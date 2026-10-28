@@ -1038,6 +1038,7 @@ var codecMaterializeRequestPayload = structCodec{size: unsafe.Sizeof(Materialize
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+	{off: unsafe.Offsetof(MaterializeRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
 func (p *MaterializeCompletedPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1062,6 +1063,7 @@ var codecMaterializeAreaRequestPayload = structCodec{size: unsafe.Sizeof(Materia
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
 func (p *FlashRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1802,6 +1804,7 @@ var codecCaveStartPayload = structCodec{size: unsafe.Sizeof(CaveStartPayload{}),
 	{off: unsafe.Offsetof(CaveStartPayload{}.Detail), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.Ramp), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.Octaves), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CaveStartPayload{}.Reach), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.BlockMask), kind: kindUint, size: unsafe.Sizeof(component.WallBlockMask(0))},
 	{off: unsafe.Offsetof(CaveStartPayload{}.Visual), kind: kindStruct, sub: &codecComponentWallVisualConfig},
 	{off: unsafe.Offsetof(CaveStartPayload{}.Art), kind: kindString},

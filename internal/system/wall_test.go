@@ -46,6 +46,14 @@ func TestWallDisplacementMaskUsesEntityCapabilities(t *testing.T) {
 			want: component.WallBlockParticle,
 		},
 		{
+			name: "particle moving as a kinetic",
+			setup: func(w *engine.World, e core.Entity) {
+				w.Components.Particle.SetComponent(e, component.ParticleComponent{Behavior: component.ParticleDecay})
+				w.Components.Kinetic.SetComponent(e, component.KineticComponent{})
+			},
+			want: component.WallBlockParticle,
+		},
+		{
 			name:  "ordinary spawn blocker",
 			setup: func(*engine.World, core.Entity) {},
 			want:  component.WallBlockSpawn,
@@ -192,6 +200,22 @@ func TestAFastCaveStepsEachColumnAndMovesACursorOnce(t *testing.T) {
 	}
 }
 
+// A tick's steps are left for what rides the cave's frame, as many as it steps, and
+// none on a tick it does not
+func TestATicksCaveStepsAreLeftForWhatRidesTheCave(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, Speed: 40, MinWall: 1}})
+	walls.Update()
+	if got := w.Resources.Cave.Steps; got != 4 || walls.cave.Offset != 4 {
+		t.Fatalf("%d steps left at offset %d, want 4 at 4", got, walls.cave.Offset)
+	}
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStop})
+	walls.Update()
+	if got := w.Resources.Cave.Steps; got != 0 {
+		t.Fatalf("%d steps left by a stopped cave, want 0", got)
+	}
+}
+
 // An opening comes in past the right edge, and EventCaveOpened arrives on the step its
 // first open column reaches the left edge, when only the walls' least is rock
 func TestACaveOpensPastTheEdgeAndAnnouncesFillingTheMap(t *testing.T) {
@@ -323,6 +347,26 @@ func TestArrivingRockPushesACursorAColumnLeftAndTowardTheChannel(t *testing.T) {
 	moves, crushed := movesOf(w)
 	if want := (event.CursorMoveRequestPayload{Entity: cursor, X: 8, Y: 6}); len(moves) != 1 || moves[0] != want || len(crushed) != 0 {
 		t.Fatalf("moves %+v and crushes %v, want only %+v", moves, crushed, want)
+	}
+}
+
+// Rock and walls that let particles pass arrive over a particle and push it nowhere
+func TestArrivingRockThatPassesParticlesPushesNone(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	pass, gap := component.WallBlockAll&^component.WallBlockParticle, w.Resources.Config.MapHeight-2
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{
+		Speed: 10, MinGap: gap, MaxGap: gap, MinWall: 1, Wavelength: 1, BlockMask: pass}})
+	walls.HandleEvent(event.GameEvent{Type: event.EventWallBatchSpawnRequest, Payload: &event.WallBatchSpawnRequestPayload{
+		BlockMask: pass, Cells: []component.WallCellDef{{OffsetX: 10, OffsetY: 5}}}})
+	particle := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(particle, component.PositionComponent{X: 9, Y: 5})
+	w.Components.Particle.SetComponent(particle, component.ParticleComponent{Behavior: component.ParticleDecay})
+	w.Components.Kinetic.SetComponent(particle, component.KineticComponent{})
+	walls.Update()
+	pos, _ := w.Positions.GetPosition(particle)
+	if pos != (component.PositionComponent{X: 9, Y: 5}) || !w.Positions.HasBlockingWallAt(9, 5, component.WallBlockSpawn) {
+		t.Fatalf("particle at %+v with the wall over 9,5 %v, want it left under the wall", pos,
+			w.Positions.HasBlockingWallAt(9, 5, component.WallBlockSpawn))
 	}
 }
 

@@ -1,6 +1,8 @@
 package system
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -66,7 +68,7 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventMaterializeRequest:
 		if payload, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
-			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, 1, 1, 1, payload.Type, component.SpeciesNone)
+			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, 1, 1, 1, payload.Type, component.SpeciesNone, payload.DurationMs)
 		}
 
 	case event.EventMaterializeAreaRequest:
@@ -79,7 +81,7 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 			if height < 1 {
 				height = 1
 			}
-			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, width, height, 1, payload.Type, payload.Species)
+			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, width, height, 1, payload.Type, payload.Species, payload.DurationMs)
 		}
 	}
 }
@@ -102,7 +104,7 @@ func (s *MaterializeSystem) Update() {
 			continue
 		}
 
-		// The materialize runs on its deadline timer, armed with its style's duration
+		// The materialize runs on its deadline timer, armed with its request's duration
 		if timer, ok := s.world.Components.Timer.GetPtr(matEntity); ok && timer.Expired(component.TimerDeadline) {
 			// The completion carries the domain of the entity it completes, so a
 			// gated shared spawn and a drain materialize stay distinguishable (D-7).
@@ -121,8 +123,9 @@ func (s *MaterializeSystem) Update() {
 	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
-// spawnMaterializeEffect creates one materialize entity in the request's domain
-func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType, species component.SpeciesType) {
+// spawnMaterializeEffect creates one materialize entity in the request's domain,
+// lasting durationMs, or its style's duration when that is not positive
+func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType, species component.SpeciesType, durationMs int64) {
 	if spawnType < 0 || spawnType >= component.SpawnTypeCount {
 		return
 	}
@@ -153,5 +156,9 @@ func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, 
 		Type:       spawnType,
 		Species:    species,
 	})
-	armTimer(s.world, entity, component.TimerDeadline, component.MaterializeStyles[spawnType].Duration())
+	duration := component.MaterializeStyles[spawnType].Duration()
+	if durationMs > 0 {
+		duration = time.Duration(durationMs) * time.Millisecond
+	}
+	armTimer(s.world, entity, component.TimerDeadline, duration)
 }

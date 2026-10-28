@@ -105,6 +105,7 @@ type prototypeDoc struct {
 	LifetimeMs int        `toml:"lifetime_ms"`
 	PatternMs  int        `toml:"pattern_ms"`
 	Entrance   string     `toml:"entrance"`
+	EntranceMs int        `toml:"entrance_ms"`
 
 	// The look: frames, the palettes their cells index, the colour of a glyph
 	// without an entry, and the console pair a 256-colour host draws
@@ -171,9 +172,10 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loo
 		Name: name, Species: species,
 		Width: d.Width, Height: d.Height, HeaderX: d.Header.X, HeaderY: d.Header.Y,
 		HitPoints: d.HP, Mass: d.Mass,
-		Contact:  component.CursorDamage{EnergyDrain: d.Contact.Energy, HeatDelta: -d.Contact.Heat},
-		Lifetime: time.Duration(d.LifetimeMs) * time.Millisecond,
-		Pattern:  time.Duration(d.PatternMs) * time.Millisecond,
+		Contact:          component.CursorDamage{EnergyDrain: d.Contact.Energy, HeatDelta: -d.Contact.Heat},
+		Lifetime:         time.Duration(d.LifetimeMs) * time.Millisecond,
+		Pattern:          time.Duration(d.PatternMs) * time.Millisecond,
+		EntranceDuration: time.Duration(d.EntranceMs) * time.Millisecond,
 	}
 	var errs []error
 	fail := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
@@ -216,6 +218,12 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loo
 		p.Entrance = component.BehaviorEntrance(i)
 	} else {
 		fail("entrance %q is not one of %s", d.Entrance, strings.Join(component.EntranceNames[1:], ", "))
+	}
+	switch {
+	case d.EntranceMs < 0:
+		fail("entrance_ms %d is negative", d.EntranceMs)
+	case d.EntranceMs > 0 && d.Entrance == "":
+		fail("entrance_ms %d times no entrance: the species stands at once", d.EntranceMs)
 	}
 
 	if i := slices.IndexFunc(combatRows, func(r component.CombatEntityType) bool {

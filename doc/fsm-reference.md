@@ -853,9 +853,9 @@ its header at that cell or the nearest place its footprint fits, searched over t
 whole map. A cell on an edge or past it searches from the footprint flush against
 that edge, on the row or column it names, so a request names an edge blind to the
 body's size and header offset. The instance stands at once, or, its prototype
-naming `entrance = "materialize"`, a one-second materialize plays over that
-footprint and the instance lands as it ends, beside any rock that came over the
-footprint meanwhile; `behavior.count` counts it from the request. A request naming
+naming `entrance = "materialize"`, a materialize plays over that footprint for the
+prototype's `entrance_ms`, a second when that is 0 or absent, and the instance
+lands as it ends, beside any rock that came over the footprint meanwhile; `behavior.count` counts it from the request. A request naming
 no program raises nothing (`behavior.unknown_program_rejects`), nor one finding no
 room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
 removes instances and the materializes still bringing them, every program's when
@@ -884,6 +884,7 @@ drops = "raider"                    # Drop table its kills roll, the scenario's 
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
 entrance = "materialize"            # Lands as a materialize over its footprint ends; none stands at once (optional)
+entrance_ms = 250                   # How long that materialize plays; 0 plays the style's second (optional)
 frames = [                          # Each frame a string per row, height rows of width cells
     { glyphs = ["╔oo╗", "╚══╝"], fg = ["0110", "1001"], attr = [" BB ", "    "] },
     { glyphs = ["┌--┐", "└──┘"] },  # fg, bg and attr are each optional
@@ -974,8 +975,9 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
   and `CancelTelegraph`, `Lightning { color }` (a `cyan`, `red`, `gold`, `green` or
   `purple` bolt to the nearest cursor, which takes the contact damage),
-  `Materialize { spawn }` (a `swarm` or `nugget` materialize over the footprint at
-  the target, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
+  `Materialize { spawn, duration_ms }` (a `swarm` or `nugget` materialize over the
+  footprint at the target for `duration_ms`, its style's own when that is 0 or
+  absent, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
   swarm or quasar at the header plus x, y) and `EmitEvent` (shared and local
   events).
 - Sustained: `Home` (steer to the target by the prototype's physics), `ChargeToStored`

@@ -114,14 +114,14 @@ and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-
   (`enter`), `internal/component/behavior.go` (`BehaviorEntrance`)
 - Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)
 
-A prototype's `entrance = "materialize"` plays a one-second materialize, the
-`swarm` style, over the footprint and lands the body as it ends, beside any rock
-that came over it, and nothing of it reaches the machine, which starts in
-`initial` the tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
+A prototype's `entrance = "materialize"` plays a `swarm`-style materialize over
+the footprint for its `entrance_ms`, a second when that is 0, and lands the body as
+it ends, beside any rock that came over it, and nothing of it reaches the machine,
+which starts in `initial` the tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
 What a program would declare next:
 
-- The materialize's duration and style, `swarm` or `nugget` until a program
-  has [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
+- The materialize's style, `swarm` or `nugget` until a program has
+  [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
   and whether a countdown shows over it.
 - An entering state the machine runs while the materialize holds, so a program can
   telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
@@ -1038,17 +1038,16 @@ Its area pulse is the hosted disruptor's shape; the red circle's turret mount is
 ### Pace a quasar fusion as its own timer did
 
 - Priority: P3
-- Affected files: `internal/component/materialize.go` (`MaterializeStyles`),
-  `internal/parameter/effect.go`, `internal/system/fuse.go` (`fuseInto`)
+- Affected files: `internal/system/fuse.go` (`fuseInto`), `internal/parameter/effect.go`
 
 A quasar fusion's quasar lands as its materialize ends, a whole spawn's
 materialize, where the timer the materialize replaced landed it a little after half
 of it. A session sweep with both fusions waiting a whole materialize cost quasar
 kills, the one gap beyond the noise; a drain pair's swarm lands at half a second
 again, as its spirits arrive, so the sweep decides whether the quasar's wait alone
-still costs them. A fusion row in
-`MaterializeStyles` with a shorter fill, hold and recede would give the old pacing
-back, spawn and visual still ending on one tick.
+still costs them. A `DurationMs` on the quasar's materialize request, a fusion
+tunable near half the style's second, would give the old pacing back, spawn and
+visual still ending on one tick.
 
 ### Show a species' machine state in a debug overlay
 
@@ -1106,6 +1105,50 @@ change ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)). Row
 its own would grow those tables per scenario from the prototype, as soft collision
 builds a data species' rows from its `mass` and loot rolls the drop table its
 `drops` names.
+
+### Fuse single-cell species and unit composites into any species
+
+- Priority: P3
+- Affected files: `internal/system/fuse.go`, `internal/event/payload.go`
+  (`FuseSwarmRequestPayload`, `FuseQuasarRequestPayload`),
+  `internal/system/drain.go` (`detectSwarmFusions`), `internal/system/behavior.go`
+  (`spawnRequests`), `internal/asset/scenario/quasar.toml`,
+  `wad/scenario/td/td_main.toml`
+- Design: [D-3](domain-design.md#d-3--cross-the-smallest-shared-outcome)
+
+A fusion takes drains alone, into one of two species: two enraged drains into a
+swarm, every drain of the elected cursor into a quasar. The idea grows it to any
+number of sources of any single-cell species, the drain today and any later one, and
+of any unit composite (`CompositeTypeUnit`: damage on the header, the members its
+hitboxes; the swarm, quasar, eye, kraken and every data species), fused into any
+species, so quasars and swarms fuse as drains do.
+
+- **One request.** An `EventFuseRequest` names its sources, by species and count or
+  as a cursor's, the target species and the `FuseEffect`, and
+  `EventFuseSwarmRequest` and `EventFuseQuasarRequest` become two uses of it: the
+  drain system's pairs and the quasar scenario's trigger play as now, the quasar's
+  pacing with **Pace a quasar fusion as its own timer did**.
+- **Domains.** Drains are Player-domain, so a drain fusion is local and crosses one
+  spawn request from the causal participant (D-3). A composite is Shared, so
+  consuming one is a Shared outcome every peer applies at one tick, from a Shared
+  trigger or as the crossing a player's request sends, the composite going with no
+  reward by `EventCompositeDestroyRequest`, as the rock crushes one. A fusion of
+  both kinds splits by domain, each batch domain-pure as `killDrains` keeps it, and
+  lands one target. A composite with a `ParentHeader`, the snake's head, is no
+  source.
+- **Any target.** The target lands by its own spawn request: `landFusion`'s two
+  cases become a table every species' request joins, `spawnRequests` in
+  `behavior.go` the start of it, a data species by `EventBehaviorSpawnRequest`,
+  named at load as `PayloadSpeciesIn` names one. Its footprint, a code species'
+  parameters or a prototype's, places it at the sources' centroid by
+  `FindFreeAreaInside`.
+- **Visuals.** Each source flies one spirit, a composite's from its header, and the
+  first names the target its arrival lands; the materialize effect plays over the
+  footprint instead. A Shared fusion's spirits stay each instance's own, as a drain
+  fusion's do.
+
+In order: the one request carrying the two drain fusions unchanged in play, then any
+target from drains, then composites as Shared sources, one test per rule.
 
 ## Environment
 

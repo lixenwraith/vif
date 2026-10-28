@@ -21,7 +21,8 @@ func NewSigilRenderer(gameCtx *engine.GameContext) *SigilRenderer {
 	}
 }
 
-// Render draws all sigil entities
+// Render draws all sigil entities. Rock and walls draw first, and a sigil in them,
+// as a particle passing through may be, would print over them, so it is not shown.
 func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	sigils := r.gameCtx.World.Components.Sigil
 	if sigils.CountEntities() == 0 {
@@ -30,9 +31,10 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 
 	buf.SetWriteMask(visual.MaskTransient)
 
+	positions := r.gameCtx.World.Positions
 	sigils.Each(func(entity core.Entity, sigilComp *component.SigilComponent) bool {
-		sigilPos, ok := r.gameCtx.World.Positions.GetPosition(entity)
-		if !ok {
+		sigilPos, ok := positions.GetPosition(entity)
+		if !ok || positions.HasBlockingWallAt(sigilPos.X, sigilPos.Y, component.WallBlockSpawn) {
 			return true
 		}
 		screenX, screenY, visible := ctx.MapToScreen(sigilPos.X, sigilPos.Y)

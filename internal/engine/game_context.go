@@ -298,6 +298,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	world.Resources.View = NewViewResource()
 	world.Resources.KrakenShape = NewKrakenShapeResource()
 	world.Resources.Drift = &DriftResource{}
+	world.Resources.Cave = &CaveResource{}
 	world.Resources.Entry = &EntryResource{}
 
 	// 9. Cursor roster; the FSM spawns cursors, so the world starts with none

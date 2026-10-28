@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/pattern"
@@ -522,6 +523,103 @@ func TestVanguardsCaveStepsOnAnEvenCadence(t *testing.T) {
 	}
 	if len(gaps) < 10 || slices.Min(gaps) != slices.Max(gaps) {
 		t.Fatalf("the cave stepped %d ticks apart, want an even cadence", gaps)
+	}
+}
+
+// TestVanguardsCaveOpensTheRowsATallMapAdds boots the shipped scenario on a map a
+// phone held upright gives: each wall keeps at most the 29 rows it keeps on a map of
+// 40, so the rows past those open, and at least 32 of 90 stay open in every column
+func TestVanguardsCaveOpensTheRowsATallMapAdds(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	const width, height, deepest = 80, 90, 29
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: width, Height: height, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	w := a.World()
+	seen := 0
+	for tick := range 400 {
+		a.Tick(1)
+		w.RunSafe(func() {
+			rock := w.Positions.Rock()
+			if rock == nil {
+				return
+			}
+			for x, col := range rock.Columns() {
+				if col.Ceil > deepest || height-col.Floor > deepest {
+					t.Fatalf("tick %d: column %d is rock to row %d and from row %d, want walls of at most %d rows of %d",
+						tick, x, col.Ceil, col.Floor, deepest, height)
+				}
+				seen++
+			}
+		})
+	}
+	if seen == 0 {
+		t.Fatal("no cave stood")
+	}
+}
+
+// TestVanguardsDecayFallsDownOneColumnOfTheCaveThroughItsRock fires the ship on
+// negative energy, which sheds decay: each decay keeps one column of the cave, its map
+// column plus the rock's origin, never rises, and falls on from the open into the
+// floor, which lets it pass. A new game lays a new cave and starts the count again.
+func TestVanguardsDecayFallsDownOneColumnOfTheCaveThroughItsRock(t *testing.T) {
+	t.Parallel()
+	a := newVanguard(t)
+	w := a.World()
+	w.RunSafe(func() {
+		player := w.Resources.Player.Entity
+		w.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
+		w.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: -parameter.GodEnergyAmount, Weapons: true})
+	})
+	type place struct {
+		column    int64
+		row       int
+		wasInOpen bool
+	}
+	seen := map[core.Entity]place{}
+	origin, passed := int64(-1), 0
+	for tick := range 200 {
+		if tick%2 == 0 {
+			a.Inject(&input.Intent{Type: input.IntentFireMain})
+		}
+		a.Tick(1)
+		w.RunSafe(func() {
+			rock := w.Positions.Rock()
+			if rock == nil {
+				return
+			}
+			if rock.Origin < origin {
+				clear(seen)
+			}
+			origin = rock.Origin
+			for _, e := range w.Components.Particle.Entities() {
+				if p, _ := w.Components.Particle.GetComponent(e); p.Behavior != component.ParticleDecay {
+					continue
+				}
+				pos, _ := w.Positions.GetPosition(e)
+				col, _ := rock.Column(pos.X)
+				was, ok := seen[e]
+				at := place{column: int64(pos.X) + rock.Origin, row: pos.Y, wasInOpen: was.wasInOpen || !col.Rock(pos.Y)}
+				if ok && (at.column != was.column || at.row < was.row) {
+					t.Fatalf("tick %d: decay went from cave column %d row %d to column %d row %d, want its column, falling",
+						tick, was.column, was.row, at.column, at.row)
+				}
+				if was.wasInOpen && pos.Y >= col.Floor {
+					passed++
+				}
+				seen[e] = at
+			}
+		})
+	}
+	if passed == 0 {
+		t.Fatalf("of %d decay none fell from the open into the floor", len(seen))
 	}
 }
 

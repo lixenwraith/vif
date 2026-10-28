@@ -32,6 +32,10 @@ type Config struct {
 	// own fractal noise of that many octaves, from Wavelength halving down
 	Octaves int `json:"octaves,omitempty"`
 
+	// Reach, when set, is the most rows a jagged wall reaches into its band, so the
+	// rows a taller map adds past what twice it and the min gap span stay open
+	Reach int `json:"reach,omitempty"`
+
 	// Open, when set, widens the cave from one column on
 	Open Opening `json:"open,omitzero"`
 }
@@ -91,8 +95,10 @@ const (
 // Validate reports a configuration whose rows cannot hold its gaps and walls
 func (c Config) Validate() error {
 	switch {
-	case c.MinWall < 0 || c.Swing < 0 || c.Detail < 0 || c.Ramp < 0:
-		return errors.New("cave: negative wall, swing, detail or ramp")
+	case c.MinWall < 0 || c.Swing < 0 || c.Detail < 0 || c.Ramp < 0 || c.Reach < 0:
+		return errors.New("cave: negative wall, swing, detail, ramp or reach")
+	case c.Reach > 0 && c.Octaves == 0:
+		return errors.New("cave: a reach shapes only a jagged cave's walls")
 	case c.MinGap < 1 || c.MaxGap < c.MinGap+2*c.Detail:
 		return errors.New("cave: max gap must hold the min gap and two rows of detail")
 	case c.Octaves < 0 || c.Octaves > MaxOctaves:
@@ -195,11 +201,11 @@ func (c Config) snaking(i int64) (top, bottom int64) {
 }
 
 // jagged is column i's walls in a jagged cave: a band of the widest gap, placed as a
-// snaking channel is, which each wall reaches into by its own fractal noise; walls
-// reaching in together past the min gap and detail share what is left by their reach.
-// Each wall's band and reach sum in fixed point and floor once, so a wall never steps
-// a row out and back as the two floor apart; where the walls share, the floor takes
-// the row two floors would leave, so the gap closes to the min gap and no wider
+// snaking channel is, which each wall reaches into by its own fractal noise, Reach
+// rows at most when set, walls reaching in together sharing the room past the min gap
+// and detail by their reach. Band and reach sum in fixed point and floor once, so a
+// wall never steps a row out and back; where the walls share, the floor takes the row
+// two floors would leave, so the gap closes to the min gap and no wider
 func (c Config) jagged(i int64) (top, bottom int64) {
 	h, w := int64(c.Height), int64(c.Wavelength)
 	widest := int64(c.widest())
@@ -210,13 +216,17 @@ func (c Config) jagged(i int64) (top, bottom int64) {
 	}
 	top = (int64(c.MinWall)+(slack-travel)/2)*unit + travel*c.snake(i+w/2, w)
 	bottom = (h-widest)*unit - top
-	reach := widest - int64(c.MinGap+2*c.Detail)
+	room := widest - int64(c.MinGap+2*c.Detail)
+	reach := room
+	if c.Reach > 0 {
+		reach = min(reach, int64(c.Reach))
+	}
 	in := reach * c.fractal(channelWallTop, i, w)
 	out := reach * c.fractal(channelWallBottom, i, w)
-	if in+out <= reach*unit {
+	if in+out <= room*unit {
 		return (top + in) / unit, (bottom + out) / unit
 	}
-	top = (top + reach*(in*unit/(in+out))) / unit
+	top = (top + room*(in*unit/(in+out))) / unit
 	return top, h - int64(c.MinGap+2*c.Detail) - top
 }
 

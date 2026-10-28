@@ -143,9 +143,10 @@ lowers the level of each Player-domain glyph it enters; a dark blue glyph become
 bright green, a dark green one bright red, and a dark red one flashes away; it
 also destroys nuggets. Blossom raises a glyph's level up to bright and is spent on
 a red glyph. A decay and a blossom that meet annihilate. Both respect
-`ProtectFromParticle`, die on walls and bounds, and have no lifetime. Every decay
-particle orbits the nearest Kraken while it spins or charges, entering with a kick
-in its spin; with no anchor left it drops straight down at fresh decay speed.
+`ProtectFromParticle`, die on walls that block particles and on bounds, and have
+no lifetime. Every decay particle orbits the nearest Kraken while it spins or
+charges, entering with a kick in its spin; with no anchor left it drops straight
+down at fresh decay speed.
 
 A behavior's profile holds an orbit for each anchor kind that pulls it: the cursor
 for dust, a Kraken for decay, and a vortex's button for all three. A vortex
@@ -422,7 +423,9 @@ A jagged cave, one with `octaves` set, snakes a band of `max_gap` rows, or all t
 walls leave, as that channel, and its ceiling and floor each reach into the band by
 fractal noise of their own: `octaves` of value noise from `wavelength` columns
 halving down, stretched and squared, so a wall keeps near its side and now and then
-reaches far in; walls reaching in together share what the min gap leaves. Each
+reaches far in; walls reaching in together share what the min gap leaves. With
+`reach` set a wall reaches at most that many rows in, so a map taller than the two
+walls' reach and the min gap need opens every row it adds. Each
 wall's edge is the median of the five columns around it, so no bump or notch two
 columns wide or less stands. The rock is a field of ceiling and floor rows per
 column, not wall entities, which every wall query reads. It draws in `visual`, or
@@ -434,16 +437,23 @@ side, so the stone moves with the rock and reads on a text console. The cave
 scrolls at `speed` columns a second, at most the soft cap `CaveMaxSpeed`, as an
 integer rate and phase, and each whole column the phase carries is a step, as many
 a tick as it carries. Each step moves the rock and every shared wall a column left,
-drops what leaves the map and lays the column entering it. What the rock arrives
-on goes a column left and a row toward its column's nearer opening, or straight
-left: a cursor by a placement, so the rock only pushes. A flying composite the rock
-reaches at any member moves whole the same way, else to the nearest place its
-footprint fits, enraged or not, and one with room nowhere is destroyed with no
-reward. A cursor the rock finds no room for, pressed against the left edge, is
-crushed where it stands (`EventCursorCrushed`), which defeats it; a loose glyph is
-removed, unless it is scenery, which the rock passes in front of. A cursor's push
-is a queued move, so a tick's steps carry each cursor from where the last left it
-and its move goes out once, to the last cell.
+drops what leaves the map and lays the column entering it, and the wall system
+leaves a tick's steps in `CaveResource` for what rides the cave's frame: before it
+moves its particles the particle system carries every one no anchor holds as far
+left, the cell it last entered with it, so decay and blossom fall or rise down one
+column of the cave and dust wanders in its frame, entering a cell only by its own
+motion, and one carried off the map is gone. What the rock arrives on goes a column
+left and a row toward its column's nearer opening, or straight left: a cursor by a
+placement, so the rock only pushes. A flying composite the rock reaches at any
+member moves whole the same way, else to the nearest place its footprint fits,
+enraged or not, and one with room nowhere is destroyed with no reward. A cursor the
+rock finds no room for, pressed against the left edge, is crushed where it stands
+(`EventCursorCrushed`), which defeats it; a loose glyph is removed, unless it is
+scenery, which the rock passes in front of. A particle meets rock by its particle
+bit, so rock that lets particles pass arrives over them without a push, and rock and
+walls hide a sigil in them as they hide scenery. A cursor's push is a queued move,
+so a tick's steps carry each cursor from where the last left it and its move goes
+out once, to the last cell.
 
 The pace changes by event, each at once or easing linearly over `ease_ms`.
 `EventCaveStop` brings the scroll to rest and leaves the rock where it stands, and
@@ -564,45 +574,50 @@ Glyphs drift behind the buttons as a moving backdrop, and music stays off.
 `vanguard` flies the cursor through a cave (§9) scrolling left at twenty columns a
 second, a column every tick: only a whole-tick period steps evenly, and eight a
 second stepped two and three ticks apart, which read as dropped frames. The cave is
-jagged, four octaves from 64 columns: its gap runs from nine rows to thirty-six as
-the map allows, mostly two to three times the narrowest, and the scenario's smallest
-map, 18 rows, holds twice the narrowest. Each new game flies a new cave, its rock in
-strata, cracked, moss or crystal stone. Glyphs drift left behind the rock at three
-depths, faster than it at 20, 40 and 80 cells a second, so each layer reads as
-moving and the depths come apart, and drains, nuggets, gold and the fuse are
-off. Raiders materialize at the right edge every two seconds while fewer than three
-fly or materialize, on a row drawn across the map, in the nearest open rows when
-rock fills it, each landing as its materialize ends and of a type drawn at random
-between the two of the rank the raid has reached among the cave's own eight. Every
-type is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the
-template for a species of one's own
-([FSM reference](fsm-reference.md#behavior-programs)), running one cycle, a chase,
-a lock, then a charge or a teleport (`RaiderStates` in `macros.toml`), its landing
-marked from the lock until it lands, with its own look. Each stone art's eight are
-its tier, two types in each of four ranks, the same ranks in every cave, so caves
-differ in looks alone: a rank up has more hit points (8, 16, 28, 44) and a fifth
-more mass (2.0 to 3.5), so a shot knocks it back less, a costlier touch, and chases
-slower on a longer lock, the first rank darting as the snake does. The raid
-climbs the tier: it spawns the first rank until players shoot three of it down, then
-the next, and three of the fourth exhaust the tier, where its boss is to stand; for
-now a green strobe marks it and the climb starts over (the `ramp` region). Each
-cave's raiders wear one hue in four shades, picked against its rock: violet vermin
-in the strata (by rank: scarab, crawler; crab, hornet; spider, mantis; beetle, scorpion),
-white haunts in the cracked stone (gremlin, chomper; imp, slime; ghost, skull;
-wraith, demon), orange animals in the moss (hedgehog, mouse; frog, hopper; bat,
-puffer; owl, lynx) and orchid constructs among the crystals (drone, shard; saucer,
-trooper; jelly, squid; djinn, robot), each one colour on a console. A raider lives
-until killed, and the rock pushes it as it pushes the cursor. Every type rolls the
-raider drop table vanguard declares, so one a player shoots down drops a `U`, its
-own loot kind, where it fell, for every player, and each `U` raises the gun a
-level of the scenario's nine: one shot forward, then two and three, one up and one
-down, one back, two up and down, two back, three up and down, three back. Forward is
-right, the way the ship flies. A crush is a defeat, as is heat and energy both run
-out: the rock and the drift halt under a red strobe for 250 ms, then the game starts
-over, the gun back at one shot, and opens with "Crushed Against The Edge!" or "You
-Died!". The drifting
-text is scenery (§9): rock and raiders pass it by and no key types it, so the ship
-earns no heat by typing.
+jagged, four octaves from 64 columns: its gap runs from nine rows to all but the
+walls' two rows each as the map allows, mostly two to three times the narrowest on
+a 40-row map, and the scenario's smallest map, 18 rows, holds twice the narrowest.
+A wall reaches at most 27 rows in, so a taller map, a phone held upright, keeps as
+much rock as a 40-row map and opens every row it adds, narrowing the less the
+taller it is: a 60-row map is a third rock and a 90-row map a fifth. Each new game
+flies a new cave, its rock in strata, cracked, moss or crystal stone. The rock
+blocks the ship, raiders and spawns but lets particles pass, hidden, so the blossom
+and decay the gun raises from glyphs rise or fall along a column of the cave and on
+into the rock. Glyphs drift left behind the rock at three depths, faster than it at
+20, 40 and 80 cells a second, so each layer reads as moving and the depths come
+apart, and drains, nuggets, gold and the fuse are off. Raiders materialize at the
+right edge every two seconds while fewer than three fly or materialize, on a row
+drawn across the map, in the nearest open rows when rock fills it. Each lands as its
+quarter-second materialize ends, too soon for much scrolling rock to come over it,
+and is of a type drawn at random between the two of the rank the raid has reached
+among the cave's own eight. Every type is a program of the scenario's own
+(`behavior/<cave>/<type>.toml`), the template for a species of one's own ([FSM
+reference](fsm-reference.md#behavior-programs)), running one cycle, a chase, a lock,
+then a charge or a teleport (`RaiderStates` in `macros.toml`), its landing marked
+from the lock until it lands, with its own look. Each stone art's eight are its
+tier, two types in each of four ranks, the same ranks in every cave, so caves differ
+in looks alone: a rank up has more hit points (8, 16, 28, 44) and a fifth more mass
+(2.0 to 3.5), so a shot knocks it back less, a costlier touch, and chases slower on
+a longer lock, the first rank darting as the snake does. The raid climbs the tier:
+it spawns the first rank until players shoot three of it down, then the next, and
+three of the fourth exhaust the tier, where its boss is to stand; for now a green
+strobe marks it and the climb starts over (the `ramp` region). Each cave's raiders
+wear one hue in four shades, picked against its rock: violet vermin in the strata
+(by rank: scarab, crawler; crab, hornet; spider, mantis; beetle, scorpion), white
+haunts in the cracked stone (gremlin, chomper; imp, slime; ghost, skull; wraith,
+demon), orange animals in the moss (hedgehog, mouse; frog, hopper; bat, puffer; owl,
+lynx) and orchid constructs among the crystals (drone, shard; saucer, trooper;
+jelly, squid; djinn, robot), each one colour on a console. A raider lives until
+killed, and the rock pushes it as it pushes the cursor. Every type rolls the raider
+drop table vanguard declares, so one a player shoots down drops a `U`, its own loot
+kind, where it fell, for every player, and each `U` raises the gun a level of the
+scenario's nine: one shot forward, then two and three, one up and one down, one
+back, two up and down, two back, three up and down, three back. Forward is right,
+the way the ship flies. A crush is a defeat, as is heat and energy both run out: the
+rock and the drift halt under a red strobe for 250 ms, then the game starts over,
+the gun back at one shot, and opens with "Crushed Against The Edge!" or "You Died!".
+The drifting text is scenery (§9): rock and raiders pass it by and no key types it,
+so the ship earns no heat by typing.
 
 ## 11. System inventory
 

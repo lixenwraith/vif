@@ -24,7 +24,7 @@ func newCaveBench(b testing.TB, w, h int) (*engine.World, *WallSystem) {
 	engine.NewGameContextWithClock(world, w, h, engine.NewManualClock())
 	walls := ready(NewWallSystem(world)).(*WallSystem)
 	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{
-		Seed: 7, Speed: 20, MinGap: 9, MaxGap: 36, MinWall: 2, Wavelength: 64, Swing: 9, Detail: 0, Ramp: 96, Octaves: 4,
+		Seed: 7, Speed: 20, MinGap: 9, MaxGap: 2000, MinWall: 2, Reach: 27, Wavelength: 64, Detail: 0, Ramp: 96, Octaves: 4,
 	}})
 	world.Resources.Event.Queue.Consume()
 	world.Resources.Time.DeltaTime = 50 * time.Millisecond

@@ -244,12 +244,16 @@ func TestACancelRequestEndsTheWardenThroughItsComposite(t *testing.T) {
 }
 
 // newEntranceWorld runs entrances over an 80x40 world whose one program is the
-// warden, materializing as it comes on
-func newEntranceWorld(t *testing.T) (*materializeWorld, *BehaviorSystem) {
+// warden, materializing as it comes on, its prototype taking any further lines
+func newEntranceWorld(t *testing.T, lines ...string) (*materializeWorld, *BehaviorSystem) {
 	t.Helper()
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
-	program := strings.Replace(wardenProgram, "[prototype]\n", "[prototype]\nentrance = \"materialize\"\n", 1)
+	prototype := "[prototype]\nentrance = \"materialize\"\n"
+	for _, line := range lines {
+		prototype += line + "\n"
+	}
+	program := strings.Replace(wardenProgram, "[prototype]\n", prototype, 1)
 	doc, err := toml.NewParser([]byte(program)).Parse()
 	if err != nil {
 		t.Fatal(err)
@@ -319,6 +323,55 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 	}
 	if clear := footprints[0]; !landed[[2]int{clear.TargetX, clear.TargetY}] {
 		t.Fatalf("wardens landed at %v, none on the clear footprint at (%d, %d)", landed, clear.TargetX, clear.TargetY)
+	}
+}
+
+// TestAnEntranceLastsItsPrototypesDuration: entrance_ms times the materialize in
+// place of its style's second, and the body lands the tick it ends
+func TestAnEntranceLastsItsPrototypesDuration(t *testing.T) {
+	e, _ := newEntranceWorld(t, "entrance_ms = 250")
+	w := e.w
+	enterWarden(e, wardenX, wardenY)
+	ticks := int(250 * time.Millisecond / parameter.GameUpdateInterval)
+	for range ticks - 1 {
+		e.tick()
+	}
+	if n := w.Components.Behavior.CountEntities(); n != 0 {
+		t.Fatalf("%d wardens landed before their 250 ms entrance ended", n)
+	}
+	e.tick()
+	if n := w.Components.Behavior.CountEntities(); n != 1 || w.Components.Materialize.CountEntities() != 0 {
+		t.Fatalf("%d wardens landed on the entrance's tick %d, want one as it ended", n, ticks)
+	}
+}
+
+// TestAMaterializeCueTimesItsMaterialize: the verb's duration_ms rides its request,
+// and a negative one fails the compile
+func TestAMaterializeCueTimesItsMaterialize(t *testing.T) {
+	const swarm = `payload = { spawn = "swarm" }`
+	timed := func(ms string) string {
+		return strings.Replace(wardenProgram, swarm, `payload = { spawn = "swarm", duration_ms = `+ms+` }`, 1)
+	}
+	ctx, s, header := newProgramWorld(t, timed("300"), wardenX+40, wardenY)
+	w := ctx.World
+	b, _ := w.Components.Behavior.GetPtr(header)
+	stepBehaviors(w, s)
+	var request *event.MaterializeAreaRequestPayload
+	for _, ev := range stepWhile(t, w, s, b, wardenWind) {
+		if p, ok := ev.Payload.(*event.MaterializeAreaRequestPayload); ok {
+			request = p
+		}
+	}
+	if request == nil || request.DurationMs != 300 {
+		t.Fatalf("the wind-up's cue requested %+v, want a 300 ms materialize", request)
+	}
+
+	doc, err := toml.NewParser([]byte(timed("-1"))).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), "duration_ms -1 is negative") {
+		t.Fatalf("a negative duration compiled: %v", err)
 	}
 }
 

@@ -9,8 +9,8 @@ import (
 
 // shapes are the configurations the property tests sweep: a terminal's cave, a
 // short and rough one, a long gentle one and a tight one at its limits, then jagged
-// ones: vanguard's on a terminal and on its smallest map, a tall rough one whose
-// band snakes, and a tight one at its limits
+// ones: vanguard's on a terminal, on its smallest map and on a phone held upright,
+// a tall rough one whose band snakes, and a tight one at its limits
 var shapes = []Config{
 	{Height: 40, MinGap: 8, MaxGap: 22, MinWall: 2, Wavelength: 48, Detail: 1, Ramp: 80},
 	{Height: 24, MinGap: 6, MaxGap: 12, MinWall: 1, Wavelength: 16, Detail: 2, Ramp: 10},
@@ -18,20 +18,22 @@ var shapes = []Config{
 	{Height: 7, MinGap: 3, MaxGap: 5, MinWall: 1, Wavelength: 1, Swing: 40, Detail: 1, Ramp: 3},
 	{Height: 40, MinGap: 9, MaxGap: 36, MinWall: 2, Wavelength: 64, Swing: 9, Ramp: 96, Octaves: 4},
 	{Height: 18, MinGap: 9, MaxGap: 36, MinWall: 2, Wavelength: 64, Swing: 9, Ramp: 96, Octaves: 4},
+	{Height: 90, MinGap: 9, MaxGap: 2000, MinWall: 2, Wavelength: 64, Ramp: 96, Octaves: 4, Reach: 27},
 	{Height: 120, MinGap: 9, MaxGap: 36, MinWall: 2, Wavelength: 64, Swing: 9, Detail: 2, Ramp: 0, Octaves: MaxOctaves},
 	{Height: 13, MinGap: 5, MaxGap: 40, MinWall: 1, Wavelength: 8, Detail: 1, Ramp: 3, Octaves: 3},
 }
 
 func FuzzAColumnKeepsItsWallsAndGap(f *testing.F) {
 	for seed, s := range shapes {
-		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, int64(0), 0, 0)
-		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, int64(0), s.MinGap*(seed%2), 8)
+		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, s.Reach, int64(0), 0, 0)
+		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, s.Reach, int64(0), s.MinGap*(seed%2), 8)
 	}
-	f.Add(^uint64(0), 40, 8, 22, 2, MaxWavelength, 1, 1, 0, 0, int64(1)<<40, 0, 0)
-	f.Add(^uint64(0), 40, 8, 1<<20, 2, MaxWavelength, 1, 1, 0, MaxOctaves, int64(1)<<40, 0, 1)
-	f.Fuzz(func(t *testing.T, seed uint64, height, minGap, maxGap, minWall, wavelength, swing, detail, ramp, octaves int, from int64, openGap, openRamp int) {
+	f.Add(^uint64(0), 40, 8, 22, 2, MaxWavelength, 1, 1, 0, 0, 0, int64(1)<<40, 0, 0)
+	f.Add(^uint64(0), 40, 8, 1<<20, 2, MaxWavelength, 1, 1, 0, MaxOctaves, 0, int64(1)<<40, 0, 1)
+	f.Add(^uint64(0), 40, 8, 1<<20, 2, MaxWavelength, 1, 1, 0, MaxOctaves, 1, int64(1)<<40, 0, 1)
+	f.Fuzz(func(t *testing.T, seed uint64, height, minGap, maxGap, minWall, wavelength, swing, detail, ramp, octaves, reach int, from int64, openGap, openRamp int) {
 		c := Config{Seed: seed, Height: height, MinGap: minGap, MaxGap: maxGap, MinWall: minWall,
-			Wavelength: wavelength, Swing: swing, Detail: detail, Ramp: ramp, Octaves: octaves}
+			Wavelength: wavelength, Swing: swing, Detail: detail, Ramp: ramp, Octaves: octaves, Reach: reach}
 		if openRamp != 0 {
 			c.Open = Opening{At: from + int64(wavelength), Gap: openGap, Ramp: openRamp}
 		}
@@ -118,23 +120,66 @@ func TestEveryCaveCanBeFlown(t *testing.T) {
 	}
 }
 
-// Over a long run a jagged cave's gap reaches both ends of its range, its rough
-// rock aside: the min gap where both walls reach in, all the walls leave where
-// neither does
+// Over sixteen long runs a jagged cave's gap reaches both ends of its range, its
+// rough rock aside: the min gap where both walls reach in, or what their reach
+// leaves of the band, and all the walls leave where neither does
 func TestAJaggedCaveSpansItsGapRange(t *testing.T) {
 	for _, s := range shapes {
 		if s.Octaves == 0 {
 			continue
 		}
+		low := s.MinGap + 2*s.Detail
+		if s.Reach > 0 {
+			low = max(low, s.widest()-2*s.Reach)
+		}
+		narrowest, widest := s.Height, 0
 		for seed := range uint64(16) {
 			s.Seed = seed
-			narrowest, widest := s.Height, 0
 			for i := int64(s.Ramp); i < int64(s.Ramp)+4000; i++ {
 				col := s.At(i)
 				narrowest, widest = min(narrowest, s.Height-col.Top-col.Bottom), max(widest, s.Height-col.Top-col.Bottom)
 			}
-			if narrowest > s.MinGap+2*s.Detail || widest < s.widest()-2*s.Detail {
-				t.Fatalf("%+v: gaps from %d to %d, want %d to %d", s, narrowest, widest, s.MinGap, s.widest())
+		}
+		if narrowest > low || widest < s.widest()-2*s.Detail {
+			t.Fatalf("%+v: gaps from %d to %d, want %d to %d", s, narrowest, widest, low, s.widest())
+		}
+	}
+}
+
+// A jagged wall reaches at most Reach rows into its band: vanguard's walls keep at
+// most 29 rows on a map of any height, so a taller map opens every row it adds,
+// and over a long run each wall reaches that deep
+func TestAJaggedWallReachesAtMostItsReach(t *testing.T) {
+	for _, height := range []int{41, 50, 60, 90, 250} {
+		c := Config{Height: height, MinGap: 9, MaxGap: 2000, MinWall: 2, Wavelength: 64, Ramp: 96, Octaves: 4, Reach: 27}
+		deepest := c.MinWall + c.Reach
+		var top, bottom int
+		for seed := range uint64(16) {
+			c.Seed = seed
+			for i := int64(c.Ramp); i < int64(c.Ramp)+4000; i++ {
+				col := c.At(i)
+				if col.Top > deepest || col.Bottom > deepest {
+					t.Fatalf("%d rows: column %d = %+v, want walls of at most %d rows", height, i, col, deepest)
+				}
+				top, bottom = max(top, col.Top), max(bottom, col.Bottom)
+			}
+		}
+		if top != deepest || bottom != deepest {
+			t.Fatalf("%d rows: the walls reach %d and %d rows deep, want %d", height, top, bottom, deepest)
+		}
+	}
+}
+
+// A reach of all the room the min gap leaves, or more, lays the cave it laid with
+// none: vanguard's reach leaves its caves up to 40 rows as they were
+func TestAReachPastItsRoomChangesNoColumn(t *testing.T) {
+	for _, height := range []int{18, 30, 40} {
+		uncapped := Config{Seed: 11, Height: height, MinGap: 9, MaxGap: 2000, MinWall: 2, Wavelength: 64, Ramp: 96, Octaves: 4}
+		capped := uncapped
+		capped.Reach = 27
+		for i := range int64(4000) {
+			if a, b := capped.At(i), uncapped.At(i); a != b {
+				t.Fatalf("%d rows: column %d = %+v with the reach, %+v without", height, i, a, b)
 			}
 		}
 	}
@@ -192,7 +237,7 @@ func TestAColumnIsFixedByItsIndexAndSeed(t *testing.T) {
 			h.Write(append(strconv.AppendInt(append(b, ','), int64(col.Bottom), 10), ';'))
 		}
 	}
-	if got, want := h.Sum64(), uint64(0xde3d9f58df3fc478); got != want {
+	if got, want := h.Sum64(), uint64(0xed7b0d861474d7f6); got != want {
 		t.Fatalf("profile digest %#x, want %#x", got, want)
 	}
 }
