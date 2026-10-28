@@ -35,6 +35,12 @@ that proves wrong or that a document now states, and link the document instead.
   after the tick.
 - A clock started inside a tick before its owner's `Update` shows one tick short of
   its span ([runtime §5](runtime.md#5-simulation-tick-steps)).
+- A new bus crossing whose payload names its producer's cursor or slot adds a row to
+  `crossingActors` (`internal/system/network.go`); without one, a misbound or
+  modified participant can act as another's cursor through it.
+- A joiner's arrival can reach it inside a correction rather than as the crossing,
+  which the capture's fence then drops: state a joiner takes on arriving is derived
+  in `RebindCursorRoster` too, never only in the arrival's handler.
 
 ## Determinism and the harness
 

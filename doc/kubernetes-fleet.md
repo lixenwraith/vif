@@ -96,7 +96,8 @@ What bounds a stranger:
 - a 16-bit frame length, bounded receive queues, and a bounded repair size, so no
   peer can make the host reserve memory by asking;
 - `admissibleFromSource`, which refuses roster-creating crossings from anyone but
-  the coordinator;
+  the coordinator, and any participant's crossing or cursor sync that acts as
+  another participant's cursor;
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
 - fuzz targets on the two handshakes a stranger's bytes reach, the join and the peer
