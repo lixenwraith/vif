@@ -88,15 +88,19 @@ func (s *KrakenSystem) spawn(p *event.KrakenSpawnRequestPayload) {
 		s.world.PushEvent(event.EventKrakenSpawnFailed, nil)
 		return
 	}
+	hp := p.HP
+	if hp <= 0 {
+		hp = parameter.KrakenInitialHP
+	}
 	e := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll ^ component.ProtectFromDeath})
 	s.world.Components.Kinetic.SetComponent(e, component.KineticComponent{Kinetic: physics.Kinetic{PreciseX: px, PreciseY: py}})
 	s.world.Components.Combat.SetComponent(e, component.CombatComponent{
-		OwnerEntity: e, CombatEntityType: component.CombatEntityKraken, HitPoints: parameter.KrakenInitialHP,
+		OwnerEntity: e, CombatEntityType: component.CombatEntityKraken, HitPoints: hp,
 	})
 	s.world.Components.Kraken.SetComponent(e, component.KrakenComponent{
-		AttackLegs: 1,
+		MaxHitPoints: hp, AttackLegs: 1,
 	})
 	s.world.Components.Header.SetComponent(e, component.HeaderComponent{
 		Behavior: component.BehaviorKraken, Type: component.CompositeTypeUnit, SkipPositionSync: true,

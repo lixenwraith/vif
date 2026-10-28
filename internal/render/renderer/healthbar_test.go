@@ -58,6 +58,31 @@ func TestKrakenHealthBarStaysVisibleCenteredAndScalesInBothColorModes(t *testing
 	}
 }
 
+// TestAKrakensHealthBarSpansTheHitPointsItRoseWith: a Kraken spawned with hit points
+// of its own fills its bar with them, so half of them draw half the bar
+func TestAKrakensHealthBarSpansTheHitPointsItRoseWith(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	e := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(e, component.PositionComponent{X: 20, Y: 12})
+	w.Components.Kraken.SetComponent(e, component.KrakenComponent{MaxHitPoints: 120})
+	w.Components.Combat.SetComponent(e, component.CombatComponent{CombatEntityType: component.CombatEntityKraken, HitPoints: 60})
+
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 40, 24)
+	NewHealthBarRenderer(game).Render(render.RenderContext{MapWidth: 40, MapHeight: 24, ViewportWidth: 40, ViewportHeight: 24}, buf)
+	count := 0
+	for y := range 24 {
+		for x := range 40 {
+			if buf.CellAt(x, y).Rune == visual.HealthBarChar {
+				count++
+			}
+		}
+	}
+	if want := (visual.KrakenHealthBarWidth + 1) / 2; count != want {
+		t.Fatalf("60 of 120 hit points draw %d bar cells, want %d", count, want)
+	}
+}
+
 // TestADataSpeciesHealthBarSpansItsPrototype: the bar measures the prototype's
 // footprint and hit points, not the swarm row the species fights as
 func TestADataSpeciesHealthBarSpansItsPrototype(t *testing.T) {

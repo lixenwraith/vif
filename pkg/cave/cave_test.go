@@ -23,26 +23,30 @@ var shapes = []Config{
 	{Height: 13, MinGap: 5, MaxGap: 40, MinWall: 1, Wavelength: 8, Detail: 1, Ramp: 3, Octaves: 3},
 }
 
+// Every column leaves the min gap, and the walls keep their min rows in the cave
+// proper: past an open mouth's ramp, and up to an opening to no rock
 func FuzzAColumnKeepsItsWallsAndGap(f *testing.F) {
 	for seed, s := range shapes {
-		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, s.Reach, int64(0), 0, 0)
-		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, s.Reach, int64(0), s.MinGap*(seed%2), 8)
+		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, s.Reach, 0, int64(0), 0, 0)
+		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, s.Reach, 0, int64(0), s.MinGap*(seed%2), 8)
+		f.Add(uint64(seed), s.Height, s.MinGap, s.MaxGap, s.MinWall, s.Wavelength, s.Swing, s.Detail, s.Ramp, s.Octaves, s.Reach, 7*seed+1, int64(0), s.MinGap*(seed%2), 8*(seed%2))
 	}
-	f.Add(^uint64(0), 40, 8, 22, 2, MaxWavelength, 1, 1, 0, 0, 0, int64(1)<<40, 0, 0)
-	f.Add(^uint64(0), 40, 8, 1<<20, 2, MaxWavelength, 1, 1, 0, MaxOctaves, 0, int64(1)<<40, 0, 1)
-	f.Add(^uint64(0), 40, 8, 1<<20, 2, MaxWavelength, 1, 1, 0, MaxOctaves, 1, int64(1)<<40, 0, 1)
-	f.Fuzz(func(t *testing.T, seed uint64, height, minGap, maxGap, minWall, wavelength, swing, detail, ramp, octaves, reach int, from int64, openGap, openRamp int) {
+	f.Add(^uint64(0), 40, 8, 22, 2, MaxWavelength, 1, 1, 0, 0, 0, 0, int64(1)<<40, 0, 0)
+	f.Add(^uint64(0), 40, 8, 1<<20, 2, MaxWavelength, 1, 1, 0, MaxOctaves, 0, 0, int64(1)<<40, 0, 1)
+	f.Add(^uint64(0), 40, 8, 1<<20, 2, MaxWavelength, 1, 1, 0, MaxOctaves, 1, 0, int64(1)<<40, 0, 1)
+	f.Fuzz(func(t *testing.T, seed uint64, height, minGap, maxGap, minWall, wavelength, swing, detail, ramp, octaves, reach, mouth int, from int64, openGap, openRamp int) {
 		c := Config{Seed: seed, Height: height, MinGap: minGap, MaxGap: maxGap, MinWall: minWall,
-			Wavelength: wavelength, Swing: swing, Detail: detail, Ramp: ramp, Octaves: octaves, Reach: reach}
+			Wavelength: wavelength, Swing: swing, Detail: detail, Ramp: ramp, Octaves: octaves, Reach: reach, Mouth: mouth}
 		if openRamp != 0 {
 			c.Open = Opening{At: from + int64(wavelength), Gap: openGap, Ramp: openRamp}
 		}
-		if c.Validate() != nil || height > 1<<12 || ramp > 1<<20 || openRamp > 1<<20 || from < 0 || from > 1<<50 {
+		if c.Validate() != nil || height > 1<<12 || ramp > 1<<20 || mouth > 1<<20 || openRamp > 1<<20 || from < 0 || from > 1<<50 {
 			t.Skip()
 		}
-		for i := from; i < from+int64(4*wavelength+ramp+openRamp+8); i++ {
+		for i := from; i < from+int64(4*wavelength+mouth+ramp+openRamp+8); i++ {
 			col := c.At(i)
-			if gap := height - col.Top - col.Bottom; col.Top < minWall || col.Bottom < minWall || gap < minGap {
+			walled := (mouth == 0 || i >= int64(mouth+ramp)) && (openRamp == 0 || openGap > 0 || i <= c.Open.At)
+			if gap := height - col.Top - col.Bottom; walled && (col.Top < minWall || col.Bottom < minWall) || gap < minGap {
 				t.Fatalf("%+v column %d = %+v: walls under %d or gap %d under %d", c, i, col, minWall, gap, minGap)
 			}
 		}
@@ -50,7 +54,7 @@ func FuzzAColumnKeepsItsWallsAndGap(f *testing.F) {
 }
 
 // An opening leaves every column up to its own as the cave had it, and past its ramp
-// holds its gap centred: all the walls leave, or the gap it names
+// holds its gap centred: no rock, or the gap it names
 func TestAnOpeningKeepsTheCaveBeforeItAndHoldsItsGapPast(t *testing.T) {
 	for _, s := range shapes {
 		for _, gap := range []int{0, s.MinGap} {
@@ -60,12 +64,33 @@ func TestAnOpeningKeepsTheCaveBeforeItAndHoldsItsGapPast(t *testing.T) {
 			if err := c.Validate(); err != nil {
 				t.Fatalf("%+v: %v", c, err)
 			}
-			want := cmp.Or(gap, s.Height-2*s.MinWall)
+			want := cmp.Or(gap, s.Height)
 			for i := range c.Open.At + 80 {
 				col := c.At(i)
 				if i <= c.Open.At && col != s.At(i) ||
 					i >= c.Open.At+16 && (col.Top != (s.Height-want)/2 || s.Height-col.Top-col.Bottom != want) {
 					t.Fatalf("%+v column %d = %+v, the cave's %+v, want a gap of %d past column %d", c, i, col, s.At(i), want, c.Open.At+16)
+				}
+			}
+		}
+	}
+}
+
+// A mouth of open map holds no rock, its jagged median included, and past its ramp
+// changes no column of the cave without it
+func TestAMouthIsOpenMapAndChangesNoColumnPastItsRamp(t *testing.T) {
+	for _, s := range shapes {
+		for _, mouth := range []int{1, jaggedMedian, 120} {
+			s.Seed = 7
+			c := s
+			c.Mouth = mouth
+			if err := c.Validate(); err != nil {
+				t.Fatalf("%+v: %v", c, err)
+			}
+			past := int64(mouth + s.Ramp + jaggedMedian)
+			for i := range past + 200 {
+				if col := c.At(i); i < int64(mouth) && col != (Column{}) || i >= past && col != s.At(i) {
+					t.Fatalf("%+v column %d = %+v, the cave's %+v: want no rock before column %d and the cave's from %d", c, i, col, s.At(i), mouth, past)
 				}
 			}
 		}

@@ -108,6 +108,29 @@ func TestACountdownIsPlacedByItsInk(t *testing.T) {
 	})
 }
 
+// An unanchored countdown is drawn beside its origin cell, and each origin cell
+// holds a countdown of its own.
+func TestAnUnanchoredCountdownStandsBesideItsOrigin(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 160, 60, engine.NewManualClock())
+	splash := ready(NewSplashSystem(w)).(*SplashSystem)
+	for _, x := range []int{40, 120} {
+		splash.handleTimerSpawn(&event.SplashTimerRequestPayload{OriginX: x, OriginY: 40, Duration: 3 * time.Second})
+	}
+	if events := w.Resources.Event.Queue.Consume(); len(events) != 0 {
+		t.Fatalf("the second countdown raised %v, want the first left standing", events)
+	}
+
+	near := 2 * parameter.SplashCharWidth
+	for _, e := range w.Components.Splash.Entities() {
+		c, _ := w.Components.Splash.GetComponent(e)
+		if dx, dy := c.OffsetX, c.OffsetY; c.AnchorY != 40 || dx < -near || dx > near || dy < -near || dy > near {
+			t.Fatalf("the countdown of (%d, %d) is drawn from (%d, %d), want within %d cells",
+				c.AnchorX, c.AnchorY, c.AnchorX+dx, c.AnchorY+dy, near)
+		}
+	}
+}
+
 // A countdown whose anchor has left the map is leaving with it: until the next
 // update retires it, it holds no space against magnifiers or other countdowns.
 func TestTimerWithoutItsAnchorHoldsNoSpace(t *testing.T) {

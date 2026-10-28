@@ -1,6 +1,8 @@
 package component
 
 import (
+	"time"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -77,7 +79,7 @@ type DropEntry struct {
 	Loot          LootType
 	BaseRate      float64
 	Count         int // items dropped on success (0 treated as 1)
-	FallbackCount int // added to every later non-unique tier when this unique entry is skipped
+	FallbackCount int // added to every later non-unique tier when its unique tier skips every entry
 }
 
 // DropTier is one roll among its entries. A unique tier skips the weapons a cursor
@@ -128,6 +130,13 @@ type LootComponent struct {
 
 	// Owner is the cursor this drop belongs to; loot is personal
 	Owner core.Entity
+
+	// A still drop stays where it lands instead of homing on its owner. Return is
+	// how long one collected stays off the map before it comes back to its cell, 0
+	// for never, and Away the time left until it does.
+	Still  bool
+	Return time.Duration
+	Away   time.Duration
 
 	// Grid tracking
 	LastIntX int

@@ -332,7 +332,8 @@ type GoldJumpRequestPayload struct {
 
 // --- Splash ---
 
-// SplashTimerRequestPayload anchors countdown timer to sequence position
+// SplashTimerRequestPayload places a countdown beside its anchor, a composite header,
+// or without one beside its origin cell, one countdown to each
 type SplashTimerRequestPayload struct {
 	AnchorEntity core.Entity   `toml:"anchor_entity"`
 	Color        color.RGB     `toml:"color"`
@@ -360,12 +361,16 @@ type EnergyAddPayload struct {
 	Type       component.EnergyDeltaType `toml:"type"`
 }
 
-// EnergySetPayload contains energy value. Weapons grants every weapon after the
-// set, so a polarity crossing the set causes strips the old ones first.
+// EnergySetPayload sets a cursor's energy to Value, or with Flip to the negation of
+// what it holds. Weapons grants a charge of every weapon after the set, and Charges
+// above 0 sets Weapon's, so a polarity crossing the set causes strips the old first.
 type EnergySetPayload struct {
-	Entity  core.Entity `toml:"entity"`
-	Value   int         `toml:"value"`
-	Weapons bool        `toml:"weapons"`
+	Entity  core.Entity          `toml:"entity"`
+	Value   int                  `toml:"value"`
+	Flip    bool                 `toml:"flip"`
+	Weapons bool                 `toml:"weapons"`
+	Weapon  component.WeaponType `toml:"weapon"`
+	Charges int                  `toml:"charges"`
 }
 
 // EnergyCrossedZeroPayload names the cursor whose energy changed sign
@@ -422,6 +427,14 @@ type WeaponAddRequestPayload struct {
 type WeaponRemoveRequestPayload struct {
 	Entity core.Entity          `toml:"entity"`
 	Weapon component.WeaponType `toml:"weapon"`
+}
+
+// WeaponSetRequestPayload sets one kind's charges on a cursor, capped at what the
+// kind holds; 0 or less takes it, the innate gun included
+type WeaponSetRequestPayload struct {
+	Entity  core.Entity          `toml:"entity"`
+	Weapon  component.WeaponType `toml:"weapon"`
+	Charges int                  `toml:"charges"`
 }
 
 // WeaponFireRequestPayload names the cursor firing main and its ready loadout
@@ -946,10 +959,12 @@ type SwarmSpawnRequestPayload struct {
 	Y int `toml:"y"`
 }
 
-// KrakenSpawnRequestPayload defaults (0, 0) to the map center.
+// KrakenSpawnRequestPayload defaults (0, 0) to the map center, and hit points of 0
+// or fewer to parameter.KrakenInitialHP.
 type KrakenSpawnRequestPayload struct {
-	X int `toml:"x"`
-	Y int `toml:"y"`
+	X  int `toml:"x"`
+	Y  int `toml:"y"`
+	HP int `toml:"hp"`
 }
 
 // --- Behavior ---
@@ -1169,11 +1184,15 @@ type SpeciesCreatedPayload struct {
 
 // --- Loot ---
 
-// LootSpawnRequestPayload names an event drop's kind and cell; no drop table is rolled
+// LootSpawnRequestPayload names an event drop's kind and cell; no drop table is
+// rolled. A still drop stays at its cell, and ReturnMs above 0 brings one collected
+// back there that long after.
 type LootSpawnRequestPayload struct {
-	Type component.LootType `toml:"type"`
-	X    int                `toml:"x"`
-	Y    int                `toml:"y"`
+	Type     component.LootType `toml:"type"`
+	X        int                `toml:"x"`
+	Y        int                `toml:"y"`
+	Still    bool               `toml:"still"`
+	ReturnMs int64              `toml:"return_ms"`
 }
 
 // --- Missile ---
@@ -1385,8 +1404,10 @@ type MazeSpawnRequestPayload struct {
 // CaveStartPayload lays a cave across the map, its rock following cave.Config at the
 // map's height, and scrolls it left at Speed columns a second, up to the soft cap. A
 // zero speed, gap or wavelength takes its default, a zero seed draws one, a zero mask
-// blocks everything, a zero visual draws stone and a zero reach caps no wall. Art names
-// a stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's pick may.
+// blocks everything, a zero visual draws stone and a zero reach caps no wall; a mouth
+// as wide as the map lays no rock in view, the cave entering past its right edge, and
+// EventCaveEntered follows once the mouth and the ramp have scrolled past. Art names a
+// stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's pick may.
 type CaveStartPayload struct {
 	Seed       uint64                     `toml:"seed"`
 	Speed      float64                    `toml:"speed"`
@@ -1399,6 +1420,7 @@ type CaveStartPayload struct {
 	Ramp       int                        `toml:"ramp"`
 	Octaves    int                        `toml:"octaves"`
 	Reach      int                        `toml:"reach"`
+	Mouth      int                        `toml:"mouth"`
 	BlockMask  component.WallBlockMask    `toml:"block_mask"`
 	Visual     component.WallVisualConfig `toml:"visual"`
 	Art        string                     `toml:"art"`
@@ -1417,9 +1439,9 @@ type CavePacePayload struct {
 }
 
 // CaveOpenPayload widens the cave from the first column past the map's right edge,
-// over Ramp columns (the cave's own ramp when 0), to Gap open rows centred (all the
-// walls leave when 0), and holds it open; EventCaveOpened follows once the opening
-// fills the map. A cave opens once.
+// over Ramp columns (the cave's own ramp when 0), to Gap open rows centred (no rock at
+// all when 0), and holds it open; EventCaveOpened follows once the opening fills the
+// map. A cave opens once.
 type CaveOpenPayload struct {
 	Gap  int `toml:"gap"`
 	Ramp int `toml:"ramp"`

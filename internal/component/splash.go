@@ -21,12 +21,12 @@ type SplashComponent struct {
 	Length  int                             // Active character count
 	Color   color.RGB                       // Render color
 
-	// Positioning: AnchorEntity != 0 uses entity-relative, else absolute AnchorX/Y
+	// Positioning: Offset from AnchorEntity's position, or without one from AnchorX/Y
 	AnchorEntity                                     core.Entity
 	AnchorX                                          int // Game-relative X
 	AnchorY                                          int // Game-relative Y
 	MarginLeft, MarginRight, MarginTop, MarginBottom int // Forced splash offset from anchor
-	OffsetX                                          int // Calculated offset from entity position (ignored if AnchorEntity == 0)
+	OffsetX                                          int // Calculated offset from the anchor
 	OffsetY                                          int
 
 	// Visual purpose and uniqueness enforcement; a timer splash counts down on its

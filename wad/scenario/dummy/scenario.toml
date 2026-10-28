@@ -1,0 +1,272 @@
+description = "Target Dummy: take any weapon at any charge from the range on the left and try it on the dummy on the right."
+min_players = 1
+max_players = 1
+
+# A weapon range for one player. The cursor starts at the centre with every loot
+# kind lying still to its left, H L M P over E B R T, each giving one charge or its
+# heat or energy and lying back on its cell three seconds after the pickup, so the
+# cursor has time to step off; :w sets any charge directly, the gun's 0 included,
+# and T gives the gun back. The dummy, a pylon of one hit point a member, stands to
+# the right and drops nothing. Behind it a green + and a red - pad each add or take
+# a hit point while the cursor stands on one, again every three seconds under a
+# countdown, and a standing dummy takes its new hit points at once. A dummy shot
+# down rises again on its spot once the cursor has walked onto it and back out of
+# its shield's reach, and an energy drop homes on the cursor from the dummy's
+# centre whenever its energy is 0. :n lays the range again.
+#
+# Only player 0's cursor steps on the pads and the dummy's spot, so the range is
+# solo: a session's guests would stand on them unseen.
+
+# The range, the cursor, the dummy and its pads in a row, and the pads clear of
+# the dummy by the reach of the shield (10 cells by 5) of a cursor on them
+[map]
+min_width = 80
+min_height = 30
+
+[drops.pylon]
+tiers = []
+
+[regions.main]
+initial = "RangeWait"
+disabled_systems = ["glyph", "nugget", "gold", "drain", "fuse", "music"]
+
+[regions.dummy]
+background = true
+
+[regions.plus]
+background = true
+
+[regions.minus]
+background = true
+
+[regions.player]
+initial = "PlayerBoot"
+background = true
+
+# --- Macros ---
+
+[macros.Offset]
+doc = "Set `name` to `from` plus `delta`, which is not 0."
+params = { name = "string", from = "string", delta = "int" }
+body = [
+    { action = "CopyVar", payload = { name = "${name}", source_var = "${from}" } },
+    { action = "IncrementVar", payload = { name = "${name}", delta = "${delta}" } },
+]
+
+[macros.RangeDrop]
+doc = "A still drop of `kind` on the cell variables `x` and `y` hold, back three seconds after its pickup."
+params = { kind = "string", x = "string", y = "string" }
+body = { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "${kind}", still = true, return_ms = 3000 }, payload_vars = { x = "${x}", y = "${y}" } }
+
+# A pad: a frame five cells by three that the cursor and shots pass, around its
+# sign; the frame's corners and edges draw as box lines
+[macros.FrameCell]
+doc = "One cell of a pad's frame, `dx` and `dy` from its sign."
+params = { dx = "int", dy = "int", color = "table" }
+body = { OffsetX = "${dx}", OffsetY = "${dy}", WallVisualConfig = { fg_color = "${color}", render_fg = true } }
+
+[macros.Pad]
+doc = "A pad's frame and its `sign`, a character code, centred on the cell variables `x` and `y` hold."
+params = { x = "string", y = "string", sign = "int", color = "table" }
+body = [
+    { action = "EmitEvent", event = "EventWallBatchSpawnRequest", payload = { block_mask = "none", box_style = "single", cells = [
+        { macro = "FrameCell", color = "${color}", each = { dx = [-2, -1, 0, 1, 2, -2, 2, -2, -1, 0, 1, 2], dy = [-1, -1, -1, -1, -1, 0, 0, 1, 1, 1, 1, 1] } },
+    ] }, payload_vars = { x = "${x}", y = "${y}" } },
+    { action = "EmitEvent", event = "EventWallSpawnRequest", payload = { char = "${sign}", fg_color = "${color}", render_fg = true, block_mask = "none" }, payload_vars = { x = "${x}", y = "${y}" } },
+]
+
+# Player 0's cursor stands in the box four variables bound, edges included; an
+# empty slot or a cursor off the map stands at -1 and in no box
+[macros.CursorIn]
+doc = "And's arguments: player 0's cursor stands within columns `left` to `right` and rows `top` to `bottom`, each a variable."
+params = { left = "string", right = "string", top = "string", bottom = "string" }
+body = { guards = [
+    { name = "StatusIntCompare", args = { key = "player.0.x", op = "gte", value = 0, since = "${left}" } },
+    { name = "StatusIntCompare", args = { key = "player.0.x", op = "lte", value = 0, since = "${right}" } },
+    { name = "StatusIntCompare", args = { key = "player.0.y", op = "gte", value = 0, since = "${top}" } },
+    { name = "StatusIntCompare", args = { key = "player.0.y", op = "lte", value = 0, since = "${bottom}" } },
+] }
+
+# A pad press: the dummy's hit points move by one, the pad sounds, the status bar
+# reads the new count and a countdown beside the pad runs its three seconds
+[macros.Press]
+doc = "Press a pad: `step` (IncrementVar or DecrementVar) the dummy's hit points within 1 to 999, sound `sound`, and count down three seconds beside the pad at variables `x` and `y`."
+params = { step = "string", sound = "string", color = "table", x = "string", y = "string" }
+body = [
+    { action = "${step}", payload = { name = "dummy_hp", min = 1, max = 999 } },
+    { action = "EmitEvent", event = "EventSoundRequest", payload = { sound = "${sound}" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Dummy {} HP" }, payload_vars = { message = "dummy_hp" } },
+    { action = "EmitEvent", event = "EventSplashTimerRequest", payload = { color = "${color}", margin_left = 2, margin_right = 2, margin_top = 1, margin_bottom = 1, duration = 3000000000 }, payload_vars = { origin_x = "${x}", origin_y = "${y}" } },
+]
+
+# --- Range ---
+
+# The range is laid once the cursor stands on the map: a drop is the cursor's own,
+# so one laid before it would belong to nobody
+[states.RangeWait]
+parent = "Root"
+transitions = [
+    { trigger = "EventCursorSpawned", target = "Range" },
+]
+
+# Everything stands about the map's centre, where the cursor starts: the drops in
+# two rows of four, 14 to 32 columns left; the dummy 18 columns right, a column
+# clear of the starting cursor's shield; the pads 35 columns right, seven rows above
+# and below it. The dummy's spot is its footprint's box, and a cursor is out of its
+# shield's reach of the dummy beyond 16 columns or 8 rows from the dummy's centre.
+[states.Range]
+parent = "Root"
+on_enter = [
+    { action = "ConfigToVar", payload = { field = "map_width", name = "cx" } },
+    { action = "DivideVar", payload = { name = "cx", delta = 2 } },
+    { action = "ConfigToVar", payload = { field = "map_height", name = "cy" } },
+    { action = "DivideVar", payload = { name = "cy", delta = 2 } },
+    { action = "CopyVar", payload = { name = "dummy_y", source_var = "cy" } },
+    { macro = "Offset", each = { name = ["col_0", "col_1", "col_2", "col_3", "row_top", "row_bottom"], from = ["cx", "cx", "cx", "cx", "cy", "cy"], delta = [-32, -26, -20, -14, -3, 3] } },
+    { macro = "Offset", each = { name = ["dummy_x", "dummy_left", "dummy_right", "dummy_top", "dummy_bottom"], from = ["cx", "cx", "cx", "cy", "cy"], delta = [18, 12, 24, -3, 3] } },
+    { macro = "Offset", each = { name = ["clear_left", "clear_right", "clear_top", "clear_bottom"], from = ["cx", "cx", "cy", "cy"], delta = [2, 34, -8, 8] } },
+    { macro = "Offset", each = { name = ["pad_x", "pad_left", "pad_right"], from = ["cx", "cx", "cx"], delta = [35, 33, 37] } },
+    { macro = "Offset", each = { name = ["plus_y", "plus_top", "plus_bottom", "minus_y", "minus_top", "minus_bottom"], from = ["cy", "cy", "cy", "cy", "cy", "cy"], delta = [-7, -8, -6, 7, 6, 8] } },
+    { macro = "RangeDrop", each = { kind = ["heat", "rod", "launcher", "disruptor", "energy", "turret", "emitter", "gun"], x = ["col_0", "col_1", "col_2", "col_3", "col_0", "col_1", "col_2", "col_3"], y = ["row_top", "row_top", "row_top", "row_top", "row_bottom", "row_bottom", "row_bottom", "row_bottom"] } },
+    { macro = "Pad", x = "pad_x", y = "plus_y", sign = 43, color = { r = 0, g = 220, b = 0 } },    # +
+    { macro = "Pad", x = "pad_x", y = "minus_y", sign = 45, color = { r = 230, g = 40, b = 40 } }, # -
+    { action = "SetVar", payload = { name = "dummy_hp", value = 1 } },
+    { action = "SpawnRegion", region = "dummy", initial_state = "DummySpawn" },
+    { action = "SpawnRegion", region = "plus", initial_state = "PlusIdle" },
+    { action = "SpawnRegion", region = "minus", initial_state = "MinusIdle" },
+]
+
+# --- Dummy ---
+
+# A pylon of dummy_hp a member, recorded as it is asked for, so a pad press while
+# it stands is a change it has not taken
+[states.DummySpawn]
+parent = "Root"
+on_enter = [
+    { action = "CopyVar", payload = { name = "dummy_hp_up", source_var = "dummy_hp" } },
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { min_hp = 1, max_hp = 1 }, payload_vars = { x = "dummy_x", y = "dummy_y", min_hp = "dummy_hp", max_hp = "dummy_hp" } },
+]
+transitions = [
+    { trigger = "EventSpeciesCreated", target = "DummyUp", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] } },
+    { trigger = "EventPylonSpawnFailed", target = "DummyDown" },
+    { trigger = "Tick", target = "DummyDown", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
+]
+
+# A standing dummy takes new hit points by giving way to a fresh one; a cancelled
+# pylon is no kill, so nothing counts it
+[states.DummyUp]
+parent = "Root"
+transitions = [
+    { trigger = "EventSpeciesKilled", target = "DummyDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["pylon"] } },
+    { trigger = "Tick", target = "DummyReplace", guard = "VarCompareVar", guard_args = { var_a = "dummy_hp", op = "neq", var_b = "dummy_hp_up" } },
+]
+
+[states.DummyReplace]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonCancelRequest" },
+]
+transitions = [
+    { trigger = "Tick", target = "DummySpawn" },
+]
+
+# Shot down, the dummy waits for the cursor to walk onto its spot. It rises once
+# the cursor is out of its shield's reach again: risen around a bare cursor its
+# members would burn the cursor's heat, and inside a shield drain its energy.
+[states.DummyDown]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "DummyArmed", guard = "And", guard_args = { macro = "CursorIn", left = "dummy_left", right = "dummy_right", top = "dummy_top", bottom = "dummy_bottom" } },
+]
+
+[states.DummyArmed]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Step Back To Raise The Dummy" } },
+]
+transitions = [
+    { trigger = "Tick", target = "DummySpawn", guard = "Not", guard_args = { guard = { name = "And", args = { macro = "CursorIn", left = "clear_left", right = "clear_right", top = "clear_top", bottom = "clear_bottom" } } } },
+]
+
+# --- Pads ---
+
+# A pad presses as the cursor stands on it and again each time its countdown ends
+# with the cursor still or once more there
+[states.PlusIdle]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlusPressed", guard = "And", guard_args = { macro = "CursorIn", left = "pad_left", right = "pad_right", top = "plus_top", bottom = "plus_bottom" } },
+]
+
+[states.PlusPressed]
+parent = "Root"
+on_enter = [
+    { macro = "Press", step = "IncrementVar", sound = "tone_e5", color = { r = 0, g = 220, b = 0 }, x = "pad_x", y = "plus_y" },
+]
+transitions = [
+    { trigger = "Tick", target = "PlusIdle", guard = "StateTimeExceeds", guard_args = { ms = 3000 } },
+]
+
+[states.MinusIdle]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "MinusPressed", guard = "And", guard_args = { macro = "CursorIn", left = "pad_left", right = "pad_right", top = "minus_top", bottom = "minus_bottom" } },
+]
+
+[states.MinusPressed]
+parent = "Root"
+on_enter = [
+    { macro = "Press", step = "DecrementVar", sound = "tone_cs4", color = { r = 230, g = 40, b = 40 }, x = "pad_x", y = "minus_y" },
+]
+transitions = [
+    { trigger = "Tick", target = "MinusIdle", guard = "StateTimeExceeds", guard_args = { ms = 3000 } },
+]
+
+# --- Player ---
+
+# The cursor starts with an energy drop's worth, 10000, so its shield holds
+# through a long session at the range
+[states.PlayerBoot]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 10000 } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
+]
+
+[states.PlayerBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+# Energy run down to 0 brings one energy drop, homing on the cursor from the
+# dummy's centre, and another only after the energy has moved off 0 again. The
+# half second lets the cursor's first energy reach its status first.
+[states.PlayerActive]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+    { trigger = "Tick", target = "PlayerRecharge", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 500 } },
+        { name = "StatusIntCompare", args = { key = "player.0.energy.current", op = "eq", value = 0 } },
+    ] } },
+]
+
+[states.PlayerRecharge]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "energy" }, payload_vars = { x = "dummy_x", y = "dummy_y" } },
+]
+transitions = [
+    { trigger = "Tick", target = "PlayerReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+    { trigger = "Tick", target = "PlayerActive", guard = "Not", guard_args = { guard = { name = "StatusIntCompare", args = { key = "player.0.energy.current", op = "eq", value = 0 } } } },
+]
+
+[states.PlayerReset]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+]

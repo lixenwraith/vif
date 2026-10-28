@@ -90,6 +90,10 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			p := &r.gameCtx.World.Resources.Behaviors[b.Program]
 			spec.width, spec.height, spec.maxHP, spec.offsetX, spec.offsetY = p.Width, p.Height, p.HitPoints, p.HeaderX, p.HeaderY
 		}
+		// A Kraken's full bar is the hit points it rose with
+		if k, ok := r.gameCtx.World.Components.Kraken.GetComponent(entity); ok && k.MaxHitPoints > 0 {
+			spec.maxHP = k.MaxHitPoints
+		}
 		if spec.maxHP == 0 {
 			return true
 		}

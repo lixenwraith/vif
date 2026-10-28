@@ -283,6 +283,46 @@ func TestGunOutlivesAnEnergyZeroCrossingAndLeavesOnRequest(t *testing.T) {
 	}
 }
 
+// TestAFlippedEnergySetLeavesTheGunAndTheSetKind: :w's negative count flips the
+// energy's sign, and the crossing strips the loot kinds before the set lands, which
+// caps at the kind's maximum; a set of 0 takes even the gun.
+func TestAFlippedEnergySetLeavesTheGunAndTheSetKind(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	handlers := []interface {
+		EventTypes() []event.EventType
+		HandleEvent(event.GameEvent)
+	}{ready(NewEnergySystem(w)).(*EnergySystem), ready(NewWeaponSystem(w)).(*WeaponSystem)}
+	settle := func(ev event.GameEvent) {
+		for evs := []event.GameEvent{ev}; len(evs) > 0; evs = w.Resources.Event.Queue.Consume() {
+			for _, e := range evs {
+				for _, h := range handlers {
+					if slices.Contains(h.EventTypes(), e.Type) {
+						h.HandleEvent(e)
+					}
+				}
+			}
+		}
+	}
+	energyComp, _ := w.Components.Energy.GetPtr(cursor)
+	weaponComp, _ := w.Components.Weapon.GetPtr(cursor)
+	energyComp.Current, weaponComp.Charges[component.WeaponRod] = 500, 2
+
+	settle(event.GameEvent{Type: event.EventEnergySetRequest, Payload: &event.EnergySetPayload{
+		Entity: cursor, Flip: true, Weapon: component.WeaponLauncher, Charges: 99,
+	}})
+	want := [component.WeaponCount]int{component.WeaponGun: 1,
+		component.WeaponLauncher: component.WeaponSpecs[component.WeaponLauncher].MaxCharges}
+	if energyComp.Current != -500 || weaponComp.Charges != want {
+		t.Fatalf("energy %d, loadout %v, want -500 and %v", energyComp.Current, weaponComp.Charges, want)
+	}
+	settle(event.GameEvent{Type: event.EventWeaponSetRequest, Payload: &event.WeaponSetRequestPayload{
+		Entity: cursor, Weapon: component.WeaponGun,
+	}})
+	if weaponComp.Charges[component.WeaponGun] != 0 {
+		t.Fatal("a set of 0 left the gun")
+	}
+}
+
 // The kinetic window covers every attacker and weapon: a hit on a closed window
 // opens it with its impulse, one on an open window lands only when stronger than
 // the impulse that opened it, resetting the window, and a window a species opened

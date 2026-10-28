@@ -73,7 +73,7 @@ func LoadScenario(o Options) (Scenario, error) {
 		return Scenario{}, err
 	}
 	if entry == "" {
-		return ReadScenario(EmbeddedLabel, asset.DefaultScenario, asset.DefaultScenarioEntry)
+		return ReadScenario(EmbeddedLabel, asset.MainScenario, asset.MainScenarioEntry)
 	}
 	dir := filepath.Dir(entry)
 	return ReadScenario(filepath.Base(dir), os.DirFS(dir), filepath.Base(entry))

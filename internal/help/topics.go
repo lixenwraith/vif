@@ -226,6 +226,7 @@ var topics = []topicDef{
 			{Keys: ":heat N", Desc: "Set player heat, clamped to the maximum"},
 			{Keys: ":boost", Desc: "Max heat and activate boost"},
 			{Keys: ":god  :demon", Desc: "Max heat, full positive or negative energy, and every weapon"},
+			{Keys: ":w <weapon> <n>  :weapon", Desc: "Set one weapon's charges, named by it or its attack: past its maximum it maxes out, 0 takes it, the gun included, and a negative n first flips the energy's sign, which drops every other weapon but the gun"},
 			{Keys: ":blossom  :decay", Desc: "Trigger a blossom or decay wave"},
 			{Keys: ":dust", Desc: "Transform every glyph to dust"},
 			{Keys: ":system <name> enable|disable", Desc: "Toggle one registered system; unavailable live"},

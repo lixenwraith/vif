@@ -257,7 +257,7 @@ the predicted Shared species. A future player-originated wind trigger needs a
 separate Bus artifact rather than changing these derived events into wire data.
 `EventDriftStart` and `EventDriftCancel` follow the same rule, as do `EventCaveStart`,
 `EventCaveStop`, `EventCavePace` and `EventCaveOpen`; every instance's walls emit
-`EventCaveOpened` on the same step.
+`EventCaveOpened` and `EventCaveEntered` on the same step.
 
 ### D-11 — The host is exact; guests converge
 
