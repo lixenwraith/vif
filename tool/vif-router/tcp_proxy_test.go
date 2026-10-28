@@ -120,12 +120,20 @@ func join(addr, id string) error {
 // whether a retry can help, which a page reads where it is never shown a status.
 func TestEitherRouteRefusesBeforeDialling(t *testing.T) {
 	pod := startPod(t)
-	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	// A closed listener's port can go to another package's listener while go test
+	// ./... runs, and that one answers the dial. A held connection keeps its own end's
+	// port bound, and nothing listens there, so a dial to it is refused.
+	far, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	refusing := &testPod{addr: closed.Addr().String()}
-	_ = closed.Close()
+	t.Cleanup(func() { _ = far.Close() })
+	near, err := net.Dial("tcp", far.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = near.Close() })
+	refusing := &testPod{addr: near.LocalAddr().String()}
 	for _, tc := range []struct {
 		name, id, want string
 		routeErr       error
