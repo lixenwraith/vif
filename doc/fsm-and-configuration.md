@@ -540,12 +540,14 @@ flowchart TD
 - Keep actions small; complex mechanics should remain Go systems triggered by a
   typed event.
 
-The embedded campaign uses `main`, `quasar`, `storm`, `kraken`, `tower`, and a
-background `monitor` that owns cursor boot/retry, pays gold completions wherever
-the sequence ends, and resets on `session.any_defeated`. This guard aggregates
+The embedded campaign uses `main`, `quasar`, `storm`, `kraken`, `tower`, the
+`handover` from a defended tower back to `main`, and a background `monitor` that
+owns cursor boot/retry, pays gold completions wherever the sequence ends, and
+resets on `session.any_defeated`. This guard aggregates
 replicated owner defeat reports; it does not read instance-local energy or heat
 mirrors. Encounter `EventLevelSetup` actions pair `clear_entities = true` with
-`preserve_loot = true`, so a level change keeps uncollected rewards; a defeat emits
+`preserve_loot = true`, so a level change keeps uncollected rewards; a Kraken's
+return to `main` clears only its maze, keeping the text. A defeat emits
 `EventGameResetRequest`, the same new game `:n` starts, which clears the world,
 rewards included. The full current flow is summarized in
 [Gameplay design](gameplay.md), and [the authoring reference](fsm-reference.md)
