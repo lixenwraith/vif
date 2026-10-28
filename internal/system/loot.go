@@ -231,8 +231,8 @@ func (s *LootSystem) Update() {
 			&kineticComp.Kinetic,
 			dtSec,
 			0, 0,
-			0, config.MapWidth,
-			0, config.MapHeight,
+			0, config.MapWidth-1,
+			0, config.MapHeight-1,
 			parameter.LootRestitution,
 			func(tx, ty int) bool {
 				return s.world.Positions.IsBlocked(tx, ty, component.WallBlockKinetic)

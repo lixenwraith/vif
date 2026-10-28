@@ -126,7 +126,7 @@ func TestApplyHomingScaledDragDisabled(t *testing.T) {
 
 func TestIntegrateWithBounceBoundaryRestitution(t *testing.T) {
 	k := newKin(5.5, 5.5, 100, 0)
-	_, _, hit := IntegrateWithBounce(&k, 0.1, 0, 0, 0, 10, 0, 10, 1, noWall)
+	_, _, hit := IntegrateWithBounce(&k, 0.1, 0, 0, 0, 9, 0, 9, 1, noWall)
 	if !hit {
 		t.Fatal("boundary collision not reported")
 	}
@@ -143,7 +143,7 @@ func TestIntegrateWithBounceAppliesAccelerationOnce(t *testing.T) {
 	k.AccelX = 8
 	k.AccelY = -4
 
-	gx, gy, stats := IntegrateWithBounceStats(&k, 0.25, 0, 0, -20, 20, -20, 20, 1, noWall)
+	gx, gy, stats := IntegrateWithBounceStats(&k, 0.25, 0, 0, -20, 19, -20, 19, 1, noWall)
 
 	if k.VelX != 2 || k.VelY != -1 {
 		t.Fatalf("velocity = (%v,%v), want (2,-1)", k.VelX, k.VelY)
@@ -158,7 +158,7 @@ func TestIntegrateWithBounceAppliesAccelerationOnce(t *testing.T) {
 
 func TestIntegrateWithBounceZeroRestitution(t *testing.T) {
 	k := newKin(5.5, 5.5, 100, 0)
-	_, _, hit := IntegrateWithBounce(&k, 0.1, 0, 0, 0, 10, 0, 10, 0, noWall)
+	_, _, hit := IntegrateWithBounce(&k, 0.1, 0, 0, 0, 9, 0, 9, 0, noWall)
 	if !hit {
 		t.Fatal("boundary collision not reported")
 	}
@@ -171,7 +171,7 @@ func TestIntegrateWithBounceNoWallTunneling(t *testing.T) {
 	wall := func(x, _ int) bool { return x == 7 }
 	k := newKin(2.5, 5.5, 50, 0)
 
-	gx, _, hit := IntegrateWithBounce(&k, 0.2, 0, 0, 0, 40, 0, 20, 1, wall)
+	gx, _, hit := IntegrateWithBounce(&k, 0.2, 0, 0, 0, 39, 0, 19, 1, wall)
 	if !hit {
 		t.Fatal("wall collision not reported")
 	}
@@ -189,7 +189,7 @@ func TestIntegrateWithBounceRespectsHeaderOffset(t *testing.T) {
 	wall := func(x, _ int) bool { return x == 7 }
 	k := newKin(4.5, 5.5, 50, 0)
 
-	gx, _, hit := IntegrateWithBounce(&k, 0.2, 2, 1, 0, 40, 0, 20, 1, wall)
+	gx, _, hit := IntegrateWithBounce(&k, 0.2, 2, 1, 0, 39, 0, 19, 1, wall)
 	if !hit {
 		t.Fatal("offset wall collision not reported")
 	}
@@ -200,9 +200,21 @@ func TestIntegrateWithBounceRespectsHeaderOffset(t *testing.T) {
 
 func TestIntegrateWithBounceStaysInBounds(t *testing.T) {
 	k := newKin(5.5, 5.5, 4000, -3000)
-	gx, gy, _ := IntegrateWithBounce(&k, 0.05, 0, 0, 0, 10, 0, 10, 0.5, noWall)
-	if gx < 0 || gx >= 10 || gy < 0 || gy >= 10 {
+	gx, gy, _ := IntegrateWithBounce(&k, 0.05, 0, 0, 0, 9, 0, 9, 0.5, noWall)
+	if gx < 0 || gx > 9 || gy < 0 || gy > 9 {
 		t.Fatalf("extreme velocity escaped bounds: (%d,%d)", gx, gy)
+	}
+}
+
+// TestTheIntegratorsBoundsHoldTheirLastCell: the bounds are the first and last
+// cells the position may hold, so a body flying at the edge reaches the last cell
+// and reflects there, never past it. A step moves under a cell, so the reflection
+// lands on the cell the body stood in, which its walls already let it hold.
+func TestTheIntegratorsBoundsHoldTheirLastCell(t *testing.T) {
+	k := newKin(8.5, 5.5, 40, 0)
+	gx, _, stats := IntegrateWithBounceStats(&k, 0.05, 0, 0, 0, 9, 0, 9, 1, noWall)
+	if gx != 9 || stats.BoundaryReflections == 0 || k.VelX >= 0 {
+		t.Fatalf("ended on cell %d moving %v after %+v, want the last cell 9 reflected back", gx, k.VelX, stats)
 	}
 }
 
@@ -211,8 +223,8 @@ func TestIntegrateWithBounceStatsPreservesIntegration(t *testing.T) {
 	wrapper := newKin(2.5, 5.5, 50, -3)
 	instrumented := wrapper
 
-	wx, wy, hit := IntegrateWithBounce(&wrapper, 0.2, 0, 0, 0, 40, 0, 20, 0.7, wall)
-	sx, sy, stats := IntegrateWithBounceStats(&instrumented, 0.2, 0, 0, 0, 40, 0, 20, 0.7, wall)
+	wx, wy, hit := IntegrateWithBounce(&wrapper, 0.2, 0, 0, 0, 39, 0, 19, 0.7, wall)
+	sx, sy, stats := IntegrateWithBounceStats(&instrumented, 0.2, 0, 0, 0, 39, 0, 19, 0.7, wall)
 
 	if wrapper != instrumented || wx != sx || wy != sy || hit != stats.Hit() {
 		t.Fatalf("instrumented integration diverged:\nwrapper=(%+v, %d, %d, %v)\nstats=(%+v, %d, %d, %+v)",

@@ -265,7 +265,7 @@ its edges, then what its host does around the step.
     leaves from wherever the header stands as it runs, so a wall pushing the
     swarm carries the beam's source along; timeout → [Arrive | Decel].
   - Arrive, `SwarmArriveDuration` (0.1 s): probe the landing's footprint, else
-    the nearest clear one (`FindFreeAreaSpiral`, `WallBlockSpawn`), so rock that
+    the nearest clear one (`FindFreeAreaInside`, `WallBlockSpawn`), so rock that
     came over the landing during the beam never holds the swarm; enter counts
     `ChargesCompleted`, clears the footprint in both domains (D-12) and stands
     the swarm on it at rest; timeout → Chase. The move is the arrival's entry
@@ -548,7 +548,7 @@ per instance:
   `Genotype` genes), with the kernel's `And`, `Or` and `Not`.
 - Probes read too, and leave their result in the context: `ResolveTarget`
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
-  (`FindFreeAreaSpiral` over the footprint). `LineOfSight` and `FindLanding` read
+  (`FindFreeAreaInside` over the footprint). `LineOfSight` and `FindLanding` read
   the live target, or with `to = "stored"` the cell `StoreTarget` kept: the swarm
   charges and teleports to the cell its lock stored, and so do vanguard's raiders.
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,

@@ -484,31 +484,10 @@ func (s *StormSystem) spawnStorm() {
 	s.lifecycle.spawned.Add(1)
 }
 
-// findCirclePosition searches for valid position for circle's elliptical footprint
-// Returns (gridX, gridY, found) where gridX/gridY is the circle center
+// findCirclePosition finds the centre nearest the target, the target first, whose
+// elliptical footprint lies inside the map clear of walls a spawn is kept from
 func (s *StormSystem) findCirclePosition(targetX, targetY int) (int, int, bool) {
-	const maxSearchRadius = 20
-
-	// Check target position first (radius 0)
-	if s.isCirclePositionValid(targetX, targetY) {
-		return targetX, targetY, true
-	}
-
-	// Spiral outward
-	for radius := 1; radius <= maxSearchRadius; radius++ {
-		vertRadius := (radius + 1) / 2 // Aspect correction for terminal cells
-
-		for _, dir := range engine.SpiralSearchDirs {
-			checkX := targetX + dir[0]*radius
-			checkY := targetY + dir[1]*vertRadius
-
-			if s.isCirclePositionValid(checkX, checkY) {
-				return checkX, checkY, true
-			}
-		}
-	}
-
-	return 0, 0, false
+	return s.world.Positions.SpiralSearch(targetX, targetY, 0, s.isCirclePositionValid)
 }
 
 // isCirclePositionValid checks if all ellipse member cells at this center are valid
@@ -1222,8 +1201,6 @@ func (s *StormSystem) glow(*circleCtx) { s.statBlueActiveFrame.Add(1) }
 // findLanding opens a blue attack: it draws the direction, then searches for room
 // there, so a search that fails has still drawn (D-8)
 func (s *StormSystem) findLanding(c *circleCtx) {
-	config := s.world.Resources.Config
-
 	angle := s.rng.Float64() * vmath.TwoPi
 	distance := parameter.StormBlueSpawnDistance
 
@@ -1232,11 +1209,9 @@ func (s *StormSystem) findLanding(c *circleCtx) {
 		circlePX+distance*vmath.Cos(angle),
 		circlePY+distance*vmath.Sin(angle)*0.5,
 	)
-	targetX := min(max(target.X, 0), config.MapWidth-1)
-	targetY := min(max(target.Y, 0), config.MapHeight-1)
 
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
-		targetX, targetY,
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
+		target.X, target.Y,
 		parameter.SwarmWidth, parameter.SwarmHeight,
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 		component.WallBlockSpawn,

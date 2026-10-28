@@ -277,34 +277,22 @@ func (s *QuasarSystem) Update() {
 	s.statActive.Store(activeCount > 0)
 }
 
+// spawnQuasar stands a quasar with its header at the cell, its footprint pulled
+// inside the map, or on the nearest footprint free of walls a spawn is kept from
 func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
-	// Trust fuse-validated position, cheap verification only
-	headerX, headerY := targetX, targetY
-	topLeftX := headerX - parameter.QuasarHeaderOffsetX
-	topLeftY := headerY - parameter.QuasarHeaderOffsetY
-
-	// O(15) wall overlap check - fuse already validated, this catches edge cases
-	if s.world.Positions.HasBlockingWallInArea(
-		topLeftX, topLeftY,
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
+		targetX, targetY,
 		parameter.QuasarWidth, parameter.QuasarHeight,
+		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
 		component.WallBlockSpawn,
-	) {
-		// Rare: wall appeared during animation, fallback to spiral
-		var found bool
-		topLeftX, topLeftY, found = s.world.Positions.FindFreeAreaSpiral(
-			headerX, headerY,
-			parameter.QuasarWidth, parameter.QuasarHeight,
-			parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
-			component.WallBlockSpawn,
-			0,
-		)
-		if !found {
-			s.lifecycle.spawnFailures.Add(1)
-			return
-		}
-		headerX = topLeftX + parameter.QuasarHeaderOffsetX
-		headerY = topLeftY + parameter.QuasarHeaderOffsetY
+		0,
+	)
+	if !found {
+		s.lifecycle.spawnFailures.Add(1)
+		return
 	}
+	headerX := topLeftX + parameter.QuasarHeaderOffsetX
+	headerY := topLeftY + parameter.QuasarHeaderOffsetY
 
 	// Clear area and create composite
 	s.clearQuasarSpawnArea(headerX, headerY)
@@ -537,11 +525,11 @@ func (s *QuasarSystem) home(c *quasarCtx) {
 		)
 	}
 
-	// The header's bounds, the maxima exclusive as the integrator takes them
+	// The header's first and last cells, the footprint inside the map
 	minHeaderX := parameter.QuasarHeaderOffsetX
-	maxHeaderX := config.MapWidth - (parameter.QuasarWidth - parameter.QuasarHeaderOffsetX) + 1
+	maxHeaderX := config.MapWidth - (parameter.QuasarWidth - parameter.QuasarHeaderOffsetX)
 	minHeaderY := parameter.QuasarHeaderOffsetY
-	maxHeaderY := config.MapHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY) + 1
+	maxHeaderY := config.MapHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY)
 
 	// Integrate with Bounce
 	newX, newY, motion := physics.IntegrateWithBounceStats(

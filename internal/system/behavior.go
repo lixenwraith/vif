@@ -392,10 +392,9 @@ func (s *BehaviorSystem) terminate(header core.Entity) {
 }
 
 // integrate is every tick's movement unless Freeze ran: the footprint bounces off
-// walls and the map edge, and the members follow the header. The integrator's
-// maxima are exclusive, so the header's last column and row are one past them: a
-// footprint the spawn put against the right edge or the bottom stays where it
-// stands, and the edge's reflection never moves it into rock the walls refuse.
+// walls and the map edge, and the members follow the header. The header's last
+// column and row keep the footprint inside the map, and the edge's reflection
+// sets it back on the cell it stood on, which the walls left free.
 func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 	pos, ok := s.world.Positions.GetPosition(c.entity)
 	if c.frozen || !ok {
@@ -409,8 +408,8 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 		&c.kinetic.Kinetic,
 		c.dtSec,
 		p.HeaderX, p.HeaderY,
-		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX)+1,
-		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY)+1,
+		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX),
+		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY),
 		p.Restitution,
 		wallCheck,
 	)

@@ -147,9 +147,8 @@ landed. Open items elsewhere it meets:
 [payload field names at load](#check-payload-field-names-against-their-event-at-load),
 [a program spawning another](#let-a-program-spawn-another-program),
 [attack, beam and drop rows](#give-data-species-attack-beam-and-drop-rows-of-their-own),
-[loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario),
-[a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does)
-and [spawn placement](#audit-spawn-placement-across-the-species).
+[loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario)
+and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does).
 
 #### Give a program an entrance of its own through the fuse
 
@@ -189,6 +188,18 @@ spirits (Lixen, 2026-10-27); the drains' fusions stay as they are.
 The raid's cap reads `behavior.count`, every data species, while raiders are the
 only ones. A prototype `group` with `behavior.group.<g>.count` would let a scenario
 that mixes programs cap each kind.
+
+#### Name a spawn's cell from the map's edge
+
+- Priority: P3
+- Affected files: `internal/event/payload.go` (`BehaviorSpawnRequestPayload`),
+  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`)
+
+Vanguard's raid spends seven actions naming its spawn's cell, the column past the
+right edge on a row drawn two inside the top and bottom: two `ConfigToVar`,
+`DecrementVar`, two `IncrementVar`, `RandomVar` and `ModuloVar`, the draw's index
+bumped by hand. A map-relative anchor on the request (an edge and an inset) or a
+draw advancing its own index would shorten it.
 
 #### Draw a countdown in a smaller splash font
 
@@ -289,30 +300,6 @@ update path; whether a maze's walls stay entities a cluster indexes or become th
 cluster; the coordinate type (2D with a third axis reserved, or 3D now); the
 migration (a façade keeping the `World.Positions` surface while the call sites move,
 then narrowed); the footprint grids' cost on td.
-
-#### Audit spawn placement across the species
-
-- Priority: P2
-- Affected files: `internal/engine/position.go` (`FindFreeAreaSpiral`,
-  `FindFreeAreaInside`), `internal/system/swarm.go`, `internal/system/quasar.go`,
-  `internal/system/eye.go`, `internal/system/snake.go`, `internal/system/gateway.go`,
-  `pkg/vmath/physics/kinetic.go` (`ReflectBoundsX`, `ReflectBoundsY`),
-  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`)
-
-A data species places a spawn with `FindFreeAreaInside`, the spiral search from an
-origin pulled in from the map's edges until the footprint fits, so a request names
-an edge blind to the body. The code species still search `FindFreeAreaSpiral` from
-the origin as given, with sizes their Go code holds, so one requested at an edge
-lands where the spiral first fits. An audit of every spawn path (the species'
-requests, the fuse's beams, the gateway, a scenario's spawns) would put each on the
-one search over the footprint it spawns. The code composites reach the map's last
-column and row by passing the cell past it to `IntegrateWithBounceStats`, as the
-data species do; bounds inclusive in `ReflectBounds` for every caller, the
-reflection checking the wall it lands on, would take that arithmetic from each.
-The raid still spends nine actions before its request to name a row (two
-`ConfigToVar`, `DecrementVar`, two `IncrementVar`, `ModuloVar`, `SetVar` and two
-`RandomVar`, each draw's index bumped by hand); a map-relative anchor on the request
-(an edge and an inset) or a draw advancing its own index would shorten it.
 
 #### Bound navigation's worst tick on busy maps
 

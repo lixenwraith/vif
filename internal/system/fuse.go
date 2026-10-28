@@ -229,8 +229,8 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	midX := (posA.X + posB.X) / 2
 	midY := (posA.Y + posB.Y) / 2
 
-	// Find valid spawn position via spiral search
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+	// The nearest footprint inside the map free of walls a spawn is kept from
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
 		midX, midY,
 		parameter.SwarmWidth, parameter.SwarmHeight,
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
@@ -277,8 +277,8 @@ func (s *FuseSystem) handleQuasarFuse() {
 		cY = config.MapHeight / 2
 	}
 
-	// Find valid spawn position via spiral search
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+	// The nearest footprint inside the map free of walls a spawn is kept from
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
 		cX, cY,
 		parameter.QuasarWidth, parameter.QuasarHeight,
 		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
