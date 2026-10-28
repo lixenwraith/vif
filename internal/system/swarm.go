@@ -120,7 +120,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 		// A wall ends the charge in the step that meets it, so the bounce stands
 		PostTick(component.SwarmStateCharge, edge{Guard: swarmHitWall, To: decelerate}).
 		// The landing is the arrival's, so a stun that ends a teleport moves nothing,
-		// and is found as the beam ends, so rock that scrolled in meanwhile never
+		// and is found as the teleport ends, so rock that scrolled in meanwhile never
 		// holds the swarm
 		Timeout(component.SwarmStateTeleport, edge{To: []target{
 			{State: component.SwarmStateArrive},
@@ -531,8 +531,8 @@ func (s *SwarmSystem) charge(c *swarmCtx) {
 	c.hitWall = s.integrateAndSync(c.entity, c.dtSec)
 }
 
-// probeLanding admits a teleport with a header to beam from and room to land by
-// the stored cell
+// probeLanding admits a teleport with a header to teleport from and room to land
+// by the stored cell
 func (s *SwarmSystem) probeLanding(c *swarmCtx) bool {
 	if !s.world.Positions.HasPosition(c.entity) {
 		return false
@@ -555,7 +555,7 @@ func (s *SwarmSystem) findRoom(c *swarmCtx, x, y int) bool {
 	return found
 }
 
-// enterTeleport marks where the beam goes and stops the swarm; the beam leaves
+// enterTeleport marks where the teleport goes and stops the swarm; the line leaves
 // from wherever the header stands as it runs
 func (s *SwarmSystem) enterTeleport(c *swarmCtx) {
 	c.swarm.TeleportTargetX, c.swarm.TeleportTargetY = c.landingX, c.landingY
@@ -564,9 +564,9 @@ func (s *SwarmSystem) enterTeleport(c *swarmCtx) {
 	}
 }
 
-// probeArrival admits an arrival on the beam's landing while its footprint is
-// clear, else on the nearest clear one: rock scrolling in during the beam takes
-// the landing, and the arrival stands beside it
+// probeArrival admits an arrival on the teleport's landing while its footprint is
+// clear, else on the nearest clear one: rock scrolling in during the teleport
+// takes the landing, and the arrival stands beside it
 func (s *SwarmSystem) probeArrival(c *swarmCtx) bool {
 	return s.findRoom(c, c.swarm.TeleportTargetX, c.swarm.TeleportTargetY)
 }

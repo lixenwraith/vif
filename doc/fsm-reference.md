@@ -973,8 +973,8 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
   and `CancelTelegraph`, `Lightning { color }` (a `cyan`, `red`, `gold`, `green` or
   `purple` bolt to the nearest cursor, which takes the contact damage),
-  `Materialize { spawn }` (a `swarm` or `nugget` beam over the footprint at the
-  target, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
+  `Materialize { spawn }` (a `swarm` or `nugget` materialize over the footprint at
+  the target, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
   swarm or quasar at the header plus x, y) and `EmitEvent` (shared and local
   events).
 - Sustained: `Home` (steer to the target by the prototype's physics), `ChargeToStored`
@@ -985,12 +985,12 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   pulses from the body's centre to the centre of the footprint on the stored cell,
   the landing marker's cell, over the end of the entry, each the
   share of it the swarm's charge is of its lock, so a lock flagged with it shows
-  where a charge goes), `Beam` (the swarm's teleport line from the body where it
-  stands to the same centre, over the entry: a state that ends in `Teleport` on its
-  timeout's `actions` beams there as the swarm does) and `Landing` (the landing
-  marker: the centre of the footprint the body takes on the stored cell blinks
-  white, red and pink, so flagging the lock, the charge and the beam marks where an
-  attack lands until it does).
+  where a charge goes), `TeleportLine` (the swarm's teleport line from the body
+  where it stands to the same centre, over the entry: a state that ends in
+  `Teleport` on its timeout's `actions` teleports there as the swarm does) and
+  `Landing` (the landing marker: the centre of the footprint the body takes on the
+  stored cell blinks white, red and pink, so flagging the lock, the charge and the
+  teleport marks where an attack lands until it does).
 
 The target is the cursor nearest the header, read from the Shared positions with
 the lower roster slot taking a tie, as for the swarm, so every instance of a

@@ -173,14 +173,14 @@ func TestAWardenWindsUpPastItsRangeThenChargesTheCellItStored(t *testing.T) {
 	}
 
 	start, _ := w.Positions.GetPosition(header)
-	beams := countEvents(stepWhile(t, w, s, b, wardenWind), event.EventMaterializeAreaRequest)
+	materializes := countEvents(stepWhile(t, w, s, b, wardenWind), event.EventMaterializeAreaRequest)
 	if b.Machine.State != wardenStrike || combat.IsEnraged || !b.Shielded ||
 		combat.Status[component.StatusWard].Remaining <= 0 {
 		t.Fatalf("wind-up ended: state %d enraged %v shielded %v ward %v, want a warded strike",
 			b.Machine.State, combat.IsEnraged, b.Shielded, combat.Status[component.StatusWard].Remaining)
 	}
-	if beams != 1 {
-		t.Fatalf("the wind-up's cue beamed %d times, want once", beams)
+	if materializes != 1 {
+		t.Fatalf("the wind-up's cue materialized %d times, want once", materializes)
 	}
 	if b.TargetX != wardenX+40 || b.TargetY != wardenY {
 		t.Fatalf("strike stored (%d,%d), want the target's cell", b.TargetX, b.TargetY)
@@ -245,7 +245,7 @@ func TestACancelRequestEndsTheWardenThroughItsComposite(t *testing.T) {
 
 // newEntranceWorld runs entrances over an 80x40 world whose one program is the
 // warden, materializing as it comes on
-func newEntranceWorld(t *testing.T) (*beamWorld, *BehaviorSystem) {
+func newEntranceWorld(t *testing.T) (*materializeWorld, *BehaviorSystem) {
 	t.Helper()
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
@@ -261,11 +261,11 @@ func newEntranceWorld(t *testing.T) (*beamWorld, *BehaviorSystem) {
 	w.Resources.Behaviors = set.Prototypes()
 	w.Resources.Target = &engine.TargetResource{}
 	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
-	return newBeamWorld(w, s), s
+	return newMaterializeWorld(w, s), s
 }
 
 // enterWarden asks for a warden with its header at the cell
-func enterWarden(e *beamWorld, x, y int) {
+func enterWarden(e *materializeWorld, x, y int) {
 	e.deliver(event.GameEvent{
 		Type:    event.EventBehaviorSpawnRequest,
 		Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: x, Y: y},
@@ -295,7 +295,7 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 		t.Fatalf("%d materializes counted as %d wardens, want two arriving and none standing", len(footprints), n)
 	}
 
-	for range beamTicks() - 1 {
+	for range materializeTicks() - 1 {
 		e.tick()
 	}
 	if n := w.Components.Behavior.CountEntities(); n != 0 {
@@ -333,7 +333,7 @@ func TestACancelEndsItsProgramsEntrancesInFlight(t *testing.T) {
 	if n := w.Components.Materialize.CountEntities(); n != 0 {
 		t.Fatalf("%d materializes outlived the cancel", n)
 	}
-	for range beamTicks() {
+	for range materializeTicks() {
 		e.tick()
 	}
 	if n := w.Components.Behavior.CountEntities(); n != 0 {

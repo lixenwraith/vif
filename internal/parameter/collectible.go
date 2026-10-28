@@ -30,6 +30,6 @@ const (
 	// NuggetJumpCostPercent is the energy cost to jump to a nugget
 	NuggetJumpCostPercent = 1
 
-	// NuggetBeaconInterval is the interval between the beacon's converging beams
+	// NuggetBeaconInterval is the interval between the beacon's materializes
 	NuggetBeaconInterval = 2 * time.Second
 )

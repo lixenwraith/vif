@@ -93,7 +93,7 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 			}
 			owner = s.world.Resources.Player.Entity
 		}
-		if s.world.ResolveOwnedCursor(owner) != 0 && !s.quasarBeaming() {
+		if s.world.ResolveOwnedCursor(owner) != 0 && !s.quasarMaterializing() {
 			s.handleQuasarFuse()
 		}
 
@@ -117,11 +117,11 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update is empty: a fusion's spirits or beam run it, and their end lands it
+// Update is empty: a fusion's spirits or materialize run it, and their end lands it
 func (s *FuseSystem) Update() {}
 
-// quasarBeaming reports a quasar fusion in flight, whose beam is its pending spawn
-func (s *FuseSystem) quasarBeaming() bool {
+// quasarMaterializing reports a quasar fusion in flight, whose materialize is its pending spawn
+func (s *FuseSystem) quasarMaterializing() bool {
 	materializes := s.world.Components.Materialize
 	for _, e := range materializes.Entities() {
 		if m, ok := materializes.GetPtr(e); ok && e.Domain() == core.DomainPlayer && m.Species == component.SpeciesQuasar {
@@ -132,9 +132,9 @@ func (s *FuseSystem) quasarBeaming() bool {
 }
 
 // fuseInto plays a fusion over area, and the species lands as what plays it ends:
-// the spirits the sources fly in, unless the effect is the beam or no source flies,
-// else a beam naming the species its completion lands. Either is this instance's
-// own: a shared one would exist only on the producer.
+// the spirits the sources fly in, unless the effect is the materialize or no
+// source flies, else a materialize naming the species its completion lands. Either
+// is this instance's own: a shared one would exist only on the producer.
 func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEffect, sources []vmath.Point, area vmath.Area) {
 	if effect != event.FuseEffectMaterialize && len(sources) > 0 {
 		s.effectSpiritArea(species, sources, area, component.SpiritCyan)
@@ -277,7 +277,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 	s.killDrains(drainEntities)
 }
 
-// landFusion crosses the spawn a fusion's spirit or beam held, its header on the
+// landFusion crosses the spawn a fusion's spirit or materialize held, its header on the
 // footprint whose top-left is x, y. The species spawn is the shared result, and the
 // request is the D-3 artifact that carries it — stamped player because the fuse
 // produced it, which is what tells it from the same type a shared storm pushes.

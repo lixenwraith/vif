@@ -346,7 +346,7 @@ crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input
 instead of accumulating color, and the visible ring-buffer prefix contracts as
 a blocked tracer drains to its stop point.
 
-The landing marker is one cell, the centre of the footprint a charge or a beam
+The landing marker is one cell, the centre of the footprint a charge or a teleport
 lands on, cycling white, red and pink every `visual.LandingBlinkStep` from the
 lock until the landing. The charge and teleport lines run between the footprints'
 centres, so both end on it: a charge pulse's head arrives on the pulse's last tick,

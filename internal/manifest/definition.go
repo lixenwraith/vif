@@ -150,7 +150,7 @@ var Systems = []SystemDef{
 		Requires: []string{"composite", "timer"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored
 
 	// --- Spawning / Materialize ---
-	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester (D-7); every spawn passes this gate, timed by its beam deadline
+	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester (D-7); every spawn passes this gate, timed by its deadline timer
 	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "dual", Requires: []string{"materialize", "spirit"},
 		Optional: []string{"drain", "quasar", "swarm"}}, // a fusion's player spirits or materialize hold its spawn, which crosses through the spawn request (D-3)
 	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual", Requires: []string{"timer"}}, // creates in the requesting domain, currently from the fuse's player-domain fusions (D-7)
@@ -175,7 +175,7 @@ var Systems = []SystemDef{
 	{Name: "swarm", Constructor: "NewSwarmSystem", Domain: "shared", Requires: []string{"composite", "timer"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "storm", Constructor: "NewStormSystem", Domain: "shared", Snapshot: "state", Requires: []string{"composite"}, // the live root lives outside any store
-		Optional: []string{"navigation", "combat", "mount", "particle", "wall", "materialize"}}, // shared stream and composite species with a D-12 footprint sweep; a blue attack's swarm rides its beam
+		Optional: []string{"navigation", "combat", "mount", "particle", "wall", "materialize"}}, // shared stream and composite species with a D-12 footprint sweep; a blue attack's swarm rides its materialize
 	{Name: "kraken", Constructor: "NewKrakenSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"combat"}},
 	{Name: "pylon", Constructor: "NewPylonSystem", Domain: "shared", Requires: []string{"composite"},

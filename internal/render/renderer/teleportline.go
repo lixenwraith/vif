@@ -12,15 +12,15 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TeleportLineRenderer draws a phase-based beam from the swarm to its teleport destination,
-// and from a data species standing in a state flagged Beam to the cell it stored
-// Phases: Fill (beam extends) → Hold (full line) → Recede (darkness sweeps)
+// TeleportLineRenderer draws a phase-based line from the swarm to its teleport destination,
+// and from a data species standing in a state flagged TeleportLine to the cell it stored
+// Phases: Fill (line extends) → Hold (full line) → Recede (darkness sweeps)
 type TeleportLineRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell teleportLineCellRenderer
 }
 
-// teleportLineCellRenderer draws one beam cell at the given intensity
+// teleportLineCellRenderer draws one line cell at the given intensity
 type teleportLineCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, intensity float64)
 
 func NewTeleportLineRenderer(ctx *engine.GameContext) *TeleportLineRenderer {
@@ -47,13 +47,13 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 			return true
 		}
 
-		// The beam leaves the header where it stands: scrolling rock can carry a swarm mid-teleport
+		// The line leaves the header where it stands: scrolling rock can carry a swarm mid-teleport
 		headerPos, ok := world.Positions.GetPosition(headerEntity)
 		if !ok {
 			return true
 		}
 
-		r.renderBeam(ctx, buf,
+		r.renderLine(ctx, buf,
 			footprintAt(headerPos.X, headerPos.Y, parameter.SwarmWidth, parameter.SwarmHeight,
 				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
 			footprintAt(swarmComp.TeleportTargetX, swarmComp.TeleportTargetY, parameter.SwarmWidth, parameter.SwarmHeight,
@@ -62,10 +62,10 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 		return true
 	})
 
-	// A data species' beam runs over its state's entry, the footprint its prototype's
+	// A data species' line runs over its state's entry, the footprint its prototype's
 	prototypes := world.Resources.Behaviors
 	behaviors.Each(func(header core.Entity, b *component.BehaviorComponent) bool {
-		if !b.Beaming || int(b.Program) >= len(prototypes) {
+		if !b.TeleportLine || int(b.Program) >= len(prototypes) {
 			return true
 		}
 		pos, ok := world.Positions.GetPosition(header)
@@ -73,7 +73,7 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 			return true
 		}
 		p := &prototypes[b.Program]
-		r.renderBeam(ctx, buf,
+		r.renderLine(ctx, buf,
 			footprintAt(pos.X, pos.Y, p.Width, p.Height, p.HeaderX, p.HeaderY),
 			footprintAt(b.TargetX, b.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY),
 			b.Machine.Progress())
@@ -81,9 +81,9 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 	})
 }
 
-// renderBeam draws the line with phase-based visibility from the body's centre into the
+// renderLine draws the line with phase-based visibility from the body's centre into the
 // landing's, where the landing marker blinks, skipping the cells of the body it leaves
-func (r *TeleportLineRenderer) renderBeam(
+func (r *TeleportLineRenderer) renderLine(
 	ctx render.RenderContext, buf *render.RenderBuffer,
 	body, landing vmath.Area,
 	progress float64,
@@ -157,7 +157,7 @@ func (r *TeleportLineRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, 
 		render.BlendMaxBg, 1.0, terminal.AttrNone)
 }
 
-// cell256 has no intensity ramp, so dim beam cells are dropped rather than scaled
+// cell256 has no intensity ramp, so dim line cells are dropped rather than scaled
 func (r *TeleportLineRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, intensity float64) {
 	if intensity > parameter.SwarmTeleport256Threshold {
 		buf.SetBg256(screenX, screenY, visual.SwarmChargeLine256Palette)

@@ -110,10 +110,10 @@ func wardenAt(w *engine.World, p component.BehaviorPrototype) (core.Entity, *com
 	return header, &component.CombatComponent{CombatEntityType: component.CombatEntitySwarm, HitPoints: 40}
 }
 
-// TestADataSpeciesInABeamStateDrawsTheTeleportLine: a state flagged Beam draws the
-// swarm's teleport line from where the header stands to the cell it stored, and no
-// line without it
-func TestADataSpeciesInABeamStateDrawsTheTeleportLine(t *testing.T) {
+// TestADataSpeciesInAStateFlaggedTeleportLineDrawsIt: a state flagged TeleportLine
+// draws the swarm's teleport line from where the header stands to the cell it
+// stored, and no line without it
+func TestADataSpeciesInAStateFlaggedTeleportLineDrawsIt(t *testing.T) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
@@ -133,9 +133,9 @@ func TestADataSpeciesInABeamStateDrawsTheTeleportLine(t *testing.T) {
 	if mid := draw(); mid.Bg != (color.RGB{}) {
 		t.Fatalf("a state without the flag drew %v midway, want no line", mid.Bg)
 	}
-	b.Beaming = true
+	b.TeleportLine = true
 	if mid := draw(); mid.Bg != visual.RgbSwarmTeleport {
-		t.Fatalf("a state flagged Beam drew %v midway, want the teleport line's %v", mid.Bg, visual.RgbSwarmTeleport)
+		t.Fatalf("a state flagged TeleportLine drew %v midway, want the teleport line's %v", mid.Bg, visual.RgbSwarmTeleport)
 	}
 }
 
@@ -210,10 +210,10 @@ func TestTheChargeAndTeleportLinesReachTheLandingMarker(t *testing.T) {
 	if bg := marker(NewChargeLineRenderer(game), charge); bg == (color.RGB{}) {
 		t.Fatal("the lock's last tick drew no charge line on the landing marker")
 	}
-	beam := component.BehaviorComponent{Beaming: true}
-	beam.Machine.Duration, beam.Machine.Elapsed = parameter.SwarmTeleportDuration, parameter.SwarmTeleportDuration/2
-	if bg := marker(NewTeleportLineRenderer(game), beam); bg != visual.RgbSwarmTeleport {
-		t.Fatalf("the beam's hold drew %v on the landing marker, want the teleport line's %v", bg, visual.RgbSwarmTeleport)
+	teleport := component.BehaviorComponent{TeleportLine: true}
+	teleport.Machine.Duration, teleport.Machine.Elapsed = parameter.SwarmTeleportDuration, parameter.SwarmTeleportDuration/2
+	if bg := marker(NewTeleportLineRenderer(game), teleport); bg != visual.RgbSwarmTeleport {
+		t.Fatalf("the teleport's hold drew %v on the landing marker, want the teleport line's %v", bg, visual.RgbSwarmTeleport)
 	}
 }
 
@@ -250,8 +250,8 @@ func TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding(t *testing.T)
 	// The 4x2 swarm, its header second on the top row, centres a cell right and down
 	sw := component.SwarmComponent{LockedTargetX: 10, LockedTargetY: 15, TeleportTargetX: 20, TeleportTargetY: 15}
 	for _, tc := range []struct {
-		state      component.SwarmState
-		lock, beam bool
+		state          component.SwarmState
+		lock, teleport bool
 	}{
 		{component.SwarmStateChase, false, false},
 		{component.SwarmStateLock, true, false},
@@ -261,9 +261,9 @@ func TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding(t *testing.T)
 	} {
 		sw.Machine.State = tc.state
 		w.Components.Swarm.SetComponent(swarm, sw)
-		if lock, beam := marked(11, 16) != (color.RGB{}), marked(21, 16) != (color.RGB{}); lock != tc.lock || beam != tc.beam {
-			t.Fatalf("swarm state %d marked the lock's landing %v and the beam's %v, want %v and %v",
-				tc.state, lock, beam, tc.lock, tc.beam)
+		if lock, teleport := marked(11, 16) != (color.RGB{}), marked(21, 16) != (color.RGB{}); lock != tc.lock || teleport != tc.teleport {
+			t.Fatalf("swarm state %d marked the lock's landing %v and the teleport's %v, want %v and %v",
+				tc.state, lock, teleport, tc.lock, tc.teleport)
 		}
 	}
 }

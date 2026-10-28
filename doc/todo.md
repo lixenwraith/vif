@@ -130,7 +130,7 @@ What vanguard met in the machine and is still open, its certain faults having
 landed. Open items elsewhere it meets:
 [payload field names at load](#check-payload-field-names-against-their-event-at-load),
 [a program spawning another](#let-a-program-spawn-another-program),
-[attack and beam rows](#give-data-species-attack-and-beam-rows-of-their-own)
+[attack and materialize rows](#give-data-species-attack-and-materialize-rows-of-their-own)
 and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does).
 
 #### Give a program's entrance an entering state
@@ -138,7 +138,7 @@ and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-
 - Priority: P2
 - Affected files: `internal/behavior/program.go`, `internal/system/behavior.go`
   (`enter`), `internal/component/behavior.go` (`BehaviorEntrance`)
-- Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-beams-and-spirits)
+- Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)
 
 A prototype's `entrance = "materialize"` plays the swarm-style one-second
 materialize over the footprint and lands the body as it ends, beside any rock that
@@ -147,7 +147,7 @@ tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
 What a program would declare next:
 
 - The materialize's duration and style, the swarm's or the nugget's until a program
-  has [rows of its own](#give-data-species-attack-and-beam-rows-of-their-own),
+  has [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
   and whether a countdown shows over it.
 - An entering state the machine runs while the materialize holds, so a program can
   telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
@@ -1077,11 +1077,12 @@ Its area pulse is the hosted disruptor's shape; the red circle's turret mount is
 - Affected files: `internal/component/materialize.go` (`MaterializeStyles`),
   `internal/parameter/effect.go`, `internal/system/fuse.go` (`fuseInto`)
 
-A quasar fusion's quasar lands as its beam ends, a whole spawn beam, where the
-timer the beam replaced landed it a little after half of it. A session sweep with
-both fusions waiting a whole beam cost quasar kills, the one gap beyond the noise;
-a drain pair's swarm lands at half a second again, as its spirits arrive, so the
-sweep decides whether the quasar's wait alone still costs them. A fusion row in
+A quasar fusion's quasar lands as its materialize ends, a whole spawn's
+materialize, where the timer the materialize replaced landed it a little after half
+of it. A session sweep with both fusions waiting a whole materialize cost quasar
+kills, the one gap beyond the noise; a drain pair's swarm lands at half a second
+again, as its spirits arrive, so the sweep decides whether the quasar's wait alone
+still costs them. A fusion row in
 `MaterializeStyles` with a shorter fill, hold and recede would give the old pacing
 back, spawn and visual still ending on one tick.
 
@@ -1130,16 +1131,17 @@ any program compiles. Its build could take any program name and push
 `EventBehaviorSpawnRequest`, which drops and counts an unknown one; the load-time
 check of that name belongs with the payload names under Authoring.
 
-### Give data species attack and beam rows of their own
+### Give data species attack and materialize rows of their own
 
 - Priority: P3
 - Affected files: `internal/profile/combat.go`, `internal/component/materialize.go`
 
-A prototype names a combat row (`swarm` or `quasar`) and a beam style (`swarm` or
-`nugget`), so a new attack profile or beam is a Go change
-([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)). Rows of its own
-would grow those tables per scenario from the prototype, as soft collision builds a
-data species' rows from its `mass` and loot rolls the drop table its `drops` names.
+A prototype names a combat row (`swarm` or `quasar`) and a program's materializes
+a style (`swarm` or `nugget`), so a new attack profile or materialize style is a Go
+change ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)). Rows of
+its own would grow those tables per scenario from the prototype, as soft collision
+builds a data species' rows from its `mass` and loot rolls the drop table its
+`drops` names.
 
 ## Environment
 

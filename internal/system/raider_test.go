@@ -83,11 +83,12 @@ func footprintInRock(w *engine.World, pos component.PositionComponent) bool {
 	return w.Positions.HasBlockingWallInArea(pos.X-1, pos.Y, 4, 2, component.WallBlockKinetic)
 }
 
-// TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding: a lock whose body
-// cannot fly to the cell it stored beams to the nearest place by its target, the
-// beam's line and landing marker drawn while the state holds; rock that comes over
-// that place meanwhile moves the landing beside it, and the brake and the chase follow
-func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
+// TestARaiderTeleportsAroundRockAndLandsBesideWhatTookItsLanding: a lock whose
+// body cannot fly to the cell it stored teleports to the nearest place by its
+// target, the teleport line and landing marker drawn while the state holds; rock
+// that comes over that place meanwhile moves the landing beside it, and the brake
+// and the chase follow
+func TestARaiderTeleportsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	w, s, header, states := newRaiderWorld(t)
 	b, _ := w.Components.Behavior.GetPtr(header)
 	b.Machine = aboutToExpire(states["Lock"], 2*parameter.GameUpdateInterval)
@@ -95,26 +96,26 @@ func TestARaiderBeamsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T) {
 	start, _ := w.Positions.GetPosition(header)
 
 	stepBehaviors(w, s)
-	if b.Machine.State != states["Beam"] || !b.Beaming || !b.Landing {
-		t.Fatalf("a blocked lock went to state %d beaming %t marked %t, want the beam marked",
-			b.Machine.State, b.Beaming, b.Landing)
+	if b.Machine.State != states["Teleport"] || !b.TeleportLine || !b.Landing {
+		t.Fatalf("a blocked lock went to state %d lined %t marked %t, want the teleport lined and marked",
+			b.Machine.State, b.TeleportLine, b.Landing)
 	}
 	if b.TargetX != 50 || b.TargetY != 10 {
-		t.Fatalf("the beam aims at (%d,%d), want the open target cell (50,10)", b.TargetX, b.TargetY)
+		t.Fatalf("the teleport aims at (%d,%d), want the open target cell (50,10)", b.TargetX, b.TargetY)
 	}
 
-	// Rock comes over the landing, as a cave's does while a beam runs
+	// Rock comes over the landing, as a cave's does while a teleport runs
 	rockRows(w, 46, 56, 14, 40)
 	for range 2 * parameter.SwarmTeleportDuration / parameter.GameUpdateInterval {
 		stepBehaviors(w, s)
-		if b.Machine.State != states["Beam"] {
+		if b.Machine.State != states["Teleport"] {
 			break
 		}
 	}
 	pos, _ := w.Positions.GetPosition(header)
-	if b.Machine.State != states["Brake"] || b.Beaming || b.Landing {
-		t.Fatalf("after the beam: state %d beaming %t marked %t, want the brake unmarked",
-			b.Machine.State, b.Beaming, b.Landing)
+	if b.Machine.State != states["Brake"] || b.TeleportLine || b.Landing {
+		t.Fatalf("after the teleport: state %d lined %t marked %t, want the brake unmarked",
+			b.Machine.State, b.TeleportLine, b.Landing)
 	}
 	if pos == start || footprintInRock(w, pos) {
 		t.Fatalf("landed at %+v from %+v, want moved and clear of rock", pos, start)
@@ -158,10 +159,10 @@ func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
 	}
 }
 
-// TestARaidersBeamLandsByTheCellItsLockStored: a lock that cannot fly to its cell
-// beams there, as the swarm's teleport does, however the cursors moved meanwhile:
+// TestARaidersTeleportLandsByTheCellItsLockStored: a lock that cannot fly to its
+// cell teleports there, as the swarm's does, however the cursors moved meanwhile:
 // the locked player stepping away and another coming nearer move nothing
-func TestARaidersBeamLandsByTheCellItsLockStored(t *testing.T) {
+func TestARaidersTeleportLandsByTheCellItsLockStored(t *testing.T) {
 	w, s, header, states := newRaiderWorld(t)
 	b, _ := w.Components.Behavior.GetPtr(header)
 	b.Machine = aboutToExpire(states["Lock"], 2*parameter.GameUpdateInterval)
@@ -169,12 +170,12 @@ func TestARaidersBeamLandsByTheCellItsLockStored(t *testing.T) {
 	aimAtCursors(w, component.PositionComponent{X: 60, Y: 30}, component.PositionComponent{X: 24, Y: 20})
 
 	stepBehaviors(w, s)
-	if b.Machine.State != states["Beam"] {
-		t.Fatalf("a blocked lock went to state %d, want the beam", b.Machine.State)
+	if b.Machine.State != states["Teleport"] {
+		t.Fatalf("a blocked lock went to state %d, want the teleport", b.Machine.State)
 	}
 	for range 2 * parameter.SwarmTeleportDuration / parameter.GameUpdateInterval {
 		stepBehaviors(w, s)
-		if b.Machine.State != states["Beam"] {
+		if b.Machine.State != states["Teleport"] {
 			break
 		}
 	}
@@ -183,13 +184,14 @@ func TestARaidersBeamLandsByTheCellItsLockStored(t *testing.T) {
 	}
 }
 
-// TestAStunDuringARaidersBeamMovesNothing: the landing is the beam's timeout, so a
-// stun that ends the beam leaves the raider where it stood, back in the chase
-func TestAStunDuringARaidersBeamMovesNothing(t *testing.T) {
+// TestAStunDuringARaidersTeleportMovesNothing: the landing is the teleport's
+// timeout, so a stun that ends the teleport leaves the raider where it stood, back
+// in the chase
+func TestAStunDuringARaidersTeleportMovesNothing(t *testing.T) {
 	w, s, header, states := newRaiderWorld(t)
 	b, _ := w.Components.Behavior.GetPtr(header)
 	b.Machine = machine.Instance[component.BehaviorState]{
-		State: states["Beam"], Elapsed: parameter.SwarmTeleportDuration / 2, Duration: parameter.SwarmTeleportDuration,
+		State: states["Teleport"], Elapsed: parameter.SwarmTeleportDuration / 2, Duration: parameter.SwarmTeleportDuration,
 	}
 	b.TargetX, b.TargetY = 50, 10
 	combat, _ := w.Components.Combat.GetPtr(header)
@@ -199,9 +201,9 @@ func TestAStunDuringARaidersBeamMovesNothing(t *testing.T) {
 	for range 3 {
 		stepBehaviors(w, s)
 	}
-	if pos, _ := w.Positions.GetPosition(header); pos != start || b.Machine.State != states["Chase"] || b.Beaming {
-		t.Fatalf("stunned mid-beam: at %+v in state %d beaming %t, want still at %+v in the chase",
-			pos, b.Machine.State, b.Beaming, start)
+	if pos, _ := w.Positions.GetPosition(header); pos != start || b.Machine.State != states["Chase"] || b.TeleportLine {
+		t.Fatalf("stunned mid-teleport: at %+v in state %d lined %t, want still at %+v in the chase",
+			pos, b.Machine.State, b.TeleportLine, start)
 	}
 }
 

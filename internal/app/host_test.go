@@ -1633,8 +1633,8 @@ func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 		&event.DrainDefeatedPayload{Entity: local[1]})
 	apps[1].Settle()
 
-	// The fusion lands as its one-second beam ends, and its spawn crosses a lead
-	// after that; the driven clock advances 50ms per tick.
+	// The fusion lands as its one-second materialize ends, and its spawn crosses a
+	// lead after that; the driven clock advances 50ms per tick.
 	for range 28 + parameter.NetworkBarrierDelayTicks {
 		tickAll(apps)
 	}
