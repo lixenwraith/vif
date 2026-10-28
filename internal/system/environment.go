@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"slices"
 	"sync/atomic"
 	"time"
 
@@ -37,7 +36,7 @@ type EnvironmentSystem struct {
 	driftVelocity [driftLevels][2]int64
 	// Cells each level stepped this tick, for the glyph spawner and renderer
 	driftStep   [driftLevels][2]int
-	driftLayer  []core.Entity
+	driftLayers [driftLevels][]core.Entity
 	driftDoomed []core.Entity
 
 	statWindActive     *atomic.Bool
@@ -425,10 +424,8 @@ func (s *EnvironmentSystem) updateDrift(delta time.Duration) {
 			phase[0] -= stepX * vmath.CellSpan
 			phase[1] -= stepY * vmath.CellSpan
 			s.driftStep[level] = [2]int{int(stepX), int(stepY)}
-			if stepX != 0 || stepY != 0 {
-				s.shiftLayer(component.GlyphLevel(level), int(stepX), int(stepY))
-			}
 		}
+		s.shiftLayers(s.driftStep)
 	})
 
 	if s.drift.Span > 0 {
@@ -448,18 +445,58 @@ func (s *EnvironmentSystem) updateDrift(delta time.Duration) {
 	}
 }
 
-// shiftLayer moves every loose glyph of one level, a cell and an axis at a time so
-// no step passes through a wall or across a corner. The layer is collected in
-// dense order, which a replay reproduces.
-func (s *EnvironmentSystem) shiftLayer(level component.GlyphLevel, stepX, stepY int) {
-	s.driftLayer = s.driftLayer[:0]
+// shiftLayers moves every loose glyph by its level's step. The layers are collected
+// in one pass, each in dense order, which a replay reproduces.
+func (s *EnvironmentSystem) shiftLayers(steps [driftLevels][2]int) {
+	if steps == ([driftLevels][2]int{}) {
+		return
+	}
+	for level := range s.driftLayers {
+		s.driftLayers[level] = s.driftLayers[level][:0]
+	}
 	s.world.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
-		if g.Level == level && e.Domain() == core.DomainPlayer && s.world.Positions.HasPosition(e) &&
-			!s.world.Components.Member.HasEntity(e) && !s.world.Components.Death.HasEntity(e) {
-			s.driftLayer = append(s.driftLayer, e)
+		if level := int(g.Level); level >= 0 && level < driftLevels && steps[level] != [2]int{} &&
+			e.Domain() == core.DomainPlayer && !s.world.Components.Member.HasEntity(e) &&
+			!s.world.Components.Death.HasEntity(e) {
+			s.driftLayers[level] = append(s.driftLayers[level], e)
 		}
 		return true
 	})
+	for level, step := range steps {
+		s.stepLayer(s.driftLayers[level], step[0], step[1])
+	}
+}
+
+// stepLayer moves a layer its step as a rigid group, removing outright the glyphs
+// whose way leaves the map, meets rock or a wall, which scenery passes behind, or
+// ends in a full cell: drift is scenery passing by, so leaving play costs and
+// rewards nothing.
+func (s *EnvironmentSystem) stepLayer(layer []core.Entity, stepX, stepY int) {
+	if len(layer) == 0 {
+		return
+	}
+	positions := s.world.Positions
+	movers := layer[:0]
+	s.driftDoomed = s.driftDoomed[:0]
+	for _, e := range layer {
+		pos, ok := positions.GetPosition(e)
+		if !ok {
+			continue
+		}
+		if positions.IsOutOfBounds(pos.X+stepX, pos.Y+stepY) || !s.passesWalls(e) && s.wayBlocked(pos, stepX, stepY) {
+			s.driftDoomed = append(s.driftDoomed, e)
+		} else {
+			movers = append(movers, e)
+		}
+	}
+	s.world.DestroyEntitiesBatch(s.driftDoomed)
+	s.driftDoomed = positions.Shift(movers, stepX, stepY, s.driftDoomed[:0])
+	s.world.DestroyEntitiesBatch(s.driftDoomed)
+}
+
+// wayBlocked reports rock or a wall on a cell a glyph at pos crosses by its step, the
+// columns first, then the rows, so no step cuts a wall's corner
+func (s *EnvironmentSystem) wayBlocked(pos component.PositionComponent, stepX, stepY int) bool {
 	dx, dy := 1, 1
 	if stepX < 0 {
 		dx = -1
@@ -468,39 +505,16 @@ func (s *EnvironmentSystem) shiftLayer(level component.GlyphLevel, stepX, stepY 
 		dy = -1
 	}
 	for range vmath.IntAbs(stepX) {
-		s.stepLayer(dx, 0)
-	}
-	for range vmath.IntAbs(stepY) {
-		s.stepLayer(0, dy)
-	}
-}
-
-// stepLayer moves the collected layer one cell, removing outright the glyphs that
-// would leave the map, enter rock or a wall, which scenery passes behind, or find
-// their cell full: drift is scenery passing by, so leaving play costs and rewards
-// nothing.
-func (s *EnvironmentSystem) stepLayer(dx, dy int) {
-	positions := s.world.Positions
-	movers := s.driftLayer[:0]
-	s.driftDoomed = s.driftDoomed[:0]
-	for _, e := range s.driftLayer {
-		pos, _ := positions.GetPosition(e)
-		x, y := pos.X+dx, pos.Y+dy
-		if positions.IsOutOfBounds(x, y) || positions.HasBlockingWallAt(x, y, component.WallBlockSpawn) &&
-			!s.passesWalls(e) {
-			s.driftDoomed = append(s.driftDoomed, e)
-		} else {
-			movers = append(movers, e)
+		if pos.X += dx; s.world.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn) {
+			return true
 		}
 	}
-	s.world.DestroyEntitiesBatch(s.driftDoomed)
-
-	s.driftDoomed = positions.Shift(movers, dx, dy, s.driftDoomed[:0])
-	if len(s.driftDoomed) > 0 {
-		s.world.DestroyEntitiesBatch(s.driftDoomed)
-		movers = slices.DeleteFunc(movers, func(e core.Entity) bool { return !positions.HasPosition(e) })
+	for range vmath.IntAbs(stepY) {
+		if pos.Y += dy; s.world.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn) {
+			return true
+		}
 	}
-	s.driftLayer = movers
+	return false
 }
 
 // passesWalls reports a glyph that drifts into rock and walls rather than leaving

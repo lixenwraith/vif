@@ -809,12 +809,14 @@ func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
 }
 
 // IsTypeable reports whether e is a glyph typing can act on: one not placed as
-// scenery (ProtectFromTyping)
+// scenery
 func (p *Position) IsTypeable(e core.Entity) bool {
-	return p.world.Components.Glyph.HasEntity(e) && !p.isScenery(e)
+	return p.world.Components.Glyph.HasEntity(e) && !p.IsScenery(e)
 }
 
-func (p *Position) isScenery(e core.Entity) bool {
+// IsScenery reports whether e was placed as scenery (ProtectFromTyping), for a
+// caller that already knows e is a glyph
+func (p *Position) IsScenery(e core.Entity) bool {
 	prot, _ := p.world.Components.Protection.GetComponent(e)
 	return prot.Mask&component.ProtectFromTyping != 0
 }
@@ -826,7 +828,7 @@ func (p *Position) topGlyph(x, y int) core.Entity {
 	var topLevel component.GlyphLevel
 	for _, e := range p.grid.EntitiesAt(x, y, ScopeBoth) {
 		g, ok := glyphs.GetPtr(e)
-		if !ok || p.isScenery(e) {
+		if !ok || p.IsScenery(e) {
 			continue
 		}
 		if top != 0 && (e.Domain() > top.Domain() || e.Domain() == top.Domain() &&
