@@ -1387,6 +1387,17 @@ default and move the TOML codec to the caller, or drop the subpackage.
 
 ## Engine
 
+### Drop what a shrinking level setup leaves off the map
+
+- Priority: P2
+- Affected files: `internal/engine/world.go` (`SetupLevel`),
+  `internal/engine/game_context.go` (`cleanupOutOfBoundsEntities`)
+
+An `EventLevelSetup` without `clear_entities` that shrinks the map keeps entities
+past the new bounds, out of the grid. The campaign's Kraken return now keeps its
+text, so a solo run resized smaller mid-Kraken carries such glyphs. Moving the
+crop's out-of-bounds cleanup onto `World` and running it from `SetupLevel` closes it.
+
 ### Give the composite lifecycle methods a user
 
 - Priority: P3

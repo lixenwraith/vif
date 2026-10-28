@@ -1,6 +1,6 @@
 # Tower region: tower defense level
 # Entry: two Kraken kills spawn this region with initial_state = "TowerSetup"
-# Exit: resume main region, terminate self
+# Exit: victory hands over to main through the handover region, defeat fails the run
 # Spawning: gateways attached to pylons handle continuous eye spawning
 
 [states.TowerHold]
@@ -70,7 +70,7 @@ on_enter = [
     # Push cursor out of walls
     { action = "EmitEvent", event = "EventWallPushCheckRequest" },
 
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "DEFEND THE TOWER" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Defend The Tower" } },
 ]
 transitions = [
     { trigger = "EventSpeciesCreated", target = "TowerAttachSnakeGW", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["tower"] }, capture_vars = { entity = "tower_anchor" } },
@@ -151,12 +151,34 @@ transitions = [
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 500 } },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DEFENSE CLEARED" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Tower Defended" } },
     # The level's reward, an event drop rather than a species roll: a gun for every
     # participant at the tower's cell, after TowerCycle's exit cleared the map
     { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "gun", x = 0, y = 0 }, payload_vars = { X = "cx", Y = "cy" } },
-    { action = "ResumeRegion", region = "main" },
+    { action = "SpawnRegion", region = "handover", initial_state = "HandoverDrift" },
     { action = "TerminateRegion", region = "tower" },
+]
+
+# --- Handover: text drifts down into the cleared map, and main takes it as it rests ---
+
+[states.HandoverDrift]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 1.5708, speed = 60.0, duration_ms = 0 } },
+    { action = "EmitEvent", event = "EventDriftCancel", payload = { ease_ms = 1000 }, delay_ms = 3000 },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventDriftCancel" },
+]
+transitions = [
+    { trigger = "Tick", target = "HandoverDone", guard = "StateTimeExceeds", guard_args = { ms = 4000 } },
+]
+
+[states.HandoverDone]
+parent = "Root"
+on_enter = [
+    { action = "ResumeRegion", region = "main" },
+    { action = "TerminateRegion", region = "handover" },
 ]
 
 # --- Exit: Defeat ---
@@ -165,7 +187,7 @@ on_enter = [
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 500 } },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DESTROYED" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Tower Destroyed" } },
     { action = "TerminateRegion", region = "tower" },
     { action = "SetVar", payload = { name = "level_failed", value = 1 } },
 ]
