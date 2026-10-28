@@ -390,9 +390,9 @@ func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
 	}
 	upgrade := slices.Index(set.Loot().Names(), "upgrade")
 	want := component.DropTable{Killer: component.DropKillerPlayer, Tiers: []component.DropTier{
-		{Entries: []component.DropEntry{{Loot: component.LootHeat, BaseRate: 0.05, Count: 1}}},
+		{Entries: []component.DropEntry{{Loot: component.LootHeat, BaseRate: 0.01, Count: 1}}},
 		{Unique: true, Entries: []component.DropEntry{{Loot: component.LootCount + component.LootType(upgrade), BaseRate: 0.5, Count: 1, FallbackCount: 1}}},
-		{Entries: []component.DropEntry{{Loot: component.LootEnergy, BaseRate: 0.2, Count: 1}}},
+		{Entries: []component.DropEntry{{Loot: component.LootEnergy, BaseRate: 0.1, Count: 1}}},
 	}}
 	if raid := set.Loot().Tables["raider"]; upgrade < 0 || !reflect.DeepEqual(raid, want) {
 		t.Fatalf("the raider table is %+v, want a player's kill to roll %+v", raid, want)

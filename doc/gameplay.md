@@ -324,10 +324,11 @@ tuning.
 A scenario rewards a level with an event drop instead: `EventLootSpawnRequest`
 places one kind at a cell for every cursor the instance simulates, with no roll,
 and each drop homes on its owner as above unless `still` keeps it at its cell;
-`return_ms` brings one collected back to its cell that long after, so a cursor
-still on it collects it again. No species drops the gun; the campaign's tower
-victory drops one at the tower. Like any FSM entry action, the drop does not
-replay on an instance a correction moves past the state raising it.
+`return_ms` brings one collected back to its cell that long after, a countdown in
+its colour standing by the cell meanwhile, so a cursor still on it collects it
+again. No species drops the gun; the campaign's tower victory drops one at the
+tower. Like any FSM entry action, the drop does not replay on an instance a
+correction moves past the state raising it.
 
 ## 7. Weapons and attacks
 
@@ -581,22 +582,23 @@ decay falls away. The level stops rising at 100 and the energy cell reads it.
 Glyphs drift behind the buttons as a moving backdrop, and music stays off.
 
 `dummy`, the Target Dummy, is a range for trying weapons alone or together at any
-charge, for one player on a map of at least 80 by 30. The cursor starts at the
-centre with every loot kind lying still to its left, `H L M P` over `E B R T`:
-walked over, each gives its charge, heat or energy and lies back on its cell three
-seconds later, so the cursor has time to step off, and one stood on gives again.
-`:w` sets any weapon's charges, the gun's 0 included, and the `T` gives the gun
-back. The dummy, a pylon of one hit point a member that drops nothing, stands 18
-columns right of the centre, out of reach of the cursor's shield at the start.
-Behind it a green `+` and a red `-` pad, each a framed sign, add or take a hit point,
-from 1 to 999, while the cursor stands on one, and again every three seconds under a
-countdown beside the pad; the status bar reads the count, and a standing dummy takes
-it at once, whole again. A dummy shot down rises on its spot once the cursor has
-stood there and walked back out of its shield's reach of the dummy, beyond 16
-columns or 8 rows, since one risen around the cursor would burn its heat or drain
-its shield. Whenever the cursor's energy is 0, an energy drop homes on it from the
-dummy's centre. Drains, nuggets, gold, the fuse and music are off, and `:n` lays
-the range again.
+charge, for one player on a map of at least 120 by 40. The cursor starts at the
+centre with no weapon, so nothing fires before a pickup, auto-fire or not, and every
+loot kind lies still to its left, `H L M P` over `E B R T`, 12 columns and 13 rows
+apart: walked over, each gives its charge, heat or energy and lies back on its cell
+three seconds later under a countdown, so the cursor has time to step off, and one
+stood on gives again. The `T` gives the gun a charge, and `:w` sets any weapon's
+charges, the gun's 0 included. The dummy, a pylon of one hit point a member that
+drops nothing, stands 20 columns right of the centre, out of reach of the cursor's
+shield at the start. Behind it a green `+` and a red `-` pad, each a framed sign,
+add or take a hit point, from 1 to 999, while the cursor stands on one, and again
+every three seconds under a countdown below the pad; the status bar reads the count,
+and a standing dummy takes it at once, whole again. A dummy shot down, the status
+bar saying so, rises on its spot once the cursor has stood there and walked back out
+of its shield's reach of the dummy, beyond 16 columns or 8 rows, since one risen
+around the cursor would burn its heat or drain its shield. Whenever the cursor's
+energy is 0, an energy drop homes on it from the dummy's centre. Drains, nuggets,
+gold, the fuse and music are off, and `:n` lays the range again.
 
 `vanguard` flies the cursor through a cave (§9) scrolling left at twenty columns a
 second at first, a column every tick: only a whole-tick period steps evenly, and
@@ -612,59 +614,63 @@ on open map as wide as the view, no rock at all, that closes into the cave over 
 columns. The rock blocks the ship, raiders and spawns but lets particles pass,
 hidden, so the blossom and decay the gun raises from glyphs rise or fall along a
 column of the cave and on into the rock. Glyphs drift left behind the rock at three
-depths, faster than it at 20, 40 and 80 cells a second, so each layer reads as
-moving and the depths come apart, and drains, nuggets, gold and the fuse are off.
-Raiders materialize at the right edge every two seconds while fewer than three fly
-or materialize, on a row drawn across the map, in the nearest open rows when rock
-fills it. Each lands as its half-second materialize ends, too soon for much
-scrolling rock to come over it, and is of a type drawn at random between the two of
-the rank the raid has reached among the cave's own eight. Every type is a program of
-the scenario's own (`behavior/<cave>/<type>.toml`), the template for a species of
-one's own ([FSM reference](fsm-reference.md#behavior-programs)), running one cycle,
-a chase, a lock, then a charge or a teleport (`RaiderStates` in `macros.toml`), its
-landing marked from the lock until it lands, with its own look. Each stone art's
-eight are its tier, two types in each of four ranks, the same ranks in every cave,
-so caves differ in looks alone: a rank up has more hit points (8, 16, 28, 44) and a
-fifth more mass (2.0 to 3.5), so a shot knocks it back less, a costlier touch, and
-chases slower on a longer lock, the first rank darting as the snake does. The raid
-climbs the tier: it spawns the first rank until players shoot three of it down, then
-the next, and three of the fourth exhaust the tier (the `ramp` region). Its end is a
-boss stage: a green strobe, the raid holds, and the cave opens to no rock from past
-the right edge (§9), the rock and the drift easing up to twice their pace while it
-comes in, so on a 120-column map at the first pace it fills the map in under six
-seconds; then the scroll and the drift ease to rest over a second and the Kraken
-rises at the right edge (the `boss` region), with 120 hit points, thirty seconds of
-the gun on it: a hit's immunity window lets one tracer of a volley land, four a
-second whatever the lanes. Its touch is main's, so a ship that stays in its reach is
-lost within seconds. A player's kill of it drops a missile charge, heat and two
+depths, at one, two and four times its pace, 20, 40 and 80 cells a second at first,
+so each layer reads as moving and the depths come apart, and drains, nuggets, gold
+and the fuse are off. Raiders materialize at the right edge every two seconds while
+fewer than three fly or materialize, on a row drawn across the map, in the nearest
+open rows when rock fills it. Each lands as its half-second materialize ends, too
+soon for much scrolling rock to come over it, and is of a type drawn at random
+between the two of the rank the raid has reached among the cave's own eight. Every
+type is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the
+template for a species of one's own ([FSM
+reference](fsm-reference.md#behavior-programs)), running one cycle, a chase, a lock,
+then a charge or a teleport (`RaiderStates` in `macros.toml`), its landing marked
+from the lock until it lands, with its own look. Each stone art's eight are its
+tier, two types in each of four ranks, the same ranks in every cave, so caves differ
+in looks alone: a rank up has more hit points (8, 16, 28, 44) and a fifth more mass
+(2.0 to 3.5), so a shot knocks it back less, a costlier touch, and chases slower on
+a longer lock, the first rank darting as the snake does. The raid climbs the tier:
+it spawns the first rank until players shoot three of it down, then the next, and
+three of the fourth exhaust the tier (the `ramp` region) and hold the raid. Once no
+raider is left, the tier ends in a boss stage: a green strobe, and the cave opens to
+no rock from past the right edge (§9), the rock and the drift easing up to twice
+their pace while it comes in, so on a 120-column map at the first pace it fills the
+map in under six seconds; then the scroll and the drift ease to rest over a second
+and the Kraken rises at the right edge (the `boss` region), with 120 hit points in
+the first cave, thirty seconds of the gun on it (a hit's immunity window lets one
+tracer of a volley land, four a second whatever the lanes), and twice the last
+Kraken's in each cave after. Its touch is main's, so a ship that stays in its reach
+is lost within seconds. A player's kill of it drops a missile charge, heat and two
 energy for every player, doubles species damage as a storm kill does in main, every
 energy penalty with it ("Species Damage Up"), and lays the next cave behind its open
 mouth, of a stone art drawn from the three it is not, scrolling a fifth faster in
-whole columns a second (20, 24, 29, 35, and on to the soft cap of 200). The rock and
-the drift rush in from rest to twice that pace as they rushed to the Kraken, and as
-the cave's own rock fills the map past its mouth, about five seconds on, they ease
-to its pace over a second; the raid resumes there and the climb starts over at that
-cave's first rank. Each cave's raiders wear one hue in four shades, picked against
-its rock: violet vermin in the strata (by rank: scarab, crawler; crab, hornet;
-spider, mantis; beetle, scorpion), white haunts in the cracked stone (gremlin,
-chomper; imp, slime; ghost, skull; wraith, demon), orange animals in the moss
-(hedgehog, mouse; frog, hopper; bat, puffer; owl, lynx) and orchid constructs among
-the crystals (drone, shard; saucer, trooper; jelly, squid; djinn, robot), each one
-colour on a console. A raider lives until killed, and the rock pushes it as it
-pushes the cursor. Every type rolls the raider drop table vanguard declares, so one
-a player shoots down rolls it for every player where it fell, each tier on its own:
-heat at 5%, a `U`, its own loot kind, at 50%, and energy at 20%, each chance growing
-by as much again for each kill in a row it misses, so a `U` drops within two kills.
-All 32 types share the table's streaks, which run on from cave to cave. No `U` drops
-while one is flying to the ship or the gun holds its last level, and then each
-energy drop is two. Each `U` raises the gun a level of the scenario's nine: one shot
-forward, then two and three, one up and one down, one back, two up and down, two
-back, three up and down, three back. Forward is right, the way the ship flies. A
-crush is a defeat, as is heat and energy both run out: the rock and the drift halt
-under a red strobe for 250 ms, then the game starts over, the gun back at one shot,
-species damage at one and the cave at its first pace, and opens with "Crushed
-Against The Edge!" or "You Died!". The drifting text is scenery (§9): rock and
-raiders pass it by and no key types it, so the ship earns no heat by typing.
+whole columns a second (20, 24, 29, 35, and on to the soft cap of 200), its drift
+four times that, so the slowest layer keeps the rock's pace (80, 96, 116, and on to
+the drift's cap of 200). The rock and the drift rush in from rest to twice that pace
+as they rushed to the Kraken, and as the cave's own rock fills the map past its
+mouth, about five seconds on, they ease to its pace over a second; the raid resumes
+there and the climb starts over at that cave's first rank. Each cave's raiders wear
+one hue in four shades, picked against its rock: violet vermin in the strata (by
+rank: scarab, crawler; crab, hornet; spider, mantis; beetle, scorpion), white haunts
+in the cracked stone (gremlin, chomper; imp, slime; ghost, skull; wraith, demon),
+orange animals in the moss (hedgehog, mouse; frog, hopper; bat, puffer; owl, lynx)
+and orchid constructs among the crystals (drone, shard; saucer, trooper; jelly,
+squid; djinn, robot), each one colour on a console. A raider lives until killed, and
+the rock pushes it as it pushes the cursor. Every type rolls the raider drop table
+vanguard declares, so one a player shoots down rolls it for every player where it
+fell, each tier on its own: heat at 1%, a `U`, its own loot kind, at 50%, and energy
+at 10%, each chance growing by as much again for each kill in a row it misses, so a
+`U` drops within two kills. All 32 types share the table's streaks, which run on
+from cave to cave. No `U` drops while one is flying to the ship or the gun holds its
+last level, and then each energy drop is two. Each `U` raises the gun a level of the
+scenario's nine: one shot forward, then two and three, one up and one down, one
+back, two up and down, two back, three up and down, three back. Forward is right,
+the way the ship flies. A crush is a defeat, as is heat and energy both run out: the
+rock and the drift halt under a red strobe for 250 ms, then the game starts over,
+the gun back at one shot, species damage at one and the cave at its first pace, and
+opens with "Crushed Against The Edge!" or "You Died!". The drifting text is scenery
+(§9): rock and raiders pass it by and no key types it, so the ship earns no heat by
+typing.
 
 ## 11. System inventory
 
