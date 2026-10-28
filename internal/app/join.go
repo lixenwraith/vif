@@ -224,27 +224,18 @@ func (m *membership) bindSessionControl(o network.SessionOffer, local link.PeerI
 	if !ok {
 		return fmt.Errorf("join roster omits local participant %d", local)
 	}
-	// A cursorless participant drives nothing, which is a slot assignment like any
-	// other: it takes the sentinel, so every "is this my cursor" test answers no.
-	if localAssignment.Slot == parameter.NoPlayerSlot {
-		if m.localSlot() != parameter.NoPlayerSlot {
-			m.ctx.PushEventOrigin(event.EventCursorSetLocalRequest,
-				&event.CursorSetLocalPayload{Slot: parameter.NoPlayerSlot}, event.OriginDebug)
-			m.scheduler.Settle()
-		}
-		m.world.RunSafe(m.ctx.PublishMapLock)
-		return nil
-	}
-	// A Wraith in the slot is this participant's own place, which it drives once its
-	// arrival crosses and takes it back.
-	var owned bool
+	// A participant drives the cursor in its place and none while the place holds
+	// none or its Wraith, which its arrival brings or takes back as it crosses: the
+	// boot slot is another's. A cursorless one takes the sentinel for good, so every
+	// "is this my cursor" test answers no.
+	slot := localAssignment.Slot
 	m.world.RunSafe(func() {
-		e := m.world.Resources.Player.Slot(localAssignment.Slot)
-		owned = e != 0 && !m.world.Components.Wraith.HasEntity(e)
+		if e := m.world.Resources.Player.Slot(slot); e == 0 || m.world.Components.Wraith.HasEntity(e) {
+			slot = parameter.NoPlayerSlot
+		}
 	})
-	if owned && localAssignment.Slot != m.localSlot() {
-		m.ctx.PushEventOrigin(event.EventCursorSetLocalRequest,
-			&event.CursorSetLocalPayload{Slot: localAssignment.Slot}, event.OriginDebug)
+	if slot != m.localSlot() {
+		m.ctx.PushEventOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: slot}, event.OriginDebug)
 		m.scheduler.Settle()
 	}
 	m.world.RunSafe(m.ctx.PublishMapLock)

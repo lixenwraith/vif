@@ -526,8 +526,8 @@ func compilePointAt(p *pointPayload) (pointArgs, error) {
 	return pointArgs{target: t, key: key, fire: p.Fire, away: p.Away}, err
 }
 
-// owns reports whether an event payload's field names the bot's own cursor. Until a
-// joiner's slot binds, Player.Entity names another's cursor, which it does not drive.
+// owns reports whether an event payload's field names the bot's own cursor, which a
+// joiner has none of until its arrival binds it.
 func (m *mind) owns(payload any, field string) bool {
 	own := m.ctx.World.Resources.Player.Entity
 	v, ok := std.ExtractIntField(payload, field)

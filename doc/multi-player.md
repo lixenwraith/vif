@@ -78,7 +78,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the first candidate. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never a candidate (§5.1, §5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. `-authority host` (default on `-serve`): nobody takes it, and every survivor continues alone once its redial ends. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
-| Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
+| Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`). |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
@@ -433,7 +433,9 @@ traffic produced during transfer is buffered rather than lost. The join waits fo
 a capture far enough past admission to include pre-admission epochs and refuses a
 catch-up gap past `NetworkJoinCatchUpTicks`, or one still wider than
 `NetworkJoinLagTicks` (the default lead) once it has caught up; a bot seat retries
-either, since a fresh attempt brings a fresher world.
+either, since a fresh attempt brings a fresher world. A joiner drives no cursor until
+its own exists: the arrival binds it, or a correction that already holds the arrival,
+whose fence drops the crossing, binds it by identity (`RebindCursorRoster`).
 
 A join its player started (`-join` at launch, `:join`, the Multiplayer page) holds
 nothing in the session until their press. Its handshake previews the session

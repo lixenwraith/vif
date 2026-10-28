@@ -2569,7 +2569,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 			s.statDrop.Add(1)
 			continue
 		}
-		if !s.admissibleFromSource(et, a.source, a.authored) {
+		if !s.admissibleFromSource(et, payload, a.source, a.authored) {
 			s.statForged.Add(1)
 			s.world.Log().Warn("session", "msg", "artifact refused",
 				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
@@ -2617,14 +2617,57 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 // Only the authority may author roster changes, which create or destroy shared
 // identities, and a hold, which stops everyone: the one that sent the frame, or the
 // one it applies under — a dropped guest sees the link close before its dismissal's
-// tick and takes the term itself. Other source authentication requires
-// authenticated peers.
-func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32, authored bool) bool {
+// tick and takes the term itself. Nobody acts as another participant's cursor
+// (crossingActors). Other source authentication requires authenticated peers.
+func (s *NetworkSystem) admissibleFromSource(et event.EventType, payload any, source uint32, authored bool) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameHold, event.EventFSMTransition:
 		return authored || source == s.authorityParticipant()
-	default:
-		return true
+	}
+	actor, ok := crossingActors[et]
+	return !ok || s.actsAsOwn(source, actor(s.world, payload))
+}
+
+// actsAsOwn reports whether e is no other participant's cursor: source's own, or
+// one no participant owns. Ownership is shared state, so every instance refuses the
+// same artifacts at the same tick. Caller MUST hold updateMutex.
+func (s *NetworkSystem) actsAsOwn(source uint32, e core.Entity) bool {
+	c, ok := s.world.Components.Cursor.GetComponent(e)
+	return !ok || c.PeerID == 0 || c.PeerID == source
+}
+
+// crossingActors reads the cursor a crossing acts as, for each type whose payload
+// names one: by entity, or by roster slot for a captured key's input.
+var crossingActors = map[event.EventType]func(*engine.World, any) core.Entity{
+	event.EventCursorMoveRequest:               actorEntity(func(p *event.CursorMoveRequestPayload) core.Entity { return p.Entity }),
+	event.EventGoldJumpRequest:                 actorEntity(func(p *event.GoldJumpRequestPayload) core.Entity { return p.Entity }),
+	event.EventCursorDefeatState:               actorEntity(func(p *event.CursorDefeatStatePayload) core.Entity { return p.Entity }),
+	event.EventEmberSpent:                      actorEntity(func(p *event.HeatBurstPayload) core.Entity { return p.Entity }),
+	event.EventExplosionRequest:                actorEntity(func(p *event.ExplosionRequestPayload) core.Entity { return p.Entity }),
+	event.EventExplosionBatchRequest:           actorEntity(func(p *event.ExplosionBatchRequestPayload) core.Entity { return p.Entity }),
+	event.EventCombatAttackAreaCrossingRequest: actorEntity(func(p *event.CombatAttackAreaRequestPayload) core.Entity { return p.OwnerEntity }),
+	event.EventCompositeMemberDestroyed:        actorEntity(func(p *event.CompositeMemberDestroyedPayload) core.Entity { return p.Entity }),
+	event.EventDrainDefeated:                   actorEntity(func(p *event.DrainDefeatedPayload) core.Entity { return p.Entity }),
+	event.EventInputPressed:                    actorSlot(func(p *event.InputPayload) uint8 { return p.Slot }),
+	event.EventInputReleased:                   actorSlot(func(p *event.InputPayload) uint8 { return p.Slot }),
+	event.EventInputReport:                     actorSlot(func(p *event.InputReportPayload) uint8 { return p.Slot }),
+}
+
+func actorEntity[T any](field func(*T) core.Entity) func(*engine.World, any) core.Entity {
+	return func(_ *engine.World, p any) core.Entity {
+		if v, ok := p.(*T); ok {
+			return field(v)
+		}
+		return 0
+	}
+}
+
+func actorSlot[T any](field func(*T) uint8) func(*engine.World, any) core.Entity {
+	return func(w *engine.World, p any) core.Entity {
+		if v, ok := p.(*T); ok {
+			return w.Resources.Player.Slot(field(v))
+		}
+		return 0
 	}
 }
 
@@ -2887,6 +2930,10 @@ func (s *NetworkSystem) writeDueStates(nextTick uint64) {
 	})
 	queue := s.world.Resources.Event.Queue
 	for _, st := range due {
+		if !s.actsAsOwn(st.source, st.payload.Entity) {
+			s.statForged.Add(1)
+			continue
+		}
 		queue.PushReady(event.GameEvent{
 			Type: event.EventCursorStateSync, Payload: st.payload,
 			Origin: event.OriginNetwork, Domain: core.DomainPlayer,
