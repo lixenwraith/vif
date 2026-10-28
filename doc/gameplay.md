@@ -421,7 +421,9 @@ A jagged cave, one with `octaves` set, snakes a band of `max_gap` rows, or all t
 walls leave, as that channel, and its ceiling and floor each reach into the band by
 fractal noise of their own: `octaves` of value noise from `wavelength` columns
 halving down, stretched and squared, so a wall keeps near its side and now and then
-reaches far in; walls reaching in together share what the min gap leaves. Each
+reaches far in; walls reaching in together share what the min gap leaves. With
+`reach` set a wall reaches at most that many rows in, so a map taller than the two
+walls' reach and the min gap need opens every row it adds. Each
 wall's edge is the median of the five columns around it, so no bump or notch two
 columns wide or less stands. The rock is a field of ceiling and floor rows per
 column, not wall entities, which every wall query reads. It draws in `visual`, or
@@ -561,19 +563,22 @@ Glyphs drift behind the buttons as a moving backdrop, and music stays off.
 `vanguard` flies the cursor through a cave (§9) scrolling left at twenty columns a
 second, a column every tick: only a whole-tick period steps evenly, and eight a
 second stepped two and three ticks apart, which read as dropped frames. The cave is
-jagged, four octaves from 64 columns: its gap runs from nine rows to thirty-six as
-the map allows, mostly two to three times the narrowest, and the scenario's smallest
-map, 18 rows, holds twice the narrowest. Each new game flies a new cave, its rock in
-strata, cracked, moss or crystal stone. Glyphs drift left behind the rock at three
-depths, faster than it at 20, 40 and 80 cells a second, so each layer reads as
-moving and the depths come apart, and drains, nuggets, gold and the fuse are
-off. Raiders materialize at the right edge every two seconds while fewer than three
-fly or materialize, on a row drawn across the map, in the nearest open rows when
-rock fills it. Each lands as its quarter-second materialize ends, too soon for much
-scrolling rock to come over it, and is of a type drawn at random between the two
-of the rank the raid has reached among the cave's own eight. Every
-type is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the
-template for a species of one's own
+jagged, four octaves from 64 columns: its gap runs from nine rows to all but the
+walls' two rows each as the map allows, mostly two to three times the narrowest on
+a 40-row map, and the scenario's smallest map, 18 rows, holds twice the narrowest.
+A wall reaches at most 27 rows in, so a taller map, a phone held upright, keeps as
+much rock as a 40-row map and opens every row it adds, narrowing the less the
+taller it is: a 60-row map is a third rock and a 90-row map a fifth. Each new game
+flies a new cave, its rock in strata, cracked, moss or crystal stone. Glyphs drift
+left behind the rock at three depths, faster than it at 20, 40 and 80 cells a
+second, so each layer reads as moving and the depths come apart, and drains,
+nuggets, gold and the fuse are off. Raiders materialize at the right edge every two
+seconds while fewer than three fly or materialize, on a row drawn across the map, in
+the nearest open rows when rock fills it. Each lands as its quarter-second
+materialize ends, too soon for much scrolling rock to come over it, and is of a type
+drawn at random between the two of the rank the raid has reached among the cave's
+own eight. Every type is a program of the scenario's own
+(`behavior/<cave>/<type>.toml`), the template for a species of one's own
 ([FSM reference](fsm-reference.md#behavior-programs)), running one cycle, a chase,
 a lock, then a charge or a teleport (`RaiderStates` in `macros.toml`), its landing
 marked from the lock until it lands, with its own look. Each stone art's eight are

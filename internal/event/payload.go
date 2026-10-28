@@ -1385,8 +1385,8 @@ type MazeSpawnRequestPayload struct {
 // CaveStartPayload lays a cave across the map, its rock following cave.Config at the
 // map's height, and scrolls it left at Speed columns a second, up to the soft cap. A
 // zero speed, gap or wavelength takes its default, a zero seed draws one, a zero mask
-// blocks everything and a zero visual draws stone. Art names a stone art preset
-// (pattern.ParseArtPreset) the rock draws instead, as EmitEvent's pick may choose.
+// blocks everything, a zero visual draws stone and a zero reach caps no wall. Art names
+// a stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's pick may.
 type CaveStartPayload struct {
 	Seed       uint64                     `toml:"seed"`
 	Speed      float64                    `toml:"speed"`
@@ -1398,6 +1398,7 @@ type CaveStartPayload struct {
 	Detail     int                        `toml:"detail"`
 	Ramp       int                        `toml:"ramp"`
 	Octaves    int                        `toml:"octaves"`
+	Reach      int                        `toml:"reach"`
 	BlockMask  component.WallBlockMask    `toml:"block_mask"`
 	Visual     component.WallVisualConfig `toml:"visual"`
 	Art        string                     `toml:"art"`

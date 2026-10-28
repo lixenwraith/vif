@@ -94,8 +94,10 @@ background = true
 # The cave scrolls a column a tick: only whole columns a tick step evenly.
 # It is jagged: ceiling and floor each reach in by four octaves of noise from 64
 # columns down, smoothed past any bump of two columns, so the gap runs from 9 rows
-# to 36, four times that, as the map allows, mostly two or three times the
-# narrowest; on a taller map the 36 rows stray at most nine off the middle. With no
+# to all but the walls' two each, as the map allows, mostly two or three times the
+# narrowest on a map of 40 rows. A wall reaches 27 rows in at most, so a taller map,
+# a phone held upright, keeps that much rock and opens every row it adds, narrowing
+# the less the taller it is; max_gap 2000, the tallest map, caps no band. With no
 # rough rock the walls stay smooth, and the mouth holds the centred cursor. The rock
 # wears one of four stone arts, the cave's seed picking it; every rock cell draws a
 # glyph, so it reads on a text console's sixteen colours too. The glyphs drift past
@@ -109,7 +111,7 @@ background = true
 parent = "Root"
 on_enter = [
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
-    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 36, min_wall = 2, wavelength = 64, swing = 9, detail = 0, ramp = 96, octaves = 4 }, payload_vars = { seed = "cave_seed" }, pick = { field = "art", var = "cave_seed", from = ["strata", "cracked", "moss", "crystal"] } },
+    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 2000, min_wall = 2, reach = 27, wavelength = 64, detail = 0, ramp = 96, octaves = 4 }, payload_vars = { seed = "cave_seed" }, pick = { field = "art", var = "cave_seed", from = ["strata", "cracked", "moss", "crystal"] } },
     { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 80.0, duration_ms = 0, scenery = true } },
 ]
 
