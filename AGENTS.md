@@ -2,6 +2,11 @@
 
 It is the contract, not a suggestion.
 
+Read [doc/agent-notes.md](doc/agent-notes.md) before starting: it holds what earlier
+agents learned that neither these rules nor the design documents state. When a
+task teaches you something the next agent would otherwise rediscover, add it there
+in the same PR.
+
 ## Comments
 
 - A comment block is **at most 5 lines**. If the explanation needs more, the code

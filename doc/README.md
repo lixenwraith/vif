@@ -55,6 +55,8 @@ Focused references:
   detail.
 - [TOML macros](toml-macros.md) records the macro decision and its syntax.
 - [TODO](todo.md) is the prioritized running work list for every area.
+- [Agent notes](agent-notes.md) holds what agents learned working on the
+  repository that no rule or design document states.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic package reference](../pkg/genetic/README.md) documents the reusable
   optimization library.
