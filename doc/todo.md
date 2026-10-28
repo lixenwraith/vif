@@ -130,14 +130,14 @@ and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-
   (`enter`), `internal/component/behavior.go` (`BehaviorEntrance`)
 - Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)
 
-A prototype's `entrance = "materialize"` plays a one-second materialize, the
-`swarm` style, over the footprint and lands the body as it ends, beside any rock
-that came over it, and nothing of it reaches the machine, which starts in
-`initial` the tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
+A prototype's `entrance = "materialize"` plays a `swarm`-style materialize over
+the footprint for its `entrance_ms`, a second when that is 0, and lands the body as
+it ends, beside any rock that came over it, and nothing of it reaches the machine,
+which starts in `initial` the tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
 What a program would declare next:
 
-- The materialize's duration and style, `swarm` or `nugget` until a program
-  has [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
+- The materialize's style, `swarm` or `nugget` until a program has
+  [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
   and whether a countdown shows over it.
 - An entering state the machine runs while the materialize holds, so a program can
   telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
@@ -1054,17 +1054,16 @@ Its area pulse is the hosted disruptor's shape; the red circle's turret mount is
 ### Pace a quasar fusion as its own timer did
 
 - Priority: P3
-- Affected files: `internal/component/materialize.go` (`MaterializeStyles`),
-  `internal/parameter/effect.go`, `internal/system/fuse.go` (`fuseInto`)
+- Affected files: `internal/system/fuse.go` (`fuseInto`), `internal/parameter/effect.go`
 
 A quasar fusion's quasar lands as its materialize ends, a whole spawn's
 materialize, where the timer the materialize replaced landed it a little after half
 of it. A session sweep with both fusions waiting a whole materialize cost quasar
 kills, the one gap beyond the noise; a drain pair's swarm lands at half a second
 again, as its spirits arrive, so the sweep decides whether the quasar's wait alone
-still costs them. A fusion row in
-`MaterializeStyles` with a shorter fill, hold and recede would give the old pacing
-back, spawn and visual still ending on one tick.
+still costs them. A `DurationMs` on the quasar's materialize request, a fusion
+tunable near half the style's second, would give the old pacing back, spawn and
+visual still ending on one tick.
 
 ### Show a species' machine state in a debug overlay
 

@@ -1038,6 +1038,7 @@ var codecMaterializeRequestPayload = structCodec{size: unsafe.Sizeof(Materialize
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+	{off: unsafe.Offsetof(MaterializeRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
 func (p *MaterializeCompletedPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1062,6 +1063,7 @@ var codecMaterializeAreaRequestPayload = structCodec{size: unsafe.Sizeof(Materia
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
 	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
 func (p *FlashRequestPayload) codec() (*structCodec, unsafe.Pointer) {

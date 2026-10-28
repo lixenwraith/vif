@@ -607,9 +607,10 @@ type PingGridRequestPayload struct {
 
 // MaterializeRequestPayload contains parameters to start a visual spawn sequence
 type MaterializeRequestPayload struct {
-	X    int                 `toml:"x"`
-	Y    int                 `toml:"y"`
-	Type component.SpawnType `toml:"type"`
+	X          int                 `toml:"x"`
+	Y          int                 `toml:"y"`
+	Type       component.SpawnType `toml:"type"`
+	DurationMs int64               `toml:"duration_ms"` // 0 = its style's
 }
 
 // MaterializeAreaRequestPayload for area-based materialization (swarm, quasar)
@@ -619,7 +620,8 @@ type MaterializeAreaRequestPayload struct {
 	AreaWidth  int                   `toml:"area_width"` // 0 or 1 = single cell
 	AreaHeight int                   `toml:"area_height"`
 	Type       component.SpawnType   `toml:"type"`
-	Species    component.SpeciesType `toml:"species"` // the species its completion lands; SpeciesNone lands nothing
+	Species    component.SpeciesType `toml:"species"`     // the species its completion lands; SpeciesNone lands nothing
+	DurationMs int64                 `toml:"duration_ms"` // 0 = its style's
 }
 
 // MaterializeCompletedPayload carries details about a completed materialization

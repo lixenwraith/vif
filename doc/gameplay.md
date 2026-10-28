@@ -569,8 +569,9 @@ depths, faster than it at 20, 40 and 80 cells a second, so each layer reads as
 moving and the depths come apart, and drains, nuggets, gold and the fuse are
 off. Raiders materialize at the right edge every two seconds while fewer than three
 fly or materialize, on a row drawn across the map, in the nearest open rows when
-rock fills it, each landing as its materialize ends and of a type drawn at random
-between the two of the rank the raid has reached among the cave's own eight. Every
+rock fills it. Each lands as its quarter-second materialize ends, too soon for much
+scrolling rock to come over it, and is of a type drawn at random between the two
+of the rank the raid has reached among the cave's own eight. Every
 type is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the
 template for a species of one's own
 ([FSM reference](fsm-reference.md#behavior-programs)), running one cycle, a chase,
