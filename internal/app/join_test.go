@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	link "github.com/lixenwraith/vif/pkg/network"
@@ -166,6 +167,45 @@ func TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor(t *testing.T) {
 	}
 	if got := host.membership.localSlot(); got != 0 {
 		t.Fatalf("host follows slot %d, want its own slot 0", got)
+	}
+}
+
+// TestAJoinerDrivesOnlyItsOwnCursor: a mid-run joiner's place is empty until its
+// arrival crosses, and its boot slot is another participant's, so it drives none. A
+// correction the arrival already crossed into fences the arrival off and brings the
+// cursor instead, which the joiner then drives.
+func TestAJoinerDrivesOnlyItsOwnCursor(t *testing.T) {
+	t.Parallel()
+	host := mustHeadless(t, 0x2B0D, 120, 40)
+	defer host.Close()
+	an := host.JoinAnchor()
+	guest := mustJoiner(t, 0x2B0D, 120, 40, an)
+	defer guest.Close()
+
+	host.Tick(30)
+	if err := guest.JoinSessionAt(sessionOfferFor(an, 2), mustRoundTrip(t, host), 0); err != nil {
+		t.Fatalf("join session: %v", err)
+	}
+	if got := guest.membership.localSlot(); got != parameter.NoPlayerSlot {
+		t.Fatalf("a joiner awaiting its arrival follows slot %d", got)
+	}
+
+	host.World().RunSafe(func() {
+		host.World().PushEventFull(event.EventParticipantJoined,
+			&event.ParticipantJoinedPayload{Participant: 2, Slot: 1}, event.OriginSession, core.DomainPlayer)
+	})
+	host.Tick(10)
+	guest.World().AdoptSession(engine.SessionState{Participant: 2, Authority: 1}) // its link's latch
+	staged, err := guest.glue.StageShared(mustRoundTrip(t, host))
+	if err == nil {
+		err = staged.Commit()
+	}
+	if err != nil {
+		t.Fatalf("correction: %v", err)
+	}
+	assertControl(t, guest, 1, component.ControlLocal)
+	if got := guest.membership.localSlot(); got != 1 {
+		t.Fatalf("a joiner follows slot %d once a correction brings its cursor, want 1", got)
 	}
 }
 
