@@ -12,8 +12,8 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
 by area so an agent can take a group, beside the navigation items. The faster
-scroll, the jagged cave, the stone art, the raider types by cave and the machine's
-certain faults have landed. Order now: play the cave raiders, the scenery text and
+scroll, the jagged cave, the stone art, the raider types by cave, the scenery text
+and the machine's certain faults have landed. Order now: play the cave raiders and
 the boss approach; the position package last, in a session of its own. Until that
 lands, nothing here adds engine surface for rock or caves: a cave's shape stays in
 `pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall system
@@ -56,7 +56,8 @@ magenta (13) meets the amethyst points, which are sparse. Keep every type within
 
 - Priority: P1
 - Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`, `RaidWait`),
-  `doc/gameplay.md` §10
+  `internal/system/environment.go` (`shiftLayers`), `internal/system/glyph.go`,
+  `internal/render/renderer/glyph.go` (`glyphLevels256`), `doc/gameplay.md` §10
 - Guide: [Script the boss approach](#script-the-boss-approach-and-play-its-stop)
 
 Three kills of the fourth rank exhaust the cave's tier and enter `RaidBoss`, a
@@ -66,24 +67,12 @@ of the tier's own, and what beating it opens, the next tier or the same climb ag
 The raid's cap of three reads `behavior.count`, which sums every program, so a boss
 program would hold a raider's place: the boss state stops the raid, or caps it on
 the raiders' own count (`behavior.<program>.count` summed, or a prototype `group`
-with `behavior.group.<g>.count`).
-
-### Scenery
-
-#### Play the scenery text and settle what it leaves open
-
-- Priority: P1
-- Affected files: `internal/system/environment.go`,
-  `wad/scenario/vanguard/scenario.toml` (`CaveStart`), `doc/gameplay.md` §9
-- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
-
-Vanguard's drifting text is scenery: rock and raiders pass it by and no key types
-it, and the spawner counts only what shows outside the rock.
-Scenery passes behind any cell that blocks spawns, rock and walls alike, until the
-position package gives rock a test of its own. A boss region of fixed, typeable text
-over moving scenery needs a drift that moves scenery alone, since a drift moves
-every loose glyph; in truecolor scenery is hazed by depth apart from typeable text,
-but on a console it takes the same two entries.
+with `behavior.group.<g>.count`). Fixed, typeable text over the moving scenery, if
+the encounter puts any there, needs a drift that moves scenery alone, since a drift
+moves every loose glyph, and the spawner placing text in place while scenery enters,
+where it places one kind at a time. Truecolor hazes scenery by depth apart from
+typeable text, but a console draws both in a hue's same two entries, so one kind
+needs a console look of its own.
 
 ### Boss approach
 
