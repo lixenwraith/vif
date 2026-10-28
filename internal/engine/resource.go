@@ -54,6 +54,10 @@ type Resource struct {
 	// before the systems are built, which bind and size by them
 	Behaviors []component.BehaviorPrototype
 
+	// The loot kinds and drop tables this scenario declares, set with Behaviors;
+	// the zero value declares none, every kill rolling the code's tables
+	Loot component.LootSet
+
 	// Transient visual effects
 	Transient *TransientResource
 

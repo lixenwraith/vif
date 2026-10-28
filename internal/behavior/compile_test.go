@@ -132,7 +132,7 @@ func parse(t *testing.T, src string) map[string]any {
 }
 
 func TestProgramsTakeIDsInSortedNameOrder(t *testing.T) {
-	set, err := Compile(testVocabulary(), map[string]map[string]any{"b": parse(t, warden), "a": parse(t, warden)})
+	set, err := Compile(testVocabulary(), map[string]map[string]any{"b": parse(t, warden), "a": parse(t, warden)}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestAPrototypeLooksAsItsFramesSay(t *testing.T) {
 	src := strings.Replace(warden, `{ glyphs = ["▀▄▄▀", "▄▀▀▄"] }`,
 		`{ glyphs = ["▀ ▄▀", "▄▀▀▄"], fg = ["0  0", "    "], bg = ["    ", "0  0"], attr = ["B  D", "    "] }`, 1)
 	src = strings.Replace(src, "pattern_ms = 500", "pattern_ms = 500\nbg = [{ r = 20, g = 10, b = 0 }]\nfg256 = 214\nbg256 = 52", 1)
-	set, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, src)})
+	set, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, src)}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestAPrototypeLooksAsItsFramesSay(t *testing.T) {
 // flies the default, and one naming a few keeps the rest of it
 func TestAProgramsPhysicsKeysReplaceTheDefaultOneByOne(t *testing.T) {
 	src := strings.Replace(warden, "mass = 2.0", "mass = 2.0\nphysics = { speed = 12, dead_zone = 0.25, restitution = 0.3 }", 1)
-	set, err := Compile(testVocabulary(), map[string]map[string]any{"plain": parse(t, warden), "tuned": parse(t, src)})
+	set, err := Compile(testVocabulary(), map[string]map[string]any{"plain": parse(t, warden), "tuned": parse(t, src)}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestAProgramsPhysicsKeysReplaceTheDefaultOneByOne(t *testing.T) {
 // each line is what one step ran and the state it ended in. Every entry, the
 // start's included, ends with the host's entered hook.
 func TestACompiledProgramStepsAsItsStatesSay(t *testing.T) {
-	set, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, warden)})
+	set, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, warden)}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,8 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 		{"no accel", `mass = 2.0`, "mass = 2.0\nphysics = { accel = 0.0 }", `program 'warden': prototype: physics: accel 0 never homes`, 1},
 		{"restitution", `mass = 2.0`, "mass = 2.0\nphysics = { restitution = 1.5 }", `program 'warden': prototype: physics: restitution 1.5 keeps more speed than a bounce met`, 1},
 		{"arrival drag alone", `mass = 2.0`, "mass = 2.0\nphysics = { arrival_drag = 2.0 }", `program 'warden': prototype: physics: arrival_drag 2 ramps in over an arrival_radius, and that is 0`, 1},
-		{"drops", `drops = "swarm"`, `drops = "tower"`, `program 'warden': prototype: drops "tower": that species drops nothing`, 1},
+		{"drops", `drops = "swarm"`, `drops = "tower"`, `program 'warden': prototype: drops "tower": that table drops nothing`, 1},
+		{"entrance", `mass = 2.0`, "mass = 2.0\nentrance = \"fly\"", `program 'warden': prototype: entrance "fly" is not one of materialize`, 1},
 		{"glyph width", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀", "▀▄▄▀"] }, {`, `program 'warden': prototype: frames[0]: glyphs[0] "▄▀▀" has 3 cells, want width 4`, 1},
 		{"frame height", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀▄"] }, {`, `program 'warden': prototype: frames[0]: glyphs has 1 rows, want height 2`, 1},
 		{"no frame", `frames = [{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, { glyphs = ["▀▄▄▀", "▄▀▀▄"] }]`, `frames = []`, `program 'warden': prototype: no frame`, 1},
@@ -294,7 +295,7 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 			if src == warden {
 				t.Fatalf("%q is not in the program", tc.old)
 			}
-			_, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, src)})
+			_, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, src)}, nil)
 			if err == nil {
 				t.Fatal("compiled")
 			}
@@ -326,7 +327,7 @@ func TestAProgramNameKeepsToTheRules(t *testing.T) {
 		{map[string]map[string]any{"swarm": doc}, `program name "swarm" is a code species`},
 		{map[string]map[string]any{"total": doc}, `program name "total" is reserved`},
 	} {
-		if _, err := Compile(testVocabulary(), tc.programs); err == nil || !strings.Contains(err.Error(), tc.want) {
+		if _, err := Compile(testVocabulary(), tc.programs, nil); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("error %v, want %q", err, tc.want)
 		}
 	}

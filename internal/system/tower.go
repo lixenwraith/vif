@@ -281,7 +281,7 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 
 	// Spiral fallback from last attempt
 	last := cells[len(cells)-1]
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
 		last.X, last.Y,
 		width, height,
 		radiusX, radiusY,

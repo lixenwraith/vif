@@ -244,7 +244,7 @@ func TestAnEmittedPayloadSpellsItsEnumsByName(t *testing.T) {
 		m := fsm.NewMachine[struct{}]()
 		std.Register(m, std.Host[struct{}]{
 			Emit:  func(_ struct{}, _ event.EventType, p any) { sent = append(sent, p) },
-			Names: event.PayloadNames([]string{"invader"}),
+			Names: event.PayloadNames(component.Declared{Programs: []string{"invader"}}),
 		})
 		return m, &sent, m.LoadScenario([]byte(`
 [regions.r]
@@ -305,7 +305,7 @@ transitions = [{ trigger = "Tick", target = "Say" }]
 	m := fsm.NewMachine[struct{}]()
 	std.Register(m, std.Host[struct{}]{
 		Emit:  func(_ struct{}, _ event.EventType, p any) { sent = append(sent, p) },
-		Names: event.PayloadNames([]string{"invader"}),
+		Names: event.PayloadNames(component.Declared{Programs: []string{"invader"}}),
 	})
 	if err := m.LoadScenario([]byte(doc)); err != nil {
 		t.Fatal(err)
@@ -383,7 +383,7 @@ func TestAPickIsCheckedAtLoad(t *testing.T) {
 		m := fsm.NewMachine[struct{}]()
 		std.Register(m, std.Host[struct{}]{
 			Emit:  func(struct{}, event.EventType, any) {},
-			Names: event.PayloadNames(nil),
+			Names: event.PayloadNames(component.Declared{}),
 		})
 		err := m.LoadScenario([]byte(`
 [regions.r]

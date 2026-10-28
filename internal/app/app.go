@@ -385,9 +385,10 @@ func (a *App) initWorld() error {
 	// Systems; AddSystem sorts by Priority(), manifest order breaks ties.
 	// MetaSystem takes the context and BehaviorSystem the compiled programs, so
 	// the generator constructs neither; their profiles stay in
-	// manifest.ContextSystems. The prototypes go in first: loot, soft collision
-	// and meta size their data rows by them.
+	// manifest.ContextSystems. The prototypes and the scenario's loot go in first:
+	// loot, soft collision and meta size their data rows by them.
 	a.world.Resources.Behaviors = a.behaviors.Prototypes()
+	a.world.Resources.Loot = *a.behaviors.Loot()
 	for _, sys := range manifest.BuildSystems(a.world) {
 		a.world.AddSystem(sys, manifest.ProfileFor(sys.Name()))
 	}
@@ -534,7 +535,7 @@ func (a *App) initScheduler() error {
 	a.glue.scheduler, a.membership.scheduler, a.scribe.scheduler = a.scheduler, a.scheduler, a.scheduler
 	a.scheduler.SetJournalDigest(a.scribe.journalDigestLocked)
 
-	register := func(m *fsm.Machine[*engine.World]) { manifest.RegisterFSMComponents(m, a.behaviors.Names()) }
+	register := func(m *fsm.Machine[*engine.World]) { manifest.RegisterFSMComponents(m, a.behaviors.Declared()) }
 	if err := a.scheduler.LoadScenarioFromFS(a.scenario.FS(), a.scenario.Entry(), register); err != nil {
 		return fmt.Errorf("load scenario %s: %w", a.scenario.Name, err)
 	}
@@ -617,7 +618,11 @@ func (a *App) readScenario() error {
 	if err != nil {
 		return fmt.Errorf("scenario: %w", err)
 	}
-	if a.behaviors, err = system.CompileBehaviors(programs); err != nil {
+	loot, err := sc.Loot()
+	if err != nil {
+		return fmt.Errorf("scenario: %w", err)
+	}
+	if a.behaviors, err = system.CompileBehaviors(programs, loot); err != nil {
 		return fmt.Errorf("scenario %s: %w", sc.Name, err)
 	}
 	a.scenario = sc

@@ -251,36 +251,26 @@ func (s *SnakeSystem) Update() {
 
 // spawnSnake creates the complete snake entity structure
 func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
-	headX, headY := payload.X, payload.Y
 	segmentCount := payload.SegmentCount
 	if segmentCount <= 0 {
 		segmentCount = parameter.SnakeDefaultSegmentCount
 	}
 
-	// Validate spawn area for head
-	topLeftX := headX - parameter.SnakeHeadHeaderOffsetX
-	topLeftY := headY - parameter.SnakeHeadHeaderOffsetY
-
-	if s.world.Positions.HasBlockingWallInArea(
-		topLeftX, topLeftY,
+	// The head's footprint the request names, pulled inside the map, or the nearest
+	// free one
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
+		payload.X, payload.Y,
 		parameter.SnakeHeadWidth, parameter.SnakeHeadHeight,
+		parameter.SnakeHeadHeaderOffsetX, parameter.SnakeHeadHeaderOffsetY,
 		component.WallBlockSpawn,
-	) {
-		var found bool
-		topLeftX, topLeftY, found = s.world.Positions.FindFreeAreaSpiral(
-			headX, headY,
-			parameter.SnakeHeadWidth, parameter.SnakeHeadHeight,
-			parameter.SnakeHeadHeaderOffsetX, parameter.SnakeHeadHeaderOffsetY,
-			component.WallBlockSpawn,
-			0,
-		)
-		if !found {
-			s.lifecycle.spawnFailures.Add(1)
-			return
-		}
-		headX = topLeftX + parameter.SnakeHeadHeaderOffsetX
-		headY = topLeftY + parameter.SnakeHeadHeaderOffsetY
+		0,
+	)
+	if !found {
+		s.lifecycle.spawnFailures.Add(1)
+		return
 	}
+	headX := topLeftX + parameter.SnakeHeadHeaderOffsetX
+	headY := topLeftY + parameter.SnakeHeadHeaderOffsetY
 
 	// Clear spawn area
 	s.clearSpawnArea(headX, headY, parameter.SnakeHeadWidth, parameter.SnakeHeadHeight,
@@ -629,9 +619,9 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	}
 
 	minHeaderX := parameter.SnakeHeadHeaderOffsetX
-	maxHeaderX := config.MapWidth - (parameter.SnakeHeadWidth - parameter.SnakeHeadHeaderOffsetX) + 1
+	maxHeaderX := config.MapWidth - (parameter.SnakeHeadWidth - parameter.SnakeHeadHeaderOffsetX)
 	minHeaderY := parameter.SnakeHeadHeaderOffsetY
-	maxHeaderY := config.MapHeight - (parameter.SnakeHeadHeight - parameter.SnakeHeadHeaderOffsetY) + 1
+	maxHeaderY := config.MapHeight - (parameter.SnakeHeadHeight - parameter.SnakeHeadHeaderOffsetY)
 
 	newX, newY, motion := physics.IntegrateWithBounceStats(
 		&kineticComp.Kinetic,

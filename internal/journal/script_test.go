@@ -35,7 +35,9 @@ func (f *scriptFake) Inject(intents ...*input.Intent) bool {
 func (f *scriptFake) Emit(et event.EventType, payload any, domain core.Domain) {
 	f.events = append(f.events, scriptEmission{typeID: et, payload: payload, domain: domain})
 }
-func (f *scriptFake) Programs() []string { return f.programs }
+func (f *scriptFake) Declared() component.Declared {
+	return component.Declared{Programs: f.programs}
+}
 
 func TestAuthoredScriptRunsActionsAtNamedTicks(t *testing.T) {
 	script, err := ParseScript([]byte(`

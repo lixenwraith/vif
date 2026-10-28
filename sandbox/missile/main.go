@@ -539,8 +539,8 @@ func updateSingleMissile(m *Missile, dt float64) {
 	case MissileBounce:
 		physics.IntegratePosition(&m.Pos, dt)
 
-		bounced := physics.ReflectBoundsX(&m.Pos, 0, screenWidth)
-		if physics.ReflectBoundsY(&m.Pos, 0, screenHeight-1) {
+		bounced := physics.ReflectBoundsX(&m.Pos, 0, screenWidth-1)
+		if physics.ReflectBoundsY(&m.Pos, 0, screenHeight-2) {
 			bounced = true
 		}
 

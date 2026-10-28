@@ -653,7 +653,7 @@ func handleEmitCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 // parseEventPayload reads an inline TOML table, "{ field = value, ... }", into the
 // event's payload as a scenario's EmitEvent would, the running programs among its
-// species; empty text is no payload
+// species and the scenario's loot kinds among its kinds; empty text is no payload
 func parseEventPayload(ctx *engine.GameContext, et event.EventType, raw string) (any, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -665,11 +665,11 @@ func parseEventPayload(ctx *engine.GameContext, et event.EventType, raw string) 
 	if err != nil {
 		return nil, fmt.Errorf("payload: %w", err)
 	}
-	programs := make([]string, len(ctx.World.Resources.Behaviors))
-	for i, p := range ctx.World.Resources.Behaviors {
-		programs[i] = p.Name
+	declared := component.Declared{Loot: ctx.World.Resources.Loot.Names()}
+	for _, p := range ctx.World.Resources.Behaviors {
+		declared.Programs = append(declared.Programs, p.Name)
 	}
-	return event.AuthoredPayload(event.PayloadNames(programs), et, parsed["_p"])
+	return event.AuthoredPayload(event.PayloadNames(declared), et, parsed["_p"])
 }
 
 // handleTelemetryCommand opens the telemetry overlay, or runs a telemetry subcommand

@@ -316,7 +316,7 @@ func rockRows(w *engine.World, x0, x1, ceil, floor int) {
 }
 
 // TestATeleportArrivesBesideRockThatTookItsLanding: rock that came over the
-// landing while the beam ran never holds the swarm. The arrival stands on the
+// landing while the teleport ran never holds the swarm. The arrival stands on the
 // nearest clear footprint, counted as a charge, and the chase follows it with
 // the whole interval.
 func TestATeleportArrivesBesideRockThatTookItsLanding(t *testing.T) {
@@ -329,7 +329,7 @@ func TestATeleportArrivesBesideRockThatTookItsLanding(t *testing.T) {
 	stepSwarm(w, s)
 
 	if sw.Machine.State != component.SwarmStateArrive || sw.ChargesCompleted != 1 {
-		t.Fatalf("after the beam: instance %+v with %d charges, want an arrival counting one",
+		t.Fatalf("after the teleport: instance %+v with %d charges, want an arrival counting one",
 			sw.Machine, sw.ChargesCompleted)
 	}
 	pos, _ := w.Positions.GetPosition(header)
@@ -369,7 +369,7 @@ func TestATeleportWithNoRoomToArriveBrakesWhereItStands(t *testing.T) {
 	stepSwarm(w, s)
 
 	if sw.Machine.State != component.SwarmStateDecelerate || sw.ChargesCompleted != 1 {
-		t.Fatalf("after the beam: instance %+v with %d charges, want a brake counting one",
+		t.Fatalf("after the teleport: instance %+v with %d charges, want a brake counting one",
 			sw.Machine, sw.ChargesCompleted)
 	}
 	if pos, _ := w.Positions.GetPosition(header); pos != start {

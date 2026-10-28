@@ -63,12 +63,12 @@ func TestDropTableYieldsCappedWeaponsThenFallsBack(t *testing.T) {
 	}
 }
 
-// A data species rolls the tiers of the code species its prototype names; one that
+// A data species rolls the table its program names, a code species' here; one that
 // names none, or a species past the scenario's programs, drops nothing
 func TestADataSpeciesRollsTheDropsItsPrototypeNames(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	w.Resources.Behaviors = []component.BehaviorPrototype{
-		{Name: "warden", Species: component.SpeciesDataFirst, Drops: component.SpeciesKraken},
+		{Name: "warden", Species: component.SpeciesDataFirst, Drops: "kraken"},
 		{Name: "wisp", Species: component.SpeciesDataFirst + 1},
 	}
 	loot := ready(NewLootSystem(w)).(*LootSystem)

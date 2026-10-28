@@ -18,7 +18,7 @@ min_height = 18
 # The raider types, one program each over the one cycle in macros.toml, so each
 # keeps its own kill counter and behavior.<type>.* rows: eight to a stone art, its
 # tier, two of each of four ranks, smallest first. RaidSpawn picks among the cave's
-# two of the rank the ramp has reached, and the U drop names them all.
+# two of the rank the ramp has reached.
 [behaviors]
 # Strata: violet vermin
 scarab = { file = "behavior/strata/scarab.toml" }
@@ -56,6 +56,21 @@ jelly = { file = "behavior/crystal/jelly.toml" }
 squid = { file = "behavior/crystal/squid.toml" }
 djinn = { file = "behavior/crystal/djinn.toml" }
 robot = { file = "behavior/crystal/robot.toml" }
+
+# The U: the gun's next level of the path the ship flies, the one loot vanguard
+# drops. Every raider type names the raider table, so a raider a player shoots
+# down drops a U where it fell, one for every player; one that dies by no player's
+# hand drops nothing.
+[loot.upgrade]
+rune = "U"
+color = { r = 255, g = 255, b = 0 }
+glow = { r = 100, g = 220, b = 100 }
+reward = "weapon"
+weapon = "gun"
+
+[drops.raider]
+killer = "player"
+tiers = [{ entries = [{ loot = "upgrade", rate = 1.0 }] }]
 
 # No drains, and so nothing to fuse: the raid spawns its raiders directly
 [regions.main]
@@ -100,37 +115,19 @@ on_enter = [
 
 # --- Raiders ---
 
-# A raider a player shoots down drops a U where it fell, an upgrade for every
-# player: an event drop, since no drop table holds it; one that dies by no
-# player's hand drops nothing. Both raid states hold it, so no kill goes
-# uncounted while a raider spawns.
-[states.Raid]
-parent = "Root"
-transitions = [
-    { trigger = "EventSpeciesKilled", internal = true, guard = "And", guard_args = { guards = [
-        { name = "PayloadSpeciesIn", args = { field = "species", names = [
-            "scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle", "scorpion",
-            "gremlin", "chomper", "imp", "slime", "ghost", "skull", "wraith", "demon",
-            "hedgehog", "mouse", "frog", "hopper", "bat", "puffer", "owl", "lynx",
-            "drone", "shard", "saucer", "trooper", "jelly", "squid", "djinn", "robot",
-        ] } },
-        { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
-    ] }, capture_vars = { x = "kill_x", y = "kill_y" }, actions = [
-        { action = "EmitEvent", event = "EventLootSpawnRequest", payload = { type = "upgrade" }, payload_vars = { x = "kill_x", y = "kill_y" } },
-    ] },
-]
-
-# A raider spawns at the right edge every two seconds while fewer than three fly,
-# every data species being a raider, on a row drawn inside the two rows a wall
-# keeps at its thinnest. The request names the map's width, a column past its right
-# edge, and the spawn stands each body flush against that edge whatever its size;
-# it searches the whole map from there, so rock on that row sends it to the nearest
-# open rows. The type is drawn between the two of the ramp's rank in the cave's
-# eight: the cave's seed modulo four is its stone art, as CaveStart's pick takes it,
-# eight times that the first of its types in the pick's list, which runs the arts
-# in CaveStart's order, and twice the rank the first of that rank's pair.
+# A raider materializes at the right edge every two seconds while fewer than three
+# fly or materialize, every data species being a raider, on a row drawn inside the
+# two rows a wall keeps at its thinnest. The request names the map's width, a column
+# past its right edge, and the materialize stands each footprint flush against that
+# edge whatever its size; it searches the whole map from there, so rock on that row
+# sends it to the nearest open rows, and the raider lands as it ends, beside any
+# rock that came over it meanwhile. The type is drawn between the two of the ramp's
+# rank in the cave's eight: the cave's seed modulo four is its stone art, as
+# CaveStart's pick takes it, eight times that the first of its types in the pick's
+# list, which runs the arts in CaveStart's order, and twice the rank the first of
+# that rank's pair.
 [states.RaidWait]
-parent = "Raid"
+parent = "Root"
 transitions = [
     { trigger = "Tick", target = "RaidSpawn", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
@@ -139,7 +136,7 @@ transitions = [
 ]
 
 [states.RaidSpawn]
-parent = "Raid"
+parent = "Root"
 on_enter = [
     { action = "ConfigToVar", payload = { field = "map_width", name = "raid_x" } },
     { action = "ConfigToVar", payload = { field = "map_height", name = "raid_rows" } },

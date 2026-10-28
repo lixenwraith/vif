@@ -87,7 +87,7 @@ func newProgramWorld(t *testing.T, program string, x, y int) (*engine.GameContex
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc})
+	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,14 +173,14 @@ func TestAWardenWindsUpPastItsRangeThenChargesTheCellItStored(t *testing.T) {
 	}
 
 	start, _ := w.Positions.GetPosition(header)
-	beams := countEvents(stepWhile(t, w, s, b, wardenWind), event.EventMaterializeAreaRequest)
+	materializes := countEvents(stepWhile(t, w, s, b, wardenWind), event.EventMaterializeAreaRequest)
 	if b.Machine.State != wardenStrike || combat.IsEnraged || !b.Shielded ||
 		combat.Status[component.StatusWard].Remaining <= 0 {
 		t.Fatalf("wind-up ended: state %d enraged %v shielded %v ward %v, want a warded strike",
 			b.Machine.State, combat.IsEnraged, b.Shielded, combat.Status[component.StatusWard].Remaining)
 	}
-	if beams != 1 {
-		t.Fatalf("the wind-up's cue beamed %d times, want once", beams)
+	if materializes != 1 {
+		t.Fatalf("the wind-up's cue materialized %d times, want once", materializes)
 	}
 	if b.TargetX != wardenX+40 || b.TargetY != wardenY {
 		t.Fatalf("strike stored (%d,%d), want the target's cell", b.TargetX, b.TargetY)
@@ -243,9 +243,124 @@ func TestACancelRequestEndsTheWardenThroughItsComposite(t *testing.T) {
 	}
 }
 
-// TestASpawnCountsItsInstanceAtOnce: a spawn landing after the step, as a beam's
-// does, shows in its program's count before the next step, so a region reading the
-// count never takes a landed instance for gone
+// newEntranceWorld runs entrances over an 80x40 world whose one program is the
+// warden, materializing as it comes on
+func newEntranceWorld(t *testing.T) (*materializeWorld, *BehaviorSystem) {
+	t.Helper()
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
+	program := strings.Replace(wardenProgram, "[prototype]\n", "[prototype]\nentrance = \"materialize\"\n", 1)
+	doc, err := toml.NewParser([]byte(program)).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Resources.Behaviors = set.Prototypes()
+	w.Resources.Target = &engine.TargetResource{}
+	s := ready(NewBehaviorSystem(w, set)).(*BehaviorSystem)
+	return newMaterializeWorld(w, s), s
+}
+
+// enterWarden asks for a warden with its header at the cell
+func enterWarden(e *materializeWorld, x, y int) {
+	e.deliver(event.GameEvent{
+		Type:    event.EventBehaviorSpawnRequest,
+		Payload: &event.BehaviorSpawnRequestPayload{Program: "warden", X: x, Y: y},
+	})
+}
+
+// TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds: a request stands nothing; a
+// Shared materialize names the species over the footprint, counted as an instance,
+// and the body lands the tick it ends, on that footprint or, rock having come over
+// it, on one clear of the rock
+func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
+	e, s := newEntranceWorld(t)
+	w := e.w
+	p := w.Resources.Behaviors[0]
+	enterWarden(e, wardenX, wardenY)
+	enterWarden(e, wardenX+20, wardenY)
+	var footprints []component.MaterializeComponent
+	for _, m := range w.Components.Materialize.Entities() {
+		c, _ := w.Components.Materialize.GetComponent(m)
+		if m.Domain() != core.DomainShared || c.Species != p.Species || c.AreaWidth != p.Width || c.AreaHeight != p.Height {
+			t.Fatalf("materialize %+v, want a Shared one naming the warden over its %dx%d footprint", c, p.Width, p.Height)
+		}
+		footprints = append(footprints, c)
+	}
+	s.Update()
+	if n := w.Resources.Status.Ints.Get("behavior.warden.count").Load(); len(footprints) != 2 || n != 2 || w.Components.Behavior.CountEntities() != 0 {
+		t.Fatalf("%d materializes counted as %d wardens, want two arriving and none standing", len(footprints), n)
+	}
+
+	for range materializeTicks() - 1 {
+		e.tick()
+	}
+	if n := w.Components.Behavior.CountEntities(); n != 0 {
+		t.Fatalf("%d wardens landed before their materializes ended", n)
+	}
+	rock := footprints[1]
+	spawnWall(w, rock.TargetX, rock.TargetY)
+	e.tick()
+	headers := w.Components.Behavior.Entities()
+	if len(headers) != 2 || w.Components.Materialize.CountEntities() != 0 {
+		t.Fatalf("%d wardens landed as their materializes ended, want two", len(headers))
+	}
+	landed := map[[2]int]bool{}
+	for _, header := range headers {
+		pos, _ := w.Positions.GetPosition(header)
+		left, top := pos.X-p.HeaderX, pos.Y-p.HeaderY
+		if !w.Positions.IsAreaFree(left, top, p.Width, p.Height, component.WallBlockSpawn) {
+			t.Fatalf("a warden landed at (%d, %d) on the rock that came over its footprint", left, top)
+		}
+		landed[[2]int{left, top}] = true
+	}
+	if clear := footprints[0]; !landed[[2]int{clear.TargetX, clear.TargetY}] {
+		t.Fatalf("wardens landed at %v, none on the clear footprint at (%d, %d)", landed, clear.TargetX, clear.TargetY)
+	}
+}
+
+// TestACancelEndsItsProgramsEntrancesInFlight: a materialize is the pending spawn,
+// so the cancel that ends a program's instances ends it too, and nothing lands after
+func TestACancelEndsItsProgramsEntrancesInFlight(t *testing.T) {
+	e, _ := newEntranceWorld(t)
+	w := e.w
+	enterWarden(e, wardenX, wardenY)
+	e.tick()
+	e.deliver(event.GameEvent{Type: event.EventBehaviorCancelRequest, Payload: &event.BehaviorCancelRequestPayload{Program: "warden"}})
+	if n := w.Components.Materialize.CountEntities(); n != 0 {
+		t.Fatalf("%d materializes outlived the cancel", n)
+	}
+	for range materializeTicks() {
+		e.tick()
+	}
+	if n := w.Components.Behavior.CountEntities(); n != 0 {
+		t.Fatalf("%d wardens landed after their cancel", n)
+	}
+}
+
+// TestOnlyASharedMaterializeLandsADataSpecies: a player-domain materialize ran on
+// one instance alone, so its completion names a species no other instance spawns
+func TestOnlyASharedMaterializeLandsADataSpecies(t *testing.T) {
+	e, _ := newEntranceWorld(t)
+	w := e.w
+	e.deliver(event.GameEvent{
+		Type:   event.EventMaterializeComplete,
+		Domain: core.DomainPlayer,
+		Payload: &event.MaterializeCompletedPayload{
+			X: wardenX, Y: wardenY, Type: component.SpawnTypeSwarm, Species: w.Resources.Behaviors[0].Species,
+		},
+	})
+	if n := w.Components.Behavior.CountEntities(); n != 0 {
+		t.Fatalf("a player materialize landed %d wardens", n)
+	}
+}
+
+// TestASpawnCountsItsInstanceAtOnce: a spawn landing after the step, as an
+// entrance's does, shows in its program's count before the next step, so a region
+// reading the count never takes a landed instance for gone
 func TestASpawnCountsItsInstanceAtOnce(t *testing.T) {
 	ctx, _, _ := newWardenWorld(t, wardenX+4, wardenY)
 	if n := ctx.World.Resources.Status.Ints.Get("behavior.warden.count").Load(); n != 1 {
@@ -357,7 +472,7 @@ func TestAnEmittedPayloadNamesADataSpeciesByItsProgram(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = CompileBehaviors(map[string]map[string]any{"warden": doc})
+	_, err = CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
 	if err == nil || !strings.Contains(err.Error(), `species: "ghost" is not one of`) {
 		t.Fatalf("a payload naming no species compiled: %v", err)
 	}

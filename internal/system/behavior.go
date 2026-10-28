@@ -54,13 +54,14 @@ type behaviorTelemetry struct {
 	lifecycle lifecycleTelemetry
 }
 
-// BehaviorSet is a scenario's compiled programs, named without the context its verbs read
+// BehaviorSet is a scenario's compiled programs and loot, named without the context
+// its verbs read
 type BehaviorSet = behavior.Set[*behaviorCtx]
 
-// CompileBehaviors compiles a scenario's programs, keyed by name, against the game
-// vocabulary
-func CompileBehaviors(byName map[string]map[string]any) (*BehaviorSet, error) {
-	return behavior.Compile(BehaviorVocabulary(), byName)
+// CompileBehaviors compiles a scenario's loot, its entry's [loot] and [drops], then
+// its programs, keyed by name, against the game vocabulary
+func CompileBehaviors(byName map[string]map[string]any, loot map[string]any) (*BehaviorSet, error) {
+	return behavior.Compile(BehaviorVocabulary(), byName, loot)
 }
 
 // NewBehaviorSystem runs set's programs; Resources.Behaviors holds their prototypes
@@ -106,6 +107,7 @@ func (s *BehaviorSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventBehaviorSpawnRequest,
 		event.EventBehaviorCancelRequest,
+		event.EventMaterializeComplete,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
@@ -121,7 +123,7 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 		return
 	case event.EventSpeciesKilled:
 		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
-			if i := int(payload.Species) - int(component.SpeciesDataFirst); i >= 0 && i < len(s.programs) {
+			if i, ok := s.programOf(payload.Species); ok {
 				s.programs[i].lifecycle.RecordKill(s.world, payload.KillerEntity)
 			}
 		}
@@ -136,8 +138,22 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 			s.statUnknown.Add(1)
 		case !s.enabled:
 			s.programs[i].lifecycle.spawnFailures.Add(1)
+		case s.set.Prototypes()[i].Entrance == component.EntranceMaterialize:
+			s.enter(i, payload.X, payload.Y)
 		default:
 			s.spawn(i, payload.X, payload.Y)
+		}
+
+	case *event.MaterializeCompletedPayload:
+		// Only a Shared materialize naming a data species is an entrance: every
+		// instance ran it, so each lands the body (D-7)
+		if i, ok := s.programOf(payload.Species); ok && ev.Domain == core.DomainShared {
+			if !s.enabled {
+				s.programs[i].lifecycle.spawnFailures.Add(1)
+				return
+			}
+			p := &s.set.Prototypes()[i]
+			s.spawn(i, payload.X+p.HeaderX, payload.Y+p.HeaderY)
 		}
 
 	case *event.BehaviorCancelRequestPayload:
@@ -164,6 +180,15 @@ func (s *BehaviorSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	var counts [parameter.BehaviorProgramsMax]int64
 	total := int64(0)
+
+	// An entrance in flight is an instance arriving, so a cap the count is read
+	// against holds it as it holds one flying
+	for _, e := range s.world.Components.Materialize.Entities() {
+		if i, ok := s.entering(e); ok {
+			counts[i]++
+			total++
+		}
+	}
 
 	for _, header := range s.world.Components.Behavior.Entities() {
 		b, ok := s.world.Components.Behavior.GetPtr(header)
@@ -210,7 +235,7 @@ func (s *BehaviorSystem) Update() {
 		shielded := flags&behaviorShielded != 0
 		c.combat.IsEnraged = flags&behaviorEnraged != 0
 		b.Shielded = shielded
-		b.Beaming = flags&behaviorBeam != 0
+		b.TeleportLine = flags&behaviorTeleportLine != 0
 		b.ChargeLine = flags&behaviorChargeLine != 0
 		b.Landing = flags&behaviorLanding != 0
 		if shielded {
@@ -253,13 +278,66 @@ func (s *BehaviorSystem) fill(header core.Entity, b *component.BehaviorComponent
 	return true
 }
 
+// programOf is the program whose species a data species is
+func (s *BehaviorSystem) programOf(species component.SpeciesType) (int, bool) {
+	i := int(species) - int(component.SpeciesDataFirst)
+	return i, i >= 0 && i < len(s.programs)
+}
+
+// entering reads a materialize as an entrance in flight, a Shared one naming a data
+// species, and the program it brings
+func (s *BehaviorSystem) entering(e core.Entity) (int, bool) {
+	m, ok := s.world.Components.Materialize.GetPtr(e)
+	if !ok || e.Domain() != core.DomainShared {
+		return 0, false
+	}
+	return s.programOf(m.Species)
+}
+
+// enter opens program i's entrance: a Shared materialize naming the species over
+// the footprint found as a spawn finds it, so the body lands as it ends, and a
+// capture meanwhile carries the pending spawn as it carries any store (D-19)
+func (s *BehaviorSystem) enter(i, x, y int) {
+	p := &s.set.Prototypes()[i]
+	left, top, found := s.findFootprint(p, x, y)
+	if !found {
+		s.programs[i].lifecycle.spawnFailures.Add(1)
+		return
+	}
+	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
+		X:          left,
+		Y:          top,
+		AreaWidth:  p.Width,
+		AreaHeight: p.Height,
+		Type:       component.SpawnTypeSwarm,
+		Species:    p.Species,
+	})
+	s.countNow(i)
+}
+
+// findFootprint finds the nearest place the footprint fits with its header at the
+// cell, searched over the whole map: a scenario names a cell blind to the walls, a
+// cave's rock among them, and to the body, a cell on an edge or past it searching
+// from the footprint flush against it
+func (s *BehaviorSystem) findFootprint(p *component.BehaviorPrototype, x, y int) (int, int, bool) {
+	return s.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
+}
+
+// countNow counts an instance of program i the moment it is asked for or lands, not
+// at the next step: an entrance lands after this tick's, and a region reading the
+// count meanwhile must not see it missing
+func (s *BehaviorSystem) countNow(i int) {
+	s.programs[i].count.Add(1)
+	s.statCount.Add(1)
+	s.statActive.Store(true)
+}
+
 // spawn builds program i's composite with its header at the cell, or the nearest
-// place its footprint fits, searched over the whole map as a fuse's beam is: a
-// scenario names a cell blind to the walls, a cave's rock among them, and to the
-// body, a cell on an edge or past it searching from the footprint flush against it
+// place its footprint fits (findFootprint); an entrance's landing searches again,
+// for rock may have come over the footprint it materialized on
 func (s *BehaviorSystem) spawn(i, x, y int) {
 	p := &s.set.Prototypes()[i]
-	left, top, found := s.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
+	left, top, found := s.findFootprint(p, x, y)
 	if !found {
 		s.programs[i].lifecycle.spawnFailures.Add(1)
 		return
@@ -328,11 +406,7 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 		EvalID:      evalID,
 	})
 	s.programs[i].lifecycle.spawned.Add(1)
-	// Counted now, not at the next step: a beam lands its instance after this
-	// tick's step, and a region reading the count meanwhile must not see none
-	s.programs[i].count.Add(1)
-	s.statCount.Add(1)
-	s.statActive.Store(true)
+	s.countNow(i)
 }
 
 // clearFootprint empties a footprint in both domains (D-12), each victim leaving
@@ -363,13 +437,21 @@ func (s *BehaviorSystem) place(header core.Entity, x, y int) {
 	}
 }
 
-// cancel ends one program's instances, or every program's when it names none
+// cancel ends one program's instances and its entrances in flight, or every
+// program's when it names none, so none lands after its cancel
 func (s *BehaviorSystem) cancel(program string) {
 	i, known := s.set.Lookup(program)
 	if program != "" && !known {
 		s.statUnknown.Add(1)
 		return
 	}
+	var entrances []core.Entity
+	for _, e := range s.world.Components.Materialize.Entities() {
+		if j, ok := s.entering(e); ok && (program == "" || j == i) {
+			entrances = append(entrances, e)
+		}
+	}
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, entrances...)
 	for _, header := range s.world.Components.Behavior.Entities() {
 		b, ok := s.world.Components.Behavior.GetComponent(header)
 		if !ok || int(b.Program) >= len(s.programs) || program != "" && int(b.Program) != i {
@@ -392,10 +474,9 @@ func (s *BehaviorSystem) terminate(header core.Entity) {
 }
 
 // integrate is every tick's movement unless Freeze ran: the footprint bounces off
-// walls and the map edge, and the members follow the header. The integrator's
-// maxima are exclusive, so the header's last column and row are one past them: a
-// footprint the spawn put against the right edge or the bottom stays where it
-// stands, and the edge's reflection never moves it into rock the walls refuse.
+// walls and the map edge, and the members follow the header. The header's last
+// column and row keep the footprint inside the map, and the edge's reflection
+// sets it back on the cell it stood on, which the walls left free.
 func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 	pos, ok := s.world.Positions.GetPosition(c.entity)
 	if c.frozen || !ok {
@@ -409,8 +490,8 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 		&c.kinetic.Kinetic,
 		c.dtSec,
 		p.HeaderX, p.HeaderY,
-		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX)+1,
-		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY)+1,
+		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX),
+		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY),
 		p.Restitution,
 		wallCheck,
 	)
@@ -450,11 +531,11 @@ func (s *BehaviorSystem) LoadLocal(data []byte) error {
 
 // Behavior flags, which Update writes to the components after every step
 const (
-	behaviorEnraged    uint64 = 1 << iota // combat's enrage, which refuses kinetic knockback
-	behaviorShielded                      // ward held and stun refused: no damage, no stun
-	behaviorBeam                          // a teleport line from the header to the stored cell
-	behaviorChargeLine                    // the swarm's charge line pulsing toward the stored cell
-	behaviorLanding                       // the landing marker blinking where the body lands on the stored cell
+	behaviorEnraged      uint64 = 1 << iota // combat's enrage, which refuses kinetic knockback
+	behaviorShielded                        // ward held and stun refused: no damage, no stun
+	behaviorTeleportLine                    // a teleport line from the header to the stored cell
+	behaviorChargeLine                      // the charge line pulsing toward the stored cell
+	behaviorLanding                         // the landing marker blinking where the body lands on the stored cell
 )
 
 // behaviorCtx is what one instance's step reads and its verbs write through. Verbs
@@ -721,7 +802,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		}, nil
 	})
 	v.Effect("Materialize", func(a *materializeArgs) (func(*behaviorCtx), error) {
-		// A drain beam's completion spawns a drain, so only the announcing beams
+		// A drain materialize's completion spawns a drain, so only the announcing styles
 		spawn := slices.IndexFunc(component.MaterializeStyles[:], func(s component.MaterializeStyle) bool { return s.Name == a.Spawn })
 		if spawn < 0 || component.SpawnType(spawn) == component.SpawnTypeDrain {
 			return nil, fmt.Errorf("spawn %q is not one of swarm, nugget", a.Spawn)
@@ -817,7 +898,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 
 	v.Flag("Enraged", behaviorEnraged)
 	v.Flag("Shielded", behaviorShielded)
-	v.Flag("Beam", behaviorBeam)
+	v.Flag("TeleportLine", behaviorTeleportLine)
 	v.Flag("ChargeLine", behaviorChargeLine)
 	v.Flag("Landing", behaviorLanding)
 	v.Integrate(func(c *behaviorCtx) { c.sys.integrate(c) })

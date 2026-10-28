@@ -582,8 +582,8 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 		prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
 		curX, curY := physics.Integrate(kinetic, dtSec)
 		if prof.bounce > 0 {
-			rx := physics.ReflectBoundsDampedX(kinetic, 0, gameWidth, prof.bounce)
-			ry := physics.ReflectBoundsDampedY(kinetic, 0, gameHeight, prof.bounce)
+			rx := physics.ReflectBoundsDampedX(kinetic, 0, gameWidth-1, prof.bounce)
+			ry := physics.ReflectBoundsDampedY(kinetic, 0, gameHeight-1, prof.bounce)
 			if rx || ry {
 				state.statBoundaryHits.Add(1)
 				curX, curY = physics.GridPos(kinetic)

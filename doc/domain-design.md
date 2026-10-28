@@ -145,7 +145,7 @@ per-target combat requests derived from that geometry do not.
 
 Lightning, flash, fadeout, splash, motion markers, explosion smoke, pulse rings,
 particles (dust, decay and blossom), orbs, bullets, missiles, and loot are
-Player-domain; a materialise beam takes its requester's domain (§3). Encounter
+Player-domain; a materialize takes its requester's domain (§3). Encounter
 level clears explicitly preserve loot; run resets clear it. Shared corrections
 retain each receiver's drops and ownership, and loot revalidates its bounds and
 walls after an install. Collected weapon charges travel through the existing
@@ -408,7 +408,7 @@ Declared system carriers are:
 | `genetic` | streaming checkpoints, archives, pending evaluations, IDs, scout state, fitness accumulators |
 | `navigation` | group and cursor-pursuit cache phases, targets, route rebuild budget, route endpoints |
 | `gold` | sequence liveness, spawn gate, header, per-slot contribution; the deadline rides the header's timer in the stores |
-| `storm` | live root entity; a blue attack's pending swarm is its beam, in the stores |
+| `storm` | live root entity; a blue attack's pending swarm is its materialize, in the stores |
 | `meta` | kill tallies, defeat latches and reset tick, cycle damage multiplier |
 | `environment` | active base wind, remaining duration, enable/applied phase; drift speed, direction, remaining duration, scenery flag and per-level sub-cell phases |
 
@@ -434,7 +434,10 @@ Persistent Player-domain effects controlled by Shared FSM state are re-derived b
 the install itself. Only immediate, unguarded `ClassLocal` lifecycle events marked
 `reconcile = true` participate: old paths release with old variables, new paths
 acquire with imported variables, and a changed scope variable is treated as a
-boundary crossing. Staging imports remain side-effect free.
+boundary crossing. Staging imports remain side-effect free. The gun's aim
+(`EventGunAimRequest`) is held by `WeaponSystem` rather than written once to the
+cursors present: an install replays it before the cursor a joiner or a bot seat
+flies arrives, and that cursor takes it as it arrives.
 
 That covers the *level-triggered* half: a hold that follows a Shared region is
 re-derived from the imported state. The *edge-triggered* half is a ledger, because

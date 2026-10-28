@@ -261,15 +261,15 @@ its edges, then what its host does around the step.
     entry's `Duration` ends; tick steers over what is left of it, integrates and
     notes a wall hit; timeout → Decel; post-tick, a wall hit → Decel in the step
     that meets it, so the bounce stands.
-  - Teleport, 0.4 s: enter marks the landing and zeroes the velocity; the beam
+  - Teleport, 0.4 s: enter marks the landing and zeroes the velocity; the line
     leaves from wherever the header stands as it runs, so a wall pushing the
-    swarm carries the beam's source along; timeout → [Arrive | Decel].
+    swarm carries the line's source along; timeout → [Arrive | Decel].
   - Arrive, `SwarmArriveDuration` (0.1 s): probe the landing's footprint, else
-    the nearest clear one (`FindFreeAreaSpiral`, `WallBlockSpawn`), so rock that
-    came over the landing during the beam never holds the swarm; enter counts
+    the nearest clear one (`FindFreeAreaInside`, `WallBlockSpawn`), so rock that
+    came over the landing during the teleport never holds the swarm; enter counts
     `ChargesCompleted`, clears the footprint in both domains (D-12) and stands
     the swarm on it at rest; timeout → Chase. The move is the arrival's entry
-    rather than the beam's exit, so a stun that ends a teleport moves nothing.
+    rather than the teleport's exit, so a stun that ends a teleport moves nothing.
   - Decel, 0.1 s: enter counts `ChargesCompleted`; tick scales the velocity by
     `SwarmDecelDrag`, a per-tick factor, and integrates; timeout → Chase.
 - Global edge: stunned, from {Lock, Charge, Teleport, Arrive, Decel} → Chase
@@ -351,9 +351,9 @@ its edges, then what its host does around the step.
   - Red, 1 s, 2 s, 1 s, flagged Armed: tick `burst` counts; the armed turret
     mount fires after the storm system.
   - Blue, 5 s, 2.5 s, 5 s: enter `findLanding` draws the direction, then searches,
-    and stores `LandingFound` (D-8); tick `glow` counts; the cue `beamIn` at
-    `StormBlueMaterializePermille`, the attack's 2 s mark, beams the swarm onto
-    the landing if one was found. A cue fires once per entry, so the blue's one
+    and stores `LandingFound` (D-8); tick `glow` counts; the cue `materializeIn`
+    at `StormBlueMaterializePermille`, the attack's 2 s mark, materializes the
+    swarm onto the landing if one was found. A cue fires once per entry, so the blue's one
     swarm an attack needs no dedup.
 - States:
   - Cooldown, the row's repeat by default: timeout → [Active (guard: convex)],
@@ -375,37 +375,39 @@ its edges, then what its host does around the step.
 - `circleCtx` holds the entity, the component, the circle's cell and the sensed
   `hasCursor` and `stunned`; the hooks are `StormSystem` methods, bound per row.
 
-### 4.4 Spawns that ride their beams and spirits
+### 4.4 Spawns that ride their materializes and spirits
 
 A deferred spawn rides the entrance that shows it, so the spawn, the entrance's
-timer and its visual end on one tick. A spawn out of nothing rides a materialize
-beam, `MaterializeComponent.Species` naming the species the beam's completion
+timer and its visual end on one tick. A spawn out of nothing rides a
+materialize, `MaterializeComponent.Species` naming the species its completion
 lands; a drain pair's swarm rides the spirits its drains fly in,
 `SpiritComponent.Species` naming the species the spirit's arrival lands. The
-pending spawn is the beam or spirit entity, which a capture carries with the
-stores, not a list beside its system.
+pending spawn is the materialize or spirit entity, which a capture carries with
+the stores, not a list beside its system.
 
-- **Storm.** The blue's cue starts a Shared beam naming the swarm, and
-  `StormSystem` lands the swarm on the beam's `EventMaterializeComplete`, its
-  header on the beam's footprint. `terminateStorm` ends the storm's beams in
+- **Storm.** The blue's cue starts a Shared materialize naming the swarm, and
+  `StormSystem` lands the swarm on its `EventMaterializeComplete`, its header on
+  the materialize's footprint. `terminateStorm` ends the storm's materializes in
   flight, and the storm's own capture (`stormSnapshot`) holds its root alone.
 - **Fusions.** A drain pair flies its drains in as player-domain spirits, the
   first naming the swarm and its footprint, and `SpiritSystem` sends
   `EventSpiritArrived` on the tick the spirits draw their arrival frame, its
   deadline running the half-second flight. A quasar fusion plays a player-domain
-  beam naming the quasar, as does a drain pair whose request asks for the beam
-  (`FuseEffectMaterialize`). On the arrival or the beam's completion
+  materialize naming the quasar, as does a drain pair whose request asks for one
+  (`FuseEffectMaterialize`). On the arrival or the materialize's completion
   `landFusion` crosses the spawn request (D-3). A quasar fusion is refused while
-  one's beam flies (`quasarBeaming`), the fuse keeps no state of its own
+  one's materialize flies (`quasarMaterializing`), the fuse keeps no state of its own
   (`FuseSystem.Update` is empty), and `killDrains` alone reports the consumed
   drains' deaths.
-- **Data species.** `EventFuseBehaviorRequest` starts a Shared beam naming the
-  data species over the nearest place its footprint fits, searched over the whole
-  map (`FindFreeAreaInside` with a negative radius: `FindFreeAreaSpiral` from the
-  origin pulled in from the edges until the footprint fits, as a direct spawn,
-  `FindLanding` and `Teleport` search), and on a shared completion
-  `landBehavior` sends the direct spawn, its header on the beam's footprint. A
-  cancel of the program ends its beams in flight (`cancelBehaviorBeams`).
+- **Data species.** A prototype naming `entrance = "materialize"` comes on as
+  the storm's swarm does, the fuse playing no part: `BehaviorSystem.enter` starts
+  a Shared materialize naming the species over the nearest place its footprint
+  fits, searched over the whole map (`findFootprint`: `FindFreeAreaInside` with a
+  negative radius, the origin pulled in from the edges until the footprint fits),
+  and on its Shared completion `spawn` lands the body, searching again from that
+  footprint, since rock may have come over it meanwhile. The materialize counts as
+  an instance from its request, so a cap read off `behavior.count` holds it, and a
+  cancel of the program ends its materializes in flight.
 
 The drain keeps its own queue (`pendingSpawns`), which completes on
 `EventMaterializeComplete`, not on a timer of its own.
@@ -420,7 +422,7 @@ machine makes structural.
   queue above.
 - Eye: a frame cycle and motion the genetics drive.
 - Gateway: a periodic emitter, counting up with carry.
-- Fuse: no state; its fusions ride their spirits or beams (§4.4).
+- Fuse: no state; its fusions ride their spirits or materializes (§4.4).
 - Pylon and tower: stationary.
 - Kraken: an animation that is all simulation state, its cycle of idle, attack,
   spin and move chosen by draws and timed by countdowns of its own.
@@ -507,7 +509,7 @@ probe = "ResolveTarget"
 on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
 on_update = [{ action = "Freeze" }]
 on_exit = [{ action = "CancelTelegraph" }]
-transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight", guard_args = { to = "stored" } }, "Beam", "Brake"] }]
+transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight", guard_args = { to = "stored" } }, "Teleport", "Brake"] }]
 ```
 
 How the keys map onto the runtime:
@@ -548,13 +550,13 @@ per instance:
   `Genotype` genes), with the kernel's `And`, `Or` and `Not`.
 - Probes read too, and leave their result in the context: `ResolveTarget`
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
-  (`FindFreeAreaSpiral` over the footprint). `LineOfSight` and `FindLanding` read
-  the live target, or with `to = "stored"` the cell `StoreTarget` kept: the swarm
-  charges and teleports to the cell its lock stored, and so do vanguard's raiders.
+  (`FindFreeAreaInside` over the footprint). `LineOfSight` and `FindLanding` read
+  the live target, or with `to = "stored"` the cell `StoreTarget` kept, so a
+  lock's charge or teleport goes to the cell it stored, as vanguard's raiders' do.
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
   `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),
-  `Materialize` (a `swarm` or `nugget` beam that lands nothing), `SpawnSpecies` (a
+  `Materialize` (a `swarm` or `nugget` materialize that lands nothing), `SpawnSpecies` (a
   swarm or a quasar) and `EmitEvent`.
 - Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Drag` (linear drag
   per second, so it holds at any tick rate) and `Freeze` (no move this tick), each
@@ -580,15 +582,17 @@ system's scaffold (§6.4), not in the vocabulary.
   under `behaviors` fails naming it. `ScenarioFiles` therefore lists programs, so
   `resource.ReadScenario` carries, digests and transfers them with no mechanism of
   their own. `validScenarioName` admits the subdirectory, `resource.entryKeys`
-  admits `behaviors`, and `Scenario.Behaviors()` returns the programs by name.
+  admits `behaviors`, `loot` and `drops`, `Scenario.Behaviors()` returns the
+  programs by name and `Scenario.Loot()` the entry's loot kinds and drop tables.
   `Machine.LoadScenarioFromMap` takes no part: a top-level key is its embedder's.
-- **Compiled once per run.** `App.readScenario` compiles the programs
-  (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
+- **Compiled once per run.** `App.readScenario` compiles the programs and the
+  loot (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
   `resource.LoadScenario`, so a bad program fails as a bad scenario does, before
   any service starts, and before the scenario machine loads, whose species names
-  resolve against the prototypes. `initWorld` puts the prototypes in `world.Resources.Behaviors`
-  before the systems are built, so loot, soft collision and `NewMetaSystem` size
-  their data rows and the renderers read glyphs. The compiled graphs go to
+  resolve against the prototypes and whose loot names against the kinds. `initWorld`
+  puts the prototypes in `world.Resources.Behaviors` and the loot in
+  `world.Resources.Loot` before the systems are built, so loot, soft collision and
+  `NewMetaSystem` size their data rows and the renderers read glyphs. The compiled graphs go to
   `system.NewBehaviorSystem(world, set)`, which the app adds beside `MetaSystem`
   (`manifest.ContextSystems`), because the generator's constructors take only a
   world.
@@ -596,7 +600,8 @@ system's scaffold (§6.4), not in the vocabulary.
   compile, then the machine load, so an unknown name or a bad argument fails
   validation, not play, and a
   mid-run scenario change refuses a bad program before anything is torn down.
-  `-check` prints `behaviors ok: <n> (<names>)`.
+  `-check` prints `behaviors ok: <n> (<names>)`, and `loot ok` and `drops ok`
+  the same way.
 
 ### 6.4 Beyond the machine
 
@@ -608,17 +613,18 @@ smaller part of it.
   way) and header offset, hit points, the combat row it fights as (`swarm` or
   `quasar`, the unit composites whose damage lands on their header), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
-  `parameter.BehaviorRestitution`, the swarm's chase, with each key of the program's
-  `[prototype.physics]` replacing its value), soft-collision mass, the code species
-  whose drop tiers it rolls, contact damage, lifetime, its look and the pattern
-  period.
+  `parameter.BehaviorRestitution`, with each key of the program's
+  `[prototype.physics]` replacing its value), soft-collision mass, the drop table
+  its kills roll (the scenario's or a code species',
+  [FSM reference: Loot](fsm-reference.md#loot)), contact damage, lifetime, its
+  entrance (§4.4), its look and the pattern period.
   The look (`component.Look`) is the frames cell by cell, each cell a glyph and
   entries of the prototype's fg and bg palettes with its attributes, plus the
   colour of a glyph without an entry and an optional console pair;
   `visual.CompileLook` builds it from the authored rows, the eye's types' art
-  included. It names rows of per-kind tables that are code, so a new attack profile,
-  beam style or drop table is a code change
-  ([todo](todo.md#give-data-species-attack-beam-and-drop-rows-of-their-own)).
+  included. It names rows of per-kind tables that are code, so a new attack profile
+  or materialize style is a code change
+  ([todo](todo.md#give-data-species-attack-and-materialize-rows-of-their-own)).
 - **Species IDs.** `component.SpeciesType` keeps its code enum, ending at
   `SpeciesCount`; `SpeciesDataFirst = SpeciesCount` and
   `SpeciesMax = SpeciesCount + parameter.BehaviorProgramsMax` bound the data
@@ -630,34 +636,32 @@ smaller part of it.
   `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`.
 - **Species tables.** Every table indexed by `SpeciesType` is `[SpeciesMax]`, so a
   data ID never indexes out of range: `profile.Contact`, `profile.SoftKraken`,
-  `profile.Drops`, the soft-collision matrices and caches, and `MetaSystem`'s kill
-  counters and capture. A data species' package-level rows stay zero, and its
-  values come from its prototype at the reader: the behavior system passes the
-  contact damage, loot rolls the named species' tiers under a pity of its own, the
-  health bar measures the prototype, and soft collision builds data rows in `Init`
-  for a prototype with mass (to and from swarm, quasar and every other data
-  species; storm, pylon and kraken push it one way), so every code pair keeps its
-  rule. The range checks in `meta.go`, `genetic.go` and `loot.go` read
-  `>= SpeciesMax`.
+  the loot system's resolved drop tables, the soft-collision matrices and caches,
+  and `MetaSystem`'s kill counters and capture. A data species' package-level rows
+  stay zero, and its values come from its prototype at the reader: the behavior
+  system passes the contact damage, loot rolls the table its `drops` names under a
+  pity of its own, the health bar measures the prototype, and soft collision
+  builds data rows in `Init` for a prototype with mass (to and from swarm, quasar
+  and every other data species; storm, pylon and kraken push it one way), so every
+  code pair keeps its rule. The range checks in `meta.go`, `genetic.go` and
+  `loot.go` read `>= SpeciesMax`.
 - **Composite routing.** A data species' header carries `component.BehaviorData`;
   the behavior system handles `EventCompositeIntegrityBreach` for it, and
   `handleEmptyComposite`'s default destroys the head.
 - **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y}` (bus,
-  and barrier-bound like the swarm's, since a crossed one allocates shared
-  identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
+  and barrier-bound, since a crossed one allocates shared identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
   cancel; an empty program cancels every data species). A program no entry
   defines is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
-  immediate, as the swarm's and the quasar's are, its footprint searched over the
-  whole map as a beam's is, since a scenario names a cell blind to the walls;
-  `EventFuseBehaviorRequest` beams one in (§4.4). A scenario registers a data species with genetics through
+  immediate unless the prototype names an entrance (§4.4), its footprint searched over the whole map, since a scenario
+  names a cell blind to the walls. A scenario registers a data species with genetics through
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
 - **Telemetry.** `behavior.*`, and per program `behavior.<program>.count` and the
   lifecycle rows (`newLifecycleTelemetry`), bind in `NewBehaviorSystem`,
   `kills.<program>` in `NewMetaSystem`, all before `Freeze`
-  ([telemetry](telemetry-reference.md)). A spawn counts at once rather than at the
-  next step, since a beam lands its instance after the step and a region reads
-  the count.
+  ([telemetry](telemetry-reference.md)). A spawn or an entrance counts at once
+  rather than at the next step, since an entrance lands its instance after the
+  step and a region reads the count.
 - **Renderer.** `BehaviorRenderer` (`renderer/behavior.go`,
   `render.PriorityBehavior` after `PrioritySwarm`) draws each header's members
   from the look's frame at `PatternIndex`, each cell its background and its glyph
@@ -670,14 +674,14 @@ smaller part of it.
   points, lifetime, the pattern cycle (held by a stun), `Step`, the flags written
   back (`Enraged` to `Combat.IsEnraged`; `Shielded` to a refreshed ward and
   `BehaviorComponent.Shielded`, which `applyStunEffect` reads as it reads the
-  quasar's shield; `Beam` to `BehaviorComponent.Beaming`, which
-  `TeleportLineRenderer` reads to draw the swarm's line to the stored cell;
+  quasar's shield; `TeleportLine` to `BehaviorComponent.TeleportLine`, which
+  `TeleportLineRenderer` reads to draw the teleport line to the stored cell;
   `ChargeLine` to `BehaviorComponent.ChargeLine`, which `ChargeLineRenderer` reads
-  to pulse the swarm's charge line toward it; and `Landing` to
+  to pulse the charge line toward it; and `Landing` to
   `BehaviorComponent.Landing`, which `LandingRenderer` reads to blink the landing
   marker there), then, unless suspended, gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
-  instance, pattern frame and accumulator, stored target, `Shielded`, `Beaming`,
+  instance, pattern frame and accumulator, stored target, `Shielded`, `TeleportLine`,
   `ChargeLine`, `Landing`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask
@@ -718,7 +722,7 @@ its look under its tier's macro. To define one:
   of 0-7, which is all a Linux console's backgrounds take; such an entry passes
   through unchanged ([rendering §6](rendering.md#6-finalization-and-color-modes)).
 - **State.** The look does not follow the machine's state: the hit flash, then
-  `Enraged`, tints every glyph, `ChargeLine` pulses the charge line and `Beam`
+  `Enraged`, tints every glyph, `ChargeLine` pulses the charge line and `TeleportLine`
   draws the teleport line to the stored cell, `Landing` blinks the landing marker
   where the body lands on it, and `Telegraph` raises the splash
   countdown beside the body. A look per state
@@ -759,7 +763,7 @@ A machine adds no source of divergence and no identity of its own.
   keeps to its bounds (`ScenarioMaxFiles`, `ScenarioMaxBytes`), so programs need
   no identity field, and the digest covers the names that fix their IDs.
 - **Versions.** A change to a machine's component changes the columnar capture and
-  bumps `snapshot.Schema`; a change to a beam's payload bumps
+  bumps `snapshot.Schema`; a change to an event's payload bumps
   `event.JournalSchema`; a change to what `-schema` prints bumps
   `manifest.SchemaVersion`; the fingerprint moves only with `definition.go`.
 - **Component mask.** The entity mask is a `uint64`, so the manifest holds at most
@@ -824,25 +828,27 @@ captures, one a tick, read the frames. Per species:
   cancels it.
 - Swarm: `a` to stop the auto-fire, `:emit EventSwarmSpawnRequest { x = 40, y = 15 }`.
   It chases, stops, its charge line pulses twice, and it charges onto the
-  cursor's cell; behind a column of walls the lock ends in the teleport beam
-  through it. A stun as the line shows ends the attack: the swarm stands for the
+  cursor's cell; behind a column of walls the lock ends in the teleport through
+  it. A stun as the line shows ends the attack: the swarm stands for the
   stun, then chases from rest.
 - Storm: `:emit EventStormSpawnRequest` with `:log stat 1`. The per-tick status
   log counts each colour's attack frames and `mount.fired`, and captures show the
-  blue's beam and the swarm on its footprint the tick the beam goes. A disruptor
+  blue's materialize and the swarm on its footprint the tick the materialize goes. A disruptor
   alone (`:energy 100000000`, `EventWeaponRemoveRequest` for each weapon, `rod`
   to `gun`, `EventWeaponAddRequest { entity = 1, weapon = "disruptor" }`, `a`)
   stuns the circles in a series, and a stunned burst holds and resumes.
 - Fusions: two enraged drains fly in as cyan spirits, and their swarm lands as
-  the spirits arrive, with no beam. `:emit EventFuseQuasarRequest` lands its
-  quasar the tick its beam's last cells go.
-- Data species: `:n vanguard`, with `:god` to outlast the raid. A raider spawns at
-  the right edge every two seconds while fewer than three fly, chases, locks red
+  the spirits arrive, with no materialize. `:emit EventFuseQuasarRequest` lands its
+  quasar the tick its materialize's last cells go.
+- Data species: `:n vanguard`, with `:god` to outlast the raid. A raider
+  materializes at the right edge every two seconds while fewer than three fly or
+  materialize, lands as its materialize ends, chases, locks red
   under the cyan countdown, and charges the cell it saw where its body clears the
-  way, else beams beside it; a disruptor stun drops it back to its chase;
+  way, else teleports beside it; a disruptor stun drops it back to its chase;
   `:emit EventBehaviorCancelRequest { program = "scarab" }` removes the scarabs.
   `bin/vif -check -s wad/scenario/vanguard` prints
-  `behaviors ok: 32 (bat, beetle, chomper, … wraith)`. A look shows best in tmux
+  `behaviors ok: 32 (bat, beetle, chomper, … wraith)`, `loot ok: 1 (upgrade)` and
+  `drops ok: 1 (raider)`. A look shows best in tmux
   pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`;
   `go run ./sandbox/raider` lays every type out by cave over its rock.
 

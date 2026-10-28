@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
@@ -28,7 +29,7 @@ transitions = []
 	}
 
 	m := fsm.NewMachine[*engine.World]()
-	manifest.RegisterFSMComponents(m, nil)
+	manifest.RegisterFSMComponents(m, component.Declared{})
 	if err := fsm.LoadScenarioFromPath(m, path); err != nil {
 		t.Fatalf("load config: %v", err)
 	}

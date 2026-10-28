@@ -41,7 +41,8 @@ func (s BounceStats) Hit() bool { return s.WallCollisions != 0 || s.BoundaryRefl
 //   - k: Kinetic component (position updated in-place)
 //   - dt: Delta time in seconds
 //   - headerOffsetX, headerOffsetY: Offset from Kinetic position to top-left of the collision box
-//   - boundMinX, boundMaxX, boundMinY, boundMaxY: Valid cell coordinate ranges
+//   - boundMinX, boundMaxX, boundMinY, boundMaxY: The first and last cells, both
+//     inclusive, the position may hold on each axis
 //   - wallRestitution: Velocity retained after bounce (1.0 = elastic, 0 = sticky)
 //   - checkWall: Callback to check collision
 //

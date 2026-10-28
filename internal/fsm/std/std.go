@@ -6,6 +6,7 @@
 package std
 
 import (
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
@@ -54,7 +55,7 @@ type Host[T any] struct {
 // Must be called before a scenario loads; names are resolved at load time
 func Register[T any](m *fsm.Machine[T], h Host[T]) {
 	if h.Names == nil {
-		h.Names = event.PayloadNames(nil)
+		h.Names = event.PayloadNames(component.Declared{})
 	}
 	registerCoreActions(m, h)
 	registerVariableActions(m, h)

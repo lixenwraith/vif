@@ -209,7 +209,7 @@ func (s *NuggetSystem) handleJumpRequest(cursorEntity core.Entity) {
 	s.statJumps.Add(1)
 }
 
-// emitBeacon converges the personal nugget's beams on it; nothing spawns when they land
+// emitBeacon plays a materialize over the personal nugget; nothing spawns when it ends
 func (s *NuggetSystem) emitBeacon(x, y int) {
 	s.world.PushLocal(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
 		X: x, Y: y, Type: component.SpawnTypeNugget,

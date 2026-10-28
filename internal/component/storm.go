@@ -30,7 +30,7 @@ type StormCircleType uint8
 const (
 	StormCircleGreen StormCircleType = iota // Index 0: area pulse
 	StormCircleRed                          // Index 1: turret mount armed for each burst
-	StormCircleBlue                         // Index 2: beams a swarm in
+	StormCircleBlue                         // Index 2: materializes a swarm in
 )
 
 // StormCircleComponent holds per-circle 3D physics state, attached to each circle header entity
