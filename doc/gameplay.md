@@ -385,7 +385,7 @@ a blocked tracer drains to its stop point.
 | Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. It keeps one cursor target and its route until the target disappears, becomes unreachable, or another route is over one-third shorter. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; its parameters are evolution-managed. |
 | Tower | Stationary ablative structure the players defend (Shared domain). It blocks cursor placement and acts as a target in tower-defense scenarios. It owns itself: no player's weapon targets it, and its loss is the region's defeat rather than anyone's kill. |
-| Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. |
+| Kraken | Eight-tentacle boss whose footprint covers hundreds of cells. It waits, lashes with alternating tentacle sets, or spins and then charges at the farthest cursor; its footprint demolishes walls, clears nuggets and gold members, turns the glyphs it covers into decay, and strikes the cursors it touches. Its body stays inside the map; only in-map tentacle cells interact. It rises with `KrakenInitialHP` (10,000) hit points, or the `hp` its spawn request names, which its health bar spans. |
 | Gateway | Timed anchored spawner. It emits eye or snake spawn requests with route/adaptation metadata and disappears when its anchor is gone. |
 | Bullet | Straight projectile stopped by bounds and walls; a mounted turret's strikes cursors and shields, a cursor's strikes species. |
 | Data species | Up to eight composites a scenario's behavior programs define, each a body, a combat row, contact damage and a state machine over shared verbs; `BehaviorSystem` runs them all ([FSM reference](fsm-reference.md#behavior-programs)). |
@@ -596,16 +596,16 @@ dummy's centre. Drains, nuggets, gold, the fuse and music are off, and `:n` lays
 the range again.
 
 `vanguard` flies the cursor through a cave (§9) scrolling left at twenty columns a
-second, a column every tick: only a whole-tick period steps evenly, and eight a
-second stepped two and three ticks apart, which read as dropped frames. The cave is
-jagged, four octaves from 64 columns: its gap runs from nine rows to all but the
-walls' two rows each as the map allows, mostly two to three times the narrowest on
-a 40-row map, and the scenario's smallest map, 18 rows, holds twice the narrowest.
-A wall reaches at most 27 rows in, so a taller map, a phone held upright, keeps as
-much rock as a 40-row map and opens every row it adds, narrowing the less the
-taller it is: a 60-row map is a third rock and a 90-row map a fifth. Each new game
-flies a new cave, its rock in strata, cracked, moss or crystal stone, opening on
-open map as wide as the view, no rock at all, that closes into the cave over 96
+second at first, a column every tick: only a whole-tick period steps evenly, and
+eight a second stepped two and three ticks apart, which read as dropped frames. The
+cave is jagged, four octaves from 64 columns: its gap runs from nine rows to all but
+the walls' two rows each as the map allows, mostly two to three times the narrowest
+on a 40-row map, and the scenario's smallest map, 18 rows, holds twice the
+narrowest. A wall reaches at most 27 rows in, so a taller map, a phone held upright,
+keeps as much rock as a 40-row map and opens every row it adds, narrowing the less
+the taller it is: a 60-row map is a third rock and a 90-row map a fifth. Each new
+game flies a new cave, its rock in strata, cracked, moss or crystal stone, opening
+on open map as wide as the view, no rock at all, that closes into the cave over 96
 columns. The rock blocks the ship, raiders and spawns but lets particles pass,
 hidden, so the blossom and decay the gun raises from glyphs rise or fall along a
 column of the cave and on into the rock. Glyphs drift left behind the rock at three
@@ -613,7 +613,7 @@ depths, faster than it at 20, 40 and 80 cells a second, so each layer reads as
 moving and the depths come apart, and drains, nuggets, gold and the fuse are off.
 Raiders materialize at the right edge every two seconds while fewer than three fly
 or materialize, on a row drawn across the map, in the nearest open rows when rock
-fills it. Each lands as its quarter-second materialize ends, too soon for much
+fills it. Each lands as its half-second materialize ends, too soon for much
 scrolling rock to come over it, and is of a type drawn at random between the two of
 the rank the raid has reached among the cave's own eight. Every type is a program of
 the scenario's own (`behavior/<cave>/<type>.toml`), the template for a species of
@@ -625,24 +625,36 @@ so caves differ in looks alone: a rank up has more hit points (8, 16, 28, 44) an
 fifth more mass (2.0 to 3.5), so a shot knocks it back less, a costlier touch, and
 chases slower on a longer lock, the first rank darting as the snake does. The raid
 climbs the tier: it spawns the first rank until players shoot three of it down, then
-the next, and three of the fourth exhaust the tier, where its boss is to stand; for
-now a green strobe marks it and the climb starts over (the `ramp` region). Each
-cave's raiders wear one hue in four shades, picked against its rock: violet vermin
-in the strata (by rank: scarab, crawler; crab, hornet; spider, mantis; beetle,
-scorpion), white haunts in the cracked stone (gremlin, chomper; imp, slime; ghost,
-skull; wraith, demon), orange animals in the moss (hedgehog, mouse; frog, hopper;
-bat, puffer; owl, lynx) and orchid constructs among the crystals (drone, shard;
-saucer, trooper; jelly, squid; djinn, robot), each one colour on a console. A raider
-lives until killed, and the rock pushes it as it pushes the cursor. Every type rolls
-the raider drop table vanguard declares, so one a player shoots down drops a `U`,
-its own loot kind, where it fell, for every player, and each `U` raises the gun a
-level of the scenario's nine: one shot forward, then two and three, one up and one
-down, one back, two up and down, two back, three up and down, three back. Forward is
-right, the way the ship flies. A crush is a defeat, as is heat and energy both run
-out: the rock and the drift halt under a red strobe for 250 ms, then the game starts
-over, the gun back at one shot, and opens with "Crushed Against The Edge!" or "You
-Died!". The drifting text is scenery (§9): rock and raiders pass it by and no key
-types it, so the ship earns no heat by typing.
+the next, and three of the fourth exhaust the tier (the `ramp` region). Its end is a
+boss stage: a green strobe, the raid holds, and the cave opens to no rock from past
+the right edge (§9); as the opening fills the map the scroll and the drift ease to
+rest over a second and the Kraken rises at the right edge (the `boss` region), with
+120 hit points, thirty seconds of the gun on it: a hit's immunity window lets one
+tracer of a volley land, four a second whatever the lanes. Its touch is main's, so a
+ship that stays in its reach is lost within seconds. A player's kill of it drops a
+missile charge, heat and two energy for every player, doubles species damage as a
+storm kill does in main, every energy penalty with it ("Species Damage Up"), and
+lays the next cave behind its open mouth, of a stone art drawn from the three it is
+not, scrolling a fifth faster in whole columns a second (20, 24, 29, 35, and on to
+the soft cap of 200), its scroll and the drift easing in over a second; the raid
+resumes and the climb starts over at that cave's first rank. Each cave's raiders
+wear one hue in four shades, picked against its rock: violet vermin in the strata
+(by rank: scarab, crawler; crab, hornet; spider, mantis; beetle, scorpion), white
+haunts in the cracked stone (gremlin, chomper; imp, slime; ghost, skull; wraith,
+demon), orange animals in the moss (hedgehog, mouse; frog, hopper; bat, puffer; owl,
+lynx) and orchid constructs among the crystals (drone, shard; saucer, trooper;
+jelly, squid; djinn, robot), each one colour on a console. A raider lives until
+killed, and the rock pushes it as it pushes the cursor. Every type rolls the raider
+drop table vanguard declares, so one a player shoots down drops a `U`, its own loot
+kind, where it fell, for every player, and each `U` raises the gun a level of the
+scenario's nine: one shot forward, then two and three, one up and one down, one
+back, two up and down, two back, three up and down, three back. Forward is right,
+the way the ship flies. A crush is a defeat, as is heat and energy both run out: the
+rock and the drift halt under a red strobe for 250 ms, then the game starts over,
+the gun back at one shot, species damage at one and the cave at its first pace, and
+opens with "Crushed Against The Edge!" or "You Died!". The drifting text is scenery
+(§9): rock and raiders pass it by and no key types it, so the ship earns no heat by
+typing.
 
 ## 11. System inventory
 

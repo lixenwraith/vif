@@ -1435,6 +1435,7 @@ func (p *KrakenSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecKrakenSpawnRequestPayload = structCodec{size: unsafe.Sizeof(KrakenSpawnRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(KrakenSpawnRequestPayload{}.HP), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *BehaviorSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

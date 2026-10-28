@@ -8,7 +8,10 @@ macro_files = ["macros.toml"]
 # pressing it against the left edge crushes it and the game starts over. Glyphs drift
 # left behind the rock at three depths as scenery no key types, raiders of the cave's
 # own eight types arrive at the right edge on a timer, and each one shot down drops a
-# U that raises the gun a level, from one shot forward to three each way.
+# U that raises the gun a level, from one shot forward to three each way. Four ranks
+# shot down end the cave: it opens to no rock, the scroll halts and the Kraken rises,
+# and once it is shot down species damage doubles and the next cave comes in, faster
+# and of another stone.
 
 # Twice the cave's narrowest gap, so even the smallest map opens past its narrowest
 [map]
@@ -72,6 +75,16 @@ weapon = "gun"
 killer = "player"
 tiers = [{ entries = [{ loot = "upgrade", rate = 1.0 }] }]
 
+# The Kraken a player shoots down drops a missile charge, heat and two energy for
+# every player, in place of its code drops
+[drops.kraken]
+killer = "player"
+tiers = [
+    { entries = [{ loot = "launcher", rate = 1.0 }] },
+    { entries = [{ loot = "heat", rate = 1.0 }] },
+    { entries = [{ loot = "energy", rate = 1.0, count = 2 }] },
+]
+
 # No drains, and so nothing to fuse: the raid spawns its raiders directly
 [regions.main]
 initial = "CaveStart"
@@ -85,13 +98,16 @@ background = true
 initial = "RaidRank1"
 background = true
 
+[regions.boss]
+background = true
+
 [regions.player]
 initial = "PlayerBoot"
 background = true
 
 # --- Cave ---
 
-# The cave scrolls a column a tick: only whole columns a tick step evenly.
+# The cave scrolls a column a tick at first: only whole columns a tick step evenly.
 # It is jagged: ceiling and floor each reach in by four octaves of noise from 64
 # columns down, smoothed past any bump of two columns, so the gap runs from 9 rows
 # to all but the walls' two each, as the map allows, mostly two or three times the
@@ -99,24 +115,27 @@ background = true
 # a phone held upright, keeps that much rock and opens every row it adds, narrowing
 # the less the taller it is; max_gap 2000, the tallest map, caps no band. With no
 # rough rock the walls stay smooth. A mouth of open map as wide as the view, no rock
-# at all, comes first, then the cave closes in over 96 columns. The rock blocks the
-# ship, raiders and spawns but not particles, which pass through it hidden, and each
-# step carries those no anchor holds a column left with it, so blossom rises, decay
-# falls and dust wanders in the cave's frame. It wears one of four stone arts, the
-# cave's seed picking it; every rock cell draws a glyph, so it reads on a text
-# console's sixteen colours too. The glyphs drift past faster than the rock, at 20,
-# 40 and 80 cells a second by layer, fast enough for each layer to read as moving
-# and the depths to come apart; a layer steps whole cells a tick, which the renderer
-# spreads over the frames between. They are scenery: rock and raiders pass them by
-# and the rock hides them, while particles and the gun act on them. The seed is
-# drawn from the run's, so each new game flies a new cave and a run's seed replays
-# its caves in order.
+# at all, comes first, then the cave closes in over 96 columns (the Cave macro). The
+# rock blocks the ship, raiders and spawns but not particles, which pass through it
+# hidden, and each step carries those no anchor holds a column left with it, so
+# blossom rises, decay falls and dust wanders in the cave's frame. It wears one of
+# four stone arts; every rock cell draws a glyph, so it reads on a text console's
+# sixteen colours too. The glyphs drift past faster than the rock, at 20, 40 and 80
+# cells a second by layer, fast enough for each layer to read as moving and the
+# depths to come apart; a layer steps whole cells a tick, which the renderer spreads
+# over the frames between. They are scenery: rock and raiders pass them by and the
+# rock hides them, while particles and the gun act on them. The seed is drawn from
+# the run's, so each new game flies a new cave and a run's seed replays its caves in
+# order. The first cave's art is its seed modulo four; each cave after a boss wears
+# one of the other three and scrolls faster (BossDown).
 [states.CaveStart]
 parent = "Root"
 on_enter = [
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
-    { action = "ConfigToVar", payload = { field = "map_width", name = "cave_mouth" } },
-    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 2000, min_wall = 2, reach = 27, wavelength = 64, detail = 0, ramp = 96, octaves = 4, block_mask = ["cursor", "kinetic", "spawn"] }, payload_vars = { seed = "cave_seed", mouth = "cave_mouth" }, pick = { field = "art", var = "cave_seed", from = ["strata", "cracked", "moss", "crystal"] } },
+    { action = "CopyVar", payload = { name = "cave_art", source_var = "cave_seed" } },
+    { action = "ModuloVar", payload = { name = "cave_art", delta = 4 } },
+    { action = "SetVar", payload = { name = "cave_speed", value = 20 } },
+    { macro = "Cave" },
     { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 80.0, duration_ms = 0, scenery = true } },
 ]
 
@@ -129,16 +148,17 @@ on_enter = [
 # edge whatever its size; it searches the whole map from there, so rock on that row
 # sends it to the nearest open rows, and the raider lands as it ends, beside any
 # rock that came over it meanwhile. The type is drawn between the two of the ramp's
-# rank in the cave's eight: the cave's seed modulo four is its stone art, as
-# CaveStart's pick takes it, eight times that the first of its types in the pick's
-# list, which runs the arts in CaveStart's order, and twice the rank the first of
-# that rank's pair.
+# rank in the cave's eight: eight times the cave's stone art, as the Cave macro's
+# pick takes it, is the first of its types in the pick's list, which runs the arts
+# in the macro's order, and twice the rank the first of that rank's pair. The raid
+# holds while a boss stage runs (raid_boss).
 [states.RaidWait]
 parent = "Root"
 transitions = [
     { trigger = "Tick", target = "RaidSpawn", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
         { name = "StatusIntCompare", args = { key = "behavior.count", op = "lt", value = 3 } },
+        { name = "VarCompare", args = { var = "raid_boss", op = "eq", value = 0 } },
     ] } },
 ]
 
@@ -155,8 +175,7 @@ on_enter = [
     { action = "SetVar", payload = { name = "raid_type_seed", value = 1 } },
     { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 1048575, seed_var = "raid_type_seed", index_var = "raid_index" } },
     { action = "ModuloVar", payload = { name = "raid_type", delta = 2 } },
-    { action = "CopyVar", payload = { name = "raid_cave", source_var = "cave_seed" } },
-    { action = "ModuloVar", payload = { name = "raid_cave", delta = 4 } },
+    { action = "CopyVar", payload = { name = "raid_cave", source_var = "cave_art" } },
     { action = "MultiplyVar", payload = { name = "raid_cave", delta = 8 } },
     { action = "IncrementVar", payload = { name = "raid_type", source_var = "raid_cave" } },
     { action = "CopyVar", payload = { name = "raid_pair", source_var = "raid_rank" } },
@@ -205,14 +224,100 @@ next = "RaidBoss"
 names = ["beetle", "scorpion", "wraith", "demon", "owl", "lynx", "djinn", "robot"]
 
 
-# The tier's boss stands here: for now a green strobe, and the climb starts over
+# The tier's end: a green strobe, the raid holds, the cave opens to no rock from
+# past the right edge over its ramp, and the boss region brings on the Kraken. Once
+# it is down the climb starts over at the first rank in the cave that follows, and
+# the raid resumes with the rank already reset, whichever region runs first.
 [states.RaidBoss]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 250 } },
+    { action = "SetVar", payload = { name = "raid_boss", value = 1 } },
+    { action = "EmitEvent", event = "EventCaveOpen", payload = { gap = 0 } },
+    { action = "SpawnRegion", region = "boss", initial_state = "BossApproach" },
 ]
 transitions = [
-    { trigger = "Tick", target = "RaidRank1" },
+    { trigger = "Tick", target = "RaidRank1", guard = "VarCompare", guard_args = { var = "boss_down", op = "eq", value = 1 }, actions = [
+        { action = "SetVar", payload = { name = "boss_down", value = 0 } },
+        { action = "SetVar", payload = { name = "raid_boss", value = 0 } },
+    ] },
+]
+
+# --- Boss ---
+
+# The opening filling the map halts the scroll and the drift, easing over a second,
+# and the Kraken rises at the right edge on the map's middle row, the request
+# clamping its body inside the map. Its 120 hit points are thirty seconds of the gun
+# on it: one tracer lands a volley, four a second, whatever the lanes, as a hit's
+# immunity window holds the rest. Its touch is the code's, as in main.
+[states.BossApproach]
+parent = "Root"
+transitions = [
+    { trigger = "EventCaveOpened", target = "BossHalt" },
+]
+
+[states.BossHalt]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCaveStop", payload = { ease_ms = 1000 } },
+    { action = "EmitEvent", event = "EventDriftCancel", payload = { ease_ms = 1000 } },
+]
+transitions = [
+    { trigger = "Tick", target = "BossSpawn", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
+]
+
+[states.BossSpawn]
+parent = "Root"
+on_enter = [
+    { action = "ConfigToVar", payload = { field = "map_width", name = "boss_x" } },
+    { action = "ConfigToVar", payload = { field = "map_height", name = "boss_y" } },
+    { action = "DivideVar", payload = { name = "boss_y", delta = 2 } },
+    { action = "EmitEvent", event = "EventKrakenSpawnRequest", payload = { hp = 120 }, payload_vars = { x = "boss_x", y = "boss_y" } },
+]
+transitions = [
+    { trigger = "EventSpeciesCreated", target = "BossFight", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["kraken"] } },
+    { trigger = "EventKrakenSpawnFailed", target = "BossSpawnRetry" },
+]
+
+[states.BossSpawnRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "BossSpawn", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.BossFight]
+parent = "Root"
+transitions = [
+    { trigger = "EventSpeciesKilled", target = "BossDown", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["kraken"] } },
+    { trigger = "EventKrakenSpawnFailed", target = "BossSpawnRetry" },
+]
+
+# The Kraken down: species damage doubles, and every energy penalty with it, and
+# the next cave comes in past the right edge behind its open mouth, in a stone art
+# drawn from the three it is not, scrolling a fifth faster in whole columns a
+# second (20, 24, 29, 35 and on to the cap of 200), its scroll and the drift easing
+# in over a second; the ramp starts the climb over and lets the raid resume
+[states.BossDown]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Species Damage Up" } },
+    { action = "IncrementVar", payload = { name = "cave_index" } },
+    { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
+    { action = "SetVar", payload = { name = "cave_step_seed", value = 1 } },
+    { action = "RandomVar", payload = { name = "cave_step", min = 1, max = 3, seed_var = "cave_step_seed", index_var = "cave_index" } },
+    { action = "IncrementVar", payload = { name = "cave_art", source_var = "cave_step" } },
+    { action = "ModuloVar", payload = { name = "cave_art", delta = 4 } },
+    { action = "MultiplyVar", payload = { name = "cave_speed", delta = 12 } },
+    { action = "IncrementVar", payload = { name = "cave_speed", delta = 5 } },
+    { action = "DivideVar", payload = { name = "cave_speed", delta = 10 } },
+    { action = "ClampVar", payload = { name = "cave_speed", min = 20, max = 200 } },
+    { macro = "Cave" },
+    { action = "EmitEvent", event = "EventCaveStop" },
+    { action = "EmitEvent", event = "EventCavePace", payload = { ease_ms = 1000 }, payload_vars = { speed = "cave_speed" } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 80.0, duration_ms = 0, scenery = true, ease_ms = 1000 } },
+    { action = "SetVar", payload = { name = "boss_down", value = 1 } },
+    { action = "TerminateRegion", region = "boss" },
 ]
 
 # --- Player ---

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"testing"
@@ -494,30 +495,43 @@ func TestVanguardsCaveOpensOnOpenMap(t *testing.T) {
 	defer a.Close()
 
 	w := a.World()
-	rockCells := func() (cells int, origin int64, ok bool) {
+	// rock is the cells of rock in view, the leftmost column holding any, and the
+	// cave's scroll
+	rock := func() (cells, left int, origin int64, ok bool) {
 		w.RunSafe(func() {
-			rock := w.Positions.Rock()
-			if ok = rock != nil; ok {
-				for _, col := range rock.Columns() {
-					cells += col.Ceil + w.Resources.Config.MapHeight - col.Floor
+			r := w.Positions.Rock()
+			if ok = r != nil; ok {
+				left = -1
+				for x, col := range r.Columns() {
+					if n := col.Ceil + w.Resources.Config.MapHeight - col.Floor; n > 0 {
+						cells += n
+						if left < 0 {
+							left = x
+						}
+					}
 				}
-				origin = rock.Origin
+				origin = r.Origin
 			}
 		})
-		return cells, origin, ok
+		return cells, left, origin, ok
 	}
 	for range 5 {
-		if _, _, ok := rockCells(); ok {
+		if _, _, _, ok := rock(); ok {
 			break
 		}
 		a.Tick(1)
 	}
-	if cells, origin, ok := rockCells(); !ok || cells > 0 {
+	if cells, _, origin, ok := rock(); !ok || cells > 0 {
 		t.Fatalf("the cave stands %v with %d rock cells in view at column %d, want none", ok, cells, origin)
 	}
-	a.Tick(300)
-	if cells, origin, _ := rockCells(); cells == 0 {
-		t.Fatalf("no rock in view at column %d, want the cave closed in", origin)
+	for range 60 {
+		if cells, _, _, _ := rock(); cells > 0 {
+			break
+		}
+		a.Tick(1)
+	}
+	if cells, left, origin, _ := rock(); cells == 0 || left < w.Resources.Config.MapWidth*3/4 {
+		t.Fatalf("at column %d the rock in view is %d cells from column %d, want it coming in at the right edge", origin, cells, left)
 	}
 }
 
@@ -757,11 +771,15 @@ func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 	}
 }
 
-// TestVanguardsRaidClimbsARankEveryThreeKillsAndStartsOverAfterItsBoss: raiders
-// the player shoots down as they arrive come from the first rank's two types until
-// three fall, then the next rank's, to the fourth; its third kill brings the boss's
-// green strobe and the first rank again
-func TestVanguardsRaidClimbsARankEveryThreeKillsAndStartsOverAfterItsBoss(t *testing.T) {
+// TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave: raiders the player
+// shoots down as they arrive come from the first rank's two types until three fall,
+// then the next rank's, to the fourth, whose third kill strobes green and ends the
+// cave. No raider comes while the cave opens to no rock and its scroll halts, and the
+// Kraken rises at the right edge with vanguard's hit points. The player's kill of it
+// drops a missile charge, heat and two energy, doubles species damage and lays the
+// next cave in another stone art, scrolling a fifth faster once its pace has eased
+// in, where the climb starts over at the first rank of that cave's types.
+func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) {
 	t.Parallel()
 	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/vanguard"), "scenario.toml")
 	if err != nil {
@@ -777,24 +795,45 @@ func TestVanguardsRaidClimbsARankEveryThreeKillsAndStartsOverAfterItsBoss(t *tes
 			rankOf[name.(string)] = r
 		}
 	}
+	// arts and types are the picks' lists: eight types to an art, in its order
+	var arts, types []any
+	for _, action := range states["CaveStart"].(map[string]any)["on_enter"].([]any) {
+		if action.(map[string]any)["event"] == "EventCaveStart" {
+			arts = action.(map[string]any)["pick"].(map[string]any)["from"].([]any)
+		}
+	}
+	spawn := states["RaidSpawn"].(map[string]any)["transitions"].([]any)[0].(map[string]any)["actions"].([]any)[0]
+	types = spawn.(map[string]any)["pick"].(map[string]any)["from"].([]any)
 
 	a := newVanguard(t)
 	w := a.World()
 	var spawned []string
-	greens, resets := 0, 0
+	var krakens []event.SpeciesCreatedPayload
+	var opens []event.CaveOpenPayload
+	var messages []string
+	greens, resets, opened := 0, 0, 0
 	a.SetDispatchTap(func(ev event.GameEvent) {
 		switch p := ev.Payload.(type) {
 		case *event.SpeciesCreatedPayload:
 			if p.Species >= component.SpeciesDataFirst {
 				spawned = append(spawned, w.Resources.Behaviors[p.Species-component.SpeciesDataFirst].Name)
+			} else if p.Species == component.SpeciesKraken {
+				krakens = append(krakens, *p)
 			}
 		case *event.StrobeRequestPayload:
 			if p.Color == (color.RGB{G: 255}) {
 				greens++
 			}
+		case *event.CaveOpenPayload:
+			opens = append(opens, *p)
+		case *event.MetaStatusMessagePayload:
+			messages = append(messages, p.Message)
 		}
-		if ev.Type == event.EventGameResetRequest {
+		switch ev.Type {
+		case event.EventGameResetRequest:
 			resets++
+		case event.EventCaveOpened:
+			opened++
 		}
 	})
 	// shoot waits for a raider and has the player shoot it down
@@ -819,19 +858,114 @@ func TestVanguardsRaidClimbsARankEveryThreeKillsAndStartsOverAfterItsBoss(t *tes
 		}
 		t.Fatal("no raider spawned")
 	}
+	// rock is the cave's stone art and how far it has scrolled
+	rock := func() (art string, origin int64) {
+		w.RunSafe(func() {
+			if r := w.Positions.Rock(); r != nil {
+				art, origin = pattern.ArtPreset(r.Look.Art).String(), r.Origin
+			}
+		})
+		return art, origin
+	}
+	inArt := func(name, art string) bool {
+		i := slices.Index(arts, any(art))
+		return i >= 0 && slices.Contains(types[i*8:i*8+8], any(name))
+	}
 
+	// Two tiers: each climb ends in the Kraken, and each cave after one is of
+	// another stone, a fifth faster in whole columns a second
 	const perRank = 3
-	for kill := range 4*perRank + 1 {
-		shoot()
+	art, _ := rock()
+	for cycle, speed := range []int64{24, 29} {
+		for kill := range 4 * perRank {
+			shoot()
+			if resets != 0 {
+				t.Skip("the game started over mid-climb")
+			}
+			n := cycle*4*perRank + kill
+			if got, want := spawned[n], kill/perRank; rankOf[got] != want || !inArt(got, art) {
+				t.Fatalf("raider %d is a %s of rank %d, want one of %s's rank %d (%v)", n, got, rankOf[got]+1, art, want+1, spawned)
+			}
+		}
+		if a.Tick(2); greens != cycle+1 {
+			t.Fatalf("tier %d: the tier's end strobed %d times, want %d", cycle, greens, cycle+1)
+		}
+
+		// The boss: the cave opens to no rock and halts, and the Kraken rises
+		for range 1200 {
+			if a.Tick(1); len(krakens) > cycle || resets > 0 {
+				break
+			}
+		}
 		if resets != 0 {
-			t.Skip("the game started over mid-climb")
+			t.Skip("the game started over before the Kraken")
 		}
-		want := kill / perRank % 4
-		if got := spawned[kill]; rankOf[got] != want {
-			t.Fatalf("raider %d is a %s of rank %d, want rank %d after %d kills (%v)", kill, got, rankOf[got]+1, want+1, kill, spawned)
+		if len(opens) != cycle+1 || opens[cycle] != (event.CaveOpenPayload{}) || opened != cycle+1 || len(krakens) != cycle+1 {
+			t.Fatalf("tier %d: cave opens %v, %d announced, %d Krakens; want an opening to no rock, then a Kraken, a tier", cycle, opens, opened, len(krakens))
 		}
-		if bosses := kill / (4 * perRank); greens != bosses {
-			t.Fatalf("after %d kills the boss strobed %d times, want %d", kill+1, greens, bosses)
+		if len(spawned) != (cycle+1)*4*perRank {
+			t.Fatalf("tier %d: %d raiders came while the cave opened, want none", cycle, len(spawned)-(cycle+1)*4*perRank)
 		}
+		var hp int
+		w.RunSafe(func() {
+			for _, e := range w.Components.Kraken.Entities() {
+				combat, _ := w.Components.Combat.GetComponent(e)
+				hp = combat.HitPoints
+			}
+		})
+		cfg := w.Resources.Config
+		edge := cfg.MapWidth - 1 - 2*int(parameter.KrakenBodyRadius)
+		if k := krakens[cycle]; hp != 120 || k.X != edge || k.Y != cfg.MapHeight/2 {
+			t.Fatalf("tier %d: the Kraken rose at (%d,%d) with %d hit points, want 120 at the right edge's (%d,%d)", cycle, k.X, k.Y, hp, edge, cfg.MapHeight/2)
+		}
+		_, halted := rock()
+		if a.Tick(10); len(spawned) != (cycle+1)*4*perRank {
+			t.Fatalf("tier %d: a raider came while the Kraken stood", cycle)
+		}
+		if _, origin := rock(); origin != halted {
+			t.Fatalf("tier %d: the cave scrolled from column %d to %d with the Kraken up, want it halted", cycle, halted, origin)
+		}
+
+		// The player shoots it down
+		w.RunSafe(func() {
+			for _, e := range w.Components.Kraken.Entities() {
+				combat, _ := w.Components.Combat.GetPtr(e)
+				combat.HitPoints, combat.LastDamagedBy = 0, w.Resources.Player.Entity
+			}
+		})
+		a.Tick(2)
+		drops := map[component.LootType]int{}
+		var multiplier int64
+		w.RunSafe(func() {
+			for _, e := range w.Components.Loot.Entities() {
+				if loot, _ := w.Components.Loot.GetComponent(e); loot.Owner == w.Resources.Player.Entity {
+					drops[loot.Type]++
+				}
+			}
+			multiplier = w.Resources.Status.Ints.Get("energy.damage_multiplier").Load()
+		})
+		if want := map[component.LootType]int{component.LootLauncher: 1, component.LootHeat: 1, component.LootEnergy: 2}; !maps.Equal(drops, want) {
+			t.Fatalf("tier %d: the Kraken dropped %v, want %v", cycle, drops, want)
+		}
+		if multiplier != 2<<cycle || !slices.Contains(messages, "Species Damage Up") {
+			t.Fatalf("tier %d: species damage x%d after the Kraken, messages %q; want x%d and its notice", cycle, multiplier, messages, 2<<cycle)
+		}
+
+		// The next cave: another stone art, its scroll easing in to the faster pace
+		next, start := rock()
+		if next == art || !slices.Contains(arts, any(next)) || start > 1 {
+			t.Fatalf("tier %d: the next cave wears %q from column %d after %q, want another of %v from its start", cycle, next, start, art, arts)
+		}
+		a.Tick(25)
+		_, eased := rock()
+		a.Tick(20)
+		if _, origin := rock(); origin-eased < speed-1 || origin-eased > speed+1 {
+			t.Fatalf("tier %d: the next cave scrolled %d columns in a second, want %d", cycle, origin-eased, speed)
+		}
+		art = next
+	}
+	shoot()
+	if got := spawned[8*perRank]; rankOf[got] != 0 || !inArt(got, art) {
+		t.Fatalf("the third cave's first raider is a %s of rank %d, want one of %s's first rank", got, rankOf[got]+1, art)
 	}
 }

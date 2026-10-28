@@ -1,8 +1,8 @@
 # Vanguard's block: the raiders' one attack cycle, the four difficulty ranks that
-# time it and weigh the body flying it, the four caves' raider colours and the
-# raid's count of kills by rank. Every raider type's program invokes its rank with
-# its cave and its look, and the rank invokes Raider. doc/toml-macros.md describes
-# definitions and invocations.
+# time it and weigh the body flying it, the four caves' raider colours, the raid's
+# count of kills by rank and the cave each stage lays. Every raider type's program
+# invokes its rank with its cave and its look, and the rank invokes Raider.
+# doc/toml-macros.md describes definitions and invocations.
 
 # The raider's attack cycle. It chases its target for chase_ms, then locks onto
 # the cell it saw for lock_ms under a telegraph. Where its body clears the way it
@@ -89,11 +89,12 @@ global = [{ macro = "RaiderStun" }]
 
 # Its cells index the cave's palette, 0 body, 1 eyes, 2 limbs, 3 accent; the
 # console draws the cave's one colour, a hit reversing it. It materializes onto
-# the map in a quarter of a second, so scrolling rock has little time to come over
-# its footprint, and lands as the materialize ends; a player's kill drops a U.
+# the map in half a second, a quarter reading as a flash, so scrolling rock has
+# little time to come over its footprint, and lands as the materialize ends; a
+# player's kill drops a U.
 [macros.Raider.body.prototype]
 entrance = "materialize"
-entrance_ms = 250
+entrance_ms = 500
 drops = "raider"
 width = "${width}"
 height = "${height}"
@@ -291,4 +292,16 @@ transitions = [
         { name = "PayloadIntCompare", args = { field = "killer_entity", op = "neq", value = 0 } },
     ] }, actions = [{ action = "IncrementVar", payload = { name = "raid_kills" } }] },
     { trigger = "Tick", target = "${next}", guard = "VarCompare", guard_args = { var = "raid_kills", op = "gte", value = 3 } },
+]
+
+# --- The cave ---
+
+# A stage's cave: the seed, stone art and speed the cave_* variables hold, jagged
+# in four octaves from 64 columns, behind a mouth of open map as wide as the view,
+# so its rock comes in past the right edge and none lands on what stands in view.
+[macros.Cave]
+doc = "Lay the cave of cave_seed, cave_art and cave_speed behind a mouth of open map the map's width."
+body = [
+    { action = "ConfigToVar", payload = { field = "map_width", name = "cave_mouth" } },
+    { action = "EmitEvent", event = "EventCaveStart", payload = { min_gap = 9, max_gap = 2000, min_wall = 2, reach = 27, wavelength = 64, detail = 0, ramp = 96, octaves = 4, block_mask = ["cursor", "kinetic", "spawn"] }, payload_vars = { seed = "cave_seed", mouth = "cave_mouth", speed = "cave_speed" }, pick = { field = "art", var = "cave_art", from = ["strata", "cracked", "moss", "crystal"] } },
 ]

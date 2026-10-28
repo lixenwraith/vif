@@ -959,10 +959,12 @@ type SwarmSpawnRequestPayload struct {
 	Y int `toml:"y"`
 }
 
-// KrakenSpawnRequestPayload defaults (0, 0) to the map center.
+// KrakenSpawnRequestPayload defaults (0, 0) to the map center, and hit points of 0
+// or fewer to parameter.KrakenInitialHP.
 type KrakenSpawnRequestPayload struct {
-	X int `toml:"x"`
-	Y int `toml:"y"`
+	X  int `toml:"x"`
+	Y  int `toml:"y"`
+	HP int `toml:"hp"`
 }
 
 // --- Behavior ---

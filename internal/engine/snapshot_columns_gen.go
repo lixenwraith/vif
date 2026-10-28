@@ -3355,6 +3355,9 @@ func decodeColumnsTower(r *columnReader) []StoreEntry[component.TowerComponent] 
 func encodeColumnsKraken(dst []byte, rows []StoreEntry[component.KrakenComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.MaxHitPoints)
+	}
+	for i := range rows {
 		dst = appendUint(dst, rows[i].Value.State)
 	}
 	for i := range rows {
@@ -3406,6 +3409,9 @@ func decodeColumnsKraken(r *columnReader) []StoreEntry[component.KrakenComponent
 	}
 	rows := make([]StoreEntry[component.KrakenComponent], n)
 	readEntityColumn(rows, r)
+	for i := range rows {
+		readInt(&rows[i].Value.MaxHitPoints, r)
+	}
 	for i := range rows {
 		readUint(&rows[i].Value.State, r)
 	}

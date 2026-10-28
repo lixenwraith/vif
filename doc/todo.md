@@ -14,7 +14,7 @@ The side-scroller's refinements after its first play test (2026-10-27) lead, gro
 by area so an agent can take a group, beside the navigation items. The faster
 scroll, the jagged cave, the stone art, the raider types by cave, the scenery text
 and the machine's certain faults have landed. Order now: play the cave raiders and
-the boss approach; the position package last, in a session of its own. Until that
+the boss stage; the position package last, in a session of its own. Until that
 lands, nothing here adds engine surface for rock or caves: a cave's shape stays in
 `pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall system
 and renderers that read it, and a query a footprint needs is built by its caller
@@ -52,51 +52,49 @@ so neither entry clears both palettes and white (15) would; the crystal raiders'
 magenta (13) meets the amethyst points, which are sparse. Keep every type within
 5×3 until the position work gives each footprint its own navigation grid.
 
-#### Put the tier's boss where the raid's climb ends
+#### Give each tier a boss of its own
 
-- Priority: P1
-- Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`, `RaidWait`),
+- Priority: P2
+- Affected files: `wad/scenario/vanguard/scenario.toml` (`BossSpawn`..`BossDown`),
   `internal/system/environment.go` (`shiftLayers`), `internal/system/glyph.go`,
   `internal/render/renderer/glyph.go` (`glyphLevels256`), `doc/gameplay.md` §10
-- Guide: [Script the boss approach](#script-the-boss-approach-and-play-its-stop)
+- Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression)
 
-Three kills of the fourth rank exhaust the cave's tier and enter `RaidBoss`, a
-placeholder that strobes green and starts the climb over at the first rank while
-the raid keeps spawning. The boss encounter replaces it: the approach below, a boss
-of the tier's own, and what beating it opens, the next tier or the same climb again.
-The raid's cap of three reads `behavior.count`, which sums every program, so a boss
-program would hold a raider's place: the boss state stops the raid, or caps it on
-the raiders' own count (`behavior.<program>.count` summed, or a prototype `group`
-with `behavior.group.<g>.count`). Fixed, typeable text over the moving scenery, if
-the encounter puts any there, needs a drift that moves scenery alone, since a drift
-moves every loose glyph, and the spawner placing text in place while scenery enters,
-where it places one kind at a time. Truecolor hazes scenery by depth apart from
-typeable text, but a console draws both in a hue's same two entries, so one kind
-needs a console look of its own.
+Every tier ends in the same boss stage, the Kraken with 120 hit points and main's
+touch, which empties a shield in a tick and ends a bare ship the next, so a ship
+left at the centre lasts about five seconds once it rises. A boss of each tier's own
+would replace it, a program of the scenario's own, which the stage's hold on the
+raid already keeps from taking a raider's place. Fixed, typeable text over the
+moving scenery, if the encounter puts any there, needs a drift that moves scenery
+alone, since a drift moves every loose glyph, and the spawner placing text in place
+while scenery enters, where it places one kind at a time. Truecolor hazes scenery by
+depth apart from typeable text, but a console draws both in a hue's same two
+entries, so one kind needs a console look of its own.
 
-### Boss approach
+### Boss stage
 
-#### Script the boss approach and play its stop
+#### Play the boss stage and the faster caves
 
 - Priority: P1
-- Affected files: `wad/scenario/vanguard/scenario.toml` (`CaveStart`),
-  `internal/parameter/environment.go` (`CaveMaxSpeed`, `DriftMaxSpeed`),
-  `doc/gameplay.md` §9
-- Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
+- Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`, `BossApproach`..
+  `BossDown`, `CaveStart`), `internal/parameter/environment.go` (`CaveMaxSpeed`,
+  `DriftMaxSpeed`), `doc/gameplay.md` §9 and §10
+- Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression)
 
-The cave's pace and the drift's change at once or ease (`EventCavePace`,
-`EventCaveStop`, `ease_ms` on both drift events), and `EventCaveOpen` widens the cave
-past the right edge, `EventCaveOpened` announcing it filling the map; vanguard uses
-none of them yet. Script the approach, faster rock and drift, then a halt eased or
-sudden as the opening fills, and play which reads as a boss. Off whole columns a tick
-the rock steps unevenly, one and two in turn at 30 columns a second, and past 20 it
-jumps more than a column a tick. The soft caps sit past what was measured: a whole
-vanguard tick, headless, reads 0.07 to 0.20 ms from 20 to 200 columns a second at
-120×40 and 0.39 to 2.42 ms at 500×254. The renderer carries scenery between ticks
-but not the rock, which at boss speeds jumps several columns a tick; carrying it
-needs the columns ahead of the map, engine surface for rock that waits for the
-position package. A cave opens once and nothing narrows it again; a later stage
-starts a new cave.
+The stage is scripted: the opening to no rock over the cave's 96-column ramp, the
+scroll and the drift easing to rest over a second as it fills the map, about eleven
+seconds from the strobe on a 120-column map at 20 columns a second, the Kraken at
+the right edge, and the next cave's scroll and drift easing in. Play whether the
+approach is too long, whether the halt reads as a boss, and whether the Kraken can
+be fought on the smallest map, 80×18, which its legs mostly reach. After the first
+boss the caves scroll off whole columns a tick, so the rock steps one and two
+columns in turn at 24 and 29 columns a second, and past 40 more than two a tick. The
+soft caps sit past what was measured: a whole vanguard tick, headless, reads 0.07 to
+0.20 ms from 20 to 200 columns a second at 120×40 and 0.39 to 2.42 ms at 500×254.
+The renderer carries scenery between ticks but not the rock, which at those speeds
+jumps several columns a tick; carrying it needs the columns ahead of the map, engine
+surface for rock that waits for the position package. A cave opens once and nothing
+narrows it again; each stage starts a new cave.
 
 ### Machine follow-ups
 
