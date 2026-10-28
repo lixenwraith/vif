@@ -23,7 +23,7 @@ This reference covers the status-registry telemetry of every system `manifest.Bu
 **Slots.** A per-slot metric (`status.NewPlayerInt` or `NewPlayerBool`) registers `player.<slot>.<suffix>` for slots 0–15 (`parameter.MaxPlayers` is 16). It can also register a bare key that mirrors the slot this instance drives, set by `Registry.SetLocalSlot`. With no local slot, the bare key mirrors nothing and reads zero.
 
 - Bare keys are instance-local and never a shared FSM guard input (D-20).
-- The mirrored bare keys are `energy.current`, `heat.{current,overheat,at_max,ember}`, `shield.active`, `boost.{active,remaining}`, `typing.max_streak`, `weapon.<kind>`, `weapon.orbs` and `player.{x,y}`.
+- The mirrored bare keys are `energy.current`, `heat.{current,overheat,at_max,ember}`, `shield.active`, `boost.{active,remaining}`, `typing.max_streak`, `weapon.<kind>`, `weapon.orbs` and `player.{x,y,entity}`.
 - Energy, shield, heat, boost and weapon (its held kinds) publish every roster slot on each update through `eachRosterSlot`, a peer's cursor included, and zero a slot whose cursor is gone. `MetaSystem` writes -1 to `player.<slot>.{x,y}` for an empty slot.
 
 **Cards.** `status.SplitKey` projects keys into cards of at most `OverlayCardMaxEntries` (15) fields, and `TestTelemetryGroupsFitOverlayCards` enforces that limit. Visibility gates apply to views, snapshots and recorder windows:
@@ -60,7 +60,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem
 | Owner | Metric keys | Registered | Written | Reset | Named consumer |
 |---|---|---|---|---|---|
 | Network | `network.*` connection, barrier, relay, parity, link and pacing keys; `context.map_locked` | `NewNetworkSystem`; `context.map_locked` by `newGameContext` | See [Session telemetry](#session-telemetry) | `Init` | See [Session telemetry](#session-telemetry) |
-| Cursor | `player.{count,local,cursor_rejects,spawn_failures}`, `player.<slot>.{entity,control}` | `NewCursorSystem` | Spawn failures, move rejections, and `publishRoster` on every roster change | `Init` | Slot cards gate on `player.<slot>.entity` |
+| Cursor | `player.{count,local,entity,cursor_rejects,spawn_failures}`, `player.<slot>.{entity,control}` | `NewCursorSystem` | Spawn failures, move rejections, and `publishRoster` on every roster change | `Init` | Slot cards gate on `player.<slot>.entity` |
 | Ping | `ping.{cursor_rejects,disabled_rejects}` | `NewPingSystem` | Request rejection paths | `Init` | Generic only |
 | Transient | `effects.{grayout_active,strobe_active}`, `transient.{explosion_merged,explosion_evicted}` | `NewTransientSystem` | Effect handlers and update; the explosion table's merge and eviction paths | `Init` | Generic only |
 | Camera | None | — | — | — | — |
@@ -183,6 +183,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `player.<slot>.entity` (int) | The cursor entity in the slot, or zero. Gates the slot's cards |
 | `player.<slot>.control` (int) | That cursor's control mode, or -1 for an empty slot |
 | `player.local` (int) | The slot this instance drives |
+| `player.entity` (int) | The cursor entity this instance drives, the number an `:emit` payload names it by, or zero |
 | `session.any_defeated` (bool) | At least one rostered cursor's owner-authored defeat latch (`EventCursorDefeatState`) is set. A shipped game-over guard |
 | `session.all_defeated` (bool) | Every rostered cursor's defeat latch is set |
 | `kills.<species>` (int) | Species deaths. `kills.drain` counts `EventDrainDefeated`, not `EventSpeciesKilled`. A tower's death is never counted: the structure is the players' own, and `kills.tower` stays zero |

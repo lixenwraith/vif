@@ -21,7 +21,7 @@ type CursorSystem struct {
 	statLocal         *atomic.Int64
 	statCursorRejects *atomic.Int64
 	statSpawnFailures *atomic.Int64
-	statSlotEntity    [parameter.MaxPlayers]*atomic.Int64
+	statEntity        *status.PlayerInt
 	statSlotControl   [parameter.MaxPlayers]*atomic.Int64
 }
 
@@ -34,8 +34,8 @@ func NewCursorSystem(world *engine.World) engine.System {
 	s.statLocal = reg.Ints.Get("player.local")
 	s.statCursorRejects = reg.Ints.Get("player.cursor_rejects")
 	s.statSpawnFailures = reg.Ints.Get("player.spawn_failures")
+	s.statEntity = status.NewPlayerInt(reg, parameter.MaxPlayers, "entity", "player.entity")
 	for i := range parameter.MaxPlayers {
-		s.statSlotEntity[i] = reg.Ints.Get(status.PlayerKey(i, "entity"))
 		s.statSlotControl[i] = reg.Ints.Get(status.PlayerKey(i, "control"))
 	}
 
@@ -434,7 +434,7 @@ func (s *CursorSystem) publishRoster() {
 	roster := s.world.Resources.Player
 	for i := range parameter.MaxPlayers {
 		e := roster.Slot(uint8(i))
-		s.statSlotEntity[i].Store(int64(e))
+		s.statEntity.Store(uint8(i), int64(e))
 		var control int64 = -1
 		if c, ok := s.world.Components.Cursor.GetComponent(e); ok {
 			control = int64(c.Control)
