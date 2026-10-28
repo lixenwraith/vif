@@ -888,6 +888,14 @@ func TestDefaultTypesWhatItReaches(t *testing.T) {
 func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
+	// The host's cursor stands idle throughout, and its defeat would start a new game
+	// that recreates every cursor compared here; under load the test outlasts it.
+	host.World().RunSafe(func() {
+		w := host.World()
+		w.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: w.Resources.Player.Entity, Value: parameter.HeatMax})
+		w.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: w.Resources.Player.Entity, Value: parameter.GodEnergyAmount})
+	})
+	host.Tick(1)
 	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatal(err)
 	}
