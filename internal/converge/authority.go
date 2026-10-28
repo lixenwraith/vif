@@ -421,7 +421,9 @@ func (u *Authority) beginSuccession(lost link.PeerID) {
 	}
 	now := time.Now() // [wall]
 	u.contested, u.lost, u.opened = u.term, lost, now
-	u.walkFrom, u.redialing, u.published = time.Time{}, false, false
+	// Raised before the redial starts, since its dial loop reads it at once, and
+	// lowered again for a run that will not redial.
+	u.walkFrom, u.redialing, u.published = time.Time{}, u.direct, false
 	u.reportsFor = u.term
 	maps.DeleteFunc(u.reports, func(k reportKey, _ struct{}) bool { return k.term < u.term })
 	held, local, fixed, direct := u.contested, u.local, u.fixed, u.direct
@@ -429,11 +431,8 @@ func (u *Authority) beginSuccession(lost link.PeerID) {
 
 	redial := direct && u.inst.Redial(lost)
 	u.mu.Lock()
-	if u.contested == held {
-		u.redialing = redial
-		if !redial {
-			u.walkFrom = now
-		}
+	if u.contested == held && !redial {
+		u.redialing, u.walkFrom = false, now
 	}
 	u.mu.Unlock()
 	// Nobody plays on in a world the next host is about to replace, so the session

@@ -332,7 +332,8 @@ func TestTheWalkDialsEachCandidateInTurn(t *testing.T) {
 
 // TestTheWalkWaitsOnARedial: a survivor redialing its lost host begins its walk when
 // the redial is refused or a window after the loss, and not when another survivor's
-// notice says the host went for it too.
+// notice says the host went for it too. The redial waits from its first look, which
+// its dial loop may take before the survivor hears that it started.
 func TestTheWalkWaitsOnARedial(t *testing.T) {
 	t.Parallel()
 	walking := func(r *run) bool {
@@ -343,9 +344,12 @@ func TestTheWalkWaitsOnARedial(t *testing.T) {
 	lose := func() *run {
 		r := session(t, 3, nil)[1]
 		r.world.redial = true
+		waits := false
+		r.world.dialing = func(lost link.PeerID) { waits = r.u.Redialing(lost) }
 		r.u.beginSuccession(1)
-		if walking(r) || len(r.world.redials) != 1 {
-			t.Fatalf("redials %v, walking %v; want one redial and the walk waiting on it", r.world.redials, walking(r))
+		if walking(r) || len(r.world.redials) != 1 || !waits {
+			t.Fatalf("redials %v, walking %v, the redial waiting at its first look %v; want one redial, waited on from its start",
+				r.world.redials, walking(r), waits)
 		}
 		return r
 	}

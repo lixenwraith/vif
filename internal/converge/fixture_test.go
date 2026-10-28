@@ -46,9 +46,11 @@ type stub struct {
 
 	// What a walk asks of the run: whether it redials the authority it lost and
 	// which, whether it relays for others and whom it marked behind it, and whether
-	// it has lost every path to its authority.
+	// it has lost every path to its authority. dialing is a redial's first look at
+	// its wait, made before Redial returns as a run's dial loop may make it.
 	redial   bool
 	redials  []link.PeerID
+	dialing  func(lost link.PeerID)
 	relaying bool
 	carried  []uint32
 	cut      bool
@@ -137,9 +139,13 @@ func (s *stub) Carry(id uint32) {
 
 func (s *stub) Redial(lost link.PeerID) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.redials = append(s.redials, lost)
-	return s.redial
+	redial, dialing := s.redial, s.dialing
+	s.mu.Unlock()
+	if redial && dialing != nil {
+		dialing(lost)
+	}
+	return redial
 }
 
 func (s *stub) CaptureShared() (snapshot.SharedCapture, error) {
