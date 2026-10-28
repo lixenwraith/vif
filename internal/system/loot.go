@@ -655,7 +655,8 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootComp *component
 		})
 	}
 
-	if pos, ok := s.world.Positions.GetPosition(entity); ok {
+	pos, placed := s.world.Positions.GetPosition(entity)
+	if placed {
 		s.world.PushLocal(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
 			X: pos.X, Y: pos.Y, Char: s.kinds[lootType].Look.Rune,
 		})
@@ -665,6 +666,12 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootComp *component
 	if lootComp.Return > 0 {
 		lootComp.Away = lootComp.Return
 		s.world.Positions.RemoveEntity(entity)
+		// A countdown in the drop's colour stands by its cell until it is back
+		if placed {
+			s.world.PushLocal(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
+				Color: lootComp.Look.Color, OriginX: pos.X, OriginY: pos.Y, Duration: lootComp.Return,
+			})
+		}
 		return
 	}
 	s.world.DestroyEntity(entity)

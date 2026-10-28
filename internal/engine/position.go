@@ -1280,8 +1280,9 @@ func (p *Position) FindPlacementAroundExclusion(
 	centerX := config.MapWidth / 2
 	direction := getSearchDirection(anchorX, centerX)
 
-	// Compute centering offsets
-	objHalfW := objectW / 2
+	// Compute centering offsets. An even width has no middle column, so it centres
+	// half a cell right: a countdown's digits ink the left of the box they share.
+	objHalfW := (objectW - 1) / 2
 	objHalfH := objectH / 2
 	hCenter := (exclusion.Right - exclusion.Left) / 2
 

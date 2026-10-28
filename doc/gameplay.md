@@ -324,10 +324,11 @@ tuning.
 A scenario rewards a level with an event drop instead: `EventLootSpawnRequest`
 places one kind at a cell for every cursor the instance simulates, with no roll,
 and each drop homes on its owner as above unless `still` keeps it at its cell;
-`return_ms` brings one collected back to its cell that long after, so a cursor
-still on it collects it again. No species drops the gun; the campaign's tower
-victory drops one at the tower. Like any FSM entry action, the drop does not
-replay on an instance a correction moves past the state raising it.
+`return_ms` brings one collected back to its cell that long after, a countdown in
+its colour standing by the cell meanwhile, so a cursor still on it collects it
+again. No species drops the gun; the campaign's tower victory drops one at the
+tower. Like any FSM entry action, the drop does not replay on an instance a
+correction moves past the state raising it.
 
 ## 7. Weapons and attacks
 
