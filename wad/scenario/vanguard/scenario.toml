@@ -9,9 +9,10 @@ macro_files = ["macros.toml"]
 # left behind the rock at three depths as scenery no key types, raiders of the cave's
 # own eight types arrive at the right edge on a timer, and those shot down drop U's
 # that raise the gun a level, from one shot forward to three each way, energy and
-# heat. Four ranks shot down end the cave: it opens to no rock, the scroll halts and
-# the Kraken rises, and once it is shot down species damage doubles and the next
-# cave comes in, faster and of another stone.
+# heat. Four ranks shot down end the cave: once no raider is left it opens to no
+# rock, the scroll halts and the Kraken rises, with twice the hit points each cave,
+# and once it is shot down species damage doubles and the next cave comes in, faster
+# and of another stone.
 
 # Twice the cave's narrowest gap, so even the smallest map opens past its narrowest
 [map]
@@ -71,15 +72,15 @@ reward = "weapon"
 weapon = "gun"
 
 # Each tier rolls on its own, its chance growing by as much again for each kill in a
-# row it misses, on streaks every raider type shares from cave to cave: heat at 5%,
+# row it misses, on streaks every raider type shares from cave to cave: heat at 1%,
 # the U at 50% until the gun holds its last level, when its fallback makes each
-# energy drop two, and energy at 20%. Heat rolls first, so the fallback passes it by.
+# energy drop two, and energy at 10%. Heat rolls first, so the fallback passes it by.
 [drops.raider]
 killer = "player"
 tiers = [
-    { entries = [{ loot = "heat", rate = 0.05 }] },
+    { entries = [{ loot = "heat", rate = 0.01 }] },
     { unique = true, entries = [{ loot = "upgrade", rate = 0.5, fallback = 1 }] },
-    { entries = [{ loot = "energy", rate = 0.2 }] },
+    { entries = [{ loot = "energy", rate = 0.1 }] },
 ]
 
 # The Kraken a player shoots down drops a missile charge, heat and two energy for
@@ -127,14 +128,15 @@ background = true
 # hidden, and each step carries those no anchor holds a column left with it, so
 # blossom rises, decay falls and dust wanders in the cave's frame. It wears one of
 # four stone arts; every rock cell draws a glyph, so it reads on a text console's
-# sixteen colours too. The glyphs drift past faster than the rock, at 20, 40 and 80
-# cells a second by layer, fast enough for each layer to read as moving and the
-# depths to come apart; a layer steps whole cells a tick, which the renderer spreads
-# over the frames between. They are scenery: rock and raiders pass them by and the
-# rock hides them, while particles and the gun act on them. The seed is drawn from
-# the run's, so each new game flies a new cave and a run's seed replays its caves in
-# order. The first cave's art is its seed modulo four; each cave after a boss wears
-# one of the other three and scrolls faster (BossDown).
+# sixteen colours too. The glyphs drift past at one, two and four times the rock's
+# pace by layer, 20, 40 and 80 cells a second at first, fast enough for each layer
+# to read as moving and the depths to come apart; a layer steps whole cells a tick,
+# which the renderer spreads over the frames between. They are scenery: rock and
+# raiders pass them by and the rock hides them, while particles and the gun act on
+# them. The seed is drawn from the run's, so each new game flies a new cave and a
+# run's seed replays its caves in order. The first cave's art is its seed modulo
+# four; each cave after a boss wears one of the other three and scrolls faster, its
+# drift with it, and each Kraken has twice the last one's hit points (BossDown).
 [states.CaveStart]
 parent = "Root"
 on_enter = [
@@ -142,7 +144,9 @@ on_enter = [
     { action = "CopyVar", payload = { name = "cave_art", source_var = "cave_seed" } },
     { action = "ModuloVar", payload = { name = "cave_art", delta = 4 } },
     { action = "SetVar", payload = { name = "cave_speed", value = 20 } },
-    { action = "SetVar", payload = { name = "drift_pace", value = 80 } },
+    { action = "CopyVar", payload = { name = "drift_pace", source_var = "cave_speed" } },
+    { action = "MultiplyVar", payload = { name = "drift_pace", delta = 4 } },
+    { action = "SetVar", payload = { name = "kraken_hp", value = 120 } },
     { macro = "Cave" },
     { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, duration_ms = 0, scenery = true }, payload_vars = { speed = "drift_pace" } },
 ]
@@ -159,7 +163,8 @@ on_enter = [
 # rank in the cave's eight: eight times the cave's stone art, as the Cave macro's
 # pick takes it, is the first of its types in the pick's list, which runs the arts
 # in the macro's order, and twice the rank the first of that rank's pair. The raid
-# holds while a boss stage runs (raid_boss).
+# holds from the tier's last kill to the boss stage's end (raid_boss), a draw begun
+# before the kill spawning nothing.
 [states.RaidWait]
 parent = "Root"
 transitions = [
@@ -191,7 +196,7 @@ on_enter = [
     { action = "IncrementVar", payload = { name = "raid_type", source_var = "raid_pair" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "RaidWait", actions = [
+    { trigger = "Tick", target = "RaidWait", guard = "VarCompare", guard_args = { var = "raid_boss", op = "eq", value = 0 }, actions = [
         { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { x = "raid_x", y = "raid_y" }, pick = { field = "program", var = "raid_type", from = [
             "scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle",
             "scorpion",
@@ -200,13 +205,15 @@ transitions = [
             "drone", "shard", "saucer", "trooper", "jelly", "squid", "djinn", "robot",
         ] } },
     ] },
+    { trigger = "Tick", target = "RaidWait" },
 ]
 
 # --- Ramp ---
 
 # The raid climbs its cave's tier: three of the first rank shot down bring on the
-# second, and so on to the fourth, whose third kill exhausts the tier. Each rank
-# names its two types in every cave, in the order RaidSpawn's pick lists them.
+# second, and so on to the fourth, whose third kill exhausts the tier and holds the
+# raid. Each rank names its two types in every cave, in the order RaidSpawn's pick
+# lists them.
 [states.RaidRank1]
 macro = "RaidRank"
 rank = 0
@@ -228,19 +235,28 @@ names = ["spider", "mantis", "ghost", "skull", "bat", "puffer", "jelly", "squid"
 [states.RaidRank4]
 macro = "RaidRank"
 rank = 3
-next = "RaidBoss"
+next = "RaidClear"
 names = ["beetle", "scorpion", "wraith", "demon", "owl", "lynx", "djinn", "robot"]
 
+# The tier's last kill holds the raid, and the boss stage waits until no raider is
+# left, the ones still flying shot down or crushed, so none fights beside the Kraken
+[states.RaidClear]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "raid_boss", value = 1 } },
+]
+transitions = [
+    { trigger = "Tick", target = "RaidBoss", guard = "StatusIntCompare", guard_args = { key = "behavior.count", op = "eq", value = 0 } },
+]
 
-# The tier's end: a green strobe, the raid holds, the cave opens to no rock from
-# past the right edge over its ramp, and the boss region brings on the Kraken. Once
-# it is down the climb starts over at the first rank in the cave that follows, and
-# the raid resumes with the rank already reset, whichever region runs first.
+# The tier's end: a green strobe, the cave opens to no rock from past the right edge
+# over its ramp, and the boss region brings on the Kraken. Once it is down the climb
+# starts over at the first rank in the cave that follows, and the raid resumes with
+# the rank already reset, whichever region runs first.
 [states.RaidBoss]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 250 } },
-    { action = "SetVar", payload = { name = "raid_boss", value = 1 } },
     { action = "EmitEvent", event = "EventCaveOpen", payload = { gap = 0 } },
     { action = "SpawnRegion", region = "boss", initial_state = "BossApproach" },
 ]
@@ -274,16 +290,17 @@ transitions = [
     { trigger = "Tick", target = "BossSpawn", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
 ]
 
-# Its 120 hit points are thirty seconds of the gun on it: one tracer lands a volley,
-# four a second, whatever the lanes, as a hit's immunity window holds the rest. Its
-# touch is the code's, as in main.
+# It rises with kraken_hp hit points, 120 in the first cave and twice the last
+# Kraken's in each after: 120 are thirty seconds of the gun on it, one tracer
+# landing a volley, four a second, whatever the lanes, as a hit's immunity window
+# holds the rest. Its touch is the code's, as in main.
 [states.BossSpawn]
 parent = "Root"
 on_enter = [
     { action = "ConfigToVar", payload = { field = "map_width", name = "boss_x" } },
     { action = "ConfigToVar", payload = { field = "map_height", name = "boss_y" } },
     { action = "DivideVar", payload = { name = "boss_y", delta = 2 } },
-    { action = "EmitEvent", event = "EventKrakenSpawnRequest", payload = { hp = 120 }, payload_vars = { x = "boss_x", y = "boss_y" } },
+    { action = "EmitEvent", event = "EventKrakenSpawnRequest", payload_vars = { x = "boss_x", y = "boss_y", hp = "kraken_hp" } },
 ]
 transitions = [
     { trigger = "EventSpeciesCreated", target = "BossFight", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["kraken"] } },
@@ -303,16 +320,19 @@ transitions = [
     { trigger = "EventKrakenSpawnFailed", target = "BossSpawnRetry" },
 ]
 
-# The Kraken down: species damage doubles, and every energy penalty with it, and
-# the next cave comes in past the right edge behind its open mouth, in a stone art
-# drawn from the three it is not, a fifth faster in whole columns a second (20, 24,
-# 29, 35 and on to the cap of 200). The rock and the drift rush in from rest as they
-# rushed to the Kraken, the raid still held.
+# The Kraken down: species damage doubles, and every energy penalty with it, the
+# next Kraken's hit points double, and the next cave comes in past the right edge
+# behind its open mouth, in a stone art drawn from the three it is not, a fifth
+# faster in whole columns a second (20, 24, 29, 35 and on to the cap of 200). Its
+# drift is four times that, so the drift's slowest layer keeps the rock's pace (80,
+# 96, 116 and on to the drift's cap of 200). The rock and the drift rush in from rest
+# as they rushed to the Kraken, the raid still held.
 [states.BossDown]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Species Damage Up" } },
+    { action = "MultiplyVar", payload = { name = "kraken_hp", delta = 2 } },
     { action = "IncrementVar", payload = { name = "cave_index" } },
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
     { action = "SetVar", payload = { name = "cave_step_seed", value = 1 } },
@@ -323,6 +343,8 @@ on_enter = [
     { action = "IncrementVar", payload = { name = "cave_speed", delta = 5 } },
     { action = "DivideVar", payload = { name = "cave_speed", delta = 10 } },
     { action = "ClampVar", payload = { name = "cave_speed", min = 20, max = 200 } },
+    { action = "CopyVar", payload = { name = "drift_pace", source_var = "cave_speed" } },
+    { action = "MultiplyVar", payload = { name = "drift_pace", delta = 4 } },
     { macro = "Cave" },
     { action = "EmitEvent", event = "EventCaveStop" },
     { macro = "Rush" },

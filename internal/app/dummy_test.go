@@ -23,7 +23,7 @@ func TestTheTargetDummyTakesItsHitPointsFromThePads(t *testing.T) {
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("dummy scenario not present")
 	}
-	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 30, Resources: opts})
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}
@@ -88,8 +88,8 @@ func TestTheTargetDummyTakesItsHitPointsFromThePads(t *testing.T) {
 		return still, homing
 	}
 
-	// The map's centre is (40, 15): the range left, the dummy at (58, 15), the pads
-	// at (75, 8) and (75, 22)
+	// The map's centre is (60, 20): the range left, its rod at (18, 14), the dummy at
+	// (80, 20), the pads at (104, 13) and (104, 27)
 	await("dummy", "DummyUp")
 	awaitDummy(1)
 	cursor = w.Resources.Player.Slot(0)
@@ -101,21 +101,21 @@ func TestTheTargetDummyTakesItsHitPointsFromThePads(t *testing.T) {
 	}
 
 	// A rod charge from the range, its drop back three seconds on
-	move(14, 12)
+	move(18, 14)
 	if wc, _ := w.Components.Weapon.GetComponent(cursor); wc.Charges[component.WeaponRod] != 1 {
 		t.Fatalf("the rod drop gave %d charges", wc.Charges[component.WeaponRod])
 	}
-	move(40, 15)
+	move(60, 20)
 	a.Tick(60)
 	if still, _ := drops(); len(still) != 8 || slices.ContainsFunc(still, func(l component.LootComponent) bool { return l.Away > 0 }) {
 		t.Fatal("the rod drop did not lie back on the range")
 	}
 
 	// + presses as the cursor arrives and again after its countdown, - once
-	move(75, 8)
+	move(104, 13)
 	awaitDummy(2)
 	awaitDummy(3)
-	move(75, 22)
+	move(104, 27)
 	awaitDummy(2)
 
 	// Shot down, the dummy waits for the cursor on its spot and rises as it leaves
@@ -129,13 +129,13 @@ func TestTheTargetDummyTakesItsHitPointsFromThePads(t *testing.T) {
 		}
 	})
 	await("dummy", "DummyDown")
-	move(58, 15)
+	move(80, 20)
 	await("dummy", "DummyArmed")
-	move(50, 15)
+	move(72, 20)
 	if state("dummy") != "DummyArmed" || len(dummies()) != 0 {
 		t.Fatal("the dummy rose with the cursor's shield still over its spot")
 	}
-	move(40, 15)
+	move(60, 20)
 	await("dummy", "DummyUp")
 	awaitDummy(2)
 
