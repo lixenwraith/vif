@@ -59,6 +59,9 @@ that proves wrong or that a document now states, and link the document instead.
   processes, alternating main's binary and the branch's under the same load.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not.
+- A race between a test's write and another goroutine's read reproduces at will:
+  sleep that goroutine before its read and move the write ahead of the sleep. Print
+  from neither side, as two writes to `os.Stderr` order them and hide the race.
 - In a CI log a `--- FAIL` line sits inside its package's block, not at the end:
   save the whole log and search it. For a hang, find `panic: test timed out` and
   match the goroutines blocked in `sync.Mutex.Lock` against what each holds.
@@ -69,6 +72,9 @@ that proves wrong or that a document now states, and link the document instead.
   reentrant), then `App.sessionMu`, then converge's `Authority.mu`. Nothing floods
   the mesh under `sessionMu` or the world lock; a flood runs in the correction loop,
   between ticks.
+- Tests reach a play run's paths by switching a running App's `cfg.Mode` under
+  `RunSafe`, so a goroutine that reads the run's config off the world lock (the
+  drive loop, a bot seat) reads the copy it started with instead.
 
 ## Glyphs and colours
 

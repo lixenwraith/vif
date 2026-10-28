@@ -210,7 +210,10 @@ transitions = [
 An internal transition consumes the event/tick and stops bubbling; place it
 below higher-priority transitions of the same trigger. An internal `Tick`
 transition with a passing guard executes every tick and shadows all outer
-`Tick` transitions — equivalent to a guarded `on_update`.
+`Tick` transitions — equivalent to a guarded `on_update`. In a live session it
+crosses as any transition does, and its region takes no `Tick` transition until
+it lands, a lead later: a guard its own actions turn false fires once, as solo,
+and one that stays true fires once a lead.
 
 ---
 

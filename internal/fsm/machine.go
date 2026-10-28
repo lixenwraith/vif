@@ -207,7 +207,7 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 		}
 	}
 
-	if m.following || region.proposed {
+	if m.following || region.proposed || region.ticking {
 		return
 	}
 	// Evaluate Tick Transitions (Event == 0), bubble up
@@ -226,16 +226,21 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 }
 
 // take moves a region by the transition its guard passed: in place, or through
-// Propose, which hands it to the authority's barrier and parks the region until
-// Apply brings it back at the committed tick, with the unguarded Tick hops after
-// its target folded in (fold). An internal one changes no state, so it parks
-// nothing: every event it counts is proposed, in order.
+// Propose to the authority's barrier, parking the region until Apply brings it
+// back at the committed tick with the unguarded Tick hops after its target folded
+// in (fold). An internal one parks nothing, so every event it counts is proposed;
+// on Tick it holds the region's Ticks, as its guard would pass again until it lands.
 func (m *Machine[T]) take(ctx T, region *RegionState, owner StateID, index int, trigger event.EventType, payload any) {
 	trans := &m.nodes[owner].Transitions[index]
 	vars := payloadVars(payload, trans.CaptureVars)
 	if m.proposing && m.Propose != nil {
 		then, end := m.fold(trans)
-		region.proposed, region.target = !trans.Internal, end
+		switch {
+		case !trans.Internal:
+			region.proposed, region.target = true, end
+		case trans.Event == 0:
+			region.ticking = true
+		}
 		m.Propose(region.Name, owner, index, trigger, vars, then)
 		return
 	}
@@ -349,7 +354,7 @@ func (m *Machine[T]) commit(ctx T, region *RegionState, trans *Transition[T], tr
 // Apply takes the transition the authority committed, whatever this machine would
 // have evaluated: a region that follows moves by these alone. A state change,
 // taken or refused, is the one the region was parked for; an internal one leaves
-// the park to it.
+// the park to it, and on Tick ends the hold its proposal set.
 func (m *Machine[T]) Apply(ctx T, p *event.FSMTransitionPayload) error {
 	region, ok := m.regions[p.Region]
 	if !ok {
@@ -358,11 +363,14 @@ func (m *Machine[T]) Apply(ctx T, p *event.FSMTransitionPayload) error {
 	owner := StateID(p.Owner)
 	node, ok := m.nodes[owner]
 	if !ok || !slices.Contains(region.ActivePath, owner) || p.Index < 0 || p.Index >= len(node.Transitions) {
-		region.proposed, region.parked = false, nil
+		region.proposed, region.ticking, region.parked = false, false, nil
 		return fmt.Errorf("region %q in %s has no transition %d of state %d", p.Region, m.StateName(region.ActiveStateID), p.Index, p.Owner)
 	}
 	trans := &node.Transitions[p.Index]
 	if trans.Internal {
+		if trans.Event == 0 {
+			region.ticking = false
+		}
 		m.commit(ctx, region, trans, p.Trigger, p.Vars)
 		return nil
 	}
@@ -394,7 +402,8 @@ func (m *Machine[T]) Steer(following, proposing bool) {
 	}
 	m.following, m.proposing = following, proposing
 	for _, name := range m.regionOrder {
-		m.regions[name].proposed, m.regions[name].parked = false, nil
+		r := m.regions[name]
+		r.proposed, r.ticking, r.parked = false, false, nil
 	}
 }
 

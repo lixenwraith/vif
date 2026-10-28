@@ -737,22 +737,6 @@ returns to.
 
 ## Netcode
 
-### Stop an internal transition proposing itself again in a session
-
-- Priority: P2
-- Affected files: `internal/fsm/machine.go` (`take`, `updateRegion`)
-
-In a session an internal `Tick` transition crosses once per tick of the lead
-rather than once: `take` sets `region.proposed = !trans.Internal`, so an internal
-one leaves its region unparked, and `updateRegion` passes the same guard on every
-tick until the first crossing's actions land. Simon's `Listen` plays three notes at
-level 1 in a session and one solo. An internal transition in flight has to stop its
-own re-proposal without parking the region's events (D-20); a test plays simon on a
-mesh pair (`shapedPair`) and counts `EventFSMTransition` by owner and index. An
-internal transition on an event crosses once: vanguard's rank counting a kill on a
-mesh pair (`TestVanguardAKillInAPairDropsEachPlayerOneU`) holds it, and a fix keeps
-it so.
-
 ### Forgive a one-tick defeat in a session as solo play does
 
 - Priority: P2
