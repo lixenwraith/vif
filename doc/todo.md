@@ -773,17 +773,10 @@ target's. What is new:
   `-spectators N` ceiling, reported in the router's listing; relay doors can fan
   them out ([Multi-player §5.6](multi-player.md#56-relay-doors-and-the-router)).
 
-Decide first how much of the target's screen it shows. Player-domain state is never
-rebuilt on another instance (D-2): the target's glyphs, drains, nuggets,
-projectiles and loot exist only on its run, so a spectator sees what any remote
-participant sees, centred on the target. Options:
-- Shared view only: no protocol beyond admission and the follow target.
-- The target's run streams its player domain: one opening of its player world
-  (what a journal's opening carries in `Own`) per target switch, then only the
-  records that drive it, which the spectator re-simulates over the shared world it
-  already holds, as a replay does. It costs the target's uplink per spectator, and
-  diverges wherever the two shared worlds differ between corrections, so it needs a
-  periodic re-opening, a correction of the player domain.
+A spectator sees the shared world, what any remote participant sees, centred on
+the target: Player-domain state is never rebuilt on another instance (D-2), so the
+target's glyphs, drains, nuggets, projectiles and loot stay on its run, and nothing
+beyond admission and the follow target goes over the wire for it.
 
 The journal's slot handling needs a review alongside. A journal records its slot
 from `LocalSlot` at the opening (`JournalCapture.Slot`, `JournalAnchor.Slot`),
@@ -839,12 +832,15 @@ What closes it:
   corrections come eight times as often. The wall-time budgets do not scale: a
   playing guest uses about a sixth of `NetworkIngressBytesPerSecond` at 1x, so a
   busy one passes it near 6x and is evicted, and `-slow-late` counts late epochs a
-  second. A LAN hides this; over the internet it shows as voided actions
-  (`network.commit_void`), a lead at its cap (`network.barrier_delay_ticks`) and
-  evictions. Cap the rate the authority takes at the highest its worst link
-  carries with headroom, and scale the per-second budgets by the rate.
-- Open: whether a person's arrival returns a host above 1x to 1x, with a notice,
-  or keeps the host's rate under the ceiling.
+  second. A LAN hides this: a host at 8x with a guest, its bot and one of the
+  host's held 155 ticks a second (7.7x). Over the internet it shows as voided
+  actions (`network.commit_void`), a lead at its cap
+  (`network.barrier_delay_ticks`) and evictions. Cap the rate the authority takes
+  at the highest its worst link carries with headroom, and scale the per-second
+  budgets by the rate.
+- No arrival changes the rate, a person's or a bot's: the host sets it, and while
+  it is not 1x every participant's status bar warns that the game runs fast or
+  slow, at what rate.
 
 Verify with the staged netem gate
 (`TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers`, `VIF_NETEM=1` as root)
@@ -986,6 +982,44 @@ prints, playing on alone as after `:leave` instead of starting over, and an
 operator route on the router, since a dedicated host has no console. Keeping a
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
+
+### Show a Wraith as a Wraith
+
+- Priority: P2
+- Affected files: `internal/render/renderer/shield.go` (`ShieldRenderer.Render`,
+  `ShieldPainter`), `internal/render/renderer/peer_cursor.go`,
+  `internal/parameter/visual/shield.go` (`buildShieldConfig`),
+  `internal/parameter/player.go`, `internal/parameter/visual` colours
+- Guide: [Multi-player §5.4](multi-player.md#54-wraiths)
+
+A Wraith, a person's or a bot's, reads as one more cursor: the peer renderer draws
+it as its slot label alone, in the slot's colour, where a live peer's label sits on
+that colour. Give it the boost's look, paler and slower, so every player sees who is
+away.
+
+The boost's look is the player shield's rotating glow: `ShieldRenderer` paints the
+field with `GlowPeriod` set to `ShieldBoostRotationDuration` (500 ms) while boost is
+active, and `ShieldPainter` rotates the bright side by game time, in truecolor a
+gradient with a glow lobe, in 256 colours a rim band (`Rim256Min`..`Rim256Max`)
+whose cells facing the lobe take the glow colour. A Wraith has no shield to paint:
+`CursorSystem.wraith` strips everything but `Cursor`, `Protection` and the `Wraith`
+component, which holds the cell it stood on (`X`, `Y`, -1 off the map).
+
+The plan:
+- A Wraith field config built by `buildShieldConfig` on the player shield's
+  geometry: a pale truecolor field and glow (near white, a little cool), a green
+  256 rim with a paler green glow, and a glow period well above the boost's (a
+  `WraithGlowPeriod` near 1.5 s, tuned live), in the parameter packages beside the
+  shield's.
+- `ShieldRenderer.Render` paints it for each Wraith at its held cell, skipping one
+  off the map, before its early return on no shields, and blended as a peer field
+  is (`PeerFieldBlend`) so a Wraith never outshines a live cursor. The holder's own
+  bots draw the same, since nobody drives a Wraith and the local cursor is never
+  one.
+- The label stays the peer renderer's, drawn over the field.
+- A renderer test in each colour mode: field cells around a Wraith's cell, none for
+  one off the map, and the lit side moving between two game times a quarter period
+  apart. Then a look in tmux at both tiers (`TERM=linux COLORTERM=` for 256).
 
 ### Keep a Wraith's stats in the session
 
