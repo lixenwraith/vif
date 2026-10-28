@@ -156,10 +156,10 @@ func dropOwned[T any](rows []StoreEntry[T], authored map[core.Entity]bool) []Sto
 }
 
 // RebindCursorRoster rebuilds the roster from the installed cursor store in slot
-// order, restores this instance's control (the handshake identity in a session, bar
-// a Wraith, which nobody drives; the held assignment outside one) and its
-// owner-authored state for cursors it held before and still authors; a joiner in a
-// new slot adopts the host's template. Caller MUST hold updateMutex.
+// order and restores this instance's control (the handshake identity in a session,
+// bar a Wraith, which nobody drives; the held assignment outside one), input and view
+// on the slot it drives, and owner-authored state for cursors it held and still
+// authors; a joiner's new slot keeps the host's template. Caller MUST hold updateMutex.
 func (w *World) RebindCursorRoster(prior LocalControl) {
 	roster := w.Resources.Player
 	slots := [parameter.MaxPlayers]core.Entity{}
@@ -175,6 +175,9 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 	// after the write; dropping them would snap the local cell back for a lead.
 	// They are kept exactly when the same entity is still the cursor it drives.
 	driven, queue := roster.Entity, roster.prediction
+	// An install that brings a joiner its cursor fences off the arrival that would
+	// have bound it, so the identity binds input as it binds control.
+	local := prior.local
 	roster.Clear()
 	for slot := range parameter.MaxPlayers {
 		e := slots[slot]
@@ -186,7 +189,7 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 			case localID != 0:
 				c.Control = component.ControlRemote
 				if c.PeerID == localID && !w.Components.Wraith.HasEntity(e) {
-					c.Control = component.ControlLocal
+					c.Control, local = component.ControlLocal, uint8(slot)
 				}
 			case prior.held[slot]:
 				c.Control = prior.control[slot]
@@ -196,9 +199,12 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 	}
 	// Bind only re-points Entity for the slot that was local at the time, and the
 	// roster was cleared, so the binding is restored explicitly afterwards.
-	roster.SetLocal(prior.local)
+	roster.SetLocal(local)
 	if roster.Entity != 0 && roster.Entity == driven {
 		roster.prediction = queue
+	}
+	if local != prior.local {
+		w.FollowLocalCursor()
 	}
 
 	for _, held := range prior.owned {

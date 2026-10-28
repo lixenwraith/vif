@@ -523,6 +523,34 @@ func TestHostRefusesARosterCrossingFromAnyoneElse(t *testing.T) {
 	}
 }
 
+// TestAParticipantActsOnlyAsItsOwnCursor: whatever binds a participant to another's
+// cursor, a bug or a modified build, the move it crosses for that cursor is refused
+// on every instance, its own included, since all of them read ownership from the
+// same shared roster.
+func TestAParticipantActsOnlyAsItsOwnCursor(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
+	cursors := localCursors(t, apps)
+	host, forger := apps[0], apps[1]
+	from := cursorPosition(host, cursors[0])
+
+	forger.World().RunSafe(func() {
+		forger.World().PushCrossing(event.EventCursorMoveRequest,
+			&event.CursorMoveRequestPayload{Entity: cursors[0], X: from.X + 3, Y: from.Y})
+	})
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if got := cursorPosition(a, cursors[0]); got != from {
+			t.Fatalf("participant %d moved slot 0 from %v to %v at participant 2's word", i+1, from, got)
+		}
+		if statOf(a, "network.artifacts_refused") == 0 {
+			t.Fatalf("participant %d applied a move of another's cursor instead of refusing it", i+1)
+		}
+	}
+}
+
 // TestSessionLagIsMeasuredEveryTick. Measuring the gap only at admission leaves a
 // guest whose machine falls behind mid-session producing artifacts that reach the
 // host after the ticks they name, with no way to know. The lag is the gap to the
