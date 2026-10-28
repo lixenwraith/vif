@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
@@ -153,7 +154,8 @@ func TestMainProgressesFromThreeStormKillsThroughTwoKrakensToTower(t *testing.T)
 		e := w.Components.Kraken.Entities()[0]
 		hp, _ := w.Components.Combat.GetPtr(e)
 		hp.HitPoints, hp.LastDamagedBy = 0, cursor
-		a.Tick(2)
+		// The kill fades the maze and rests, under a second, before the region moves on
+		a.Tick(int(time.Second / parameter.GameUpdateInterval))
 		if round == 1 {
 			a.Tick(60)
 			if w.Components.Tower.CountEntities() != 0 || w.Components.Kraken.CountEntities() != 0 ||
