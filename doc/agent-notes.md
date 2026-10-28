@@ -105,6 +105,10 @@ that proves wrong or that a document now states, and link the document instead.
   `char` takes the character's code, `43` for `+` (`wad/scenario/dummy`'s pads).
 - An event drop belongs to a cursor, so drops a scenario lays before
   `EventCursorSpawned` go to nobody: lay them on that event.
+- A drop table's rolls are player-domain, each instance rolling its own: a test of a
+  kill whose drop is below certain shoots until the table's pity makes it certain
+  (vanguard's U within two kills), and counts a kill's drops as the loot new since
+  it, since earlier drops may still be flying (`internal/app/vanguard_test.go`).
 
 ## Words
 
