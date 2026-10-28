@@ -252,13 +252,20 @@ transitions = [
 
 # --- Boss ---
 
-# The opening filling the map halts the scroll and the drift, easing over a second,
-# and the Kraken rises at the right edge on the map's middle row, the request
-# clamping its body inside the map. Its 120 hit points are thirty seconds of the gun
-# on it: one tracer lands a volley, four a second, whatever the lanes, as a hit's
-# immunity window holds the rest. Its touch is the code's, as in main.
+# The rock and the drift run at twice their pace while the opening comes in, easing
+# up over a second, so it fills a 120-column map in about six seconds at the first
+# pace. Filling it halts the scroll and the drift, easing over a second, and the
+# Kraken rises at the right edge on the map's middle row, the request clamping its
+# body inside the map.
 [states.BossApproach]
 parent = "Root"
+on_enter = [
+    { action = "CopyVar", payload = { name = "boss_pace", source_var = "cave_speed" } },
+    { action = "MultiplyVar", payload = { name = "boss_pace", delta = 2 } },
+    { action = "ClampVar", payload = { name = "boss_pace", min = 20, max = 200 } },
+    { action = "EmitEvent", event = "EventCavePace", payload = { ease_ms = 1000 }, payload_vars = { speed = "boss_pace" } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 160.0, duration_ms = 0, scenery = true, ease_ms = 1000 } },
+]
 transitions = [
     { trigger = "EventCaveOpened", target = "BossHalt" },
 ]
@@ -273,6 +280,9 @@ transitions = [
     { trigger = "Tick", target = "BossSpawn", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
 ]
 
+# Its 120 hit points are thirty seconds of the gun on it: one tracer lands a volley,
+# four a second, whatever the lanes, as a hit's immunity window holds the rest. Its
+# touch is the code's, as in main.
 [states.BossSpawn]
 parent = "Root"
 on_enter = [

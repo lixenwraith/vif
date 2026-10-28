@@ -12,89 +12,13 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 
 The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
 by area so an agent can take a group, beside the navigation items. The faster
-scroll, the jagged cave, the stone art, the raider types by cave, the scenery text
-and the machine's certain faults have landed. Order now: play the cave raiders and
-the boss stage; the position package last, in a session of its own. Until that
-lands, nothing here adds engine surface for rock or caves: a cave's shape stays in
-`pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall system
-and renderers that read it, and a query a footprint needs is built by its caller
-from the existing ones, so the move inherits nothing new.
-
-### Raiders
-
-Each stone art has its own eight raider types, its tier, two to each of four ranks,
-in one hue: strata violet vermin, cracked white haunts, moss orange animals, crystal
-orchid constructs. Every type invokes `RaiderRank1`..`RaiderRank4` in vanguard's
-`macros.toml` with its cave and its look; the `ramp` region climbs the ranks, three
-player kills a rank, and `RaidSpawn` draws between the cave's two of the rank
-reached; `sandbox/raider` shows them by cave over that cave's rock.
-
-#### Play the cave raiders and tune the ranks
-
-- Priority: P1
-- Affected files: `wad/scenario/vanguard/macros.toml` (`RaiderRank1`..`4`, the cave
-  colours), `wad/scenario/vanguard/scenario.toml` (`RaidRank1`..`4`, `RaidSpawn`),
-  `wad/scenario/vanguard/behavior/`, `doc/gameplay.md` §10
-- Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression),
-  [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs)
-
-The ranks' numbers are starting values: hit points 8, 16, 28 and 44 and mass 2.0,
-2.4, 2.9 and 3.5, a fifth more a rank, each rank's lock, charge and contact cost
-rising with it and its chase slowing. A kill drops a `U`, so the gun is near its
-ninth level by the fourth rank, which the steeper hit points answer; play each cave
-and retune the rank macros, which every cave shares, or the kills a rank takes
-(`RaidRank`'s `gte 3`). A cave's colours are its `<Cave>Fg` macros there and a
-type's look its own file. Colours against the rock are a first pick to settle in
-play. On a console a raider is one colour, and two caves' raiders share an entry
-with their rock's hued points: the moss raiders' brown (3) is the FreeBSD console's
-mustard, the colour of its moss there, while on VGA the moss is bright yellow (11),
-so neither entry clears both palettes and white (15) would; the crystal raiders'
-magenta (13) meets the amethyst points, which are sparse. Keep every type within
-5×3 until the position work gives each footprint its own navigation grid.
-
-#### Give each tier a boss of its own
-
-- Priority: P2
-- Affected files: `wad/scenario/vanguard/scenario.toml` (`BossSpawn`..`BossDown`),
-  `internal/system/environment.go` (`shiftLayers`), `internal/system/glyph.go`,
-  `internal/render/renderer/glyph.go` (`glyphLevels256`), `doc/gameplay.md` §10
-- Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression)
-
-Every tier ends in the same boss stage, the Kraken with 120 hit points and main's
-touch, which empties a shield in a tick and ends a bare ship the next, so a ship
-left at the centre lasts about five seconds once it rises. A boss of each tier's own
-would replace it, a program of the scenario's own, which the stage's hold on the
-raid already keeps from taking a raider's place. Fixed, typeable text over the
-moving scenery, if the encounter puts any there, needs a drift that moves scenery
-alone, since a drift moves every loose glyph, and the spawner placing text in place
-while scenery enters, where it places one kind at a time. Truecolor hazes scenery by
-depth apart from typeable text, but a console draws both in a hue's same two
-entries, so one kind needs a console look of its own.
-
-### Boss stage
-
-#### Play the boss stage and the faster caves
-
-- Priority: P1
-- Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`, `BossApproach`..
-  `BossDown`, `CaveStart`), `internal/parameter/environment.go` (`CaveMaxSpeed`,
-  `DriftMaxSpeed`), `doc/gameplay.md` §9 and §10
-- Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression)
-
-The stage is scripted: the opening to no rock over the cave's 96-column ramp, the
-scroll and the drift easing to rest over a second as it fills the map, about eleven
-seconds from the strobe on a 120-column map at 20 columns a second, the Kraken at
-the right edge, and the next cave's scroll and drift easing in. Play whether the
-approach is too long, whether the halt reads as a boss, and whether the Kraken can
-be fought on the smallest map, 80×18, which its legs mostly reach. After the first
-boss the caves scroll off whole columns a tick, so the rock steps one and two
-columns in turn at 24 and 29 columns a second, and past 40 more than two a tick. The
-soft caps sit past what was measured: a whole vanguard tick, headless, reads 0.07 to
-0.20 ms from 20 to 200 columns a second at 120×40 and 0.39 to 2.42 ms at 500×254.
-The renderer carries scenery between ticks but not the rock, which at those speeds
-jumps several columns a tick; carrying it needs the columns ahead of the map, engine
-surface for rock that waits for the position package. A cave opens once and nothing
-narrows it again; each stage starts a new cave.
+scroll, the jagged cave, the stone art, the raider types by cave, the scenery text,
+the boss stage and the machine's certain faults have landed. What is left is the
+machine follow-ups and, last, the position package in a session of its own. Until
+that lands, nothing here adds engine surface for rock or caves: a cave's shape stays
+in `pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall
+system and renderers that read it, and a query a footprint needs is built by its
+caller from the existing ones, so the move inherits nothing new.
 
 ### Machine follow-ups
 
@@ -212,7 +136,13 @@ Goals:
   and 200×60, 2,400 ticks each), 1,988 of the 25,168 chase ticks it called direct,
   7.9%, had the raider's own body blocked on the way. The footprint registry of
   [Bound navigation's worst tick on busy maps](#bound-navigations-worst-tick-on-busy-maps)
-  belongs here.
+  belongs here. Until it lands, every raider type stays within 5×3.
+- Rock carried between ticks: off whole columns a tick a cave steps unevenly, one
+  and two columns in turn at 24 and 29 columns a second, more than two a tick past
+  40, and vanguard's boss approach doubles its pace. The renderer carries scenery
+  between ticks but not the rock, which needs the columns ahead of the map. The soft
+  caps sit past what was measured: a whole vanguard tick, headless, reads 0.07 to
+  0.20 ms from 20 to 200 columns a second at 120×40 and 0.39 to 2.42 ms at 500×254.
 - A sparse or tiled grid for a ceiling-sized empty map
   ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)).
 

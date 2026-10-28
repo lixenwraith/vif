@@ -629,38 +629,39 @@ chases slower on a longer lock, the first rank darting as the snake does. The ra
 climbs the tier: it spawns the first rank until players shoot three of it down, then
 the next, and three of the fourth exhaust the tier (the `ramp` region). Its end is a
 boss stage: a green strobe, the raid holds, and the cave opens to no rock from past
-the right edge (§9); as the opening fills the map the scroll and the drift ease to
-rest over a second and the Kraken rises at the right edge (the `boss` region), with
-120 hit points, thirty seconds of the gun on it: a hit's immunity window lets one
-tracer of a volley land, four a second whatever the lanes. Its touch is main's, so a
-ship that stays in its reach is lost within seconds. A player's kill of it drops a
-missile charge, heat and two energy for every player, doubles species damage as a
-storm kill does in main, every energy penalty with it ("Species Damage Up"), and
-lays the next cave behind its open mouth, of a stone art drawn from the three it is
-not, scrolling a fifth faster in whole columns a second (20, 24, 29, 35, and on to
-the soft cap of 200), its scroll and the drift easing in over a second; the raid
-resumes and the climb starts over at that cave's first rank. Each cave's raiders
-wear one hue in four shades, picked against its rock: violet vermin in the strata
-(by rank: scarab, crawler; crab, hornet; spider, mantis; beetle, scorpion), white
-haunts in the cracked stone (gremlin, chomper; imp, slime; ghost, skull; wraith,
-demon), orange animals in the moss (hedgehog, mouse; frog, hopper; bat, puffer; owl,
-lynx) and orchid constructs among the crystals (drone, shard; saucer, trooper;
-jelly, squid; djinn, robot), each one colour on a console. A raider lives until
-killed, and the rock pushes it as it pushes the cursor. Every type rolls the raider
-drop table vanguard declares, so one a player shoots down rolls it for every player
-where it fell, each tier on its own: heat at 5%, a `U`, its own loot kind, at 50%,
-and energy at 20%, each chance growing by as much again for each kill in a row it
-misses, so a `U` drops within two kills. All 32 types share the table's streaks,
-which run on from cave to cave. No `U` drops while one is flying to the ship or the
-gun holds its last level, and then each energy drop is two. Each `U` raises the gun
-a level of the scenario's nine: one shot forward, then two and three, one up and one
-down, one back, two up and down, two back, three up and down, three back. Forward is
-right, the way the ship flies. A crush is a defeat, as is heat and energy both run
-out: the rock and the drift halt under a red strobe for 250 ms, then the game starts
-over, the gun back at one shot, species damage at one and the cave at its first
-pace, and opens with "Crushed Against The Edge!" or "You Died!". The drifting text
-is scenery (§9): rock and raiders pass it by and no key types it, so the ship earns
-no heat by typing.
+the right edge (§9), the rock and the drift easing up to twice their pace while it
+comes in, so on a 120-column map at the first pace it fills the map in under six
+seconds; then the scroll and the drift ease to rest over a second and the Kraken
+rises at the right edge (the `boss` region), with 120 hit points, thirty seconds of
+the gun on it: a hit's immunity window lets one tracer of a volley land, four a
+second whatever the lanes. Its touch is main's, so a ship that stays in its reach is
+lost within seconds. A player's kill of it drops a missile charge, heat and two
+energy for every player, doubles species damage as a storm kill does in main, every
+energy penalty with it ("Species Damage Up"), and lays the next cave behind its open
+mouth, of a stone art drawn from the three it is not, scrolling a fifth faster in
+whole columns a second (20, 24, 29, 35, and on to the soft cap of 200), its scroll
+and the drift easing in over a second; the raid resumes and the climb starts over at
+that cave's first rank. Each cave's raiders wear one hue in four shades, picked
+against its rock: violet vermin in the strata (by rank: scarab, crawler; crab,
+hornet; spider, mantis; beetle, scorpion), white haunts in the cracked stone
+(gremlin, chomper; imp, slime; ghost, skull; wraith, demon), orange animals in the
+moss (hedgehog, mouse; frog, hopper; bat, puffer; owl, lynx) and orchid constructs
+among the crystals (drone, shard; saucer, trooper; jelly, squid; djinn, robot), each
+one colour on a console. A raider lives until killed, and the rock pushes it as it
+pushes the cursor. Every type rolls the raider drop table vanguard declares, so one
+a player shoots down rolls it for every player where it fell, each tier on its own:
+heat at 5%, a `U`, its own loot kind, at 50%, and energy at 20%, each chance growing
+by as much again for each kill in a row it misses, so a `U` drops within two kills.
+All 32 types share the table's streaks, which run on from cave to cave. No `U` drops
+while one is flying to the ship or the gun holds its last level, and then each
+energy drop is two. Each `U` raises the gun a level of the scenario's nine: one shot
+forward, then two and three, one up and one down, one back, two up and down, two
+back, three up and down, three back. Forward is right, the way the ship flies. A
+crush is a defeat, as is heat and energy both run out: the rock and the drift halt
+under a red strobe for 250 ms, then the game starts over, the gun back at one shot,
+species damage at one and the cave at its first pace, and opens with "Crushed
+Against The Edge!" or "You Died!". The drifting text is scenery (§9): rock and
+raiders pass it by and no key types it, so the ship earns no heat by typing.
 
 ## 11. System inventory
 

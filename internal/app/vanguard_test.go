@@ -799,8 +799,9 @@ func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 // TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave: raiders the player
 // shoots down as they arrive come from the first rank's two types until three fall,
 // then the next rank's, to the fourth, whose third kill strobes green and ends the
-// cave. No raider comes while the cave opens to no rock and its scroll halts, and the
-// Kraken rises at the right edge with vanguard's hit points. The player's kill of it
+// cave. No raider comes while the cave opens to no rock, the rock and the drift at
+// twice their pace, and its scroll halts, and the Kraken rises at the right edge
+// with vanguard's hit points. The player's kill of it
 // drops a missile charge, heat and two energy, doubles species damage and lays the
 // next cave in another stone art, the raider table's streaks carried into it,
 // scrolling a fifth faster once its pace has eased in, where the climb starts over
@@ -925,6 +926,7 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 	// another stone, a fifth faster in whole columns a second
 	const perRank = 3
 	art, _ := rock()
+	pace := int64(20)
 	for cycle, speed := range []int64{24, 29} {
 		for kill := range 4 * perRank {
 			shoot()
@@ -938,6 +940,15 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		}
 		if a.Tick(2); greens != cycle+1 {
 			t.Fatalf("tier %d: the tier's end strobed %d times, want %d", cycle, greens, cycle+1)
+		}
+		// The approach, once eased up: the rock and the drift at twice their pace
+		a.Tick(20)
+		_, from := rock()
+		a.Tick(20)
+		var drift float64
+		w.RunSafe(func() { drift = w.Resources.Status.Floats.Get("environment.drift_speed").Get() })
+		if _, to := rock(); to-from < 2*pace-1 || to-from > 2*pace+1 || drift != 160 {
+			t.Fatalf("tier %d: the approach scrolled %d columns in a second, the drift at %v; want %d and 160", cycle, to-from, drift, 2*pace)
 		}
 
 		// The boss: the cave opens to no rock and halts, and the Kraken rises
@@ -1019,7 +1030,7 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		if _, origin := rock(); origin-eased < speed-1 || origin-eased > speed+1 {
 			t.Fatalf("tier %d: the next cave scrolled %d columns in a second, want %d", cycle, origin-eased, speed)
 		}
-		art = next
+		art, pace = next, speed
 	}
 	shoot()
 	if got := spawned[8*perRank]; rankOf[got] != 0 || !inArt(got, art) {
