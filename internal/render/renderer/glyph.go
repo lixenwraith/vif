@@ -56,13 +56,13 @@ func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
 
 // Render draws each cell's top typeable glyph in its cell, and scenery where its
 // layer stands at the frame's moment, carried on from its cells by the part of a
-// tick since. The layers draw far to near, typeable text last, each over the ones
-// behind it. Rock and walls draw first, and a glyph in them would print over them,
-// so it is not shown.
+// tick since, with the text still entering past the edge. The layers draw far to
+// near, typeable text last, each over the ones behind it. Rock and walls draw first,
+// and a glyph in them would print over them, so it is not shown.
 func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	world := r.gameCtx.World
-	glyphs := world.Components.Glyph
-	if glyphs.CountEntities() == 0 {
+	glyphs, entering := world.Components.Glyph, world.Resources.Entry.Lines
+	if glyphs.CountEntities() == 0 && len(entering) == 0 {
 		return
 	}
 
@@ -72,6 +72,10 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	carry := r.carry(ctx)
 	for i := range r.layers {
 		r.layers[i] = r.layers[i][:0]
+	}
+	for i := range entering {
+		line := &entering[i]
+		r.addEntering(line, world.Resources.Drift.Step[line.Level], carry[line.Level], width, height)
 	}
 
 	glyphs.Each(func(entity core.Entity, glyph *component.GlyphComponent) bool {
@@ -111,6 +115,31 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 				renderCell(buf, screenX, screenY, &d.glyph)
 			}
 		}
+	}
+}
+
+// addEntering adds the runes of a line still entering that its layer brings onto the
+// map by the frame's moment, under the glyphs already there. The spawner left them
+// where their layer stood before the tick's step, and scenery carries on from there.
+func (r *GlyphRenderer) addEntering(line *engine.EntryLine, step, carry [2]int, width, height int) {
+	layer, x, y := typeableLayer, line.X+step[0], line.Y+step[1]
+	if line.Scenery {
+		layer, x, y = int(line.Level), x+carry[0], y+carry[1]
+	}
+	if y < 0 || y >= height {
+		return
+	}
+	glyph := component.GlyphComponent{Type: line.Type, Level: line.Level}
+	for _, ch := range line.Text {
+		if x >= 0 && x < width {
+			if ch != ' ' {
+				glyph.Rune = ch
+				r.layers[layer] = append(r.layers[layer], drawnGlyph{x: x, y: y, glyph: glyph})
+			}
+		} else if x >= width && line.Dir > 0 || x < 0 && line.Dir < 0 {
+			return // the rest lies further past the edge
+		}
+		x += line.Dir
 	}
 }
 

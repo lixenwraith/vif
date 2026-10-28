@@ -122,12 +122,17 @@ maps sharply reduce new placement. Occupancy and the type and level census count
 only the kind being placed, scenery under a scenery drift (§9) or typeable text
 otherwise, so each keeps its own fill where both stand. Placement needs at least one
 cursor, excludes a region around every cursor, and retries only a bounded number of
-positions. While a glyph drift is active, new lines are placed in a band
-`DriftEntryBand` cells deep beside an upwind edge, each drawn in proportion to the
-drift crossing it, so text enters where the drift carries it across; the spawner
-reads the drift from the environment's published status. A drift faster than
-`DriftFillSpeed` (10 cells a second) shortens the spawn interval in proportion, as
-it carries text off the map that much sooner.
+positions. While a glyph drift is active, a new line enters across an upwind edge,
+each drawn in proportion to the drift crossing it: across a side a rune at a time as
+its layer makes room, the last rune first from the left, and across an end a whole
+row at once. It starts at free cells where no line of its level is still entering,
+as far past the edge as its layer stepped last tick, so it first shows at the edge.
+Each rune takes its cell as the drift carries a glyph there, past other glyphs and,
+as scenery, behind rock and walls, where typeable text leaves a hole. What is still
+to enter is dropped once the drift stops or turns or the spawner is switched off.
+The spawner reads the drift from the environment's published status and each layer's
+step from `Drift`. A drift faster than `DriftFillSpeed` (10 cells a second) shortens
+the spawn interval in proportion, as it carries text off the map that much sooner.
 
 `ParticleSystem` selects dust, decay or blossom rules from
 `ParticleComponent.Behavior`, and everything that differs between them is one row
@@ -478,7 +483,8 @@ eased one carries every phase through; disabling the
 system pauses the drift as it pauses wind. Where layers share a cell the nearest
 draws on top, and typeable text over scenery (§3). A layer steps whole cells a
 tick, and the glyph renderer draws scenery where its layer stands between ticks,
-from the part-cell and velocity the environment leaves each tick
+and a line still entering (§4) where its layer brings it past the edge, from the
+part-cell, velocity and step the environment leaves each tick
 ([Rendering §7](rendering.md#7-layer-inventory)).
 
 A start with `scenery` set makes the text placed while it drifts scenery for life:

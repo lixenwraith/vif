@@ -373,15 +373,19 @@ layer on from its cells by the part-cell and velocity the environment leaves in
 `Drift` each tick, over the time since the tick (`TimeResource.PaceTime`, the
 pacing clock's instant it ran at) and a tick at most: a fast layer moves every
 frame and lands where the next tick puts it, and a frame before the tick draws it
-in its cells. The layers draw far to near and typeable text last, each over the
-ones behind it, so the nearest glyph shows where several are drawn in one cell,
-and lines of two depths interleave where they cross. Scenery standing in rock or a
-wall that blocks spawns is not drawn: rock and walls draw first and a glyph prints
-over them foreground-only, so the text passes behind them. In truecolor each
-scenery layer mixes its type's bright color into the background by
-`visual.SceneryDepthMix`, so far text fades as haze, while typeable text keeps its
-level's color. In 256-color mode a glyph hue has two console entries, one for dark
-and one shared by normal and bright, so only the dark layer stands apart there.
+in its cells. A line the spawner is still feeding in across an upwind edge
+(`Entry`) draws its waiting runes on from where the spawner left them, by the step
+its layer took that tick (`Drift.Step`) and, as scenery, its carry, under the
+glyphs already there, so text comes on at the edge as it leaves the other. The
+layers draw far to near and typeable text last, each over the ones behind it, so
+the nearest glyph shows where several are drawn in one cell, and lines of two
+depths interleave where they cross. Scenery standing in rock or a wall that blocks
+spawns is not drawn: rock and walls draw first and a glyph prints over them
+foreground-only, so the text passes behind them. In truecolor each scenery layer
+mixes its type's bright color into the background by `visual.SceneryDepthMix`, so
+far text fades as haze, while typeable text keeps its level's color. In 256-color
+mode a glyph hue has two console entries, one for dark and one shared by normal
+and bright, so only the dark layer stands apart there.
 
 ### Local and peer cursors
 
