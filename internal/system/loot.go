@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -208,6 +209,14 @@ func (s *LootSystem) Update() {
 		}
 
 		curX, curY := physics.GridPos(&kineticComp.Kinetic)
+		if lootComp.Away > 0 {
+			// A returning drop is collectible again from the tick after it is back
+			if lootComp.Away -= s.world.Resources.Time.DeltaTime; lootComp.Away <= 0 {
+				lootComp.Away = 0
+				s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: curX, Y: curY})
+			}
+			continue
+		}
 		// A transition or correction can shrink the shared map under private loot.
 		if s.world.Positions.IsOutOfBounds(curX, curY) {
 			curX, curY = min(max(curX, 0), config.MapWidth-1), min(max(curY, 0), config.MapHeight-1)
@@ -227,7 +236,11 @@ func (s *LootSystem) Update() {
 
 		if hasOwner && vmath.IntAbs(curX-ownerPos.X) <= parameter.LootCollectRadius &&
 			vmath.IntAbs(curY-ownerPos.Y) <= parameter.LootCollectRadius {
-			s.collectLoot(owner, lootEntity, lootComp.Type)
+			s.collectLoot(owner, lootEntity, lootComp)
+			continue
+		}
+		if lootComp.Still {
+			activeCount++
 			continue
 		}
 
@@ -318,10 +331,11 @@ func (s *LootSystem) homingTarget(
 // onEventDrop is a scenario's reward rather than a roll: one drop of the named kind
 // for every cursor this instance simulates, as each instance rolls a kill for its own
 func (s *LootSystem) onEventDrop(payload *event.LootSpawnRequestPayload) {
+	drop := component.LootComponent{Still: payload.Still, Return: time.Duration(max(payload.ReturnMs, 0)) * time.Millisecond}
 	for i := range parameter.MaxPlayers {
 		cursor := s.world.Resources.Player.Slot(uint8(i))
 		if cursor != 0 && s.world.SimulatesLocally(cursor) {
-			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y, cursor)
+			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y, cursor, drop)
 		}
 	}
 }
@@ -359,14 +373,15 @@ func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 			continue
 		}
 
-		s.spawnLootMulti(spawns, payload.X, payload.Y, cursor)
+		s.spawnLootMulti(spawns, payload.X, payload.Y, cursor, component.LootComponent{})
 	}
 }
 
 // --- Spawn ---
 
-// spawnLootMulti scatters drops in a fixed pattern, each bursting away from the centre
-func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owner core.Entity) {
+// spawnLootMulti scatters drops in a fixed pattern, each bursting away from the
+// centre and staying or returning as drop says
+func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owner core.Entity, drop component.LootComponent) {
 	count := len(loots)
 	if count == 0 {
 		return
@@ -402,13 +417,13 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owne
 			}
 		}
 
-		s.spawnLootWithBurst(lootType, spawnX, spawnY, burstDirX, burstDirY, owner)
+		s.spawnLootWithBurst(lootType, spawnX, spawnY, burstDirX, burstDirY, owner, drop)
 		s.statDrops.Add(1)
 	}
 }
 
 // spawnLootWithBurst creates one owned drop moving in its burst direction
-func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int, owner core.Entity) {
+func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int, owner core.Entity, drop component.LootComponent) {
 	if int(lootType) >= len(s.kinds) {
 		return
 	}
@@ -417,19 +432,14 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	preciseX, preciseY := vmath.Point{X: x, Y: y}.Center()
 
 	var velX, velY float64
-	if burstDirX != 0 || burstDirY != 0 {
+	if (burstDirX != 0 || burstDirY != 0) && !drop.Still {
 		dirX, dirY := vmath.Normalize2D(float64(burstDirX), float64(burstDirY))
 		velX = dirX * parameter.LootBurstSpeed
 		velY = dirY * parameter.LootBurstSpeed
 	}
 
-	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
-		Type:     lootType,
-		Look:     s.kinds[lootType].Look,
-		Owner:    owner,
-		LastIntX: x,
-		LastIntY: y,
-	})
+	drop.Type, drop.Look, drop.Owner, drop.LastIntX, drop.LastIntY = lootType, s.kinds[lootType].Look, owner, x, y
+	s.world.Components.Loot.SetComponent(entity, drop)
 
 	s.world.Components.Kinetic.SetComponent(entity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
@@ -593,7 +603,7 @@ type candidate struct {
 func (s *LootSystem) activeLootTypes(cursor core.Entity) (active [component.LootMax]bool) {
 	for _, entity := range s.world.Components.Loot.Entities() {
 		lootComp, ok := s.world.Components.Loot.GetPtr(entity)
-		if ok && lootComp.Owner == cursor && lootComp.Type < component.LootMax {
+		if ok && lootComp.Owner == cursor && lootComp.Type < component.LootMax && lootComp.Away == 0 {
 			active[lootComp.Type] = true
 		}
 	}
@@ -602,7 +612,10 @@ func (s *LootSystem) activeLootTypes(cursor core.Entity) (active [component.Loot
 
 // --- Collection ---
 
-func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.LootType) {
+// collectLoot grants a drop's reward to its owner, then destroys the drop, or takes
+// it off the map until it returns
+func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootComp *component.LootComponent) {
+	lootType := lootComp.Type
 	if int(lootType) >= len(s.kinds) {
 		s.world.DestroyEntity(entity)
 		return
@@ -635,8 +648,13 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 		})
 	}
 
-	s.world.DestroyEntity(entity)
 	s.statCollects.Add(1)
+	if lootComp.Return > 0 {
+		lootComp.Away = lootComp.Return
+		s.world.Positions.RemoveEntity(entity)
+		return
+	}
+	s.world.DestroyEntity(entity)
 }
 
 type lootPityLocal struct {

@@ -1181,11 +1181,15 @@ type SpeciesCreatedPayload struct {
 
 // --- Loot ---
 
-// LootSpawnRequestPayload names an event drop's kind and cell; no drop table is rolled
+// LootSpawnRequestPayload names an event drop's kind and cell; no drop table is
+// rolled. A still drop stays at its cell, and ReturnMs above 0 brings one collected
+// back there that long after.
 type LootSpawnRequestPayload struct {
-	Type component.LootType `toml:"type"`
-	X    int                `toml:"x"`
-	Y    int                `toml:"y"`
+	Type     component.LootType `toml:"type"`
+	X        int                `toml:"x"`
+	Y        int                `toml:"y"`
+	Still    bool               `toml:"still"`
+	ReturnMs int64              `toml:"return_ms"`
 }
 
 // --- Missile ---

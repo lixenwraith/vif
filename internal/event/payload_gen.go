@@ -1617,6 +1617,8 @@ var codecLootSpawnRequestPayload = structCodec{size: unsafe.Sizeof(LootSpawnRequ
 	{off: unsafe.Offsetof(LootSpawnRequestPayload{}.Type), kind: kindUint, size: unsafe.Sizeof(component.LootType(0))},
 	{off: unsafe.Offsetof(LootSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(LootSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LootSpawnRequestPayload{}.Still), kind: kindBool},
+	{off: unsafe.Offsetof(LootSpawnRequestPayload{}.ReturnMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
 var codecComponentCursorDamage = structCodec{size: unsafe.Sizeof(component.CursorDamage{}), fields: []field{

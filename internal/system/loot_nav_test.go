@@ -2,6 +2,7 @@ package system
 
 import (
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -123,7 +124,7 @@ func dropLoot(w *engine.World, loot *LootSystem, x, y int, owner core.Entity) co
 	for _, e := range w.Components.Loot.GetAllEntities() {
 		before[e] = true
 	}
-	loot.spawnLootWithBurst(component.LootEnergy, x, y, 0, 0, owner)
+	loot.spawnLootWithBurst(component.LootEnergy, x, y, 0, 0, owner, component.LootComponent{})
 	for _, e := range w.Components.Loot.GetAllEntities() {
 		if !before[e] {
 			return e
@@ -408,6 +409,48 @@ func TestADropsFieldIsItsOwnersPrivateGroup(t *testing.T) {
 	nav.Update()
 	if w.Resources.Pursuit.Field(1) != nil || w.Resources.Pursuit.Field(0) == nil {
 		t.Fatal("a departed cursor kept its field, or took the survivor's")
+	}
+}
+
+// TestAStillDropStaysAndReturnsAfterCollection: an event drop marked still stays at
+// its cell while its owner is away, and one with a return is off the map from its
+// collection until that long after, then back at its cell to be collected again.
+func TestAStillDropStaysAndReturnsAfterCollection(t *testing.T) {
+	w, owner := soloCursorWorld(t)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+	w.Positions.SetPosition(owner, component.PositionComponent{X: 3, Y: 3})
+	loot.HandleEvent(event.GameEvent{Type: event.EventLootSpawnRequest, Payload: &event.LootSpawnRequestPayload{
+		Type: component.LootRod, X: 20, Y: 10, Still: true, ReturnMs: 3000,
+	}})
+	drops := w.Components.Loot.GetAllEntities()
+	if len(drops) != 1 {
+		t.Fatalf("%d drops, want one", len(drops))
+	}
+	at := func() (component.PositionComponent, bool) { return w.Positions.GetPosition(drops[0]) }
+	step := func(ticks int) {
+		for range ticks {
+			loot.Update()
+		}
+	}
+
+	step(100)
+	if pos, ok := at(); !ok || pos.X != 20 || pos.Y != 10 {
+		t.Fatalf("the still drop is at %+v (%t), want its cell", pos, ok)
+	}
+	w.Positions.SetPosition(owner, component.PositionComponent{X: 20, Y: 10})
+	step(1)
+	w.Positions.SetPosition(owner, component.PositionComponent{X: 3, Y: 3})
+	if _, ok := at(); ok || !w.Components.Loot.HasEntity(drops[0]) {
+		t.Fatal("a collected drop with a return stayed on the map, or was destroyed")
+	}
+	away := int(3 * time.Second / w.Resources.Time.DeltaTime)
+	step(away - 1)
+	if _, ok := at(); ok {
+		t.Fatal("the drop came back before its return")
+	}
+	step(1)
+	if pos, ok := at(); !ok || pos.X != 20 || pos.Y != 10 {
+		t.Fatalf("the drop is at %+v (%t) after its return, want its cell", pos, ok)
 	}
 }
 

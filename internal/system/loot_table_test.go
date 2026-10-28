@@ -70,7 +70,7 @@ func TestADropCarriesItsKindsLookAndGrantsItsReward(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	raiderLoot(w)
 	loot := ready(NewLootSystem(w)).(*LootSystem)
-	loot.spawnLootWithBurst(component.LootCount, 10, 10, 0, 0, cursor)
+	loot.spawnLootWithBurst(component.LootCount, 10, 10, 0, 0, cursor, component.LootComponent{})
 	drops := w.Components.Loot.GetAllEntities()
 	if len(drops) != 1 {
 		t.Fatalf("%d drops, want one", len(drops))
@@ -80,7 +80,8 @@ func TestADropCarriesItsKindsLookAndGrantsItsReward(t *testing.T) {
 	}
 
 	w.Resources.Event.Queue.Consume()
-	loot.collectLoot(cursor, drops[0], component.LootCount)
+	drop, _ := w.Components.Loot.GetPtr(drops[0])
+	loot.collectLoot(cursor, drops[0], drop)
 	var granted, flashed bool
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		switch p := ev.Payload.(type) {
