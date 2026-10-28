@@ -60,8 +60,11 @@ type Resource struct {
 	// Tentacle samples the Kraken system built this tick, for its renderer
 	KrakenShape *KrakenShapeResource
 
-	// The drift's layers as this tick left them, for the glyph renderer
+	// The drift's layers as this tick left them, for the glyph spawner and renderer
 	Drift *DriftResource
+
+	// The lines the glyph spawner is feeding onto the map, for the glyph renderer
+	Entry *EntryResource
 
 	// Player-domain view effects
 	View *ViewResource
@@ -121,11 +124,13 @@ func (tr *TimeResource) DeltaTimeNano() int64 { return int64(tr.DeltaTime) }
 // --- Drift Resource ---
 
 // DriftResource is each drift layer as the environment left it this tick: its
-// part-cell and its velocity per axis. Systems write, renderers read; it is derived
-// state and never copied with a world.
+// part-cell, its velocity and the cells it stepped per axis. The environment writes,
+// the glyph spawner and renderers read; it is derived state and never copied with a
+// world.
 type DriftResource struct {
 	Phase [len(parameter.DriftLayerFactor)][2]int64 // velocity times nanoseconds
 	Rate  [len(parameter.DriftLayerFactor)][2]int64 // microcells a second
+	Step  [len(parameter.DriftLayerFactor)][2]int   // whole cells this tick
 }
 
 // Carry is how far a layer moves in since past the tick, in whole cells per axis:
@@ -133,6 +138,28 @@ type DriftResource struct {
 func (r *DriftResource) Carry(level int, since time.Duration) (dx, dy int) {
 	p, v := r.Phase[level], r.Rate[level]
 	return int((p[0] + v[0]*int64(since)) / vmath.CellSpan), int((p[1] + v[1]*int64(since)) / vmath.CellSpan)
+}
+
+// --- Entry Resource ---
+
+// EntryResource is the text the glyph spawner is feeding onto the map across an
+// upwind edge, as it left it this tick. The spawner writes, renderers read; it is
+// derived state and never copied with a world.
+type EntryResource struct {
+	Lines []EntryLine
+}
+
+// EntryLine is a line still entering: its runes yet to place in entry order, the
+// next at X, Y as its layer stood before this tick's step and each after it a cell
+// on along Dir, +1 or -1 on X
+type EntryLine struct {
+	X       int                  `json:"x"`
+	Y       int                  `json:"y"`
+	Dir     int                  `json:"dir"`
+	Text    string               `json:"text"`
+	Type    component.GlyphType  `json:"type"`
+	Level   component.GlyphLevel `json:"level"`
+	Scenery bool                 `json:"scenery,omitempty"`
 }
 
 // --- Config Resource ---
