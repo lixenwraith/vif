@@ -360,6 +360,57 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	}
 }
 
+// TestVanguardABotSeatFliesTheShipsGunPath seats a bot on a vanguard run. Its
+// instance installs the game, the aim with it, before its cursor arrives, and that
+// cursor's gun climbs vanguard's path from its first ticks as the player's does,
+// not from the next game, whose start aims it afresh.
+func TestVanguardABotSeatFliesTheShipsGunPath(t *testing.T) {
+	// Not parallel: a paced run against wall-clock deadlines.
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	holder, _ := driveBot(t, Config{Bots: []string{"roam"}, Resources: opts}, "patrol", nil)
+	waitForCursors(t, holder, 2)
+	// gun reads the gun on the cursor a run flies: whether it holds one, and its path
+	gun := func(a *App) (armed bool, levels int) {
+		w := a.World()
+		w.RunSafe(func() {
+			weapon, ok := w.Components.Weapon.GetComponent(w.Resources.Player.Entity)
+			armed, levels = ok, weapon.GunLevels
+		})
+		return armed, levels
+	}
+	const settle = 5 // ticks the seat's first reading may take
+	var seat *App
+	var armedAt uint64
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if seat == nil {
+			holder.membership.seatsMu.Lock()
+			if len(holder.membership.seats) == 1 {
+				seat = holder.membership.seats[0].app.Load()
+			}
+			holder.membership.seatsMu.Unlock()
+			continue
+		}
+		tick := seat.Position().Tick
+		armed, levels := gun(seat)
+		switch {
+		case !armed:
+		case levels == 9:
+			if _, own := gun(holder); own != 9 {
+				t.Fatalf("the player's gun climbs %d levels, want vanguard's nine", own)
+			}
+			return
+		case armedAt == 0:
+			armedAt = tick
+		case tick > armedAt+settle:
+			t.Fatalf("the seat's gun climbs %d levels %d ticks after its cursor armed, want vanguard's nine", levels, tick-armedAt)
+		}
+	}
+	t.Fatalf("no seat's cursor armed within %s (seat %v)", socketWait, seat != nil)
+}
+
 // TestVanguardsCaveWearsOneOfItsStoneArts boots the shipped scenario: its rock draws
 // one of the four stone arts the cave start lists, from the cave's seed, and a new
 // game's cave draws one again

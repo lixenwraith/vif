@@ -124,17 +124,6 @@ A level of the gun's upgrade path names its lanes per cardinal, and
 more fires three. A wider fan needs offsets two or more rows or columns out, and a
 volley spacing that still reads as lanes in a 15-row cave channel.
 
-#### Aim a seat's gun as the scenario aims the player's
-
-- Priority: P3
-- Affected files: `internal/system/weapon.go`, `internal/event/payload.go`
-
-`EventGunAimRequest` is local and sets the aim and path of the cursor this instance
-drives, so a bot seat, or a cursor an instance adopts, fires the gun's own four
-cardinals and stops at three charges. An entity field, as `EventKeyCaptureRequest`
-carries, or a path the weapon system holds per scenario would reach every cursor
-an instance simulates.
-
 #### Declare loot kinds and drop tables in a scenario
 
 - Priority: P2
@@ -159,7 +148,6 @@ landed. Open items elsewhere it meets:
 [a program spawning another](#let-a-program-spawn-another-program),
 [attack, beam and drop rows](#give-data-species-attack-beam-and-drop-rows-of-their-own),
 [loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario),
-[a seat's gun](#aim-a-seats-gun-as-the-scenario-aims-the-players),
 [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does)
 and [spawn placement](#audit-spawn-placement-across-the-species).
 

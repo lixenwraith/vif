@@ -202,7 +202,7 @@ const (
 	EventWeaponRemoveRequest
 	// EventWeaponFireRequest (WeaponFireRequestPayload) [local] signals weapon fire request
 	EventWeaponFireRequest
-	// EventGunAimRequest (GunAimRequestPayload) [local] sets the cardinals, or the upgrade path, of the gun of the cursor this instance drives
+	// EventGunAimRequest (GunAimRequestPayload) [local] sets the cardinals, or the upgrade path, the gun fires on every cursor this instance simulates, one that arrives later among them
 	EventGunAimRequest
 	// EventFireSpecialRequest (FireSpecialRequestPayload) [local] signals player intent to fire special ability
 	EventFireSpecialRequest

@@ -2,6 +2,8 @@ package system
 
 import (
 	"cmp"
+	"encoding/json"
+	"fmt"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -36,6 +38,10 @@ type WeaponSystem struct {
 
 	rng *vmath.FastRand // shot spread; a cursor's shots are this instance's alone
 
+	// The gun as the scenario aims it, which every cursor this instance simulates
+	// fires: one that arrives, comes back or is adopted later takes it as it updates
+	aim gunAim
+
 	// Tracers in flight, read detached: one destroyed this tick frees its cells for the next
 	tracerBuf []core.Entity
 	glyphBuf  []core.Entity
@@ -58,6 +64,14 @@ type WeaponSystem struct {
 	buffers          bufferTelemetry
 
 	toggle
+}
+
+// gunAim is the cardinals and the upgrade path a scenario gives the gun, Levels of
+// Path long; the zero value leaves the gun on its own four
+type gunAim struct {
+	Directions component.TracerDirection                `json:"directions"`
+	Path       [parameter.GunPathMax]component.GunLevel `json:"path"`
+	Levels     int                                      `json:"levels"`
 }
 
 // NewWeaponSystem creates a new weapon system
@@ -91,6 +105,7 @@ func NewWeaponSystem(world *engine.World) engine.System {
 // Init resets session state for a new game, dropping every orb in the world
 func (s *WeaponSystem) Init() {
 	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
+	s.aim = gunAim{}
 	s.destroyAllOrbs()
 	s.orbs = [parameter.MaxPlayers]orbSlots{}
 	s.reapBuf = s.reapBuf[:0]
@@ -210,13 +225,31 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 		// count to on the new one, and an instance installing the game mid-run aims
 		// with the charges it carried
 		if payload, ok := ev.Payload.(*event.GunAimRequestPayload); ok {
-			if weaponComp, ok := s.world.Components.Weapon.GetPtr(s.world.Resources.Player.Entity); ok {
-				weaponComp.Aim = payload.Directions & component.TracerAllDirections
-				weaponComp.GunLevels = copy(weaponComp.GunPath[:], payload.Path)
-				clear(weaponComp.GunPath[weaponComp.GunLevels:])
-			}
+			s.aim = gunAim{Directions: payload.Directions & component.TracerAllDirections}
+			s.aim.Levels = copy(s.aim.Path[:], payload.Path)
+			s.world.Components.Cursor.Each(func(cursor core.Entity, _ *component.CursorComponent) bool {
+				if weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor); ok && s.world.SimulatesLocally(cursor) {
+					s.aimGun(weaponComp)
+				}
+				return true
+			})
 		}
 	}
+}
+
+// aimGun puts a gun on the scenario's aim and path
+func (s *WeaponSystem) aimGun(weaponComp *component.WeaponComponent) {
+	weaponComp.Aim, weaponComp.GunPath, weaponComp.GunLevels = s.aim.Directions, s.aim.Path, s.aim.Levels
+}
+
+// SaveLocal carries the scenario's aim, which a copy's cursors go on firing
+func (s *WeaponSystem) SaveLocal() ([]byte, error) { return json.Marshal(s.aim) }
+
+func (s *WeaponSystem) LoadLocal(data []byte) error {
+	if err := json.Unmarshal(data, &s.aim); err != nil {
+		return fmt.Errorf("weapon: %w", err)
+	}
+	return nil
 }
 
 // Update advances cooldowns and orbit for every cursor
@@ -243,6 +276,7 @@ func (s *WeaponSystem) Update() {
 		if !ok {
 			return true
 		}
+		s.aimGun(weaponComp)
 
 		// Update main fire cooldown
 		if weaponComp.MainFireCooldown > 0 {

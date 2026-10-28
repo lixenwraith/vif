@@ -434,7 +434,10 @@ Persistent Player-domain effects controlled by Shared FSM state are re-derived b
 the install itself. Only immediate, unguarded `ClassLocal` lifecycle events marked
 `reconcile = true` participate: old paths release with old variables, new paths
 acquire with imported variables, and a changed scope variable is treated as a
-boundary crossing. Staging imports remain side-effect free.
+boundary crossing. Staging imports remain side-effect free. The gun's aim
+(`EventGunAimRequest`) is held by `WeaponSystem` rather than written once to the
+cursors present: an install replays it before the cursor a joiner or a bot seat
+flies arrives, and that cursor takes it as it arrives.
 
 That covers the *level-triggered* half: a hold that follows a Shared region is
 re-derived from the imported state. The *edge-triggered* half is a ledger, because

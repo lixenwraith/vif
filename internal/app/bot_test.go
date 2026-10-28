@@ -164,11 +164,13 @@ func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, f
 }
 
 // driveRun is driveBot as the kind of run it names: a bot run ends with its session,
-// a script's plays its fork on.
+// a script's plays its fork on. A config naming no resources plays the embedded ones.
 func driveRun(t *testing.T, kind string, cfg Config, graph string, hold func() bool) (*App, func()) {
 	t.Helper()
 	cfg.Seed, cfg.Width, cfg.Height = fixtureSeed, BotWidth, BotHeight
-	cfg.Resources = resource.Options{Embedded: true}
+	if cfg.Resources == (resource.Options{}) {
+		cfg.Resources = resource.Options{Embedded: true}
+	}
 	g, err := loadBotGraph(cfg.Resources, graph)
 	if err != nil {
 		t.Fatal(err)
