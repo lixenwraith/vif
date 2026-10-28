@@ -43,20 +43,20 @@ type SoundRequestPayload struct {
 	Name string        `toml:"sound"`
 }
 
-type SoundMuteToggleMode uint8
+type AudioMuteToggleMode uint8
 
 const (
-	MuteCycle  SoundMuteToggleMode = iota // ignore Mask, advance the rotation
+	MuteCycle  AudioMuteToggleMode = iota // ignore Mask, advance the rotation
 	MuteToggle                            // flip the channels named in Mask
 	MuteSet                               // set the mask verbatim
 )
 
 var muteToggleModeNames = [...]string{MuteCycle: "cycle", MuteToggle: "toggle", MuteSet: "set"}
 
-// SoundMuteTogglePayload requests an audio mute-mask change
+// AudioMuteTogglePayload requests an audio mute-mask change
 // A nil payload is equivalent to {Mode: MuteCycle}
-type SoundMuteTogglePayload struct {
-	Mode SoundMuteToggleMode `toml:"mode"`
+type AudioMuteTogglePayload struct {
+	Mode AudioMuteToggleMode `toml:"mode"`
 	Mask uint8               `toml:"mask"` // parameter.AudioChan* bits
 }
 

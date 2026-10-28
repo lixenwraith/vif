@@ -1268,17 +1268,6 @@ keyboard's text into `terminal.Event`s and flushes cell frames through
 4. Size: the views need 60×16 cells. A phone held landscape fits at the default
    cell; portrait needs the pinch zoom out, or a keyboard of fewer keys.
 
-### Rename the audio mute event to the audio vocabulary
-
-- Priority: P2
-- Affected files: `internal/event/type.go`, `internal/event/payload.go`,
-  `internal/system/audio.go`, `internal/mode/config_menu.go`, `doc/audio.md`
-
-`EventSoundMuteToggle` changes the audio channel mask, sfx and music alike, so it
-is `EventAudioMuteToggle`, the request beside `EventAudioMuteChanged`, with its
-payload. It waits for the netcode work to settle the event registry and journal
-schema the rename regenerates and bumps.
-
 ### Spin off `pkg/audio` as its own module
 
 - Priority: P2
