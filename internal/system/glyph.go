@@ -261,12 +261,6 @@ func (s *GlyphSystem) countPlacedKind() int {
 	return glyphs.CountEntities() - scenery
 }
 
-// isScenery reports a glyph placed as scenery, which typing passes over
-func (s *GlyphSystem) isScenery(e core.Entity) bool {
-	prot, _ := s.world.Components.Protection.GetComponent(e)
-	return prot.Mask&component.ProtectFromTyping != 0
-}
-
 // hides reports a cell of rock or a wall that keeps text out and scenery behind it
 func (s *GlyphSystem) hides(x, y int) bool {
 	return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockSpawn)
@@ -284,7 +278,7 @@ func (s *GlyphSystem) updateCensus() {
 			orphanGlyph++
 			return true
 		}
-		if s.isScenery(e) != scenery || scenery && s.hides(pos.X, pos.Y) {
+		if s.world.Positions.IsScenery(e) != scenery || scenery && s.hides(pos.X, pos.Y) {
 			return true
 		}
 		if slot := censusSlot(g.Type, g.Level); slot >= 0 {
