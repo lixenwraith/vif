@@ -556,9 +556,9 @@ it spawns and arms the cursor before opening `main`.
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `simon` is a memory game, and `vanguard` is a side-scroller whose raiders
-are species its own behavior programs define. Each entry has a short `description`
-for scenario listings.
+scaffold, `simon` is a memory game, `dummy` is a weapon range, and `vanguard` is a
+side-scroller whose raiders are species its own behavior programs define. Each entry
+has a short `description` for scenario listings.
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its
@@ -574,6 +574,24 @@ field grays and turns to decay circling the button at fault, the one pressed or
 the one due, while the due note lights and sounds; the next game starts as the
 decay falls away. The level stops rising at 100 and the energy cell reads it.
 Glyphs drift behind the buttons as a moving backdrop, and music stays off.
+
+`dummy`, the Target Dummy, is a range for trying weapons alone or together at any
+charge, for one player on a map of at least 80 by 30. The cursor starts at the
+centre with every loot kind lying still to its left, `H L M P` over `E B R T`:
+walked over, each gives its charge, heat or energy and lies back on its cell three
+seconds later, so the cursor has time to step off, and one stood on gives again.
+`:w` sets any weapon's charges, the gun's 0 included, and the `T` gives the gun
+back. The dummy, a pylon of one hit point a member that drops nothing, stands 18
+columns right of the centre, out of reach of the cursor's shield at the start.
+Behind it a green `+` and a red `-` pad, each a framed sign, add or take a hit point,
+from 1 to 999, while the cursor stands on one, and again every three seconds under a
+countdown beside the pad; the status bar reads the count, and a standing dummy takes
+it at once, whole again. A dummy shot down rises on its spot once the cursor has
+stood there and walked back out of its shield's reach of the dummy, beyond 16
+columns or 8 rows, since one risen around the cursor would burn its heat or drain
+its shield. Whenever the cursor's energy is 0, an energy drop homes on it from the
+dummy's centre. Drains, nuggets, gold, the fuse and music are off, and `:n` lays
+the range again.
 
 `vanguard` flies the cursor through a cave (§9) scrolling left at twenty columns a
 second, a column every tick: only a whole-tick period steps evenly, and eight a

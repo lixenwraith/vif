@@ -449,7 +449,10 @@ it at. The runtime runs it after init, reset, an installed capture and each
 Scripts read the status registry and never write it. `StatusToVar` marks where a
 count starts, and `StatusIntCompare` with `since = "storm_mark"` compares the value
 minus that mark, so a scenario counts kills since its own escalation while
-`kills.*` keeps the game's totals.
+`kills.*` keeps the game's totals. The mark can be any variable: the solo
+`wad/scenario/dummy` finds its cursor inside a box by comparing `player.0.x` and
+`player.0.y` with the box's edges, variables its layout sets from the map's size
+(its `CursorIn` macro).
 
 ### Action Modifiers
 
