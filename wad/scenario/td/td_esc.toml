@@ -14,11 +14,11 @@ EscLSpawnA = { macro = "Pylon", x = 60, y = 118, attach = "EscLGwA", next = "Esc
 EscLGwA = { macro = "FlankGateway", side = "l", group = 1, next = "EscLSpawnB" }
 EscLSpawnB = { macro = "Pylon", x = 60, y = 132, attach = "EscLGwB", next = "EscLDone" }
 EscLGwB = { macro = "FlankGateway", side = "l", group = 2, next = "EscLDone" }
-EscLDone = { macro = "FlankDone", side = "l", message = "WEST FLANK REINFORCED", next = "EscWait" }
+EscLDone = { macro = "FlankDone", side = "l", message = "West Flank Reinforced", next = "EscWait" }
 
 # Right twins mirror the left
 EscRSpawnA = { macro = "Pylon", x = 440, y = 118, attach = "EscRGwA", next = "EscRSpawnB" }
 EscRGwA = { macro = "FlankGateway", side = "r", group = 1, next = "EscRSpawnB" }
 EscRSpawnB = { macro = "Pylon", x = 440, y = 132, attach = "EscRGwB", next = "EscRDone" }
 EscRGwB = { macro = "FlankGateway", side = "r", group = 2, next = "EscRDone" }
-EscRDone = { macro = "FlankDone", side = "r", message = "EAST FLANK REINFORCED", next = "EscWait" }
+EscRDone = { macro = "FlankDone", side = "r", message = "East Flank Reinforced", next = "EscWait" }

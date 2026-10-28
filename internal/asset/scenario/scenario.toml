@@ -31,4 +31,8 @@ background = true
 file = "tower.toml"
 disabled_systems = ["glyph"]
 
+# Defined in tower.toml: the seconds between a defended tower and main
+[regions.handover]
+enabled_systems = ["glyph"]
+
 #[states.Root]
