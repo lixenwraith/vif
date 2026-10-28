@@ -36,15 +36,22 @@ var spawnOffsets = [][]struct{ dx, dy int }{
 	{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {0, 0}}, // 5: cross + center
 }
 
-// pityState tracks consecutive misses per loot type for a species type
+// pityState tracks consecutive misses per loot type for a drop table
 type pityState struct {
 	misses [component.LootMax]int
 }
 
-// pityKey scopes a pity streak to one cursor's slot; local cursors roll independently
+// pityKey scopes a pity streak to one table and cursor slot: every species naming a
+// table rolls on its streaks, and local cursors roll independently
 type pityKey struct {
-	species component.SpeciesType
-	slot    uint8
+	table string
+	slot  uint8
+}
+
+// speciesTable is the drop table a species rolls and the name its pity goes by
+type speciesTable struct {
+	name string
+	component.DropTable
 }
 
 type LootSystem struct {
@@ -59,9 +66,9 @@ type LootSystem struct {
 	// The session's kinds, the code's then the scenario's, and each species' table,
 	// a scenario's where it declares one (Resources.Loot)
 	kinds  []component.LootKind
-	tables [component.SpeciesMax]component.DropTable
+	tables [component.SpeciesMax]speciesTable
 
-	// Pity tracking per species type and roster slot
+	// Pity tracking per drop table and roster slot, kept until the game starts over
 	pity map[pityKey]*pityState
 
 	loots []core.Entity // the tick's loot, detached: collectLoot destroys mid-iteration
@@ -119,13 +126,15 @@ func (s *LootSystem) resolve() {
 		s.kinds = append(s.kinds, component.LootKind{LootSpec: component.LootSpecs[t], Look: visual.LootVisuals[t]})
 	}
 	s.kinds = append(s.kinds, declared.Kinds...)
-	s.tables = [component.SpeciesMax]component.DropTable{}
+	s.tables = [component.SpeciesMax]speciesTable{}
 	for sp := component.SpeciesNone + 1; sp < component.SpeciesCount; sp++ {
-		s.tables[sp], _ = profile.DropTableNamed(declared, component.SpeciesNames[sp])
+		table, _ := profile.DropTableNamed(declared, component.SpeciesNames[sp])
+		s.tables[sp] = speciesTable{name: component.SpeciesNames[sp], DropTable: table}
 	}
 	for i, p := range s.world.Resources.Behaviors {
 		if p.Drops != "" && int(component.SpeciesDataFirst)+i < len(s.tables) {
-			s.tables[int(component.SpeciesDataFirst)+i], _ = profile.DropTableNamed(declared, p.Drops)
+			table, _ := profile.DropTableNamed(declared, p.Drops)
+			s.tables[int(component.SpeciesDataFirst)+i] = speciesTable{name: p.Drops, DropTable: table}
 		}
 	}
 }
@@ -476,8 +485,8 @@ func (s *LootSystem) isValidSpawnPos(x, y int) bool {
 }
 
 // rollDropTable rolls a species' tiers for one cursor with pity and fallback
-// accumulation; a data species rolls the table its program names under a pity of
-// its own
+// accumulation; a data species rolls the table its program names, on the pity of
+// every species naming it
 func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor core.Entity, slot uint8) []DropResult {
 	if speciesType >= component.SpeciesMax {
 		return nil
@@ -487,7 +496,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 		return nil
 	}
 
-	key := pityKey{species: speciesType, slot: slot}
+	key := pityKey{table: s.tables[speciesType].name, slot: slot}
 	state := s.pity[key]
 	if state == nil {
 		state = &pityState{}
@@ -506,9 +515,17 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 			return false
 		}
 
-		// Max-charge check, repeats drops until this cursor is capped
+		// Max-charge check, repeats drops until this cursor is capped; the weapon
+		// system holds a gun on a scenario's path to a charge per level
 		weapons, ok := s.world.Components.Weapon.GetPtr(cursor)
-		return ok && weapons.Charges[spec.Weapon] >= component.WeaponSpecs[spec.Weapon].MaxCharges
+		if !ok {
+			return false
+		}
+		full := component.WeaponSpecs[spec.Weapon].MaxCharges
+		if weapons.GunLevels > 0 && component.WeaponSpecs[spec.Weapon].Delivery == component.DeliveryTracer {
+			full = weapons.GunLevels
+		}
+		return weapons.Charges[spec.Weapon] >= full
 	}
 
 	var results []DropResult
@@ -575,18 +592,14 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 			}
 		}
 
-		switch {
-		case dropped != nil:
+		// A miss adds no fallback: that stands in only for loot the tier skipped
+		if dropped != nil {
 			count := max(dropped.Count, 1)
 			// Every non-unique tier after a skipped weapon carries its fallback
 			if !tier.Unique {
 				count += fallbackBonus
 			}
 			results = append(results, DropResult{Loot: dropped.Loot, Count: count})
-		case tier.Unique:
-			for _, c := range candidates {
-				fallbackBonus += c.entry.FallbackCount
-			}
 		}
 	}
 
@@ -658,18 +671,18 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootComp *component
 }
 
 type lootPityLocal struct {
-	Species component.SpeciesType  `json:"species"`
-	Slot    uint8                  `json:"slot"`
-	Misses  [component.LootMax]int `json:"misses"`
+	Table  string                 `json:"table"`
+	Slot   uint8                  `json:"slot"`
+	Misses [component.LootMax]int `json:"misses"`
 }
 
 func (s *LootSystem) SaveLocal() ([]byte, error) {
 	rows := make([]lootPityLocal, 0, len(s.pity))
 	for k, p := range s.pity {
-		rows = append(rows, lootPityLocal{Species: k.species, Slot: k.slot, Misses: p.misses})
+		rows = append(rows, lootPityLocal{Table: k.table, Slot: k.slot, Misses: p.misses})
 	}
 	slices.SortFunc(rows, func(a, b lootPityLocal) int {
-		return cmp.Or(cmp.Compare(a.Species, b.Species), cmp.Compare(a.Slot, b.Slot))
+		return cmp.Or(cmp.Compare(a.Table, b.Table), cmp.Compare(a.Slot, b.Slot))
 	})
 	return json.Marshal(rows)
 }
@@ -681,7 +694,7 @@ func (s *LootSystem) LoadLocal(data []byte) error {
 	}
 	clear(s.pity)
 	for _, p := range rows {
-		s.pity[pityKey{species: p.Species, slot: p.Slot}] = &pityState{misses: p.Misses}
+		s.pity[pityKey{table: p.Table, slot: p.Slot}] = &pityState{misses: p.Misses}
 	}
 	return nil
 }

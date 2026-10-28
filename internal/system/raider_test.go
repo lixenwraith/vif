@@ -2,6 +2,7 @@ package system
 
 import (
 	"os"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -349,7 +350,8 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 // types to each stone art, in the order CaveStart's pick lists the arts, and every
 // program once. Each cave's eight wear one palette and console colour, and fly the
 // same ranks in the same order, its hit points rising, so caves differ in looks
-// alone. Every type drops from the raider table, which holds the U.
+// alone. Every type drops from the raider table: heat, then the U, which a full gun
+// passes over for two energy a drop, then energy.
 func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
 	set, _, merged := vanguardScenario(t)
 	path := func(v any, keys ...any) any {
@@ -387,10 +389,13 @@ func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
 		t.Fatalf("the raid picks %v, want every program once: %v", got, set.Names())
 	}
 	upgrade := slices.Index(set.Loot().Names(), "upgrade")
-	raid := set.Loot().Tables["raider"]
-	if upgrade < 0 || raid.Killer != component.DropKillerPlayer || len(raid.Tiers) != 1 || len(raid.Tiers[0].Entries) != 1 ||
-		raid.Tiers[0].Entries[0].Loot != component.LootCount+component.LootType(upgrade) {
-		t.Fatalf("the raider table is %+v, want a player's kill to roll the U alone", raid)
+	want := component.DropTable{Killer: component.DropKillerPlayer, Tiers: []component.DropTier{
+		{Entries: []component.DropEntry{{Loot: component.LootHeat, BaseRate: 0.05, Count: 1}}},
+		{Unique: true, Entries: []component.DropEntry{{Loot: component.LootCount + component.LootType(upgrade), BaseRate: 0.5, Count: 1, FallbackCount: 1}}},
+		{Entries: []component.DropEntry{{Loot: component.LootEnergy, BaseRate: 0.2, Count: 1}}},
+	}}
+	if raid := set.Loot().Tables["raider"]; upgrade < 0 || !reflect.DeepEqual(raid, want) {
+		t.Fatalf("the raider table is %+v, want a player's kill to roll %+v", raid, want)
 	}
 	for _, p := range set.Prototypes() {
 		if p.Drops != "raider" {

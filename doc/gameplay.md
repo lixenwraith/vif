@@ -286,12 +286,14 @@ dropping at most one of its entries, for each cursor this instance simulates. A
 code species rolls its table in `internal/profile/loot.go` unless the scenario
 declares one of its name, and a data species the table its program's `drops`
 names; a table a scenario marks for players' kills rolls only when a cursor dealt
-the fatal damage. A unique tier skips weapon loot the cursor holds at full charge
-and any loot it already has on the map. When it drops nothing, the fallback counts
-of the entries it rolled, or of every entry if it skipped them all, add to the
-drop of each later non-unique tier. Pity-adjusted rolls improve repeated misses.
-Drops burst away from the death point, then home using direct line of sight or a
-flow field and collect near the player.
+the fatal damage. A unique tier skips weapon loot the cursor holds at full charge,
+a gun on an upgrade path at its last level, and any loot it already has on the
+map; when it skips every entry, their fallback counts add to the drop of each later
+non-unique tier, and a tier that rolls and misses adds none. Pity improves repeated
+misses: an entry's chance grows by as much again for each roll in a row it misses,
+on streaks a table keeps for each cursor, every species rolling it sharing them,
+until the game starts over. Drops burst away from the death point, then home using
+direct line of sight or a flow field and collect near the player.
 
 A drop belongs to the cursor it was rolled for and only that cursor can collect
 it, so both halves of the route are the owner's: the line of sight is tested
@@ -645,16 +647,20 @@ demon), orange animals in the moss (hedgehog, mouse; frog, hopper; bat, puffer; 
 lynx) and orchid constructs among the crystals (drone, shard; saucer, trooper;
 jelly, squid; djinn, robot), each one colour on a console. A raider lives until
 killed, and the rock pushes it as it pushes the cursor. Every type rolls the raider
-drop table vanguard declares, so one a player shoots down drops a `U`, its own loot
-kind, where it fell, for every player, and each `U` raises the gun a level of the
-scenario's nine: one shot forward, then two and three, one up and one down, one
-back, two up and down, two back, three up and down, three back. Forward is right,
-the way the ship flies. A crush is a defeat, as is heat and energy both run out: the
-rock and the drift halt under a red strobe for 250 ms, then the game starts over,
-the gun back at one shot, species damage at one and the cave at its first pace, and
-opens with "Crushed Against The Edge!" or "You Died!". The drifting text is scenery
-(§9): rock and raiders pass it by and no key types it, so the ship earns no heat by
-typing.
+drop table vanguard declares, so one a player shoots down rolls it for every player
+where it fell, each tier on its own: heat at 5%, a `U`, its own loot kind, at 50%,
+and energy at 20%, each chance growing by as much again for each kill in a row it
+misses, so a `U` drops within two kills. All 32 types share the table's streaks,
+which run on from cave to cave. No `U` drops while one is flying to the ship or the
+gun holds its last level, and then each energy drop is two. Each `U` raises the gun
+a level of the scenario's nine: one shot forward, then two and three, one up and one
+down, one back, two up and down, two back, three up and down, three back. Forward is
+right, the way the ship flies. A crush is a defeat, as is heat and energy both run
+out: the rock and the drift halt under a red strobe for 250 ms, then the game starts
+over, the gun back at one shot, species damage at one and the cave at its first
+pace, and opens with "Crushed Against The Edge!" or "You Died!". The drifting text
+is scenery (§9): rock and raiders pass it by and no key types it, so the ship earns
+no heat by typing.
 
 ## 11. System inventory
 

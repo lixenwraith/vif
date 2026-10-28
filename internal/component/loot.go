@@ -79,7 +79,7 @@ type DropEntry struct {
 	Loot          LootType
 	BaseRate      float64
 	Count         int // items dropped on success (0 treated as 1)
-	FallbackCount int // added to every later non-unique tier when this unique entry is skipped
+	FallbackCount int // added to every later non-unique tier when its unique tier skips every entry
 }
 
 // DropTier is one roll among its entries. A unique tier skips the weapons a cursor

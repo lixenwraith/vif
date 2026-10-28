@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock plays the shipped
@@ -107,10 +109,10 @@ func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.
 }
 
 // TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun plays the shipped scenario
-// and ends two raiders as they arrive: one that dies by no player's hand drops
-// nothing, and one the player shoots down drops a U where it fell, which flies to
-// the ship and raises its gun a level of vanguard's path; a new game starts the
-// path over.
+// and ends raiders as they arrive: one that dies by no player's hand drops nothing,
+// and within two the player shoots down, the U's even odds certain after a miss,
+// one drops a U where it fell, which flies to the ship and raises its gun a level
+// of vanguard's path; a new game starts the path over.
 func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
@@ -195,12 +197,16 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 		t.Fatalf("a raider nobody shot: %d kills and U's at %+v, want one kill and nothing dropped", len(kills), got)
 	}
 
-	end(true)
-	got := drops()
-	if len(kills) != 2 || len(got) != 1 {
-		t.Fatalf("a raider the player shot: %d kills and U's at %+v, want two kills and one U", len(kills), got)
+	var got []component.PositionComponent
+	for len(got) == 0 && len(kills) < 3 {
+		end(true)
+		got = drops()
 	}
-	if drop, kill := got[0], kills[1]; drop.X != kill.X || drop.Y != kill.Y {
+	if len(got) != 1 {
+		t.Fatalf("%d raiders the player shot left U's at %+v, want one within two", len(kills)-1, got)
+	}
+	// Heat or energy dropping beside it scatters the drops a cell from the kill
+	if drop, kill := got[0], kills[len(kills)-1]; vmath.IntAbs(drop.X-kill.X) > 2 || vmath.IntAbs(drop.Y-kill.Y) > 2 {
 		t.Fatalf("a U at (%d,%d) for a kill at (%d,%d), want it where the raider fell", drop.X, drop.Y, kill.X, kill.Y)
 	}
 	for tick := range 600 {
@@ -246,11 +252,12 @@ func vanguardUs(w *engine.World) []core.Entity {
 	return out
 }
 
-// TestVanguardAKillInAPairDropsEachPlayerOneU ends a raider by the host player's
-// shot on a mesh pair. Each instance rolls the raider table once for the player it
-// simulates, the guest when its ledger confirms the death, so each drops one U, and
-// each player's ship takes its own and goes up a level. The rank counts the kill by
-// an internal transition on it, which each instance crosses once.
+// TestVanguardAKillInAPairDropsEachPlayerOneU ends raiders by the host player's
+// shot on a mesh pair until each instance has dropped its player a U, two kills at
+// most. Each instance rolls the raider table once a kill for the player it
+// simulates, the guest when its ledger confirms the death, and each player's ship
+// takes its own U's and goes up a level a U. The rank counts each kill by an
+// internal transition on it, which each instance crosses once.
 func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
@@ -288,11 +295,18 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	host.AttachTransport(mesh.Node(1))
 	guest.AttachTransport(mesh.Node(2))
 
-	var kills, resets [2]int
+	// rolls are the deaths the loot system rolls on: one an instance proves, or
+	// one its ledger confirms
+	var kills, rolls, resets [2]int
 	for i, a := range apps {
 		a.SetDispatchTap(func(ev event.GameEvent) {
-			if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
-				kills[i]++
+			if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && p.Species >= component.SpeciesDataFirst {
+				if ev.Type == event.EventSpeciesKilled {
+					kills[i]++
+				}
+				if ev.Type == event.EventSpeciesKillConfirmed || ev.Type == event.EventSpeciesKilled && ev.Phase != event.PhasePredicted {
+					rolls[i]++
+				}
 			}
 			if ev.Type == event.EventGameResetRequest {
 				resets[i]++
@@ -335,62 +349,73 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 		return n
 	}
 
-	// A raider both instances fly, ended by the host player's shot in both worlds
-	var raider core.Entity
-	for range 900 {
-		step()
-		host.World().RunSafe(func() {
-			for _, e := range host.World().Components.Behavior.Entities() {
-				raider = e
-				return
-			}
-		})
-		onGuest := false
-		guest.World().RunSafe(func() { onGuest = raider != 0 && guest.World().Components.Behavior.HasEntity(raider) })
-		if onGuest {
-			break
-		}
-		raider = 0
-	}
-	if raider == 0 {
-		t.Fatal("no raider flew on both instances")
-	}
-	for i, a := range apps {
-		if n := charges(a); n != 1 {
-			t.Fatalf("instance %d: the ship's gun holds %d charges before the kill, want vanguard's first level", i, n)
-		}
-	}
 	var shooter core.Entity
 	host.World().RunSafe(func() { shooter = host.World().Resources.Player.Entity })
-	for _, a := range apps {
-		w := a.World()
-		w.RunSafe(func() {
-			if combat, ok := w.Components.Combat.GetPtr(raider); ok {
-				combat.HitPoints, combat.LastDamagedBy = 0, shooter
+	// Raiders both instances fly, each ended by the host player's shot in both
+	// worlds, until each instance has dropped a U
+	n := 0
+	for ; len(drops[0]) == 0 || len(drops[1]) == 0; n++ {
+		if n == 2 {
+			t.Fatalf("two kills dropped %d and %d U's on host and guest, want one on each at least", len(drops[0]), len(drops[1]))
+		}
+		var raider core.Entity
+		for range 900 {
+			step()
+			host.World().RunSafe(func() {
+				for _, e := range host.World().Components.Behavior.Entities() {
+					raider = e
+					return
+				}
+			})
+			onGuest := false
+			guest.World().RunSafe(func() { onGuest = raider != 0 && guest.World().Components.Behavior.HasEntity(raider) })
+			if onGuest {
+				break
 			}
-		})
+			raider = 0
+		}
+		if raider == 0 {
+			t.Fatal("no raider flew on both instances")
+		}
+		for i, a := range apps {
+			if c := charges(a); n == 0 && c != 1 {
+				t.Fatalf("instance %d: the ship's gun holds %d charges before the kill, want vanguard's first level", i, c)
+			}
+		}
+		for _, a := range apps {
+			w := a.World()
+			w.RunSafe(func() {
+				if combat, ok := w.Components.Combat.GetPtr(raider); ok {
+					combat.HitPoints, combat.LastDamagedBy = 0, shooter
+				}
+			})
+		}
+		// The guest's ledger confirms the death a few ticks on
+		for range 30 {
+			step()
+		}
 	}
 
-	for tick := 0; charges(host) < 2 || charges(guest) < 2; tick++ {
+	for tick := 0; charges(host) < 1+len(drops[0]) || charges(guest) < 1+len(drops[1]); tick++ {
 		if tick == 600 {
-			t.Fatalf("the guns hold %d and %d charges 600 ticks after the kill, want 2 each", charges(host), charges(guest))
+			t.Fatalf("the guns hold %d and %d charges 600 ticks after the kills, want a level up a U", charges(host), charges(guest))
 		}
 		if resets != [2]int{} {
-			t.Fatalf("tick %d: the game started over before a U reached each ship", tick)
+			t.Fatalf("tick %d: the game started over before the U's reached each ship", tick)
 		}
 		step()
-	}
-	if h, g := charges(host), charges(guest); h != 2 || g != 2 {
-		t.Fatalf("the guns hold %d and %d charges, want one level up each", h, g)
 	}
 	for range 30 {
 		step()
 	}
-	if kills != [2]int{1, 1} || len(drops[0]) != 1 || len(drops[1]) != 1 {
-		t.Fatalf("kills %v and %d and %d U's on host and guest, want one of each on each", kills, len(drops[0]), len(drops[1]))
+	if h, g := charges(host), charges(guest); h != 1+len(drops[0]) || g != 1+len(drops[1]) {
+		t.Fatalf("the guns hold %d and %d charges for %d and %d U's, want a level up each", h, g, len(drops[0]), len(drops[1]))
 	}
-	if h, g := rankKills(host), rankKills(guest); h != 1 || g != 1 {
-		t.Fatalf("the rank counted %d and %d kills on host and guest, want the one on each", h, g)
+	if kills != [2]int{n, n} || rolls != [2]int{n, n} {
+		t.Fatalf("kills %v and rolls %v on host and guest, want %d of each on each", kills, rolls, n)
+	}
+	if h, g := rankKills(host), rankKills(guest); h != int64(n) || g != int64(n) {
+		t.Fatalf("the rank counted %d and %d kills on host and guest, want the %d on each", h, g, n)
 	}
 }
 
@@ -777,8 +802,9 @@ func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 // cave. No raider comes while the cave opens to no rock and its scroll halts, and the
 // Kraken rises at the right edge with vanguard's hit points. The player's kill of it
 // drops a missile charge, heat and two energy, doubles species damage and lays the
-// next cave in another stone art, scrolling a fifth faster once its pace has eased
-// in, where the climb starts over at the first rank of that cave's types.
+// next cave in another stone art, the raider table's streaks carried into it,
+// scrolling a fifth faster once its pace has eased in, where the climb starts over
+// at the first rank of that cave's types.
 func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) {
 	t.Parallel()
 	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/vanguard"), "scenario.toml")
@@ -871,6 +897,29 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		i := slices.Index(arts, any(art))
 		return i >= 0 && slices.Contains(types[i*8:i*8+8], any(name))
 	}
+	// streaks are the raider table's pity rows as the loot system carries them
+	streaks := func() (rows []string) {
+		w.RunSafe(func() {
+			for _, sys := range w.Systems() {
+				if s, ok := sys.(engine.LocalStateSaver); ok && sys.Name() == "loot" {
+					data, err := s.SaveLocal()
+					var all []struct {
+						Table  string `json:"table"`
+						Misses []int  `json:"misses"`
+					}
+					if err != nil || json.Unmarshal(data, &all) != nil {
+						t.Errorf("the loot system's state: %v", err)
+					}
+					for _, r := range all {
+						if r.Table == "raider" {
+							rows = append(rows, fmt.Sprint(r.Misses))
+						}
+					}
+				}
+			}
+		})
+		return rows
+	}
 
 	// Two tiers: each climb ends in the Kraken, and each cave after one is of
 	// another stone, a fifth faster in whole columns a second
@@ -926,8 +975,13 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 			t.Fatalf("tier %d: the cave scrolled from column %d to %d with the Kraken up, want it halted", cycle, halted, origin)
 		}
 
-		// The player shoots it down
+		// The player shoots it down, the raiders' drops still flying left out
+		carried := streaks()
+		before := map[core.Entity]bool{}
 		w.RunSafe(func() {
+			for _, e := range w.Components.Loot.Entities() {
+				before[e] = true
+			}
 			for _, e := range w.Components.Kraken.Entities() {
 				combat, _ := w.Components.Combat.GetPtr(e)
 				combat.HitPoints, combat.LastDamagedBy = 0, w.Resources.Player.Entity
@@ -938,7 +992,7 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		var multiplier int64
 		w.RunSafe(func() {
 			for _, e := range w.Components.Loot.Entities() {
-				if loot, _ := w.Components.Loot.GetComponent(e); loot.Owner == w.Resources.Player.Entity {
+				if loot, _ := w.Components.Loot.GetComponent(e); loot.Owner == w.Resources.Player.Entity && !before[e] {
 					drops[loot.Type]++
 				}
 			}
@@ -955,6 +1009,9 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		next, start := rock()
 		if next == art || !slices.Contains(arts, any(next)) || start > 1 {
 			t.Fatalf("tier %d: the next cave wears %q from column %d after %q, want another of %v from its start", cycle, next, start, art, arts)
+		}
+		if got := streaks(); len(carried) == 0 || !slices.Equal(got, carried) {
+			t.Fatalf("tier %d: the raider table's streaks went from %v to %v over the Kraken, want them carried on", cycle, carried, got)
 		}
 		a.Tick(25)
 		_, eased := rock()

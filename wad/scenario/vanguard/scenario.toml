@@ -7,11 +7,11 @@ macro_files = ["macros.toml"]
 # left past it. Rock pushes the cursor a column back and toward the channel; rock
 # pressing it against the left edge crushes it and the game starts over. Glyphs drift
 # left behind the rock at three depths as scenery no key types, raiders of the cave's
-# own eight types arrive at the right edge on a timer, and each one shot down drops a
-# U that raises the gun a level, from one shot forward to three each way. Four ranks
-# shot down end the cave: it opens to no rock, the scroll halts and the Kraken rises,
-# and once it is shot down species damage doubles and the next cave comes in, faster
-# and of another stone.
+# own eight types arrive at the right edge on a timer, and those shot down drop U's
+# that raise the gun a level, from one shot forward to three each way, energy and
+# heat. Four ranks shot down end the cave: it opens to no rock, the scroll halts and
+# the Kraken rises, and once it is shot down species damage doubles and the next
+# cave comes in, faster and of another stone.
 
 # Twice the cave's narrowest gap, so even the smallest map opens past its narrowest
 [map]
@@ -60,10 +60,9 @@ squid = { file = "behavior/crystal/squid.toml" }
 djinn = { file = "behavior/crystal/djinn.toml" }
 robot = { file = "behavior/crystal/robot.toml" }
 
-# The U: the gun's next level of the path the ship flies, the one loot vanguard
-# drops. Every raider type names the raider table, so a raider a player shoots
-# down drops a U where it fell, one for every player; one that dies by no player's
-# hand drops nothing.
+# The U: the gun's next level of the path the ship flies. Every raider type names
+# the raider table, so a raider a player shoots down rolls it for every player where
+# it fell; one that dies by no player's hand drops nothing.
 [loot.upgrade]
 rune = "U"
 color = { r = 255, g = 255, b = 0 }
@@ -71,9 +70,17 @@ glow = { r = 100, g = 220, b = 100 }
 reward = "weapon"
 weapon = "gun"
 
+# Each tier rolls on its own, its chance growing by as much again for each kill in a
+# row it misses, on streaks every raider type shares from cave to cave: heat at 5%,
+# the U at 50% until the gun holds its last level, when its fallback makes each
+# energy drop two, and energy at 20%. Heat rolls first, so the fallback passes it by.
 [drops.raider]
 killer = "player"
-tiers = [{ entries = [{ loot = "upgrade", rate = 1.0 }] }]
+tiers = [
+    { entries = [{ loot = "heat", rate = 0.05 }] },
+    { unique = true, entries = [{ loot = "upgrade", rate = 0.5, fallback = 1 }] },
+    { entries = [{ loot = "energy", rate = 0.2 }] },
+]
 
 # The Kraken a player shoots down drops a missile charge, heat and two energy for
 # every player, in place of its code drops

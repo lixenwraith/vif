@@ -91,7 +91,7 @@ global = [{ macro = "RaiderStun" }]
 # console draws the cave's one colour, a hit reversing it. It materializes onto
 # the map in half a second, a quarter reading as a flash, so scrolling rock has
 # little time to come over its footprint, and lands as the materialize ends; a
-# player's kill drops a U.
+# player's kill rolls the raider table.
 [macros.Raider.body.prototype]
 entrance = "materialize"
 entrance_ms = 500

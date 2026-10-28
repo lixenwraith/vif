@@ -95,3 +95,96 @@ func TestADropCarriesItsKindsLookAndGrantsItsReward(t *testing.T) {
 		t.Fatalf("collecting the upgrade granted a gun charge %t and flashed its rune %t, want both and the drop gone", granted, flashed)
 	}
 }
+
+// Two species naming one table roll on its one streak, which a copy carries: a
+// U at even odds, certain after a miss, never misses twice running between them
+func TestEverySpeciesNamingATableRollsOnItsStreaks(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	raiderLoot(w)
+	w.Resources.Loot.Tables["raider"] = component.DropTable{Tiers: []component.DropTier{
+		{Entries: []component.DropEntry{{Loot: component.LootCount, BaseRate: 0.5, Count: 1}}},
+	}}
+	w.Resources.Behaviors = append(w.Resources.Behaviors, component.BehaviorPrototype{Name: "crab", Species: component.SpeciesDataFirst + 1, Drops: "raider"})
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+
+	missed, misses := false, 0
+	for i := range 200 {
+		dropped := len(loot.rollDropTable(component.SpeciesDataFirst+component.SpeciesType(i%2), cursor, 0)) > 0
+		if !dropped && missed {
+			t.Fatalf("roll %d: a second miss in a row across the table's two species", i)
+		}
+		if missed = !dropped; missed {
+			misses++
+		}
+	}
+	if misses == 0 || len(loot.pity) != 1 {
+		t.Fatalf("%d misses over %d streaks, want some on the table's one", misses, len(loot.pity))
+	}
+
+	for !missed {
+		missed = len(loot.rollDropTable(component.SpeciesDataFirst, cursor, 0)) == 0
+	}
+	data, err := loot.SaveLocal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := ready(NewLootSystem(w)).(*LootSystem)
+	if err := copied.LoadLocal(data); err != nil {
+		t.Fatal(err)
+	}
+	if got := copied.rollDropTable(component.SpeciesDataFirst+1, cursor, 0); len(got) != 1 {
+		t.Fatalf("a copy rolled %v after the streak's miss, want the U it makes certain", got)
+	}
+}
+
+// A gun on a scenario's path is full at the path's last level, not the code gun's
+// third charge: only then does a unique tier pass its U over, for its fallback
+func TestAUniqueGunOnAPathIsFullAtItsLastLevel(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	raiderLoot(w)
+	w.Resources.Loot.Tables["raider"] = component.DropTable{Tiers: []component.DropTier{
+		{Unique: true, Entries: []component.DropEntry{{Loot: component.LootCount, BaseRate: 1, Count: 1, FallbackCount: 1}}},
+		{Entries: []component.DropEntry{{Loot: component.LootEnergy, BaseRate: 1, Count: 1}}},
+	}}
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+	roll := func(charges int) map[component.LootType]int {
+		weapons, _ := w.Components.Weapon.GetPtr(cursor)
+		weapons.GunLevels, weapons.Charges[component.WeaponGun] = 9, charges
+		got := map[component.LootType]int{}
+		for _, r := range loot.rollDropTable(component.SpeciesDataFirst, cursor, 0) {
+			got[r.Loot] += r.Count
+		}
+		return got
+	}
+	if got := roll(component.WeaponSpecs[component.WeaponGun].MaxCharges); got[component.LootCount] != 1 || got[component.LootEnergy] != 1 {
+		t.Fatalf("a gun three levels up its path of nine dropped %v, want a U and one energy", got)
+	}
+	if got := roll(9); len(got) != 1 || got[component.LootEnergy] != 2 {
+		t.Fatalf("a gun at its path's last level dropped %v, want no U and two energy", got)
+	}
+}
+
+// A unique tier that rolls and misses adds no fallback; only loot it skips does
+func TestAUniqueTiersMissAddsNoFallback(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	w.Resources.Loot.Tables = map[string]component.DropTable{"drain": {Tiers: []component.DropTier{
+		{Unique: true, Entries: []component.DropEntry{{Loot: component.LootRod, BaseRate: 0.01, Count: 1, FallbackCount: 2}}},
+		{Entries: []component.DropEntry{{Loot: component.LootEnergy, BaseRate: 1, Count: 1}}},
+	}}}
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+	misses := 0
+	for range 20 {
+		got := map[component.LootType]int{}
+		for _, r := range loot.rollDropTable(component.SpeciesDrain, cursor, 0) {
+			got[r.Loot] += r.Count
+		}
+		if got[component.LootRod] == 0 {
+			if misses++; got[component.LootEnergy] != 1 {
+				t.Fatalf("a missed rod roll dropped %v, want the one energy alone", got)
+			}
+		}
+	}
+	if misses == 0 {
+		t.Fatal("no rod roll missed at 1%")
+	}
+}

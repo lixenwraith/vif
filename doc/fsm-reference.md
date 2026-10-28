@@ -1043,8 +1043,10 @@ tiers = [                           # Rolled in order, at most 8, each dropping 
 ```
 
 - `rate`: an entry's chance, above 0 and at most 1, which grows by as much again
-  for each roll in a row it misses; a tier's chances summing past 1 are scaled to
-  share one.
+  for each roll in a row it misses, on streaks the table keeps for each cursor
+  until the game starts over, every species naming it sharing them; a tier's
+  chances summing past 1 are scaled to share one.
 - `count`: how many the entry drops, 1 to 8, one when left out.
 - `fallback`: in a unique tier, how many the entry adds, 0 to 8, to the drop of each
-  later tier that is not unique when this tier drops nothing.
+  later tier that is not unique when this tier skips all its loot; a roll that
+  misses adds none.
