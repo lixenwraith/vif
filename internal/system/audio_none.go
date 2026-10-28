@@ -32,7 +32,7 @@ func (*unavailableAudioSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSoundRequest,
 		event.EventGamePauseChanged,
-		event.EventSoundMuteToggle,
+		event.EventAudioMuteToggle,
 		event.EventMetaSystemCommandRequest,
 	}
 }

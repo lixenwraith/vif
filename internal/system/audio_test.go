@@ -40,7 +40,7 @@ func TestAudioAvailabilityGatesMuteResetAndMusicWithoutLosingPreferences(t *test
 		dispatch(event.GameEvent{Type: event.EventMetaSystemCommandRequest, Payload: &event.MetaSystemCommandPayload{SystemName: name, Enabled: enabled}})
 	}
 	setMask := func(mask uint8) {
-		dispatch(event.GameEvent{Type: event.EventSoundMuteToggle, Payload: &event.SoundMuteTogglePayload{Mode: event.MuteSet, Mask: mask}})
+		dispatch(event.GameEvent{Type: event.EventAudioMuteToggle, Payload: &event.AudioMuteTogglePayload{Mode: event.MuteSet, Mask: mask}})
 	}
 	assertMask := func(want uint8) {
 		t.Helper()
@@ -60,7 +60,7 @@ func TestAudioAvailabilityGatesMuteResetAndMusicWithoutLosingPreferences(t *test
 	command("audio", false)
 	command("music", false)
 	for range 8 {
-		dispatch(event.GameEvent{Type: event.EventSoundMuteToggle})
+		dispatch(event.GameEvent{Type: event.EventAudioMuteToggle})
 		assertMask(parameter.AudioChanNone)
 		if !player.IsSfxMuted() || !player.IsMusicMuted() || player.IsMusicPlaying() {
 			t.Fatal("mute cycle started a disabled channel")
@@ -157,7 +157,7 @@ func TestARebuiltCopyTakesOverTheSpeakers(t *testing.T) {
 	}
 	from, _, play := world(&engine.AudioResource{Engine: player})
 	to, music, dispatch := world(nil)
-	play(event.GameEvent{Type: event.EventSoundMuteToggle, Payload: &event.SoundMuteTogglePayload{Mode: event.MuteSet, Mask: parameter.AudioChanAll}})
+	play(event.GameEvent{Type: event.EventAudioMuteToggle, Payload: &event.AudioMuteTogglePayload{Mode: event.MuteSet, Mask: parameter.AudioChanAll}})
 	play(event.GameEvent{Type: event.EventMusicStart})
 	settle("presented world's music did not start", player.IsMusicPlaying)
 	dispatch(gate(false)) // the copy stands before a region opened the music gate

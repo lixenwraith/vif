@@ -106,7 +106,7 @@ func (s *AudioSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSoundRequest,
 		event.EventGamePauseChanged,
-		event.EventSoundMuteToggle,
+		event.EventAudioMuteToggle,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -142,9 +142,9 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 		}
 		return
 
-	case event.EventSoundMuteToggle:
+	case event.EventAudioMuteToggle:
 		next := parameter.AudioMaskCycle(s.mask)
-		if p, ok := ev.Payload.(*event.SoundMuteTogglePayload); ok {
+		if p, ok := ev.Payload.(*event.AudioMuteTogglePayload); ok {
 			switch p.Mode {
 			case event.MuteToggle:
 				next = s.mask ^ (p.Mask & parameter.AudioChanAll)

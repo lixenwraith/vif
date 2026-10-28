@@ -16,7 +16,7 @@ func InitRegistry() {
 	RegisterType("EventLevelSetup", EventLevelSetup)
 	RegisterType("EventScreenResize", EventScreenResize)
 	RegisterType("EventSoundRequest", EventSoundRequest)
-	RegisterType("EventSoundMuteToggle", EventSoundMuteToggle)
+	RegisterType("EventAudioMuteToggle", EventAudioMuteToggle)
 	RegisterType("EventAudioMuteChanged", EventAudioMuteChanged)
 	RegisterType("EventMusicStart", EventMusicStart)
 	RegisterType("EventMusicStop", EventMusicStop)
@@ -228,7 +228,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventLevelSetup:                      ClassShared,
 	EventScreenResize:                    ClassLocal,
 	EventSoundRequest:                    ClassLocal,
-	EventSoundMuteToggle:                 ClassLocal,
+	EventAudioMuteToggle:                 ClassLocal,
 	EventAudioMuteChanged:                ClassLocal,
 	EventMusicStart:                      ClassLocal,
 	EventMusicStop:                       ClassLocal,

@@ -50,8 +50,8 @@ const (
 
 	// EventSoundRequest (SoundRequestPayload) [local] requests audio playback
 	EventSoundRequest
-	// EventSoundMuteToggle (SoundMuteTogglePayload) [local] requests an audio mute-mask change; nil payload cycles
-	EventSoundMuteToggle
+	// EventAudioMuteToggle (AudioMuteTogglePayload) [local] requests an audio mute-mask change; nil payload cycles
+	EventAudioMuteToggle
 	// EventAudioMuteChanged (AudioMuteChangedPayload) [local] announces the applied audio mute mask
 	EventAudioMuteChanged
 

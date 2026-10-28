@@ -103,7 +103,7 @@ reused once a departed player is dropped.
 the session when its authority leaves, or `migrate` to allow a successor. The
 status bar reports the bound address. Share an address reachable by your guests;
 the menu does not change network reachability. A browser can join a session but
-not host one.
+not host one, since a page cannot accept connections; the row says so.
 
 **Join a session** accepts `host:port[/name]`, `vif://` and `tcp://` links or
 `ws(s)://` URLs. An `http(s)://` site requests a new session with server defaults.

@@ -415,7 +415,7 @@ func (r *Router) handleEscape() bool {
 // handleToggleAudioCycle asks AudioSystem to advance parameter.AudioMaskCycle. The
 // mute is this machine's, so it is neither journaled nor counted as an action.
 func (r *Router) handleToggleAudioCycle() bool {
-	r.ctx.PushLocalOrigin(event.EventSoundMuteToggle, nil, event.OriginDevice)
+	r.ctx.PushLocalOrigin(event.EventAudioMuteToggle, nil, event.OriginDevice)
 	return true
 }
 

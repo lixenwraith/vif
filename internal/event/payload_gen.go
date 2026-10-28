@@ -17,7 +17,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventLevelSetup:                      func() any { return new(LevelSetupPayload) },
 	EventScreenResize:                    func() any { return new(ScreenResizePayload) },
 	EventSoundRequest:                    func() any { return new(SoundRequestPayload) },
-	EventSoundMuteToggle:                 func() any { return new(SoundMuteTogglePayload) },
+	EventAudioMuteToggle:                 func() any { return new(AudioMuteTogglePayload) },
 	EventAudioMuteChanged:                func() any { return new(AudioMuteChangedPayload) },
 	EventMusicStart:                      func() any { return new(MusicStartPayload) },
 	EventBeatPatternRequest:              func() any { return new(BeatPatternRequestPayload) },
@@ -190,7 +190,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventLevelSetup:                      &codecLevelSetupPayload,
 	EventScreenResize:                    &codecScreenResizePayload,
 	EventSoundRequest:                    &codecSoundRequestPayload,
-	EventSoundMuteToggle:                 &codecSoundMuteTogglePayload,
+	EventAudioMuteToggle:                 &codecAudioMuteTogglePayload,
 	EventAudioMuteChanged:                &codecAudioMuteChangedPayload,
 	EventMusicStart:                      &codecMusicStartPayload,
 	EventBeatPatternRequest:              &codecBeatPatternRequestPayload,
@@ -388,13 +388,13 @@ var codecSoundRequestPayload = structCodec{size: unsafe.Sizeof(SoundRequestPaylo
 	{off: unsafe.Offsetof(SoundRequestPayload{}.Name), kind: kindString},
 }}
 
-func (p *SoundMuteTogglePayload) codec() (*structCodec, unsafe.Pointer) {
-	return &codecSoundMuteTogglePayload, unsafe.Pointer(p)
+func (p *AudioMuteTogglePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecAudioMuteTogglePayload, unsafe.Pointer(p)
 }
 
-var codecSoundMuteTogglePayload = structCodec{size: unsafe.Sizeof(SoundMuteTogglePayload{}), fields: []field{
-	{off: unsafe.Offsetof(SoundMuteTogglePayload{}.Mode), kind: kindUint, size: unsafe.Sizeof(SoundMuteToggleMode(0))},
-	{off: unsafe.Offsetof(SoundMuteTogglePayload{}.Mask), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+var codecAudioMuteTogglePayload = structCodec{size: unsafe.Sizeof(AudioMuteTogglePayload{}), fields: []field{
+	{off: unsafe.Offsetof(AudioMuteTogglePayload{}.Mode), kind: kindUint, size: unsafe.Sizeof(AudioMuteToggleMode(0))},
+	{off: unsafe.Offsetof(AudioMuteTogglePayload{}.Mask), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 }}
 
 func (p *AudioMuteChangedPayload) codec() (*structCodec, unsafe.Pointer) {

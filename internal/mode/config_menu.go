@@ -271,7 +271,7 @@ func audioChannelValue(mask uint8) func(*engine.GameContext) string {
 
 func toggleAudioChannel(mask uint8) func(*engine.GameContext, int) {
 	return func(ctx *engine.GameContext, _ int) {
-		ctx.PushLocalOrigin(event.EventSoundMuteToggle, &event.SoundMuteTogglePayload{Mode: event.MuteToggle, Mask: mask}, event.OriginDevice)
+		ctx.PushLocalOrigin(event.EventAudioMuteToggle, &event.AudioMuteTogglePayload{Mode: event.MuteToggle, Mask: mask}, event.OriginDevice)
 	}
 }
 

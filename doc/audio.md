@@ -208,8 +208,9 @@ Sfx and music have independent mute bits. `Ctrl-S` cycles the composed audio
 mask through silence, sfx only, music only, and both. Every build starts with
 both on, as the embedded `vif.toml`'s `[play]` says, until the player's own
 settings say otherwise; `-mute` starts a run muted. Each change is written back
-for the next run, and system and config events can change channels
-independently.
+for the next run. `EventAudioMuteToggle` cycles, flips or sets channels from a
+key, a system or the configuration menu, and `EventAudioMuteChanged` announces
+the mask applied.
 
 Pause is a device/output state, not merely a gameplay-system toggle. It applies
 even if `AudioSystem` is disabled and ramps the master gain over 250 ms; music
