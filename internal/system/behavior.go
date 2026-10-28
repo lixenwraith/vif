@@ -295,8 +295,9 @@ func (s *BehaviorSystem) entering(e core.Entity) (int, bool) {
 }
 
 // enter opens program i's entrance: a Shared materialize naming the species over
-// the footprint found as a spawn finds it, so the body lands as it ends, and a
-// capture meanwhile carries the pending spawn as it carries any store (D-19)
+// the footprint found as a spawn finds it, for as long as its prototype gives, so
+// the body lands as it ends, and a capture meanwhile carries the pending spawn as
+// it carries any store (D-19)
 func (s *BehaviorSystem) enter(i, x, y int) {
 	p := &s.set.Prototypes()[i]
 	left, top, found := s.findFootprint(p, x, y)
@@ -311,6 +312,7 @@ func (s *BehaviorSystem) enter(i, x, y int) {
 		AreaHeight: p.Height,
 		Type:       component.SpawnTypeSwarm,
 		Species:    p.Species,
+		DurationMs: p.EntranceDuration.Milliseconds(),
 	})
 	s.countNow(i)
 }
@@ -630,7 +632,8 @@ type (
 		Color string `toml:"color"`
 	}
 	materializeArgs struct {
-		Spawn string `toml:"spawn"`
+		Spawn      string `toml:"spawn"`
+		DurationMs int64  `toml:"duration_ms"`
 	}
 	spawnSpeciesArgs struct {
 		Species string `toml:"species"`
@@ -807,6 +810,9 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		if spawn < 0 || component.SpawnType(spawn) == component.SpawnTypeDrain {
 			return nil, fmt.Errorf("spawn %q is not one of swarm, nugget", a.Spawn)
 		}
+		if a.DurationMs < 0 {
+			return nil, fmt.Errorf("duration_ms %d is negative", a.DurationMs)
+		}
 		return func(c *behaviorCtx) {
 			x, y, ok := c.target()
 			if !ok {
@@ -819,6 +825,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 				AreaWidth:  p.Width,
 				AreaHeight: p.Height,
 				Type:       component.SpawnType(spawn),
+				DurationMs: a.DurationMs,
 			})
 		}, nil
 	})

@@ -607,9 +607,10 @@ type PingGridRequestPayload struct {
 
 // MaterializeRequestPayload contains parameters to start a visual spawn sequence
 type MaterializeRequestPayload struct {
-	X    int                 `toml:"x"`
-	Y    int                 `toml:"y"`
-	Type component.SpawnType `toml:"type"`
+	X          int                 `toml:"x"`
+	Y          int                 `toml:"y"`
+	Type       component.SpawnType `toml:"type"`
+	DurationMs int64               `toml:"duration_ms"` // 0 = its style's
 }
 
 // MaterializeAreaRequestPayload for area-based materialization (swarm, quasar)
@@ -619,7 +620,8 @@ type MaterializeAreaRequestPayload struct {
 	AreaWidth  int                   `toml:"area_width"` // 0 or 1 = single cell
 	AreaHeight int                   `toml:"area_height"`
 	Type       component.SpawnType   `toml:"type"`
-	Species    component.SpeciesType `toml:"species"` // the species its completion lands; SpeciesNone lands nothing
+	Species    component.SpeciesType `toml:"species"`     // the species its completion lands; SpeciesNone lands nothing
+	DurationMs int64                 `toml:"duration_ms"` // 0 = its style's
 }
 
 // MaterializeCompletedPayload carries details about a completed materialization
@@ -1383,8 +1385,8 @@ type MazeSpawnRequestPayload struct {
 // CaveStartPayload lays a cave across the map, its rock following cave.Config at the
 // map's height, and scrolls it left at Speed columns a second, up to the soft cap. A
 // zero speed, gap or wavelength takes its default, a zero seed draws one, a zero mask
-// blocks everything and a zero visual draws stone. Art names a stone art preset
-// (pattern.ParseArtPreset) the rock draws instead, as EmitEvent's pick may choose.
+// blocks everything, a zero visual draws stone and a zero reach caps no wall. Art names
+// a stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's pick may.
 type CaveStartPayload struct {
 	Seed       uint64                     `toml:"seed"`
 	Speed      float64                    `toml:"speed"`
@@ -1396,6 +1398,7 @@ type CaveStartPayload struct {
 	Detail     int                        `toml:"detail"`
 	Ramp       int                        `toml:"ramp"`
 	Octaves    int                        `toml:"octaves"`
+	Reach      int                        `toml:"reach"`
 	BlockMask  component.WallBlockMask    `toml:"block_mask"`
 	Visual     component.WallVisualConfig `toml:"visual"`
 	Art        string                     `toml:"art"`

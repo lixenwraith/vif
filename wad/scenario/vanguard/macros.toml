@@ -89,9 +89,11 @@ global = [{ macro = "RaiderStun" }]
 
 # Its cells index the cave's palette, 0 body, 1 eyes, 2 limbs, 3 accent; the
 # console draws the cave's one colour, a hit reversing it. It materializes onto
-# the map and lands as the materialize ends, and a player's kill drops a U.
+# the map in a quarter of a second, so scrolling rock has little time to come over
+# its footprint, and lands as the materialize ends; a player's kill drops a U.
 [macros.Raider.body.prototype]
 entrance = "materialize"
+entrance_ms = 250
 drops = "raider"
 width = "${width}"
 height = "${height}"

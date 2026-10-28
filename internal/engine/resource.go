@@ -67,6 +67,9 @@ type Resource struct {
 	// The drift's layers as this tick left them, for the glyph spawner and renderer
 	Drift *DriftResource
 
+	// The cave's scroll as this tick left it, for what rides the cave's frame
+	Cave *CaveResource
+
 	// The lines the glyph spawner is feeding onto the map, for the glyph renderer
 	Entry *EntryResource
 
@@ -142,6 +145,16 @@ type DriftResource struct {
 func (r *DriftResource) Carry(level int, since time.Duration) (dx, dy int) {
 	p, v := r.Phase[level], r.Rate[level]
 	return int((p[0] + v[0]*int64(since)) / vmath.CellSpan), int((p[1] + v[1]*int64(since)) / vmath.CellSpan)
+}
+
+// --- Cave Resource ---
+
+// CaveResource is the cave's scroll as the wall system left it this tick: the
+// columns its rock and shared walls stepped left. The wall system writes, the particle
+// system reads to carry what rides the cave's frame; it is derived state and never
+// copied with a world.
+type CaveResource struct {
+	Steps int
 }
 
 // --- Entry Resource ---

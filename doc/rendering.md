@@ -385,11 +385,12 @@ the copy is a packed 16 bytes and a glyph's kind is its protection alone
 frame where a 40-byte copy and `IsTypeable` took 63 (`BenchmarkGlyphRender`).
 Scenery standing in rock or a wall that blocks spawns is not drawn: rock and walls
 draw first and a glyph prints over them foreground-only, so the text passes behind
-them. In truecolor each scenery layer mixes its type's bright color into the
-background by `visual.SceneryDepthMix`, so far text fades as haze, while typeable
-text keeps its level's color. In 256-color mode a glyph hue has two console
-entries, one for dark and one shared by normal and bright, so only the dark layer
-stands apart there.
+them; the sigil renderer leaves out a sigil there the same way, so a particle
+passing through rock goes behind it. In truecolor each scenery layer mixes its
+type's bright color into the background by `visual.SceneryDepthMix`, so far text
+fades as haze, while typeable text keeps its level's color. In 256-color mode a
+glyph hue has two console entries, one for dark and one shared by normal and
+bright, so only the dark layer stands apart there.
 
 ### Local and peer cursors
 

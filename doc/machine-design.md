@@ -383,7 +383,10 @@ materialize, `MaterializeComponent.Species` naming the species its completion
 lands; a drain pair's swarm rides the spirits its drains fly in,
 `SpiritComponent.Species` naming the species the spirit's arrival lands. The
 pending spawn is the materialize or spirit entity, which a capture carries with
-the stores, not a list beside its system.
+the stores, not a list beside its system. A materialize lasts its request's
+`DurationMs`, its style's when that is 0: the deadline slot keeps the duration it
+was armed with, which a capture carries with the timer and the renderer spreads
+the style's fill, hold and recede over.
 
 - **Storm.** The blue's cue starts a Shared materialize naming the swarm, and
   `StormSystem` lands the swarm on its `EventMaterializeComplete`, its header on
@@ -401,8 +404,8 @@ the stores, not a list beside its system.
   drains' deaths.
 - **Data species.** A prototype naming `entrance = "materialize"` comes on as
   the storm's swarm does, the fuse playing no part: `BehaviorSystem.enter` starts
-  a Shared materialize naming the species over the nearest place its footprint
-  fits, searched over the whole map (`findFootprint`: `FindFreeAreaInside` with a
+  a Shared materialize naming the species, for the prototype's `entrance_ms`, over
+  the nearest place its footprint fits, searched over the whole map (`findFootprint`: `FindFreeAreaInside` with a
   negative radius, the origin pulled in from the edges until the footprint fits),
   and on its Shared completion `spawn` lands the body, searching again from that
   footprint, since rock may have come over it meanwhile. The materialize counts as
@@ -842,7 +845,7 @@ captures, one a tick, read the frames. Per species:
   quasar the tick its materialize's last cells go.
 - Data species: `:n vanguard`, with `:god` to outlast the raid. A raider
   materializes at the right edge every two seconds while fewer than three fly or
-  materialize, lands as its materialize ends, chases, locks red
+  materialize, lands as its quarter-second materialize ends, chases, locks red
   under the cyan countdown, and charges the cell it saw where its body clears the
   way, else teleports beside it; a disruptor stun drops it back to its chase;
   `:emit EventBehaviorCancelRequest { program = "scarab" }` removes the scarabs.

@@ -69,7 +69,8 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		// Transform target area to viewport coords
 		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
 
-		style, c := component.MaterializeStyles[mat.Type], materializePalette[mat.Type]
+		style := timedStyle(component.MaterializeStyles[mat.Type], timer.Slots[component.TimerDeadline].Duration)
+		c := materializePalette[mat.Type]
 		for _, dir := range [...]beamDir{dirUp, dirDown, dirLeft, dirRight} {
 			r.renderBeam(ctx, buf, pf, mat, elapsed, style, c, targetVX, targetVY, dir)
 		}
@@ -119,6 +120,20 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 			r.renderBeamCellSpan(ctx, buf, pf, c, dir, edgePos, cellOffset, spanPos, intensity)
 		}
 	}
+}
+
+// timedStyle spreads a style's fill, hold and recede over d, the duration its
+// materialize's timer was armed with, in the style's proportions
+func timedStyle(style component.MaterializeStyle, d time.Duration) component.MaterializeStyle {
+	total := style.Duration()
+	if d <= 0 || d == total {
+		return style
+	}
+	share := float64(d) / float64(total)
+	style.Fill = time.Duration(float64(style.Fill) * share)
+	style.Hold = time.Duration(float64(style.Hold) * share)
+	style.Recede = d - style.Fill - style.Hold
+	return style
 }
 
 // beamSpan is the lit segment at elapsed, as offsets from the edge: the head runs

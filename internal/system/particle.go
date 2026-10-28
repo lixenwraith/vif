@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -162,6 +163,7 @@ type ParticleSystem struct {
 	behavior [component.ParticleBehaviorCount]particleBehaviorState
 	entities []core.Entity
 	deathBuf []core.Entity
+	carried  []core.Entity // what the cave's steps carry, refilled in place
 	centers  []orbitCenter
 
 	// The dust chase boost follows cursor jumps, one stagger group (0-2) per jump
@@ -355,13 +357,17 @@ func (s *ParticleSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update advances dust, then decay, then blossom. A detached reusable entity
-// list permits immediate removals from the shared component store.
+// Update carries the particles the cave's scroll moves this tick, then advances dust,
+// then decay, then blossom. A detached reusable entity list permits immediate
+// removals from the shared component store.
 func (s *ParticleSystem) Update() {
 	if !s.enabled {
 		return
 	}
 
+	if steps := s.world.Resources.Cave.Steps; steps > 0 {
+		s.carry(steps)
+	}
 	particles := s.world.Components.Particle
 	if particles.CountEntities() > 0 {
 		s.entities = append(s.entities[:0], particles.Entities()...)
@@ -500,10 +506,44 @@ func (s *ParticleSystem) vortex(p *event.ParticleVortexPayload) {
 }
 
 // behindWall reports a glyph standing in rock or a wall, as scenery may: it is
-// behind them, where no conversion reaches, and a particle born there would stay
+// behind them, where no conversion reaches
 func (s *ParticleSystem) behindWall(e core.Entity) bool {
 	pos, ok := s.world.Positions.GetPosition(e)
 	return ok && s.world.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn)
+}
+
+// carry moves every particle no anchor holds left with the cave's steps, the cell it
+// last entered with it, so it falls, rises or wanders in the cave's frame and enters
+// a cell only by its own motion; one carried off the map is gone
+func (s *ParticleSystem) carry(steps int) {
+	particles, kinetics := s.world.Components.Particle, s.world.Components.Kinetic
+	s.carried = s.carried[:0]
+	for _, e := range particles.Entities() {
+		if p, ok := particles.GetPtr(e); ok && !p.Orbiting && kinetics.HasEntity(e) {
+			p.LastIntX -= steps
+			s.carried = append(s.carried, e)
+		}
+	}
+	if len(s.carried) == 0 {
+		return
+	}
+	s.destroyBuf = s.world.Positions.Shift(s.carried, -steps, 0, s.destroyBuf[:0])
+	for _, e := range s.carried {
+		if k, ok := kinetics.GetPtr(e); ok {
+			k.PreciseX -= float64(steps)
+		}
+	}
+	// One a full cell refused is placed by its next move; one off the map is gone
+	s.destroyBuf = slices.DeleteFunc(s.destroyBuf, func(e core.Entity) bool {
+		pos, _ := s.world.Positions.GetPosition(e)
+		return pos.X >= 0
+	})
+	for _, e := range s.destroyBuf {
+		if p, ok := particles.GetComponent(e); ok && validParticle(p.Behavior) {
+			s.behavior[p.Behavior].statBoundaryHits.Add(1)
+		}
+	}
+	s.world.DestroyEntitiesBatch(s.destroyBuf)
 }
 
 // buttonRect places the button in slot on this map; ok is false when none is there

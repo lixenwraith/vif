@@ -235,6 +235,7 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *WallSystem) Update() {
+	s.world.Resources.Cave.Steps = 0
 	if !s.enabled {
 		return
 	}
@@ -955,11 +956,12 @@ func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMas
 		return component.WallBlockNone
 	}
 
-	if s.world.Components.Kinetic.HasEntity(entity) {
-		return component.WallBlockKinetic
-	}
+	// A particle moves as a kinetic does but meets walls by its own bit
 	if s.world.Components.Particle.HasEntity(entity) {
 		return component.WallBlockParticle
+	}
+	if s.world.Components.Kinetic.HasEntity(entity) {
+		return component.WallBlockKinetic
 	}
 	// Phantom heads are non-physical anchors, not subject to wall displacement
 	if s.world.Components.Header.HasEntity(entity) {
@@ -1200,6 +1202,7 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 		Detail:     p.Detail,
 		Ramp:       p.Ramp,
 		Octaves:    p.Octaves,
+		Reach:      p.Reach,
 	}
 	if err := cfg.Validate(); err != nil {
 		s.world.DebugPrint(err.Error())
@@ -1317,9 +1320,10 @@ func (s *WallSystem) inRock(fn func(x, y int)) {
 }
 
 // scrollCave carries the phase at the scroll's pace and steps the cave a column for
-// each whole column carried. A cursor's push is a queued move, so the steps push each
-// cursor from where the last one left it, and its move goes out once, to the last
-// cell. A resized map takes the rock reshaped to its bounds first.
+// each whole column carried, leaving the count for what rides the cave's frame. A
+// cursor's push is a queued move, so the steps push each cursor from where the last
+// one left it, and its move goes out once, to the last cell. A resized map takes the
+// rock reshaped to its bounds first.
 func (s *WallSystem) scrollCave() {
 	if !s.cave.Active {
 		return
@@ -1341,6 +1345,7 @@ func (s *WallSystem) scrollCave() {
 	for range steps {
 		s.stepCave(cursors)
 	}
+	s.world.Resources.Cave.Steps = int(steps)
 	for _, cursor := range cursors {
 		if cursor.pushed {
 			s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
