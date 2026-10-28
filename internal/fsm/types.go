@@ -25,8 +25,9 @@ type RegionState struct {
 
 	triggers triggerMask // union over ActivePath; rebuilt on every commit
 	// exiting marks a running exit phase; terminated, a TerminateRegion it issued;
-	// proposed, a transition handed to Propose and not yet applied
-	exiting, terminated, proposed bool
+	// proposed, a transition handed to Propose and not yet applied; ticking, an
+	// internal Tick one, which holds the region's Tick transitions and no event
+	exiting, terminated, proposed, ticking bool
 	// target is the proposed transition's state, and parked the events that reached
 	// the region while proposed and that state's path reacts to, each with a copy
 	// of its payload, replayed there once the transition lands

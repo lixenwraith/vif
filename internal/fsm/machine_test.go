@@ -221,6 +221,69 @@ func TestAProposedTransitionWaitsForItsApply(t *testing.T) {
 	}
 }
 
+const tickedDoc = `
+[regions.r]
+initial = "A"
+[states.A]
+on_update = [{ action = "IncrementVar", payload = { name = "beat" } }]
+transitions = [
+    { trigger = "Tick", target = "B", guard = "VarCompare", guard_args = { var = "notes", op = "gte", value = 2 } },
+    { trigger = "Tick", internal = true, guard = "VarCompare", guard_args = { var = "beat", op = "gte", value = 1 }, actions = [
+        { action = "SetVar", payload = { name = "beat", value = 0 } },
+        { action = "IncrementVar", payload = { name = "notes" } },
+    ] },
+    { trigger = "EventSpeciesKilled", internal = true, actions = [{ action = "IncrementVar", payload = { name = "dead" } }] },
+]
+[states.B]
+`
+
+// TestAnInternalTickTransitionHoldsTheRegionsTicksUntilItLands: an internal Tick
+// transition's guard, which its own actions turn false, passes until it lands, so a
+// proposing machine hands it over once and takes no Tick transition meanwhile; an
+// event still crosses, and only the Tick one's apply ends the hold.
+func TestAnInternalTickTransitionHoldsTheRegionsTicksUntilItLands(t *testing.T) {
+	m, trace, err := loadMachine(t, tickedDoc)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	var proposed []*event.FSMTransitionPayload
+	m.Propose = func(region string, owner fsm.StateID, index int, trigger event.EventType, vars []event.FSMVar, then []event.FSMHop) {
+		proposed = append(proposed, &event.FSMTransitionPayload{Region: region, Owner: int(owner), Index: index, Trigger: trigger, Vars: vars, Then: then})
+	}
+	m.Steer(false, true)
+	if err := m.Init(trace); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	for range 3 {
+		m.Update(trace, time.Millisecond)
+	}
+	killed := event.GameEvent{Type: event.EventSpeciesKilled, Payload: &event.SpeciesKilledPayload{}}
+	if !m.HandleEvent(trace, killed) || len(proposed) != 2 || proposed[0].Index != 1 || proposed[1].Index != 2 {
+		t.Fatalf("after three ticks and a kill: %d proposals; want the note once, then the kill", len(proposed))
+	}
+	if err := m.Apply(trace, proposed[0]); err != nil {
+		t.Fatalf("apply the note: %v", err)
+	}
+	m.Update(trace, time.Millisecond)
+	if len(proposed) != 3 || proposed[2].Index != 1 {
+		t.Fatalf("after the note landed: %d proposals; want the next note", len(proposed))
+	}
+	if err := m.Apply(trace, proposed[1]); err != nil {
+		t.Fatalf("apply the kill: %v", err)
+	}
+	m.Update(trace, time.Millisecond)
+	if len(proposed) != 3 || m.GetVar("dead") != 1 {
+		t.Fatalf("after the kill landed: %d proposals, dead %d; want the second note still holding", len(proposed), m.GetVar("dead"))
+	}
+	if err := m.Apply(trace, proposed[2]); err != nil {
+		t.Fatalf("apply the second note: %v", err)
+	}
+	m.Update(trace, time.Millisecond)
+	if len(proposed) != 4 || proposed[3].Index != 0 || m.GetVar("notes") != 2 {
+		t.Fatalf("after two notes: %d proposals, notes %d; want B's transition proposed", len(proposed), m.GetVar("notes"))
+	}
+}
+
 // TestAFollowingMachineMovesByApplyAlone: a guest's machine evaluates no guard,
 // so neither an event nor time moves it, and Apply alone does.
 func TestAFollowingMachineMovesByApplyAlone(t *testing.T) {
