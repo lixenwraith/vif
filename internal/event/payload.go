@@ -332,7 +332,8 @@ type GoldJumpRequestPayload struct {
 
 // --- Splash ---
 
-// SplashTimerRequestPayload anchors countdown timer to sequence position
+// SplashTimerRequestPayload places a countdown beside its anchor, a composite header,
+// or without one beside its origin cell, one countdown to each
 type SplashTimerRequestPayload struct {
 	AnchorEntity core.Entity   `toml:"anchor_entity"`
 	Color        color.RGB     `toml:"color"`
