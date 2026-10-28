@@ -374,7 +374,7 @@ func TestDriftStepsEachLevelAtItsParallaxFraction(t *testing.T) {
 }
 
 // TestDriftRemovesGlyphsThatCannotStep: a glyph leaves play rather than stepping
-// off the map, into a wall, around a wall's corner, or into a full cell.
+// off the map, into or through a wall, around a wall's corner, or into a full cell.
 func TestDriftRemovesGlyphsThatCannotStep(t *testing.T) {
 	w, s := newEnvironmentWorld(1)
 	wall := func(x, y int) {
@@ -393,8 +393,10 @@ func TestDriftRemovesGlyphsThatCannotStep(t *testing.T) {
 	wall(29, 10)
 	wall(30, 11)
 	cornered := addDriftGlyph(w, 30, 10, component.GlyphNormal)
+	wall(40, 14)
+	through := addDriftGlyph(w, 42, 14, component.GlyphDark)
 
-	s.shiftLayer(component.GlyphBright, -1, 0)
+	s.shiftLayers([driftLevels][2]int{component.GlyphBright: {-1, 0}})
 	for _, e := range []core.Entity{edge, walled, crowded} {
 		if w.HasEntity(e) {
 			pos, _ := w.Positions.GetPosition(e)
@@ -405,9 +407,12 @@ func TestDriftRemovesGlyphsThatCannotStep(t *testing.T) {
 		t.Fatalf("glyph behind the removed one at %v, want 11,6", pos)
 	}
 
-	s.shiftLayer(component.GlyphNormal, -1, 1)
+	s.shiftLayers([driftLevels][2]int{component.GlyphNormal: {-1, 1}, component.GlyphDark: {-3, 0}})
 	if w.HasEntity(cornered) {
 		t.Fatal("a diagonal step cut between two walls")
+	}
+	if w.HasEntity(through) {
+		t.Fatal("a step of three cells passed through the wall on its way")
 	}
 }
 
@@ -432,13 +437,12 @@ func TestSceneryDriftsIntoWallsAndLeavesOnlyOffTheMap(t *testing.T) {
 	}
 	plain := addDriftGlyph(w, 11, 6, component.GlyphBright)
 	behind := scenery(11, 7)
-	edge := scenery(0, 5)
+	edge := scenery(1, 5)
 
-	s.shiftLayer(component.GlyphBright, -1, 0)
+	s.shiftLayers([driftLevels][2]int{component.GlyphBright: {-2, 0}})
 	if w.HasEntity(plain) || w.HasEntity(edge) {
 		t.Fatal("a plain glyph entered the wall or scenery left the map")
 	}
-	s.shiftLayer(component.GlyphBright, -1, 0)
 	if pos, _ := w.Positions.GetPosition(behind); !w.HasEntity(behind) || pos != (component.PositionComponent{X: 9, Y: 7}) {
 		t.Fatalf("scenery at %v, want it through the wall at 9,7", pos)
 	}
@@ -909,8 +913,8 @@ func TestEnteringTextCarriesOverACopy(t *testing.T) {
 
 // TestTextPlacedUnderASceneryDriftIsSceneryCountedApart: text placed while the drift
 // is scenery carries ProtectScenery and other text carries none, and the spawner's
-// density and census count only the kind it places, so neither kind crowds out the
-// other where both share the map
+// density and census count only the kind it places that a player sees, so neither
+// kind crowds out the other and scenery behind rock or a wall fills nothing
 func TestTextPlacedUnderASceneryDriftIsSceneryCountedApart(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
@@ -946,5 +950,32 @@ func TestTextPlacedUnderASceneryDriftIsSceneryCountedApart(t *testing.T) {
 	drift.Store(true)
 	if n := glyphs.countPlacedKind(); n != len(scenery) {
 		t.Fatalf("scenery count %d, want %d", n, len(scenery))
+	}
+
+	// Rock over one scenery glyph's column and a wall on another's cell hide them
+	hidden := map[core.Entity]bool{scenery[0]: true, scenery[len(scenery)-1]: true}
+	rock, _ := w.Positions.GetPosition(scenery[0])
+	cols := make([]engine.RockColumn, w.Resources.Config.MapWidth)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Ceil: 0, Floor: w.Resources.Config.MapHeight}
+	}
+	cols[rock.X] = engine.RockColumn{Ceil: rock.Y + 1, Floor: w.Resources.Config.MapHeight}
+	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	wall := w.CreateEntity(core.DomainShared)
+	walled, _ := w.Positions.GetPosition(scenery[len(scenery)-1])
+	w.Positions.SetPosition(wall, walled)
+	w.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockAll})
+	for _, e := range scenery {
+		if pos, _ := w.Positions.GetPosition(e); !hidden[e] && pos.X == rock.X && pos.Y <= rock.Y {
+			hidden[e] = true
+		}
+	}
+	glyphs.updateCensus()
+	shown := 0
+	for _, n := range glyphs.census {
+		shown += n
+	}
+	if n, want := glyphs.countPlacedKind(), len(scenery)-len(hidden); n != want || shown != want {
+		t.Fatalf("scenery count %d and census %d with %d behind rock and a wall, want %d", n, shown, len(hidden), want)
 	}
 }

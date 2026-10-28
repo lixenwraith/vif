@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/cave"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -147,5 +149,43 @@ func TestAnEnteringLineIsDrawnAStepPastWhereTheSpawnerLeftIt(t *testing.T) {
 				t.Fatalf("(%d,%d) drew %q, want %q", width-5+i, y, got, r)
 			}
 		}
+	}
+}
+
+// BenchmarkGlyphRender draws a frame half a tick past its tick, of scenery drifting at
+// vanguard's three layer speeds over vanguard's cave, on three terminals, each with
+// as many glyphs as vanguard keeps there, placed at random, in the rock too
+func BenchmarkGlyphRender(b *testing.B) {
+	for _, size := range []struct{ w, h, glyphs int }{{120, 40, 870}, {200, 60, 1460}, {400, 120, 2560}} {
+		b.Run(fmt.Sprintf("%dx%d", size.w, size.h), func(b *testing.B) {
+			w := engine.NewWorld()
+			game := engine.NewGameContextWithClock(w, size.w, size.h, engine.NewManualClock())
+			w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+			config := w.Resources.Config
+			profile := cave.Config{Seed: 7, Height: config.MapHeight, MinGap: 9, MaxGap: 36, MinWall: 2, Wavelength: 64, Swing: 9, Ramp: 96, Octaves: 4}
+			cols := make([]engine.RockColumn, config.MapWidth)
+			for x := range cols {
+				col := profile.At(int64(x))
+				cols[x] = engine.RockColumn{Ceil: col.Top, Floor: config.MapHeight - col.Bottom}
+			}
+			w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+			rng := vmath.NewFastRand(3)
+			for range size.glyphs {
+				addGlyph(w, rng.Intn(size.w), rng.Intn(size.h), 'a'+rune(rng.Intn(26)), component.GlyphLevel(rng.Intn(3)), true)
+			}
+			for level, speed := range []int64{-20, -40, -80} {
+				w.Resources.Drift.Rate[level][0] = speed * vmath.MicroRate
+			}
+			tick := engine.SimEpoch.Add(time.Second)
+			w.Resources.Time.PaceTime, w.Resources.Time.DeltaTime = tick, 50*time.Millisecond
+			r := NewGlyphRenderer(game)
+			buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+			ctx := render.RenderContext{GameTime: tick.Add(25 * time.Millisecond), MapWidth: config.MapWidth,
+				MapHeight: config.MapHeight, ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}
+			b.ReportAllocs()
+			for b.Loop() {
+				r.Render(ctx, buf)
+			}
+		})
 	}
 }

@@ -25,17 +25,24 @@ type GlyphRenderer struct {
 	layers [typeableLayer + 1][]drawnGlyph
 }
 
-// drawnGlyph is a glyph at the cell it is drawn in this frame
+// drawnGlyph is a glyph at the cell it is drawn in this frame, packed, since every
+// frame copies each glyph on the map into its layer
 type drawnGlyph struct {
-	x, y  int
-	glyph component.GlyphComponent
+	x, y  int32
+	char  rune
+	typ   uint8 // component.GlyphType
+	level uint8 // component.GlyphLevel
+}
+
+func drawnAt(x, y int, glyph *component.GlyphComponent) drawnGlyph {
+	return drawnGlyph{x: int32(x), y: int32(y), char: glyph.Rune, typ: uint8(glyph.Type), level: uint8(glyph.Level)}
 }
 
 // typeableLayer is the layer typeable text draws in, over every scenery level
 const typeableLayer = len(parameter.DriftLayerFactor)
 
 // glyphCellRenderer draws one glyph in the colour mode chosen at construction
-type glyphCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent)
+type glyphCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, d *drawnGlyph)
 
 // NewGlyphRenderer creates a new glyph renderer
 func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
@@ -88,15 +95,15 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		if !ok {
 			return true
 		}
-		if positions.IsTypeable(entity) {
+		if !positions.IsScenery(entity) {
 			if positions.TopGlyphIs(entity, pos.X, pos.Y) {
-				r.layers[typeableLayer] = append(r.layers[typeableLayer], drawnGlyph{x: pos.X, y: pos.Y, glyph: *glyph})
+				r.layers[typeableLayer] = append(r.layers[typeableLayer], drawnAt(pos.X, pos.Y, glyph))
 			}
 			return true
 		}
 		x, y := pos.X+carry[glyph.Level][0], pos.Y+carry[glyph.Level][1]
 		if x >= 0 && x < width && y >= 0 && y < height {
-			r.layers[glyph.Level] = append(r.layers[glyph.Level], drawnGlyph{x: x, y: y, glyph: *glyph})
+			r.layers[glyph.Level] = append(r.layers[glyph.Level], drawnAt(x, y, glyph))
 		}
 		return true
 	})
@@ -108,11 +115,12 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 		for i := range drawn {
 			d := &drawn[i]
-			if positions.HasBlockingWallAt(d.x, d.y, component.WallBlockSpawn) {
+			x, y := int(d.x), int(d.y)
+			if positions.HasBlockingWallAt(x, y, component.WallBlockSpawn) {
 				continue
 			}
-			if screenX, screenY, visible := ctx.MapToScreen(d.x, d.y); visible {
-				renderCell(buf, screenX, screenY, &d.glyph)
+			if screenX, screenY, visible := ctx.MapToScreen(x, y); visible {
+				renderCell(buf, screenX, screenY, d)
 			}
 		}
 	}
@@ -134,7 +142,7 @@ func (r *GlyphRenderer) addEntering(line *engine.EntryLine, step, carry [2]int, 
 		if x >= 0 && x < width {
 			if ch != ' ' {
 				glyph.Rune = ch
-				r.layers[layer] = append(r.layers[layer], drawnGlyph{x: x, y: y, glyph: glyph})
+				r.layers[layer] = append(r.layers[layer], drawnAt(x, y, &glyph))
 			}
 		} else if x >= width && line.Dir > 0 || x < 0 && line.Dir < 0 {
 			return // the rest lies further past the edge
@@ -157,16 +165,16 @@ func (r *GlyphRenderer) carry(ctx render.RenderContext) (c [len(parameter.DriftL
 	return c
 }
 
-func (r *GlyphRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {
-	buf.SetFgOnly(screenX, screenY, glyph.Rune, visual.GlyphColorLUT[glyph.Type][glyph.Level], terminal.AttrNone)
+func (r *GlyphRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, d *drawnGlyph) {
+	buf.SetFgOnly(screenX, screenY, d.char, visual.GlyphColorLUT[d.typ][d.level], terminal.AttrNone)
 }
 
-func (r *GlyphRenderer) sceneryTrueColor(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {
-	buf.SetFgOnly(screenX, screenY, glyph.Rune, r.sceneryTC[glyph.Type][glyph.Level], terminal.AttrNone)
+func (r *GlyphRenderer) sceneryTrueColor(buf *render.RenderBuffer, screenX, screenY int, d *drawnGlyph) {
+	buf.SetFgOnly(screenX, screenY, d.char, r.sceneryTC[d.typ][d.level], terminal.AttrNone)
 }
 
-func (r *GlyphRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, glyph *component.GlyphComponent) {
-	buf.SetFgOnly(screenX, screenY, glyph.Rune, color.RGB{R: r.levels256[glyph.Type][glyph.Level]}, terminal.AttrFg256)
+func (r *GlyphRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, d *drawnGlyph) {
+	buf.SetFgOnly(screenX, screenY, d.char, color.RGB{R: r.levels256[d.typ][d.level]}, terminal.AttrFg256)
 }
 
 // glyphLevels256 gives each glyph type its hue's two console entries, darker for Dark and
