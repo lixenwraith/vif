@@ -476,12 +476,14 @@ player glyph moves along that direction at its level's fraction of the speed,
 `DriftLayerFactor`: bright at full speed,
 normal at half, dark at a quarter, with rows scaled by the cell aspect so one
 speed reads the same in every direction. Each level keeps an integer sub-cell
-phase per axis that advances
-by simulated time, so drift follows game speed, draws no RNG, and every instance
-steps a layer on the same tick. A layer moves one cell and one axis at a time as
-a rigid group, so no step crosses a wall's corner. A glyph that would leave the
-map, enter rock or a wall or find its target cell full is removed with no reward
-or effect; scenery enters rock and walls. Composite members (gold) and glyphs
+phase per axis that advances by simulated time, so drift follows game speed, draws
+no RNG, and every instance steps a layer on the same tick. A layer moves its tick's
+step as one rigid group, each glyph's way read a column and then a row at a time,
+so no step crosses a wall's corner; moving each glyph once a tick rather than a
+cell at a time took vanguard's tick at 200×60 from 458 to 304 µs
+(`BenchmarkHeadlessTicks`). A glyph whose way leaves the map or meets rock or a
+wall, or whose cell is full, is removed with no reward or effect; scenery passes
+into rock and walls. Composite members (gold) and glyphs
 already tagged to die stay put, and the cursor does not ride with the text under
 it. A new start at once keeps each phase that still points the new way, so a
 change of pace does not jolt the text and a reversal does not stall it, and an

@@ -17,10 +17,10 @@ import (
 )
 
 // BenchmarkHeadlessTicks measures one simulation tick on a driven App: the embedded
-// scenario played by one cursor, and td, which an unattended run restarts every few
-// seconds, so its ticks carry the maze spawn and route graphs a level costs. Run with
-// -benchtime=<n>x so every run simulates the same ticks of one seed and allocations
-// compare exactly.
+// scenario played by one cursor; td, which an unattended run restarts every few
+// seconds, so its ticks carry a level's maze and route graphs; and vanguard, its
+// scenery drifting over the scrolling cave. Run with -benchtime=<n>x so every run
+// simulates the same ticks of one seed and allocations compare exactly.
 func BenchmarkHeadlessTicks(b *testing.B) {
 	cases := []struct {
 		name   string
@@ -29,6 +29,7 @@ func BenchmarkHeadlessTicks(b *testing.B) {
 	}{
 		{"main-160x50", true, Config{Seed: 42, Width: 160, Height: 50, Resources: resource.Options{Embedded: true}}},
 		{"td-200x60", false, Config{Seed: 42, Width: 200, Height: 60, Resources: resource.Options{Dir: "../../wad", Scenario: "td"}}},
+		{"vanguard-200x60", false, Config{Seed: 42, Width: 200, Height: 60, Resources: resource.Options{Dir: "../../wad", Scenario: "vanguard"}}},
 	}
 	for _, c := range cases {
 		b.Run(c.name, func(b *testing.B) {
