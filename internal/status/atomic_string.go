@@ -19,14 +19,15 @@ func (s *AtomicString) Store(val string) {
 	s.ptr.Store(&val)
 }
 
-// StoreIfChanged stores val only when it differs from the current value.
-// Store's parameter escapes, so a caller that writes the same value every tick
-// allocates a header per call; FSM state names are stable for many ticks.
+// StoreIfChanged stores val only when it differs from the current value, for a
+// caller that writes the same value every tick: Store's parameter escapes and
+// allocates a header per call, so the stored copy is taken past the comparison.
 func (s *AtomicString) StoreIfChanged(val string) {
 	if p := s.ptr.Load(); p != nil && *p == val {
 		return
 	}
-	s.ptr.Store(&val)
+	stored := val
+	s.ptr.Store(&stored)
 }
 
 // Load returns the current string value
