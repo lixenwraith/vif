@@ -647,7 +647,7 @@ staging world sharing the live grid's shape without its cells, takes it.
 ### Publish a player's session at the router
 
 - Priority: P3
-- Affected files: `tool/vif-router`, `internal/app/host.go`, `internal/network`
+- Affected files: `tool/vif-router`, `internal/app/host.go`, `internal/network`, `web/terminal.js`
 - Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
 
 A run publishes its `-relay` door through the router's reverse tunnel and is
@@ -676,6 +676,14 @@ What the feature itself needs, best shaped by deploying it step by step:
   that identity rather than the address, over the per-connection lines above.
 - The front door's `-tunnels` ceiling split between relay doors and hosted
   sessions, or one budget for both, decided from how the first deployments fill.
+- A page as the publisher. `DoorTunnel` dials through `link.Dial`, which speaks
+  `wss://` in a page, but the browser route wants a session id in its path before
+  the first frame, so a publish needs a path of its own. A hosting page must be
+  exempt from `LEAVE_HIDDEN_MS`, holds only the embedded `main` until bundles are
+  fetched over HTTP, and is never a successor door. Wasm runs host work about 3.9x
+  slower than a native core: `main` with eight participants takes under half the
+  page's thread and `td` does not fit, so the authority belongs in a Worker of its
+  own.
 
 ### Project a correction outside the live lock
 
@@ -1267,17 +1275,6 @@ keyboard's text into `terminal.Event`s and flushes cell frames through
    the system keyboard serves `:` and the prompts, as in the game.
 4. Size: the views need 60×16 cells. A phone held landscape fits at the default
    cell; portrait needs the pinch zoom out, or a keyboard of fewer keys.
-
-### Rename the audio mute event to the audio vocabulary
-
-- Priority: P2
-- Affected files: `internal/event/type.go`, `internal/event/payload.go`,
-  `internal/system/audio.go`, `internal/mode/config_menu.go`, `doc/audio.md`
-
-`EventSoundMuteToggle` changes the audio channel mask, sfx and music alike, so it
-is `EventAudioMuteToggle`, the request beside `EventAudioMuteChanged`, with its
-payload. It waits for the netcode work to settle the event registry and journal
-schema the rename regenerates and bumps.
 
 ### Spin off `pkg/audio` as its own module
 

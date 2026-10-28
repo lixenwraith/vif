@@ -1815,7 +1815,7 @@ func TestAudioMuteStaysOutOfTheJournal(t *testing.T) {
 		return r.done()
 	})
 	for _, rec := range cap.Records() {
-		if rec.Type == event.EventSoundMuteToggle {
+		if rec.Type == event.EventAudioMuteToggle {
 			t.Fatalf("jseq %d journals the audio mute, origin %s", rec.JSeq, rec.Origin)
 		}
 	}

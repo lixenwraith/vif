@@ -356,9 +356,13 @@ func (m *membership) BeginHosting(addr string) error {
 	return err
 }
 
+// errBrowserHosting is why a browser never hosts: a page opens connections but
+// cannot accept one, so no player could reach a session it opened
+var errBrowserHosting = errors.New("hosting unavailable in a browser, which cannot accept connections; host from the installed game")
+
 func (m *membership) hostErrorLocked() error {
 	if !buildHasSocketNetwork {
-		return errors.New("host: a browser can join a session but not host one")
+		return errBrowserHosting
 	}
 	if m.dialling.Load() {
 		return errors.New("host: a join is already being dialled")

@@ -90,92 +90,62 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	})
 }
 
-// generateFractalPath creates a jagged lightning path using midpoint displacement
-// Uses sine envelope for oval shape and coherent spine for natural flow
+// generateFractalPath creates a jagged lightning path by midpoint displacement in
+// quadrant space, two quadrants a cell each way, aimed from one end cell's centre to
+// the other's. A centre is the corner its cell's four quadrants share, so each end
+// is the quadrant of its cell nearest the path's next point: a bolt meets both cells
+// on the side facing the other, from any direction. A bolt within one cell has none.
 func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.FastRand) []struct{ X, Y int } {
-	sx1, sy1 := x1*2, y1*2
-	sx2, sy2 := x2*2, y2*2
-
-	dx := sx2 - sx1
-	dy := sy2 - sy1
-
-	dxF := float64(dx)
-	dyF := float64(dy)
-	dist := vmath.Magnitude(dxF, dyF)
 	points := r.points[:0]
-	if dist < 1.0 {
-		r.points = append(points, struct{ X, Y int }{sx1, sy1}, struct{ X, Y int }{sx2, sy2})
-		return r.points
+	if x1 == x2 && y1 == y2 {
+		r.points = points
+		return points
 	}
+	sx1, sy1 := float64(2*x1+1), float64(2*y1+1)
+	dxF, dyF := float64(2*(x2-x1)), float64(2*(y2-y1))
+	dist := vmath.Magnitude(dxF, dyF)
 
-	// Segment count: ~1 per 10 sub-pixels, capped min and max segments
+	// About one segment per 10 quadrants
 	segments := min(max(int(dist/10.0), 4), 32)
 
-	// Normalized perpendicular: (-dy/dist, dx/dist)
+	// Unit perpendicular the jitter displaces along
 	perpX := -dyF / dist
 	perpY := dxF / dist
 
-	// === Two-octave jitter ===
-	// Octave 1: Coherent spine offset (single random value for whole path)
-	// Creates gentle arc, prevents "straight bundle" appearance
+	// Two octaves: one spine offset bends the whole path into a gentle arc, so
+	// bolts do not bundle straight; per-segment detail adds the jag
 	spineRand := rng.Next()
 	spineOffset := float64(int64(spineRand>>32))/(1<<31) - 1.0
-	spine := spineOffset * 4.0 // Max 4 sub-pixel spine curve
+	spine := spineOffset * 4.0
+	detailMagnitude := 6.0
 
-	// Octave 2: Per-segment detail jitter
-	detailMagnitude := 6.0 // Max 6 sub-pixel detail
-
-	points = append(points, struct{ X, Y int }{sx1, sy1})
-
+	points = append(points, struct{ X, Y int }{}) // the origin's quadrant, once its neighbour is known
 	for i := 1; i < segments; i++ {
 		t := float64(i) / float64(segments)
+		bx := sx1 + dxF*t
+		by := sy1 + dyF*t
 
-		// Base point on line
-		bx := float64(sx1) + dxF*t
-		by := float64(sy1) + dyF*t
+		// Spine on a parabola, detail on a sine, both peaking mid-path; the detail's
+		// floor keeps the points next to the ends dancing
+		spineJitter := spine * 4.0 * t * (1.0 - t)
+		envelope := max(vmath.Sin(t*vmath.TwoPi/2.0), 0.15)
 
-		// === Sine envelope: sin(t * π) ===
-		// Maps t ∈ [0,1] to envelope ∈ [0,1], max at t=0.5
-		envelope := vmath.Sin(t * vmath.TwoPi / 2.0)
-		if envelope < 0 {
-			envelope = -envelope // Ensure positive (shouldn't happen in [0, 0.5] but safety)
-		}
-
-		// Spine contribution: coherent arc, modulated by envelope
-		// Parabolic envelope for spine: 4*t*(1-t), peaks at 0.5
-		spineEnvelope := 4.0 * t * (1.0 - t)
-		spineJitter := spine * spineEnvelope
-
-		// Floor envelope to prevent static endpoints
-		envelopeFloor := 0.15
-		if envelope < envelopeFloor {
-			envelope = envelopeFloor
-		}
-		if spineEnvelope < envelopeFloor {
-			spineEnvelope = envelopeFloor
-		}
-
-		// Detail contribution: random per-segment, modulated by envelope
 		detailRand := rng.Next()
 		detailFrac := float64(int64(detailRand>>32))/(1<<31) - 1.0
 		detailJitter := detailFrac * detailMagnitude * envelope
 
-		// Combined jitter
 		totalJitter := spineJitter + detailJitter
-
-		// Apply perpendicular displacement
-		jx := perpX * totalJitter
-		jy := perpY * totalJitter
-		point := vmath.PointAt(bx+jx, by+jy)
-
-		points = append(points, struct{ X, Y int }{
-			point.X,
-			point.Y,
-		})
+		points = append(points, struct{ X, Y int }(vmath.PointAt(bx+perpX*totalJitter, by+perpY*totalJitter)))
 	}
+	points = append(points, endQuadrant(x2, y2, points[len(points)-1]))
+	points[0] = endQuadrant(x1, y1, points[1])
+	r.points = points
+	return points
+}
 
-	r.points = append(points, struct{ X, Y int }{sx2, sy2})
-	return r.points
+// endQuadrant is the quadrant of cell (x, y) nearest the quadrant p
+func endQuadrant(x, y int, p struct{ X, Y int }) struct{ X, Y int } {
+	return struct{ X, Y int }{min(max(p.X, 2*x), 2*x+1), min(max(p.Y, 2*y), 2*y+1)}
 }
 
 // renderLightningTrueColor draws lightning using quadrant block characters with screen blending
@@ -184,29 +154,11 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 	points []struct{ X, Y int }, colorType component.LightningColorType, alpha float64) {
 
 	c := visual.LightningTrueColorLUT[colorType][0]
-
-	// Accumulate quadrant hits per cell
-	// Key: packed (x,y), Value: quadrant bitmap
-	cellHits := r.cellHits
-	clear(cellHits)
-
-	for i := range len(points) - 1 {
-		r.traceSubPixelLineQuadrant(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
-	}
-
-	// Render accumulated quadrants with screen blend foreground
-	for key, bits := range cellHits {
-		// Unpack cell coordinates from map key
-		mapX := int(int64(key >> 32))
-		mapY := int(int64(key & 0xFFFFFFFF))
-
-		// Transform to screen with visibility check
-		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+	for key, bits := range r.traceBolt(points) {
+		screenX, screenY, visible := ctx.MapToScreen(int(int32(key>>32)), int(int32(key)))
 		if !visible {
 			continue
 		}
-
-		// Get quadrant character from bitmap
 		char := visual.QuadrantChars[bits]
 		if char == ' ' {
 			continue
@@ -217,28 +169,36 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 	}
 }
 
-// traceSubPixelLineQuadrant traces a line in sub-pixel space, accumulating quadrant hits
-// Uses Bresenham's algorithm at 2x resolution for smooth diagonal coverage
-// Quadrant bitmap: bit0=UL, bit1=UR, bit2=LL, bit3=LR
-func (r *LightningRenderer) traceSubPixelLineQuadrant(hits map[uint64]uint8, sx0, sy0, sx1, sy1 int) {
-	for line := vmath.NewLine(sx0, sy0, sx1, sy1); ; line = line.Next() {
-		// Convert sub-pixel to cell + quadrant position
-		cx, cy := line.X()/2, line.Y()/2
-		qx, qy := line.X()&1, line.Y()&1
-
-		// Quadrant bitmap encoding: row-major 2x2
-		// qy=0: top row (UL=0, UR=1)
-		// qy=1: bottom row (LL=2, LR=3)
-		quadrant := uint8(1 << (qy*2 + qx))
-
-		// Pack cell coordinates into 64-bit map key
-		key := uint64(cx)<<32 | uint64(cy)
-		hits[key] |= quadrant
-
-		if line.AtEnd() {
-			break
+// traceBolt gathers the quadrants a path crosses by Bresenham, per cell. Each end cell
+// keeps only its end quadrant, so a short bolt that wanders back over the cell it
+// leaves or strikes passes behind it rather than across it.
+func (r *LightningRenderer) traceBolt(points []struct{ X, Y int }) map[uint64]uint8 {
+	hits := r.cellHits
+	clear(hits)
+	if len(points) == 0 {
+		return hits
+	}
+	for i := range len(points) - 1 {
+		for line := vmath.NewLine(points[i].X, points[i].Y, points[i+1].X, points[i+1].Y); ; line = line.Next() {
+			key, bit := quadrantHit(line.X(), line.Y())
+			hits[key] |= bit
+			if line.AtEnd() {
+				break
+			}
 		}
 	}
+	for _, end := range [2]struct{ X, Y int }{points[0], points[len(points)-1]} {
+		key, bit := quadrantHit(end.X, end.Y)
+		hits[key] = bit
+	}
+	return hits
+}
+
+// quadrantHit is a quadrant's cell, its coordinates the key's 32-bit halves, and its
+// bit in the cell's bitmap (bit0=UL, bit1=UR, bit2=LL, bit3=LR). A shift, not a
+// division, keeps a quadrant past the map's top or left edge in its own cell.
+func quadrantHit(qx, qy int) (uint64, uint8) {
+	return uint64(uint32(qx>>1))<<32 | uint64(uint32(qy>>1)), uint8(1 << ((qy&1)*2 + qx&1))
 }
 
 // renderLightning256 fills the background of every cell the bolt crosses: console
@@ -250,14 +210,8 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 		return
 	}
 	paletteIdx := visual.Lightning256ColorLUT[colorType]
-
-	cellHits := r.cellHits
-	clear(cellHits)
-	for i := range len(points) - 1 {
-		r.traceSubPixelLineQuadrant(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
-	}
-	for key := range cellHits {
-		screenX, screenY, visible := ctx.MapToScreen(int(int64(key>>32)), int(int64(key&0xFFFFFFFF)))
+	for key := range r.traceBolt(points) {
+		screenX, screenY, visible := ctx.MapToScreen(int(int32(key>>32)), int(int32(key)))
 		if visible {
 			buf.SetBg256(screenX, screenY, paletteIdx)
 		}
