@@ -360,12 +360,16 @@ type EnergyAddPayload struct {
 	Type       component.EnergyDeltaType `toml:"type"`
 }
 
-// EnergySetPayload contains energy value. Weapons grants every weapon after the
-// set, so a polarity crossing the set causes strips the old ones first.
+// EnergySetPayload sets a cursor's energy to Value, or with Flip to the negation of
+// what it holds. Weapons grants a charge of every weapon after the set, and Charges
+// above 0 sets Weapon's, so a polarity crossing the set causes strips the old first.
 type EnergySetPayload struct {
-	Entity  core.Entity `toml:"entity"`
-	Value   int         `toml:"value"`
-	Weapons bool        `toml:"weapons"`
+	Entity  core.Entity          `toml:"entity"`
+	Value   int                  `toml:"value"`
+	Flip    bool                 `toml:"flip"`
+	Weapons bool                 `toml:"weapons"`
+	Weapon  component.WeaponType `toml:"weapon"`
+	Charges int                  `toml:"charges"`
 }
 
 // EnergyCrossedZeroPayload names the cursor whose energy changed sign
@@ -422,6 +426,14 @@ type WeaponAddRequestPayload struct {
 type WeaponRemoveRequestPayload struct {
 	Entity core.Entity          `toml:"entity"`
 	Weapon component.WeaponType `toml:"weapon"`
+}
+
+// WeaponSetRequestPayload sets one kind's charges on a cursor, capped at what the
+// kind holds; 0 or less takes it, the innate gun included
+type WeaponSetRequestPayload struct {
+	Entity  core.Entity          `toml:"entity"`
+	Weapon  component.WeaponType `toml:"weapon"`
+	Charges int                  `toml:"charges"`
 }
 
 // WeaponFireRequestPayload names the cursor firing main and its ready loadout

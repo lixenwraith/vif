@@ -66,6 +66,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventShieldDrainRequest:              func() any { return new(ShieldDrainRequestPayload) },
 	EventWeaponAddRequest:                func() any { return new(WeaponAddRequestPayload) },
 	EventWeaponRemoveRequest:             func() any { return new(WeaponRemoveRequestPayload) },
+	EventWeaponSetRequest:                func() any { return new(WeaponSetRequestPayload) },
 	EventWeaponFireRequest:               func() any { return new(WeaponFireRequestPayload) },
 	EventGunAimRequest:                   func() any { return new(GunAimRequestPayload) },
 	EventFireSpecialRequest:              func() any { return new(FireSpecialRequestPayload) },
@@ -238,6 +239,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventShieldDrainRequest:              &codecShieldDrainRequestPayload,
 	EventWeaponAddRequest:                &codecWeaponAddRequestPayload,
 	EventWeaponRemoveRequest:             &codecWeaponRemoveRequestPayload,
+	EventWeaponSetRequest:                &codecWeaponSetRequestPayload,
 	EventWeaponFireRequest:               &codecWeaponFireRequestPayload,
 	EventGunAimRequest:                   &codecGunAimRequestPayload,
 	EventFireSpecialRequest:              &codecFireSpecialRequestPayload,
@@ -770,7 +772,10 @@ func (p *EnergySetPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecEnergySetPayload = structCodec{size: unsafe.Sizeof(EnergySetPayload{}), fields: []field{
 	{off: unsafe.Offsetof(EnergySetPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(EnergySetPayload{}.Value), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(EnergySetPayload{}.Flip), kind: kindBool},
 	{off: unsafe.Offsetof(EnergySetPayload{}.Weapons), kind: kindBool},
+	{off: unsafe.Offsetof(EnergySetPayload{}.Weapon), kind: kindInt, size: unsafe.Sizeof(component.WeaponType(0))},
+	{off: unsafe.Offsetof(EnergySetPayload{}.Charges), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *EnergyCrossedZeroPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -850,6 +855,16 @@ func (p *WeaponRemoveRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecWeaponRemoveRequestPayload = structCodec{size: unsafe.Sizeof(WeaponRemoveRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(WeaponRemoveRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(WeaponRemoveRequestPayload{}.Weapon), kind: kindInt, size: unsafe.Sizeof(component.WeaponType(0))},
+}}
+
+func (p *WeaponSetRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecWeaponSetRequestPayload, unsafe.Pointer(p)
+}
+
+var codecWeaponSetRequestPayload = structCodec{size: unsafe.Sizeof(WeaponSetRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(WeaponSetRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(WeaponSetRequestPayload{}.Weapon), kind: kindInt, size: unsafe.Sizeof(component.WeaponType(0))},
+	{off: unsafe.Offsetof(WeaponSetRequestPayload{}.Charges), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *WeaponFireRequestPayload) codec() (*structCodec, unsafe.Pointer) {

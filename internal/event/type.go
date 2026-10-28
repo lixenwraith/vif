@@ -200,6 +200,8 @@ const (
 	EventWeaponAddRequest
 	// EventWeaponRemoveRequest (WeaponRemoveRequestPayload) [local] takes one kind from a cursor's loadout
 	EventWeaponRemoveRequest
+	// EventWeaponSetRequest (WeaponSetRequestPayload) [local] sets one kind's charges on a cursor, capped at what it holds; 0 takes the kind
+	EventWeaponSetRequest
 	// EventWeaponFireRequest (WeaponFireRequestPayload) [local] signals weapon fire request
 	EventWeaponFireRequest
 	// EventGunAimRequest (GunAimRequestPayload) [local] sets the cardinals, or the upgrade path, the gun fires on every cursor this instance simulates, one that arrives later among them
