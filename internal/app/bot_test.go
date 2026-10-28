@@ -27,6 +27,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
 	link "github.com/lixenwraith/vif/pkg/network"
 )
@@ -403,6 +404,44 @@ func TestASeatHoldsWithItsWorld(t *testing.T) {
 	}
 	pause("off")
 	until("the bot to run on", func() bool { return !held(b) && b.Position().Tick > at })
+}
+
+// TestTheRosterCardsNameABotAndItsHolder: each instance's roster cards name every
+// slot's owner and the participant holding a bot, and its bare keys its own slot.
+func TestTheRosterCardsNameABotAndItsHolder(t *testing.T) {
+	// Not parallel: paced runs against wall-clock deadlines.
+	holder, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	waitForCursors(t, holder, 2)
+	var b *App
+	waitUntil(t, func() bool {
+		holder.membership.seatsMu.Lock()
+		defer holder.membership.seatsMu.Unlock()
+		if len(holder.membership.seats) == 1 {
+			b = holder.membership.seats[0].app.Load()
+		}
+		return b != nil
+	}, "the bot seated")
+	waitForCursors(t, b, 2)
+	host, seat := int64(holder.membership.localParticipant()), int64(b.membership.localParticipant())
+	want := map[string]int64{
+		"player.0.peer": host, "player.0.holder": 0, "player.1.peer": seat, "player.1.holder": host,
+	}
+	for _, p := range []struct {
+		name string
+		app  *App
+		slot int64
+		peer int64
+	}{{"the holder", holder, 0, host}, {"its bot", b, 1, seat}} {
+		waitUntil(t, func() bool {
+			for key, v := range want {
+				if statOf(p.app, key) != v {
+					return false
+				}
+			}
+			return statOf(p.app, "player.slot") == p.slot && statOf(p.app, "player.peer") == p.peer &&
+				statOf(p.app, "player.entity") == statOf(p.app, status.PlayerKey(int(p.slot), "entity"))
+		}, p.name+"'s roster cards")
+	}
 }
 
 // TestAGuestsBotsWaitWithIt: a guest's bots join through it, and when it goes they

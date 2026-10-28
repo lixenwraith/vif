@@ -18,10 +18,13 @@ type CursorSystem struct {
 	world *engine.World
 
 	statCount         *atomic.Int64
-	statLocal         *atomic.Int64
+	statSlot          *atomic.Int64
 	statCursorRejects *atomic.Int64
 	statSpawnFailures *atomic.Int64
 	statEntity        *status.PlayerInt
+	statPeer          *status.PlayerInt
+	statHolder        *status.PlayerInt
+	statWraith        *status.PlayerBool
 	statSlotControl   [parameter.MaxPlayers]*atomic.Int64
 }
 
@@ -31,10 +34,13 @@ func NewCursorSystem(world *engine.World) engine.System {
 
 	reg := world.Resources.Status
 	s.statCount = reg.Ints.Get("player.count")
-	s.statLocal = reg.Ints.Get("player.local")
+	s.statSlot = reg.Ints.Get("player.slot")
 	s.statCursorRejects = reg.Ints.Get("player.cursor_rejects")
 	s.statSpawnFailures = reg.Ints.Get("player.spawn_failures")
 	s.statEntity = status.NewPlayerInt(reg, parameter.MaxPlayers, "entity", "player.entity")
+	s.statPeer = status.NewPlayerInt(reg, parameter.MaxPlayers, "peer", "player.peer")
+	s.statHolder = status.NewPlayerInt(reg, parameter.MaxPlayers, "holder", "")
+	s.statWraith = status.NewPlayerBool(reg, parameter.MaxPlayers, "wraith", "")
 	for i := range parameter.MaxPlayers {
 		s.statSlotControl[i] = reg.Ints.Get(status.PlayerKey(i, "control"))
 	}
@@ -57,13 +63,15 @@ func (s *CursorSystem) Name() string { return "cursor" }
 func (s *CursorSystem) Priority() int { return parameter.PriorityCursor }
 
 // Update ages every Wraith's wait on every instance; cursor lifecycle and placement
-// are event-driven
+// are event-driven. It also republishes the roster cards, because an installed
+// capture and a join's owner binding rewrite the roster with no lifecycle event.
 func (s *CursorSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	s.world.Components.Wraith.Each(func(_ core.Entity, w *component.WraithComponent) bool {
 		w.Waited += dt
 		return true
 	})
+	s.publishRoster()
 }
 
 // EventTypes returns the event types CursorSystem handles.
@@ -429,18 +437,26 @@ func (s *CursorSystem) setLocal(slot uint8) {
 	s.world.PushLocal(event.EventCursorLocalChanged, &event.CursorSetLocalPayload{Slot: slot})
 }
 
-// publishRoster mirrors slot occupancy; called on every lifecycle change
+// publishRoster mirrors each slot's cursor and who drives it; called on every
+// lifecycle change and every tick
 func (s *CursorSystem) publishRoster() {
 	roster := s.world.Resources.Player
 	for i := range parameter.MaxPlayers {
-		e := roster.Slot(uint8(i))
-		s.statEntity.Store(uint8(i), int64(e))
-		var control int64 = -1
+		slot, e := uint8(i), roster.Slot(uint8(i))
+		var control, peer, holder int64 = -1, 0, 0
 		if c, ok := s.world.Components.Cursor.GetComponent(e); ok {
-			control = int64(c.Control)
+			control, peer, holder = int64(c.Control), int64(c.PeerID), int64(c.Holder)
 		}
+		s.statEntity.Store(slot, int64(e))
+		s.statPeer.Store(slot, peer)
+		s.statHolder.Store(slot, holder)
+		s.statWraith.Store(slot, e != 0 && s.world.Components.Wraith.HasEntity(e))
 		s.statSlotControl[i].Store(control)
 	}
 	s.statCount.Store(int64(roster.Count()))
-	s.statLocal.Store(int64(roster.LocalSlot()))
+	local := int64(roster.LocalSlot())
+	if local >= parameter.MaxPlayers {
+		local = -1
+	}
+	s.statSlot.Store(local)
 }

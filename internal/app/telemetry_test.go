@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -309,7 +310,7 @@ func TestTelemetryGroupsFitOverlayCards(t *testing.T) {
 	for _, want := range []string{
 		"adapt.buffers", "combat.absorbed.attacker", "combat.damage.defender",
 		"combat.rejects", "death.batch", "event.settle", "eye.ga", "fsm.main",
-		"network.session", "player.0", "player.0.weapon", "storm.protection",
+		"network.session", "player.0", "player.0.roster", "player.0.weapon", "storm.protection",
 	} {
 		if !seen[want] {
 			t.Errorf("semantic telemetry group %q is missing", want)
@@ -317,15 +318,15 @@ func TestTelemetryGroupsFitOverlayCards(t *testing.T) {
 	}
 	visiblePlayers := make(map[string]bool)
 	for _, view := range a.World().Resources.Status.VisibleViews() {
-		if strings.HasPrefix(view.Name(), "player.") &&
-			view.Name() != "player.0" && view.Name() != "player.0.weapon" {
+		if strings.HasPrefix(view.Name(), "player.") && view.Name() != "player.0" &&
+			view.Name() != "player.0.roster" && view.Name() != "player.0.weapon" {
 			t.Errorf("inactive roster group %q is visible", view.Name())
 		}
 		if strings.HasPrefix(view.Name(), "player.0") {
 			visiblePlayers[view.Name()] = true
 		}
 	}
-	for _, want := range []string{"player.0", "player.0.weapon"} {
+	for _, want := range []string{"player.0", "player.0.roster", "player.0.weapon"} {
 		if !visiblePlayers[want] {
 			t.Errorf("active roster group %q is hidden", want)
 		}
@@ -400,6 +401,39 @@ func TestAPurgeReturnsTheOperatorSettingsToTheirDefaults(t *testing.T) {
 		ctx.TimeCtl.Scale() != engine.ScaleNormal {
 		t.Fatalf("the purge left auto-fire %d, free mouse %v, rate %s",
 			ctx.AutoFire.Load(), ctx.MouseFreeMode.Load(), ctx.TimeCtl.Scale())
+	}
+}
+
+// TestTheRosterCardsFollowARebindWithoutALifecycleEvent: an installed capture and a
+// join's owner binding rewrite the roster without a spawn, despawn or rebind event,
+// and the roster cards still follow within a tick. A Wraith reads as one.
+func TestTheRosterCardsFollowARebindWithoutALifecycleEvent(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	var e core.Entity
+	a.World().RunSafe(func() { e = a.World().Resources.Player.Entity })
+	cards := func() [4]int64 {
+		return [4]int64{statOf(a, "player.slot"), statOf(a, "player.entity"),
+			statOf(a, "player.0.entity"), statOf(a, status.PlayerKey(0, "control"))}
+	}
+	if got, want := cards(), [4]int64{0, int64(e), int64(e), int64(component.ControlLocal)}; got != want {
+		t.Fatalf("player.{slot,entity,0.entity,0.control} = %v, want %v", got, want)
+	}
+
+	a.World().RunSafe(a.World().DisownCursors)
+	a.Tick(1)
+	if got, want := cards(), [4]int64{-1, 0, int64(e), int64(component.ControlRemote)}; got != want {
+		t.Fatalf("after the rebind, player.{slot,entity,0.entity,0.control} = %v, want %v", got, want)
+	}
+
+	a.Context().PushEventOrigin(event.EventCursorWraithRequest, &event.CursorWraithRequestPayload{Slot: 0}, event.OriginDebug)
+	a.Settle()
+	var wraith bool
+	a.World().RunSafe(func() { wraith = a.World().Resources.Status.Bools.Get("player.0.wraith").Load() })
+	if !wraith {
+		t.Fatal("player.0.wraith is false for a Wraith")
 	}
 }
 
