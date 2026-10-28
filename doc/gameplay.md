@@ -120,7 +120,8 @@ drift layer (§9) and its dust lifetime.
 Spawn pacing adapts to screen occupancy: sparse maps receive text faster while dense
 maps sharply reduce new placement. Occupancy and the type and level census count
 only the kind being placed, scenery under a scenery drift (§9) or typeable text
-otherwise, so each keeps its own fill where both stand. Placement needs at least one
+otherwise, so each keeps its own fill where both stand, and of scenery only what
+shows: text passing behind rock or a wall fills nothing. Placement needs at least one
 cursor, excludes a region around every cursor, and retries only a bounded number of
 positions. While a glyph drift is active, a new line enters across an upwind edge,
 each drawn in proportion to the drift crossing it: across a side a rune at a time as
@@ -485,12 +486,14 @@ player glyph moves along that direction at its level's fraction of the speed,
 `DriftLayerFactor`: bright at full speed,
 normal at half, dark at a quarter, with rows scaled by the cell aspect so one
 speed reads the same in every direction. Each level keeps an integer sub-cell
-phase per axis that advances
-by simulated time, so drift follows game speed, draws no RNG, and every instance
-steps a layer on the same tick. A layer moves one cell and one axis at a time as
-a rigid group, so no step crosses a wall's corner. A glyph that would leave the
-map, enter rock or a wall or find its target cell full is removed with no reward
-or effect; scenery enters rock and walls. Composite members (gold) and glyphs
+phase per axis that advances by simulated time, so drift follows game speed, draws
+no RNG, and every instance steps a layer on the same tick. A layer moves its tick's
+step as one rigid group, each glyph's way read a column and then a row at a time,
+so no step crosses a wall's corner; moving each glyph once a tick rather than a
+cell at a time took vanguard's tick at 200×60 from 458 to 304 µs
+(`BenchmarkHeadlessTicks`). A glyph whose way leaves the map or meets rock or a
+wall, or whose cell is full, is removed with no reward or effect; scenery passes
+into rock and walls. Composite members (gold) and glyphs
 already tagged to die stay put, and the cursor does not ride with the text under
 it. A new start at once keeps each phase that still points the new way, so a
 change of pace does not jolt the text and a reversal does not stall it, and an
