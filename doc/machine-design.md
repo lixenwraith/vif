@@ -551,8 +551,8 @@ per instance:
 - Probes read too, and leave their result in the context: `ResolveTarget`
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
   (`FindFreeAreaInside` over the footprint). `LineOfSight` and `FindLanding` read
-  the live target, or with `to = "stored"` the cell `StoreTarget` kept: the swarm
-  charges and teleports to the cell its lock stored, and so do vanguard's raiders.
+  the live target, or with `to = "stored"` the cell `StoreTarget` kept, so a
+  lock's charge or teleport goes to the cell it stored, as vanguard's raiders' do.
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
   `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),
@@ -613,7 +613,7 @@ smaller part of it.
   way) and header offset, hit points, the combat row it fights as (`swarm` or
   `quasar`, the unit composites whose damage lands on their header), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
-  `parameter.BehaviorRestitution`, the swarm's chase, with each key of the program's
+  `parameter.BehaviorRestitution`, with each key of the program's
   `[prototype.physics]` replacing its value), soft-collision mass, the drop table
   its kills roll (the scenario's or a code species',
   [FSM reference: Loot](fsm-reference.md#loot)), contact damage, lifetime, its
@@ -649,12 +649,10 @@ smaller part of it.
   the behavior system handles `EventCompositeIntegrityBreach` for it, and
   `handleEmptyComposite`'s default destroys the head.
 - **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y}` (bus,
-  and barrier-bound like the swarm's, since a crossed one allocates shared
-  identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
+  and barrier-bound, since a crossed one allocates shared identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
   cancel; an empty program cancels every data species). A program no entry
   defines is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
-  immediate, as the swarm's and the quasar's are, unless the prototype names an
-  entrance (§4.4), its footprint searched over the whole map, since a scenario
+  immediate unless the prototype names an entrance (§4.4), its footprint searched over the whole map, since a scenario
   names a cell blind to the walls. A scenario registers a data species with genetics through
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
@@ -677,9 +675,9 @@ smaller part of it.
   back (`Enraged` to `Combat.IsEnraged`; `Shielded` to a refreshed ward and
   `BehaviorComponent.Shielded`, which `applyStunEffect` reads as it reads the
   quasar's shield; `TeleportLine` to `BehaviorComponent.TeleportLine`, which
-  `TeleportLineRenderer` reads to draw the swarm's line to the stored cell;
+  `TeleportLineRenderer` reads to draw the teleport line to the stored cell;
   `ChargeLine` to `BehaviorComponent.ChargeLine`, which `ChargeLineRenderer` reads
-  to pulse the swarm's charge line toward it; and `Landing` to
+  to pulse the charge line toward it; and `Landing` to
   `BehaviorComponent.Landing`, which `LandingRenderer` reads to blink the landing
   marker there), then, unless suspended, gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
@@ -849,7 +847,8 @@ captures, one a tick, read the frames. Per species:
   way, else teleports beside it; a disruptor stun drops it back to its chase;
   `:emit EventBehaviorCancelRequest { program = "scarab" }` removes the scarabs.
   `bin/vif -check -s wad/scenario/vanguard` prints
-  `behaviors ok: 32 (bat, beetle, chomper, … wraith)`. A look shows best in tmux
+  `behaviors ok: 32 (bat, beetle, chomper, … wraith)`, `loot ok: 1 (upgrade)` and
+  `drops ok: 1 (raider)`. A look shows best in tmux
   pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`;
   `go run ./sandbox/raider` lays every type out by cave over its rock.
 

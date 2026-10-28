@@ -129,9 +129,9 @@ func TestARaiderTeleportsAroundRockAndLandsBesideWhatTookItsLanding(t *testing.T
 }
 
 // TestARaiderLocksTheCursorNearestItInRosterOrder: with several cursors the lock
-// stores the nearest one's cell, and on a tie the lower roster slot's, as the swarm
-// does, so every instance of a session that holds the same Shared cursors aims alike;
-// the lock draws the swarm's charge line toward it and marks where it lands
+// stores the nearest one's cell, and on a tie the lower roster slot's, so every
+// instance of a session that holds the same Shared cursors aims alike; the lock
+// draws the charge line toward it and marks where it lands
 func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -160,8 +160,8 @@ func TestARaiderLocksTheCursorNearestItInRosterOrder(t *testing.T) {
 }
 
 // TestARaidersTeleportLandsByTheCellItsLockStored: a lock that cannot fly to its
-// cell teleports there, as the swarm's does, however the cursors moved meanwhile:
-// the locked player stepping away and another coming nearer move nothing
+// cell teleports there however the cursors moved meanwhile: the locked player
+// stepping away and another coming nearer move nothing
 func TestARaidersTeleportLandsByTheCellItsLockStored(t *testing.T) {
 	w, s, header, states := newRaiderWorld(t)
 	b, _ := w.Components.Behavior.GetPtr(header)

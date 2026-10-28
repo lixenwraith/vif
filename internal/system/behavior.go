@@ -534,7 +534,7 @@ const (
 	behaviorEnraged      uint64 = 1 << iota // combat's enrage, which refuses kinetic knockback
 	behaviorShielded                        // ward held and stun refused: no damage, no stun
 	behaviorTeleportLine                    // a teleport line from the header to the stored cell
-	behaviorChargeLine                      // the swarm's charge line pulsing toward the stored cell
+	behaviorChargeLine                      // the charge line pulsing toward the stored cell
 	behaviorLanding                         // the landing marker blinking where the body lands on the stored cell
 )
 

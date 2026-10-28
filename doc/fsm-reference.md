@@ -860,8 +860,9 @@ no program raises nothing (`behavior.unknown_program_rejects`), nor one finding 
 room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
 removes instances and the materializes still bringing them, every program's when
 it names none. `wad/scenario/vanguard` is the worked example: its raider types,
-materializing in, fly the swarm's attack cycle as thirty-two programs over one macro (`RaiderStates`
-in its `macros.toml`). Each program file is one invocation of its rank's macro
+materializing in, fly one attack cycle, a chase, a lock, then a charge or a
+teleport, as thirty-two programs over one macro (`RaiderStates` in its
+`macros.toml`). Each program file is one invocation of its rank's macro
 (`RaiderRank1`..`RaiderRank4`) naming its cave and its look, and the rank's
 expansion is the whole program: the look, the rank's stats and physics, the cave's
 palette, and `[states]` invoking `RaiderStates` with the rank's timings. `-check` compiles every program and prints `behaviors ok: <n> (<names>)`;
@@ -935,8 +936,8 @@ target = "Roam"
   palettes' nearest colours. The hit flash, then `Enraged`, tints every glyph. The
   eye's types are drawn from the same look.
 - The physics: a key `[prototype.physics]` leaves out keeps its default, the
-  `Behavior*` values in `internal/parameter`: the swarm's chase (speed 8, accel 6,
-  drag 2), no arrival steering, the homing's half-cell snap and restitution 0.5.
+  `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
+  steering, the homing's half-cell snap and restitution 0.5.
   `Home` steers by all but the restitution, which every move bounces by. Each value
   is finite and at least 0, accel above it, and restitution at most 1. Vanguard's
   first raider rank gives the snake's values and each later rank its own, slower.
@@ -981,20 +982,19 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   (the velocity that reaches the stored cell as the timed entry ends),
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
 - Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
-  `Shielded` (no damage, no stun), `ChargeLine` (the swarm's charge line: two
-  pulses from the body's centre to the centre of the footprint on the stored cell,
-  the landing marker's cell, over the end of the entry, each the
-  share of it the swarm's charge is of its lock, so a lock flagged with it shows
-  where a charge goes), `TeleportLine` (the swarm's teleport line from the body
-  where it stands to the same centre, over the entry: a state that ends in
-  `Teleport` on its timeout's `actions` teleports there as the swarm does) and
+  `Shielded` (no damage, no stun), `ChargeLine` (the charge line: two pulses from
+  the body's centre to the centre of the footprint on the stored cell, the landing
+  marker's cell, over the end of the entry, each two fifths of it
+  (`BehaviorChargeLinePulseShare`), so a lock flagged with it shows where a charge
+  goes), `TeleportLine` (the teleport line from the body where it stands to the
+  same centre, over the entry, for a state that ends in `Teleport` on its
+  timeout's `actions`) and
   `Landing` (the landing marker: the centre of the footprint the body takes on the
   stored cell blinks white, red and pink, so flagging the lock, the charge and the
   teleport marks where an attack lands until it does).
 
 The target is the cursor nearest the header, read from the Shared positions with
-the lower roster slot taking a tie, as for the swarm, so every instance of a
-session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
+the lower roster slot taking a tie, so every instance of a session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
 composite's integrity work as for every composite species; a program does not
 script them.
 

@@ -4,11 +4,11 @@
 # its cave and its look, and the rank invokes Raider. doc/toml-macros.md describes
 # definitions and invocations.
 
-# The swarm's machine as a raider flies it. It chases its target for chase_ms, then
-# locks onto the cell it saw for lock_ms under a telegraph. Where its body clears the
-# way it charges that cell over charge_ms; behind rock it teleports to the nearest
-# place by that cell and lands as the teleport_ms ends, beside any rock that came
-# over the landing meanwhile; with no room anywhere it brakes where it stands. Rock
+# The raider's attack cycle. It chases its target for chase_ms, then locks onto
+# the cell it saw for lock_ms under a telegraph. Where its body clears the way it
+# charges that cell over charge_ms; behind rock it teleports to the nearest place
+# by that cell and lands as the teleport_ms ends, beside any rock that came over
+# the landing meanwhile; with no room anywhere it brakes where it stands. Rock
 # pushes it as it pushes the cursor, enraged or not. A program names Chase its
 # initial state and adds RaiderStun to its globals.
 [macros.RaiderStates]
@@ -21,9 +21,9 @@ duration_ms = "${chase_ms}"
 on_update = [{ action = "Home" }]
 transitions = [{ trigger = "Timeout", target = "Lock", fallback = { retry_ms = 200 } }]
 
-# The swarm's charge line pulses toward the stored cell as the lock ends, so a
-# player sees where the charge goes before it leaves, and the landing marker
-# blinks where it lands from the lock until the charge or teleport is over
+# The charge line pulses toward the stored cell as the lock ends, so a player
+# sees where the charge goes before it leaves, and the landing marker blinks
+# where it lands from the lock until the charge or teleport is over
 [macros.RaiderStates.body.Lock]
 duration_ms = "${lock_ms}"
 flags = ["Enraged", "ChargeLine", "Landing"]
@@ -44,12 +44,12 @@ transitions = [
     { trigger = "AfterTick", guard = "HitWall", target = "Brake" },
 ]
 
-# Lands by the cell the lock stored, as the swarm's teleport does, so moving
-# during the countdown dodges the teleport as it does the charge, and in a session
-# the teleport keeps to the player the lock marked. The line runs from wherever the
-# raider stands, so rock carrying it bends the line. The landing is the timeout's,
-# so a stun that ends the teleport moves nothing, and the Teleport action looks for
-# room again as it lands.
+# Lands by the cell the lock stored, so moving during the countdown dodges the
+# teleport as it does the charge, and in a session the teleport keeps to the
+# player the lock marked. The line runs from wherever the raider stands, so rock
+# carrying it bends the line. The landing is the timeout's, so a stun that ends
+# the teleport moves nothing, and the Teleport action looks for room again as it
+# lands.
 [macros.RaiderStates.body.Teleport]
 duration_ms = "${teleport_ms}"
 flags = ["Enraged", "TeleportLine", "Landing"]
@@ -59,7 +59,7 @@ on_enter = [{ action = "StoreTarget" }]
 on_update = [{ action = "Freeze" }]
 transitions = [{ trigger = "Timeout", target = "Brake", actions = [{ action = "Teleport" }] }]
 
-# The swarm's stop: a tenth of the speed left each tick
+# The stop: a tenth of the speed left each tick
 [macros.RaiderStates.body.Brake]
 duration_ms = 100
 flags = ["Enraged"]
@@ -113,8 +113,8 @@ bg256 = 0
 # ranks in every cave. A rank up has more hit points (8, 16, 28, 44), a fifth more
 # mass (2.0, 2.4, 2.9, 3.5), so a shot knocks it back less, and a costlier touch,
 # and chases slower on a longer warning and a slower charge; the first darts as the
-# snake does, its mass the swarm's. Hit points times chase speed, the raid's measure
-# of threat, runs 96, 144, 168 and 198.
+# snake does. Hit points times chase speed, the raid's measure of threat, runs 96,
+# 144, 168 and 198.
 
 [macros.RaiderRank1]
 doc = "A first-rank raider: small, quick and fragile, on a short warning."

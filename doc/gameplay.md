@@ -567,18 +567,19 @@ map, 18 rows, holds twice the narrowest. Each new game flies a new cave, its roc
 strata, cracked, moss or crystal stone. Glyphs drift left behind the rock at three
 depths, faster than it at 20, 40 and 80 cells a second, so each layer reads as
 moving and the depths come apart, and drains, nuggets, gold and the fuse are
-off. Raiders, the cave's swarms, spawn at the right edge every two seconds while
-fewer than three fly, on a row drawn across the map, in the nearest open rows when
-rock fills it, each of a type drawn at random between the two of the rank the raid
-has reached among the cave's own eight. Every type
-is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the template for
-a species of one's own ([FSM reference](fsm-reference.md#behavior-programs)),
-running one cycle, the swarm's chase, lock, charge and teleport (`RaiderStates` in
-`macros.toml`), its landing marked as the swarm's is, with its own look. Each stone
-art's eight are its tier, two types in each of four ranks, the same ranks in every
-cave, so caves differ in looks alone: a rank up has more hit points (8, 16, 28, 44)
-and a fifth more mass (2.0 to 3.5), so a shot knocks it back less, a costlier touch, and
-chases slower on a longer lock, the first rank darting as the snake does. The raid
+off. Raiders materialize at the right edge every two seconds while fewer than three
+fly or materialize, on a row drawn across the map, in the nearest open rows when
+rock fills it, each landing as its materialize ends and of a type drawn at random
+between the two of the rank the raid has reached among the cave's own eight. Every
+type is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the
+template for a species of one's own
+([FSM reference](fsm-reference.md#behavior-programs)), running one cycle, a chase,
+a lock, then a charge or a teleport (`RaiderStates` in `macros.toml`), its landing
+marked from the lock until it lands, with its own look. Each stone art's eight are
+its tier, two types in each of four ranks, the same ranks in every cave, so caves
+differ in looks alone: a rank up has more hit points (8, 16, 28, 44) and a fifth
+more mass (2.0 to 3.5), so a shot knocks it back less, a costlier touch, and chases
+slower on a longer lock, the first rank darting as the snake does. The raid
 climbs the tier: it spawns the first rank until players shoot three of it down, then
 the next, and three of the fourth exhaust the tier, where its boss is to stand; for
 now a green strobe marks it and the climb starts over (the `ramp` region). Each

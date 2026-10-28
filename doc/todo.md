@@ -55,14 +55,18 @@ magenta (13) meets the amethyst points, which are sparse. Keep every type within
 #### Put the tier's boss where the raid's climb ends
 
 - Priority: P1
-- Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`), `doc/gameplay.md`
-  §10
+- Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`, `RaidWait`),
+  `doc/gameplay.md` §10
 - Guide: [Script the boss approach](#script-the-boss-approach-and-play-its-stop)
 
 Three kills of the fourth rank exhaust the cave's tier and enter `RaidBoss`, a
 placeholder that strobes green and starts the climb over at the first rank while
 the raid keeps spawning. The boss encounter replaces it: the approach below, a boss
 of the tier's own, and what beating it opens, the next tier or the same climb again.
+The raid's cap of three reads `behavior.count`, which sums every program, so a boss
+program would hold a raider's place: the boss state stops the raid, or caps it on
+the raiders' own count (`behavior.<program>.count` summed, or a prototype `group`
+with `behavior.group.<g>.count`).
 
 ### Scenery
 
@@ -110,20 +114,6 @@ needs the columns ahead of the map, engine surface for rock that waits for the
 position package. A cave opens once and nothing narrows it again; a later stage
 starts a new cave.
 
-### Gun and loot
-
-The gun path, moved from Combat.
-
-#### Fan more than three gun lanes along a cardinal
-
-- Priority: P3
-- Affected files: `internal/parameter/tracer.go`, `internal/system/weapon.go`
-
-A level of the gun's upgrade path names its lanes per cardinal, and
-`TracerLaneOffsets` stops at the centre and its two sides, so a level asking for
-more fires three. A wider fan needs offsets two or more rows or columns out, and a
-volley spacing that still reads as lanes in a 15-row cave channel.
-
 ### Machine follow-ups
 
 What vanguard met in the machine and is still open, its certain faults having
@@ -140,13 +130,13 @@ and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-
   (`enter`), `internal/component/behavior.go` (`BehaviorEntrance`)
 - Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)
 
-A prototype's `entrance = "materialize"` plays the swarm-style one-second
-materialize over the footprint and lands the body as it ends, beside any rock that
-came over it, and nothing of it reaches the machine, which starts in `initial` the
-tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
+A prototype's `entrance = "materialize"` plays a one-second materialize, the
+`swarm` style, over the footprint and lands the body as it ends, beside any rock
+that came over it, and nothing of it reaches the machine, which starts in
+`initial` the tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
 What a program would declare next:
 
-- The materialize's duration and style, the swarm's or the nugget's until a program
+- The materialize's duration and style, `swarm` or `nugget` until a program
   has [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
   and whether a countdown shows over it.
 - An entering state the machine runs while the materialize holds, so a program can
@@ -158,16 +148,6 @@ What a program would declare next:
 The materialize is Shared, so the entering state's clock and probe must run alike
 on every instance and a capture mid-materialize must restore them
 (`snapshot.Schema`).
-
-#### Count a group of programs
-
-- Priority: P2
-- Affected files: `internal/behavior/program.go`, `internal/system/behavior.go`
-  (`behaviorTelemetry`), `doc/telemetry-reference.md`
-
-The raid's cap reads `behavior.count`, every data species, while raiders are the
-only ones. A prototype `group` with `behavior.group.<g>.count` would let a scenario
-that mixes programs cap each kind.
 
 #### Name a spawn's cell from the map's edge
 

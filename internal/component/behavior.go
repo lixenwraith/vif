@@ -26,7 +26,7 @@ type BehaviorComponent struct {
 
 	Shielded     bool // Written from the machine's flags each step: damage and stun immunity
 	TeleportLine bool // Written likewise: a teleport line runs from the header to the stored cell
-	ChargeLine   bool // Written likewise: the swarm's charge line pulses toward the stored cell
+	ChargeLine   bool // Written likewise: the charge line pulses toward the stored cell
 	Landing      bool // Written likewise: a marker blinks where the body lands on the stored cell
 }
 
