@@ -838,7 +838,7 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 	var krakens []event.SpeciesCreatedPayload
 	var opens []event.CaveOpenPayload
 	var messages []string
-	greens, resets, opened := 0, 0, 0
+	greens, resets, opened, entered := 0, 0, 0, 0
 	a.SetDispatchTap(func(ev event.GameEvent) {
 		switch p := ev.Payload.(type) {
 		case *event.SpeciesCreatedPayload:
@@ -861,6 +861,8 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 			resets++
 		case event.EventCaveOpened:
 			opened++
+		case event.EventCaveEntered:
+			entered++
 		}
 	})
 	// shoot waits for a raider and has the player shoot it down
@@ -897,6 +899,16 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 	inArt := func(name, art string) bool {
 		i := slices.Index(arts, any(art))
 		return i >= 0 && slices.Contains(types[i*8:i*8+8], any(name))
+	}
+	// second waits out an ease and reads the next second: the columns the rock
+	// scrolled and the drift's pace
+	second := func() (cols int64, drift float64) {
+		a.Tick(25)
+		_, from := rock()
+		a.Tick(20)
+		_, to := rock()
+		w.RunSafe(func() { drift = w.Resources.Status.Floats.Get("environment.drift_speed").Get() })
+		return to - from, drift
 	}
 	// streaks are the raider table's pity rows as the loot system carries them
 	streaks := func() (rows []string) {
@@ -942,13 +954,8 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 			t.Fatalf("tier %d: the tier's end strobed %d times, want %d", cycle, greens, cycle+1)
 		}
 		// The approach, once eased up: the rock and the drift at twice their pace
-		a.Tick(20)
-		_, from := rock()
-		a.Tick(20)
-		var drift float64
-		w.RunSafe(func() { drift = w.Resources.Status.Floats.Get("environment.drift_speed").Get() })
-		if _, to := rock(); to-from < 2*pace-1 || to-from > 2*pace+1 || drift != 160 {
-			t.Fatalf("tier %d: the approach scrolled %d columns in a second, the drift at %v; want %d and 160", cycle, to-from, drift, 2*pace)
+		if cols, drift := second(); cols < 2*pace-1 || cols > 2*pace+1 || drift != 160 {
+			t.Fatalf("tier %d: the approach scrolled %d columns in a second, the drift at %v; want %d and 160", cycle, cols, drift, 2*pace)
 		}
 
 		// The boss: the cave opens to no rock and halts, and the Kraken rises
@@ -1016,7 +1023,9 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 			t.Fatalf("tier %d: species damage x%d after the Kraken, messages %q; want x%d and its notice", cycle, multiplier, messages, 2<<cycle)
 		}
 
-		// The next cave: another stone art, its scroll easing in to the faster pace
+		// The next cave: another stone art, the rock and the drift rushing in at twice
+		// its pace while its mouth passes, then easing to its own, the raid held till then
+		entries := entered
 		next, start := rock()
 		if next == art || !slices.Contains(arts, any(next)) || start > 1 {
 			t.Fatalf("tier %d: the next cave wears %q from column %d after %q, want another of %v from its start", cycle, next, start, art, arts)
@@ -1024,11 +1033,19 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		if got := streaks(); len(carried) == 0 || !slices.Equal(got, carried) {
 			t.Fatalf("tier %d: the raider table's streaks went from %v to %v over the Kraken, want them carried on", cycle, carried, got)
 		}
-		a.Tick(25)
-		_, eased := rock()
-		a.Tick(20)
-		if _, origin := rock(); origin-eased < speed-1 || origin-eased > speed+1 {
-			t.Fatalf("tier %d: the next cave scrolled %d columns in a second, want %d", cycle, origin-eased, speed)
+		if cols, drift := second(); cols < 2*speed-1 || cols > 2*speed+1 || drift != 160 {
+			t.Fatalf("tier %d: the next cave rushed in %d columns in a second, the drift at %v; want %d and 160", cycle, cols, drift, 2*speed)
+		}
+		for range 600 {
+			if a.Tick(1); entered > entries || resets > 0 {
+				break
+			}
+		}
+		if entered != entries+1 || len(spawned) != (cycle+1)*4*perRank {
+			t.Fatalf("tier %d: the next cave filled the map %d times with %d raiders come since the Kraken, want once and none", cycle, entered-entries, len(spawned)-(cycle+1)*4*perRank)
+		}
+		if cols, drift := second(); cols < speed-1 || cols > speed+1 || drift != 80 {
+			t.Fatalf("tier %d: the next cave scrolled %d columns in a second, the drift at %v; want %d and 80", cycle, cols, drift, speed)
 		}
 		art, pace = next, speed
 	}

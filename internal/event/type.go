@@ -519,6 +519,8 @@ const (
 	EventCaveOpen
 	// EventCaveOpened [shared] announces the cave's opening filling the map
 	EventCaveOpened
+	// EventCaveEntered [shared] announces the cave filling the map past its mouth and ramp
+	EventCaveEntered
 	// EventWallDespawnRequest (WallDespawnRequestPayload) [shared] requests removal of walls in specified area or globally
 	EventWallDespawnRequest
 	// EventWallMaskChangeRequest (WallMaskChangeRequestPayload) [shared] modifies blocking behavior of existing walls

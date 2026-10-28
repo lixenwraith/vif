@@ -1405,9 +1405,9 @@ type MazeSpawnRequestPayload struct {
 // map's height, and scrolls it left at Speed columns a second, up to the soft cap. A
 // zero speed, gap or wavelength takes its default, a zero seed draws one, a zero mask
 // blocks everything, a zero visual draws stone and a zero reach caps no wall; a mouth
-// as wide as the map lays no rock in view, the cave entering past its right edge. Art
-// names a stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's
-// pick may.
+// as wide as the map lays no rock in view, the cave entering past its right edge, and
+// EventCaveEntered follows once the mouth and the ramp have scrolled past. Art names a
+// stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's pick may.
 type CaveStartPayload struct {
 	Seed       uint64                     `toml:"seed"`
 	Speed      float64                    `toml:"speed"`

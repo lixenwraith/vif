@@ -468,7 +468,8 @@ over `ramp` columns, the cave's own when 0, to `gap` open rows centred, at most 
 the walls leave, or to no rock at all when 0, and holds it open from there; a cave
 opens once.
 `EventCaveOpened` announces the opening filling the map, the cue a boss encounter
-waits on.
+waits on, and `EventCaveEntered` a cave's own rock filling it once its mouth and
+ramp have scrolled past, the cue to settle into it.
 
 `EnvironmentSystem` owns map-wide gameplay effects rather than rendering
 post-process effects. Its first effect is wind: `EventWindStart` supplies force,
@@ -639,15 +640,17 @@ lost within seconds. A player's kill of it drops a missile charge, heat and two
 energy for every player, doubles species damage as a storm kill does in main, every
 energy penalty with it ("Species Damage Up"), and lays the next cave behind its open
 mouth, of a stone art drawn from the three it is not, scrolling a fifth faster in
-whole columns a second (20, 24, 29, 35, and on to the soft cap of 200), its scroll
-and the drift easing in over a second; the raid resumes and the climb starts over at
-that cave's first rank. Each cave's raiders wear one hue in four shades, picked
-against its rock: violet vermin in the strata (by rank: scarab, crawler; crab,
-hornet; spider, mantis; beetle, scorpion), white haunts in the cracked stone
-(gremlin, chomper; imp, slime; ghost, skull; wraith, demon), orange animals in the
-moss (hedgehog, mouse; frog, hopper; bat, puffer; owl, lynx) and orchid constructs
-among the crystals (drone, shard; saucer, trooper; jelly, squid; djinn, robot), each
-one colour on a console. A raider lives until killed, and the rock pushes it as it
+whole columns a second (20, 24, 29, 35, and on to the soft cap of 200). The rock and
+the drift rush in from rest to twice that pace as they rushed to the Kraken, and as
+the cave's own rock fills the map past its mouth, about five seconds on, they ease
+to its pace over a second; the raid resumes there and the climb starts over at that
+cave's first rank. Each cave's raiders wear one hue in four shades, picked against
+its rock: violet vermin in the strata (by rank: scarab, crawler; crab, hornet;
+spider, mantis; beetle, scorpion), white haunts in the cracked stone (gremlin,
+chomper; imp, slime; ghost, skull; wraith, demon), orange animals in the moss
+(hedgehog, mouse; frog, hopper; bat, puffer; owl, lynx) and orchid constructs among
+the crystals (drone, shard; saucer, trooper; jelly, squid; djinn, robot), each one
+colour on a console. A raider lives until killed, and the rock pushes it as it
 pushes the cursor. Every type rolls the raider drop table vanguard declares, so one
 a player shoots down rolls it for every player where it fell, each tier on its own:
 heat at 5%, a `U`, its own loot kind, at 50%, and energy at 20%, each chance growing

@@ -1405,6 +1405,9 @@ func (s *WallSystem) stepCave(cursors []cursorCell) {
 	if open := s.cave.Config.Open; open.Ramp > 0 && s.cave.Offset == open.At+int64(open.Ramp) {
 		s.world.PushEvent(event.EventCaveOpened, nil)
 	}
+	if mouth := int64(s.cave.Config.Mouth); mouth > 0 && s.cave.Offset == mouth+int64(s.cave.Config.Ramp) {
+		s.world.PushEvent(event.EventCaveEntered, nil)
+	}
 
 	s.caveLanded = s.caveLanded[:0]
 	land := func(x, y int) {

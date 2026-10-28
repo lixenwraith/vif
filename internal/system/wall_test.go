@@ -276,6 +276,29 @@ func TestAMouthAsWideAsTheMapLaysNoRockInView(t *testing.T) {
 	}
 }
 
+// A cave with a mouth announces EventCaveEntered on the step its mouth and ramp have
+// left the map, when every column in view is the cave's own
+func TestACaveAnnouncesFillingTheMapPastItsMouth(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	mapW := w.Resources.Config.MapWidth
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{
+		Seed: 7, Speed: 10, MinGap: 6, MaxGap: 12, MinWall: 1, Wavelength: 8, Ramp: 4, Octaves: 3, Mouth: mapW}})
+	steps := 0
+	for entered := false; !entered; {
+		if steps > mapW+4 {
+			t.Fatalf("no entry after %d steps", steps)
+		}
+		walls.Update()
+		steps++
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			entered = entered || ev.Type == event.EventCaveEntered
+		}
+	}
+	if steps != mapW+4 {
+		t.Fatalf("entered after %d steps, want the mouth's %d and the ramp's 4", steps, mapW)
+	}
+}
+
 // Every wall going takes the cave's rock with it, and a record with no cave lifts it
 func TestRemovingEveryWallLiftsTheCave(t *testing.T) {
 	for _, remove := range []event.GameEvent{

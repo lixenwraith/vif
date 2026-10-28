@@ -305,3 +305,18 @@ body = [
     { action = "ConfigToVar", payload = { field = "map_width", name = "cave_mouth" } },
     { action = "EmitEvent", event = "EventCaveStart", payload = { min_gap = 9, max_gap = 2000, min_wall = 2, reach = 27, wavelength = 64, detail = 0, ramp = 96, octaves = 4, block_mask = ["cursor", "kinetic", "spawn"] }, payload_vars = { seed = "cave_seed", mouth = "cave_mouth", speed = "cave_speed" }, pick = { field = "art", var = "cave_art", from = ["strata", "cracked", "moss", "crystal"] } },
 ]
+
+# The boss stage's rush, into it and out to the next cave: the rock and the drift
+# ease up over a second to twice the paces cave_speed and drift_pace hold, the rock
+# within the cave's cap of 200 columns a second.
+[macros.Rush]
+doc = "Ease the rock and the drift up over a second to twice cave_speed and drift_pace."
+body = [
+    { action = "CopyVar", payload = { name = "rush_rock", source_var = "cave_speed" } },
+    { action = "MultiplyVar", payload = { name = "rush_rock", delta = 2 } },
+    { action = "ClampVar", payload = { name = "rush_rock", min = 20, max = 200 } },
+    { action = "CopyVar", payload = { name = "rush_drift", source_var = "drift_pace" } },
+    { action = "MultiplyVar", payload = { name = "rush_drift", delta = 2 } },
+    { action = "EmitEvent", event = "EventCavePace", payload = { ease_ms = 1000 }, payload_vars = { speed = "rush_rock" } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, duration_ms = 0, scenery = true, ease_ms = 1000 }, payload_vars = { speed = "rush_drift" } },
+]

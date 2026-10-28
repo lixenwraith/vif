@@ -142,8 +142,9 @@ on_enter = [
     { action = "CopyVar", payload = { name = "cave_art", source_var = "cave_seed" } },
     { action = "ModuloVar", payload = { name = "cave_art", delta = 4 } },
     { action = "SetVar", payload = { name = "cave_speed", value = 20 } },
+    { action = "SetVar", payload = { name = "drift_pace", value = 80 } },
     { macro = "Cave" },
-    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 80.0, duration_ms = 0, scenery = true } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, duration_ms = 0, scenery = true }, payload_vars = { speed = "drift_pace" } },
 ]
 
 # --- Raiders ---
@@ -252,20 +253,13 @@ transitions = [
 
 # --- Boss ---
 
-# The rock and the drift run at twice their pace while the opening comes in, easing
-# up over a second, so it fills a 120-column map in about six seconds at the first
-# pace. Filling it halts the scroll and the drift, easing over a second, and the
-# Kraken rises at the right edge on the map's middle row, the request clamping its
-# body inside the map.
+# The rock and the drift rush while the opening comes in, so it fills a 120-column
+# map in about six seconds at the first pace. Filling it halts the scroll and the
+# drift, easing over a second, and the Kraken rises at the right edge on the map's
+# middle row, the request clamping its body inside the map.
 [states.BossApproach]
 parent = "Root"
-on_enter = [
-    { action = "CopyVar", payload = { name = "boss_pace", source_var = "cave_speed" } },
-    { action = "MultiplyVar", payload = { name = "boss_pace", delta = 2 } },
-    { action = "ClampVar", payload = { name = "boss_pace", min = 20, max = 200 } },
-    { action = "EmitEvent", event = "EventCavePace", payload = { ease_ms = 1000 }, payload_vars = { speed = "boss_pace" } },
-    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 160.0, duration_ms = 0, scenery = true, ease_ms = 1000 } },
-]
+on_enter = [{ macro = "Rush" }]
 transitions = [
     { trigger = "EventCaveOpened", target = "BossHalt" },
 ]
@@ -311,9 +305,9 @@ transitions = [
 
 # The Kraken down: species damage doubles, and every energy penalty with it, and
 # the next cave comes in past the right edge behind its open mouth, in a stone art
-# drawn from the three it is not, scrolling a fifth faster in whole columns a
-# second (20, 24, 29, 35 and on to the cap of 200), its scroll and the drift easing
-# in over a second; the ramp starts the climb over and lets the raid resume
+# drawn from the three it is not, a fifth faster in whole columns a second (20, 24,
+# 29, 35 and on to the cap of 200). The rock and the drift rush in from rest as they
+# rushed to the Kraken, the raid still held.
 [states.BossDown]
 parent = "Root"
 on_enter = [
@@ -331,8 +325,19 @@ on_enter = [
     { action = "ClampVar", payload = { name = "cave_speed", min = 20, max = 200 } },
     { macro = "Cave" },
     { action = "EmitEvent", event = "EventCaveStop" },
+    { macro = "Rush" },
+]
+transitions = [
+    { trigger = "EventCaveEntered", target = "BossExit" },
+]
+
+# The cave filling the map past its mouth eases the rock and the drift to its own
+# paces over a second, and the ramp starts the climb over and lets the raid resume
+[states.BossExit]
+parent = "Root"
+on_enter = [
     { action = "EmitEvent", event = "EventCavePace", payload = { ease_ms = 1000 }, payload_vars = { speed = "cave_speed" } },
-    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 80.0, duration_ms = 0, scenery = true, ease_ms = 1000 } },
+    { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, duration_ms = 0, scenery = true, ease_ms = 1000 }, payload_vars = { speed = "drift_pace" } },
     { action = "SetVar", payload = { name = "boss_down", value = 1 } },
     { action = "TerminateRegion", region = "boss" },
 ]
