@@ -22,12 +22,17 @@ func splitKey(key string) (group, name, playerSlot string) {
 		return GroupMisc, key, ""
 	}
 
-	// Player cards are slot-scoped, with the weapon inventory split out so
-	// every active-slot card stays within the UI cardinality bound.
+	// Player cards are slot-scoped, with the weapon inventory and the slot's roster
+	// entry (its cursor and who drives it) split out so every active-slot card stays
+	// within the UI cardinality bound.
 	if domain == "player" {
 		if slot, metric, ok := splitPlayerMetric(name); ok {
 			if weapon, ok := strings.CutPrefix(metric, "weapon."); ok {
 				return "player." + slot + ".weapon", weapon, slot
+			}
+			switch metric {
+			case "entity", "control", "peer", "holder", "wraith":
+				return "player." + slot + ".roster", metric, slot
 			}
 			return "player." + slot, metric, slot
 		}
