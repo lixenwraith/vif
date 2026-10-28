@@ -250,7 +250,10 @@ func (s *GlyphSystem) countPlacedKind() int {
 			return true
 		}
 		scenery++
-		if pos, ok := s.world.Positions.GetPosition(e); placing && ok && !s.hides(pos.X, pos.Y) {
+		if !placing {
+			return true
+		}
+		if pos, ok := s.world.Positions.GetPosition(e); ok && !s.hides(pos.X, pos.Y) {
 			shown++
 		}
 		return true
