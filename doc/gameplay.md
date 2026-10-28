@@ -120,7 +120,8 @@ drift layer (§9) and its dust lifetime.
 Spawn pacing adapts to screen occupancy: sparse maps receive text faster while dense
 maps sharply reduce new placement. Occupancy and the type and level census count
 only the kind being placed, scenery under a scenery drift (§9) or typeable text
-otherwise, so each keeps its own fill where both stand. Placement needs at least one
+otherwise, so each keeps its own fill where both stand, and of scenery only what
+shows: text passing behind rock or a wall fills nothing. Placement needs at least one
 cursor, excludes a region around every cursor, and retries only a bounded number of
 positions. While a glyph drift is active, a new line enters across an upwind edge,
 each drawn in proportion to the drift crossing it: across a side a rune at a time as

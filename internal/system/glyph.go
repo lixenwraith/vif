@@ -238,19 +238,25 @@ func (s *GlyphSystem) calculateNextSpawn() time.Duration {
 	return time.Duration(float64(baseDelay) / s.rateMultiplier / fill)
 }
 
-// countPlacedKind counts the glyphs of the kind placeLine stamps now, scenery or
-// typeable text, so each keeps its own fill where both live side by side. Scenery is
-// counted off the protection store, which a map without it keeps small.
+// countPlacedKind counts the glyphs of the kind placeLine stamps now that a player
+// sees, scenery or typeable text, so each keeps its own fill where both live side by
+// side and scenery passing behind rock or a wall fills nothing. Scenery is counted off
+// the protection store, which a map without it keeps small.
 func (s *GlyphSystem) countPlacedKind() int {
-	glyphs, scenery := s.world.Components.Glyph, 0
+	glyphs, placing := s.world.Components.Glyph, s.statDriftScenery.Load()
+	scenery, shown := 0, 0
 	s.world.Components.Protection.Each(func(e core.Entity, p *component.ProtectionComponent) bool {
-		if p.Mask&component.ProtectFromTyping != 0 && glyphs.HasEntity(e) {
-			scenery++
+		if p.Mask&component.ProtectFromTyping == 0 || !glyphs.HasEntity(e) {
+			return true
+		}
+		scenery++
+		if pos, ok := s.world.Positions.GetPosition(e); placing && ok && !s.hides(pos.X, pos.Y) {
+			shown++
 		}
 		return true
 	})
-	if s.statDriftScenery.Load() {
-		return scenery
+	if placing {
+		return shown
 	}
 	return glyphs.CountEntities() - scenery
 }
@@ -261,33 +267,31 @@ func (s *GlyphSystem) isScenery(e core.Entity) bool {
 	return prot.Mask&component.ProtectFromTyping != 0
 }
 
-// updateCensus counts live glyphs of the placed kind per spawn slot, called once
-// per spawn, O(n)
+// hides reports a cell of rock or a wall that keeps text out and scenery behind it
+func (s *GlyphSystem) hides(x, y int) bool {
+	return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockSpawn)
+}
+
+// updateCensus counts the glyphs of the placed kind a player sees per spawn slot, as
+// countPlacedKind counts them, called once per spawn, O(n)
 func (s *GlyphSystem) updateCensus() {
 	s.census = glyphCensus{}
 	scenery := s.statDriftScenery.Load()
-
 	var orphanGlyph int64
-
-	for _, glyphEntity := range s.world.Components.Glyph.Entities() {
-		if !s.world.Positions.HasPosition(glyphEntity) {
-			orphanGlyph++
-			continue
-		}
-		if s.isScenery(glyphEntity) != scenery {
-			continue
-		}
-
-		glyphComp, ok := s.world.Components.Glyph.GetPtr(glyphEntity)
+	s.world.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
+		pos, ok := s.world.Positions.GetPosition(e)
 		if !ok {
-			continue
+			orphanGlyph++
+			return true
 		}
-
-		if slot := censusSlot(glyphComp.Type, glyphComp.Level); slot >= 0 {
+		if s.isScenery(e) != scenery || scenery && s.hides(pos.X, pos.Y) {
+			return true
+		}
+		if slot := censusSlot(g.Type, g.Level); slot >= 0 {
 			s.census[slot]++
 		}
-	}
-
+		return true
+	})
 	s.statOrphanGlyph.Store(orphanGlyph)
 }
 
@@ -561,7 +565,7 @@ func (s *GlyphSystem) feed(line *engine.EntryLine, heading [2]int) bool {
 // rock or a wall that blocks spawns keeps typeable text out, leaving a hole, and
 // scenery enters behind it
 func (s *GlyphSystem) enterRune(line *engine.EntryLine, r rune) {
-	if !line.Scenery && s.world.Positions.HasBlockingWallAt(line.X, line.Y, component.WallBlockSpawn) {
+	if !line.Scenery && s.hides(line.X, line.Y) {
 		return
 	}
 	e := s.world.CreateEntity(core.DomainPlayer)

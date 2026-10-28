@@ -73,17 +73,12 @@ with `behavior.group.<g>.count`).
 #### Play the scenery text and settle what it leaves open
 
 - Priority: P1
-- Affected files: `internal/system/glyph.go` (`placeLine`, `countPlacedKind`),
-  `internal/system/environment.go`, `wad/scenario/vanguard/scenario.toml`
-  (`CaveStart`), `doc/gameplay.md` §9
+- Affected files: `internal/system/environment.go`,
+  `wad/scenario/vanguard/scenario.toml` (`CaveStart`), `doc/gameplay.md` §9
 - Guide: [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment)
 
 Vanguard's drifting text is scenery: rock and raiders pass it by and no key types
-it. Typing was the ship's only heat and energy income (+1 heat a key), so a game now
-earns none; play shows whether kills or a pickup should pay instead. One gap remains
-in the measured numbers: the spawner counts the scenery hidden in rock, a quarter to
-a third of it, so its rate falls from mostly double to mostly normal (mean
-multiplier 1.84 to 1.10 at 120×40); counting only the visible text closes that.
+it, and the spawner counts only what shows outside the rock.
 Scenery passes behind any cell that blocks spawns, rock and walls alike, until the
 position package gives rock a test of its own. A boss region of fixed, typeable text
 over moving scenery needs a drift that moves scenery alone, since a drift moves

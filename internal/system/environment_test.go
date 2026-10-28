@@ -909,8 +909,8 @@ func TestEnteringTextCarriesOverACopy(t *testing.T) {
 
 // TestTextPlacedUnderASceneryDriftIsSceneryCountedApart: text placed while the drift
 // is scenery carries ProtectScenery and other text carries none, and the spawner's
-// density and census count only the kind it places, so neither kind crowds out the
-// other where both share the map
+// density and census count only the kind it places that a player sees, so neither
+// kind crowds out the other and scenery behind rock or a wall fills nothing
 func TestTextPlacedUnderASceneryDriftIsSceneryCountedApart(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
@@ -946,5 +946,32 @@ func TestTextPlacedUnderASceneryDriftIsSceneryCountedApart(t *testing.T) {
 	drift.Store(true)
 	if n := glyphs.countPlacedKind(); n != len(scenery) {
 		t.Fatalf("scenery count %d, want %d", n, len(scenery))
+	}
+
+	// Rock over one scenery glyph's column and a wall on another's cell hide them
+	hidden := map[core.Entity]bool{scenery[0]: true, scenery[len(scenery)-1]: true}
+	rock, _ := w.Positions.GetPosition(scenery[0])
+	cols := make([]engine.RockColumn, w.Resources.Config.MapWidth)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Ceil: 0, Floor: w.Resources.Config.MapHeight}
+	}
+	cols[rock.X] = engine.RockColumn{Ceil: rock.Y + 1, Floor: w.Resources.Config.MapHeight}
+	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	wall := w.CreateEntity(core.DomainShared)
+	walled, _ := w.Positions.GetPosition(scenery[len(scenery)-1])
+	w.Positions.SetPosition(wall, walled)
+	w.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockAll})
+	for _, e := range scenery {
+		if pos, _ := w.Positions.GetPosition(e); !hidden[e] && pos.X == rock.X && pos.Y <= rock.Y {
+			hidden[e] = true
+		}
+	}
+	glyphs.updateCensus()
+	shown := 0
+	for _, n := range glyphs.census {
+		shown += n
+	}
+	if n, want := glyphs.countPlacedKind(), len(scenery)-len(hidden); n != want || shown != want {
+		t.Fatalf("scenery count %d and census %d with %d behind rock and a wall, want %d", n, shown, len(hidden), want)
 	}
 }
