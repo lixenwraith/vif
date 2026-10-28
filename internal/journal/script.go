@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
@@ -260,15 +261,15 @@ func scriptEventDomain(et event.EventType, text string) (core.Domain, error) {
 	}
 }
 
-// ScriptTarget is the App-independent surface an authored script drives. Programs
-// are the running scenario's behavior programs, data species an event's payload
-// may name.
+// ScriptTarget is the App-independent surface an authored script drives. Declared
+// is what the running scenario adds to the names an event's payload may spell: its
+// behavior programs, the data species, and its loot kinds.
 type ScriptTarget interface {
 	Position() event.Stamp
 	Tick(int)
 	Inject(...*input.Intent) bool
 	Emit(event.EventType, any, core.Domain)
-	Programs() []string
+	Declared() component.Declared
 }
 
 // ScriptStats reports one authored run's progress.
@@ -439,5 +440,5 @@ func (d *ScriptDriver) payload(a compiledScriptAction) (any, error) {
 	if a.kind != scriptEvent || a.payload == nil {
 		return nil, nil
 	}
-	return event.AuthoredPayload(event.PayloadNames(d.target.Programs()), a.eventType, a.payload)
+	return event.AuthoredPayload(event.PayloadNames(d.target.Declared()), a.eventType, a.payload)
 }

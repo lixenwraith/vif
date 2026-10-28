@@ -1,64 +1,51 @@
 package visual
 
 import (
-	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 )
 
-// LootVisualDef defines rendering properties for a loot type
-type LootVisualDef struct {
-	Rune       rune
-	InnerColor color.RGB // Rune color
-	GlowColor  color.RGB // Shield glow color
-}
-
-// LootVisuals is indexed by LootType. Weapon loot is lettered for its attack
-// (Lightning, Missile, Pulse, Bullet, Ray, Tracer), the name players use; the
-// Upgrade is the gun's charge too, lettered for a gun that climbs a path.
-var LootVisuals = [component.LootCount]LootVisualDef{
+// LootVisuals is the code kinds' looks, indexed by LootType. Weapon loot is
+// lettered for its attack (Lightning, Missile, Pulse, Bullet, Ray, Tracer), the
+// name players use.
+var LootVisuals = [component.LootCount]component.LootLook{
 	component.LootRod: {
-		Rune:       'L',
-		InnerColor: RgbOrbRod,
-		GlowColor:  RgbLootRodGlow,
+		Rune:  'L',
+		Color: RgbOrbRod,
+		Glow:  RgbLootRodGlow,
 	},
 	component.LootLauncher: {
-		Rune:       'M',
-		InnerColor: RgbOrbLauncher,
-		GlowColor:  RgbLootLauncherGlow,
+		Rune:  'M',
+		Color: RgbOrbLauncher,
+		Glow:  RgbLootLauncherGlow,
 	},
 	component.LootDisruptor: {
-		Rune:       'P',
-		InnerColor: RgbOrbDisruptor,
-		GlowColor:  RgbLootDisruptorGlow,
+		Rune:  'P',
+		Color: RgbOrbDisruptor,
+		Glow:  RgbLootDisruptorGlow,
 	},
 	component.LootTurret: {
-		Rune:       'B',
-		InnerColor: RgbOrbTurret,
-		GlowColor:  RgbLootTurretGlow,
+		Rune:  'B',
+		Color: RgbOrbTurret,
+		Glow:  RgbLootTurretGlow,
 	},
 	component.LootEmitter: {
-		Rune:       'R',
-		InnerColor: RgbOrbEmitter,
-		GlowColor:  RgbLootEmitterGlow,
+		Rune:  'R',
+		Color: RgbOrbEmitter,
+		Glow:  RgbLootEmitterGlow,
 	},
 	component.LootGun: {
-		Rune:       'T',
-		InnerColor: RgbTracerPositive,
-		GlowColor:  RgbLootGunGlow,
-	},
-	component.LootUpgrade: {
-		Rune:       'U',
-		InnerColor: RgbTracerPositive,
-		GlowColor:  RgbLootUpgradeGlow,
+		Rune:  'T',
+		Color: RgbTracerPositive,
+		Glow:  RgbLootGunGlow,
 	},
 	component.LootHeat: {
-		Rune:       'H',
-		InnerColor: RgbLootHeatSigil,
-		GlowColor:  RgbLootHeatGlow,
+		Rune:  'H',
+		Color: RgbLootHeatSigil,
+		Glow:  RgbLootHeatGlow,
 	},
 	component.LootEnergy: {
-		Rune:       'E',
-		InnerColor: RgbLootEnergySigil,
-		GlowColor:  RgbLootEnergyGlow,
+		Rune:  'E',
+		Color: RgbLootEnergySigil,
+		Glow:  RgbLootEnergyGlow,
 	},
 }

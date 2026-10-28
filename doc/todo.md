@@ -112,7 +112,7 @@ starts a new cave.
 
 ### Gun and loot
 
-The gun path and vanguard's `U`, moved from Combat.
+The gun path, moved from Combat.
 
 #### Fan more than three gun lanes along a cardinal
 
@@ -124,30 +124,13 @@ A level of the gun's upgrade path names its lanes per cardinal, and
 more fires three. A wider fan needs offsets two or more rows or columns out, and a
 volley spacing that still reads as lanes in a 15-row cave channel.
 
-#### Declare loot kinds and drop tables in a scenario
-
-- Priority: P2
-- Affected files: `internal/component/loot.go`, `internal/parameter/visual/loot.go`,
-  `internal/profile/loot.go`, `internal/system/loot.go`
-
-Loot kinds, their rewards and runes are a Go enum and the drop tiers are fixed per
-code species, so a scenario's own pickup is a Go change that reaches players only
-as an event drop: vanguard's `U` is `LootUpgrade`, the gun drop's reward under its
-own rune, raised by its FSM where a player shoots a raider down because no tier can
-hold it. Kinds a scenario declares (rune, colours, reward) and tiers that name them
-would let a program list its drops and roll them with pity, with `activeLootTypes`
-and the pity counts sized from the declared kinds rather than `LootCount`.
-[Give data species attack, beam and drop rows of their own](#give-data-species-attack-beam-and-drop-rows-of-their-own)
-is the drop half of this for programs.
-
 ### Machine follow-ups
 
 What vanguard met in the machine and is still open, its certain faults having
 landed. Open items elsewhere it meets:
 [payload field names at load](#check-payload-field-names-against-their-event-at-load),
 [a program spawning another](#let-a-program-spawn-another-program),
-[attack, beam and drop rows](#give-data-species-attack-beam-and-drop-rows-of-their-own),
-[loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario)
+[attack and beam rows](#give-data-species-attack-and-beam-rows-of-their-own)
 and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does).
 
 #### Give a program's entrance an entering state
@@ -164,7 +147,7 @@ tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
 What a program would declare next:
 
 - The materialize's duration and style, the swarm's or the nugget's until a program
-  has [rows of its own](#give-data-species-attack-beam-and-drop-rows-of-their-own),
+  has [rows of its own](#give-data-species-attack-and-beam-rows-of-their-own),
   and whether a countdown shows over it.
 - An entering state the machine runs while the materialize holds, so a program can
   telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
@@ -866,8 +849,9 @@ tick until the first crossing's actions land. Simon's `Listen` plays three notes
 level 1 in a session and one solo. An internal transition in flight has to stop its
 own re-proposal without parking the region's events (D-20); a test plays simon on a
 mesh pair (`shapedPair`) and counts `EventFSMTransition` by owner and index. An
-internal transition on an event crosses once: vanguard's U drop on a mesh pair
-(`TestVanguardAKillInAPairDropsEachPlayerOneU`) holds it, and a fix keeps it so.
+internal transition on an event crosses once: vanguard's rank counting a kill on a
+mesh pair (`TestVanguardAKillInAPairDropsEachPlayerOneU`) holds it, and a fix keeps
+it so.
 
 ### Forgive a one-tick defeat in a session as solo play does
 
@@ -1146,17 +1130,16 @@ any program compiles. Its build could take any program name and push
 `EventBehaviorSpawnRequest`, which drops and counts an unknown one; the load-time
 check of that name belongs with the payload names under Authoring.
 
-### Give data species attack, beam and drop rows of their own
+### Give data species attack and beam rows of their own
 
 - Priority: P3
-- Affected files: `internal/profile/combat.go`, `internal/profile/loot.go`,
-  `internal/component/materialize.go`
+- Affected files: `internal/profile/combat.go`, `internal/component/materialize.go`
 
-A prototype names a combat row (`swarm` or `quasar`), a beam style (`swarm` or
-`nugget`) and a code species' drop tiers, so a new attack profile, beam or drop
-table is a Go change ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)).
-Rows of its own would grow those tables per scenario from the prototype, as soft
-collision builds a data species' rows from its `mass`.
+A prototype names a combat row (`swarm` or `quasar`) and a beam style (`swarm` or
+`nugget`), so a new attack profile or beam is a Go change
+([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)). Rows of its own
+would grow those tables per scenario from the prototype, as soft collision builds a
+data species' rows from its `mass` and loot rolls the drop table its `drops` names.
 
 ## Environment
 

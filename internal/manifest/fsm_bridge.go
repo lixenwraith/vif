@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -10,13 +11,14 @@ import (
 )
 
 // RegisterFSMComponents installs the FSM standard library bound to the ECS world;
-// programs are the scenario's behavior programs, data species its names take
-func RegisterFSMComponents(m *fsm.Machine[*engine.World], programs []string) {
-	std.Register(m, worldHost(programs))
+// declared is what the scenario adds to the names a payload takes, its behavior
+// programs as data species and its loot kinds
+func RegisterFSMComponents(m *fsm.Machine[*engine.World], declared component.Declared) {
+	std.Register(m, worldHost(declared))
 }
 
 // worldHost binds std.Host capabilities to the ECS world
-func worldHost(programs []string) std.Host[*engine.World] {
+func worldHost(declared component.Declared) std.Host[*engine.World] {
 	return std.Host[*engine.World]{
 		// A region's actions run on every instance, so an artifact one raises is a
 		// per-instance effect unless its class says otherwise. The Local class keeps it
@@ -59,7 +61,7 @@ func worldHost(programs []string) std.Host[*engine.World] {
 		ConfigInt:  engine.ConfigIntAccessor,
 		ConfigBool: engine.ConfigBoolAccessor,
 
-		Names: event.PayloadNames(programs),
+		Names: event.PayloadNames(declared),
 
 		// The session root is shared session identity, and the run moves before a
 		// reset re-enters the machine, which the session counter does only after

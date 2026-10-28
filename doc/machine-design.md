@@ -582,15 +582,17 @@ system's scaffold (§6.4), not in the vocabulary.
   under `behaviors` fails naming it. `ScenarioFiles` therefore lists programs, so
   `resource.ReadScenario` carries, digests and transfers them with no mechanism of
   their own. `validScenarioName` admits the subdirectory, `resource.entryKeys`
-  admits `behaviors`, and `Scenario.Behaviors()` returns the programs by name.
+  admits `behaviors`, `loot` and `drops`, `Scenario.Behaviors()` returns the
+  programs by name and `Scenario.Loot()` the entry's loot kinds and drop tables.
   `Machine.LoadScenarioFromMap` takes no part: a top-level key is its embedder's.
-- **Compiled once per run.** `App.readScenario` compiles the programs
-  (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
+- **Compiled once per run.** `App.readScenario` compiles the programs and the
+  loot (`system.CompileBehaviors`, against `system.BehaviorVocabulary()`) right after
   `resource.LoadScenario`, so a bad program fails as a bad scenario does, before
   any service starts, and before the scenario machine loads, whose species names
-  resolve against the prototypes. `initWorld` puts the prototypes in `world.Resources.Behaviors`
-  before the systems are built, so loot, soft collision and `NewMetaSystem` size
-  their data rows and the renderers read glyphs. The compiled graphs go to
+  resolve against the prototypes and whose loot names against the kinds. `initWorld`
+  puts the prototypes in `world.Resources.Behaviors` and the loot in
+  `world.Resources.Loot` before the systems are built, so loot, soft collision and
+  `NewMetaSystem` size their data rows and the renderers read glyphs. The compiled graphs go to
   `system.NewBehaviorSystem(world, set)`, which the app adds beside `MetaSystem`
   (`manifest.ContextSystems`), because the generator's constructors take only a
   world.
@@ -598,7 +600,8 @@ system's scaffold (§6.4), not in the vocabulary.
   compile, then the machine load, so an unknown name or a bad argument fails
   validation, not play, and a
   mid-run scenario change refuses a bad program before anything is torn down.
-  `-check` prints `behaviors ok: <n> (<names>)`.
+  `-check` prints `behaviors ok: <n> (<names>)`, and `loot ok` and `drops ok`
+  the same way.
 
 ### 6.4 Beyond the machine
 
@@ -611,16 +614,17 @@ smaller part of it.
   `quasar`, the unit composites whose damage lands on their header), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
   `parameter.BehaviorRestitution`, the swarm's chase, with each key of the program's
-  `[prototype.physics]` replacing its value), soft-collision mass, the code species
-  whose drop tiers it rolls, contact damage, lifetime, its entrance (§4.4), its
-  look and the pattern period.
+  `[prototype.physics]` replacing its value), soft-collision mass, the drop table
+  its kills roll (the scenario's or a code species',
+  [FSM reference: Loot](fsm-reference.md#loot)), contact damage, lifetime, its
+  entrance (§4.4), its look and the pattern period.
   The look (`component.Look`) is the frames cell by cell, each cell a glyph and
   entries of the prototype's fg and bg palettes with its attributes, plus the
   colour of a glyph without an entry and an optional console pair;
   `visual.CompileLook` builds it from the authored rows, the eye's types' art
-  included. It names rows of per-kind tables that are code, so a new attack profile,
-  beam style or drop table is a code change
-  ([todo](todo.md#give-data-species-attack-beam-and-drop-rows-of-their-own)).
+  included. It names rows of per-kind tables that are code, so a new attack profile
+  or beam style is a code change
+  ([todo](todo.md#give-data-species-attack-and-beam-rows-of-their-own)).
 - **Species IDs.** `component.SpeciesType` keeps its code enum, ending at
   `SpeciesCount`; `SpeciesDataFirst = SpeciesCount` and
   `SpeciesMax = SpeciesCount + parameter.BehaviorProgramsMax` bound the data
@@ -632,15 +636,15 @@ smaller part of it.
   `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`.
 - **Species tables.** Every table indexed by `SpeciesType` is `[SpeciesMax]`, so a
   data ID never indexes out of range: `profile.Contact`, `profile.SoftKraken`,
-  `profile.Drops`, the soft-collision matrices and caches, and `MetaSystem`'s kill
-  counters and capture. A data species' package-level rows stay zero, and its
-  values come from its prototype at the reader: the behavior system passes the
-  contact damage, loot rolls the named species' tiers under a pity of its own, the
-  health bar measures the prototype, and soft collision builds data rows in `Init`
-  for a prototype with mass (to and from swarm, quasar and every other data
-  species; storm, pylon and kraken push it one way), so every code pair keeps its
-  rule. The range checks in `meta.go`, `genetic.go` and `loot.go` read
-  `>= SpeciesMax`.
+  the loot system's resolved drop tables, the soft-collision matrices and caches,
+  and `MetaSystem`'s kill counters and capture. A data species' package-level rows
+  stay zero, and its values come from its prototype at the reader: the behavior
+  system passes the contact damage, loot rolls the table its `drops` names under a
+  pity of its own, the health bar measures the prototype, and soft collision
+  builds data rows in `Init` for a prototype with mass (to and from swarm, quasar
+  and every other data species; storm, pylon and kraken push it one way), so every
+  code pair keeps its rule. The range checks in `meta.go`, `genetic.go` and
+  `loot.go` read `>= SpeciesMax`.
 - **Composite routing.** A data species' header carries `component.BehaviorData`;
   the behavior system handles `EventCompositeIntegrityBreach` for it, and
   `handleEmptyComposite`'s default destroys the head.

@@ -87,7 +87,7 @@ func newProgramWorld(t *testing.T, program string, x, y int) (*engine.GameContex
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc})
+	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func newEntranceWorld(t *testing.T) (*beamWorld, *BehaviorSystem) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc})
+	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +472,7 @@ func TestAnEmittedPayloadNamesADataSpeciesByItsProgram(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = CompileBehaviors(map[string]map[string]any{"warden": doc})
+	_, err = CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
 	if err == nil || !strings.Contains(err.Error(), `species: "ghost" is not one of`) {
 		t.Fatalf("a payload naming no species compiled: %v", err)
 	}

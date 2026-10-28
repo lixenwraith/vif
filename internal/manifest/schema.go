@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/vif/internal/bot"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
@@ -24,7 +25,7 @@ func Schema(w io.Writer) error {
 	event.EnsureRegistry()
 
 	m := fsm.NewMachine[*engine.World]()
-	RegisterFSMComponents(m, nil)
+	RegisterFSMComponents(m, component.Declared{})
 
 	type field struct {
 		Name   string `json:"name"`    // toml tag (authoring name)
@@ -49,7 +50,7 @@ func Schema(w io.Writer) error {
 		ConfigBoolFields []string                   `json:"config_bool_fields"`
 	}{
 		SchemaVersion:    SchemaVersion,
-		Names:            event.PayloadNames(nil).List(),
+		Names:            event.PayloadNames(component.Declared{}).List(),
 		Vocabularies:     map[string][]dialect.Entry{"scenario": m.Vocabulary(), "bot": bot.Vocabulary(), "behavior": system.BehaviorVocabulary().Entries()},
 		Ops:              dialect.Ops(),
 		ConfigIntFields:  engine.ConfigIntFields(),

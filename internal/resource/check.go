@@ -77,13 +77,17 @@ func ValidateScenario(o Options) (Scenario, error) {
 		return Scenario{}, err
 	}
 	var set *system.BehaviorSet
+	var loot map[string]any
 	programs, err := sc.Behaviors()
 	if err == nil {
-		set, err = system.CompileBehaviors(programs)
+		loot, err = sc.Loot()
+	}
+	if err == nil {
+		set, err = system.CompileBehaviors(programs, loot)
 	}
 	if err == nil {
 		m := fsm.NewMachine[*engine.World]()
-		manifest.RegisterFSMComponents(m, set.Names())
+		manifest.RegisterFSMComponents(m, set.Declared())
 		if err = fsm.LoadScenarioFromFS(m, sc.FS(), sc.Entry()); err == nil {
 			err = checkSystems(m)
 		}
@@ -115,11 +119,26 @@ func checkScenario(o Options, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "behaviors ok: %d", len(programs))
-	if len(programs) > 0 {
-		fmt.Fprintf(w, " (%s)", strings.Join(slices.Sorted(maps.Keys(programs)), ", "))
+	loot, err := sc.Loot()
+	if err != nil {
+		return err
 	}
-	fmt.Fprintln(w)
+	kinds, _ := loot["loot"].(map[string]any)
+	tables, _ := loot["drops"].(map[string]any)
+	for _, line := range []struct {
+		key   string
+		names []string
+	}{
+		{"behaviors", slices.Sorted(maps.Keys(programs))},
+		{"loot", slices.Sorted(maps.Keys(kinds))},
+		{"drops", slices.Sorted(maps.Keys(tables))},
+	} {
+		fmt.Fprintf(w, "%s ok: %d", line.key, len(line.names))
+		if len(line.names) > 0 {
+			fmt.Fprintf(w, " (%s)", strings.Join(line.names, ", "))
+		}
+		fmt.Fprintln(w)
+	}
 	return nil
 }
 

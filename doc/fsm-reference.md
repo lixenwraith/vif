@@ -77,6 +77,9 @@ cursors = false                     # Players hold slots, no cursor on the map (
 [behaviors]
 scarab = { file = "behavior/strata/scarab.toml" }  # A species of the scenario's own (Behavior Programs)
 
+[loot.upgrade]                      # A loot kind of the scenario's own, its keys in Loot
+[drops.raider]                      # A drop table kills roll, its keys in Loot
+
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
 file = "file.toml"                  # External state definitions
@@ -283,12 +286,13 @@ A string takes the value's decimal form in place of each `{}`, so
 "Level 3".
 
 A field of an enum type takes one of its type's names, which `vif -schema` lists
-under `names` by type: `payload = { type = "upgrade" }` places an upgrade. A
+under `names` by type: `payload = { type = "gun" }` places a gun. A
 mask, as a wall's `block_mask`, takes a name or a list of them standing for their
 union (`["cursor", "kinetic"]`). A gateway's `sub_type` takes its `species`' own
 kinds (`species = "eye", sub_type = "flame"`), and a species without kinds takes
 none. A species field takes a code species or one of the scenario's behavior
-programs, as `PayloadSpeciesIn` does. A name its type lacks, or a number, fails
+programs, as `PayloadSpeciesIn` does, and a loot field a code kind or one of the
+scenario's own ([Loot](#loot)). A name its type lacks, or a number, fails
 the load, naming the field's path and the names it takes. `:emit` and an
 authored script's event decode a payload the same way.
 
@@ -875,7 +879,7 @@ header = { x = 1, y = 0 }           # Header cell inside the footprint
 hp = 40
 combat = "swarm"                    # Attack-matrix row it fights as: swarm or quasar
 mass = 2.0                          # Soft collision, flocking, knockback; 0: the row's knockback only (optional)
-drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
+drops = "raider"                    # Drop table its kills roll, the scenario's or a code species' (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
 entrance = "materialize"            # Lands as a materialize over its footprint ends; none stands at once (optional)
@@ -993,3 +997,49 @@ the lower roster slot taking a tie, as for the swarm, so every instance of a
 session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
 composite's integrity work as for every composite species; a program does not
 script them.
+
+## Loot
+
+A confirmed kill rolls its species' drop table for each cursor the instance
+simulates ([Gameplay: Species loot](gameplay.md#species-loot)). The code's kinds
+(`rod`, `launcher`, `disruptor`, `heat`, `energy`, `turret`, `emitter`, `gun`) and a
+table for each code species, in `internal/profile/loot.go`, are the fallback. The
+entry's `[loot]` declares at most 32 kinds of its own, taking loot types 8 onward in
+sorted-name order, so a payload names one as it names a code kind
+(`EventLootSpawnRequest { type = "upgrade", x, y }`), and its `[drops]` declares
+tables: one named for a code species replaces that species' table, `tiers = []`
+leaving it dropping nothing, and any other is a table a program's `drops` names
+([Behavior Programs](#behavior-programs)). A program naming none drops nothing, and
+one naming a table without tiers fails. A name is `[a-z][a-z0-9_]*` of at most 24
+bytes, a kind's not a code kind's and a table's not a program's. A drop draws its
+kind's look and, collected, grants its kind's reward. `-check` prints
+`loot ok: <n> (<names>)` and `drops ok: <n> (<names>)`; each fault names its kind
+or table and place (`drops 'raider': tiers[1]: entries[0]: loot "upgrde" names no
+kind`).
+
+```toml
+[loot.beacon]
+rune = "*"                          # The glyph it draws: one rune, not a space
+color = { r = 255, g = 255, b = 255 }  # The rune's
+glow = { r = 60, g = 60, b = 200 }  # Its shield's
+reward = "energy"                   # weapon, heat or energy
+delta = 500                         # Heat or energy it adds, above 0; a weapon reward
+                                    # names its weapon instead (weapon = "gun"), one charge
+
+[drops.raider]
+killer = "player"                   # Rolls only for a kill a cursor dealt; "any", the default, for every kill
+tiers = [                           # Rolled in order, at most 8, each dropping at most one entry
+    { unique = true, entries = [    # Passes over loot its cursor has on the map or, a weapon, holds full
+        { loot = "rod", rate = 0.5, fallback = 1 },
+        { loot = "beacon", rate = 0.25 },
+    ] },
+    { entries = [{ loot = "gun", rate = 1.0, count = 2 }] },
+]
+```
+
+- `rate`: an entry's chance, above 0 and at most 1, which grows by as much again
+  for each roll in a row it misses; a tier's chances summing past 1 are scaled to
+  share one.
+- `count`: how many the entry drops, 1 to 8, one when left out.
+- `fallback`: in a unique tier, how many the entry adds, 0 to 8, to the drop of each
+  later tier that is not unique when this tier drops nothing.

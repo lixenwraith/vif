@@ -32,7 +32,7 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 		t.Fatal(err)
 	}
 	doc, _ := merged["behaviors"].(map[string]any)["scarab"].(map[string]any)
-	set, err := CompileBehaviors(map[string]map[string]any{"scarab": doc})
+	set, err := CompileBehaviors(map[string]map[string]any{"scarab": doc}, merged)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func vanguardScenario(t *testing.T) (*BehaviorSet, map[string]map[string]any, ma
 	for name, doc := range merged["behaviors"].(map[string]any) {
 		docs[name] = doc.(map[string]any)
 	}
-	set, err := CompileBehaviors(docs)
+	set, err := CompileBehaviors(docs, merged)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +347,7 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 // types to each stone art, in the order CaveStart's pick lists the arts, and every
 // program once. Each cave's eight wear one palette and console colour, and fly the
 // same ranks in the same order, its hit points rising, so caves differ in looks
-// alone. The U drop names every type.
+// alone. Every type drops from the raider table, which holds the U.
 func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
 	set, _, merged := vanguardScenario(t)
 	path := func(v any, keys ...any) any {
@@ -371,7 +371,6 @@ func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
 	states := merged["states"]
 	arts := list(path(states, "CaveStart", "on_enter", 1, "pick", "from"))
 	raiders := list(path(states, "RaidSpawn", "transitions", 0, "actions", 0, "pick", "from"))
-	drops := list(path(states, "Raid", "transitions", 0, "guard_args", "guards", 0, "args", "names"))
 
 	const perCave = 8
 	if len(raiders) != perCave*len(arts) {
@@ -380,8 +379,16 @@ func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
 	if got := slices.Sorted(slices.Values(raiders)); !slices.Equal(got, set.Names()) {
 		t.Fatalf("the raid picks %v, want every program once: %v", got, set.Names())
 	}
-	if got := slices.Sorted(slices.Values(drops)); !slices.Equal(got, set.Names()) {
-		t.Fatalf("the U drop names %v, want every program: %v", got, set.Names())
+	upgrade := slices.Index(set.Loot().Names(), "upgrade")
+	raid := set.Loot().Tables["raider"]
+	if upgrade < 0 || raid.Killer != component.DropKillerPlayer || len(raid.Tiers) != 1 || len(raid.Tiers[0].Entries) != 1 ||
+		raid.Tiers[0].Entries[0].Loot != component.LootCount+component.LootType(upgrade) {
+		t.Fatalf("the raider table is %+v, want a player's kill to roll the U alone", raid)
+	}
+	for _, p := range set.Prototypes() {
+		if p.Drops != "raider" {
+			t.Fatalf("%s drops from %q, want the raider table", p.Name, p.Drops)
+		}
 	}
 
 	byName := map[string]component.BehaviorPrototype{}

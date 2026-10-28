@@ -279,13 +279,17 @@ makes gold worth something to a player who never types it.
 
 ### Species loot
 
-Once a kill is confirmed, it is evaluated against ordered, species-specific drop
-tiers, rolled for each cursor this instance simulates. A unique tier skips weapon
-loot the cursor holds at full charge or already has on the map. When it drops
-nothing, the fallback counts of the entries it rolled, or of every entry if it
-skipped them all, add to the drop of each later non-unique tier. Pity-adjusted
-rolls improve repeated misses. Drops burst away from the death point, then home
-using direct line of sight or a flow field and collect near the player.
+Once a kill is confirmed, it rolls its species' drop table, ordered tiers each
+dropping at most one of its entries, for each cursor this instance simulates. A
+code species rolls its table in `internal/profile/loot.go` unless the scenario
+declares one of its name, and a data species the table its program's `drops`
+names; a table a scenario marks for players' kills rolls only when a cursor dealt
+the fatal damage. A unique tier skips weapon loot the cursor holds at full charge
+and any loot it already has on the map. When it drops nothing, the fallback counts
+of the entries it rolled, or of every entry if it skipped them all, add to the
+drop of each later non-unique tier. Pity-adjusted rolls improve repeated misses.
+Drops burst away from the death point, then home using direct line of sight or a
+flow field and collect near the player.
 
 A drop belongs to the cursor it was rolled for and only that cursor can collect
 it, so both halves of the route are the owner's: the line of sight is tested
@@ -302,20 +306,21 @@ where it is.
 | Turret | `B` | Adds a turret charge/orb. |
 | Emitter | `R` | Adds an emitter charge/orb. |
 | Gun | `T` | Adds a gun lane per direction, up to three, or on a scenario's path its next level. |
-| Upgrade | `U` | Raises the gun a level, as a gun drop does; only an event drops it. |
 | Heat | `H` | Adds the configured heat reward (currently 10). |
 | Energy | `E` | Adds the configured energy reward (currently 10,000). |
 
 Weapon loot is lettered for its attack: lightning, missile, pulse, bullet, ray,
-tracer; the upgrade, a gun charge too, is lettered for a gun that climbs a path. The exact tier rates are gameplay balance data in `internal/profile/loot.go`;
-documentation does not duplicate every rate because those values are expected
-to change during tuning.
+tracer. A scenario adds kinds of its own, each a rune with its colour and its
+shield's and a reward, one charge of a weapon or an amount of heat or energy, and
+tables naming them ([FSM reference: Loot](fsm-reference.md#loot)). The exact tier
+rates are gameplay balance data in `internal/profile/loot.go`; documentation does
+not duplicate every rate because those values are expected to change during
+tuning.
 
 A scenario rewards a level with an event drop instead: `EventLootSpawnRequest`
 places one kind at a cell for every cursor the instance simulates, with no roll,
 and each drop homes on its owner as above. No species drops the gun; the
-campaign's tower victory drops one at the tower, and vanguard drops a `U` where a
-player shoots a raider down. Like any FSM entry action, the
+campaign's tower victory drops one at the tower. Like any FSM entry action, the
 drop does not replay on an instance a correction moves past the state raising it.
 
 ## 7. Weapons and attacks
@@ -583,8 +588,9 @@ white haunts in the cracked stone (gremlin, chomper; imp, slime; ghost, skull;
 wraith, demon), orange animals in the moss (hedgehog, mouse; frog, hopper; bat,
 puffer; owl, lynx) and orchid constructs among the crystals (drone, shard; saucer,
 trooper; jelly, squid; djinn, robot), each one colour on a console. A raider lives
-until killed, and the rock pushes it as it pushes the cursor. One a player shoots
-down drops a `U` where it fell, for every player, and each `U` raises the gun a
+until killed, and the rock pushes it as it pushes the cursor. Every type rolls the
+raider drop table vanguard declares, so one a player shoots down drops a `U`, its
+own loot kind, where it fell, for every player, and each `U` raises the gun a
 level of the scenario's nine: one shot forward, then two and three, one up and one
 down, one back, two up and down, two back, three up and down, three back. Forward is
 right, the way the ship flies. A crush is a defeat, as is heat and energy both run
@@ -630,7 +636,7 @@ Each entry declares a domain profile and its dependencies in
 | Player and collectible constants | `internal/parameter/gameplay.go`, `player.go`, `collectible.go` |
 | Species tuning | `internal/parameter/{drain,quasar,swarm,storm,kraken,pylon,snake,eye,tower}.go` |
 | Weapons, combat matrix and profiles | `internal/component/weapon.go` (`WeaponSpecs`), `internal/profile/combat.go`, `internal/parameter/combat.go`, `player.go`, `tracer.go`, `internal/system/combat.go` |
-| Drop tables and rewards | `internal/profile/loot.go`, `internal/component/loot.go`, `internal/parameter/loot.go` |
+| Drop tables and rewards | `internal/profile/loot.go`, `internal/component/loot.go`, `internal/parameter/loot.go`, a scenario's `[loot]` and `[drops]` (`internal/behavior/loot.go`) |
 | Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
 | Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |

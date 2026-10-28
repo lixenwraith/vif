@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
 )
 
@@ -17,7 +18,7 @@ type Vocabulary[C any] struct {
 	flags     map[string]uint64
 	integrate func(C)
 	entered   func(C)
-	names     func(programs []string) *dialect.Names
+	names     func(component.Declared) *dialect.Names
 }
 
 // verb is one registered name: its kind, the keys of its table it reads beside
@@ -72,9 +73,10 @@ func (v *Vocabulary[C]) Emit(name string, build func(names *dialect.Names, event
 	v.add(name, verb[C]{kind: dialect.KindAction, keys: []string{"event", "payload"}, apply: build})
 }
 
-// Names sets the names a set's payloads take, given its programs, which name data
-// species beside the code's; unset, a payload takes none
-func (v *Vocabulary[C]) Names(f func(programs []string) *dialect.Names) { v.names = f }
+// Names sets the names a set's payloads take, given what its scenario declares: its
+// programs, which name data species beside the code's, and its loot kinds; unset, a
+// payload takes none
+func (v *Vocabulary[C]) Names(f func(component.Declared) *dialect.Names) { v.names = f }
 
 func (v *Vocabulary[C]) Flag(name string, bit uint64) {
 	if _, ok := v.flags[name]; ok {

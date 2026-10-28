@@ -54,13 +54,14 @@ type behaviorTelemetry struct {
 	lifecycle lifecycleTelemetry
 }
 
-// BehaviorSet is a scenario's compiled programs, named without the context its verbs read
+// BehaviorSet is a scenario's compiled programs and loot, named without the context
+// its verbs read
 type BehaviorSet = behavior.Set[*behaviorCtx]
 
-// CompileBehaviors compiles a scenario's programs, keyed by name, against the game
-// vocabulary
-func CompileBehaviors(byName map[string]map[string]any) (*BehaviorSet, error) {
-	return behavior.Compile(BehaviorVocabulary(), byName)
+// CompileBehaviors compiles a scenario's loot, its entry's [loot] and [drops], then
+// its programs, keyed by name, against the game vocabulary
+func CompileBehaviors(byName map[string]map[string]any, loot map[string]any) (*BehaviorSet, error) {
+	return behavior.Compile(BehaviorVocabulary(), byName, loot)
 }
 
 // NewBehaviorSystem runs set's programs; Resources.Behaviors holds their prototypes

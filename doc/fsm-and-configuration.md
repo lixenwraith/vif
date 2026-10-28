@@ -90,10 +90,11 @@ expands against the entry's macros before regions merge ([TOML macros](toml-macr
 Circular includes and duplicate state names are errors, and a path outside the
 entry's directory is rejected. The entry's `[behaviors]` files are scenario files
 in the same way, each a behavior program compiled once per run
-([FSM reference](fsm-reference.md#behavior-programs)).
+([FSM reference](fsm-reference.md#behavior-programs)), and its `[loot]` and `[drops]`
+compile with them ([FSM reference: Loot](fsm-reference.md#loot)).
 
 Use `vif -check [-s <name-or-path>]` to resolve, load and validate the scenario
-plus its behavior programs, keymap, audio overrides, content and every bot graph
+plus its behavior programs and loot, keymap, audio overrides, content and every bot graph
 without starting the terminal game. `vif -schema` prints generated JSON describing
 known events and their payload fields, the names an enum field takes, the
 vocabularies of a scenario, a bot graph and a behavior program with their

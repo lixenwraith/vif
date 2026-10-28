@@ -20,7 +20,7 @@ func TestSnapshotDeclarationsMatchImplementations(t *testing.T) {
 	if len(systems) < 50 {
 		t.Fatalf("built %d systems, expected the full set; the manifest has drifted", len(systems))
 	}
-	set, err := system.CompileBehaviors(nil)
+	set, err := system.CompileBehaviors(nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

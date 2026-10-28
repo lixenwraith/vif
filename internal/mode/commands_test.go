@@ -1,6 +1,7 @@
 package mode_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -106,18 +107,28 @@ func TestAutoFireCycleRoutesOnlySelectedWeapons(t *testing.T) {
 }
 
 // TestEmitSpellsAPayloadsEnumsByName: :emit decodes its payload as a scenario's
-// EmitEvent does, so a loot kind takes its name and a key no field takes is refused
+// EmitEvent does, so a loot kind takes its name, the code's or one the scenario
+// declares, and a key no field takes is refused
 func TestEmitSpellsAPayloadsEnumsByName(t *testing.T) {
 	event.EnsureRegistry()
 	w := engine.NewWorld()
+	w.Resources.Loot = component.LootSet{Kinds: []component.LootKind{{LootSpec: component.LootSpec{Name: "upgrade"}}}}
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	mode.ExecuteCommand(ctx, `emit LootSpawnRequest { type = "upgrade", x = 3, y = 4 }`)
-	events := w.Resources.Event.Queue.Consume()
-	if len(events) != 1 {
-		t.Fatalf(":emit pushed %d events, want one: %q", len(events), ctx.GetStatusMessage())
-	}
-	if p, ok := events[0].Payload.(*event.LootSpawnRequestPayload); !ok || *p != (event.LootSpawnRequestPayload{Type: component.LootUpgrade, X: 3, Y: 4}) {
-		t.Fatalf(":emit pushed %+v, want an upgrade at (3, 4)", events[0].Payload)
+	for _, tc := range []struct {
+		name string
+		want event.LootSpawnRequestPayload
+	}{
+		{"gun", event.LootSpawnRequestPayload{Type: component.LootGun, X: 3, Y: 4}},
+		{"upgrade", event.LootSpawnRequestPayload{Type: component.LootCount, X: 5, Y: 6}},
+	} {
+		mode.ExecuteCommand(ctx, fmt.Sprintf(`emit LootSpawnRequest { type = %q, x = %d, y = %d }`, tc.name, tc.want.X, tc.want.Y))
+		events := w.Resources.Event.Queue.Consume()
+		if len(events) != 1 {
+			t.Fatalf(":emit %s pushed %d events, want one: %q", tc.name, len(events), ctx.GetStatusMessage())
+		}
+		if p, ok := events[0].Payload.(*event.LootSpawnRequestPayload); !ok || *p != tc.want {
+			t.Fatalf(":emit %s pushed %+v, want %+v", tc.name, events[0].Payload, tc.want)
+		}
 	}
 
 	mode.ExecuteCommand(ctx, `emit LootSpawnRequest { kind = "upgrade" }`)

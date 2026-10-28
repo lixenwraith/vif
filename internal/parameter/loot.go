@@ -10,6 +10,21 @@ const LootHeatRewardValue = 10
 // Energy loot reward value
 const LootEnergyRewardValue = 10000
 
+// The loot a scenario declares, bounded as everything a scenario holds is, since one
+// arrives from a peer as readily as from disk
+const (
+	// LootKindsMax is how many kinds a scenario may declare, the rows LootType
+	// reserves after the code's kinds
+	LootKindsMax = 32
+	// LootNameMax bounds a kind's or a drop table's name in bytes
+	LootNameMax = 24
+	// LootTiersMax bounds a drop table's tiers, each one roll per kill and cursor
+	LootTiersMax = 8
+	// LootDropCountMax bounds an entry's count and its fallback, the drops one roll
+	// scatters or adds to each later tier
+	LootDropCountMax = 8
+)
+
 // Homing physics, read together: a drop cruises at LootHomingMaxSpeed under
 // LootHomingAccel. Alone the pair holds a circular orbit at speed² / accel, about 19
 // cells, outside LootHomingArrivalRadius; the cornering brake LootSystem applies

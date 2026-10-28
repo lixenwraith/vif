@@ -37,7 +37,7 @@ var spawnOffsets = [][]struct{ dx, dy int }{
 
 // pityState tracks consecutive misses per loot type for a species type
 type pityState struct {
-	misses [component.LootCount]int
+	misses [component.LootMax]int
 }
 
 // pityKey scopes a pity streak to one cursor's slot; local cursors roll independently
@@ -54,6 +54,11 @@ type LootSystem struct {
 
 	// costs weight every owner route at the cell aspect
 	costs navigation.Costs
+
+	// The session's kinds, the code's then the scenario's, and each species' table,
+	// a scenario's where it declares one (Resources.Loot)
+	kinds  []component.LootKind
+	tables [component.SpeciesMax]component.DropTable
 
 	// Pity tracking per species type and roster slot
 	pity map[pityKey]*pityState
@@ -91,6 +96,7 @@ func NewLootSystem(world *engine.World) engine.System {
 func (s *LootSystem) Init() {
 	s.costs = navigation.CostsFor(s.world.Resources.Config.CellAspect)
 	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
+	s.resolve()
 	s.pity = make(map[pityKey]*pityState)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
@@ -100,6 +106,27 @@ func (s *LootSystem) Init() {
 	s.motion.Reset()
 
 	s.enabled = true
+}
+
+// resolve reads the session's loot from what the scenario declares: every kind,
+// and each species' table, a code species' by its name and a data species' by the
+// name its program's drops gives
+func (s *LootSystem) resolve() {
+	declared := &s.world.Resources.Loot
+	s.kinds = s.kinds[:0]
+	for t := range component.LootCount {
+		s.kinds = append(s.kinds, component.LootKind{LootSpec: component.LootSpecs[t], Look: visual.LootVisuals[t]})
+	}
+	s.kinds = append(s.kinds, declared.Kinds...)
+	s.tables = [component.SpeciesMax]component.DropTable{}
+	for sp := component.SpeciesNone + 1; sp < component.SpeciesCount; sp++ {
+		s.tables[sp], _ = profile.DropTableNamed(declared, component.SpeciesNames[sp])
+	}
+	for i, p := range s.world.Resources.Behaviors {
+		if p.Drops != "" && int(component.SpeciesDataFirst)+i < len(s.tables) {
+			s.tables[int(component.SpeciesDataFirst)+i], _ = profile.DropTableNamed(declared, p.Drops)
+		}
+	}
 }
 
 func (s *LootSystem) Name() string {
@@ -301,9 +328,13 @@ func (s *LootSystem) onEventDrop(payload *event.LootSpawnRequestPayload) {
 
 // onSpeciesKilled rolls the drop table once per locally simulated cursor; a kill
 // produces this instance's drops only, so ownership is never read across instances.
+// A table only a player's kill rolls drops nothing for a kill no cursor dealt.
 func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 	// A negative coordinate marks a death with no position; nothing to drop onto
-	if payload.X < 0 || payload.Y < 0 {
+	if payload.X < 0 || payload.Y < 0 || payload.Species >= component.SpeciesMax {
+		return
+	}
+	if s.tables[payload.Species].Killer == component.DropKillerPlayer && payload.KillerEntity == 0 {
 		return
 	}
 
@@ -378,7 +409,7 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owne
 
 // spawnLootWithBurst creates one owned drop moving in its burst direction
 func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int, owner core.Entity) {
-	if lootType >= component.LootCount {
+	if int(lootType) >= len(s.kinds) {
 		return
 	}
 
@@ -394,6 +425,7 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 
 	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
 		Type:     lootType,
+		Look:     s.kinds[lootType].Look,
 		Owner:    owner,
 		LastIntX: x,
 		LastIntY: y,
@@ -434,15 +466,13 @@ func (s *LootSystem) isValidSpawnPos(x, y int) bool {
 }
 
 // rollDropTable rolls a species' tiers for one cursor with pity and fallback
-// accumulation; a data species rolls its prototype's tiers under a pity of its own
+// accumulation; a data species rolls the table its program names under a pity of
+// its own
 func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor core.Entity, slot uint8) []DropResult {
 	if speciesType >= component.SpeciesMax {
 		return nil
 	}
-	tiers := profile.Drops[speciesType]
-	if i := int(speciesType) - int(component.SpeciesDataFirst); i >= 0 && i < len(s.world.Resources.Behaviors) {
-		tiers = profile.Drops[s.world.Resources.Behaviors[i].Drops]
-	}
+	tiers := s.tables[speciesType].Tiers
 	if len(tiers) == 0 {
 		return nil
 	}
@@ -461,7 +491,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 		if activeLoot[lt] {
 			return true
 		}
-		spec := &component.LootSpecs[lt]
+		spec := &s.kinds[lt].LootSpec
 		if spec.Reward != component.RewardWeapon {
 			return false
 		}
@@ -491,7 +521,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 			}
 		}
 
-		var buf [component.LootCount]candidate
+		var buf [component.LootMax]candidate
 		candidates := buf[:0]
 		var totalRate float64
 
@@ -517,7 +547,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 
 		roll := s.rng.Float64()
 		var cumulative float64
-		var dropped *profile.DropEntry
+		var dropped *component.DropEntry
 
 		for _, c := range candidates {
 			cumulative += c.rate
@@ -555,15 +585,15 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 
 // candidate holds entry with pity-adjusted rate
 type candidate struct {
-	entry *profile.DropEntry
+	entry *component.DropEntry
 	rate  float64
 }
 
 // activeLootTypes reports the loot types this cursor already has on the map
-func (s *LootSystem) activeLootTypes(cursor core.Entity) (active [component.LootCount]bool) {
+func (s *LootSystem) activeLootTypes(cursor core.Entity) (active [component.LootMax]bool) {
 	for _, entity := range s.world.Components.Loot.Entities() {
 		lootComp, ok := s.world.Components.Loot.GetPtr(entity)
-		if ok && lootComp.Owner == cursor && lootComp.Type < component.LootCount {
+		if ok && lootComp.Owner == cursor && lootComp.Type < component.LootMax {
 			active[lootComp.Type] = true
 		}
 	}
@@ -573,12 +603,12 @@ func (s *LootSystem) activeLootTypes(cursor core.Entity) (active [component.Loot
 // --- Collection ---
 
 func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.LootType) {
-	if lootType >= component.LootCount {
+	if int(lootType) >= len(s.kinds) {
 		s.world.DestroyEntity(entity)
 		return
 	}
 
-	switch spec := &component.LootSpecs[lootType]; spec.Reward {
+	switch spec := &s.kinds[lootType].LootSpec; spec.Reward {
 	case component.RewardWeapon:
 		s.world.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{
 			Entity: cursor,
@@ -601,7 +631,7 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 
 	if pos, ok := s.world.Positions.GetPosition(entity); ok {
 		s.world.PushLocal(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
-			X: pos.X, Y: pos.Y, Char: visual.LootVisuals[lootType].Rune,
+			X: pos.X, Y: pos.Y, Char: s.kinds[lootType].Look.Rune,
 		})
 	}
 
@@ -610,9 +640,9 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 }
 
 type lootPityLocal struct {
-	Species component.SpeciesType    `json:"species"`
-	Slot    uint8                    `json:"slot"`
-	Misses  [component.LootCount]int `json:"misses"`
+	Species component.SpeciesType  `json:"species"`
+	Slot    uint8                  `json:"slot"`
+	Misses  [component.LootMax]int `json:"misses"`
 }
 
 func (s *LootSystem) SaveLocal() ([]byte, error) {

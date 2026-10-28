@@ -123,21 +123,26 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 
 	w := a.World()
 	var kills []event.SpeciesKilledPayload
-	var drops []event.LootSpawnRequestPayload
 	resets := 0
 	a.SetDispatchTap(func(ev event.GameEvent) {
-		switch p := ev.Payload.(type) {
-		case *event.SpeciesKilledPayload:
-			if ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
-				kills = append(kills, *p)
-			}
-		case *event.LootSpawnRequestPayload:
-			drops = append(drops, *p)
+		if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
+			kills = append(kills, *p)
 		}
 		if ev.Type == event.EventGameResetRequest {
 			resets++
 		}
 	})
+	// drops are where the U's on the map stand
+	drops := func() (cells []component.PositionComponent) {
+		w.RunSafe(func() {
+			for _, e := range vanguardUs(w) {
+				if pos, ok := w.Positions.GetPosition(e); ok {
+					cells = append(cells, pos)
+				}
+			}
+		})
+		return cells
+	}
 	// gun is the player's gun: its charges and the levels of its path
 	gun := func() (charges, levels int) {
 		w.RunSafe(func() {
@@ -184,16 +189,17 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	}
 
 	end(false)
-	if len(kills) != 1 || len(drops) != 0 {
-		t.Fatalf("a raider nobody shot: %d kills and drops %+v, want one kill and nothing dropped", len(kills), drops)
+	if got := drops(); len(kills) != 1 || len(got) != 0 {
+		t.Fatalf("a raider nobody shot: %d kills and U's at %+v, want one kill and nothing dropped", len(kills), got)
 	}
 
 	end(true)
-	if len(kills) != 2 || len(drops) != 1 {
-		t.Fatalf("a raider the player shot: %d kills and drops %+v, want two kills and one drop", len(kills), drops)
+	got := drops()
+	if len(kills) != 2 || len(got) != 1 {
+		t.Fatalf("a raider the player shot: %d kills and U's at %+v, want two kills and one U", len(kills), got)
 	}
-	if drop, kill := drops[0], kills[1]; drop.Type != component.LootUpgrade || drop.X != kill.X || drop.Y != kill.Y {
-		t.Fatalf("dropped %+v for a kill at (%d,%d), want a U there", drop, kill.X, kill.Y)
+	if drop, kill := got[0], kills[1]; drop.X != kill.X || drop.Y != kill.Y {
+		t.Fatalf("a U at (%d,%d) for a kill at (%d,%d), want it where the raider fell", drop.X, drop.Y, kill.X, kill.Y)
 	}
 	for tick := range 600 {
 		if charges, _ := gun(); charges == 2 {
@@ -223,12 +229,26 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	}
 }
 
+// vanguardUs are the drops of vanguard's U on w's map; the caller holds its lock
+func vanguardUs(w *engine.World) []core.Entity {
+	i := slices.Index(w.Resources.Loot.Names(), "upgrade")
+	if i < 0 {
+		return nil
+	}
+	var out []core.Entity
+	for _, e := range w.Components.Loot.Entities() {
+		if l, ok := w.Components.Loot.GetPtr(e); ok && l.Type == component.LootCount+component.LootType(i) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // TestVanguardAKillInAPairDropsEachPlayerOneU ends a raider by the host player's
-// shot on a mesh pair. The raid's kill edge, an internal transition on the kill
-// event, moves on the authority's crossing (D-20) and runs once on each instance,
-// so each requests one U, and each player's ship takes the U its own instance
-// simulates and goes up a level, where an edge proposed again on the lead would
-// drop once more.
+// shot on a mesh pair. Each instance rolls the raider table once for the player it
+// simulates, the guest when its ledger confirms the death, so each drops one U, and
+// each player's ship takes its own and goes up a level. The rank counts the kill by
+// an internal transition on it, which each instance crosses once.
 func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
@@ -266,29 +286,41 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	host.AttachTransport(mesh.Node(1))
 	guest.AttachTransport(mesh.Node(2))
 
-	var kills, drops, resets [2]int
+	var kills, resets [2]int
 	for i, a := range apps {
 		a.SetDispatchTap(func(ev event.GameEvent) {
-			switch p := ev.Payload.(type) {
-			case *event.SpeciesKilledPayload:
-				if ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
-					kills[i]++
-				}
-			case *event.LootSpawnRequestPayload:
-				if p.Type == component.LootUpgrade {
-					drops[i]++
-				}
+			if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
+				kills[i]++
 			}
 			if ev.Type == event.EventGameResetRequest {
 				resets[i]++
 			}
 		})
 	}
+	// drops are the U's each instance has dropped, each once however long it flies
+	drops := [2]map[core.Entity]bool{{}, {}}
 	step := func() {
 		host.Tick(1)
 		guest.Tick(1)
 		_ = host.corrections.PublishDue()
 		guest.ApplyPendingCorrections()
+		for i, a := range apps {
+			w := a.World()
+			w.RunSafe(func() {
+				for _, e := range vanguardUs(w) {
+					drops[i][e] = true
+				}
+			})
+		}
+	}
+	// rankKills is the kills the raid's rank has counted on an instance
+	rankKills := func(a *App) int64 {
+		for _, v := range a.scheduler.ExportFSM().Variables {
+			if v.Name == "raid_kills" {
+				return v.Value
+			}
+		}
+		return 0
 	}
 	// charges is the gun of the ship an instance flies
 	charges := func(a *App) (n int) {
@@ -352,8 +384,11 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	for range 30 {
 		step()
 	}
-	if kills != [2]int{1, 1} || drops != [2]int{1, 1} {
-		t.Fatalf("kills %v and U requests %v on host and guest, want one of each on each", kills, drops)
+	if kills != [2]int{1, 1} || len(drops[0]) != 1 || len(drops[1]) != 1 {
+		t.Fatalf("kills %v and %d and %d U's on host and guest, want one of each on each", kills, len(drops[0]), len(drops[1]))
+	}
+	if h, g := rankKills(host), rankKills(guest); h != 1 || g != 1 {
+		t.Fatalf("the rank counted %d and %d kills on host and guest, want the one on each", h, g)
 	}
 }
 
