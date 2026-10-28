@@ -120,7 +120,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 		// A wall ends the charge in the step that meets it, so the bounce stands
 		PostTick(component.SwarmStateCharge, edge{Guard: swarmHitWall, To: decelerate}).
 		// The landing is the arrival's, so a stun that ends a teleport moves nothing,
-		// and is found as the beam ends, so rock that scrolled in meanwhile never
+		// and is found as the teleport ends, so rock that scrolled in meanwhile never
 		// holds the swarm
 		Timeout(component.SwarmStateTeleport, edge{To: []target{
 			{State: component.SwarmStateArrive},
@@ -337,34 +337,22 @@ func (s *SwarmSystem) Update() {
 	s.statActive.Store(activeCount > 0)
 }
 
+// spawnSwarm stands a swarm with its header at the cell, its footprint pulled inside
+// the map, or on the nearest footprint free of walls a spawn is kept from
 func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
-	// Trust fuse-validated position, cheap verification only
-	headerX, headerY := targetX, targetY
-	topLeftX := headerX - parameter.SwarmHeaderOffsetX
-	topLeftY := headerY - parameter.SwarmHeaderOffsetY
-
-	// O(8) wall overlap check - fuse already validated, this catches edge cases
-	if s.world.Positions.HasBlockingWallInArea(
-		topLeftX, topLeftY,
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
+		targetX, targetY,
 		parameter.SwarmWidth, parameter.SwarmHeight,
+		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 		component.WallBlockSpawn,
-	) {
-		// Rare: wall appeared during animation, fallback to spiral
-		var found bool
-		topLeftX, topLeftY, found = s.world.Positions.FindFreeAreaSpiral(
-			headerX, headerY,
-			parameter.SwarmWidth, parameter.SwarmHeight,
-			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-			component.WallBlockSpawn,
-			0,
-		)
-		if !found {
-			s.lifecycle.spawnFailures.Add(1)
-			return
-		}
-		headerX = topLeftX + parameter.SwarmHeaderOffsetX
-		headerY = topLeftY + parameter.SwarmHeaderOffsetY
+		0,
+	)
+	if !found {
+		s.lifecycle.spawnFailures.Add(1)
+		return
 	}
+	headerX := topLeftX + parameter.SwarmHeaderOffsetX
+	headerY := topLeftY + parameter.SwarmHeaderOffsetY
 
 	// Clear area (retained as defensive measure)
 	s.clearSwarmSpawnArea(headerX, headerY)
@@ -543,8 +531,8 @@ func (s *SwarmSystem) charge(c *swarmCtx) {
 	c.hitWall = s.integrateAndSync(c.entity, c.dtSec)
 }
 
-// probeLanding admits a teleport with a header to beam from and room to land by
-// the stored cell
+// probeLanding admits a teleport with a header to teleport from and room to land
+// by the stored cell
 func (s *SwarmSystem) probeLanding(c *swarmCtx) bool {
 	if !s.world.Positions.HasPosition(c.entity) {
 		return false
@@ -552,10 +540,11 @@ func (s *SwarmSystem) probeLanding(c *swarmCtx) bool {
 	return s.findRoom(c, c.swarm.LockedTargetX, c.swarm.LockedTargetY)
 }
 
-// findRoom finds the footprint nearest the header cell (x, y) that holds no
-// wall a spawn is kept from, the cell itself first, into the context's landing
+// findRoom finds the footprint nearest the header cell (x, y), pulled inside the
+// map, that holds no wall a spawn is kept from, the cell itself first, into the
+// context's landing
 func (s *SwarmSystem) findRoom(c *swarmCtx, x, y int) bool {
-	left, top, found := s.world.Positions.FindFreeAreaSpiral(
+	left, top, found := s.world.Positions.FindFreeAreaInside(
 		x, y,
 		parameter.SwarmWidth, parameter.SwarmHeight,
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
@@ -566,7 +555,7 @@ func (s *SwarmSystem) findRoom(c *swarmCtx, x, y int) bool {
 	return found
 }
 
-// enterTeleport marks where the beam goes and stops the swarm; the beam leaves
+// enterTeleport marks where the teleport goes and stops the swarm; the line leaves
 // from wherever the header stands as it runs
 func (s *SwarmSystem) enterTeleport(c *swarmCtx) {
 	c.swarm.TeleportTargetX, c.swarm.TeleportTargetY = c.landingX, c.landingY
@@ -575,9 +564,9 @@ func (s *SwarmSystem) enterTeleport(c *swarmCtx) {
 	}
 }
 
-// probeArrival admits an arrival on the beam's landing while its footprint is
-// clear, else on the nearest clear one: rock scrolling in during the beam takes
-// the landing, and the arrival stands beside it
+// probeArrival admits an arrival on the teleport's landing while its footprint is
+// clear, else on the nearest clear one: rock scrolling in during the teleport
+// takes the landing, and the arrival stands beside it
 func (s *SwarmSystem) probeArrival(c *swarmCtx) bool {
 	return s.findRoom(c, c.swarm.TeleportTargetX, c.swarm.TeleportTargetY)
 }
@@ -656,11 +645,11 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtSec float64) 
 		)
 	}
 
-	// Bounds
+	// The header's first and last cells, the footprint inside the map
 	minHeaderX := parameter.SwarmHeaderOffsetX
-	maxHeaderX := config.MapWidth - (parameter.SwarmWidth - parameter.SwarmHeaderOffsetX) + 1
+	maxHeaderX := config.MapWidth - (parameter.SwarmWidth - parameter.SwarmHeaderOffsetX)
 	minHeaderY := parameter.SwarmHeaderOffsetY
-	maxHeaderY := config.MapHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY) + 1
+	maxHeaderY := config.MapHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
 
 	// Integrate with Bounce
 	newX, newY, motion := physics.IntegrateWithBounceStats(

@@ -149,8 +149,8 @@ that is typed, passing over scenery (`IsTypeable`), and `TopGlyphIs` the one
 drawn. Reapplying an entity's existing cell is idempotent
 when the grid already contains it, avoiding remove/reinsert churn for composite
 members; a soft-clipped entity still retries insertion. Where a mechanic needs
-a line through cells, line of sight, a ray or a beam, it walks `vmath.Line`, one
-integer Bresenham stepper.
+a line through cells, line of sight, a ray, a bolt or a charge or teleport line,
+it walks `vmath.Line`, one integer Bresenham stepper.
 
 Cell capacity is a performance contract, not a hard entity limit. If more than
 the configured maximum occupy one cell, the position store still contains the

@@ -970,6 +970,27 @@ func encodeColumnsLoot(dst []byte, rows []StoreEntry[component.LootComponent]) [
 		dst = appendUint(dst, rows[i].Value.Type)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Look.Rune)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Look.Color.R)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Look.Color.G)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Look.Color.B)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Look.Glow.R)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Look.Glow.G)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Look.Glow.B)
+	}
+	for i := range rows {
 		dst = appendUint(dst, rows[i].Value.Owner)
 	}
 	for i := range rows {
@@ -990,6 +1011,27 @@ func decodeColumnsLoot(r *columnReader) []StoreEntry[component.LootComponent] {
 	readEntityColumn(rows, r)
 	for i := range rows {
 		readUint(&rows[i].Value.Type, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Look.Rune, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Look.Color.R, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Look.Color.G, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Look.Color.B, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Look.Glow.R, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Look.Glow.G, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Look.Glow.B, r)
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Owner, r)
@@ -3421,7 +3463,7 @@ func encodeColumnsBehavior(dst []byte, rows []StoreEntry[component.BehaviorCompo
 		dst = appendBool(dst, rows[i].Value.Shielded)
 	}
 	for i := range rows {
-		dst = appendBool(dst, rows[i].Value.Beaming)
+		dst = appendBool(dst, rows[i].Value.TeleportLine)
 	}
 	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.ChargeLine)
@@ -3467,7 +3509,7 @@ func decodeColumnsBehavior(r *columnReader) []StoreEntry[component.BehaviorCompo
 		readBool(&rows[i].Value.Shielded, r)
 	}
 	for i := range rows {
-		readBool(&rows[i].Value.Beaming, r)
+		readBool(&rows[i].Value.TeleportLine, r)
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.ChargeLine, r)

@@ -910,13 +910,13 @@ type FuseQuasarRequestPayload struct {
 }
 
 // FuseEffect is what plays a fusion and carries its spawn: the spirits its sources
-// fly in, or a beam over the footprint
+// fly in, or a materialize over the footprint
 type FuseEffect int
 
 const (
 	FuseEffectNone        FuseEffect = iota // As FuseEffectSpirit
 	FuseEffectSpirit                        // Spirits fly the sources in, and the species lands as they arrive
-	FuseEffectMaterialize                   // A beam over the footprint, and the species lands as it ends
+	FuseEffectMaterialize                   // A materialize over the footprint, and the species lands as it ends
 )
 
 var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spirit", FuseEffectMaterialize: "materialize"}
@@ -926,14 +926,6 @@ type FuseSwarmRequestPayload struct {
 	DrainA core.Entity `toml:"drain_a"`
 	DrainB core.Entity `toml:"drain_b"`
 	Effect FuseEffect  `toml:"effect"`
-}
-
-// FuseBehaviorRequestPayload names the program beamed in and the cell its
-// header asks for
-type FuseBehaviorRequestPayload struct {
-	Program string `toml:"program"`
-	X       int    `toml:"x"`
-	Y       int    `toml:"y"`
 }
 
 // --- Quasar ---

@@ -600,39 +600,39 @@ func (p *Position) FindFreeAreaSpiral(
 	if p.world == nil {
 		return 0, 0, false
 	}
+	x, y, found := p.SpiralSearch(originX, originY, maxRadius, func(x, y int) bool {
+		return p.isAreaFreeUnsafe(x-anchorOffsetX, y-anchorOffsetY, width, height, mask)
+	})
+	if !found {
+		return 0, 0, false
+	}
+	return x - anchorOffsetX, y - anchorOffsetY, true
+}
 
+// SpiralSearch is FindFreeAreaSpiral's walk for a footprint no rectangle holds: the
+// origin first, then each radius in 8 directions, fewer rows than columns so the
+// ring reads as round on the cell aspect, to the first cell fits takes. maxRadius
+// is FindFreeAreaSpiral's.
+func (p *Position) SpiralSearch(originX, originY, maxRadius int, fits func(x, y int) bool) (int, int, bool) {
 	switch {
 	case maxRadius < 0:
 		maxRadius = p.MapSearchRadius()
 	case maxRadius == 0:
 		maxRadius = parameter.FreeAreaSearchRadius
 	}
-
-	// Check origin first (radius 0)
-	topLeftX := originX - anchorOffsetX
-	topLeftY := originY - anchorOffsetY
-	if p.isAreaFreeUnsafe(topLeftX, topLeftY, width, height, mask) {
-		return topLeftX, topLeftY, true
+	if fits(originX, originY) {
+		return originX, originY, true
 	}
-
-	// Spiral outward, checking 8 directions per radius, fewer rows than columns so
-	// the ring reads as round on the cell aspect
 	aspect := p.world.Resources.Config.CellAspect
 	for radius := 1; radius <= maxRadius; radius++ {
 		vertRadius := int(math.Ceil(aspect.FromCircular(float64(radius))))
 		for _, dir := range SpiralSearchDirs {
-			checkX := originX + dir[0]*radius
-			checkY := originY + dir[1]*vertRadius
-
-			topLeftX = checkX - anchorOffsetX
-			topLeftY = checkY - anchorOffsetY
-
-			if p.isAreaFreeUnsafe(topLeftX, topLeftY, width, height, mask) {
-				return topLeftX, topLeftY, true
+			x, y := originX+dir[0]*radius, originY+dir[1]*vertRadius
+			if fits(x, y) {
+				return x, y, true
 			}
 		}
 	}
-
 	return 0, 0, false
 }
 

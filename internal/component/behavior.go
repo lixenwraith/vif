@@ -24,10 +24,10 @@ type BehaviorComponent struct {
 
 	TargetX, TargetY int // the cell StoreTarget kept, which a charge or teleport goes to
 
-	Shielded   bool // Written from the machine's flags each step: damage and stun immunity
-	Beaming    bool // Written likewise: a teleport line runs from the header to the stored cell
-	ChargeLine bool // Written likewise: the swarm's charge line pulses toward the stored cell
-	Landing    bool // Written likewise: a marker blinks where the body lands on the stored cell
+	Shielded     bool // Written from the machine's flags each step: damage and stun immunity
+	TeleportLine bool // Written likewise: a teleport line runs from the header to the stored cell
+	ChargeLine   bool // Written likewise: the charge line pulses toward the stored cell
+	Landing      bool // Written likewise: a marker blinks where the body lands on the stored cell
 }
 
 // BehaviorPrototype is what a program declares about its species' body: plain data
@@ -45,13 +45,25 @@ type BehaviorPrototype struct {
 	Homing      physics.HomingProfile // what its homing steers by
 	Restitution float64               // velocity it keeps on a wall or boundary bounce
 	Mass        float64               // soft-collision mass; 0 takes no soft collision or flocking
-	Drops       SpeciesType           // the code species whose drop tiers it rolls; SpeciesNone drops nothing
+	Drops       string                // the drop table its kills roll, by name; "" drops nothing
 	Contact     CursorDamage          // what touching it costs a cursor
 	Lifetime    time.Duration         // 0 = lives until killed or cancelled
+	Entrance    BehaviorEntrance      // how it comes onto the map
 
 	Look    Look          // its frames, cell by cell
 	Pattern time.Duration // how long each frame shows
 }
+
+// BehaviorEntrance is how a data species comes onto the map when it is asked for
+type BehaviorEntrance uint8
+
+const (
+	EntranceNone        BehaviorEntrance = iota // it stands the tick it is asked for
+	EntranceMaterialize                         // a materialize over its footprint, and it lands as that ends
+)
+
+// EntranceNames are a prototype's entrance keys, none naming EntranceNone
+var EntranceNames = [...]string{EntranceNone: "", EntranceMaterialize: "materialize"}
 
 // LookCell is one cell of a frame: its glyph, none where 0, and its foreground and
 // background palette entries, -1 for the look's colour and for no background

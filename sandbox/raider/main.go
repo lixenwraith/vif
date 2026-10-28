@@ -186,7 +186,7 @@ func load(dir string) ([]cave, error) {
 	for name, doc := range behaviors {
 		docs[name], _ = doc.(map[string]any)
 	}
-	set, err := system.CompileBehaviors(docs)
+	set, err := system.CompileBehaviors(docs, merged)
 	if err != nil {
 		return nil, err
 	}

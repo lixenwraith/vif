@@ -35,8 +35,9 @@ func SetImpulse(k *Kinetic, vx, vy float64) {
 	k.VelY = vy
 }
 
-// ReflectBoundsX handles horizontal boundary collision, returns true if reflection occurred
-// Clamps to centered position within valid cell range [minX, maxX)
+// ReflectBoundsX handles horizontal boundary collision over the cells minX..maxX,
+// both inclusive, returns true if reflection occurred: a position past either is
+// clamped to the centre of the edge cell it passed
 func ReflectBoundsX(k *Kinetic, minX, maxX int) bool {
 	p := vmath.PointAt(k.PreciseX, k.PreciseY)
 	if p.X < minX {
@@ -44,15 +45,16 @@ func ReflectBoundsX(k *Kinetic, minX, maxX int) bool {
 		k.VelX = -k.VelX
 		return true
 	}
-	if p.X >= maxX {
-		k.PreciseX, _ = (vmath.Point{X: maxX - 1}).Center()
+	if p.X > maxX {
+		k.PreciseX, _ = (vmath.Point{X: maxX}).Center()
 		k.VelX = -k.VelX
 		return true
 	}
 	return false
 }
 
-// ReflectBoundsY handles vertical boundary collision, returns true if reflection occurred
+// ReflectBoundsY handles vertical boundary collision over the cells minY..maxY,
+// both inclusive, returns true if reflection occurred
 func ReflectBoundsY(k *Kinetic, minY, maxY int) bool {
 	p := vmath.PointAt(k.PreciseX, k.PreciseY)
 	if p.Y < minY {
@@ -60,18 +62,19 @@ func ReflectBoundsY(k *Kinetic, minY, maxY int) bool {
 		k.VelY = -k.VelY
 		return true
 	}
-	if p.Y >= maxY {
-		_, k.PreciseY = (vmath.Point{Y: maxY - 1}).Center()
+	if p.Y > maxY {
+		_, k.PreciseY = (vmath.Point{Y: maxY}).Center()
 		k.VelY = -k.VelY
 		return true
 	}
 	return false
 }
 
-// ReflectBounds handles both axis boundary collisions, returns true if any reflection occurred
+// ReflectBounds handles both axis boundary collisions over a width×height grid,
+// returns true if any reflection occurred
 func ReflectBounds(k *Kinetic, width, height int) bool {
-	rx := ReflectBoundsX(k, 0, width)
-	ry := ReflectBoundsY(k, 0, height)
+	rx := ReflectBoundsX(k, 0, width-1)
+	ry := ReflectBoundsY(k, 0, height-1)
 	return rx || ry
 }
 

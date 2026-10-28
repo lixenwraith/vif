@@ -55,14 +55,18 @@ magenta (13) meets the amethyst points, which are sparse. Keep every type within
 #### Put the tier's boss where the raid's climb ends
 
 - Priority: P1
-- Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`), `doc/gameplay.md`
-  §10
+- Affected files: `wad/scenario/vanguard/scenario.toml` (`RaidBoss`, `RaidWait`),
+  `doc/gameplay.md` §10
 - Guide: [Script the boss approach](#script-the-boss-approach-and-play-its-stop)
 
 Three kills of the fourth rank exhaust the cave's tier and enter `RaidBoss`, a
 placeholder that strobes green and starts the climb over at the first rank while
 the raid keeps spawning. The boss encounter replaces it: the approach below, a boss
 of the tier's own, and what beating it opens, the next tier or the same climb again.
+The raid's cap of three reads `behavior.count`, which sums every program, so a boss
+program would hold a raider's place: the boss state stops the raid, or caps it on
+the raiders' own count (`behavior.<program>.count` summed, or a prototype `group`
+with `behavior.group.<g>.count`).
 
 ### Scenery
 
@@ -110,97 +114,52 @@ needs the columns ahead of the map, engine surface for rock that waits for the
 position package. A cave opens once and nothing narrows it again; a later stage
 starts a new cave.
 
-### Gun and loot
-
-The gun path and vanguard's `U`, moved from Combat.
-
-#### Fan more than three gun lanes along a cardinal
-
-- Priority: P3
-- Affected files: `internal/parameter/tracer.go`, `internal/system/weapon.go`
-
-A level of the gun's upgrade path names its lanes per cardinal, and
-`TracerLaneOffsets` stops at the centre and its two sides, so a level asking for
-more fires three. A wider fan needs offsets two or more rows or columns out, and a
-volley spacing that still reads as lanes in a 15-row cave channel.
-
-#### Aim a seat's gun as the scenario aims the player's
-
-- Priority: P3
-- Affected files: `internal/system/weapon.go`, `internal/event/payload.go`
-
-`EventGunAimRequest` is local and sets the aim and path of the cursor this instance
-drives, so a bot seat, or a cursor an instance adopts, fires the gun's own four
-cardinals and stops at three charges. An entity field, as `EventKeyCaptureRequest`
-carries, or a path the weapon system holds per scenario would reach every cursor
-an instance simulates.
-
-#### Declare loot kinds and drop tables in a scenario
-
-- Priority: P2
-- Affected files: `internal/component/loot.go`, `internal/parameter/visual/loot.go`,
-  `internal/profile/loot.go`, `internal/system/loot.go`
-
-Loot kinds, their rewards and runes are a Go enum and the drop tiers are fixed per
-code species, so a scenario's own pickup is a Go change that reaches players only
-as an event drop: vanguard's `U` is `LootUpgrade`, the gun drop's reward under its
-own rune, raised by its FSM where a player shoots a raider down because no tier can
-hold it. Kinds a scenario declares (rune, colours, reward) and tiers that name them
-would let a program list its drops and roll them with pity, with `activeLootTypes`
-and the pity counts sized from the declared kinds rather than `LootCount`.
-[Give data species attack, beam and drop rows of their own](#give-data-species-attack-beam-and-drop-rows-of-their-own)
-is the drop half of this for programs.
-
 ### Machine follow-ups
 
 What vanguard met in the machine and is still open, its certain faults having
 landed. Open items elsewhere it meets:
 [payload field names at load](#check-payload-field-names-against-their-event-at-load),
 [a program spawning another](#let-a-program-spawn-another-program),
-[attack, beam and drop rows](#give-data-species-attack-beam-and-drop-rows-of-their-own),
-[loot kinds in a scenario](#declare-loot-kinds-and-drop-tables-in-a-scenario),
-[a seat's gun](#aim-a-seats-gun-as-the-scenario-aims-the-players),
-[a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does)
-and [spawn placement](#audit-spawn-placement-across-the-species).
+[attack and materialize rows](#give-data-species-attack-and-materialize-rows-of-their-own)
+and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does).
 
-#### Give a program an entrance of its own through the fuse
-
-- Priority: P1
-- Affected files: `internal/system/fuse.go` (`handleBehaviorFuse`,
-  `landBehavior`), `internal/behavior/program.go`, `internal/system/behavior.go`,
-  `internal/system/materialize.go`, `wad/scenario/vanguard/scenario.toml`
-- Guide: [Behavior machines §6](machine-design.md#6-data-species)
-
-Vanguard's raiders spawn at once (`EventBehaviorSpawnRequest`), the fuse off with
-the drains, because a program's entrance through the fuse is fixed: the swarm's
-one-second beam over a footprint `FindFreeAreaInside` chose when the fuse was
-asked, then a direct spawn at what the beam covered, and nothing of it reaches the
-machine, which starts in `initial` the tick the body stands. Lixen expects
-entrances to grow for machines (2026-10-27). What a program would declare:
-
-- The beam: its duration and style, the swarm's or the nugget's until a program has
-  [beam rows of its own](#give-data-species-attack-beam-and-drop-rows-of-their-own),
-  and whether a countdown shows over it.
-- An entering state the machine runs while the beam holds, so a program can
-  telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
-  nor takes damage, as no body stands yet.
-- A landing its probe chooses (`FindLanding` or its own), tried again when the beam
-  ends, since rock scrolls under a beam as it does under a teleport.
-
-The beam is Shared, so the entering state's clock and probe must run alike on every
-instance and a capture mid-beam must restore them (`snapshot.Schema`). The entrance
-stays a beam, as a spawn out of nothing's is, while drains that fuse fly in as
-spirits (Lixen, 2026-10-27); the drains' fusions stay as they are.
-
-#### Count a group of programs
+#### Give a program's entrance an entering state
 
 - Priority: P2
 - Affected files: `internal/behavior/program.go`, `internal/system/behavior.go`
-  (`behaviorTelemetry`), `doc/telemetry-reference.md`
+  (`enter`), `internal/component/behavior.go` (`BehaviorEntrance`)
+- Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)
 
-The raid's cap reads `behavior.count`, every data species, while raiders are the
-only ones. A prototype `group` with `behavior.group.<g>.count` would let a scenario
-that mixes programs cap each kind.
+A prototype's `entrance = "materialize"` plays a one-second materialize, the
+`swarm` style, over the footprint and lands the body as it ends, beside any rock
+that came over it, and nothing of it reaches the machine, which starts in
+`initial` the tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
+What a program would declare next:
+
+- The materialize's duration and style, `swarm` or `nugget` until a program
+  has [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
+  and whether a countdown shows over it.
+- An entering state the machine runs while the materialize holds, so a program can
+  telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
+  nor takes damage, as no body stands yet.
+- A landing its probe chooses (`FindLanding` or its own) as the materialize ends,
+  in place of the nearest clear footprint.
+
+The materialize is Shared, so the entering state's clock and probe must run alike
+on every instance and a capture mid-materialize must restore them
+(`snapshot.Schema`).
+
+#### Name a spawn's cell from the map's edge
+
+- Priority: P3
+- Affected files: `internal/event/payload.go` (`BehaviorSpawnRequestPayload`),
+  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`)
+
+Vanguard's raid spends seven actions naming its spawn's cell, the column past the
+right edge on a row drawn two inside the top and bottom: two `ConfigToVar`,
+`DecrementVar`, two `IncrementVar`, `RandomVar` and `ModuloVar`, the draw's index
+bumped by hand. A map-relative anchor on the request (an edge and an inset) or a
+draw advancing its own index would shorten it.
 
 #### Draw a countdown in a smaller splash font
 
@@ -301,30 +260,6 @@ update path; whether a maze's walls stay entities a cluster indexes or become th
 cluster; the coordinate type (2D with a third axis reserved, or 3D now); the
 migration (a façade keeping the `World.Positions` surface while the call sites move,
 then narrowed); the footprint grids' cost on td.
-
-#### Audit spawn placement across the species
-
-- Priority: P2
-- Affected files: `internal/engine/position.go` (`FindFreeAreaSpiral`,
-  `FindFreeAreaInside`), `internal/system/swarm.go`, `internal/system/quasar.go`,
-  `internal/system/eye.go`, `internal/system/snake.go`, `internal/system/gateway.go`,
-  `pkg/vmath/physics/kinetic.go` (`ReflectBoundsX`, `ReflectBoundsY`),
-  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`)
-
-A data species places a spawn with `FindFreeAreaInside`, the spiral search from an
-origin pulled in from the map's edges until the footprint fits, so a request names
-an edge blind to the body. The code species still search `FindFreeAreaSpiral` from
-the origin as given, with sizes their Go code holds, so one requested at an edge
-lands where the spiral first fits. An audit of every spawn path (the species'
-requests, the fuse's beams, the gateway, a scenario's spawns) would put each on the
-one search over the footprint it spawns. The code composites reach the map's last
-column and row by passing the cell past it to `IntegrateWithBounceStats`, as the
-data species do; bounds inclusive in `ReflectBounds` for every caller, the
-reflection checking the wall it lands on, would take that arithmetic from each.
-The raid still spends nine actions before its request to name a row (two
-`ConfigToVar`, `DecrementVar`, two `IncrementVar`, `ModuloVar`, `SetVar` and two
-`RandomVar`, each draw's index bumped by hand); a map-relative anchor on the request
-(an edge and an inset) or a draw advancing its own index would shorten it.
 
 #### Bound navigation's worst tick on busy maps
 
@@ -894,8 +829,9 @@ tick until the first crossing's actions land. Simon's `Listen` plays three notes
 level 1 in a session and one solo. An internal transition in flight has to stop its
 own re-proposal without parking the region's events (D-20); a test plays simon on a
 mesh pair (`shapedPair`) and counts `EventFSMTransition` by owner and index. An
-internal transition on an event crosses once: vanguard's U drop on a mesh pair
-(`TestVanguardAKillInAPairDropsEachPlayerOneU`) holds it, and a fix keeps it so.
+internal transition on an event crosses once: vanguard's rank counting a kill on a
+mesh pair (`TestVanguardAKillInAPairDropsEachPlayerOneU`) holds it, and a fix keeps
+it so.
 
 ### Forgive a one-tick defeat in a session as solo play does
 
@@ -1121,11 +1057,12 @@ Its area pulse is the hosted disruptor's shape; the red circle's turret mount is
 - Affected files: `internal/component/materialize.go` (`MaterializeStyles`),
   `internal/parameter/effect.go`, `internal/system/fuse.go` (`fuseInto`)
 
-A quasar fusion's quasar lands as its beam ends, a whole spawn beam, where the
-timer the beam replaced landed it a little after half of it. A session sweep with
-both fusions waiting a whole beam cost quasar kills, the one gap beyond the noise;
-a drain pair's swarm lands at half a second again, as its spirits arrive, so the
-sweep decides whether the quasar's wait alone still costs them. A fusion row in
+A quasar fusion's quasar lands as its materialize ends, a whole spawn's
+materialize, where the timer the materialize replaced landed it a little after half
+of it. A session sweep with both fusions waiting a whole materialize cost quasar
+kills, the one gap beyond the noise; a drain pair's swarm lands at half a second
+again, as its spirits arrive, so the sweep decides whether the quasar's wait alone
+still costs them. A fusion row in
 `MaterializeStyles` with a shorter fill, hold and recede would give the old pacing
 back, spawn and visual still ending on one tick.
 
@@ -1174,17 +1111,17 @@ any program compiles. Its build could take any program name and push
 `EventBehaviorSpawnRequest`, which drops and counts an unknown one; the load-time
 check of that name belongs with the payload names under Authoring.
 
-### Give data species attack, beam and drop rows of their own
+### Give data species attack and materialize rows of their own
 
 - Priority: P3
-- Affected files: `internal/profile/combat.go`, `internal/profile/loot.go`,
-  `internal/component/materialize.go`
+- Affected files: `internal/profile/combat.go`, `internal/component/materialize.go`
 
-A prototype names a combat row (`swarm` or `quasar`), a beam style (`swarm` or
-`nugget`) and a code species' drop tiers, so a new attack profile, beam or drop
-table is a Go change ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)).
-Rows of its own would grow those tables per scenario from the prototype, as soft
-collision builds a data species' rows from its `mass`.
+A prototype names a combat row (`swarm` or `quasar`) and a program's materializes
+a style (`swarm` or `nugget`), so a new attack profile or materialize style is a Go
+change ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)). Rows of
+its own would grow those tables per scenario from the prototype, as soft collision
+builds a data species' rows from its `mass` and loot rolls the drop table its
+`drops` names.
 
 ## Environment
 

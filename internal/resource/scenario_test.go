@@ -3,6 +3,7 @@ package resource
 import (
 	"bytes"
 	"compress/flate"
+	"errors"
 	"fmt"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"io/fs"
@@ -229,11 +230,22 @@ func TestAProgramThatDoesNotCompileFailsTheScenario(t *testing.T) {
 	}
 }
 
-// TestCheckReportsTheProgramsItCompiled: a scenario declaring none says so
-func TestCheckReportsTheProgramsItCompiled(t *testing.T) {
+// TestCheckReportsTheProgramsAndLootItCompiled: a scenario declaring none says so
+func TestCheckReportsTheProgramsAndLootItCompiled(t *testing.T) {
+	looted := writePrograms(t, map[string]string{"wisp": strings.Replace(wisp, "hp = 1", "hp = 1\ndrops = \"spark\"", 1)})
+	entry, err := os.OpenFile(filepath.Join(looted, "scenario.toml"), os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = entry.WriteString("[loot.ember]\nrune = \"e\"\ncolor = {}\nglow = {}\nreward = \"heat\"\ndelta = 1\n" +
+		"[drops.spark]\ntiers = [{ entries = [{ loot = \"ember\", rate = 1.0 }] }]\n")
+	if err := errors.Join(err, entry.Close()); err != nil {
+		t.Fatal(err)
+	}
 	for want, dir := range map[string]string{
-		"behaviors ok: 2 (spark, wisp)\n": writePrograms(t, map[string]string{"spark": wisp, "wisp": wisp}),
-		"behaviors ok: 0\n":               writeScenario(t, filepath.Join(t.TempDir(), "scenario", "plain"), scenarioRegion),
+		"behaviors ok: 2 (spark, wisp)\nloot ok: 0\ndrops ok: 0\n":          writePrograms(t, map[string]string{"spark": wisp, "wisp": wisp}),
+		"behaviors ok: 0\nloot ok: 0\ndrops ok: 0\n":                        writeScenario(t, filepath.Join(t.TempDir(), "scenario", "plain"), scenarioRegion),
+		"behaviors ok: 1 (wisp)\nloot ok: 1 (ember)\ndrops ok: 1 (spark)\n": looted,
 	} {
 		var out strings.Builder
 		if err := checkScenario(Options{Scenario: dir}, &out); err != nil || !strings.HasSuffix(out.String(), want) {

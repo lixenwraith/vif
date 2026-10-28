@@ -165,11 +165,11 @@ func TestAnExpiredCooldownWaitsForTheConvex(t *testing.T) {
 	}
 }
 
-// TestTheBlueCueBeamsOnceAnAttack: the blue finds its landing as its attack opens and
-// beams a swarm onto it at 800 ‰ of the attack, once an attack however many ticks
-// follow; an attack that found no landing beams nothing
-func TestTheBlueCueBeamsOnceAnAttack(t *testing.T) {
-	beams := func(walled bool) []int {
+// TestTheBlueCueMaterializesOnceAnAttack: the blue finds its landing as its attack
+// opens and materializes a swarm onto it at 800 ‰ of the attack, once an attack
+// however many ticks follow; an attack that found no landing materializes nothing
+func TestTheBlueCueMaterializesOnceAnAttack(t *testing.T) {
+	materializes := func(walled bool) []int {
 		w, _, _ := testCursorWorld(t)
 		if walled {
 			for y := range 24 {
@@ -194,11 +194,11 @@ func TestTheBlueCueBeamsOnceAnAttack(t *testing.T) {
 
 	// Attacks open on ticks 0 and 150 (2.5 s, then the 5 s cooldown); each cue is
 	// 2 s in
-	if got := beams(false); !slices.Equal(got, []int{40, 190}) {
-		t.Fatalf("beams on ticks %v, want 40 and 190", got)
+	if got := materializes(false); !slices.Equal(got, []int{40, 190}) {
+		t.Fatalf("materializes on ticks %v, want 40 and 190", got)
 	}
-	if got := beams(true); len(got) != 0 {
-		t.Fatalf("beams on ticks %v with no landing anywhere, want none", got)
+	if got := materializes(true); len(got) != 0 {
+		t.Fatalf("materializes on ticks %v with no landing anywhere, want none", got)
 	}
 }
 
@@ -228,36 +228,37 @@ func TestStormDrawsBeforeItReadsLivePositions(t *testing.T) {
 	}
 }
 
-// TestTheBlueSwarmLandsAsItsBeamEnds: the swarm a blue attack beams in rides its
-// beam, a Shared entity naming the species, and stands on the landing the tick the
-// beam, and so its visual, ends: the attack opens on tick 0, the beam on 40 (2 s).
-// The storm lands it alone; the fuse crosses only a fusion's.
-func TestTheBlueSwarmLandsAsItsBeamEnds(t *testing.T) {
+// TestTheBlueSwarmLandsAsItsMaterializeEnds: the swarm a blue attack materializes
+// in rides its materialize, a Shared entity naming the species, and stands on the
+// landing the tick the materialize, and so its visual, ends: the attack opens on
+// tick 0, the materialize on 40 (2 s). The storm lands it alone; the fuse crosses
+// only a fusion's.
+func TestTheBlueSwarmLandsAsItsMaterializeEnds(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	storm := ready(NewStormSystem(w)).(*StormSystem)
-	b := newBeamWorld(w, storm, ready(NewSwarmSystem(w)), ready(NewFuseSystem(w)))
+	b := newMaterializeWorld(w, storm, ready(NewSwarmSystem(w)), ready(NewFuseSystem(w)))
 	stormComp, circle := openingCircle(storm, component.StormCircleBlue, parameter.StormZMid-1)
 
-	for tick := range 40 + beamTicks() + 1 {
+	for tick := range 40 + materializeTicks() + 1 {
 		storm.updateCircleAttacks(stormComp, parameter.GameUpdateInterval)
 		b.tick()
-		beams, swarms := w.Components.Materialize.Entities(), w.Components.Swarm.Entities()
+		materializes, swarms := w.Components.Materialize.Entities(), w.Components.Swarm.Entities()
 		switch {
 		case tick < 40:
-			if len(beams) != 0 || len(swarms) != 0 {
-				t.Fatalf("tick %d: %d beams and %d swarms before the cue", tick, len(beams), len(swarms))
+			if len(materializes) != 0 || len(swarms) != 0 {
+				t.Fatalf("tick %d: %d materializes and %d swarms before the cue", tick, len(materializes), len(swarms))
 			}
-		case tick < 40+beamTicks():
-			if len(beams) != 1 || len(swarms) != 0 {
-				t.Fatalf("tick %d: %d beams and %d swarms while the beam flies, want the beam alone", tick, len(beams), len(swarms))
+		case tick < 40+materializeTicks():
+			if len(materializes) != 1 || len(swarms) != 0 {
+				t.Fatalf("tick %d: %d materializes and %d swarms while the materialize flies, want the materialize alone", tick, len(materializes), len(swarms))
 			}
-			if beam, _ := w.Components.Materialize.GetComponent(beams[0]); beams[0].Domain() != core.DomainShared || beam.Species != component.SpeciesSwarm {
-				t.Fatalf("tick %d: the beam is %v naming %d, want a Shared one naming the swarm", tick, beams[0], beam.Species)
+			if materialize, _ := w.Components.Materialize.GetComponent(materializes[0]); materializes[0].Domain() != core.DomainShared || materialize.Species != component.SpeciesSwarm {
+				t.Fatalf("tick %d: the materialize is %v naming %d, want a Shared one naming the swarm", tick, materializes[0], materialize.Species)
 			}
 		default:
 			requests := b.sent(event.EventSwarmSpawnRequest, 0)
-			if len(beams) != 0 || len(swarms) != 1 || len(requests) != 1 || requests[0].Domain != core.DomainShared {
-				t.Fatalf("tick %d: %d beams, %d swarms and requests %+v as the beam ended, want one Shared request and its swarm", tick, len(beams), len(swarms), requests)
+			if len(materializes) != 0 || len(swarms) != 1 || len(requests) != 1 || requests[0].Domain != core.DomainShared {
+				t.Fatalf("tick %d: %d materializes, %d swarms and requests %+v as the materialize ended, want one Shared request and its swarm", tick, len(materializes), len(swarms), requests)
 			}
 			if pos, _ := w.Positions.GetPosition(swarms[0]); pos.X != circle.AttackTargetX || pos.Y != circle.AttackTargetY {
 				t.Fatalf("the swarm stands at (%d, %d), want the landing (%d, %d)", pos.X, pos.Y, circle.AttackTargetX, circle.AttackTargetY)
@@ -266,19 +267,19 @@ func TestTheBlueSwarmLandsAsItsBeamEnds(t *testing.T) {
 	}
 }
 
-// TestAStormsEndEndsItsBeams: a beam in flight is a swarm the storm has yet to
-// land, so the storm's end ends it and nothing lands after. A fusion's
-// player-domain beam and a Shared one naming no species are not the storm's: both
-// fly on, and neither lands a swarm.
-func TestAStormsEndEndsItsBeams(t *testing.T) {
+// TestAStormsEndEndsItsMaterializes: a materialize in flight is a swarm the storm
+// has yet to land, so the storm's end ends it and nothing lands after. A fusion's
+// player-domain materialize and a Shared one naming no species are not the
+// storm's: both fly on, and neither lands a swarm.
+func TestAStormsEndEndsItsMaterializes(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	storm := ready(NewStormSystem(w)).(*StormSystem)
-	b := newBeamWorld(w, storm, ready(NewSwarmSystem(w)))
+	b := newMaterializeWorld(w, storm, ready(NewSwarmSystem(w)))
 	storm.spawnStorm()
 	if storm.rootEntity == 0 {
 		t.Fatal("no storm spawned")
 	}
-	storm.beamIn(&circleCtx{circle: &component.StormCircleComponent{LandingFound: true, AttackTargetX: 20, AttackTargetY: 12}})
+	storm.materializeIn(&circleCtx{circle: &component.StormCircleComponent{LandingFound: true, AttackTargetX: 20, AttackTargetY: 12}})
 	others := []event.GameEvent{
 		{Type: event.EventMaterializeAreaRequest, Domain: core.DomainPlayer, Payload: &event.MaterializeAreaRequestPayload{
 			X: 4, Y: 16, AreaWidth: parameter.SwarmWidth, AreaHeight: parameter.SwarmHeight,
@@ -291,9 +292,9 @@ func TestAStormsEndEndsItsBeams(t *testing.T) {
 
 	b.deliver(event.GameEvent{Type: event.EventStormCancelRequest})
 	if n := w.Components.Materialize.CountEntities(); n != len(others) {
-		t.Fatalf("%d beams after the storm's end, want the %d not its own", n, len(others))
+		t.Fatalf("%d materializes after the storm's end, want the %d not its own", n, len(others))
 	}
-	for range beamTicks() {
+	for range materializeTicks() {
 		b.tick()
 	}
 	if n := w.Components.Swarm.CountEntities(); n != 0 {

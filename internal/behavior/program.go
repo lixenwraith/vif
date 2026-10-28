@@ -104,6 +104,7 @@ type prototypeDoc struct {
 	Physics    physicsDoc `toml:"physics"`
 	LifetimeMs int        `toml:"lifetime_ms"`
 	PatternMs  int        `toml:"pattern_ms"`
+	Entrance   string     `toml:"entrance"`
 
 	// The look: frames, the palettes their cells index, the colour of a glyph
 	// without an entry, and the console pair a 256-colour host draws
@@ -163,8 +164,9 @@ func checkName(name string) error {
 	return nil
 }
 
-// prototype validates d and makes it the species' plain data
-func (d *prototypeDoc) prototype(name string, species component.SpeciesType) (component.BehaviorPrototype, error) {
+// prototype validates d and makes it the species' plain data, its drops naming one
+// of loot's tables or a code species'
+func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loot *component.LootSet) (component.BehaviorPrototype, error) {
 	p := component.BehaviorPrototype{
 		Name: name, Species: species,
 		Width: d.Width, Height: d.Height, HeaderX: d.Header.X, HeaderY: d.Header.Y,
@@ -209,6 +211,11 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType) (co
 	}
 	if d.LifetimeMs < 0 {
 		fail("lifetime_ms %d is negative", d.LifetimeMs)
+	}
+	if i := slices.Index(component.EntranceNames[:], d.Entrance); i >= 0 {
+		p.Entrance = component.BehaviorEntrance(i)
+	} else {
+		fail("entrance %q is not one of %s", d.Entrance, strings.Join(component.EntranceNames[1:], ", "))
 	}
 
 	if i := slices.IndexFunc(combatRows, func(r component.CombatEntityType) bool {
@@ -255,14 +262,13 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType) (co
 		fail("physics: arrival_drag %v ramps in over an arrival_radius, and that is 0", p.Homing.ArrivalDragBoost)
 	}
 	if d.Drops != "" {
-		i := slices.Index(component.SpeciesNames[:], d.Drops)
-		switch {
-		case i < 0:
-			fail("drops %q names no species", d.Drops)
-		case len(profile.Drops[i]) == 0:
-			fail("drops %q: that species drops nothing", d.Drops)
+		switch t, ok := profile.DropTableNamed(loot, d.Drops); {
+		case !ok:
+			fail("drops %q names no drop table", d.Drops)
+		case len(t.Tiers) == 0:
+			fail("drops %q: that table drops nothing", d.Drops)
 		default:
-			p.Drops = component.SpeciesType(i)
+			p.Drops = d.Drops
 		}
 	}
 

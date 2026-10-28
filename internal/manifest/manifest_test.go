@@ -47,7 +47,7 @@ func TestActiveSystemsMatchRuntimeNames(t *testing.T) {
 func TestASpeciesGuardNamesItsSpecies(t *testing.T) {
 	load := func(names string) (*fsm.Machine[*engine.World], error) {
 		m := fsm.NewMachine[*engine.World]()
-		RegisterFSMComponents(m, []string{"invader", "construct"})
+		RegisterFSMComponents(m, component.Declared{Programs: []string{"invader", "construct"}})
 		return m, m.LoadScenario([]byte(`
 [regions.r]
 initial = "Wait"

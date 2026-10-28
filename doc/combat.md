@@ -197,7 +197,8 @@ Lightning, missile and bullet integrate after combat; `transient` ages rings lat
 3. Give its attack family a profile against every cursor defender; an over-time
    family sets `Status`, `Period` and `Duration`.
 4. Add its orb colours, loot type with its `LootSpecs` and `LootVisuals` rows, and
-   a tier in `profile.Drops`, unless it is innate.
+   a tier in `profile.Drops`, unless it is innate; a scenario's kinds charge it by
+   name (`weapon = "<name>"`) once `WeaponSpecs` holds it.
 5. A player-domain push of a replicated event must be named in `crossingPushes`
    with the artifact it crosses; `TestEventClassMatchesSystemProfile` enforces it.
 

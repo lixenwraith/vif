@@ -49,7 +49,7 @@ func TestApplyAndSetImpulse(t *testing.T) {
 
 func TestReflectBoundsX(t *testing.T) {
 	k := kin{PreciseX: -0.5, VelX: -3}
-	if !ReflectBoundsX(&k, 0, 10) {
+	if !ReflectBoundsX(&k, 0, 9) {
 		t.Fatal("left boundary not detected")
 	}
 	if x, _ := posOf(&k); math.Abs(x-0.5) > 1e-6 {
@@ -60,22 +60,22 @@ func TestReflectBoundsX(t *testing.T) {
 	}
 
 	k = kin{PreciseX: 10.2, VelX: 3}
-	if !ReflectBoundsX(&k, 0, 10) {
+	if !ReflectBoundsX(&k, 0, 9) {
 		t.Fatal("right boundary not detected")
 	}
 	if x, _ := posOf(&k); math.Abs(x-9.5) > 1e-6 {
 		t.Fatalf("clamped to %v, want cell center 9.5", x)
 	}
 
-	k = kin{PreciseX: 5.5}
-	if ReflectBoundsX(&k, 0, 10) {
+	k = kin{PreciseX: 9.5}
+	if ReflectBoundsX(&k, 0, 9) {
 		t.Fatal("in-bounds position reported a reflection")
 	}
 }
 
 func TestReflectBoundsY(t *testing.T) {
 	k := kin{PreciseY: -0.1, VelY: -2}
-	if !ReflectBoundsY(&k, 0, 8) {
+	if !ReflectBoundsY(&k, 0, 7) {
 		t.Fatal("top boundary not detected")
 	}
 	if _, y := posOf(&k); math.Abs(y-0.5) > 1e-6 {

@@ -14,13 +14,15 @@ import (
 	"github.com/lixenwraith/vif/pkg/machine"
 )
 
-// Set is a scenario's compiled programs in sorted-name order: program i is species
-// SpeciesDataFirst+i. Its slices are shared and never change after Compile.
+// Set is a scenario's compiled programs in sorted-name order, program i species
+// SpeciesDataFirst+i, and the loot it declares, which their kills roll. Its slices
+// are shared and never change after Compile.
 type Set[C any] struct {
 	names    []string
 	protos   []component.BehaviorPrototype
 	graphs   []*machine.Graph[component.BehaviorState, C]
 	initials []component.BehaviorState
+	loot     component.LootSet
 }
 
 func (s *Set[C]) Len() int { return len(s.names) }
@@ -38,26 +40,37 @@ func (s *Set[C]) Graph(i int) *machine.Graph[component.BehaviorState, C] { retur
 // Initial is the state a spawn of program i starts in
 func (s *Set[C]) Initial(i int) component.BehaviorState { return s.initials[i] }
 
-// Compile builds every program against v, each a machine graph whose states take
-// IDs in sorted-name order. Every fault is reported, each naming its program and
+// Loot is the loot kinds and drop tables the scenario declares
+func (s *Set[C]) Loot() *component.LootSet { return &s.loot }
+
+// Declared is what the scenario adds to the code's names: its programs and its kinds
+func (s *Set[C]) Declared() component.Declared {
+	return component.Declared{Programs: s.names, Loot: s.loot.Names()}
+}
+
+// Compile builds the loot a scenario's entry declares, its [loot] and [drops] as
+// loot holds them, any other key unread, so the resolved entry itself serves; then
+// every program against v, each a machine graph whose states take IDs in
+// sorted-name order. Every fault is reported, each naming its program or loot and
 // place; no programs is an empty set.
-func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any) (*Set[C], error) {
+func Compile[C any](v *Vocabulary[C], programs map[string]map[string]any, loot map[string]any) (*Set[C], error) {
 	names := slices.Sorted(maps.Keys(programs))
 	if len(names) > parameter.BehaviorProgramsMax {
 		return nil, fmt.Errorf("%d behavior programs, at most %d", len(names), parameter.BehaviorProgramsMax)
 	}
 	set := &Set[C]{names: names}
+	var errs []error
+	set.loot, errs = compileLoot(loot, names)
 	payloads := dialect.NewNames()
 	if v.names != nil {
-		payloads = v.names(names)
+		payloads = v.names(set.Declared())
 	}
-	var errs []error
 	for i, name := range names {
 		if err := checkName(name); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		c := compiler[C]{v: v, program: name, payloads: payloads}
+		c := compiler[C]{v: v, program: name, payloads: payloads, loot: &set.loot}
 		proto, graph, initial := c.build(programs[name], component.SpeciesDataFirst+component.SpeciesType(i))
 		errs = append(errs, c.errs...)
 		set.protos = append(set.protos, proto)
@@ -75,6 +88,7 @@ type compiler[C any] struct {
 	v        *Vocabulary[C]
 	program  string
 	payloads *dialect.Names
+	loot     *component.LootSet // the tables a prototype's drops may name
 	ids      map[string]component.BehaviorState
 	sites    int
 	errs     []error
@@ -103,7 +117,7 @@ func (c *compiler[C]) build(raw map[string]any, species component.SpeciesType) (
 	}
 	if doc.Prototype == nil {
 		c.fail("", errors.New("[prototype] is required"))
-	} else if proto, err = doc.Prototype.prototype(c.program, species); err != nil {
+	} else if proto, err = doc.Prototype.prototype(c.program, species, c.loot); err != nil {
 		c.fail("prototype", err)
 	}
 

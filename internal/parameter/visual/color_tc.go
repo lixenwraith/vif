@@ -243,7 +243,6 @@ var (
 	RgbLootTurretGlow    = color.LightSkyBlue
 	RgbLootEmitterGlow   = color.LightPink
 	RgbLootGunGlow       = color.PaleGold
-	RgbLootUpgradeGlow   = color.PastelGreen
 	RgbLootEnergyGlow    = color.HotMagenta
 	RgbLootEnergySigil   = color.LemonYellow
 	RgbLootHeatSigil     = color.Coral

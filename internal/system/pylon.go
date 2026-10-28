@@ -297,7 +297,7 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 
 	// Tier 2: Spiral from last random attempt center
 	last := cells[len(cells)-1]
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
 		last.X, last.Y,
 		width, height,
 		radiusX, radiusY, // anchor offset = radius (center to top-left)

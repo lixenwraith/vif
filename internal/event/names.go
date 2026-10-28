@@ -14,13 +14,25 @@ import (
 
 // PayloadNames are the names a payload's enum fields take, each type's from its
 // own table. A species field takes a scenario's behavior programs too, which hold
-// SpeciesDataFirst onward in sorted-name order.
-func PayloadNames(programs []string) *dialect.Names {
-	if len(programs) == 0 {
+// SpeciesDataFirst onward in sorted-name order, and a loot kind field its kinds,
+// LootCount onward alike.
+func PayloadNames(d component.Declared) *dialect.Names {
+	if len(d.Programs) == 0 && len(d.Loot) == 0 {
 		return codeNames()
 	}
-	species := slices.Concat(component.SpeciesNames[:], slices.Sorted(slices.Values(programs)))
-	return codeNames().Clone().Enum[component.SpeciesType](species...)
+	names := codeNames().Clone()
+	if len(d.Programs) > 0 {
+		names.Enum[component.SpeciesType](slices.Concat(component.SpeciesNames[:], slices.Sorted(slices.Values(d.Programs)))...)
+	}
+	if len(d.Loot) > 0 {
+		names.Enum[component.LootType](slices.Concat(lootNames(), slices.Sorted(slices.Values(d.Loot)))...)
+	}
+	return names
+}
+
+// lootNames are the code's loot kinds
+func lootNames() []string {
+	return namesOf(component.LootSpecs[:], func(s component.LootSpec) string { return s.Name })
 }
 
 // AuthoredPayload makes event et's payload from raw, a table an author wrote, as
@@ -51,7 +63,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[component.SpeciesType](component.SpeciesNames[:]...).
 		Variant[component.SubType](component.SpeciesEye, component.EyeTypeNames[:]...).
 		Variant[component.SubType](component.SpeciesTower, component.TowerTypeNames[:]...).
-		Enum[component.LootType](namesOf(component.LootSpecs[:], func(s component.LootSpec) string { return s.Name })...).
+		Enum[component.LootType](lootNames()...).
 		Enum[component.EyeType](component.EyeTypeNames[:]...).
 		Enum[component.TowerType](component.TowerTypeNames[:]...).
 		Enum[component.TargetType](component.TargetTypeNames[:]...).

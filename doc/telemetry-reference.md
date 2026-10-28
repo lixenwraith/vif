@@ -80,7 +80,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem
 | Particle | `{dust,decay,blossom}.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}`; `dust.{created,destroyed,centers_dropped,buf_{centers,flash,impulses,transform}_hwm}`; `particle.{cursor_rejects,disabled_rejects}` | `NewParticleSystem` | Behavior-selected spawn, apply, update and detonation paths | `Init` | Generic only |
 | Gold | `gold.{active,header_entity,timer,spawn_failures,cursor_rejects,disabled_rejects}` | `NewGoldSystem` | Resolved sequence handlers and update | `Init` | Generic only |
 | Materialize | None | — | — | — | — |
-| Fuse | `fuse.{spawn_failures,disabled_rejects}` | `NewFuseSystem` | Fuse request failure paths, a data species' entrance naming no program or finding no room included | `Init` | Generic only |
+| Fuse | `fuse.{spawn_failures,disabled_rejects}` | `NewFuseSystem` | Fuse request failure paths | `Init` | Generic only |
 | Spirit | None | — | — | — | — |
 | Lightning | None | — | — | — | — |
 | Missile | `missile.{count,spawned,impacts,expired,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewMissileSystem` | Resolved spawn, impact and expiry; swept update | `Init` | Generic only |
@@ -112,7 +112,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem
 | Audio | `audio.{backend,silent,played,dropped,mask,sfx_muted,music_muted}`, `audio.rej_{bad_id,muted,not_running,paused,queue_full,silent}` | `NewAudioSystem` | `Update`, from backend totals; `publishAudioMask` (audio and music systems) for the mask keys | `Init` takes backend baselines; counters publish deltas from them | The status bar and config menu read `audio.mask`; the config menu also reads `audio.silent` |
 | Music | Strings `music.{group,tier,rhythm,melody,fill,bass}`; `music.bpm` | `NewMusicSystem` | Update, stop and mute, from the sequencer readout | `Init` clears them | Generic only |
 | Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{drain,eye,kraken,pylon,quasar,snake,storm,swarm,tower,total,uncredited}`, `kills.<program>` for each behavior program, `session.{any_defeated,all_defeated}`, `energy.damage_multiplier` | `NewMetaSystem` | `Update` (map, camera, placement), kill and defeat handlers, the cycle damage-multiplier events, and `LoadShared` | `Init`; kill tallies, the defeat latches and the multiplier are carried by its D-19 record | `session.any_defeated` and `kills.{drain,quasar,storm,kraken}` are shipped FSM guards, and those kill keys are also `StatusToVar` sources; the status bar reads `energy.damage_multiplier` |
-| Behavior | `behavior.{active,count,unknown_program_rejects,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}`; per program `behavior.<program>.{count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewBehaviorSystem`, from the scenario's compiled programs | Spawn, cancel, lifecycle and bounce paths; the counts every `Update`, and a spawn's at once | `Init` | `behavior.count` is a shipped FSM guard (`wad/scenario/vanguard`) |
+| Behavior | `behavior.{active,count,unknown_program_rejects,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}`; per program `behavior.<program>.{count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewBehaviorSystem`, from the scenario's compiled programs | Spawn, cancel, lifecycle and bounce paths; the counts every `Update`, and a spawn's or an entrance's at once | `Init` | `behavior.count` is a shipped FSM guard (`wad/scenario/vanguard`) |
 
 Audio-free builds (`vif_headless`, `vif_noaudio`) use `audio_none.go`. There, Audio registers only `audio.mask`, held at -1, and Music registers nothing.
 
@@ -208,7 +208,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `swarm.killed_by_lifecycle` (int) | Also counts swarms retired after `SwarmMaxCharges` charges or at their lifetime deadline, which emit no kill event |
 | `swarm.transition_stalls` (int) | Locks that found no target, the chase re-arming, and locks that could neither charge nor teleport and fell back to deceleration |
 | `behavior.unknown_program_rejects` (int) | Spawn and cancel requests naming no program of the scenario, dropped |
-| `behavior.<program>.count` (int) | Live instances of the program; `behavior.count` sums the programs |
+| `behavior.<program>.count` (int) | Live instances of the program and those still materializing in; `behavior.count` sums the programs |
 | `drain.count` (int) | Live drains not already queued for death |
 | `drain.paused` (bool) | A spawning hold applies to this instance's own cursor: a session-wide hold, or a quasar fused from that cursor |
 | `nav.recomputes` (int) | Flow fields rebuilt on the last tick (a gauge) |

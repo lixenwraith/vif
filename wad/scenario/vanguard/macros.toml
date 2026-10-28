@@ -4,16 +4,16 @@
 # its cave and its look, and the rank invokes Raider. doc/toml-macros.md describes
 # definitions and invocations.
 
-# The swarm's machine as a raider flies it. It chases its target for chase_ms, then
-# locks onto the cell it saw for lock_ms under a telegraph. Where its body clears the
-# way it charges that cell over charge_ms; behind rock it beams to the nearest place
-# by that cell and lands as the beam_ms ends, beside any rock that came over the
-# landing meanwhile; with no room anywhere it brakes where it stands. Rock pushes it
-# as it pushes the cursor, enraged or not. A program names Chase its initial state
-# and adds RaiderStun to its globals.
+# The raider's attack cycle. It chases its target for chase_ms, then locks onto
+# the cell it saw for lock_ms under a telegraph. Where its body clears the way it
+# charges that cell over charge_ms; behind rock it teleports to the nearest place
+# by that cell and lands as the teleport_ms ends, beside any rock that came over
+# the landing meanwhile; with no room anywhere it brakes where it stands. Rock
+# pushes it as it pushes the cursor, enraged or not. A program names Chase its
+# initial state and adds RaiderStun to its globals.
 [macros.RaiderStates]
-doc = "The raider's chase, lock, charge, beam and brake, timed per type."
-params = { chase_ms = "int", lock_ms = "int", charge_ms = "int", beam_ms = "int" }
+doc = "The raider's chase, lock, charge, teleport and brake, timed per type."
+params = { chase_ms = "int", lock_ms = "int", charge_ms = "int", teleport_ms = "int" }
 
 # With no target the lock waits, the chase moving meanwhile
 [macros.RaiderStates.body.Chase]
@@ -21,9 +21,9 @@ duration_ms = "${chase_ms}"
 on_update = [{ action = "Home" }]
 transitions = [{ trigger = "Timeout", target = "Lock", fallback = { retry_ms = 200 } }]
 
-# The swarm's charge line pulses toward the stored cell as the lock ends, so a
-# player sees where the charge goes before it leaves, and the landing marker
-# blinks where it lands from the lock until the charge or beam is over
+# The charge line pulses toward the stored cell as the lock ends, so a player
+# sees where the charge goes before it leaves, and the landing marker blinks
+# where it lands from the lock until the charge or teleport is over
 [macros.RaiderStates.body.Lock]
 duration_ms = "${lock_ms}"
 flags = ["Enraged", "ChargeLine", "Landing"]
@@ -31,7 +31,7 @@ probe = "ResolveTarget"
 on_enter = [{ action = "StoreTarget" }, { action = "Telegraph", payload = { color = "cyan" } }]
 on_update = [{ action = "Freeze" }]
 on_exit = [{ action = "CancelTelegraph" }]
-transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight", guard_args = { to = "stored" } }, "Beam", "Brake"] }]
+transitions = [{ trigger = "Timeout", target = [{ state = "Charge", guard = "LineOfSight", guard_args = { to = "stored" } }, "Teleport", "Brake"] }]
 
 # Arrives on the stored cell as the entry ends; a wall ends it in the step that
 # meets it, so the bounce stands
@@ -44,22 +44,22 @@ transitions = [
     { trigger = "AfterTick", guard = "HitWall", target = "Brake" },
 ]
 
-# Lands by the cell the lock stored, as the swarm's teleport does, so moving
-# during the countdown dodges the beam as it does the charge, and in a session the
-# beam keeps to the player the lock marked. The line runs from wherever the raider
-# stands, so rock carrying it bends the beam. The landing is the timeout's, so a
-# stun that ends the beam moves nothing, and Teleport looks for room again as it
+# Lands by the cell the lock stored, so moving during the countdown dodges the
+# teleport as it does the charge, and in a session the teleport keeps to the
+# player the lock marked. The line runs from wherever the raider stands, so rock
+# carrying it bends the line. The landing is the timeout's, so a stun that ends
+# the teleport moves nothing, and the Teleport action looks for room again as it
 # lands.
-[macros.RaiderStates.body.Beam]
-duration_ms = "${beam_ms}"
-flags = ["Enraged", "Beam", "Landing"]
+[macros.RaiderStates.body.Teleport]
+duration_ms = "${teleport_ms}"
+flags = ["Enraged", "TeleportLine", "Landing"]
 probe = "FindLanding"
 probe_args = { to = "stored" }
 on_enter = [{ action = "StoreTarget" }]
 on_update = [{ action = "Freeze" }]
 transitions = [{ trigger = "Timeout", target = "Brake", actions = [{ action = "Teleport" }] }]
 
-# The swarm's stop: a tenth of the speed left each tick
+# The stop: a tenth of the speed left each tick
 [macros.RaiderStates.body.Brake]
 duration_ms = 100
 flags = ["Enraged"]
@@ -70,7 +70,7 @@ transitions = [{ trigger = "Timeout", target = "Chase" }]
 [macros.RaiderStun]
 doc = "A stun drops a raider from any attack state back to its chase."
 params = {}
-body = { from = ["Lock", "Charge", "Beam", "Brake"], guard = "Stunned", target = "Chase" }
+body = { from = ["Lock", "Charge", "Teleport", "Brake"], guard = "Stunned", target = "Chase" }
 
 # --- A raider type ---
 
@@ -79,17 +79,20 @@ body = { from = ["Lock", "Charge", "Beam", "Brake"], guard = "Stunned", target =
 # this, so every theme's rank flies alike and only looks differ.
 [macros.Raider]
 doc = "A raider program: the attack cycle over a body of the given look and stats."
-params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", hp = "int", mass = "float", contact = "table", physics = "table", chase_ms = "int", lock_ms = "int", charge_ms = "int", beam_ms = "int" }
+params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", hp = "int", mass = "float", contact = "table", physics = "table", chase_ms = "int", lock_ms = "int", charge_ms = "int", teleport_ms = "int" }
 
 [macros.Raider.body]
 initial = "Chase"
 suspend = { guard = "Stunned" }
-states = { macro = "RaiderStates", chase_ms = "${chase_ms}", lock_ms = "${lock_ms}", charge_ms = "${charge_ms}", beam_ms = "${beam_ms}" }
+states = { macro = "RaiderStates", chase_ms = "${chase_ms}", lock_ms = "${lock_ms}", charge_ms = "${charge_ms}", teleport_ms = "${teleport_ms}" }
 global = [{ macro = "RaiderStun" }]
 
 # Its cells index the cave's palette, 0 body, 1 eyes, 2 limbs, 3 accent; the
-# console draws the cave's one colour, a hit reversing it
+# console draws the cave's one colour, a hit reversing it. It materializes onto
+# the map and lands as the materialize ends, and a player's kill drops a U.
 [macros.Raider.body.prototype]
+entrance = "materialize"
+drops = "raider"
 width = "${width}"
 height = "${height}"
 header = "${header}"
@@ -110,8 +113,8 @@ bg256 = 0
 # ranks in every cave. A rank up has more hit points (8, 16, 28, 44), a fifth more
 # mass (2.0, 2.4, 2.9, 3.5), so a shot knocks it back less, and a costlier touch,
 # and chases slower on a longer warning and a slower charge; the first darts as the
-# snake does, its mass the swarm's. Hit points times chase speed, the raid's measure
-# of threat, runs 96, 144, 168 and 198.
+# snake does. Hit points times chase speed, the raid's measure of threat, runs 96,
+# 144, 168 and 198.
 
 [macros.RaiderRank1]
 doc = "A first-rank raider: small, quick and fragile, on a short warning."
@@ -132,7 +135,7 @@ physics = { speed = 12.0, accel = 42.0, drag = 0.94, arrival_radius = 2.0, arriv
 chase_ms = 3000
 lock_ms = 1200
 charge_ms = 500
-beam_ms = 300
+teleport_ms = 300
 
 [macros.RaiderRank2]
 doc = "A second-rank raider: twice the first's hit points, a little slower."
@@ -153,7 +156,7 @@ physics = { speed = 9.0, accel = 24.0, drag = 1.2, arrival_radius = 2.0, arrival
 chase_ms = 3500
 lock_ms = 1400
 charge_ms = 600
-beam_ms = 350
+teleport_ms = 350
 
 [macros.RaiderRank3]
 doc = "A third-rank raider: a heavier body on a steadier chase."
@@ -174,7 +177,7 @@ physics = { speed = 6.0, accel = 10.0, drag = 1.6, arrival_radius = 2.5, arrival
 chase_ms = 4000
 lock_ms = 1600
 charge_ms = 700
-beam_ms = 450
+teleport_ms = 450
 
 [macros.RaiderRank4]
 doc = "A fourth-rank raider: slow and armoured, its touch the costliest."
@@ -195,7 +198,7 @@ physics = { speed = 4.5, accel = 6.0, drag = 2.0, arrival_radius = 3.0, arrival_
 chase_ms = 4500
 lock_ms = 1800
 charge_ms = 800
-beam_ms = 500
+teleport_ms = 500
 
 # --- Cave colours ---
 

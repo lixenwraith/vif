@@ -281,7 +281,7 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 		style.SkipY = int16(shieldPos.Y)
 	}
 
-	var lootVis *visual.LootVisualDef
+	var lootLook *component.LootLook
 	switch shieldComp.Type {
 	case component.ShieldTypePlayer:
 		if energy, ok := r.gameCtx.World.Components.Energy.GetPtr(shieldEntity); ok && energy.Current < 0 {
@@ -295,9 +295,9 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 		}
 
 	case component.ShieldTypeLoot:
-		if loot, ok := r.gameCtx.World.Components.Loot.GetPtr(shieldEntity); ok && loot.Type < component.LootCount {
-			lootVis = &visual.LootVisuals[loot.Type]
-			style.GlowColor = lootVis.GlowColor
+		if loot, ok := r.gameCtx.World.Components.Loot.GetPtr(shieldEntity); ok && loot.Look.Rune != 0 {
+			lootLook = &loot.Look
+			style.GlowColor = lootLook.Glow
 		}
 	}
 
@@ -308,9 +308,9 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 	r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, style)
 
 	// Loot's rune draws with its halo, after the species layers, so no body hides a drop.
-	if lootVis != nil {
+	if lootLook != nil {
 		if screenX, screenY, visible := ctx.MapToScreen(shieldPos.X, shieldPos.Y); visible {
-			buf.SetFgOnly(screenX, screenY, lootVis.Rune, lootVis.InnerColor, terminal.AttrNone)
+			buf.SetFgOnly(screenX, screenY, lootLook.Rune, lootLook.Color, terminal.AttrNone)
 		}
 	}
 

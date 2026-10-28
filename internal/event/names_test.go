@@ -19,7 +19,7 @@ func TestEveryEnumAPayloadHoldsTakesNames(t *testing.T) {
 	numbers := []reflect.Type{reflect.TypeFor[core.Entity](), reflect.TypeFor[time.Duration](),
 		reflect.TypeFor[model.SoundID](), reflect.TypeFor[model.PatternID]()}
 	named := map[string]bool{}
-	for _, l := range event.PayloadNames(nil).List() {
+	for _, l := range event.PayloadNames(component.Declared{}).List() {
 		named[l.Type] = true
 	}
 	seen := map[reflect.Type]bool{}
@@ -56,7 +56,7 @@ func TestEveryEnumAPayloadHoldsTakesNames(t *testing.T) {
 // species from SpeciesDataFirst in sorted-name order, whatever order they come in,
 // and the code's names, which every scenario shares, gain none of them.
 func TestASpeciesFieldTakesAScenariosPrograms(t *testing.T) {
-	names := event.PayloadNames([]string{"zeta", "alpha"})
+	names := event.PayloadNames(component.Declared{Programs: []string{"zeta", "alpha"}})
 	for name, want := range map[string]component.SpeciesType{
 		"eye": component.SpeciesEye, "alpha": component.SpeciesDataFirst, "zeta": component.SpeciesDataFirst + 1,
 	} {
@@ -64,7 +64,24 @@ func TestASpeciesFieldTakesAScenariosPrograms(t *testing.T) {
 			t.Errorf("%s = %d, %t; want %d", name, got, ok, want)
 		}
 	}
-	if _, ok := event.PayloadNames(nil).Value[component.SpeciesType]("alpha"); ok {
+	if _, ok := event.PayloadNames(component.Declared{}).Value[component.SpeciesType]("alpha"); ok {
 		t.Error("the code's names took a scenario's program")
+	}
+}
+
+// TestALootFieldTakesAScenariosKinds: a scenario's loot kinds name the kinds from
+// LootCount in sorted-name order, whatever order they come in, beside the code's,
+// which every scenario shares and which gain none of them.
+func TestALootFieldTakesAScenariosKinds(t *testing.T) {
+	names := event.PayloadNames(component.Declared{Loot: []string{"zeta", "alpha"}})
+	for name, want := range map[string]component.LootType{
+		"gun": component.LootGun, "alpha": component.LootCount, "zeta": component.LootCount + 1,
+	} {
+		if got, ok := names.Value[component.LootType](name); !ok || got != want {
+			t.Errorf("%s = %d, %t; want %d", name, got, ok, want)
+		}
+	}
+	if _, ok := event.PayloadNames(component.Declared{}).Value[component.LootType]("alpha"); ok {
+		t.Error("the code's names took a scenario's kind")
 	}
 }

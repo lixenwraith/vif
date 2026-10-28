@@ -83,10 +83,10 @@ func TestLifetimesKeepTheirTickCounts(t *testing.T) {
 }
 
 // TestDeadlinesEndOnTheirLastTick pins each deadline to the tick its owner acts:
-// a drain beam completes on its 20th tick and a nugget beacon on its 12th, as
-// their summed progress did; a missile detonates on its 60th tick, where its 60th
-// move left it, and a gold sequence times out on the tick its countdown reaches
-// zero, while its header lives.
+// a drain materialize completes on its 20th tick and a nugget beacon on its 12th,
+// as their summed progress did; a missile detonates on its 60th tick, where its
+// 60th move left it, and a gold sequence times out on the tick its countdown
+// reaches zero, while its header lives.
 func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	tick := newTimerTick(w)
@@ -119,10 +119,10 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 		materialize.HandleEvent(event.GameEvent{Type: event.EventMaterializeRequest, Domain: core.DomainPlayer,
 			Payload: &event.MaterializeRequestPayload{X: 10, Y: 10, Type: spawn}})
 		if got, want := actsOn(materialize.Update, has(event.EventMaterializeComplete)), ticks(component.MaterializeStyles[spawn].Duration()); got != want {
-			t.Fatalf("spawn type %d beam completed on tick %d, want %d", spawn, got, want)
+			t.Fatalf("spawn type %d materialize completed on tick %d, want %d", spawn, got, want)
 		}
 		if n := w.Components.Materialize.CountEntities(); n != 0 {
-			t.Fatalf("completed beams left = %d, want none", n)
+			t.Fatalf("completed materializes left = %d, want none", n)
 		}
 	}
 

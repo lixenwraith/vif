@@ -218,6 +218,43 @@ func TestAGunOnAPathFiresTheLevelItsChargesCountTo(t *testing.T) {
 	}
 }
 
+// TestTheScenarioAimReachesEveryCursorThisInstanceSimulates: the aim and path a
+// request sets reach each cursor this instance simulates, one arriving after it
+// among them, as a bot seat's cursor arrives after its instance installed the game;
+// never a remote cursor, whose own instance aims it; and a copy goes on aiming.
+func TestTheScenarioAimReachesEveryCursorThisInstanceSimulates(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	path := []component.GunLevel{{Right: 1}, {Right: 3, Left: 1}}
+	weapon.HandleEvent(event.GameEvent{Type: event.EventGunAimRequest, Payload: &event.GunAimRequestPayload{Path: path}})
+
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+	ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
+		X: 30, Y: 5, Slot: 3, Control: uint8(component.ControlLocal),
+	}})
+	late := w.Resources.Player.Slot(3)
+	w.Resources.Event.Queue.Consume()
+	weapon.Update()
+
+	for _, cursor := range []core.Entity{first, second, late} {
+		if gun, _ := w.Components.Weapon.GetComponent(cursor); gun.GunLevels != len(path) || gun.GunPath[1] != path[1] {
+			t.Fatalf("cursor %d fires %d levels, want the scenario's %d", cursor, gun.GunLevels, len(path))
+		}
+	}
+	if gun, _ := w.Components.Weapon.GetComponent(remote); gun.GunLevels != 0 {
+		t.Fatalf("the remote cursor took %d levels here, want its own instance to aim it", gun.GunLevels)
+	}
+
+	data, err := weapon.SaveLocal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	if err := copied.LoadLocal(data); err != nil || copied.aim != weapon.aim {
+		t.Fatalf("a copy aims %+v (%v), want %+v", copied.aim, err, weapon.aim)
+	}
+}
+
 // TestGunOutlivesAnEnergyZeroCrossingAndLeavesOnRequest: a fresh loadout holds
 // the gun; a zero crossing strips the loot and keeps it; a remove request takes
 // it, and main fire then launches nothing.

@@ -202,7 +202,7 @@ const (
 	EventWeaponRemoveRequest
 	// EventWeaponFireRequest (WeaponFireRequestPayload) [local] signals weapon fire request
 	EventWeaponFireRequest
-	// EventGunAimRequest (GunAimRequestPayload) [local] sets the cardinals, or the upgrade path, of the gun of the cursor this instance drives
+	// EventGunAimRequest (GunAimRequestPayload) [local] sets the cardinals, or the upgrade path, the gun fires on every cursor this instance simulates, one that arrives later among them
 	EventGunAimRequest
 	// EventFireSpecialRequest (FireSpecialRequestPayload) [local] signals player intent to fire special ability
 	EventFireSpecialRequest
@@ -362,8 +362,6 @@ const (
 	EventFuseQuasarRequest
 	// EventFuseSwarmRequest (FuseSwarmRequestPayload) [local] signals two enraged drains should fuse into swarm
 	EventFuseSwarmRequest
-	// EventFuseBehaviorRequest (FuseBehaviorRequestPayload) [shared] beams a program's species in, its spawn sent as the beam ends
-	EventFuseBehaviorRequest
 
 	// --- Drain ---
 
@@ -404,9 +402,9 @@ const (
 
 	// --- Behavior ---
 
-	// EventBehaviorSpawnRequest (BehaviorSpawnRequestPayload) [bus] signals BehaviorSystem to create a program's species at location
+	// EventBehaviorSpawnRequest (BehaviorSpawnRequestPayload) [bus] asks for a program's species at a cell: it stands at once, or lands as its entrance's materialize ends
 	EventBehaviorSpawnRequest
-	// EventBehaviorCancelRequest (BehaviorCancelRequestPayload) [shared] removes one program's composites, or every program's when it names none
+	// EventBehaviorCancelRequest (BehaviorCancelRequestPayload) [shared] removes one program's composites and entrances in flight, or every program's when it names none
 	EventBehaviorCancelRequest
 
 	// --- Environment ---

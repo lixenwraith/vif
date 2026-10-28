@@ -82,10 +82,10 @@ const (
 	// the deceleration that followed a teleport before
 	SwarmArriveDuration = SwarmDecelerationDuration
 
-	// SwarmTeleportBeamAlpha is peak beam opacity
-	SwarmTeleportBeamAlpha = 0.5
-	// SwarmTeleportBeamTrail is trail length fraction
-	SwarmTeleportBeamTrail = 0.3
+	// SwarmTeleportLineAlpha is the teleport line's peak opacity
+	SwarmTeleportLineAlpha = 0.5
+	// SwarmTeleportLineTrail is trail length fraction
+	SwarmTeleportLineTrail = 0.3
 	// SwarmTeleport256Threshold for 256-color visibility
 	SwarmTeleport256Threshold = 0.15
 )

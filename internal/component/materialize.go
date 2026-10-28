@@ -6,8 +6,8 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// MaterializeComponent represents a converging beam effect toward a spawn target;
-// its deadline timer runs the beam and completes it
+// MaterializeComponent represents a materialize, beams converging on a spawn
+// target; its deadline timer runs it and completes it
 type MaterializeComponent struct {
 	// Target area (beams converge to this rectangle)
 	TargetX    int // Top-left X
@@ -20,8 +20,8 @@ type MaterializeComponent struct {
 
 	// Type of entity being spawned (for completion event)
 	Type SpawnType
-	// Species is the species the completion lands, so the beam itself holds the
-	// spawn; SpeciesNone lands nothing
+	// Species is the species the completion lands, so the materialize itself holds
+	// the spawn; SpeciesNone lands nothing
 	Species SpeciesType
 }
 
@@ -37,14 +37,14 @@ const (
 )
 
 // MaterializeStyle is one spawn type: the name a document calls it by, and its
-// beam's timing; the fill runs the head from the edge to the target, the hold
-// keeps the line, the recede runs the tail after it
+// materialize's timing; the fill runs each beam's head from the edge to the
+// target, the hold keeps the beam, the recede runs the tail after it
 type MaterializeStyle struct {
 	Name               string
 	Fill, Hold, Recede time.Duration
 }
 
-// Duration is the whole beam, which its deadline timer runs
+// Duration is the whole materialize, which its deadline timer runs
 func (s MaterializeStyle) Duration() time.Duration { return s.Fill + s.Hold + s.Recede }
 
 // MaterializeStyles is indexed by SpawnType

@@ -77,6 +77,9 @@ cursors = false                     # Players hold slots, no cursor on the map (
 [behaviors]
 scarab = { file = "behavior/strata/scarab.toml" }  # A species of the scenario's own (Behavior Programs)
 
+[loot.upgrade]                      # A loot kind of the scenario's own, its keys in Loot
+[drops.raider]                      # A drop table kills roll, its keys in Loot
+
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
 file = "file.toml"                  # External state definitions
@@ -283,12 +286,13 @@ A string takes the value's decimal form in place of each `{}`, so
 "Level 3".
 
 A field of an enum type takes one of its type's names, which `vif -schema` lists
-under `names` by type: `payload = { type = "upgrade" }` places an upgrade. A
+under `names` by type: `payload = { type = "gun" }` places a gun. A
 mask, as a wall's `block_mask`, takes a name or a list of them standing for their
 union (`["cursor", "kinetic"]`). A gateway's `sub_type` takes its `species`' own
 kinds (`species = "eye", sub_type = "flame"`), and a species without kinds takes
 none. A species field takes a code species or one of the scenario's behavior
-programs, as `PayloadSpeciesIn` does. A name its type lacks, or a number, fails
+programs, as `PayloadSpeciesIn` does, and a loot field a code kind or one of the
+scenario's own ([Loot](#loot)). A name its type lacks, or a number, fails
 the load, naming the field's path and the names it takes. `:emit` and an
 authored script's event decode a payload the same way.
 
@@ -835,30 +839,30 @@ between instances; the first read of one in a shared session logs a D-14 warning
 
 A behavior program defines a species the scenario brings: its body in
 `[prototype]` and its conduct as a state machine over the game's verbs. The entry's
-`[behaviors]` table lists at most eight, each in its own file, which is read,
+`[behaviors]` table lists at most 32, each in its own file, which is read,
 expanded against the entry's macros and carried, digested and sent to a joiner as
 the entry's other files are, or inline as the table itself. Programs take species
-IDs 10 to 17 in sorted-name order, so a guard on `EventSpeciesCreated` or
+IDs 10 to 41 in sorted-name order, so a guard on `EventSpeciesCreated` or
 `EventSpeciesKilled` names its program (`PayloadSpeciesIn`). A name is
 `[a-z][a-z0-9_]*` of at most 24 bytes, neither a code species' name nor `total` or
 `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`
 ([Telemetry](telemetry-reference.md)).
 
-A scenario raises an instance at once with `EventBehaviorSpawnRequest { program,
-x, y }`, its header at that cell or the nearest place its footprint fits, searched
-over the whole map. A cell on an edge or past it searches from the footprint flush
-against that edge, on the row or column it names, so a request names an edge blind
-to the body's size and header offset. A request naming no program raises nothing
-(`behavior.unknown_program_rejects`), nor one finding no room
-(`behavior.<name>.spawn_failures`). Or it beams one in with
-`EventFuseBehaviorRequest { program, x, y }`: the fuse plays a one-second swarm beam over the nearest place its footprint fits, searching the
-whole map from that cell as a direct spawn does, and spawns the instance as it ends; a request naming no
-program or finding no room beams nothing (`fuse.spawn_failures`). The fuse runs
-without the drain system, which only its drain fusions need. `EventBehaviorCancelRequest { program }` removes
-instances and the beams still bringing them, every program's when it names none.
-`wad/scenario/vanguard` is the worked example: its raider types, spawned directly,
-fly the swarm's attack cycle as thirty-two programs over one macro (`RaiderStates`
-in its `macros.toml`). Each program file is one invocation of its rank's macro
+A scenario raises an instance with `EventBehaviorSpawnRequest { program, x, y }`,
+its header at that cell or the nearest place its footprint fits, searched over the
+whole map. A cell on an edge or past it searches from the footprint flush against
+that edge, on the row or column it names, so a request names an edge blind to the
+body's size and header offset. The instance stands at once, or, its prototype
+naming `entrance = "materialize"`, a one-second materialize plays over that
+footprint and the instance lands as it ends, beside any rock that came over the
+footprint meanwhile; `behavior.count` counts it from the request. A request naming
+no program raises nothing (`behavior.unknown_program_rejects`), nor one finding no
+room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
+removes instances and the materializes still bringing them, every program's when
+it names none. `wad/scenario/vanguard` is the worked example: its raider types,
+materializing in, fly one attack cycle, a chase, a lock, then a charge or a
+teleport, as thirty-two programs over one macro (`RaiderStates` in its
+`macros.toml`). Each program file is one invocation of its rank's macro
 (`RaiderRank1`..`RaiderRank4`) naming its cave and its look, and the rank's
 expansion is the whole program: the look, the rank's stats and physics, the cave's
 palette, and `[states]` invoking `RaiderStates` with the rank's timings. `-check` compiles every program and prints `behaviors ok: <n> (<names>)`;
@@ -876,9 +880,10 @@ header = { x = 1, y = 0 }           # Header cell inside the footprint
 hp = 40
 combat = "swarm"                    # Attack-matrix row it fights as: swarm or quasar
 mass = 2.0                          # Soft collision, flocking, knockback; 0: the row's knockback only (optional)
-drops = "swarm"                     # Code species whose drop tiers it rolls (optional)
+drops = "raider"                    # Drop table its kills roll, the scenario's or a code species' (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
+entrance = "materialize"            # Lands as a materialize over its footprint ends; none stands at once (optional)
 frames = [                          # Each frame a string per row, height rows of width cells
     { glyphs = ["╔oo╗", "╚══╝"], fg = ["0110", "1001"], attr = [" BB ", "    "] },
     { glyphs = ["┌--┐", "└──┘"] },  # fg, bg and attr are each optional
@@ -931,8 +936,8 @@ target = "Roam"
   palettes' nearest colours. The hit flash, then `Enraged`, tints every glyph. The
   eye's types are drawn from the same look.
 - The physics: a key `[prototype.physics]` leaves out keeps its default, the
-  `Behavior*` values in `internal/parameter`: the swarm's chase (speed 8, accel 6,
-  drag 2), no arrival steering, the homing's half-cell snap and restitution 0.5.
+  `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
+  steering, the homing's half-cell snap and restitution 0.5.
   `Home` steers by all but the restitution, which every move bounces by. Each value
   is finite and at least 0, accel above it, and restitution at most 1. Vanguard's
   first raider rank gives the snake's values and each later rank its own, slower.
@@ -969,27 +974,72 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
   and `CancelTelegraph`, `Lightning { color }` (a `cyan`, `red`, `gold`, `green` or
   `purple` bolt to the nearest cursor, which takes the contact damage),
-  `Materialize { spawn }` (a `swarm` or `nugget` beam over the footprint at the
-  target, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
+  `Materialize { spawn }` (a `swarm` or `nugget` materialize over the footprint at
+  the target, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
   swarm or quasar at the header plus x, y) and `EmitEvent` (shared and local
   events).
 - Sustained: `Home` (steer to the target by the prototype's physics), `ChargeToStored`
   (the velocity that reaches the stored cell as the timed entry ends),
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).
 - Flags: `Enraged` (combat's enrage: no knockback, the enraged colour),
-  `Shielded` (no damage, no stun), `ChargeLine` (the swarm's charge line: two
-  pulses from the body's centre to the centre of the footprint on the stored cell,
-  the landing marker's cell, over the end of the entry, each the
-  share of it the swarm's charge is of its lock, so a lock flagged with it shows
-  where a charge goes), `Beam` (the swarm's teleport line from the body where it
-  stands to the same centre, over the entry: a state that ends in `Teleport` on its
-  timeout's `actions` beams there as the swarm does) and `Landing` (the landing
-  marker: the centre of the footprint the body takes on the stored cell blinks
-  white, red and pink, so flagging the lock, the charge and the beam marks where an
-  attack lands until it does).
+  `Shielded` (no damage, no stun), `ChargeLine` (the charge line: two pulses from
+  the body's centre to the centre of the footprint on the stored cell, the landing
+  marker's cell, over the end of the entry, each two fifths of it
+  (`BehaviorChargeLinePulseShare`), so a lock flagged with it shows where a charge
+  goes), `TeleportLine` (the teleport line from the body where it stands to the
+  same centre, over the entry, for a state that ends in `Teleport` on its
+  timeout's `actions`) and
+  `Landing` (the landing marker: the centre of the footprint the body takes on the
+  stored cell blinks white, red and pink, so flagging the lock, the charge and the
+  teleport marks where an attack lands until it does).
 
 The target is the cursor nearest the header, read from the Shared positions with
-the lower roster slot taking a tie, as for the swarm, so every instance of a
-session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
+the lower roster slot taking a tie, so every instance of a session aims alike. Hit points, lifetime, contact strikes, gold breaking and the
 composite's integrity work as for every composite species; a program does not
 script them.
+
+## Loot
+
+A confirmed kill rolls its species' drop table for each cursor the instance
+simulates ([Gameplay: Species loot](gameplay.md#species-loot)). The code's kinds
+(`rod`, `launcher`, `disruptor`, `heat`, `energy`, `turret`, `emitter`, `gun`) and a
+table for each code species, in `internal/profile/loot.go`, are the fallback. The
+entry's `[loot]` declares at most 32 kinds of its own, taking loot types 8 onward in
+sorted-name order, so a payload names one as it names a code kind
+(`EventLootSpawnRequest { type = "upgrade", x, y }`), and its `[drops]` declares
+tables: one named for a code species replaces that species' table, `tiers = []`
+leaving it dropping nothing, and any other is a table a program's `drops` names
+([Behavior Programs](#behavior-programs)). A program naming none drops nothing, and
+one naming a table without tiers fails. A name is `[a-z][a-z0-9_]*` of at most 24
+bytes, a kind's not a code kind's and a table's not a program's. A drop draws its
+kind's look and, collected, grants its kind's reward. `-check` prints
+`loot ok: <n> (<names>)` and `drops ok: <n> (<names>)`; each fault names its kind
+or table and place (`drops 'raider': tiers[1]: entries[0]: loot "upgrde" names no
+kind`).
+
+```toml
+[loot.beacon]
+rune = "*"                          # The glyph it draws: one rune, not a space
+color = { r = 255, g = 255, b = 255 }  # The rune's
+glow = { r = 60, g = 60, b = 200 }  # Its shield's
+reward = "energy"                   # weapon, heat or energy
+delta = 500                         # Heat or energy it adds, above 0; a weapon reward
+                                    # names its weapon instead (weapon = "gun"), one charge
+
+[drops.raider]
+killer = "player"                   # Rolls only for a kill a cursor dealt; "any", the default, for every kill
+tiers = [                           # Rolled in order, at most 8, each dropping at most one entry
+    { unique = true, entries = [    # Passes over loot its cursor has on the map or, a weapon, holds full
+        { loot = "rod", rate = 0.5, fallback = 1 },
+        { loot = "beacon", rate = 0.25 },
+    ] },
+    { entries = [{ loot = "gun", rate = 1.0, count = 2 }] },
+]
+```
+
+- `rate`: an entry's chance, above 0 and at most 1, which grows by as much again
+  for each roll in a row it misses; a tier's chances summing past 1 are scaled to
+  share one.
+- `count`: how many the entry drops, 1 to 8, one when left out.
+- `fallback`: in a unique tier, how many the entry adds, 0 to 8, to the drop of each
+  later tier that is not unique when this tier drops nothing.

@@ -171,7 +171,8 @@ does not restart evolution from the scored archive.
 `IntegrateWithBounce` limits a substep to roughly 0.45 cells to reduce wall
 tunneling, applies acceleration once before selecting the step count, moves one
 axis at a time, restores the prior axis position on a wall, and scales reflected
-velocity by restitution. Projectiles with stricter swept collision needs use grid
+velocity by restitution. Its bounds are the first and last cells a body may hold,
+both inclusive. Projectiles with stricter swept collision needs use grid
 traversal in their owning system rather than relying only on final-cell overlap.
 
 Homing separates desired cruise speed, acceleration, overspeed drag, arrival

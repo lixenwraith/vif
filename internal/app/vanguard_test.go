@@ -20,13 +20,13 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
-// TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock plays the shipped
+// TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock plays the shipped
 // vanguard scenario with nobody steering, through the resets its crushes and
-// collisions bring: raiders of several types spawn directly at the right edge, no
-// fuse beaming them in and no drain ever standing, at most three fly at once, and
-// no tick ends with one standing in rock, which pushes them as it scrolls and which
-// their teleports land beside.
-func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
+// collisions bring: raiders of several types materialize at the right edge, each
+// landing as its materialize ends, no drain ever standing, at most three fly at
+// once, and no tick ends with one standing in rock, which pushes them as it scrolls
+// and which their landings and teleports keep clear of.
+func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
@@ -40,19 +40,16 @@ func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 
 	w := a.World()
 	var created []event.SpeciesCreatedPayload
-	beams := 0
+	materialized := 0
 	a.SetDispatchTap(func(ev event.GameEvent) {
 		switch p := ev.Payload.(type) {
 		case *event.SpeciesCreatedPayload:
 			if p.Species >= component.SpeciesDataFirst {
 				created = append(created, *p)
 			}
-		case *event.FuseBehaviorRequestPayload:
-			beams++
-
-		case *event.MaterializeAreaRequestPayload:
-			if p.Species >= component.SpeciesDataFirst {
-				beams++
+		case *event.MaterializeCompletedPayload:
+			if ev.Domain == core.DomainShared && p.Species >= component.SpeciesDataFirst {
+				materialized++
 			}
 		}
 	})
@@ -86,8 +83,8 @@ func TestVanguardRaidersSpawnAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 	if len(created) < 3 {
 		t.Fatalf("%d raiders spawned over a minute, want several", len(created))
 	}
-	if beams != 0 {
-		t.Fatalf("%d beams brought raiders in, want each spawned directly", beams)
+	if materialized != len(created) {
+		t.Fatalf("%d raiders stood as %d materializes ended, want each landing as its own ends", len(created), materialized)
 	}
 	types := map[component.SpeciesType]bool{}
 	for _, p := range created {
@@ -126,21 +123,26 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 
 	w := a.World()
 	var kills []event.SpeciesKilledPayload
-	var drops []event.LootSpawnRequestPayload
 	resets := 0
 	a.SetDispatchTap(func(ev event.GameEvent) {
-		switch p := ev.Payload.(type) {
-		case *event.SpeciesKilledPayload:
-			if ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
-				kills = append(kills, *p)
-			}
-		case *event.LootSpawnRequestPayload:
-			drops = append(drops, *p)
+		if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
+			kills = append(kills, *p)
 		}
 		if ev.Type == event.EventGameResetRequest {
 			resets++
 		}
 	})
+	// drops are where the U's on the map stand
+	drops := func() (cells []component.PositionComponent) {
+		w.RunSafe(func() {
+			for _, e := range vanguardUs(w) {
+				if pos, ok := w.Positions.GetPosition(e); ok {
+					cells = append(cells, pos)
+				}
+			}
+		})
+		return cells
+	}
 	// gun is the player's gun: its charges and the levels of its path
 	gun := func() (charges, levels int) {
 		w.RunSafe(func() {
@@ -187,16 +189,17 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	}
 
 	end(false)
-	if len(kills) != 1 || len(drops) != 0 {
-		t.Fatalf("a raider nobody shot: %d kills and drops %+v, want one kill and nothing dropped", len(kills), drops)
+	if got := drops(); len(kills) != 1 || len(got) != 0 {
+		t.Fatalf("a raider nobody shot: %d kills and U's at %+v, want one kill and nothing dropped", len(kills), got)
 	}
 
 	end(true)
-	if len(kills) != 2 || len(drops) != 1 {
-		t.Fatalf("a raider the player shot: %d kills and drops %+v, want two kills and one drop", len(kills), drops)
+	got := drops()
+	if len(kills) != 2 || len(got) != 1 {
+		t.Fatalf("a raider the player shot: %d kills and U's at %+v, want two kills and one U", len(kills), got)
 	}
-	if drop, kill := drops[0], kills[1]; drop.Type != component.LootUpgrade || drop.X != kill.X || drop.Y != kill.Y {
-		t.Fatalf("dropped %+v for a kill at (%d,%d), want a U there", drop, kill.X, kill.Y)
+	if drop, kill := got[0], kills[1]; drop.X != kill.X || drop.Y != kill.Y {
+		t.Fatalf("a U at (%d,%d) for a kill at (%d,%d), want it where the raider fell", drop.X, drop.Y, kill.X, kill.Y)
 	}
 	for tick := range 600 {
 		if charges, _ := gun(); charges == 2 {
@@ -226,12 +229,26 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	}
 }
 
+// vanguardUs are the drops of vanguard's U on w's map; the caller holds its lock
+func vanguardUs(w *engine.World) []core.Entity {
+	i := slices.Index(w.Resources.Loot.Names(), "upgrade")
+	if i < 0 {
+		return nil
+	}
+	var out []core.Entity
+	for _, e := range w.Components.Loot.Entities() {
+		if l, ok := w.Components.Loot.GetPtr(e); ok && l.Type == component.LootCount+component.LootType(i) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // TestVanguardAKillInAPairDropsEachPlayerOneU ends a raider by the host player's
-// shot on a mesh pair. The raid's kill edge, an internal transition on the kill
-// event, moves on the authority's crossing (D-20) and runs once on each instance,
-// so each requests one U, and each player's ship takes the U its own instance
-// simulates and goes up a level, where an edge proposed again on the lead would
-// drop once more.
+// shot on a mesh pair. Each instance rolls the raider table once for the player it
+// simulates, the guest when its ledger confirms the death, so each drops one U, and
+// each player's ship takes its own and goes up a level. The rank counts the kill by
+// an internal transition on it, which each instance crosses once.
 func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
@@ -269,29 +286,41 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	host.AttachTransport(mesh.Node(1))
 	guest.AttachTransport(mesh.Node(2))
 
-	var kills, drops, resets [2]int
+	var kills, resets [2]int
 	for i, a := range apps {
 		a.SetDispatchTap(func(ev event.GameEvent) {
-			switch p := ev.Payload.(type) {
-			case *event.SpeciesKilledPayload:
-				if ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
-					kills[i]++
-				}
-			case *event.LootSpawnRequestPayload:
-				if p.Type == component.LootUpgrade {
-					drops[i]++
-				}
+			if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && ev.Type == event.EventSpeciesKilled && p.Species >= component.SpeciesDataFirst {
+				kills[i]++
 			}
 			if ev.Type == event.EventGameResetRequest {
 				resets[i]++
 			}
 		})
 	}
+	// drops are the U's each instance has dropped, each once however long it flies
+	drops := [2]map[core.Entity]bool{{}, {}}
 	step := func() {
 		host.Tick(1)
 		guest.Tick(1)
 		_ = host.corrections.PublishDue()
 		guest.ApplyPendingCorrections()
+		for i, a := range apps {
+			w := a.World()
+			w.RunSafe(func() {
+				for _, e := range vanguardUs(w) {
+					drops[i][e] = true
+				}
+			})
+		}
+	}
+	// rankKills is the kills the raid's rank has counted on an instance
+	rankKills := func(a *App) int64 {
+		for _, v := range a.scheduler.ExportFSM().Variables {
+			if v.Name == "raid_kills" {
+				return v.Value
+			}
+		}
+		return 0
 	}
 	// charges is the gun of the ship an instance flies
 	charges := func(a *App) (n int) {
@@ -355,9 +384,63 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	for range 30 {
 		step()
 	}
-	if kills != [2]int{1, 1} || drops != [2]int{1, 1} {
-		t.Fatalf("kills %v and U requests %v on host and guest, want one of each on each", kills, drops)
+	if kills != [2]int{1, 1} || len(drops[0]) != 1 || len(drops[1]) != 1 {
+		t.Fatalf("kills %v and %d and %d U's on host and guest, want one of each on each", kills, len(drops[0]), len(drops[1]))
 	}
+	if h, g := rankKills(host), rankKills(guest); h != 1 || g != 1 {
+		t.Fatalf("the rank counted %d and %d kills on host and guest, want the one on each", h, g)
+	}
+}
+
+// TestVanguardABotSeatFliesTheShipsGunPath seats a bot on a vanguard run. Its
+// instance installs the game, the aim with it, before its cursor arrives, and that
+// cursor's gun climbs vanguard's path from its first ticks as the player's does,
+// not from the next game, whose start aims it afresh.
+func TestVanguardABotSeatFliesTheShipsGunPath(t *testing.T) {
+	// Not parallel: a paced run against wall-clock deadlines.
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	holder, _ := driveBot(t, Config{Bots: []string{"roam"}, Resources: opts}, "patrol", nil)
+	waitForCursors(t, holder, 2)
+	// gun reads the gun on the cursor a run flies: whether it holds one, and its path
+	gun := func(a *App) (armed bool, levels int) {
+		w := a.World()
+		w.RunSafe(func() {
+			weapon, ok := w.Components.Weapon.GetComponent(w.Resources.Player.Entity)
+			armed, levels = ok, weapon.GunLevels
+		})
+		return armed, levels
+	}
+	const settle = 5 // ticks the seat's first reading may take
+	var seat *App
+	var armedAt uint64
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if seat == nil {
+			holder.membership.seatsMu.Lock()
+			if len(holder.membership.seats) == 1 {
+				seat = holder.membership.seats[0].app.Load()
+			}
+			holder.membership.seatsMu.Unlock()
+			continue
+		}
+		tick := seat.Position().Tick
+		armed, levels := gun(seat)
+		switch {
+		case !armed:
+		case levels == 9:
+			if _, own := gun(holder); own != 9 {
+				t.Fatalf("the player's gun climbs %d levels, want vanguard's nine", own)
+			}
+			return
+		case armedAt == 0:
+			armedAt = tick
+		case tick > armedAt+settle:
+			t.Fatalf("the seat's gun climbs %d levels %d ticks after its cursor armed, want vanguard's nine", levels, tick-armedAt)
+		}
+	}
+	t.Fatalf("no seat's cursor armed within %s (seat %v)", socketWait, seat != nil)
 }
 
 // TestVanguardsCaveWearsOneOfItsStoneArts boots the shipped scenario: its rock draws

@@ -91,7 +91,7 @@ type circleVariant struct {
 	initial, attack, repeat time.Duration                  // the spawn's cooldown, the attack, the cooldown after one
 	flags                   uint64                         // Active's flags beside circleAttacking
 	enter, tick             func(*StormSystem, *circleCtx) // Active's hooks
-	cue                     uint16                         // ‰ of the attack at which beamIn runs; 0 for none
+	cue                     uint16                         // ‰ of the attack at which materializeIn runs; 0 for none
 }
 
 // circleVariants is indexed by StormCircleType
@@ -151,7 +151,7 @@ func newCircleGraph(s *StormSystem, v *circleVariant) *machine.Graph[component.S
 		Tick:     bind(v.tick),
 	}
 	if v.cue > 0 {
-		active.Cues = []machine.Cue[*circleCtx]{{AtPermille: v.cue, Do: s.beamIn}}
+		active.Cues = []machine.Cue[*circleCtx]{{AtPermille: v.cue, Do: s.materializeIn}}
 	}
 
 	return machine.Must(machine.New[component.StormCircleState, *circleCtx](nil).
@@ -250,8 +250,8 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventMaterializeComplete:
-		// A blue attack's beam is the only Shared one naming the swarm, and the swarm
-		// it carries lands as it ends, on its footprint
+		// A blue attack's materialize is the only Shared one naming the swarm, and the
+		// swarm it carries lands as it ends, on its footprint
 		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok &&
 			ev.Domain == core.DomainShared && payload.Species == component.SpeciesSwarm {
 			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
@@ -307,8 +307,8 @@ func (s *StormSystem) Update() {
 // stormSnapshot is this system's D-19 record. The live storm's root decides future
 // shared outcomes and lives outside any store: a receiver whose FSM was moved past
 // StormSetup by an install never ran the spawn, so without it it holds the storm's
-// entities and simulates none of them. A blue attack's swarm waits in its beam,
-// which the stores carry.
+// entities and simulates none of them. A blue attack's swarm waits in its
+// materialize, which the stores carry.
 type stormSnapshot struct {
 	RootEntity core.Entity `json:"root_entity"`
 }
@@ -484,31 +484,10 @@ func (s *StormSystem) spawnStorm() {
 	s.lifecycle.spawned.Add(1)
 }
 
-// findCirclePosition searches for valid position for circle's elliptical footprint
-// Returns (gridX, gridY, found) where gridX/gridY is the circle center
+// findCirclePosition finds the centre nearest the target, the target first, whose
+// elliptical footprint lies inside the map clear of walls a spawn is kept from
 func (s *StormSystem) findCirclePosition(targetX, targetY int) (int, int, bool) {
-	const maxSearchRadius = 20
-
-	// Check target position first (radius 0)
-	if s.isCirclePositionValid(targetX, targetY) {
-		return targetX, targetY, true
-	}
-
-	// Spiral outward
-	for radius := 1; radius <= maxSearchRadius; radius++ {
-		vertRadius := (radius + 1) / 2 // Aspect correction for terminal cells
-
-		for _, dir := range engine.SpiralSearchDirs {
-			checkX := targetX + dir[0]*radius
-			checkY := targetY + dir[1]*vertRadius
-
-			if s.isCirclePositionValid(checkX, checkY) {
-				return checkX, checkY, true
-			}
-		}
-	}
-
-	return 0, 0, false
+	return s.world.Positions.SpiralSearch(targetX, targetY, 0, s.isCirclePositionValid)
 }
 
 // isCirclePositionValid checks if all ellipse member cells at this center are valid
@@ -1216,14 +1195,12 @@ func (s *StormSystem) pulse(c *circleCtx) {
 // burst counts the red's attack ticks; its armed turret mount fires them
 func (s *StormSystem) burst(*circleCtx) { s.statRedActiveFrame.Add(1) }
 
-// glow counts the blue's attack ticks; its cue beams the swarm in
+// glow counts the blue's attack ticks; its cue materializes the swarm in
 func (s *StormSystem) glow(*circleCtx) { s.statBlueActiveFrame.Add(1) }
 
 // findLanding opens a blue attack: it draws the direction, then searches for room
 // there, so a search that fails has still drawn (D-8)
 func (s *StormSystem) findLanding(c *circleCtx) {
-	config := s.world.Resources.Config
-
 	angle := s.rng.Float64() * vmath.TwoPi
 	distance := parameter.StormBlueSpawnDistance
 
@@ -1232,11 +1209,9 @@ func (s *StormSystem) findLanding(c *circleCtx) {
 		circlePX+distance*vmath.Cos(angle),
 		circlePY+distance*vmath.Sin(angle)*0.5,
 	)
-	targetX := min(max(target.X, 0), config.MapWidth-1)
-	targetY := min(max(target.Y, 0), config.MapHeight-1)
 
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
-		targetX, targetY,
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
+		target.X, target.Y,
 		parameter.SwarmWidth, parameter.SwarmHeight,
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 		component.WallBlockSpawn,
@@ -1247,9 +1222,9 @@ func (s *StormSystem) findLanding(c *circleCtx) {
 	c.circle.AttackTargetY = topLeftY + parameter.SwarmHeaderOffsetY
 }
 
-// beamIn beams a swarm onto the landing its attack found: a cue, so once an
-// attack. The beam names the species, so the swarm lands as it ends.
-func (s *StormSystem) beamIn(c *circleCtx) {
+// materializeIn materializes a swarm onto the landing its attack found: a cue, so
+// once an attack. The materialize names the species, so the swarm lands as it ends.
+func (s *StormSystem) materializeIn(c *circleCtx) {
 	if !c.circle.LandingFound {
 		return
 	}
@@ -1289,14 +1264,14 @@ func (s *StormSystem) terminateStorm() {
 		Effect:       0,
 	})
 
-	// A beam in flight would land its swarm after the storm
-	var beams []core.Entity
+	// A materialize in flight would land its swarm after the storm
+	var landing []core.Entity
 	for _, e := range s.world.Components.Materialize.Entities() {
 		if m, ok := s.world.Components.Materialize.GetPtr(e); ok && e.Domain() == core.DomainShared && m.Species == component.SpeciesSwarm {
-			beams = append(beams, e)
+			landing = append(landing, e)
 		}
 	}
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, beams...)
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, landing...)
 
 	s.rootEntity = 0
 	s.statActive.Store(false)

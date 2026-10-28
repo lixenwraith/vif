@@ -227,31 +227,21 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 		return
 	}
 
-	headerX, headerY := payload.X, payload.Y
-	topLeftX := headerX - parameter.EyeHeaderOffsetX
-	topLeftY := headerY - parameter.EyeHeaderOffsetY
-
-	if s.world.Positions.HasBlockingWallInArea(
-		topLeftX, topLeftY,
+	// The footprint the request names, pulled inside the map, or the nearest free one
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
+		payload.X, payload.Y,
 		parameter.EyeWidth, parameter.EyeHeight,
+		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
 		component.WallBlockSpawn,
-	) {
-		var found bool
-		topLeftX, topLeftY, found = s.world.Positions.FindFreeAreaSpiral(
-			headerX, headerY,
-			parameter.EyeWidth, parameter.EyeHeight,
-			parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
-			component.WallBlockSpawn,
-			0,
-		)
-		if !found {
-			s.lifecycle.spawnFailures.Add(1)
-			s.abandonEval(payload)
-			return
-		}
-		headerX = topLeftX + parameter.EyeHeaderOffsetX
-		headerY = topLeftY + parameter.EyeHeaderOffsetY
+		0,
+	)
+	if !found {
+		s.lifecycle.spawnFailures.Add(1)
+		s.abandonEval(payload)
+		return
 	}
+	headerX := topLeftX + parameter.EyeHeaderOffsetX
+	headerY := topLeftY + parameter.EyeHeaderOffsetY
 
 	s.clearSpawnArea(headerX, headerY)
 	s.createEyeComposite(headerX, headerY, payload.Type, payload.TargetGroupID, payload.RouteGraphID, payload.RouteID, payload.EvalID, payload.Genes)
@@ -445,9 +435,9 @@ func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *comp
 	}
 
 	minHeaderX := parameter.EyeHeaderOffsetX
-	maxHeaderX := config.MapWidth - (parameter.EyeWidth - parameter.EyeHeaderOffsetX) + 1
+	maxHeaderX := config.MapWidth - (parameter.EyeWidth - parameter.EyeHeaderOffsetX)
 	minHeaderY := parameter.EyeHeaderOffsetY
-	maxHeaderY := config.MapHeight - (parameter.EyeHeight - parameter.EyeHeaderOffsetY) + 1
+	maxHeaderY := config.MapHeight - (parameter.EyeHeight - parameter.EyeHeaderOffsetY)
 
 	newX, newY, motion := physics.IntegrateWithBounceStats(
 		&kineticComp.Kinetic,

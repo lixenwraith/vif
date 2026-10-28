@@ -649,10 +649,10 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 		return
 	}
 
-	// Fade out once the beam opens
+	// Fade out once the materialize opens
 	intensityMult := 1.0
-	if beam := float64(parameter.StormBlueMaterializePermille) / 1000; progress > beam {
-		intensityMult = (1.0 - progress) / (1.0 - beam)
+	if opens := float64(parameter.StormBlueMaterializePermille) / 1000; progress > opens {
+		intensityMult = (1.0 - progress) / (1.0 - opens)
 	}
 	if intensityMult <= 0.05 {
 		return

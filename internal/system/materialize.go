@@ -102,7 +102,7 @@ func (s *MaterializeSystem) Update() {
 			continue
 		}
 
-		// The beam runs on its deadline timer, armed with its style's duration
+		// The materialize runs on its deadline timer, armed with its style's duration
 		if timer, ok := s.world.Components.Timer.GetPtr(matEntity); ok && timer.Expired(component.TimerDeadline) {
 			// The completion carries the domain of the entity it completes, so a
 			// gated shared spawn and a drain materialize stay distinguishable (D-7).

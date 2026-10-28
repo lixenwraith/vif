@@ -6,15 +6,15 @@ import (
 
 // Materialization Effect
 const (
-	// A spawn's beam: the head runs from the map edge to the target through the
-	// fill, the line holds, then the tail runs after it through the recede, the
-	// slow trail of something being ported in
+	// A spawn's materialize: each beam's head runs from the map edge to the target
+	// through the fill, the beam holds, then the tail runs after it through the
+	// recede, the slow trail of something being ported in
 	MaterializeFill   = 400 * time.Millisecond
 	MaterializeHold   = 200 * time.Millisecond
 	MaterializeRecede = 400 * time.Millisecond
 
-	// The nugget beacon's beams: quicker, and at one speed in and out, so the
-	// beam reads as one pass rather than a sweep and a faster second one
+	// The nugget beacon's materialize: quicker, and at one speed in and out, so
+	// each beam reads as one pass rather than a sweep and a faster second one
 	MaterializeNuggetFill   = 270 * time.Millisecond
 	MaterializeNuggetHold   = 60 * time.Millisecond
 	MaterializeNuggetRecede = 270 * time.Millisecond

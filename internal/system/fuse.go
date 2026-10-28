@@ -1,7 +1,6 @@
 package system
 
 import (
-	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -15,9 +14,8 @@ import (
 
 // FuseSystem orchestrates the visual and timing transition of entity fusions and manages fusion source system
 // Every spawn it plays rides what plays it, so it holds nothing: a drain pair's swarm lands as the spirits its
-// drains fly in arrive, and a spawn with no drains to fly in, a quasar or a data species, as its beam ends.
+// drains fly in arrive, and a quasar, which no drains fly in, as its materialize ends.
 // A fusion is player-domain: it consumes drains and their visuals; the crossing is the geometry-only spawn request.
-// A data species' entrance is Shared instead, its spawn every instance's own.
 type FuseSystem struct {
 	world *engine.World
 
@@ -59,10 +57,8 @@ func (s *FuseSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventFuseQuasarRequest,
 		event.EventFuseSwarmRequest,
-		event.EventFuseBehaviorRequest,
 		event.EventMaterializeComplete,
 		event.EventSpiritArrived,
-		event.EventBehaviorCancelRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -77,7 +73,7 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
-		if ev.Type == event.EventFuseQuasarRequest || ev.Type == event.EventFuseSwarmRequest || ev.Type == event.EventFuseBehaviorRequest {
+		if ev.Type == event.EventFuseQuasarRequest || ev.Type == event.EventFuseSwarmRequest {
 			s.statDisabled.Add(1)
 		}
 		return
@@ -97,7 +93,7 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 			}
 			owner = s.world.Resources.Player.Entity
 		}
-		if s.world.ResolveOwnedCursor(owner) != 0 && !s.quasarBeaming() {
+		if s.world.ResolveOwnedCursor(owner) != 0 && !s.quasarMaterializing() {
 			s.handleQuasarFuse()
 		}
 
@@ -106,40 +102,26 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 			s.handleSwarmFuse(payload.DrainA, payload.DrainB, payload.Effect)
 		}
 
-	case event.EventFuseBehaviorRequest:
-		if payload, ok := ev.Payload.(*event.FuseBehaviorRequestPayload); ok {
-			s.handleBehaviorFuse(payload.Program, payload.X, payload.Y)
-		}
-
 	case event.EventMaterializeComplete:
-		// The completion carries its beam's domain (D-7): a fusion's beam ran on this
-		// instance alone, and only one every instance ran lands a data species
-		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok {
-			if ev.Domain == core.DomainShared {
-				s.landBehavior(payload)
-			} else {
-				s.landFusion(payload.Species, payload.X, payload.Y)
-			}
-		}
-
-	case event.EventSpiritArrived:
-		// A fusion's spirits ran on this instance alone, as its beam does
-		if payload, ok := ev.Payload.(*event.SpiritArrivedPayload); ok && ev.Domain != core.DomainShared {
+		// The completion carries its materialize's domain (D-7), and a fusion's ran on
+		// this instance alone
+		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok && ev.Domain != core.DomainShared {
 			s.landFusion(payload.Species, payload.X, payload.Y)
 		}
 
-	case event.EventBehaviorCancelRequest:
-		if payload, ok := ev.Payload.(*event.BehaviorCancelRequestPayload); ok {
-			s.cancelBehaviorBeams(payload.Program)
+	case event.EventSpiritArrived:
+		// A fusion's spirits ran on this instance alone, as its materialize does
+		if payload, ok := ev.Payload.(*event.SpiritArrivedPayload); ok && ev.Domain != core.DomainShared {
+			s.landFusion(payload.Species, payload.X, payload.Y)
 		}
 	}
 }
 
-// Update is empty: a fusion's spirits or beam run it, and their end lands it
+// Update is empty: a fusion's spirits or materialize run it, and their end lands it
 func (s *FuseSystem) Update() {}
 
-// quasarBeaming reports a quasar fusion in flight, whose beam is its pending spawn
-func (s *FuseSystem) quasarBeaming() bool {
+// quasarMaterializing reports a quasar fusion in flight, whose materialize is its pending spawn
+func (s *FuseSystem) quasarMaterializing() bool {
 	materializes := s.world.Components.Materialize
 	for _, e := range materializes.Entities() {
 		if m, ok := materializes.GetPtr(e); ok && e.Domain() == core.DomainPlayer && m.Species == component.SpeciesQuasar {
@@ -150,9 +132,9 @@ func (s *FuseSystem) quasarBeaming() bool {
 }
 
 // fuseInto plays a fusion over area, and the species lands as what plays it ends:
-// the spirits the sources fly in, unless the effect is the beam or no source flies,
-// else a beam naming the species its completion lands. Either is this instance's
-// own: a shared one would exist only on the producer.
+// the spirits the sources fly in, unless the effect is the materialize or no
+// source flies, else a materialize naming the species its completion lands. Either
+// is this instance's own: a shared one would exist only on the producer.
 func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEffect, sources []vmath.Point, area vmath.Area) {
 	if effect != event.FuseEffectMaterialize && len(sources) > 0 {
 		s.effectSpiritArea(species, sources, area, component.SpiritCyan)
@@ -229,8 +211,8 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	midX := (posA.X + posB.X) / 2
 	midY := (posA.Y + posB.Y) / 2
 
-	// Find valid spawn position via spiral search
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+	// The nearest footprint inside the map free of walls a spawn is kept from
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
 		midX, midY,
 		parameter.SwarmWidth, parameter.SwarmHeight,
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
@@ -277,8 +259,8 @@ func (s *FuseSystem) handleQuasarFuse() {
 		cY = config.MapHeight / 2
 	}
 
-	// Find valid spawn position via spiral search
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+	// The nearest footprint inside the map free of walls a spawn is kept from
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
 		cX, cY,
 		parameter.QuasarWidth, parameter.QuasarHeight,
 		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
@@ -295,68 +277,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 	s.killDrains(drainEntities)
 }
 
-// handleBehaviorFuse beams a program's species in over the nearest place its
-// footprint fits, searched over the whole map: a scenario names a cell blind to the
-// walls, a cave's rock among them, and to the body, a cell on an edge or past it
-// searching from the footprint flush against it. The beam is a Shared entity
-// naming the species, so a capture taken mid-beam carries the pending spawn as it
-// carries any store (D-19).
-func (s *FuseSystem) handleBehaviorFuse(program string, x, y int) {
-	behaviors := s.world.Resources.Behaviors
-	i := slices.IndexFunc(behaviors, func(p component.BehaviorPrototype) bool { return p.Name == program })
-	if i < 0 {
-		s.statSpawnFailures.Add(1)
-		return
-	}
-	p := &behaviors[i]
-	left, top, found := s.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
-	if !found {
-		s.statSpawnFailures.Add(1)
-		return
-	}
-	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
-		X:          left,
-		Y:          top,
-		AreaWidth:  p.Width,
-		AreaHeight: p.Height,
-		Type:       component.SpawnTypeSwarm,
-		Species:    p.Species,
-	})
-}
-
-// landBehavior sends the direct spawn a data species' beam held, its header on
-// the footprint the beam covered
-func (s *FuseSystem) landBehavior(p *event.MaterializeCompletedPayload) {
-	i := int(p.Species) - int(component.SpeciesDataFirst)
-	if i < 0 || i >= len(s.world.Resources.Behaviors) {
-		return
-	}
-	proto := &s.world.Resources.Behaviors[i]
-	s.world.PushEvent(event.EventBehaviorSpawnRequest, &event.BehaviorSpawnRequestPayload{
-		Program: proto.Name,
-		X:       p.X + proto.HeaderX,
-		Y:       p.Y + proto.HeaderY,
-	})
-}
-
-// cancelBehaviorBeams ends the beams of a cancelled program, or of every program
-// when it names none, so none lands after its cancel
-func (s *FuseSystem) cancelBehaviorBeams(program string) {
-	behaviors := s.world.Resources.Behaviors
-	var beams []core.Entity
-	for _, e := range s.world.Components.Materialize.Entities() {
-		m, ok := s.world.Components.Materialize.GetPtr(e)
-		if !ok || e.Domain() != core.DomainShared {
-			continue
-		}
-		if i := int(m.Species) - int(component.SpeciesDataFirst); i >= 0 && i < len(behaviors) && (program == "" || behaviors[i].Name == program) {
-			beams = append(beams, e)
-		}
-	}
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, beams...)
-}
-
-// landFusion crosses the spawn a fusion's spirit or beam held, its header on the
+// landFusion crosses the spawn a fusion's spirit or materialize held, its header on the
 // footprint whose top-left is x, y. The species spawn is the shared result, and the
 // request is the D-3 artifact that carries it — stamped player because the fuse
 // produced it, which is what tells it from the same type a shared storm pushes.
