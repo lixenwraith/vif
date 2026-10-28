@@ -42,7 +42,17 @@ transitions = [
 parent = "KrakenHold"
 transitions = [
     { trigger = "EventKrakenSpawnFailed", target = "KrakenWait" },
-    { trigger = "EventSpeciesKilled", target = "KrakenDecision", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["kraken"] } },
+    { trigger = "EventSpeciesKilled", target = "KrakenFade", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["kraken"] } },
+]
+
+# The maze fades out, and the field rests half a second past the fade before any exit
+[states.KrakenFade]
+parent = "KrakenHold"
+on_enter = [
+    { action = "EmitEvent", event = "EventWallDespawnRequest", payload = { all = true } },
+]
+transitions = [
+    { trigger = "Tick", target = "KrakenDecision", guard = "StateTimeExceeds", guard_args = { ms = 900 } },
 ]
 
 [states.KrakenDecision]
@@ -66,11 +76,10 @@ on_enter = [
     { action = "TerminateRegion", region = "kraken" },
 ]
 
-# What text the Kraken left passes to main: the maze's walls go, the field stays
+# What text the Kraken left passes to main: the maze faded, the field stays
 [states.KrakenVictory]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventWallDespawnAll" },
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, crop_on_resize = true } },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "kraken" },
