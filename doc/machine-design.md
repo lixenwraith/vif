@@ -642,8 +642,8 @@ smaller part of it.
   the loot system's resolved drop tables, the soft-collision matrices and caches,
   and `MetaSystem`'s kill counters and capture. A data species' package-level rows
   stay zero, and its values come from its prototype at the reader: the behavior
-  system passes the contact damage, loot rolls the table its `drops` names under a
-  pity of its own, the health bar measures the prototype, and soft collision
+  system passes the contact damage, loot rolls the table its `drops` names on that
+  table's pity, the health bar measures the prototype, and soft collision
   builds data rows in `Init` for a prototype with mass (to and from swarm, quasar
   and every other data species; storm, pylon and kraken push it one way), so every
   code pair keeps its rule. The range checks in `meta.go`, `genetic.go` and
@@ -845,13 +845,13 @@ captures, one a tick, read the frames. Per species:
   quasar the tick its materialize's last cells go.
 - Data species: `:n vanguard`, with `:god` to outlast the raid. A raider
   materializes at the right edge every two seconds while fewer than three fly or
-  materialize, lands as its quarter-second materialize ends, chases, locks red
+  materialize, lands as its half-second materialize ends, chases, locks red
   under the cyan countdown, and charges the cell it saw where its body clears the
   way, else teleports beside it; a disruptor stun drops it back to its chase;
   `:emit EventBehaviorCancelRequest { program = "scarab" }` removes the scarabs.
   `bin/vif -check -s wad/scenario/vanguard` prints
   `behaviors ok: 32 (bat, beetle, chomper, … wraith)`, `loot ok: 1 (upgrade)` and
-  `drops ok: 1 (raider)`. A look shows best in tmux
+  `drops ok: 2 (kraken, raider)`. A look shows best in tmux
   pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`;
   `go run ./sandbox/raider` lays every type out by cave over its rock.
 

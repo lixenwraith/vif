@@ -138,6 +138,7 @@ func (s *WeaponSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventWeaponAddRequest,
 		event.EventWeaponRemoveRequest,
+		event.EventWeaponSetRequest,
 		event.EventEnergyCrossedZero,
 		event.EventWeaponFireRequest,
 		event.EventGunAimRequest,
@@ -209,6 +210,20 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 				return
 			}
 			s.removeWeapon(cursor, payload.Weapon)
+		}
+
+	case event.EventWeaponSetRequest:
+		if payload, ok := ev.Payload.(*event.WeaponSetRequestPayload); ok {
+			if payload.Weapon < 0 || payload.Weapon >= component.WeaponCount {
+				s.statKind.Add(1)
+				return
+			}
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
+			if cursor == 0 {
+				s.rejects.cursor.Add(1)
+				return
+			}
+			s.setWeapon(cursor, payload.Weapon, payload.Charges)
 		}
 
 	case event.EventWeaponFireRequest:
@@ -332,16 +347,25 @@ func (s *WeaponSystem) advanceStreams(cursor core.Entity, weaponComp *component.
 
 // addWeapon grants or recharges one weapon on one cursor
 func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType) {
+	if weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor); ok && weaponComp.Charges[weapon] < chargeCap(weaponComp, weapon) {
+		s.setWeapon(cursor, weapon, weaponComp.Charges[weapon]+1)
+	}
+}
+
+// setWeapon writes one kind's charges on one cursor, capped at what it holds; 0 or
+// less takes the kind
+func (s *WeaponSystem) setWeapon(cursor core.Entity, weapon component.WeaponType, charges int) {
 	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
 	if !ok {
 		return
 	}
-
-	firstAcquire := weaponComp.Charges[weapon] == 0
-	if weaponComp.Charges[weapon] < chargeCap(weaponComp, weapon) {
-		weaponComp.Charges[weapon]++
+	if charges <= 0 {
+		s.removeWeapon(cursor, weapon)
+		return
 	}
 
+	firstAcquire := weaponComp.Charges[weapon] == 0
+	weaponComp.Charges[weapon] = min(charges, chargeCap(weaponComp, weapon))
 	if firstAcquire {
 		weaponComp.Cooldown[weapon] = 0 // Ready to fire immediately on first pickup
 		s.publishLoadout(cursor, weaponComp)

@@ -141,11 +141,20 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 				s.statCursorRejects.Add(1)
 				return
 			}
-			s.setEnergy(cursor, int64(payload.Value))
+			value := int64(payload.Value)
+			if energyComp, ok := s.world.Components.Energy.GetPtr(cursor); ok && payload.Flip {
+				value = -energyComp.Current
+			}
+			s.setEnergy(cursor, value)
 			if payload.Weapons {
 				for wt := range component.WeaponCount {
 					s.world.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: cursor, Weapon: wt})
 				}
+			}
+			if payload.Charges > 0 {
+				s.world.PushLocal(event.EventWeaponSetRequest, &event.WeaponSetRequestPayload{
+					Entity: cursor, Weapon: payload.Weapon, Charges: payload.Charges,
+				})
 			}
 		}
 	case event.EventCursorArmRequest:

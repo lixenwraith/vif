@@ -16,8 +16,9 @@ import (
 var assetFS embed.FS
 
 var (
-	// DefaultScenario is the fallback scenario; DefaultScenarioEntry is its entry.
-	DefaultScenario fs.FS
+	// MainScenario is the main campaign, the scenario a run falls back to;
+	// MainScenarioEntry is its entry.
+	MainScenario fs.FS
 	// DefaultContent is the fallback typing corpus.
 	DefaultContent fs.FS
 	// DefaultSounds holds the built-in sound specs; DefaultSoundFiles is their
@@ -27,7 +28,7 @@ var (
 	DefaultBots fs.FS
 )
 
-const DefaultScenarioEntry = "scenario.toml"
+const MainScenarioEntry = "scenario.toml"
 
 var DefaultSoundFiles = []string{"sfx.toml", "drums.toml"}
 
@@ -42,7 +43,7 @@ var DefaultSettings []byte
 
 // A missing group is a broken build artifact, not a recoverable user error.
 func init() {
-	DefaultScenario = sub("scenario")
+	MainScenario = sub("scenario")
 	DefaultContent = sub("content")
 	DefaultSounds = sub("audio")
 	DefaultBots = sub("bot")

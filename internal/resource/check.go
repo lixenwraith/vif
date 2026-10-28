@@ -110,7 +110,7 @@ func checkScenario(o Options, w io.Writer) error {
 		return err
 	}
 	if source == "" {
-		source = "embedded default"
+		source = "embedded main"
 	}
 	fmt.Fprintf(w, "scenario ok: %s (%s, %d files, sha256:%s, players %d..%d)\n",
 		source, sc.Name, sc.Files(), sc.Short(), sc.MinPlayers, sc.MaxPlayers)

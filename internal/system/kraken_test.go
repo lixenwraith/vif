@@ -41,6 +41,23 @@ func krakenFixture(t *testing.T) (*engine.World, *KrakenSystem, core.Entity, vma
 	return w, s, e, leg
 }
 
+// A spawn request's hit points are the Kraken's, its bar's full length too, and none
+// asked for take the parameter's
+func TestAKrakenRisesWithTheHitPointsItsRequestNames(t *testing.T) {
+	for _, tc := range []struct{ asked, want int }{{120, 120}, {0, parameter.KrakenInitialHP}, {-5, parameter.KrakenInitialHP}} {
+		w, _, _ := testCursorWorld(t)
+		w.SetupLevel(180, 90, false, false, false)
+		s := ready(NewKrakenSystem(w)).(*KrakenSystem)
+		s.spawn(&event.KrakenSpawnRequestPayload{X: 90, Y: 45, HP: tc.asked})
+		e := w.Components.Kraken.Entities()[0]
+		combat, _ := w.Components.Combat.GetComponent(e)
+		k, _ := w.Components.Kraken.GetComponent(e)
+		if combat.HitPoints != tc.want || k.MaxHitPoints != tc.want {
+			t.Fatalf("asked for %d: %d hit points of %d, want %d", tc.asked, combat.HitPoints, k.MaxHitPoints, tc.want)
+		}
+	}
+}
+
 func TestKrakenWaitsThenAttacksOrSpinsBeforeAimedCharge(t *testing.T) {
 	w, s, e, _ := krakenFixture(t)
 	k, _ := w.Components.Kraken.GetPtr(e)

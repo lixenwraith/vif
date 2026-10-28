@@ -20,8 +20,10 @@ var DriftLayerFactor = [3]float64{0.25, 0.5, 1}
 
 const (
 	// DriftMaxSpeed caps a drift's pace in cells/second, bounding a layer's steps per
-	// tick: a soft cap, past which the bright layer jumps more than five cells a tick.
-	DriftMaxSpeed = 100.0
+	// tick: a soft cap, past which the bright layer jumps more than ten cells a tick,
+	// as the rock does past CaveMaxSpeed. A layer moves its step in one shift however
+	// many cells it spans.
+	DriftMaxSpeed = 200.0
 
 	// DriftFillSpeed is the drift pace the glyph spawner's interval suits: a faster
 	// drift spawns sooner in proportion, so its text keeps its density in passing.

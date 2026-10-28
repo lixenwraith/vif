@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -35,15 +36,22 @@ var spawnOffsets = [][]struct{ dx, dy int }{
 	{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {0, 0}}, // 5: cross + center
 }
 
-// pityState tracks consecutive misses per loot type for a species type
+// pityState tracks consecutive misses per loot type for a drop table
 type pityState struct {
 	misses [component.LootMax]int
 }
 
-// pityKey scopes a pity streak to one cursor's slot; local cursors roll independently
+// pityKey scopes a pity streak to one table and cursor slot: every species naming a
+// table rolls on its streaks, and local cursors roll independently
 type pityKey struct {
-	species component.SpeciesType
-	slot    uint8
+	table string
+	slot  uint8
+}
+
+// speciesTable is the drop table a species rolls and the name its pity goes by
+type speciesTable struct {
+	name string
+	component.DropTable
 }
 
 type LootSystem struct {
@@ -58,9 +66,9 @@ type LootSystem struct {
 	// The session's kinds, the code's then the scenario's, and each species' table,
 	// a scenario's where it declares one (Resources.Loot)
 	kinds  []component.LootKind
-	tables [component.SpeciesMax]component.DropTable
+	tables [component.SpeciesMax]speciesTable
 
-	// Pity tracking per species type and roster slot
+	// Pity tracking per drop table and roster slot, kept until the game starts over
 	pity map[pityKey]*pityState
 
 	loots []core.Entity // the tick's loot, detached: collectLoot destroys mid-iteration
@@ -118,13 +126,15 @@ func (s *LootSystem) resolve() {
 		s.kinds = append(s.kinds, component.LootKind{LootSpec: component.LootSpecs[t], Look: visual.LootVisuals[t]})
 	}
 	s.kinds = append(s.kinds, declared.Kinds...)
-	s.tables = [component.SpeciesMax]component.DropTable{}
+	s.tables = [component.SpeciesMax]speciesTable{}
 	for sp := component.SpeciesNone + 1; sp < component.SpeciesCount; sp++ {
-		s.tables[sp], _ = profile.DropTableNamed(declared, component.SpeciesNames[sp])
+		table, _ := profile.DropTableNamed(declared, component.SpeciesNames[sp])
+		s.tables[sp] = speciesTable{name: component.SpeciesNames[sp], DropTable: table}
 	}
 	for i, p := range s.world.Resources.Behaviors {
 		if p.Drops != "" && int(component.SpeciesDataFirst)+i < len(s.tables) {
-			s.tables[int(component.SpeciesDataFirst)+i], _ = profile.DropTableNamed(declared, p.Drops)
+			table, _ := profile.DropTableNamed(declared, p.Drops)
+			s.tables[int(component.SpeciesDataFirst)+i] = speciesTable{name: p.Drops, DropTable: table}
 		}
 	}
 }
@@ -208,6 +218,14 @@ func (s *LootSystem) Update() {
 		}
 
 		curX, curY := physics.GridPos(&kineticComp.Kinetic)
+		if lootComp.Away > 0 {
+			// A returning drop is collectible again from the tick after it is back
+			if lootComp.Away -= s.world.Resources.Time.DeltaTime; lootComp.Away <= 0 {
+				lootComp.Away = 0
+				s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: curX, Y: curY})
+			}
+			continue
+		}
 		// A transition or correction can shrink the shared map under private loot.
 		if s.world.Positions.IsOutOfBounds(curX, curY) {
 			curX, curY = min(max(curX, 0), config.MapWidth-1), min(max(curY, 0), config.MapHeight-1)
@@ -227,7 +245,11 @@ func (s *LootSystem) Update() {
 
 		if hasOwner && vmath.IntAbs(curX-ownerPos.X) <= parameter.LootCollectRadius &&
 			vmath.IntAbs(curY-ownerPos.Y) <= parameter.LootCollectRadius {
-			s.collectLoot(owner, lootEntity, lootComp.Type)
+			s.collectLoot(owner, lootEntity, lootComp)
+			continue
+		}
+		if lootComp.Still {
+			activeCount++
 			continue
 		}
 
@@ -318,10 +340,11 @@ func (s *LootSystem) homingTarget(
 // onEventDrop is a scenario's reward rather than a roll: one drop of the named kind
 // for every cursor this instance simulates, as each instance rolls a kill for its own
 func (s *LootSystem) onEventDrop(payload *event.LootSpawnRequestPayload) {
+	drop := component.LootComponent{Still: payload.Still, Return: time.Duration(max(payload.ReturnMs, 0)) * time.Millisecond}
 	for i := range parameter.MaxPlayers {
 		cursor := s.world.Resources.Player.Slot(uint8(i))
 		if cursor != 0 && s.world.SimulatesLocally(cursor) {
-			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y, cursor)
+			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y, cursor, drop)
 		}
 	}
 }
@@ -359,14 +382,15 @@ func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 			continue
 		}
 
-		s.spawnLootMulti(spawns, payload.X, payload.Y, cursor)
+		s.spawnLootMulti(spawns, payload.X, payload.Y, cursor, component.LootComponent{})
 	}
 }
 
 // --- Spawn ---
 
-// spawnLootMulti scatters drops in a fixed pattern, each bursting away from the centre
-func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owner core.Entity) {
+// spawnLootMulti scatters drops in a fixed pattern, each bursting away from the
+// centre and staying or returning as drop says
+func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owner core.Entity, drop component.LootComponent) {
 	count := len(loots)
 	if count == 0 {
 		return
@@ -402,13 +426,13 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owne
 			}
 		}
 
-		s.spawnLootWithBurst(lootType, spawnX, spawnY, burstDirX, burstDirY, owner)
+		s.spawnLootWithBurst(lootType, spawnX, spawnY, burstDirX, burstDirY, owner, drop)
 		s.statDrops.Add(1)
 	}
 }
 
 // spawnLootWithBurst creates one owned drop moving in its burst direction
-func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int, owner core.Entity) {
+func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int, owner core.Entity, drop component.LootComponent) {
 	if int(lootType) >= len(s.kinds) {
 		return
 	}
@@ -417,19 +441,14 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	preciseX, preciseY := vmath.Point{X: x, Y: y}.Center()
 
 	var velX, velY float64
-	if burstDirX != 0 || burstDirY != 0 {
+	if (burstDirX != 0 || burstDirY != 0) && !drop.Still {
 		dirX, dirY := vmath.Normalize2D(float64(burstDirX), float64(burstDirY))
 		velX = dirX * parameter.LootBurstSpeed
 		velY = dirY * parameter.LootBurstSpeed
 	}
 
-	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
-		Type:     lootType,
-		Look:     s.kinds[lootType].Look,
-		Owner:    owner,
-		LastIntX: x,
-		LastIntY: y,
-	})
+	drop.Type, drop.Look, drop.Owner, drop.LastIntX, drop.LastIntY = lootType, s.kinds[lootType].Look, owner, x, y
+	s.world.Components.Loot.SetComponent(entity, drop)
 
 	s.world.Components.Kinetic.SetComponent(entity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
@@ -466,8 +485,8 @@ func (s *LootSystem) isValidSpawnPos(x, y int) bool {
 }
 
 // rollDropTable rolls a species' tiers for one cursor with pity and fallback
-// accumulation; a data species rolls the table its program names under a pity of
-// its own
+// accumulation; a data species rolls the table its program names, on the pity of
+// every species naming it
 func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor core.Entity, slot uint8) []DropResult {
 	if speciesType >= component.SpeciesMax {
 		return nil
@@ -477,7 +496,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 		return nil
 	}
 
-	key := pityKey{species: speciesType, slot: slot}
+	key := pityKey{table: s.tables[speciesType].name, slot: slot}
 	state := s.pity[key]
 	if state == nil {
 		state = &pityState{}
@@ -496,9 +515,17 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 			return false
 		}
 
-		// Max-charge check, repeats drops until this cursor is capped
+		// Max-charge check, repeats drops until this cursor is capped; the weapon
+		// system holds a gun on a scenario's path to a charge per level
 		weapons, ok := s.world.Components.Weapon.GetPtr(cursor)
-		return ok && weapons.Charges[spec.Weapon] >= component.WeaponSpecs[spec.Weapon].MaxCharges
+		if !ok {
+			return false
+		}
+		full := component.WeaponSpecs[spec.Weapon].MaxCharges
+		if weapons.GunLevels > 0 && component.WeaponSpecs[spec.Weapon].Delivery == component.DeliveryTracer {
+			full = weapons.GunLevels
+		}
+		return weapons.Charges[spec.Weapon] >= full
 	}
 
 	var results []DropResult
@@ -565,18 +592,14 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor cor
 			}
 		}
 
-		switch {
-		case dropped != nil:
+		// A miss adds no fallback: that stands in only for loot the tier skipped
+		if dropped != nil {
 			count := max(dropped.Count, 1)
 			// Every non-unique tier after a skipped weapon carries its fallback
 			if !tier.Unique {
 				count += fallbackBonus
 			}
 			results = append(results, DropResult{Loot: dropped.Loot, Count: count})
-		case tier.Unique:
-			for _, c := range candidates {
-				fallbackBonus += c.entry.FallbackCount
-			}
 		}
 	}
 
@@ -593,7 +616,7 @@ type candidate struct {
 func (s *LootSystem) activeLootTypes(cursor core.Entity) (active [component.LootMax]bool) {
 	for _, entity := range s.world.Components.Loot.Entities() {
 		lootComp, ok := s.world.Components.Loot.GetPtr(entity)
-		if ok && lootComp.Owner == cursor && lootComp.Type < component.LootMax {
+		if ok && lootComp.Owner == cursor && lootComp.Type < component.LootMax && lootComp.Away == 0 {
 			active[lootComp.Type] = true
 		}
 	}
@@ -602,7 +625,10 @@ func (s *LootSystem) activeLootTypes(cursor core.Entity) (active [component.Loot
 
 // --- Collection ---
 
-func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.LootType) {
+// collectLoot grants a drop's reward to its owner, then destroys the drop, or takes
+// it off the map until it returns
+func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootComp *component.LootComponent) {
+	lootType := lootComp.Type
 	if int(lootType) >= len(s.kinds) {
 		s.world.DestroyEntity(entity)
 		return
@@ -635,23 +661,28 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 		})
 	}
 
-	s.world.DestroyEntity(entity)
 	s.statCollects.Add(1)
+	if lootComp.Return > 0 {
+		lootComp.Away = lootComp.Return
+		s.world.Positions.RemoveEntity(entity)
+		return
+	}
+	s.world.DestroyEntity(entity)
 }
 
 type lootPityLocal struct {
-	Species component.SpeciesType  `json:"species"`
-	Slot    uint8                  `json:"slot"`
-	Misses  [component.LootMax]int `json:"misses"`
+	Table  string                 `json:"table"`
+	Slot   uint8                  `json:"slot"`
+	Misses [component.LootMax]int `json:"misses"`
 }
 
 func (s *LootSystem) SaveLocal() ([]byte, error) {
 	rows := make([]lootPityLocal, 0, len(s.pity))
 	for k, p := range s.pity {
-		rows = append(rows, lootPityLocal{Species: k.species, Slot: k.slot, Misses: p.misses})
+		rows = append(rows, lootPityLocal{Table: k.table, Slot: k.slot, Misses: p.misses})
 	}
 	slices.SortFunc(rows, func(a, b lootPityLocal) int {
-		return cmp.Or(cmp.Compare(a.Species, b.Species), cmp.Compare(a.Slot, b.Slot))
+		return cmp.Or(cmp.Compare(a.Table, b.Table), cmp.Compare(a.Slot, b.Slot))
 	})
 	return json.Marshal(rows)
 }
@@ -663,7 +694,7 @@ func (s *LootSystem) LoadLocal(data []byte) error {
 	}
 	clear(s.pity)
 	for _, p := range rows {
-		s.pity[pityKey{species: p.Species, slot: p.Slot}] = &pityState{misses: p.Misses}
+		s.pity[pityKey{table: p.Table, slot: p.Slot}] = &pityState{misses: p.Misses}
 	}
 	return nil
 }

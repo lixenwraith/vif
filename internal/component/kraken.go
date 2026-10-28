@@ -19,6 +19,7 @@ const (
 
 // The entire animation is simulation state so hitboxes and rendering survive snapshots together.
 type KrakenComponent struct {
+	MaxHitPoints      int // the hit points it rose with, its health bar's full length
 	State             KrakenState
 	StateRemaining    time.Duration
 	IdleTurnRemaining time.Duration

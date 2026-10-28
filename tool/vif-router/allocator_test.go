@@ -506,7 +506,7 @@ func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(cfg.WadDir, "scenario", "main")); err != nil {
 		t.Fatal(err)
 	}
-	embedded, err := fs.ReadFile(asset.DefaultScenario, asset.DefaultScenarioEntry)
+	embedded, err := fs.ReadFile(asset.MainScenario, asset.MainScenarioEntry)
 	if err != nil {
 		t.Fatal(err)
 	}

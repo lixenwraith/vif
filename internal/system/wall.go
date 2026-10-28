@@ -1203,6 +1203,7 @@ func (s *WallSystem) startCave(p *event.CaveStartPayload) {
 		Ramp:       p.Ramp,
 		Octaves:    p.Octaves,
 		Reach:      p.Reach,
+		Mouth:      p.Mouth,
 	}
 	if err := cfg.Validate(); err != nil {
 		s.world.DebugPrint(err.Error())
@@ -1403,6 +1404,9 @@ func (s *WallSystem) stepCave(cursors []cursorCell) {
 	s.cave.Offset++
 	if open := s.cave.Config.Open; open.Ramp > 0 && s.cave.Offset == open.At+int64(open.Ramp) {
 		s.world.PushEvent(event.EventCaveOpened, nil)
+	}
+	if mouth := int64(s.cave.Config.Mouth); mouth > 0 && s.cave.Offset == mouth+int64(s.cave.Config.Ramp) {
+		s.world.PushEvent(event.EventCaveEntered, nil)
 	}
 
 	s.caveLanded = s.caveLanded[:0]

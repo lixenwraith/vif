@@ -69,7 +69,7 @@ func newResolver(o Options) resolver {
 }
 
 // ScenarioPath returns the scenario entry path. An empty path selects the
-// embedded default.
+// embedded main scenario.
 func ScenarioPath(o Options) (string, error) {
 	if o.Embedded {
 		return "", nil

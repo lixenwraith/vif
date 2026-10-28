@@ -49,12 +49,12 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	})
 }
 
-// resolveAnchor returns the splash's origin in map coordinates. An anchored splash
-// follows its anchor entity and has no origin once that entity has no position:
-// it is leaving with its anchor, and AnchorX/Y hold nothing for it
+// resolveAnchor returns the splash's origin in map coordinates, its offset from
+// AnchorX/Y or from its anchor entity. An anchored splash follows its anchor and has
+// no origin once that entity has no position: it is leaving with its anchor
 func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (int, int, bool) {
 	if splashComp.AnchorEntity == 0 {
-		return splashComp.AnchorX, splashComp.AnchorY, true
+		return splashComp.AnchorX + splashComp.OffsetX, splashComp.AnchorY + splashComp.OffsetY, true
 	}
 	anchorPos, ok := r.gameCtx.World.Positions.GetPosition(splashComp.AnchorEntity)
 	if !ok {

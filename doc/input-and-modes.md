@@ -393,6 +393,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:emit <EventName> [{ TOML payload }]`, `:e`, `:event` | Construct and publish a registered event for testing; the `Event` prefix is optional. |
 | `:energy <value>`, `:heat <0-100>`, `:boost` | Directly manipulate player state for development. |
 | `:god`, `:demon` | Set max heat, high positive/negative energy and every weapon. |
+| `:w <weapon> <n>`, `:weapon` | Set one weapon's charges, named by the weapon or its attack (`rod` or `lightning`, `launcher` or `missile`, `disruptor` or `pulse`, `turret` or `bullet`, `emitter` or `ray`, `gun` or `tracer`): past its maximum it maxes out, and 0 takes it, the gun included. A negative `n` first flips the energy's sign, keeping its size, so the crossing drops every weapon but the gun, then sets the weapon to `-n`. |
 | `:blossom`, `:decay`, `:dust` | Trigger effect/gameplay events directly. |
 
 The event registry validates `:emit` names and uses generated payload type

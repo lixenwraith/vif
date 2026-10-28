@@ -235,13 +235,16 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 	return true
 }
 
-// handleTimerSpawn creates the persistent timer anchored to the anchor entity
+// handleTimerSpawn creates the persistent timer anchored to the anchor entity, or
+// placed around its origin cell without one
 func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload) {
-	s.cleanupSplashesBySlotAndAnchor(component.SlotTimer, payload.AnchorEntity)
+	s.cleanupTimers(payload.AnchorEntity, payload.OriginX, payload.OriginY)
 
 	splashComp := component.SplashComponent{
 		Color:        payload.Color,
 		AnchorEntity: payload.AnchorEntity,
+		AnchorX:      payload.OriginX,
+		AnchorY:      payload.OriginY,
 		MarginLeft:   payload.MarginLeft,
 		MarginRight:  payload.MarginRight,
 		MarginTop:    payload.MarginTop,
@@ -322,15 +325,16 @@ func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 	}
 }
 
-// cleanupSplashesBySlotAndAnchor removes all splashes of a specific slot for a composite anchor
-func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot, anchor core.Entity) {
+// cleanupTimers removes the countdowns of a composite anchor, or without one those
+// of the origin cell
+func (s *SplashSystem) cleanupTimers(anchor core.Entity, x, y int) {
 	splashEntities := s.world.Components.Splash.Entities()
 	for _, splashEntity := range splashEntities {
 		splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity)
-		if !ok {
+		if !ok || splashComp.Slot != component.SlotTimer || splashComp.AnchorEntity != anchor {
 			continue
 		}
-		if splashComp.Slot == slot && splashComp.AnchorEntity == anchor {
+		if anchor != 0 || splashComp.AnchorX == x && splashComp.AnchorY == y {
 			event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		}
 	}
@@ -446,15 +450,13 @@ func (s *SplashSystem) collidesTimer(candidate BBox, skip int) bool {
 func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponent, self int) {
 	ink := timerInkBox(splashComp.Length)
 
-	var anchorX, anchorY int
+	anchorX, anchorY := splashComp.AnchorX, splashComp.AnchorY
 	if splashComp.AnchorEntity != 0 {
+		anchorX, anchorY = 0, 0
 		if pos, ok := s.world.Positions.GetPosition(splashComp.AnchorEntity); ok {
 			anchorX = pos.X
 			anchorY = pos.Y
 		}
-	} else {
-		anchorX = s.world.Resources.Config.MapWidth / 2
-		anchorY = s.world.Resources.Config.MapHeight / 2
 	}
 
 	checkTimers := func(absX, absY, w, h int) bool {
@@ -507,9 +509,9 @@ func (s *SplashSystem) paddedBox(splashComp *component.SplashComponent) (BBox, b
 		if !ok {
 			return BBox{}, false
 		}
-		x = pos.X + splashComp.OffsetX
-		y = pos.Y + splashComp.OffsetY
+		x, y = pos.X, pos.Y
 	}
+	x, y = x+splashComp.OffsetX, y+splashComp.OffsetY
 
 	pad := parameter.SplashCollisionPadding
 	ink := timerInkBox(splashComp.Length)

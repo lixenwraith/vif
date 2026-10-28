@@ -11,7 +11,7 @@ Entry config search order:
 3. the same under the user root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
    `/usr/local/etc/vif` and `/etc/vif`;
-5. embedded default (`internal/asset/scenario/`; forced with `-d`).
+5. the embedded main scenario (`internal/asset/scenario/`; forced with `-d`).
 
 `-d` is mutually exclusive with both `-s` and `-f`; by itself it selects the
 embedded scenario and content corpus. For the runtime design behind this reference, see
@@ -449,7 +449,10 @@ it at. The runtime runs it after init, reset, an installed capture and each
 Scripts read the status registry and never write it. `StatusToVar` marks where a
 count starts, and `StatusIntCompare` with `since = "storm_mark"` compares the value
 minus that mark, so a scenario counts kills since its own escalation while
-`kills.*` keeps the game's totals.
+`kills.*` keeps the game's totals. The mark can be any variable: the solo
+`wad/scenario/dummy` finds its cursor inside a box by comparing `player.0.x` and
+`player.0.y` with the box's edges, variables its layout sets from the map's size
+(its `CursorIn` macro).
 
 ### Action Modifiers
 
@@ -1040,8 +1043,10 @@ tiers = [                           # Rolled in order, at most 8, each dropping 
 ```
 
 - `rate`: an entry's chance, above 0 and at most 1, which grows by as much again
-  for each roll in a row it misses; a tier's chances summing past 1 are scaled to
-  share one.
+  for each roll in a row it misses, on streaks the table keeps for each cursor
+  until the game starts over, every species naming it sharing them; a tier's
+  chances summing past 1 are scaled to share one.
 - `count`: how many the entry drops, 1 to 8, one when left out.
 - `fallback`: in a unique tier, how many the entry adds, 0 to 8, to the drop of each
-  later tier that is not unique when this tier drops nothing.
+  later tier that is not unique when this tier skips all its loot; a roll that
+  misses adds none.

@@ -36,7 +36,7 @@ var commandNames = []string{
 	"flow", "graph", "l", "log", "q", "quit", "p", "pause", "n", "new", "new!", "n!",
 	"f", "free", "a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
 	"t", "telemetry", "hud", "d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
-	"boost", "god", "demon", "blossom", "decay", "dust",
+	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
 	"host", "join", "leave", "relay", "session", "bot", "player", "g", "config", "journal", "wait",
@@ -128,6 +128,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleGodCommand(ctx, 1)
 	case "demon":
 		return handleGodCommand(ctx, -1)
+	case "w", "weapon":
+		return handleWeaponCommand(ctx, args)
 	case "blossom":
 		return handleBlossomCommand(ctx)
 	case "decay":
@@ -1373,6 +1375,39 @@ func handleGodCommand(ctx *engine.GameContext, sign int) CommandResult {
 	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{
 		Entity: player, Value: sign * parameter.GodEnergyAmount, Weapons: true,
 	})
+	return CommandResult{Continue: true}
+}
+
+// handleWeaponCommand sets one weapon's charges, by its name or its attack's: past
+// the kind's maximum it maxes out, 0 takes it, the gun included, and a negative
+// count flips the energy's sign, which drops every other loot weapon, before the set
+func handleWeaponCommand(ctx *engine.GameContext, args []string) CommandResult {
+	const usage = "Usage: :w <weapon> <charges>"
+	if len(args) != 2 {
+		setCommandError(ctx, usage)
+		return CommandResult{Continue: true}
+	}
+	weapon := slices.IndexFunc(component.WeaponSpecs[:], func(spec component.WeaponSpec) bool {
+		return strings.EqualFold(args[0], spec.Name) || strings.EqualFold(args[0], component.CombatAttackNames[spec.Attack])
+	})
+	if weapon < 0 {
+		setCommandError(ctx, "Unknown weapon: "+args[0])
+		return CommandResult{Continue: true}
+	}
+	charges, err := strconv.Atoi(args[1])
+	if err != nil {
+		setCommandError(ctx, usage)
+		return CommandResult{Continue: true}
+	}
+
+	player, kind := ctx.World.Resources.Player.Entity, component.WeaponType(weapon)
+	if charges < 0 {
+		ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{
+			Entity: player, Flip: true, Weapon: kind, Charges: -charges,
+		})
+		return CommandResult{Continue: true}
+	}
+	ctx.PushLocal(event.EventWeaponSetRequest, &event.WeaponSetRequestPayload{Entity: player, Weapon: kind, Charges: charges})
 	return CommandResult{Continue: true}
 }
 
