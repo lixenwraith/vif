@@ -735,7 +735,146 @@ does; today Android finishes the activity and leaves the reason in logcat. Open:
 host, list or both; a second screen or rows on this one; what a session that ends
 returns to.
 
+### Watch a session as a spectator
+
+- Priority: P2
+- Affected files: `internal/network/session.go` (`RosterEntry`, `SessionOffer`),
+  `internal/app/session.go`, `internal/app/join.go`, `internal/engine/world.go`
+  (`FollowLocalCursor`), `internal/mode/config_menu.go`, `cmd/vif`, `web/terminal.js`,
+  `internal/app/journal.go`, `internal/app/replay.go`
+- Guide: [Domain design §1](domain-design.md#1-domains-and-identity),
+  [Multi-player §1](multi-player.md#1-vocabulary-and-boundaries)
+
+A spectator joins a session to watch: it holds no cursor and views the world from
+one it picks, a person's or a bot's, among those whose owners allow it. It is
+reached by a flag (`-spectate <link> [slot]`; `-watch` already means a watched
+bot), a command (`:spectate <link> [slot]`, and `:spectate <slot>` or a key to
+switch target inside the session), the Multiplayer page, and the page's launch
+arguments as `-join` is passed, with a Watch link beside Play in the site's lobby.
+
+Most of it exists. A dedicated host's coordinator is a cursorless roster entry
+(`NoPlayerSlot`), and a joiner holds the sentinel until its own cursor exists, so
+every "is this my cursor" test already answers no for one. The shared world
+reaches it the ordinary way, a capture at join and then committed epochs and
+corrections, not a journal, and it crosses nothing. Each cursor's owner-authored
+values reach every instance through the syncs (D-13), so a HUD can show the
+target's. What is new:
+- A second kind of cursorless entry: admitted, paced like a guest, not counted in
+  `MaxPlayers` (domain design §1 allows only the coordinator none today), never a
+  successor, and not a stall for the start gate or the hold.
+- A follow target apart from the input slot: the camera follows the target's
+  cursor and the status bar reads its values; a target that leaves, or turns
+  watching off, moves the view to the next allowed cursor.
+- Consent: a game option ("Let others watch", on by default for now) on the
+  Multiplayer page, saved with the rest of `Play` and carried on the roster entry
+  as `Claim` is, so the authority and every spectator read the same answer. Seats
+  take their holder's.
+- Capacity: spectators cost the authority a link and its corrections each, so a
+  `-spectators N` ceiling, reported in the router's listing; relay doors can fan
+  them out ([Multi-player §5.6](multi-player.md#56-relay-doors-and-the-router)).
+
+A spectator sees the shared world, what any remote participant sees, centred on
+the target: Player-domain state is never rebuilt on another instance (D-2), so the
+target's glyphs, drains, nuggets, projectiles and loot stay on its run, and nothing
+beyond admission and the follow target goes over the wire for it.
+
+The journal's slot handling needs a review alongside. A journal records its slot
+from `LocalSlot` at the opening (`JournalCapture.Slot`, `JournalAnchor.Slot`),
+its replay binds input there (`openedLocked`), and later installs bind by
+identity (`RebindCursorRoster`). Three cases want a test: a journal a joiner opens
+before its arrival, which may now record `NoPlayerSlot` and must bind when the arrival
+or a correction brings the cursor; a spectator's journal, whose target switches are
+presentation and must be journaled local events so its replay shows the same view;
+and `:journal start <slot>` on a spectator, which journals its own run, since a
+remote player's run cannot be journaled. A bot-only session is the natural thing
+to watch: [Run a scenario with no players](#run-a-scenario-with-no-players).
+
 ## Netcode
+
+### Let a session's host set its speed
+
+- Priority: P1
+- Affected files: `internal/system/meta.go` (`handleSpeedRequest`,
+  `handleStepRequest`), `internal/system/network.go` (`admissibleFromSource`),
+  `internal/engine/game_context.go` (`ResetSessionState`), `internal/app/seat.go`
+  (`seatConfigLocked`), `internal/app/script.go` (`scriptPacing`),
+  `internal/converge/authority.go`, `internal/parameter/network.go`
+- Guide: [Runtime §9](runtime.md#9-time-control),
+  [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
+
+A rate chosen solo stays for the life of any session the run opens, and nobody can
+change it. `:speed` and `:step` are refused once `Session().Live` is set, which
+`:host` and the first `:bot add` both do (`handleSpeedRequest`); `:new!` keeps the
+rate in a live session (`ResetSessionState`); a guest adopts the host's from the
+offer's anchor (`ConfigForJoin`). A host at 2x cannot bring a person who joins back
+to 1x, short of leaving the session.
+
+Bot seats run at another rate than their holder: a seat's config carries none, so
+`scriptPacing` paces it at 1x and corrections drag it along. Two roam seats under a
+patrol holder, 3 s each: at 1x no correction jumped a seat's clock (0 of 13 and 0
+of 14); at 8x nearly all did (29 of 29 and 25 of 26, `snapshot.corrections_jumped`).
+A seat at 8x plays a world that leaps forward each correction instead of one it
+simulates.
+
+What closes it:
+- The rate becomes the authority's, as the hold is
+  ([Multi-player §3.6](multi-player.md#36-holding-a-session)): `:speed` on the
+  authority crosses as an event only the coordinator may author
+  (`admissibleFromSource`) and every instance sets it at its apply tick; a replay's
+  presentation, paced by the opening rate (`JournalAnchor.Speed`), follows it. A
+  guest's `:speed` is refused or asks the host; `:step` and breakpoints stay solo.
+  A host with only its own seats (`SessionState.SeatsOnly`) changes it as solo.
+- A seat paces at its holder's rate, read live, not from its config.
+- A ceiling. The simulation step is fixed, so a rate moves only wall pacing, but
+  every tick-counted window shrinks with it. At 8x a tick is 6.25 ms: the largest
+  lead (`NetworkBarrierMaxDelayTicks`, 20) covers 125 ms instead of a second, a
+  crossing that much late is void (`NetworkCommitLateTicks`), and syncs, epochs and
+  corrections come eight times as often. The wall-time budgets do not scale: a
+  playing guest uses about a sixth of `NetworkIngressBytesPerSecond` at 1x, so a
+  busy one passes it near 6x and is evicted, and `-slow-late` counts late epochs a
+  second. A LAN hides this: a host at 8x with a guest, its bot and one of the
+  host's held 155 ticks a second (7.7x). Over the internet it shows as voided
+  actions (`network.commit_void`), a lead at its cap
+  (`network.barrier_delay_ticks`) and evictions. Cap the rate the authority takes
+  at the highest its worst link carries with headroom, and scale the per-second
+  budgets by the rate.
+- No arrival changes the rate, a person's or a bot's: the host sets it, and while
+  it is not 1x every participant's status bar warns that the game runs fast or
+  slow, at what rate.
+
+Verify with the staged netem gate
+(`TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers`, `VIF_NETEM=1` as root)
+at 1x, 2x, 4x and 8x, reading the lead, voids, corrections and evictions per stage,
+and the divergence harness at two rates.
+
+### Shed load when a host cannot keep its tick
+
+- Priority: P2
+- Affected files: `internal/engine/scheduler.go`, `internal/converge/authority.go`,
+  `internal/app/session.go`, `internal/app/seat.go`, `internal/parameter/network.go`
+- Guide: [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
+
+Nothing watches whether the authority keeps its tick. A host that cannot (a large
+map such as td, many participants, a rate above 1x, native builds included) misses
+tick deadlines (`engine.tick_slips`), its epochs land late, every guest's lead and
+pacing steps climb, and the session degrades for all with no notice, until the slow
+policy evicts a guest whose link was fine. Strong hardware may carry any of these,
+so refuse none up front; gauge and relieve instead:
+- Gauges on the authority, over a window: tick slips a second, the tick's cost
+  against its interval at the current rate (no `engine.` key publishes the cost
+  today), the worst lead in force, commit voids and correction floor breaches.
+- Valves, one at a time, each announced to every participant: lower the session
+  rate a step ([Let a session's host set its speed](#let-a-sessions-host-set-its-speed)),
+  drop bots newest first and tell their holders, stop admitting joins, then drop a
+  participant with a reason its client prints
+  ([Let an authority drop a participant](#let-an-authority-drop-a-participant)) or
+  split ([Split a session under a second authority](#split-a-session-under-a-second-authority)).
+- Hysteresis: a valve holds for a window before the next opens, and closes only
+  after the gauges stay under a lower threshold, so the session does not swing.
+  Thresholds are parameters, with an off switch as `-slow-window 0` is.
+
+Related: [Bound navigation's worst tick on busy maps](#bound-navigations-worst-tick-on-busy-maps),
+[Measure a full roster](#measure-a-full-roster).
 
 ### Forgive a one-tick defeat in a session as solo play does
 
@@ -815,11 +954,12 @@ it, and parameters count in ticks, the network's windows most
 and the rest), so a shorter tick shortens each of them in time. Every participant
 of a session must step the same interval, so it would travel in the session's
 handshake and the journal, and a session's traffic per second, command frames,
-epochs and corrections, grows with the rate. Vanguard's rock steps a column a tick,
-evenly only on a whole-tick period, so its pace follows the interval. The smallest
-step is an interval set per run and carried where every participant reads it, the
-tick-counted windows derived from durations, and the divergence harness run at two
-intervals.
+epochs and corrections, grows with the rate, as it already does for a session run
+above 1x ([Let a session's host set its speed](#let-a-sessions-host-set-its-speed)).
+Vanguard's rock steps a column a tick, evenly only on a whole-tick period, so its
+pace follows the interval. The smallest step is an interval set per run and carried
+where every participant reads it, the tick-counted windows derived from durations,
+and the divergence harness run at two intervals.
 
 ## Session membership
 
@@ -842,6 +982,44 @@ prints, playing on alone as after `:leave` instead of starting over, and an
 operator route on the router, since a dedicated host has no console. Keeping a
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
+
+### Show a Wraith as a Wraith
+
+- Priority: P2
+- Affected files: `internal/render/renderer/shield.go` (`ShieldRenderer.Render`,
+  `ShieldPainter`), `internal/render/renderer/peer_cursor.go`,
+  `internal/parameter/visual/shield.go` (`buildShieldConfig`),
+  `internal/parameter/player.go`, `internal/parameter/visual` colours
+- Guide: [Multi-player §5.4](multi-player.md#54-wraiths)
+
+A Wraith, a person's or a bot's, reads as one more cursor: the peer renderer draws
+it as its slot label alone, in the slot's colour, where a live peer's label sits on
+that colour. Give it the boost's look, paler and slower, so every player sees who is
+away.
+
+The boost's look is the player shield's rotating glow: `ShieldRenderer` paints the
+field with `GlowPeriod` set to `ShieldBoostRotationDuration` (500 ms) while boost is
+active, and `ShieldPainter` rotates the bright side by game time, in truecolor a
+gradient with a glow lobe, in 256 colours a rim band (`Rim256Min`..`Rim256Max`)
+whose cells facing the lobe take the glow colour. A Wraith has no shield to paint:
+`CursorSystem.wraith` strips everything but `Cursor`, `Protection` and the `Wraith`
+component, which holds the cell it stood on (`X`, `Y`, -1 off the map).
+
+The plan:
+- A Wraith field config built by `buildShieldConfig` on the player shield's
+  geometry: a pale truecolor field and glow (near white, a little cool), a green
+  256 rim with a paler green glow, and a glow period well above the boost's (a
+  `WraithGlowPeriod` near 1.5 s, tuned live), in the parameter packages beside the
+  shield's.
+- `ShieldRenderer.Render` paints it for each Wraith at its held cell, skipping one
+  off the map, before its early return on no shields, and blended as a peer field
+  is (`PeerFieldBlend`) so a Wraith never outshines a live cursor. The holder's own
+  bots draw the same, since nobody drives a Wraith and the local cursor is never
+  one.
+- The label stays the peer renderer's, drawn over the field.
+- A renderer test in each colour mode: field cells around a Wraith's cell, none for
+  one off the map, and the lit side moving between two game times a quarter period
+  apart. Then a look in tmux at both tiers (`TERM=linux COLORTERM=` for 256).
 
 ### Keep a Wraith's stats in the session
 

@@ -516,6 +516,8 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 |----------------------------------|----------------------------|
 | `player.<n>.entity`              | Entity id, 0 when empty    |
 | `player.<n>.control`             | 0=this instance drives it (a person or a bot), 2=remote, -1=empty |
+| `player.<n>.peer`, `player.<n>.holder` | Owner participant; for a bot, the participant running it (0 for a person) |
+| `player.<n>.wraith`              | Owner away, cursor held as a Wraith |
 | `player.<n>.x`, `player.<n>.y`   | Position, -1 when empty or off the map |
 | `player.<n>.energy.current`      | Energy                     |
 | `player.<n>.heat.current`        | Heat                       |
@@ -528,7 +530,7 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 | `player.<n>.weapon.orbs`         | Orbs                       |
 | `player.<n>.typing.max_streak`   | Longest correct run        |
 
-`player.count` and `player.local` describe the roster.
+`player.count` and `player.slot` describe the roster.
 `session.any_defeated` becomes true when any rostered cursor reports zero heat
 and zero energy; all shipped scenarios use it for game over.
 `session.all_defeated` serves a scenario that needs unanimous defeat.

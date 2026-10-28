@@ -71,6 +71,10 @@ that proves wrong or that a document now states, and link the document instead.
 - In a CI log a `--- FAIL` line sits inside its package's block, not at the end:
   save the whole log and search it. For a hang, find `panic: test timed out` and
   match the goroutines blocked in `sync.Mutex.Lock` against what each holds.
+- A closed listener's port is no refusing address: under `go test ./...` another
+  package's listener can be given it and answer. Dial the near end of a held
+  connection instead, which stays bound with nothing listening (vif-router's
+  `TestEitherRouteRefusesBeforeDialling`).
 
 ## Locks
 
