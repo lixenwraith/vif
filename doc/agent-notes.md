@@ -68,6 +68,10 @@ that proves wrong or that a document now states, and link the document instead.
 - A race between a test's write and another goroutine's read reproduces at will:
   sleep that goroutine before its read and move the write ahead of the sleep. Print
   from neither side, as two writes to `os.Stderr` order them and hide the race.
+- `internal/app` tests start no log sink, so a socket test that times out says
+  nothing of why: put `fmt.Fprintf(os.Stderr, ...)` probes in a `git worktree`
+  copy, build its race binary there and run it under the same load, keeping the
+  branch clean.
 - In a CI log a `--- FAIL` line sits inside its package's block, not at the end:
   save the whole log and search it. For a hang, find `panic: test timed out` and
   match the goroutines blocked in `sync.Mutex.Lock` against what each holds.
@@ -82,6 +86,10 @@ that proves wrong or that a document now states, and link the document instead.
   reentrant), then `App.sessionMu`, then converge's `Authority.mu`. Nothing floods
   the mesh under `sessionMu` or the world lock; a flood runs in the correction loop,
   between ticks.
+- A flag a goroutine reads as it starts is raised before the call that starts it,
+  and lowered again if nothing started: `Instance.Redial`'s dial loop may read
+  `Authority.Redialing` before `Redial` returns, so `beginSuccession` and
+  `redialRelay` raise their wait first.
 - Tests reach a play run's paths by switching a running App's `cfg.Mode` under
   `RunSafe`, so a goroutine that reads the run's config off the world lock (the
   drive loop, a bot seat) reads the copy it started with instead.
