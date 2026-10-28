@@ -371,7 +371,12 @@ func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
 		return out
 	}
 	states := merged["states"]
-	arts := list(path(states, "CaveStart", "on_enter", 1, "pick", "from"))
+	var arts []string
+	for _, action := range path(states, "CaveStart", "on_enter").([]any) {
+		if path(action, "event") == "EventCaveStart" {
+			arts = list(path(action, "pick", "from"))
+		}
+	}
 	raiders := list(path(states, "RaidSpawn", "transitions", 0, "actions", 0, "pick", "from"))
 
 	const perCave = 8

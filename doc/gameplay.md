@@ -418,9 +418,10 @@ uses either flow fields toward a target or precomputed multi-route graphs
 `EventCaveStart` lays a cave across the map and scrolls it left. `pkg/cave` gives
 each column its ceiling and floor rows from the seed in integer arithmetic, so every
 instance and platform lays the same rock: walls of at least `min_wall` rows under
-`detail` rows of rough rock, never fewer than `min_gap` open rows, opening from a
-centred mouth over `ramp` columns. A snaking cave's gap wanders up to `max_gap`, its
-channel at most `swing` rows off the middle with knots every `wavelength` columns.
+`detail` rows of rough rock, never fewer than `min_gap` open rows, closing in over
+`ramp` columns from a centred mouth, or from `mouth` columns of open map, no rock at
+all, when set. A snaking cave's gap wanders up to `max_gap`, its channel at most
+`swing` rows off the middle with knots every `wavelength` columns.
 A jagged cave, one with `octaves` set, snakes a band of `max_gap` rows, or all the
 walls leave, as that channel, and its ceiling and floor each reach into the band by
 fractal noise of their own: `octaves` of value noise from `wavelength` columns
@@ -461,8 +462,9 @@ The pace changes by event, each at once or easing linearly over `ease_ms`.
 `EventCaveStop` brings the scroll to rest and leaves the rock where it stands, and
 `EventCavePace` sets a new `speed`, resuming a halted cave. `EventCaveOpen` widens
 the cave from the first column past the right edge, so no rock in view changes,
-over `ramp` columns, the cave's own when 0, to `gap` open rows centred, all the
-walls leave when 0, and holds it open from there; a cave opens once.
+over `ramp` columns, the cave's own when 0, to `gap` open rows centred, at most all
+the walls leave, or to no rock at all when 0, and holds it open from there; a cave
+opens once.
 `EventCaveOpened` announces the opening filling the map, the cue a boss encounter
 waits on.
 
@@ -602,44 +604,45 @@ a 40-row map, and the scenario's smallest map, 18 rows, holds twice the narrowes
 A wall reaches at most 27 rows in, so a taller map, a phone held upright, keeps as
 much rock as a 40-row map and opens every row it adds, narrowing the less the
 taller it is: a 60-row map is a third rock and a 90-row map a fifth. Each new game
-flies a new cave, its rock in strata, cracked, moss or crystal stone. The rock
-blocks the ship, raiders and spawns but lets particles pass, hidden, so the blossom
-and decay the gun raises from glyphs rise or fall along a column of the cave and on
-into the rock. Glyphs drift left behind the rock at three depths, faster than it at
-20, 40 and 80 cells a second, so each layer reads as moving and the depths come
-apart, and drains, nuggets, gold and the fuse are off. Raiders materialize at the
-right edge every two seconds while fewer than three fly or materialize, on a row
-drawn across the map, in the nearest open rows when rock fills it. Each lands as its
-quarter-second materialize ends, too soon for much scrolling rock to come over it,
-and is of a type drawn at random between the two of the rank the raid has reached
-among the cave's own eight. Every type is a program of the scenario's own
-(`behavior/<cave>/<type>.toml`), the template for a species of one's own ([FSM
-reference](fsm-reference.md#behavior-programs)), running one cycle, a chase, a lock,
-then a charge or a teleport (`RaiderStates` in `macros.toml`), its landing marked
-from the lock until it lands, with its own look. Each stone art's eight are its
-tier, two types in each of four ranks, the same ranks in every cave, so caves differ
-in looks alone: a rank up has more hit points (8, 16, 28, 44) and a fifth more mass
-(2.0 to 3.5), so a shot knocks it back less, a costlier touch, and chases slower on
-a longer lock, the first rank darting as the snake does. The raid climbs the tier:
-it spawns the first rank until players shoot three of it down, then the next, and
-three of the fourth exhaust the tier, where its boss is to stand; for now a green
-strobe marks it and the climb starts over (the `ramp` region). Each cave's raiders
-wear one hue in four shades, picked against its rock: violet vermin in the strata
-(by rank: scarab, crawler; crab, hornet; spider, mantis; beetle, scorpion), white
-haunts in the cracked stone (gremlin, chomper; imp, slime; ghost, skull; wraith,
-demon), orange animals in the moss (hedgehog, mouse; frog, hopper; bat, puffer; owl,
-lynx) and orchid constructs among the crystals (drone, shard; saucer, trooper;
-jelly, squid; djinn, robot), each one colour on a console. A raider lives until
-killed, and the rock pushes it as it pushes the cursor. Every type rolls the raider
-drop table vanguard declares, so one a player shoots down drops a `U`, its own loot
-kind, where it fell, for every player, and each `U` raises the gun a level of the
-scenario's nine: one shot forward, then two and three, one up and one down, one
-back, two up and down, two back, three up and down, three back. Forward is right,
-the way the ship flies. A crush is a defeat, as is heat and energy both run out: the
-rock and the drift halt under a red strobe for 250 ms, then the game starts over,
-the gun back at one shot, and opens with "Crushed Against The Edge!" or "You Died!".
-The drifting text is scenery (§9): rock and raiders pass it by and no key types it,
-so the ship earns no heat by typing.
+flies a new cave, its rock in strata, cracked, moss or crystal stone, opening on
+open map as wide as the view, no rock at all, that closes into the cave over 96
+columns. The rock blocks the ship, raiders and spawns but lets particles pass,
+hidden, so the blossom and decay the gun raises from glyphs rise or fall along a
+column of the cave and on into the rock. Glyphs drift left behind the rock at three
+depths, faster than it at 20, 40 and 80 cells a second, so each layer reads as
+moving and the depths come apart, and drains, nuggets, gold and the fuse are off.
+Raiders materialize at the right edge every two seconds while fewer than three fly
+or materialize, on a row drawn across the map, in the nearest open rows when rock
+fills it. Each lands as its quarter-second materialize ends, too soon for much
+scrolling rock to come over it, and is of a type drawn at random between the two of
+the rank the raid has reached among the cave's own eight. Every type is a program of
+the scenario's own (`behavior/<cave>/<type>.toml`), the template for a species of
+one's own ([FSM reference](fsm-reference.md#behavior-programs)), running one cycle,
+a chase, a lock, then a charge or a teleport (`RaiderStates` in `macros.toml`), its
+landing marked from the lock until it lands, with its own look. Each stone art's
+eight are its tier, two types in each of four ranks, the same ranks in every cave,
+so caves differ in looks alone: a rank up has more hit points (8, 16, 28, 44) and a
+fifth more mass (2.0 to 3.5), so a shot knocks it back less, a costlier touch, and
+chases slower on a longer lock, the first rank darting as the snake does. The raid
+climbs the tier: it spawns the first rank until players shoot three of it down, then
+the next, and three of the fourth exhaust the tier, where its boss is to stand; for
+now a green strobe marks it and the climb starts over (the `ramp` region). Each
+cave's raiders wear one hue in four shades, picked against its rock: violet vermin
+in the strata (by rank: scarab, crawler; crab, hornet; spider, mantis; beetle,
+scorpion), white haunts in the cracked stone (gremlin, chomper; imp, slime; ghost,
+skull; wraith, demon), orange animals in the moss (hedgehog, mouse; frog, hopper;
+bat, puffer; owl, lynx) and orchid constructs among the crystals (drone, shard;
+saucer, trooper; jelly, squid; djinn, robot), each one colour on a console. A raider
+lives until killed, and the rock pushes it as it pushes the cursor. Every type rolls
+the raider drop table vanguard declares, so one a player shoots down drops a `U`,
+its own loot kind, where it fell, for every player, and each `U` raises the gun a
+level of the scenario's nine: one shot forward, then two and three, one up and one
+down, one back, two up and down, two back, three up and down, three back. Forward is
+right, the way the ship flies. A crush is a defeat, as is heat and energy both run
+out: the rock and the drift halt under a red strobe for 250 ms, then the game starts
+over, the gun back at one shot, and opens with "Crushed Against The Edge!" or "You
+Died!". The drifting text is scenery (§9): rock and raiders pass it by and no key
+types it, so the ship earns no heat by typing.
 
 ## 11. System inventory
 

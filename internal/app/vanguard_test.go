@@ -478,6 +478,49 @@ func TestVanguardsCaveWearsOneOfItsStoneArts(t *testing.T) {
 	}
 }
 
+// TestVanguardsCaveOpensOnOpenMap boots the shipped scenario: its cave starts with a
+// mouth of open map as wide as the view, no rock at all, and its rock comes in past
+// the right edge as it scrolls
+func TestVanguardsCaveOpensOnOpenMap(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("vanguard scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	w := a.World()
+	rockCells := func() (cells int, origin int64, ok bool) {
+		w.RunSafe(func() {
+			rock := w.Positions.Rock()
+			if ok = rock != nil; ok {
+				for _, col := range rock.Columns() {
+					cells += col.Ceil + w.Resources.Config.MapHeight - col.Floor
+				}
+				origin = rock.Origin
+			}
+		})
+		return cells, origin, ok
+	}
+	for range 5 {
+		if _, _, ok := rockCells(); ok {
+			break
+		}
+		a.Tick(1)
+	}
+	if cells, origin, ok := rockCells(); !ok || cells > 0 {
+		t.Fatalf("the cave stands %v with %d rock cells in view at column %d, want none", ok, cells, origin)
+	}
+	a.Tick(300)
+	if cells, origin, _ := rockCells(); cells == 0 {
+		t.Fatalf("no rock in view at column %d, want the cave closed in", origin)
+	}
+}
+
 // TestVanguardsCaveStepsOnAnEvenCadence boots the shipped scenario: its cave steps a
 // column on whole ticks, the same number apart every time, since a period between
 // whole ticks falls alternately short and long and reads as dropped frames

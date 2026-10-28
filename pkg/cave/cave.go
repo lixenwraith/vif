@@ -2,7 +2,8 @@
 // ceiling and of floor each column holds. A column is a pure function of its index and
 // the seed, in integer arithmetic, so any instance derives any column on its own and
 // every platform rounds it alike. A cave's channel snakes, or each of its walls is a
-// jagged fractal of its own, and an opening widens it from a column on.
+// jagged fractal of its own; a mouth of open map may come before it, and an opening
+// widens it from a column on.
 package cave
 
 import (
@@ -26,7 +27,7 @@ type Config struct {
 	Wavelength int `json:"wavelength"`
 	Swing      int `json:"swing"`  // rows the channel strays either side of the middle; 0 is all the walls leave
 	Detail     int `json:"detail"` // rows of rough rock laid over the smooth profile
-	Ramp       int `json:"ramp"`   // columns closing in from a mouth of MaxGap centred rows
+	Ramp       int `json:"ramp"`   // columns closing in from a mouth of MaxGap centred rows, or of no rock past Mouth
 
 	// Octaves, when set, makes the cave jagged: each wall reaches into the gap by its
 	// own fractal noise of that many octaves, from Wavelength halving down
@@ -36,12 +37,17 @@ type Config struct {
 	// rows a taller map adds past what twice it and the min gap span stay open
 	Reach int `json:"reach,omitempty"`
 
+	// Mouth, when set, is the columns of open map, no rock at all, before the ramp,
+	// which closes in from none
+	Mouth int `json:"mouth,omitempty"`
+
 	// Open, when set, widens the cave from one column on
 	Open Opening `json:"open,omitzero"`
 }
 
 // Opening widens a cave past column At, over Ramp columns, to Gap open rows centred,
-// all the walls leave when 0, and holds it open from there.
+// at most all the walls leave, or to no rock at all when 0, and holds it open from
+// there.
 type Opening struct {
 	At   int64 `json:"at"`
 	Gap  int   `json:"gap,omitempty"`
@@ -95,8 +101,8 @@ const (
 // Validate reports a configuration whose rows cannot hold its gaps and walls
 func (c Config) Validate() error {
 	switch {
-	case c.MinWall < 0 || c.Swing < 0 || c.Detail < 0 || c.Ramp < 0 || c.Reach < 0:
-		return errors.New("cave: negative wall, swing, detail, ramp or reach")
+	case c.MinWall < 0 || c.Swing < 0 || c.Detail < 0 || c.Ramp < 0 || c.Reach < 0 || c.Mouth < 0:
+		return errors.New("cave: negative wall, swing, detail, ramp, reach or mouth")
 	case c.Reach > 0 && c.Octaves == 0:
 		return errors.New("cave: a reach shapes only a jagged cave's walls")
 	case c.MinGap < 1 || c.MaxGap < c.MinGap+2*c.Detail:
@@ -110,7 +116,7 @@ func (c Config) Validate() error {
 	case c.Wavelength < 1 || c.Wavelength > MaxWavelength:
 		return errors.New("cave: wavelength out of range")
 	case c.Open != (Opening{}) && (c.Open.At < 0 || c.Open.Ramp < 1 || c.Open.Gap < 0 || c.Open.Gap > 0 && c.Open.Gap < c.MinGap):
-		return errors.New("cave: an opening needs a column, a ramp, and a gap of all the walls leave or at least the min gap")
+		return errors.New("cave: an opening needs a column, a ramp, and a gap of no rock or at least the min gap")
 	}
 	return nil
 }
@@ -122,14 +128,16 @@ func (c Config) widest() int {
 }
 
 // At returns column i's rock, counted from the mouth at 0; a valid configuration
-// always leaves MinGap open rows and MinWall rows of each wall.
+// always leaves MinGap open rows, and MinWall rows of each wall past an open mouth's
+// ramp and short of an opening to no rock.
 func (c Config) At(i int64) Column {
 	if c.Octaves == 0 {
 		return c.opened(i, c.column(i))
 	}
 	// A jagged wall's edge is the median of its own around it. Of 2r+1 columns, r+1
 	// keep each wall at least its median, so one column keeps both and the medians
-	// leave at least its gap
+	// leave at least its gap. Past an open mouth's ramp, at most jaggedMedian of them
+	// lie in it, so the median keeps MinWall there
 	var tops, bottoms [2*jaggedMedian + 1]int
 	for k := range tops {
 		col := c.column(i + int64(k-jaggedMedian))
@@ -148,12 +156,12 @@ func (c Config) opened(i int64, col Column) Column {
 	if o.Ramp == 0 || i <= o.At {
 		return col
 	}
-	gap := c.Height - 2*c.MinWall
+	var top, bottom int64
 	if o.Gap > 0 {
-		gap = min(o.Gap, gap)
+		gap := min(o.Gap, c.Height-2*c.MinWall)
+		top = int64(c.Height-gap) / 2
+		bottom = int64(c.Height-gap) - top
 	}
-	top := int64(c.Height-gap) / 2
-	bottom := int64(c.Height-gap) - top
 	k, r := min(i-o.At, int64(o.Ramp)), int64(o.Ramp)
 	return Column{
 		Top:    int((int64(col.Top)*(r-k) + top*k) / r),
@@ -164,6 +172,9 @@ func (c Config) opened(i int64, col Column) Column {
 // column is column i's rock before a jagged cave's median
 func (c Config) column(i int64) Column {
 	i = max(i, 0)
+	if i < int64(c.Mouth) {
+		return Column{}
+	}
 	h := int64(c.Height)
 	detail := int64(c.Detail)
 
@@ -179,13 +190,17 @@ func (c Config) column(i int64) Column {
 	}
 
 	// Within the ramp, a weighted mean with the mouth: both terms are valid columns
-	// and flooring each wall only widens the gap
-	if ramp := int64(c.Ramp); i < ramp {
-		widest := int64(c.widest())
-		mouthTop := (h - widest) / 2
-		mouthBottom := h - widest - mouthTop
-		top = (mouthTop*(ramp-i) + top*i) / ramp
-		bottom = (mouthBottom*(ramp-i) + bottom*i) / ramp
+	// and flooring each wall only widens the gap; past an open mouth, the mouth's
+	// term is no rock
+	if k, ramp := i-int64(c.Mouth), int64(c.Ramp); k < ramp {
+		var mouthTop, mouthBottom int64
+		if c.Mouth == 0 {
+			widest := int64(c.widest())
+			mouthTop = (h - widest) / 2
+			mouthBottom = h - widest - mouthTop
+		}
+		top = (mouthTop*(ramp-k) + top*k) / ramp
+		bottom = (mouthBottom*(ramp-k) + bottom*k) / ramp
 	}
 	return Column{Top: int(top), Bottom: int(bottom)}
 }

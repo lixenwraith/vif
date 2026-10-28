@@ -98,23 +98,25 @@ background = true
 # narrowest on a map of 40 rows. A wall reaches 27 rows in at most, so a taller map,
 # a phone held upright, keeps that much rock and opens every row it adds, narrowing
 # the less the taller it is; max_gap 2000, the tallest map, caps no band. With no
-# rough rock the walls stay smooth, and the mouth holds the centred cursor. The rock
-# blocks the ship, raiders and spawns but not particles, which pass through it
-# hidden, and each step carries those no anchor holds a column left with it, so
-# blossom rises, decay falls and dust wanders in the cave's frame. It wears one of
-# four stone arts, the cave's seed picking it; every rock cell draws a glyph, so it
-# reads on a text console's sixteen colours too. The glyphs drift past faster than
-# the rock, at 20, 40 and 80 cells a second by layer, fast enough for each layer to
-# read as moving and the depths to come apart; a layer steps whole cells a tick,
-# which the renderer spreads over the frames between. They are scenery: rock and
-# raiders pass them by and the rock hides them, while particles and the gun act on
-# them. The seed is drawn from the run's, so each new game flies a new cave and a
-# run's seed replays its caves in order.
+# rough rock the walls stay smooth. A mouth of open map as wide as the view, no rock
+# at all, comes first, then the cave closes in over 96 columns. The rock blocks the
+# ship, raiders and spawns but not particles, which pass through it hidden, and each
+# step carries those no anchor holds a column left with it, so blossom rises, decay
+# falls and dust wanders in the cave's frame. It wears one of four stone arts, the
+# cave's seed picking it; every rock cell draws a glyph, so it reads on a text
+# console's sixteen colours too. The glyphs drift past faster than the rock, at 20,
+# 40 and 80 cells a second by layer, fast enough for each layer to read as moving
+# and the depths to come apart; a layer steps whole cells a tick, which the renderer
+# spreads over the frames between. They are scenery: rock and raiders pass them by
+# and the rock hides them, while particles and the gun act on them. The seed is
+# drawn from the run's, so each new game flies a new cave and a run's seed replays
+# its caves in order.
 [states.CaveStart]
 parent = "Root"
 on_enter = [
     { action = "RandomVar", payload = { name = "cave_seed", min = 1, max = 2147483647, index_var = "cave_index" } },
-    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 2000, min_wall = 2, reach = 27, wavelength = 64, detail = 0, ramp = 96, octaves = 4, block_mask = ["cursor", "kinetic", "spawn"] }, payload_vars = { seed = "cave_seed" }, pick = { field = "art", var = "cave_seed", from = ["strata", "cracked", "moss", "crystal"] } },
+    { action = "ConfigToVar", payload = { field = "map_width", name = "cave_mouth" } },
+    { action = "EmitEvent", event = "EventCaveStart", payload = { speed = 20.0, min_gap = 9, max_gap = 2000, min_wall = 2, reach = 27, wavelength = 64, detail = 0, ramp = 96, octaves = 4, block_mask = ["cursor", "kinetic", "spawn"] }, payload_vars = { seed = "cave_seed", mouth = "cave_mouth" }, pick = { field = "art", var = "cave_seed", from = ["strata", "cracked", "moss", "crystal"] } },
     { action = "EmitEvent", event = "EventDriftStart", payload = { direction = 3.141592653589793, speed = 80.0, duration_ms = 0, scenery = true } },
 ]
 

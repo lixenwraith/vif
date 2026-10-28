@@ -1402,8 +1402,10 @@ type MazeSpawnRequestPayload struct {
 // CaveStartPayload lays a cave across the map, its rock following cave.Config at the
 // map's height, and scrolls it left at Speed columns a second, up to the soft cap. A
 // zero speed, gap or wavelength takes its default, a zero seed draws one, a zero mask
-// blocks everything, a zero visual draws stone and a zero reach caps no wall. Art names
-// a stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's pick may.
+// blocks everything, a zero visual draws stone and a zero reach caps no wall; a mouth
+// as wide as the map lays no rock in view, the cave entering past its right edge. Art
+// names a stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's
+// pick may.
 type CaveStartPayload struct {
 	Seed       uint64                     `toml:"seed"`
 	Speed      float64                    `toml:"speed"`
@@ -1416,6 +1418,7 @@ type CaveStartPayload struct {
 	Ramp       int                        `toml:"ramp"`
 	Octaves    int                        `toml:"octaves"`
 	Reach      int                        `toml:"reach"`
+	Mouth      int                        `toml:"mouth"`
 	BlockMask  component.WallBlockMask    `toml:"block_mask"`
 	Visual     component.WallVisualConfig `toml:"visual"`
 	Art        string                     `toml:"art"`
@@ -1434,9 +1437,9 @@ type CavePacePayload struct {
 }
 
 // CaveOpenPayload widens the cave from the first column past the map's right edge,
-// over Ramp columns (the cave's own ramp when 0), to Gap open rows centred (all the
-// walls leave when 0), and holds it open; EventCaveOpened follows once the opening
-// fills the map. A cave opens once.
+// over Ramp columns (the cave's own ramp when 0), to Gap open rows centred (no rock at
+// all when 0), and holds it open; EventCaveOpened follows once the opening fills the
+// map. A cave opens once.
 type CaveOpenPayload struct {
 	Gap  int `toml:"gap"`
 	Ramp int `toml:"ramp"`

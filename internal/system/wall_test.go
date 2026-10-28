@@ -217,7 +217,7 @@ func TestATicksCaveStepsAreLeftForWhatRidesTheCave(t *testing.T) {
 }
 
 // An opening comes in past the right edge, and EventCaveOpened arrives on the step its
-// first open column reaches the left edge, when only the walls' least is rock
+// first open column reaches the left edge, when no rock is left
 func TestACaveOpensPastTheEdgeAndAnnouncesFillingTheMap(t *testing.T) {
 	w, walls, _ := newCaveWorld(t, 30, 12)
 	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{
@@ -235,10 +235,43 @@ func TestACaveOpensPastTheEdgeAndAnnouncesFillingTheMap(t *testing.T) {
 			opened = opened || ev.Type == event.EventCaveOpened
 		}
 	}
-	open, wall := strings.Repeat(".", mapW), strings.Repeat("#", mapW)
+	open := strings.Repeat(".", mapW)
 	for y := range mapH {
-		if want := map[bool]string{true: wall, false: open}[y == 0 || y == mapH-1]; steps != mapW+6 || rockAt(w, y) != want {
+		if steps != mapW+6 || rockAt(w, y) != open {
 			t.Fatalf("opened after %d steps, want %d; row %d %s", steps, mapW+6, y, rockAt(w, y))
+		}
+	}
+}
+
+// A mouth as wide as the map lays no rock in view, and the cave's comes in past the
+// right edge as it scrolls
+func TestAMouthAsWideAsTheMapLaysNoRockInView(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	mapW, mapH := w.Resources.Config.MapWidth, w.Resources.Config.MapHeight
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{
+		Seed: 7, Speed: 10, MinGap: 6, MaxGap: 12, MinWall: 1, Wavelength: 8, Ramp: 4, Octaves: 3, Mouth: mapW}})
+	profile := cave.Config{Seed: 7, Height: mapH, MinGap: 6, MaxGap: 12, MinWall: 1, Wavelength: 8, Ramp: 4, Octaves: 3, Mouth: mapW}
+	for _, step := range []int{0, mapW / 2, mapW + 10} {
+		for walls.cave.Offset < int64(step) {
+			walls.Update()
+		}
+		rock := 0
+		for y := range mapH {
+			want := make([]byte, mapW)
+			for x := range want {
+				col := profile.At(int64(x + step))
+				want[x] = '.'
+				if y < col.Top || y >= mapH-col.Bottom {
+					want[x] = '#'
+					rock++
+				}
+			}
+			if got := rockAt(w, y); got != string(want) {
+				t.Fatalf("step %d row %d:\n got  %s\n want %s", step, y, got, want)
+			}
+		}
+		if step == 0 && rock > 0 || step == mapW+10 && rock == 0 {
+			t.Fatalf("step %d: %d rock cells in view", step, rock)
 		}
 	}
 }
