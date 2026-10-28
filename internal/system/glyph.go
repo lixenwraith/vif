@@ -342,20 +342,20 @@ func (s *GlyphSystem) spawnGlyphs() {
 func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
 	config := s.world.Resources.Config
 
-	lineRunes := []rune(line)
-	if len(lineRunes) == 0 {
-		return false
+	// Read in place, a rune a column, so a try that places nothing allocates nothing
+	text, lineLength := line, 0
+	for i := range line {
+		if lineLength == config.MapWidth {
+			text = line[:i]
+			break
+		}
+		lineLength++
 	}
-	if len(lineRunes) > config.MapWidth {
-		lineRunes = lineRunes[:config.MapWidth]
-	}
-	lineLength := len(lineRunes)
-
-	if s.world.Resources.Player.Count() == 0 {
+	if lineLength == 0 || s.world.Resources.Player.Count() == 0 {
 		return false
 	}
 	if s.statDriftActive.Load() {
-		return s.enterLine(lineRunes, glyphType, glyphLevel)
+		return s.enterLine(text, lineLength, glyphType, glyphLevel)
 	}
 
 	for range parameter.MaxPlacementTries {
@@ -367,15 +367,16 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 
 		// 1. Stage entities, skipping spaces
 		s.placement = s.placement[:0]
-		for i := range lineLength {
-			if lineRunes[i] == ' ' {
-				continue
+		col := startCol
+		for _, r := range text {
+			if r != ' ' {
+				s.placement = append(s.placement, glyphPlacement{
+					entity: s.world.CreateEntity(core.DomainPlayer),
+					pos:    component.PositionComponent{X: col, Y: row},
+					char:   r,
+				})
 			}
-			s.placement = append(s.placement, glyphPlacement{
-				entity: s.world.CreateEntity(core.DomainPlayer),
-				pos:    component.PositionComponent{X: startCol + i, Y: row},
-				char:   lineRunes[i],
-			})
+			col++
 		}
 		s.buffers.Observe(0, len(s.placement))
 
@@ -436,14 +437,14 @@ func (s *GlyphSystem) blocked(row, startCol, length int) bool {
 	return false
 }
 
-// enterLine starts a line entering across an upwind edge, each drawn in proportion to
-// the drift crossing it: across a side a rune at a time, the last first from the left,
-// across an end a whole row at once. The cells it meets the map at must be free and
-// clear of cursors and of a line of its level still entering; it starts as far past
-// them as its layer stepped last tick, so its first frame shows it at the edge.
-func (s *GlyphSystem) enterLine(runes []rune, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
+// enterLine starts text, length runes, entering across an upwind edge, each drawn in
+// proportion to the drift crossing it: across a side a rune at a time, the last first
+// from the left, across an end a whole row at once. The cells it meets the map at must
+// be free and clear of cursors and of a line of its level still entering; it starts as
+// far past them as its layer stepped last tick, so its first frame shows it at the edge.
+func (s *GlyphSystem) enterLine(text string, length int, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
 	config := s.world.Resources.Config
-	width, height, length := config.MapWidth, config.MapHeight, len(runes)
+	width, height := config.MapWidth, config.MapHeight
 	sin, cos := math.Sincos(s.statDriftDirection.Get())
 	side := math.Abs(cos) * float64(height)
 	end := config.CellAspect.FromCircular(math.Abs(sin)) * float64(width)
@@ -452,9 +453,7 @@ func (s *GlyphSystem) enterLine(runes []rune, glyphType component.GlyphType, gly
 	line := engine.EntryLine{Dir: 1, Type: glyphType, Level: glyphLevel, Scenery: s.statDriftScenery.Load()}
 	if fromSide && cos > 0 {
 		line.Dir = -1
-		slices.Reverse(runes)
 	}
-	line.Text = string(runes)
 
 	// Where it first meets the map: one cell of a side, or its row along an end
 	step := s.world.Resources.Drift.Step[glyphLevel]
@@ -477,6 +476,12 @@ func (s *GlyphSystem) enterLine(runes []rune, glyphType component.GlyphType, gly
 		if s.nearCursor(row, col, cells) || s.blocked(row, col, cells) || s.occupied(row, col, cells) ||
 			s.overlaysEntering(&line, length) {
 			continue
+		}
+		line.Text = text
+		if line.Dir < 0 {
+			runes := []rune(text)
+			slices.Reverse(runes)
+			line.Text = string(runes)
 		}
 		if s.feed(&line, heading) {
 			s.entering = append(s.entering, line)
