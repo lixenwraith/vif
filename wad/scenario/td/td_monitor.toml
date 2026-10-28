@@ -16,8 +16,8 @@ transitions = [
 ]
 
 [states]
-MonDefeat = { macro = "Ending", color = { r = 255, g = 0, b = 0 }, message = "GAME OVER - RESTARTING" }
-MonVictory = { macro = "Ending", color = { r = 0, g = 255, b = 0 }, message = "TOWER DEFENSE CLEARED" }
+MonDefeat = { macro = "Ending", color = { r = 255, g = 0, b = 0 }, message = "Game Over" }
+MonVictory = { macro = "Ending", color = { r = 0, g = 255, b = 0 }, message = "Towers Defended" }
 
 [states.MonReset]
 parent = "Root"

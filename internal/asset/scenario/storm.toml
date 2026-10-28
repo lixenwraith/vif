@@ -40,7 +40,7 @@ transitions = [
 parent = "StormHold"
 on_enter = [
     { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
-    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "SPECIES DAMAGE INCREASED" } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Species Damage Up" } },
 ]
 transitions = [
     { trigger = "Tick", target = "StormEscalateKraken", guard = "StatusIntCompare", guard_args = { key = "kills.storm", since = "storm_mark", op = "gte", value = 3 } },

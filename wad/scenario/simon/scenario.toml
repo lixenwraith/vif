@@ -255,7 +255,8 @@ transitions = [
 
 # A lost game puts the ember out, grays the field and turns it to decay circling the
 # button at fault: the one pressed or, out of time, the one due. The due note lights
-# clear of the buzz, and the decay falls away as the next game starts.
+# clear of the buzz, the field holds half a second past it, and the decay falls away
+# as the next game starts.
 [states.Lost]
 parent = "Game"
 on_enter = [
@@ -272,7 +273,7 @@ on_exit = [
     { action = "EmitEvent", event = "EventGrayoutEnd", reconcile = true },
 ]
 transitions = [
-    { trigger = "Tick", target = "NewGame", guard = "StateTimeExceeds", guard_args = { ms = 1000 } },
+    { trigger = "Tick", target = "NewGame", guard = "StateTimeExceeds", guard_args = { ms = 1500 } },
 ]
 
 [states.Wrong]
