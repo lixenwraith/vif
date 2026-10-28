@@ -855,7 +855,9 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
   nothing until it lands and parks the events the state it is entering reacts
   to, replaying them there, so a quasar killed while its region's gold cycle
   crossed still ends the region; an internal transition parks nothing, so every
-  event it counts crosses, in order. A reset's own settle, one artifact every instance
+  event it counts crosses, in order, and an internal `Tick` one holds only its
+  region's `Tick` transitions until it lands, as its guard would pass again before
+  its actions run (simon's notes). A reset's own settle, one artifact every instance
   applies at one tick, takes its transitions in place, as a solo run does. Guards
   that read per-instance status (`kills.*`, `TimeInState`) are the authority's by
   construction (D-20). The `fsm` section stays as the proof, `StormSetup`'s

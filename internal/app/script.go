@@ -167,7 +167,8 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 	if err != nil {
 		return false, err
 	}
-	if a.cfg.Mode == ModeScript {
+	// cfg, not a.cfg: once build hands the App out, its config is read under its lock
+	if cfg.Mode == ModeScript {
 		return true, runPresented(a, src, kind, name, interval, paced, signals)
 	}
 	// A solo run that opens a session, with :host or for its bots, gains a peer to
