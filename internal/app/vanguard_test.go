@@ -798,14 +798,15 @@ func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 
 // TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave: raiders the player
 // shoots down as they arrive come from the first rank's two types until three fall,
-// then the next rank's, to the fourth, whose third kill strobes green and ends the
-// cave. No raider comes while the cave opens to no rock, the rock and the drift at
-// twice their pace, and its scroll halts, and the Kraken rises at the right edge
-// with vanguard's hit points. The player's kill of it
-// drops a missile charge, heat and two energy, doubles species damage and lays the
-// next cave in another stone art, the raider table's streaks carried into it,
-// scrolling a fifth faster once its pace has eased in, where the climb starts over
-// at the first rank of that cave's types.
+// then the next rank's, to the fourth, whose third kill holds the raid and, with no
+// raider left, strobes green and ends the cave. No raider comes while the cave opens
+// to no rock, the rock and the drift at twice their pace, and its scroll halts, and
+// the Kraken rises at the right edge with vanguard's hit points, twice the last
+// one's in the next tier. The player's kill of it drops a missile charge, heat and
+// two energy, doubles species damage and lays the next cave in another stone art,
+// the raider table's streaks carried into it, scrolling a fifth faster once its pace
+// has eased in, its drift four times that, where the climb starts over at the first
+// rank of that cave's types.
 func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) {
 	t.Parallel()
 	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/vanguard"), "scenario.toml")
@@ -910,6 +911,9 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		w.RunSafe(func() { drift = w.Resources.Status.Floats.Get("environment.drift_speed").Get() })
 		return to - from, drift
 	}
+	// driftOf is the drift's pace for a rock at cols columns a second: four times it,
+	// within the drift's cap
+	driftOf := func(cols int64) float64 { return min(float64(4*cols), parameter.DriftMaxSpeed) }
 	// streaks are the raider table's pity rows as the loot system carries them
 	streaks := func() (rows []string) {
 		w.RunSafe(func() {
@@ -950,12 +954,17 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 				t.Fatalf("raider %d is a %s of rank %d, want one of %s's rank %d (%v)", n, got, rankOf[got]+1, art, want+1, spawned)
 			}
 		}
-		if a.Tick(2); greens != cycle+1 {
+		for range 20 {
+			if a.Tick(1); greens > cycle {
+				break
+			}
+		}
+		if greens != cycle+1 {
 			t.Fatalf("tier %d: the tier's end strobed %d times, want %d", cycle, greens, cycle+1)
 		}
 		// The approach, once eased up: the rock and the drift at twice their pace
-		if cols, drift := second(); cols < 2*pace-1 || cols > 2*pace+1 || drift != 160 {
-			t.Fatalf("tier %d: the approach scrolled %d columns in a second, the drift at %v; want %d and 160", cycle, cols, drift, 2*pace)
+		if cols, drift := second(); cols < 2*pace-1 || cols > 2*pace+1 || drift != driftOf(2*pace) {
+			t.Fatalf("tier %d: the approach scrolled %d columns in a second, the drift at %v; want %d and %v", cycle, cols, drift, 2*pace, driftOf(2*pace))
 		}
 
 		// The boss: the cave opens to no rock and halts, and the Kraken rises
@@ -982,8 +991,8 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		})
 		cfg := w.Resources.Config
 		edge := cfg.MapWidth - 1 - 2*int(parameter.KrakenBodyRadius)
-		if k := krakens[cycle]; hp != 120 || k.X != edge || k.Y != cfg.MapHeight/2 {
-			t.Fatalf("tier %d: the Kraken rose at (%d,%d) with %d hit points, want 120 at the right edge's (%d,%d)", cycle, k.X, k.Y, hp, edge, cfg.MapHeight/2)
+		if k := krakens[cycle]; hp != 120<<cycle || k.X != edge || k.Y != cfg.MapHeight/2 {
+			t.Fatalf("tier %d: the Kraken rose at (%d,%d) with %d hit points, want %d at the right edge's (%d,%d)", cycle, k.X, k.Y, hp, 120<<cycle, edge, cfg.MapHeight/2)
 		}
 		_, halted := rock()
 		if a.Tick(10); len(spawned) != (cycle+1)*4*perRank {
@@ -1033,8 +1042,8 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		if got := streaks(); len(carried) == 0 || !slices.Equal(got, carried) {
 			t.Fatalf("tier %d: the raider table's streaks went from %v to %v over the Kraken, want them carried on", cycle, carried, got)
 		}
-		if cols, drift := second(); cols < 2*speed-1 || cols > 2*speed+1 || drift != 160 {
-			t.Fatalf("tier %d: the next cave rushed in %d columns in a second, the drift at %v; want %d and 160", cycle, cols, drift, 2*speed)
+		if cols, drift := second(); cols < 2*speed-1 || cols > 2*speed+1 || drift != driftOf(2*speed) {
+			t.Fatalf("tier %d: the next cave rushed in %d columns in a second, the drift at %v; want %d and %v", cycle, cols, drift, 2*speed, driftOf(2*speed))
 		}
 		for range 600 {
 			if a.Tick(1); entered > entries || resets > 0 {
@@ -1044,8 +1053,8 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 		if entered != entries+1 || len(spawned) != (cycle+1)*4*perRank {
 			t.Fatalf("tier %d: the next cave filled the map %d times with %d raiders come since the Kraken, want once and none", cycle, entered-entries, len(spawned)-(cycle+1)*4*perRank)
 		}
-		if cols, drift := second(); cols < speed-1 || cols > speed+1 || drift != 80 {
-			t.Fatalf("tier %d: the next cave scrolled %d columns in a second, the drift at %v; want %d and 80", cycle, cols, drift, speed)
+		if cols, drift := second(); cols < speed-1 || cols > speed+1 || drift != driftOf(speed) {
+			t.Fatalf("tier %d: the next cave scrolled %d columns in a second, the drift at %v; want %d and %v", cycle, cols, drift, speed, driftOf(speed))
 		}
 		art, pace = next, speed
 	}
