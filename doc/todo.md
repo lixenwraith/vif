@@ -76,17 +76,15 @@ of the tier's own, and what beating it opens, the next tier or the same climb ag
 
 Vanguard's drifting text is scenery: rock and raiders pass it by and no key types
 it. Typing was the ship's only heat and energy income (+1 heat a key), so a game now
-earns none; play shows whether kills or a pickup should pay instead. Two gaps remain
-in the measured numbers. The upwind quarter stays thinner, as a line appears whole
-within `DriftEntryBand` (4) of the edge; entering lines part off the map closes it.
-The spawner counts the scenery hidden in rock, a quarter to a third of it, so its
-rate falls from mostly double to mostly normal (mean multiplier 1.84 to 1.10 at
-120×40); counting only the visible text closes that. Scenery passes behind any cell
-that blocks spawns, rock and walls alike, until the position package gives rock a
-test of its own. A boss region of fixed, typeable text over moving scenery needs a
-drift that moves scenery alone, since a drift moves every loose glyph; in truecolor
-scenery is hazed by depth apart from typeable text, but on a console it takes the
-same two entries.
+earns none; play shows whether kills or a pickup should pay instead. One gap remains
+in the measured numbers: the spawner counts the scenery hidden in rock, a quarter to
+a third of it, so its rate falls from mostly double to mostly normal (mean
+multiplier 1.84 to 1.10 at 120×40); counting only the visible text closes that.
+Scenery passes behind any cell that blocks spawns, rock and walls alike, until the
+position package gives rock a test of its own. A boss region of fixed, typeable text
+over moving scenery needs a drift that moves scenery alone, since a drift moves
+every loose glyph; in truecolor scenery is hazed by depth apart from typeable text,
+but on a console it takes the same two entries.
 
 ### Boss approach
 

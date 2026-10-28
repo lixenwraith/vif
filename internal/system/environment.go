@@ -35,8 +35,10 @@ type EnvironmentSystem struct {
 	drift driftState
 	// Velocity per level and axis in microcells/second, derived from drift
 	driftVelocity [driftLevels][2]int64
-	driftLayer    []core.Entity
-	driftDoomed   []core.Entity
+	// Cells each level stepped this tick, for the glyph spawner and renderer
+	driftStep   [driftLevels][2]int
+	driftLayer  []core.Entity
+	driftDoomed []core.Entity
 
 	statWindActive     *atomic.Bool
 	statDriftActive    *atomic.Bool
@@ -93,6 +95,7 @@ func (s *EnvironmentSystem) Init() {
 	s.windDirection = 0
 	s.windRemaining = 0
 	s.endDrift()
+	s.driftStep = [driftLevels][2]int{}
 	s.enabled = true
 	s.publishStatus()
 }
@@ -153,6 +156,7 @@ func (s *EnvironmentSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *EnvironmentSystem) Update() {
+	s.driftStep = [driftLevels][2]int{}
 	if s.enabled {
 		delta := s.world.Resources.Time.DeltaTime
 		s.updateWind(delta)
@@ -420,6 +424,7 @@ func (s *EnvironmentSystem) updateDrift(delta time.Duration) {
 			stepX, stepY := phase[0]/vmath.CellSpan, phase[1]/vmath.CellSpan
 			phase[0] -= stepX * vmath.CellSpan
 			phase[1] -= stepY * vmath.CellSpan
+			s.driftStep[level] = [2]int{int(stepX), int(stepY)}
 			if stepX != 0 || stepY != 0 {
 				s.shiftLayer(component.GlyphLevel(level), int(stepX), int(stepY))
 			}
@@ -504,8 +509,8 @@ func (s *EnvironmentSystem) passesWalls(e core.Entity) bool {
 	return prot.Mask&component.ProtectFromWall != 0
 }
 
-// publishStatus also leaves each layer's part-cell and velocity for the glyph
-// renderer, at rest while the system is off
+// publishStatus also leaves each layer's part-cell, velocity and step for the glyph
+// spawner and renderer, at rest while the system is off
 func (s *EnvironmentSystem) publishStatus() {
 	running := s.enabled && s.drift.Active
 	speed, rate := 0.0, [driftLevels][2]int64{}
@@ -517,7 +522,8 @@ func (s *EnvironmentSystem) publishStatus() {
 	s.statDriftDirection.Set(s.drift.Direction)
 	s.statDriftSpeed.Set(speed)
 	s.statDriftScenery.Store(s.enabled && s.drift.Scenery)
-	s.world.Resources.Drift.Phase, s.world.Resources.Drift.Rate = s.drift.Phase, rate
+	drift := s.world.Resources.Drift
+	drift.Phase, drift.Rate, drift.Step = s.drift.Phase, rate, s.driftStep
 }
 
 func finite(v float64) bool {
@@ -582,6 +588,7 @@ func (s *EnvironmentSystem) LoadShared(data []byte) error {
 	}
 	// A record moves no glyph: this instance's glyphs keep their own history
 	s.endDrift()
+	s.driftStep = [driftLevels][2]int{}
 	if snap.Drift.Active {
 		s.drift = snap.Drift
 		s.driftVelocity = driftVelocity(s.drift.Speed, s.drift.Direction, s.world.Resources.Config.CellAspect)

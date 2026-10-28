@@ -23,10 +23,6 @@ const (
 	// tick: a soft cap, past which the bright layer jumps more than five cells a tick.
 	DriftMaxSpeed = 100.0
 
-	// DriftEntryBand is how many cells from the upwind edge new glyph lines are
-	// placed while a drift is active.
-	DriftEntryBand = 4
-
 	// DriftFillSpeed is the drift pace the glyph spawner's interval suits: a faster
 	// drift spawns sooner in proportion, so its text keeps its density in passing.
 	DriftFillSpeed = 10.0

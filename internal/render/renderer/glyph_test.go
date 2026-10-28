@@ -120,3 +120,32 @@ func TestSceneryTakesItsColourFromItsDepth(t *testing.T) {
 		}
 	}
 }
+
+// TestAnEnteringLineIsDrawnAStepPastWhereTheSpawnerLeftIt: the runes of a line still
+// entering are drawn from where the spawner left its next one, on by the tick's step
+// and, as scenery, its layer's carry, up to the edge and under a glyph drawn there
+func TestAnEnteringLineIsDrawnAStepPastWhereTheSpawnerLeftIt(t *testing.T) {
+	w, game := glyphWorld()
+	width := w.Resources.Config.MapWidth
+	drift := w.Resources.Drift
+	drift.Rate[component.GlyphBright][0] = -80 * vmath.MicroRate
+	drift.Step[component.GlyphBright] = [2]int{-4, 0}
+	drift.Step[component.GlyphNormal] = [2]int{-2, 0}
+	w.Resources.Entry.Lines = []engine.EntryLine{
+		{X: width + 1, Y: 5, Dir: 1, Text: "abcdefg", Type: component.GlyphBlue, Level: component.GlyphBright, Scenery: true},
+		{X: width, Y: 7, Dir: 1, Text: "pq", Type: component.GlyphBlue, Level: component.GlyphNormal},
+	}
+	addGlyph(w, width-1, 5, 'R', component.GlyphBright, true)
+	addGlyph(w, width-1, 7, 'T', component.GlyphNormal, false)
+	tick := engine.SimEpoch.Add(time.Second)
+	w.Resources.Time.PaceTime = tick
+
+	buf := drawGlyphs(game, tick.Add(25*time.Millisecond))
+	for y, want := range map[int]string{5: "abRde", 7: "...pT"} {
+		for i, r := range want {
+			if got := buf.CellAt(width-5+i, y).Rune; r != '.' && got != r {
+				t.Fatalf("(%d,%d) drew %q, want %q", width-5+i, y, got, r)
+			}
+		}
+	}
+}

@@ -3,6 +3,7 @@ package system
 import (
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -562,6 +563,39 @@ func TestALayersCarryOverATickIsTheStepItTakesNext(t *testing.T) {
 	}
 }
 
+// TestTheEnvironmentPublishesEachLayersStep: each tick leaves the cells every layer
+// stepped for the glyph spawner, none for a layer that held still or a drift switched
+// off
+func TestTheEnvironmentPublishesEachLayersStep(t *testing.T) {
+	w, s := newEnvironmentWorld(1)
+	levels := []core.Entity{
+		addDriftGlyph(w, 60, 6, component.GlyphDark),
+		addDriftGlyph(w, 60, 12, component.GlyphNormal),
+		addDriftGlyph(w, 60, 18, component.GlyphBright),
+	}
+	s.startDrift(&event.DriftStartPayload{Direction: 5 * math.Pi / 6, Speed: 30})
+	tick := uint64(1)
+	for range 12 {
+		var before [3]component.PositionComponent
+		for level, e := range levels {
+			before[level], _ = w.Positions.GetPosition(e)
+		}
+		tick = runEnvironment(w, s, tick, 1)
+		for level, e := range levels {
+			pos, _ := w.Positions.GetPosition(e)
+			if step := w.Resources.Drift.Step[level]; pos.X-before[level].X != step[0] || pos.Y-before[level].Y != step[1] {
+				t.Fatalf("tick %d: level %d stepped from %v to %v, published %v", tick, level, before[level], pos, step)
+			}
+		}
+	}
+	s.HandleEvent(event.GameEvent{Type: event.EventMetaSystemCommandRequest,
+		Payload: &event.MetaSystemCommandPayload{SystemName: s.Name(), Enabled: false}})
+	runEnvironment(w, s, tick, 1)
+	if step := w.Resources.Drift.Step; step != ([driftLevels][2]int{}) {
+		t.Fatalf("a drift switched off published steps %v", step)
+	}
+}
+
 // TestAFastDriftSpawnsSoonerInProportion: the spawn interval shrinks by how far the
 // drift outpaces DriftFillSpeed, so its text keeps its density in passing, and a
 // slower drift spawns at the plain interval
@@ -584,55 +618,292 @@ func TestAFastDriftSpawnsSoonerInProportion(t *testing.T) {
 	}
 }
 
-// TestGlyphLinesEnterAtTheUpwindEdge: while glyphs drift, new lines are placed in
-// the band beside the edge the drift comes from.
-func TestGlyphLinesEnterAtTheUpwindEdge(t *testing.T) {
-	type band func(cfg *engine.ConfigResource, p component.PositionComponent) bool
-	right := func(cfg *engine.ConfigResource, p component.PositionComponent) bool {
-		return p.X >= cfg.MapWidth-parameter.DriftEntryBand-2
+// entryWorld is a cursor world whose glyphs drift, with the spawner and the
+// environment run in their order each tick
+type entryWorld struct {
+	w      *engine.World
+	env    *EnvironmentSystem
+	glyphs *GlyphSystem
+	tick   uint64
+}
+
+func newEntryWorld(t *testing.T, direction, speed float64, scenery bool) *entryWorld {
+	w, _, _ := testCursorWorld(t)
+	ew := &entryWorld{w: w, env: ready(NewEnvironmentSystem(w)).(*EnvironmentSystem),
+		glyphs: ready(NewGlyphSystem(w)).(*GlyphSystem), tick: 1}
+	ew.env.startDrift(&event.DriftStartPayload{Direction: direction, Speed: speed, Scenery: scenery})
+	return ew
+}
+
+// step runs a tick, starting text entering inside the spawner's turn as a spawn would
+func (ew *entryWorld) step(t *testing.T, enter ...string) {
+	t.Helper()
+	setEnvironmentDelta(ew.w, ew.tick, 50*time.Millisecond)
+	ew.glyphs.Update()
+	for _, text := range enter {
+		ew.start(t, text, component.GlyphBright)
 	}
-	top := func(_ *engine.ConfigResource, p component.PositionComponent) bool {
-		return p.Y < parameter.DriftEntryBand
+	ew.env.Update()
+	ew.tick++
+}
+
+// start starts a line entering, retrying the rows a cursor or a line of its level holds
+func (ew *entryWorld) start(t *testing.T, text string, level component.GlyphLevel) {
+	t.Helper()
+	for range 20 {
+		if ew.glyphs.placeLine(text, component.GlyphBlue, level) {
+			return
+		}
 	}
+	t.Fatalf("no row took %q", text)
+}
+
+// shown is what a frame right after the tick draws of the lines entering and the text
+// already on the map: each glyph in its cell, and each rune still entering a step on
+// from where the spawner left it, as the glyph renderer draws them
+func (ew *entryWorld) shown() map[component.PositionComponent]rune {
+	cells := map[component.PositionComponent]rune{}
+	ew.w.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
+		pos, _ := ew.w.Positions.GetPosition(e)
+		cells[pos] = g.Rune
+		return true
+	})
+	for _, line := range ew.glyphs.entering {
+		step := ew.w.Resources.Drift.Step[line.Level]
+		x, y := line.X+step[0], line.Y+step[1]
+		for _, r := range line.Text {
+			if !ew.w.Positions.IsOutOfBounds(x, y) {
+				cells[component.PositionComponent{X: x, Y: y}] = r
+			}
+			x += line.Dir
+		}
+	}
+	return cells
+}
+
+// readRow reads cells on one row as a run of neighbouring columns
+func readRow(t *testing.T, cells map[component.PositionComponent]rune) (text string, row, lo, hi int) {
+	t.Helper()
+	row, lo, hi = -1, math.MaxInt, math.MinInt
+	for pos := range cells {
+		if row >= 0 && pos.Y != row {
+			t.Fatalf("one line stands on rows %d and %d", row, pos.Y)
+		}
+		row, lo, hi = pos.Y, min(lo, pos.X), max(hi, pos.X)
+	}
+	runes := make([]rune, 0, len(cells))
+	for x := lo; x <= hi; x++ {
+		r, ok := cells[component.PositionComponent{X: x, Y: row}]
+		if !ok {
+			t.Fatalf("a gap at column %d in %v", x, cells)
+		}
+		runes = append(runes, r)
+	}
+	return string(runes), row, lo, hi
+}
+
+// TestALineEntersAcrossTheUpwindEdgeAsItsLayerMakesRoom: under a drift a line comes
+// on from past the upwind edge, a rune at a time across a side, the last first from
+// the left, and as a whole row across an end. A frame after each tick shows it in
+// order with no gap, its runes still to place drawn up to the edge; its first frame
+// shows it at the edge, and in the end the whole line is on the map.
+func TestALineEntersAcrossTheUpwindEdgeAsItsLayerMakesRoom(t *testing.T) {
+	const text = "abcdefghij"
 	for _, tc := range []struct {
 		name      string
 		direction float64
-		bands     []band
+		side      int // +1 enters across the right edge, -1 the left, 0 an end
 	}{
-		{"left", math.Pi, []band{right}},
-		{"down", math.Pi / 2, []band{top}},
-		{"down-left", 3 * math.Pi / 4, []band{right, top}},
+		{"left", math.Pi, 1},
+		{"right", 0, -1},
+		{"down", math.Pi / 2, 0},
+		{"up", 3 * math.Pi / 2, 0},
 	} {
-		w, _, _ := testCursorWorld(t)
-		glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
-		w.Resources.Status.Bools.Get("environment.drift_active").Store(true)
-		w.Resources.Status.Floats.Get("environment.drift_direction").Set(tc.direction)
-		for range 20 {
-			glyphs.placeLine("abc", component.GlyphBlue, component.GlyphNormal)
+		ew := newEntryWorld(t, tc.direction, 80, false)
+		width, height := ew.w.Resources.Config.MapWidth, ew.w.Resources.Config.MapHeight
+		ew.step(t)
+		ew.step(t, text)
+		first := true
+		for range 6 {
+			if cells := ew.shown(); len(cells) > 0 {
+				shown, row, lo, hi := readRow(t, cells)
+				inOrder := map[int]bool{1: strings.HasPrefix(text, shown), -1: strings.HasSuffix(text, shown), 0: shown == text}[tc.side]
+				atEdge := map[int]bool{1: hi == width-1, -1: lo == 0, 0: row == 0 || row == height-1}[tc.side]
+				if !inOrder || shown != text && !atEdge {
+					t.Fatalf("%s: a frame shows %q on row %d, columns %d to %d", tc.name, shown, row, lo, hi)
+				}
+				if first && (!atEdge || tc.side != 0 && len(shown) != 1) {
+					t.Fatalf("%s: the line first shows as %q on row %d, columns %d to %d", tc.name, shown, row, lo, hi)
+				}
+				first = false
+			}
+			ew.step(t)
 		}
+		if n := ew.w.Components.Glyph.CountEntities(); n != len(text) || len(ew.glyphs.entering) > 0 {
+			t.Fatalf("%s: %d runes on the map and %d lines entering, want the whole line on", tc.name, n, len(ew.glyphs.entering))
+		}
+	}
+}
 
-		// Every glyph lies in a band, and each band holds one that lies in no other
-		only := make([]int, len(tc.bands))
-		for _, e := range w.Components.Glyph.Entities() {
-			pos, _ := w.Positions.GetPosition(e)
-			var in []int
-			for i, b := range tc.bands {
-				if b(w.Resources.Config, pos) {
-					in = append(in, i)
+// TestAnEnteringRuneTakesItsCellAsTheDriftCarriesAGlyph: a rune enters its cell past
+// another glyph there, and past rock or a wall that blocks spawns as scenery, where
+// typeable text leaves a hole; a space leaves its cell empty
+func TestAnEnteringRuneTakesItsCellAsTheDriftCarriesAGlyph(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
+	cfg := w.Resources.Config
+	cols := make([]engine.RockColumn, cfg.MapWidth)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Ceil: 0, Floor: cfg.MapHeight}
+	}
+	cols[31] = engine.RockColumn{Ceil: cfg.MapHeight, Floor: cfg.MapHeight}
+	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	for _, y := range []int{12, 16} {
+		wall := w.CreateEntity(core.DomainShared)
+		w.Positions.SetPosition(wall, component.PositionComponent{X: 33, Y: y})
+		w.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockAll})
+		addDriftGlyph(w, 35, y, component.GlyphDark)
+	}
+
+	for _, tc := range []struct {
+		scenery bool
+		y       int
+		want    string // columns 30 to 36: a rock column, a wall, a glyph of another depth
+	}{
+		{false, 12, "a.c.efg"},
+		{true, 16, "abc.efg"},
+	} {
+		line := engine.EntryLine{X: 30, Y: tc.y, Dir: 1, Text: "abc efg", Type: component.GlyphBlue,
+			Level: component.GlyphBright, Scenery: tc.scenery}
+		if glyphs.feed(&line, [2]int{-1, 0}) {
+			t.Fatalf("scenery %v: a line on the map is still entering", tc.scenery)
+		}
+		got := []rune(".......")
+		for x := range got {
+			for _, e := range w.Positions.GetAllEntityAt(30+x, tc.y) {
+				if g, ok := w.Components.Glyph.GetComponent(e); ok && g.Level == component.GlyphBright {
+					got[x] = g.Rune
 				}
 			}
-			if len(in) == 0 {
-				t.Fatalf("%s: glyph placed at %v, outside every entry band", tc.name, pos)
-			}
-			if len(in) == 1 {
-				only[in[0]]++
-			}
 		}
-		for i, n := range only {
-			if n == 0 {
-				t.Fatalf("%s: no line entered through band %d", tc.name, i)
-			}
+		if string(got) != tc.want {
+			t.Fatalf("scenery %v: entered as %q, want %q", tc.scenery, string(got), tc.want)
 		}
+	}
+}
+
+// TestNoTwoLinesOfALevelEnterOnOneRow: a line never starts on a row where a line of
+// its level is still entering, which would lay one text over the other, while lines
+// of two levels share rows as their layers pass
+func TestNoTwoLinesOfALevelEnterOnOneRow(t *testing.T) {
+	ew := newEntryWorld(t, math.Pi, 80, true)
+	ew.step(t)
+	for range 40 {
+		for _, level := range []component.GlyphLevel{component.GlyphNormal, component.GlyphBright} {
+			ew.glyphs.placeLine("abcdefghij", component.GlyphBlue, level)
+		}
+	}
+	rows := map[component.GlyphLevel]map[int]bool{component.GlyphNormal: {}, component.GlyphBright: {}}
+	for _, line := range ew.glyphs.entering {
+		if rows[line.Level][line.Y] {
+			t.Fatalf("two lines of level %d enter on row %d", line.Level, line.Y)
+		}
+		rows[line.Level][line.Y] = true
+	}
+	shared := 0
+	for row := range rows[component.GlyphBright] {
+		if rows[component.GlyphNormal][row] {
+			shared++
+		}
+	}
+	if shared == 0 {
+		t.Fatalf("lines of two levels never shared a row: %v", rows)
+	}
+}
+
+// TestALineStartsEnteringAtAFreeCell: a line starts only where its first cells on the
+// map stand empty, as text is placed on no other entity
+func TestALineStartsEnteringAtAFreeCell(t *testing.T) {
+	ew := newEntryWorld(t, math.Pi, 80, true)
+	ew.step(t)
+	width, height := ew.w.Resources.Config.MapWidth, ew.w.Resources.Config.MapHeight
+	free := height / 2
+	for y := range height {
+		if y != free {
+			addDriftGlyph(ew.w, width-1, y, component.GlyphDark)
+		}
+	}
+	for range 200 {
+		ew.glyphs.placeLine("abcdefghij", component.GlyphBlue, component.GlyphBright)
+	}
+	if len(ew.glyphs.entering) != 1 || ew.glyphs.entering[0].Y != free {
+		t.Fatalf("lines entering %+v, want one on row %d", ew.glyphs.entering, free)
+	}
+}
+
+// TestEnteringTextIsDroppedOnceNothingCarriesItIn: what is still to enter is dropped
+// once the drift stops, turns away from its edge or the spawner is switched off,
+// rather than standing past the edge; no more of it comes on than a frame had shown
+func TestEnteringTextIsDroppedOnceNothingCarriesItIn(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		stop func(ew *entryWorld)
+	}{
+		{"stops", func(ew *entryWorld) { ew.env.HandleEvent(event.GameEvent{Type: event.EventDriftCancel}) }},
+		{"turns", func(ew *entryWorld) { ew.env.startDrift(&event.DriftStartPayload{Direction: 0, Speed: 80}) }},
+		{"spawner off", func(ew *entryWorld) {
+			ew.glyphs.HandleEvent(event.GameEvent{Type: event.EventMetaSystemCommandRequest,
+				Payload: &event.MetaSystemCommandPayload{SystemName: ew.glyphs.Name(), Enabled: false}})
+		}},
+	} {
+		ew := newEntryWorld(t, math.Pi, 80, true)
+		ew.step(t)
+		ew.step(t, "abcdefghij")
+		ew.step(t)
+		shown := len(ew.shown())
+		if len(ew.glyphs.entering) == 0 {
+			t.Fatalf("%s: nothing was entering", tc.name)
+		}
+		tc.stop(ew)
+		ew.step(t)
+		if n := ew.w.Components.Glyph.CountEntities(); len(ew.glyphs.entering) > 0 || len(ew.w.Resources.Entry.Lines) > 0 || n > shown {
+			t.Fatalf("%s: %d lines entering, %d published, %d runes on against %d shown before", tc.name,
+				len(ew.glyphs.entering), len(ew.w.Resources.Entry.Lines), n, shown)
+		}
+	}
+}
+
+// TestEnteringTextCarriesOverACopy: a copy of the spawner whose environment holds no
+// step yet goes on feeding its lines exactly as the source does
+func TestEnteringTextCarriesOverACopy(t *testing.T) {
+	source, copied := newEntryWorld(t, math.Pi, 80, true), newEntryWorld(t, math.Pi, 80, true)
+	for _, ew := range []*entryWorld{source, copied} {
+		ew.step(t)
+		ew.step(t, "abcdefghijklmnopqrstuvwxyz", "0123456789")
+	}
+	data, err := copied.glyphs.SaveLocal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := copied.env.SaveShared()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := copied.env.LoadShared(record); err != nil {
+		t.Fatal(err)
+	}
+	if err := copied.glyphs.LoadLocal(data); err != nil {
+		t.Fatal(err)
+	}
+	if len(copied.glyphs.entering) == 0 {
+		t.Fatal("no line was still entering at the copy")
+	}
+	for tick := range 12 {
+		if got, want := copied.shown(), source.shown(); !reflect.DeepEqual(got, want) {
+			t.Fatalf("tick %d: the copy shows %v, the source %v", tick, got, want)
+		}
+		source.step(t)
+		copied.step(t)
 	}
 }
 
