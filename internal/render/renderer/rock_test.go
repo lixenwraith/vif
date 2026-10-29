@@ -3,6 +3,7 @@ package renderer
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
@@ -11,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/cave"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // stoneField lays a field across the map whose ceiling and floor step from column to
@@ -87,6 +89,48 @@ func TestAParticlePassesHiddenThroughRock(t *testing.T) {
 		ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}, buf)
 	if hidden, shown := buf.CellAt(5, 1).Rune, buf.CellAt(5, 6).Rune; hidden != 0 || shown != 'd' {
 		t.Fatalf("drew %q in rock and %q in the open, want nothing and 'd'", hidden, shown)
+	}
+}
+
+// TestRockDrawsWhereTheScrollStandsAtTheFrame: rock and shared walls ride the cave's
+// scroll, so a frame between ticks draws them carried on, the columns ahead entering
+// at the right edge, and scenery hides behind the rock as drawn
+func TestRockDrawsWhereTheScrollStandsAtTheFrame(t *testing.T) {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	config := w.Resources.Config
+	cols := make([]engine.RockColumn, config.MapWidth)
+	for x := range cols {
+		cols[x] = engine.RockColumn{Floor: config.MapHeight}
+	}
+	cols[10].Ceil = 5
+	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{Visual: component.WallVisualConfig{Char: '#', RenderFg: true}}, 0, cols)
+	w.Positions.SetRockAhead([]engine.RockColumn{{Ceil: 5, Floor: config.MapHeight}})
+	wall := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(wall, component.PositionComponent{X: 20, Y: 8})
+	w.Components.Wall.SetComponent(wall, component.WallComponent{Rune: 'W', RenderFg: true})
+	for _, x := range []int{9, 10} {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: 2})
+		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 's', Type: component.GlyphBlue, Level: component.GlyphNormal})
+		w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectScenery})
+	}
+	// Half a column carried and 20 columns a second for 30 ms: 1.1 columns on
+	tick := time.Unix(1000, 0)
+	w.Resources.Time.PaceTime, w.Resources.Time.DeltaTime = tick, 50*time.Millisecond
+	w.Resources.Cave.Phase, w.Resources.Cave.Rate = vmath.CellSpan/2, 20*vmath.MicroRate
+	ctx := render.RenderContext{MapWidth: config.MapWidth, MapHeight: config.MapHeight,
+		ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight, GameTime: tick.Add(30 * time.Millisecond)}
+
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+	NewWallRenderer(game).Render(ctx, buf)
+	if left, stood, entered, moved := buf.CellAt(9, 2).Rune, buf.CellAt(10, 2).Rune, buf.CellAt(config.MapWidth-1, 2).Rune, buf.CellAt(19, 8).Rune; left != '#' || stood != 0 || entered != '#' || moved != 'W' {
+		t.Fatalf("drew %q a column left of the rock, %q where it stood, %q at the edge, the wall %q, want '#', nothing, '#', 'W'", left, stood, entered, moved)
+	}
+	buf = render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+	NewGlyphRenderer(game).Render(ctx, buf)
+	if hidden, shown := buf.CellAt(9, 2).Rune, buf.CellAt(10, 2).Rune; hidden != 0 || shown != 's' {
+		t.Fatalf("drew %q behind the rock and %q where it left, want nothing and 's'", hidden, shown)
 	}
 }
 

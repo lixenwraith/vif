@@ -94,7 +94,7 @@ func (r *RayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 
 // drawRay draws a ray's cells, a warning's core only, its sides at sides of the core's alpha
 func (r *RayRenderer) drawRay(ctx render.RenderContext, buf *render.RenderBuffer, b *component.RayComponent, alpha, sides float64, warning bool) {
-	positions := r.gameCtx.World.Positions
+	positions, carry := r.gameCtx.World.Positions, rockCarry(ctx, r.gameCtx.World)
 	for i := 1; i <= b.Ray.Length; i++ {
 		half := b.Ray.Half(i)
 		if warning {
@@ -103,7 +103,7 @@ func (r *RayRenderer) drawRay(ctx render.RenderContext, buf *render.RenderBuffer
 		for across := -half; across <= half; across++ {
 			x, y := b.Ray.Cell(i, across)
 			if x < 0 || y < 0 || x >= ctx.MapWidth || y >= ctx.MapHeight ||
-				positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+				positions.HasBlockingWallDrawnAt(x, y, carry, component.WallBlockKinetic) {
 				continue
 			}
 			screenX, screenY, visible := ctx.MapToScreen(x, y)

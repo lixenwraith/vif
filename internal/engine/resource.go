@@ -150,11 +150,19 @@ func (r *DriftResource) Carry(level int, since time.Duration) (dx, dy int) {
 // --- Cave Resource ---
 
 // CaveResource is the cave's scroll as the wall system left it this tick: the
-// columns its rock and shared walls stepped left. The wall system writes, the particle
-// system reads to carry what rides the cave's frame; it is derived state and never
+// columns its rock and shared walls stepped left, its part-column and its rate. The
+// wall system writes, the particle system reads to carry what rides the cave's frame
+// and renderers to draw the scroll between ticks; it is derived state and never
 // copied with a world.
 type CaveResource struct {
 	Steps int
+	Phase int64 // rate times nanoseconds toward the next column
+	Rate  int64 // microcolumns a second, 0 while no cave scrolls
+}
+
+// Carry is how many columns the scroll moves in since past the tick, at the rate it has
+func (r *CaveResource) Carry(since time.Duration) int {
+	return int((r.Phase + r.Rate*int64(since)) / vmath.CellSpan)
 }
 
 // --- Entry Resource ---

@@ -383,10 +383,17 @@ depths interleave where they cross. A frame copies every glyph into its layer, s
 the copy is a packed 16 bytes and a glyph's kind is its protection alone
 (`Position.IsScenery`): 1,460 scenery glyphs over a 200×60 cave draw in 54 µs a
 frame where a 40-byte copy and `IsTypeable` took 63 (`BenchmarkGlyphRender`).
-Scenery standing in rock or a wall that blocks spawns is not drawn: rock and walls
-draw first and a glyph prints over them foreground-only, so the text passes behind
-them; the sigil renderer leaves out a sigil there the same way, so a particle
-passing through rock goes behind it. In truecolor each scenery layer mixes its
+A cave's rock and the shared walls riding its scroll are drawn the same way, where
+the scroll stands at the frame's moment: the wall renderer carries them on by the
+part-column and rate the wall system leaves in `Cave`, at most as far as the field's
+columns ahead (`RockField.Ahead`), which come in at the right edge. A rock drawn at
+its tick moves 20 times a second at any pace, so 24 columns a second is four steps
+of one column and one of two; carried, it moves 24 times a column at a time, and
+any pace up to 60 moves a column at a time. Scenery standing in rock or a wall that
+blocks spawns, as drawn (`Position.HasBlockingWallDrawnAt`), is not drawn: rock and
+walls draw first and a glyph prints over them foreground-only, so the text passes
+behind them; the sigil renderer leaves out a sigil there the same way, so a particle
+passing through rock goes behind it, and a ray stops at it. In truecolor each scenery layer mixes its
 type's bright color into the background by `visual.SceneryDepthMix`, so far text
 fades as haze, while typeable text keeps its level's color. In 256-color mode a
 glyph hue has two console entries, one for dark and one shared by normal and

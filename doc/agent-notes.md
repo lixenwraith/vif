@@ -120,6 +120,11 @@ that proves wrong or that a document now states, and link the document instead.
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A vanguard crush
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe
   clears what it recorded there.
+- Whether a motion reads smooth is a frame question, not a tick one: render each of
+  a tick's three frames with the context's `GameTime` set that far past
+  `Time.PaceTime` and count the cells the layer moved. A pace off a multiple of
+  twenty a second, drawn only where its tick left it, moves in uneven steps however
+  fast it is.
 
 ## Scenario TOML
 

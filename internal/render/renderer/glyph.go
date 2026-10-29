@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"time"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
@@ -76,7 +78,7 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	buf.SetWriteMask(visual.MaskGlyph)
 	positions := world.Positions
 	width, height := world.Resources.Config.MapWidth, world.Resources.Config.MapHeight
-	carry := r.carry(ctx)
+	carry, rockCarry := r.carry(ctx), rockCarry(ctx, world)
 	for i := range r.layers {
 		r.layers[i] = r.layers[i][:0]
 	}
@@ -116,7 +118,7 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		for i := range drawn {
 			d := &drawn[i]
 			x, y := int(d.x), int(d.y)
-			if positions.HasBlockingWallAt(x, y, component.WallBlockSpawn) {
+			if positions.HasBlockingWallDrawnAt(x, y, rockCarry, component.WallBlockSpawn) {
 				continue
 			}
 			if screenX, screenY, visible := ctx.MapToScreen(x, y); visible {
@@ -151,18 +153,25 @@ func (r *GlyphRenderer) addEntering(line *engine.EntryLine, step, carry [2]int, 
 	}
 }
 
-// carry is how far each drift layer stands past its cells at the frame's moment:
-// from the tick the frame follows, a tick on at most, and none before a first tick
+// carry is how far each drift layer stands past its cells at the frame's moment
 func (r *GlyphRenderer) carry(ctx render.RenderContext) (c [len(parameter.DriftLayerFactor)][2]int) {
-	t := r.gameCtx.World.Resources.Time
-	if t.PaceTime.IsZero() {
+	since, ok := sinceTick(ctx, r.gameCtx.World.Resources.Time)
+	if !ok {
 		return c
 	}
-	since := min(max(ctx.GameTime.Sub(t.PaceTime), 0), t.DeltaTime)
 	for level := range c {
 		c[level][0], c[level][1] = r.gameCtx.World.Resources.Drift.Carry(level, since)
 	}
 	return c
+}
+
+// sinceTick is how far the frame's moment stands past the tick it follows, a tick on
+// at most, and false before a first tick
+func sinceTick(ctx render.RenderContext, t *engine.TimeResource) (time.Duration, bool) {
+	if t.PaceTime.IsZero() {
+		return 0, false
+	}
+	return min(max(ctx.GameTime.Sub(t.PaceTime), 0), t.DeltaTime), true
 }
 
 func (r *GlyphRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, d *drawnGlyph) {

@@ -31,10 +31,10 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	positions := r.gameCtx.World.Positions
+	positions, carry := r.gameCtx.World.Positions, rockCarry(ctx, r.gameCtx.World)
 	sigils.Each(func(entity core.Entity, sigilComp *component.SigilComponent) bool {
 		sigilPos, ok := positions.GetPosition(entity)
-		if !ok || positions.HasBlockingWallAt(sigilPos.X, sigilPos.Y, component.WallBlockSpawn) {
+		if !ok || positions.HasBlockingWallDrawnAt(sigilPos.X, sigilPos.Y, carry, component.WallBlockSpawn) {
 			return true
 		}
 		screenX, screenY, visible := ctx.MapToScreen(sigilPos.X, sigilPos.Y)
