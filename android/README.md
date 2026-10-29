@@ -41,9 +41,9 @@ the APK on one of those.
 `bindGo` builds gomobile and gobind at the versions `go.mod` pins, binds `./game`
 for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and an APK for each lands
 in `app/build/outputs/apk/debug/`: a phone takes arm64, an emulator x86_64. Its
-library is compressed, so installing unpacks it once and each launch loads that
-copy. Gradle packages a debug APK whole on every build, as it does a release
-(`gradle.properties`), so rebuilding never grows it. This module requires at least
+library is stored uncompressed and loaded from the APK in place. Gradle packages a
+debug APK whole on every build, as it does a release (`gradle.properties`), so
+rebuilding never grows it. This module requires at least
 what the root's `go.mod` does, so a dependency bump there runs
 `go -C android mod tidy` in the same commit; until it does, `make android` names
 each module behind and what requires it. `make verify` vets and tests this

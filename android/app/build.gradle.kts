@@ -49,19 +49,14 @@ android {
         }
     }
 
-    // One APK per ABI bindGo builds, each library compressed: a phone downloads its
-    // own alone, and installing unpacks it once (README.md).
+    // One APK per ABI bindGo builds, so a phone downloads and keeps its own library
+    // alone, stored uncompressed and loaded from the APK in place (README.md).
     splits {
         abi {
             isEnable = true
             reset()
             include("arm64-v8a", "x86_64")
             isUniversalApk = false
-        }
-    }
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
         }
     }
 

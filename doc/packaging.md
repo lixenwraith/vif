@@ -74,8 +74,8 @@ carries `LICENSE.purego` for the desktop window its binary links. Each archive's
 - **A plain `vX.Y.Z` tag** drafts the final release. None has been pushed.
 - **The Android APKs** (`vif-<label>-android-arm64.apk` for a phone and
   `vif-<label>-android-x86_64.apk` for an emulator; Android 11 and newer) are one
-  per ABI, each library compressed: a phone downloads 6.6 MB, where the one APK
-  carrying both libraries uncompressed was 37.9 MB. They are built by
+  per ABI, so a phone downloads and keeps its own library alone: 18.3 MB, where
+  the one APK carrying both was 37.9 MB. They are built by
   `android/toolchain.sh gradlew assembleRelease` on the runner's SDK, their
   `versionCode` the workflow's run number, which climbs across nightlies and tags,
   so a device takes each build as an update of the one before. They are signed
