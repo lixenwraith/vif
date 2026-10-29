@@ -220,7 +220,7 @@ func (r *Reach) Close() {
 // nobody: it shares its holder's fate, so the link it joined on is the one it needs.
 // walking is a survivor walking the list, or one cut off.
 func (r *Reach) drive(walking bool) {
-	if r == nil || r.authority.seat() {
+	if r == nil || r.inst.Seated() {
 		return
 	}
 	chain := r.authority.Chain()
@@ -242,7 +242,7 @@ func (r *Reach) drive(walking bool) {
 // dials every candidate for one that carries it (NetworkSystem.sendUp), and goes
 // on alone if none does (Authority.driveCutOff).
 func (r *Reach) cutOff() bool {
-	if r == nil || r.authority.seat() {
+	if r == nil || r.inst.Seated() {
 		return false
 	}
 	u := r.authority

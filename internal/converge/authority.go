@@ -548,13 +548,6 @@ func (u *Authority) currentRoster() []network.RosterEntry {
 	return out
 }
 
-// seat reports whether this instance is a bot some participant holds.
-func (u *Authority) seat() bool {
-	local, roster := link.PeerID(u.inst.LocalParticipant()), u.currentRoster()
-	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return e.ID == local })
-	return i >= 0 && roster[i].Holder != 0
-}
-
 // recordReport notes one report, reporting whether it was new. The set is what ends
 // the flood: a report says one thing and says it once. One naming a term before the
 // lost authority's is history.
