@@ -159,7 +159,7 @@ var topics = []topicDef{
 		Key: "commands", Title: "COMMANDS",
 		Entries: []entryDef{
 			{Keys: ":h  :?", Desc: "This help"},
-			{Keys: ":g  :config", Desc: "Configuration: bots, multiplayer, audio, controls, display, solo speed and diagnostics; startup settings explain files and flags"},
+			{Keys: ":g  :config", Desc: "Configuration: bots, multiplayer, audio, controls, display, speed and diagnostics; startup settings explain files and flags"},
 			{Keys: ":about", Desc: "Version, engine and licence"},
 			{Keys: ":pause [on|off]  :p", Desc: "Pause or resume the game until the next :pause; in a live session only the host can, every participant stops at the same tick, and a joiner lands paused"},
 			{Keys: ":new  :n", Desc: "New game; in a live session the host resets everyone and a guest is refused"},
@@ -216,7 +216,7 @@ var topics = []topicDef{
 			{Keys: ":d heap", Desc: "Heap profile to vif-heap-<time>.pprof: live and allocated space by call site"},
 			{Keys: ":d mutex [s]", Desc: "Mutex profile for s seconds, default 10, to vif-mutex-<time>.pprof: lock wait time by the holder's stack"},
 			{Keys: ":d trace [s]", Desc: "Execution trace for s seconds to vif-trace-<time>.out with a region per timed module, for go tool trace"},
-			{Keys: ":speed [rate]  :sp [rate]", Desc: "Solo simulation rate: 1/8 1/4 1/2 1 2 4 8, or + - reset; unavailable live"},
+			{Keys: ":speed [rate]  :sp [rate]", Desc: "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or + - reset; in a live session only the host can, and every participant changes at the same tick"},
 			{Keys: ":step [n]  :st [n]", Desc: "Solo pause and advance n settled game ticks; unavailable live"},
 			{Keys: ":step [rate] fsm [region] [pause]", Desc: "Solo run until the next FSM transition, then restore; unavailable live"},
 			{Keys: ":step [rate] ev <Event> [pause]", Desc: "Solo run until the event is dispatched, then restore; unavailable live"},

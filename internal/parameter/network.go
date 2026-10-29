@@ -79,15 +79,15 @@ const (
 
 	// NetworkSlowWindow, NetworkSlowLatePerSecond and NetworkSlowBytesPerSecond are
 	// the default eviction policy for a participant too slow to keep up: over the
-	// window, its epochs reached the authority late this often and its
-	// corrections cost this much. Both must hold; zero disables either.
+	// window, its epochs reached the authority late this often and its corrections
+	// cost this much, a second of game time. Both must hold; zero disables either.
 	NetworkSlowWindow         = 20 * time.Second
 	NetworkSlowLatePerSecond  = 5.0
 	NetworkSlowBytesPerSecond = 8 << 10
 
 	// NetworkIngressBytesPerSecond is what the authority accepts from a link over
-	// the same window, per participant the link carries. A guest drains about a
-	// sixth of it while playing; past it, the link and its subtree are evicted.
+	// the same window, per participant the link carries and second of game time. A
+	// guest uses about a sixth of it while playing; past it, its subtree is evicted.
 	NetworkIngressBytesPerSecond = 64 << 10
 
 	// NetworkSyncTicks is the period between owner-authored state syncs (D-13).

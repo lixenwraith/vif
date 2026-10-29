@@ -113,33 +113,26 @@ payload = "width = 100\nheight = 30"
 // is a property of the run rather than of the flags, and -speed overrides it.
 func TestScriptPacingSelectsTheWallRate(t *testing.T) {
 	t.Parallel()
-	tick := parameter.GameUpdateInterval
 	for _, tc := range []struct {
-		name     string
-		cfg      Config
-		interval time.Duration
-		paced    bool
-		wantErr  bool
+		name    string
+		cfg     Config
+		paced   bool
+		wantErr bool
 	}{
-		{"solo runs flat out", Config{}, tick, false, false},
-		{"a session is paced from tick zero", Config{HostAddress: ":0"}, tick, true, false},
-		{"a joining session is paced too", Config{JoinAddress: "h:1"}, tick, true, false},
-		{"an explicit rate paces a solo run", Config{TimeScaleSpec: "1"}, tick, true, false},
-		{"a faster rate spends less wall time", Config{TimeScaleSpec: "2"}, tick / 2, true, false},
-		{"a slower rate spends more", Config{TimeScaleSpec: "1/2"}, tick * 2, true, false},
-		{"max removes pacing", Config{TimeScaleSpec: ScriptPaceMax}, tick, false, false},
-		{"an unknown token is refused", Config{TimeScaleSpec: "3/7"}, 0, false, true},
+		{"solo runs flat out", Config{}, false, false},
+		{"a session is paced from tick zero", Config{HostAddress: ":0"}, true, false},
+		{"a joining session is paced too", Config{JoinAddress: "h:1"}, true, false},
+		{"an explicit rate paces a solo run", Config{TimeScaleSpec: "2"}, true, false},
+		{"max removes pacing", Config{TimeScaleSpec: ScriptPaceMax}, false, false},
+		{"an unknown token is refused", Config{TimeScaleSpec: "3/7"}, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			interval, paced, err := scriptPacing(tc.cfg)
+			paced, err := scriptPacing(tc.cfg)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("scriptPacing error = %v, want error %t", err, tc.wantErr)
 			}
-			if err != nil {
-				return
-			}
-			if interval != tc.interval || paced != tc.paced {
-				t.Fatalf("scriptPacing = (%s, %t), want (%s, %t)", interval, paced, tc.interval, tc.paced)
+			if err == nil && paced != tc.paced {
+				t.Fatalf("scriptPacing paced = %t, want %t", paced, tc.paced)
 			}
 		})
 	}

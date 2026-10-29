@@ -130,6 +130,7 @@ A correction must not be repairing entity allocation or run numbering.
 | `EventParticipantJoined` / `EventParticipantDeparted` | creates or destroys a shared cursor |
 | `EventGameResetRequest` | replaces the run |
 | `EventGameHold` | stops every participant's clock after the same tick (§3.6) |
+| `EventGameSpeed` | sets every participant's rate from the same tick (§3.6) |
 | `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` | allocates a shared species from a drain fusion |
 | `EventBehaviorSpawnRequest` | allocates a data species; only a script crosses one, a bus event defaulting to the player domain there |
 | `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
@@ -359,23 +360,23 @@ ahead saved at most one tick of lead and tripled the corrections that moved a
 placement on the guest that ran it.
 
 While authoring, the authority evicts a participant whose epochs, over
-`-slow-window`, reached it late at least `-slow-late` times a second while its link
-carried at least `-slow-bytes` a second (`driveEviction`). Epochs rather than
-crossings: a player sweeping the pointer is not a slower link than one standing
-still. The first window after arrival is grace, and only a participant's own raw
-epochs count, so its actions relayed to the others never mark them. A link is
-evicted with the bots it holds once what it sends over the window passes
-`NetworkIngressBytesPerSecond` for itself, each bot it holds and each person the
-authority has no link to (`driveIngress`). `-slow-window 0` turns off both. The
-authority sends every committed copy down each of its links, the producer's
-included, so a producer knows which of its epochs were committed; one with nobody
-behind it reads the copy's age alone, its frames left off (netcode §1). On a handoff a
-guest resends to the successor, in its next epoch, the retained crossings of the
-epochs that never came back (`ResendUncommitted`); the successor commits them late
-and refuses by sequence any it already holds from the predecessor's copies, so a
-lost authority costs a player only what the commit bound voids. Every receiver
-takes each source's crossing sequence once (`NetworkSequenceWindow`), whatever
-epoch carries it.
+`-slow-window`, reached it late at least `-slow-late` times a second of game time
+while its link carried at least `-slow-bytes` a second of it (`driveEviction`).
+Epochs rather than crossings: a player sweeping the pointer is not a slower link
+than one standing still. The first window after arrival or a change of rate is
+grace, and only a participant's own raw epochs count, so its actions relayed to the
+others never mark them. A link is evicted with the bots it holds once what it sends
+over the window passes `NetworkIngressBytesPerSecond` for itself, each bot it holds
+and each person the authority has no link to (`driveIngress`). `-slow-window 0`
+turns off both. The authority sends every committed copy down each of its links, the
+producer's included, so a producer knows which of its epochs were committed; one
+with nobody behind it reads the copy's age alone, its frames left off (netcode §1).
+On a handoff a guest resends to the successor, in its next epoch, the retained
+crossings of the epochs that never came back (`ResendUncommitted`); the successor
+commits them late and refuses by sequence any it already holds from the
+predecessor's copies, so a lost authority costs a player only what the commit bound
+voids. Every receiver takes each source's crossing sequence once
+(`NetworkSequenceWindow`), whatever epoch carries it.
 
 ### 3.6 Holding a session
 
@@ -426,6 +427,19 @@ did, and the resume the run recorded ends it there. A joiner admitted while
 its host's new game waits for the host's press is held as a start
 (`SessionOffer.Start`): it waits as every guest there does, and the host's first
 epoch starts it with nothing said.
+
+A session runs at its host's rate as it stops at its host's hold. The host's
+`:speed` (Simulation → Game speed) crosses `EventGameSpeed`, admissible from the
+authority alone, so every participant changes rate at one agreed tick, and a
+guest's is refused (`speedRefused`). A joiner adopts the rate its offer's anchor
+names (`ConfigForJoin`), a script's or bot's pace included, and every driven run
+paces at its own clock's rate, which the crossing moves on a seat as on its holder.
+The authority's per-second budgets (`driveEviction`, `driveIngress`) count a second
+of game time, and a window the rate changed in starts over, grace for eviction. A
+replay presents the run at the rate its clock held, which the journal's opening
+anchor names and its records move. Nothing yet caps the rate at what the session's
+links and its host's tick carry
+([Cap a session's rate at what it carries](todo.md#cap-a-sessions-rate-at-what-it-carries)).
 
 ## 4. Correction pipeline
 

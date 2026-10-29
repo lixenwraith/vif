@@ -996,13 +996,13 @@ func (s *NetworkSystem) AppliedCrossingFences() link.CrossingFences {
 // barrierBound names the artifacts that apply at one agreed tick on every instance,
 // the producer included: the ones deciding what the world *is* — roster, run, shared
 // identity, a region's spawn progression, the defeat that rebuilds the level, the
-// hold every clock stops at — not what happens in a world both already hold, whose
-// gap a correction repairs. Nobody's input waits on them. See multi-player.md §3.1.
+// hold every clock stops at and the rate they run at — not what happens in a world
+// both already hold, whose gap a correction repairs. See multi-player.md §3.1.
 func barrierBound(et event.EventType) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest,
 		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventBehaviorSpawnRequest,
-		event.EventDrainDefeated, event.EventCursorDefeatState, event.EventGameHold:
+		event.EventDrainDefeated, event.EventCursorDefeatState, event.EventGameHold, event.EventGameSpeed:
 		return true
 	default:
 		return false
@@ -2693,13 +2693,14 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 }
 
 // Only the authority may author roster changes, which create or destroy shared
-// identities, and a hold, which stops everyone: the one that sent the frame, or the
-// one it applies under — a dropped guest sees the link close before its dismissal's
-// tick and takes the term itself. Nobody acts as another participant's cursor
-// (crossingActors). Other source authentication requires authenticated peers.
+// identities, and a hold or a rate, which stop or pace everyone: the one that sent
+// the frame, or the one it applies under — a dropped guest sees the link close before
+// its dismissal's tick and takes the term itself. Nobody acts as another
+// participant's cursor (crossingActors); other authentication needs authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, payload any, source uint32, authored bool) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameHold, event.EventFSMTransition:
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameHold, event.EventGameSpeed,
+		event.EventFSMTransition:
 		return authored || source == s.authorityParticipant()
 	}
 	actor, ok := crossingActors[et]

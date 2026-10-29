@@ -97,24 +97,24 @@ things about how one is *run* are policy rather than content:
 
 | `-speed` | Effect on a script |
 |---|---|
-| unset | Real time in a session, unpaced when solo. A solo script that opens a session with `:host` starts pacing at that tick and re-anchors its clock there. |
+| unset | The session's rate in a session, unpaced when solo. A solo script that opens a session with `:host` starts pacing at that tick and re-anchors its clock there. |
 | `1`, `2`, `1/2`, … | One tick occupies the game interval divided by the rate: `2` is twice real time, `1/2` is half. |
 | `max` | No wall pacing at all. Refused with `-host`, `-join` or seated bots: a participant that outruns its peers is not simulating the session it is in. |
 
-Every participant of one session must use the same rate. The runtime cannot see a
-peer's pace, so it enforces only the `max` case: a participant running faster than
-the rest reaches ticks they have not, and every correction rebases it back to the
-authority's tick — which is a working session, but not one whose scripted actions
-land where they were authored. A dedicated host runs real time; an interactive
-host runs its own rate, which an interactive guest adopts from the offer and nobody
-changes while a peer is linked. A script sharing a session with either must match it.
+Every participant of one session runs at its host's rate: a joiner adopts it from
+the offer, a script's or bot's pace included, a paced run reads it off its own
+clock, and the host's `:speed` crosses to every participant at one tick
+([Multi-player §3.6](multi-player.md#36-holding-a-session)). A dedicated host runs
+real time, which nobody can change. `max` is refused in a session: a participant
+running faster than the rest reaches ticks they have not, and every correction
+rebases it back to the authority's tick.
 
 `-watch` presents the run on this terminal instead of running it headlessly. The
 simulation is unchanged — the same manual clock, the same script geometry, the
 same driver — so a presented run and a headless one of the same script produce
 the same world. Only pan and quit are offered while a presented script is in a
-session: step and rate are instance-local, and a session stops only by its host's
-hold (§8).
+session: step is instance-local, the rate is the host's, and a session stops only by
+its host's hold (§8).
 
 ### 1.2 The dedicated host
 
@@ -522,8 +522,9 @@ In a replay `:r` is `:replay`; elsewhere it remains `:region`, which a replay
 refuses. A game reset starts a run whose ticks count from zero, so `tick` and
 `time` address the run shown; the status bar reports run, tick and its 1x time.
 
-Pacing converts the recorded tick interval and speed to wall time, then applies
-the viewer's rate. A presented step is one recorded tick and everything up to the
+Pacing converts the recorded tick interval to wall time at the rate the replayed
+run's clock holds, which the journal's opening anchor names and its records move as
+the run's moved, then applies the viewer's rate. A presented step is one recorded tick and everything up to the
 next: its settle groups, and any world written then with the groups that landed on
 it. A frame shows the run between two ticks, never inside one, where a command
 typed while the run paused took none of its time. The presented
@@ -893,8 +894,9 @@ along it and clamp at the ends. `PausableClock` re-anchors game time on a rate
 change, so there is no time jump or catch-up burst. Above 1x the scheduler
 skips render backpressure so the world can outrun the display.
 
-`-speed <rate>` sets the initial play-mode rate; an interactive guest takes its
-host's instead (§1.1). Runtime commands are:
+`-speed <rate>` sets the initial play-mode rate; a guest takes its host's instead,
+and in a live session only the host changes it, for every participant at one tick
+(§1.1). Runtime commands are:
 
 | Command | Effect |
 |---|---|
@@ -996,7 +998,7 @@ command/search/status text; a reset the scenario raises, as the default
 scenario's defeat does, clears no instance's macros. `:new!` additionally clears
 the initiating instance's telemetry HUD, pins and breakpoints and returns its free
 mouse, auto-fire and time scale to their startup values (`GameContext.StartScale`
-keeps the `-speed` rate). A peer receiving the crossed reset retains its own
+keeps the `-speed` rate), the rate only outside a live session, whose is its host's. A peer receiving the crossed reset retains its own
 operator state, macros included.
 Logging target, level, scope, snapshot period, and recorder depth are process
 diagnostics and are never part of this purge.

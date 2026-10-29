@@ -131,6 +131,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventGameStepRequest,
 		event.EventGameHoldRequest,
 		event.EventGameHold,
+		event.EventGameSpeed,
 		event.EventSpeciesKilled,
 		event.EventDrainDefeated,
 		event.EventCursorDefeatState,
@@ -244,6 +245,11 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventGameHold:
 		s.handleHold(ev.Origin == event.OriginNetwork)
+
+	case event.EventGameSpeed:
+		if p, ok := ev.Payload.(*event.GameSpeedPayload); ok {
+			s.handleSpeed(engine.TimeScale{Num: p.Num, Den: p.Den}, ev.Origin == event.OriginNetwork)
+		}
 
 	case event.EventSpeciesKilled:
 		if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
@@ -774,24 +780,41 @@ func (s *MetaSystem) handleHold(byHost bool) {
 	s.ctx.SetStatusMessage("Paused", parameter.StatusNotice)
 }
 
-// handleSpeedRequest applies the time scale through its single owner, then
-// announces it; a nil or non-positive payload restores real time
+// handleSpeedRequest sets the time scale; a nil or non-positive payload restores
+// real time. A live session's rate is its host's, which crosses so every
+// participant changes it at one tick; the command refuses a guest's.
 func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
-	if s.world.Session().Live {
-		s.ctx.SetStatusMessage("Speed control is unavailable in a live session", parameter.StatusNotice)
-		return
-	}
 	scale := engine.ScaleNormal
 	if p != nil && p.Num > 0 && p.Den > 0 {
 		scale = engine.TimeScale{Num: p.Num, Den: p.Den}
 	}
-	// if s.ctx.TimeCtl.Scale() == scale {
-	if s.ctx.TimeCtl.Scale() == scale && s.ctx.TimeCtl.Armed() == nil {
+	switch session := s.world.Session(); {
+	case !session.Live:
+		s.setScale(scale)
+	case session.Coordinator():
+		s.ctx.PushCrossing(event.EventGameSpeed, &event.GameSpeedPayload{Num: scale.Num, Den: scale.Den})
+	}
+}
+
+// handleSpeed sets the rate a live session's host crossed, at the tick it crossed
+// for; byHost is a rate another participant crossed. Only a ladder rate is taken.
+func (s *MetaSystem) handleSpeed(scale engine.TimeScale, byHost bool) {
+	if !slices.Contains(engine.ScaleLadder, scale) || !s.setScale(scale) || !byHost {
 		return
+	}
+	s.ctx.SetStatusMessage("The host set the speed to "+scale.String()+"x", parameter.StatusNotice)
+}
+
+// setScale applies the rate through its single owner and announces it, reporting
+// whether anything changed.
+func (s *MetaSystem) setScale(scale engine.TimeScale) bool {
+	if s.ctx.TimeCtl.Scale() == scale && s.ctx.TimeCtl.Armed() == nil {
+		return false
 	}
 	s.ctx.TimeCtl.SetScale(scale)
 	s.world.Log().Info("app", "msg", "time scale changed", "scale", scale.String())
 	s.ctx.PushLocal(event.EventGameSpeedChanged, &event.GameSpeedPayload{Num: scale.Num, Den: scale.Den})
+	return true
 }
 
 // handleStepRequest arms a tick allowance or a run-until breakpoint; pause and

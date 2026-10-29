@@ -813,56 +813,42 @@ to watch: [Run a scenario with no players](#run-a-scenario-with-no-players).
 
 ## Netcode
 
-### Let a session's host set its speed
+### Cap a session's rate at what it carries
 
-- Priority: P1
-- Affected files: `internal/system/meta.go` (`handleSpeedRequest`,
-  `handleStepRequest`), `internal/system/network.go` (`admissibleFromSource`),
-  `internal/engine/game_context.go` (`ResetSessionState`), `internal/app/seat.go`
-  (`seatConfigLocked`), `internal/app/script.go` (`scriptPacing`),
-  `internal/converge/authority.go`, `internal/parameter/network.go`
-- Guide: [Runtime §9](runtime.md#9-time-control),
-  [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
+- Priority: P2
+- Affected files: `internal/system/meta.go` (`handleSpeedRequest`),
+  `internal/converge/authority.go`, `internal/system/network.go` (`ownLead`),
+  `internal/engine/scheduler.go`, `internal/parameter/network.go`
+- Guide: [Multi-player §3.6](multi-player.md#36-holding-a-session),
+  [§3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
 
-A rate chosen solo stays for the life of any session the run opens, and nobody can
-change it. `:speed` and `:step` are refused once `Session().Live` is set, which
-`:host` and the first `:bot add` both do (`handleSpeedRequest`); `:new!` keeps the
-rate in a live session (`ResetSessionState`); a guest adopts the host's from the
-offer's anchor (`ConfigForJoin`). A host at 2x cannot bring a person who joins back
-to 1x, short of leaving the session.
+A session's rate is its host's (`EventGameSpeed`), every participant and seat paces
+at it, and the authority's budgets count a second of game time; nothing caps it.
+The simulation step is fixed, so a rate moves wall pacing alone, and every
+tick-counted window shrinks with it: at 8x a tick is 6.25 ms, the largest lead
+(`NetworkBarrierMaxDelayTicks`, 20) covers 125 ms instead of a second, a crossing
+that much late is void (`NetworkCommitLateTicks`), and syncs, epochs and
+corrections come eight times as often. A LAN hides this: a host at 8x with a guest,
+its bot and one of the host's held 155 ticks a second (7.7x), and two seats under an
+8x patrol holder ran 478 and 479 ticks in 3 s, none of 114 and 124 corrections
+jumping their clocks (on the main before the rate crossed, 25 of 29 and 29 of 29
+did). Over the internet it shows as voided actions (`network.commit_void`), a lead
+at its cap (`network.barrier_delay_ticks`) and corrections.
 
-Bot seats run at another rate than their holder: a seat's config carries none, so
-`scriptPacing` paces it at 1x and corrections drag it along. Two roam seats under a
-patrol holder, 3 s each: at 1x no correction jumped a seat's clock (0 of 13 and 0
-of 14); at 8x nearly all did (29 of 29 and 25 of 26, `snapshot.corrections_jumped`).
-A seat at 8x plays a world that leaps forward each correction instead of one it
-simulates.
-
-What closes it:
-- The rate becomes the authority's, as the hold is
-  ([Multi-player §3.6](multi-player.md#36-holding-a-session)): `:speed` on the
-  authority crosses as an event only the coordinator may author
-  (`admissibleFromSource`) and every instance sets it at its apply tick; a replay's
-  presentation, paced by the opening rate (`JournalAnchor.Speed`), follows it. A
-  guest's `:speed` is refused or asks the host; `:step` and breakpoints stay solo.
-  A host with only its own seats (`SessionState.SeatsOnly`) changes it as solo.
-- A seat paces at its holder's rate, read live, not from its config.
-- A ceiling. The simulation step is fixed, so a rate moves only wall pacing, but
-  every tick-counted window shrinks with it. At 8x a tick is 6.25 ms: the largest
-  lead (`NetworkBarrierMaxDelayTicks`, 20) covers 125 ms instead of a second, a
-  crossing that much late is void (`NetworkCommitLateTicks`), and syncs, epochs and
-  corrections come eight times as often. The wall-time budgets do not scale: a
-  playing guest uses about a sixth of `NetworkIngressBytesPerSecond` at 1x, so a
-  busy one passes it near 6x and is evicted, and `-slow-late` counts late epochs a
-  second. A LAN hides this: a host at 8x with a guest, its bot and one of the
-  host's held 155 ticks a second (7.7x). Over the internet it shows as voided
-  actions (`network.commit_void`), a lead at its cap
-  (`network.barrier_delay_ticks`) and evictions. Cap the rate the authority takes
-  at the highest its worst link carries with headroom, and scale the per-second
-  budgets by the rate.
-- No arrival changes the rate, a person's or a bot's: the host sets it, and while
-  it is not 1x every participant's status bar warns that the game runs fast or
-  slow, at what rate.
+Decisions it waits on:
+- What caps it. Measured: the authority refuses a rate at which its worst link's
+  path, read in wall time from the epochs' ages at commit (`WireBatch.Age`), needs
+  a lead past `NetworkBarrierMaxDelayTicks` with headroom, or at which its tick's
+  cost passes the interval (the gauge [shedding](#shed-load-when-a-host-cannot-keep-its-tick)
+  asks for). Static: a session with a remote guest caps at one rung, seats and a
+  LAN aside. Or the windows become wall durations at the rate, which keeps a lead a
+  second at any rate and lands a guest's action eight seconds of game time late
+  at 8x.
+- The headroom, measured at each rung: the share of the lead cap and of the
+  interval a rate may use.
+- What a refused `:speed` says, and whether a cap that falls below the rate in
+  force, a link degrading at 4x, lowers it: shedding's first valve.
+- Whether a guest's `:speed` stays refused or asks the host.
 
 Verify with the staged netem gate
 (`TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers`, `VIF_NETEM=1` as root)
@@ -886,7 +872,7 @@ so refuse none up front; gauge and relieve instead:
   against its interval at the current rate (no `engine.` key publishes the cost
   today), the worst lead in force, commit voids and correction floor breaches.
 - Valves, one at a time, each announced to every participant: lower the session
-  rate a step ([Let a session's host set its speed](#let-a-sessions-host-set-its-speed)),
+  rate a step (`EventGameSpeed`, which every participant and seat already follows),
   drop bots newest first and tell their holders, stop admitting joins, then drop a
   participant with a reason its client prints
   ([Let an authority drop a participant](#let-an-authority-drop-a-participant)) or
@@ -957,7 +943,7 @@ and the rest), so a shorter tick shortens each of them in time. Every participan
 of a session must step the same interval, so it would travel in the session's
 handshake and the journal, and a session's traffic per second, command frames,
 epochs and corrections, grows with the rate, as it already does for a session run
-above 1x ([Let a session's host set its speed](#let-a-sessions-host-set-its-speed)).
+above 1x ([Cap a session's rate at what it carries](#cap-a-sessions-rate-at-what-it-carries)).
 Vanguard's rock is drawn at the frame's moment but blocks where its tick left it, so
 what it hits follows the interval. The smallest step is an interval set per run and carried
 where every participant reads it, the tick-counted windows derived from durations,

@@ -580,7 +580,7 @@ func (ctx *GameContext) ResetSessionState() {
 	ctx.TimeCtl.ClearBreaks(nil)
 	ctx.MouseFreeMode.Store(ctx.StartMouseFree)
 	ctx.AutoFire.Store(ctx.StartAutoFire)
-	// The rate is refused in a live session, so a purge there leaves it as well.
+	// A live session's rate is its host's, so a purge there leaves it as well.
 	if !ctx.World.Session().Live {
 		ctx.TimeCtl.SetScale(ctx.StartScale)
 	}

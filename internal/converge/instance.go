@@ -19,8 +19,9 @@ type Instance interface {
 	Position() event.Stamp
 	Driven() bool
 	// Held reports a hold standing on this run, which reaches no tick until it ends;
-	// it takes no lock.
+	// it takes no lock. Rate is the rate its clock runs at, the host's in a session.
 	Held() bool
+	Rate() engine.TimeScale
 
 	// LocalParticipant is this instance's session identity, zero outside a session.
 	// Seated marks a bot's run, which shares its holder's fate: the run's own word,
