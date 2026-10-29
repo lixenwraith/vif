@@ -29,6 +29,7 @@ type stub struct {
 	frozen bool
 	held   bool
 	local  uint32
+	seated bool
 	roster []network.RosterEntry
 	port   engine.NetworkPort
 	world  snapshot.SharedCapture
@@ -96,6 +97,8 @@ func (s *stub) setHeld(held bool) {
 }
 
 func (s *stub) LocalParticipant() uint32 { return s.local }
+
+func (s *stub) Seated() bool { return s.seated }
 
 func (s *stub) WorldRoster() []network.RosterEntry {
 	s.mu.Lock()

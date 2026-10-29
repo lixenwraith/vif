@@ -35,6 +35,12 @@ func (m *membership) Held() bool            { return m.ctx.TimeCtl.Held() }
 
 func (m *membership) LocalParticipant() uint32 { return m.localParticipant() }
 
+func (m *membership) Seated() bool {
+	var seated bool
+	m.world.RunSafe(func() { seated = m.cfg.holder != 0 })
+	return seated
+}
+
 // WorldRoster reads the roster off the cursors rather than off the lobby the offer
 // described: arrivals and departures are barrier-bound crossings, so this is the
 // same list on every instance.

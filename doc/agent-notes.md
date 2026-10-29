@@ -45,6 +45,9 @@ that proves wrong or that a document now states, and link the document instead.
 - A joiner's arrival can reach it inside a correction rather than as the crossing,
   which the capture's fence then drops: state a joiner takes on arriving is derived
   in `RebindCursorRoster` too, never only in the arrival's handler.
+- A joiner's world holds no entry for it until its arrival crosses there, while the
+  authority's may already: what the run itself is, a bot seat, is its own word
+  (`Instance.Seated`), never read off its roster entry.
 
 ## Determinism and the harness
 
@@ -61,11 +64,11 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Tests that flake
 
-- A few `internal/app` tests over real sockets fail on main alone, a few percent of
-  runs and more under `-race` or load: `TestAStillGuestSeatsBotsAfterItsHostLeaves`
-  most, a relay-join hold and a mid-session journal test rarely. A failure there takes about 16.5 s, a 15 s
-  socket wait running out. Before calling one a regression, run it alone in fresh
-  processes, alternating main's binary and the branch's under the same load.
+- A few `internal/app` tests over real sockets have failed on main alone, rarely and
+  more under `-race` or load: a relay-join hold and a mid-session journal test. A
+  failure there takes about 16.5 s, a 15 s socket wait running out. Before calling
+  one a regression, run it alone in fresh processes, alternating main's binary and
+  the branch's under the same load.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not.
 - A race between a test's write and another goroutine's read reproduces at will:

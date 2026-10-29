@@ -23,7 +23,10 @@ type Instance interface {
 	Held() bool
 
 	// LocalParticipant is this instance's session identity, zero outside a session.
+	// Seated marks a bot's run, which shares its holder's fate: the run's own word,
+	// since its world holds no entry for it until its arrival crosses there.
 	LocalParticipant() uint32
+	Seated() bool
 
 	// WorldRoster is the roster as the cursors hold it: the same list on every
 	// instance, because arrivals and departures are barrier-bound crossings. Empty
