@@ -50,7 +50,7 @@ The status bar reports an active selection as `dom:shared` in the filter stack s
 
 ## Build & Run
 
-`vif-log` lives in the `vif` module and builds with its toolchain (Go 1.27.2). From the repository root:
+`vif-log` lives in the `vif` module and builds with its toolchain (Go 1.27.3). From the repository root:
 
 ```bash
 make tools                 # builds bin/vif-log alongside the other tools

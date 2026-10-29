@@ -1,6 +1,6 @@
 module github.com/lixenwraith/vif/android
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/lixenwraith/terminal v0.6.1
