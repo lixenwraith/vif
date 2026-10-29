@@ -1003,6 +1003,12 @@ func encodeColumnsLoot(dst []byte, rows []StoreEntry[component.LootComponent]) [
 		dst = appendInt(dst, rows[i].Value.Away)
 	}
 	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.FlowX)
+	}
+	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.FlowY)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.LastIntX)
 	}
 	for i := range rows {
@@ -1053,6 +1059,12 @@ func decodeColumnsLoot(r *columnReader) []StoreEntry[component.LootComponent] {
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Away, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.FlowX, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.FlowY, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.LastIntX, r)
@@ -1786,6 +1798,12 @@ func encodeColumnsNavigation(dst []byte, rows []StoreEntry[component.NavigationC
 		dst = appendInt(dst, rows[i].Value.Height)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.HeaderX)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.HeaderY)
+	}
+	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.FlowLookahead)
 	}
 	for i := range rows {
@@ -1827,6 +1845,12 @@ func decodeColumnsNavigation(r *columnReader) []StoreEntry[component.NavigationC
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Height, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.HeaderX, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.HeaderY, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.FlowLookahead, r)

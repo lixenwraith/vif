@@ -17,9 +17,10 @@ type NavigationComponent struct {
 	FlowX float64
 	FlowY float64
 
-	// Entity dimensions for area-based LOS (set at spawn)
-	Width  int
-	Height int
+	// The body's footprint and its header's offset from the top-left, set at spawn:
+	// area line of sight reads the size, and the passability tier it steers by all four
+	Width, Height    int
+	HeaderX, HeaderY int
 
 	// FlowLookahead is how far along the flow vector, in cells, the homing target is
 	// placed while HasDirectPath is false

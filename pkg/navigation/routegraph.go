@@ -102,10 +102,8 @@ type RouteGraph struct {
 	SourceX, SourceY int
 	TargetX, TargetY int
 
-	FootprintW, FootprintH int // Entity footprint used for passability
-	HeaderOffX, HeaderOffY int
-
-	Grid uint64 // Caller's generation of the passability the routes were computed on
+	Footprint Footprint // the body the passability fits
+	Grid      uint64    // Caller's generation of the passability the routes were computed on
 }
 
 // RouteSolver computes route graphs on scratch kept from one computation to the
@@ -124,18 +122,17 @@ type RouteSolver struct {
 func ComputeRouteGraph(
 	sourceX, sourceY, targetX, targetY int,
 	mapW, mapH int,
-	footprintW, footprintH, headerOffX, headerOffY int,
+	foot Footprint,
 	isBlocked WallChecker,
 ) *RouteGraph {
-	return new(RouteSolver).Compute(sourceX, sourceY, targetX, targetY, mapW, mapH,
-		footprintW, footprintH, headerOffX, headerOffY, isBlocked)
+	return new(RouteSolver).Compute(sourceX, sourceY, targetX, targetY, mapW, mapH, foot, isBlocked)
 }
 
 // Compute is ComputeRouteGraph on the solver's scratch
 func (rs *RouteSolver) Compute(
 	sourceX, sourceY, targetX, targetY int,
 	mapW, mapH int,
-	footprintW, footprintH, headerOffX, headerOffY int,
+	foot Footprint,
 	isBlocked WallChecker,
 ) *RouteGraph {
 	if mapW <= 0 || mapH <= 0 {
@@ -155,8 +152,7 @@ func (rs *RouteSolver) Compute(
 	rg := &RouteGraph{
 		SourceX: sourceX, SourceY: sourceY,
 		TargetX: targetX, TargetY: targetY,
-		FootprintW: footprintW, FootprintH: footprintH,
-		HeaderOffX: headerOffX, HeaderOffY: headerOffY,
+		Footprint: foot,
 	}
 
 	size := mapW * mapH
@@ -403,7 +399,7 @@ func (sc *routeScratch) dilate(path []int, radius int, fn func(idx int)) {
 		for _, idx := range cur {
 			p := g.pad(int32(idx))
 			for k := range DirCount {
-				if g.blocked[p+g.padStep[k]] {
+				if g.free[p+g.padStep[k]] == 0 {
 					continue
 				}
 				nIdx := idx + int(g.step[k])

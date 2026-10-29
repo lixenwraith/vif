@@ -470,3 +470,50 @@ func TestADropAWallLandedOnIsDisplacedAndCollected(t *testing.T) {
 		t.Fatalf("the drop never left the wall that landed on it: %+v", flight)
 	}
 }
+
+// A reader out of sight reads its field every field_refresh_ticks and holds the way
+// it read between, a navigator its flow and a drop its owner's field's, so the field
+// is computed on the reading ticks alone; one that went out of sight since the last
+// read holds no way, and homes on its target meanwhile. An install takes the phase.
+func TestAReaderOutOfSightReadsItsFieldEveryRefresh(t *testing.T) {
+	w, owner := soloCursorWorld(t)
+	w.Resources.Config.NavRefreshTicks = 4
+	wallWithGap(w, 20)
+	mover := w.CreateEntity(core.DomainShared) // closes a cell every tick, so a field read must be computed
+	w.Components.Wall.SetComponent(mover, component.WallComponent{BlockMask: component.WallBlockAll})
+	w.Positions.SetPosition(mover, component.PositionComponent{X: 38, Y: 0})
+	walker := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(walker, component.PositionComponent{X: 30, Y: 5})
+	w.Components.Navigation.SetComponent(walker, component.NavigationComponent{FlowLookahead: 12})
+	nav := ready(NewNavigationSystem(w)).(*NavigationSystem)
+	loot := ready(NewLootSystem(w)).(*LootSystem)
+	drop := dropLoot(w, loot, 32, 8, owner)
+	held := 0.123
+	for tick := range 9 {
+		w.Positions.Move(mover, component.PositionComponent{X: 38, Y: tick % 3})
+		computed := nav.groups[0].fields[0].cache.Field.CurrentGen
+		nav.Update()
+		loot.Update()
+		w.Resources.Event.Queue.Consume()
+		n, _ := w.Components.Navigation.GetPtr(walker)
+		l, _ := w.Components.Loot.GetPtr(drop)
+		read := nav.groups[0].fields[0].cache.Field.CurrentGen != computed
+		if fresh := tick%4 == 0; read != fresh || fresh == (n.FlowX == held) || fresh == (l.FlowX == held) {
+			t.Fatalf("tick %d: reading tick %t, the field computed %t, the walker's flow held %t, the drop's %t",
+				tick, fresh, read, n.FlowX == held, l.FlowX == held)
+		}
+		n.FlowX, l.FlowX = held, held
+	}
+	w.Positions.Move(walker, component.PositionComponent{X: 10, Y: 5})
+	nav.Update() // in sight, between reads
+	w.Positions.Move(walker, component.PositionComponent{X: 30, Y: 5})
+	nav.Update() // out of sight again, still before the next read
+	if n, _ := w.Components.Navigation.GetPtr(walker); n.HasDirectPath || n.FlowX != 0 || n.FlowY != 0 {
+		t.Fatalf("a navigator out of sight since the last read steers %+v, want no flow", n)
+	}
+	phase, _ := nav.SaveShared()
+	joiner := ready(NewNavigationSystem(w)).(*NavigationSystem)
+	if err := joiner.LoadShared(phase); err != nil || joiner.refreshTicks != nav.refreshTicks || nav.refreshTicks == 0 {
+		t.Fatalf("an install took refresh phase %d of the sender's %d (%v)", joiner.refreshTicks, nav.refreshTicks, err)
+	}
+}

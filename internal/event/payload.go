@@ -1495,12 +1495,18 @@ type TargetGroupRemovePayload struct {
 	GroupID uint8 `toml:"group_id"`
 }
 
-// RouteGraphRequestPayload requests route graph computation for a gateway-target pair
+// RouteGraphRequestPayload requests route graph computation for a gateway-target pair,
+// for the body the routes are for: Width×Height cells with the header HeaderX,
+// HeaderY from the top-left, the eye's when it names none
 type RouteGraphRequestPayload struct {
 	SourceX       int    `toml:"source_x"` // Gateway spawn position
 	SourceY       int    `toml:"source_y"`
 	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity); valid only while route-graph anchors are shared, the domain tag sits above bit 32
 	TargetGroupID uint8  `toml:"target_group_id"`
+	Width         int    `toml:"width"`
+	Height        int    `toml:"height"`
+	HeaderX       int    `toml:"header_x"`
+	HeaderY       int    `toml:"header_y"`
 }
 
 // RouteGraphComputedPayload signals route graph computation completion

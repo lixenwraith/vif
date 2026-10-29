@@ -39,6 +39,17 @@ func navRecord(t *testing.T, cap snapshot.SharedCapture) (int, map[string]any) {
 	return 0, nil
 }
 
+// navFields is every group's phase on every tier in a navigation record
+func navFields(body map[string]any) []map[string]any {
+	var fields []map[string]any
+	for _, g := range body["groups"].([]any) {
+		for _, f := range g.(map[string]any)["fields"].([]any) {
+			fields = append(fields, f.(map[string]any))
+		}
+	}
+	return fields
+}
+
 // resealCapture writes a modified navigation record back and restores the integrity
 // hash, so what the install rejects is the state and not the envelope.
 func resealCapture(t *testing.T, cap snapshot.SharedCapture, idx int, body map[string]any) snapshot.SharedCapture {
@@ -80,12 +91,9 @@ func TestNavigationPhaseIsLoadBearing(t *testing.T) {
 				// armed to recompute immediately. It is the sabotage that matters
 				// most, because it is the state the install would be in if the
 				// declaration were dropped.
-				for _, g := range body["groups"].([]any) {
-					group := g.(map[string]any)
-					group["point_ticks"] = float64(parameter.NavFlowMinTicksBetweenCompute)
-					group["composite_ticks"] = float64(parameter.NavFlowMinTicksBetweenCompute)
-					group["point_pending"] = true
-					group["composite_pending"] = true
+				for _, field := range navFields(body) {
+					field["ticks"] = float64(parameter.NavFlowMinTicksBetweenCompute)
+					field["pending"] = true
 				}
 			},
 		},
@@ -97,11 +105,8 @@ func TestNavigationPhaseIsLoadBearing(t *testing.T) {
 			// steer by it from the next tick.
 			name: "wrong_last_targets",
 			sabotage: func(body map[string]any) {
-				for _, g := range body["groups"].([]any) {
-					group := g.(map[string]any)
-					moved := []any{map[string]any{"X": 12.0, "Y": 6.0}}
-					group["point_last_targets"] = moved
-					group["composite_last_targets"] = moved
+				for _, field := range navFields(body) {
+					field["last_targets"] = []any{map[string]any{"X": 12.0, "Y": 6.0}}
 				}
 			},
 		},
@@ -404,7 +409,7 @@ func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
 	}
 	origin.World().RunSafe(func() {
 		w, got := origin.World(), passability()
-		want := navigation.NewCompositePassability(got.Width, got.Height, got.FootprintW, got.FootprintH, got.HeaderOffX, got.HeaderOffY)
+		want := navigation.NewCompositePassability(got.Width, got.Height, got.Footprint())
 		want.Compute(func(x, y int) bool { return w.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) })
 		if !slices.Equal(got.Valid, want.Valid) {
 			t.Fatal("the installed world's passability is not what its walls derive")

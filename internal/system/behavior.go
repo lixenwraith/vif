@@ -361,6 +361,8 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 	s.world.Components.Navigation.SetComponent(header, component.NavigationComponent{
 		Width:         p.Width,
 		Height:        p.Height,
+		HeaderX:       p.HeaderX,
+		HeaderY:       p.HeaderY,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 	s.world.Components.Combat.SetComponent(header, component.CombatComponent{

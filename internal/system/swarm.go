@@ -407,6 +407,8 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
 		Width:         parameter.SwarmWidth,
 		Height:        parameter.SwarmHeight,
+		HeaderX:       parameter.SwarmHeaderOffsetX,
+		HeaderY:       parameter.SwarmHeaderOffsetY,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 

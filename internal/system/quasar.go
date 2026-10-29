@@ -366,6 +366,8 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
 		Width:         parameter.QuasarWidth,
 		Height:        parameter.QuasarHeight,
+		HeaderX:       parameter.QuasarHeaderOffsetX,
+		HeaderY:       parameter.QuasarHeaderOffsetY,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 

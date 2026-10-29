@@ -1,6 +1,7 @@
 package system
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -15,17 +16,40 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// targetGroupNav holds per-group flow fields and the grid generation each was last
-// computed on; zero is none, since the generation starts at one
-type targetGroupNav struct {
-	pointFlowCache       *navigation.FlowFieldCache // For point entities (1×1)
-	compositeFlowCache   *navigation.FlowFieldCache // For composite entities (footprint-aware)
-	pointAt, compositeAt uint64
-	due                  bool // the composite field fell due this tick: its targets moved enough to matter
+// navTier is one passability tier: the headers a footprint fits on, the grid every
+// field, reach and route graph of the footprint searches, the generation it last
+// moved at, and the cells a tick's wall change turned on it
+type navTier struct {
+	foot           navigation.Footprint
+	pass           *navigation.CompositePassability // nil on the point tier, whose passability is the walls
+	grid           navigation.SearchGrid
+	gen            uint64
+	opened, closed []vmath.Point
 }
 
-// NavigationSystem resolves target groups, maintains per-group point and composite
-// flow fields, tracks composite passability, and computes gateway route graphs
+// tierField is a group's field on one tier, the tier's generation it was last
+// computed on (zero is none, since generations start at one), and whether it fell
+// due this tick: its targets moved enough to matter
+type tierField struct {
+	cache *navigation.FlowFieldCache
+	at    uint64
+	due   bool
+}
+
+// targetGroupNav holds a group's field on every tier, in the system's tier order
+type targetGroupNav struct {
+	fields []tierField
+}
+
+// eyeFootprint is the composite tier every body it covers steers by
+var eyeFootprint = navigation.Footprint{
+	Width: parameter.EyeWidth, Height: parameter.EyeHeight,
+	HeaderX: parameter.EyeHeaderOffsetX, HeaderY: parameter.EyeHeaderOffsetY,
+}
+
+// NavigationSystem resolves target groups, maintains each group's flow field on
+// every passability tier, keeps the tiers up to the walls, and computes gateway
+// route graphs
 type NavigationSystem struct {
 	world *engine.World
 
@@ -35,34 +59,33 @@ type NavigationSystem struct {
 	solver  navigation.RouteSolver
 	costs   navigation.Costs // the cell aspect every field and route is weighted at
 
-	// Composite passability, moved cell by cell as the walls change
-	compositePassability *navigation.CompositePassability
+	// tiers are the point tier, the eye's, which every body it covers rides, then one
+	// for each other footprint a navigator or a route graph needs, in footprint order
+	tiers []*navTier
 	// walls are what everything derived stands on, wallsW×wallsH, read from the
 	// cells the wall log named since wallsSeq; scratch takes a whole re-read
 	walls, scratch []bool
 	wallsW, wallsH int
 	wallsSeq       uint64
 
-	// grid and comp are the generations of the walls and of the composite
-	// passability: each moves when its tier changes, so a field or route graph
-	// stamped with it when computed is exactly what recomputing it now would give.
-	// derived is false until passability and the grids were derived whole.
-	grid, comp uint64
-	derived    bool
+	// gen is the last generation a tier took: a tier takes the next as it moves, so
+	// a field or route graph stamped with its tier's when computed is exactly what
+	// recomputing it now would give. derived is false until the tiers were derived
+	// whole, and gridsAt is the point tier's generation the grids were filled at.
+	gen     uint64
+	derived bool
+	gridsAt uint64
 
 	// Per-tick resolved target snapshot; avoids per-entity TargetResource locking
 	targets [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
 
-	// Ticks since last gateway route graph recompute (rebuild budget)
-	routeRebuildTicks int
+	// Ticks since last gateway route graph recompute (rebuild budget), and since a
+	// reader out of sight last read its field
+	routeRebuildTicks, refreshTicks int
 
-	// The grids every field and reach of a tier runs on, the generation they stand
-	// at, and the cells a tick's wall change moved on each
-	pointGrid, compositeGrid                         navigation.SearchGrid
-	gridsAt                                          uint64
-	pointOpened, pointClosed, compOpened, compClosed []vmath.Point
-	reach                                            navigation.Reach
-	recomputes                                       int64 // fields that fell due this tick
+	reach      navigation.Reach
+	recomputes int64                  // fields that fell due this tick
+	need       []navigation.Footprint // syncTiers' scratch
 
 	statEntities   *atomic.Int64
 	statRecomputes *atomic.Int64
@@ -76,8 +99,6 @@ func NewNavigationSystem(world *engine.World) engine.System {
 	s := &NavigationSystem{
 		world:  world,
 		groups: make(map[uint8]*targetGroupNav),
-		grid:   1,
-		comp:   1,
 	}
 
 	s.statEntities = world.Resources.Status.Ints.Get("nav.entities")
@@ -98,19 +119,13 @@ func (s *NavigationSystem) Init() {
 	s.enabled = true
 	s.groups = make(map[uint8]*targetGroupNav)
 	clear(s.targets[:])
-	s.routeRebuildTicks = 0
+	s.routeRebuildTicks, s.refreshTicks = 0, 0
 	s.gridsAt, s.wallsSeq, s.derived = 0, 0, false
-
-	s.getOrCreateGroup(0)
+	s.tiers = []*navTier{{foot: navigation.Point}, {foot: eyeFootprint}}
 
 	config := s.world.Resources.Config
-	if config.MapWidth > 0 && config.MapHeight > 0 {
-		s.resizePassability(config.MapWidth, config.MapHeight)
-		for _, g := range s.groups {
-			g.pointFlowCache.Resize(config.MapWidth, config.MapHeight)
-			g.compositeFlowCache.Resize(config.MapWidth, config.MapHeight)
-		}
-	}
+	s.resize(config.MapWidth, config.MapHeight)
+	s.getOrCreateGroup(0)
 
 	if s.world.Resources.Target == nil {
 		s.world.Resources.Target = &engine.TargetResource{}
@@ -123,13 +138,7 @@ func (s *NavigationSystem) Init() {
 		s.world.Resources.Pursuit = &engine.PursuitResource{}
 	}
 
-	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
-		if g, ok := s.groups[dbg.GroupID]; ok {
-			dbg.Flow = g.pointFlowCache
-			dbg.CompositeFlow = g.compositeFlowCache
-		}
-		dbg.CompositePassability = s.compositePassability
-	}
+	s.showDebug()
 }
 
 func (s *NavigationSystem) Name() string {
@@ -164,11 +173,7 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
-			s.resizePassability(payload.Width, payload.Height)
-			for _, g := range s.groups {
-				g.pointFlowCache.Resize(payload.Width, payload.Height)
-				g.compositeFlowCache.Resize(payload.Width, payload.Height)
-			}
+			s.resize(payload.Width, payload.Height)
 		}
 
 	case event.EventTargetGroupUpdate:
@@ -189,14 +194,16 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventNavigationRegraph:
 		for _, g := range s.groups {
-			g.compositeFlowCache.MarkDirty()
+			for i := 1; i < len(g.fields); i++ {
+				g.fields[i].cache.MarkDirty()
+			}
 		}
 
 		// RouteIDs do not survive a rebuild: detach before invalidating
 		s.clearAllRouteAssignments()
 		s.world.Resources.RouteGraph.Clear()
 		// Staged rebuild; refreshRouteGraphs drains one graph per interval
-		s.routeRebuildTicks = parameter.NavRouteRebuildInterval
+		s.routeRebuildTicks = s.rebuildEvery()
 	}
 }
 
@@ -211,41 +218,55 @@ func (s *NavigationSystem) clearAllRouteAssignments() {
 	})
 }
 
-// resizePassability sizes the composite passability grid to the map, creating it
-// the first time; applyWalls derives it whole next.
-func (s *NavigationSystem) resizePassability(width, height int) {
-	if s.compositePassability == nil {
-		s.compositePassability = navigation.NewCompositePassability(
-			width, height,
-			parameter.EyeWidth, parameter.EyeHeight,
-			parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
-		)
-		if dbg := s.world.Resources.NavigationDebug; dbg != nil {
-			dbg.CompositePassability = s.compositePassability
+// resize sizes every tier's passability and every group's fields to the map; the
+// next applyWalls derives the tiers whole
+func (s *NavigationSystem) resize(width, height int) {
+	for _, t := range s.tiers[1:] {
+		if t.pass == nil {
+			t.pass = navigation.NewCompositePassability(width, height, t.foot)
+		} else {
+			t.pass.Resize(width, height)
 		}
-	} else {
-		s.compositePassability.Resize(width, height)
+	}
+	for _, g := range s.groups {
+		for _, f := range g.fields {
+			f.cache.Resize(width, height)
+		}
 	}
 	s.derived = false
+	s.showDebug()
 }
 
-// applyWalls brings passability, the grids and every field up to the walls as
-// they stand, re-testing only the cells the wall log names: a cell closed drops
-// the fields of its tier, cells opened repair them in place, and the composite
-// tier moves only where a footprint's fit changed. A lost log re-reads every cell;
-// a wholesale change, or the first derivation, derives everything whole.
+// wallAt is the walls everything derived stands on, none off them
+func (s *NavigationSystem) wallAt(x, y int) bool {
+	return x >= 0 && y >= 0 && x < s.wallsW && y < s.wallsH && s.walls[y*s.wallsW+x]
+}
+
+// blocked is the test a tier's grid and route graphs read: the walls on the point
+// tier, the cells no header fits on on a composite one
+func (t *navTier) blocked(s *NavigationSystem) navigation.WallChecker {
+	if t.pass == nil {
+		return s.wallAt
+	}
+	return t.pass.IsBlocked
+}
+
+// applyWalls brings every tier, its grid and its fields up to the walls as they
+// stand, re-testing only the cells the wall log names: a cell closed drops the
+// fields of its tier, cells opened repair them in place, and a composite tier
+// moves only where its footprint's fit changed. A lost log re-reads every cell; a
+// wholesale change, or the first derivation, derives everything whole.
 func (s *NavigationSystem) applyWalls() {
 	config := s.world.Resources.Config
 	w, h := config.MapWidth, config.MapHeight
-	isWall := func(x, y int) bool {
-		return x >= 0 && y >= 0 && x < s.wallsW && y < s.wallsH && s.walls[y*s.wallsW+x]
-	}
+	point := s.tiers[0]
 	// A restore carries the walls and passability the fields stand on, not the grids
 	// searched on them: those are refilled before any change, which may find nothing
-	if s.derived && s.gridsAt != s.grid {
-		s.pointGrid.Fill(w, h, isWall)
-		s.compositeGrid.Fill(w, h, s.compositePassability.IsBlocked)
-		s.gridsAt = s.grid
+	if s.derived && s.gridsAt != point.gen {
+		for _, t := range s.tiers {
+			t.grid.Fill(w, h, t.blocked(s))
+		}
+		s.gridsAt = point.gen
 	}
 	cells, seq, logged := s.world.Positions.WallChanges(s.wallsSeq)
 	s.wallsSeq = seq
@@ -255,17 +276,20 @@ func (s *NavigationSystem) applyWalls() {
 	if logged && !whole && len(cells) == 0 {
 		return
 	}
-	s.pointOpened, s.pointClosed = s.pointOpened[:0], s.pointClosed[:0]
-	s.compOpened, s.compClosed = s.compOpened[:0], s.compClosed[:0]
-	changed, bulk := 0, ww*wh/50
+	for _, t := range s.tiers {
+		t.opened, t.closed = t.opened[:0], t.closed[:0]
+	}
+	// From an eighth of the map on, deriving whole costs no more than moving the
+	// grids, even when every turned cell refits a whole footprint of headers
+	changed, bulk := 0, ww*wh/8
 	turned := func(x, y int, blocked bool) {
 		if changed++; changed > bulk || x >= w || y >= h {
 			return
 		}
 		if blocked {
-			s.pointClosed = append(s.pointClosed, vmath.Point{X: x, Y: y})
+			point.closed = append(point.closed, vmath.Point{X: x, Y: y})
 		} else {
-			s.pointOpened = append(s.pointOpened, vmath.Point{X: x, Y: y})
+			point.opened = append(point.opened, vmath.Point{X: x, Y: y})
 		}
 	}
 	switch {
@@ -294,53 +318,165 @@ func (s *NavigationSystem) applyWalls() {
 		}
 		whole = changed > bulk
 	}
-	s.grid++
 	if whole {
-		s.compositePassability.Compute(isWall)
-		s.pointGrid.Fill(w, h, isWall)
-		s.compositeGrid.Fill(w, h, s.compositePassability.IsBlocked)
-		s.comp, s.gridsAt, s.derived = s.comp+1, s.grid, true
+		for _, t := range s.tiers {
+			s.derive(t)
+		}
+		s.gridsAt, s.derived = point.gen, true
 		for _, g := range s.groups {
-			g.pointFlowCache.Closed()
-			g.compositeFlowCache.Closed()
-			g.pointAt, g.compositeAt = s.grid, s.comp
+			for i, t := range s.tiers {
+				g.fields[i].cache.Closed()
+				g.fields[i].at = t.gen
+			}
 		}
 		return
 	}
-	for _, c := range s.pointClosed {
-		s.pointGrid.Set(c.X, c.Y, true)
-	}
-	for _, c := range s.pointOpened {
-		s.pointGrid.Set(c.X, c.Y, false)
-	}
-	// Every header whose footprint covers a changed cell may fit differently.
-	footW, footH, _, _ := s.compositePassability.GetFootprint()
-	s.statROICells.Add(int64((len(s.pointClosed) + len(s.pointOpened)) * footW * footH))
-	s.compositePassability.Moved(s.pointClosed, s.pointOpened, func(x, y int, valid bool) {
-		if valid {
-			s.compOpened = append(s.compOpened, vmath.Point{X: x, Y: y})
-		} else {
-			s.compClosed = append(s.compClosed, vmath.Point{X: x, Y: y})
-		}
-	})
-	compMoved := len(s.compOpened)+len(s.compClosed) > 0
-	if compMoved {
-		s.comp++
-		for _, c := range s.compClosed {
-			s.compositeGrid.Set(c.X, c.Y, true)
-		}
-		for _, c := range s.compOpened {
-			s.compositeGrid.Set(c.X, c.Y, false)
+	point.grid.Move(point.closed, point.opened)
+	s.gen++
+	point.gen = s.gen
+	for _, t := range s.tiers[1:] {
+		// Every header whose footprint covers a changed cell may fit differently.
+		s.statROICells.Add(int64((len(point.closed) + len(point.opened)) * t.foot.Width * t.foot.Height))
+		t.pass.Moved(point.closed, point.opened, func(x, y int, valid bool) {
+			if valid {
+				t.opened = append(t.opened, vmath.Point{X: x, Y: y})
+			} else {
+				t.closed = append(t.closed, vmath.Point{X: x, Y: y})
+			}
+		})
+		if len(t.opened)+len(t.closed) > 0 {
+			t.grid.Move(t.closed, t.opened)
+			s.gen++
+			t.gen = s.gen
 		}
 	}
-	s.gridsAt = s.grid
+	s.gridsAt = point.gen
 	for _, g := range s.groups {
-		g.pointFlowCache.Moved(&s.pointGrid, s.pointClosed, s.pointOpened)
-		g.pointAt = s.grid
-		if compMoved {
-			g.compositeFlowCache.Moved(&s.compositeGrid, s.compClosed, s.compOpened)
-			g.compositeAt = s.comp
+		for i, t := range s.tiers {
+			if i == 0 || len(t.opened)+len(t.closed) > 0 {
+				g.fields[i].cache.Moved(&t.grid, t.closed, t.opened)
+				g.fields[i].at = t.gen
+			}
 		}
+	}
+}
+
+// derive computes a tier whole from the walls and moves its generation
+func (s *NavigationSystem) derive(t *navTier) {
+	config := s.world.Resources.Config
+	if t.pass != nil {
+		t.pass.Compute(s.wallAt)
+	}
+	t.grid.Fill(config.MapWidth, config.MapHeight, t.blocked(s))
+	s.gen++
+	t.gen = s.gen
+}
+
+// validBody reports whether a footprint is one a body can have: its header on it,
+// and no larger than the largest a data species may declare
+func validBody(f navigation.Footprint) bool {
+	return f.Width >= 1 && f.Height >= 1 && f.Width <= parameter.BehaviorFootprintMax && f.Height <= parameter.BehaviorFootprintMax &&
+		f.HeaderX >= 0 && f.HeaderY >= 0 && f.HeaderX < f.Width && f.HeaderY < f.Height
+}
+
+// bodyOf is the footprint a navigator declares
+func bodyOf(nav *component.NavigationComponent) navigation.Footprint {
+	return navigation.Footprint{Width: max(nav.Width, 1), Height: max(nav.Height, 1), HeaderX: nav.HeaderX, HeaderY: nav.HeaderY}
+}
+
+// tierOf is the index of the tier a body steers by: the point tier for one cell
+// across, the eye's for a body its cells hold, else the body's own, -1 while no
+// tier is kept for it
+func (s *NavigationSystem) tierOf(foot navigation.Footprint) int {
+	switch {
+	case foot.Width <= 1 && foot.Height <= 1:
+		return 0
+	case eyeFootprint.Covers(foot):
+		return 1
+	}
+	for i := 2; i < len(s.tiers); i++ {
+		if s.tiers[i].foot == foot {
+			return i
+		}
+	}
+	return -1
+}
+
+// keepTier is the tier a body steers by, derived from the walls as they stand
+// when the body is the first to need it, every group taking a field on it
+func (s *NavigationSystem) keepTier(foot navigation.Footprint) int {
+	if i := s.tierOf(foot); i >= 0 {
+		return i
+	}
+	config := s.world.Resources.Config
+	t := &navTier{foot: foot, pass: navigation.NewCompositePassability(config.MapWidth, config.MapHeight, foot)}
+	i := 2 + slices.IndexFunc(s.tiers[2:], func(o *navTier) bool { return footOrder(foot, o.foot) < 0 })
+	if i < 2 {
+		i = len(s.tiers)
+	}
+	s.tiers = slices.Insert(s.tiers, i, t)
+	for _, g := range s.groups {
+		g.fields = slices.Insert(g.fields, i, s.newField())
+	}
+	if s.derived {
+		s.derive(t)
+	}
+	return i
+}
+
+// syncTiers keeps a tier for each footprint the eye's does not cover that a
+// navigator or a gateway's route graph steers by, and no other
+func (s *NavigationSystem) syncTiers() {
+	need := s.need[:0]
+	keep := func(foot navigation.Footprint) {
+		if foot.Width > 1 || foot.Height > 1 {
+			if !eyeFootprint.Covers(foot) && !slices.Contains(need, foot) {
+				need = append(need, foot)
+			}
+		}
+	}
+	s.world.Components.Navigation.Each(func(_ core.Entity, nav *component.NavigationComponent) bool {
+		keep(bodyOf(nav))
+		return true
+	})
+	for _, e := range s.world.Components.Gateway.Entities() {
+		if gw, ok := s.world.Components.Gateway.GetPtr(e); ok && gw.RouteDistID != 0 {
+			if rg := s.world.Resources.RouteGraph.Get(gw.RouteDistID); rg != nil {
+				keep(rg.Footprint)
+			}
+		}
+	}
+	for i := len(s.tiers) - 1; i >= 2; i-- {
+		if !slices.Contains(need, s.tiers[i].foot) {
+			s.tiers = slices.Delete(s.tiers, i, i+1)
+			for _, g := range s.groups {
+				g.fields = slices.Delete(g.fields, i, i+1)
+			}
+		}
+	}
+	for _, foot := range need {
+		s.keepTier(foot)
+	}
+	s.need = need
+}
+
+// footOrder orders footprints by width, height and header, the order extra tiers keep
+func footOrder(a, b navigation.Footprint) int {
+	return cmp.Or(cmp.Compare(a.Width, b.Width), cmp.Compare(a.Height, b.Height),
+		cmp.Compare(a.HeaderX, b.HeaderX), cmp.Compare(a.HeaderY, b.HeaderY))
+}
+
+// showDebug points the debug view at its group's point field and the eye tier's
+// field and passability
+func (s *NavigationSystem) showDebug() {
+	dbg := s.world.Resources.NavigationDebug
+	if dbg == nil || len(s.tiers) < 2 {
+		return
+	}
+	dbg.CompositePassability = s.tiers[1].pass
+	dbg.Flow, dbg.CompositeFlow = nil, nil
+	if g, ok := s.groups[dbg.GroupID]; ok {
+		dbg.Flow, dbg.CompositeFlow = g.fields[0].cache, g.fields[1].cache
 	}
 }
 
@@ -350,23 +486,15 @@ func (s *NavigationSystem) Update() {
 	}
 
 	config := s.world.Resources.Config
-
-	// Handle map resize: one passability rebuild, then per-group caches
-	if s.compositePassability != nil &&
-		(config.MapWidth != s.compositePassability.Width || config.MapHeight != s.compositePassability.Height) {
-		s.resizePassability(config.MapWidth, config.MapHeight)
-	}
-	for _, g := range s.groups {
-		if config.MapWidth != g.pointFlowCache.Field.Width || config.MapHeight != g.pointFlowCache.Field.Height {
-			g.pointFlowCache.Resize(config.MapWidth, config.MapHeight)
-			g.compositeFlowCache.Resize(config.MapWidth, config.MapHeight)
-		}
+	if p := s.tiers[1].pass; config.MapWidth != p.Width || config.MapHeight != p.Height {
+		s.resize(config.MapWidth, config.MapHeight)
 	}
 
 	s.resolveGroupTargets()
 	s.snapshotTargets()
 
 	s.applyWalls()
+	s.syncTiers()
 	s.refreshRouteGraphs()
 
 	// Build routes before choosing a pursuit target.
@@ -374,12 +502,16 @@ func (s *NavigationSystem) Update() {
 	for groupID, g := range s.groups {
 		s.refresh(groupID, g)
 	}
+	// A reader out of sight reads its field every NavRefreshTicks and holds what it
+	// read between, so a field over a moving map is computed once in as many ticks
+	fresh := s.refreshTicks == 0
+	s.refreshTicks = (s.refreshTicks + 1) % max(config.NavRefreshTicks, 1)
 	for slot := range parameter.MaxPlayers {
 		var c *navigation.FlowFieldCache
 		if g := s.groups[uint8(component.MaxTargetGroups+slot)]; g != nil {
-			c = g.pointFlowCache
+			c = g.fields[0].cache
 		}
-		s.world.Resources.Pursuit.Publish(&s.pointGrid, uint8(slot), c)
+		s.world.Resources.Pursuit.Publish(&s.tiers[0].grid, !fresh, uint8(slot), c)
 	}
 
 	// Classify entities and check LOS to the same target their route follows.
@@ -453,10 +585,11 @@ func (s *NavigationSystem) Update() {
 		}
 	}
 
-	// Resolve movement from the selected cache.
+	// Resolve movement from the selected cache; between reads a navigator out of sight
+	// holds its flow, and one that went out of sight since homes on its target
 	for _, entity := range entities {
 		navComp, ok := navigations.GetPtr(entity)
-		if !ok || navComp.HasDirectPath {
+		if !ok || navComp.HasDirectPath || !fresh {
 			continue
 		}
 
@@ -482,7 +615,8 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		isComposite := navComp.Width > 1 || navComp.Height > 1
+		tier := s.keepTier(bodyOf(navComp))
+		isComposite := tier > 0
 
 		// Route graph: use per-route flow field when assigned
 		if navComp.UseRouteGraph && navComp.RouteID >= 0 {
@@ -505,26 +639,20 @@ func (s *NavigationSystem) Update() {
 
 		// Shared group flow field (default)
 		if isComposite {
-			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, s.flow(group, true))
+			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, s.flow(group, tier))
 		} else {
-			navComp.FlowX, navComp.FlowY = s.costs.InterpolatedDirection(s.flow(group, false), preciseX, preciseY)
+			navComp.FlowX, navComp.FlowY = s.costs.InterpolatedDirection(s.flow(group, tier), preciseX, preciseY)
 		}
 
 	}
 	s.statRecomputes.Store(s.recomputes)
 
 	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
-		if g, ok := s.groups[dbg.GroupID]; ok {
-			if dbg.ShowFlow || dbg.ShowComposite {
-				s.flow(g, false)
-				s.flow(g, true)
-			}
-			dbg.Flow = g.pointFlowCache
-			dbg.CompositeFlow = g.compositeFlowCache
-		} else {
-			dbg.Flow = nil
-			dbg.CompositeFlow = nil
+		if g, ok := s.groups[dbg.GroupID]; ok && (dbg.ShowFlow || dbg.ShowComposite) {
+			s.flow(g, 0)
+			s.flow(g, 1)
 		}
+		s.showDebug()
 	}
 }
 
@@ -534,8 +662,9 @@ func (s *NavigationSystem) handleGroupUpdate(payload *event.TargetGroupUpdatePay
 		return
 	}
 	g := s.getOrCreateGroup(payload.GroupID)
-	g.pointFlowCache.MarkDirty()
-	g.compositeFlowCache.MarkDirty()
+	for _, f := range g.fields {
+		f.cache.MarkDirty()
+	}
 
 	posX, posY := payload.PosX, payload.PosY
 	if payload.Type == component.TargetEntity && payload.Entity != 0 {
@@ -556,39 +685,39 @@ func (s *NavigationSystem) handleGroupUpdate(payload *event.TargetGroupUpdatePay
 	s.world.Resources.Target.SetGroup(payload.GroupID, state)
 }
 
-// getOrCreateGroup returns group nav state, allocating flow caches on first use
+// getOrCreateGroup returns group nav state, a field on every tier, taking the
+// caches of a retired group before allocating
 func (s *NavigationSystem) getOrCreateGroup(groupID uint8) *targetGroupNav {
 	if g, ok := s.groups[groupID]; ok {
 		return g
 	}
 	config := s.world.Resources.Config
-	var g *targetGroupNav
+	g := &targetGroupNav{}
 	if n := len(s.retired); n > 0 {
 		g, s.retired = s.retired[n-1], s.retired[:n-1]
-		*g = targetGroupNav{pointFlowCache: g.pointFlowCache, compositeFlowCache: g.compositeFlowCache}
-		g.pointFlowCache.Reset(config.MapWidth, config.MapHeight)
-		g.compositeFlowCache.Reset(config.MapWidth, config.MapHeight)
-	} else {
-		g = &targetGroupNav{
-			pointFlowCache: navigation.NewFlowFieldCache(
-				config.MapWidth, config.MapHeight,
-				parameter.NavFlowMinTicksBetweenCompute,
-				parameter.NavFlowDirtyDistance,
-				parameter.NavFlowSettleTicks,
-			),
-			compositeFlowCache: navigation.NewFlowFieldCache(
-				config.MapWidth, config.MapHeight,
-				parameter.NavFlowMinTicksBetweenCompute,
-				parameter.NavFlowDirtyDistance,
-				parameter.NavFlowSettleTicks,
-			),
+	}
+	kept := g.fields
+	g.fields = make([]tierField, len(s.tiers))
+	for i := range g.fields {
+		if i < len(kept) {
+			kept[i].cache.Reset(config.MapWidth, config.MapHeight)
+			g.fields[i] = tierField{cache: kept[i].cache}
+		} else {
+			g.fields[i] = s.newField()
 		}
-		g.pointFlowCache.Lazy, g.compositeFlowCache.Lazy = true, true
-		g.pointFlowCache.Field.Costs, g.compositeFlowCache.Field.Costs = s.costs, s.costs
 	}
 	s.groups[groupID] = g
 	s.buffers.Observe(0, len(s.groups))
 	return g
+}
+
+// newField is a lazy cache at the map's size, weighted at the run's cell aspect
+func (s *NavigationSystem) newField() tierField {
+	config := s.world.Resources.Config
+	c := navigation.NewFlowFieldCache(config.MapWidth, config.MapHeight,
+		parameter.NavFlowMinTicksBetweenCompute, parameter.NavFlowDirtyDistance, parameter.NavFlowSettleTicks)
+	c.Lazy, c.Field.Costs = true, s.costs
+	return tierField{cache: c}
 }
 
 // retire removes a group, keeping its caches for the next group created
@@ -601,7 +730,9 @@ func (s *NavigationSystem) retire(groupID uint8) {
 
 // refresh lets a group's fields fall due on this tick's targets and grids.
 func (s *NavigationSystem) refresh(groupID uint8, g *targetGroupNav) {
-	g.due = false
+	for i := range g.fields {
+		g.fields[i].due = false
+	}
 	groupState := s.targets[groupID]
 	if !groupState.Valid || groupState.Count == 0 {
 		return
@@ -610,25 +741,20 @@ func (s *NavigationSystem) refresh(groupID uint8, g *targetGroupNav) {
 	for i := range groupState.Count {
 		targets[i] = vmath.Point{X: groupState.Targets[i].PosX, Y: groupState.Targets[i].PosY}
 	}
-	if g.pointFlowCache.Update(targets[:groupState.Count], &s.pointGrid) {
-		s.recomputes++
-		g.pointAt = s.grid
-	}
-	if g.compositeFlowCache.Update(targets[:groupState.Count], &s.compositeGrid) {
-		s.recomputes++
-		g.compositeAt, g.due = s.comp, true
+	for i, t := range s.tiers {
+		if f := &g.fields[i]; f.cache.Update(targets[:groupState.Count], &t.grid) {
+			s.recomputes++
+			f.at, f.due = t.gen, true
+		}
 	}
 }
 
-// flow is a group's field for an entity of this shape, computed now if its
-// throttle let it wait for a reader. Only Update may call it: the grids are its.
-func (s *NavigationSystem) flow(g *targetGroupNav, composite bool) *navigation.FlowFieldCache {
-	if composite {
-		g.compositeFlowCache.Materialize(&s.compositeGrid)
-		return g.compositeFlowCache
-	}
-	g.pointFlowCache.Materialize(&s.pointGrid)
-	return g.pointFlowCache
+// flow is a group's field on a tier, computed now if its throttle let it wait for
+// a reader. Only Update may call it: the grids are its.
+func (s *NavigationSystem) flow(g *targetGroupNav, tier int) *navigation.FlowFieldCache {
+	c := g.fields[tier].cache
+	c.Materialize(&s.tiers[tier].grid)
+	return c
 }
 
 func (s *NavigationSystem) getEntityGroup(entity core.Entity) uint8 {
@@ -845,7 +971,7 @@ func (s *NavigationSystem) pursue(slot uint8) bool {
 }
 
 // lockSnakeTarget holds a head on the cursor it reaches soonest. One reach from
-// the head over the composite grid measures every cursor at once, when the head
+// the head over its tier's grid measures every cursor at once, when the head
 // has no reachable lock, the roster moved enough for its field to fall due, or
 // the settle interval passed; a lock holds until another route is over a third
 // shorter, and a cursor the head cannot reach is never chosen.
@@ -883,14 +1009,15 @@ func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.Na
 		n++
 	}
 	nav.LockTicks++
+	tier := s.keepTier(bodyOf(nav))
 	g := s.groups[groupID]
 	if !(held < 0 && nav.LockTicks >= parameter.NavFlowMinTicksBetweenCompute ||
-		g != nil && g.due || nav.LockTicks >= parameter.NavFlowSettleTicks) {
+		g != nil && g.fields[tier].due || nav.LockTicks >= parameter.NavFlowSettleTicks) {
 		return
 	}
 	nav.LockTicks = 0
 	var costs [parameter.MaxPlayers]int32
-	s.reach.Measure(&s.compositeGrid, &s.costs, pos.X, pos.Y, goals[:n], costs[:n])
+	s.reach.Measure(&s.tiers[tier].grid, &s.costs, pos.X, pos.Y, goals[:n], costs[:n])
 	best, bestCost, heldCost := core.Entity(0), navigation.CostUnreachable, navigation.CostUnreachable
 	for i := range n {
 		cost := int(costs[i])
@@ -907,9 +1034,10 @@ func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.Na
 	nav.LockedTarget = best
 }
 
-// routeGraphFresh reports whether a graph's goal still matches a live target of the group
+// routeGraphFresh reports whether a graph stands on its tier as it is and its goal
+// still matches a live target of the group
 func (s *NavigationSystem) routeGraphFresh(graph *navigation.RouteGraph, groupID uint8) bool {
-	if graph.Grid != s.comp || int(groupID) >= len(s.targets) {
+	if tier := s.tierOf(graph.Footprint); tier < 0 || graph.Grid != s.tiers[tier].gen || int(groupID) >= len(s.targets) {
 		return false
 	}
 	state := &s.targets[groupID]
@@ -939,7 +1067,7 @@ func (s *NavigationSystem) clearRouteAssignments(graphID uint32) {
 // Dijkstra + per-route field cost forbids an unbudgeted sweep
 func (s *NavigationSystem) refreshRouteGraphs() {
 	s.routeRebuildTicks++
-	if s.routeRebuildTicks < parameter.NavRouteRebuildInterval {
+	if s.routeRebuildTicks < s.rebuildEvery() {
 		return
 	}
 
@@ -959,21 +1087,35 @@ func (s *NavigationSystem) refreshRouteGraphs() {
 			continue
 		}
 
+		// A gateway's routes are for the eyes it spawns, unless a request named another body
+		foot := eyeFootprint
+		if graph != nil {
+			foot = graph.Footprint
+		}
 		s.routeRebuildTicks = 0
 		s.handleRouteGraphRequest(&event.RouteGraphRequestPayload{
 			RouteGraphID:  gw.RouteDistID,
 			SourceX:       anchorPos.X + gw.OffsetX,
 			SourceY:       anchorPos.Y + gw.OffsetY,
 			TargetGroupID: gw.GroupID,
+			Width:         foot.Width, Height: foot.Height, HeaderX: foot.HeaderX, HeaderY: foot.HeaderY,
 		})
 		return
 	}
 }
 
+// rebuildEvery is how many ticks a stale gateway route graph waits between rebuilds
+func (s *NavigationSystem) rebuildEvery() int {
+	if n := s.world.Resources.Config.NavRebuildTicks; n > 0 {
+		return n
+	}
+	return parameter.NavRouteRebuildInterval
+}
+
 // handleRouteGraphRequest computes a route graph for a gateway-target pair
 // Resolves target position from TargetResource or TargetAnchor fallback
 func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequestPayload) {
-	if s.compositePassability == nil {
+	if len(s.tiers) == 0 {
 		return
 	}
 	s.applyWalls()
@@ -983,7 +1125,14 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 		return
 	}
 
-	rg := s.computeRouteGraph(payload.SourceX, payload.SourceY, targetX, targetY)
+	foot := eyeFootprint
+	if payload.Width > 0 || payload.Height > 0 {
+		foot = navigation.Footprint{Width: payload.Width, Height: payload.Height, HeaderX: payload.HeaderX, HeaderY: payload.HeaderY}
+		if !validBody(foot) {
+			return
+		}
+	}
+	rg := s.computeRouteGraph(payload.SourceX, payload.SourceY, targetX, targetY, foot)
 	replacing := s.world.Resources.RouteGraph.Get(payload.RouteGraphID) != nil
 	if rg == nil {
 		// Unreachable target: drop the stale graph rather than leave it authoritative
@@ -1006,19 +1155,14 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 	})
 }
 
-// computeRouteGraph routes source to target over the composite passability and
-// stamps the graph with the grid generation it read.
-func (s *NavigationSystem) computeRouteGraph(sourceX, sourceY, targetX, targetY int) *navigation.RouteGraph {
+// computeRouteGraph routes a body from source to target over the tier it steers by
+// and stamps the graph with the tier's generation it read.
+func (s *NavigationSystem) computeRouteGraph(sourceX, sourceY, targetX, targetY int, foot navigation.Footprint) *navigation.RouteGraph {
 	config := s.world.Resources.Config
-	rg := s.solver.Compute(
-		sourceX, sourceY, targetX, targetY,
-		config.MapWidth, config.MapHeight,
-		parameter.EyeWidth, parameter.EyeHeight,
-		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
-		s.compositePassability.IsBlocked,
-	)
+	t := s.tiers[s.keepTier(foot)]
+	rg := s.solver.Compute(sourceX, sourceY, targetX, targetY, config.MapWidth, config.MapHeight, foot, t.blocked(s))
 	if rg != nil {
-		rg.Grid = s.comp
+		rg.Grid = t.gen
 	}
 	return rg
 }
@@ -1056,6 +1200,7 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 // different cells, steer differently.
 type navSnapshot struct {
 	RouteRebuildTicks int             `json:"route_rebuild_ticks"`
+	RefreshTicks      int             `json:"refresh_ticks,omitempty"`
 	Groups            []navGroupPhase `json:"groups"`
 
 	// Routes names each gateway route graph held and the cells it was computed
@@ -1076,32 +1221,36 @@ type navTargetGroup struct {
 // navRouteGraph is one gateway route graph's derivation inputs, named by the graph
 // ID the gateway carries so it survives gateways being added or removed.
 type navRouteGraph struct {
-	GraphID uint32 `json:"graph_id"`
-	SourceX int    `json:"source_x"`
-	SourceY int    `json:"source_y"`
-	TargetX int    `json:"target_x"`
-	TargetY int    `json:"target_y"`
+	GraphID   uint32               `json:"graph_id"`
+	SourceX   int                  `json:"source_x"`
+	SourceY   int                  `json:"source_y"`
+	TargetX   int                  `json:"target_x"`
+	TargetY   int                  `json:"target_y"`
+	Footprint navigation.Footprint `json:"footprint"`
 }
 
-// navGroupPhase is one target group's throttle phase, named by group ID so the
-// capture survives groups being created or destroyed between capture and install.
+// navGroupPhase is one target group's throttle phase on every tier, named by group
+// ID so the capture survives groups being created or destroyed between capture and
+// install.
 type navGroupPhase struct {
-	GroupID          uint8         `json:"group_id"`
-	PointTicks       int           `json:"point_ticks"`
-	PointPending     bool          `json:"point_pending"`
-	PointComputed    bool          `json:"point_computed"`
-	PointLastTargets []vmath.Point `json:"point_last_targets"`
+	GroupID uint8           `json:"group_id"`
+	Fields  []navFieldPhase `json:"fields"`
+}
 
-	CompositeTicks       int           `json:"composite_ticks"`
-	CompositePending     bool          `json:"composite_pending"`
-	CompositeComputed    bool          `json:"composite_computed"`
-	CompositeLastTargets []vmath.Point `json:"composite_last_targets"`
+// navFieldPhase is a group's throttle phase on one tier, named by the tier's
+// footprint so it survives tiers being kept or dropped.
+type navFieldPhase struct {
+	Footprint   navigation.Footprint `json:"footprint"`
+	Ticks       int                  `json:"ticks"`
+	Pending     bool                 `json:"pending"`
+	Computed    bool                 `json:"computed"`
+	LastTargets []vmath.Point        `json:"last_targets"`
 }
 
 // SaveShared carries the D-17 recompute phase (D-19). The fields themselves are
 // derived at install and deliberately not serialized.
 func (s *NavigationSystem) SaveShared() ([]byte, error) {
-	snap := navSnapshot{RouteRebuildTicks: s.routeRebuildTicks}
+	snap := navSnapshot{RouteRebuildTicks: s.routeRebuildTicks, RefreshTicks: s.refreshTicks}
 	ids := make([]uint8, 0, len(s.groups))
 	for id := range s.groups {
 		ids = append(ids, id)
@@ -1110,20 +1259,11 @@ func (s *NavigationSystem) SaveShared() ([]byte, error) {
 	// must not reach the bytes.
 	slices.Sort(ids)
 	for _, id := range ids {
-		g := s.groups[id]
-		if g == nil {
-			continue
-		}
 		phase := navGroupPhase{GroupID: id}
-		if c := g.pointFlowCache; c != nil {
-			phase.PointTicks, phase.PointPending = c.TicksSinceCompute, c.PendingUpdate
-			phase.PointComputed = c.Computed()
-			phase.PointLastTargets = slices.Clone(c.LastTargets)
-		}
-		if c := g.compositeFlowCache; c != nil {
-			phase.CompositeTicks, phase.CompositePending = c.TicksSinceCompute, c.PendingUpdate
-			phase.CompositeComputed = c.Computed()
-			phase.CompositeLastTargets = slices.Clone(c.LastTargets)
+		for i, t := range s.tiers {
+			c := s.groups[id].fields[i].cache
+			phase.Fields = append(phase.Fields, navFieldPhase{Footprint: t.foot, Ticks: c.TicksSinceCompute,
+				Pending: c.PendingUpdate, Computed: c.Computed(), LastTargets: slices.Clone(c.LastTargets)})
 		}
 		snap.Groups = append(snap.Groups, phase)
 	}
@@ -1162,24 +1302,27 @@ func (s *NavigationSystem) saveRouteGraphs() []navRouteGraph {
 			GraphID: id,
 			SourceX: rg.SourceX, SourceY: rg.SourceY,
 			TargetX: rg.TargetX, TargetY: rg.TargetY,
+			Footprint: rg.Footprint,
 		})
 	}
 	return out
 }
 
 // deriveRouteGraphs holds exactly the gateway route graphs the capture named, between
-// the cells it named, and drops every other: a receiver's own graphs may be for
-// gateways or cells the sender's are not, with route indices the installed entities
-// name. A held graph stamped on this grid for those cells is kept, since recomputing
-// it would give the same routes. Nothing is emitted; an install is not a run event.
+// the cells and for the bodies it named, and drops every other: a receiver's own
+// graphs may be for gateways or cells the sender's are not, with route indices the
+// installed entities name. A held graph stamped on its tier as it stands for those
+// cells is kept, since recomputing it would give the same routes. Nothing is
+// emitted; an install is not a run event.
 func (s *NavigationSystem) deriveRouteGraphs(routes []navRouteGraph) {
 	graphs := s.world.Resources.RouteGraph
-	if graphs == nil || s.compositePassability == nil {
+	if graphs == nil || len(s.tiers) == 0 {
 		return
 	}
 	held := make(map[uint32]*navigation.RouteGraph, len(routes))
 	for _, r := range routes {
-		if rg := graphs.Get(r.GraphID); rg != nil && rg.Grid == s.comp &&
+		if rg := graphs.Get(r.GraphID); rg != nil && rg.Footprint == r.Footprint &&
+			rg.Grid == s.tiers[s.keepTier(r.Footprint)].gen &&
 			rg.SourceX == r.SourceX && rg.SourceY == r.SourceY &&
 			rg.TargetX == r.TargetX && rg.TargetY == r.TargetY {
 			held[r.GraphID] = rg
@@ -1190,7 +1333,7 @@ func (s *NavigationSystem) deriveRouteGraphs(routes []navRouteGraph) {
 	for _, r := range routes {
 		rg, ok := held[r.GraphID]
 		if !ok {
-			rg = s.computeRouteGraph(r.SourceX, r.SourceY, r.TargetX, r.TargetY)
+			rg = s.computeRouteGraph(r.SourceX, r.SourceY, r.TargetX, r.TargetY, r.Footprint)
 		}
 		if rg == nil {
 			continue
@@ -1213,35 +1356,49 @@ func (s *NavigationSystem) deriveRouteGraphs(routes []navRouteGraph) {
 }
 
 // LoadShared restores the recompute phase and derives now what the capture does not
-// carry: passability from the installed walls, each computed field from the targets
-// its phase belongs to, and the route graphs. Left to the next tick, Update would
-// compute from this tick's targets and reset the phase (D-17). A field or graph
-// already computed from the same inputs on this grid is kept rather than recomputed.
+// carry: the tiers it names from the installed walls, each computed field from the
+// targets its phase belongs to, and the route graphs. Left to the next tick, Update
+// would compute from this tick's targets and reset the phase (D-17). A field or graph
+// already computed from the same inputs on its tier as it stands is kept.
 func (s *NavigationSystem) LoadShared(data []byte) error {
 	var snap navSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("navigation: phase: %w", err)
 	}
-	s.routeRebuildTicks = snap.RouteRebuildTicks
+	s.routeRebuildTicks, s.refreshTicks = snap.RouteRebuildTicks, snap.RefreshTicks
 
 	s.applyWalls()
+	var feet []navigation.Footprint
+	for _, phase := range snap.Groups {
+		if int(phase.GroupID) >= len(s.targets) {
+			return fmt.Errorf("navigation: invalid cache group %d", phase.GroupID)
+		}
+		for _, f := range phase.Fields {
+			if !validBody(f.Footprint) {
+				return fmt.Errorf("navigation: invalid tier %+v", f.Footprint)
+			}
+			feet = append(feet, f.Footprint)
+		}
+	}
+	for i := len(s.tiers) - 1; i >= 2; i-- {
+		if !slices.Contains(feet, s.tiers[i].foot) {
+			s.tiers = slices.Delete(s.tiers, i, i+1)
+			for _, g := range s.groups {
+				g.fields = slices.Delete(g.fields, i, i+1)
+			}
+		}
+	}
 	for id := range uint8(len(s.targets)) {
 		if !slices.ContainsFunc(snap.Groups, func(phase navGroupPhase) bool { return phase.GroupID == id }) {
 			delete(s.groups, id)
 		}
 	}
 	for _, phase := range snap.Groups {
-		if int(phase.GroupID) >= len(s.targets) {
-			return fmt.Errorf("navigation: invalid cache group %d", phase.GroupID)
+		for _, fp := range phase.Fields {
+			i := s.keepTier(fp.Footprint)
+			f, t := &s.getOrCreateGroup(phase.GroupID).fields[i], s.tiers[i]
+			f.at = restoreField(f.cache, f.at, t.gen, &t.grid, fp.Ticks, fp.Pending, fp.Computed, fp.LastTargets)
 		}
-		g := s.getOrCreateGroup(phase.GroupID)
-		if g == nil {
-			continue
-		}
-		g.pointAt = restoreField(g.pointFlowCache, g.pointAt, s.grid, &s.pointGrid,
-			phase.PointTicks, phase.PointPending, phase.PointComputed, phase.PointLastTargets)
-		g.compositeAt = restoreField(g.compositeFlowCache, g.compositeAt, s.comp, &s.compositeGrid,
-			phase.CompositeTicks, phase.CompositePending, phase.CompositeComputed, phase.CompositeLastTargets)
 	}
 	s.deriveRouteGraphs(snap.Routes)
 	for id := range uint8(component.MaxTargetGroups) {
@@ -1253,6 +1410,7 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 		}
 		s.world.Resources.Target.SetGroup(g.GroupID, g.State)
 	}
+	s.showDebug()
 	return nil
 }
 
@@ -1278,15 +1436,17 @@ func restoreField(c *navigation.FlowFieldCache, at, gen uint64, grid *navigation
 	return gen
 }
 
+// navState is a copy of the tiers without their grids, which a restore refills
 type navState struct {
 	groups            map[uint8]targetGroupNav
-	passability       *navigation.CompositePassability
+	tiers             []navTier
 	walls             []bool
 	wallsW, wallsH    int
-	grid, comp        uint64
+	gen               uint64
 	derived           bool
 	targets           [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
 	routeRebuildTicks int
+	refreshTicks      int
 	graphs            map[uint32]*navigation.RouteGraph
 }
 
@@ -1294,14 +1454,13 @@ type navState struct {
 // phase each was rebuilt in, which LoadShared re-derives as a joiner would.
 func (s *NavigationSystem) CopyState() any {
 	c := navState{groups: make(map[uint8]targetGroupNav, len(s.groups)), walls: slices.Clone(s.walls),
-		wallsW: s.wallsW, wallsH: s.wallsH, grid: s.grid, comp: s.comp, derived: s.derived, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
-		graphs: s.world.Resources.RouteGraph.Graphs()}
-	if s.compositePassability != nil {
-		c.passability = s.compositePassability.Clone()
+		wallsW: s.wallsW, wallsH: s.wallsH, gen: s.gen, derived: s.derived, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
+		refreshTicks: s.refreshTicks, graphs: s.world.Resources.RouteGraph.Graphs()}
+	for _, t := range s.tiers {
+		c.tiers = append(c.tiers, t.copy())
 	}
 	for id, g := range s.groups {
-		c.groups[id] = targetGroupNav{pointFlowCache: g.pointFlowCache.Clone(), compositeFlowCache: g.compositeFlowCache.Clone(),
-			pointAt: g.pointAt, compositeAt: g.compositeAt}
+		c.groups[id] = cloneGroup(g)
 	}
 	return c
 }
@@ -1310,19 +1469,36 @@ func (s *NavigationSystem) RestoreState(v any) error {
 	c := v.(navState)
 	clear(s.groups)
 	for id, g := range c.groups {
-		s.groups[id] = &targetGroupNav{pointFlowCache: g.pointFlowCache.Clone(), compositeFlowCache: g.compositeFlowCache.Clone(),
-			pointAt: g.pointAt, compositeAt: g.compositeAt}
+		n := cloneGroup(&g)
+		s.groups[id] = &n
 	}
-	s.compositePassability = nil
-	if c.passability != nil {
-		s.compositePassability = c.passability.Clone()
+	s.tiers = s.tiers[:0]
+	for _, t := range c.tiers {
+		n := t.copy()
+		s.tiers = append(s.tiers, &n)
 	}
-	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
-		dbg.CompositePassability = s.compositePassability
-	}
-	s.walls, s.wallsW, s.wallsH, s.grid, s.comp, s.derived = slices.Clone(c.walls), c.wallsW, c.wallsH, c.grid, c.comp, c.derived
+	s.walls, s.wallsW, s.wallsH, s.gen, s.derived = slices.Clone(c.walls), c.wallsW, c.wallsH, c.gen, c.derived
 	s.gridsAt, s.wallsSeq = 0, 0
-	s.targets, s.routeRebuildTicks = c.targets, c.routeRebuildTicks
+	s.targets, s.routeRebuildTicks, s.refreshTicks = c.targets, c.routeRebuildTicks, c.refreshTicks
 	s.world.Resources.RouteGraph.SetGraphs(c.graphs)
+	s.showDebug()
 	return nil
+}
+
+// copy is the tier sharing no storage with t, without its grid
+func (t *navTier) copy() navTier {
+	n := navTier{foot: t.foot, gen: t.gen}
+	if t.pass != nil {
+		n.pass = t.pass.Clone()
+	}
+	return n
+}
+
+// cloneGroup is a group's fields sharing no storage with g's
+func cloneGroup(g *targetGroupNav) targetGroupNav {
+	n := targetGroupNav{fields: slices.Clone(g.fields)}
+	for i := range n.fields {
+		n.fields[i].cache = n.fields[i].cache.Clone()
+	}
+	return n
 }

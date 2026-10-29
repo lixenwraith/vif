@@ -115,6 +115,9 @@ disabled_systems = ["system_runtime_name"] # or only_systems = [...], not both
 min_width = 50
 min_height = 20
 
+[navigation]
+field_refresh_ticks = 4
+
 [regions.main]
 initial = "MainStart"
 file = "main.toml"
@@ -139,6 +142,8 @@ only_systems = ["typing", "button"] # or disabled_systems, not both
 | `systems.only_systems` | Every toggled system not named is off in the baseline; the inverse of `disabled_systems`, for a scenario that needs few mechanics. |
 | `map.min_width`, `map.min_height` | Floor under the map's size, positive integers a map can hold, applied before the FSM boots and by every resize, reset and level setup; a smaller terminal crops the view and the camera follows the cursor. |
 | `map.fixed` | `"WxH"`, the size a scenario's map holds throughout, for front-ends such as the fleet lobby; the scenario's level setups are what hold it. A scenario whose regions size the map differently leaves it out. |
+| `navigation.field_refresh_ticks` | How often, in ticks, a navigator or drop out of sight reads its flow field, holding the way it read between ([Navigation §4](navigation-design.md#4-throttle-phase-and-laziness)); 1, every tick, when unset. |
+| `navigation.route_rebuild_ticks` | The fewest ticks between two rebuilds of a stale gateway route graph; 20 when unset. |
 | `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
 | `background` | Keeps the region out of the foreground summary the status bar shows; it still updates, handles events and publishes its own `fsm.<region>.*` metrics. |

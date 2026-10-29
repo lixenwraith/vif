@@ -19,6 +19,12 @@ macro_files = ["macros.toml"]
 min_width = 80
 min_height = 18
 
+# The cave closes cells every tick, so each field a raider or drop out of sight reads
+# is computed anew; reading it every fourth tick computes a quarter of them, and the
+# raiders, out of sight a third of a second at a time, chase as before.
+[navigation]
+field_refresh_ticks = 4
+
 # The raider types, one program each over the one cycle in macros.toml, so each
 # keeps its own kill counter and behavior.<type>.* rows: eight to a stone art, its
 # tier, two of each of four ranks, smallest first. RaidSpawn picks among the cave's

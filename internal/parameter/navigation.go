@@ -12,8 +12,12 @@ const (
 	// still points the same way everywhere but beside the target, where sight takes over
 	NavFlowSettleTicks = 20
 
-	// NavRouteRebuildInterval is minimum game ticks between gateway route graph recomputes
+	// NavRouteRebuildInterval is minimum game ticks between gateway route graph
+	// recomputes, unless the scenario's [navigation] route_rebuild_ticks sets another
 	NavRouteRebuildInterval = 20
+
+	// NavTicksMax is the most ticks a scenario's [navigation] setting names, a minute's
+	NavTicksMax = 1200
 
 	// NavCorneringBrake is the drag multiplier per unit of turn severity
 	NavCorneringBrake = 0.8

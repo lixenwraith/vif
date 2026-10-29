@@ -363,6 +363,8 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 	s.world.Components.Navigation.SetComponent(headEntity, component.NavigationComponent{
 		Width:         parameter.SnakeHeadWidth,
 		Height:        parameter.SnakeHeadHeight,
+		HeaderX:       parameter.SnakeHeadHeaderOffsetX,
+		HeaderY:       parameter.SnakeHeadHeaderOffsetY,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 		LockTicks:     parameter.NavFlowMinTicksBetweenCompute,
 	})

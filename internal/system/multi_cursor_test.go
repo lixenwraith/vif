@@ -28,6 +28,7 @@ func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T
 	w.Components.SnakeHead.SetComponent(head, component.SnakeHeadComponent{})
 	w.Components.Navigation.SetComponent(head, component.NavigationComponent{
 		Width: parameter.SnakeHeadWidth, Height: parameter.SnakeHeadHeight,
+		HeaderX: parameter.SnakeHeadHeaderOffsetX, HeaderY: parameter.SnakeHeadHeaderOffsetY,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 	motion := component.KineticComponent{}
@@ -49,7 +50,7 @@ func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T
 		if nav.LockedTarget != locked {
 			t.Fatal("small distance changes switched the snake between hidden cursors")
 		}
-		field := s.groups[s.getEntityGroup(head)].compositeFlowCache
+		field := s.groups[s.getEntityGroup(head)].fields[1].cache
 		fx, fy := s.getCompositeFlowDirection(kinetic.PreciseX, kinetic.PreciseY, field)
 		if (fx == 0 && fy == 0) || nav.FlowX != fx || nav.FlowY != fy {
 			t.Fatal("snake steering disagrees with its locked target's route")

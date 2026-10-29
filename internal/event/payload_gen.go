@@ -1968,6 +1968,10 @@ var codecRouteGraphRequestPayload = structCodec{size: unsafe.Sizeof(RouteGraphRe
 	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.SourceY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.RouteGraphID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.TargetGroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.HeaderX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.HeaderY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *RouteGraphComputedPayload) codec() (*structCodec, unsafe.Pointer) {

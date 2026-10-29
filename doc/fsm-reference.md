@@ -74,6 +74,10 @@ min_height = 20
 fixed = "500x250"                   # Size the map holds throughout, for front-ends (optional)
 cursors = false                     # Players hold slots, no cursor on the map (optional)
 
+[navigation]
+field_refresh_ticks = 4             # Out of sight, read the field every 4 ticks (optional; 1)
+route_rebuild_ticks = 20            # Fewest ticks between stale route graph rebuilds (optional)
+
 [behaviors]
 scarab = { file = "behavior/strata/scarab.toml" }  # A species of the scenario's own (Behavior Programs)
 

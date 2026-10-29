@@ -374,6 +374,36 @@ func TestAScenarioDeclaresItsPlayerRange(t *testing.T) {
 	}
 }
 
+// TestNavigationTakesTickCounts: [navigation] field_refresh_ticks and
+// route_rebuild_ticks take a tick count from one to a minute's, unset reads zero,
+// and anything else, or another key, is refused.
+func TestNavigationTakesTickCounts(t *testing.T) {
+	for _, c := range []struct {
+		table            string
+		refresh, rebuild int
+		refused          bool
+	}{
+		{"", 0, 0, false},
+		{"[navigation]\nfield_refresh_ticks = 4\nroute_rebuild_ticks = 40\n", 4, 40, false},
+		{"[navigation]\nfield_refresh_ticks = 0\n", 0, 0, true},
+		{fmt.Sprintf("[navigation]\nroute_rebuild_ticks = %d\n", parameter.NavTicksMax+1), 0, 0, true},
+		{"[navigation]\nfield_refresh_ticks = 2.5\n", 0, 0, true},
+		{"[navigation]\nfield_refresh = 4\n", 0, 0, true},
+	} {
+		entry := "[regions.main]\nfile = \"main.toml\"\n" + c.table
+		fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}
+		s, err := ReadScenario("navigation", fsys, "scenario.toml")
+		switch {
+		case c.refused && err == nil:
+			t.Errorf("%q was taken", c.table)
+		case !c.refused && err != nil:
+			t.Errorf("%q: %v", c.table, err)
+		case !c.refused && (s.NavRefreshTicks != c.refresh || s.NavRebuildTicks != c.rebuild):
+			t.Errorf("%q: refresh %d, rebuild %d, want %d and %d", c.table, s.NavRefreshTicks, s.NavRebuildTicks, c.refresh, c.rebuild)
+		}
+	}
+}
+
 // TestAnEntryKeyNothingReadsIsRefused: a misspelt top-level key fails the read
 // naming it, where it once loaded as absent.
 func TestAnEntryKeyNothingReadsIsRefused(t *testing.T) {

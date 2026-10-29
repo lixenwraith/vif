@@ -138,6 +138,10 @@ type LootComponent struct {
 	Return time.Duration
 	Away   time.Duration
 
+	// FlowX, FlowY are the way its owner's field led when the drop, out of sight,
+	// last read it, held until it reads again; zero homes on the owner
+	FlowX, FlowY float64
+
 	// Grid tracking
 	LastIntX int
 	LastIntY int
