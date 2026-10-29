@@ -17,6 +17,11 @@ that proves wrong or that a document now states, and link the document instead.
   that check runs on a device.
 - After bumping `lixenwraith/terminal`, build `./...`, not only `./cmd/vif`: the
   tools and sandboxes break on a change the game does not use.
+- `deploy/docker/Dockerfile` pins the Go image's index digest: HEAD
+  `registry-1.docker.io/v2/library/golang/manifests/<tag>` with an `auth.docker.io`
+  pull token and the OCI index Accept header, and read `Docker-Content-Digest`. HEAD
+  the current pin first, which must match. Docker Hub answers a shared egress 429
+  at times: retry after a pause.
 - Every shipped target is 64-bit, and `internal/core/arch32.go` refuses the rest.
 - `bindGo` strips the Android library (`-s -w`), so `go tool nm` reads nothing in
   it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over

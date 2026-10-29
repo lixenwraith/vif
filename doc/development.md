@@ -6,7 +6,7 @@ responsibility map is in [Package map](package-map.md).
 
 ## 1. Toolchain and dependencies
 
-`go.mod` declares Go `1.27.2`; use that version or a compatible newer toolchain.
+`go.mod` declares Go `1.27.3`; use that version or a compatible newer toolchain.
 The application has no CGO requirement, but it is not standard-library-only.
 The modules it requires:
 
