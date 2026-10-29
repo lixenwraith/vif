@@ -152,6 +152,14 @@ without `preserve_loot`, and ignores reports produced before it, because the
 un-defeat crossing arrives a lead after `MonitorArm` has already re-armed the
 roster — long enough for the guard to fire a second reset.
 
+A defeat settles before it crosses (`NetworkSystem.settles`): its owner's barrier
+holds it until every crossing the owner made by the close of the defeat's tick has
+applied there, and drops it if its undoing comes first. A cursor standing on a pylon
+can reach zero heat and energy in the tick its own hits pay energy back: solo both
+land in that tick, hosted the hits land up to a lead later, so a defeat they undo
+never crosses, and one that stands crosses once they have landed, at once when none
+was on its way.
+
 Wind start/cancel are the opposite case: they are `ClassShared` outputs suitable
 for a Shared FSM transition. They appear identically in every journal but never
 on the wire, because a transported copy would duplicate the transition's local

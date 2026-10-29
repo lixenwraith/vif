@@ -26,8 +26,7 @@ What vanguard met in the machine and is still open, its certain faults having
 landed. Open items elsewhere it meets:
 [payload field names at load](#check-payload-field-names-against-their-event-at-load),
 [a program spawning another](#let-a-program-spawn-another-program),
-[attack and materialize rows](#give-data-species-attack-and-materialize-rows-of-their-own)
-and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does).
+and [attack and materialize rows](#give-data-species-attack-and-materialize-rows-of-their-own).
 
 #### Give a program's entrance an entering state
 
@@ -651,6 +650,22 @@ What would close it:
 - A test per case on the probe's shape, with `meshSession` handing back its mesh:
   participant 3 follows 2 at term 2, and no Wraith but the lost host's remains.
 
+### Cross a departure a reset dropped
+
+- Priority: P2
+- Affected files: `internal/system/network.go` (`Init`, `announceDeparture`),
+  `internal/app/transport_test.go`
+
+A link lost within a lead of a reset loses its departure: the reset clears the
+barrier (`NetworkSystem.Init` drops `scheduled` and `departed`) before the
+departure crossed for it applies, and the next game rebuilds that participant's
+cursor from the roster as a live one nobody drives, which never turns Wraith, never
+times out and holds the slot its claim comes back for: a player who quits as its
+defeat ends the game can leave one. `TestTwoLiveParticipantsConvergeOverTCP` shows
+it once its scripted defeat's reset is moved into the disconnect's lead. What would
+close it: after a reset the authority crosses, once, the departure of every
+rostered participant it neither links nor carries.
+
 ### Publish a player's session at the router
 
 - Priority: P3
@@ -881,25 +896,6 @@ so refuse none up front; gauge and relieve instead:
   Thresholds are parameters, with an off switch as `-slow-window 0` is.
 
 Related: [Measure a full roster](#measure-a-full-roster).
-
-### Forgive a one-tick defeat in a session as solo play does
-
-- Priority: P2
-- Affected files: `internal/system/energy.go`, `internal/system/heat.go`,
-  `internal/system/combat.go`, `internal/system/meta.go`
-
-A cursor's defeat (`pushDefeatTransition`) and the gun hits that pay energy back
-(`applyEnergyDrain`, 100 a hit) each cross the barrier. Solo, a cursor standing on a
-pylon reached zero heat and energy on a tick whose four hits paid 400 back, so the
-defeat and its undoing landed in that tick and the monitor never saw it. Hosted,
-both land a lead later, and the recovery the hits' energy produces crosses only
-then, so `session.any_defeated` reads true for a lead (3 ticks) and td's monitor
-ended the run every time. Options: a monitor that confirms a defeat lasting longer
-than a lead, or the hit's reward paid as the owner's own energy when it fires, so a
-defeat and its undoing cross in one batch.
-Proper approach is a few second immunity period. Consider having cursor as Wraith till
-world is settled, and then allow play. Visual representation of Wraith state for the local
-and remote cursors to be added.
 
 ### Price the log's and journal's 50 ms sync
 

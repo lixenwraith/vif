@@ -64,6 +64,12 @@ type NetworkSystem struct {
 	encodeErr     int64
 	barrierActive atomic.Bool
 
+	// settling holds an own cursor's defeat until the crossings its owner made by the
+	// close of its tick have applied here, and drops it if its undoing comes first: a
+	// hit already on its way pays its energy back before anyone hears of the defeat it
+	// undoes, as one tick settles both in solo play.
+	settling []settlingDefeat
+
 	// appliedPeerSeq is each remote source's highest applied sequence. Unlike the
 	// local contiguous prefix, a remote fence advances past refused frames because
 	// they will not arrive again; relay reordering is repaired by correction.
@@ -363,6 +369,14 @@ func (w *window) newest() uint64 { return w.high }
 // and departure of the identity at the top of the range.
 const participantSlots = parameter.MaxPlayers + 2
 
+// settlingDefeat is a defeat held until settleAt, the apply tick of the newest
+// crossing its owner had made when the defeat's tick closed; zero until then.
+type settlingDefeat struct {
+	ev       event.GameEvent
+	entity   core.Entity
+	settleAt uint64
+}
+
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick,
 // and the epoch its source produced it in.
 type barrierArtifact struct {
@@ -483,6 +497,7 @@ func (s *NetworkSystem) Init() {
 
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
+	s.settling = s.settling[:0]
 	s.scheduled = s.scheduled[:0]
 	s.scheduledBytes = 0
 	s.applied = s.applied[:0]
@@ -763,7 +778,8 @@ func (s *NetworkSystem) forgetLocked(gone func(uint32) bool, drop func(barrierAr
 // Cross encodes and schedules a crossing when a peer is live, taking the event: the
 // local copy is applied by the barrier at the artifact's agreed tick, in the order
 // every other instance applies it, and the pooled original is released after
-// encoding. There is no producer copy published sooner (multi-player.md §3.1).
+// encoding. There is no producer copy published sooner (multi-player.md §3.1), and
+// a cursor's defeat settles first.
 func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	if !s.barrierActive.Load() {
 		return false
@@ -773,6 +789,68 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 		event.ReleaseDeferredPayload(ev.Payload)
 		return true
 	}
+	if ev.Type == event.EventCursorDefeatState && s.settles(ev) {
+		return true
+	}
+	s.schedule(ev)
+	return true
+}
+
+// settles holds a defeat and drops a held one its undoing reaches first, reporting
+// whether it took the event; an undoing with nothing held crosses as it is.
+func (s *NetworkSystem) settles(ev event.GameEvent) bool {
+	p, ok := ev.Payload.(*event.CursorDefeatStatePayload)
+	if !ok {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := slices.IndexFunc(s.settling, func(d settlingDefeat) bool { return d.entity == p.Entity })
+	switch {
+	case p.Defeated && i < 0:
+		s.settling = append(s.settling, settlingDefeat{ev: ev, entity: p.Entity})
+		return true
+	case !p.Defeated && i >= 0:
+		event.ReleaseDeferredPayload(s.settling[i].ev.Payload)
+		s.settling = slices.Delete(s.settling, i, i+1)
+	case !p.Defeated:
+		return false
+	}
+	event.ReleaseDeferredPayload(ev.Payload)
+	return true
+}
+
+// crossSettled crosses each held defeat once the crossings its owner made by the
+// close of its tick have applied, by completedTick; with the barrier gone, at once
+// and here, ahead of any undoing made from now on.
+func (s *NetworkSystem) crossSettled(completedTick uint64, active bool) {
+	s.mu.Lock()
+	var due []event.GameEvent
+	held := s.settling[:0]
+	for _, d := range s.settling {
+		if d.settleAt == 0 {
+			d.settleAt = s.lastApplyTick
+		}
+		if active && d.settleAt > completedTick {
+			held = append(held, d)
+			continue
+		}
+		due = append(due, d.ev)
+	}
+	s.settling = held
+	s.mu.Unlock()
+	for _, ev := range due {
+		if active {
+			s.schedule(ev)
+		} else {
+			s.world.Resources.Event.Queue.Push(ev)
+		}
+	}
+}
+
+// schedule encodes one own crossing into the open epoch and onto this instance's
+// barrier, at the apply tick its lead gives it.
+func (s *NetworkSystem) schedule(ev event.GameEvent) {
 	s.mu.Lock()
 	// Named before it is encoded, so this instance's own copy and every peer's
 	// carry one identity: a payload whose shared outcome needs a value no receiver
@@ -787,7 +865,7 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 		s.encodeErr++
 		s.mu.Unlock()
 		event.ReleaseDeferredPayload(ev.Payload)
-		return true
+		return
 	}
 	frame.Seq = s.crossSeq
 	applyTick := max(s.productionEpoch+s.delayTicks, s.lastApplyTick)
@@ -813,7 +891,6 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	s.mu.Unlock()
 	event.ReleaseDeferredPayload(ev.Payload)
 	s.statDeferred.Add(1)
-	return true
 }
 
 // ResendUncommitted puts this instance's own retained crossings that no authority
@@ -1364,6 +1441,7 @@ func (s *NetworkSystem) Flush(completedTick uint64) {
 	p := s.port()
 	active := s.refreshLink(p)
 	s.pushSessionRecords(p)
+	s.crossSettled(completedTick, active)
 	s.flushCrossings(p, completedTick, active)
 	if s.enabled && p != nil && p.IsRunning() && s.ticks%parameter.NetworkSyncTicks == 0 {
 		s.sendCursorState(p)
