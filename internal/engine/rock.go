@@ -23,6 +23,9 @@ type RockField struct {
 	// Origin is the profile column at map column 0, which what draws the rock anchors to
 	Origin int64
 	cols   []RockColumn
+	// The columns past the right end the next tick's scroll can bring in, for drawing
+	// the field carried on between ticks; they block nothing
+	ahead []RockColumn
 }
 
 // RockLook is how a rock field draws: Visual in every cell, or with Stone set the art
@@ -39,6 +42,10 @@ func (r *RockField) Width() int { return len(r.cols) }
 
 // Columns is the field's columns from map column 0, to read and not to keep
 func (r *RockField) Columns() []RockColumn { return r.cols }
+
+// Ahead is the columns past the field's right end the next tick can bring in, to read
+// and not to keep
+func (r *RockField) Ahead() []RockColumn { return r.ahead }
 
 // Column returns map column x's rock, and false outside the field
 func (r *RockField) Column(x int) (RockColumn, bool) {
@@ -89,6 +96,29 @@ func (p *Position) SetRock(mask component.WallBlockMask, look RockLook, origin i
 	}
 	p.rock.Mask, p.rock.Look, p.rock.Origin = mask, look, origin
 	p.rock.cols = append(p.rock.cols[:0], cols...)
+	p.rock.ahead = p.rock.ahead[:0]
+}
+
+// SetRockAhead keeps cols as the columns past the field's right end, in entry order
+func (p *Position) SetRockAhead(cols []RockColumn) {
+	if p.rock != nil {
+		p.rock.ahead = append(p.rock.ahead[:0], cols...)
+	}
+}
+
+// HasBlockingWallDrawnAt is HasBlockingWallAt as a frame draws the cave carry columns
+// on: rock and shared walls ride its scroll, so cell (x, y) shows what x+carry holds
+// now, and past the map's right edge the field's columns ahead
+func (p *Position) HasBlockingWallDrawnAt(x, y, carry int, mask component.WallBlockMask) bool {
+	if carry <= 0 || x < 0 {
+		return p.HasBlockingWallAt(x, y, mask)
+	}
+	x += carry
+	if r := p.rock; r != nil && x >= len(r.cols) && x < len(r.cols)+len(r.ahead) {
+		return p.world != nil && y >= 0 && y < p.world.Resources.Config.MapHeight &&
+			(mask == 0 || r.Mask&mask != 0) && r.ahead[x-len(r.cols)].Rock(y)
+	}
+	return p.HasBlockingWallAt(x, y, mask)
 }
 
 // ShiftRock moves the field a column left: map column 0 leaves it and enter stands

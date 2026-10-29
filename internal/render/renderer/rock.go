@@ -42,12 +42,14 @@ type stoneColumns struct {
 	cells    []stoneCell // height cells a slot
 }
 
-// renderRock draws the rock field's cells the viewport shows: each column's ceiling
+// renderRock draws the rock field's cells the viewport shows, each map column the one
+// carry columns on, from the columns ahead past the field's end: each column's ceiling
 // rows, then its floor rows, in its visual or its stone
-func (r *WallRenderer) renderRock(ctx *render.RenderContext, buf *render.RenderBuffer, rock *engine.RockField) {
+func (r *WallRenderer) renderRock(ctx *render.RenderContext, buf *render.RenderBuffer, rock *engine.RockField, carry int) {
+	r.drawn = append(append(r.drawn[:0], rock.Columns()...), rock.Ahead()...)
 	look := rock.Look
 	if look.Stone {
-		r.renderStone(ctx, buf, rock)
+		r.renderStone(ctx, buf, rock, carry)
 		return
 	}
 	vis := look.Visual
@@ -55,14 +57,13 @@ func (r *WallRenderer) renderRock(ctx *render.RenderContext, buf *render.RenderB
 		return
 	}
 	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
-	cols := rock.Columns()
 	draw := func(x, y int) {
 		if screenX, screenY, visible := ctx.MapToScreen(x, y); visible {
 			r.renderCell(buf, screenX, screenY, vis.Char, vis.FgColor, vis.BgColor, vis.RenderFg, vis.RenderBg, terminal.AttrNone)
 		}
 	}
-	for x := max(minX, 0); x <= min(maxX, len(cols)-1); x++ {
-		c := cols[x]
+	for x := max(minX, 0); x <= min(maxX, rock.Width()-1); x++ {
+		c := r.drawn[x+carry]
 		for y := minY; y < min(c.Ceil, maxY+1); y++ {
 			draw(x, y)
 		}
@@ -73,18 +74,17 @@ func (r *WallRenderer) renderRock(ctx *render.RenderContext, buf *render.RenderB
 }
 
 // renderStone draws the visible rock in its stone art, each column from the cache
-func (r *WallRenderer) renderStone(ctx *render.RenderContext, buf *render.RenderBuffer, rock *engine.RockField) {
+func (r *WallRenderer) renderStone(ctx *render.RenderContext, buf *render.RenderBuffer, rock *engine.RockField, carry int) {
 	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
 	height := r.gameCtx.World.Resources.Config.MapHeight
-	cols := rock.Columns()
-	r.stone.fit(rock.Look, len(cols), height)
+	r.stone.fit(rock.Look, rock.Width(), height)
 	attrs := terminal.AttrNone
 	if r.stone.index256 {
 		attrs = terminal.AttrFg256 | terminal.AttrBg256
 	}
 	minY, maxY = max(minY, 0), min(maxY, height-1)
-	for x := max(minX, 0); x <= min(maxX, len(cols)-1); x++ {
-		column := r.stone.column(cols, x, rock.Origin)
+	for x := max(minX, 0); x <= min(maxX, rock.Width()-1); x++ {
+		column := r.stone.column(r.drawn, x+carry, rock.Origin)
 		for y := minY; y <= maxY; y++ {
 			cell := &column[y]
 			if cell.r == 0 {

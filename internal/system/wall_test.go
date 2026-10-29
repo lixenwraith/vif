@@ -2,6 +2,7 @@ package system
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -213,6 +214,23 @@ func TestATicksCaveStepsAreLeftForWhatRidesTheCave(t *testing.T) {
 	walls.Update()
 	if got := w.Resources.Cave.Steps; got != 0 {
 		t.Fatalf("%d steps left by a stopped cave, want 0", got)
+	}
+}
+
+// The columns a tick leaves ahead of the rock are those the next tick's scroll lays at
+// the right edge, so a frame drawn between the two shows the rock that comes
+func TestTheColumnsAheadOfTheRockAreTheOnesTheScrollLays(t *testing.T) {
+	w, walls, _ := newCaveWorld(t, 30, 12)
+	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, Speed: 25, MinWall: 1, Wavelength: 8, Detail: 1}})
+	walls.Update()
+	ahead := slices.Clone(w.Positions.Rock().Ahead())
+	if got := w.Resources.Cave.Carry(100 * time.Millisecond); got != 3 || len(ahead) != 3+pattern.FaceReach {
+		t.Fatalf("carry %d over a tick and %d columns ahead, want 3 and %d", got, len(ahead), 3+pattern.FaceReach)
+	}
+	walls.Update()
+	cols := w.Positions.Rock().Columns()
+	if got := cols[len(cols)-3:]; !slices.Equal(got, ahead[:3]) {
+		t.Fatalf("the scroll laid %v, the columns ahead were %v", got, ahead[:3])
 	}
 }
 

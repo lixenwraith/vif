@@ -130,11 +130,11 @@ background = true
 # four stone arts; every rock cell draws a glyph, so it reads on a text console's
 # sixteen colours too. The glyphs drift past at one, two and four times the rock's
 # pace by layer, 20, 40 and 80 cells a second at first, fast enough for each layer
-# to read as moving and the depths to come apart; a layer steps whole cells a tick,
-# which the renderer spreads over the frames between. They are scenery: rock and
-# raiders pass them by and the rock hides them, while particles and the gun act on
-# them. The seed is drawn from the run's, so each new game flies a new cave and a
-# run's seed replays its caves in order. The first cave's art is its seed modulo
+# to read as moving and the depths to come apart; the rock and each layer step whole
+# cells a tick, which the renderer spreads over the frames between. The glyphs are
+# scenery: rock and raiders pass them by and the rock hides them, while particles and
+# the gun act on them. The seed is drawn from the run's, so each new game flies a new
+# cave and a run's seed replays its caves in order. The first cave's art is its seed modulo
 # four; each cave after a boss wears one of the other three and scrolls faster, its
 # drift with it, and each Kraken has twice the last one's hit points (BossDown).
 [states.CaveStart]
