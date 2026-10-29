@@ -638,6 +638,57 @@ staging world sharing the live grid's shape without its cells, takes it.
 
 ## Multiplayer
 
+### Hear a participant again once its link reopens
+
+- Priority: P1
+- Affected files: `internal/system/network.go` (`announceDeparture`,
+  `removeParticipant`, `addParticipant`, `receiveAuthority`, `receiveDeparture`),
+  `internal/converge/authority.go` (`onReport`, `takeBack`, `reconcile`),
+  `internal/converge/reach.go` (`admitPeerLink`), `internal/app/migration_test.go`
+- Guide: [Multi-player §5.1](multi-player.md#51-succession),
+  [§5.2](multi-player.md#52-the-roster-after-a-loss),
+  [§5.3](multi-player.md#53-reachability-under--authority-migrate)
+
+An instance marks a participant departed the moment its own link to it drops
+(`announceDeparture`), and the coordinator's crossing marks it on every instance
+(`removeParticipant`). Only an arrival clears the mark (`addParticipant`), and while
+it stands `receiveAuthority` and `receiveDeparture` drop whatever that participant
+sends. A reopened link clears nothing: `admitPeerLink` admits any roster member, a
+Wraith included, so the link stands and the succession hears nothing on it. A person
+whose link to its host drops is unaffected, since its redial is a claim and the
+claim's arrival clears the mark. Two cases are not:
+- Two guests' warm link (§5.3 item 3) drops and reopens while the host lives.
+  Neither end coordinates, so nothing crosses and nothing clears, and each ignores
+  the other for the rest of the session. When the host goes, the candidate takes
+  the term and drops the other's notices (`MsgAuthorityReport`), the other drops its
+  record (`MsgAuthorityHandoff`), and at its own turn takes the next term.
+- A survivor's link to the candidate is down when the candidate takes the term and
+  reopens before the survivor adopts a record. The new host crossed its departure,
+  so the notices on the reopened link are dropped, the survivor is never answered,
+  and it takes a term of its own. Only a report another participant relays passes
+  the mark; one on the survivor's own link never reaches `takeBack`.
+
+Either way the session splits: two hosts, each holding the other and the lost host
+as Wraiths. A survivor with no path to the candidate is meant to split off (§5.1);
+one whose link came back is not. A three-participant `meshSession` probe (links
+1-2, 2-3, 1-3; 2-3 cut with `MeshPort.Disconnect` and linked again with `Mesh.Peer`,
+before the host closes or across 2 taking term 2) ended in all five runs with 2 on
+term 2 and 3 on term 3, two Wraiths each; without the cut both were on term 2.
+
+What would close it:
+- A link admitted after the mark was set clears it, so a mark nothing crossed is
+  gone the moment the link is back. That fixes the first case alone.
+- For a participant whose departure crossed, the reopened link carries its walk: the
+  host answers its notice, takes its membership report, and gives the place back
+  through `CrossReturns`, whose arrival clears the mark everywhere. `takeBack`
+  declines a report that lands before the floor (`reconcileAt` still set), and
+  `recordReport` never offers it again, so the floor has to give back an away
+  participant that reported at its term.
+- The coordinator still crosses one departure per participant: clearing the mark
+  must not let a second drop of the same link cross a second departure for a Wraith.
+- A test per case on the probe's shape, with `meshSession` handing back its mesh:
+  participant 3 follows 2 at term 2, and no Wraith but the lost host's remains.
+
 ### Publish a player's session at the router
 
 - Priority: P3
