@@ -101,6 +101,7 @@ html, body {
     z-index: 3;                           /* over the start screen */
 }
 
+#nojs { background: var(--bg); }   /* over the loading line, which no script hides */
 #nojs a { color: var(--accent); }
 
 /* The frame and the strip the run left, out of sight but in place, so nothing
