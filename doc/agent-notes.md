@@ -127,6 +127,10 @@ that proves wrong or that a document now states, and link the document instead.
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A vanguard crush
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe
   clears what it recorded there.
+- The browser launcher runs end to end in the container: `GOOS=js GOARCH=wasm go
+  build -o <copy>/vif.wasm ./cmd/vif` into a copy of `web/`, serve the copy with
+  `python3 -m http.server` and drive it with Playwright. `?arg=-join=ws://127.0.0.1:9/x`
+  ends the run at once with a refused join's message.
 - Whether a motion reads smooth is a frame question, not a tick one: render each of
   a tick's three frames with the context's `GameTime` set that far past
   `Time.PaceTime` and count the cells the layer moved. A pace off a multiple of

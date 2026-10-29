@@ -1257,14 +1257,16 @@ void main() {
         setTimeout(function() { el.hidden = true; }, 5000);
     }
 
-    // Every message here ends the run: it takes the start screen's place, with a
-    // reload, and a solo game in place of a shared one that refused or ended
+    // Every message here ends the run: it takes the place of the start screen and
+    // the game, with a reload, and a solo game in place of a shared one that
+    // refused or ended
     function showMessage(msg, isError) {
         const el = document.getElementById('loading');
         el.textContent = msg;
         el.classList.remove('hidden', 'ask');
         el.classList.toggle('error', isError);
         start.hidden = true;
+        document.body.classList.add('ended');
         away = false;
         const actions = document.createElement('div');
         actions.className = 'actions';
