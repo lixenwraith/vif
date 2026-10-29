@@ -332,6 +332,7 @@ func (a *App) initWorld() error {
 	cfg := a.world.Resources.Config
 	cfg.MapMinWidth, cfg.MapMinHeight = a.scenario.MapMinWidth, a.scenario.MapMinHeight
 	cfg.CursorsOffMap = a.scenario.CursorsOffMap
+	cfg.NavRefreshTicks, cfg.NavRebuildTicks = a.scenario.NavRefreshTicks, a.scenario.NavRebuildTicks
 	if w, h := cfg.FloorMapSize(cfg.MapWidth, cfg.MapHeight); w != cfg.MapWidth || h != cfg.MapHeight {
 		a.world.SetupLevel(w, h, false, cfg.CropOnResize, false)
 	}

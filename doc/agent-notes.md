@@ -142,6 +142,23 @@ that proves wrong or that a document now states, and link the document instead.
   twenty a second, drawn only where its tick left it, moves in uneven steps however
   fast it is.
 
+## Measuring
+
+- Benchmarks in a cloud container move a fifth between runs, and benchstat is not
+  installed: build main's and the branch's test binaries (`go test -c` in a `git
+  worktree` of main) and compare medians of alternating runs.
+- Navigation's cost in vanguard depends on how the ship is flown: one that keeps
+  still keeps sight of the raiders and shows little of it. Measure as a player
+  flies, headless under `:god` with auto-fire, the ship sweeping between the map's
+  middle and near its left edge every three seconds; a group cache's
+  `FlowField.CurrentGen` counts the fields actually computed.
+- A headless test reads the checkout's `wad/` (`soakRoot`), so main's test binary run
+  from the branch's package directory reads the branch's scenarios and refuses a key
+  main does not know: run main's from its worktree's package directory.
+- Vanguard's fourth-rank raiders fly 4.5 cells a second, so a raider that moved two
+  cells in half a second is not stuck; read a stuck raider as one out of sight a full
+  second that moved less than a cell in it.
+
 ## Scenario TOML
 
 - A payload's untagged fields decode by their Go names: a wall batch's cells take

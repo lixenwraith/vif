@@ -79,8 +79,9 @@ type NavigationSystem struct {
 	// Per-tick resolved target snapshot; avoids per-entity TargetResource locking
 	targets [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
 
-	// Ticks since last gateway route graph recompute (rebuild budget)
-	routeRebuildTicks int
+	// Ticks since last gateway route graph recompute (rebuild budget), and since a
+	// reader out of sight last read its field
+	routeRebuildTicks, refreshTicks int
 
 	reach      navigation.Reach
 	recomputes int64                  // fields that fell due this tick
@@ -118,7 +119,7 @@ func (s *NavigationSystem) Init() {
 	s.enabled = true
 	s.groups = make(map[uint8]*targetGroupNav)
 	clear(s.targets[:])
-	s.routeRebuildTicks = 0
+	s.routeRebuildTicks, s.refreshTicks = 0, 0
 	s.gridsAt, s.wallsSeq, s.derived = 0, 0, false
 	s.tiers = []*navTier{{foot: navigation.Point}, {foot: eyeFootprint}}
 
@@ -202,7 +203,7 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 		s.clearAllRouteAssignments()
 		s.world.Resources.RouteGraph.Clear()
 		// Staged rebuild; refreshRouteGraphs drains one graph per interval
-		s.routeRebuildTicks = parameter.NavRouteRebuildInterval
+		s.routeRebuildTicks = s.rebuildEvery()
 	}
 }
 
@@ -501,12 +502,16 @@ func (s *NavigationSystem) Update() {
 	for groupID, g := range s.groups {
 		s.refresh(groupID, g)
 	}
+	// A reader out of sight reads its field every NavRefreshTicks and holds what it
+	// read between, so a field over a moving map is computed once in as many ticks
+	fresh := s.refreshTicks == 0
+	s.refreshTicks = (s.refreshTicks + 1) % max(config.NavRefreshTicks, 1)
 	for slot := range parameter.MaxPlayers {
 		var c *navigation.FlowFieldCache
 		if g := s.groups[uint8(component.MaxTargetGroups+slot)]; g != nil {
 			c = g.fields[0].cache
 		}
-		s.world.Resources.Pursuit.Publish(&s.tiers[0].grid, uint8(slot), c)
+		s.world.Resources.Pursuit.Publish(&s.tiers[0].grid, !fresh, uint8(slot), c)
 	}
 
 	// Classify entities and check LOS to the same target their route follows.
@@ -580,10 +585,11 @@ func (s *NavigationSystem) Update() {
 		}
 	}
 
-	// Resolve movement from the selected cache.
+	// Resolve movement from the selected cache; between reads a navigator out of sight
+	// holds its flow, and one that went out of sight since homes on its target
 	for _, entity := range entities {
 		navComp, ok := navigations.GetPtr(entity)
-		if !ok || navComp.HasDirectPath {
+		if !ok || navComp.HasDirectPath || !fresh {
 			continue
 		}
 
@@ -1061,7 +1067,7 @@ func (s *NavigationSystem) clearRouteAssignments(graphID uint32) {
 // Dijkstra + per-route field cost forbids an unbudgeted sweep
 func (s *NavigationSystem) refreshRouteGraphs() {
 	s.routeRebuildTicks++
-	if s.routeRebuildTicks < parameter.NavRouteRebuildInterval {
+	if s.routeRebuildTicks < s.rebuildEvery() {
 		return
 	}
 
@@ -1096,6 +1102,14 @@ func (s *NavigationSystem) refreshRouteGraphs() {
 		})
 		return
 	}
+}
+
+// rebuildEvery is how many ticks a stale gateway route graph waits between rebuilds
+func (s *NavigationSystem) rebuildEvery() int {
+	if n := s.world.Resources.Config.NavRebuildTicks; n > 0 {
+		return n
+	}
+	return parameter.NavRouteRebuildInterval
 }
 
 // handleRouteGraphRequest computes a route graph for a gateway-target pair
@@ -1186,6 +1200,7 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 // different cells, steer differently.
 type navSnapshot struct {
 	RouteRebuildTicks int             `json:"route_rebuild_ticks"`
+	RefreshTicks      int             `json:"refresh_ticks,omitempty"`
 	Groups            []navGroupPhase `json:"groups"`
 
 	// Routes names each gateway route graph held and the cells it was computed
@@ -1235,7 +1250,7 @@ type navFieldPhase struct {
 // SaveShared carries the D-17 recompute phase (D-19). The fields themselves are
 // derived at install and deliberately not serialized.
 func (s *NavigationSystem) SaveShared() ([]byte, error) {
-	snap := navSnapshot{RouteRebuildTicks: s.routeRebuildTicks}
+	snap := navSnapshot{RouteRebuildTicks: s.routeRebuildTicks, RefreshTicks: s.refreshTicks}
 	ids := make([]uint8, 0, len(s.groups))
 	for id := range s.groups {
 		ids = append(ids, id)
@@ -1350,7 +1365,7 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("navigation: phase: %w", err)
 	}
-	s.routeRebuildTicks = snap.RouteRebuildTicks
+	s.routeRebuildTicks, s.refreshTicks = snap.RouteRebuildTicks, snap.RefreshTicks
 
 	s.applyWalls()
 	var feet []navigation.Footprint
@@ -1431,6 +1446,7 @@ type navState struct {
 	derived           bool
 	targets           [component.MaxTargetGroups + parameter.MaxPlayers]engine.TargetGroupState
 	routeRebuildTicks int
+	refreshTicks      int
 	graphs            map[uint32]*navigation.RouteGraph
 }
 
@@ -1439,7 +1455,7 @@ type navState struct {
 func (s *NavigationSystem) CopyState() any {
 	c := navState{groups: make(map[uint8]targetGroupNav, len(s.groups)), walls: slices.Clone(s.walls),
 		wallsW: s.wallsW, wallsH: s.wallsH, gen: s.gen, derived: s.derived, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
-		graphs: s.world.Resources.RouteGraph.Graphs()}
+		refreshTicks: s.refreshTicks, graphs: s.world.Resources.RouteGraph.Graphs()}
 	for _, t := range s.tiers {
 		c.tiers = append(c.tiers, t.copy())
 	}
@@ -1463,7 +1479,7 @@ func (s *NavigationSystem) RestoreState(v any) error {
 	}
 	s.walls, s.wallsW, s.wallsH, s.gen, s.derived = slices.Clone(c.walls), c.wallsW, c.wallsH, c.gen, c.derived
 	s.gridsAt, s.wallsSeq = 0, 0
-	s.targets, s.routeRebuildTicks = c.targets, c.routeRebuildTicks
+	s.targets, s.routeRebuildTicks, s.refreshTicks = c.targets, c.routeRebuildTicks, c.refreshTicks
 	s.world.Resources.RouteGraph.SetGraphs(c.graphs)
 	s.showDebug()
 	return nil

@@ -133,6 +133,14 @@ rebuilds every field whose stamp is not its tier's current generation or whose
 targets differ, keeps the rest, and derives the named graphs. The fields
 themselves are never carried.
 
+A reader out of sight reads its field every `field_refresh_ticks` (the scenario's
+`[navigation]`, every tick when unset) and holds the way it read between: a
+navigator its `FlowX`, `FlowY`, a drop its `LootComponent.FlowX`, `FlowY`. One that
+went out of sight since the last read holds none and homes on its target, as one in
+sight does. Over a moving map, where a closing drops the fields every tick, a field
+is then computed once in as many ticks. What a reader holds is component state a
+capture carries, and the reading ticks are navigation's phase (`refresh_ticks`).
+
 ## 5. Target groups
 
 A target group is one navigation goal for many actors. Group 0 is the live
@@ -181,12 +189,12 @@ is nearer and stall there, and a line-of-sight flag read against that cursor
 would drive it into the wall between it and its own. A drop therefore steers by
 its owner's private group through `PursuitResource`, with its own line-of-sight
 check against the same cursor. A field is computed when first read, so only the
-instance holding a cursor's drops ever materializes it; nothing of it is in the
-loot system or any capture. No field covers a wall cell, so a drop a wall lands
-on without displacing it — a correction installs shared walls under
-player-domain loot — is pushed out as a spawn displaces it. Anything else that
-becomes owned rather than contested reads the same resource; do not add a target
-group per participant.
+instance holding a cursor's drops ever materializes it; of the field, a capture
+holds only the way a drop read between refreshes (§4). No field covers a wall
+cell, so a drop a wall lands on without displacing it — a correction installs
+shared walls under player-domain loot — is pushed out as a spawn displaces it.
+Anything else that becomes owned rather than contested reads the same resource;
+do not add a target group per participant.
 
 ## 8. Route graphs
 
@@ -216,7 +224,8 @@ graph is fresh — computed at its tier's current generation, so a wall
 change that fits no footprint differently leaves it fresh, toward a cell a live
 group target still occupies — and only while the actor is inside its corridor;
 otherwise the actor steers by its group field. Navigation rebuilds at most one
-stale graph per `NavRouteRebuildInterval` (20 ticks), and `EventNavigationRegraph`
+stale graph per `route_rebuild_ticks` (the scenario's `[navigation]`,
+`NavRouteRebuildInterval`'s 20 ticks when unset), and `EventNavigationRegraph`
 drops every graph and route assignment for that budget to rebuild. A graph to a
 moving goal is a trap: it is stale as soon as the goal moves. Fields are for
 moving goals, graphs for fixed ones.
@@ -235,20 +244,20 @@ Measured native on the scenario maze shape (cell 5×3, braiding 0.5) and on a
 headless td run with eight cursors walking a cell a tick, the monitor stopped
 and towers healed, 100–340 eyes, two to seven snake heads, a storm raised.
 
-| Isolated | tower 239×64 | td 500×250 |
-|---|---:|---:|
-| composite passability, whole | 0.4 ms | 2.5 ms |
-| point field, 8 targets | 0.5 ms | 3.9 ms |
-| composite field, 8 targets | 0.3 ms | 1.5 ms |
-| route graph | 1.5 ms | 3.8 ms |
-| route storage | 22 kB a route | 36 kB a route |
+```
+Isolated                      tower 239×64   td 500×250
+composite passability, whole  0.4 ms         2.5 ms
+point field, 8 targets        0.5 ms         3.9 ms
+composite field, 8 targets    0.3 ms         1.5 ms
+route graph                   1.5 ms         3.8 ms
+route storage                 22 kB a route  36 kB a route
 
-| td run | Reading |
-|---|---:|
-| play, a tick on average | 4.4 ms |
-| storm, a tick on average | 6.4 ms |
-| storm, the worst tick | 30 ms |
-| fields computed in the worst tick | 2 |
+td run                             Reading
+play, a tick on average            4.4 ms
+storm, a tick on average           6.4 ms
+storm, the worst tick              30 ms
+fields computed in the worst tick  2
+```
 
 The cost model: a group field toward static anchors is computed once
 and repaired or rebuilt only as its tier's passability moves; group 0's fields
@@ -257,8 +266,11 @@ snake lock scales with heads, one reach each on its throttle; a drop's field
 costs its owner's instance alone; a route graph is rebuilt only when the
 composite passability changes and at most one per twenty ticks. What the storm
 tick still holds is one point field per local cursor with drops in flight, the
-reaches, and composite line of sight. What would bound it further is in
-[todo](todo.md#bound-navigations-worst-tick-on-busy-maps).
+reaches, and composite line of sight. td's worst ticks are walls going, not
+fields: under a raised storm with eight cursors walking, the ticks where hundreds
+of walls go reach 40–60 ms and compute no field, the wall system's event peaking
+at 34–51 ms and navigation at 15–17 ms, and no tick computes more than four
+fields.
 
 Vanguard's jagged cave steps a column every tick, and more in a later cave. At
 500×254 a step turns about 350 cells and the wall upkeep is 71 µs
@@ -269,8 +281,30 @@ map on a third of the ticks. Played headless as a player plays it (`:god`, the
 ship sweeping from the middle to near the left edge every three seconds, firing),
 navigation took 95–100 µs a tick at 120×40 and 220–245 µs at 200×60 while a
 fiftieth derived whole, two thirds of it those derivations, and takes 27–43 µs and
-64–79 µs at an eighth; at 400×120, 145–165 µs before and 90–120 µs. What would cut
-the fields is in [todo](todo.md#spend-less-on-fields-over-a-moving-map).
+64–79 µs at an eighth; at 400×120, 145–165 µs before and 90–120 µs.
+
+What is left is the fields. A cell closes every tick, so a raider out of sight
+computes its group's composite field on every tick it reads one, a fifth of the
+ticks at 120×40 and a seventh at 200×60, and a drop out of sight its owner's point
+field. Vanguard reads them every fourth tick (`field_refresh_ticks`, §4), which
+computes a quarter of them. Medians of nine games of 6,000 ticks played as above,
+navigation and the whole tick, in µs:
+
+```
+         main         unset        refresh 4
+         nav   tick   nav   tick   nav   tick
+120×40    91    340    34    276    23    278
+200×60   182    567    72    492    46    448
+400×120  147   1137    98   1081    80   1017
+```
+
+Over nine such games at 120×40 and 200×60 for each refresh of 1, 4, 6, 10 and
+1,000, the raiders' contacts, charges, teleports, kills and wall hits, the share of
+their chase ticks out of sight spent standing (11–15%) and the length of a chase
+out of sight (7–8 ticks) stay within the spread between games; a raider stuck out
+of sight a second, about 1% of those ticks reading every tick, is rarer reading
+every fourth or thousandth. Out of sight a third of a second at a time, a raider
+steers alike by a field a few ticks old.
 
 ## 11. Custom maps
 
@@ -298,9 +332,22 @@ the fields is in [todo](todo.md#spend-less-on-fields-over-a-moving-map).
 - The snake lock is sticky and sight stays out of it (§6).
 - An opened cell repairs a field rather than dirtying it (§3), and a graph's
   freshness is its tier's generation rather than a corridor mask, for the same
-  reason: a joiner computes on the grid it has.
+  reason: a joiner computes on the grid it has. A reader between refreshes holds
+  the way it read (§4) rather than reading a field left over an older grid: what it
+  holds is in its component, which a capture carries.
 - Loot folds into navigation's private groups, kept for every cursor so the
   carrier agrees across instances (§7).
+- A field over a moving map is read less often (§4), never settled less: a settle
+  stopping at the farthest reader out of sight would skip a tenth of a raider's
+  field at 120×40 and under a hundredth at 400×120, and a third to a half of a
+  drop's, which costs under a hundredth of a tick. Repairing a field where cells
+  closed pays on an open map, not on a cave, where every bend moves each column.
+- No per-tick field budget and no coarse field: td's worst ticks compute no field
+  (§10), so deferring one, which changes what a reader steers by, would bound
+  nothing that stalls, and a 2×2 field changes the answer for a cost the shared
+  grid already took.
+- Vanguard reads every fourth tick, not less often: past four, navigation's cost is
+  the wall upkeep and sight, and a longer hold saves under 10 µs a tick.
 
 ## 13. Extension guidance and source map
 

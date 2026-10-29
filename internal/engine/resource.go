@@ -228,6 +228,11 @@ type ConfigResource struct {
 	// slot, owner and control alone, with no cell or anything a cell carries
 	CursorsOffMap bool `toml:"-"`
 
+	// NavRefreshTicks is the scenario's [navigation] field_refresh_ticks, how often a
+	// navigator or drop out of sight reads its field, and NavRebuildTicks its
+	// route_rebuild_ticks, how often a stale route graph may rebuild; zero is unset
+	NavRefreshTicks, NavRebuildTicks int `toml:"-"`
+
 	// ColorMode for rendering pipeline (256-color vs TrueColor)
 	// Set after terminal initialization
 	ColorMode terminal.ColorMode `toml:"color_mode"`
@@ -879,15 +884,22 @@ func (tr *TargetResource) SetGroupValidity(groupID uint8, valid bool) {
 // read, which is local and leaves the shared throttle phase alone (D-17).
 type PursuitResource struct {
 	grid   *navigation.SearchGrid
+	hold   bool
 	fields [parameter.MaxPlayers]*navigation.FlowFieldCache
 }
 
-// Publish names the tick's grid and one slot's field, nil where no cursor stands.
-func (r *PursuitResource) Publish(grid *navigation.SearchGrid, slot uint8, c *navigation.FlowFieldCache) {
+// Publish names the tick's grid, whether a reader out of sight holds the way it read
+// last rather than reading its field this tick, and one slot's field, nil where no
+// cursor stands.
+func (r *PursuitResource) Publish(grid *navigation.SearchGrid, hold bool, slot uint8, c *navigation.FlowFieldCache) {
 	if int(slot) < len(r.fields) {
-		r.grid, r.fields[slot] = grid, c
+		r.grid, r.hold, r.fields[slot] = grid, hold, c
 	}
 }
+
+// Fresh reports whether a drop out of sight reads its field this tick, rather than
+// holding the way it read last.
+func (r *PursuitResource) Fresh() bool { return r == nil || !r.hold }
 
 // Field is the field toward the cursor in slot, or nil while it reaches nothing.
 func (r *PursuitResource) Field(slot uint8) navigation.Source {

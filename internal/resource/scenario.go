@@ -52,6 +52,9 @@ type Scenario struct {
 	// CursorsOffMap is [map] cursors = false: a player holds a roster slot with no
 	// cursor on the map, and plays through the keys and buttons the scenario takes
 	CursorsOffMap bool
+	// NavRefreshTicks and NavRebuildTicks are [navigation] field_refresh_ticks and
+	// route_rebuild_ticks, zero when the scenario sets none
+	NavRefreshTicks, NavRebuildTicks int
 
 	entry  string
 	files  []scenarioFile
@@ -256,7 +259,7 @@ func UnmarshalScenario(name string, body []byte) (Scenario, error) {
 
 // entryKeys are the top-level keys a scenario entry may hold
 var entryKeys = []string{"behaviors", "description", "drops", "loot", "macro_files", "macros", "map",
-	"max_players", "min_players", "regions", "states", "systems"}
+	"max_players", "min_players", "navigation", "regions", "states", "systems"}
 
 // validate holds every form of a scenario to one rule set: bounded, sorted,
 // .toml-only, naming nothing outside itself, its entry holding only entryKeys.
@@ -312,7 +315,38 @@ func (s *Scenario) validate() error {
 		return err
 	}
 	if table, exists := doc["map"]; exists {
-		return s.readMap(table)
+		if err := s.readMap(table); err != nil {
+			return err
+		}
+	}
+	if table, exists := doc["navigation"]; exists {
+		return s.readNavigation(table)
+	}
+	return nil
+}
+
+// readNavigation reads [navigation] field_refresh_ticks and route_rebuild_ticks,
+// each a tick count from one to parameter.NavTicksMax
+func (s *Scenario) readNavigation(v any) error {
+	table, ok := v.(map[string]any)
+	if !ok {
+		return errors.New("navigation must be a table")
+	}
+	for key, value := range table {
+		var to *int
+		switch key {
+		case "field_refresh_ticks":
+			to = &s.NavRefreshTicks
+		case "route_rebuild_ticks":
+			to = &s.NavRebuildTicks
+		default:
+			return fmt.Errorf("navigation.%s is not a navigation setting", key)
+		}
+		n, ok := value.(int64)
+		if !ok || n < 1 || n > parameter.NavTicksMax {
+			return fmt.Errorf("navigation.%s must be an integer from 1 to %d", key, parameter.NavTicksMax)
+		}
+		*to = int(n)
 	}
 	return nil
 }

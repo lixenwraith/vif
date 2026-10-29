@@ -1508,7 +1508,7 @@ func equalWall(a, b *component.WallComponent) bool {
 }
 
 func equalLoot(a, b *component.LootComponent) bool {
-	return *a == *b
+	return a.Type == b.Type && a.Look == b.Look && a.Owner == b.Owner && a.Still == b.Still && a.Return == b.Return && a.Away == b.Away && math.Float64bits(float64(a.FlowX)) == math.Float64bits(float64(b.FlowX)) && math.Float64bits(float64(a.FlowY)) == math.Float64bits(float64(b.FlowY)) && a.LastIntX == b.LastIntX && a.LastIntY == b.LastIntY
 }
 
 func equalGateway(a, b *component.GatewayComponent) bool {
