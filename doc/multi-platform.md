@@ -42,7 +42,7 @@ make nolog                   # bin/vif without the logger
 make headless                # bin/vif-headless
 make gui                     # bin/vif-gui, the window by default
 make cli                     # bin/vif-cli, no window
-make android                 # bin/vif-debug.apk, from android/
+make android                 # bin/vif-debug-arm64.apk and -x86_64.apk, from android/
 make wasm                    # web/vif.wasm
 make windows                 # bin/vif.exe
 

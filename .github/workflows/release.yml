@@ -183,9 +183,10 @@ jobs:
           android/toolchain.sh gradlew assembleRelease \
             -PversionCode="$GITHUB_RUN_NUMBER" -PversionName="$label+${GITHUB_SHA::7}"
           mkdir -p dist
-          cp android/app/build/outputs/apk/release/app-release.apk "dist/vif-$label-android.apk"
+          cp android/app/build/outputs/apk/release/app-arm64-v8a-release.apk "dist/vif-$label-android-arm64.apk"
+          cp android/app/build/outputs/apk/release/app-x86_64-release.apk "dist/vif-$label-android-x86_64.apk"
 
-      - name: Upload the APK
+      - name: Upload the APKs
         uses: actions/upload-artifact@v6
         with:
           name: release-payload-android
@@ -279,7 +280,7 @@ jobs:
           set -euo pipefail
           version=${GITHUB_REF_NAME#v}
           flags=(--draft --verify-tag)
-          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux ones need glibc, and each archive's README.md says how to start it. The Android APK installs over a nightly or a local debug build (android/README.md). The windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound."
+          notes="Built from ${GITHUB_SHA}. vif-$version.tar.gz is the source archive; SHA256SUMS covers every asset. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window; the Linux ones need glibc, and each archive's README.md says how to start it. The Android APKs, arm64 for a phone and x86_64 for an emulator, install over a nightly or a local debug build (android/README.md). The windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound."
           case $version in
           *-*)
             flags+=(--prerelease)
@@ -300,7 +301,7 @@ jobs:
           git push origin refs/tags/nightly --force
 
           title='Nightly development build (not a release)'
-          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window, the Linux ones on glibc, and each archive's README.md says how to start it; the Linux server archive and GHCR image use the vif_headless profile. The Android APK (Android 11 and newer, arm64 and x86_64) is signed with the repository's debug key and installs over the night before; the windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound."
+          notes="Not a release: an automated development build of ${GITHUB_SHA}, replaced every night. Flags, files and formats may change without notice. The Linux and FreeBSD binaries play in a terminal or, with -g, a desktop window, the Linux ones on glibc, and each archive's README.md says how to start it; the Linux server archive and GHCR image use the vif_headless profile. The Android APKs (Android 11 and newer), arm64 for a phone and x86_64 for an emulator, are signed with the repository's debug key and install over the night before; the windows-amd64 zip is experimental: it plays in a terminal, without mouse or sound."
           if gh release view nightly >/dev/null 2>&1; then
             gh release upload nightly dist/* --clobber
             # The release carries exactly this build, not a renamed or dropped asset.

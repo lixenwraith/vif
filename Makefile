@@ -85,8 +85,8 @@ help:
 	@echo "  headless Build dedicated-host binary without presentation or audio"
 	@echo "  cli      Build bin/vif-cli, the terminal alone: no desktop window (vif_nogui)"
 	@echo "  gui      Build bin/vif-gui, the release binary opening the desktop window by default (-g=false: the terminal)"
-	@echo "  android  Build the Android debug APK as bin/vif-debug.apk; first names any JDK or SDK piece missing"
-	@echo "  android-install Install bin/vif-debug.apk on the device adb sees"
+	@echo "  android  Build the Android debug APKs as bin/vif-debug-arm64.apk and bin/vif-debug-x86_64.apk; first names any JDK or SDK piece missing"
+	@echo "  android-install Install the debug APK of the ABI of the device adb sees"
 	@echo "  android-toolchain Install what android needs: Go and a JDK (asking first), the SDK's"
 	@echo "           command-line tools, platform, NDK and platform-tools (android/README.md)"
 	@echo "  nolog    Release build without logger"
@@ -182,14 +182,18 @@ cli: check-go $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "vif_nogui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-cli $(SRC)
 
 # android is its own Go module and Gradle project: gomobile binds the Go host and
-# the APK packages wad/ as its assets. toolchain.sh checks the JDK and SDK before
-# Gradle runs; only android-toolchain downloads them (android/README.md).
+# each APK, one per ABI, packages wad/ as its assets. toolchain.sh checks the JDK
+# and SDK before Gradle runs; only android-toolchain downloads them (android/README.md).
 android: check-go $(BIN_DIR)
 	android/toolchain.sh gradlew assembleDebug
-	install -m 0644 android/app/build/outputs/apk/debug/app-debug.apk $(BIN_DIR)/$(BINARY)-debug.apk
+	install -m 0644 android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk $(BIN_DIR)/$(BINARY)-debug-arm64.apk
+	install -m 0644 android/app/build/outputs/apk/debug/app-x86_64-debug.apk $(BIN_DIR)/$(BINARY)-debug-x86_64.apk
 
+# The device names its ABI as Android does, the APKs by its short name; toolchain.sh
+# runs in android/, so the path is absolute
 android-install:
-	android/toolchain.sh adb install -r $(BIN_DIR)/$(BINARY)-debug.apk
+	abi=$$(android/toolchain.sh adb shell getprop ro.product.cpu.abi | tr -d '\r') && \
+	android/toolchain.sh adb install -r $(CURDIR)/$(BIN_DIR)/$(BINARY)-debug-$${abi%-v8a}.apk
 
 android-toolchain: check-go
 	@android/toolchain.sh install
