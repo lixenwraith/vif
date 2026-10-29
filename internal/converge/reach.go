@@ -28,6 +28,9 @@ type Reach struct {
 	listener net.Listener
 	declared string
 	dialing  map[link.PeerID]bool
+	// admitted is when each participant's own link here was last admitted, which
+	// lands within a pass; a dial to it meanwhile would cross that link.
+	admitted map[link.PeerID]time.Time
 	nextPass time.Time
 	passes   int
 	remotes  map[link.PeerID]string // where each joiner's stream came from, for a door it declares later
@@ -53,6 +56,7 @@ func newReach(inst Instance, reg *status.Registry) *Reach {
 	return &Reach{
 		inst:          inst,
 		dialing:       make(map[link.PeerID]bool, parameter.MaxPlayers),
+		admitted:      make(map[link.PeerID]time.Time, parameter.MaxPlayers),
 		remotes:       make(map[link.PeerID]string, parameter.MaxPlayers),
 		statChain:     reg.Ints.Get("network.chain"),
 		statAttempts:  reg.Ints.Get("network.rejoin_attempts"),
@@ -365,7 +369,7 @@ func (r *Reach) retrySuccession() {
 // link existed, so the far end has to be asked.
 func (r *Reach) dial(dialer engine.PeerDialingPort, id link.PeerID, addr string) {
 	r.mu.Lock()
-	if r.dialing[id] {
+	if r.dialing[id] || time.Since(r.admitted[id]) < parameter.NetworkRejoinPassInterval { // [wall]
 		r.mu.Unlock()
 		return
 	}
@@ -429,5 +433,14 @@ func (r *Reach) admitPeerLink(from link.PeerID) error {
 		func(p network.RosterEntry) bool { return p.ID == from }) {
 		return fmt.Errorf("peer link: participant %d is not in this session", from)
 	}
+	// Two participants dialling each other would each keep the link it took first and
+	// close the other, leaving neither when they took different ones: both keep the
+	// lower identity's.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.dialing[from] && local < from {
+		return fmt.Errorf("peer link: participant %d dials %d itself: %w", local, from, link.ErrLinkStands)
+	}
+	r.admitted[from] = time.Now() // [wall]
 	return nil
 }

@@ -59,8 +59,7 @@ that proves wrong or that a document now states, and link the document instead.
 
 - A few `internal/app` tests over real sockets fail on main alone, a few percent of
   runs and more under `-race` or load: `TestAStillGuestSeatsBotsAfterItsHostLeaves`
-  and `TestAPersonBehindARelayReachesTheHostThatTookOver` most, a relay-join hold
-  and a mid-session journal test rarely. A failure there takes about 16.5 s, a 15 s
+  most, a relay-join hold and a mid-session journal test rarely. A failure there takes about 16.5 s, a 15 s
   socket wait running out. Before calling one a regression, run it alone in fresh
   processes, alternating main's binary and the branch's under the same load.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
