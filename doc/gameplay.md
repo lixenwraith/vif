@@ -444,7 +444,10 @@ scrolls at `speed` columns a second, at most the soft cap `CaveMaxSpeed`, as an
 integer rate and phase, and each whole column the phase carries is a step, as many
 a tick as it carries. Each step moves the rock and every shared wall a column left,
 drops what leaves the map and lays the column entering it, and the wall system
-leaves a tick's steps in `CaveResource` for what rides the cave's frame: before it
+leaves a tick's steps, its part-column and rate in `CaveResource`, and the columns
+the next tick can bring in ahead of the field, so the rock is drawn where the scroll
+stands between ticks ([Rendering §7](rendering.md#7-layer-inventory)), for what rides
+the cave's frame: before it
 moves its particles the particle system carries every one no anchor holds as far
 left, the cell it last entered with it, so decay and blossom fall or rise down one
 column of the cave and dust wanders in its frame, entering a cell only by its own

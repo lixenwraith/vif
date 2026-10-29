@@ -48,6 +48,7 @@ type WallSystem struct {
 	// (then the cells rock arrived on as well), the walls it moves, those that left
 	// the map, and the cells rock arrived on
 	rockPrev   []engine.RockColumn
+	rockAhead  []engine.RockColumn
 	caveRock   map[int]bool
 	caveMovers []core.Entity
 	caveHeads  map[core.Entity]bool
@@ -208,6 +209,7 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCaveStart:
 		if payload, ok := ev.Payload.(*event.CaveStartPayload); ok {
 			s.startCave(payload)
+			s.publishCave()
 		}
 
 	case event.EventCaveStop:
@@ -216,10 +218,12 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 			ease = p.EaseMs
 		}
 		s.paceCave(0, ease)
+		s.publishCave()
 
 	case event.EventCavePace:
 		if p, ok := ev.Payload.(*event.CavePacePayload); ok && p.Speed > 0 {
 			s.paceCave(p.Speed, p.EaseMs)
+			s.publishCave()
 		}
 
 	case event.EventCaveOpen:
@@ -228,6 +232,7 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 			open = *p
 		}
 		s.openCave(open)
+		s.publishCave()
 
 	case event.EventWallDespawnAll:
 		s.handleDespawnAllSilent()
@@ -236,6 +241,7 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 
 func (s *WallSystem) Update() {
 	s.world.Resources.Cave.Steps = 0
+	defer s.publishCave()
 	if !s.enabled {
 		return
 	}
@@ -1265,6 +1271,30 @@ func (s *WallSystem) liftCave() {
 	s.cave = caveState{}
 	s.rockMap = [2]int{}
 	s.world.Positions.SetRock(component.WallBlockNone, engine.RockLook{}, 0, nil)
+	s.publishCave()
+}
+
+// publishCave leaves the scroll where it stands for what draws it between ticks: its
+// part-column and rate, and the columns past the field's end the next tick can bring
+// in, with those a stone face reads beyond them
+func (s *WallSystem) publishCave() {
+	res, rock := s.world.Resources.Cave, s.world.Positions.Rock()
+	res.Phase, res.Rate = 0, 0
+	if !s.enabled || !s.cave.Active || rock == nil {
+		return
+	}
+	res.Phase, res.Rate = s.cave.Phase, s.cave.Pace.Rate()
+	cfg := s.caveProfile()
+	s.rockAhead = s.rockAhead[:0]
+	for i := range res.Carry(s.tickElapsed()) + pattern.FaceReach {
+		s.rockAhead = append(s.rockAhead, rockColumn(cfg, s.cave.Offset+int64(rock.Width()+i)))
+	}
+	s.world.Positions.SetRockAhead(s.rockAhead)
+}
+
+// tickElapsed is the time a tick scrolls the cave over, its delta within the integration cap
+func (s *WallSystem) tickElapsed() time.Duration {
+	return min(max(s.world.Resources.Time.DeltaTime, 0), time.Duration(parameter.MaxSimulationDeltaSeconds*float64(time.Second)))
 }
 
 // caveProfile is the cave's profile at the map's height, or at its start's height
@@ -1333,8 +1363,7 @@ func (s *WallSystem) scrollCave() {
 		s.layRock()
 		s.pushOutOfRock()
 	}
-	elapsed := min(max(s.world.Resources.Time.DeltaTime, 0), time.Duration(parameter.MaxSimulationDeltaSeconds*float64(time.Second)))
-	covered, pace := s.cave.Pace.Cover(int64(elapsed))
+	covered, pace := s.cave.Pace.Cover(int64(s.tickElapsed()))
 	s.cave.Pace = pace
 	s.cave.Phase += covered
 	steps := s.cave.Phase / vmath.CellSpan

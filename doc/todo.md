@@ -137,12 +137,6 @@ Goals:
   7.9%, had the raider's own body blocked on the way. The footprint registry of
   [Bound navigation's worst tick on busy maps](#bound-navigations-worst-tick-on-busy-maps)
   belongs here. Until it lands, every raider type stays within 5×3.
-- Rock carried between ticks: off whole columns a tick a cave steps unevenly, one
-  and two columns in turn at 24 and 29 columns a second, more than two a tick past
-  40, and vanguard's boss approach doubles its pace. The renderer carries scenery
-  between ticks but not the rock, which needs the columns ahead of the map. The soft
-  caps sit past what was measured: a whole vanguard tick, headless, reads 0.07 to
-  0.20 ms from 20 to 200 columns a second at 120×40 and 0.39 to 2.42 ms at 500×254.
 - A sparse or tiled grid for a ceiling-sized empty map
   ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)).
 
@@ -947,7 +941,7 @@ authority with no peers.
 
 At time scale 8x vanguard's parallax reads as depth on its own, every layer stepping
 at least twenty times a second; a faster tick would give every motion that, where
-the renderer now carries only scenery between ticks. `GameUpdateInterval` (50 ms)
+the renderer now carries only scenery and the cave between ticks. `GameUpdateInterval` (50 ms)
 is a constant: a frame is a third of it, `SimTime` derives each tick's instant from
 it, and parameters count in ticks, the network's windows most
 (`NetworkBarrierDelayTicks`, `NetworkPaceStepTicks`, `SnapshotFloorKeyframeTicks`
@@ -956,8 +950,8 @@ of a session must step the same interval, so it would travel in the session's
 handshake and the journal, and a session's traffic per second, command frames,
 epochs and corrections, grows with the rate, as it already does for a session run
 above 1x ([Let a session's host set its speed](#let-a-sessions-host-set-its-speed)).
-Vanguard's rock steps a column a tick, evenly only on a whole-tick period, so its
-pace follows the interval. The smallest step is an interval set per run and carried
+Vanguard's rock is drawn at the frame's moment but blocks where its tick left it, so
+what it hits follows the interval. The smallest step is an interval set per run and carried
 where every participant reads it, the tick-counted windows derived from durations,
 and the divergence harness run at two intervals.
 

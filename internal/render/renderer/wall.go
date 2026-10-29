@@ -18,6 +18,7 @@ type WallRenderer struct {
 	gameCtx    *engine.GameContext
 	renderCell wallCellRenderer
 	stone      stoneColumns
+	drawn      []engine.RockColumn // the rock's columns and those ahead of it, this frame
 }
 
 func NewWallRenderer(ctx *engine.GameContext) *WallRenderer {
@@ -35,6 +36,9 @@ func NewWallRenderer(ctx *engine.GameContext) *WallRenderer {
 	return r
 }
 
+// Render draws the rock and the walls where the cave's scroll stands at the frame's
+// moment: rock and shared walls ride it, carried on from their cells by the part of a
+// tick since, as the drift's layers are
 func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	walls := r.gameCtx.World.Components.Wall
 	rock := r.gameCtx.World.Positions.Rock()
@@ -42,8 +46,9 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 		return
 	}
 	buf.SetWriteMask(visual.MaskWall)
+	carry := rockCarry(ctx, r.gameCtx.World)
 	if rock != nil {
-		r.renderRock(&ctx, buf, rock)
+		r.renderRock(&ctx, buf, rock, carry)
 	}
 
 	walls.Each(func(wallEntity core.Entity, wallComp *component.WallComponent) bool {
@@ -54,6 +59,9 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 		pos, ok := r.gameCtx.World.Positions.GetPosition(wallEntity)
 		if !ok {
 			return true
+		}
+		if wallEntity.Domain() == core.DomainShared {
+			pos.X -= carry
 		}
 
 		// Transform map coords to screen coords with visibility check
@@ -66,6 +74,17 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 			wallComp.RenderFg, wallComp.RenderBg, wallComp.Attrs)
 		return true
 	})
+}
+
+// rockCarry is how many columns the cave's scroll stands past its tick at the frame's
+// moment, as far as the columns ahead of the rock reach
+func rockCarry(ctx render.RenderContext, world *engine.World) int {
+	rock := world.Positions.Rock()
+	since, ok := sinceTick(ctx, world.Resources.Time)
+	if rock == nil || !ok {
+		return 0
+	}
+	return min(world.Resources.Cave.Carry(since), len(rock.Ahead()))
 }
 
 func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, screenY int,
