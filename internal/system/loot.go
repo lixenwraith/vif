@@ -299,7 +299,9 @@ func (s *LootSystem) Update() {
 	s.statUnreachable.Store(unreachable)
 }
 
-// A drop follows its owner directly when visible, otherwise its private field.
+// A drop follows its owner directly when visible, otherwise its private field, read
+// as often as navigation lets a reader out of sight and held between: a drop that
+// went out of sight since the last read homes on its owner meanwhile.
 func (s *LootSystem) homingTarget(
 	lootComp *component.LootComponent,
 	kineticComp *component.KineticComponent,
@@ -313,6 +315,7 @@ func (s *LootSystem) homingTarget(
 
 	ownerCenterX, ownerCenterY := vmath.Point{X: ownerPos.X, Y: ownerPos.Y}.Center()
 	if s.world.Positions.HasLineOfSight(curX, curY, ownerPos.X, ownerPos.Y, component.WallBlockKinetic) {
+		lootComp.FlowX, lootComp.FlowY = 0, 0
 		return ownerCenterX, ownerCenterY, true
 	}
 
@@ -320,13 +323,20 @@ func (s *LootSystem) homingTarget(
 	if !ok {
 		return 0, 0, false
 	}
-	field := s.world.Resources.Pursuit.Field(slot)
-	if field == nil {
-		return 0, 0, false
+	if pursuit := s.world.Resources.Pursuit; pursuit.Fresh() {
+		lootComp.FlowX, lootComp.FlowY = 0, 0
+		field := pursuit.Field(slot)
+		if field == nil {
+			return 0, 0, false
+		}
+		lootComp.FlowX, lootComp.FlowY = s.costs.InterpolatedDirection(field, kineticComp.PreciseX, kineticComp.PreciseY)
+		if lootComp.FlowX == 0 && lootComp.FlowY == 0 {
+			return 0, 0, false
+		}
 	}
-	flowX, flowY := s.costs.InterpolatedDirection(field, kineticComp.PreciseX, kineticComp.PreciseY)
+	flowX, flowY := lootComp.FlowX, lootComp.FlowY
 	if flowX == 0 && flowY == 0 {
-		return 0, 0, false
+		return ownerCenterX, ownerCenterY, true
 	}
 
 	lookahead := vmath.Clamp(

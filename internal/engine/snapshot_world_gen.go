@@ -1508,7 +1508,7 @@ func equalWall(a, b *component.WallComponent) bool {
 }
 
 func equalLoot(a, b *component.LootComponent) bool {
-	return *a == *b
+	return a.Type == b.Type && a.Look == b.Look && a.Owner == b.Owner && a.Still == b.Still && a.Return == b.Return && a.Away == b.Away && math.Float64bits(float64(a.FlowX)) == math.Float64bits(float64(b.FlowX)) && math.Float64bits(float64(a.FlowY)) == math.Float64bits(float64(b.FlowY)) && a.LastIntX == b.LastIntX && a.LastIntY == b.LastIntY
 }
 
 func equalGateway(a, b *component.GatewayComponent) bool {
@@ -1556,7 +1556,7 @@ func equalTracer(a, b *component.TracerComponent) bool {
 }
 
 func equalNavigation(a, b *component.NavigationComponent) bool {
-	return a.LockedTarget == b.LockedTarget && a.LockTicks == b.LockTicks && a.HasDirectPath == b.HasDirectPath && math.Float64bits(float64(a.FlowX)) == math.Float64bits(float64(b.FlowX)) && math.Float64bits(float64(a.FlowY)) == math.Float64bits(float64(b.FlowY)) && a.Width == b.Width && a.Height == b.Height && math.Float64bits(float64(a.FlowLookahead)) == math.Float64bits(float64(b.FlowLookahead)) && a.UseRouteGraph == b.UseRouteGraph && a.RouteGraphID == b.RouteGraphID && a.RouteID == b.RouteID
+	return a.LockedTarget == b.LockedTarget && a.LockTicks == b.LockTicks && a.HasDirectPath == b.HasDirectPath && math.Float64bits(float64(a.FlowX)) == math.Float64bits(float64(b.FlowX)) && math.Float64bits(float64(a.FlowY)) == math.Float64bits(float64(b.FlowY)) && a.Width == b.Width && a.Height == b.Height && a.HeaderX == b.HeaderX && a.HeaderY == b.HeaderY && math.Float64bits(float64(a.FlowLookahead)) == math.Float64bits(float64(b.FlowLookahead)) && a.UseRouteGraph == b.UseRouteGraph && a.RouteGraphID == b.RouteGraphID && a.RouteID == b.RouteID
 }
 
 func equalCombat(a, b *component.CombatComponent) bool {

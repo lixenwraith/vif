@@ -11,9 +11,9 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 ## Vanguard
 
 The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
-by area so an agent can take a group, beside the navigation items. The faster
-scroll, the jagged cave, the stone art, the raider types by cave, the scenery text,
-the boss stage and the machine's certain faults have landed. What is left is the
+by area so an agent can take a group. The faster scroll, the jagged cave, the stone
+art, the raider types by cave, the scenery text, the boss stage, the machine's
+certain faults and navigation's cost over the cave have landed. What is left is the
 machine follow-ups and, last, the position package in a session of its own. Until
 that lands, nothing here adds engine surface for rock or caves: a cave's shape stays
 in `pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall
@@ -128,15 +128,16 @@ Goals:
   in words, with no component lookup a cell. td (500×250, narrow mazes everywhere)
   proves it and navigation with it: its passability
   (`CompositePassability.Compute`), the search grids `applyWalls` refills whole, its
-  direct-path tests.
-- Footprints: each navigator's own body, size and header offset, where today every
-  composite navigates on one grid computed for the eye's 5×3 and the direct-path
-  test centres the footprint and accepts it turned 90°
-  (`HasAreaLineOfSightRotatable`): in 16 headless vanguard games (8 seeds at 120×40
-  and 200×60, 2,400 ticks each), 1,988 of the 25,168 chase ticks it called direct,
-  7.9%, had the raider's own body blocked on the way. The footprint registry of
-  [Bound navigation's worst tick on busy maps](#bound-navigations-worst-tick-on-busy-maps)
-  belongs here. Until it lands, every raider type stays within 5×3.
+  direct-path tests. td's worst ticks are those where hundreds of walls go at once:
+  under a storm with eight walking cursors they reach 40–60 ms and compute no field,
+  the wall system's event peaking at 34–51 ms and navigation at 15–17 ms.
+- Footprints: navigation steers each body by its footprint's tier
+  ([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)), but
+  the direct-path test centres the footprint and accepts it turned 90°
+  (`HasAreaLineOfSightRotatable`) rather than testing the body from its header: in
+  16 headless vanguard games (8 seeds at 120×40 and 200×60, 2,400 ticks each),
+  1,988 of the 25,168 chase ticks it called direct, 7.9%, had the raider's own body
+  blocked on the way.
 - A sparse or tiled grid for a ceiling-sized empty map
   ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)).
 
@@ -166,45 +167,6 @@ update path; whether a maze's walls stay entities a cluster indexes or become th
 cluster; the coordinate type (2D with a third axis reserved, or 3D now); the
 migration (a façade keeping the `World.Positions` surface while the call sites move,
 then narrowed); the footprint grids' cost on td.
-
-#### Bound navigation's worst tick on busy maps
-
-- Priority: P2
-- Affected files: `pkg/navigation/flowfield.go`, `internal/system/navigation.go`,
-  `internal/system/loot.go`
-- Guide: [Navigation §10](navigation-design.md#10-costs)
-
-On td with eight walking cursors and seven snake heads a storm tick peaks at 30 ms
-against 6.4 ms on average, and no wall change computes more than two fields in a
-tick. A td tick with sixteen cursors on one core reads 0.55 ms
-(`TestTickProfileTD16`), 42% of it the level resets' maze spawn and route graphs
-and 13% `applyWalls`, the search grids refilled whole when a level's walls land.
-What is left, for a need rather than a measurement: a per-tick field budget
-in canonical group order, if a browser frame still stalls, and a footprint tier
-registry deriving the grids to keep from the live navigators, so a data-driven
-species' footprint costs one row. A 2×2 coarse field is not planned: it changes
-the answer, and the shared grid already took the cost it would have saved.
-
-#### Spend less on fields over a moving map
-
-- Priority: P3
-- Affected files: `pkg/navigation/flowfield.go`, `pkg/navigation/cache.go`
-- Guide: [Navigation §10](navigation-design.md#10-costs)
-
-A cell closing drops every field of its tier, so on a scrolling cave a navigator
-out of sight recomputes its field after every column. Vanguard's jagged cave, a
-column a tick, makes that most of the tick: with eight composites out of sight
-(`BenchmarkCaveNavigation`, far) 410 µs a tick at 500×254, three fifths of it
-settling fields, and 120 µs at 200×60. Two exact cuts remain, for a need rather
-than a measurement. Settle a field only until every reader's cell is settled, resuming
-when a farther cell is read: a Dijkstra's settled cells do not depend on where it
-stopped, so an instance reading more of it moves nothing shared; it pays when the
-readers out of sight are near their target. Repair a field where cells closed, as
-an opening repairs it, re-settling the cells whose way ran through them: it pays
-for a local change on an open map, not on the cave, where every bend moves each
-column. Keeping a field across a closing for a few ticks is not planned
-([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)): a
-joiner computes on the grid it has.
 
 ## Bots
 
@@ -918,8 +880,7 @@ so refuse none up front; gauge and relieve instead:
   after the gauges stay under a lower threshold, so the session does not swing.
   Thresholds are parameters, with an off switch as `-slow-window 0` is.
 
-Related: [Bound navigation's worst tick on busy maps](#bound-navigations-worst-tick-on-busy-maps),
-[Measure a full roster](#measure-a-full-roster).
+Related: [Measure a full roster](#measure-a-full-roster).
 
 ### Forgive a one-tick defeat in a session as solo play does
 

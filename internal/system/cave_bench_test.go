@@ -143,7 +143,7 @@ func BenchmarkCaveNavigation(b *testing.B) {
 						x = size.w/2 + i*(size.w/2-8)/8
 					}
 					bodies = append(bodies, newBody(world, x, cols[x].Ceil+(cols[x].Floor-cols[x].Ceil)/2-1, 4, 2))
-					world.Components.Navigation.SetComponent(bodies[i], component.NavigationComponent{Width: 4, Height: 2})
+					world.Components.Navigation.SetComponent(bodies[i], component.NavigationComponent{Width: 4, Height: 2, HeaderX: 1})
 				}
 				nav := ready(NewNavigationSystem(world)).(*NavigationSystem)
 				nav.Update()
