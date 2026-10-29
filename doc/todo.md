@@ -985,44 +985,6 @@ operator route on the router, since a dedicated host has no console. Keeping a
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
 
-### Show a Wraith as a Wraith
-
-- Priority: P2
-- Affected files: `internal/render/renderer/shield.go` (`ShieldRenderer.Render`,
-  `ShieldPainter`), `internal/render/renderer/peer_cursor.go`,
-  `internal/parameter/visual/shield.go` (`buildShieldConfig`),
-  `internal/parameter/player.go`, `internal/parameter/visual` colours
-- Guide: [Multi-player §5.4](multi-player.md#54-wraiths)
-
-A Wraith, a person's or a bot's, reads as one more cursor: the peer renderer draws
-it as its slot label alone, in the slot's colour, where a live peer's label sits on
-that colour. Give it the boost's look, paler and slower, so every player sees who is
-away.
-
-The boost's look is the player shield's rotating glow: `ShieldRenderer` paints the
-field with `GlowPeriod` set to `ShieldBoostRotationDuration` (500 ms) while boost is
-active, and `ShieldPainter` rotates the bright side by game time, in truecolor a
-gradient with a glow lobe, in 256 colours a rim band (`Rim256Min`..`Rim256Max`)
-whose cells facing the lobe take the glow colour. A Wraith has no shield to paint:
-`CursorSystem.wraith` strips everything but `Cursor`, `Protection` and the `Wraith`
-component, which holds the cell it stood on (`X`, `Y`, -1 off the map).
-
-The plan:
-- A Wraith field config built by `buildShieldConfig` on the player shield's
-  geometry: a pale truecolor field and glow (near white, a little cool), a green
-  256 rim with a paler green glow, and a glow period well above the boost's (a
-  `WraithGlowPeriod` near 1.5 s, tuned live), in the parameter packages beside the
-  shield's.
-- `ShieldRenderer.Render` paints it for each Wraith at its held cell, skipping one
-  off the map, before its early return on no shields, and blended as a peer field
-  is (`PeerFieldBlend`) so a Wraith never outshines a live cursor. The holder's own
-  bots draw the same, since nobody drives a Wraith and the local cursor is never
-  one.
-- The label stays the peer renderer's, drawn over the field.
-- A renderer test in each colour mode: field cells around a Wraith's cell, none for
-  one off the map, and the lit side moving between two game times a quarter period
-  apart. Then a look in tmux at both tiers (`TERM=linux COLORTERM=` for 256).
-
 ### Keep a Wraith's stats in the session
 
 - Priority: P2

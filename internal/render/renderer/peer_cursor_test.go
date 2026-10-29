@@ -2,12 +2,14 @@ package renderer
 
 import (
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -117,6 +119,42 @@ func TestAWraithIsDrawnAsItsLabelAlone(t *testing.T) {
 		px, py, _ := rc.MapToScreen(6, 3)
 		if cell := buf.CellAt(px, py); cell.Rune != '1' || cell.Attrs&terminal.AttrBg256 == 0 && cell.Bg == under.Bg {
 			t.Fatalf("mode %v drew the playing peer as %+v beside a Wraith", mode, cell)
+		}
+	}
+}
+
+// TestAWraithWearsATurningPaleField: in either colour mode the cell a Wraith holds is
+// ringed by the Wraith field, whose lit side turns with game time, while a Wraith off
+// the map draws none.
+func TestAWraithWearsATurningPaleField(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []terminal.ColorMode{terminal.ColorModeTrueColor, terminal.ColorMode256} {
+		gameCtx, cursors := peerWorld(t, 3)
+		w := gameCtx.World
+		w.Resources.Config.ColorMode = mode
+		for slot, cell := range map[int][2]int{1: {20, 10}, 2: {-1, -1}} {
+			w.Positions.RemoveEntity(cursors[slot])
+			w.Components.Wraith.SetComponent(cursors[slot], component.WraithComponent{X: cell[0], Y: cell[1]})
+		}
+		rc := peerContext(gameCtx)
+		r := NewShieldRenderer(gameCtx)
+		at := func(d time.Duration) *render.RenderBuffer {
+			rc.GameTime = time.Unix(0, 0).Add(d) // the glow faces right at phase zero
+			buf := render.NewRenderBuffer(mode, 80, 24)
+			r.Render(rc, buf)
+			return buf
+		}
+		blank := render.NewRenderBuffer(mode, 80, 24).CellAt(0, 0)
+		field := func(buf *render.RenderBuffer, x, y int) bool { return buf.CellAt(x, y) != blank }
+		facing, turned := at(0), at(parameter.WraithGlowPeriod/4)
+		if !field(facing, 29, 10) || !field(turned, 29, 10) {
+			t.Fatalf("mode %v: no field beside the cell the Wraith holds", mode)
+		}
+		if facing.CellAt(29, 10) == turned.CellAt(29, 10) {
+			t.Fatalf("mode %v: the field did not turn in a quarter period", mode)
+		}
+		if field(facing, 2, 1) {
+			t.Fatalf("mode %v: a Wraith off the map drew a field", mode)
 		}
 	}
 }

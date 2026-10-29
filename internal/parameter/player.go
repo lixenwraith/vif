@@ -30,6 +30,10 @@ const (
 
 	// ShieldBoostRotationDuration is the animation speed at which the boost indicator rotates once around the shield
 	ShieldBoostRotationDuration = 500 * time.Millisecond
+
+	// WraithGlowPeriod is one turn of the field round a Wraith: the boost's look,
+	// slower, so who is away never reads as who is boosted
+	WraithGlowPeriod = 1500 * time.Millisecond
 )
 
 // Shield visuals
