@@ -786,6 +786,25 @@ func TestAFollowerThroughARelayDialsItsHost(t *testing.T) {
 	})
 }
 
+// TestABotDialsNobody: a bot shares its holder's fate, so it opens no link of its
+// own to the host it follows through its holder, nor while its world holds no entry
+// for it yet, which the host's roster may already hold.
+func TestABotDialsNobody(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(2, 3)
+	mesh.Link(3, 4)
+	node := &dialingNode{MeshPort: mesh.Node(4), mesh: mesh}
+	bot := newRun(t, 4, node, roster(3))
+	bot.world.seated = true
+	bot.u.Open(network.SessionOffer{Host: 2, Assigned: 4, Relay: 3, Term: network.FirstTerm,
+		Chain: network.SuccessionChain{{ID: 2, Addr: "2"}, {ID: 3, Addr: "3"}}}, 4)
+	bot.u.drive()
+	if dialed := waitDials(t, bot, node, 0); len(dialed) != 0 {
+		t.Fatalf("the bot dialled %v; want nobody", dialed)
+	}
+}
+
 // TestTheSuccessorDialIsPaced: a participant keeps a link to the first candidate
 // warm; one its connect does not reach is dialled after a growing wait and then left,
 // as a followed host is, and another successor, or a link to it that stood and
