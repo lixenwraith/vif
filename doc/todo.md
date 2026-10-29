@@ -881,6 +881,17 @@ so refuse none up front; gauge and relieve instead:
   after the gauges stay under a lower threshold, so the session does not swing.
   Thresholds are parameters, with an off switch as `-slow-window 0` is.
 
+Decisions it waits on:
+- Who opens a valve: the authority on its own, the host told and choosing (a status
+  line and a menu row), or the authority on its own only where nobody plays it, a
+  dedicated host.
+- Whether the rate valve goes below 1x, the cheapest relief there is but a slower
+  game for everyone, or stops at 1x and leaves the rest to the later valves.
+- Which gauge opens which valve, and over what window: measured on
+  [Measure a full roster](#measure-a-full-roster), a rate cap's tick cost included.
+- What every participant reads: one sentence per valve, its notice and the refusal
+  of what it closed being the same.
+
 Related: [Measure a full roster](#measure-a-full-roster).
 
 ### Price the log's and journal's 50 ms sync
@@ -935,19 +946,36 @@ authority with no peers.
 
 At time scale 8x vanguard's parallax reads as depth on its own, every layer stepping
 at least twenty times a second; a faster tick would give every motion that, where
-the renderer now carries only scenery and the cave between ticks. `GameUpdateInterval` (50 ms)
-is a constant: a frame is a third of it, `SimTime` derives each tick's instant from
-it, and parameters count in ticks, the network's windows most
-(`NetworkBarrierDelayTicks`, `NetworkPaceStepTicks`, `SnapshotFloorKeyframeTicks`
-and the rest), so a shorter tick shortens each of them in time. Every participant
-of a session must step the same interval, so it would travel in the session's
-handshake and the journal, and a session's traffic per second, command frames,
-epochs and corrections, grows with the rate, as it already does for a session run
-above 1x ([Cap a session's rate at what it carries](#cap-a-sessions-rate-at-what-it-carries)).
-Vanguard's rock is drawn at the frame's moment but blocks where its tick left it, so
-what it hits follows the interval. The smallest step is an interval set per run and carried
-where every participant reads it, the tick-counted windows derived from durations,
-and the divergence harness run at two intervals.
+the renderer now carries only scenery and the cave between ticks.
+`GameUpdateInterval` (50 ms) is a constant: a frame is a third of it, `SimTime`
+derives each tick's instant from it, and parameters count in ticks, the network's
+windows most (`NetworkBarrierDelayTicks`, `NetworkPaceStepTicks`,
+`SnapshotFloorKeyframeTicks` and the rest), so a shorter tick shortens each of them
+in time, and a session's traffic a second grows with it as it does with a session
+rate above 1x ([Cap a session's rate at what it carries](#cap-a-sessions-rate-at-what-it-carries)).
+Vanguard's rock is drawn at the frame's moment but blocks where its tick left it,
+so what it hits follows the interval.
+
+The interval already travels: the handshake's build identity
+(`PeerIdentity.TickIntervalNS`), the join's anchor fields
+(`sessionAnchorFields`), the journal anchor and the capture header carry it, each
+compared against the build's constant, which a replay refuses a journal on. An
+interval per run compares against the run's instead.
+
+Decisions it waits on:
+- Per build or per run. A build ticking at 25 ms halves every window for every
+  session, the internet's included; one per run, carried where it already travels,
+  keeps 50 ms where links are slow and lets a solo run or a LAN tick faster.
+- Which tick counts are durations: each `*Ticks` parameter that means time (leads,
+  the late bound, syncs, pace windows, keyframe floors, FSM delays) derives from a
+  duration at the interval; one that means a count (rings, sequence windows) stays.
+  The classification is a list to make, one parameter at a time.
+- The frame: a third of the tick at 25 ms is 120 a second, or the frame decouples
+  from the tick.
+- What content means by a tick: a scenario's tick-counted rule plays faster at a
+  shorter interval unless it is authored in time.
+
+Then the divergence harness at two intervals.
 
 ## Session membership
 

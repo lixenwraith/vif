@@ -53,6 +53,14 @@ that proves wrong or that a document now states, and link the document instead.
 - A joiner's world holds no entry for it until its arrival crosses there, while the
   authority's may already: what the run itself is, a bot seat, is its own word
   (`Instance.Seated`), never read off its roster entry.
+- `NetworkSystem.Flush` runs at the tick's close under the world lock, after the
+  close settle, so a hold it releases at a crossing's apply tick sees everything
+  that crossing paid in that tick (`NetworkSystem.crossSettled`).
+- `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
+  the game resets near tick 35; a session test that waits a fixed count of ticks
+  past that reads the reset. Wait for the condition, bounded.
+- `Config.Validate` refuses a rate on a driven run that is neither a script nor a
+  bot: a harness's or a replay's clock takes one through `TimeCtl` instead.
 
 ## Determinism and the harness
 
@@ -101,6 +109,8 @@ that proves wrong or that a document now states, and link the document instead.
   and lowered again if nothing started: `Instance.Redial`'s dial loop may read
   `Authority.Redialing` before `Redial` returns, so `beginSuccession` and
   `redialRelay` raise their wait first.
+- `Router.ProcessMacroTick` runs off the world lock (`loop.go`, `headless.go`): a
+  component read there races. Read a status cell, or take `RunSafe`.
 - Tests reach a play run's paths by switching a running App's `cfg.Mode` under
   `RunSafe`, so a goroutine that reads the run's config off the world lock (the
   drive loop, a bot seat) reads the copy it started with instead.
@@ -116,6 +126,9 @@ that proves wrong or that a document now states, and link the document instead.
   uses only what they have.
 - The 256 tier's entries 0–15 take an emulator's theme, so no contrast between two
   of them is promised; a colour, or 15, on entry 0 is safe.
+- On the Linux console the 256 tier shows sixteen colours: a pale tint over a rim
+  falls to the rim's own, so a glow that must read there is near white, as the
+  Wraith field's is.
 
 ## Looking at the game without a device
 
