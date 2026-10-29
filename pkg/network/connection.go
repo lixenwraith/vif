@@ -535,6 +535,10 @@ func (pm *PeerManager) SetHandlers(
 	pm.onMessage = onMessage
 }
 
+// ErrLinkStands refuses a link to a participant one already stands to, or opens
+// to from its end: nothing failed, so nobody is told of it.
+var ErrLinkStands = errors.New("a link to this participant stands or is opening")
+
 // AddConnectionAs registers a stream under its session-assigned participant ID;
 // served says the far end joined the session through this one.
 func (pm *PeerManager) AddConnectionAs(conn net.Conn, id PeerID, served bool) (PeerID, error) {
@@ -551,7 +555,7 @@ func (pm *PeerManager) AddConnectionAs(conn net.Conn, id PeerID, served bool) (P
 	}
 	if _, exists := pm.peers[id]; exists {
 		_ = conn.Close()
-		return 0, fmt.Errorf("peer %d already connected", id)
+		return 0, fmt.Errorf("peer %d: %w", id, ErrLinkStands)
 	}
 
 	peer := newPeer(id, conn, pm.config)

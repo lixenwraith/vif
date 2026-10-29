@@ -954,6 +954,37 @@ func TestAGuestAdmitsAPeerLink(t *testing.T) {
 	}
 }
 
+// TestCrossedPeerDialsKeepTheLowerIdentitysLink: two participants dialling each
+// other at once keep one link, the lower identity's, which a new host and a survivor
+// walking to it do: the lower refuses the other's while its own dial is out, and
+// neither dials one whose link it admitted until that link had a pass to land.
+func TestCrossedPeerDialsKeepTheLowerIdentitysLink(t *testing.T) {
+	t.Parallel()
+	runs := session(t, 3, [][2]int{{1, 2}, {1, 3}})
+	low, high := runs[1], runs[2]
+	low.r.dialing[3], high.r.dialing[2] = true, true
+	if err := low.r.admitPeerLink(3); !errors.Is(err, link.ErrLinkStands) {
+		t.Fatalf("dialling participant 3, participant 2 admitted its crossed dial (%v)", err)
+	}
+	if err := high.r.admitPeerLink(2); err != nil {
+		t.Fatalf("dialling participant 2, participant 3 refused its crossed dial: %v", err)
+	}
+	delete(high.r.dialing, 2)
+	mesh := network.NewMesh()
+	d := &dialingNode{MeshPort: mesh.Node(3), mesh: mesh}
+	high.r.dial(d, 2, "2")
+	if dialed := waitDials(t, high, d, 0); len(dialed) != 0 {
+		t.Fatalf("participant 3 dialled %v just after admitting participant 2's link", dialed)
+	}
+	high.r.mu.Lock()
+	high.r.admitted[2] = high.r.admitted[2].Add(-parameter.NetworkRejoinPassInterval)
+	high.r.mu.Unlock()
+	high.r.dial(d, 2, "2")
+	if dialed := waitDials(t, high, d, 1); !slices.Equal(dialed, []string{"2"}) {
+		t.Fatalf("a pass after admitting participant 2's link, participant 3 dialled %v", dialed)
+	}
+}
+
 // TestALinkIsBudgetedPerParticipantItCarries: over a window a link may send the
 // ingress budget for itself, each bot it holds and each person the authority has no
 // link to; past that it is evicted.

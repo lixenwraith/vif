@@ -677,7 +677,10 @@ instance binds it, and authorship never leaves the machine that started the worl
    coordinator assigned, so a peer link allocates nothing, offers nothing and
    captures nothing. Admission is roster membership, read from the world rather than
    from the coordinator's own list, and deliberately *not* the term: a survivor
-   still electing is exactly who needs to open one.
+   still electing is exactly who needs to open one. Two that dial each other at
+   once, as a new host dials its successor while that survivor walks to it, keep
+   the lower identity's link: it refuses the other's while its own dial is out, and
+   neither dials one whose link it admitted until that link has had a pass to land.
 5. The same port takes joins, which open with the session's name
    (`MsgSessionRoute`, empty for none) where a peer link opens with `MsgConnect`, so
    its first byte says which handshake runs. A join is turned away until this

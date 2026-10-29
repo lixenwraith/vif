@@ -391,14 +391,16 @@ func (t *Transport) handshake(conn net.Conn, d door) {
 	}
 	t.releasePending(conn)
 	<-t.handshakes
-	if err != nil {
+	if err == nil {
+		// AddConnectionAs closes the connection on every failure of its own.
+		_, err = t.peers.AddConnectionAs(link, id, served)
+	} else {
 		_ = conn.Close()
-		t.report(err)
-		return
 	}
-	// AddConnectionAs closes the connection on every failure of its own.
-	if _, err := t.peers.AddConnectionAs(link, id, served); err != nil {
-		t.report(err)
+	if err != nil {
+		if !errors.Is(err, ErrLinkStands) {
+			t.report(err)
+		}
 		return
 	}
 	if served && d.admitted != nil {
