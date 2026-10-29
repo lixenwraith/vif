@@ -62,8 +62,8 @@ make dev       # generated code + race-enabled debug build
 | `uninstall` | Remove what `install` put under `PREFIX`, keeping the config root. |
 | `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
 | `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
-| `android` | Build the debug APK as `bin/vif-debug.apk`, first naming any JDK or Android SDK piece missing. |
-| `android-install` | Install `bin/vif-debug.apk` on the device `adb` sees. |
+| `android` | Build the debug APKs, one per ABI, as `bin/vif-debug-arm64.apk` and `bin/vif-debug-x86_64.apk`, first naming any JDK or Android SDK piece missing. |
+| `android-install` | Install the debug APK of the ABI of the device `adb` sees. |
 | `android-toolchain` | Install what `android` needs, asking first ([android/README.md](../android/README.md#build)). |
 | `clean` | Remove `bin/` and the Android build directories. |
 

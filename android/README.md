@@ -24,9 +24,9 @@ it builds on and the SDK build tools; later builds reuse them, and Gradle's buil
 configuration caches (`gradle.properties`) rerun only what changed.
 
 ```bash
-make android             # names every missing piece and its fix, else bin/vif-debug.apk
+make android             # names every missing piece and its fix, else bin/vif-debug-arm64.apk and -x86_64.apk
 make android-toolchain   # installs the missing pieces
-make android-install     # adb install -r bin/vif-debug.apk, adb from PATH or the SDK
+make android-install     # adb install -r the APK of the device's ABI, adb from PATH or the SDK
 ```
 
 `make android` reports the JDK and SDK pieces it lacks and installs none of them.
@@ -39,26 +39,31 @@ Google ships the SDK's tools for Linux, macOS and Windows only; on FreeBSD, buil
 the APK on one of those.
 
 `bindGo` builds gomobile and gobind at the versions `go.mod` pins, binds `./game`
-for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and the APK lands in
-`app/build/outputs/apk/debug/`. This module requires at least what the root's
-`go.mod` does, so a dependency bump there runs `go -C android mod tidy` in the same
-commit; until it does, `make android` names each module behind and what requires it.
-`make verify` vets and tests this module's Go side with the rest.
+for arm64 and x86_64 into `app/build/gomobile/vif.aar`, and an APK for each lands
+in `app/build/outputs/apk/debug/`: a phone takes arm64, an emulator x86_64. Its
+library is compressed, so installing unpacks it once and each launch loads that
+copy. Gradle packages a debug APK whole on every build, as it does a release
+(`gradle.properties`), so rebuilding never grows it. This module requires at least
+what the root's `go.mod` does, so a dependency bump there runs
+`go -C android mod tidy` in the same commit; until it does, `make android` names
+each module behind and what requires it. `make verify` vets and tests this
+module's Go side with the rest.
 
 ## Nightly
 
 The release workflow (`.github/workflows/release.yml`) builds
-`vif-nightly-android.apk` every night, and `vif-<version>-android.apk` on a tag,
-with `android/toolchain.sh gradlew assembleRelease` on the runner's SDK: arm64 and
-x86_64, Android 11 and newer, published under the repository's `nightly` release.
-Its `versionCode` is the workflow's run number, so each build installs over the one
-before it, and it is signed with `debug.keystore` here, the key `make android`
-signs with too, so a nightly and a local build install over each other; the
-`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and
-`ANDROID_KEY_PASSWORD` secrets put a release key in its place
+`vif-nightly-android-arm64.apk` and `vif-nightly-android-x86_64.apk` every night,
+and `vif-<version>-android-<abi>.apk` on a tag, with
+`android/toolchain.sh gradlew assembleRelease` on the runner's SDK: Android 11 and
+newer, published under the repository's `nightly` release. Its `versionCode` is
+the workflow's run number, so each build installs over the one before it, and it
+is signed with `debug.keystore` here, the key `make android` signs with too, so a
+nightly and a local build install over each other; the `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets
+put a release key in its place
 ([todo](../doc/todo.md#sign-the-android-build-with-a-release-key)).
-`adb install -r vif-nightly-android.apk` installs it; a phone installs it from its
-browser once that browser may install apps.
+`adb install -r vif-nightly-android-arm64.apk` installs it on a phone, as does the
+phone's browser once it may install apps; an emulator takes the x86_64 one.
 
 ## Run
 

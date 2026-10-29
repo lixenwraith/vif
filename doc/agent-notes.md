@@ -18,6 +18,10 @@ that proves wrong or that a document now states, and link the document instead.
 - After bumping `lixenwraith/terminal`, build `./...`, not only `./cmd/vif`: the
   tools and sandboxes break on a change the game does not use.
 - Every shipped target is 64-bit, and `internal/core/arch32.go` refuses the rest.
+- `bindGo` strips the Android library (`-s -w`), so `go tool nm` reads nothing in
+  it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
+  component structs compiles once per component, and each copy's name spells the
+  struct's fields, costing a third as much as its code.
 
 ## Ticks and events
 

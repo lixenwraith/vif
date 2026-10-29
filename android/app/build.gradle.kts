@@ -49,6 +49,22 @@ android {
         }
     }
 
+    // One APK per ABI bindGo builds, each library compressed: a phone downloads its
+    // own alone, and installing unpacks it once (README.md).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

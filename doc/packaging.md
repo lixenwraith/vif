@@ -72,15 +72,18 @@ carries `LICENSE.purego` for the desktop window its binary links. Each archive's
 - **A `vX.Y.Z-suffix` tag** (`v0.1.0-rc.1`) drafts a GitHub pre-release whose
   notes open by saying it is not a final release.
 - **A plain `vX.Y.Z` tag** drafts the final release. None has been pushed.
-- **The Android APK** (`vif-<label>-android.apk`; Android 11 and newer, arm64 and
-  x86_64) is built by `android/toolchain.sh gradlew assembleRelease` on the
-  runner's SDK, its `versionCode` the workflow's run number, which climbs across
-  nightlies and tags, so a device takes each build as an update of the one before.
-  It is signed with the repository's debug key, `android/debug.keystore`, which
-  `make android` shares, unless the `ANDROID_KEYSTORE_BASE64`,
-  `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`
-  secrets hold a release key ([todo](todo.md#sign-the-android-build-with-a-release-key)).
-  A store listing is not on this path.
+- **The Android APKs** (`vif-<label>-android-arm64.apk` for a phone and
+  `vif-<label>-android-x86_64.apk` for an emulator; Android 11 and newer) are one
+  per ABI, each library compressed: a phone downloads 6.6 MB, where the one APK
+  carrying both libraries uncompressed was 37.9 MB. They are built by
+  `android/toolchain.sh gradlew assembleRelease` on the runner's SDK, their
+  `versionCode` the workflow's run number, which climbs across nightlies and tags,
+  so a device takes each build as an update of the one before. They are signed
+  with the repository's debug key, `android/debug.keystore`, which `make android`
+  shares, unless the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+  `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets hold a release key
+  ([todo](todo.md#sign-the-android-build-with-a-release-key)). A store listing is
+  not on this path.
 
 A tag adds `vif-X.Y.Z.tar.gz`, a `git archive` of the tag and the byte-stable
 source archive a distribution hashes. It pushes no image, moves nothing, and
