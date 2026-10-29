@@ -545,10 +545,10 @@ func TestASolverReusedAcrossGraphsComputesEachAfresh(t *testing.T) {
 	}
 	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
 
-	fresh := ComputeRouteGraph(1, 1, 38, 22, w, h, 1, 1, 0, 0, blocked)
+	fresh := ComputeRouteGraph(1, 1, 38, 22, w, h, Point, blocked)
 	rs := new(RouteSolver)
-	rs.Compute(20, 12, 1, 1, w, h, 1, 1, 0, 0, blocked)
-	reused := rs.Compute(1, 1, 38, 22, w, h, 1, 1, 0, 0, blocked)
+	rs.Compute(20, 12, 1, 1, w, h, Point, blocked)
+	reused := rs.Compute(1, 1, 38, 22, w, h, Point, blocked)
 	if fresh == nil || reused == nil || len(fresh.Routes) != len(reused.Routes) {
 		t.Fatalf("fresh %v, reused %v", fresh, reused)
 	}
@@ -584,7 +584,7 @@ func TestACorridorFieldIsTheFieldConfinedToItsCorridor(t *testing.T) {
 		walls[i*w+1], walls[i*w+58] = false, false
 	}
 	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
-	rg := ComputeRouteGraph(1, 1, 58, 15, w, h, 1, 1, 0, 0, blocked)
+	rg := ComputeRouteGraph(1, 1, 58, 15, w, h, Point, blocked)
 	if rg == nil || len(rg.Routes) < 2 {
 		t.Fatalf("graph %v has too few routes to compare", rg)
 	}

@@ -35,7 +35,7 @@ func FuzzCompositePassabilityFollowsItsWalls(f *testing.F) {
 		rng := rand.New(rand.NewPCG(seed, seed>>3))
 		w, h := 1+rng.IntN(30), 1+rng.IntN(20)
 		fw, fh := 1+rng.IntN(6), 1+rng.IntN(4)
-		p := NewCompositePassability(w, h, fw, fh, rng.IntN(fw), rng.IntN(fh))
+		p := NewCompositePassability(w, h, Footprint{Width: fw, Height: fh, HeaderX: rng.IntN(fw), HeaderY: rng.IntN(fh)})
 		walls := make([]bool, w*h)
 		density := rng.Float64()
 		for i := range walls {

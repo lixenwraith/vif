@@ -129,14 +129,13 @@ Goals:
   proves it and navigation with it: its passability
   (`CompositePassability.Compute`), the search grids `applyWalls` refills whole, its
   direct-path tests.
-- Footprints: each navigator's own body, size and header offset, where today every
-  composite navigates on one grid computed for the eye's 5×3 and the direct-path
-  test centres the footprint and accepts it turned 90°
-  (`HasAreaLineOfSightRotatable`): in 16 headless vanguard games (8 seeds at 120×40
-  and 200×60, 2,400 ticks each), 1,988 of the 25,168 chase ticks it called direct,
-  7.9%, had the raider's own body blocked on the way. The footprint registry of
-  [Bound navigation's worst tick on busy maps](#bound-navigations-worst-tick-on-busy-maps)
-  belongs here. Until it lands, every raider type stays within 5×3.
+- Footprints: navigation steers each body by its footprint's tier
+  ([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)), but
+  the direct-path test centres the footprint and accepts it turned 90°
+  (`HasAreaLineOfSightRotatable`) rather than testing the body from its header: in
+  16 headless vanguard games (8 seeds at 120×40 and 200×60, 2,400 ticks each),
+  1,988 of the 25,168 chase ticks it called direct, 7.9%, had the raider's own body
+  blocked on the way.
 - A sparse or tiled grid for a ceiling-sized empty map
   ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)).
 
@@ -180,10 +179,9 @@ tick. A td tick with sixteen cursors on one core reads 0.55 ms
 (`TestTickProfileTD16`), 42% of it the level resets' maze spawn and route graphs
 and 13% `applyWalls`, the search grids refilled whole when a level's walls land.
 What is left, for a need rather than a measurement: a per-tick field budget
-in canonical group order, if a browser frame still stalls, and a footprint tier
-registry deriving the grids to keep from the live navigators, so a data-driven
-species' footprint costs one row. A 2×2 coarse field is not planned: it changes
-the answer, and the shared grid already took the cost it would have saved.
+in canonical group order, if a browser frame still stalls. A 2×2 coarse field is
+not planned: it changes the answer, and the shared grid already took the cost it
+would have saved.
 
 #### Spend less on fields over a moving map
 

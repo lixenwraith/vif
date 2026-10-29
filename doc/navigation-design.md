@@ -20,7 +20,7 @@ into motion; loot reads one resource; `AdaptationSystem` reads route graphs.
 |---|---|---|
 | `SearchGrid` | One passability read into a bordered grid with the open directions of every cell precomputed; every Dijkstra on that tier runs on it | fields, reaches, route solver |
 | `FlowField`, `FlowFieldCache` | A field toward a target group's cells, in a cache that throttles its recompute | species through `NavigationComponent` |
-| `CompositePassability` | The header cells at which the 5×3 footprint fits | the composite tier's grid |
+| `Footprint`, `CompositePassability` | A body's cells around its header, and the header cells at which they fit | each composite tier's grid |
 | `Reach` | One search from a cell measuring its distance to several goals | the snake lock |
 | `RouteGraph`, `CorridorField` | A gateway's distinct corridors to its target, each with a field over its corridor alone | routed eyes, adaptation |
 | `TargetResource`, `RouteGraphResource`, `PursuitResource` | The resolved groups, the graphs by gateway, the field toward each cursor | species, gateways, loot |
@@ -67,21 +67,26 @@ against a reference heap search, and the repair against a recompute.
 
 ## 3. Passability tiers and wall changes
 
-Point passability is a wall-free cell. A 5×3 eye needs more: `CompositePassability`
-holds, for every header cell, whether the whole footprint fits, using
-header-to-top-left offsets, so a path over it guarantees footprint clearance.
-Navigation keeps one, for the eye's footprint that the quasar and snake head
-share; every composite navigator, the 4×2 swarm included, steers by it. Each
-tier has its own `SearchGrid`.
+Point passability is a wall-free cell. A larger body needs more:
+`CompositePassability` holds, for every header cell, whether the whole footprint
+fits, its cells placed by the header's offset from their top-left, so a path over
+it guarantees footprint clearance. Each footprint navigation steers by is a tier
+with its own passability and `SearchGrid`: the point tier; the eye's 5×3, which
+every body it holds around the same header rides, the quasar, the snake head, the
+4×2 swarm and vanguard's raiders among them; and one for each other footprint a
+navigator declares (`NavigationComponent` carries the header's offset) or a route
+graph is requested for, derived whole as it is first needed and dropped once
+nothing needs it (`syncTiers`). Riding the eye's tier keeps one composite tier's
+upkeep and fields; it only refuses a gap a smaller body fits.
 
 Navigation keeps the walls everything stands on and brings them up to the walls
 once a tick, re-testing only the cells the engine's wall log names
 (`Position.WallChanges`): a moving map costs the cells that moved, not the map.
 When the log no longer reaches back, after an install, a resize or a restore, it
 reads every cell through `Position.WallTest` and diffs them. A changed cell moves
-the point tier. The composite passability counts the walls under each header's
+the point tier. A composite passability counts the walls under each header's
 footprint, so a changed cell moves only the counts of the headers over it
-(`Moved`), and the composite tier moves only where a footprint's fit changed,
+(`Moved`), and a composite tier moves only where its footprint's fit changed,
 which a storm's single-cell holes rarely do; a header two cells turned the same
 tick is named only if its fit did change. Each tier has a generation that a field
 or route graph is stamped with when computed. A wholesale change, more than an
@@ -156,7 +161,7 @@ integrate their own motion.
 ## 6. The snake lock
 
 A snake head locks the cursor it reaches soonest (`LockedTarget`). One `Reach`
-from the head over the composite grid measures every cursor at once — what a
+from the head over its tier's grid measures every cursor at once — what a
 field seeded at each cursor would read at the head, since a step costs the same
 both ways; a blocked cursor cell from its first passable ring, a blocked head
 cell from its neighbours a diagonal away — stopping once every cursor is
@@ -199,13 +204,15 @@ normalized inverse-distance initial weight, and its `CorridorField`: the
 corridor's cells with their distance and step, searched on the graph's grid with
 everything outside the corridor a wall, a diagonal's corners included, and kept
 sorted by cell, so a route costs its corridor rather than the map. The graph
-records the footprint used and the composite generation it was computed on.
+records the body it routes and its tier's generation it was computed on: a
+request names the body (`width`, `height`, `header_x`, `header_y`), the eye's when
+it names none, and a gateway's routes are for its eyes.
 
 A gateway spawned to route by graph requests one at once
 (`EventRouteGraphRequest`); graphs live in `RouteGraphResource` by the gateway's
 `RouteDistID`, and each computed graph (`EventRouteGraphComputed`) starts its
 adaptation entry, from which spawns pop a route. A route steers only while its
-graph is fresh — computed at the composite tier's current generation, so a wall
+graph is fresh — computed at its tier's current generation, so a wall
 change that fits no footprint differently leaves it fresh, toward a cell a live
 group target still occupies — and only while the actor is inside its corridor;
 otherwise the actor steers by its group field. Navigation rebuilds at most one
@@ -273,9 +280,11 @@ the fields is in [todo](todo.md#spend-less-on-fields-over-a-moving-map).
 - A group with several anchors gets routes to its first anchor only
   (`resolveTargetPosition`); the field picks the nearest, so an eye off its
   corridor may change goal.
-- Footprints beyond 5×3 and 1×1 ride the 5×3 grid; a footprint tier registry
-  ([todo](todo.md#bound-navigations-worst-tick-on-busy-maps)) is what would make
-  another footprint cost a row.
+- A body the eye's 5×3 holds around its header rides the eye's tier, so it never
+  takes a gap narrower than an eye's; any other footprint costs a tier of its own
+  while it navigates, its passability moved on every wall change and a field for
+  each group. Line of sight still tests the body centred and accepts it turned
+  ([todo](todo.md#move-position-into-a-package-of-its-own-walls-and-rock-one-blocking-model)).
 - Eight targets a group, sixteen groups, sixteen private groups; a map's size
   scales every field, and every instance computes the same ones.
 
@@ -298,8 +307,9 @@ the fields is in [todo](todo.md#spend-less-on-fields-over-a-moving-map).
 - Use a shared field for many actors with the same footprint and targets; never
   one per entity. An actor whose goal is one participant's cursor reads that
   cursor's private group.
-- Build composite passability before routing a large footprint, and give a new
-  footprint its own tier rather than riding a larger one.
+- A navigator declares its footprint and header offset in `NavigationComponent`,
+  and navigation keeps the tier that steers it; a route graph request for a body
+  other than the eye names its footprint.
 - A new shared derivation with a throttle carries its phase (D-17) and must
   decide identically whether or not anything reads it.
 

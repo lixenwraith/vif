@@ -307,6 +307,8 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 	navComp := component.NavigationComponent{
 		Width:         parameter.EyeWidth,
 		Height:        parameter.EyeHeight,
+		HeaderX:       parameter.EyeHeaderOffsetX,
+		HeaderY:       parameter.EyeHeaderOffsetY,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	}
 	if routeID >= 0 {

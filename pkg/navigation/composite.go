@@ -6,6 +6,22 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
+// Footprint is a body's cells around the header it navigates by: Width×Height
+// cells, the header HeaderX, HeaderY from the top-left
+type Footprint struct {
+	Width, Height, HeaderX, HeaderY int
+}
+
+// Point is the footprint of a body one cell across
+var Point = Footprint{Width: 1, Height: 1}
+
+// Covers reports whether f's cells around a header hold o's around the same
+// header, so every header f fits on o fits on too
+func (f Footprint) Covers(o Footprint) bool {
+	return f.HeaderX >= o.HeaderX && f.HeaderY >= o.HeaderY &&
+		f.Width-f.HeaderX >= o.Width-o.HeaderX && f.Height-f.HeaderY >= o.Height-o.HeaderY
+}
+
 // CompositePassability pre-computes valid header positions for a fixed footprint
 // A cell is valid iff the entire footprint fits within bounds and contains no walls
 type CompositePassability struct {
@@ -24,17 +40,16 @@ type CompositePassability struct {
 	mark    uint32
 }
 
-// NewCompositePassability creates passability grid for given footprint dimensions
-// headerOffX/Y: offset from top-left to header position (e.g., 2,1 for 5×3 eye)
-func NewCompositePassability(mapW, mapH, footW, footH, headerOffX, headerOffY int) *CompositePassability {
+// NewCompositePassability creates the passability grid of a footprint on a map
+func NewCompositePassability(mapW, mapH int, foot Footprint) *CompositePassability {
 	size := mapW * mapH
 	return &CompositePassability{
 		Width:      mapW,
 		Height:     mapH,
-		FootprintW: footW,
-		FootprintH: footH,
-		HeaderOffX: headerOffX,
-		HeaderOffY: headerOffY,
+		FootprintW: foot.Width,
+		FootprintH: foot.Height,
+		HeaderOffX: foot.HeaderX,
+		HeaderOffY: foot.HeaderY,
 		Valid:      make([]bool, size),
 		walls:      make([]uint16, size),
 	}
@@ -208,25 +223,12 @@ func (p *CompositePassability) IsValid(x, y int) bool {
 
 // --- DEBUG ---
 
-// DebugStats returns total/valid/blocked cell counts for diagnostics
-func (p *CompositePassability) DebugStats() (total, valid, blocked int) {
-	total = len(p.Valid)
-	for _, v := range p.Valid {
-		if v {
-			valid++
-		} else {
-			blocked++
-		}
-	}
-	return total, valid, blocked
-}
-
 // GetDimensions returns grid dimensions
 func (p *CompositePassability) GetDimensions() (width, height int) {
 	return p.Width, p.Height
 }
 
-// GetFootprint returns footprint configuration
-func (p *CompositePassability) GetFootprint() (footW, footH, offX, offY int) {
-	return p.FootprintW, p.FootprintH, p.HeaderOffX, p.HeaderOffY
+// Footprint is the footprint the grid fits
+func (p *CompositePassability) Footprint() Footprint {
+	return Footprint{Width: p.FootprintW, Height: p.FootprintH, HeaderX: p.HeaderOffX, HeaderY: p.HeaderOffY}
 }
