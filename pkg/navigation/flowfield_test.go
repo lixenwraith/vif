@@ -138,8 +138,8 @@ func referenceSeed(f *FlowField, heap *minHeap, tx, ty int, isBlocked WallChecke
 				if f.VisitedGen[idx] != f.CurrentGen || cost < f.Distances[idx] {
 					f.Distances[idx], f.VisitedGen[idx], f.Directions[idx] = cost, f.CurrentGen, DirTarget
 					heap.push(heapEntry{idx: idx, dist: cost})
-					found = true
 				}
+				found = true
 			}
 		}
 		if found {
@@ -340,13 +340,11 @@ func FuzzOpenedRepairsAsARecomputeWould(f *testing.F) {
 		if len(opened) == 0 {
 			return
 		}
-		for _, o := range opened {
-			g.Set(o.X, o.Y, false)
-		}
+		g.Move(nil, opened)
 		fresh := new(SearchGrid)
 		fresh.Fill(w, h, isBlocked)
-		if !slices.Equal(g.open, fresh.open) || !slices.Equal(g.blocked, fresh.blocked) {
-			t.Fatal("a grid moved cell by cell differs from one filled whole")
+		if !slices.Equal(g.open, fresh.open) || !slices.Equal(g.free, fresh.free) {
+			t.Fatal("a moved grid differs from one filled whole")
 		}
 		want := NewFlowField(w, h)
 		want.ComputeOn(fresh, goals)
@@ -391,12 +389,12 @@ func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
 	if !c.Update(goal, g) || c.GetDistance(2, 1) != 0 {
 		t.Fatal("one-cell motion never refreshed the goal")
 	}
-	g.Set(3, 1, true)
+	g.Move([]vmath.Point{{X: 3, Y: 1}}, nil)
 	c.Closed()
 	if !c.Update(goal, g) || c.GetDistance(3, 1) != -1 {
 		t.Fatal("a closed cell left a stale route")
 	}
-	g.Set(3, 1, false)
+	g.Move(nil, []vmath.Point{{X: 3, Y: 1}})
 	c.Moved(g, nil, []vmath.Point{{X: 3, Y: 1}})
 	if c.Update(goal, g) || c.GetDistance(3, 1) != 10 {
 		t.Fatal("an opened cell recomputed instead of repairing, or stayed blocked")

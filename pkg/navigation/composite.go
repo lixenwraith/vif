@@ -17,7 +17,11 @@ type CompositePassability struct {
 	// walls counts the wall cells under each header's footprint, clipped to the
 	// grid, so a cell that turns moves only the headers over it (Moved)
 	walls   []uint16
-	touched []int32 // headers whose count reached or left zero, Moved's scratch
+	cells   []uint16 // Compute's scratch: each cell's wall, and a row's sums
+	line    []uint16
+	touched []int32  // headers whose count reached or left zero, Moved's scratch
+	marks   []uint32 // the Moved each header was last touched in, so it is named once
+	mark    uint32
 }
 
 // NewCompositePassability creates passability grid for given footprint dimensions
@@ -39,7 +43,8 @@ func NewCompositePassability(mapW, mapH, footW, footH, headerOffX, headerOffY in
 // Clone returns a grid sharing no storage with p.
 func (p *CompositePassability) Clone() *CompositePassability {
 	n := *p
-	n.Valid, n.walls, n.touched = slices.Clone(p.Valid), slices.Clone(p.walls), nil
+	n.Valid, n.walls = slices.Clone(p.Valid), slices.Clone(p.walls)
+	n.cells, n.line, n.touched, n.marks, n.mark = nil, nil, nil, nil, 0
 	return &n
 }
 
@@ -64,54 +69,71 @@ func (p *CompositePassability) Resize(width, height int) {
 
 // Compute rebuilds passability grid from wall state and reports whether any cell changed
 // isWall: returns true if cell blocks composite movement. Each cell is asked once,
-// and its wall summed down a footprint's height, then across its width.
+// and its wall summed down a footprint's height a row at a time, then across its width.
 func (p *CompositePassability) Compute(isWall WallChecker) bool {
 	w, h := p.Width, p.Height
 	if len(p.walls) != w*h {
 		p.walls = make([]uint16, w*h)
 	}
+	p.cells, p.line = grow(p.cells, w*h), grow(p.line, 2*w)
 	for y := range h {
-		for x := range w {
-			p.walls[y*w+x] = 0
+		row := p.cells[y*w : y*w+w]
+		for x := range row {
+			row[x] = 0
 			if isWall(x, y) {
-				p.walls[y*w+x] = 1
+				row[x] = 1
 			}
 		}
 	}
-	line := make([]uint16, max(w, h))
-	// window sums, along a line of n cells, every footprint's span of size cells
-	// from off before its header to the header's count
-	window := func(n, size, off int, at func(i int) *uint16) {
-		for i := range n {
-			line[i] = *at(i)
+	cellRow := func(r int) []uint16 { // row r's walls, none off the grid
+		if r < 0 || r >= h {
+			return nil
 		}
-		var run uint16
-		for lead := -off; lead < n-off+size; lead++ {
-			if lead >= 0 && lead < n {
-				run += line[lead]
-			}
-			if out := lead - size; out >= 0 && out < n {
-				run -= line[out]
-			}
-			if hd := lead + off - size + 1; hd >= 0 && hd < n {
-				*at(hd) = run
-			}
-		}
+		return p.cells[r*w : r*w+w]
 	}
-	for x := range w {
-		window(h, p.FootprintH, p.HeaderOffY, func(y int) *uint16 { return &p.walls[y*w+x] })
+	run, line := p.line[:w], p.line[w:]
+	clear(run)
+	for r := -p.HeaderOffY; r < p.FootprintH-p.HeaderOffY; r++ {
+		for x, c := range cellRow(r) {
+			run[x] += c
+		}
 	}
 	changed := false
 	for y := range h {
-		window(w, p.FootprintW, p.HeaderOffX, func(x int) *uint16 { return &p.walls[y*w+x] })
-		for x := range w {
-			i := y*w + x
-			if v := p.walls[i] == 0 && p.fits(x, y); v != p.Valid[i] {
-				p.Valid[i], changed = v, true
+		row := p.walls[y*w : y*w+w]
+		copy(line, run)
+		for x, c := range cellRow(y - p.HeaderOffY) {
+			run[x] -= c
+		}
+		for x, c := range cellRow(y - p.HeaderOffY + p.FootprintH) {
+			run[x] += c
+		}
+		slide(row, line, p.FootprintW, p.HeaderOffX)
+		for x, n := range row {
+			if v := n == 0 && p.fits(x, y); v != p.Valid[y*w+x] {
+				p.Valid[y*w+x], changed = v, true
 			}
 		}
 	}
 	return changed
+}
+
+// slide sets out[i] to the sum of in over a footprint's span of size cells from off
+// before i, clipped to the line
+func slide(out, in []uint16, size, off int) {
+	var run uint16
+	for j := max(-off, 0); j < min(size-off, len(in)); j++ {
+		run += in[j]
+	}
+	for i := range out {
+		out[i] = run
+		if j := i - off; j >= 0 && j < len(in) {
+			run -= in[j]
+		}
+		if j := i - off + size; j >= 0 && j < len(in) {
+			run += in[j]
+		}
+	}
 }
 
 // fits reports whether the footprint at header (x, y) lies within the grid
@@ -122,9 +144,14 @@ func (p *CompositePassability) fits(x, y int) bool {
 
 // Moved brings passability up to cells that closed and opened since it was
 // computed, each named once, and calls flip once for every header whose fit
-// changed, in grid order, with its new validity.
+// changed, with its new validity.
 func (p *CompositePassability) Moved(closed, opened []vmath.Point, flip func(x, y int, valid bool)) {
 	p.touched = p.touched[:0]
+	p.marks = grow(p.marks, len(p.walls))
+	if p.mark++; p.mark == 0 {
+		clear(p.marks[:cap(p.marks)])
+		p.mark = 1
+	}
 	turn := func(c vmath.Point, wall bool) {
 		if c.X < 0 || c.Y < 0 || c.X >= p.Width || c.Y >= p.Height {
 			return
@@ -137,7 +164,8 @@ func (p *CompositePassability) Moved(closed, opened []vmath.Point, flip func(x, 
 				} else {
 					p.walls[i]--
 				}
-				if p.walls[i] == 0 || wall && p.walls[i] == 1 { // reached or left zero
+				if (p.walls[i] == 0 || wall && p.walls[i] == 1) && p.marks[i] != p.mark { // reached or left zero
+					p.marks[i] = p.mark
 					p.touched = append(p.touched, int32(i))
 				}
 			}
@@ -150,8 +178,7 @@ func (p *CompositePassability) Moved(closed, opened []vmath.Point, flip func(x, 
 		turn(c, false)
 	}
 	// A header two cells turned may stand where it was: only its count says
-	slices.Sort(p.touched)
-	for _, i := range slices.Compact(p.touched) {
+	for _, i := range p.touched {
 		x, y := int(i)%p.Width, int(i)/p.Width
 		if v := p.walls[i] == 0 && p.fits(x, y); v != p.Valid[i] {
 			p.Valid[i] = v

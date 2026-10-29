@@ -403,7 +403,7 @@ func (sc *routeScratch) dilate(path []int, radius int, fn func(idx int)) {
 		for _, idx := range cur {
 			p := g.pad(int32(idx))
 			for k := range DirCount {
-				if g.blocked[p+g.padStep[k]] {
+				if g.free[p+g.padStep[k]] == 0 {
 					continue
 				}
 				nIdx := idx + int(g.step[k])

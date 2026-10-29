@@ -316,31 +316,29 @@ func (f *FlowField) canonical(g *SearchGrid, idx int32) int8 {
 // reach on its tier until the passability moves.
 type SearchGrid struct {
 	w, h    int
-	blocked []bool          // bordered, (w+2)×(h+2)
+	free    []uint8         // bordered, (w+2)×(h+2): 1 where passable
 	open    []uint8         // per cell, a bit per DirVectors index
 	step    [DirCount]int32 // to each neighbour, in field cells
 	padStep [DirCount]int   // the same, in the bordered grid
 	ring    [][]int32
 	pending int
 	at      int32
+	marks   []uint32 // the Move each cell was last remasked in, so it is remasked once
+	mark    uint32
 }
 
 // Fill reads the passability of a w×h field and the directions open from each
 // cell: into a passable cell, and along a diagonal only past both corners beside it.
 func (g *SearchGrid) Fill(w, h int, isBlocked WallChecker) {
 	pw, ph := w+2, h+2
-	if cap(g.blocked) < pw*ph {
-		g.blocked = make([]bool, pw*ph)
-	}
-	g.blocked = g.blocked[:pw*ph]
-	for x := range pw {
-		g.blocked[x], g.blocked[(ph-1)*pw+x] = true, true
-	}
+	g.free = grow(g.free, pw*ph)
+	clear(g.free)
 	for y := range h {
-		row := g.blocked[(y+1)*pw : (y+2)*pw]
-		row[0], row[pw-1] = true, true
-		for x := range w {
-			row[x+1] = isBlocked(x, y)
+		row := g.free[(y+1)*pw+1 : (y+1)*pw+1+w]
+		for x := range row {
+			if !isBlocked(x, y) {
+				row[x] = 1
+			}
 		}
 	}
 	g.w, g.h = w, h
@@ -348,43 +346,67 @@ func (g *SearchGrid) Fill(w, h int, isBlocked WallChecker) {
 		g.step[k] = int32(DirVectors[k][1]*w + DirVectors[k][0])
 		g.padStep[k] = DirVectors[k][1]*pw + DirVectors[k][0]
 	}
-	if cap(g.open) < w*h {
-		g.open = make([]uint8, w*h)
-	}
-	g.open = g.open[:w*h]
+	g.open = grow(g.open, w*h)
 	for y := range h {
-		for x := range w {
-			g.open[y*w+x] = g.mask((y+1)*pw + x + 1)
+		up, mid, down := g.free[y*pw:], g.free[(y+1)*pw:], g.free[(y+2)*pw:]
+		row := g.open[y*w : y*w+w]
+		for x := range row {
+			row[x] = openMask(up[x:x+3], mid[x:x+3], down[x:x+3])
 		}
 	}
 }
 
 // mask is the directions open from the cell at bordered index p.
 func (g *SearchGrid) mask(p int) uint8 {
-	if g.blocked[p] {
-		return 0
-	}
-	var m uint8
-	for k := range DirCount {
-		if !g.blocked[p+g.padStep[k]] {
-			m |= 1 << k
-		}
-	}
-	return m & (0x55 | (m<<1|m>>7)&(m>>1|m<<7))
+	pw := g.w + 2
+	return openMask(g.free[p-pw-1:p-pw+2], g.free[p-1:p+2], g.free[p+pw-1:p+pw+2])
 }
 
-// Set moves one cell's passability and the directions open around it.
-func (g *SearchGrid) Set(x, y int, blocked bool) {
-	if x < 0 || y < 0 || x >= g.w || y >= g.h {
-		return
-	}
+// openMask is the directions open from the middle of three rows of three cells:
+// into a passable cell, and along a diagonal only past both corners beside it.
+func openMask(up, mid, down []uint8) uint8 {
+	m := up[1] | up[2]<<DirNE | mid[2]<<DirE | down[2]<<DirSE | down[1]<<DirS | down[0]<<DirSW | mid[0]<<DirW | up[0]<<DirNW
+	return m & (0x55 | bits.RotateLeft8(m, 1)&bits.RotateLeft8(m, -1)) & -mid[1]
+}
+
+// Move closes and opens cells, then remasks the directions open from every cell
+// within a step of one, each once however many changed cells it neighbours.
+func (g *SearchGrid) Move(closed, opened []vmath.Point) {
 	pw := g.w + 2
-	g.blocked[(y+1)*pw+x+1] = blocked
-	for ny := max(0, y-1); ny <= min(g.h-1, y+1); ny++ {
-		for nx := max(0, x-1); nx <= min(g.w-1, x+1); nx++ {
-			g.open[ny*g.w+nx] = g.mask((ny+1)*pw + nx + 1)
+	for _, c := range closed {
+		if g.inside(c) {
+			g.free[(c.Y+1)*pw+c.X+1] = 0
 		}
 	}
+	for _, c := range opened {
+		if g.inside(c) {
+			g.free[(c.Y+1)*pw+c.X+1] = 1
+		}
+	}
+	g.marks = grow(g.marks, g.w*g.h)
+	if g.mark++; g.mark == 0 {
+		clear(g.marks[:cap(g.marks)])
+		g.mark = 1
+	}
+	for _, cells := range [2][]vmath.Point{closed, opened} {
+		for _, c := range cells {
+			if !g.inside(c) {
+				continue
+			}
+			for ny := max(0, c.Y-1); ny <= min(g.h-1, c.Y+1); ny++ {
+				for nx := max(0, c.X-1); nx <= min(g.w-1, c.X+1); nx++ {
+					if i := ny*g.w + nx; g.marks[i] != g.mark {
+						g.marks[i] = g.mark
+						g.open[i] = g.mask((ny+1)*pw + nx + 1)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (g *SearchGrid) inside(c vmath.Point) bool {
+	return c.X >= 0 && c.Y >= 0 && c.X < g.w && c.Y < g.h
 }
 
 // Size is the field size the grid was filled at.
@@ -402,7 +424,7 @@ func Diff(prev, next []bool, w int, fn func(x, y int, blocked bool)) {
 
 // Blocked reports whether a cell is impassable; every cell off the grid is.
 func (g *SearchGrid) Blocked(x, y int) bool {
-	return x < 0 || y < 0 || x >= g.w || y >= g.h || g.blocked[(y+1)*(g.w+2)+x+1]
+	return x < 0 || y < 0 || x >= g.w || y >= g.h || g.free[(y+1)*(g.w+2)+x+1] == 0
 }
 
 // pad is a field cell's index in the bordered grid.

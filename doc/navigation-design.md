@@ -51,8 +51,8 @@ Every Dijkstra in the package, the route search included, runs on a
 border, the directions open from each cell as one precomputed mask with the
 corner rule folded in, so settling a cell is one load, and, since step costs
 are small integers, a ring of distance buckets rather than a heap, which settles
-a cell in constant time. The grid moves cell by cell as walls change (`Set`),
-remasking the cells around each. A field computes on a grid it is handed
+a cell in constant time. The grid moves with the walls (`Move`), remasking each
+cell within a step of a change once. A field computes on a grid it is handed
 (`ComputeOn`); one reading its own walls (`Compute`) fills a private grid. A
 field's arrays are allocated by its first compute, so a field nothing reads
 costs nothing. Generation stamps mark cells current without clearing the arrays.
@@ -84,13 +84,15 @@ footprint, so a changed cell moves only the counts of the headers over it
 (`Moved`), and the composite tier moves only where a footprint's fit changed,
 which a storm's single-cell holes rarely do; a header two cells turned the same
 tick is named only if its fit did change. Each tier has a generation that a field
-or route graph is stamped with when computed. A wholesale change, more than a
-fiftieth of the map — the first derivation, a resize, a maze — derives everything
-whole. Between ticks a route graph request brings passability up to date first.
-A scrolling cave, which turns about 400 cells a column on the largest map, costs
-65 µs a step this way where the re-read and diff cost 240 µs; one wall moving on
-an open map costs 2.5 µs at any size (`BenchmarkCaveStepNavigation`,
-`BenchmarkNavigationWallMoves`).
+or route graph is stamped with when computed. A wholesale change, more than an
+eighth of the map — the first derivation, a resize, a maze — derives everything
+whole: moving the grids costs as much at an eighth when the turned cells are
+scattered, each refitting a whole footprint of headers, and a cave's, a few to a
+column, cost a tenth of that. Between ticks a route graph request brings
+passability up to date first. A scrolling cave, which turns about 400 cells a
+column on the largest map, costs 71 µs a step this way where the re-read and diff
+cost 230 µs; one wall moving on an open map costs 3.6 µs at any size
+(`BenchmarkCaveStepNavigation`, `BenchmarkNavigationWallMoves`).
 
 What a tier's change does to its fields: a cell closed drops them (`Closed`),
 since a direction may now point into it, and they recompute when next read;
@@ -251,13 +253,17 @@ tick still holds is one point field per local cursor with drops in flight, the
 reaches, and composite line of sight. What would bound it further is in
 [todo](todo.md#bound-navigations-worst-tick-on-busy-maps).
 
-Vanguard's jagged cave steps a column every tick. At 500×254 a step turns about
-350 cells and the wall upkeep is 95 µs (`BenchmarkCaveStepNavigation`); a tick with
-eight composites, most of them out of sight of the cursor, costs 410 µs, three
-fifths of it the composite field recomputed after each column closed cells, and
-290 µs with them near the cursor and a third in sight (`BenchmarkCaveNavigation`).
-At 200×60 the upkeep is 35 µs and a tick 95 to 120 µs. What would cut the fields is
-in [todo](todo.md#spend-less-on-fields-over-a-moving-map).
+Vanguard's jagged cave steps a column every tick, and more in a later cave. At
+500×254 a step turns about 350 cells and the wall upkeep is 71 µs
+(`BenchmarkCaveStepNavigation`); a tick with eight composites, most of them out of
+sight of the cursor, costs 180 µs, and 103 µs with them near it
+(`BenchmarkCaveNavigation`). In play a step turns more than a fiftieth of a small
+map on a third of the ticks. Played headless as a player plays it (`:god`, the
+ship sweeping from the middle to near the left edge every three seconds, firing),
+navigation took 95–100 µs a tick at 120×40 and 220–245 µs at 200×60 while a
+fiftieth derived whole, two thirds of it those derivations, and takes 27–43 µs and
+64–79 µs at an eighth; at 400×120, 145–165 µs before and 90–120 µs. What would cut
+the fields is in [todo](todo.md#spend-less-on-fields-over-a-moving-map).
 
 ## 11. Custom maps
 

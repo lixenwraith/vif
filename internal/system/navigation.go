@@ -257,7 +257,9 @@ func (s *NavigationSystem) applyWalls() {
 	}
 	s.pointOpened, s.pointClosed = s.pointOpened[:0], s.pointClosed[:0]
 	s.compOpened, s.compClosed = s.compOpened[:0], s.compClosed[:0]
-	changed, bulk := 0, ww*wh/50
+	// From an eighth of the map on, deriving whole costs no more than moving the
+	// grids, even when every turned cell refits a whole footprint of headers
+	changed, bulk := 0, ww*wh/8
 	turned := func(x, y int, blocked bool) {
 		if changed++; changed > bulk || x >= w || y >= h {
 			return
@@ -307,12 +309,7 @@ func (s *NavigationSystem) applyWalls() {
 		}
 		return
 	}
-	for _, c := range s.pointClosed {
-		s.pointGrid.Set(c.X, c.Y, true)
-	}
-	for _, c := range s.pointOpened {
-		s.pointGrid.Set(c.X, c.Y, false)
-	}
+	s.pointGrid.Move(s.pointClosed, s.pointOpened)
 	// Every header whose footprint covers a changed cell may fit differently.
 	footW, footH, _, _ := s.compositePassability.GetFootprint()
 	s.statROICells.Add(int64((len(s.pointClosed) + len(s.pointOpened)) * footW * footH))
@@ -326,12 +323,7 @@ func (s *NavigationSystem) applyWalls() {
 	compMoved := len(s.compOpened)+len(s.compClosed) > 0
 	if compMoved {
 		s.comp++
-		for _, c := range s.compClosed {
-			s.compositeGrid.Set(c.X, c.Y, true)
-		}
-		for _, c := range s.compOpened {
-			s.compositeGrid.Set(c.X, c.Y, false)
-		}
+		s.compositeGrid.Move(s.compClosed, s.compOpened)
 	}
 	s.gridsAt = s.grid
 	for _, g := range s.groups {
