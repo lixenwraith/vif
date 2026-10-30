@@ -121,6 +121,14 @@ Overlay as non-blocking inspection there. `:pause` is a hold, which no mode chan
 ends: under it Normal takes no play, only `:`, the menu, help, quit, the audio
 toggle and a key's release.
 
+Normal, Visual, Insert and Search are play modes: the run's world holds the
+current one (`GameState`), each change is an event the journal records, and a
+replay plays through them. Command and Overlay are the operator's
+(`GameMode.Operator`): they open over the play mode and leave it in place, and the
+world, the journal and a reset never see them, nor the pause a solo game takes for
+them, nor what an overlay shows. Leaving one returns to Normal, recorded when that
+changes the play mode.
+
 A new game a person plays waits at its first tick in a start hold, the `:pause`
 hold marked `engine.HoldStart`: at launch, on `:n`, the menu's New game and a map
 change, unless `[play] wait` is off (`:wait`, `-nw`). The first press the held
@@ -332,8 +340,10 @@ APM exists to drive adaptive music, not to score macros or raw device event
 rate. The scheduler admits dispatched input-origin events as gestures, so a
 replay reproduces the count from the journal:
 
-- macro playback, auto-fire, every other origin, and input while paused admit nothing;
-- one dispatch pass is one gesture: `:` pauses and changes mode, a click fires;
+- macro playback, auto-fire, every other origin, and input under a hold admit
+  nothing; the operator's pause, which no journal holds, gates nothing;
+- one dispatch pass is one gesture: `i` changes mode, a click fires; the command
+  line and the overlays are the operator's and no gesture;
 - one key mashed diminishes: a key (the event, with a motion's direction or a typed
   character) repeated within 500 ms counts only on its 1st, 2nd, 4th, 8th... press,
   so `h` and `l` in turn count in full while a held or hammered `l` counts by its log;
@@ -430,9 +440,9 @@ the run's loop serves it outside the lock, because closing the port it leaves wa
 for handshakes that take the world lock.
 
 Free-mouse and auto-fire preferences, time scale, telemetry HUD visibility, pinned
-overlay cards and breakpoints are operator-owned and survive plain `:new`. Both
-reset forms clear the issuing instance's macros, and every instance's captured
-keys and transient command/overlay state. `:new!` additionally clears the issuing
+overlay cards, breakpoints, and the mode with its open command line, search or
+overlay are operator-owned and survive plain `:new`. Both reset forms clear the
+issuing instance's macros, and every instance's captured keys and status text. `:new!` additionally clears the issuing
 instance's HUD, pins and breakpoints and returns its two preferences and the time
 scale to their startup values (free mouse on, auto-fire on both weapons, the
 `-speed` rate); peers retain their own operator state when the shared reset

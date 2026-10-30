@@ -68,10 +68,15 @@ that proves wrong or that a document now states, and link the document instead.
   whole, so a goroutine off the world lock (a bot seat, the drive loop, the
   correction loop) reads none of their fields, even one that never changes: the
   race detector flags the copy's write.
-- The game mode can change outside the router: a reset sets NORMAL under an open
-  command line. The input machine follows only through `Router.SyncNormal`, which
-  `App.takeEvent` runs before each event; a new path that sets another mode
-  outside the router keeps the machine in step itself.
+- `GameState.Mode` is the play mode (Normal, Visual, Insert, Search), which the
+  world reads and the journal records; Command and Overlay are the operator's, held
+  on the context over it (`GameMode.Operator`), and reach neither. A live run's
+  mode changes only through the router (`transitionMode`), which keeps the input
+  machine in step: a path that sets it elsewhere leaves every key but Ctrl+Q dead.
+- What only the operator does or sees, a pause, an overlay request, the speakers,
+  is pushed `OriginDevice`: never journaled and outside the event tallies, so a
+  replay, which has an operator of its own, still matches. One left on the ambient
+  origin diverges every replay whose recording made it.
 
 ## Determinism and the harness
 

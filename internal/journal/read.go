@@ -63,7 +63,6 @@ type captureFields struct {
 	Body        []byte `json:"body"` // base64, which encoding/json decodes into []byte
 	Opens       bool   `json:"opens"`
 	Mode        uint64 `json:"mode"`
-	Paused      bool   `json:"paused"`
 	Held        bool   `json:"held"`
 	Start       bool   `json:"start"`
 	Off         string `json:"off"` // system names, comma-separated
@@ -240,8 +239,8 @@ func decodeCapture(raw json.RawMessage) (event.JournalCapture, error) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		return event.JournalCapture{}, err
 	}
-	if f.Mode >= uint64(len(core.ModeNames)) {
-		return event.JournalCapture{}, fmt.Errorf("cseq %d: unknown mode %d", f.CSeq, f.Mode)
+	if f.Mode >= uint64(len(core.ModeNames)) || core.GameMode(f.Mode).Operator() {
+		return event.JournalCapture{}, fmt.Errorf("cseq %d: no play mode %d", f.CSeq, f.Mode)
 	}
 	if f.Slot >= parameter.MaxPlayers && f.Slot != uint64(parameter.NoPlayerSlot) {
 		return event.JournalCapture{}, fmt.Errorf("cseq %d: no roster slot %d", f.CSeq, f.Slot)
@@ -249,7 +248,7 @@ func decodeCapture(raw json.RawMessage) (event.JournalCapture, error) {
 	c := event.JournalCapture{
 		JSeq: f.JSeq, CSeq: f.CSeq, Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
 		Participant: f.Participant, Authority: f.Authority, Barrier: f.Barrier, Body: f.Body,
-		Opens: f.Opens, Mode: core.GameMode(f.Mode), Paused: f.Paused, Held: f.Held, Start: f.Start, Slot: uint8(f.Slot), Own: f.Own,
+		Opens: f.Opens, Mode: core.GameMode(f.Mode), Held: f.Held, Start: f.Start, Slot: uint8(f.Slot), Own: f.Own,
 	}
 	if f.Off != "" {
 		c.Off = strings.Split(f.Off, ",")

@@ -171,7 +171,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `combat.live_<type>` | Combat | Live Combat-store population per type. It decomposes `combat.count`, so a type still counted while its species reports inactive is a lifecycle leak |
 | `weapon.<kind>`, `weapon.<kind>_fired`, `player.<slot>.weapon.<kind>` | Weapon | Whether a cursor holds the kind, and discharges per kind. `weapon.main_fired` counts main-fire actions past the cooldown, each of which fires the loadout |
 | `storm.<color>_active_frames` | Storm | Attack ticks of a circle of that colour (red, green, blue) |
-| `event.settle_<label>` | Scheduler | Non-empty settle passes, attributed by source label |
+| `event.settle_<label>` | Scheduler | Settle passes that dispatched an event a replay reproduces, attributed by source label; a `device` event, which no journal holds, counts in none of the event tallies |
 | `player.<slot>.<suffix>` | Per-slot metrics | See [The registry](#the-registry) |
 
 ## Key notes

@@ -175,15 +175,11 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventModeChanged:
 		p, ok := ev.Payload.(*event.ModeChangedPayload)
-		if !ok || int(p.Mode) >= len(core.ModeNames) {
-			return // absent or out-of-range mode from an external stream
+		if !ok || int(p.Mode) >= len(core.ModeNames) || p.Mode.Operator() {
+			return // the run hears of play modes only
 		}
-		s.ctx.SetMode(p.Mode)
+		s.ctx.SetPlayMode(p.Mode)
 		s.ctx.World.UpdateBoundsRadius()
-		// An overlay lives only in overlay mode, so a replayed close closes it too
-		if p.Mode != core.ModeOverlay {
-			s.ctx.SetOverlayContent(nil)
-		}
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
@@ -482,13 +478,11 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 	// Grid tracks map dimensions; a level-sized grid would outlive the level
 	s.ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
 
-	// 6. Reset mode, captured keys and status; the FSM reset below spawns the cursor
-	s.ctx.SetMode(core.ModeNormal)
+	// 6. Release the scenario's captured keys and clear the status. The play mode and
+	// the operator's, with its lines and overlay, outlive the reset, so a command line
+	// stays open across resets that keep coming. The FSM reset below spawns the cursor.
 	s.ctx.KeyCapture.Set("", false)
-	s.ctx.SetCommandText("")
-	s.ctx.SetSearchText("")
 	s.ctx.ClearStatusMessage()
-	s.ctx.SetOverlayContent(nil)
 
 	// 7. Cancel pending step requests; the rate survives a plain reset
 	s.ctx.TimeCtl.CancelBreak()
@@ -724,7 +718,7 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 	if !s.ctx.TimeCtl.SetPaused(paused) {
 		return
 	}
-	s.ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: s.ctx.TimeCtl.IsPaused()})
+	s.ctx.PushLocalOrigin(event.EventGamePauseChanged, &event.GamePausePayload{Paused: s.ctx.TimeCtl.IsPaused()}, event.OriginDevice)
 }
 
 // handleHoldRequest starts or ends a hold. The start crosses, so a live session's
