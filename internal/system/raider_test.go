@@ -81,7 +81,7 @@ func standRaider(s *BehaviorSystem, program string, x, y int) {
 // footprintInRock reports whether any cell of a 4x2 footprint with its header at
 // (1, 0) holds rock
 func footprintInRock(w *engine.World, pos component.PositionComponent) bool {
-	return w.Positions.HasBlockingWallInArea(pos.X-1, pos.Y, 4, 2, component.WallBlockKinetic)
+	return w.Positions.BlocksArea(pos.X-1, pos.Y, 4, 2, component.WallBlockKinetic)
 }
 
 // TestARaiderTeleportsAroundRockAndLandsBesideWhatTookItsLanding: a lock whose

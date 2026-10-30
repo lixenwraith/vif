@@ -160,7 +160,7 @@ func (s *BulletSystem) traverseAndCollide(
 			return true
 		}
 
-		if s.world.Positions.HasBlockingWallAt(cx, cy, component.WallBlockKinetic) {
+		if s.world.Positions.Blocks(cx, cy, component.WallBlockKinetic) {
 			s.statWallCollisions.Add(1)
 			return true
 		}

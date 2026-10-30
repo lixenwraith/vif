@@ -69,7 +69,7 @@ func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.
 				live++
 				h, _ := w.Components.Header.GetComponent(header)
 				for _, m := range h.MemberEntries {
-					if pos, ok := w.Positions.GetPosition(m.Entity); ok && w.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockKinetic) {
+					if pos, ok := w.Positions.GetPosition(m.Entity); ok && w.Positions.Blocks(pos.X, pos.Y, component.WallBlockKinetic) {
 						stuck = header
 					}
 				}

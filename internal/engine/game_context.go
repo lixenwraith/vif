@@ -277,7 +277,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 		CropOnResize:   true,
 		CellAspect:     vmath.RefAspect,
 	}
-	world.Positions.ResizeGrid(viewportWidth, viewportHeight)
+	world.Positions.Resize(viewportWidth, viewportHeight)
 
 	// 5. Time Resource (Initial state). Boot FSM actions can create deadlines
 	// before tick one, while a network lobby is paused. Seed their game clock at
@@ -402,7 +402,7 @@ func (ctx *GameContext) HandleResizeLocked() {
 	}
 
 	// Grid tracks map dimensions (grow-only, no reallocation on shrink)
-	ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	ctx.World.Positions.Resize(config.MapWidth, config.MapHeight)
 
 	if !cropped {
 		// The map did not move, so no cursor needs reconciling. A same-cell move

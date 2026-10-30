@@ -1032,7 +1032,7 @@ func TestCameraAnchorsOnThePredictedCell(t *testing.T) {
 
 	config := w.Resources.Config
 	config.MapWidth, config.MapHeight = 200, 100
-	w.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	w.Positions.Resize(config.MapWidth, config.MapHeight)
 
 	w.PushCursorMove(local, 150, 60)
 	if config.CameraX == 0 || config.CameraY == 0 {
@@ -1070,7 +1070,7 @@ func TestAPointerHeldStillLeavesTheMapStill(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	config := w.Resources.Config
 	config.MapWidth, config.MapHeight = 400, 100
-	w.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	w.Positions.Resize(config.MapWidth, config.MapHeight)
 	w.PushCursorMove(local, 300, 50) // a key move scrolls the view to the right side
 
 	report := func(vx, vy int) (int, int) {

@@ -569,7 +569,7 @@ the volume already carries whatever the installer puts there.
 ### Shrink the spatial grid on ceiling-sized maps
 
 - Priority: P3
-- Affected files: `internal/engine/spatial_grid.go`
+- Affected files: `pkg/position/grid.go`
 - Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
 
 The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250)

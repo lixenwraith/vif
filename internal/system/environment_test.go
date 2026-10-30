@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -784,7 +785,7 @@ func TestAnEnteringRuneTakesItsCellAsTheDriftCarriesAGlyph(t *testing.T) {
 		}
 		got := []rune(".......")
 		for x := range got {
-			for _, e := range w.Positions.GetAllEntityAt(30+x, tc.y) {
+			for _, e := range w.Positions.EntitiesAt(30+x, tc.y, position.ScopeAll) {
 				if g, ok := w.Components.Glyph.GetComponent(e); ok && g.Level == component.GlyphBright {
 					got[x] = g.Rune
 				}

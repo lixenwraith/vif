@@ -262,7 +262,7 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, m *com
 		}
 
 		// Wall collision
-		if s.world.Positions.HasBlockingWallAt(currX, currY, component.WallBlockKinetic) {
+		if s.world.Positions.Blocks(currX, currY, component.WallBlockKinetic) {
 			s.statWallCollisions.Add(1)
 			return lastSafeX, lastSafeY, impactWall
 		}

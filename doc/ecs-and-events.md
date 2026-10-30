@@ -135,8 +135,10 @@ flowchart LR
 ```
 
 `engine.Position` keeps the rows, an entity's cell, with the sparse index `Store`
-shares, and `position.Index` keeps the cells: a write moves both. The index
-answers point and area queries, out-of-bounds checks, line-of-sight traversal and
+shares, and embeds the `position.Index` that keeps the cells: a write moves both,
+and a reader asks the index by the package's names (`Blocks`, `BlocksArea`,
+`EntitiesAt`, the searches), the binding keeping what the rows, the components or
+the rock need. The index answers point and area queries, out-of-bounds checks, line-of-sight traversal and
 free-space searches by pattern or spiral, which a negative radius sends over the
 whole map, within its grid's bounds and at the cell aspect it reads live from the
 config (`position.Frame`). The package's words are *block*, a cell an occupant
@@ -150,18 +152,17 @@ entering; then from a plane of bits the index keeps for the mask, a bit a cell,
 built from the cells on the mask's first query and brought to a cell's shared
 occupants whenever a wall is placed, moved, removed or remasked there
 (`Position.wallOf` names a wall and what it stops), so a point is a bit and an
-area a few words a row. `WallBits` hands a reader deriving whole the plane's words
-with the surfaces' solid cells (`position.Bits`, which navigation derives its
-passability from). The rock's look (`RockLook`) stays the engine's, beside the
-field. A wall's
-placement and its store membership bring the plane to the cell, and a `BlockMask`
-written in place calls `Position.WallChanged` for its wall. The
-same changes log the cells they can have turned, both cells of a wall's move and each
-cell a rock shift crossed, and `Position.WallChanges` hands a reader that keeps
-its own copy of the answers those cells since the sequence it last read, so a
-moving map costs it the cells that moved. A change that names no cells (an
-install's `Position.WallsChanged`, a resize, a rock field laid) loses the log, and
-the reader re-reads every cell. `Shift` moves a rigid group without contending
+area a few words a row. `BlockBits` hands a reader deriving whole the plane's
+words with the surfaces' solid cells (`position.Bits`, which navigation derives
+its passability from). The rock's look (`RockLook`) stays the engine's, beside the
+field. A wall's placement and its store membership bring the plane to the cell,
+and a `BlockMask` written in place calls `Position.WallChanged` for its wall. The
+same changes log the cells they can have turned, both cells of a wall's move and
+each cell a rock shift crossed, and `BlockChanges` hands a reader that keeps its
+own copy of the answers those cells since the sequence it last read, so a moving
+map costs it the cells that moved. A change that names no cells (an install's
+`BlocksChanged`, a resize, a rock field laid) loses the log, and the reader
+re-reads every cell. `Shift` moves a rigid group without contending
 with itself for a cell, and `TopGlyphAt` names the one glyph per cell that is
 typed, passing over scenery (`IsTypeable`), and `TopGlyphIs` the one drawn.
 Reapplying an entity's existing cell is idempotent when the grid already contains
@@ -522,7 +523,7 @@ fields it owns into a component, resource, or new value.
 | System declarations | `internal/manifest/definition.go`, `graph.go`, `internal/engine/ecs.go` |
 | Generic store | `internal/engine/store.go` |
 | Generated stores/masks/domains | `internal/engine/component_store_gen.go`, `component_domain_gen.go` |
-| Positions and grid | `internal/engine/position.go`, `internal/engine/spatial_grid.go` |
+| Positions and grid | `internal/engine/position.go`, `internal/engine/rock.go`, `pkg/position` |
 | Resources | `internal/engine/resource.go`, `resource_transient.go`, `resource_audio.go` |
 | Components | `internal/component/*.go`, `internal/manifest/definition.go` |
 | Composites | `internal/component/header.go`, `member.go`, `internal/system/composite.go` |

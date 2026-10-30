@@ -2,6 +2,7 @@ package engine
 
 import (
 	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -74,7 +75,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 							if rng.IntN(2) == 0 {
 								w.Positions.WallChanged(e)
 							} else {
-								w.Positions.WallsChanged()
+								w.Positions.BlocksChanged()
 							}
 						}
 					case 2:
@@ -108,7 +109,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						if !ok {
 							break
 						}
-						for _, o := range w.Positions.GetEntitiesAt(pos.X, pos.Y, position.ScopeAll) {
+						for _, o := range slices.Clone(w.Positions.EntitiesAt(pos.X, pos.Y, position.ScopeAll)) {
 							if o != e && !w.Components.Wall.HasEntity(o) {
 								w.Positions.Move(o, component.PositionComponent{X: -1, Y: -1})
 							}
@@ -128,7 +129,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						spawn()
 					}
 				case 9:
-					w.Positions.ResizeGrid(cfg.MapWidth, cfg.MapHeight)
+					w.Positions.Resize(cfg.MapWidth, cfg.MapHeight)
 				case 10:
 					w.CopyIn(saved)
 				case 11: // a correction rewrites masks over the walls already there
@@ -169,7 +170,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						return true
 					}
 				}
-				for _, e := range w.Positions.GetEntitiesAt(x, y, position.ScopeShared) {
+				for _, e := range w.Positions.EntitiesAt(x, y, position.ScopeShared) {
 					if wall, ok := w.Components.Wall.GetComponent(e); ok && (mask == 0 || wall.BlockMask&mask != 0) {
 						return true
 					}
@@ -179,7 +180,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 			for _, mask := range masks {
 				for y := -1; y <= cfg.MapHeight; y++ {
 					for x := -1; x <= cfg.MapWidth; x++ {
-						if got, want := w.Positions.HasBlockingWallAt(x, y, mask), oracle(x, y, mask); got != want {
+						if got, want := w.Positions.Blocks(x, y, mask), oracle(x, y, mask); got != want {
 							t.Fatalf("round %d mask %d at (%d,%d): HasBlockingWallAt %t, the cell's walls say %t", round, mask, x, y, got, want)
 						}
 					}
@@ -187,33 +188,33 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 			}
 			// A reader of the wall log re-testing only the cells it names keeps every
 			// answer HasBlockingWallAt gives
-			cells, now, logged := w.Positions.WallChanges(since)
+			cells, now, logged := w.Positions.BlockChanges(since)
 			since = now
 			for i, mask := range masks {
 				if !logged || readers[i] == nil {
 					readers[i] = make([]bool, cfg.MapWidth*cfg.MapHeight)
 					for c := range readers[i] {
-						readers[i][c] = w.Positions.HasBlockingWallAt(c%cfg.MapWidth, c/cfg.MapWidth, mask)
+						readers[i][c] = w.Positions.Blocks(c%cfg.MapWidth, c/cfg.MapWidth, mask)
 					}
 				}
 				for _, c := range cells {
 					if c.X >= 0 && c.Y >= 0 && c.X < cfg.MapWidth && c.Y < cfg.MapHeight {
-						readers[i][c.Y*cfg.MapWidth+c.X] = w.Positions.HasBlockingWallAt(c.X, c.Y, mask)
+						readers[i][c.Y*cfg.MapWidth+c.X] = w.Positions.Blocks(c.X, c.Y, mask)
 					}
 				}
 				for c, got := range readers[i] {
-					if x, y := c%cfg.MapWidth, c/cfg.MapWidth; got != w.Positions.HasBlockingWallAt(x, y, mask) {
+					if x, y := c%cfg.MapWidth, c/cfg.MapWidth; got != w.Positions.Blocks(x, y, mask) {
 						t.Fatalf("round %d mask %d at (%d,%d): the wall log's reader holds %t", round, mask, x, y, got)
 					}
 				}
 			}
 			for _, mask := range masks {
-				bits := w.Positions.WallBits(mask, buf)
+				bits := w.Positions.BlockBits(mask, buf)
 				buf = bits.Words
 				for y := -1; y <= cfg.MapHeight; y++ {
 					for x := -1; x <= cfg.MapWidth; x++ {
 						got := x >= 0 && y >= 0 && x < cfg.MapWidth && y < cfg.MapHeight && bits.Bit(x, y)
-						if want := w.Positions.HasBlockingWallAt(x, y, mask); got != want {
+						if want := w.Positions.Blocks(x, y, mask); got != want {
 							t.Fatalf("round %d mask %d at (%d,%d): WallBits %t, HasBlockingWallAt %t", round, mask, x, y, got, want)
 						}
 					}
@@ -224,10 +225,10 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					want := false
 					for cy := y; cy < y+ah; cy++ {
 						for cx := x; cx < x+aw; cx++ {
-							want = want || w.Positions.HasBlockingWallAt(cx, cy, mask)
+							want = want || w.Positions.Blocks(cx, cy, mask)
 						}
 					}
-					if got := w.Positions.HasBlockingWallInArea(x, y, aw, ah, mask); got != want {
+					if got := w.Positions.BlocksArea(x, y, aw, ah, mask); got != want {
 						t.Fatalf("round %d mask %d area (%d,%d) %dx%d: %t, cells say %t", round, mask, x, y, aw, ah, got, want)
 					}
 				}
@@ -256,7 +257,7 @@ func TestShiftMovesARigidGroupThroughFullCells(t *testing.T) {
 	}
 	full := parameter.ReservedPlayerPerCell
 	for _, c := range []struct{ x, want int }{{3, 0}, {4, full}, {5, full}} {
-		if got := len(w.Positions.index.EntitiesAt(c.x, 3, position.ScopePrivate)); got != c.want {
+		if got := len(w.Positions.Index.EntitiesAt(c.x, 3, position.ScopePrivate)); got != c.want {
 			t.Fatalf("cell %d holds %d player entities, want %d", c.x, got, c.want)
 		}
 	}
@@ -317,7 +318,7 @@ func TestTopGlyphPassesOverScenery(t *testing.T) {
 	}
 	drawn := func(want core.Entity) {
 		t.Helper()
-		for _, e := range w.Positions.GetAllEntityAt(at.X, at.Y) {
+		for _, e := range w.Positions.EntitiesAt(at.X, at.Y, position.ScopeAll) {
 			if got := w.Positions.TopGlyphIs(e, at.X, at.Y); got != (e == want) {
 				t.Fatalf("TopGlyphIs(%v) = %v, want %v drawn", e, got, want)
 			}

@@ -95,7 +95,7 @@ func HasCombatTargetAt(w *engine.World, x, y int, scope position.Scope, selfEnti
 // CombatTargetAt is HasCombatTargetAt naming the first target found and the occupant it was hit through
 func CombatTargetAt(w *engine.World, x, y int, scope position.Scope, selfEntity, ownerEntity core.Entity) (target, hit core.Entity, ok bool) {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := w.Positions.GetEntitiesAtInto(x, y, scope, entities[:])
+	count := copy(entities[:], w.Positions.EntitiesAt(x, y, scope))
 	for i := range count {
 		target, hit, valid := ResolveTargetFromEntity(w, entities[i], selfEntity)
 		if !valid || isPlayerSide(w, target, ownerEntity) {
@@ -295,7 +295,7 @@ func traceRay(w *engine.World, r vmath.Ray) int {
 	limit := w.Resources.Config.MapWidth + w.Resources.Config.MapHeight
 	for i := 1; i <= limit; i++ {
 		x, y := r.Center(i)
-		if w.Positions.IsOutOfBounds(x, y) || w.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+		if w.Positions.IsOutOfBounds(x, y) || w.Positions.Blocks(x, y, component.WallBlockKinetic) {
 			return i - 1
 		}
 	}

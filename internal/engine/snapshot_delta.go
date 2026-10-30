@@ -277,7 +277,7 @@ func reconcileStore[T any](s *Store[T], entries []StoreEntry[T]) {
 		s.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	if s.bit == WallBit { // an overwrite can rewrite a BlockMask
-		s.world.Positions.WallsChanged()
+		s.world.Positions.BlocksChanged()
 	}
 }
 
@@ -332,7 +332,7 @@ func (p *Position) capturePlayer() ([]StoreEntry[component.PositionComponent], [
 	placed := captureRows(p.dense, p.entities, core.DomainPlayer)
 	var out []core.Entity
 	for _, en := range placed {
-		if !p.index.Holds(en.Entity, EntityClass(en.Entity), en.Value.X, en.Value.Y) {
+		if !p.Index.Holds(en.Entity, EntityClass(en.Entity), en.Value.X, en.Value.Y) {
 			out = append(out, en.Entity)
 		}
 	}
@@ -415,11 +415,11 @@ func (p *Position) reorder(order []core.Entity, cells []position.CellOrder[core.
 	if err := reorderRows(&p.slots, p.dense, p.entities, order); err != nil {
 		return err
 	}
-	return p.index.Reorder(cells, EntityClass)
+	return p.Index.Reorder(cells, EntityClass)
 }
 
 // cellOrder reads the occupants of every cell holding two or more.
-func (p *Position) cellOrder() []position.CellOrder[core.Entity] { return p.index.Order() }
+func (p *Position) cellOrder() []position.CellOrder[core.Entity] { return p.Index.Order() }
 
 // WorldReconcile is one world brought to another's shared half in place, store by
 // store, with no capture of either: the comparison first, reading both and writing
@@ -577,7 +577,7 @@ func writeStoreFrom[T any](dst, src *Store[T], changed []int32) {
 		dst.SetComponent(src.entities[i], DetachSnapshotValue(src.dense[i]))
 	}
 	if dst.bit == WallBit { // an overwrite can rewrite a BlockMask
-		dst.world.Positions.WallsChanged()
+		dst.world.Positions.BlocksChanged()
 	}
 }
 

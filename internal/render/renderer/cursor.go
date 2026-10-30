@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // cellContent resolves what a cell shows under a cursor or a marker: its top glyph,
@@ -16,7 +17,7 @@ func cellContent(gameCtx *engine.GameContext, x, y int) (glyph, sigil core.Entit
 		return glyph, 0
 	}
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := gameCtx.World.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	count := copy(entities[:], gameCtx.World.Positions.EntitiesAt(x, y, position.ScopeAll))
 	for i := range count {
 		if gameCtx.World.Components.Sigil.HasEntity(entities[i]) {
 			return 0, entities[i]

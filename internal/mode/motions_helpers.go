@@ -5,6 +5,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // CharType represents the type of character at a position
@@ -71,7 +72,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		rowEmpty := true
 		// Scan row; stop early if any typeable glyph is found
 		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
-			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
+			count := copy(buf[:], ctx.World.Positions.EntitiesAt(x, y, position.ScopeAll))
 			for i := range count {
 				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					rowEmpty = false
@@ -95,7 +96,7 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		rowEmpty := true
 		// Scan row; stop early if any typeable glyph is found
 		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
-			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
+			count := copy(buf[:], ctx.World.Positions.EntitiesAt(x, y, position.ScopeAll))
 			for i := range count {
 				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					rowEmpty = false
@@ -309,7 +310,7 @@ func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBoun
 
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
 		for x := ctx.World.Resources.Config.MapWidth - 1; x >= 0; x-- {
-			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
+			count := copy(buf[:], ctx.World.Positions.EntitiesAt(x, y, position.ScopeAll))
 			for i := range count {
 				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					if x > rightmost {

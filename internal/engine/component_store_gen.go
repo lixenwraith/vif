@@ -635,7 +635,7 @@ func (w *World) wipeAll() {
 	w.Components.Button.ClearAllComponents()
 	w.Components.Death.ClearAllComponents()
 	w.Components.Timer.ClearAllComponents()
-	w.Positions.ClearAllComponents()
+	w.Positions.Clear()
 
 	// Clear component mask
 	clear(w.componentMask)

@@ -409,11 +409,11 @@ type CursorRosterEntry struct {
 	Waited  time.Duration // how long it has been away, which the new game's wait goes on from
 }
 
-// PingAbsoluteBounds holds absolute coordinates derived from cursor position and radius
+// PingAbsoluteBounds is the cells a cursor's ping reaches, as the index takes a
+// bounds; Active while the ping's radius sets them
 type PingAbsoluteBounds struct {
-	MinX, MaxX int
-	MinY, MaxY int
-	Active     bool
+	position.Rect
+	Active bool
 }
 
 // Valid reports whether a local cursor exists

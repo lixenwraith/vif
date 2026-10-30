@@ -640,7 +640,7 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtSec float64) 
 
 	// Physics Integration with Wall Constraints
 	wallCheck := func(topLeftX, topLeftY int) bool {
-		return s.world.Positions.HasBlockingWallInArea(
+		return s.world.Positions.BlocksArea(
 			topLeftX, topLeftY,
 			parameter.SwarmWidth, parameter.SwarmHeight,
 			component.WallBlockKinetic,

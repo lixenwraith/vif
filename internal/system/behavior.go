@@ -488,7 +488,7 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 	}
 	p, config := c.proto, s.world.Resources.Config
 	wallCheck := func(left, top int) bool {
-		return s.world.Positions.HasBlockingWallInArea(left, top, p.Width, p.Height, component.WallBlockKinetic)
+		return s.world.Positions.BlocksArea(left, top, p.Width, p.Height, component.WallBlockKinetic)
 	}
 	x, y, motion := physics.IntegrateWithBounceStats(
 		&c.kinetic.Kinetic,

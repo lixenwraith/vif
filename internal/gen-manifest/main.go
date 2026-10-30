@@ -537,7 +537,7 @@ func (w *World) wipeAll() {
 {{- range .Components }}
 	w.Components.{{ .Field }}.ClearAllComponents()
 {{- end }}
-	w.Positions.ClearAllComponents()
+	w.Positions.Clear()
 	
 	// Clear component mask
 	clear(w.componentMask)

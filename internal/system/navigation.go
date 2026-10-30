@@ -278,9 +278,9 @@ func (s *NavigationSystem) applyWalls() {
 		}
 		s.gridsAt = point.gen
 	}
-	cells, seq, logged := s.world.Positions.WallChanges(s.wallsSeq)
+	cells, seq, logged := s.world.Positions.BlockChanges(s.wallsSeq)
 	s.wallsSeq = seq
-	gw, gh := s.world.Positions.GridDimensions()
+	gw, gh := s.world.Positions.Width, s.world.Positions.Height
 	ww, wh := max(min(w, gw), 0), max(min(h, gh), 0) // the cells a wall test covers
 	whole := !s.derived || ww != s.wallsW || wh != s.wallsH
 	if logged && !whole && len(cells) == 0 {
@@ -304,7 +304,7 @@ func (s *NavigationSystem) applyWalls() {
 	}
 	switch {
 	case whole || !logged:
-		s.scratch = s.world.Positions.WallBits(component.WallBlockKinetic, s.scratch.Words)
+		s.scratch = s.world.Positions.BlockBits(component.WallBlockKinetic, s.scratch.Words)
 		if !whole {
 			position.Diff(s.walls, s.scratch, ww, turned)
 		}
@@ -314,7 +314,7 @@ func (s *NavigationSystem) applyWalls() {
 			if c.X < 0 || c.Y < 0 || c.X >= ww || c.Y >= wh {
 				continue
 			}
-			if blocked := s.world.Positions.HasBlockingWallAt(c.X, c.Y, component.WallBlockKinetic); blocked != s.walls.Bit(c.X, c.Y) {
+			if blocked := s.world.Positions.Blocks(c.X, c.Y, component.WallBlockKinetic); blocked != s.walls.Bit(c.X, c.Y) {
 				s.walls.Put(c.X, c.Y, blocked)
 				turned(c.X, c.Y, blocked)
 			}

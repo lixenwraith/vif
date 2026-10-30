@@ -468,7 +468,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 func (s *SoftCollisionSystem) footprintsOverlap(source, target core.Entity, pos component.PositionComponent) bool {
 	contains := func(x, y int) bool {
 		var occupants [parameter.MaxEntitiesPerCell]core.Entity
-		n := s.world.Positions.GetEntitiesAtInto(x, y, position.ScopeShared, occupants[:])
+		n := copy(occupants[:], s.world.Positions.EntitiesAt(x, y, position.ScopeShared))
 		for _, occupant := range occupants[:n] {
 			if member, ok := s.world.Components.Member.GetPtr(occupant); ok && member.HeaderEntity == source {
 				return true
