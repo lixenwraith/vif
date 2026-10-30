@@ -64,6 +64,10 @@ that proves wrong or that a document now states, and link the document instead.
 - A run's tick is `ConfigResource.TickInterval`, which its host may choose
   (`-tick`); `parameter.GameUpdateInterval` is only the default. Code converting
   ticks to time reads the run's, as tests may keep the constant.
+- The game mode can change outside the router: a reset sets NORMAL under an open
+  command line. The input machine follows only through `Router.SyncNormal`, which
+  `App.takeEvent` runs before each event; a new path that sets another mode
+  outside the router keeps the machine in step itself.
 
 ## Determinism and the harness
 
