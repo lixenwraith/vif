@@ -223,6 +223,9 @@ func (a *App) Loop() (*restartRequest, error) {
 		// iteration after the intent that asked for one, and every other path
 		// through the loop arrives back here too.
 		if a.membership.dismissed.Load() {
+			if a.membership.shed.Load() {
+				return &restartRequest{Notice: "Removed by the host to keep its tick; started a local game"}, nil
+			}
 			return &restartRequest{Notice: "Removed by the host; started a local game"}, nil
 		}
 		if req := a.restart.Load(); req != nil {

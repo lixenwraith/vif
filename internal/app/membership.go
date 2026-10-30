@@ -43,6 +43,7 @@ type membership struct {
 	reach       *converge.Reach
 
 	dismissed atomic.Bool // this run was dismissed from its session; the next one is what replaces it
+	shed      atomic.Bool // the dismissal was its host keeping its tick
 	dialling  atomic.Bool // a :join is being dialled while this run plays on
 	leaving   atomic.Bool // a :leave or a fork is waiting for Loop, or being served by it
 

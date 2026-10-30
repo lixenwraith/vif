@@ -369,6 +369,9 @@ func (a *App) initWorld() error {
 	if a.cfg.SlowPolicy != nil {
 		a.authority.SetSlowPolicy(*a.cfg.SlowPolicy)
 	}
+	if a.cfg.ShedPolicy != nil {
+		a.authority.SetShedPolicy(*a.cfg.ShedPolicy)
+	}
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {

@@ -73,6 +73,9 @@ type Instance interface {
 	// this instance late while it authored.
 	DropParticipant(id uint32) bool
 	CommitLate(id uint32) uint64
+	// ShedParticipant dismisses one participant, with its bots, for the load it
+	// costs, which every participant and the dropped one are told.
+	ShedParticipant(id uint32) bool
 
 	// Ingress is how many frame bytes this instance has drained from a link.
 	Ingress(id uint32) uint64

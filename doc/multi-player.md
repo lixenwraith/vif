@@ -378,6 +378,16 @@ predecessor's copies, so a lost authority costs a player only what the commit bo
 voids. Every receiver takes each source's crossing sequence once
 (`NetworkSequenceWindow`), whatever epoch carries it.
 
+An authority that cannot keep its own tick sheds what it carries
+(`Authority.driveShedding`): when over `-shed-window` its scheduler dropped more
+than `NetworkShedShare` of the ticks it owed (`engine.ticks_dropped`, the debt it
+drops past two ticks), it dismisses its newest bot by identity, or with none left
+its newest player, never itself or a Wraith. Played or headless, nobody is asked. A
+pause or a hold drops no tick, and a new run or a change of roster starts the window
+over, so a join's stall is grace and one shed waits a whole window for the next. The
+dismissal carries `Shed`: every participant reads which bot or player went and why,
+and the dropped one starts a local game saying so. `-shed-window 0` turns it off.
+
 ### 3.6 Holding a session
 
 A session stops only as a whole, and only its host stops it. The host's `:pause`
@@ -437,9 +447,9 @@ paces at its own clock's rate, which the crossing moves on a seat as on its hold
 The authority's per-second budgets (`driveEviction`, `driveIngress`) count a second
 of game time, and a window the rate changed in starts over, grace for eviction. A
 replay presents the run at the rate its clock held, which the journal's opening
-anchor names and its records move. Nothing yet caps the rate at what the session's
-links and its host's tick carry
-([Cap a session's rate at what it carries](todo.md#cap-a-sessions-rate-at-what-it-carries)).
+anchor names and its records move. Nothing caps the rate: the host chooses it, every
+status bar shows it, and an authority that cannot keep it sheds load (§3.5). A guest
+on its host's machine at 8x held a lead of 3 to 4 ticks, 19 to 25 ms.
 
 ## 4. Correction pipeline
 

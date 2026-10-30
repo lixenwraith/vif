@@ -197,6 +197,23 @@ func (m *membership) DropParticipant(id uint32) bool {
 	return ok && p.Disconnect(id)
 }
 
+// ShedParticipant dismisses one participant, with its bots, for the load it costs:
+// the host's drop, the dismissal saying why.
+func (m *membership) ShedParticipant(id uint32) (shed bool) {
+	m.world.RunSafe(func() {
+		for _, e := range m.worldRosterLocked() {
+			if uint32(e.ID) == id {
+				m.world.PushEventFull(event.EventParticipantDeparted,
+					&event.ParticipantDepartedPayload{Participant: id, Slot: e.Slot, Dismissed: true, Shed: true},
+					event.OriginSession, core.DomainPlayer)
+				shed = true
+				return
+			}
+		}
+	})
+	return shed
+}
+
 func (m *membership) CommitLate(id uint32) (n uint64) {
 	m.world.RunSafe(func() {
 		if r := m.world.Resources.Network; r != nil && int(id) < len(r.CommitLate) {

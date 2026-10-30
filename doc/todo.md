@@ -813,87 +813,6 @@ to watch: [Run a scenario with no players](#run-a-scenario-with-no-players).
 
 ## Netcode
 
-### Cap a session's rate at what it carries
-
-- Priority: P2
-- Affected files: `internal/system/meta.go` (`handleSpeedRequest`),
-  `internal/converge/authority.go`, `internal/system/network.go` (`ownLead`),
-  `internal/engine/scheduler.go`, `internal/parameter/network.go`
-- Guide: [Multi-player §3.6](multi-player.md#36-holding-a-session),
-  [§3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
-
-A session's rate is its host's (`EventGameSpeed`), every participant and seat paces
-at it, and the authority's budgets count a second of game time; nothing caps it.
-The simulation step is fixed, so a rate moves wall pacing alone, and every
-tick-counted window shrinks with it: at 8x a tick is 6.25 ms, the largest lead
-(`NetworkBarrierMaxDelayTicks`, 20) covers 125 ms instead of a second, a crossing
-that much late is void (`NetworkCommitLateTicks`), and syncs, epochs and
-corrections come eight times as often. A LAN hides this: a host at 8x with a guest,
-its bot and one of the host's held 155 ticks a second (7.7x), and two seats under an
-8x patrol holder ran 478 and 479 ticks in 3 s, none of 114 and 124 corrections
-jumping their clocks (on the main before the rate crossed, 25 of 29 and 29 of 29
-did). Over the internet it shows as voided actions (`network.commit_void`), a lead
-at its cap (`network.barrier_delay_ticks`) and corrections.
-
-Decisions it waits on:
-- What caps it. Measured: the authority refuses a rate at which its worst link's
-  path, read in wall time from the epochs' ages at commit (`WireBatch.Age`), needs
-  a lead past `NetworkBarrierMaxDelayTicks` with headroom, or at which its tick's
-  cost passes the interval (the gauge [shedding](#shed-load-when-a-host-cannot-keep-its-tick)
-  asks for). Static: a session with a remote guest caps at one rung, seats and a
-  LAN aside. Or the windows become wall durations at the rate, which keeps a lead a
-  second at any rate and lands a guest's action eight seconds of game time late
-  at 8x.
-- The headroom, measured at each rung: the share of the lead cap and of the
-  interval a rate may use.
-- What a refused `:speed` says, and whether a cap that falls below the rate in
-  force, a link degrading at 4x, lowers it: shedding's first valve.
-- Whether a guest's `:speed` stays refused or asks the host.
-
-Verify with the staged netem gate
-(`TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers`, `VIF_NETEM=1` as root)
-at 1x, 2x, 4x and 8x, reading the lead, voids, corrections and evictions per stage,
-and the divergence harness at two rates.
-
-### Shed load when a host cannot keep its tick
-
-- Priority: P2
-- Affected files: `internal/engine/scheduler.go`, `internal/converge/authority.go`,
-  `internal/app/session.go`, `internal/app/seat.go`, `internal/parameter/network.go`
-- Guide: [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
-
-Nothing watches whether the authority keeps its tick. A host that cannot (a large
-map such as td, many participants, a rate above 1x, native builds included) misses
-tick deadlines (`engine.tick_slips`), its epochs land late, every guest's lead and
-pacing steps climb, and the session degrades for all with no notice, until the slow
-policy evicts a guest whose link was fine. Strong hardware may carry any of these,
-so refuse none up front; gauge and relieve instead:
-- Gauges on the authority, over a window: tick slips a second, the tick's cost
-  against its interval at the current rate (no `engine.` key publishes the cost
-  today), the worst lead in force, commit voids and correction floor breaches.
-- Valves, one at a time, each announced to every participant: lower the session
-  rate a step (`EventGameSpeed`, which every participant and seat already follows),
-  drop bots newest first and tell their holders, stop admitting joins, then drop a
-  participant with a reason its client prints
-  ([Let an authority drop a participant](#let-an-authority-drop-a-participant)) or
-  split ([Split a session under a second authority](#split-a-session-under-a-second-authority)).
-- Hysteresis: a valve holds for a window before the next opens, and closes only
-  after the gauges stay under a lower threshold, so the session does not swing.
-  Thresholds are parameters, with an off switch as `-slow-window 0` is.
-
-Decisions it waits on:
-- Who opens a valve: the authority on its own, the host told and choosing (a status
-  line and a menu row), or the authority on its own only where nobody plays it, a
-  dedicated host.
-- Whether the rate valve goes below 1x, the cheapest relief there is but a slower
-  game for everyone, or stops at 1x and leaves the rest to the later valves.
-- Which gauge opens which valve, and over what window: measured on
-  [Measure a full roster](#measure-a-full-roster), a rate cap's tick cost included.
-- What every participant reads: one sentence per valve, its notice and the refusal
-  of what it closed being the same.
-
-Related: [Measure a full roster](#measure-a-full-roster).
-
 ### Price the log's and journal's 50 ms sync
 
 - Priority: P3
@@ -952,7 +871,7 @@ derives each tick's instant from it, and parameters count in ticks, the network'
 windows most (`NetworkBarrierDelayTicks`, `NetworkPaceStepTicks`,
 `SnapshotFloorKeyframeTicks` and the rest), so a shorter tick shortens each of them
 in time, and a session's traffic a second grows with it as it does with a session
-rate above 1x ([Cap a session's rate at what it carries](#cap-a-sessions-rate-at-what-it-carries)).
+rate above 1x.
 Vanguard's rock is drawn at the frame's moment but blocks where its tick left it,
 so what it hits follows the interval.
 

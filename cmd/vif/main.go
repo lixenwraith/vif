@@ -432,6 +432,7 @@ func buildConfig() app.Config {
 	// surviving guest continuing the game is worth more than the address staying put.
 	cfg.FixedAuthority = flagSession.serve != ""
 	cfg.SlowPolicy = &flagSession.slow
+	cfg.ShedPolicy = &flagSession.shed
 	if flagSession.authority != "" {
 		cfg.FixedAuthority = flagSession.authority == authorityHost
 	}
@@ -561,8 +562,10 @@ type sessionFlags struct {
 	ca          string
 
 	// slow is the eviction policy a host applies to a participant that cannot keep
-	// up; see converge.SlowPolicy.
+	// up, and shed what it drops when it cannot keep its own tick; see
+	// converge.SlowPolicy and converge.ShedPolicy.
 	slow converge.SlowPolicy
+	shed converge.ShedPolicy
 
 	// name is what a host answers to when one address serves several sessions. A
 	// joiner carries it in the -join target rather than here, because a player is
@@ -617,9 +620,13 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.DurationVar(&f.slow.Window, "slow-window", parameter.NetworkSlowWindow,
 		"With -host or -serve, the window a participant's lateness is judged over; 0 never evicts")
 	fs.Float64Var(&f.slow.LatePerSecond, "slow-late", parameter.NetworkSlowLatePerSecond,
-		"With -host or -serve, evict a participant whose crossings reach the authority late this often per second; 0 ignores lateness")
+		"With -host or -serve, evict a participant whose crossings reach the authority late this often per second of game time; 0 ignores lateness")
 	fs.Float64Var(&f.slow.BytesPerSecond, "slow-bytes", parameter.NetworkSlowBytesPerSecond,
-		"With -host or -serve, and whose link carries at least this many bytes per second; 0 ignores throughput")
+		"With -host or -serve, and whose link carries at least this many bytes per second of game time; 0 ignores throughput")
+	f.shed.Share = parameter.NetworkShedShare
+	fs.DurationVar(&f.shed.Window, "shed-window", parameter.NetworkShedWindow, fmt.Sprintf(
+		"With -host or -serve, the window the host's own tick keeping is judged over: dropping more than %.0f%% of its ticks there, it drops its newest bot, then its newest player; 0 never sheds",
+		parameter.NetworkShedShare*100))
 	fs.StringVar(&f.authority, "authority", "", fmt.Sprintf(
 		"What losing the authoring participant does: %q hands the session down the "+
 			"succession list, %q ends it and leaves every survivor playing alone. "+

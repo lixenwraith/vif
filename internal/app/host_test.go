@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"net"
 	"net/http"
@@ -1295,6 +1296,35 @@ func TestASessionsRateIsItsHosts(t *testing.T) {
 		t.Fatalf("the guest was told %q", got)
 	}
 	assertMeshParity(t, apps, 0)
+}
+
+// TestAShedIsToldToEveryParticipant: a host shedding load dismisses the participant
+// saying why, which the dropped one keeps for its notice and every other reads.
+func TestAShedIsToldToEveryParticipant(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1AA, 3, [][2]int{{1, 2}, {1, 3}})
+	local := localCursors(t, apps)
+	var slot uint8
+	apps[0].World().RunSafe(func() {
+		c, _ := apps[0].World().Components.Cursor.GetComponent(local[2])
+		slot = c.Slot
+	})
+	if !apps[0].membership.ShedParticipant(3) {
+		t.Fatal("the host shed nobody")
+	}
+	apps[0].Settle()
+	// The dropped guest ticks first: the host closes its link as the dismissal
+	// applies, and the mesh drops what a closed link still queues.
+	for range parameter.NetworkBarrierMaxDelayTicks + 2 {
+		tickAll([]*App{apps[2], apps[0], apps[1]})
+	}
+	if !apps[2].membership.dismissed.Load() || !apps[2].membership.shed.Load() {
+		t.Fatal("the shed participant was not told it was shed")
+	}
+	if got, want := apps[1].Context().GetStatusMessage(),
+		fmt.Sprintf("The host dropped the player in slot %X to keep its tick", slot); got != want {
+		t.Fatalf("the other guest read %q, want %q", got, want)
+	}
 }
 
 // TestTheHostsNextTickResumesItsGuests: a held host sends nothing, so its first epoch

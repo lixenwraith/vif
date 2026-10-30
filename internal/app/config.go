@@ -216,8 +216,10 @@ type Config struct {
 	FixedAuthority bool
 
 	// SlowPolicy is when this run, while authoring, evicts a participant that cannot
-	// keep up; nil keeps the default. See converge.SlowPolicy.
+	// keep up, and ShedPolicy what it drops when it cannot keep its own tick; nil
+	// keeps the default. See converge.SlowPolicy and converge.ShedPolicy.
 	SlowPolicy *converge.SlowPolicy
+	ShedPolicy *converge.ShedPolicy
 
 	// Participants is a ceiling on the roster's cursors, a playing host's own
 	// included; zero means the whole roster. On a scripted or bot-driven host an
