@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // BBox represents an axis-aligned bounding box for collision detection
@@ -417,7 +418,7 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 	absX, absY, found := s.world.Positions.FindFreeFromPattern(
 		cursorX, cursorY,
 		splashW, splashH,
-		engine.PatternDiagonalFirst,
+		position.PatternDiagonalFirst,
 		parameter.SplashMinDistance,
 		parameter.SplashMinDistance*3,
 		true,
@@ -463,7 +464,7 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 		return !s.collidesTimer(BBox{X: absX, Y: absY, W: w, H: h}, self)
 	}
 
-	exclusion := engine.Exclusion{
+	exclusion := position.Exclusion{
 		Left:   splashComp.MarginLeft,
 		Right:  splashComp.MarginRight,
 		Top:    splashComp.MarginTop,
@@ -476,7 +477,7 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 		ink.W, ink.H,
 		exclusion,
 		parameter.SplashTimerPadding,
-		engine.PatternCardinalFirst,
+		position.PatternCardinalFirst,
 		component.WallBlockAll,
 		checkTimers,
 	)

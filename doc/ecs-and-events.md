@@ -105,9 +105,9 @@ one without updating the other.
 `position.Grid` maps every map coordinate to a fixed-capacity `Cell` of up to
 `CellCapacity` (31) entity IDs, which spares the collision, typing and targeting hot
 paths a per-query allocation. Shared occupants precede private ones,
-`PrivateBudget` (12) caps the private half, and a query takes a `Scope`; the
-engine's `ScopeShared`, `ScopePlayer` and `ScopeBoth` name the package's, and an
-entity's class is its domain ([the domain
+`PrivateBudget` (12) caps the private half, and a query takes a `position.Scope`
+(`ScopeShared`, `ScopePrivate`, `ScopeAll`); an entity's class is its domain
+(`engine.EntityClass`, [the domain
 model](domain-design.md#3-spatial-and-entity-classification)).
 
 The grid is dense, so a map costs cells: `Cell` is exactly 256 bytes, and the

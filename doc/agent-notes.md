@@ -158,8 +158,10 @@ that proves wrong or that a document now states, and link the document instead.
   interface on each `Blocks` cost `BenchmarkGlyphRender` a quarter, and an
   interface over the wall entities a tenth more. Measure a probe path with the
   renderer's benches, not only the tick's.
-- A method cannot be declared on an alias (`engine.DomainScope = position.Scope`),
-  so a scope selects a class, `engine.EntityClass(e)`, which the two guard arrays in
+- The game reads the package's types by the package's names (`position.Scope`,
+  `position.Pattern`), never through an engine alias: a method cannot be declared
+  on an alias, and a second name sends a reader to two docs. A scope selects a
+  class through `engine.EntityClass(e)`, which the two guard arrays in
   `internal/engine/position.go` hold to the domain numbering.
 - `pkg/position` knows no entity: a test over walls or glyphs needs a world and
   stays in `internal/engine`; a grid-only test goes to the package with a test id

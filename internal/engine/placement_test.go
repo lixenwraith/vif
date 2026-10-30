@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // TestAPlacementWithNoClearSlotTakesTheOneOverlappingTheLeast: with walls on every
@@ -15,7 +16,7 @@ func TestAPlacementWithNoClearSlotTakesTheOneOverlappingTheLeast(t *testing.T) {
 	NewGameContextWithClock(w, 80, 40, NewManualClock())
 	cfg := w.Resources.Config
 	const objW, objH, padding = 8, 9, 1
-	exclusion := Exclusion{Left: 1, Right: 1, Top: 1, Bottom: 1}
+	exclusion := position.Exclusion{Left: 1, Right: 1, Top: 1, Bottom: 1}
 	ax, ay := cfg.MapWidth/2, cfg.MapHeight/2
 
 	// The top slot sits padding above the exclusion, centred on it, an even width
@@ -37,7 +38,7 @@ func TestAPlacementWithNoClearSlotTakesTheOneOverlappingTheLeast(t *testing.T) {
 	}
 
 	dx, dy, found := w.Positions.FindPlacementAroundExclusion(ax, ay, objW, objH, exclusion, padding,
-		PatternCardinalFirst, component.WallBlockAll, nil)
+		position.PatternCardinalFirst, component.WallBlockAll, nil)
 	if found || ax+dx != topX || ay+dy != topY {
 		t.Fatalf("placed at (%d, %d) found %v, want the top slot (%d, %d) with one wall, not found",
 			ax+dx, ay+dy, found, topX, topY)

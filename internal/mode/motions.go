@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // MotionLeft implements 'h' motion
@@ -503,7 +504,7 @@ func MotionEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	if isCursorBlocked(ctx, rightX, botY) {
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			rightX, botY, 1, 1,
-			engine.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
+			position.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
@@ -529,7 +530,7 @@ func MotionCenter(ctx *engine.GameContext, x, y, count int) MotionResult {
 	if isCursorBlocked(ctx, midX, midY) {
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			midX, midY, 1, 1,
-			engine.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
+			position.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
@@ -554,7 +555,7 @@ func MotionOrigin(ctx *engine.GameContext, x, y, count int) MotionResult {
 	if isCursorBlocked(ctx, originX, originY) {
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			originX, originY, 1, 1,
-			engine.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
+			position.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
@@ -814,7 +815,7 @@ func motionScanDirectional(ctx *engine.GameContext, x, y, count, dx, dy int) Mot
 
 	for range count {
 		// Both domains: glyphs are player, gold members are shared and carry one
-		_, nextX, nextY, found := ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, engine.ScopeBoth, filter)
+		_, nextX, nextY, found := ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, position.ScopeAll, filter)
 		if !found {
 			break
 		}
@@ -868,7 +869,7 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 		var nextX, nextY int
 		var ok bool
 		// Both domains: the color filter narrows the result, the scope must not
-		_, nextX, nextY, ok = positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, engine.ScopeBoth, filter)
+		_, nextX, nextY, ok = positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, position.ScopeAll, filter)
 
 		if !ok {
 			// If not found in sequence, stop at last valid

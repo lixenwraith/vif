@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -272,7 +273,7 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, m *com
 			if CursorContactAt(s.world, currX, currY) != 0 {
 				return currX, currY, impactCombatant
 			}
-		} else if HasCombatTargetAt(s.world, currX, currY, engine.ScopeBoth, 0, m.Owner) {
+		} else if HasCombatTargetAt(s.world, currX, currY, position.ScopeAll, 0, m.Owner) {
 			return currX, currY, impactCombatant
 		}
 
@@ -322,7 +323,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 		cx, cy := vmath.Point{X: x, Y: y}.Center()
 		return cx, cy, true
 	}
-	targets := FindNearestTargets(s.world, missileX, missileY, 1, engine.ScopeBoth, m.Owner)
+	targets := FindNearestTargets(s.world, missileX, missileY, 1, position.ScopeAll, m.Owner)
 	if len(targets) == 0 {
 		return 0, 0, false
 	}

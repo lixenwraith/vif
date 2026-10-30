@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // newStormBreachFixture spawns a storm and returns the systems the incident ran
@@ -124,12 +125,12 @@ func TestOffMapEntityIsNotATarget(t *testing.T) {
 	})
 
 	w.Positions.SetPosition(e, component.PositionComponent{X: config.MapWidth + 3, Y: 2})
-	if got := FindNearestTargets(w, 1, 1, 1, engine.ScopeBoth, 0); len(got) != 0 {
+	if got := FindNearestTargets(w, 1, 1, 1, position.ScopeAll, 0); len(got) != 0 {
 		t.Fatalf("targets = %v, want none while the entity sits off the map", got)
 	}
 
 	w.Positions.SetPosition(e, component.PositionComponent{X: config.MapWidth - 1, Y: 2})
-	if got := FindNearestTargets(w, 1, 1, 1, engine.ScopeBoth, 0); len(got) != 1 || got[0].Target != e {
+	if got := FindNearestTargets(w, 1, 1, 1, position.ScopeAll, 0); len(got) != 1 || got[0].Target != e {
 		t.Fatalf("targets = %v, want the same entity once it is back in bounds", got)
 	}
 }

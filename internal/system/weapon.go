@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -338,7 +339,7 @@ func (s *WeaponSystem) advanceStreams(cursor core.Entity, weaponComp *component.
 		weaponComp.Stream[wt] = parameter.WeaponStreamInterval
 		x, y := s.emitterCell(orbs[wt], cursorPos)
 		fromX, fromY := vmath.Point{X: x, Y: y}.Center()
-		targets := FindNearestTargets(s.world, fromX, fromY, spec.Stream, engine.ScopeBoth, cursor)
+		targets := FindNearestTargets(s.world, fromX, fromY, spec.Stream, position.ScopeAll, cursor)
 		if spec.Delivery == component.DeliveryBullet && s.fireBullets(cursor, x, y, spec.Attack, targets) {
 			s.statFired[wt].Add(1)
 		}
@@ -849,7 +850,7 @@ func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.Wea
 	var nearest []TargetAssignment
 	if need > 0 {
 		fromX, fromY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.Center()
-		nearest = FindNearestTargets(s.world, fromX, fromY, need, engine.ScopeBoth, cursor)
+		nearest = FindNearestTargets(s.world, fromX, fromY, need, position.ScopeAll, cursor)
 	}
 
 	for wt, charges := range weaponComp.Charges {
@@ -937,7 +938,7 @@ func (s *WeaponSystem) arcLightning(cursor core.Entity, from TargetAssignment, a
 		return slices.Contains(arced, e) ||
 			slices.ContainsFunc(assignments, func(a TargetAssignment) bool { return a.Target == e })
 	}
-	composites, singles := nearestTargets(s.world, fromX, fromY, engine.ScopeBoth, cursor)
+	composites, singles := nearestTargets(s.world, fromX, fromY, position.ScopeAll, cursor)
 	for _, group := range [2][]TargetAssignment{composites, singles} {
 		var best *TargetAssignment
 		for i := range group {
@@ -1022,7 +1023,7 @@ func (s *WeaponSystem) fireBullets(cursor core.Entity, x, y int, attack componen
 func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, spec *component.WeaponSpec, charged bool) bool {
 	pulse := spec.Pulse
 	invRxSq, invRySq := vmath.EllipseInvRadiiSq(pulse.Radius, s.world.Resources.Config.CellAspect.Y(pulse.Radius/2))
-	if len(FindTargetsInEllipse(s.world, x, y, invRxSq, invRySq, engine.ScopeBoth, cursor)) == 0 {
+	if len(FindTargetsInEllipse(s.world, x, y, invRxSq, invRySq, position.ScopeAll, cursor)) == 0 {
 		return false
 	}
 	pulse.Attack, pulse.Charged = spec.Attack, charged
@@ -1094,7 +1095,7 @@ func (s *WeaponSystem) layRay(cursor, orb core.Entity, ray *component.RayCompone
 // strikeRay hits every combat target group a ray covers once: a drain's locally,
 // a Shared target's as one crossing naming its members and the owner (D-3)
 func (s *WeaponSystem) strikeRay(cursor core.Entity, ray *component.RayComponent, attack component.CombatAttackType) {
-	for _, g := range FindTargetsIn(s.world, ray.Ray.Contains, engine.ScopeBoth, cursor) {
+	for _, g := range FindTargetsIn(s.world, ray.Ray.Contains, position.ScopeAll, cursor) {
 		hit := &event.CombatAttackAreaRequestPayload{
 			AttackType:   attack,
 			OwnerEntity:  cursor,

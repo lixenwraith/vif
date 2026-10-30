@@ -411,7 +411,7 @@ func reorderRows[T any](index *sparseIndex, dense []T, entities, order []core.En
 }
 
 // reorder puts the placements in order and each cell's occupants in its own.
-func (p *Position) reorder(order []core.Entity, cells []CellOrder) error {
+func (p *Position) reorder(order []core.Entity, cells []position.CellOrder[core.Entity]) error {
 	if err := reorderRows(&p.slots, p.dense, p.entities, order); err != nil {
 		return err
 	}
@@ -419,7 +419,7 @@ func (p *Position) reorder(order []core.Entity, cells []CellOrder) error {
 }
 
 // cellOrder reads the occupants of every cell holding two or more.
-func (p *Position) cellOrder() []CellOrder { return p.index.Order() }
+func (p *Position) cellOrder() []position.CellOrder[core.Entity] { return p.index.Order() }
 
 // WorldReconcile is one world brought to another's shared half in place, store by
 // store, with no capture of either: the comparison first, reading both and writing

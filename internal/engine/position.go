@@ -11,26 +11,6 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// The names the game reads the package's types by.
-type (
-	DomainScope = position.Scope
-	Cell        = position.Cell[core.Entity]
-	SpatialGrid = position.Grid[core.Entity]
-	GridStats   = position.Stats
-	CellOrder   = position.CellOrder[core.Entity]
-	Exclusion   = position.Exclusion
-	PatternType = position.Pattern
-)
-
-const (
-	ScopeShared = position.ScopeShared
-	ScopePlayer = position.ScopePrivate
-	ScopeBoth   = position.ScopeAll
-
-	PatternCardinalFirst = position.PatternCardinalFirst
-	PatternDiagonalFirst = position.PatternDiagonalFirst
-)
-
 // EntityClass is the half of a cell an entity's domain places it in.
 func EntityClass(e core.Entity) position.Class { return position.Class(e.Domain()) }
 
@@ -275,7 +255,7 @@ func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 // Copy is required: callers may SetPosition/remove returned entities while
 // iterating, which swap-mutates the underlying grid cell.
 // Hot paths should prefer GetEntitiesAtInto (zero-alloc)
-func (p *Position) GetEntitiesAt(x, y int, scope DomainScope) []core.Entity {
+func (p *Position) GetEntitiesAt(x, y int, scope position.Scope) []core.Entity {
 	view := p.index.EntitiesAt(x, y, scope)
 	if len(view) == 0 {
 		return nil
@@ -289,11 +269,11 @@ func (p *Position) GetEntitiesAt(x, y int, scope DomainScope) []core.Entity {
 
 // GetAllEntityAt returns a COPY of every entity at (x, y) regardless of domain
 func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
-	return p.GetEntitiesAt(x, y, ScopeBoth)
+	return p.GetEntitiesAt(x, y, position.ScopeAll)
 }
 
 // GetEntitiesAtInto copies in-scope entities at (x,y) into a caller-provided buffer and returns number copied, Zero-alloc if buf is on stack
-func (p *Position) GetEntitiesAtInto(x, y int, scope DomainScope, buf []core.Entity) int {
+func (p *Position) GetEntitiesAtInto(x, y int, scope position.Scope, buf []core.Entity) int {
 	view := p.index.EntitiesAt(x, y, scope)
 	count := min(len(view), len(buf))
 	copy(buf, view[:count])
@@ -302,17 +282,17 @@ func (p *Position) GetEntitiesAtInto(x, y int, scope DomainScope, buf []core.Ent
 
 // GetAllEntitiesAtInto copies every entity at (x,y) regardless of domain
 func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
-	return p.GetEntitiesAtInto(x, y, ScopeBoth, buf)
+	return p.GetEntitiesAtInto(x, y, position.ScopeAll, buf)
 }
 
 // HasAnyEntityAt O(1) returns true if any entity of either domain exists at (x, y)
 func (p *Position) HasAnyEntityAt(x, y int) bool {
-	return p.index.HasAnyEntityAt(x, y, ScopeBoth)
+	return p.index.HasAnyEntityAt(x, y, position.ScopeAll)
 }
 
 // HasAnySharedEntityAt O(1) returns true if a shared entity occupies (x, y)
 func (p *Position) HasAnySharedEntityAt(x, y int) bool {
-	return p.index.HasAnyEntityAt(x, y, ScopeShared)
+	return p.index.HasAnyEntityAt(x, y, position.ScopeShared)
 }
 
 // ResizeGrid resizes the internal spatial grid and re-indexes all entities
@@ -539,7 +519,7 @@ func (p *Position) TopGlyphAt(x, y int) (core.Entity, bool) {
 // TopGlyphIs reports whether typeable e is the glyph drawn at (x, y), the one
 // typing acts on. Alone in its cell it is, which spares the lookup.
 func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
-	if cell := p.index.Occupants(x, y, ScopeBoth); len(cell) == 1 {
+	if cell := p.index.Occupants(x, y, position.ScopeAll); len(cell) == 1 {
 		return cell[0] == e
 	}
 	return p.topGlyph(x, y) == e
@@ -563,7 +543,7 @@ func (p *Position) topGlyph(x, y int) core.Entity {
 	glyphs := p.world.Components.Glyph
 	var top core.Entity
 	var topLevel component.GlyphLevel
-	for _, e := range p.index.Occupants(x, y, ScopeBoth) {
+	for _, e := range p.index.Occupants(x, y, position.ScopeAll) {
 		g, ok := glyphs.GetPtr(e)
 		if !ok || p.IsScenery(e) {
 			continue
@@ -657,7 +637,7 @@ func (pb *PositionBatch) CommitForce() {
 }
 
 // GridStats returns computed statistics for the spatial grid
-func (p *Position) GridStats() GridStats {
+func (p *Position) GridStats() position.Stats {
 	return p.index.ComputeStats()
 }
 
@@ -668,7 +648,7 @@ func (p *Position) GridDimensions() (width, height int) {
 
 // FindClosestEntityInDirection searches for entities in a cardinal direction (up,
 // down, left, right) within the specified bounds; see Index.FindClosestEntityInDirection.
-func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, bounds PingAbsoluteBounds, scope DomainScope, filter func(core.Entity) bool) (core.Entity, int, int, bool) {
+func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, bounds PingAbsoluteBounds, scope position.Scope, filter func(core.Entity) bool) (core.Entity, int, int, bool) {
 	return p.index.FindClosestEntityInDirection(startX, startY, dx, dy,
 		position.Rect{MinX: bounds.MinX, MaxX: bounds.MaxX, MinY: bounds.MinY, MaxY: bounds.MaxY}, scope, filter)
 }
@@ -678,7 +658,7 @@ func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, boun
 func (p *Position) FindFreeFromPattern(
 	originX, originY int,
 	width, height int,
-	pattern PatternType,
+	pattern position.Pattern,
 	startRadius, maxRadius int,
 	aspectCorrect bool,
 	mask component.WallBlockMask,
@@ -693,9 +673,9 @@ func (p *Position) FindFreeFromPattern(
 func (p *Position) FindPlacementAroundExclusion(
 	anchorX, anchorY int,
 	objectW, objectH int,
-	exclusion Exclusion,
+	exclusion position.Exclusion,
 	padding int,
-	pattern PatternType,
+	pattern position.Pattern,
 	mask component.WallBlockMask,
 	additionalCheck func(absX, absY, w, h int) bool,
 ) (int, int, bool) {

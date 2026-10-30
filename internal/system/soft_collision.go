@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -467,7 +468,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 func (s *SoftCollisionSystem) footprintsOverlap(source, target core.Entity, pos component.PositionComponent) bool {
 	contains := func(x, y int) bool {
 		var occupants [parameter.MaxEntitiesPerCell]core.Entity
-		n := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, occupants[:])
+		n := s.world.Positions.GetEntitiesAtInto(x, y, position.ScopeShared, occupants[:])
 		for _, occupant := range occupants[:n] {
 			if member, ok := s.world.Components.Member.GetPtr(occupant); ok && member.HeaderEntity == source {
 				return true

@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 func TestPositionTelemetryReportsCellSaturationAndOverflow(t *testing.T) {
@@ -81,7 +82,7 @@ func TestSetPositionSameCellIsStableAndSoftClipStillRetries(t *testing.T) {
 	w.Positions.SetPosition(second, pos)
 	w.Positions.SetPosition(first, pos)
 
-	occupants := w.Positions.index.EntitiesAt(pos.X, pos.Y, ScopeShared)
+	occupants := w.Positions.index.EntitiesAt(pos.X, pos.Y, position.ScopeShared)
 	if len(occupants) != 2 || occupants[0] != first || occupants[1] != second {
 		t.Fatalf("same-cell write reordered occupants: %v", occupants)
 	}

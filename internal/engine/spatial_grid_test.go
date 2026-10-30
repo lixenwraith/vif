@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // FuzzWallTestAnswersAsHasBlockingWallAt: the grid a derivation reads is the live
@@ -107,7 +108,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						if !ok {
 							break
 						}
-						for _, o := range w.Positions.GetEntitiesAt(pos.X, pos.Y, ScopeBoth) {
+						for _, o := range w.Positions.GetEntitiesAt(pos.X, pos.Y, position.ScopeAll) {
 							if o != e && !w.Components.Wall.HasEntity(o) {
 								w.Positions.Move(o, component.PositionComponent{X: -1, Y: -1})
 							}
@@ -168,7 +169,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						return true
 					}
 				}
-				for _, e := range w.Positions.GetEntitiesAt(x, y, ScopeShared) {
+				for _, e := range w.Positions.GetEntitiesAt(x, y, position.ScopeShared) {
 					if wall, ok := w.Components.Wall.GetComponent(e); ok && (mask == 0 || wall.BlockMask&mask != 0) {
 						return true
 					}
@@ -255,7 +256,7 @@ func TestShiftMovesARigidGroupThroughFullCells(t *testing.T) {
 	}
 	full := parameter.ReservedPlayerPerCell
 	for _, c := range []struct{ x, want int }{{3, 0}, {4, full}, {5, full}} {
-		if got := len(w.Positions.index.EntitiesAt(c.x, 3, ScopePlayer)); got != c.want {
+		if got := len(w.Positions.index.EntitiesAt(c.x, 3, position.ScopePrivate)); got != c.want {
 			t.Fatalf("cell %d holds %d player entities, want %d", c.x, got, c.want)
 		}
 	}

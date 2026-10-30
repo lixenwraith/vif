@@ -1028,6 +1028,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // StoreEntry is one entity's component in a capture. The reference is a
@@ -1164,7 +1165,7 @@ func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 // replay of it, then play on in the run's own order.
 type WorldOrder struct {
 	Positions []core.Entity ` + "`json:\"positions,omitempty\"`" + `
-	Cells     []CellOrder   ` + "`json:\"cells,omitempty\"`" + `
+	Cells     []position.CellOrder[core.Entity] ` + "`json:\"cells,omitempty\"`" + `
 {{- range .Components }}
 	{{ .Field }} []core.Entity ` + "`json:\"{{ .Field | lower }},omitempty\"`" + `
 {{- end }}

@@ -21,6 +21,7 @@ import (
 	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/pkg/cave"
 	"github.com/lixenwraith/vif/pkg/maze"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -274,7 +275,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		case event.WallBatchOverwrite:
 			var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 			var toDestroy []core.Entity
-			n := s.world.Positions.GetEntitiesAtInto(payload.X, payload.Y, engine.ScopeShared, entityBuf[:])
+			n := s.world.Positions.GetEntitiesAtInto(payload.X, payload.Y, position.ScopeShared, entityBuf[:])
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
@@ -390,7 +391,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 		for _, rc := range resolved {
-			n := s.world.Positions.GetEntitiesAtInto(rc.x, rc.y, engine.ScopeShared, entityBuf[:])
+			n := s.world.Positions.GetEntitiesAtInto(rc.x, rc.y, position.ScopeShared, entityBuf[:])
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
@@ -596,7 +597,7 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for y := max(payload.Y, 0); y < min(payload.Y+height, gridH); y++ {
 		for x := max(payload.X, 0); x < min(payload.X+width, gridW); x++ {
-			n := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
+			n := s.world.Positions.GetEntitiesAtInto(x, y, position.ScopeShared, entities[:])
 			for _, entity := range entities[:n] {
 				if wall, ok := s.world.Components.Wall.GetPtr(entity); ok {
 					s.classifyWallForDespawn(entity, *wall, &flashTargets, &fadeoutTargets, &silentTargets)
@@ -1147,7 +1148,7 @@ func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style compon
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for cy := y; cy < endY; cy++ {
 		for cx := x; cx < endX; cx++ {
-			count := s.world.Positions.GetEntitiesAtInto(cx, cy, engine.ScopeShared, entities[:])
+			count := s.world.Positions.GetEntitiesAtInto(cx, cy, position.ScopeShared, entities[:])
 			for i := range count {
 				e := entities[i]
 				wall, ok := s.world.Components.Wall.GetPtr(e)
@@ -1678,7 +1679,7 @@ func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bo
 	}
 
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
+	count := s.world.Positions.GetEntitiesAtInto(x, y, position.ScopeShared, entities[:])
 	for i := range count {
 		if wall, ok := s.world.Components.Wall.GetPtr(entities[i]); ok {
 			if wall.BoxStyle == style {
@@ -1712,7 +1713,7 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 			continue
 		}
 
-		count := s.world.Positions.GetEntitiesAtInto(nx, ny, engine.ScopeShared, entities[:])
+		count := s.world.Positions.GetEntitiesAtInto(nx, ny, position.ScopeShared, entities[:])
 		for i := range count {
 			e := entities[i]
 			wall, ok := s.world.Components.Wall.GetPtr(e)

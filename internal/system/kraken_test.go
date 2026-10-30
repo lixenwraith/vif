@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -438,7 +439,7 @@ func TestKrakenTracerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testi
 func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 	w, _, e, leg := krakenFixture(t)
 	cursor := w.Resources.Player.Slot(0)
-	target, hit, ok := CombatTargetAt(w, leg.X, leg.Y, engine.ScopeBoth, 0, cursor)
+	target, hit, ok := CombatTargetAt(w, leg.X, leg.Y, position.ScopeAll, 0, cursor)
 	if !ok || target != e || hit == e {
 		t.Fatalf("leg resolved to (%d, %d, %v)", target, hit, ok)
 	}
@@ -478,7 +479,7 @@ func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 
 func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	w, s, e, leg := krakenFixture(t)
-	_, member, _ := CombatTargetAt(w, leg.X, leg.Y, engine.ScopeShared, 0, 0)
+	_, member, _ := CombatTargetAt(w, leg.X, leg.Y, position.ScopeShared, 0, 0)
 	spawnWall(w, leg.X, leg.Y)
 	walls := ready(NewWallSystem(w)).(*WallSystem)
 	walls.pushEntitiesAtPosition(leg.X, leg.Y, walls.readCursors())

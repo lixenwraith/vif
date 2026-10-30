@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/vlog"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -891,7 +892,7 @@ func (w *World) ResolveFreeCell(x, y int, mask component.WallBlockMask) (int, in
 	maxRadius := max(config.MapWidth, config.MapHeight) / 2
 
 	newX, newY, found := w.Positions.FindFreeFromPattern(
-		x, y, 1, 1, PatternCardinalFirst, 1, maxRadius, true, mask, nil,
+		x, y, 1, 1, position.PatternCardinalFirst, 1, maxRadius, true, mask, nil,
 	)
 	if !found {
 		return x, y, false
