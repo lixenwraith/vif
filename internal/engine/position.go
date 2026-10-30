@@ -72,17 +72,20 @@ func NewPosition(w *World, bit uint64) *Position {
 		world:    w,
 		bit:      bit,
 	}
-	p.index = position.New[core.Entity](p, p.isWall)
+	p.index = position.New[core.Entity](p, p.wallOf)
 	return p
 }
 
 // Aspect is the cell aspect the searches round on, the config's.
 func (p *Position) Aspect() vmath.Aspect { return p.world.Resources.Config.CellAspect }
 
-// isWall reports whether shared occupant e is a wall blocking mask (0 = any wall)
-func (p *Position) isWall(e core.Entity, mask position.Mask) bool {
-	wall, ok := p.world.Components.Wall.GetComponent(e)
-	return ok && (mask == 0 || position.Mask(wall.BlockMask)&mask != 0)
+// wallOf reports whether shared occupant e is a wall, and what it stops
+func (p *Position) wallOf(e core.Entity) (component.WallBlockMask, bool) {
+	wall, ok := p.world.Components.Wall.GetPtr(e)
+	if !ok {
+		return 0, false
+	}
+	return wall.BlockMask, true
 }
 
 // BindTelemetry registers spatial diagnostics after GameContext creates the registry.
@@ -147,15 +150,15 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 		if old == pos && p.index.Holds(e, EntityClass(e), old.X, old.Y) {
 			return
 		}
-		p.wallMoved(e, old.X, old.Y)
-		p.wallMoved(e, pos.X, pos.Y)
 		countSaturation = old.X != pos.X || old.Y != pos.Y
 		p.index.RemoveEntityAt(e, old.X, old.Y)
+		p.wallMoved(e, old.X, old.Y)
 		p.dense[i] = pos
 	} else {
 		p.insert(e, pos)
 	}
 	p.setGrid(e, pos.X, pos.Y, countSaturation)
+	p.wallMoved(e, pos.X, pos.Y)
 }
 
 // insert places an entity new to the store, leaving the spatial index to the caller.
@@ -165,7 +168,6 @@ func (p *Position) insert(e core.Entity, pos component.PositionComponent) {
 	p.entities = append(p.entities, e)
 	p.world.AddComponentMask(e, p.bit)
 	storeAtomicMax(p.statPositionsHWM, int64(len(p.entities)))
-	p.wallMoved(e, pos.X, pos.Y)
 }
 
 // setGrid preserves soft clipping while exposing saturation, budget rejection, and
@@ -367,7 +369,7 @@ func (p *Position) ClearAllComponents() {
 // one copy instead; it is exact while walls cannot change.
 // SYNC: caller holds World.updateMutex for as long as it calls the result
 func (p *Position) WallTest(mask component.WallBlockMask, buf *[]bool) func(x, y int) bool {
-	return p.index.WallTest(position.Mask(mask), buf)
+	return p.index.WallTest(mask, buf)
 }
 
 // WallsChanged moves the wall epoch for walls rewritten wholesale, an install's,
@@ -382,8 +384,9 @@ func (p *Position) WallChanged(e core.Entity) {
 	}
 }
 
-// wallMoved logs (x, y) when e, a wall a grid can hold, left or entered it. The
-// mask, not the wall store, names a wall: a destroy empties the store first.
+// wallMoved logs (x, y) once e, a wall a grid can hold, has left or entered it in
+// the grid. The mask, not the wall store, names a wall: a destroy empties the
+// store first.
 func (p *Position) wallMoved(e core.Entity, x, y int) {
 	if e.Domain() != core.DomainPlayer && p.world.componentMask[e]&WallBit != 0 {
 		p.index.WallChangedAt(x, y)
@@ -400,13 +403,13 @@ func (p *Position) WallChanges(since uint64) (cells []vmath.Point, now uint64, o
 // HasBlockingWallAt returns true if a wall exists at (x, y) that blocks the given mask
 // SYNC: caller holds World.updateMutex
 func (p *Position) HasBlockingWallAt(x, y int, mask component.WallBlockMask) bool {
-	return p.index.Blocks(x, y, position.Mask(mask))
+	return p.index.Blocks(x, y, mask)
 }
 
 // HasBlockingWallInArea returns true if any wall exists in rectangular area that blocks the given mask
 // Area defined as [x, x+width) × [y, y+height), skips out-of-bounds cells
 func (p *Position) HasBlockingWallInArea(x, y, width, height int, mask component.WallBlockMask) bool {
-	return p.index.BlocksArea(x, y, width, height, position.Mask(mask))
+	return p.index.BlocksArea(x, y, width, height, mask)
 }
 
 // HasBlockingWallInAreaUnsafe is HasBlockingWallInArea; the name is kept for its callers
@@ -423,7 +426,7 @@ func (p *Position) FindFreeAreaSpiral(
 	mask component.WallBlockMask,
 	maxRadius int,
 ) (int, int, bool) {
-	return p.index.FindFreeAreaSpiral(originX, originY, width, height, anchorOffsetX, anchorOffsetY, position.Mask(mask), maxRadius)
+	return p.index.FindFreeAreaSpiral(originX, originY, width, height, anchorOffsetX, anchorOffsetY, mask, maxRadius)
 }
 
 // SpiralSearch is FindFreeAreaSpiral's walk for a footprint no rectangle holds; see
@@ -441,7 +444,7 @@ func (p *Position) FindFreeAreaInside(
 	mask component.WallBlockMask,
 	maxRadius int,
 ) (int, int, bool) {
-	return p.index.FindFreeAreaInside(originX, originY, width, height, anchorOffsetX, anchorOffsetY, position.Mask(mask), maxRadius)
+	return p.index.FindFreeAreaInside(originX, originY, width, height, anchorOffsetX, anchorOffsetY, mask, maxRadius)
 }
 
 // MapSearchRadius is the spiral radius whose rays reach every column and every row
@@ -450,12 +453,12 @@ func (p *Position) MapSearchRadius() int { return p.index.MapSearchRadius() }
 
 // IsAreaFree checks if the rectangular area is strictly within grid bounds and free of blocking walls
 func (p *Position) IsAreaFree(x, y, width, height int, mask component.WallBlockMask) bool {
-	return p.index.IsAreaFree(x, y, width, height, position.Mask(mask))
+	return p.index.IsAreaFree(x, y, width, height, mask)
 }
 
 // IsBlocked checks if a specific point is invalid (OOB) or blocked by a wall
 func (p *Position) IsBlocked(x, y int, mask component.WallBlockMask) bool {
-	return p.index.IsBlocked(x, y, position.Mask(mask))
+	return p.index.IsBlocked(x, y, mask)
 }
 
 // IsOutOfBounds checks if position is outside the map
@@ -464,17 +467,17 @@ func (p *Position) IsOutOfBounds(x, y int) bool { return p.index.IsOutOfBounds(x
 // CheckBlockedBatch checks multiple points for blocking (OOB or wall)
 // Returns bool slice aligned with input where true = position is blocked
 func (p *Position) CheckBlockedBatch(points []vmath.Point, mask component.WallBlockMask) []bool {
-	return p.index.CheckBlockedBatch(points, position.Mask(mask))
+	return p.index.CheckBlockedBatch(points, mask)
 }
 
 // IsAnyBlockedInSet returns true if any point is blocked (OOB or wall)
 func (p *Position) IsAnyBlockedInSet(points []vmath.Point, mask component.WallBlockMask) bool {
-	return p.index.IsAnyBlockedInSet(points, position.Mask(mask))
+	return p.index.IsAnyBlockedInSet(points, mask)
 }
 
 // HasLineOfSight checks if two grid points have unobstructed line of sight
 func (p *Position) HasLineOfSight(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
-	return p.index.HasLineOfSight(x0, y0, x1, y1, position.Mask(mask))
+	return p.index.HasLineOfSight(x0, y0, x1, y1, mask)
 }
 
 // HasLineOfSightUnsafe is HasLineOfSight; the name is kept for its callers
@@ -491,11 +494,11 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 	}
 	old := p.dense[i]
 	p.index.RemoveEntityAt(e, old.X, old.Y)
-	p.dense[i] = newPos
 	p.wallMoved(e, old.X, old.Y)
-	p.wallMoved(e, newPos.X, newPos.Y)
+	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
 	p.setGrid(e, newPos.X, newPos.Y, old.X != newPos.X || old.Y != newPos.Y)
+	p.wallMoved(e, newPos.X, newPos.Y)
 }
 
 // Shift translates every entity by (dx, dy) in two phases, all leaving their cells
@@ -510,14 +513,16 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 		if i, ok := p.slots.get(e); ok {
 			old := p.dense[i]
 			p.index.RemoveEntityAt(e, old.X, old.Y)
-			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
 			p.wallMoved(e, old.X, old.Y)
-			p.wallMoved(e, old.X+dx, old.Y+dy)
+			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
 		}
 	}
 	for _, e := range entities {
-		if i, ok := p.slots.get(e); ok && !p.setGrid(e, p.dense[i].X, p.dense[i].Y, true) {
-			unplaced = append(unplaced, e)
+		if i, ok := p.slots.get(e); ok {
+			if !p.setGrid(e, p.dense[i].X, p.dense[i].Y, true) {
+				unplaced = append(unplaced, e)
+			}
+			p.wallMoved(e, p.dense[i].X, p.dense[i].Y)
 		}
 	}
 	return unplaced
@@ -680,7 +685,7 @@ func (p *Position) FindFreeFromPattern(
 	additionalCheck func(absX, absY, w, h int) bool,
 ) (int, int, bool) {
 	return p.index.FindFreeFromPattern(originX, originY, width, height, pattern, startRadius, maxRadius,
-		aspectCorrect, position.Mask(mask), additionalCheck)
+		aspectCorrect, mask, additionalCheck)
 }
 
 // FindPlacementAroundExclusion finds valid position for object outside exclusion
@@ -695,13 +700,13 @@ func (p *Position) FindPlacementAroundExclusion(
 	additionalCheck func(absX, absY, w, h int) bool,
 ) (int, int, bool) {
 	return p.index.FindPlacementAroundExclusion(anchorX, anchorY, objectW, objectH, exclusion, padding, pattern,
-		position.Mask(mask), additionalCheck)
+		mask, additionalCheck)
 }
 
 // FindLastFreeOnRay returns the last unblocked cell on a ray from (startX, startY) toward (endX, endY)
 // Returns (x, y, reachedEnd) where reachedEnd=true if entire path is free
 func (p *Position) FindLastFreeOnRay(startX, startY, endX, endY int, mask component.WallBlockMask) (int, int, bool) {
-	return p.index.FindLastFreeOnRay(startX, startY, endX, endY, position.Mask(mask))
+	return p.index.FindLastFreeOnRay(startX, startY, endX, endY, mask)
 }
 
 // IsPathBlocked checks if straight line from (x0,y0) to (x1,y1) intersects any blocking wall
@@ -717,7 +722,7 @@ func (p *Position) IsPointValidForOrbit(x, y int, mask component.WallBlockMask) 
 
 // HasAreaLineOfSight checks if rectangular entity can traverse unobstructed from (x0,y0) to (x1,y1)
 func (p *Position) HasAreaLineOfSight(x0, y0, x1, y1, width, height int, mask component.WallBlockMask) bool {
-	return p.index.HasAreaLineOfSight(x0, y0, x1, y1, width, height, position.Mask(mask))
+	return p.index.HasAreaLineOfSight(x0, y0, x1, y1, width, height, mask)
 }
 
 // HasAreaLineOfSightUnsafe is HasAreaLineOfSight; the name is kept for its callers
@@ -728,5 +733,5 @@ func (p *Position) HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height int, m
 // HasAreaLineOfSightRotatable checks LOS with optional 90° rotation
 // Tries width×height first, then height×width if blocked
 func (p *Position) HasAreaLineOfSightRotatable(x0, y0, x1, y1, width, height int, mask component.WallBlockMask) bool {
-	return p.index.HasAreaLineOfSightRotatable(x0, y0, x1, y1, width, height, position.Mask(mask))
+	return p.index.HasAreaLineOfSightRotatable(x0, y0, x1, y1, width, height, mask)
 }

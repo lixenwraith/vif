@@ -490,8 +490,8 @@ func TestVanguardsCaveWearsOneOfItsStoneArts(t *testing.T) {
 		a.Tick(5)
 		var look engine.RockLook
 		w.RunSafe(func() {
-			if rock := w.Positions.Rock(); rock != nil {
-				look = rock.Look
+			if w.Positions.Rock() != nil {
+				look = w.Positions.RockLook()
 			}
 		})
 		art := pattern.ArtPreset(look.Art).String()
@@ -892,7 +892,7 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 	rock := func() (art string, origin int64) {
 		w.RunSafe(func() {
 			if r := w.Positions.Rock(); r != nil {
-				art, origin = pattern.ArtPreset(r.Look.Art).String(), r.Origin
+				art, origin = pattern.ArtPreset(w.Positions.RockLook().Art).String(), r.Origin
 			}
 		})
 		return art, origin

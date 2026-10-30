@@ -83,7 +83,6 @@ func (x *Index[E]) Rock() *Rock { return x.rock }
 // SetRock lays cols as the rock field from map column 0, origin its first profile
 // column; no columns lift the field
 func (x *Index[E]) SetRock(mask Mask, origin int64, cols []Column) {
-	x.epoch++
 	x.log.lose()
 	if len(cols) == 0 {
 		x.rock = nil
@@ -125,7 +124,6 @@ func (x *Index[E]) ShiftRock(enter Column) {
 	if r == nil {
 		return
 	}
-	x.epoch++
 	w, h := x.Width, x.Height
 	for col := range min(len(r.cols), w) {
 		was, now := r.cols[col], enter
