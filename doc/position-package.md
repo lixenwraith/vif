@@ -353,3 +353,45 @@ The gain grows with the map, where the cells a probe misses are out of cache:
 the cave step's push checks and the composites' probes on the largest map. The
 glyph renderer, whose probes land on occupied cells, pays the extra load inside
 the band.
+
+Iteration 4 whole, main at phase 2b against the branch, alternated five times.
+td's tick with sixteen cursors, ms a tick:
+
+```
+main      0.29  0.33  0.33  0.33  0.31   median 0.33
+branch    0.33  0.31  0.30  0.34  0.37   median 0.33
+```
+
+The benches, medians of ns/op:
+
+```
+                                   main    branch   change
+CaveStep/200x60                   9874      8008   -18.9%
+CaveStep/400x120                 22448     14018   -37.6%
+CaveStep/500x254                 25289     17348   -31.4%
+CaveStepNavigation/200x60        30089     32431    +7.8%
+CaveStepNavigation/400x120       58650     61754    +5.3%
+CaveStepNavigation/500x254       75134     77612    +3.3%
+CaveNavigation/200x60/near       76162     80310    +5.4%
+CaveNavigation/200x60/far       143968    127109   -11.7%
+CaveNavigation/400x120/near     100230     85504   -14.7%
+CaveNavigation/400x120/far      150822    141831    -6.0%
+CaveNavigation/500x254/near     122987    113408    -7.8%
+CaveNavigation/500x254/far      203475    175765   -13.6%
+NavigationWallMoves/200x60        4060      4063    +0.1%
+NavigationWallMoves/400x120       4574      4055   -11.3%
+NavigationWallMoves/500x254       4232      4170    -1.5%
+GlyphRender/120x40               32990     32828    -0.5%
+GlyphRender/200x60               52714     56960    +8.1%
+GlyphRender/400x120              79441     86338    +8.7%
+```
+
+The cave step, which shifted the rock's bits a column and now shifts a slice of
+heights and the merged bits once, reads a fifth to two fifths under main; the
+composites' probes read under it by the presence bits. The glyph renderer reads
+three to seven microseconds a frame over main at 200×60 and 400×120, in five
+rounds of four comparisons: its probe reads the merged surfaces through a slice
+where it read the rock's bits from a field, a load or two a probe over 1,460 to
+5,800 scenery glyphs a frame. That is the price of several surfaces behind one
+probe; a fixed array for the first few masks would take it back if a frame
+ever needs it.
