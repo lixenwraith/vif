@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -277,6 +278,45 @@ func TestAJoinerAdoptsTheHostsRngSession(t *testing.T) {
 	defer guest.Close()
 	if err := guest.JoinAt(an); err != nil {
 		t.Fatalf("a joiner that adopted the host's session was refused: %v", err)
+	}
+}
+
+// TestAJoinerAdoptsTheHostsTick: the tick is its host's choice, so a joiner takes it
+// from the offer and passes the identity check, where one that kept its own is
+// refused by that field.
+func TestAJoinerAdoptsTheHostsTick(t *testing.T) {
+	t.Parallel()
+	const seed, tick = 0x71C4, 25 * time.Millisecond
+	host, err := NewHeadless(Config{Seed: seed, Width: 120, Height: 40, TickInterval: tick,
+		Resources: resource.Options{Embedded: true}})
+	if err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	defer host.Close()
+	an := host.JoinAnchor()
+	cfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, network.SessionOffer{
+		Anchor: an, Host: 1, Assigned: 2, Term: network.FirstTerm,
+		Roster: []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
+	})
+	if err != nil {
+		t.Fatalf("join config: %v", err)
+	}
+	guest, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("join app: %v", err)
+	}
+	defer guest.Close()
+	if got := guest.World().TickInterval(); got != tick {
+		t.Fatalf("the joiner ticks at %s, its host at %s", got, tick)
+	}
+	if err := identityFromAnchor(an).Verify(guest.membership.sessionIdentity()); err != nil {
+		t.Fatalf("a joiner that adopted the host's tick was refused: %v", err)
+	}
+	kept := mustHeadless(t, seed, 120, 40)
+	defer kept.Close()
+	if err := identityFromAnchor(an).Verify(kept.membership.sessionIdentity()); err == nil ||
+		!strings.Contains(err.Error(), "tick_ns") {
+		t.Fatalf("a joiner on its own tick was told %v", err)
 	}
 }
 

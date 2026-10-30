@@ -85,6 +85,12 @@ const (
 	NetworkSlowLatePerSecond  = 5.0
 	NetworkSlowBytesPerSecond = 8 << 10
 
+	// NetworkShedWindow and NetworkShedShare are when an authority sheds what it
+	// cannot carry: over the window its scheduler dropped more than this share of
+	// the ticks it owed, so it dismisses its newest bot, then its newest player.
+	NetworkShedWindow = 10 * time.Second
+	NetworkShedShare  = 0.1
+
 	// NetworkIngressBytesPerSecond is what the authority accepts from a link over
 	// the same window, per participant the link carries and second of game time. A
 	// guest uses about a sixth of it while playing; past it, its subtree is evicted.

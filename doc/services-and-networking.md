@@ -318,8 +318,8 @@ The identity has two halves, because they become knowable at different moments:
 
 | Half | Fields | Checked |
 |---|---|---|
-| Build | `protocol`, `simulation`, `capture_schema`, `journal_schema`, `tick_ns` | By the dialer against the preview, before it constructs a world, and against the offer at its seat; and again by the coordinator. |
-| Session | `seed`, `session`, `scenario_digest` | By the coordinator only. A dialer has no world yet, so it has none of these. |
+| Build | `protocol`, `simulation`, `capture_schema`, `journal_schema` | By the dialer against the preview, before it constructs a world, and against the offer at its seat; and again by the coordinator. |
+| Session | `tick_ns`, `seed`, `session`, `scenario_digest` | By the coordinator only. A dialer has no world yet, so it has none of these; it adopts the host's tick from the offer as it adopts the seed. |
 
 `scenario_digest` is the SHA-256 of the scenario's canonical form and the only
 scenario field compared: two roots may install the same scenario under different

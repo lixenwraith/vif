@@ -465,7 +465,7 @@ func (s *QuasarSystem) home(c *quasarCtx) {
 
 	// Periodic speed scaling with cap (game logic, not physics), over movement time
 	// only; the remainder carries into the next interval
-	speedIncreaseInterval := time.Duration(parameter.QuasarSpeedIncreaseTicks) * parameter.GameUpdateInterval
+	speedIncreaseInterval := time.Duration(parameter.QuasarSpeedIncreaseTicks) * s.world.TickInterval()
 	quasarComp.SpeedElapsed += c.dt
 	for quasarComp.SpeedElapsed >= speedIncreaseInterval {
 		quasarComp.SpeedElapsed -= speedIncreaseInterval

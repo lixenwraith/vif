@@ -677,7 +677,7 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	if r := s.world.Resources.Network; r != nil && p.Dismissed && p.Participant == r.ParticipantID && r.OnDismissed != nil {
 		// A dismissed instance must not relay its closing links as fresh departures.
 		s.enabled = false
-		r.OnDismissed()
+		r.OnDismissed(p.Shed)
 	}
 	// One crossing retires the whole holder group at the same simulation boundary,
 	// in the same way: a holder's bots wait with it, or go with it.
@@ -701,6 +701,14 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	}
 	c, held := s.world.Components.Cursor.GetComponent(cursor)
 	held = held && c.PeerID == p.Participant
+	if p.Shed && held && p.Participant != s.world.Session().Participant {
+		who := "player"
+		if c.Holder != 0 {
+			who = "bot"
+		}
+		s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+			Message: fmt.Sprintf("The host dropped the %s in slot %X to keep its tick", who, p.Slot), Alert: true})
+	}
 	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
 		// A participant with no cursor has nothing to wait in, so it leaves for good.
 		r.OnDeparture(p.Participant, p.Dismissed || !held)
@@ -1651,13 +1659,14 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) (dropped 
 	}
 	// Every departure reaches the session layer, not only the authority's: a
 	// survivor's own reach is what the succession rule counts, and it changes
-	// whenever any link does. A seat this run dropped leaves as it was told to.
+	// whenever any link does. A seat this run dropped leaves as it was told to, and
+	// a participant whose departure applied already was told so then.
 	if r := s.world.Resources.Network; r != nil && r.OnPeerLost != nil {
 		dropped = r.OnPeerLost(peerID)
 	}
-	if dropped {
-		s.world.Log().Info("net", "msg", "seat link closed", "peer", peerID, "remaining_peers", remaining)
-		return true
+	if dropped || int(peerID) < len(s.departed) && s.departed[peerID] {
+		s.world.Log().Info("net", "msg", "departed link closed", "peer", peerID, "remaining_peers", remaining)
+		return dropped
 	}
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: message, Alert: true})
 	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,

@@ -82,16 +82,19 @@ type Scheduler struct {
 	statGameElapsedMs   *atomic.Int64
 	statEvDropped       *atomic.Int64
 	statTickSlips       *atomic.Int64
+	statTicksDropped    *atomic.Int64
 	statEvInvalid       *atomic.Int64
 	statSettleExhausted *atomic.Int64
 	statEvDispatchTypes *status.AtomicString
 	statEvDeadTypes     *status.AtomicString
 	statSettlePass      [settleSourceCount]*atomic.Int64
 
-	// Scheduler-owned accumulators are mutated and published under the world lock.
-	evBackoffs      int64
-	tickSlips       int64
-	tickSlipPending bool
+	// Scheduler-owned accumulators are mutated and published under the world lock;
+	// slipPending is the ticks the loop dropped since the last tick took them.
+	evBackoffs   int64
+	tickSlips    int64
+	ticksDropped int64
+	slipPending  int64
 
 	// paceTrim and paceStep are the guest pacing read off NetworkResource under the
 	// tick's lock; whoever paces the ticks takes them with TakePace.
@@ -189,6 +192,7 @@ func NewScheduler(
 		statGameElapsedMs:   statusReg.Ints.Get("time.game_elapsed_ms"),
 		statEvDropped:       statusReg.Ints.Get("event.dropped"),
 		statTickSlips:       statusReg.Ints.Get("engine.tick_slips"),
+		statTicksDropped:    statusReg.Ints.Get("engine.ticks_dropped"),
 		statEvInvalid:       statusReg.Ints.Get("event.invalid"),
 		statSettleExhausted: statusReg.Ints.Get("event.settle_exhausted"),
 		statEvDispatchTypes: statusReg.Strings.Get("event.dispatch_by_type"),
@@ -358,12 +362,11 @@ func (s *Scheduler) ExportFSM() fsm.MachineState { return s.fsm.Export() }
 // SchedulerCopy is the FSM position and the scheduler's own accumulators, for a
 // replay copy restored where another stood.
 type SchedulerCopy struct {
-	fsm                      fsm.MachineState
-	evBackoffs, tickSlips    int64
-	tickSlipPending          bool
-	eventDispatch, eventDead [event.EventTypeCount]int64
-	lastEvDropped            uint64
-	resetPending             bool
+	fsm                                              fsm.MachineState
+	evBackoffs, tickSlips, ticksDropped, slipPending int64
+	eventDispatch, eventDead                         [event.EventTypeCount]int64
+	lastEvDropped                                    uint64
+	resetPending                                     bool
 }
 
 // ResetPending reports a game reset requested and not yet run, which the restoring
@@ -377,13 +380,13 @@ func (c SchedulerCopy) FSM() fsm.MachineState { return c.fsm }
 // CopyOut reads the scheduler. Caller MUST hold updateMutex.
 func (s *Scheduler) CopyOut() SchedulerCopy {
 	return SchedulerCopy{fsm: s.fsm.Export(), evBackoffs: s.evBackoffs, tickSlips: s.tickSlips,
-		tickSlipPending: s.tickSlipPending, eventDispatch: s.eventDispatch, eventDead: s.eventDead,
+		ticksDropped: s.ticksDropped, slipPending: s.slipPending, eventDispatch: s.eventDispatch, eventDead: s.eventDead,
 		lastEvDropped: s.lastEvDropped, resetPending: len(s.resetChan) > 0}
 }
 
 // CopyIn places the scheduler where a copy was read. Caller MUST hold updateMutex.
 func (s *Scheduler) CopyIn(c SchedulerCopy) error {
-	s.evBackoffs, s.tickSlips, s.tickSlipPending = c.evBackoffs, c.tickSlips, c.tickSlipPending
+	s.evBackoffs, s.tickSlips, s.ticksDropped, s.slipPending = c.evBackoffs, c.tickSlips, c.ticksDropped, c.slipPending
 	s.eventDispatch, s.eventDead, s.lastEvDropped = c.eventDispatch, c.eventDead, c.lastEvDropped
 	return s.ImportFSM(c.fsm, false)
 }
@@ -737,10 +740,10 @@ func (s *Scheduler) schedulerLoop() {
 				// Re-read after the tick: the debt is what the tick consumed,
 				// not what was owed when it started
 				gameNow = s.ctl.Now()
-				if gameNow.Sub(s.nextTickDeadline) > s.tickInterval*2 {
+				if owed := gameNow.Sub(s.nextTickDeadline); owed > s.tickInterval*2 {
 					// Systems cannot sustain this rate; drop the debt and count it
 					s.nextTickDeadline = gameNow.Add(s.tickInterval)
-					s.tickSlipPending = true
+					s.slipPending += int64(owed / s.tickInterval)
 				}
 				deadline = s.nextTickDeadline
 
@@ -1146,8 +1149,7 @@ func (s *Scheduler) recordSettlePass(src string) {
 // Construction and executeReset are the only callers.
 func (s *Scheduler) resetTelemetry() {
 	s.evBackoffs = 0
-	s.tickSlips = 0
-	s.tickSlipPending = false
+	s.tickSlips, s.ticksDropped, s.slipPending = 0, 0, 0
 	s.lastEvDropped = 0
 
 	for _, stat := range []*atomic.Int64{
@@ -1165,6 +1167,7 @@ func (s *Scheduler) resetTelemetry() {
 		s.statGameElapsedMs,
 		s.statEvDropped,
 		s.statTickSlips,
+		s.statTicksDropped,
 		s.statEvInvalid,
 		s.statSettleExhausted,
 	} {
@@ -1363,9 +1366,10 @@ func (s *Scheduler) processTick() {
 		} else {
 			s.paceTrim = 0
 		}
-		if s.tickSlipPending {
+		if s.slipPending > 0 {
 			s.tickSlips++
-			s.tickSlipPending = false
+			s.ticksDropped += s.slipPending
+			s.slipPending = 0
 		}
 		// The barrier applies against the completed tick's stamp. Its settle group
 		// therefore replays between ticks, before the next BeginTick resets Boundary.
@@ -1458,6 +1462,7 @@ func (s *Scheduler) processTick() {
 		s.statEntityDestroyed.Store(s.world.DestroyedCount())
 		s.statEvBackoffs.Store(s.evBackoffs)
 		s.statTickSlips.Store(s.tickSlips)
+		s.statTicksDropped.Store(s.ticksDropped)
 
 		qlen := int64(s.world.Resources.Event.Queue.Len())
 		s.statQueueLen.Store(qlen)

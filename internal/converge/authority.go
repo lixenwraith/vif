@@ -1,6 +1,7 @@
 package converge
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
@@ -34,6 +35,13 @@ type Authority struct {
 	ingress   float64
 	metered   map[link.PeerID]slowWatch
 	statEvict *atomic.Int64
+
+	// shed is when this authority drops what it cannot carry and shedFrom the window
+	// its own tick keeping is judged over; see driveShedding.
+	shed        ShedPolicy
+	shedFrom    shedWatch
+	statDropped *atomic.Int64
+	statShed    *atomic.Int64
 
 	// corrections is what authorship produces, and reach the links it needs to
 	// move: a successor seeds its cadence from what it installed, and a survivor
@@ -146,6 +154,9 @@ func newAuthority(inst Instance, tel snapshot.Telemetry, reg *status.Registry) *
 			LatePerSecond:  parameter.NetworkSlowLatePerSecond,
 			BytesPerSecond: parameter.NetworkSlowBytesPerSecond,
 		},
+		shed:        ShedPolicy{Window: parameter.NetworkShedWindow, Share: parameter.NetworkShedShare},
+		statDropped: reg.Ints.Get("engine.ticks_dropped"),
+		statShed:    reg.Ints.Get("network.shed"),
 	}
 }
 
@@ -182,6 +193,75 @@ func perPlayedSecond(perWallSecond float64, rate engine.TimeScale) float64 {
 
 // SetSlowPolicy replaces the eviction policy. Call before the session runs.
 func (u *Authority) SetSlowPolicy(p SlowPolicy) { u.slow = p }
+
+// ShedPolicy is when the authority sheds what it cannot carry: over Window its
+// scheduler dropped more than Share of the ticks it owed, so it dismisses the newest
+// bot, or with none left the newest player, one a window. No window disables it.
+type ShedPolicy struct {
+	Window time.Duration
+	Share  float64
+}
+
+// shedWatch is the authority's own window: where it started, in which run, over
+// which roster, and the ticks played and dropped by then.
+type shedWatch struct {
+	since           time.Time
+	run             uint64
+	members         int
+	played, dropped int64
+}
+
+// SetShedPolicy replaces the shedding policy. Call before the session runs.
+func (u *Authority) SetShedPolicy(p ShedPolicy) { u.shed = p }
+
+// driveShedding drops what the authority cannot carry, played or headless alike and
+// asking nobody. A pause or a hold drops no tick, so neither reads as falling behind;
+// a new run or roster starts the window over, so a join's stall or a shed is grace.
+func (u *Authority) driveShedding(now time.Time) {
+	if u.shed.Window <= 0 || !u.isAuthority() {
+		u.shedFrom = shedWatch{}
+		return
+	}
+	at, roster := u.inst.Position(), u.currentRoster()
+	next := shedWatch{since: now, run: at.Run, members: len(roster), played: int64(at.Tick),
+		dropped: u.statDropped.Load()}
+	w := u.shedFrom
+	if w.since.IsZero() || at.Run != w.run || w.members != next.members ||
+		next.played < w.played || next.dropped < w.dropped {
+		u.shedFrom = next
+		return
+	}
+	if now.Sub(w.since) < u.shed.Window {
+		return
+	}
+	u.shedFrom = next
+	lost := next.dropped - w.dropped
+	owed := next.played - w.played + lost
+	if owed == 0 || float64(lost) <= u.shed.Share*float64(owed) {
+		return
+	}
+	if id := shedCandidate(roster, link.PeerID(u.inst.LocalParticipant())); id != 0 && u.inst.ShedParticipant(uint32(id)) {
+		u.statShed.Add(1)
+		u.log.Warn("session", "msg", "participant shed to keep the tick",
+			"peer", id, "ticks_dropped", lost, "ticks_owed", owed, "window", u.shed.Window.String())
+	}
+}
+
+// shedCandidate is who shedding drops next: the newest bot, or with none the newest
+// player, by identity; never this instance and never a Wraith, which costs nothing.
+func shedCandidate(roster []network.RosterEntry, local link.PeerID) link.PeerID {
+	var bot, player link.PeerID
+	for _, e := range roster {
+		switch {
+		case e.ID == local || e.Away:
+		case e.Holder != 0:
+			bot = max(bot, e.ID)
+		default:
+			player = max(player, e.ID)
+		}
+	}
+	return cmp.Or(bot, player)
+}
 
 // driveEviction judges each participant's last window on the authority. Only a
 // participant's own late crossings count, as the authority received them from its
@@ -619,6 +699,7 @@ func (u *Authority) drive() {
 	u.reach.drive(contested != 0 || cut)
 	u.driveEviction(now)
 	u.driveIngress(now)
+	u.driveShedding(now)
 	if contested != 0 {
 		u.driveWalk(now)
 	}

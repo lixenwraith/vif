@@ -34,6 +34,8 @@ func (m *membership) Driven() bool           { return m.cfg.Mode.Driven() }
 func (m *membership) Held() bool             { return m.ctx.TimeCtl.Held() }
 func (m *membership) Rate() engine.TimeScale { return m.ctx.TimeCtl.Scale() }
 
+func (m *membership) TickInterval() time.Duration { return m.world.TickInterval() }
+
 func (m *membership) LocalParticipant() uint32 { return m.localParticipant() }
 
 func (m *membership) Seated() bool {
@@ -195,6 +197,23 @@ func (c *corrector) AdoptAuthority(h snapshot.CaptureHeader) {
 func (m *membership) DropParticipant(id uint32) bool {
 	p, ok := m.sessionTransport().(engine.PeerDroppingPort)
 	return ok && p.Disconnect(id)
+}
+
+// ShedParticipant dismisses one participant, with its bots, for the load it costs:
+// the host's drop, the dismissal saying why.
+func (m *membership) ShedParticipant(id uint32) (shed bool) {
+	m.world.RunSafe(func() {
+		for _, e := range m.worldRosterLocked() {
+			if uint32(e.ID) == id {
+				m.world.PushEventFull(event.EventParticipantDeparted,
+					&event.ParticipantDepartedPayload{Participant: id, Slot: e.Slot, Dismissed: true, Shed: true},
+					event.OriginSession, core.DomainPlayer)
+				shed = true
+				return
+			}
+		}
+	})
+	return shed
 }
 
 func (m *membership) CommitLate(id uint32) (n uint64) {

@@ -33,6 +33,7 @@ type PeerIdentity struct {
 // build values to compare against are always this build's own — reading them out of
 // something a peer sent would compare a claim with itself.
 func (local PeerIdentity) SessionFrom(an event.JournalAnchor) PeerIdentity {
+	local.TickIntervalNS = an.TickInterval
 	local.Seed = an.Seed
 	local.Session = an.Session
 	local.ScenarioDigest = an.ScenarioDigest
@@ -56,17 +57,17 @@ func (local PeerIdentity) buildFields(remote PeerIdentity) []identityField {
 		{"simulation", local.Simulation, remote.Simulation},
 		{"capture_schema", local.CaptureSchema, remote.CaptureSchema},
 		{"journal_schema", local.JournalSchema, remote.JournalSchema},
-		{"tick_ns", local.TickIntervalNS, remote.TickIntervalNS},
 	}
 }
 
 // sessionFields are what the two are simulating: the same seed over the same
-// scenario. They can only be compared once the peer has built a world, which is
-// why they are separate from the build half. The corpus is deliberately absent —
-// it is the player's, resolved locally and never reconciled, so a peer with a
-// different one is not a peer running a different session.
+// scenario at the same tick, which the host chose and a joiner adopts. They can
+// only be compared once the peer has built a world, which is why they are separate
+// from the build half. The corpus is deliberately absent — it is the player's,
+// resolved locally and never reconciled.
 func (local PeerIdentity) sessionFields(remote PeerIdentity) []identityField {
 	return []identityField{
+		{"tick_ns", local.TickIntervalNS, remote.TickIntervalNS},
 		{"seed", local.Seed, remote.Seed},
 		{"session", local.Session, remote.Session},
 		{"scenario_digest", local.ScenarioDigest, remote.ScenarioDigest},

@@ -62,6 +62,7 @@ type stub struct {
 	ingress map[uint32]uint64
 	rate    engine.TimeScale
 	dropped []uint32
+	shed    []uint32
 
 	// How the world was read as ticks closed: captured whole, or indexed in place.
 	captured, indexed int
@@ -91,6 +92,8 @@ func (s *stub) Held() bool {
 	defer s.mu.Unlock()
 	return s.held
 }
+
+func (s *stub) TickInterval() time.Duration { return parameter.GameUpdateInterval }
 
 func (s *stub) Rate() engine.TimeScale {
 	s.mu.Lock()
@@ -224,6 +227,18 @@ func (s *stub) DropParticipant(id uint32) bool {
 	first := !slices.Contains(s.dropped, id)
 	s.dropped = append(s.dropped, id)
 	return first
+}
+
+// ShedParticipant records the dismissal and applies it, the participant leaving the
+// roster with its bots as its departure does.
+func (s *stub) ShedParticipant(id uint32) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.shed = append(s.shed, id)
+	s.roster = slices.DeleteFunc(s.roster, func(e network.RosterEntry) bool {
+		return uint32(e.ID) == id || uint32(e.Holder) == id
+	})
+	return true
 }
 
 func (s *stub) AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID) {

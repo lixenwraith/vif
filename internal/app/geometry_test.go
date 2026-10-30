@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -702,5 +703,32 @@ func TestAPasteTypesWhole(t *testing.T) {
 	}
 	if got := a.ctx.GetCommandText(); !a.ctx.IsCommandMode() || got != link {
 		t.Fatalf("the command line holds %q, want the paste whole, %d characters", got, len(link))
+	}
+}
+
+// TestAResetUnderTheCommandLineLeavesTheKeysWorking: a reset puts the game back in
+// NORMAL under an open command line, as a session's defeat does while the host
+// types, and the keys that follow parse as NORMAL's, so ':' opens the line again.
+func TestAResetUnderTheCommandLineLeavesTheKeysWorking(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
+		Host: Host{Presentation: &framePresentation{w: 120, h: 40}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	colon := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: ':'}
+	a.takeEvent(colon)
+	if !a.ctx.IsCommandMode() {
+		t.Fatal("':' did not open the command line")
+	}
+	a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
+	a.Settle()
+	if a.ctx.IsCommandMode() {
+		t.Fatal("the reset left the command line open")
+	}
+	a.takeEvent(colon)
+	if !a.ctx.IsCommandMode() {
+		t.Fatal("after the reset ':' no longer opens the command line")
 	}
 }

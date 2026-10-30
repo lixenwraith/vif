@@ -57,7 +57,8 @@ var deniedSharedKey = map[string]bool{
 	// A missed deadline is this process's pacing, not simulation state. Elapsed
 	// game time is absent: engine.SimTime derives it from the tick, so comparing
 	// it is what pins the simulation clock deterministic.
-	"engine.tick_slips": true,
+	"engine.tick_slips":    true,
+	"engine.ticks_dropped": true,
 	// Whole-store counts sum both domains; the shared position digest covers the
 	// shared half.
 	"nav.entities": true,

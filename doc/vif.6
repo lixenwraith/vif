@@ -65,10 +65,13 @@ Where authorship goes when the authoring participant leaves; default host with \
 Window a participant's lateness is judged over; host only, 0 never evicts (default 20s)
 .TP
 .B \-slow\-late <n>
-Evict at this many late epochs per second over the window; 0 ignores lateness (default 5)
+Evict at this many late epochs per second of game time over the window; 0 ignores lateness (default 5)
 .TP
 .B \-slow\-bytes <n>
-\&...and at least this many bytes per second on its link; 0 ignores throughput (default 8192)
+\&...and at least this many bytes per second of it on its link; 0 ignores throughput (default 8192)
+.TP
+.B \-shed\-window <dur>
+Window the host's own tick keeping is judged over; past 10% of its ticks dropped, it drops its newest bot, then player; host only, 0 never sheds (default 10s)
 .TP
 .B \-listen <addr>
 Address this participant is dialled back on; \-join only, default the host's port then an ephemeral one
@@ -150,6 +153,9 @@ Root RNG seed; 0 draws one and logs it
 .TP
 .B \-speed <rate>
 Simulation rate 1/8 1/4 1/2 1 2 4 8; with \-script or autonomous bots also "max" for no wall pacing
+.TP
+.B \-tick <dur>
+Game time one tick advances, 10ms to 100ms; a host's is its session's, which joiners take (default 50ms)
 .TP
 .B \-script <path>
 Run an authored deterministic TOML tick script

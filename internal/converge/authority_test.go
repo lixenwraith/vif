@@ -1061,6 +1061,34 @@ func TestABudgetHoldsPerSecondOfPlay(t *testing.T) {
 	}
 }
 
+// TestAnAuthorityThatCannotKeepItsTickShedsItsNewestBotThenPlayer: past its share of
+// dropped ticks over a window the authority dismisses its newest bot, then with
+// none left its newest player, never itself or a Wraith; the roster's change starts
+// the next window, and a window that kept its tick sheds nobody.
+func TestAnAuthorityThatCannotKeepItsTickShedsItsNewestBotThenPlayer(t *testing.T) {
+	t.Parallel()
+	host := newRun(t, 1, nil, []network.RosterEntry{
+		{ID: 1}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}, {ID: 4, Slot: 3, Holder: 2},
+		{ID: 5, Slot: 4, Holder: 3}, {ID: 6, Slot: 5, Away: true},
+	})
+	host.open(1, nil, true)
+	host.u.SetShedPolicy(ShedPolicy{Window: time.Second, Share: 0.1})
+	dropped := host.reg.Ints.Get("engine.ticks_dropped")
+	start := time.Unix(1_000_000, 0)
+	windows := []struct{ played, lost int64 }{{0, 0}, {19, 1}, {15, 5}, {15, 5}, {15, 5}, {15, 5}, {15, 5}}
+	for i, w := range windows {
+		host.world.advance(uint64(w.played))
+		dropped.Add(w.lost)
+		host.u.driveShedding(start.Add(time.Duration(i) * time.Second))
+		if i == 1 && len(host.world.shed) != 0 {
+			t.Fatalf("shed %v over a window that dropped 1 of 20 ticks", host.world.shed)
+		}
+	}
+	if want := []uint32{5, 4, 3}; !slices.Equal(host.world.shed, want) {
+		t.Fatalf("shed %v, want the newest bot, the next, then the newest player: %v", host.world.shed, want)
+	}
+}
+
 // TestOnlyTheParticipantThatStaysLateIsEvicted: the first window after arrival is
 // grace, a participant whose own crossings keep landing late is dropped at the end
 // of a window, and one that is never late is kept whatever the session costs it.

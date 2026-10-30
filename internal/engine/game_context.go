@@ -280,11 +280,7 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 	// the same tick-derived origin processTick uses, never at the pacing clock's
 	// wall instant.
 	world.Resources.Time = &TimeResource{}
-	world.Resources.Time.Update(
-		SimEpoch,
-		ctx.TimeCtl.RealTime(),
-		parameter.GameUpdateInterval,
-	)
+	world.Resources.Time.Update(SimEpoch, ctx.TimeCtl.RealTime(), world.tick)
 
 	// 6. Event Queue Resource
 	world.Resources.Event = &EventQueueResource{Queue: event.NewEventQueue()}
@@ -584,6 +580,19 @@ func (ctx *GameContext) ResetSessionState() {
 	if !ctx.World.Session().Live {
 		ctx.TimeCtl.SetScale(ctx.StartScale)
 	}
+}
+
+// SetTickInterval fixes the run's tick before its scheduler is built, the boot's
+// game clock with it.
+func (ctx *GameContext) SetTickInterval(d time.Duration) {
+	ctx.World.tick = d
+	ctx.World.Resources.Time.Update(SimEpoch, ctx.TimeCtl.RealTime(), d)
+}
+
+// FrameInterval is how often the run is drawn: a third of its tick, so each tick is
+// drawn three times, and no faster than parameter.FrameMinInterval.
+func (ctx *GameContext) FrameInterval() time.Duration {
+	return max(ctx.World.tick/3, parameter.FrameMinInterval)
 }
 
 // === Viewport and Bounds ===

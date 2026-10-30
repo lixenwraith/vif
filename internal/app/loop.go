@@ -210,7 +210,7 @@ func (a *App) Loop() (*restartRequest, error) {
 		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
 	}
 
-	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
+	frameTicker := time.NewTicker(a.ctx.FrameInterval())
 	defer frameTicker.Stop()
 
 	inputTicker := time.NewTicker(parameter.InputTickInterval)
@@ -223,6 +223,9 @@ func (a *App) Loop() (*restartRequest, error) {
 		// iteration after the intent that asked for one, and every other path
 		// through the loop arrives back here too.
 		if a.membership.dismissed.Load() {
+			if a.membership.shed.Load() {
+				return &restartRequest{Notice: "Removed by the host to keep its tick; started a local game"}, nil
+			}
 			return &restartRequest{Notice: "Removed by the host; started a local game"}, nil
 		}
 		if req := a.restart.Load(); req != nil {
@@ -295,6 +298,7 @@ func (a *App) takeEvent(ev terminal.Event) bool {
 	if ev.Type == terminal.EventPaste {
 		return pasteKeys(ev.Text, a.takeTap)
 	}
+	a.router.SyncNormal()
 	intent := a.inputMachine.Process(ev)
 	if ev.Type == terminal.EventMouse && ev.MouseAction == terminal.MouseActionPress {
 		a.touched = ev.Touch

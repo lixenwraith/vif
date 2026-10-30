@@ -237,7 +237,7 @@ greps for rather than enumerating every refusal.
 
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
-| `peer link opened` / `peer link lost` / `seat link closed` | INFO / WARN / INFO | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss; a seat this run dropped closes rather than is lost, with no alert | `Reach.dial`, `NetworkSystem.reportDisconnect` |
+| `peer link opened` / `peer link lost` / `departed link closed` | INFO / WARN / INFO | `peer`, plus `address` on the dial and `authority_lost`, `remaining_peers` on the loss; a seat this run dropped, or a participant whose departure applied, closes rather than is lost, with no alert | `Reach.dial`, `NetworkSystem.reportDisconnect` |
 | `peer listener bound` / `no listening port; this participant is a leaf` | INFO / WARN | `bound`, `declared` / `address`, `error` | `Reach.AdoptListener`, `BindAdvertised` |
 | `relay door noted` | INFO | `peer`, `door` | `Reach.NoteDoor`: the coordinator put a relay's door in the chain, completed from the relay's connection (Multiplayer §5.6) |
 | `playout lead adopted` | INFO | `ticks`, `tick` | a change of this instance's own lead, at the tick its journaled event dispatched |
@@ -252,6 +252,7 @@ greps for rather than enumerating every refusal.
 | `server running` | INFO | `address`, `capacity` | the `-serve` loop, once its session is open |
 | `session summary` | INFO | `summary` | the `-serve` loop, every 30 s when the line changed; the same line `:session` prints. With peer links it names the slowest link and the correction plan's totals over all of them; with none it names neither |
 | `participant evicted as too slow` / `participant evicted for what its link sends` | WARN | `peer`, `late_per_s`, `bytes_per_s`, `speed`, `window` / `peer`, `bytes_per_s`, `carried`, `speed`, `window`; each a second a second of game time at `speed` | the authority's slow and ingress policies (multi-player.md §3.5) |
+| `participant shed to keep the tick` | WARN | `peer`, `ticks_dropped`, `ticks_owed`, `window` | the authority's shedding (multi-player.md §3.5) |
 | `authority handed off` / `authority lost; walking the succession list` | WARN | `term`, `authority`, `predecessor`, `roster`, `evidence_tick`, `local`, `via` / `peer`, `term`, `local`, `redial` | `Authority`; `via` is the candidate a survivor follows its host through, zero for its own link |
 | `authority reached on a link of this instance's own` | INFO | `authority`, `term` | `Authority.reachedHost`: a survivor that followed its host through a relay opened a link of its own to it, which its artifacts take from here (Multiplayer §5.1) |
 | `late survivor taken back` | INFO | `peer`, `term`, `places` | `Authority.takeBack`: a membership report that reached the host after the floor gives the survivor its place back, with its bots' (Multiplayer §5.2) |

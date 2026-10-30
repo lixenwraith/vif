@@ -9,7 +9,6 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/manifest"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	link "github.com/lixenwraith/vif/pkg/network"
 )
@@ -172,7 +171,7 @@ func (c *corrector) captureLightLocked() (snapshot.SharedCapture, error) {
 		JournalSchema:  uint64(event.JournalSchema),
 		Run:            st.Run,
 		Tick:           st.Tick,
-		TickInterval:   parameter.GameUpdateInterval,
+		TickInterval:   c.world.TickInterval(),
 		Seed:           c.world.Resources.Rand.Root(),
 		Session:        c.world.Resources.Rand.Session(),
 		ScenarioID:     c.scenario.Name,

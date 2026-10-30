@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"math"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -682,7 +683,7 @@ func latencySeverity(ms int64) int {
 }
 
 // timeItem builds the time control indicator, present only when the simulation is
-// off real time or a step request is pending
+// off real time, ticks at another rate than the default, or a step is pending
 func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
 	if step := r.statStep.Load(); step > 0 {
 		return r.pal.alarm.with(r.timeText.hold(step, "", "", func() string { return fmt.Sprintf(" STEP %d ", step) })), true
@@ -692,10 +693,21 @@ func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
 	if brk := r.statBreak.Load(); brk != "" && brk != "-" {
 		return r.pal.alarm.with(r.timeText.hold(-1, speed, brk, func() string { return fmt.Sprintf(" %sx>%s ", speed, brk) })), true
 	}
-	if speed != "" && speed != "1" {
-		return r.pal.speed.with(r.timeText.hold(-2, speed, "", func() string { return fmt.Sprintf(" %sx ", speed) })), true
+	fast := speed != "" && speed != "1"
+	tick := r.gameCtx.World.TickInterval()
+	if !fast && tick == parameter.GameUpdateInterval {
+		return statusItem{}, false
 	}
-	return statusItem{}, false
+	return r.pal.speed.with(r.timeText.hold(-2, speed, "", func() string {
+		var b strings.Builder
+		if fast {
+			b.WriteString(" " + speed + "x")
+		}
+		if tick != parameter.GameUpdateInterval {
+			fmt.Fprintf(&b, " %dHz", time.Second/tick)
+		}
+		return b.String() + " "
+	})), true
 }
 
 func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg color.RGB, cursorPos int) int {

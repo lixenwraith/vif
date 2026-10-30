@@ -14,7 +14,7 @@ import (
 // order is caught here.
 func TestCadenceBoundsAreTheGameParameters(t *testing.T) {
 	t.Parallel()
-	b := cadenceBounds()
+	b := cadenceBounds(parameter.GameUpdateInterval)
 	if err := b.Validate(); err != nil {
 		t.Fatalf("the shipped envelope does not validate: %v", err)
 	}
