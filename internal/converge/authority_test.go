@@ -1030,6 +1030,37 @@ func TestALinkIsBudgetedPerParticipantItCarries(t *testing.T) {
 	}
 }
 
+// TestABudgetHoldsPerSecondOfPlay: a session played faster sends as much faster,
+// so the budget counts a second of game time, and a window the rate changed in
+// starts over rather than judging one rate by another.
+func TestABudgetHoldsPerSecondOfPlay(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	host := newRun(t, 1, mesh.Node(1), []network.RosterEntry{{ID: 1}, {ID: 2, Slot: 1}})
+	host.open(1, nil, true)
+	host.u.SetSlowPolicy(SlowPolicy{Window: time.Second})
+	host.u.ingress = 100
+	host.world.ingress = map[uint32]uint64{}
+	host.world.rate = engine.TimeScale{Num: 4, Den: 1}
+	start := time.Unix(1_000_000, 0)
+
+	host.u.driveIngress(start)
+	host.world.ingress[2] = 350
+	host.u.driveIngress(start.Add(time.Second))
+	host.world.rate = engine.ScaleNormal
+	host.world.ingress[2] = 700
+	host.u.driveIngress(start.Add(2 * time.Second))
+	if len(host.world.dropped) != 0 {
+		t.Fatalf("evicted %v for 350 a second at 4x, or across the change to 1x", host.world.dropped)
+	}
+	host.world.ingress[2] = 1050
+	host.u.driveIngress(start.Add(3 * time.Second))
+	if len(host.world.dropped) != 1 || host.world.dropped[0] != 2 {
+		t.Fatalf("evicted %v for 350 a second at 1x, want participant 2", host.world.dropped)
+	}
+}
+
 // TestOnlyTheParticipantThatStaysLateIsEvicted: the first window after arrival is
 // grace, a participant whose own crossings keep landing late is dropped at the end
 // of a window, and one that is never late is kept whatever the session costs it.

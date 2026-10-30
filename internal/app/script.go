@@ -21,26 +21,23 @@ import (
 // ScriptPaceMax is the -speed token that removes wall pacing from a script run.
 const ScriptPaceMax = "max"
 
-// scriptPacing resolves a run's wall pace: the interval one simulation tick may
-// occupy, and whether pacing applies. An empty spec takes the default from the run
-// rather than the flags — a script that starts in a session is paced from its first
-// tick, a solo one runs flat out until it opens a session with :host. Bots seat
-// in a session, so a run with them starts in one.
-func scriptPacing(cfg Config) (interval time.Duration, paced bool, err error) {
-	if cfg.TimeScaleSpec == "" {
-		inSession := cfg.HostAddress != "" || cfg.JoinAddress != "" || len(cfg.Bots) > 0
-		return parameter.GameUpdateInterval, inSession, nil
+// scriptPacing resolves whether a run's wall pace applies; a paced tick occupies the
+// game interval at the rate the run's clock holds, which -speed sets alone and the
+// host's in a session. An empty spec takes the default from the run rather than the
+// flags — a script that starts in a session is paced from its first tick, a solo one
+// runs flat out until it opens a session with :host. Bots seat in a session.
+func scriptPacing(cfg Config) (paced bool, err error) {
+	switch {
+	case cfg.TimeScaleSpec == "":
+		return cfg.HostAddress != "" || cfg.JoinAddress != "" || len(cfg.Bots) > 0, nil
+	case cfg.TimeScaleSpec == ScriptPaceMax:
+		return false, nil
 	}
-	if cfg.TimeScaleSpec == ScriptPaceMax {
-		return parameter.GameUpdateInterval, false, nil
-	}
-	scale, ok := engine.ParseScale(cfg.TimeScaleSpec)
-	if !ok {
-		return 0, false, fmt.Errorf(
+	if _, ok := engine.ParseScale(cfg.TimeScaleSpec); !ok {
+		return false, fmt.Errorf(
 			"-speed %q is not a ladder rate (1/8 1/4 1/2 1 2 4 8) or %q", cfg.TimeScaleSpec, ScriptPaceMax)
 	}
-	// A faster rate spends less wall time per tick.
-	return time.Duration(int64(parameter.GameUpdateInterval) * scale.Den / scale.Num), true, nil
+	return true, nil
 }
 
 // RunScript loads an authored deterministic script and runs it. A host/join
@@ -144,7 +141,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		cfg.Mode = ModeHeadless
 	}
 	cfg.scriptedSession = true
-	interval, paced, err := scriptPacing(cfg)
+	paced, err := scriptPacing(cfg)
 	if err != nil {
 		return false, err
 	}
@@ -169,7 +166,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 	}
 	// cfg, not a.cfg: once build hands the App out, its config is read under its lock
 	if cfg.Mode == ModeScript {
-		return true, runPresented(a, src, kind, name, interval, paced, signals)
+		return true, runPresented(a, src, kind, name, paced, signals)
 	}
 	// A solo run that opens a session, with :host or for its bots, gains a peer to
 	// keep step with, so pacing engages at that moment. The clock is re-anchored there
@@ -217,7 +214,8 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		}
 		if paced {
 			trim, step := a.scheduler.TakePace()
-			nextTick = nextTick.Add(engine.PacedInterval(interval, trim, step))
+			tick := a.ctx.TimeCtl.Scale().Wall(parameter.GameUpdateInterval)
+			nextTick = nextTick.Add(engine.PacedInterval(tick, trim, step))
 			if !waitScriptTick(signals, time.Until(nextTick)) {
 				return false, nil
 			}

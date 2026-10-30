@@ -3,6 +3,7 @@
 package converge
 
 import (
+	"cmp"
 	"slices"
 	"sync"
 	"testing"
@@ -56,9 +57,10 @@ type stub struct {
 	carried  []uint32
 	cut      bool
 
-	// What the eviction policy reads, and what it decided.
+	// What the eviction policy reads, and what it decided; a zero rate is real time.
 	late    map[uint32]uint64
 	ingress map[uint32]uint64
+	rate    engine.TimeScale
 	dropped []uint32
 
 	// How the world was read as ticks closed: captured whole, or indexed in place.
@@ -88,6 +90,12 @@ func (s *stub) Held() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.held
+}
+
+func (s *stub) Rate() engine.TimeScale {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return cmp.Or(s.rate, engine.ScaleNormal)
 }
 
 func (s *stub) setHeld(held bool) {

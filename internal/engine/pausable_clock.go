@@ -42,6 +42,14 @@ func (s TimeScale) Percent() int64 {
 	return s.Num * 100 / s.Den
 }
 
+// Wall is the wall interval game duration d occupies at this rate
+func (s TimeScale) Wall(d time.Duration) time.Duration {
+	if s.IsNormal() || !s.Valid() {
+		return d
+	}
+	return time.Duration(int64(d) * s.Den / s.Num)
+}
+
 // String renders the rate as a ladder token: "1/4", "1", "8"
 func (s TimeScale) String() string {
 	if s.Den == 1 {
@@ -154,10 +162,7 @@ func (pc *PausableClock) ToReal(d time.Duration) time.Duration {
 	if a.paused {
 		return 0
 	}
-	if a.scale.IsNormal() {
-		return d
-	}
-	return time.Duration(int64(d) * a.scale.Den / a.scale.Num)
+	return a.scale.Wall(d)
 }
 
 // Step advances frozen game time by d; a no-op while running.

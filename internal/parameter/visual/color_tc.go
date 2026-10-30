@@ -79,6 +79,11 @@ var (
 	// Boost glow effect
 	RgbBoostGlow = color.HotPink
 
+	// A Wraith's field and its glow, pale and cool; on a console the glow lights
+	// Wraith256Rim's green white, where a paler green would fall to the rim's own
+	RgbWraithField = color.RGB{R: 196, G: 210, B: 226}
+	RgbWraithGlow  = color.RGB{R: 225, G: 235, B: 242}
+
 	// Splash colors
 	RgbSplashWhite = color.DimSilver
 	RgbSplashCyan  = color.VibrantCyan

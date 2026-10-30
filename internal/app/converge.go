@@ -29,9 +29,10 @@ type instance struct {
 // instance is the run as converge reads it.
 func (a *App) instance() instance { return instance{&a.glue, &a.membership} }
 
-func (m *membership) Position() event.Stamp { return m.run.Position() }
-func (m *membership) Driven() bool          { return m.cfg.Mode.Driven() }
-func (m *membership) Held() bool            { return m.ctx.TimeCtl.Held() }
+func (m *membership) Position() event.Stamp  { return m.run.Position() }
+func (m *membership) Driven() bool           { return m.cfg.Mode.Driven() }
+func (m *membership) Held() bool             { return m.ctx.TimeCtl.Held() }
+func (m *membership) Rate() engine.TimeScale { return m.ctx.TimeCtl.Scale() }
 
 func (m *membership) LocalParticipant() uint32 { return m.localParticipant() }
 

@@ -1265,6 +1265,38 @@ func TestOnlyTheHostHoldsALiveSession(t *testing.T) {
 	}
 }
 
+// TestASessionsRateIsItsHosts: the host's :speed crosses, so every participant runs
+// at it from one agreed tick, and a guest asking is told only the host can.
+func TestASessionsRateIsItsHosts(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A9, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	host, guest := apps[0], apps[1]
+	mode.ExecuteCommand(guest.Context(), "speed 2")
+	guest.Settle()
+	if got := guest.Context().GetStatusMessage(); got != "Only the host can change the speed in a live session" {
+		t.Fatalf("a guest's :speed was told %q", got)
+	}
+	mode.ExecuteCommand(host.Context(), "speed 2")
+	host.Settle()
+	took := make([]uint64, len(apps))
+	for range parameter.NetworkBarrierMaxDelayTicks + 2 {
+		tickAll(apps)
+		for i, a := range apps {
+			if took[i] == 0 && a.Context().TimeCtl.Scale() == (engine.TimeScale{Num: 2, Den: 1}) {
+				took[i] = a.Position().Tick
+			}
+		}
+	}
+	if took[0] == 0 || took[1] != took[0] {
+		t.Fatalf("host and guest took 2x at ticks %v, want both at one tick", took)
+	}
+	if got := guest.Context().GetStatusMessage(); got != "The host set the speed to 2x" {
+		t.Fatalf("the guest was told %q", got)
+	}
+	assertMeshParity(t, apps, 0)
+}
+
 // TestTheHostsNextTickResumesItsGuests: a held host sends nothing, so its first epoch
 // after :pause off is the resume, and the guest runs on from the tick both stood at.
 func TestTheHostsNextTickResumesItsGuests(t *testing.T) {

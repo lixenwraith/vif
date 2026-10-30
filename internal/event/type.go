@@ -123,6 +123,8 @@ const (
 	EventGameHoldRequest
 	// EventGameHold [bus] starts a hold; a live session's host crosses it, so every participant stops after one tick
 	EventGameHold
+	// EventGameSpeed (GameSpeedPayload) [bus] sets a live session's rate; its host crosses it, so every participant changes rate at one tick
+	EventGameSpeed
 
 	// --- FSM ---
 

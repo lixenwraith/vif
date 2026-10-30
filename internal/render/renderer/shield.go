@@ -192,11 +192,13 @@ type emberTransitionState struct {
 	transitionStart time.Time
 }
 
-// ShieldRenderer renders active player shields with dynamic energy-based coloring
+// ShieldRenderer renders active player shields with dynamic energy-based coloring,
+// and the Wraith field round every Wraith
 type ShieldRenderer struct {
 	gameCtx *engine.GameContext
 	painter *ShieldPainter
 	configs [component.ShieldTypeCount]visual.ShieldConfig // at the cell aspect
+	wraith  visual.ShieldConfig
 
 	// Per-entity ember transition tracking (keyed by entity)
 	emberTransitions map[core.Entity]*emberTransitionState
@@ -212,17 +214,19 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 	for t := range r.configs {
 		r.configs[t] = visual.ShieldConfigFor(component.ShieldType(t), gameCtx.World.Resources.Config.CellAspect)
 	}
+	r.wraith = visual.WraithFieldFor(gameCtx.World.Resources.Config.CellAspect)
 	return r
 }
 
-// Render draws all active player shields
+// Render draws the Wraith fields, then all active player shields
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	buf.SetWriteMask(visual.MaskField)
+	r.renderWraiths(ctx, buf)
+
 	shields := r.gameCtx.World.Components.Shield
 	if shields.CountEntities() == 0 {
 		return
 	}
-
-	buf.SetWriteMask(visual.MaskField)
 
 	localEntity := r.gameCtx.World.Resources.Player.Entity
 	var localShield *component.ShieldComponent
@@ -238,6 +242,22 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	if localShield != nil {
 		r.renderShield(ctx, buf, localEntity, localShield, true)
 	}
+}
+
+// renderWraiths paints the Wraith field at the cell each Wraith holds, none for one
+// off the map, subordinate to the live fields as a peer's is.
+func (r *ShieldRenderer) renderWraiths(ctx render.RenderContext, buf *render.RenderBuffer) {
+	cfg := &r.wraith
+	style := ShieldStyle{
+		Config: cfg, BlendScale: visual.PeerFieldBlend, Color: cfg.Color, GlowColor: cfg.GlowColor,
+		Palette256: cfg.Palette256, GlowPeriod: cfg.GlowPeriod, SkipX: -1, SkipY: -1,
+	}
+	r.gameCtx.World.Components.Wraith.Each(func(_ core.Entity, w *component.WraithComponent) bool {
+		if w.X >= 0 {
+			r.painter.Paint(buf, ctx, w.X, w.Y, style)
+		}
+		return true
+	})
 }
 
 func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.RenderBuffer, shieldEntity core.Entity, shieldComp *component.ShieldComponent, local bool) {

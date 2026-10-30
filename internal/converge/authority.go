@@ -150,9 +150,9 @@ func newAuthority(inst Instance, tel snapshot.Telemetry, reg *status.Registry) *
 }
 
 // SlowPolicy is when the authority evicts a participant that cannot keep up: over
-// Window, its epochs reached the authority late at least LatePerSecond, and its
-// link carried at least BytesPerSecond. Zero drops a criterion; both zero, or no
-// window, disables eviction.
+// Window, its epochs reached the authority late at least LatePerSecond, and its link
+// carried at least BytesPerSecond, each second a second of game time. Zero drops a
+// criterion; both zero, or no window, disables eviction.
 type SlowPolicy struct {
 	Window         time.Duration
 	LatePerSecond  float64
@@ -164,11 +164,20 @@ func (p SlowPolicy) enabled() bool {
 }
 
 // slowWatch is one participant's current window: where it started, the count it
-// started from, and whether it is the grace window after the participant arrived.
+// started from, the rate it is played at, and whether it is the grace window after
+// the participant arrived or the rate changed.
 type slowWatch struct {
 	since time.Time
 	from  uint64
+	rate  engine.TimeScale
 	grace bool
+}
+
+// perPlayedSecond is a per-second reading over a wall window as one per second of
+// game time at rate: a session played faster sends and misses more a second, and a
+// budget holds what it plays rather than how fast.
+func perPlayedSecond(perWallSecond float64, rate engine.TimeScale) float64 {
+	return perWallSecond * rate.Wall(time.Second).Seconds()
 }
 
 // SetSlowPolicy replaces the eviction policy. Call before the session runs.
@@ -177,14 +186,14 @@ func (u *Authority) SetSlowPolicy(p SlowPolicy) { u.slow = p }
 // driveEviction judges each participant's last window on the authority. Only a
 // participant's own late crossings count, as the authority received them from its
 // link, so a slow participant's actions relayed to the others never mark them; the
-// first window after one arrives is grace, because a join catches up.
+// first window after one arrives or the rate changes is grace, while leads catch up.
 func (u *Authority) driveEviction(now time.Time) {
 	if !u.slow.enabled() || !u.isAuthority() {
 		clear(u.watch)
 		return
 	}
 	meter, _ := u.inst.Transport().(engine.LinkMeasuringPort)
-	local := u.inst.LocalParticipant()
+	local, played := u.inst.LocalParticipant(), u.inst.Rate()
 	seen := make(map[link.PeerID]bool, len(u.watch))
 	for _, e := range u.currentRoster() {
 		if uint32(e.ID) == local {
@@ -193,19 +202,19 @@ func (u *Authority) driveEviction(now time.Time) {
 		seen[e.ID] = true
 		late := u.inst.CommitLate(uint32(e.ID))
 		w, ok := u.watch[e.ID]
-		if !ok || late < w.from {
-			u.watch[e.ID] = slowWatch{since: now, from: late, grace: true}
+		if !ok || late < w.from || w.rate != played {
+			u.watch[e.ID] = slowWatch{since: now, from: late, rate: played, grace: true}
 			continue
 		}
 		elapsed := now.Sub(w.since)
 		if elapsed < u.slow.Window {
 			continue
 		}
-		u.watch[e.ID] = slowWatch{since: now, from: late}
-		rate := float64(late-w.from) / elapsed.Seconds()
+		u.watch[e.ID] = slowWatch{since: now, from: late, rate: played}
+		rate := perPlayedSecond(float64(late-w.from)/elapsed.Seconds(), played)
 		var bps float64
 		if meter != nil {
-			bps = meter.LinkMetric(uint32(e.ID)).Throughput
+			bps = perPlayedSecond(meter.LinkMetric(uint32(e.ID)).Throughput, played)
 		}
 		if w.grace || rate < u.slow.LatePerSecond || bps < u.slow.BytesPerSecond {
 			continue
@@ -213,7 +222,7 @@ func (u *Authority) driveEviction(now time.Time) {
 		if u.inst.DropParticipant(uint32(e.ID)) {
 			u.statEvict.Add(1)
 			u.log.Warn("session", "msg", "participant evicted as too slow",
-				"peer", e.ID, "late_per_s", rate, "bytes_per_s", bps,
+				"peer", e.ID, "late_per_s", rate, "bytes_per_s", bps, "speed", played.String(),
 				"window", u.slow.Window.String())
 		}
 	}
@@ -235,6 +244,7 @@ func (u *Authority) driveIngress(now time.Time) {
 		return
 	}
 	roster, local, peers := u.currentRoster(), link.PeerID(u.inst.LocalParticipant()), meter.Peers()
+	played := u.inst.Rate()
 	unlinked := func(e network.RosterEntry) bool {
 		return e.ID != local && e.Holder == 0 && !slices.Contains(peers, uint32(e.ID))
 	}
@@ -252,26 +262,27 @@ func (u *Authority) driveIngress(now time.Time) {
 		seen[e.ID] = true
 		in := u.inst.Ingress(uint32(e.ID))
 		w, ok := u.metered[e.ID]
-		if !ok || in < w.from {
-			u.metered[e.ID] = slowWatch{since: now, from: in}
+		if !ok || in < w.from || w.rate != played {
+			u.metered[e.ID] = slowWatch{since: now, from: in, rate: played}
 			continue
 		}
 		elapsed := now.Sub(w.since)
 		if elapsed < u.slow.Window {
 			continue
 		}
-		u.metered[e.ID] = slowWatch{since: now, from: in}
+		u.metered[e.ID] = slowWatch{since: now, from: in, rate: played}
 		carried := 1 + behind
 		for _, o := range roster {
 			if o.Holder == e.ID {
 				carried++
 			}
 		}
-		rate := float64(in-w.from) / elapsed.Seconds()
+		rate := perPlayedSecond(float64(in-w.from)/elapsed.Seconds(), played)
 		if rate > u.ingress*float64(carried) && u.inst.DropParticipant(uint32(e.ID)) {
 			u.statEvict.Add(1)
 			u.log.Warn("session", "msg", "participant evicted for what its link sends",
-				"peer", e.ID, "bytes_per_s", rate, "carried", carried, "window", u.slow.Window.String())
+				"peer", e.ID, "bytes_per_s", rate, "carried", carried, "speed", played.String(),
+				"window", u.slow.Window.String())
 		}
 	}
 	for id := range u.metered {

@@ -106,6 +106,21 @@ func ShieldConfigFor(t component.ShieldType, a vmath.Aspect) ShieldConfig {
 	)
 }
 
+// WraithFieldFor is the field round a Wraith: the player shield's geometry with the
+// boost's turning glow, pale and slower
+func WraithFieldFor(a vmath.Aspect) ShieldConfig {
+	return buildShieldConfig(
+		parameter.PlayerShieldRadiusX,
+		a.Y(parameter.PlayerShieldRadiusY),
+		parameter.ShieldMaxOpacity,
+		RgbWraithField, RgbWraithField,
+		Wraith256Rim, Wraith256Rim,
+		RgbWraithGlow,
+		ShieldPlayerGlowIntensity,
+		parameter.WraithGlowPeriod,
+	)
+}
+
 func buildShieldConfig(rx, ry, maxOpacity float64, colorMain, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
 	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
 

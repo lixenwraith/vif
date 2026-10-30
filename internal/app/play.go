@@ -33,7 +33,17 @@ func PlayJournal(viewer Config, paths ...string) error {
 	an := set.Anchors[0]
 	cfg.Play, cfg.AudioBackend, cfg.AudioBuffer = viewer.Play, viewer.AudioBackend, viewer.AudioBuffer
 	cfg.MusicWAV, cfg.ColorMode, cfg.ColorModeSet = viewer.MusicWAV, viewer.ColorMode, viewer.ColorModeSet
-	a, err := NewReplay(cfg)
+	// A replay's clock opens at the rate its journal did, and its records move it as
+	// the run's moved, which is the rate it is presented at.
+	rate := parseSpeed(an.Speed)
+	newReplay := func(cfg Config) (*App, error) {
+		r, err := NewReplay(cfg)
+		if err == nil {
+			r.ctx.TimeCtl.SetScale(rate)
+		}
+		return r, err
+	}
+	a, err := newReplay(cfg)
 	if err != nil {
 		return err
 	}
@@ -61,9 +71,8 @@ func PlayJournal(viewer Config, paths ...string) error {
 	a.log.Info("journal", "msg", "replay opened",
 		"records", len(set.Records), "digests", len(set.Digests), "seed", an.Seed, "speed", an.Speed)
 	shown := &replayCopy{a: a, src: journalSource{d, a.log}}
-	p := &player{a: a, src: shown.src, interval: time.Duration(an.TickInterval),
-		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}
-	rw = newRewinder(shown, a, replayCopies(a, cfg, stream, NewReplay))
+	p := &player{a: a, src: shown.src, interval: time.Duration(an.TickInterval), scale: engine.ScaleNormal}
+	rw = newRewinder(shown, a, replayCopies(a, cfg, stream, newReplay))
 	p.rw = rw
 	a.ctx.ReplaySeek = p.seekLater
 	return p.run()
@@ -90,20 +99,18 @@ func replayCopies(lender *App, cfg Config, stream *journal.Stream, newApp func(C
 	}
 }
 
-// runPresented presents a driven run, a script or a bot. Pacing is the run's own:
-// the resolved interval is one tick's wall budget, and an unpaced run is presented
-// as fast as the frame loop can render it.
-func runPresented(a *App, src pacedSource, kind, name string,
-	interval time.Duration, paced bool, signals <-chan os.Signal) error {
-
+// runPresented presents a driven run, a script or a bot. Pacing is the run's own: a
+// paced tick occupies the game interval at its clock's rate, and an unpaced run is
+// presented as fast as the frame loop can render it.
+func runPresented(a *App, src pacedSource, kind, name string, paced bool, signals <-chan os.Signal) error {
 	live := a.membership.sessionTransport() != nil
+	interval := parameter.GameUpdateInterval
 	if !paced {
 		interval = time.Millisecond // the floor perTick already clamps to
 	}
 	a.log.Info("app", "msg", kind+" opened", "name", name, "paced", paced, "live", live)
 	p := &player{
-		a: a, src: src, interval: interval,
-		rec: engine.ScaleNormal, scale: engine.ScaleNormal,
+		a: a, src: src, interval: interval, scale: engine.ScaleNormal,
 		driven: true, live: live, interactive: kind == "bot", signals: signals,
 	}
 	return p.run()
@@ -122,8 +129,7 @@ type player struct {
 	a   *App
 	src pacedSource
 
-	interval time.Duration    // stream game time per tick
-	rec      engine.TimeScale // rate the stream was produced at
+	interval time.Duration    // stream game time per tick, at the rate its clock runs
 	scale    engine.TimeScale // viewer rate, relative to the produced one
 
 	driven      bool // a script or a bot rather than a replay
@@ -269,10 +275,7 @@ func (p *player) advance(elapsed time.Duration) {
 	}
 	p.live = p.driven && p.a.membership.sessionTransport() != nil
 	if p.live {
-		p.paused, p.scale = false, engine.ScaleNormal
-		if p.a.cfg.TimeScaleSpec == "" {
-			p.interval = parameter.GameUpdateInterval
-		}
+		p.paused, p.scale, p.interval = false, engine.ScaleNormal, parameter.GameUpdateInterval
 	}
 	commandHeld := p.cmd != nil && !(p.interactive && p.live)
 	held := p.driven && p.a.ctx.TimeCtl.Held()
@@ -317,11 +320,11 @@ func (p *player) advance(elapsed time.Duration) {
 	}
 }
 
-// perTick converts one recorded tick into the wall interval it should occupy
+// perTick converts one tick into the wall interval it should occupy: at the rate the
+// presented run's clock holds, which a session's host or a replay's records move,
+// and at the viewer's on top.
 func (p *player) perTick() time.Duration {
-	d := int64(p.interval) * p.rec.Den / p.rec.Num
-	d = d * p.scale.Den / p.scale.Num
-	return max(time.Duration(d), time.Millisecond)
+	return max(p.scale.Wall(p.a.ctx.TimeCtl.Scale().Wall(p.interval)), time.Millisecond)
 }
 
 // tickOnce advances a bot's or script's stream, latching its end

@@ -410,9 +410,12 @@ matters, which is when they overlap. `PriorityPeerCursor` sits directly under
 `PriorityCursor` so an overlap resolves in favour of the one the player is steering.
 
 `peer_cursor` keeps a participant visible even when it projects no shield or
-ember. The local cursor and the inverted marker read the cell underneath
-through one `cellContent`, which picks the cell's top glyph as typing does, so
-what they show is what a keystroke would hit.
+ember. A Wraith wears the Wraith field round the cell it holds
+(`visual.WraithFieldFor`): the player shield's geometry, pale and cool, its glow
+turning every `WraithGlowPeriod`, at the peer blend, its rim green in 256 colours.
+The local cursor and the inverted marker read the cell underneath through one
+`cellContent`, which picks the cell's top glyph as typing does, so what they show
+is what a keystroke would hit.
 
 Peer shield and ember fields keep their owner's color and geometry. In truecolor
 they compose at `visual.PeerFieldBlend` (30%) of local intensity over the

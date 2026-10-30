@@ -350,7 +350,9 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	local.CellAspect = fromAnchor.CellAspect
 	local.LockMap = true
 	local.sessionPlayers = o.Players
-	if !local.Mode.Driven() {
+	// The session's rate is its host's, a script's or bot's pace included; a
+	// harness's manual clock is driven by Tick and takes none.
+	if !local.Mode.Driven() || local.scriptedSession {
 		local.TimeScaleSpec = o.Anchor.Anchor.Speed
 	}
 	return local, local.Validate()
@@ -596,7 +598,7 @@ func (c Config) validateDriven() error {
 	if c.TimeScaleSpec != "" {
 		switch {
 		case c.scriptedSession:
-			if _, _, err := scriptPacing(c); err != nil {
+			if _, err := scriptPacing(c); err != nil {
 				return err
 			}
 		case c.Mode.Serves():

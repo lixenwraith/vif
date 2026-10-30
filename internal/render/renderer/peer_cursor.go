@@ -13,7 +13,8 @@ import (
 )
 
 // Peer cursors keep their slot colour and hexadecimal label across instances. A
-// Wraith is drawn as its label alone, in its slot's colour, at the cell it holds.
+// Wraith is drawn as its label alone, in its slot's colour, at the cell it holds,
+// over the field the shield renderer rings it with.
 type PeerCursorRenderer struct {
 	gameCtx      *engine.GameContext
 	renderCell   peerCursorCellRenderer

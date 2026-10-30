@@ -99,12 +99,12 @@ var configPages = []configPage{
 		{key: "graph", label: "Route graph", description: "Show composite navigation routes (:graph <group> selects a target group).",
 			command: "graph", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowComposite) }},
 	}},
-	{key: "simulation", label: "Simulation", description: "Solo simulation pacing and a replay's restart; network sessions keep their shared rate.", options: []configOption{
-		{key: "speed", label: "Game speed", description: "Left slows down; Right or Enter speeds up. 1x is real time; range 1/8x to 8x.",
+	{key: "simulation", label: "Simulation", description: "Simulation pacing, which in a session its host sets, and a replay's restart.", options: []configOption{
+		{key: "speed", label: "Game speed", description: "Left slows down; Right or Enter speeds up. 1x is real time; range 1/8x to 8x. In a session only the host can, and every participant changes with it.",
 			command: "speed", read: func(ctx *engine.GameContext) string { return ctx.TimeCtl.Scale().String() + "x" },
 			change: func(ctx *engine.GameContext, d int) {
 				handleSpeedCommand(ctx, []string{engine.ScaleStep(ctx.TimeCtl.Scale(), d).String()})
-			}},
+			}, disabled: speedRefused},
 		commandAction("replay", "Restart replay", "Play the recording again from its first tick. :r tick and :r time go to any other.", "replay restart"),
 	}},
 	{key: "diagnostics", label: "Diagnostics", description: "Logging, snapshots, flight recorder and profiling.", options: []configOption{
