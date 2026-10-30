@@ -154,8 +154,8 @@ occupants whenever a wall is placed, moved, removed or remasked there
 (`Position.wallOf` names a wall and what it stops), so a point is a bit and an
 area a few words a row. `BlockBits` hands a reader deriving whole the plane's
 words with the surfaces' solid cells (`position.Bits`, which navigation derives
-its passability from). The rock's look (`RockLook`) stays the engine's, beside the
-field. A wall's placement and its store membership bring the plane to the cell,
+its passability from). The rock's look (`RockLook`) is the wall system's to lay in
+`CaveResource` with the field, where the rock renderer reads it. A wall's placement and its store membership bring the plane to the cell,
 and a `BlockMask` written in place calls `Position.WallChanged` for its wall. The
 same changes log the cells they can have turned, both cells of a wall's move and
 each cell a rock shift crossed, and `BlockChanges` hands a reader that keeps its

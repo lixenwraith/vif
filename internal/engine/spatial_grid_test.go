@@ -153,11 +153,11 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					for i := range cols {
 						cols[i] = rockColumn()
 					}
-					w.Positions.SetRock(masks[1+rng.IntN(len(masks)-1)], RockLook{}, 0, cols)
+					w.Positions.SetRock(masks[1+rng.IntN(len(masks)-1)], 0, cols)
 				case 14:
 					w.Positions.ShiftRock(rockColumn())
 				case 15:
-					w.Positions.SetRock(0, RockLook{}, 0, nil)
+					w.Positions.SetRock(0, 0, nil)
 				}
 			}
 			// The planes answer as the cells' own wall components do, cell by cell

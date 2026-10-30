@@ -762,7 +762,7 @@ func TestAnEnteringRuneTakesItsCellAsTheDriftCarriesAGlyph(t *testing.T) {
 		cols[x] = engine.RockColumn{Ceil: 0, Floor: cfg.MapHeight}
 	}
 	cols[31] = engine.RockColumn{Ceil: cfg.MapHeight, Floor: cfg.MapHeight}
-	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	w.Positions.SetRock(component.WallBlockAll, 0, cols)
 	for _, y := range []int{12, 16} {
 		wall := w.CreateEntity(core.DomainShared)
 		w.Positions.SetPosition(wall, component.PositionComponent{X: 33, Y: y})
@@ -961,7 +961,7 @@ func TestTextPlacedUnderASceneryDriftIsSceneryCountedApart(t *testing.T) {
 		cols[x] = engine.RockColumn{Ceil: 0, Floor: w.Resources.Config.MapHeight}
 	}
 	cols[rock.X] = engine.RockColumn{Ceil: rock.Y + 1, Floor: w.Resources.Config.MapHeight}
-	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	w.Positions.SetRock(component.WallBlockAll, 0, cols)
 	wall := w.CreateEntity(core.DomainShared)
 	walled, _ := w.Positions.GetPosition(scenery[len(scenery)-1])
 	w.Positions.SetPosition(wall, walled)

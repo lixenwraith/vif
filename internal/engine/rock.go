@@ -30,7 +30,8 @@ type RockField struct {
 }
 
 // RockLook is how a rock field draws: Visual in every cell, or with Stone set the art
-// preset Art (a pattern.ArtPreset) from Seed, cell by cell
+// preset Art (a pattern.ArtPreset) from Seed, cell by cell. The wall system lays it
+// in CaveResource with the field, and the rock renderer reads it there.
 type RockLook struct {
 	Visual component.WallVisualConfig
 	Stone  bool
@@ -70,13 +71,9 @@ func (r *RockField) split(cols []RockColumn) (ceil, floor []int) {
 // World.updateMutex and change it only through SetRock and ShiftRock.
 func (p *Position) Rock() *RockField { return p.rock }
 
-// RockLook is how the rock field standing draws
-func (p *Position) RockLook() RockLook { return p.rockLook }
-
 // SetRock lays cols as the rock field from map column 0, origin its first profile
-// column, drawn in look; no columns lift the field
-func (p *Position) SetRock(mask component.WallBlockMask, look RockLook, origin int64, cols []RockColumn) {
-	p.rockLook = look
+// column; no columns lift the field
+func (p *Position) SetRock(mask component.WallBlockMask, origin int64, cols []RockColumn) {
 	if len(cols) == 0 {
 		p.liftRock()
 		return

@@ -1271,7 +1271,8 @@ func (s *WallSystem) openCave(p event.CaveOpenPayload) {
 func (s *WallSystem) liftCave() {
 	s.cave = caveState{}
 	s.rockMap = [2]int{}
-	s.world.Positions.SetRock(component.WallBlockNone, engine.RockLook{}, 0, nil)
+	s.world.Positions.SetRock(component.WallBlockNone, 0, nil)
+	s.world.Resources.Cave.Look = engine.RockLook{}
 	s.publishCave()
 }
 
@@ -1328,7 +1329,8 @@ func (s *WallSystem) layRock() {
 	if art, ok := pattern.ParseArtPreset(s.cave.Art); ok {
 		look.Stone, look.Art, look.Seed = true, uint8(art), s.cave.Config.Seed
 	}
-	s.world.Positions.SetRock(s.cave.Mask, look, s.cave.Offset, s.rockCols)
+	s.world.Positions.SetRock(s.cave.Mask, s.cave.Offset, s.rockCols)
+	s.world.Resources.Cave.Look = look
 }
 
 // pushOutOfRock queues a push check at every cell where something stands in the

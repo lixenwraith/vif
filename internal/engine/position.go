@@ -31,7 +31,6 @@ type Position struct {
 	entities []core.Entity // Dense array for cache-friendly iteration
 	bit      uint64        // Component bit mask
 	rock     *RockField    // the cave's rock, two surfaces of the index, or nil
-	rockLook RockLook      // how the rock field draws, kept beside it
 
 	statCellSaturations *atomic.Int64
 	statCellOverflows   *atomic.Int64
@@ -297,7 +296,7 @@ func (p *Position) Clear() {
 	p.dense = p.dense[:0]
 	p.entities = p.entities[:0]
 	p.Index.Clear()
-	p.rock, p.rockLook = nil, RockLook{}
+	p.rock = nil
 }
 
 // --- Wall ---
