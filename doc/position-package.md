@@ -305,3 +305,41 @@ NavigationWallMoves/500x254       4276      4222    -1.3%
 GlyphRender/200x60               53428     55661    +4.2%
 GlyphRender/400x120              86806     81071    -6.6%
 ```
+
+Phase 5, the presence bits, measured against the commit before them on this
+branch, the same bench files on both, alternated five times. td's tick with
+sixteen cursors, ms a tick:
+
+```
+before    0.32  0.30  0.35  0.29  0.31   median 0.31
+after     0.30  0.34  0.30  0.30  0.30   median 0.30
+```
+
+The benches, medians of ns/op:
+
+```
+                                 before     after   change
+CaveStep/200x60                   7873      8076    +2.6%
+CaveStep/400x120                 14312     13797    -3.6%
+CaveStep/500x254                 22962     16830   -26.7%
+CaveStepNavigation/200x60        29420     28799    -2.1%
+CaveStepNavigation/400x120       58411     59782    +2.3%
+CaveStepNavigation/500x254       71002     71803    +1.1%
+CaveNavigation/200x60/near       75661     74300    -1.8%
+CaveNavigation/200x60/far       130517    127126    -2.6%
+CaveNavigation/400x120/near      94623     85290    -9.9%
+CaveNavigation/400x120/far      155387    143344    -7.8%
+CaveNavigation/500x254/near     110778    103111    -6.9%
+CaveNavigation/500x254/far      193145    173590   -10.1%
+NavigationWallMoves/200x60        3857      3975    +3.1%
+NavigationWallMoves/400x120       4177      4180    +0.1%
+NavigationWallMoves/500x254       4141      4045    -2.3%
+GlyphRender/120x40               35777     35413    -1.0%
+GlyphRender/200x60               61743     61300    -0.7%
+GlyphRender/400x120             102235    107896    +5.5%
+```
+
+The gain grows with the map, where the cells a probe misses are out of cache:
+the cave step's push checks and the composites' probes on the largest map. The
+glyph renderer, whose probes land on occupied cells, pays the extra load inside
+the band.
