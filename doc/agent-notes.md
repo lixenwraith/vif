@@ -97,6 +97,10 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Tests that flake
 
+- The cadence tests (`internal/app/cadence_test.go`) run a shaped mesh on its
+  virtual clock and are deterministic: one fails every run alone or never, so it is
+  not load. A capture a few bytes larger or smaller reshapes every publication over
+  a thin link: bisect, then print the host's `LinkMetric` and `Cadence()` each tick.
 - A few `internal/app` tests over real sockets have failed on main alone, rarely and
   more under `-race` or load: a relay-join hold and a mid-session journal test. A
   failure there takes about 16.5 s, a 15 s socket wait running out. Before calling

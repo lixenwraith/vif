@@ -1180,8 +1180,9 @@ type LinkMeasuringPort interface {
 	ObserveTransfer(peer uint32, bytes int64, elapsed time.Duration)
 
 	// ObserveHold records whether this instance's frames for a peer are waiting on
-	// its link now. A sender pacing to a link never shows a backlog past the bound
-	// it paces to; frames that wait are its evidence that the link is the limit.
+	// its link now, or would: the link stands past the bound the sender paces to.
+	// A paced sender never shows a backlog near the meter's own threshold; frames
+	// that wait are its evidence that the link is the limit.
 	ObserveHold(peer uint32, held bool)
 }
 
