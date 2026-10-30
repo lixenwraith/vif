@@ -239,6 +239,15 @@ func (g *Grid[E]) EntitiesAt(x, y int, scope Scope) []E {
 	return g.Cells[y*g.Width+x].view(scope)
 }
 
+// Occupants is EntitiesAt without the presence test, for a caller that knows the
+// cell holds something, as one asking about an entity's own cell does.
+func (g *Grid[E]) Occupants(x, y int, scope Scope) []E {
+	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
+		return nil
+	}
+	return g.Cells[y*g.Width+x].view(scope)
+}
+
 // HasAnyEntityAt reports whether scope selects at least one entity at (x, y). O(1)
 func (g *Grid[E]) HasAnyEntityAt(x, y int, scope Scope) bool {
 	return x >= 0 && x < g.Width && y >= 0 && y < g.Height && g.holds(x, y, scope)

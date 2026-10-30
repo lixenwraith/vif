@@ -27,6 +27,7 @@ type Surface struct {
 	// brings in, for a frame drawn between shifts, which block nothing
 	heights []int
 	ahead   []int
+	pending bool // shifted since the merged bits moved
 }
 
 // Width is how many columns the surface covers, from x 0
@@ -58,47 +59,41 @@ func (s *Surface) solidAt(h, y int) bool {
 // stops reports whether the surface blocks mask, 0 asking for any
 func (s *Surface) stops(mask Mask) bool { return mask == 0 || s.Mask&mask != 0 }
 
-// solid is the surfaces of one mask merged for a probe: for each column, the
-// greatest height solid above it and the least solid from it, so a cell is two
-// compares whatever the surfaces.
+// solid is the surfaces of one mask merged for the probes: for each column the
+// greatest height solid above it and the least solid from it, and the cells
+// those make within the grid as bits, so a cell is one bit whatever the
+// surfaces. A shift of every surface of the mask moves the bits a column; a
+// change of any other kind lays them again from the heights.
 type solid struct {
 	mask        Mask
 	ceil, floor []int
+	bits        Bits
+	pending     int // the surfaces of the mask shifted since the bits moved
 }
 
 // stops reports whether the merged surfaces block mask, 0 asking for any
 func (m *solid) stops(mask Mask) bool { return mask == 0 || m.mask&mask != 0 }
 
-// at reports whether (x, y) is solid
-func (m *solid) at(x, y int) bool {
-	return x >= 0 && x < len(m.ceil) && (y < m.ceil[x] || y >= m.floor[x])
-}
-
-// in reports whether a cell of [x0, x1) × [y0, y1) is solid; the caller has
-// bounded the rows
-func (m *solid) in(x0, y0, x1, y1 int) bool {
-	for x := max(x0, 0); x < min(x1, len(m.ceil)); x++ {
-		if y0 < m.ceil[x] || y1 > m.floor[x] {
-			return true
-		}
-	}
-	return false
-}
-
-// mark sets every solid cell within w×h in b
-func (m *solid) mark(b Bits, w, h int) {
+// lay sets the bits from the heights, within w×h
+func (m *solid) lay(w, h int) {
+	m.bits = m.bits.sized(Stride(w), h)
 	for x := range min(len(m.ceil), w) {
-		for y := range min(m.ceil[x], h) {
-			b.Set(x, y)
-		}
-		for y := max(m.floor[x], 0); y < h; y++ {
-			b.Set(x, y)
-		}
+		m.layColumn(x, h)
+	}
+}
+
+// layColumn sets column x's bits from its heights
+func (m *solid) layColumn(x, h int) {
+	for y := range min(m.ceil[x], h) {
+		m.bits.Set(x, y)
+	}
+	for y := max(m.floor[x], 0); y < h; y++ {
+		m.bits.Set(x, y)
 	}
 }
 
 // merge brings the merged surfaces to the surfaces as they stand, one entry a
-// mask, in storage kept from the last merge
+// mask, in storage kept from the last merge, and lays their bits
 func (x *Index[E]) merge() {
 	x.unmerged = false
 	n := 0
@@ -113,9 +108,10 @@ func (x *Index[E]) merge() {
 			if i = n; n == len(x.solid) {
 				x.solid = append(x.solid, solid{})
 			}
-			x.solid[i] = solid{mask: s.Mask, ceil: x.solid[i].ceil[:0], floor: x.solid[i].floor[:0]}
+			x.solid[i] = solid{mask: s.Mask, ceil: x.solid[i].ceil[:0], floor: x.solid[i].floor[:0], bits: x.solid[i].bits}
 			n++
 		}
+		s.pending = false
 		m := &x.solid[i]
 		for len(m.ceil) < len(s.heights) {
 			m.ceil, m.floor = append(m.ceil, 0), append(m.floor, math.MaxInt)
@@ -129,14 +125,67 @@ func (x *Index[E]) merge() {
 		}
 	}
 	x.solid = x.solid[:n]
+	for i := range x.solid {
+		x.solid[i].pending = 0
+		x.solid[i].lay(x.Width, x.Height)
+	}
 }
 
-// merged is the merged surfaces, brought up to date for a probe
-func (x *Index[E]) merged() []solid {
+// shifted notes that s moved a column: once every surface of its mask has, the
+// merged heights and bits move a column with them and the last column is laid
+// from the surfaces' last heights; a surface moving twice before the rest, or
+// one moving alone before a probe, leaves the mask to a merge.
+func (x *Index[E]) shifted(s *Surface) {
 	if x.unmerged {
-		x.merge()
+		return
 	}
-	return x.solid
+	i := -1
+	for j := range x.solid {
+		if x.solid[j].mask == s.Mask {
+			i = j
+		}
+	}
+	if i < 0 || s.pending {
+		x.unmerged = true
+		return
+	}
+	s.pending = true
+	m := &x.solid[i]
+	m.pending++
+	n := 0
+	for _, o := range x.surfaces {
+		if o.Mask == s.Mask {
+			n++
+		}
+	}
+	if m.pending < n {
+		return
+	}
+	w := len(m.ceil)
+	if w > 0 {
+		copy(m.ceil, m.ceil[1:])
+		copy(m.floor, m.floor[1:])
+		m.ceil[w-1], m.floor[w-1] = 0, math.MaxInt
+	}
+	for _, o := range x.surfaces {
+		o.pending = false
+		if o.Mask != s.Mask || len(o.heights) == 0 {
+			continue
+		}
+		if last := len(o.heights) - 1; o.Side == Above {
+			m.ceil[last] = max(m.ceil[last], o.heights[last])
+		} else {
+			m.floor[last] = min(m.floor[last], o.heights[last])
+		}
+	}
+	m.pending = 0
+	for y := range x.Height {
+		row := m.bits.Row(y)
+		ShiftRow(row, row, 1)
+	}
+	if last := min(w, x.Width) - 1; last >= 0 {
+		m.layColumn(last, x.Height)
+	}
 }
 
 // Surfaces is every surface laid, in the order laid. Read-only.
@@ -193,7 +242,7 @@ func (x *Index[E]) ShiftSurface(s *Surface, enter int) {
 		s.heights[len(s.heights)-1] = enter
 	}
 	s.Origin++
-	x.unmerged = true
+	x.shifted(s)
 }
 
 // BlocksCarried is Blocks as a frame drawn carry columns into a scroll sees it:

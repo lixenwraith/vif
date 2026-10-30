@@ -539,7 +539,7 @@ func (p *Position) TopGlyphAt(x, y int) (core.Entity, bool) {
 // TopGlyphIs reports whether typeable e is the glyph drawn at (x, y), the one
 // typing acts on. Alone in its cell it is, which spares the lookup.
 func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
-	if cell := p.index.EntitiesAt(x, y, ScopeBoth); len(cell) == 1 {
+	if cell := p.index.Occupants(x, y, ScopeBoth); len(cell) == 1 {
 		return cell[0] == e
 	}
 	return p.topGlyph(x, y) == e
@@ -563,7 +563,7 @@ func (p *Position) topGlyph(x, y int) core.Entity {
 	glyphs := p.world.Components.Glyph
 	var top core.Entity
 	var topLevel component.GlyphLevel
-	for _, e := range p.index.EntitiesAt(x, y, ScopeBoth) {
+	for _, e := range p.index.Occupants(x, y, ScopeBoth) {
 		g, ok := glyphs.GetPtr(e)
 		if !ok || p.IsScenery(e) {
 			continue

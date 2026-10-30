@@ -89,7 +89,7 @@ func New[E comparable](frame Frame, blockOf func(e E) (Mask, bool)) *Index[E] {
 func (x *Index[E]) Resize(w, h int) {
 	x.Grid.Resize(w, h)
 	x.log.lose()
-	x.stale = true
+	x.stale, x.unmerged = true, true
 }
 
 // Clear empties the grid, lifts every surface and loses the log.
@@ -161,8 +161,11 @@ func (x *Index[E]) Blocks(px, py int, mask Mask) bool {
 	if px < 0 || px >= x.Width || py < 0 || py >= x.Height {
 		return false
 	}
-	for ms, i := x.merged(), 0; i < len(ms); i++ {
-		if m := &ms[i]; m.stops(mask) && m.at(px, py) {
+	if x.unmerged {
+		x.merge()
+	}
+	for i := range x.solid {
+		if m := &x.solid[i]; (mask == 0 || m.mask&mask != 0) && m.bits.Bit(px, py) {
 			return true
 		}
 	}
@@ -177,8 +180,11 @@ func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
 	if x0 >= x1 || y0 >= y1 {
 		return false
 	}
-	for ms, i := x.merged(), 0; i < len(ms); i++ {
-		if m := &ms[i]; m.stops(mask) && m.in(x0, y0, x1, y1) {
+	if x.unmerged {
+		x.merge()
+	}
+	for i := range x.solid {
+		if m := &x.solid[i]; m.stops(mask) && m.bits.Any(x0, x1, y0, y1) {
 			return true
 		}
 	}
@@ -204,9 +210,14 @@ func (x *Index[E]) blockedCells(px, py, width, height int, mask Mask) int {
 func (x *Index[E]) BlockBits(mask Mask, buf []uint64) Bits {
 	p := x.planeFor(mask)
 	b := Bits{Words: append(buf[:0], p.Words...), Stride: p.Stride}
-	for ms, i := x.merged(), 0; i < len(ms); i++ {
-		if m := &ms[i]; m.stops(mask) {
-			m.mark(b, x.Width, x.Height)
+	if x.unmerged {
+		x.merge()
+	}
+	for i := range x.solid {
+		if m := &x.solid[i]; m.stops(mask) {
+			for j, w := range m.bits.Words {
+				b.Words[j] |= w
+			}
 		}
 	}
 	return b
