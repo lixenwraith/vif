@@ -48,7 +48,7 @@ var crossingPushes = map[string]string{
 	// D-3 table, area effect: combat geometry crosses; visual centers stay local.
 	"missile:EventExplosionRequest":       "missile impact; center, radius, attack family and owner cross",
 	"particle:EventExplosionBatchRequest": "dust detonation; centers, radius, attack family and owner cross",
-	"weapon:EventExplosionRequest":        "disruptor pulse; center, ellipse radius, attack family, charge cap and owner cross",
+	"pulse:EventExplosionRequest":         "a cursor's pulse; center, the radius it has grown to, attack family, charge cap and owner cross",
 
 	// A ray band's hit on a Shared target: its member set and owner cross, as a shield impact's do.
 	"weapon:EventCombatAttackAreaCrossingRequest": "ray band; each Shared target's member set and the owner cross",

@@ -15,15 +15,15 @@ another one.
 | Simulated by | the cursor's owner only (D-2) | every instance, identically |
 | State | `WeaponComponent`, owner-authored (D-13) | `MountComponent` on the host, in the capture |
 | Positions read | the predicted cursor cell (D-18) | Shared positions only, roster order on ties |
-| Shots and visuals | Player-domain, on the owner alone | Player-domain, re-derived on every instance (D-6) |
+| Shots and visuals | Player-domain, on the owner alone | Player-domain, re-derived on every instance (D-6); a pulse is Shared |
 | What crosses | impacts only: damage, knockback, stun, burn (D-3) | nothing |
 | Hits on cursors | none (no PvP) | applied by each cursor's owner alone |
 
-A peer never sees a remote cursor's orbs, tracers, projectiles, bolts, rings or
+A peer never sees a remote cursor's orbs, tracers, projectiles, bolts, pulses or
 rays, and never receives its loadout's behaviour; it receives what that loadout
 did to the Shared world, as the artifacts in §5. A mount raises only local
 events: its cursor hits go through `strikeCursor`, which acts only on a cursor
-this instance simulates.
+this instance simulates, and its pulse is a Shared entity every instance advances.
 
 ## 2. Layers
 
@@ -35,7 +35,7 @@ flowchart LR
     Mount --> Delivery
     Delivery --> Combat["combat profiles: species targets, statuses"]
     Delivery --> Strike["strikeCursor: cursor targets"]
-    Delivery --> Presented["transient rings; tracer, ray, missile, bullet and lightning components"]
+    Delivery --> Presented["pulse, tracer, ray, missile, bullet and lightning components"]
 ```
 
 `component.WeaponSpecs` is the one table of weapon kinds: status name, delivery,
@@ -50,7 +50,7 @@ index by kind.
 | Gun | tracer | innate; one streak per cardinal from the cursor, direct damage on contact, the polarity's glyph effect along the way | none |
 | Rod | lightning | direct hit per unique nearest target, bolt from the orb | zaps the aimed cursor |
 | Launcher | missile | one homing missile per charge; the blast is explosion geometry | one hostile missile that homes on cursors |
-| Disruptor | pulse | stun burst centred on the orb when a target is inside | strikes every cursor inside its ring |
+| Disruptor | pulse | a pulse on the orb's cell when a target is inside it, striking once: area damage and stun | a Shared pulse riding its host, striking every cursor inside it; storm's green circle is one |
 | Turret | bullet | one spread bullet per charge, direct damage | hostile bullets; storm's red circle is one |
 | Emitter | ray | timed ray from the cursor through its orb at an assigned target, sweeping as the orb orbits; at the cap it is sustained (§4) | warns, fires, rests along a locked ray |
 
@@ -75,9 +75,10 @@ red glyphs it crosses into blossom, a negative one turns blue ones green and
 releases decay from them.
 
 **`mount`** (shared) fires the one weapon a Shared host carries. A level attaches
-it with `EventMountRequest` (host, weapon, interval, range, muzzle, lane, width),
-capturing the host from `EventSpeciesCreated` as a gateway is attached; a species
-may set the component itself. Each tick it:
+it with `EventMountRequest` (host, weapon, interval, range, muzzle, lane, width, the
+`energy` and `heat` a hit costs, and a `pulse` table), capturing the host from
+`EventSpeciesCreated` as a gateway is attached; a species may set the component
+itself. Each tick it:
 
 - aims at the nearest cursor within range, aspect-corrected, from Shared positions;
 - fires when ready and, under `MountArmed`, only while the host holds `Armed`;
@@ -99,10 +100,28 @@ striking the cursors inside every `RayHitInterval`, then rest for its interval. 
 laned ray needs no cursor in range; that is the level obstacle. Width is the
 mount's to set; a cursor's is fixed.
 
-Storm's red circle carries a turret mount the storm arms from its machine's flags
-after each step, so the burst fires on its active ticks exactly, the step that
-opens it included, and a stunned or cursorless circle's turret is disarmed; the
-storm renderer draws the muzzle at the mount's aim while it is armed.
+Storm's red and green circles carry mounts, their rows in `circleVariants`, which
+the storm arms from its machine's flags after each step, so an attack fires from
+the step that opens it and a stunned or cursorless circle's mount is disarmed. The
+red's turret fires a bullet a tick of its burst, the storm renderer drawing the
+muzzle at its aim while armed; the green's disruptor fires one pulse an attack.
+
+**`pulse`** (dual) advances every pulse, an entity of its own in its firer's
+domain: a cursor's disruptor makes a Player-domain one that stays on its orb's
+cell, a mount a Shared one riding its host, which the mount names `Live` and fires
+no other while it lasts. Each tick a pulse ages, swells from `PulseGrowStart` of its
+radius to all of it over `Grow`, and strikes inside the size it has reached every
+`HitInterval`, or once as it fires; it ends after `Duration` unless `Sustained`. A
+ridden pulse ends with its host or once its mount names another, and holds, neither
+ageing nor striking, while a `MountArmed` mount is disarmed, so a stun holds the
+green's attack and its pulse alike. A cursor's strike resolves its drains locally
+and crosses its geometry (§5); a mount's strikes each cursor inside it through
+`strikeCursor`. `WeaponSpecs` holds the kind's `PulseSpec` and a mount overrides it
+field by field, as it overrides `Damage`: a scenario writes `pulse = { radius,
+duration_ms, sustained, grow_ms, hit_interval_ms, style, attack, charged }`, style
+`ring`, `glow` or `hidden`. A mount's pulse carries its attack family and charge,
+but the cursors it strikes take only its `CursorDamage` until cursors take a
+family's effects (todo: PvP).
 
 ## 4. At the charge cap
 
@@ -175,8 +194,9 @@ Renderers draw only what exists on their instance. Orbs take their kind's colour
 from `orbPalette` and show the bullseye at the cap. A discharge's `WeaponPalette`
 is positive or negative by the cursor's energy, or hostile for a mount; a tracer
 keeps the palette it was fired with and draws as a background-only trail that
-contracts as it drains. Pulse rings are a fixed-capacity list in
-`TransientResource`, raised by `EventPulseVisualRequest`. Rays are drawn straight
+contracts as it drains. A pulse draws from its component in its `PulseStyle`: a
+ring of ripples over what it strikes, a glow under the species that carries it,
+whose hostile colour is the storm's green, or nothing when hidden. Rays are drawn straight
 from their `RayComponent`: a white core, sides in the palette where the ray widens,
 a mount's warning as its core line alone. Missiles and bullets draw hostile colours
 from their `Hostile` flag; lightning uses its colour table. Each has a 256-colour
@@ -186,8 +206,9 @@ path.
 
 `weapon` runs early with the player state and advances tracers last in its tick.
 Host species run next, then `mount` after every host so a host arms before its
-mount fires, then `combat`, which also ages statuses and lands burn ticks.
-Lightning, missile and bullet integrate after combat; `transient` ages rings late.
+mount fires, then `pulse`, so a pulse strikes from the tick it is fired, then
+`combat`, which also ages statuses and lands burn ticks. Lightning, missile and
+bullet integrate after combat; `transient` ages explosion centres late.
 
 ## 8. Adding a weapon
 
@@ -207,4 +228,4 @@ Telemetry: the `weapon` card holds the loadout, orbs and tracers in flight,
 the `weapon.fired` and `weapon.rejects` groups the counters, `weapon.tracer_*` the
 sweep; the `combat.damage.family` group is the damage each attack family deals,
 which is how a weapon's effect reads; `combat.effect_burn` and `combat.burn_ticks`
-count burns left and ticks landed; `mount`, `missile` and `bullet` hold their own.
+count burns left and ticks landed; `mount`, `pulse`, `missile` and `bullet` hold their own.

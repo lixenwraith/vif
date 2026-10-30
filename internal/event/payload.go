@@ -456,6 +456,8 @@ type GunAimRequestPayload struct {
 // MountRequestPayload puts one weapon on a Shared host, replacing any it carried.
 // Zero interval, range and width take the weapon's hosted defaults; zero muzzle fires
 // from the host cell. A ray's Lane (1-8, vmath.Octants) fixes its direction; 0 aims.
+// Energy and Heat are what a hit costs a cursor, and Pulse shapes a pulse kind's
+// pulse, each zero field taking the kind's.
 type MountRequestPayload struct {
 	Host       core.Entity          `toml:"host"`
 	Weapon     component.WeaponType `toml:"weapon"`
@@ -464,6 +466,21 @@ type MountRequestPayload struct {
 	Muzzle     float64              `toml:"muzzle"`
 	Lane       int                  `toml:"lane"`
 	Width      int                  `toml:"width"`
+	Energy     int                  `toml:"energy"`
+	Heat       int                  `toml:"heat"`
+	Pulse      MountPulse           `toml:"pulse"`
+}
+
+// MountPulse is a mount's PulseSpec as a scenario writes it, in milliseconds
+type MountPulse struct {
+	Radius        float64                    `toml:"radius"`
+	DurationMs    int                        `toml:"duration_ms"`
+	Sustained     bool                       `toml:"sustained"`
+	GrowMs        int                        `toml:"grow_ms"`
+	HitIntervalMs int                        `toml:"hit_interval_ms"`
+	Style         component.PulseStyle       `toml:"style"`
+	Attack        component.CombatAttackType `toml:"attack"`
+	Charged       bool                       `toml:"charged"`
 }
 
 // FireSpecialRequestPayload names the cursor firing its special
@@ -701,13 +718,6 @@ type ExplosionVisualRequestPayload struct {
 	Radius   float64       `toml:"radius"`
 	Duration time.Duration `toml:"duration"`
 	Type     ExplosionType `toml:"type"`
-}
-
-// PulseVisualRequestPayload is player-domain presentation for one disruptor pulse.
-type PulseVisualRequestPayload struct {
-	X       int                     `toml:"x"`
-	Y       int                     `toml:"y"`
-	Palette component.WeaponPalette `toml:"palette"`
 }
 
 // ExplosionVisualBatchRequestPayload is player-domain presentation for a group

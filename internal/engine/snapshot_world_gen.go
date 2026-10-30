@@ -65,6 +65,7 @@ type SharedWorldState struct {
 	Missile      []StoreEntry[component.MissileComponent]      `json:"missile,omitempty"`
 	Mount        []StoreEntry[component.MountComponent]        `json:"mount,omitempty"`
 	Ray          []StoreEntry[component.RayComponent]          `json:"ray,omitempty"`
+	Pulse        []StoreEntry[component.PulseComponent]        `json:"pulse,omitempty"`
 	Spirit       []StoreEntry[component.SpiritComponent]       `json:"spirit,omitempty"`
 	Materialize  []StoreEntry[component.MaterializeComponent]  `json:"materialize,omitempty"`
 	Target       []StoreEntry[component.TargetComponent]       `json:"target,omitempty"`
@@ -135,6 +136,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 	s.Missile = captureRows(w.Components.Missile.dense, w.Components.Missile.entities, core.DomainShared)
 	s.Mount = captureRows(w.Components.Mount.dense, w.Components.Mount.entities, core.DomainShared)
 	s.Ray = captureRows(w.Components.Ray.dense, w.Components.Ray.entities, core.DomainShared)
+	s.Pulse = captureRows(w.Components.Pulse.dense, w.Components.Pulse.entities, core.DomainShared)
 	s.Spirit = captureRows(w.Components.Spirit.dense, w.Components.Spirit.entities, core.DomainShared)
 	s.Materialize = captureRows(w.Components.Materialize.dense, w.Components.Materialize.entities, core.DomainShared)
 	s.Target = captureRows(w.Components.Target.dense, w.Components.Target.entities, core.DomainShared)
@@ -258,6 +260,9 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	for _, en := range s.Ray {
 		w.Components.Ray.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
+	for _, en := range s.Pulse {
+		w.Components.Pulse.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
+	}
 	for _, en := range s.Spirit {
 		w.Components.Spirit.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
@@ -380,6 +385,7 @@ type PlayerWorldState struct {
 	Lightning   []StoreEntry[component.LightningComponent]   `json:"lightning,omitempty"`
 	Missile     []StoreEntry[component.MissileComponent]     `json:"missile,omitempty"`
 	Ray         []StoreEntry[component.RayComponent]         `json:"ray,omitempty"`
+	Pulse       []StoreEntry[component.PulseComponent]       `json:"pulse,omitempty"`
 	Spirit      []StoreEntry[component.SpiritComponent]      `json:"spirit,omitempty"`
 	Materialize []StoreEntry[component.MaterializeComponent] `json:"materialize,omitempty"`
 	Drain       []StoreEntry[component.DrainComponent]       `json:"drain,omitempty"`
@@ -417,6 +423,7 @@ func (w *World) CapturePlayerWorld() PlayerWorldState {
 	s.Lightning = captureRows(w.Components.Lightning.dense, w.Components.Lightning.entities, core.DomainPlayer)
 	s.Missile = captureRows(w.Components.Missile.dense, w.Components.Missile.entities, core.DomainPlayer)
 	s.Ray = captureRows(w.Components.Ray.dense, w.Components.Ray.entities, core.DomainPlayer)
+	s.Pulse = captureRows(w.Components.Pulse.dense, w.Components.Pulse.entities, core.DomainPlayer)
 	s.Spirit = captureRows(w.Components.Spirit.dense, w.Components.Spirit.entities, core.DomainPlayer)
 	s.Materialize = captureRows(w.Components.Materialize.dense, w.Components.Materialize.entities, core.DomainPlayer)
 	s.Drain = captureRows(w.Components.Drain.dense, w.Components.Drain.entities, core.DomainPlayer)
@@ -453,6 +460,7 @@ func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 	installPlayerRows(w.Components.Lightning, s.Lightning)
 	installPlayerRows(w.Components.Missile, s.Missile)
 	installPlayerRows(w.Components.Ray, s.Ray)
+	installPlayerRows(w.Components.Pulse, s.Pulse)
 	installPlayerRows(w.Components.Spirit, s.Spirit)
 	installPlayerRows(w.Components.Materialize, s.Materialize)
 	installPlayerRows(w.Components.Drain, s.Drain)
@@ -503,6 +511,7 @@ type WorldOrder struct {
 	Missile      []core.Entity `json:"missile,omitempty"`
 	Mount        []core.Entity `json:"mount,omitempty"`
 	Ray          []core.Entity `json:"ray,omitempty"`
+	Pulse        []core.Entity `json:"pulse,omitempty"`
 	Spirit       []core.Entity `json:"spirit,omitempty"`
 	Materialize  []core.Entity `json:"materialize,omitempty"`
 	Target       []core.Entity `json:"target,omitempty"`
@@ -565,6 +574,7 @@ func (w *World) CaptureOrder() WorldOrder {
 	o.Missile = orderOf(w.Components.Missile.entities)
 	o.Mount = orderOf(w.Components.Mount.entities)
 	o.Ray = orderOf(w.Components.Ray.entities)
+	o.Pulse = orderOf(w.Components.Pulse.entities)
 	o.Spirit = orderOf(w.Components.Spirit.entities)
 	o.Materialize = orderOf(w.Components.Materialize.entities)
 	o.Target = orderOf(w.Components.Target.entities)
@@ -685,6 +695,9 @@ func (w *World) InstallOrder(o WorldOrder) error {
 	}
 	if err := reorderStore(w.Components.Ray, o.Ray); err != nil {
 		return fmt.Errorf("ray: %w", err)
+	}
+	if err := reorderStore(w.Components.Pulse, o.Pulse); err != nil {
+		return fmt.Errorf("pulse: %w", err)
 	}
 	if err := reorderStore(w.Components.Spirit, o.Spirit); err != nil {
 		return fmt.Errorf("spirit: %w", err)
@@ -814,6 +827,7 @@ type SharedWorldDelta struct {
 	Missile      StoreDelta[component.MissileComponent]      `json:"missile,omitzero"`
 	Mount        StoreDelta[component.MountComponent]        `json:"mount,omitzero"`
 	Ray          StoreDelta[component.RayComponent]          `json:"ray,omitzero"`
+	Pulse        StoreDelta[component.PulseComponent]        `json:"pulse,omitzero"`
 	Spirit       StoreDelta[component.SpiritComponent]       `json:"spirit,omitzero"`
 	Materialize  StoreDelta[component.MaterializeComponent]  `json:"materialize,omitzero"`
 	Target       StoreDelta[component.TargetComponent]       `json:"target,omitzero"`
@@ -881,6 +895,7 @@ func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
 	d.Missile = diffStore(base.Missile, next.Missile, equalMissile)
 	d.Mount = diffStore(base.Mount, next.Mount, equalMount)
 	d.Ray = diffStore(base.Ray, next.Ray, equalRay)
+	d.Pulse = diffStore(base.Pulse, next.Pulse, equalPulse)
 	d.Spirit = diffStore(base.Spirit, next.Spirit, equalSpirit)
 	d.Materialize = diffStore(base.Materialize, next.Materialize, equalMaterialize)
 	d.Target = diffStore(base.Target, next.Target, equalTarget)
@@ -944,6 +959,7 @@ func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorl
 	s.Missile = applyStore(base.Missile, d.Missile)
 	s.Mount = applyStore(base.Mount, d.Mount)
 	s.Ray = applyStore(base.Ray, d.Ray)
+	s.Pulse = applyStore(base.Pulse, d.Pulse)
 	s.Spirit = applyStore(base.Spirit, d.Spirit)
 	s.Materialize = applyStore(base.Materialize, d.Materialize)
 	s.Target = applyStore(base.Target, d.Target)
@@ -1006,6 +1022,7 @@ func (d SharedWorldDelta) DeltaEntries() int {
 	n += d.Missile.Entries()
 	n += d.Mount.Entries()
 	n += d.Ray.Entries()
+	n += d.Pulse.Entries()
 	n += d.Spirit.Entries()
 	n += d.Materialize.Entries()
 	n += d.Target.Entries()
@@ -1071,6 +1088,7 @@ func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
 	w.Entries += countStoreDifference(a.Missile, b.Missile, touched, equalMissile)
 	w.Entries += countStoreDifference(a.Mount, b.Mount, touched, equalMount)
 	w.Entries += countStoreDifference(a.Ray, b.Ray, touched, equalRay)
+	w.Entries += countStoreDifference(a.Pulse, b.Pulse, touched, equalPulse)
 	w.Entries += countStoreDifference(a.Spirit, b.Spirit, touched, equalSpirit)
 	w.Entries += countStoreDifference(a.Materialize, b.Materialize, touched, equalMaterialize)
 	w.Entries += countStoreDifference(a.Target, b.Target, touched, equalTarget)
@@ -1213,6 +1231,9 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	for _, en := range s.Ray {
 		target[en.Entity] = struct{}{}
 	}
+	for _, en := range s.Pulse {
+		target[en.Entity] = struct{}{}
+	}
 	for _, en := range s.Spirit {
 		target[en.Entity] = struct{}{}
 	}
@@ -1342,6 +1363,7 @@ func (w *World) ReconcileSharedWorld(s SharedWorldState) {
 	reconcileStore(w.Components.Missile, s.Missile)
 	reconcileStore(w.Components.Mount, s.Mount)
 	reconcileStore(w.Components.Ray, s.Ray)
+	reconcileStore(w.Components.Pulse, s.Pulse)
 	reconcileStore(w.Components.Spirit, s.Spirit)
 	reconcileStore(w.Components.Materialize, s.Materialize)
 	reconcileStore(w.Components.Target, s.Target)
@@ -1413,6 +1435,7 @@ func (w *World) ReconcileSharedFrom(src *World, record bool) *WorldReconcile {
 	d.Missile = compareStoreFrom(r, w.Components.Missile, src.Components.Missile, equalMissile)
 	d.Mount = compareStoreFrom(r, w.Components.Mount, src.Components.Mount, equalMount)
 	d.Ray = compareStoreFrom(r, w.Components.Ray, src.Components.Ray, equalRay)
+	d.Pulse = compareStoreFrom(r, w.Components.Pulse, src.Components.Pulse, equalPulse)
 	d.Spirit = compareStoreFrom(r, w.Components.Spirit, src.Components.Spirit, equalSpirit)
 	d.Materialize = compareStoreFrom(r, w.Components.Materialize, src.Components.Materialize, equalMaterialize)
 	d.Target = compareStoreFrom(r, w.Components.Target, src.Components.Target, equalTarget)
@@ -1590,11 +1613,15 @@ func equalMissile(a, b *component.MissileComponent) bool {
 }
 
 func equalMount(a, b *component.MountComponent) bool {
-	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
+	return a.Weapon == b.Weapon && a.Trigger == b.Trigger && a.Armed == b.Armed && a.Interval == b.Interval && math.Float64bits(float64(a.Range)) == math.Float64bits(float64(b.Range)) && math.Float64bits(float64(a.Muzzle)) == math.Float64bits(float64(b.Muzzle)) && a.Damage == b.Damage && math.Float64bits(float64(a.Pulse.Radius)) == math.Float64bits(float64(b.Pulse.Radius)) && a.Pulse.Duration == b.Pulse.Duration && a.Pulse.Sustained == b.Pulse.Sustained && a.Pulse.Grow == b.Pulse.Grow && a.Pulse.HitInterval == b.Pulse.HitInterval && a.Pulse.Style == b.Pulse.Style && a.Pulse.Attack == b.Pulse.Attack && a.Pulse.Charged == b.Pulse.Charged && a.Live == b.Live && a.AimX == b.AimX && a.AimY == b.AimY && a.HasAim == b.HasAim && a.Lane == b.Lane && a.Width == b.Width
 }
 
 func equalRay(a, b *component.RayComponent) bool {
 	return a.Ray.X == b.Ray.X && a.Ray.Y == b.Ray.Y && math.Float64bits(float64(a.Ray.DX)) == math.Float64bits(float64(b.Ray.DX)) && math.Float64bits(float64(a.Ray.DY)) == math.Float64bits(float64(b.Ray.DY)) && a.Ray.Length == b.Ray.Length && a.Ray.Knee == b.Ray.Knee && a.Ray.Near == b.Ray.Near && a.Ray.Far == b.Ray.Far && a.Phase == b.Phase && a.Remaining == b.Remaining && a.Duration == b.Duration && a.HitInterval == b.HitInterval && a.HitTimer == b.HitTimer && a.Scale == b.Scale && a.Hold == b.Hold && a.Palette == b.Palette
+}
+
+func equalPulse(a, b *component.PulseComponent) bool {
+	return math.Float64bits(float64(a.PulseSpec.Radius)) == math.Float64bits(float64(b.PulseSpec.Radius)) && a.PulseSpec.Duration == b.PulseSpec.Duration && a.PulseSpec.Sustained == b.PulseSpec.Sustained && a.PulseSpec.Grow == b.PulseSpec.Grow && a.PulseSpec.HitInterval == b.PulseSpec.HitInterval && a.PulseSpec.Style == b.PulseSpec.Style && a.PulseSpec.Attack == b.PulseSpec.Attack && a.PulseSpec.Charged == b.PulseSpec.Charged && a.X == b.X && a.Y == b.Y && a.Owner == b.Owner && a.Anchor == b.Anchor && a.Hostile == b.Hostile && a.Damage == b.Damage && a.Palette == b.Palette && a.Elapsed == b.Elapsed && a.HitTimer == b.HitTimer
 }
 
 func equalSpirit(a, b *component.SpiritComponent) bool {

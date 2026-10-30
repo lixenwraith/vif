@@ -324,7 +324,7 @@ also the visual stacking order; exact integer priorities are in
 | Background/guidance | `ping` |
 | Environment/guidance | `wall`, `chargeline` |
 | Base entities | `sigil`, `glyph`, `gold` |
-| Particles | `flash`, `fadeout`, `explosion`, `spirit`: what a species left, under the species that leaves it |
+| Particles | `flash`, `fadeout`, `explosion`, `spirit`: what a species left, under the species that leaves it; then `pulse_glow`, a glowing pulse under the species that carries it |
 | Species/structures | `pylon`, `tower`, `storm`, `kraken`, `eye`, `snake`, `drain`, `quasar`, `swarm`, `behavior` (every data species), then `healthbar` over them |
 | Tracer/materialize | `tracer`, `materialize`, `teleportline` |
 | Fields/projectiles | `shield`, `ember`, `orb`, `lightning`, `missile`, `pulse`, `ray`, `bullet` |

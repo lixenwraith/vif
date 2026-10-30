@@ -44,6 +44,10 @@ that proves wrong or that a document now states, and link the document instead.
   after the tick.
 - A clock started inside a tick before its owner's `Update` shows one tick short of
   its span ([runtime §5](runtime.md#5-simulation-tick-steps)).
+- A mount creates the pulse it fires in its own `Update` rather than by request, as
+  missiles are: a request dispatches in the close settle, a tick behind the machine
+  that armed the mount, and the pulse, which holds with that machine, falls out of
+  step with it and lingers into the cooldown.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
   `crossingActors` (`internal/system/network.go`); without one, a misbound or
   modified participant can act as another's cursor through it.

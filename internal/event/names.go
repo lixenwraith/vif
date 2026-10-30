@@ -79,6 +79,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Mask[component.TracerDirection](component.TracerDirectionNames).
 		Enum[component.WeaponType](namesOf(component.WeaponSpecs[:], func(s component.WeaponSpec) string { return s.Name })...).
 		Enum[component.WeaponPalette](component.WeaponPaletteNames[:]...).
+		Enum[component.PulseStyle](component.PulseStyleNames[:]...).
 		Mask[component.WallBlockMask](component.WallBlockNames).
 		Mask[terminal.Attr](component.WallAttrNames).
 		Enum[component.BoxDrawStyle](component.BoxDrawStyleNames[:]...).

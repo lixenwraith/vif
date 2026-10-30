@@ -25,7 +25,7 @@ var deniedSharedPrefix = []string{
 	"entity.",
 	// Per-system counters of a player- or dual-profile system. The rule is the
 	// profile in manifest.Systems, not the name.
-	"drain.", "particle.", "dust.", "decay.", "blossom.", "bullet.", "missile.",
+	"drain.", "particle.", "dust.", "decay.", "blossom.", "bullet.", "missile.", "pulse.",
 	"lightning.", "flash.", "fadeout.", "splash.", "spirit.", "loot.",
 	"weapon.", "energy.", "heat.", "typing.", "ping.", "boost.",
 	"glyph.", "nugget.", "fuse.", "shield.", "camera.", "transient.",

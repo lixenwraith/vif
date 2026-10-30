@@ -967,16 +967,29 @@ A mounted ray destroying walls and glyphs, mounted weapons striking other specie
 ### Let cursor weapons strike other cursors
 
 - Priority: P3
-- Affected files: `internal/system/weapon.go`, `internal/system/bullet.go`, `internal/profile/combat.go`
+- Affected files: `internal/system/weapon.go`, `internal/system/bullet.go`, `internal/system/pulse.go`, `internal/system/interaction.go`, `internal/profile/combat.go`
 
 PvP: a hit on a remote cursor crosses as its impact and the victim's owner applies it, as `strikeCursor` does for mounts.
 
-### Move storm's green circle onto a disruptor mount
+A cursor then takes what an attack family does rather than a fixed `CursorDamage`, and a mount's pulse already carries its family for it (`PulseSpec.Attack`, `Charged`, set per mount), so mounted weapons gain the same effects:
+- Profiles with `CombatEntityCursor` as the defender, a row per family that may strike a cursor; `strikeCursor` resolves one, a mount striking as its host's combat row.
+- Owner-authored cursor statuses (D-13): a stun the owner's input and its D-18 prediction obey, never refreshed while it runs; a burn ticking heat on the owner each period.
+- Knockback as a push: the owner moves its own cursor along the impulse through `PushCursorMove` to a free cell, or a Shared pulse re-derives the move on every instance, as the cave rock's push does.
+- Per-attacker, per-family immunity on the cursor, as species keep it, so a sustained pulse cannot stun-lock.
+
+### Place a pulse on a map cell
 
 - Priority: P3
-- Affected files: `internal/system/storm.go`
+- Affected files: `internal/system/mount.go`, `internal/event/payload.go`
 
-Its area pulse is the hosted disruptor's shape; the red circle's turret mount is the pattern.
+`EventMountRequest` naming a cell and no host places a bare Shared anchor carrying the mount, so a scenario can lay a sustained, hidden pulse over part of the map, such as one that pushes cursors back once they take pushes; a level clear and a request remove it.
+
+### Let a scenario shape the cursor's pulse
+
+- Priority: P3
+- Affected files: `internal/system/weapon.go`, `internal/event/payload.go`
+
+A request overriding the disruptor's `PulseSpec` for every cursor field by field, as a mount's is, carried in the weapon system's local save as the gun's aim is (`EventGunAimRequest`).
 
 ## Species
 
