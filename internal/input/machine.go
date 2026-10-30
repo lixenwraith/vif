@@ -90,6 +90,8 @@ func (m *Machine) SetMode(mode InputMode) {
 	}
 }
 
+func (m *Machine) Mode() InputMode { return m.mode }
+
 // Feedback is what the status bar's key cell shows: the keys of a sequence still
 // pending, else the last one completed.
 func (m *Machine) Feedback() string {

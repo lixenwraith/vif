@@ -328,7 +328,8 @@ func (m *membership) bindSessionHooks(r *engine.NetworkResource) {
 	r.OnDeparture = m.participantDeparted
 	// Replays and staging worlds apply roster changes without ending their viewer.
 	if _, live := r.Port.(engine.PeerDroppingPort); live {
-		r.OnDismissed = func() {
+		r.OnDismissed = func(shed bool) {
+			m.shed.Store(shed)
 			m.dismissed.Store(true)
 			m.haltSeats(false)
 			// The place is gone, and the claim with it.

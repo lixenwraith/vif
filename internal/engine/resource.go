@@ -1199,7 +1199,7 @@ type NetworkResource struct {
 	// slot to the Wraith that waits for it. It must not take a lock that a world-lock
 	// acquisition waits behind.
 	OnDeparture func(participant uint32, final bool)
-	OnDismissed func()
+	OnDismissed func(shed bool)
 
 	// OnCorrection hands one reassembled authoritative correction to the session
 	// layer, under the world lock from the tick that drained its last chunk, so it

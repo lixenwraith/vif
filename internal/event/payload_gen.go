@@ -525,6 +525,7 @@ func (p *ParticipantDepartedPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecParticipantDepartedPayload = structCodec{size: unsafe.Sizeof(ParticipantDepartedPayload{}), fields: []field{
 	{off: unsafe.Offsetof(ParticipantDepartedPayload{}.Dismissed), kind: kindBool},
+	{off: unsafe.Offsetof(ParticipantDepartedPayload{}.Shed), kind: kindBool},
 	{off: unsafe.Offsetof(ParticipantDepartedPayload{}.Participant), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(ParticipantDepartedPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 }}

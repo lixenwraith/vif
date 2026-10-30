@@ -230,7 +230,7 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.AttachTransport(network.NewMesh().Node(1))
-	p := &player{a: a, src: journalSource{d, a.log}, interval: parameter.GameUpdateInterval,
+	p := &player{a: a, src: journalSource{d, a.log, parameter.GameUpdateInterval}, interval: parameter.GameUpdateInterval,
 		scale: engine.ScaleNormal}
 	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
 	if !p.paused || p.live {
@@ -295,7 +295,7 @@ func replayPlayer(t *testing.T, set journal.Set, edit func(*Config)) *player {
 	if err != nil {
 		t.Fatal(err)
 	}
-	shown := &replayCopy{a: a, src: journalSource{d, a.log}}
+	shown := &replayCopy{a: a, src: journalSource{d, a.log, parameter.GameUpdateInterval}}
 	p := &player{a: a, src: shown.src, interval: parameter.GameUpdateInterval,
 		scale: engine.ScaleNormal}
 	p.rw = newRewinder(shown, a, replayCopies(a, cfg, stream, NewHeadless))
@@ -557,7 +557,7 @@ func TestAPresentedReplayStepIsOneRecordedTick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := journalSource{d, a.log}
+	src := journalSource{d, a.log, parameter.GameUpdateInterval}
 	for {
 		from := a.Position()
 		more, err := src.Step()

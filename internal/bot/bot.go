@@ -19,7 +19,6 @@ import (
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
 	"github.com/lixenwraith/vif/internal/fsm/std"
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/tomlmacro"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -234,7 +233,8 @@ func payloadTrue(payload any, field string) bool {
 // game. Credit left idle is capped at one second's worth, so a quiet bot bursts no
 // further.
 func (d *Driver) Step() (bool, error) {
-	d.credit = min(d.credit+d.rate*parameter.GameUpdateInterval.Milliseconds(), d.rate*1000)
+	tick := d.ctx.World.TickInterval()
+	d.credit = min(d.credit+d.rate*tick.Milliseconds(), d.rate*1000)
 	var err error
 	d.ctx.World.RunSafe(func() {
 		d.mind.fresh = [targetCount]bool{}
@@ -249,7 +249,7 @@ func (d *Driver) Step() (bool, error) {
 		}
 		clear(d.seen)
 		d.seen = d.seen[:0]
-		d.machine.Update(&d.mind, parameter.GameUpdateInterval)
+		d.machine.Update(&d.mind, tick)
 	})
 	if err != nil {
 		return false, err

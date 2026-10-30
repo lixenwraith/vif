@@ -85,7 +85,7 @@ func (a *App) Serve() error {
 	a.log.Info("session", "msg", "server running",
 		"address", a.cfg.HostAddress, "capacity", a.membership.sessionCapacity())
 
-	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
+	frameTicker := time.NewTicker(a.ctx.FrameInterval())
 	defer frameTicker.Stop()
 	report := time.NewTicker(parameter.ServeReportInterval)
 	defer report.Stop()

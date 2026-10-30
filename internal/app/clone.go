@@ -178,8 +178,9 @@ func loadLocalState(sys engine.System, v any) error {
 
 // journalSource adapts a record stream to the presentation loop.
 type journalSource struct {
-	d   *journal.ReplayDriver
-	log *vlog.Log
+	d    *journal.ReplayDriver
+	log  *vlog.Log
+	tick time.Duration
 }
 
 // Step advances one recorded tick and everything up to the next, a world written then
@@ -196,7 +197,7 @@ func (s journalSource) Step() (bool, error) {
 
 func (s journalSource) progress() string {
 	st := s.d.Stats()
-	at := time.Duration(st.End.Tick) * parameter.GameUpdateInterval / time.Second
+	at := time.Duration(st.End.Tick) * s.tick / time.Second
 	return fmt.Sprintf("run %d tick %d %d:%02d:%02d | %d/%d rec",
 		st.End.Run, st.End.Tick, at/3600, at/60%60, at%60, st.Injected, st.Records)
 }

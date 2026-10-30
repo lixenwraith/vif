@@ -155,6 +155,10 @@ type Config struct {
 	// to ScriptPaceMax solo and to real time in a session.
 	TimeScaleSpec string
 
+	// TickInterval is the game time one tick advances, chosen by a session's host
+	// and adopted by its joiners; zero is parameter.GameUpdateInterval.
+	TickInterval time.Duration
+
 	// System seed for RNG
 	Seed uint64
 
@@ -216,8 +220,10 @@ type Config struct {
 	FixedAuthority bool
 
 	// SlowPolicy is when this run, while authoring, evicts a participant that cannot
-	// keep up; nil keeps the default. See converge.SlowPolicy.
+	// keep up, and ShedPolicy what it drops when it cannot keep its own tick; nil
+	// keeps the default. See converge.SlowPolicy and converge.ShedPolicy.
 	SlowPolicy *converge.SlowPolicy
+	ShedPolicy *converge.ShedPolicy
 
 	// Participants is a ceiling on the roster's cursors, a playing host's own
 	// included; zero means the whole roster. On a scripted or bot-driven host an
@@ -349,6 +355,7 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	local.CropOnResize = fromAnchor.CropOnResize
 	local.CellAspect = fromAnchor.CellAspect
 	local.LockMap = true
+	local.TickInterval = fromAnchor.TickInterval
 	local.sessionPlayers = o.Players
 	// The session's rate is its host's, a script's or bot's pace included; a
 	// harness's manual clock is driven by Tick and takes none.
@@ -466,6 +473,9 @@ func (c *Config) Normalize() {
 func (c Config) Validate() error {
 	if err := c.Resources.Validate(); err != nil {
 		return err
+	}
+	if c.TickInterval != 0 && (c.TickInterval < parameter.TickIntervalMin || c.TickInterval > parameter.TickIntervalMax) {
+		return fmt.Errorf("-tick %s is outside %s to %s", c.TickInterval, parameter.TickIntervalMin, parameter.TickIntervalMax)
 	}
 	if err := validateBuildConfig(c); err != nil {
 		return err
