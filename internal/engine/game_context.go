@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/status"
 	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/navigation"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 const (
@@ -340,7 +341,7 @@ func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
 	// bounded here rather than at each of them: a terminal that reports a size the
 	// grid cannot hold is presented at the largest map there is, instead of
 	// producing bounds no cell exists for.
-	return ClampMapSize(gameWidth, gameHeight)
+	return position.Clamp(gameWidth, gameHeight)
 }
 
 // ScreenSize inverts updateGameArea: terminal dimensions recovered from the viewport

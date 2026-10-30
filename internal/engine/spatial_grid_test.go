@@ -3,84 +3,11 @@ package engine
 import (
 	"math/rand/v2"
 	"testing"
-	"unsafe"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
-
-// TestCellFitsFourCacheLines pins the layout the partition byte was taken from.
-func TestCellFitsFourCacheLines(t *testing.T) {
-	if got := unsafe.Sizeof(Cell{}); got != 256 {
-		t.Fatalf("unsafe.Sizeof(Cell{}) = %d, want 256", got)
-	}
-}
-
-func TestGridPartitionSurvivesRemoval(t *testing.T) {
-	g := NewSpatialGrid(4, 4)
-	shared := []core.Entity{core.MakeEntity(core.DomainShared, 1), core.MakeEntity(core.DomainShared, 2)}
-	player := []core.Entity{
-		core.MakeEntity(core.DomainPlayer, 1),
-		core.MakeEntity(core.DomainPlayer, 2),
-		core.MakeEntity(core.DomainPlayer, 3),
-	}
-
-	// Interleaved insertion must still yield a partitioned cell
-	g.Set(player[0], 1, 1)
-	g.Set(shared[0], 1, 1)
-	g.Set(player[1], 1, 1)
-	g.Set(shared[1], 1, 1)
-	g.Set(player[2], 1, 1)
-	assertPartition(t, g, 1, 1, 2, 3)
-
-	g.RemoveEntityAt(shared[0], 1, 1)
-	assertPartition(t, g, 1, 1, 1, 3)
-
-	g.RemoveEntityAt(player[1], 1, 1)
-	assertPartition(t, g, 1, 1, 1, 2)
-
-	if got := g.EntitiesAt(1, 1, ScopeShared)[0]; got != shared[1] {
-		t.Fatalf("surviving shared entity = %d, want %d", got, shared[1])
-	}
-}
-
-func TestPlayerBudgetPreservesSharedCapacity(t *testing.T) {
-	g := NewSpatialGrid(1, 1)
-	for i := range parameter.ReservedPlayerPerCell {
-		if !g.Set(core.MakeEntity(core.DomainPlayer, uint64(i+1)), 0, 0) {
-			t.Fatalf("player %d rejected inside the reserved budget", i)
-		}
-	}
-	if g.Set(core.MakeEntity(core.DomainPlayer, 9999), 0, 0) {
-		t.Fatal("player insert exceeded the reserved budget")
-	}
-	for i := range parameter.MaxEntitiesPerCell - parameter.ReservedPlayerPerCell {
-		if !g.Set(core.MakeEntity(core.DomainShared, uint64(i+1)), 0, 0) {
-			t.Fatalf("shared %d displaced by a saturated player run", i)
-		}
-	}
-}
-
-// assertPartition checks the domain invariant and the expected run lengths.
-func assertPartition(t *testing.T, g *SpatialGrid, x, y, wantShared, wantPlayer int) {
-	t.Helper()
-	sharedView := g.EntitiesAt(x, y, ScopeShared)
-	playerView := g.EntitiesAt(x, y, ScopePlayer)
-	if len(sharedView) != wantShared || len(playerView) != wantPlayer {
-		t.Fatalf("cell runs = (%d, %d), want (%d, %d)", len(sharedView), len(playerView), wantShared, wantPlayer)
-	}
-	for _, e := range sharedView {
-		if e.Domain() != core.DomainShared {
-			t.Fatalf("player entity %d inside the shared run", e)
-		}
-	}
-	for _, e := range playerView {
-		if e.Domain() != core.DomainPlayer {
-			t.Fatalf("shared entity %d inside the player run", e)
-		}
-	}
-}
 
 // FuzzWallTestAnswersAsHasBlockingWallAt: the grid a derivation reads is the live
 // query cell for cell — any mask, either domain, soft-clipped walls, out of bounds
@@ -161,7 +88,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						if !ok {
 							break
 						}
-						slot, _ := w.Positions.index.get(e)
+						slot, _ := w.Positions.slots.get(e)
 						w.Positions.RemoveEntity(e)
 						for range parameter.MaxEntitiesPerCell {
 							w.Positions.SetPosition(w.CreateEntity(core.DomainShared), pos)
@@ -300,7 +227,7 @@ func TestShiftMovesARigidGroupThroughFullCells(t *testing.T) {
 	}
 	full := parameter.ReservedPlayerPerCell
 	for _, c := range []struct{ x, want int }{{3, 0}, {4, full}, {5, full}} {
-		if got := len(w.Positions.grid.EntitiesAt(c.x, 3, ScopePlayer)); got != c.want {
+		if got := len(w.Positions.index.EntitiesAt(c.x, 3, ScopePlayer)); got != c.want {
 			t.Fatalf("cell %d holds %d player entities, want %d", c.x, got, c.want)
 		}
 	}
@@ -379,67 +306,4 @@ func TestTopGlyphPassesOverScenery(t *testing.T) {
 		t.Fatalf("top glyph = %v, want the typeable %v under nearer scenery", top, typeable)
 	}
 	drawn(typeable)
-}
-
-// TestGridOccupiedListIsTheCellsHoldingEntities holds the index a copy and the gauges
-// read in place of the map: every listed cell holds something, every cell holding
-// something is listed once at its slot, and the stats read off the list are the
-// full scan's.
-func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
-	g := NewSpatialGrid(7, 5)
-	rng := rand.New(rand.NewPCG(3, 9))
-	type placed struct {
-		e    core.Entity
-		x, y int
-	}
-	var held []placed
-	check := func() {
-		t.Helper()
-		seen := map[int32]bool{}
-		for slot, idx := range g.Occupied() {
-			c := &g.Cells[idx]
-			if c.Count == 0 || int(c.slot) != slot || seen[idx] {
-				t.Fatalf("occupied[%d] = cell %d: count %d, slot %d, seen %v", slot, idx, c.Count, c.slot, seen[idx])
-			}
-			seen[idx] = true
-		}
-		var want GridStats
-		for i := range g.Cells {
-			if n := int(g.Cells[i].Count); n > 0 {
-				if !seen[int32(i)] {
-					t.Fatalf("cell %d holds %d and is not listed", i, n)
-				}
-				want.CellsOccupied++
-				want.EntitiesTotal += n
-				want.EntitiesShared += int(g.Cells[i].SharedCount)
-				want.MaxOccupancy = max(want.MaxOccupancy, n)
-			}
-		}
-		if got := g.ComputeStats(); got != want {
-			t.Fatalf("stats off the list %+v, off the cells %+v", got, want)
-		}
-	}
-	for step := range 2000 {
-		switch {
-		case len(held) > 0 && rng.IntN(3) == 0:
-			i := rng.IntN(len(held))
-			g.RemoveEntityAt(held[i].e, held[i].x, held[i].y)
-			held[i] = held[len(held)-1]
-			held = held[:len(held)-1]
-		case step%97 == 96:
-			g.Clear()
-			held = nil
-		default:
-			d := core.DomainShared
-			if rng.IntN(4) == 0 {
-				d = core.DomainPlayer
-			}
-			e := core.MakeEntity(d, uint64(step+1))
-			x, y := rng.IntN(7), rng.IntN(5)
-			if g.Set(e, x, y) {
-				held = append(held, placed{e, x, y})
-			}
-		}
-		check()
-	}
 }

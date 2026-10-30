@@ -621,7 +621,7 @@ func TestACaveWearsTheStoneArtItNames(t *testing.T) {
 		walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: seed, MinWall: 1, Art: art}})
 		preset, _ := pattern.ParseArtPreset(art)
 		want := engine.RockLook{Visual: orStone(component.WallVisualConfig{}), Stone: true, Art: uint8(preset), Seed: seed}
-		if rock := w.Positions.Rock(); rock == nil || rock.Look != want {
+		if rock := w.Positions.Rock(); rock == nil || w.Positions.RockLook() != want {
 			t.Fatalf("seed %d laid the cave %+v, want the look %+v", seed, walls.cave, want)
 		}
 		record, err := walls.SaveShared()
@@ -632,14 +632,14 @@ func TestACaveWearsTheStoneArtItNames(t *testing.T) {
 		if err := receiverWalls.LoadShared(record); err != nil {
 			t.Fatal(err)
 		}
-		if got := receiver.Positions.Rock().Look; got != want {
+		if got := receiver.Positions.RockLook(); got != want {
 			t.Fatalf("seed %d: the record laid the look %+v, want %+v", seed, got, want)
 		}
 	}
 
 	w, walls, _ := newCaveWorld(t, 30, 12)
 	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1}})
-	if got, want := w.Positions.Rock().Look, (engine.RockLook{Visual: orStone(component.WallVisualConfig{})}); got != want {
+	if got, want := w.Positions.RockLook(), (engine.RockLook{Visual: orStone(component.WallVisualConfig{})}); got != want {
 		t.Fatalf("a cave with no art laid the look %+v, want %+v", got, want)
 	}
 	w, walls, _ = newCaveWorld(t, 30, 12)

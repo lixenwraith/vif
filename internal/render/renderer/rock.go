@@ -47,7 +47,7 @@ type stoneColumns struct {
 // rows, then its floor rows, in its visual or its stone
 func (r *WallRenderer) renderRock(ctx *render.RenderContext, buf *render.RenderBuffer, rock *engine.RockField, carry int) {
 	r.drawn = append(append(r.drawn[:0], rock.Columns()...), rock.Ahead()...)
-	look := rock.Look
+	look := r.gameCtx.World.Positions.RockLook()
 	if look.Stone {
 		r.renderStone(ctx, buf, rock, carry)
 		return
@@ -77,7 +77,7 @@ func (r *WallRenderer) renderRock(ctx *render.RenderContext, buf *render.RenderB
 func (r *WallRenderer) renderStone(ctx *render.RenderContext, buf *render.RenderBuffer, rock *engine.RockField, carry int) {
 	minX, minY, maxX, maxY := ctx.VisibleMapBounds()
 	height := r.gameCtx.World.Resources.Config.MapHeight
-	r.stone.fit(rock.Look, rock.Width(), height)
+	r.stone.fit(r.gameCtx.World.Positions.RockLook(), rock.Width(), height)
 	attrs := terminal.AttrNone
 	if r.stone.index256 {
 		attrs = terminal.AttrFg256 | terminal.AttrBg256

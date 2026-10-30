@@ -135,6 +135,19 @@ that proves wrong or that a document now states, and link the document instead.
   `RunSafe`, so a goroutine that reads the run's config off the world lock (the
   drive loop, a bot seat) reads the copy it started with instead.
 
+## Position
+
+- The map's bounds and the grid can differ for a tick: `Config.MapWidth` is written
+  on seven paths of which four resize the grid, and a copy restores the config
+  whole. A query reads the map through `position.Frame` and the grid through its
+  own dimensions, never one for the other.
+- A method cannot be declared on an alias (`engine.DomainScope = position.Scope`),
+  so a scope selects a class, `engine.EntityClass(e)`, which the two guard arrays in
+  `internal/engine/position.go` hold to the domain numbering.
+- `pkg/position` knows no entity: a test over walls or glyphs needs a world and
+  stays in `internal/engine`; a grid-only test goes to the package with a test id
+  whose class is its top byte.
+
 ## Glyphs and colours
 
 - A new non-ASCII rune in a drawing package or a shipped scenario's TOML needs the

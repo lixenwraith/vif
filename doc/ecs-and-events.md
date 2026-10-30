@@ -100,57 +100,66 @@ one without updating the other.
 
 ## 3. Position and spatial queries
 
-`SpatialGrid` maps every map coordinate to a fixed-capacity `Cell`. A cell can
-hold up to `parameter.MaxEntitiesPerCell` entity IDs (currently 31). This avoids
-per-query allocation in collision, typing, and targeting hot paths. Shared
-occupants precede Player ones, `ReservedPlayerPerCell` (12) caps the Player
-half, and queries take a `DomainScope` ([the domain
+`pkg/position` is the spatial index and the geometry over a map, free of the game
+([Position package](position-package.md)); `engine.Position` binds it to the world.
+`position.Grid` maps every map coordinate to a fixed-capacity `Cell` of up to
+`CellCapacity` (31) entity IDs, which spares the collision, typing and targeting hot
+paths a per-query allocation. Shared occupants precede private ones,
+`PrivateBudget` (12) caps the private half, and a query takes a `Scope`; the
+engine's `ScopeShared`, `ScopePlayer` and `ScopeBoth` name the package's, and an
+entity's class is its domain ([the domain
 model](domain-design.md#3-spatial-and-entity-classification)).
 
 The grid is dense, so a map costs cells: `Cell` is exactly 256 bytes, and the
 grid is sized to its map with grow-only backing, so a shrink never reallocates.
-`engine.ClampMapSize` is the single gate in front of that allocation, bounding a
-map by `parameter.MaxMapWidth`, `MaxMapHeight` and `MaxMapCells` (32 MB of cells
-per world at the ceiling). It clamps rather than rejects because a `LevelSetup`
-payload is replicated: every participant applies the same one, so a clamp reaches
-the same bounds everywhere where a payload dropped on one instance and applied on
-another is a divergence. `World.SetupLevel` and the resize and reset paths write
-the map size through `ConfigResource.FloorMapSize`, which raises it to the
-scenario's `[map]` floor and then clamps, and `SpatialGrid.Resize` clamps again
-before it allocates. Config and the grid therefore describe one map, and a
-width and height whose product overflows `int` never reaches the allocator.
+`position.Clamp` is the single gate in front of that allocation, bounding a map by
+`MaxWidth`, `MaxHeight` and `MaxCells` (32 MB of cells per world at the ceiling),
+which `parameter` names as the game reads them. It clamps rather than rejects
+because a `LevelSetup` payload is replicated: every participant applies the same
+one, so a clamp reaches the same bounds everywhere where a payload dropped on one
+instance and applied on another is a divergence. `World.SetupLevel` and the resize
+and reset paths write the map size through `ConfigResource.FloorMapSize`, which
+raises it to the scenario's `[map]` floor and then clamps, and `Grid.Resize`
+clamps again before it allocates. Config and the grid therefore describe one map,
+and a width and height whose product overflows `int` never reaches the allocator.
 
 ```mermaid
 flowchart LR
-    Move["SetPosition"] --> Store["position sparse set"]
+    Move["SetPosition"] --> Store["position rows"]
     Move --> Old["remove from old cell"]
     Move --> New["add to new cell"]
     Query["point or area query"] --> New
 ```
 
-The position layer provides point and area queries, out-of-bounds checks, wall
-masks, line-of-sight traversal, and free-space searches using patterns or a
-spiral, which a negative radius sends over the whole map. Beside the wall
-entities it holds a rock field (`RockField`, `Position.SetRock`): a ceiling and a
-floor row per map column with one mask and one look, which every wall query reads
-as walls, so a cave's rock costs a column, not an entity per cell, and
-`ShiftRock` moves it a column left with the column entering. `WallTest` serves a derivation that probes every cell from a per-mask
-wall grid rebuilt only when the wall epoch or the grid's generation moved: a
-wall's placement and its store membership move the epoch, and a `BlockMask`
-written in place calls `Position.WallChanged` for its wall. The same changes log
-the cells they can have turned, both cells of a wall's move and each cell a rock
-shift crossed, and `Position.WallChanges` hands a reader that keeps its own copy
-of the answers those cells since the sequence it last read, so a moving map costs
-it the cells that moved. A change that names no cells (an install's
-`Position.WallsChanged`, a resize, a rock field laid) loses the log, and the
-reader re-reads every cell. `Shift` moves a rigid group without
-contending with itself for a cell, and `TopGlyphAt` names the one glyph per cell
-that is typed, passing over scenery (`IsTypeable`), and `TopGlyphIs` the one
-drawn. Reapplying an entity's existing cell is idempotent
-when the grid already contains it, avoiding remove/reinsert churn for composite
-members; a soft-clipped entity still retries insertion. Where a mechanic needs
-a line through cells, line of sight, a ray, a bolt or a charge or teleport line,
-it walks `vmath.Line`, one integer Bresenham stepper.
+`engine.Position` keeps the rows, an entity's cell, with the sparse index `Store`
+shares, and `position.Index` keeps the cells: a write moves both. The index
+answers point and area queries, out-of-bounds checks, line-of-sight traversal and
+free-space searches by pattern or spiral, which a negative radius sends over the
+whole map, within the bounds and at the cell aspect it reads live from the config
+(`position.Frame`). What blocks a cell comes from its blockers
+(`position.Blocker`), each answering a point, an area and the cells it marks for a
+wall test, for a `Mask` (0 is any): the rock field first (`position.Rock`,
+`Position.SetRock`), a ceiling and a floor row per map column with one mask, so a
+cave's rock costs a column, not an entity per cell, and `ShiftRock` moves it a
+column left with the column entering; then the engine's wall entities, read from
+`Components.Wall` in the cell. The rock's look (`RockLook`) stays the engine's,
+beside the field. `WallTest` serves a derivation that probes every cell from a
+per-mask wall grid rebuilt only when the wall epoch or the grid's generation
+moved: a wall's placement and its store membership move the epoch, and a
+`BlockMask` written in place calls `Position.WallChanged` for its wall. The same
+changes log the cells they can have turned, both cells of a wall's move and each
+cell a rock shift crossed, and `Position.WallChanges` hands a reader that keeps
+its own copy of the answers those cells since the sequence it last read, so a
+moving map costs it the cells that moved. A change that names no cells (an
+install's `Position.WallsChanged`, a resize, a rock field laid) loses the log, and
+the reader re-reads every cell. `Shift` moves a rigid group without contending
+with itself for a cell, and `TopGlyphAt` names the one glyph per cell that is
+typed, passing over scenery (`IsTypeable`), and `TopGlyphIs` the one drawn.
+Reapplying an entity's existing cell is idempotent when the grid already contains
+it, avoiding remove/reinsert churn for composite members; a soft-clipped entity
+still retries insertion. Where a mechanic needs a line through cells, line of
+sight, a ray, a bolt or a charge or teleport line, it walks `vmath.Line`, one
+integer Bresenham stepper.
 
 Cell capacity is a performance contract, not a hard entity limit. If more than
 the configured maximum occupy one cell, the position store still contains the

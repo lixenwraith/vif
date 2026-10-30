@@ -335,3 +335,11 @@ func (x *sparseIndex) clear() {
 	}
 	x.far, x.n, x.held = nil, 0, 0
 }
+
+// sized is s at length n with room for c, reusing its storage when it has the room.
+func sized[T any](s []T, n, c int) []T {
+	if cap(s) < c {
+		return make([]T, n, c)
+	}
+	return s[:n]
+}
