@@ -781,15 +781,6 @@ func (r *Router) transitionMode(newMode core.GameMode) {
 	r.machine.SetMode(inputMode)
 }
 
-// SyncNormal returns the input machine to Normal when something other than the
-// router put the game there, as a reset's level setup does under an open command
-// line or overlay: the machine would go on reading keys for a mode nothing handles.
-func (r *Router) SyncNormal() {
-	if r.ctx.GetMode() == core.ModeNormal && r.machine.Mode() != input.ModeNormal {
-		r.machine.SetMode(input.ModeNormal)
-	}
-}
-
 // openBreak puts the command line over a run a breakpoint paused, so the operator
 // inspects it there and leaving the line resumes it. An overlay keeps the screen.
 func (r *Router) openBreak() {

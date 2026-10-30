@@ -706,10 +706,10 @@ func TestAPasteTypesWhole(t *testing.T) {
 	}
 }
 
-// TestAResetUnderTheCommandLineLeavesTheKeysWorking: a reset puts the game back in
-// NORMAL under an open command line, as a session's defeat does while the host
-// types, and the keys that follow parse as NORMAL's, so ':' opens the line again.
-func TestAResetUnderTheCommandLineLeavesTheKeysWorking(t *testing.T) {
+// TestAResetLeavesTheOperatorsMode: the mode is the operator's, so a reset, as a
+// session's defeat brings while the host types, leaves the command line open with
+// what was typed, and the next key goes on editing it.
+func TestAResetLeavesTheOperatorsMode(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
 		Host: Host{Presentation: &framePresentation{w: 120, h: 40}}})
@@ -717,18 +717,18 @@ func TestAResetUnderTheCommandLineLeavesTheKeysWorking(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(a.Close)
-	colon := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: ':'}
-	a.takeEvent(colon)
-	if !a.ctx.IsCommandMode() {
-		t.Fatal("':' did not open the command line")
+	for _, r := range ":lo" {
+		a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
 	}
+	run := a.Position().Run
 	a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{}, event.OriginDebug)
 	a.Settle()
-	if a.ctx.IsCommandMode() {
-		t.Fatal("the reset left the command line open")
+	if a.Position().Run == run {
+		t.Fatal("the reset did not start a new run")
 	}
-	a.takeEvent(colon)
-	if !a.ctx.IsCommandMode() {
-		t.Fatal("after the reset ':' no longer opens the command line")
+	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'g'})
+	if got := a.ctx.GetCommandText(); !a.ctx.IsCommandMode() || got != "log" {
+		t.Fatalf("after the reset the command line is open %t holding %q, want open holding %q",
+			a.ctx.IsCommandMode(), got, "log")
 	}
 }

@@ -171,6 +171,9 @@ type GameContext struct {
 
 	// === Atomic States ===
 
+	// The command line or overlay open over the play mode GameState holds; ModeNormal for none
+	operatorMode atomic.Int32
+
 	// Status bar state (atomic pointers for lock-free access)
 	commandText   atomic.Pointer[string]
 	searchText    atomic.Pointer[string]
@@ -562,9 +565,10 @@ func (ctx *GameContext) SetOverlayFilterEditing(editing bool) {
 }
 
 // Session state is operator-owned — mouse free mode, auto-fire, simulation rate,
-// overlay HUD and pins, standing breakpoints — and survives EventGameResetRequest;
-// anything else is world state. Logging is process configuration and is excluded;
-// pending step requests name what a reset destroys and are cancelled.
+// overlay HUD and pins, standing breakpoints, the mode with its lines and overlay —
+// and survives EventGameResetRequest; anything else is world state. Logging is
+// process configuration and is excluded; pending step requests name what a reset
+// destroys and are cancelled.
 
 // ResetSessionState returns the operator's state to its startup values: the HUD,
 // pins, overlay content and standing breakpoints cleared, free mouse, auto-fire and
@@ -720,15 +724,35 @@ func (ctx *GameContext) WithOrigin(o event.Origin, fn func()) { ctx.World.WithOr
 
 // === MODE ACCESSORS ===
 
-// GetMode returns the current game mode
+// GetMode returns the current game mode: the operator's, else the play mode
 func (ctx *GameContext) GetMode() core.GameMode {
+	if m := core.GameMode(ctx.operatorMode.Load()); m.Operator() {
+		return m
+	}
 	return ctx.World.Resources.Game.State.GetMode()
 }
 
-// SetMode applies the mode and publishes context.mode; the applier path, no event
+// SetMode applies the mode and publishes context.mode; the applier path, no event.
+// An operator mode opens over the play mode, and a play mode closes it.
 func (ctx *GameContext) SetMode(m core.GameMode) {
+	if m.Operator() {
+		ctx.operatorMode.Store(int32(m))
+		ctx.publishMode()
+		return
+	}
+	ctx.operatorMode.Store(int32(core.ModeNormal))
+	ctx.SetPlayMode(m)
+}
+
+// SetPlayMode applies a play mode under whatever the operator has open, as a
+// replayed one lands under a viewer's own command line.
+func (ctx *GameContext) SetPlayMode(m core.GameMode) {
 	ctx.World.Resources.Game.State.SetMode(m)
-	if int(m) < len(core.ModeNames) {
+	ctx.publishMode()
+}
+
+func (ctx *GameContext) publishMode() {
+	if m := ctx.GetMode(); int(m) < len(core.ModeNames) {
 		ctx.statMode.StoreIfChanged(core.ModeNames[m])
 	}
 }
@@ -740,14 +764,16 @@ func (ctx *GameContext) BindLog(l *vlog.Log) {
 	ctx.World.Resources.Status.SetLog(l)
 }
 
-// RequestMode applies a mode change and announces it, so the transition is a
-// function of the event stream. Decision sites call this; MetaSystem's handler
-// calls SetMode, which is why the emit is not folded into it.
-// Caller MUST hold updateMutex: UpdateBoundsRadius reads component stores.
+// RequestMode applies a mode change and announces a changed play mode, so the run's
+// mode is a function of the event stream; the operator's stays out of it. Decision
+// sites call this; MetaSystem's handler applies the play mode, so the emit is not
+// folded into SetMode. Caller MUST hold updateMutex: UpdateBoundsRadius reads
+// component stores.
 func (ctx *GameContext) RequestMode(m core.GameMode) {
+	played := ctx.World.Resources.Game.State.GetMode()
 	ctx.SetMode(m)
-	if ctx.Viewer.Load() {
-		return // a replay viewer borrows the mode; the recording authors the world
+	if ctx.Viewer.Load() || m.Operator() || m == played {
+		return // a replay viewer borrows the play mode; the recording authors the world
 	}
 	ctx.World.UpdateBoundsRadius()
 	ctx.PushLocal(event.EventModeChanged, &event.ModeChangedPayload{Mode: m})
@@ -974,7 +1000,7 @@ func (ctx *GameContext) SetPaused(paused bool) {
 	if ctx.Viewer.Load() {
 		return
 	}
-	ctx.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
+	ctx.PushLocalOrigin(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused}, event.OriginDevice)
 }
 
 // Hold starts or ends this instance's hold and, when that changed, tells its systems
@@ -983,14 +1009,14 @@ func (ctx *GameContext) Hold(held bool) bool {
 	if !ctx.TimeCtl.SetHeld(held) {
 		return false
 	}
-	ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: ctx.TimeCtl.IsPaused()})
+	ctx.PushLocalOrigin(event.EventGamePauseChanged, &event.GamePausePayload{Paused: ctx.TimeCtl.IsPaused()}, event.OriginDevice)
 	return true
 }
 
 // HoldAs is Hold for a hold that waits for what kind does; see TimeControl.HoldAs.
 func (ctx *GameContext) HoldAs(kind HoldKind) {
 	if ctx.TimeCtl.HoldAs(kind) {
-		ctx.PushLocal(event.EventGamePauseChanged, &event.GamePausePayload{Paused: true})
+		ctx.PushLocalOrigin(event.EventGamePauseChanged, &event.GamePausePayload{Paused: true}, event.OriginDevice)
 	}
 }
 

@@ -216,7 +216,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 
 // openedLocked settles what writing a journal's opening world queued, with input
 // bound to the slot the run followed, writes the run's own side over what that
-// derived, then takes up the operator state the run stood in.
+// derived, then takes up the play mode, the hold and the systems the run stood in.
 // Caller MUST hold updateMutex.
 func (sc *scribe) openedLocked(c event.JournalCapture, own ownState) error {
 	sc.world.PushLocalOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: c.Slot}, event.OriginSystem)
@@ -224,9 +224,8 @@ func (sc *scribe) openedLocked(c event.JournalCapture, own ownState) error {
 	if err := sc.installOwnLocked(own); err != nil {
 		return err
 	}
-	sc.ctx.SetMode(c.Mode)
+	sc.ctx.SetPlayMode(c.Mode)
 	sc.world.UpdateBoundsRadius()
-	sc.ctx.TimeCtl.SetPaused(c.Paused)
 	if c.Start {
 		sc.ctx.TimeCtl.HoldAs(engine.HoldStart)
 	} else {

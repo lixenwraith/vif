@@ -972,11 +972,11 @@ request it; the request crosses and every participant applies it at one barrier
 tick. A reset the scenario's own FSM emits, such as the shipped monitor's on a
 defeat, is re-derived on every instance instead.
 `MetaSystem` snapshots the roster's slot/control/peer/holder assignments, pauses
-time and audio, clears entities, `GameState` and kill tallies, advances the
-journal run while rebasing its tick to zero, returns a map this instance owns to
-its viewport size (no smaller than the scenario's `[map]` floor) while a session's
-latched bounds carry across, resets camera, crop-on-resize, mode, captured keys
-and status text, and cancels pending step controls. The reset FSM's first cursor
+time and audio, clears entities, the `GameState` counters and kill tallies,
+advances the journal run while rebasing its tick to zero, returns a map this
+instance owns to its viewport size (no smaller than the scenario's `[map]` floor)
+while a session's latched bounds carry across, resets camera, crop-on-resize,
+captured keys and status text, and cancels pending step controls. The reset FSM's first cursor
 spawn carries the configured heat/energy template and expands the saved roster
 in deterministic slot order. The scheduler serializes these phases with the
 world lock:
@@ -996,12 +996,14 @@ being driven or observed and survives plain `:new`. Its explicit contract is:
 - free-mouse and auto-fire preferences;
 - the current time scale;
 - telemetry HUD visibility and pinned overlay cards;
-- standing breakpoints.
+- standing breakpoints;
+- the mode, with an open command line, search or overlay and what is typed there,
+  so a scenario that resets again and again never closes the line under its
+  operator.
 
 Both `:new` and `:new!` clear the issuing instance's recorded and playing macros,
-and on every instance close overlays, return to Normal mode, and clear
-command/search/status text; a reset the scenario raises, as the default
-scenario's defeat does, clears no instance's macros. `:new!` additionally clears
+and the status text on every instance; a reset the scenario raises, as the
+default scenario's defeat does, clears no instance's macros. `:new!` additionally clears
 the initiating instance's telemetry HUD, pins and breakpoints and returns its free
 mouse, auto-fire and time scale to their startup values (`GameContext.StartScale`
 keeps the `-speed` rate), the rate only outside a live session, whose is its host's. A peer receiving the crossed reset retains its own
@@ -1029,6 +1031,7 @@ replay-excluded keys in `internal/snapshot/surface.go`:
 | Surface | Excluded keys |
 |---|---|
 | Operator time control | `engine.paused`, `engine.speed`, `engine.speed_pct`, `engine.step`, `engine.breakpoint` |
+| Operator mode | `context.mode`, which names a command line or overlay the journal never holds |
 | Presentation | `engine.fps`, `context.frame` |
 | Live contention | `event.backoffs` |
 | Recorder bookkeeping | `rec.depth`, `rec.flushes`, `rec.records`, `rec.skipped` |

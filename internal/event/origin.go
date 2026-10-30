@@ -12,7 +12,7 @@ const (
 	OriginNetwork               // Remote producer
 	OriginDebug                 // Harness and out-of-band control, such as App.Region and -script events
 	OriginSession               // Session layer, from a transport observation
-	OriginDevice                // This machine's own output, such as the audio mute
+	OriginDevice                // This machine's own: its speakers, its operator's pause and overlays
 	originCount
 )
 
@@ -32,7 +32,8 @@ func (o Origin) String() string {
 // Journaled reports whether events from this origin enter the replay journal.
 // OriginSession is, because no other record implies a roster change; it differs from
 // OriginNetwork in that it still has to cross. OriginDevice is not: the speakers a run
-// played on are no part of the run, and whoever replays it has their own.
+// played on and its operator's pause and overlays are no part of the run, and whoever
+// replays it has their own.
 func (o Origin) Journaled() bool { return o != OriginSystem && o != OriginDevice && o < originCount }
 
 // ParseOrigin resolves a journal name back to its origin

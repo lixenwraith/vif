@@ -10,7 +10,7 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 56
+const JournalSchema = 57
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -118,17 +118,17 @@ type JournalCapture struct {
 	Body []byte // snapshot.WrittenDelta: the world written, against the one before it
 
 	// Opens marks the world a journal opened on mid-run, its first capture, written
-	// on a replay's own settled boot; Mode, Paused, Held, Off, Slot and Own are what
-	// that boot would otherwise decide. Held and Start also mark the hold a join's
-	// install lands in, a start's or a pause, so a replay holds there as the run did.
-	Opens  bool
-	Mode   core.GameMode
-	Paused bool
-	Held   bool
-	Start  bool
-	Off    []string
-	Slot   uint8  // parameter.NoPlayerSlot for none
-	Own    []byte // app.ownState
+	// on a replay's own settled boot; Mode, Held, Off, Slot and Own are what that boot
+	// would otherwise decide. Mode is the play mode: the operator's command line,
+	// overlay and pause are no part of the run. Held and Start also mark the hold a
+	// join's install lands in, a start's or a pause, so a replay holds there too.
+	Opens bool
+	Mode  core.GameMode
+	Held  bool
+	Start bool
+	Off   []string
+	Slot  uint8  // parameter.NoPlayerSlot for none
+	Own   []byte // app.ownState
 }
 
 // JournalDigest is the world a run held after a tick's body, before anything

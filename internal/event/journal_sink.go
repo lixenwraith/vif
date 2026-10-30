@@ -102,7 +102,7 @@ func (s vlogSink) Capture(c JournalCapture) {
 		kv = append(kv, "held", c.Held, "start", c.Start)
 	}
 	if c.Opens {
-		kv = append(kv, "opens", true, "mode", uint64(c.Mode), "paused", c.Paused, "off", strings.Join(c.Off, ","),
+		kv = append(kv, "opens", true, "mode", uint64(c.Mode), "off", strings.Join(c.Off, ","),
 			"slot", uint64(c.Slot), "own", base64.StdEncoding.EncodeToString(c.Own))
 	}
 	s.file.Write(s.log, SubJournalCapture, kv...)
