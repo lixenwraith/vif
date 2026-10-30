@@ -287,8 +287,6 @@ const (
 	EventExplosionVisualRequest
 	// EventExplosionVisualBatchRequest (ExplosionVisualBatchRequestPayload) [local] presents several explosion centers for its producer
 	EventExplosionVisualBatchRequest
-	// EventPulseVisualRequest (PulseVisualRequestPayload) [local] presents one disruptor pulse ring for its producer
-	EventPulseVisualRequest
 
 	// --- Particle ---
 

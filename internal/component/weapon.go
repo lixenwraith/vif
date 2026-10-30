@@ -54,6 +54,8 @@ type WeaponSpec struct {
 	MaxedCooldown time.Duration // replaces Cooldown
 	Stream        int           // bullets per stream shot while a wave's cooldown runs
 	Sustained     bool          // the ray lasts while main fire is held
+
+	Pulse PulseSpec // a pulse kind's pulse, cursor's and mounted
 }
 
 // CursorDamage is a hit on a cursor: energy drained through an active shield,
@@ -91,7 +93,8 @@ var WeaponSpecs = [WeaponCount]WeaponSpec{
 	WeaponDisruptor: {Name: "disruptor", Delivery: DeliveryPulse, Attack: CombatAttackPulse,
 		Cooldown: parameter.WeaponCooldownDisruptor, MaxCharges: parameter.WeaponMaxChargeDisruptor,
 		HostedRange:  parameter.PulseRadiusX,
-		HostedDamage: CursorDamage{parameter.HostedDisruptorEnergy, -parameter.HostedDisruptorHeat}},
+		HostedDamage: CursorDamage{parameter.HostedDisruptorEnergy, -parameter.HostedDisruptorHeat},
+		Pulse:        PulseSpec{Radius: parameter.PulseRadiusX, Duration: parameter.PulseDuration, Style: PulseRing}},
 	WeaponTurret: {Name: "turret", Delivery: DeliveryBullet, Attack: CombatAttackBullet,
 		Cooldown: parameter.WeaponCooldownTurret, MaxCharges: parameter.WeaponMaxChargeTurret,
 		HostedRange:  parameter.HostedTurretRange,

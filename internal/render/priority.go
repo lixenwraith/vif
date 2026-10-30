@@ -26,6 +26,7 @@ const (
 	PriorityFadeout
 	PriorityExplosion
 	PrioritySpirit
+	PriorityPulseGlow // a glowing pulse lies under the species it rides
 
 	// === Species (back to front) ===
 

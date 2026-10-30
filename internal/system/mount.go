@@ -1,6 +1,7 @@
 package system
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
@@ -15,8 +16,9 @@ import (
 )
 
 // MountSystem fires the weapons Shared hosts carry. Every instance advances each
-// mount identically from Shared state; what it fires is that instance's own
-// presentation, and a hit on a cursor counts only on the cursor's owner.
+// mount identically from Shared state; a pulse it fires is Shared, any other shot
+// that instance's own presentation, and a hit on a cursor counts only on the
+// cursor's owner.
 type MountSystem struct {
 	world *engine.World
 
@@ -87,11 +89,15 @@ func (s *MountSystem) HandleEvent(ev event.GameEvent) {
 // a Player-domain entity cannot carry Shared state.
 func (s *MountSystem) attach(p *event.MountRequestPayload) {
 	_, placed := s.world.Positions.GetPosition(p.Host)
+	pulse := p.Pulse
 	if !placed || p.Host.Domain() != core.DomainShared || s.world.Components.Cursor.HasEntity(p.Host) ||
-		p.Weapon < 0 || p.Weapon >= component.WeaponCount || p.Lane < 0 || p.Lane > len(vmath.Octants) {
+		p.Weapon < 0 || p.Weapon >= component.WeaponCount || p.Lane < 0 || p.Lane > len(vmath.Octants) ||
+		pulse.Radius < 0 || pulse.DurationMs < 0 || pulse.GrowMs < 0 || pulse.HitIntervalMs < 0 ||
+		pulse.Style >= component.PulseStyleCount || pulse.Attack < 0 || pulse.Attack >= component.CombatAttackTypeCount {
 		s.statRejects.Add(1)
 		return
 	}
+	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
 	spec := &component.WeaponSpecs[p.Weapon]
 	interval := time.Duration(p.IntervalMs) * time.Millisecond
 	if interval <= 0 {
@@ -111,11 +117,17 @@ func (s *MountSystem) attach(p *event.MountRequestPayload) {
 		Interval: interval,
 		Range:    reach,
 		Muzzle:   p.Muzzle,
-		Lane:     uint8(p.Lane),
-		Width:    width,
+		Damage:   component.CursorDamage{EnergyDrain: p.Energy, HeatDelta: -p.Heat},
+		Pulse: component.PulseSpec{
+			Radius: pulse.Radius, Duration: ms(pulse.DurationMs), Sustained: pulse.Sustained,
+			Grow: ms(pulse.GrowMs), HitInterval: ms(pulse.HitIntervalMs), Style: pulse.Style,
+			Attack: pulse.Attack, Charged: pulse.Charged,
+		},
+		Lane:  uint8(p.Lane),
+		Width: width,
 	})
-	// A ray the replaced mount had in flight would have nothing left to end it, and
-	// the new weapon starts ready
+	// A ray the replaced mount had in flight would have nothing left to end it, while
+	// its pulse ends once the mount names none; the new weapon starts ready
 	s.world.Components.Ray.RemoveEntity(p.Host, false)
 	if timer, ok := s.world.Components.Timer.GetPtr(p.Host); ok {
 		timer.Slots[component.TimerCooldown] = component.Countdown{}
@@ -145,7 +157,8 @@ func (s *MountSystem) Update() {
 			s.cycleRay(host, cursor, m, pos, dt)
 			continue
 		}
-		if cursor == 0 || timerRunning(s.world, host, component.TimerCooldown) || (m.Trigger == component.MountArmed && !m.Armed) {
+		if cursor == 0 || timerRunning(s.world, host, component.TimerCooldown) || (m.Trigger == component.MountArmed && !m.Armed) ||
+			s.world.Components.Pulse.HasEntity(m.Live) {
 			continue
 		}
 		s.fire(host, cursor, m, pos)
@@ -192,15 +205,17 @@ func muzzle(m *component.MountComponent, pos component.PositionComponent) (float
 }
 
 // fire discharges one mount at the cursor it aims at; every request is local
-// presentation or a hit the cursor's owner alone applies
+// presentation or a hit the cursor's owner alone applies, and a pulse, a Shared
+// entity riding the host, lands its hits the same way
 func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent, pos component.PositionComponent) {
 	spec := &component.WeaponSpecs[m.Weapon]
+	damage := mountDamage(m)
 	originX, originY := muzzle(m, pos)
 	origin := vmath.PointAt(originX, originY)
 
 	switch spec.Delivery {
 	case component.DeliveryLightning:
-		strikeCursor(s.world, cursor, spec.HostedDamage)
+		strikeCursor(s.world, cursor, damage)
 		s.world.PushLocal(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
 			Owner:        host,
 			OriginX:      origin.X,
@@ -221,7 +236,7 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 			Targets:     []core.Entity{cursor},
 			HitEntities: []core.Entity{cursor},
 			Hostile:     true,
-			Damage:      spec.HostedDamage,
+			Damage:      damage,
 		})
 
 	case component.DeliveryBullet:
@@ -240,16 +255,40 @@ func (s *MountSystem) fire(host, cursor core.Entity, m *component.MountComponent
 			Owner:       host,
 			MaxLifetime: parameter.TurretBulletLifetime,
 			Hostile:     true,
-			Damage:      spec.HostedDamage,
+			Damage:      damage,
 		})
 
 	case component.DeliveryPulse:
-		var ring blastArea
-		ring.resetOne(pos.X, pos.Y, parameter.PulseRadiusX, s.world.Resources.Config.CellAspect)
-		strikeCursorsIn(s.world, ring.contains, spec.HostedDamage)
-		s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{
-			X: pos.X, Y: pos.Y, Palette: component.PaletteHostile,
+		m.Live = s.world.CreateEntity(core.DomainShared)
+		s.world.Components.Pulse.SetComponent(m.Live, component.PulseComponent{
+			PulseSpec: mountPulse(m), X: pos.X, Y: pos.Y, Anchor: host,
+			Hostile: true, Damage: damage, Palette: component.PaletteHostile,
 		})
+	}
+}
+
+// mountDamage is what a mount's hit costs a cursor, each zero field the kind's
+func mountDamage(m *component.MountComponent) component.CursorDamage {
+	kind := component.WeaponSpecs[m.Weapon].HostedDamage
+	return component.CursorDamage{
+		EnergyDrain: cmp.Or(m.Damage.EnergyDrain, kind.EnergyDrain),
+		HeatDelta:   cmp.Or(m.Damage.HeatDelta, kind.HeatDelta),
+	}
+}
+
+// mountPulse is the pulse a mount fires, each zero field the kind's
+func mountPulse(m *component.MountComponent) component.PulseSpec {
+	spec := &component.WeaponSpecs[m.Weapon]
+	own, kind := m.Pulse, spec.Pulse
+	return component.PulseSpec{
+		Radius:      cmp.Or(own.Radius, kind.Radius),
+		Duration:    cmp.Or(own.Duration, kind.Duration),
+		Sustained:   own.Sustained || kind.Sustained,
+		Grow:        cmp.Or(own.Grow, kind.Grow),
+		HitInterval: cmp.Or(own.HitInterval, kind.HitInterval),
+		Style:       cmp.Or(own.Style, kind.Style),
+		Attack:      cmp.Or(own.Attack, kind.Attack, spec.Attack),
+		Charged:     own.Charged || kind.Charged,
 	}
 }
 
@@ -289,7 +328,7 @@ func (s *MountSystem) cycleRay(host, cursor core.Entity, m *component.MountCompo
 		return
 	}
 	if ray.HitTimer -= dt; ray.HitTimer <= 0 {
-		strikeCursorsIn(s.world, ray.Ray.Contains, component.WeaponSpecs[m.Weapon].HostedDamage)
+		strikeCursorsIn(s.world, ray.Ray.Contains, mountDamage(m))
 		ray.HitTimer = ray.HitInterval
 	}
 }

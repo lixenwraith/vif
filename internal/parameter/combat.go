@@ -125,17 +125,14 @@ const (
 	// PulseStunDuration is the duration of disruptor weapon stun effect
 	PulseStunDuration = 2000 * time.Millisecond
 
-	// PulseRadiusX is disruptor weapon horizontal radius (2× shield)
+	// PulseRadiusX is disruptor weapon horizontal radius; vertical is half at RefAspect
 	PulseRadiusX = PlayerShieldRadiusX * 3.5
 
-	// PulseRadiusY is disruptor weapon vertical radius (2× shield, aspect corrected)
-	PulseRadiusY = PlayerShieldRadiusY * 3.5
+	// PulseDuration is how long a disruptor's pulse lasts; it strikes once, as it fires
+	PulseDuration = 250 * time.Millisecond
 
-	// PulseEffectDuration is pulse visual effect duration
-	PulseEffectDuration = 250 * time.Millisecond
-
-	// PulseEffectCap is the maximum number of concurrent pulse rings; the oldest is replaced
-	PulseEffectCap = 16
+	// PulseGrowStart is the share of its radius a growing pulse fires at
+	PulseGrowStart = 0.5
 
 	// A charged pulse leaves a burn: BurnDamage every BurnPeriod for BurnDuration
 	BurnDamage   = 1

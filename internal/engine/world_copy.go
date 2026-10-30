@@ -158,7 +158,6 @@ type PlayerSide struct {
 	Pointer    bool              `json:"pointer"`
 	APM        APMState          `json:"apm"`
 	Explosions []ExplosionCenter `json:"explosions,omitempty"`
-	Pulses     []PulseEffect     `json:"pulses,omitempty"`
 	View       ViewResource      `json:"view"`
 	Streams    []StreamState     `json:"streams,omitempty"`
 	Prediction PredictionState   `json:"prediction"`
@@ -171,7 +170,6 @@ func (w *World) CapturePlayerSide() PlayerSide {
 		CameraX: r.Config.CameraX, CameraY: r.Config.CameraY, Pointer: r.Config.pointer,
 		APM:        r.Game.State.APM(),
 		Explosions: slices.Clone(r.Transient.ExplosionBacking[:r.Transient.ExplosionCount]),
-		Pulses:     slices.Clone(r.Transient.PulseBacking[:r.Transient.PulseCount]),
 		View:       *r.View,
 		Streams:    r.Rand.SaveStreams(core.DomainPlayer),
 		Prediction: r.Player.Prediction(),
@@ -185,9 +183,6 @@ func (w *World) InstallPlayerSide(s PlayerSide) []string {
 	r.Config.CameraX, r.Config.CameraY, r.Config.pointer = s.CameraX, s.CameraY, s.Pointer
 	r.Game.State.SetAPM(s.APM)
 	r.Transient.ExplosionCount = copy(r.Transient.ExplosionBacking[:], s.Explosions)
-	// As addPulse does, a palette the renderer has no ramp for is dropped
-	pulses := slices.DeleteFunc(slices.Clone(s.Pulses), func(p PulseEffect) bool { return p.Palette >= component.PaletteCount })
-	r.Transient.PulseCount = copy(r.Transient.PulseBacking[:], pulses)
 	*r.View = s.View
 	r.Player.SetPrediction(s.Prediction)
 	return r.Rand.LoadStreams(core.DomainPlayer, s.Streams)

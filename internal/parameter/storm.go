@@ -74,9 +74,12 @@ var (
 
 // Storm circle attack parameters
 const (
-	// Green circle: area pulse attack
+	// Green circle: a disruptor mount armed for each attack, one pulse an attack that
+	// swells over its first half and strikes every tick
 	StormGreenInitialCooldown  = 1 * time.Second
 	StormGreenRepeatInterval   = 1 * time.Second
+	StormGreenGrow             = StormGreenRepeatInterval / 2
+	StormGreenHitInterval      = GameUpdateInterval
 	StormGreenRadiusMultiplier = 3.0 // Multiplier to circle radius in each dimension
 	StormGreenDamageEnergy     = 10000
 	StormGreenDamageHeat       = 10
@@ -97,8 +100,5 @@ const (
 	StormBlueSpawnDistance       = 10.0
 )
 
-// Pre-computed green attack radii (2× circle radius)
-var (
-	StormGreenRadiusX = StormCircleRadiusX * StormGreenRadiusMultiplier
-	StormGreenRadiusY = StormCircleRadiusY * StormGreenRadiusMultiplier
-)
+// StormGreenRadiusX is the green's pulse radius; vertical is half at RefAspect
+const StormGreenRadiusX = StormCircleRadiusX * StormGreenRadiusMultiplier

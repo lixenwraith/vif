@@ -68,6 +68,8 @@ var Components = []ComponentDef{
 	{"Missile", "MissileComponent", "player"},
 	{"Mount", "MountComponent", "shared"},
 	{"Ray", "RayComponent", ""},
+	// Pulse is its firer's: a cursor's player, a mount's shared
+	{"Pulse", "PulseComponent", ""},
 	{"Spirit", "SpiritComponent", ""},
 	{"Materialize", "MaterializeComponent", ""},
 
@@ -126,7 +128,7 @@ var Systems = []SystemDef{
 	{Name: "heat", Constructor: "NewHeatSystem", Domain: "player", Requires: []string{"cursor"}},                                   // owns cursor heat
 	{Name: "boost", Constructor: "NewBoostSystem", Domain: "player", Requires: []string{"cursor"}, Optional: []string{"energy"}},   // owns cursor boost state; energy funds it
 	{Name: "weapon", Constructor: "NewWeaponSystem", Domain: "player",
-		Requires: []string{"cursor", "energy"}, Optional: []string{"combat", "glyph", "particle"}}, // only the owner simulates a cursor's weapons and tracers (D-2, D-13)
+		Requires: []string{"cursor", "energy"}, Optional: []string{"combat", "glyph", "particle", "pulse"}}, // only the owner simulates a cursor's weapons and tracers (D-2, D-13)
 
 	// --- Input Processing ---
 	{Name: "typing", Constructor: "NewTypingSystem", Domain: "player", Requires: []string{"cursor"},
@@ -185,7 +187,9 @@ var Systems = []SystemDef{
 	{Name: "eye", Constructor: "NewEyeSystem", Domain: "shared", Requires: []string{"composite"},
 		Optional: []string{"navigation", "combat"}}, // shared stream and composite species with a D-12 footprint sweep
 	{Name: "mount", Constructor: "NewMountSystem", Domain: "shared", Requires: []string{"timer"},
-		Optional: []string{"bullet", "missile", "lightning", "transient", "shield", "heat"}}, // mounts are shared host state; their shots and cursor hits are per-instance (D-2, D-6)
+		Optional: []string{"bullet", "missile", "lightning", "pulse", "shield", "heat"}}, // mounts are shared host state; their shots and cursor hits are per-instance (D-2, D-6), a pulse shared
+	{Name: "pulse", Constructor: "NewPulseSystem", Domain: "dual",
+		Optional: []string{"explosion", "combat", "shield", "heat"}}, // each pulse in its firer's domain: a cursor's crosses its geometry (D-3), a mount's strikes cursors on their owners
 	{Name: "bullet", Constructor: "NewBulletSystem", Domain: "player", Requires: []string{"timer"}, Optional: []string{"combat"}}, // player bullets; combat optionally resolves their hits
 
 	// --- Particles / Effects: player-domain by D-6 ---
@@ -245,6 +249,7 @@ var Renderers = []RendererDef{
 	{"fadeout", "NewFadeoutRenderer", "PriorityFadeout"},
 	{"explosion", "NewExplosionRenderer", "PriorityExplosion"},
 	{"spirit", "NewSpiritRenderer", "PrioritySpirit"},
+	{"pulse_glow", "NewPulseGlowRenderer", "PriorityPulseGlow"},
 
 	// --- Species (back to front) ---
 	{"pylon", "NewPylonRenderer", "PriorityPylon"},

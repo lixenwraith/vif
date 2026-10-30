@@ -92,17 +92,31 @@ type circleVariant struct {
 	flags                   uint64                         // Active's flags beside circleAttacking
 	enter, tick             func(*StormSystem, *circleCtx) // Active's hooks
 	cue                     uint16                         // ‰ of the attack at which materializeIn runs; 0 for none
+	mount                   *component.MountComponent      // the weapon the circle carries, armed by circleArmed; nil for none
 }
 
 // circleVariants is indexed by StormCircleType
 var circleVariants = [component.StormCircleCount]circleVariant{
 	component.StormCircleGreen: {
 		initial: parameter.StormGreenInitialCooldown, attack: parameter.StormGreenRepeatInterval,
-		repeat: parameter.StormGreenRepeatInterval, tick: (*StormSystem).pulse,
+		repeat: parameter.StormGreenRepeatInterval, flags: circleArmed, tick: (*StormSystem).pulse,
+		mount: &component.MountComponent{
+			Weapon: component.WeaponDisruptor, Trigger: component.MountArmed, Interval: parameter.StormGreenRepeatInterval,
+			Damage: component.CursorDamage{EnergyDrain: parameter.StormGreenDamageEnergy, HeatDelta: -parameter.StormGreenDamageHeat},
+			// One pulse an attack, as long as the attack, held with it
+			Pulse: component.PulseSpec{
+				Radius: parameter.StormGreenRadiusX, Duration: parameter.StormGreenRepeatInterval,
+				Grow: parameter.StormGreenGrow, HitInterval: parameter.StormGreenHitInterval, Style: component.PulseGlow,
+			},
+		},
 	},
 	component.StormCircleRed: {
 		initial: parameter.StormRedInitialCooldown, attack: parameter.StormRedBurstDuration,
 		repeat: parameter.StormRedPostAttackDelay, flags: circleArmed, tick: (*StormSystem).burst,
+		mount: &component.MountComponent{
+			Weapon: component.WeaponTurret, Trigger: component.MountArmed, Interval: parameter.StormRedFireInterval,
+			Muzzle: parameter.StormCircleRadiusX * parameter.StormRedBulletSpawnMargin,
+		},
 	},
 	component.StormCircleBlue: {
 		initial: parameter.StormBlueInitialCooldown, attack: parameter.StormBlueEffectDuration,
@@ -114,7 +128,7 @@ var circleVariants = [component.StormCircleCount]circleVariant{
 // Storm circle flags, which updateCircleAttacks writes to the components after every step
 const (
 	circleAttacking uint64 = 1 << iota // held in the convex, so not invulnerable
-	circleArmed                        // the turret mount fires
+	circleArmed                        // the circle's mount fires
 )
 
 // circleCtx is what one circle's step reads and its hooks write through
@@ -544,13 +558,8 @@ func (s *StormSystem) createCircleHeader(
 		Index: index,
 	})
 
-	if component.StormCircleType(index) == component.StormCircleRed {
-		s.world.Components.Mount.SetComponent(circleEntity, component.MountComponent{
-			Weapon:   component.WeaponTurret,
-			Trigger:  component.MountArmed,
-			Interval: parameter.StormRedFireInterval,
-			Muzzle:   parameter.StormCircleRadiusX * parameter.StormRedBulletSpawnMargin,
-		})
+	if mount := circleVariants[index].mount; mount != nil {
+		s.world.Components.Mount.SetComponent(circleEntity, *mount)
 	}
 
 	// Kinetic component for 2D collision compatibility
@@ -1167,7 +1176,7 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 		}
 		flags, suspended := s.graphs[circleComp.Index].Step(&circleComp.Machine, &s.ctx, dt)
 
-		// The state's outputs, written on every step: a held turret fires nothing
+		// The state's outputs, written on every step: a held mount fires nothing
 		circleComp.IsInvulnerable = concave(circleComp) && flags&circleAttacking == 0
 		if mount, ok := s.world.Components.Mount.GetPtr(circleEntity); ok {
 			mount.Armed = flags&circleArmed != 0 && !suspended
@@ -1175,22 +1184,8 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 	}
 }
 
-// stormGreenDamage is what the green circle's pulse costs each cursor inside it
-var stormGreenDamage = component.CursorDamage{
-	EnergyDrain: parameter.StormGreenDamageEnergy,
-	HeatDelta:   -parameter.StormGreenDamageHeat,
-}
-
-// pulse strikes the cursors inside the green's area, every tick of its attack
-func (s *StormSystem) pulse(c *circleCtx) {
-	s.statGreenActiveFrame.Add(1)
-
-	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.StormGreenRadiusX,
-		s.world.Resources.Config.CellAspect.Y(parameter.StormGreenRadiusY))
-	strikeCursorsIn(s.world, func(x, y int) bool {
-		return vmath.EllipseContainsPoint(x, y, c.x, c.y, invRxSq, invRySq)
-	}, stormGreenDamage)
-}
+// pulse counts the green's attack ticks; its armed disruptor mount pulses
+func (s *StormSystem) pulse(*circleCtx) { s.statGreenActiveFrame.Add(1) }
 
 // burst counts the red's attack ticks; its armed turret mount fires them
 func (s *StormSystem) burst(*circleCtx) { s.statRedActiveFrame.Add(1) }

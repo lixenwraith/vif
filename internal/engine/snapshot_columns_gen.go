@@ -70,60 +70,62 @@ func SharedWorldEncodeStoreColumns(dst []byte, s *SharedWorldState, i int) []byt
 	case 27:
 		return encodeColumnsRay(dst, s.Ray)
 	case 28:
-		return encodeColumnsSpirit(dst, s.Spirit)
+		return encodeColumnsPulse(dst, s.Pulse)
 	case 29:
-		return encodeColumnsMaterialize(dst, s.Materialize)
+		return encodeColumnsSpirit(dst, s.Spirit)
 	case 30:
-		return encodeColumnsTarget(dst, s.Target)
+		return encodeColumnsMaterialize(dst, s.Materialize)
 	case 31:
-		return encodeColumnsTargetAnchor(dst, s.TargetAnchor)
+		return encodeColumnsTarget(dst, s.Target)
 	case 32:
-		return encodeColumnsDrain(dst, s.Drain)
+		return encodeColumnsTargetAnchor(dst, s.TargetAnchor)
 	case 33:
-		return encodeColumnsQuasar(dst, s.Quasar)
+		return encodeColumnsDrain(dst, s.Drain)
 	case 34:
-		return encodeColumnsSwarm(dst, s.Swarm)
+		return encodeColumnsQuasar(dst, s.Quasar)
 	case 35:
-		return encodeColumnsStorm(dst, s.Storm)
+		return encodeColumnsSwarm(dst, s.Swarm)
 	case 36:
-		return encodeColumnsStormCircle(dst, s.StormCircle)
+		return encodeColumnsStorm(dst, s.Storm)
 	case 37:
-		return encodeColumnsBullet(dst, s.Bullet)
+		return encodeColumnsStormCircle(dst, s.StormCircle)
 	case 38:
-		return encodeColumnsPylon(dst, s.Pylon)
+		return encodeColumnsBullet(dst, s.Bullet)
 	case 39:
-		return encodeColumnsSnake(dst, s.Snake)
+		return encodeColumnsPylon(dst, s.Pylon)
 	case 40:
-		return encodeColumnsSnakeHead(dst, s.SnakeHead)
+		return encodeColumnsSnake(dst, s.Snake)
 	case 41:
-		return encodeColumnsSnakeBody(dst, s.SnakeBody)
+		return encodeColumnsSnakeHead(dst, s.SnakeHead)
 	case 42:
-		return encodeColumnsSnakeMember(dst, s.SnakeMember)
+		return encodeColumnsSnakeBody(dst, s.SnakeBody)
 	case 43:
-		return encodeColumnsEye(dst, s.Eye)
+		return encodeColumnsSnakeMember(dst, s.SnakeMember)
 	case 44:
-		return encodeColumnsTower(dst, s.Tower)
+		return encodeColumnsEye(dst, s.Eye)
 	case 45:
-		return encodeColumnsKraken(dst, s.Kraken)
+		return encodeColumnsTower(dst, s.Tower)
 	case 46:
-		return encodeColumnsBehavior(dst, s.Behavior)
+		return encodeColumnsKraken(dst, s.Kraken)
 	case 47:
-		return encodeColumnsHeader(dst, s.Header)
+		return encodeColumnsBehavior(dst, s.Behavior)
 	case 48:
-		return encodeColumnsMember(dst, s.Member)
+		return encodeColumnsHeader(dst, s.Header)
 	case 49:
-		return encodeColumnsFlash(dst, s.Flash)
+		return encodeColumnsMember(dst, s.Member)
 	case 50:
-		return encodeColumnsFadeout(dst, s.Fadeout)
+		return encodeColumnsFlash(dst, s.Flash)
 	case 51:
-		return encodeColumnsSplash(dst, s.Splash)
+		return encodeColumnsFadeout(dst, s.Fadeout)
 	case 52:
-		return encodeColumnsMarker(dst, s.Marker)
+		return encodeColumnsSplash(dst, s.Splash)
 	case 53:
-		return encodeColumnsButton(dst, s.Button)
+		return encodeColumnsMarker(dst, s.Marker)
 	case 54:
-		return encodeColumnsDeath(dst, s.Death)
+		return encodeColumnsButton(dst, s.Button)
 	case 55:
+		return encodeColumnsDeath(dst, s.Death)
+	case 56:
 		return encodeColumnsTimer(dst, s.Timer)
 	}
 	return dst
@@ -191,60 +193,62 @@ func SharedWorldDecodeStoreColumns(s *SharedWorldState, i int, data []byte) erro
 	case 27:
 		s.Ray = decodeColumnsRay(r)
 	case 28:
-		s.Spirit = decodeColumnsSpirit(r)
+		s.Pulse = decodeColumnsPulse(r)
 	case 29:
-		s.Materialize = decodeColumnsMaterialize(r)
+		s.Spirit = decodeColumnsSpirit(r)
 	case 30:
-		s.Target = decodeColumnsTarget(r)
+		s.Materialize = decodeColumnsMaterialize(r)
 	case 31:
-		s.TargetAnchor = decodeColumnsTargetAnchor(r)
+		s.Target = decodeColumnsTarget(r)
 	case 32:
-		s.Drain = decodeColumnsDrain(r)
+		s.TargetAnchor = decodeColumnsTargetAnchor(r)
 	case 33:
-		s.Quasar = decodeColumnsQuasar(r)
+		s.Drain = decodeColumnsDrain(r)
 	case 34:
-		s.Swarm = decodeColumnsSwarm(r)
+		s.Quasar = decodeColumnsQuasar(r)
 	case 35:
-		s.Storm = decodeColumnsStorm(r)
+		s.Swarm = decodeColumnsSwarm(r)
 	case 36:
-		s.StormCircle = decodeColumnsStormCircle(r)
+		s.Storm = decodeColumnsStorm(r)
 	case 37:
-		s.Bullet = decodeColumnsBullet(r)
+		s.StormCircle = decodeColumnsStormCircle(r)
 	case 38:
-		s.Pylon = decodeColumnsPylon(r)
+		s.Bullet = decodeColumnsBullet(r)
 	case 39:
-		s.Snake = decodeColumnsSnake(r)
+		s.Pylon = decodeColumnsPylon(r)
 	case 40:
-		s.SnakeHead = decodeColumnsSnakeHead(r)
+		s.Snake = decodeColumnsSnake(r)
 	case 41:
-		s.SnakeBody = decodeColumnsSnakeBody(r)
+		s.SnakeHead = decodeColumnsSnakeHead(r)
 	case 42:
-		s.SnakeMember = decodeColumnsSnakeMember(r)
+		s.SnakeBody = decodeColumnsSnakeBody(r)
 	case 43:
-		s.Eye = decodeColumnsEye(r)
+		s.SnakeMember = decodeColumnsSnakeMember(r)
 	case 44:
-		s.Tower = decodeColumnsTower(r)
+		s.Eye = decodeColumnsEye(r)
 	case 45:
-		s.Kraken = decodeColumnsKraken(r)
+		s.Tower = decodeColumnsTower(r)
 	case 46:
-		s.Behavior = decodeColumnsBehavior(r)
+		s.Kraken = decodeColumnsKraken(r)
 	case 47:
-		s.Header = decodeColumnsHeader(r)
+		s.Behavior = decodeColumnsBehavior(r)
 	case 48:
-		s.Member = decodeColumnsMember(r)
+		s.Header = decodeColumnsHeader(r)
 	case 49:
-		s.Flash = decodeColumnsFlash(r)
+		s.Member = decodeColumnsMember(r)
 	case 50:
-		s.Fadeout = decodeColumnsFadeout(r)
+		s.Flash = decodeColumnsFlash(r)
 	case 51:
-		s.Splash = decodeColumnsSplash(r)
+		s.Fadeout = decodeColumnsFadeout(r)
 	case 52:
-		s.Marker = decodeColumnsMarker(r)
+		s.Splash = decodeColumnsSplash(r)
 	case 53:
-		s.Button = decodeColumnsButton(r)
+		s.Marker = decodeColumnsMarker(r)
 	case 54:
-		s.Death = decodeColumnsDeath(r)
+		s.Button = decodeColumnsButton(r)
 	case 55:
+		s.Death = decodeColumnsDeath(r)
+	case 56:
 		s.Timer = decodeColumnsTimer(r)
 	default:
 		return fmt.Errorf("store %d is not a shared store", i)
@@ -342,6 +346,9 @@ func SharedWorldEncodeDelta(dst []byte, d *SharedWorldDelta) []byte {
 	dst = encodeColumnsRay(dst, d.Ray.Changed)
 	dst = appendEntities(dst, d.Ray.Removed)
 	dst = appendEntities(dst, d.Ray.Order)
+	dst = encodeColumnsPulse(dst, d.Pulse.Changed)
+	dst = appendEntities(dst, d.Pulse.Removed)
+	dst = appendEntities(dst, d.Pulse.Order)
 	dst = encodeColumnsSpirit(dst, d.Spirit.Changed)
 	dst = appendEntities(dst, d.Spirit.Removed)
 	dst = appendEntities(dst, d.Spirit.Order)
@@ -520,6 +527,9 @@ func SharedWorldDecodeDelta(data []byte) (SharedWorldDelta, error) {
 	d.Ray.Changed = decodeColumnsRay(r)
 	d.Ray.Removed = readEntities(r)
 	d.Ray.Order = readEntities(r)
+	d.Pulse.Changed = decodeColumnsPulse(r)
+	d.Pulse.Removed = readEntities(r)
+	d.Pulse.Order = readEntities(r)
 	d.Spirit.Changed = decodeColumnsSpirit(r)
 	d.Spirit.Removed = readEntities(r)
 	d.Spirit.Order = readEntities(r)
@@ -2268,6 +2278,39 @@ func encodeColumnsMount(dst []byte, rows []StoreEntry[component.MountComponent])
 		dst = appendF64(dst, rows[i].Value.Muzzle)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Damage.EnergyDrain)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Damage.HeatDelta)
+	}
+	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.Pulse.Radius)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Pulse.Duration)
+	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Pulse.Sustained)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Pulse.Grow)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Pulse.HitInterval)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Pulse.Style)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Pulse.Attack)
+	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Pulse.Charged)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Live)
+	}
+	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.AimX)
 	}
 	for i := range rows {
@@ -2309,6 +2352,39 @@ func decodeColumnsMount(r *columnReader) []StoreEntry[component.MountComponent] 
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.Muzzle, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Damage.EnergyDrain, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Damage.HeatDelta, r)
+	}
+	for i := range rows {
+		readF64(&rows[i].Value.Pulse.Radius, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Pulse.Duration, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Pulse.Sustained, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Pulse.Grow, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Pulse.HitInterval, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Pulse.Style, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Pulse.Attack, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Pulse.Charged, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Live, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.AimX, r)
@@ -2435,6 +2511,129 @@ func decodeColumnsRay(r *columnReader) []StoreEntry[component.RayComponent] {
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Palette, r)
+	}
+	return rows
+}
+
+func encodeColumnsPulse(dst []byte, rows []StoreEntry[component.PulseComponent]) []byte {
+	dst = appendEntityColumn(dst, rows)
+	for i := range rows {
+		dst = appendF64(dst, rows[i].Value.PulseSpec.Radius)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.PulseSpec.Duration)
+	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.PulseSpec.Sustained)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.PulseSpec.Grow)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.PulseSpec.HitInterval)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.PulseSpec.Style)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.PulseSpec.Attack)
+	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.PulseSpec.Charged)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.X)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Y)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Owner)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Anchor)
+	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Hostile)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Damage.EnergyDrain)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Damage.HeatDelta)
+	}
+	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Palette)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Elapsed)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.HitTimer)
+	}
+	return dst
+}
+
+func decodeColumnsPulse(r *columnReader) []StoreEntry[component.PulseComponent] {
+	n := r.rows()
+	if n == 0 {
+		return nil
+	}
+	rows := make([]StoreEntry[component.PulseComponent], n)
+	readEntityColumn(rows, r)
+	for i := range rows {
+		readF64(&rows[i].Value.PulseSpec.Radius, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.PulseSpec.Duration, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.PulseSpec.Sustained, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.PulseSpec.Grow, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.PulseSpec.HitInterval, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.PulseSpec.Style, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.PulseSpec.Attack, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.PulseSpec.Charged, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.X, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Y, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Owner, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Anchor, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Hostile, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Damage.EnergyDrain, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Damage.HeatDelta, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Palette, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Elapsed, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.HitTimer, r)
 	}
 	return rows
 }

@@ -872,7 +872,7 @@ func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.Wea
 		case component.DeliveryMissile:
 			fired = s.fireMissiles(cursor, x, y, charges, assignments)
 		case component.DeliveryPulse:
-			fired = s.firePulse(cursor, x, y, spec.Attack, capped)
+			fired = s.firePulse(cursor, x, y, spec, capped)
 		case component.DeliveryBullet:
 			fired = s.fireBullets(cursor, x, y, spec.Attack, assignments)
 		case component.DeliveryRay:
@@ -1016,30 +1016,20 @@ func (s *WeaponSystem) fireBullets(cursor core.Entity, x, y int, attack componen
 	return fired
 }
 
-// firePulse bursts at the emitter cell when a target is inside the ellipse; a
-// charged burst's artifact says so, and the profile's charged chain follows it
-func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, attack component.CombatAttackType, charged bool) bool {
-	aspect := s.world.Resources.Config.CellAspect
-	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.PulseRadiusX, aspect.Y(parameter.PulseRadiusY))
-	targets := FindTargetsInEllipse(s.world, x, y, invRxSq, invRySq, engine.ScopeBoth, cursor)
-	if len(targets) == 0 {
+// firePulse fires a pulse that stays on the emitter cell, when a target is inside
+// its reach; the pulse system strikes with it this tick, a charged one carrying the
+// family's charged chain
+func (s *WeaponSystem) firePulse(cursor core.Entity, x, y int, spec *component.WeaponSpec, charged bool) bool {
+	pulse := spec.Pulse
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(pulse.Radius, s.world.Resources.Config.CellAspect.Y(pulse.Radius/2))
+	if len(FindTargetsInEllipse(s.world, x, y, invRxSq, invRySq, engine.ScopeBoth, cursor)) == 0 {
 		return false
 	}
-
-	// Resolve player targets here; shared targets are re-derived from the crossing geometry.
-	var pulse blastArea
-	pulse.resetOne(x, y, parameter.PulseRadiusX, aspect)
-	strikePlayerTargets(s.world, cursor, &pulse, attack, charged)
-	s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-		Entity:  cursor,
-		X:       x,
-		Y:       y,
-		Radius:  parameter.PulseRadiusX,
-		Attack:  attack,
-		Charged: charged,
+	pulse.Attack, pulse.Charged = spec.Attack, charged
+	e := s.world.CreateEntity(core.DomainPlayer)
+	s.world.Components.Pulse.SetComponent(e, component.PulseComponent{
+		PulseSpec: pulse, X: x, Y: y, Owner: cursor, Palette: s.palette(cursor),
 	})
-
-	s.world.PushLocal(event.EventPulseVisualRequest, &event.PulseVisualRequestPayload{X: x, Y: y, Palette: s.palette(cursor)})
 	return true
 }
 

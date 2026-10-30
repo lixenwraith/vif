@@ -119,6 +119,78 @@ func TestAStunHoldsAnAttackAndItsTurret(t *testing.T) {
 	}
 }
 
+// TestTheGreenAttacksAsOnePulseHeldWithIt: the storm arms its green circle's
+// disruptor for each attack, which fires one Shared pulse riding the circle and
+// striking every tick of the attack; a stun holds the attack and the pulse alike,
+// the pulse ends with the attack, and the next attack fires the next one
+func TestTheGreenAttacksAsOnePulseHeldWithIt(t *testing.T) {
+	w, first, _ := testCursorWorld(t)
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	storm := ready(NewStormSystem(w)).(*StormSystem)
+	mounts := ready(NewMountSystem(w)).(*MountSystem)
+	pulses := ready(NewPulseSystem(w)).(*PulseSystem)
+	timers := ready(NewTimerSystem(w))
+	stormComp, _ := openingCircle(storm, component.StormCircleGreen, parameter.StormZMid-1)
+	circle := stormComp.Circles[component.StormCircleGreen]
+	combat, _ := w.Components.Combat.GetPtr(circle)
+	tick := func() (strikes int) {
+		timers.Update()
+		storm.updateCircleAttacks(stormComp, parameter.GameUpdateInterval)
+		mounts.Update()
+		pulses.Update()
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.HeatAddRequestPayload); ok && p.Entity == first {
+				strikes++
+			}
+		}
+		return strikes
+	}
+
+	strikes := 0
+	for range 5 {
+		strikes += tick()
+	}
+	live := w.Components.Pulse.GetAllEntities()
+	if len(live) != 1 || live[0].Domain() != core.DomainShared || strikes != 5 {
+		t.Fatalf("pulses %v after %d strikes, want one Shared pulse striking each tick", live, strikes)
+	}
+	fired := live[0]
+	pulse, _ := w.Components.Pulse.GetPtr(fired)
+	if pulse.Anchor != circle || pulse.Style != component.PulseGlow {
+		t.Fatalf("pulse = %#v, want a glow riding circle %d", pulse, circle)
+	}
+
+	held := pulse.Elapsed
+	combat.Status[component.StatusStun] = component.Status{Remaining: parameter.PulseStunDuration}
+	for range 10 {
+		if n := tick(); n != 0 || pulse.Elapsed != held {
+			t.Fatalf("stunned: %d strikes, elapsed %v, want the pulse held at %v", n, pulse.Elapsed, held)
+		}
+	}
+	combat.Status[component.StatusStun] = component.Status{}
+
+	attack := int(parameter.StormGreenRepeatInterval / parameter.StormGreenHitInterval)
+	for range 2 * attack {
+		if !w.Components.Pulse.HasEntity(fired) {
+			break
+		}
+		strikes += tick()
+	}
+	if w.Components.Pulse.HasEntity(fired) || strikes != attack {
+		t.Fatalf("%d strikes over the attack, want %d and the pulse ended with it", strikes, attack)
+	}
+	for range 2 * attack {
+		if n := tick(); w.Components.Pulse.CountEntities() > 0 {
+			break
+		} else if n != 0 {
+			t.Fatalf("%d strikes between attacks", n)
+		}
+	}
+	if next := w.Components.Pulse.Entities(); len(next) != 1 || next[0] == fired {
+		t.Fatalf("pulses %v at the next attack, want a new one", next)
+	}
+}
+
 // TestACircleWithNoCursorKeepsItsOutputsCurrent: with no cursor to attack the
 // machine holds, its cooldown frozen, while IsInvulnerable follows the circle's
 // depth and its attack on every step

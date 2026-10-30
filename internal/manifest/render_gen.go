@@ -24,6 +24,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Name: "fadeout", Renderer: renderer.NewFadeoutRenderer(ctx), Priority: render.PriorityFadeout},
 		{Name: "explosion", Renderer: renderer.NewExplosionRenderer(ctx), Priority: render.PriorityExplosion},
 		{Name: "spirit", Renderer: renderer.NewSpiritRenderer(ctx), Priority: render.PrioritySpirit},
+		{Name: "pulse_glow", Renderer: renderer.NewPulseGlowRenderer(ctx), Priority: render.PriorityPulseGlow},
 		{Name: "pylon", Renderer: renderer.NewPylonRenderer(ctx), Priority: render.PriorityPylon},
 		{Name: "tower", Renderer: renderer.NewTowerRenderer(ctx), Priority: render.PriorityTower},
 		{Name: "eye", Renderer: renderer.NewEyeRenderer(ctx), Priority: render.PriorityEye},

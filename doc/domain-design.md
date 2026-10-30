@@ -143,7 +143,7 @@ per-target combat requests derived from that geometry do not.
 
 ### D-6 — Presentation and personal effects are Player-domain
 
-Lightning, flash, fadeout, splash, motion markers, explosion smoke, pulse rings,
+Lightning, flash, fadeout, splash, motion markers, explosion smoke, a cursor's pulses,
 particles (dust, decay and blossom), orbs, bullets, missiles, and loot are
 Player-domain; a materialize takes its requester's domain (§3). Encounter
 level clears explicitly preserve loot; run resets clear it. Shared corrections
@@ -171,8 +171,11 @@ A weapon mounted on a Shared host follows the same boundary; storm's red circle 
 one, a turret the storm arms for each burst. The mount's aim is Shared state
 refreshed every tick from Shared positions, and every instance derives its own
 Player-domain shots and muzzle from that common aim, so a correction repairs
-direction without putting Player-domain identity on the wire. A hit on a cursor is
-applied by that cursor's owner alone; equal-distance aims use roster order.
+direction without putting Player-domain identity on the wire. A mount's pulse is
+Shared instead, an entity riding its host that every instance advances alike, since
+it lasts and holds with its host: a stun holds the storm's green attack and its
+pulse together, and a joiner sees one mid-strike. A hit on a cursor is applied by
+that cursor's owner alone; equal-distance aims use roster order.
 
 ### D-7 — Domain is explicit ambient context
 
