@@ -49,6 +49,7 @@ type Position struct {
 	dense    []component.PositionComponent
 	entities []core.Entity // Dense array for cache-friendly iteration
 	bit      uint64        // Component bit mask
+	rock     *RockField    // the cave's rock, two surfaces of the index, or nil
 	rockLook RockLook      // how the rock field draws, kept beside it
 
 	statCellSaturations *atomic.Int64
@@ -359,7 +360,7 @@ func (p *Position) ClearAllComponents() {
 	p.dense = p.dense[:0]
 	p.entities = p.entities[:0]
 	p.index.Clear()
-	p.rockLook = RockLook{}
+	p.rock, p.rockLook = nil, RockLook{}
 }
 
 // --- Wall ---
@@ -368,18 +369,18 @@ func (p *Position) ClearAllComponents() {
 // exact while walls cannot change.
 // SYNC: caller holds World.updateMutex for as long as it reads the result
 func (p *Position) WallBits(mask component.WallBlockMask, buf []uint64) position.Bits {
-	return p.index.WallBits(mask, buf)
+	return p.index.BlockBits(mask, buf)
 }
 
 // WallsChanged moves the wall epoch for walls rewritten wholesale, an install's,
 // and loses the wall log, since it names no cells.
-func (p *Position) WallsChanged() { p.index.WallsChanged() }
+func (p *Position) WallsChanged() { p.index.BlocksChanged() }
 
 // WallChanged logs the cell of e, a wall a writer no store sees rewrote: a
 // BlockMask set in place, or a wall component overwritten.
 func (p *Position) WallChanged(e core.Entity) {
 	if i, ok := p.slots.get(e); ok {
-		p.index.WallChangedAt(p.dense[i].X, p.dense[i].Y)
+		p.index.BlockChangedAt(p.dense[i].X, p.dense[i].Y)
 	}
 }
 
@@ -388,7 +389,7 @@ func (p *Position) WallChanged(e core.Entity) {
 // store first.
 func (p *Position) wallMoved(e core.Entity, x, y int) {
 	if e.Domain() != core.DomainPlayer && p.world.componentMask[e]&WallBit != 0 {
-		p.index.WallChangedAt(x, y)
+		p.index.BlockChangedAt(x, y)
 	}
 }
 
@@ -396,7 +397,7 @@ func (p *Position) wallMoved(e core.Entity, x, y int) {
 // it did at sequence since, and the sequence it stands at now; see Index.WallChanges.
 // SYNC: caller holds World.updateMutex
 func (p *Position) WallChanges(since uint64) (cells []vmath.Point, now uint64, ok bool) {
-	return p.index.WallChanges(since)
+	return p.index.BlockChanges(since)
 }
 
 // HasBlockingWallAt returns true if a wall exists at (x, y) that blocks the given mask
@@ -538,7 +539,7 @@ func (p *Position) TopGlyphAt(x, y int) (core.Entity, bool) {
 // TopGlyphIs reports whether typeable e is the glyph drawn at (x, y), the one
 // typing acts on. Alone in its cell it is, which spares the lookup.
 func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
-	if cell := p.index.EntitiesAt(x, y, ScopeBoth); len(cell) == 1 {
+	if cell := p.index.Occupants(x, y, ScopeBoth); len(cell) == 1 {
 		return cell[0] == e
 	}
 	return p.topGlyph(x, y) == e
@@ -562,7 +563,7 @@ func (p *Position) topGlyph(x, y int) core.Entity {
 	glyphs := p.world.Components.Glyph
 	var top core.Entity
 	var topLevel component.GlyphLevel
-	for _, e := range p.index.EntitiesAt(x, y, ScopeBoth) {
+	for _, e := range p.index.Occupants(x, y, ScopeBoth) {
 		g, ok := glyphs.GetPtr(e)
 		if !ok || p.IsScenery(e) {
 			continue

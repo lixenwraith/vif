@@ -214,13 +214,14 @@ func (x *Index[E]) FindClosestEntityInDirection(startX, startY, dx, dy int, boun
 		if dy < 0 {
 			stepY = -1
 		}
+		x0, x1 := max(bounds.MinX, 0), min(bounds.MaxX+1, g.Width)
 		for py := startY + stepY; py >= 0 && py < g.Height; py += stepY {
+			if x0 >= x1 || !g.anyIn(x0, x1, py, py+1, scope) {
+				continue
+			}
 			var best E
 			bestX, minDist, found := -1, math.MaxInt, false
-			for px := bounds.MinX; px <= bounds.MaxX; px++ {
-				if px < 0 || px >= g.Width {
-					continue
-				}
+			for px := x0; px < x1; px++ {
 				for _, e := range g.Cells[py*g.Width+px].view(scope) {
 					if filter == nil || filter(e) {
 						if dist := vmath.IntAbs(px - startX); dist < minDist {
@@ -239,13 +240,14 @@ func (x *Index[E]) FindClosestEntityInDirection(startX, startY, dx, dy int, boun
 		if dx < 0 {
 			stepX = -1
 		}
+		y0, y1 := max(bounds.MinY, 0), min(bounds.MaxY+1, g.Height)
 		for px := startX + stepX; px >= 0 && px < g.Width; px += stepX {
+			if y0 >= y1 || !g.anyIn(px, px+1, y0, y1, scope) {
+				continue
+			}
 			var best E
 			bestY, minDist, found := -1, math.MaxInt, false
-			for py := bounds.MinY; py <= bounds.MaxY; py++ {
-				if py < 0 || py >= g.Height {
-					continue
-				}
+			for py := y0; py < y1; py++ {
 				for _, e := range g.Cells[py*g.Width+px].view(scope) {
 					if filter == nil || filter(e) {
 						if dist := vmath.IntAbs(py - startY); dist < minDist {

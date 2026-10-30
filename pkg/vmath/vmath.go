@@ -55,21 +55,22 @@ const (
 
 // === Grid types ===
 
-// Point is an integer grid cell coordinate
+// Point is an integer grid cell coordinate: a column, a row and, in a volume, a
+// layer; on a map one layer deep Z is 0.
 type Point struct {
-	X, Y int
+	X, Y, Z int
 }
 
-// Center returns the float64 position of the cell's center
+// Center returns the float64 position of the cell's center in its layer
 func (p Point) Center() (px, py float64) {
 	return float64(p.X) + CellCenter, float64(p.Y) + CellCenter
 }
 
 // Add returns the component-wise sum
-func (p Point) Add(q Point) Point { return Point{X: p.X + q.X, Y: p.Y + q.Y} }
+func (p Point) Add(q Point) Point { return Point{X: p.X + q.X, Y: p.Y + q.Y, Z: p.Z + q.Z} }
 
 // Sub returns the component-wise difference
-func (p Point) Sub(q Point) Point { return Point{X: p.X - q.X, Y: p.Y - q.Y} }
+func (p Point) Sub(q Point) Point { return Point{X: p.X - q.X, Y: p.Y - q.Y, Z: p.Z - q.Z} }
 
 // PointAt returns the cell containing the float64 position
 // Floor preserves cell mapping for negative coordinates.

@@ -49,32 +49,32 @@ func TestARampCoversTheAreaUnderItsRate(t *testing.T) {
 // --- grid types ---
 
 func TestPointCenterRoundTrip(t *testing.T) {
-	for _, p := range []Point{{0, 0}, {1, 2}, {-1, -2}, {-7, 13}, {1000, -1000}} {
+	for _, p := range []Point{{X: 0, Y: 0}, {X: 1, Y: 2}, {X: -1, Y: -2}, {X: -7, Y: 13}, {X: 1000, Y: -1000}} {
 		px, py := p.Center()
 		if got := PointAt(px, py); got != p {
 			t.Errorf("PointAt(%v.Center()) = %v", p, got)
 		}
 	}
 	// int() truncates toward zero; the grid needs floor
-	if got := PointAt(-0.25, -1.75); got != (Point{-1, -2}) {
+	if got := PointAt(-0.25, -1.75); got != (Point{X: -1, Y: -2}) {
 		t.Errorf("PointAt negative = %v, want (-1,-2)", got)
 	}
 }
 
 func TestPointAddSub(t *testing.T) {
-	a, b := Point{3, -4}, Point{-1, 6}
-	if got := a.Add(b); got != (Point{2, 2}) {
+	a, b := Point{X: 3, Y: -4}, Point{X: -1, Y: 6}
+	if got := a.Add(b); got != (Point{X: 2, Y: 2}) {
 		t.Errorf("Add = %v", got)
 	}
-	if got := a.Sub(b); got != (Point{4, -10}) {
+	if got := a.Sub(b); got != (Point{X: 4, Y: -10}) {
 		t.Errorf("Sub = %v", got)
 	}
 }
 
 func TestAreaContainsBoundaries(t *testing.T) {
 	a := Area{X: 2, Y: 3, Width: 4, Height: 5} // x in [2,6), y in [3,8)
-	inside := []Point{{2, 3}, {5, 7}, {3, 5}}
-	outside := []Point{{1, 3}, {6, 7}, {2, 2}, {2, 8}}
+	inside := []Point{{X: 2, Y: 3}, {X: 5, Y: 7}, {X: 3, Y: 5}}
+	outside := []Point{{X: 1, Y: 3}, {X: 6, Y: 7}, {X: 2, Y: 2}, {X: 2, Y: 8}}
 	for _, p := range inside {
 		if !a.ContainsPoint(p) {
 			t.Errorf("%v should be inside", p)
@@ -88,7 +88,7 @@ func TestAreaContainsBoundaries(t *testing.T) {
 }
 
 func TestAreaCenter(t *testing.T) {
-	if got := (Area{X: 2, Y: 3, Width: 4, Height: 5}).Center(); got != (Point{4, 5}) {
+	if got := (Area{X: 2, Y: 3, Width: 4, Height: 5}).Center(); got != (Point{X: 4, Y: 5}) {
 		t.Errorf("Center = %v", got)
 	}
 }
@@ -125,7 +125,7 @@ func TestAreaRandomPointInside(t *testing.T) {
 func TestAreaRandomPointSingleCellPreservesRNG(t *testing.T) {
 	a := Area{X: 1, Y: 1, Width: 1, Height: 1}
 	r1, r2 := NewFastRand(42), NewFastRand(42)
-	if got := a.RandomPoint(r1); got != (Point{1, 1}) {
+	if got := a.RandomPoint(r1); got != (Point{X: 1, Y: 1}) {
 		t.Fatalf("RandomPoint = %v", got)
 	}
 	if r1.Next() != r2.Next() {
