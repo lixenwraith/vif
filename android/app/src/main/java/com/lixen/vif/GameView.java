@@ -37,8 +37,8 @@ import java.util.Arrays;
 final class GameView extends SurfaceView implements SurfaceHolder.Callback, Choreographer.FrameCallback {
     // A tap lifts this soon after it lands, and the next tap of a gesture this soon
     // after the last; two fingers are a tap when the second lands this soon after the
-    // first and neither moves, and a finger joining a held one is play. Two pair taps,
-    // or three of one finger on the status bar, toggle the keyboard
+    // first and neither strays far, and a finger joining a held one is play. Two pair
+    // taps, or three of one finger on the status bar, toggle the keyboard
     private static final long TAP_MS = 300, NEXT_TAP_MS = 500, PAIR_TOGETHER_MS = 150;
     private static final int BAR_TAPS = 3;
 
@@ -48,11 +48,11 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private final Speaker speaker;
     private final CellDrawer drawer;
     private final Stats stats = new Stats();
-    private final int slop;
+    private final int pairSlop; // how far a pair tap's finger may stray: as far as a pinch's spread changes before it begins
     private final int barSlop; // how far a finger tapping the status bar may stray, as a double tap's second tap may land
     private final ScaleGestureDetector scaler; // a pinch zooms the cells
     private float pinch; // the scale of the pinch in progress, which the game zooms by at its end
-    private boolean scaling; // a pinch is in progress: its fingers are no taps
+    private boolean scaling; // a pinch is in progress: its fingers press and drag nothing
 
     private boolean started;
     private HandlerThread thread;
@@ -84,14 +84,13 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
             throw new IllegalStateException("font atlas", e);
         }
         drawer = d;
-        slop = ViewConfiguration.get(activity).getScaledTouchSlop();
+        pairSlop = 2 * ViewConfiguration.get(activity).getScaledTouchSlop();
         barSlop = ViewConfiguration.get(activity).getScaledDoubleTapSlop();
         scaler = new ScaleGestureDetector(activity, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override
             public boolean onScaleBegin(ScaleGestureDetector d) {
                 scaling = true;
                 pinch = 1;
-                pairDown = pairTap = false;
                 Game.tap((int) d.getFocusX(), (int) d.getFocusY(), false);
                 return true;
             }
@@ -104,7 +103,9 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
 
             @Override
             public void onScaleEnd(ScaleGestureDetector d) {
-                Game.zoom(pinch);
+                if (!pairTap) { // fingers that stayed a pair tap zoom nothing
+                    Game.zoom(pinch);
+                }
             }
         });
         scaler.setQuickScaleEnabled(false); // a double tap is special fire, not a zoom handle
@@ -212,6 +213,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         if (strip) {
             return true; // the strip is a readout, not the map under it
         }
+        pair(e); // before the pinch, whose end reads whether the fingers were a tap
         scaler.onTouchEvent(e);
         if (scaling) {
             if (e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL) {
@@ -221,56 +223,73 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         }
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                pairDown = pairTap = false;
-                downAt = e.getEventTime();
                 Game.tap(x, y, true);
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                // A second finger landing with the first starts a tap; one joining a
-                // finger held or dragging, as thumbs do in landscape, is nothing
-                if (e.getPointerCount() == 2 && e.getEventTime() - downAt <= PAIR_TOGETHER_MS) {
-                    pairDown = true;
-                    pairAt = e.getEventTime();
-                    for (int i = 0; i < 2; i++) {
-                        pairX[i] = e.getX(i);
-                        pairY[i] = e.getY(i);
-                    }
-                    Game.tap(x, y, false);
+                if (pairDown && e.getPointerCount() == 2) {
+                    Game.tap(x, y, false); // a pair is a gesture: the first finger's press is let go
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (!pairDown) {
                     Game.drag(x, y);
-                    break;
                 }
-                for (int i = 0; i < Math.min(2, e.getPointerCount()); i++) {
-                    if (Math.abs(e.getX(i) - pairX[i]) > slop || Math.abs(e.getY(i) - pairY[i]) > slop) {
-                        pairDown = false;
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                Game.tap(x, y, false);
+                break;
+        }
+        return true;
+    }
+
+    /**
+     * Follows two fingers tapped together anywhere: the second such tap in time
+     * toggles the keyboard.
+     */
+    private void pair(MotionEvent e) {
+        long t = e.getEventTime();
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                pairDown = pairTap = false;
+                downAt = t;
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                // A second finger landing with the first starts a tap; one joining a
+                // finger held or dragging, as thumbs do in landscape, is nothing
+                if (e.getPointerCount() == 2 && t - downAt <= PAIR_TOGETHER_MS) {
+                    pairDown = true;
+                    pairAt = t;
+                    for (int i = 0; i < 2; i++) {
+                        pairX[i] = e.getX(i);
+                        pairY[i] = e.getY(i);
                     }
                 }
                 break;
+            case MotionEvent.ACTION_MOVE:
+                for (int i = 0; pairDown && i < Math.min(2, e.getPointerCount()); i++) {
+                    pairDown = Math.hypot(e.getX(i) - pairX[i], e.getY(i) - pairY[i]) <= pairSlop;
+                }
+                break;
             case MotionEvent.ACTION_POINTER_UP:
-                pairTap = pairDown && e.getPointerCount() == 2 && e.getEventTime() - pairAt <= TAP_MS;
+                pairTap = pairDown && e.getPointerCount() == 2 && t - pairAt <= TAP_MS;
                 pairDown = false;
                 break;
             case MotionEvent.ACTION_UP:
-                Game.tap(x, y, false);
-                if (pairTap && e.getEventTime() - pairAt <= TAP_MS) {
-                    if (pairTapAt != 0 && e.getEventTime() - pairTapAt <= NEXT_TAP_MS) {
+                if (pairTap && t - pairAt <= TAP_MS) {
+                    if (pairTapAt != 0 && t - pairTapAt <= NEXT_TAP_MS) {
                         pairTapAt = 0;
                         toggleKeyboard();
                     } else {
-                        pairTapAt = e.getEventTime();
+                        pairTapAt = t;
                     }
                 }
                 pairTap = false;
                 break;
             case MotionEvent.ACTION_CANCEL:
                 pairDown = pairTap = false;
-                Game.tap(x, y, false);
                 break;
         }
-        return true;
     }
 
     /**

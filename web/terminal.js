@@ -989,7 +989,8 @@ void main() {
        together twice they raise or drop the keyboard, as three taps of one finger on
        the status bar do, timed as on Android (GameView). A finger landing on the status
        strip reads it and plays nothing, and stands for the bar while the keyboard is up. */
-    const TAP_MS = 300, NEXT_TAP_MS = 500, PAIR_TOGETHER_MS = 150, PAIR_SLOP = 8;
+    const TAP_MS = 300, NEXT_TAP_MS = 500, PAIR_TOGETHER_MS = 150;
+    const PAIR_SLOP = 16;         // a pair's finger strays this far before it pinches, twice the touch slop as on Android
     const BAR_TAPS = 3, BAR_SLOP = 100;   // a bar tap's finger may stray as far as Android's double tap slop
     const pointers = new Map();   // fingers on the canvas, by id: where each is, and was as the pair formed
     const reading = new Set();    // fingers on the status strip
@@ -1053,7 +1054,7 @@ void main() {
         p.x = e.clientX;
         p.y = e.clientY;
         if (!pinch) return false;
-        if (Math.abs(p.x - p.x0) > PAIR_SLOP || Math.abs(p.y - p.y0) > PAIR_SLOP) pair.down = false;
+        if (Math.hypot(p.x - p.x0, p.y - p.y0) > PAIR_SLOP) pair.down = false;
         if (!pair.down && pointers.size === 2) zoomTo(pinch.cell * pinchDistance() / pinch.dist);
         return true;
     }
