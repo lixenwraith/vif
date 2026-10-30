@@ -93,6 +93,8 @@ func (s *stub) Held() bool {
 	return s.held
 }
 
+func (s *stub) TickInterval() time.Duration { return parameter.GameUpdateInterval }
+
 func (s *stub) Rate() engine.TimeScale {
 	s.mu.Lock()
 	defer s.mu.Unlock()

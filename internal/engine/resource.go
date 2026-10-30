@@ -241,6 +241,10 @@ type ConfigResource struct {
 	// identity a joiner adopts with the map bounds, the terminal's reference by default
 	CellAspect vmath.Aspect `toml:"cell_aspect"`
 
+	// TickInterval is the game time one tick advances, fixed for the run: session
+	// identity a joiner adopts, parameter.GameUpdateInterval unless the host chose
+	TickInterval time.Duration `toml:"-"`
+
 	// ConsolePalette is the text console a 256-color frame is drawn on; set with ColorMode
 	ConsolePalette ConsolePalette `toml:"-"`
 

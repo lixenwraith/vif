@@ -121,13 +121,13 @@ type selectiveState struct {
 // silenceLimit is how many unanswered manifests make a peer silent: the ones its
 // round trip and the backlog queued ahead of them keep in flight, plus
 // SnapshotManifestSilenceCorrections.
-func silenceLimit(p *peerPublisher) int {
+func silenceLimit(p *peerPublisher, tick time.Duration) int {
 	m, inFlight := p.metrics, 0
 	trip := m.RTT
 	if m.Throughput > 0 {
 		trip += time.Duration(float64(m.Backlog) / m.Throughput * float64(time.Second))
 	}
-	if cadence := time.Duration(p.plan.CadenceTicks) * parameter.GameUpdateInterval; cadence > 0 {
+	if cadence := time.Duration(p.plan.CadenceTicks) * tick; cadence > 0 {
 		inFlight = int(trip / cadence)
 	}
 	return parameter.SnapshotManifestSilenceCorrections + inFlight
@@ -177,7 +177,7 @@ func (c *Corrections) publishManifest(port engine.NetworkPort, index *snapshot.M
 		case p.wide > 0:
 			// Diverged too widely to repair last time; owed a body instead.
 			p.wide--
-		case p.silence >= silenceLimit(p):
+		case p.silence >= silenceLimit(p, c.bounds.TickInterval):
 			// Answering nothing; the index cannot reach it.
 		case !port.Send(id, uint8(network.MsgStateManifest), b):
 			p.refused++

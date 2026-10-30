@@ -210,7 +210,7 @@ func (a *App) Loop() (*restartRequest, error) {
 		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
 	}
 
-	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
+	frameTicker := time.NewTicker(a.ctx.FrameInterval())
 	defer frameTicker.Stop()
 
 	inputTicker := time.NewTicker(parameter.InputTickInterval)

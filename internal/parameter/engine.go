@@ -7,12 +7,17 @@ import "time"
 
 // Game Loop & Engine Timing
 const (
-	// FrameUpdateInterval is the rendering frame interval, 60 FPS: a third of a tick,
-	// so every tick is drawn for exactly three frames
+	// FrameUpdateInterval is the rendering frame interval at the default tick, 60 FPS:
+	// a third of a tick, so every tick is drawn for exactly three frames. A shorter
+	// tick draws no faster than FrameMinInterval [wall]
 	FrameUpdateInterval = GameUpdateInterval / 3
+	FrameMinInterval    = time.Second / 120
 
-	// GameUpdateInterval is the game logic update interval (clock tick) [game]
+	// GameUpdateInterval is the default tick, the game time one tick advances; a run's
+	// host may choose another between TickIntervalMin and TickIntervalMax [game]
 	GameUpdateInterval = 50 * time.Millisecond
+	TickIntervalMin    = 10 * time.Millisecond
+	TickIntervalMax    = 100 * time.Millisecond
 
 	// MaxSimulationDeltaSeconds caps continuous integration after a delayed live
 	// tick or a configured tick-interval change.

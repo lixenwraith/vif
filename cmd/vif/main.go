@@ -54,6 +54,7 @@ var (
 	flagCheck    = flag.Bool("check", false, "Validate the resolved config, then exit")
 	flagSchema   = flag.Bool("schema", false, "Print the FSM schema as JSON, then exit")
 	flagSpeed    = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or max with -script or autonomous bots")
+	flagTick     = flag.Duration("tick", parameter.GameUpdateInterval, "Game time one tick advances; a host's is its session's, which joiners take")
 	flagSeed     = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
 	flagGUI      = flag.Bool("g", false, "Open the game in a desktop window instead of the terminal")
 	flagCLI      = flag.Bool("cli", false, "Play in the terminal, whatever vif.toml or the build says")
@@ -405,6 +406,7 @@ func buildConfig() app.Config {
 		StatTicks:     flagLogs.stat.value,
 		RecTicks:      flagLogs.rec.value,
 		TimeScaleSpec: *flagSpeed,
+		TickInterval:  *flagTick,
 		Seed:          *flagSeed,
 		Journal:       flagJournal.set,
 		SessionName:   flagSession.name,

@@ -154,6 +154,9 @@ Root RNG seed; 0 draws one and logs it
 .B \-speed <rate>
 Simulation rate 1/8 1/4 1/2 1 2 4 8; with \-script or autonomous bots also "max" for no wall pacing
 .TP
+.B \-tick <dur>
+Game time one tick advances, 10ms to 100ms; a host's is its session's, which joiners take (default 50ms)
+.TP
 .B \-script <path>
 Run an authored deterministic TOML tick script
 .TP

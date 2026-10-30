@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -24,9 +25,10 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	if a.Schema != event.JournalSchema {
 		return Config{}, fmt.Errorf("journal schema %d, this build reads %d", a.Schema, event.JournalSchema)
 	}
-	if a.TickInterval != int64(parameter.GameUpdateInterval) {
-		return Config{}, fmt.Errorf("journal tick interval %dns, this build ticks at %dns",
-			a.TickInterval, int64(parameter.GameUpdateInterval))
+	tick := time.Duration(a.TickInterval)
+	if tick < parameter.TickIntervalMin || tick > parameter.TickIntervalMax {
+		return Config{}, fmt.Errorf("journal tick interval %s is outside %s to %s",
+			tick, parameter.TickIntervalMin, parameter.TickIntervalMax)
 	}
 	if a.Seed == 0 {
 		return Config{}, errors.New("anchor carries no seed")
@@ -37,7 +39,7 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	// the terminal the anchor names (D-14).
 	cfg := Config{
 		Mode: ModeHeadless, Seed: a.Seed, Session: a.Session,
-		Width: a.Width, Height: a.Height,
+		Width: a.Width, Height: a.Height, TickInterval: tick,
 		MapWidth: a.MapWidth, MapHeight: a.MapHeight, CropOnResize: a.CropOnResize,
 		CellAspect: vmath.Aspect(a.CellAspect), LockMap: a.SessionShared,
 	}
@@ -77,7 +79,7 @@ func (sc *scribe) sessionAnchorFields(an event.JournalAnchor) []anchorField {
 		{"seed", an.Seed, sc.world.Resources.Rand.Root()},
 		{"session", an.Session, sc.world.Resources.Rand.Session()},
 		{"scenario_digest", an.ScenarioDigest, sc.scenario.Digest()},
-		{"tick_ns", an.TickInterval, int64(parameter.GameUpdateInterval)},
+		{"tick_ns", an.TickInterval, int64(sc.world.Resources.Config.TickInterval)},
 	}
 }
 

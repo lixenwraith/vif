@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -323,6 +324,7 @@ func (a *App) initWorld() error {
 	}
 	a.membership.ctx, a.scribe.ctx = a.ctx, a.ctx
 	a.ctx.BindLog(a.log)
+	a.ctx.SetTickInterval(cmp.Or(a.cfg.TickInterval, parameter.GameUpdateInterval))
 	a.applyPlay()
 	a.world.Resources.Config.ColorMode = colorMode
 	a.world.Resources.Config.CellAspect = aspect
@@ -532,7 +534,7 @@ func (a *App) initScheduler() error {
 	a.scheduler, a.gameUpdateDone, resetChan = engine.NewScheduler(
 		a.world,
 		a.ctx.TimeCtl,
-		parameter.GameUpdateInterval,
+		a.world.Resources.Config.TickInterval,
 		a.frameReady,
 	)
 	a.ctx.ResetChan = resetChan

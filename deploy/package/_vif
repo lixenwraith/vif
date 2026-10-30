@@ -42,6 +42,7 @@ _arguments \
   '(-nw -no-wait)'{-nw,-no-wait}'[Start each new game and seat each join at once, or at a key, click or tap as -nw=false; unset, vif.toml'\''s \[play\] wait stands, waiting by default]' \
   '-seed[Root RNG seed; 0 draws one and logs it]:n: ' \
   '-speed[Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing]:rate: ' \
+  '-tick[Game time one tick advances, 10ms to 100ms; a host'\''s is its session'\''s, which joiners take (default 50ms)]:dur: ' \
   '-script[Run an authored deterministic TOML tick script]:path:_files' \
   '-headless[With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal'\''s digests unattended]' \
   '-watch[Watch the first bot or a script on this terminal, with no human player]' \

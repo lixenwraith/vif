@@ -1,6 +1,8 @@
 package converge
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
@@ -19,9 +21,11 @@ type Instance interface {
 	Position() event.Stamp
 	Driven() bool
 	// Held reports a hold standing on this run, which reaches no tick until it ends;
-	// it takes no lock. Rate is the rate its clock runs at, the host's in a session.
+	// it takes no lock. Rate is the rate its clock runs at and TickInterval the game
+	// time a tick advances, both the host's in a session.
 	Held() bool
 	Rate() engine.TimeScale
+	TickInterval() time.Duration
 
 	// LocalParticipant is this instance's session identity, zero outside a session.
 	// Seated marks a bot's run, which shares its holder's fate: the run's own word,

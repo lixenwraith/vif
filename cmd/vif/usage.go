@@ -96,6 +96,8 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"nw", "no-wait"}, arg: "[=false]", hint: "Start each new game and seat each join at once, or at a key, click or tap as -nw=false; unset, vif.toml's [play] wait stands, waiting by default"},
 			{names: []string{"seed"}, arg: "<n>", hint: "Root RNG seed; 0 draws one and logs it"},
 			{names: []string{"speed"}, arg: "<rate>", hint: `Simulation rate 1/8 1/4 1/2 1 2 4 8; with -script or autonomous bots also "max" for no wall pacing`},
+			{names: []string{"tick"}, arg: "<dur>", hint: fmt.Sprintf("Game time one tick advances, %s to %s; a host's is its session's, which joiners take (default %s)",
+				parameter.TickIntervalMin, parameter.TickIntervalMax, parameter.GameUpdateInterval)},
 			{names: []string{"script"}, arg: "<path>", hint: "Run an authored deterministic TOML tick script"},
 			{names: []string{"headless"}, hint: "With -bot, run bots without a human player or terminal; solo runs are unpaced. With -replay, verify the journal's digests unattended"},
 			{names: []string{"watch"}, hint: "Watch the first bot or a script on this terminal, with no human player"},

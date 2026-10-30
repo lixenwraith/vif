@@ -61,6 +61,9 @@ that proves wrong or that a document now states, and link the document instead.
   past that reads the reset. Wait for the condition, bounded.
 - `Config.Validate` refuses a rate on a driven run that is neither a script nor a
   bot: a harness's or a replay's clock takes one through `TimeCtl` instead.
+- A run's tick is `ConfigResource.TickInterval`, which its host may choose
+  (`-tick`); `parameter.GameUpdateInterval` is only the default. Code converting
+  ticks to time reads the run's, as tests may keep the constant.
 
 ## Determinism and the harness
 

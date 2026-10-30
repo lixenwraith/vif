@@ -854,48 +854,6 @@ crossing a host playing alone makes lands two ticks later than it needs to. Push
 the authority's lead when hosting starts, or let `driveOwnLead` run for an
 authority with no peers.
 
-### Let a run tick faster than twenty times a second
-
-- Priority: P3
-- Affected files: `internal/parameter/engine.go` (`GameUpdateInterval`,
-  `FrameUpdateInterval`), `internal/parameter/network.go`,
-  `internal/engine/scheduler.go`, `wad/scenario/vanguard/scenario.toml`
-- Guide: [Runtime §3](runtime.md#3-runtime-clocks-and-cadence),
-  [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
-
-At time scale 8x vanguard's parallax reads as depth on its own, every layer stepping
-at least twenty times a second; a faster tick would give every motion that, where
-the renderer now carries only scenery and the cave between ticks.
-`GameUpdateInterval` (50 ms) is a constant: a frame is a third of it, `SimTime`
-derives each tick's instant from it, and parameters count in ticks, the network's
-windows most (`NetworkBarrierDelayTicks`, `NetworkPaceStepTicks`,
-`SnapshotFloorKeyframeTicks` and the rest), so a shorter tick shortens each of them
-in time, and a session's traffic a second grows with it as it does with a session
-rate above 1x.
-Vanguard's rock is drawn at the frame's moment but blocks where its tick left it,
-so what it hits follows the interval.
-
-The interval already travels: the handshake's build identity
-(`PeerIdentity.TickIntervalNS`), the join's anchor fields
-(`sessionAnchorFields`), the journal anchor and the capture header carry it, each
-compared against the build's constant, which a replay refuses a journal on. An
-interval per run compares against the run's instead.
-
-Decisions it waits on:
-- Per build or per run. A build ticking at 25 ms halves every window for every
-  session, the internet's included; one per run, carried where it already travels,
-  keeps 50 ms where links are slow and lets a solo run or a LAN tick faster.
-- Which tick counts are durations: each `*Ticks` parameter that means time (leads,
-  the late bound, syncs, pace windows, keyframe floors, FSM delays) derives from a
-  duration at the interval; one that means a count (rings, sequence windows) stays.
-  The classification is a list to make, one parameter at a time.
-- The frame: a third of the tick at 25 ms is 120 a second, or the frame decouples
-  from the tick.
-- What content means by a tick: a scenario's tick-counted rule plays faster at a
-  shorter interval unless it is authored in time.
-
-Then the divergence harness at two intervals.
-
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under

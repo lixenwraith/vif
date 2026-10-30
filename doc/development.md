@@ -154,6 +154,7 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 | `-bot [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
 | `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` walks the succession chain, each surviving member that declared a port taking a term of its own in its turn, never a bot. Default `host` with `-serve`, `migrate` otherwise. |
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second of game time over the window, on a link carrying at least this many bytes per second of it. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
+| `-shed-window <dur>` | A host's shedding when it cannot keep its own tick: past a tenth of the ticks it owed dropped over the window, it dismisses its newest bot, then its newest player, one a window. `0` never sheds. See [Multiplayer](multi-player.md) §3.5. |
 | `-listen <addr>`, `-no-advertise` | With `-join`, the address the other participants reach this one at in a migrate session, or none at all, which keeps it a leaf, never a candidate ([Multiplayer](multi-player.md) §5.3). |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first person's terminal sizes the session, or a bot's 120x40 when the server seats bots of its own. |
 | `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
@@ -196,6 +197,7 @@ and the audio buffer; a flag on the command line wins
 | `-nw`, `-no-wait[=false]` | Start each new game, and seat each join, at once rather than at its player's key, click or tap; `-nw=false` waits. Unset, `vif.toml`'s `[play] wait` stands, waiting by default. |
 | `-seed <n>` | Root RNG seed; zero draws one and logs it. |
 | `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`. With `-script` or autonomous bots it is the run's wall pace instead and additionally accepts `max`. |
+| `-tick <dur>` | Game time one tick advances, 10 to 100 ms, default 50 ms. A host's is its session's, which every joiner adopts; tick-counted rules play faster at a shorter tick. |
 | `-script <path>` | Run a bounded authored TOML tick schedule; may be combined with `-host` or `-join`. |
 | `-headless` | With bots, run without a human or terminal; solo runs are unpaced. With `-replay`, verify the journal's digests unattended. |
 | `-watch` | Present a script or the first bot, with no human player. |

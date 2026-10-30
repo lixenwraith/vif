@@ -169,21 +169,21 @@ func TestVerifyBuildIgnoresWhatAPeerCannotKnowYet(t *testing.T) {
 func TestSessionFromKeepsTheBuildLocal(t *testing.T) {
 	t.Parallel()
 	build := PeerIdentity{
-		Protocol: ProtocolVersion, Simulation: "abc123", CaptureSchema: 4,
-		JournalSchema: 11, TickIntervalNS: 50_000_000,
+		Protocol: ProtocolVersion, Simulation: "abc123", CaptureSchema: 4, JournalSchema: 11,
 	}
 	got := build.SessionFrom(event.JournalAnchor{
-		Schema: 999, TickInterval: 1, Seed: 0x5EED, Session: 3,
+		Schema: 999, TickInterval: 25_000_000, Seed: 0x5EED, Session: 3,
 		ScenarioID: "embedded", ScenarioDigest: "sha256:2604b13fd259",
 	})
 
-	if got.JournalSchema != 11 || got.TickIntervalNS != 50_000_000 {
+	if got.JournalSchema != 11 {
 		t.Fatalf("the anchor overwrote a build field: %+v", got)
 	}
 	if got.Simulation != "abc123" || got.CaptureSchema != 4 || got.Protocol != ProtocolVersion {
 		t.Fatalf("a build field was lost: %+v", got)
 	}
-	if got.Seed != 0x5EED || got.Session != 3 || got.ScenarioDigest != "sha256:2604b13fd259" {
+	if got.TickIntervalNS != 25_000_000 || got.Seed != 0x5EED || got.Session != 3 ||
+		got.ScenarioDigest != "sha256:2604b13fd259" {
 		t.Fatalf("a session field was not adopted: %+v", got)
 	}
 }

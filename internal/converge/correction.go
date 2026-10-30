@@ -256,7 +256,7 @@ func newCorrections(inst Instance, tel snapshot.Telemetry) *Corrections {
 	return &Corrections{
 		inst:   inst,
 		tel:    tel,
-		bounds: cadenceBounds(),
+		bounds: cadenceBounds(inst.TickInterval()),
 		peers:  make(map[uint32]*peerPublisher),
 		base:   parameter.SnapshotCorrectionTicks,
 		keyPeriod: parameter.SnapshotCorrectionTicks *
@@ -279,9 +279,9 @@ const keyframePoll = time.Millisecond
 // assembled here because the envelope is a linkpace value and pkg may not see
 // internal: this is the one place the game's numbers and the controller's contract
 // meet, and the one place a test can check they still agree.
-func cadenceBounds() linkpace.Bounds {
+func cadenceBounds(tick time.Duration) linkpace.Bounds {
 	return linkpace.Bounds{
-		TickInterval:        parameter.GameUpdateInterval,
+		TickInterval:        tick,
 		MinCadenceTicks:     parameter.SnapshotCadenceMinTicks,
 		NominalCadenceTicks: parameter.SnapshotCorrectionTicks,
 		MaxCadenceTicks:     parameter.SnapshotCadenceMaxTicks,
@@ -314,7 +314,7 @@ func (c *Corrections) StartPump() {
 // no world — so a peer whose link improved does not wait out the old cadence.
 func (c *Corrections) pump() {
 	defer close(c.pumpDone)
-	interval := parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval
+	interval := parameter.SnapshotCadenceMinTicks * c.bounds.TickInterval
 	ticker := time.NewTicker(interval) // [wall] a publication cadence, not a game clock
 	defer ticker.Stop()
 
@@ -691,7 +691,7 @@ func (c *Corrections) decideLocked(ids []uint32, meter engine.LinkMeasuringPort,
 		p.plan.Constrained = p.plan.Constrained || !p.drains(sizes.Keyframe)
 		// A long round trip spaces this peer's indexes, so each descent stays retained;
 		// spaced past the quiet cadence, the link made the plan worse than any demand.
-		if spaced := min(answerSpacing(m.RTT), c.bounds.MaxCadenceTicks); spaced > p.plan.CadenceTicks {
+		if spaced := min(answerSpacing(m.RTT, c.bounds.TickInterval), c.bounds.MaxCadenceTicks); spaced > p.plan.CadenceTicks {
 			p.plan.CadenceTicks = spaced
 			p.plan.Constrained = p.plan.Constrained || spaced > max(c.bounds.NominalCadenceTicks, c.bounds.QuietCadence)
 		}
@@ -751,8 +751,8 @@ func (p *peerPublisher) nextDue(tick uint64) uint64 {
 // answerSpacing is the fewest ticks between two indexes to one peer that keeps the
 // tick its page request names retained: a descent crosses the link twice, and the
 // ring spans SnapshotManifestRetention-1 of this peer's publications.
-func answerSpacing(rtt time.Duration) uint64 {
-	trip := uint64((rtt + parameter.GameUpdateInterval - 1) / parameter.GameUpdateInterval)
+func answerSpacing(rtt, tick time.Duration) uint64 {
+	trip := uint64((rtt + tick - 1) / tick)
 	return (2*trip + parameter.SnapshotManifestRetention - 2) / (parameter.SnapshotManifestRetention - 1)
 }
 
@@ -1059,9 +1059,9 @@ func (c *Corrections) correct() {
 		// lost to a full channel, and costs one queue check per cadence when idle.
 		// A held correction is released by the clock and nothing wakes on that, so
 		// while one is waiting the backstop runs at the tick instead.
-		wait := parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval // [wall]
+		wait := parameter.SnapshotCadenceMinTicks * c.bounds.TickInterval // [wall]
 		if c.holding() {
-			wait = parameter.GameUpdateInterval
+			wait = c.bounds.TickInterval
 		}
 		backstop.Reset(wait)
 		select {
@@ -1618,7 +1618,7 @@ func (c *Corrections) AdmitLink(port *link.SocketPort, id link.PeerID, bytes int
 		sizes.Keyframe = int64(bytes)
 	}
 	rate := linkpace.TransferRate(int64(bytes), elapsed)
-	if err := linkpace.Admit(cadenceBounds(), rate, sizes); err != nil {
+	if err := linkpace.Admit(c.bounds, rate, sizes); err != nil {
 		return fmt.Errorf("participant %d: %w", id, err)
 	}
 	c.log.Debug("converge", "msg", "join link measured",
@@ -1635,7 +1635,7 @@ func (c *Corrections) AdmitMeasuredLink(port *link.SocketPort, id link.PeerID) e
 	if sizes.Keyframe == 0 {
 		return nil
 	}
-	if err := linkpace.AdmitMetrics(cadenceBounds(), port.LinkMetric(uint32(id)), sizes); err != nil {
+	if err := linkpace.AdmitMetrics(c.bounds, port.LinkMetric(uint32(id)), sizes); err != nil {
 		return fmt.Errorf("participant %d: %w", id, err)
 	}
 	return nil

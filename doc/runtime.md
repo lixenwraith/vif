@@ -376,11 +376,17 @@ only clock.
 
 | Path | Default interval | Owner | Purpose |
 |---|---:|---|---|
-| Render frame | 16.7 ms (a third of a tick) | main goroutine | Snapshot frame state, render, flush, and release the next simulation tick. |
+| Render frame | 16.7 ms (a third of a tick, no faster than 120 a second) | main goroutine | Snapshot frame state, render, flush, and release the next simulation tick. |
 | Input tick | 16 ms | main goroutine | Reconcile the presentation's pointer mode, open the command line after a breakpoint hit, repeat held/automatic fire, and advance macros. |
-| Simulation tick | 50 ms | scheduler goroutine | Advance pause-aware game time, FSM, systems, APM, and telemetry. |
+| Simulation tick | 50 ms (`-tick`, 10 to 100 ms) | scheduler goroutine | Advance pause-aware game time, FSM, systems, APM, and telemetry. |
 | Event attempt | 4 ms | event goroutine | Settle queued events between simulation ticks, including while paused. |
 | Audio buffer | 50 ms | audio mixer goroutine | Drain audio commands, synthesize/mix the next PCM buffer, and write it. |
+
+The tick is the run's, fixed for its life (`ConfigResource.TickInterval`): a host
+chooses it with `-tick`, a joiner adopts it from the offer, a journal records it and
+its replay ticks at it. Rules counted in ticks stay counted in ticks, so a shorter
+tick plays them faster; only the status bar says so, with the tick rate beside the
+speed when it is not the default (`40Hz`).
 
 The simulation is fixed-step but frame-gated. The main loop primes one
 `frameReady` token. After a simulation update signals `updateDone`, the next

@@ -5,22 +5,20 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/network"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 )
 
-// buildIdentity is what this binary is, with no world required: five compile-time
+// buildIdentity is what this binary is, with no world required: four compile-time
 // constants and the name a refusal gives them. It is what a dialer compares against
 // an offer before it constructs anything, and it is the half of the identity no
 // configuration changes.
 func buildIdentity() network.PeerIdentity {
 	return network.PeerIdentity{
-		Protocol:       network.ProtocolVersion,
-		Simulation:     manifest.FingerprintString(),
-		CaptureSchema:  snapshot.Schema,
-		JournalSchema:  event.JournalSchema,
-		TickIntervalNS: int64(parameter.GameUpdateInterval),
-		Build:          asset.Build(),
+		Protocol:      network.ProtocolVersion,
+		Simulation:    manifest.FingerprintString(),
+		CaptureSchema: snapshot.Schema,
+		JournalSchema: event.JournalSchema,
+		Build:         asset.Build(),
 	}
 }
 
