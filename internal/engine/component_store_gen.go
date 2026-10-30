@@ -37,6 +37,7 @@ const (
 	MissileBit
 	MountBit
 	RayBit
+	PulseBit
 	SpiritBit
 	MaterializeBit
 	TargetBit
@@ -98,6 +99,7 @@ type Component struct {
 	Missile      *Store[component.MissileComponent]
 	Mount        *Store[component.MountComponent]
 	Ray          *Store[component.RayComponent]
+	Pulse        *Store[component.PulseComponent]
 	Spirit       *Store[component.SpiritComponent]
 	Materialize  *Store[component.MaterializeComponent]
 	Target       *Store[component.TargetComponent]
@@ -158,6 +160,7 @@ func initComponents(w *World) {
 	w.Components.Missile = NewStore[component.MissileComponent](w, MissileBit)
 	w.Components.Mount = NewStore[component.MountComponent](w, MountBit)
 	w.Components.Ray = NewStore[component.RayComponent](w, RayBit)
+	w.Components.Pulse = NewStore[component.PulseComponent](w, PulseBit)
 	w.Components.Spirit = NewStore[component.SpiritComponent](w, SpiritBit)
 	w.Components.Materialize = NewStore[component.MaterializeComponent](w, MaterializeBit)
 	w.Components.Target = NewStore[component.TargetComponent](w, TargetBit)
@@ -286,6 +289,9 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&RayBit != 0 {
 		w.Components.Ray.RemoveEntity(e, true)
+	}
+	if mask&PulseBit != 0 {
+		w.Components.Pulse.RemoveEntity(e, true)
 	}
 	if mask&SpiritBit != 0 {
 		w.Components.Spirit.RemoveEntity(e, true)
@@ -474,6 +480,9 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&RayBit != 0 {
 		w.Components.Ray.RemoveBatch(entities, true)
 	}
+	if union&PulseBit != 0 {
+		w.Components.Pulse.RemoveBatch(entities, true)
+	}
 	if union&SpiritBit != 0 {
 		w.Components.Spirit.RemoveBatch(entities, true)
 	}
@@ -597,6 +606,7 @@ func (w *World) wipeAll() {
 	w.Components.Missile.ClearAllComponents()
 	w.Components.Mount.ClearAllComponents()
 	w.Components.Ray.ClearAllComponents()
+	w.Components.Pulse.ClearAllComponents()
 	w.Components.Spirit.ClearAllComponents()
 	w.Components.Materialize.ClearAllComponents()
 	w.Components.Target.ClearAllComponents()
@@ -660,6 +670,7 @@ type componentCopies struct {
 	Missile      storeCopy[component.MissileComponent]
 	Mount        storeCopy[component.MountComponent]
 	Ray          storeCopy[component.RayComponent]
+	Pulse        storeCopy[component.PulseComponent]
 	Spirit       storeCopy[component.SpiritComponent]
 	Materialize  storeCopy[component.MaterializeComponent]
 	Target       storeCopy[component.TargetComponent]
@@ -720,6 +731,7 @@ func (w *World) copyComponentsOut(reuse *componentCopies) (c componentCopies) {
 	c.Missile = w.Components.Missile.copyOut(reuse.Missile)
 	c.Mount = w.Components.Mount.copyOut(reuse.Mount)
 	c.Ray = w.Components.Ray.copyOut(reuse.Ray)
+	c.Pulse = w.Components.Pulse.copyOut(reuse.Pulse)
 	c.Spirit = w.Components.Spirit.copyOut(reuse.Spirit)
 	c.Materialize = w.Components.Materialize.copyOut(reuse.Materialize)
 	c.Target = w.Components.Target.copyOut(reuse.Target)
@@ -781,6 +793,7 @@ func (w *World) copyComponentsIn(c componentCopies) {
 	w.Components.Missile.copyIn(c.Missile)
 	w.Components.Mount.copyIn(c.Mount)
 	w.Components.Ray.copyIn(c.Ray)
+	w.Components.Pulse.copyIn(c.Pulse)
 	w.Components.Spirit.copyIn(c.Spirit)
 	w.Components.Materialize.copyIn(c.Materialize)
 	w.Components.Target.copyIn(c.Target)

@@ -96,6 +96,7 @@ Rows follow `manifest.BuildSystems` order, then `MetaSystem` and `BehaviorSystem
 | Snake | `snake.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSnakeSystem` | Spawn, lifecycle and bounce paths | `Init` | Generic only |
 | Eye | `eye.{count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewEyeSystem` | Spawn, lifecycle and bounce paths | `Init` | Generic only |
 | Mount | `mount.{count,fired,host_rejects,disabled_rejects}` | `NewMountSystem` | Attach requests and the per-mount fire pass | `Init` | Generic only |
+| Pulse | `pulse.{count,strikes}` | `NewPulseSystem` | `Update`: live pulses of both domains, and their strikes | `Init` | Generic only |
 | Bullet | `bullet.{count,spawned,hits,wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewBulletSystem` | Spawn, swept update, and cursor, shield or target hits | `Init` | Generic only |
 | Flash | None | — | — | — | — |
 | Fadeout | None | — | — | — | — |

@@ -971,13 +971,6 @@ A mounted ray destroying walls and glyphs, mounted weapons striking other specie
 
 PvP: a hit on a remote cursor crosses as its impact and the victim's owner applies it, as `strikeCursor` does for mounts.
 
-### Move storm's green circle onto a disruptor mount
-
-- Priority: P3
-- Affected files: `internal/system/storm.go`
-
-Its area pulse is the hosted disruptor's shape; the red circle's turret mount is the pattern.
-
 ## Species
 
 ### Pace a quasar fusion as its own timer did

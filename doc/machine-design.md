@@ -344,10 +344,12 @@ its edges, then what its host does around the step.
 
 - `circleVariants`, indexed by `StormCircleType`, holds a row per colour: the
   spawn's cooldown, the attack, the cooldown after one, Active's flags beside
-  Attacking, its enter and tick hooks, and its cue. `NewStormSystem` builds the
-  three graphs from the rows once (`newCircleGraph`); a colour is a row, never a
-  switch.
-  - Green, 1 s, 1 s, 1 s: tick `pulse` strikes the cursors inside its area.
+  Attacking, its enter and tick hooks, its cue, and the mount `createCircleHeader`
+  gives the circle. `NewStormSystem` builds the three graphs from the rows once
+  (`newCircleGraph`); a colour is a row, never a switch.
+  - Green, 1 s, 1 s, 1 s, flagged Armed: tick `pulse` counts; the armed disruptor
+    mount fires one pulse an attack, which swells over its first half and strikes
+    every tick of it.
   - Red, 1 s, 2 s, 1 s, flagged Armed: tick `burst` counts; the armed turret
     mount fires after the storm system.
   - Blue, 5 s, 2.5 s, 5 s: enter `findLanding` draws the direction, then searches,
@@ -367,11 +369,11 @@ its edges, then what its host does around the step.
   swarm and the quasar hold theirs.
 - After every step, suspended or not, the host writes
   `IsInvulnerable = concave && !Attacking` and `Mount.Armed = Armed &&
-  !suspended`, so the red fires from the step that opens its burst and never while
-  held. The physics Z clamp and the renderer read `Machine.State`, the green
-  pulse and the blue glow `Machine.Progress()`, and the red's muzzle flash the
-  armed mount: a held burst shows no flash, while a held pulse or glow keeps its
-  progress.
+  !suspended`, so a mount fires from the step that opens its attack and never
+  while held, and the green's pulse holds with a disarmed mount. The physics Z
+  clamp and the renderer read `Machine.State`, the blue glow `Machine.Progress()`
+  and the red's muzzle flash the armed mount, and the green's pulse draws itself: a
+  held burst shows no flash, while a held pulse or glow keeps its progress.
 - `circleCtx` holds the entity, the component, the circle's cell and the sensed
   `hasCursor` and `stunned`; the hooks are `StormSystem` methods, bound per row.
 

@@ -10,12 +10,13 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// TestDisruptorCrossesGeometry keeps player combat and the ring local, centres both
-// on the disruptor orb, and lets the shared explosion consumer derive its own
-// targets from one replicated pulse artifact.
+// TestDisruptorCrossesGeometry fires a Player-domain pulse that stays on the
+// disruptor orb's cell; its strike keeps player combat local and crosses one pulse
+// artifact, from which the shared explosion consumer derives its own targets.
 func TestDisruptorCrossesGeometry(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	pulses := ready(NewPulseSystem(w)).(*PulseSystem)
 	explosion := ready(NewExplosionSystem(w)).(*ExplosionSystem)
 
 	drain := w.CreateEntity(core.DomainPlayer)
@@ -51,10 +52,21 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 	weaponComp.Charges[component.WeaponDisruptor] = 1
 	weaponComp.Charges[component.WeaponGun] = 0 // the pulse's artifacts alone
 	weapon.fireLoadout(cursor, weaponComp, orbs)
+	if events := w.Resources.Event.Queue.Consume(); len(events) != 0 {
+		t.Fatalf("fire events = %#v, want the pulse to strike from its own system", events)
+	}
+	fired := w.Components.Pulse.Entities()
+	if len(fired) != 1 || fired[0].Domain() != core.DomainPlayer {
+		t.Fatalf("pulses = %v, want one Player-domain pulse", fired)
+	}
+	if pulse, _ := w.Components.Pulse.GetComponent(fired[0]); pulse.X != 8 || pulse.Y != 7 || pulse.Owner != cursor || pulse.Anchor != 0 {
+		t.Fatalf("pulse = %#v, want one staying on the orb's cell, owned by %d", pulse, cursor)
+	}
 
+	pulses.Update()
 	events := w.Resources.Event.Queue.Consume()
-	if len(events) != 3 {
-		t.Fatalf("disruptor events = %#v, want a player attack, a crossing and a ring", events)
+	if len(events) != 2 {
+		t.Fatalf("strike events = %#v, want a player attack and a crossing", events)
 	}
 	local, ok := events[0].Payload.(*event.CombatAttackAreaRequestPayload)
 	if !ok || events[0].Type != event.EventCombatAttackAreaRequest || local.TargetEntity != drain {
@@ -67,10 +79,6 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 	if crossing.Entity != cursor || crossing.X != 8 || crossing.Y != 7 ||
 		crossing.Radius != parameter.PulseRadiusX || crossing.Attack != component.CombatAttackPulse {
 		t.Fatalf("crossing payload = %#v, want complete pulse geometry at the orb", crossing)
-	}
-	ring, ok := events[2].Payload.(*event.PulseVisualRequestPayload)
-	if !ok || events[2].Domain != core.DomainPlayer || ring.X != 8 || ring.Y != 7 {
-		t.Fatalf("ring event = %#v, want a local pulse visual at the orb", events[2])
 	}
 
 	explosion.HandleEvent(events[1])
@@ -85,38 +93,41 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 }
 
 // TestMountedWeaponRaisesOnlyLocalEvents: a Shared host's weapon crosses nothing.
-// Its hits and its ring are each instance's own; a remote cursor's hit is its owner's.
+// Its pulse is a Shared entity riding the host, every instance's alike; its hits are
+// each instance's own, and a remote cursor's hit is its owner's.
 func TestMountedWeaponRaisesOnlyLocalEvents(t *testing.T) {
 	w, first, second := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 20, 6, 9)
 	mount := ready(NewMountSystem(w)).(*MountSystem)
+	pulses := ready(NewPulseSystem(w)).(*PulseSystem)
 
 	host := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(host, component.PositionComponent{X: 10, Y: 5})
 	mount.HandleEvent(event.GameEvent{Type: event.EventMountRequest,
 		Payload: &event.MountRequestPayload{Host: host, Weapon: component.WeaponDisruptor}})
 	mount.Update()
+	pulses.Update()
 
 	struck := make(map[core.Entity]bool)
-	rings := 0
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		if ev.Domain != core.DomainPlayer {
 			t.Fatalf("%s stamped %v, want a local event", event.GetEventName(ev.Type), ev.Domain)
 		}
-		switch p := ev.Payload.(type) {
-		case *event.HeatAddRequestPayload:
+		if p, ok := ev.Payload.(*event.HeatAddRequestPayload); ok {
 			struck[p.Entity] = true
-		case *event.PulseVisualRequestPayload:
-			if p.X != 10 || p.Y != 5 || p.Palette != component.PaletteHostile {
-				t.Fatalf("ring = %#v, want a hostile ring at the host", p)
-			}
-			rings++
-		default:
+		} else {
 			t.Fatalf("unexpected %s", event.GetEventName(ev.Type))
 		}
 	}
-	if !struck[first] || !struck[second] || struck[remote] || rings != 1 {
-		t.Fatalf("struck = %v, rings = %d; want both local cursors, not %d, and one ring", struck, rings, remote)
+	if !struck[first] || !struck[second] || struck[remote] {
+		t.Fatalf("struck = %v; want both local cursors, not %d", struck, remote)
+	}
+	live := w.Components.Pulse.Entities()
+	if len(live) != 1 || live[0].Domain() != core.DomainShared {
+		t.Fatalf("pulses = %v, want one Shared pulse", live)
+	}
+	if pulse, _ := w.Components.Pulse.GetComponent(live[0]); pulse.Anchor != host || !pulse.Hostile || pulse.Palette != component.PaletteHostile {
+		t.Fatalf("pulse = %#v, want a hostile one riding host %d", pulse, host)
 	}
 }
 

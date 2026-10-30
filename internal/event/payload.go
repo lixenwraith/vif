@@ -703,13 +703,6 @@ type ExplosionVisualRequestPayload struct {
 	Type     ExplosionType `toml:"type"`
 }
 
-// PulseVisualRequestPayload is player-domain presentation for one disruptor pulse.
-type PulseVisualRequestPayload struct {
-	X       int                     `toml:"x"`
-	Y       int                     `toml:"y"`
-	Palette component.WeaponPalette `toml:"palette"`
-}
-
 // ExplosionVisualBatchRequestPayload is player-domain presentation for a group
 // of centers. It is not pooled: the local queue owns the producer's slice copy.
 type ExplosionVisualBatchRequestPayload struct {

@@ -98,7 +98,6 @@ var payloadNew = [EventTypeCount]func() any{
 	EventExplosionBatchRequest:           func() any { return new(ExplosionBatchRequestPayload) },
 	EventExplosionVisualRequest:          func() any { return new(ExplosionVisualRequestPayload) },
 	EventExplosionVisualBatchRequest:     func() any { return new(ExplosionVisualBatchRequestPayload) },
-	EventPulseVisualRequest:              func() any { return new(PulseVisualRequestPayload) },
 	EventParticleSpawnOne:                func() any { return new(ParticleSpawnPayload) },
 	EventParticleWave:                    func() any { return new(ParticleWavePayload) },
 	EventParticleVortex:                  func() any { return new(ParticleVortexPayload) },
@@ -272,7 +271,6 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventExplosionBatchRequest:           &codecExplosionBatchRequestPayload,
 	EventExplosionVisualRequest:          &codecExplosionVisualRequestPayload,
 	EventExplosionVisualBatchRequest:     &codecExplosionVisualBatchRequestPayload,
-	EventPulseVisualRequest:              &codecPulseVisualRequestPayload,
 	EventParticleSpawnOne:                &codecParticleSpawnPayload,
 	EventParticleWave:                    &codecParticleWavePayload,
 	EventParticleVortex:                  &codecParticleVortexPayload,
@@ -1151,16 +1149,6 @@ var codecExplosionVisualBatchRequestPayload = structCodec{size: unsafe.Sizeof(Ex
 	{off: unsafe.Offsetof(ExplosionVisualBatchRequestPayload{}.Radius), kind: kindFloat},
 	{off: unsafe.Offsetof(ExplosionVisualBatchRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
 	{off: unsafe.Offsetof(ExplosionVisualBatchRequestPayload{}.Type), kind: kindUint, size: unsafe.Sizeof(ExplosionType(0))},
-}}
-
-func (p *PulseVisualRequestPayload) codec() (*structCodec, unsafe.Pointer) {
-	return &codecPulseVisualRequestPayload, unsafe.Pointer(p)
-}
-
-var codecPulseVisualRequestPayload = structCodec{size: unsafe.Sizeof(PulseVisualRequestPayload{}), fields: []field{
-	{off: unsafe.Offsetof(PulseVisualRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(PulseVisualRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(PulseVisualRequestPayload{}.Palette), kind: kindUint, size: unsafe.Sizeof(component.WeaponPalette(0))},
 }}
 
 func (p *ParticleSpawnPayload) codec() (*structCodec, unsafe.Pointer) {

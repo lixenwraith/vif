@@ -1,6 +1,10 @@
 package component
 
-import "time"
+import (
+	"time"
+
+	"github.com/lixenwraith/vif/internal/core"
+)
 
 // MountTrigger decides when a mounted weapon fires
 type MountTrigger uint8
@@ -20,6 +24,12 @@ type MountComponent struct {
 	Interval time.Duration // between discharges, counted on the host's cooldown timer
 	Range    float64       // cells a target may be, horizontally; zero is unbounded
 	Muzzle   float64       // cells from the host a shot leaves at, toward the aim
+	Damage   CursorDamage  // what a hit costs a cursor; each zero field takes the kind's
+
+	// A pulse kind fires Pulse, each zero field taking the kind's, and no other while
+	// Live, the Shared pulse it last fired, lasts
+	Pulse PulseSpec
+	Live  core.Entity
 
 	// Aim is the cursor cell the mount tracks, for renderers; HasAim is false while none is in range
 	AimX, AimY int

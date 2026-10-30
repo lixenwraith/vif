@@ -12,7 +12,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-func TestStormEffectBoundsClipToVisibleMap(t *testing.T) {
+func TestEffectBoundsClipToVisibleMap(t *testing.T) {
 	ctx := render.RenderContext{
 		ViewportWidth:  20,
 		ViewportHeight: 10,
@@ -22,13 +22,13 @@ func TestStormEffectBoundsClipToVisibleMap(t *testing.T) {
 		MapHeight:      60,
 	}
 
-	startX, endX, startY, endY, ok := stormEffectBounds(ctx, 55, 25, 30, 15)
+	startX, endX, startY, endY, ok := effectBounds(ctx, 55, 25, 30, 15)
 	if !ok || startX != 50 || endX != 69 || startY != 20 || endY != 29 {
 		t.Fatalf("clipped bounds = (%d..%d, %d..%d, %t), want (50..69, 20..29, true)",
 			startX, endX, startY, endY, ok)
 	}
 
-	if _, _, _, _, ok := stormEffectBounds(ctx, 5, 5, 4, 2); ok {
+	if _, _, _, _, ok := effectBounds(ctx, 5, 5, 4, 2); ok {
 		t.Fatal("fully off-viewport effect reported visible bounds")
 	}
 }

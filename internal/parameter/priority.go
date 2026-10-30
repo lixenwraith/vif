@@ -38,6 +38,7 @@ const (
 	PriorityGateway // After Tower, before Eye — spawns eyes for the tick
 	PriorityEye     // After Gateway
 	PriorityMount   // After every host species: a host arms its mount before the mount fires
+	PriorityPulse   // After Mount, so a pulse strikes from the tick it is fired
 	PriorityCombat
 	PriorityLoot      // After species entities and combat
 	PriorityParticle  // After Kraken, whose spin and charge pull decay particles

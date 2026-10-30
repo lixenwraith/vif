@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -15,8 +14,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TransientSystem manages player-domain presentation: screen overlays,
-// short-lived spatial explosion centers and pulse rings.
+// TransientSystem manages player-domain presentation: screen overlays and
+// short-lived spatial explosion centers.
 type TransientSystem struct {
 	world *engine.World
 
@@ -69,7 +68,6 @@ func (s *TransientSystem) EventTypes() []event.EventType {
 		event.EventStrobeRequest,
 		event.EventExplosionVisualRequest,
 		event.EventExplosionVisualBatchRequest,
-		event.EventPulseVisualRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -122,11 +120,6 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 				s.addExplosionCenter(p.Centers[i].X, p.Centers[i].Y, p.Radius, p.Duration, p.Type)
 			}
 		}
-
-	case event.EventPulseVisualRequest:
-		if p, ok := ev.Payload.(*event.PulseVisualRequestPayload); ok {
-			s.addPulse(p)
-		}
 	}
 }
 
@@ -157,7 +150,6 @@ func (s *TransientSystem) Update() {
 		return
 	}
 	s.updateExplosions()
-	s.updatePulses()
 
 	strobe := &s.world.Resources.View.Strobe
 	if !strobe.Active {
@@ -192,43 +184,6 @@ func (s *TransientSystem) updateExplosions() {
 		}
 	}
 	transient.ExplosionCount = write
-}
-
-func (s *TransientSystem) updatePulses() {
-	transient := s.world.Resources.Transient
-	dtNano := s.world.Resources.Time.DeltaTimeNano()
-	write := 0
-	for i := range transient.PulseCount {
-		p := transient.PulseBacking[i]
-		p.Age += dtNano
-		if p.Age < p.DurNano {
-			transient.PulseBacking[write] = p
-			write++
-		}
-	}
-	transient.PulseCount = write
-}
-
-// addPulse appends a ring, replacing the oldest when the bounded array is full
-func (s *TransientSystem) addPulse(p *event.PulseVisualRequestPayload) {
-	if p.Palette >= component.PaletteCount {
-		return
-	}
-	transient := s.world.Resources.Transient
-	idx := transient.PulseCount
-	if idx < parameter.PulseEffectCap {
-		transient.PulseCount++
-	} else {
-		idx = 0
-		for i := range transient.PulseCount {
-			if transient.PulseBacking[i].Age > transient.PulseBacking[idx].Age {
-				idx = i
-			}
-		}
-	}
-	transient.PulseBacking[idx] = engine.PulseEffect{
-		X: p.X, Y: p.Y, DurNano: parameter.PulseEffectDuration.Nanoseconds(), Palette: p.Palette,
-	}
 }
 
 // addExplosionCenter owns the visual-only merge and bounded center array. Neither

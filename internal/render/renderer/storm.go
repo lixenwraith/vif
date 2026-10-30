@@ -55,9 +55,6 @@ type StormRenderer struct {
 	surfaceRadiusX, surfaceRadiusY int
 	surfaceWidth                   int
 	surface                        []stormSurfaceSample
-
-	// Attack effect radii
-	greenAttackRadiusX, greenAttackRadiusY float64
 }
 
 // stormBodyCellRenderer draws one sphere body cell of circle type circle
@@ -138,9 +135,6 @@ func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 		surfaceRadiusY: surfaceRadiusY,
 		surfaceWidth:   surfaceWidth,
 		surface:        surface,
-
-		greenAttackRadiusX: rx * parameter.StormGreenRadiusMultiplier,
-		greenAttackRadiusY: ry * parameter.StormGreenRadiusMultiplier,
 	}
 	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.bodyCell, r.glowCell, r.halo = stormBody256, stormGlow256, false
@@ -205,12 +199,10 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 }
 
 func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender) {
-	// Render attack effects before body (background layer)
+	// Render attack effects before body (background layer); the green's pulse draws itself
 	circleComp := circle.component
 	if circleComp.Machine.State == component.StormCircleActive {
 		switch component.StormCircleType(circle.index) {
-		case component.StormCircleGreen:
-			r.renderGreenPulse(ctx, buf, circle, circleComp)
 		case component.StormCircleRed:
 			r.renderRedMuzzleFlash(ctx, buf, circle)
 		case component.StormCircleBlue:
@@ -351,9 +343,9 @@ func (r *StormRenderer) surfaceSample(offsetX, offsetY int) (stormSurfaceSample,
 	return sample, true
 }
 
-// stormEffectBounds intersects an effect's map-space box with the visible map.
+// effectBounds intersects an effect's map-space box with the visible map.
 // Large pulses then do no per-cell work for clipped portions of the world.
-func stormEffectBounds(
+func effectBounds(
 	ctx render.RenderContext,
 	centerX, centerY int,
 	radiusX, radiusY float64,
@@ -384,7 +376,7 @@ func cursorLighting(cursorX, cursorY, circleX, circleY int) (lightX, lightY, lig
 }
 
 func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, depthBright, baseR, baseG, baseB float64) {
-	mapStartX, mapEndX, mapStartY, mapEndY, ok := stormEffectBounds(
+	mapStartX, mapEndX, mapStartY, mapEndY, ok := effectBounds(
 		ctx, circle.x, circle.y, r.haloRadiusX, r.haloRadiusY,
 	)
 	if !ok {
@@ -437,7 +429,7 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 }
 
 func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, depthBright, baseR, baseG, baseB float64) {
-	mapStartX, mapEndX, mapStartY, mapEndY, ok := stormEffectBounds(
+	mapStartX, mapEndX, mapStartY, mapEndY, ok := effectBounds(
 		ctx, circle.x, circle.y, r.glowMaxRadiusX, r.glowMaxRadiusY,
 	)
 	if !ok {
@@ -497,70 +489,6 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 
 			c := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
 			r.glowCell(buf, screenX, screenY, c, 1.0, visual.Storm256Ring)
-		}
-	}
-}
-
-// renderGreenPulse draws expanding green pulse effect
-func (r *StormRenderer) renderGreenPulse(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
-	progress := circleComp.Machine.Progress()
-	if progress <= 0 {
-		return
-	}
-
-	// Pulse expands then fades
-	pulsePhase := progress * 2.0
-	var radiusMult, alpha float64
-	if pulsePhase < 1.0 {
-		radiusMult = 0.5 + 0.5*pulsePhase
-		alpha = 0.7 * pulsePhase
-	} else {
-		radiusMult = 1.0
-		alpha = 0.7 * (2.0 - pulsePhase)
-	}
-
-	if alpha <= 0.02 {
-		return
-	}
-
-	effectRadiusX := r.greenAttackRadiusX * radiusMult
-	effectRadiusY := r.greenAttackRadiusY * radiusMult
-	invRx := 1.0 / effectRadiusX
-	invRy := 1.0 / effectRadiusY
-
-	mapStartX, mapEndX, mapStartY, mapEndY, ok := stormEffectBounds(
-		ctx, circle.x, circle.y, effectRadiusX, effectRadiusY,
-	)
-	if !ok {
-		return
-	}
-
-	pulseColor := visual.RgbStormGreenPulse
-
-	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
-		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
-			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-			if !visible {
-				continue
-			}
-
-			nx := float64(mapX-circle.x) * invRx
-			ny := float64(mapY-circle.y) * invRy
-			distSq := nx*nx + ny*ny
-
-			if distSq > 1.0 {
-				continue
-			}
-
-			dist := math.Sqrt(distSq)
-			edgeFalloff := 1.0 - dist*dist
-			cellAlpha := alpha * edgeFalloff
-
-			if cellAlpha < 0.03 {
-				continue
-			}
-
-			r.glowCell(buf, screenX, screenY, pulseColor, cellAlpha, visual.Storm256GreenPulse)
 		}
 	}
 }
@@ -675,7 +603,7 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 	outerRx := r.radiusX + parameter.StormConvexGlowExtend + 1.0
 	outerRy := r.radiusY + (parameter.StormConvexGlowExtend+1.0)*(r.radiusY/r.radiusX)
 
-	mapStartX, mapEndX, mapStartY, mapEndY, ok := stormEffectBounds(
+	mapStartX, mapEndX, mapStartY, mapEndY, ok := effectBounds(
 		ctx, circle.x, circle.y, outerRx, outerRy,
 	)
 	if !ok {
