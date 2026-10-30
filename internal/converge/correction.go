@@ -633,9 +633,11 @@ func (c *Corrections) releaseLocked(port engine.NetworkPort) {
 			}
 			p.flight.frames = p.flight.frames[1:]
 		}
-		// What the link did not take waits on it: the meter reads how long.
+		// What the link did not take waits on it, and a link past the bound would hold
+		// the next frame: the session's other frames share it and can keep it there
+		// while nothing is owed. The meter reads how long.
 		if meter, ok := port.(engine.LinkMeasuringPort); ok {
-			meter.ObserveHold(id, len(p.flight.frames) > 0 || p.owed != nil)
+			meter.ObserveHold(id, len(p.flight.frames) > 0 || p.owed != nil || bulkHeld(port, id))
 		}
 	}
 }
