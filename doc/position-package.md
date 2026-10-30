@@ -171,7 +171,9 @@ RockRender/400x120/stone       1137142   1035326    -9.0%
 RockRender/500x254/stone       4059707   4300285    +5.9%
 ```
 
-A cave step moves every shared wall a column, and each move now brings the
-planes to two cells, a cell scan each: one to three microseconds a step at
-200×60 and 400×120, inside the band at 500×254. That is the trade: a wall's move
-pays once what every probe of its cell paid before.
+`CaveStep` turns rock alone, no wall entity, and its readings overlap (9.3 to
+10.5 µs on main against 9.9 to 11.2 on phase 2 at 200×60): the band. What the
+planes do cost is a wall's move, which brings them to two cells, a cell scan
+each, paid once where every probe of the cell paid before; nothing measured
+moves walls in bulk but a cave with pattern walls riding its scroll, which a
+vanguard profile should read when one lands.
