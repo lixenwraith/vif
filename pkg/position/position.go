@@ -55,6 +55,8 @@ type Index[E comparable] struct {
 	frame    Frame
 	blockOf  func(e E) (mask Mask, block bool)
 	surfaces []*Surface
+	solid    []solid // the surfaces merged, one entry a mask, once unmerged is false
+	unmerged bool
 	log      changeLog // the cells each block change can have moved, for BlockChanges
 
 	// planes holds one plane per mask a query asked, planeOf naming it; stale marks
@@ -93,7 +95,7 @@ func (x *Index[E]) Resize(w, h int) {
 // Clear empties the grid, lifts every surface and loses the log.
 func (x *Index[E]) Clear() {
 	x.Grid.Clear()
-	x.surfaces = x.surfaces[:0]
+	x.surfaces, x.solid, x.unmerged = x.surfaces[:0], x.solid[:0], false
 	x.log.lose()
 	x.stale = true
 }
@@ -159,8 +161,8 @@ func (x *Index[E]) Blocks(px, py int, mask Mask) bool {
 	if px < 0 || px >= x.Width || py < 0 || py >= x.Height {
 		return false
 	}
-	for _, s := range x.surfaces {
-		if s.stops(mask) && s.Solid(px, py) {
+	for ms, i := x.merged(), 0; i < len(ms); i++ {
+		if m := &ms[i]; m.stops(mask) && m.at(px, py) {
 			return true
 		}
 	}
@@ -175,8 +177,8 @@ func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
 	if x0 >= x1 || y0 >= y1 {
 		return false
 	}
-	for _, s := range x.surfaces {
-		if s.stops(mask) && s.solidIn(x0, y0, x1, y1) {
+	for ms, i := x.merged(), 0; i < len(ms); i++ {
+		if m := &ms[i]; m.stops(mask) && m.in(x0, y0, x1, y1) {
 			return true
 		}
 	}
@@ -202,9 +204,9 @@ func (x *Index[E]) blockedCells(px, py, width, height int, mask Mask) int {
 func (x *Index[E]) BlockBits(mask Mask, buf []uint64) Bits {
 	p := x.planeFor(mask)
 	b := Bits{Words: append(buf[:0], p.Words...), Stride: p.Stride}
-	for _, s := range x.surfaces {
-		if s.stops(mask) {
-			s.mark(b, x.Width, x.Height)
+	for ms, i := x.merged(), 0; i < len(ms); i++ {
+		if m := &ms[i]; m.stops(mask) {
+			m.mark(b, x.Width, x.Height)
 		}
 	}
 	return b

@@ -35,8 +35,10 @@ In `pkg/position`:
 - `Surface`: a boundary no entity holds, a height for each column with the cells
   on one `Side` of it solid (`Above`, a ceiling; `Below`, a floor), blocking its
   mask as a block does; laid from its writer's record, shifted a column at a time
-  with the heights ahead of it for a frame drawn between shifts, and answered
-  before the cell's occupants by its heights alone, no bits to keep.
+  with the heights ahead of it for a frame drawn between shifts. The surfaces of
+  one mask are merged for the probes into a ceiling and a floor per column, once
+  after a change, on the first probe, so a cell is two compares whatever their
+  number, and answered before the cell's occupants.
 
 The terms, the package's and the game's:
 
@@ -103,11 +105,16 @@ Each names the choice taken and what the other would have cost.
   put the area test, navigation's direct-path probe over a footprint, at a sixth
   of the tick, most of it cell reads of 256 bytes each. The walls stay entities,
   which species move and break; the planes are derived, never captured.
-- Surfaces, heights with a side rather than bits: a probe compares a row to a
-  height, as cheap as a bit, a shift moves a slice of heights and logs the rows
-  crossed, and only a reader deriving whole (`BlockBits`) rasterises them. The
-  rock kept bits for one phase, shifted a column at a time with it; two surfaces
-  would have doubled that shift for nothing a probe needs. The game's rock is two
+- Surfaces, heights with a side rather than bits: a shift moves a slice of
+  heights and logs the rows crossed, and only a reader deriving whole
+  (`BlockBits`) rasterises them. The rock kept bits for one phase, shifted a
+  column at a time with it; two surfaces would have doubled that shift for
+  nothing a probe needs. A probe compares a row to two heights, the mask's
+  surfaces merged into the greatest ceiling and the least floor a column, as
+  cheap as the bit it replaces: testing each surface on its own read the glyph
+  renderer, which probes a cell a scenery glyph, a tenth slower, and a merge on
+  every shift, allocating, read the cave step at twice main's; merged once on the
+  first probe after a change, both read at main or under. The game's rock is two
   surfaces that move together; a floor alone or a ceiling alone is one.
 - The mask, the package's: `component.WallBlockMask` is `position.Mask`, since the
   package names no game type and the game's constants stay where they are.
