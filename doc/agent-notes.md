@@ -15,6 +15,16 @@ that proves wrong or that a document now states, and link the document instead.
   `go -C android mod tidy`, which `android/toolchain.sh` checks before Gradle. A
   container without egress to the Android SDK and JDK hosts cannot build the APK;
   that check runs on a device.
+- The Java app type-checks without an SDK: `javac -cp android-all.jar` (Robolectric's
+  `org.robolectric:android-all` from Maven Central, the release `compileSdk` names)
+  over `android/app/src/main/java` and stubs for `R` and the bound `Game`, `Speaker`
+  and `Listener`.
+- `adb shell input` taps one finger only, and the emulator's user image refuses
+  `sendevent` (SELinux). `adb shell uinput -` registers a touchscreen from JSON and
+  injects multi-touch frames with millisecond delays, about 3 s after it starts. Its
+  first frame is stamped with the register's time, so inject one with no finger
+  down first, or a first tap reads as a 3 s press. `dumpsys window` puts
+  `visibleFrame=` between the keyboard inset's `frame=` and `visible=`.
 - After bumping `lixenwraith/terminal`, build `./...`, not only `./cmd/vif`: the
   tools and sandboxes break on a change the game does not use.
 - `deploy/docker/Dockerfile` pins the Go image's index digest: HEAD

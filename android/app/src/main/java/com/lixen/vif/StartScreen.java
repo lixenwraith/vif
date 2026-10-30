@@ -33,7 +33,6 @@ final class StartScreen extends FrameLayout {
             {"Double tap", "Fire the special weapon as well"},
             {"Hold the status bar", "Open the configuration menu: audio, bots, multiplayer and more"},
             {"Triple tap the status bar", "Show or hide the keyboard, to type commands such as :help"},
-            {"Two fingers, tap twice", "Show or hide the keyboard, anywhere on the screen"},
             {"Pinch", "Zoom in or out; the zoom is kept for next time"},
             {"Back", "Escape; twice quickly, leave with the game paused"},
     };

@@ -538,8 +538,8 @@ clipboard as the Paste key, Ctrl-Shift-V and Shift-Insert do; Back is Escape. A 
 `onKeyUp` ends the hold its `onKeyDown` began and `getRepeatCount` marks its
 repeats; the system keyboard's text, its delete and Back tap; the window losing
 focus ends every hold. Three taps on the status bar, landing anywhere on it (the
-strip above the keyboard stands for it), or two fingers tapped together twice raise
-or drop the system keyboard through the input method manager, whose state is read
+strip above the keyboard stands for it) or within a 48 dp touch target of the view's
+foot, raise or drop the system keyboard through the input method manager, whose state is read
 from the window's insets rather than a flag of the app's; the
 keyboard covers the view instead of resizing it, so a `crop_on_resize` map keeps
 its cells; the run hears of the keyboard (`Covered`, which the status bar reads as
@@ -551,7 +551,7 @@ every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse inpu
 off a press on the bar's rows still reaches the run, and an open overlay takes the
 pointer: a tap picks a row or a card or moves the scrollbar's thumb, a finger drags
 the thumb, and a tap outside the window is Escape. The page does each of these
-on a touch screen, timed alike: the double
+on a touch screen, timed alike: the triple
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
 bottom row drawn again above it, and the hold. Every page opens on the same start
 screen in the same words, the key strip listed beside Back; a
