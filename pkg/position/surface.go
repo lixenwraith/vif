@@ -129,6 +129,10 @@ func (x *Index[E]) merge() {
 		x.solid[i].pending = 0
 		x.solid[i].lay(x.Width, x.Height)
 	}
+	x.aheadFrom = math.MaxInt
+	for _, s := range x.surfaces {
+		x.aheadFrom = min(x.aheadFrom, len(s.heights))
+	}
 }
 
 // shifted notes that s moved a column: once every surface of its mask has, the
@@ -253,6 +257,12 @@ func (x *Index[E]) BlocksCarried(px, py, carry int, mask Mask) bool {
 		return x.Blocks(px, py, mask)
 	}
 	px += carry
+	if x.unmerged {
+		x.merge()
+	}
+	if px < x.aheadFrom {
+		return x.Blocks(px, py, mask)
+	}
 	for _, s := range x.surfaces {
 		if i := px - len(s.heights); i >= 0 && i < len(s.ahead) && s.stops(mask) &&
 			py >= 0 && py < x.Height && s.solidAt(s.ahead[i], py) {

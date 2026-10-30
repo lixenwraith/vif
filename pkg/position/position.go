@@ -52,12 +52,13 @@ func (s Scope) Selects(c Class) bool { return s&(1<<c) != 0 }
 // SYNC: the caller serialises every call; the index locks nothing.
 type Index[E comparable] struct {
 	*Grid[E]
-	frame    Frame
-	blockOf  func(e E) (mask Mask, block bool)
-	surfaces []*Surface
-	solid    []solid // the surfaces merged, one entry a mask, once unmerged is false
-	unmerged bool
-	log      changeLog // the cells each block change can have moved, for BlockChanges
+	frame     Frame
+	blockOf   func(e E) (mask Mask, block bool)
+	surfaces  []*Surface
+	solid     []solid // the surfaces merged, one entry a mask, once unmerged is false
+	unmerged  bool
+	aheadFrom int       // the first column past a surface, where its heights ahead answer
+	log       changeLog // the cells each block change can have moved, for BlockChanges
 
 	// planes holds one plane per mask a query asked, planeOf naming it; stale marks
 	// them all for rebuilding from the cells before the next query.
