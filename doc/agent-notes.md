@@ -137,10 +137,13 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Position
 
-- The map's bounds and the grid can differ for a tick: `Config.MapWidth` is written
-  on seven paths of which four resize the grid, and a copy restores the config
-  whole. A query reads the map through `position.Frame` and the grid through its
-  own dimensions, never one for the other.
+- The index's bounds are its grid's: every writer of `Config.MapWidth` resizes the
+  grid before a query runs (`SetupLevel`, the reset, a crop, `CopyIn`), and a new
+  writer must too, or every wall query and bounds check answers for the old map.
+- An indirect call on a per-cell probe shows: reading the bounds through an
+  interface on each `Blocks` cost `BenchmarkGlyphRender` a quarter, and an
+  interface over the wall entities a tenth more. Measure a probe path with the
+  renderer's benches, not only the tick's.
 - A method cannot be declared on an alias (`engine.DomainScope = position.Scope`),
   so a scope selects a class, `engine.EntityClass(e)`, which the two guard arrays in
   `internal/engine/position.go` hold to the domain numbering.

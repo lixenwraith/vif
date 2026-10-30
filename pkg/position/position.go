@@ -1,23 +1,21 @@
 // Package position is a map's spatial index and the geometry over it: a dense grid
-// of cells holding what stands in each, blockers answering what each cell stops for
-// a mask, the log of the cells whose answer changed, and the searches a placement,
-// a line or a ray makes over them. It knows no game: an entity is any comparable
-// value, and its class, the map's bounds and its blockers come from the caller.
+// of cells holding what stands in each, the walls among them and the rock no
+// entity holds, the log of the cells whose wall answer changed, and the searches a
+// placement, a line or a ray makes over them. It knows no game: an entity is any
+// comparable value, and its class, the walls and the cell aspect come from the caller.
 package position
 
 import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// Frame is the map an index serves, read live: the bounds every query answers
-// within, which the grid may differ from for a tick, and the cell aspect the
-// searches round on.
+// Frame is the map's frame, read live: the cell aspect the searches round on. The
+// bounds every query answers within are the grid's.
 type Frame interface {
-	Bounds() (w, h int)
 	Aspect() vmath.Aspect
 }
 
-// Mask selects the kinds of mover a blocker stops; a query's 0 asks for any.
+// Mask selects the kinds of mover a wall stops; a query's 0 asks for any.
 type Mask uint8
 
 // Class is one half of a cell: the shared half fills it from the front, the
@@ -41,35 +39,28 @@ const (
 // Selects reports whether the scope includes class c.
 func (s Scope) Selects(c Class) bool { return s&(1<<c) != 0 }
 
-// Blocker is one source of blocked cells. Blocks and BlocksArea answer for mask, 0
-// being any, over cells the index has bounded by the map; Mark sets cells[y*w+x]
-// for every cell it blocks within w×h.
-type Blocker interface {
-	Blocks(x, y int, mask Mask) bool
-	BlocksArea(x, y, width, height int, mask Mask) bool
-	Mark(mask Mask, w, h int, cells []bool)
-}
-
-// Index is one map's spatial index: its grid, its frame, its blockers, the epoch
-// and log of the cells whose wall answer changed, and the searches over them.
+// Index is one map's spatial index: its grid, the rock, the caller's word on which
+// shared occupant is a wall for a mask, the epoch and log of the cells whose wall
+// answer changed, and the searches over them.
 // SYNC: the caller serialises every call; the index locks nothing.
 type Index[E comparable] struct {
 	*Grid[E]
-	frame    Frame
-	blockers []Blocker
-	rock     *Rock
-	// epoch moves wherever a wall test's cells can change: a blocker's cell changed,
+	frame  Frame
+	isWall func(e E, mask Mask) bool
+	rock   *Rock
+	// epoch moves wherever a wall test's cells can change: a wall's cell changed,
 	// a rock laid or shifted.
 	epoch uint64
 	log   changeLog   // the cells each such change can have moved, for WallChanges
 	tests []*maskGrid // WallTest's grid for each mask asked
 }
 
-// New makes an empty index over frame; the blockers answer after the rock.
-func New[E comparable](frame Frame, blockers ...Blocker) *Index[E] {
+// New makes an empty index over frame; isWall says whether a shared occupant
+// blocks mask, 0 asking for any wall.
+func New[E comparable](frame Frame, isWall func(e E, mask Mask) bool) *Index[E] {
 	// The grid is sized by the caller to the map it indexes: a ceiling-sized one
 	// costs 32 MB, which an instance per bot multiplies.
-	return &Index[E]{Grid: NewGrid[E](0, 0), frame: frame, blockers: blockers}
+	return &Index[E]{Grid: NewGrid[E](0, 0), frame: frame, isWall: isWall}
 }
 
 // Resize sizes the grid to w×h, emptying it, and loses the log, since the cells
@@ -86,23 +77,18 @@ func (x *Index[E]) Clear() {
 	x.log.lose()
 }
 
-// Blocks reports whether a wall stands at (x, y) for mask: the rock's, then a
-// blocker's. Outside the map, or the grid, nothing does.
+// Blocks reports whether a wall stands at (x, y) for mask: the rock's, or a
+// shared occupant isWall names. Outside the map nothing does.
 func (x *Index[E]) Blocks(px, py int, mask Mask) bool {
-	w, h := x.frame.Bounds()
-	return x.blocks(px, py, w, h, mask)
-}
-
-// blocks is Blocks with the bounds read once for a walk
-func (x *Index[E]) blocks(px, py, w, h int, mask Mask) bool {
-	if px < 0 || px >= w || py < 0 || py >= h || px >= x.Width || py >= x.Height {
+	if px < 0 || px >= x.Width || py < 0 || py >= x.Height {
 		return false
 	}
 	if x.rock != nil && x.rock.blocks(px, py, mask) {
 		return true
 	}
-	for _, b := range x.blockers {
-		if b.Blocks(px, py, mask) {
+	cell := &x.Cells[py*x.Width+px]
+	for _, e := range cell.Entities[:cell.SharedCount] {
+		if x.isWall(e, mask) {
 			return true
 		}
 	}
@@ -112,15 +98,19 @@ func (x *Index[E]) blocks(px, py, w, h int, mask Mask) bool {
 // BlocksArea reports whether a wall stands in [x, x+width) × [y, y+height) for
 // mask, the cells outside the map passed over.
 func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
-	if x.rock != nil {
-		w, h := x.wallBounds()
-		if x.rock.blocksArea(px, max(py, 0), min(px+width, w), min(py+height, h), mask) {
-			return true
-		}
+	if x.rock != nil && x.rock.blocksArea(px, max(py, 0), min(px+width, x.Width), min(py+height, x.Height), mask) {
+		return true
 	}
-	for _, b := range x.blockers {
-		if b.BlocksArea(px, py, width, height, mask) {
-			return true
+	startX, startY := max(0, px), max(0, py)
+	endX, endY := min(x.Width, px+width), min(x.Height, py+height)
+	for row := startY; row < endY; row++ {
+		for col := startX; col < endX; col++ {
+			cell := &x.Cells[row*x.Width+col]
+			for _, e := range cell.Entities[:cell.SharedCount] {
+				if x.isWall(e, mask) {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -128,11 +118,10 @@ func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
 
 // blockedCells counts the cells of an area that walls block for mask
 func (x *Index[E]) blockedCells(px, py, width, height int, mask Mask) int {
-	w, h := x.frame.Bounds()
 	n := 0
 	for row := py; row < py+height; row++ {
 		for col := px; col < px+width; col++ {
-			if x.blocks(col, row, w, h, mask) {
+			if x.Blocks(col, row, mask) {
 				n++
 			}
 		}
@@ -233,7 +222,8 @@ type maskGrid struct {
 	cells        []bool
 }
 
-// testGrid returns mask's grid, rebuilt only when the walls or the grid changed.
+// testGrid returns mask's grid, rebuilt only when the walls or the grid changed:
+// the occupied cells' shared occupants isWall names, then the rock.
 func (x *Index[E]) testGrid(mask Mask) *maskGrid {
 	var g *maskGrid
 	for _, c := range x.tests {
@@ -245,7 +235,7 @@ func (x *Index[E]) testGrid(mask Mask) *maskGrid {
 		g = &maskGrid{mask: mask, w: -1}
 		x.tests = append(x.tests, g)
 	}
-	w, h := x.wallBounds()
+	w, h := x.Width, x.Height
 	if g.w == w && g.h == h && g.epoch == x.epoch && g.built == x.generation {
 		return g
 	}
@@ -255,18 +245,17 @@ func (x *Index[E]) testGrid(mask Mask) *maskGrid {
 	}
 	g.cells = g.cells[:w*h]
 	clear(g.cells)
-	for _, b := range x.blockers {
-		b.Mark(mask, w, h, g.cells)
+	for _, i := range x.occupied {
+		cell := &x.Cells[i]
+		for _, e := range cell.Entities[:cell.SharedCount] {
+			if x.isWall(e, mask) {
+				g.cells[i] = true
+				break
+			}
+		}
 	}
 	if r := x.rock; r != nil && (mask == 0 || r.Mask&mask != 0) {
 		r.mark(w, h, g.cells)
 	}
 	return g
-}
-
-// wallBounds is the part of the grid a wall test covers: the map, where the grid holds it.
-func (x *Index[E]) wallBounds() (w, h int) {
-	w, h = x.frame.Bounds()
-	w, h = min(w, x.Width), min(h, x.Height)
-	return max(w, 0), max(h, 0)
 }

@@ -113,8 +113,7 @@ func (x *Index[E]) BlocksDrawn(px, py, carry int, mask Mask) bool {
 	}
 	px += carry
 	if r := x.rock; r != nil && px >= len(r.cols) && px < len(r.cols)+len(r.ahead) {
-		_, h := x.frame.Bounds()
-		return py >= 0 && py < h && (mask == 0 || r.Mask&mask != 0) && r.ahead[px-len(r.cols)].Rock(py)
+		return py >= 0 && py < x.Height && (mask == 0 || r.Mask&mask != 0) && r.ahead[px-len(r.cols)].Rock(py)
 	}
 	return x.Blocks(px, py, mask)
 }
@@ -127,7 +126,7 @@ func (x *Index[E]) ShiftRock(enter Column) {
 		return
 	}
 	x.epoch++
-	w, h := x.wallBounds()
+	w, h := x.Width, x.Height
 	for col := range min(len(r.cols), w) {
 		was, now := r.cols[col], enter
 		if col+1 < len(r.cols) {

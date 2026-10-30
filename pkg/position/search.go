@@ -77,24 +77,21 @@ func (x *Index[E]) FindFreeAreaInside(
 	mask Mask,
 	maxRadius int,
 ) (int, int, bool) {
-	w, h := x.frame.Bounds()
-	originX = max(anchorOffsetX, min(originX, w-width+anchorOffsetX))
-	originY = max(anchorOffsetY, min(originY, h-height+anchorOffsetY))
+	originX = max(anchorOffsetX, min(originX, x.Width-width+anchorOffsetX))
+	originY = max(anchorOffsetY, min(originY, x.Height-height+anchorOffsetY))
 	return x.FindFreeAreaSpiral(originX, originY, width, height, anchorOffsetX, anchorOffsetY, mask, maxRadius)
 }
 
 // MapSearchRadius is the spiral radius whose rays reach every column and every row
 // of the map from any cell in it, rows being searched at the cell aspect
 func (x *Index[E]) MapSearchRadius() int {
-	w, h := x.frame.Bounds()
-	return max(w, int(math.Ceil(x.frame.Aspect().Circular(float64(h)))))
+	return max(x.Width, int(math.Ceil(x.frame.Aspect().Circular(float64(x.Height)))))
 }
 
 // IsAreaFree reports whether [x, x+width) × [y, y+height) lies whole inside the
 // map and holds no wall matching mask
 func (x *Index[E]) IsAreaFree(px, py, width, height int, mask Mask) bool {
-	w, h := x.frame.Bounds()
-	if px < 0 || py < 0 || px+width > w || py+height > h {
+	if px < 0 || py < 0 || px+width > x.Width || py+height > x.Height {
 		return false
 	}
 	return !x.BlocksArea(px, py, width, height, mask)
@@ -102,17 +99,15 @@ func (x *Index[E]) IsAreaFree(px, py, width, height int, mask Mask) bool {
 
 // IsBlocked reports whether (x, y) is outside the map or a wall matching mask
 func (x *Index[E]) IsBlocked(px, py int, mask Mask) bool {
-	w, h := x.frame.Bounds()
-	if px < 0 || px >= w || py < 0 || py >= h {
+	if px < 0 || px >= x.Width || py < 0 || py >= x.Height {
 		return true
 	}
-	return x.blocks(px, py, w, h, mask)
+	return x.Blocks(px, py, mask)
 }
 
 // IsOutOfBounds reports whether (x, y) is outside the map
 func (x *Index[E]) IsOutOfBounds(px, py int) bool {
-	w, h := x.frame.Bounds()
-	return px < 0 || px >= w || py < 0 || py >= h
+	return px < 0 || px >= x.Width || py < 0 || py >= x.Height
 }
 
 // CheckBlockedBatch reports for each point whether it is outside the map or a wall
@@ -139,9 +134,8 @@ func (x *Index[E]) IsAnyBlockedInSet(points []vmath.Point, mask Mask) bool {
 // HasLineOfSight reports whether no cell strictly between (x0, y0) and (x1, y1) on
 // the Bresenham line is a wall matching mask
 func (x *Index[E]) HasLineOfSight(x0, y0, x1, y1 int, mask Mask) bool {
-	w, h := x.frame.Bounds()
 	for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
-		if x.blocks(line.X(), line.Y(), w, h, mask) {
+		if x.Blocks(line.X(), line.Y(), mask) {
 			return false
 		}
 	}
@@ -151,12 +145,11 @@ func (x *Index[E]) HasLineOfSight(x0, y0, x1, y1 int, mask Mask) bool {
 // FindLastFreeOnRay returns the last unblocked cell on a ray from (startX, startY)
 // toward (endX, endY), the start taken as free, and whether the whole ray was
 func (x *Index[E]) FindLastFreeOnRay(startX, startY, endX, endY int, mask Mask) (int, int, bool) {
-	w, h := x.frame.Bounds()
 	lastFreeX, lastFreeY := startX, startY
 	line := vmath.NewLine(startX, startY, endX, endY)
 	for !line.AtEnd() {
 		line = line.Next()
-		if x.blocks(line.X(), line.Y(), w, h, mask) {
+		if x.Blocks(line.X(), line.Y(), mask) {
 			return lastFreeX, lastFreeY, false
 		}
 		lastFreeX, lastFreeY = line.X(), line.Y()
@@ -173,7 +166,6 @@ func (x *Index[E]) HasAreaLineOfSight(x0, y0, x1, y1, width, height int, mask Ma
 		return x.HasLineOfSight(x0, y0, x1, y1, mask)
 	}
 
-	w, h := x.frame.Bounds()
 	halfW := width / 2
 	halfH := height / 2
 
@@ -181,7 +173,7 @@ func (x *Index[E]) HasAreaLineOfSight(x0, y0, x1, y1, width, height int, mask Ma
 		boxX := line.X() - halfW
 		boxY := line.Y() - halfH
 
-		if boxX < 0 || boxY < 0 || boxX+width > w || boxY+height > h {
+		if boxX < 0 || boxY < 0 || boxX+width > x.Width || boxY+height > x.Height {
 			return false
 		}
 		if x.BlocksArea(boxX, boxY, width, height, mask) {
@@ -321,7 +313,7 @@ func (x *Index[E]) FindFreeFromPattern(
 	mask Mask,
 	additionalCheck func(absX, absY, w, h int) bool,
 ) (int, int, bool) {
-	w, h := x.frame.Bounds()
+	w, h := x.Width, x.Height
 	aspect := x.frame.Aspect()
 	direction := searchDirection(originX, w/2)
 
@@ -402,7 +394,7 @@ func (x *Index[E]) FindPlacementAroundExclusion(
 	mask Mask,
 	additionalCheck func(absX, absY, w, h int) bool,
 ) (int, int, bool) {
-	w, h := x.frame.Bounds()
+	w, h := x.Width, x.Height
 	direction := searchDirection(anchorX, w/2)
 
 	// Centering offsets. An even width has no middle column, so it centres half a

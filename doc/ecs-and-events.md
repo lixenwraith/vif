@@ -135,15 +135,14 @@ flowchart LR
 shares, and `position.Index` keeps the cells: a write moves both. The index
 answers point and area queries, out-of-bounds checks, line-of-sight traversal and
 free-space searches by pattern or spiral, which a negative radius sends over the
-whole map, within the bounds and at the cell aspect it reads live from the config
-(`position.Frame`). What blocks a cell comes from its blockers
-(`position.Blocker`), each answering a point, an area and the cells it marks for a
-wall test, for a `Mask` (0 is any): the rock field first (`position.Rock`,
-`Position.SetRock`), a ceiling and a floor row per map column with one mask, so a
-cave's rock costs a column, not an entity per cell, and `ShiftRock` moves it a
-column left with the column entering; then the engine's wall entities, read from
-`Components.Wall` in the cell. The rock's look (`RockLook`) stays the engine's,
-beside the field. `WallTest` serves a derivation that probes every cell from a
+whole map, within its grid's bounds and at the cell aspect it reads live from the
+config (`position.Frame`). A wall query answers for a `Mask` (0 is any) from the
+rock field first (`position.Rock`, `Position.SetRock`), a ceiling and a floor row
+per map column with one mask, so a cave's rock costs a column, not an entity per
+cell, and `ShiftRock` moves it a column left with the column entering; then from
+the cell's shared occupants, each one the engine names a wall by its
+`Components.Wall` mask (`Position.isWall`). The rock's look (`RockLook`) stays the
+engine's, beside the field. `WallTest` serves a derivation that probes every cell from a
 per-mask wall grid rebuilt only when the wall epoch or the grid's generation
 moved: a wall's placement and its store membership move the epoch, and a
 `BlockMask` written in place calls `Position.WallChanged` for its wall. The same

@@ -1,11 +1,11 @@
 # Position package
 
 `pkg/position` is a map's spatial index and the geometry over it, free of the game
-and of `engine`: a dense grid of cells holding what stands in each, blockers
-answering what each cell stops, the log of the cells whose answer changed, and the
-searches a placement, a line or a ray makes over them. `engine.Position` binds it
-to a `World`: the rows (entity to cell), the component mask, the wall entities as a
-blocker, the domain names, telemetry and typing's top glyph. This document holds
+and of `engine`: a dense grid of cells holding what stands in each, the walls among
+them and the rock no entity holds, the log of the cells whose wall answer changed,
+and the searches a placement, a line or a ray makes over them. `engine.Position`
+binds it to a `World`: the rows (entity to cell), the component mask, which shared
+occupant is a wall, the domain names, telemetry and typing's top glyph. This document holds
 the move's decisions and its phases; the item in [todo](todo.md#move-position-into-a-package-of-its-own-walls-and-rock-one-blocking-model)
 states what the end must keep.
 
@@ -16,23 +16,22 @@ In `pkg/position`:
 - `Grid[E]`: the cells, each two halves (`ClassShared` from the front, `ClassPrivate`
   from the back within `PrivateBudget`), `Scope`, the occupied list, `Clamp` and the
   map ceiling, stats, and the load and reorder a world copy and an install use.
-- `Index[E]`: the grid with its `Frame` (the bounds a query answers within and the
-  cell aspect, read live), its blockers, the wall epoch and log, the per-mask
-  `WallTest` grid, and the searches: free area by spiral, by pattern and around an
-  exclusion, point and area line of sight, rays, batches, the closest occupant in a
-  direction.
-- `Blocker`: one source of blocked cells (point, area, and the cells it marks for a
-  wall test), for a `Mask` (0 is any). `Rock` is the package's own: a ceiling and a
-  floor per column, shifted a column at a time, its columns ahead for a frame drawn
-  between ticks.
+- `Index[E]`: the grid, whose dimensions are the bounds every query answers
+  within; the `Frame` it reads the cell aspect through; `isWall`, the caller's word
+  on which shared occupant blocks a `Mask` (0 is any); the wall epoch and log; the
+  per-mask `WallTest` grid; and the searches: free area by spiral, by pattern and
+  around an exclusion, point and area line of sight, rays, batches, the closest
+  occupant in a direction.
+- `Rock`: the cluster no entity holds, a ceiling and a floor per column, shifted a
+  column at a time, its columns ahead for a frame drawn between ticks; a wall query
+  reads it before the cell's occupants.
 
 In `engine`:
 
 - `Position`: the rows and their sparse index (shared with `Store`), `SetPosition`
   and its kin over rows and grid, `Shift`, batches, the mask upkeep that tells the
-  index which moves are a wall's, `wallEntities` (the blocker over `Components.Wall`),
-  the typing queries (`TopGlyphAt`, `IsTypeable`, `IsScenery`), telemetry, and the
-  rock's look.
+  index which moves are a wall's, `isWall` over `Components.Wall`, the typing
+  queries (`TopGlyphAt`, `IsTypeable`, `IsScenery`), telemetry, and the rock's look.
 - The names the game reads: `DomainScope`, `ScopeShared`, `ScopePlayer`, `ScopeBoth`,
   `Cell`, `SpatialGrid`, `RockField`, `RockColumn`, `Exclusion`, the pattern kinds,
   as aliases of the package's. A class is an entity's domain
@@ -54,16 +53,20 @@ Each names the choice taken and what the other would have cost.
   function, would cost a dictionary or indirect call per insert and lookup; an
   entity type of the package's, aliased by `core`, would put identity in a
   geometry package.
-- Bounds, read live through `Frame`: `Config.MapWidth` and `MapHeight` are Shared
-  authority (D-14), written on seven paths of which only some resize the grid, and a
-  copy restores the config whole. An index owning its bounds would have to be told
-  on each, and the grid is what it is told. The grid can be smaller than the map
-  for a tick; a wall test covers the smaller of the two, as before.
-- Blockers, an interface: the rock is tested first, the engine's wall entities
-  after, so a probe answers as it did. The next phase replaces the entity blocker's
-  cell scan with per-mask row bitsets kept from the log, so a point, an area or a
-  line is answered in words with no component lookup; whether a maze's walls stay
-  entities a cluster indexes or become one is open.
+- Bounds, the grid's: `Config.MapWidth` and `MapHeight` stay Shared authority
+  (D-14), and every path that writes them resizes the grid before a query runs (a
+  level setup, the reset, a crop, a copy), so the index answers within its grid and
+  reads no bounds live. Reading them through `Frame` on every probe cost the glyph
+  renderer, which asks a wall per scenery glyph a frame, a quarter of its time; a
+  writer that does not resize the grid is a bug, and `TestSetupLevelRecordsOnlyBoundsTheGridHolds`
+  pins the pair.
+- Walls, a predicate: the rock answers first, then each shared occupant of the
+  cell through the caller's `isWall`, so an open cell costs no indirect call. An
+  interface over the wall entities, asked on every probe, cost the same renderer a
+  tenth. The next phase keeps per-mask row bitsets from the log, so a point, an
+  area or a line is answered in words with no component lookup, and brings the
+  cluster surface a second cluster needs; whether a maze's walls stay entities a
+  cluster indexes or become one is open.
 - Rows, in `engine` for now: the sparse index is `Store`'s, and the row type is
   `component.PositionComponent`. Moving the rows means a point type of the package's
   aliased by `component`, and the generator walking the alias; the third axis

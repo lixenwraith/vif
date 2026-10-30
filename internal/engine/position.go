@@ -40,7 +40,7 @@ var _ [position.ClassPrivate - position.Class(core.DomainPlayer)]struct{}
 
 // Position binds the world's placements to the spatial index: the rows an entity's
 // cell is read from, the index that holds the cells and answers every geometry
-// query, the wall entities as its blocker, and typing's view of a cell.
+// query, which shared occupants are walls, and typing's view of a cell.
 // SYNC: all Position access occurs under World.updateMutex; no internal locking
 type Position struct {
 	world    *World
@@ -72,18 +72,18 @@ func NewPosition(w *World, bit uint64) *Position {
 		world:    w,
 		bit:      bit,
 	}
-	p.index = position.New[core.Entity](p, wallEntities{p})
+	p.index = position.New[core.Entity](p, p.isWall)
 	return p
-}
-
-// Bounds is the map every query answers within, the config's.
-func (p *Position) Bounds() (w, h int) {
-	config := p.world.Resources.Config
-	return config.MapWidth, config.MapHeight
 }
 
 // Aspect is the cell aspect the searches round on, the config's.
 func (p *Position) Aspect() vmath.Aspect { return p.world.Resources.Config.CellAspect }
+
+// isWall reports whether shared occupant e is a wall blocking mask (0 = any wall)
+func (p *Position) isWall(e core.Entity, mask position.Mask) bool {
+	wall, ok := p.world.Components.Wall.GetComponent(e)
+	return ok && (mask == 0 || position.Mask(wall.BlockMask)&mask != 0)
+}
 
 // BindTelemetry registers spatial diagnostics after GameContext creates the registry.
 func (p *Position) BindTelemetry(reg *status.Registry) {
@@ -395,49 +395,6 @@ func (p *Position) wallMoved(e core.Entity, x, y int) {
 // SYNC: caller holds World.updateMutex
 func (p *Position) WallChanges(since uint64) (cells []vmath.Point, now uint64, ok bool) {
 	return p.index.WallChanges(since)
-}
-
-// wallEntities is the blocker over the wall store: a shared wall entity blocks the
-// cell the grid holds it in, for its BlockMask.
-type wallEntities struct{ p *Position }
-
-// blocksMask reports whether e is a wall blocking mask (0 = any wall)
-func (b wallEntities) blocksMask(e core.Entity, mask position.Mask) bool {
-	wall, ok := b.p.world.Components.Wall.GetComponent(e)
-	return ok && (mask == 0 || position.Mask(wall.BlockMask)&mask != 0)
-}
-
-// Blocks scans the cell's shared occupants. O(k) where k = entities at cell (typically 1-3)
-func (b wallEntities) Blocks(x, y int, mask position.Mask) bool {
-	for _, e := range b.p.index.EntitiesAt(x, y, ScopeShared) {
-		if b.blocksMask(e, mask) {
-			return true
-		}
-	}
-	return false
-}
-
-func (b wallEntities) BlocksArea(x, y, width, height int, mask position.Mask) bool {
-	return b.p.index.HasAnyEntityInArea(x, y, width, height, ScopeShared, func(e core.Entity) bool {
-		return b.blocksMask(e, mask)
-	})
-}
-
-// Mark sets the cell of every shared wall blocking mask that the grid holds within
-// w×h: not every stored wall, under soft clipping.
-func (b wallEntities) Mark(mask position.Mask, w, h int, cells []bool) {
-	p := b.p
-	ws := p.world.Components.Wall
-	for i, e := range ws.entities {
-		if e.Domain() == core.DomainPlayer || (mask != 0 && position.Mask(ws.dense[i].BlockMask)&mask == 0) {
-			continue
-		}
-		pos, ok := p.GetPosition(e)
-		if !ok || pos.X < 0 || pos.X >= w || pos.Y < 0 || pos.Y >= h || !p.index.Holds(e, EntityClass(e), pos.X, pos.Y) {
-			continue
-		}
-		cells[pos.Y*w+pos.X] = true
-	}
 }
 
 // HasBlockingWallAt returns true if a wall exists at (x, y) that blocks the given mask
