@@ -98,9 +98,10 @@ A full session of its own, last: it moves what the rest builds on.
   [Rendering §2.2](rendering.md#22-the-cell-aspect),
   [Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)
 
-Phase 1 landed: `pkg/position` holds the grid, the geometry, the rock and the wall
-log behind one set of queries, and `engine.Position` binds them, keeping every
-`World.Positions` method ([Position package §2](position-package.md#2-decisions)
+Phases 1 to 3 landed: `pkg/position` holds the grid, the blocks, the surfaces, the
+block log and the geometry behind one set of queries, `engine.Position` embeds the
+index and keeps what the rows, the components and the rock need, and the game asks
+by the package's names ([Position package §2](position-package.md#2-decisions)
 holds the choices made). What remains, in the order of
 [its phases](position-package.md#3-phases):
 
@@ -112,8 +113,6 @@ holds the choices made). What remains, in the order of
   eight walking cursors they reach 40–60 ms and compute no field, the wall
   system's event peaking at 34–51 ms and navigation at 15–17 ms. The walls stay
   entities, which species move and break.
-- The call sites take the package's names and the binding narrows; `SetRock` loses
-  its look, which the wall system publishes in `CaveResource` for the rock renderer.
 - Footprints: navigation steers each body by its footprint's tier
   ([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)), but
   the direct-path test centres the footprint and accepts it turned 90°

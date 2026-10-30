@@ -6,9 +6,10 @@ among them kept as a bit a cell for each mask asked, the surfaces no entity hold
 the log of the cells whose block answer changed, and the searches a placement, a
 line or a ray makes over them. `engine.Position` binds it to a `World`: the rows
 (entity to cell), the component mask, which shared occupant is a block and what it
-stops, the domain names, telemetry and typing's top glyph. The package's terms
-and the game's are mapped in §1. This document holds
-the move's decisions and its phases; the item in [todo](todo.md#move-position-into-a-package-of-its-own-walls-and-rock-one-blocking-model)
+stops, telemetry and typing's top glyph, with the index embedded, so the game asks
+it by the package's names. The package's terms and the game's are mapped in §1.
+This document holds the move's decisions and its phases; the item in
+[todo](todo.md#move-position-into-a-package-of-its-own-walls-and-rock-one-blocking-model)
 states what the end must keep.
 
 ## 1. The boundary
@@ -46,32 +47,38 @@ The terms, the package's and the game's:
 - A *block* is a cell an occupant blocks for a mask: in the game a *wall*, the
   entity with a `WallComponent`, whose `BlockMask` is the mask. `Blocks`,
   `BlocksArea`, `BlockBits` answer; `BlockChangedAt`, `BlocksChanged`,
-  `BlockChanges` keep the planes and the log. The binding keeps the game's
-  names (`HasBlockingWallAt`, `WallChanged`, `WallsChanged`, `WallChanges`,
-  `WallBits`, the *wall log*).
+  `BlockChanges` keep the planes and the log, and the game asks by those names
+  through `World.Positions`. The binding keeps `WallChanged`, which finds a wall's
+  cell from its row, and `wallOf`, which names a wall and what it stops; the *wall
+  log* is the game's name for the block log.
 - A *surface* is a height a column with a solid side: in the game the cave's
   *rock*, two surfaces, the ceiling above and the floor below, which
   `engine.RockField` keeps with one mask, one origin and the `RockColumn` pairs the
-  renderer and the wall system read. `SetRock`, `ShiftRock`, `SetRockAhead` and
-  `HasBlockingWallDrawnAt` are the binding's names for `AddSurface`/`LaySurface`,
-  `ShiftSurface`, `SetSurfaceAhead` and `BlocksCarried`.
+  renderer and the wall system read. `SetRock`, `ShiftRock` and `SetRockAhead`
+  lay, shift and extend both through `AddSurface`/`LaySurface`, `ShiftSurface` and
+  `SetSurfaceAhead`; a frame drawn between shifts asks `BlocksCarried`. The rock's
+  look is the wall system's, laid in `CaveResource` for the rock renderer.
 - A *shape*, a line or polygon rasterised into blocks or a volume into solid
   cells, is the third kind a game may want; none is implemented, and it would
   enter as a surface does, laid from its writer's record.
 
 In `engine`:
 
-- `Position`: the rows and their sparse index (shared with `Store`), `SetPosition`
-  and its kin over rows and grid, `Shift`, batches, the mask upkeep that tells the
-  index which moves are a wall's, once the grid holds the move, `wallOf` over
-  `Components.Wall` as the index's `blockOf`, the typing queries (`TopGlyphAt`,
-  `IsTypeable`, `IsScenery`), telemetry, and the rock: `RockField`, the two
-  surfaces with their columns and look. `component.WallBlockMask` is the package's
-  `Mask`.
-- The names the game reads: `DomainScope`, `ScopeShared`, `ScopePlayer`, `ScopeBoth`,
-  `Cell`, `SpatialGrid`, `Exclusion`, the pattern kinds, as aliases of the
-  package's; `RockField` and `RockColumn` are the engine's own. A class is an
-  entity's domain (`position.Class(e.Domain())`), which `EntityClass` states once.
+- `Position`: embeds the index, so its queries are `World.Positions`'s own, and
+  keeps what the rows, the components or the rock need: the rows and their sparse
+  index (shared with `Store`), `SetPosition` and its kin over rows and grid,
+  `Shift`, batches, `Resize` and `Clear`, which place the rows again or drop them,
+  the mask upkeep that tells the index which moves are a wall's, once the grid
+  holds the move, `wallOf` over `Components.Wall` as the index's `blockOf`, the
+  typing queries (`TopGlyphAt`, `IsTypeable`, `IsScenery`), telemetry, and the
+  rock: `RockField`, the two surfaces with their columns. `component.WallBlockMask`
+  is the package's `Mask`.
+- The names the game reads are the package's: `position.Scope` with `ScopeShared`,
+  `ScopePrivate` and `ScopeAll`, `position.Pattern` and its kinds,
+  `position.Exclusion`, `position.Rect` (the ping's bounds embed one),
+  `position.CellOrder` in the world order; `RockField`, `RockColumn` and `RockLook`
+  are the engine's own. A class is an entity's domain
+  (`position.Class(e.Domain())`), which `EntityClass` states once.
 - The snapshot and copy paths, which read the rows and the cells.
 
 ## 2. Decisions
@@ -144,11 +151,19 @@ Each names the choice taken and what the other would have cost.
   aliased by `component`, and the generator walking the alias; the third axis
   enters with that type, so both wait for the same phase.
 - Names: the package's classes are shared and private, the game's shared and player.
-  `component.WallBlockMask` converts to `position.Mask` at the binding; an alias
-  there is the smaller change when the call sites move.
-- The surface: `World.Positions` keeps every method a caller had, so no call site
-  moves in the first phase. Methods nothing called are deleted rather than moved:
-  `ScanLine`, `ScanLineFirst`, `WallGeneration`.
+  `component.WallBlockMask` is `position.Mask` by alias, so a call site passes the
+  game's constants to the package's methods unchanged.
+- The surface: the first phase kept every method a caller had, so no call site
+  moved with the code; the third took the call sites to the package's names and
+  narrowed the binding to the rows, the components and the rock, the index promoted
+  through `World.Positions` rather than forwarded method by method, so a query the
+  package gains needs no binding. The grid's own writes (`Set`, `RemoveEntityAt`,
+  `Load`, `Reorder`) come with the promotion and move no row; a view type hiding
+  them would cost the forwarding the promotion saves, and `Resize` and `Clear` are
+  the binding's, shadowing the grid's. Methods nothing called were deleted rather
+  than moved or promoted: `ScanLine`, `ScanLineFirst`, `WallGeneration`, the
+  `Unsafe` twins, `IsPointValidForOrbit` and `IsPathBlocked`, negations of
+  `IsBlocked` and `HasLineOfSight`.
 
 ## 3. Phases
 
@@ -161,9 +176,11 @@ Each names the choice taken and what the other would have cost.
    from bits. Done. The route solver and the flow fields still ask a cell at a time
    through `WallChecker`.
 3. The call sites: readers take the package's names (`position.ScopeAll`,
-   `position.Surface`), the binding narrows to what the rows need, and `SetRock`
-   loses its look, which the wall system publishes in `CaveResource` for the rock
-   renderer. The point with its third axis (§4) landed ahead of it.
+   `position.Pattern`, `Blocks`, `EntitiesAt`), the binding narrows to what the
+   rows, the components and the rock need, the index promoted through
+   `World.Positions`, and `SetRock` loses its look, which the wall system lays in
+   `CaveResource` for the rock renderer. Done, measured in §5 at parity. The point
+   with its third axis (§4) landed ahead of it.
 4. Footprints and the volume: the direct-path test from the body's header, the 1:1
    cell for a graphical host (authored geometry stays at `RefAspect`, the package
    owns the conversion), a depth to the grid, chunked cells for a volume and the
