@@ -168,7 +168,7 @@ func BenchmarkGlyphRender(b *testing.B) {
 				col := profile.At(int64(x))
 				cols[x] = engine.RockColumn{Ceil: col.Top, Floor: config.MapHeight - col.Bottom}
 			}
-			w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+			w.Positions.SetRock(component.WallBlockAll, 0, cols)
 			rng := vmath.NewFastRand(3)
 			for range size.glyphs {
 				addGlyph(w, rng.Intn(size.w), rng.Intn(size.h), 'a'+rune(rng.Intn(26)), component.GlyphLevel(rng.Intn(3)), true)

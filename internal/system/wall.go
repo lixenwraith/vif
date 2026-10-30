@@ -21,6 +21,7 @@ import (
 	"github.com/lixenwraith/vif/internal/pattern"
 	"github.com/lixenwraith/vif/pkg/cave"
 	"github.com/lixenwraith/vif/pkg/maze"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -274,7 +275,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		case event.WallBatchOverwrite:
 			var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 			var toDestroy []core.Entity
-			n := s.world.Positions.GetEntitiesAtInto(payload.X, payload.Y, engine.ScopeShared, entityBuf[:])
+			n := copy(entityBuf[:], s.world.Positions.EntitiesAt(payload.X, payload.Y, position.ScopeShared))
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
@@ -390,7 +391,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 		for _, rc := range resolved {
-			n := s.world.Positions.GetEntitiesAtInto(rc.x, rc.y, engine.ScopeShared, entityBuf[:])
+			n := copy(entityBuf[:], s.world.Positions.EntitiesAt(rc.x, rc.y, position.ScopeShared))
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
@@ -592,11 +593,11 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	var silentTargets []core.Entity
 
 	// The area's cells rather than every wall: a footprint asks one cell at a time
-	gridW, gridH := s.world.Positions.GridDimensions()
+	gridW, gridH := s.world.Positions.Width, s.world.Positions.Height
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for y := max(payload.Y, 0); y < min(payload.Y+height, gridH); y++ {
 		for x := max(payload.X, 0); x < min(payload.X+width, gridW); x++ {
-			n := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
+			n := copy(entities[:], s.world.Positions.EntitiesAt(x, y, position.ScopeShared))
 			for _, entity := range entities[:n] {
 				if wall, ok := s.world.Components.Wall.GetPtr(entity); ok {
 					s.classifyWallForDespawn(entity, *wall, &flashTargets, &fadeoutTargets, &silentTargets)
@@ -803,7 +804,7 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int, cursors []cursorCell) int6
 	// Check other entities
 	// Both domains: a new wall claims its cell and displaces whoever holds it (D-12)
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	count := copy(entities[:], s.world.Positions.EntitiesAt(x, y, position.ScopeAll))
 	for i := range count {
 		entity := entities[i]
 		if s.world.Components.Cursor.HasEntity(entity) {
@@ -1147,7 +1148,7 @@ func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style compon
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for cy := y; cy < endY; cy++ {
 		for cx := x; cx < endX; cx++ {
-			count := s.world.Positions.GetEntitiesAtInto(cx, cy, engine.ScopeShared, entities[:])
+			count := copy(entities[:], s.world.Positions.EntitiesAt(cx, cy, position.ScopeShared))
 			for i := range count {
 				e := entities[i]
 				wall, ok := s.world.Components.Wall.GetPtr(e)
@@ -1270,7 +1271,8 @@ func (s *WallSystem) openCave(p event.CaveOpenPayload) {
 func (s *WallSystem) liftCave() {
 	s.cave = caveState{}
 	s.rockMap = [2]int{}
-	s.world.Positions.SetRock(component.WallBlockNone, engine.RockLook{}, 0, nil)
+	s.world.Positions.SetRock(component.WallBlockNone, 0, nil)
+	s.world.Resources.Cave.Look = engine.RockLook{}
 	s.publishCave()
 }
 
@@ -1327,7 +1329,8 @@ func (s *WallSystem) layRock() {
 	if art, ok := pattern.ParseArtPreset(s.cave.Art); ok {
 		look.Stone, look.Art, look.Seed = true, uint8(art), s.cave.Config.Seed
 	}
-	s.world.Positions.SetRock(s.cave.Mask, look, s.cave.Offset, s.rockCols)
+	s.world.Positions.SetRock(s.cave.Mask, s.cave.Offset, s.rockCols)
+	s.world.Resources.Cave.Look = look
 }
 
 // pushOutOfRock queues a push check at every cell where something stands in the
@@ -1483,7 +1486,7 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 	var pushes int64
 	for i := range cursors {
 		cursor := &cursors[i]
-		if cursor.crushed || cursor.x != x || cursor.y != y || !positions.HasBlockingWallAt(x, y, component.WallBlockCursor) {
+		if cursor.crushed || cursor.x != x || cursor.y != y || !positions.Blocks(x, y, component.WallBlockCursor) {
 			continue
 		}
 		newX, newY, found := s.caveRoom(x, y, component.WallBlockCursor)
@@ -1497,7 +1500,7 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 	}
 
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	n := positions.GetAllEntitiesAtInto(x, y, entities[:])
+	n := copy(entities[:], positions.EntitiesAt(x, y, position.ScopeAll))
 	s.caveDoomed = s.caveDoomed[:0]
 	for _, e := range entities[:n] {
 		// A composite that flies moves whole wherever the rock reached it; any other
@@ -1513,7 +1516,7 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 			continue
 		}
 		mask := s.getMaskForEntity(e)
-		if mask == component.WallBlockNone || !positions.HasBlockingWallAt(x, y, mask) {
+		if mask == component.WallBlockNone || !positions.Blocks(x, y, mask) {
 			continue
 		}
 		if newX, newY, found := s.caveRoom(x, y, mask); found {
@@ -1546,8 +1549,8 @@ func (s *WallSystem) towardChannel(x, y int, mask component.WallBlockMask) int {
 	positions := s.world.Positions
 	h := s.world.Resources.Config.MapHeight
 	for d := 1; y-d >= 0 || y+d < h; d++ {
-		up := y-d >= 0 && !positions.HasBlockingWallAt(x, y-d, mask)
-		down := y+d < h && !positions.HasBlockingWallAt(x, y+d, mask)
+		up := y-d >= 0 && !positions.Blocks(x, y-d, mask)
+		down := y+d < h && !positions.Blocks(x, y+d, mask)
 		switch {
 		case up && down && 2*y < h, down && !up:
 			return 1
@@ -1678,7 +1681,7 @@ func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bo
 	}
 
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
+	count := copy(entities[:], s.world.Positions.EntitiesAt(x, y, position.ScopeShared))
 	for i := range count {
 		if wall, ok := s.world.Components.Wall.GetPtr(entities[i]); ok {
 			if wall.BoxStyle == style {
@@ -1712,7 +1715,7 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 			continue
 		}
 
-		count := s.world.Positions.GetEntitiesAtInto(nx, ny, engine.ScopeShared, entities[:])
+		count := copy(entities[:], s.world.Positions.EntitiesAt(nx, ny, position.ScopeShared))
 		for i := range count {
 			e := entities[i]
 			wall, ok := s.world.Components.Wall.GetPtr(e)

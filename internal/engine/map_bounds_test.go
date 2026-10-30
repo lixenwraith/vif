@@ -22,7 +22,7 @@ func TestSetupLevelRecordsOnlyBoundsTheGridHolds(t *testing.T) {
 		cfg.MapWidth*cfg.MapHeight > parameter.MaxMapCells {
 		t.Fatalf("config records a %dx%d map the grid cannot hold", cfg.MapWidth, cfg.MapHeight)
 	}
-	gw, gh := w.Positions.GridDimensions()
+	gw, gh := w.Positions.Width, w.Positions.Height
 	if gw != cfg.MapWidth || gh != cfg.MapHeight {
 		t.Fatalf("config says %dx%d, grid says %dx%d", cfg.MapWidth, cfg.MapHeight, gw, gh)
 	}

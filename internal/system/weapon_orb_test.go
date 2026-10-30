@@ -46,7 +46,7 @@ func TestFiveOrbsSpaceEvenlyAtEveryEdgeAndResumeTogether(t *testing.T) {
 			for _, e := range orbs {
 				orb, _ := w.Components.Orb.GetPtr(e)
 				pos, _ := w.Positions.GetPosition(e)
-				if !w.Positions.IsPointValidForOrbit(pos.X, pos.Y, component.WallBlockKinetic) {
+				if w.Positions.IsBlocked(pos.X, pos.Y, component.WallBlockKinetic) {
 					t.Fatalf("edge %v: orb at blocked cell %+v", edge, pos)
 				}
 				angles = append(angles, orb.OrbitAngle)
@@ -55,7 +55,7 @@ func TestFiveOrbsSpaceEvenlyAtEveryEdgeAndResumeTogether(t *testing.T) {
 				samples := vmath.SampleEllipseGrid(point.X, point.Y, parameter.OrbOrbitRadiusX, parameter.OrbOrbitRadiusY, vmath.EllipseSampleCount)
 				blocked := make([]bool, len(samples))
 				for i, p := range samples {
-					blocked[i] = !w.Positions.IsPointValidForOrbit(p[0], p[1], component.WallBlockKinetic)
+					blocked[i] = w.Positions.IsBlocked(p[0], p[1], component.WallBlockKinetic)
 				}
 				arc := vmath.FindUnblockedArcs(blocked)[0]
 				for i := range angles {

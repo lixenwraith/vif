@@ -381,7 +381,7 @@ func TestSpecialFireAndVortexTakeSceneryButNotWhereRockHidesIt(t *testing.T) {
 	for x := range cols {
 		cols[x] = engine.RockColumn{Ceil: 3, Floor: w.Resources.Config.MapHeight}
 	}
-	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	w.Positions.SetRock(component.WallBlockAll, 0, cols)
 	glyph := func(x, y int, mask component.ProtectionFlags) core.Entity {
 		e := w.CreateEntity(core.DomainPlayer)
 		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})

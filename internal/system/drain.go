@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -789,7 +790,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 
 	// Handle collisions at materialize spawn position
 	var entitiesAtSpawn [parameter.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllEntitiesAtInto(spawnX, spawnY, entitiesAtSpawn[:])
+	count := copy(entitiesAtSpawn[:], s.world.Positions.EntitiesAt(spawnX, spawnY, position.ScopeAll))
 
 	s.world.Positions.SetPosition(entity, pos)
 	s.world.Components.Drain.SetComponent(entity, drainComp)
@@ -991,7 +992,7 @@ func (s *DrainSystem) handleEntityCollisions() {
 			continue
 		}
 
-		count := s.world.Positions.GetAllEntitiesAtInto(entry.pos.X, entry.pos.Y, targets[:])
+		count := copy(targets[:], s.world.Positions.EntitiesAt(entry.pos.X, entry.pos.Y, position.ScopeAll))
 		for j := range count {
 			target := targets[j]
 			if target == 0 || target == entry.entity || s.world.Components.Cursor.HasEntity(target) {
@@ -1097,7 +1098,7 @@ func (s *DrainSystem) updateDrainMovement() {
 				continue
 			}
 
-			if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+			if s.world.Positions.Blocks(x, y, component.WallBlockKinetic) {
 				s.statWallCollisions.Add(1)
 				s.reflectOffWall(&kineticComp.Kinetic, lastSafeX, lastSafeY, x, y)
 				hitWall = true
@@ -1107,7 +1108,7 @@ func (s *DrainSystem) updateDrainMovement() {
 			lastSafeX, lastSafeY = x, y
 
 			// Entity-Entity Collision
-			count := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
+			count := copy(collisionBuf[:], s.world.Positions.EntitiesAt(x, y, position.ScopeAll))
 			for j := range count {
 				target := collisionBuf[j]
 				if target == 0 || target == drainEntity || s.world.Components.Cursor.HasEntity(target) {

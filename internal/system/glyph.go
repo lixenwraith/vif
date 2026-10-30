@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -266,7 +267,7 @@ func (s *GlyphSystem) countPlacedKind() int {
 
 // hides reports a cell of rock or a wall that keeps text out and scenery behind it
 func (s *GlyphSystem) hides(x, y int) bool {
-	return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockSpawn)
+	return s.world.Positions.Blocks(x, y, component.WallBlockSpawn)
 }
 
 // updateCensus counts the glyphs of the placed kind a player sees per spawn slot, as
@@ -491,7 +492,7 @@ func (s *GlyphSystem) enterLine(text string, length int, glyphType component.Gly
 // occupied reports a run of cells on a row that any entity stands in
 func (s *GlyphSystem) occupied(row, startCol, length int) bool {
 	for i := range length {
-		if s.world.Positions.HasAnyEntityAt(startCol+i, row) {
+		if s.world.Positions.HasAnyEntityAt(startCol+i, row, position.ScopeAll) {
 			return true
 		}
 	}

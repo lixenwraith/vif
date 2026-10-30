@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -163,7 +164,7 @@ func (s *ExplosionSystem) resolveArea(id event.CrossingID, cursor core.Entity, c
 
 			// Shared only: this enumeration decides shared combat, so it must not
 			// observe player entities (D-1)
-			count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, cellBuf[:])
+			count := copy(cellBuf[:], s.world.Positions.EntitiesAt(x, y, position.ScopeShared))
 			for i := range count {
 				entity := cellBuf[i]
 				memberComp, ok := s.world.Components.Member.GetPtr(entity)

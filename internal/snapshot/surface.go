@@ -15,7 +15,7 @@ var deniedSharedPrefix = []string{
 	// This instance's view of the map: mirrors of fields ctx|view already drops.
 	"context.screen_", "context.camera_", "context.mode",
 	// Instance-local traffic and index: only Shared ∪ Bus replicates (D-10), and a
-	// resize re-runs ResizeGrid on the instance that received it. The one
+	// resize re-runs Positions.Resize on the instance that received it. The one
 	// comparable member is re-admitted by allowedSharedKey.
 	"event.", "spatial.",
 	// Transport counters: the exact complement of the peer's, not a shared quantity.

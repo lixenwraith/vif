@@ -30,7 +30,8 @@ type RockField struct {
 }
 
 // RockLook is how a rock field draws: Visual in every cell, or with Stone set the art
-// preset Art (a pattern.ArtPreset) from Seed, cell by cell
+// preset Art (a pattern.ArtPreset) from Seed, cell by cell. The wall system lays it
+// in CaveResource with the field, and the rock renderer reads it there.
 type RockLook struct {
 	Visual component.WallVisualConfig
 	Stone  bool
@@ -70,13 +71,9 @@ func (r *RockField) split(cols []RockColumn) (ceil, floor []int) {
 // World.updateMutex and change it only through SetRock and ShiftRock.
 func (p *Position) Rock() *RockField { return p.rock }
 
-// RockLook is how the rock field standing draws
-func (p *Position) RockLook() RockLook { return p.rockLook }
-
 // SetRock lays cols as the rock field from map column 0, origin its first profile
-// column, drawn in look; no columns lift the field
-func (p *Position) SetRock(mask component.WallBlockMask, look RockLook, origin int64, cols []RockColumn) {
-	p.rockLook = look
+// column; no columns lift the field
+func (p *Position) SetRock(mask component.WallBlockMask, origin int64, cols []RockColumn) {
 	if len(cols) == 0 {
 		p.liftRock()
 		return
@@ -91,20 +88,20 @@ func (p *Position) SetRock(mask component.WallBlockMask, look RockLook, origin i
 	r.ahead = r.ahead[:0]
 	ceil, floor := r.split(cols)
 	if r.ceiling == nil {
-		r.ceiling = p.index.AddSurface(mask, position.Above, origin, ceil)
-		r.floor = p.index.AddSurface(mask, position.Below, origin, floor)
+		r.ceiling = p.Index.AddSurface(mask, position.Above, origin, ceil)
+		r.floor = p.Index.AddSurface(mask, position.Below, origin, floor)
 		return
 	}
 	r.ceiling.Mask, r.floor.Mask = mask, mask
-	p.index.LaySurface(r.ceiling, origin, ceil)
-	p.index.LaySurface(r.floor, origin, floor)
+	p.Index.LaySurface(r.ceiling, origin, ceil)
+	p.Index.LaySurface(r.floor, origin, floor)
 }
 
 // liftRock takes the rock and its surfaces out
 func (p *Position) liftRock() {
 	if r := p.rock; r != nil {
-		p.index.RemoveSurface(r.ceiling)
-		p.index.RemoveSurface(r.floor)
+		p.Index.RemoveSurface(r.ceiling)
+		p.Index.RemoveSurface(r.floor)
 		p.rock = nil
 	}
 }
@@ -117,15 +114,8 @@ func (p *Position) SetRockAhead(cols []RockColumn) {
 	}
 	r.ahead = append(r.ahead[:0], cols...)
 	ceil, floor := r.split(cols)
-	p.index.SetSurfaceAhead(r.ceiling, ceil)
-	p.index.SetSurfaceAhead(r.floor, floor)
-}
-
-// HasBlockingWallDrawnAt is HasBlockingWallAt as a frame draws the cave carry columns
-// on: rock and shared walls ride its scroll, so cell (x, y) shows what x+carry holds
-// now, and past the map's right edge the field's columns ahead
-func (p *Position) HasBlockingWallDrawnAt(x, y, carry int, mask component.WallBlockMask) bool {
-	return p.index.BlocksCarried(x, y, carry, mask)
+	p.Index.SetSurfaceAhead(r.ceiling, ceil)
+	p.Index.SetSurfaceAhead(r.floor, floor)
 }
 
 // ShiftRock moves the field a column left: map column 0 leaves it and enter stands
@@ -135,8 +125,8 @@ func (p *Position) ShiftRock(enter RockColumn) {
 	if r == nil {
 		return
 	}
-	p.index.ShiftSurface(r.ceiling, enter.Ceil)
-	p.index.ShiftSurface(r.floor, enter.Floor)
+	p.Index.ShiftSurface(r.ceiling, enter.Ceil)
+	p.Index.ShiftSurface(r.floor, enter.Floor)
 	copy(r.cols, r.cols[1:])
 	r.cols[len(r.cols)-1] = enter
 	r.Origin++

@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -284,7 +285,7 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 	}
 	settle()
 	for _, cell := range []vmath.Point{{X: 90, Y: 45}, leg, {X: 90, Y: 46}} {
-		if w.Positions.HasBlockingWallAt(cell.X, cell.Y, 0) {
+		if w.Positions.Blocks(cell.X, cell.Y, 0) {
 			t.Fatalf("spawn footprint left wall at %+v", cell)
 		}
 	}
@@ -297,7 +298,7 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 		settle()
 	}
 	motion, _ := w.Components.Kinetic.GetComponent(e)
-	if motion.PreciseX < 125 || w.Positions.HasBlockingWallAt(125, 45, 0) || !w.Positions.HasBlockingWallAt(150, 80, 0) {
+	if motion.PreciseX < 125 || w.Positions.Blocks(125, 45, 0) || !w.Positions.Blocks(150, 80, 0) {
 		t.Fatal("charge failed to demolish its path or destroyed a wall outside its footprint")
 	}
 }
@@ -438,7 +439,7 @@ func TestKrakenTracerAndGlyphExplosionsSpendSeparatePlayerWeaponBudgets(t *testi
 func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 	w, _, e, leg := krakenFixture(t)
 	cursor := w.Resources.Player.Slot(0)
-	target, hit, ok := CombatTargetAt(w, leg.X, leg.Y, engine.ScopeBoth, 0, cursor)
+	target, hit, ok := CombatTargetAt(w, leg.X, leg.Y, position.ScopeAll, 0, cursor)
 	if !ok || target != e || hit == e {
 		t.Fatalf("leg resolved to (%d, %d, %v)", target, hit, ok)
 	}
@@ -478,7 +479,7 @@ func TestKrakenLegInterceptsMissilesAndSharesUnstunnableHealth(t *testing.T) {
 
 func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	w, s, e, leg := krakenFixture(t)
-	_, member, _ := CombatTargetAt(w, leg.X, leg.Y, engine.ScopeShared, 0, 0)
+	_, member, _ := CombatTargetAt(w, leg.X, leg.Y, position.ScopeShared, 0, 0)
 	spawnWall(w, leg.X, leg.Y)
 	walls := ready(NewWallSystem(w)).(*WallSystem)
 	walls.pushEntitiesAtPosition(leg.X, leg.Y, walls.readCursors())

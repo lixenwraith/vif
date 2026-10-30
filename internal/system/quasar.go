@@ -520,7 +520,7 @@ func (s *QuasarSystem) home(c *quasarCtx) {
 
 	// Wall query to capture the specific mask and dimensions
 	wallCheck := func(topLeftX, topLeftY int) bool {
-		return s.world.Positions.HasBlockingWallInArea(
+		return s.world.Positions.BlocksArea(
 			topLeftX, topLeftY,
 			parameter.QuasarWidth, parameter.QuasarHeight,
 			component.WallBlockKinetic,

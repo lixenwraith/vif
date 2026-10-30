@@ -521,7 +521,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 		memberX := centerX + int(math.Floor(perpX*float64(lateralOffset)))
 		memberY := centerY + int(math.Floor(perpY*float64(lateralOffset)))
 
-		if s.world.Positions.HasBlockingWallAt(memberX, memberY, component.WallBlockSpawn) {
+		if s.world.Positions.Blocks(memberX, memberY, component.WallBlockSpawn) {
 			continue
 		}
 
@@ -613,7 +613,7 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 
 	config := s.world.Resources.Config
 	wallCheck := func(topLeftX, topLeftY int) bool {
-		return s.world.Positions.HasBlockingWallInArea(
+		return s.world.Positions.BlocksArea(
 			topLeftX, topLeftY,
 			parameter.SnakeHeadWidth, parameter.SnakeHeadHeight,
 			component.WallBlockKinetic,

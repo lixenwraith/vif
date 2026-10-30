@@ -429,7 +429,7 @@ func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *comp
 	}
 
 	wallCheck := func(topLeftX, topLeftY int) bool {
-		return s.world.Positions.HasBlockingWallInArea(
+		return s.world.Positions.BlocksArea(
 			topLeftX, topLeftY,
 			parameter.EyeWidth, parameter.EyeHeight,
 			component.WallBlockKinetic,

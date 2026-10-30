@@ -91,7 +91,7 @@ func rockAt(w *engine.World, y int) string {
 	row := make([]byte, w.Resources.Config.MapWidth)
 	for x := range row {
 		row[x] = '.'
-		if w.Positions.HasBlockingWallAt(x, y, component.WallBlockAll) {
+		if w.Positions.Blocks(x, y, component.WallBlockAll) {
 			row[x] = '#'
 		}
 	}
@@ -326,7 +326,7 @@ func TestRemovingEveryWallLiftsTheCave(t *testing.T) {
 		w, walls, _ := newCaveWorld(t, 30, 12)
 		walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7}})
 		walls.HandleEvent(remove)
-		if w.Positions.Rock() != nil || walls.cave.Active || w.Positions.HasBlockingWallAt(0, 0, component.WallBlockAll) {
+		if w.Positions.Rock() != nil || walls.cave.Active || w.Positions.Blocks(0, 0, component.WallBlockAll) {
 			t.Fatalf("%v left the cave standing", remove.Type)
 		}
 	}
@@ -350,7 +350,7 @@ func TestAResizedMapReshapesTheRock(t *testing.T) {
 	// The cursor stands on the reshaped ceiling's lowest row
 	w.Positions.SetPosition(cursor, component.PositionComponent{X: 5, Y: profile.At(5).Top - 1})
 	config.MapHeight = profile.Height
-	w.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	w.Positions.Resize(config.MapWidth, config.MapHeight)
 	walls.Update()
 	for x := range config.MapWidth {
 		col := profile.At(walls.cave.Offset + int64(x))
@@ -438,9 +438,9 @@ func TestArrivingRockThatPassesParticlesPushesNone(t *testing.T) {
 	w.Components.Kinetic.SetComponent(particle, component.KineticComponent{})
 	walls.Update()
 	pos, _ := w.Positions.GetPosition(particle)
-	if pos != (component.PositionComponent{X: 9, Y: 5}) || !w.Positions.HasBlockingWallAt(9, 5, component.WallBlockSpawn) {
+	if pos != (component.PositionComponent{X: 9, Y: 5}) || !w.Positions.Blocks(9, 5, component.WallBlockSpawn) {
 		t.Fatalf("particle at %+v with the wall over 9,5 %v, want it left under the wall", pos,
-			w.Positions.HasBlockingWallAt(9, 5, component.WallBlockSpawn))
+			w.Positions.Blocks(9, 5, component.WallBlockSpawn))
 	}
 }
 
@@ -524,7 +524,7 @@ func bodyAt(w *engine.World, header core.Entity) (x, y int, px float64, walled b
 	h, _ := w.Components.Header.GetComponent(header)
 	for _, m := range h.MemberEntries {
 		mp, _ := w.Positions.GetPosition(m.Entity)
-		walled = walled || w.Positions.HasBlockingWallAt(mp.X, mp.Y, component.WallBlockKinetic)
+		walled = walled || w.Positions.Blocks(mp.X, mp.Y, component.WallBlockKinetic)
 	}
 	return pos.X, pos.Y, k.PreciseX, walled
 }
@@ -621,7 +621,7 @@ func TestACaveWearsTheStoneArtItNames(t *testing.T) {
 		walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: seed, MinWall: 1, Art: art}})
 		preset, _ := pattern.ParseArtPreset(art)
 		want := engine.RockLook{Visual: orStone(component.WallVisualConfig{}), Stone: true, Art: uint8(preset), Seed: seed}
-		if rock := w.Positions.Rock(); rock == nil || w.Positions.RockLook() != want {
+		if rock := w.Positions.Rock(); rock == nil || w.Resources.Cave.Look != want {
 			t.Fatalf("seed %d laid the cave %+v, want the look %+v", seed, walls.cave, want)
 		}
 		record, err := walls.SaveShared()
@@ -632,14 +632,14 @@ func TestACaveWearsTheStoneArtItNames(t *testing.T) {
 		if err := receiverWalls.LoadShared(record); err != nil {
 			t.Fatal(err)
 		}
-		if got := receiver.Positions.RockLook(); got != want {
+		if got := receiver.Resources.Cave.Look; got != want {
 			t.Fatalf("seed %d: the record laid the look %+v, want %+v", seed, got, want)
 		}
 	}
 
 	w, walls, _ := newCaveWorld(t, 30, 12)
 	walls.HandleEvent(event.GameEvent{Type: event.EventCaveStart, Payload: &event.CaveStartPayload{Seed: 7, MinWall: 1}})
-	if got, want := w.Positions.RockLook(), (engine.RockLook{Visual: orStone(component.WallVisualConfig{})}); got != want {
+	if got, want := w.Resources.Cave.Look, (engine.RockLook{Visual: orStone(component.WallVisualConfig{})}); got != want {
 		t.Fatalf("a cave with no art laid the look %+v, want %+v", got, want)
 	}
 	w, walls, _ = newCaveWorld(t, 30, 12)

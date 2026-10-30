@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/pkg/navigation"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // D-17 throttles the flow-field recompute, and which ticks it fires on decides how
@@ -296,7 +297,7 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 			d.comp = slices.Clone(dbg.CompositePassability.Bits().Words)
 			cfg := w.Resources.Config
 			var pointGrid, compositeGrid navigation.SearchGrid
-			pointGrid.FillBlocked(cfg.MapWidth, cfg.MapHeight, w.Positions.WallBits(component.WallBlockKinetic, nil))
+			pointGrid.FillBlocked(cfg.MapWidth, cfg.MapHeight, w.Positions.BlockBits(component.WallBlockKinetic, nil))
 			compositeGrid.FillBlocked(cfg.MapWidth, cfg.MapHeight, dbg.CompositePassability.Bits())
 			dbg.Flow.Materialize(&pointGrid)
 			dbg.CompositeFlow.Materialize(&compositeGrid)
@@ -384,7 +385,7 @@ func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
 	origin.World().RunSafe(func() {
 		p := passability()
 		for i := range p.Width * p.Height {
-			if x, y := i%p.Width, i/p.Width; hx < 0 && p.IsValid(x, y) && !origin.World().Positions.HasAnyEntityAt(x, y) {
+			if x, y := i%p.Width, i/p.Width; hx < 0 && p.IsValid(x, y) && !origin.World().Positions.HasAnyEntityAt(x, y, position.ScopeAll) {
 				hx, hy = x, y
 			}
 		}
@@ -407,7 +408,7 @@ func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
 	origin.World().RunSafe(func() {
 		w, got := origin.World(), passability()
 		want := navigation.NewCompositePassability(got.Width, got.Height, got.Footprint())
-		want.Compute(w.Positions.WallBits(component.WallBlockKinetic, nil))
+		want.Compute(w.Positions.BlockBits(component.WallBlockKinetic, nil))
 		if !slices.Equal(got.Bits().Words, want.Bits().Words) {
 			t.Fatal("the installed world's passability is not what its walls derive")
 		}
