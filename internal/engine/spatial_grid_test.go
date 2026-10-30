@@ -47,7 +47,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 			spawn()
 		}
 
-		var buf []bool
+		var buf []uint64
 		var saved *WorldCopy
 		var since uint64
 		readers := make([][]bool, len(masks))
@@ -207,11 +207,13 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 				}
 			}
 			for _, mask := range masks {
-				test := w.Positions.WallTest(mask, &buf)
+				bits := w.Positions.WallBits(mask, buf)
+				buf = bits.Words
 				for y := -1; y <= cfg.MapHeight; y++ {
 					for x := -1; x <= cfg.MapWidth; x++ {
-						if got, want := test(x, y), w.Positions.HasBlockingWallAt(x, y, mask); got != want {
-							t.Fatalf("round %d mask %d at (%d,%d): WallTest %t, HasBlockingWallAt %t", round, mask, x, y, got, want)
+						got := x >= 0 && y >= 0 && x < cfg.MapWidth && y < cfg.MapHeight && bits.Bit(x, y)
+						if want := w.Positions.HasBlockingWallAt(x, y, mask); got != want {
+							t.Fatalf("round %d mask %d at (%d,%d): WallBits %t, HasBlockingWallAt %t", round, mask, x, y, got, want)
 						}
 					}
 				}

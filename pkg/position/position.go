@@ -7,8 +7,6 @@
 package position
 
 import (
-	"math/bits"
-
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -54,19 +52,19 @@ type Index[E comparable] struct {
 	rock   *Rock
 	log    changeLog // the cells each wall change can have moved, for WallChanges
 
-	// planes holds one plane per mask a query asked, planeOf naming it; stale
-	// marks them all for rebuilding from the cells before the next query.
-	planes  []plane
-	planeOf [256]int8
-	stride  int // words a row
-	stale   bool
+	// planes holds one plane per mask a query asked, planeOf naming it, and rockBits
+	// the rock's cells; stale marks them all for rebuilding from the cells and the
+	// columns before the next query.
+	planes   []plane
+	planeOf  [256]int8
+	rockBits Bits
+	stale    bool
 }
 
-// plane is the cells a wall stands in for one mask, a bit a cell, each row
-// starting on a word so an area is a few words a row.
+// plane is the cells a wall stands in for one mask
 type plane struct {
 	mask Mask
-	bits []uint64
+	Bits
 }
 
 // New makes an empty index over frame; wallOf says whether a shared occupant is a
@@ -86,7 +84,6 @@ func New[E comparable](frame Frame, wallOf func(e E) (Mask, bool)) *Index[E] {
 func (x *Index[E]) Resize(w, h int) {
 	x.Grid.Resize(w, h)
 	x.log.lose()
-	x.stride = (x.Width + 63) / 64
 	x.stale = true
 }
 
@@ -107,31 +104,27 @@ func (x *Index[E]) planeFor(mask Mask) *plane {
 		return &x.planes[i]
 	}
 	x.planeOf[mask] = int8(len(x.planes))
-	x.planes = append(x.planes, plane{mask: mask, bits: make([]uint64, x.stride*x.Height)})
+	x.planes = append(x.planes, plane{mask: mask, Bits: NewBits(x.Width, x.Height)})
 	p := &x.planes[len(x.planes)-1]
 	for _, i := range x.occupied {
-		if m, wall := x.cellWall(int(i)); wall {
-			word, bit := x.cellWord(int(i))
-			p.set(word, bit, m)
+		if m, wall := x.cellWall(int(i)); wall && (mask == 0 || m&mask != 0) {
+			p.Set(int(i)%x.Width, int(i)/x.Width)
 		}
 	}
 	return p
 }
 
-// rebuild sets every plane from the cells
+// rebuild sets every plane from the cells and the rock's bits from its columns
 func (x *Index[E]) rebuild() {
 	x.stale = false
+	stride := Stride(x.Width)
 	for i := range x.planes {
-		p := &x.planes[i]
-		if cap(p.bits) < x.stride*x.Height {
-			p.bits = make([]uint64, x.stride*x.Height)
-		}
-		p.bits = p.bits[:x.stride*x.Height]
-		clear(p.bits)
+		x.planes[i].Bits = x.planes[i].Bits.sized(stride, x.Height)
 	}
 	for _, i := range x.occupied {
 		x.update(int(i))
 	}
+	x.layRock()
 }
 
 // cellWall is what the shared occupants of cell i make of it: the masks of its
@@ -146,64 +139,21 @@ func (x *Index[E]) cellWall(i int) (mask Mask, wall bool) {
 	return mask, wall
 }
 
-// cellWord is cell i's word in a plane and the bit in it
-func (x *Index[E]) cellWord(i int) (word int, bit uint) {
-	px, py := i%x.Width, i/x.Width
-	return py*x.stride + px>>6, uint(px & 63)
-}
-
 // update brings every plane's bit for cell i to its occupants
 func (x *Index[E]) update(i int) {
 	if len(x.planes) == 0 {
 		return
 	}
 	mask, wall := x.cellWall(i)
-	word, bit := x.cellWord(i)
+	px, py := i%x.Width, i/x.Width
 	for p := range x.planes {
-		x.planes[p].put(word, bit, wall && (x.planes[p].mask == 0 || mask&x.planes[p].mask != 0))
+		x.planes[p].Put(px, py, wall && (x.planes[p].mask == 0 || mask&x.planes[p].mask != 0))
 	}
 }
 
-// set sets the bit of cell (word, bit) where mask names the plane's movers
-func (p *plane) set(word int, bit uint, mask Mask) {
-	if p.mask == 0 || mask&p.mask != 0 {
-		p.bits[word] |= 1 << bit
-	}
-}
-
-// put writes the bit of cell (word, bit)
-func (p *plane) put(word int, bit uint, on bool) {
-	if on {
-		p.bits[word] |= 1 << bit
-	} else {
-		p.bits[word] &^= 1 << bit
-	}
-}
-
-// any reports whether a bit is set in [x0, x1) × [y0, y1), which the caller has
-// bounded by the grid
-func (p *plane) any(stride, x0, x1, y0, y1 int) bool {
-	w0, w1 := x0>>6, (x1-1)>>6
-	first := ^uint64(0) << (uint(x0) & 63)
-	last := ^uint64(0) >> (63 - uint(x1-1)&63)
-	for y := y0; y < y1; y++ {
-		row := p.bits[y*stride:]
-		if w0 == w1 {
-			if row[w0]&first&last != 0 {
-				return true
-			}
-			continue
-		}
-		if row[w0]&first != 0 || row[w1]&last != 0 {
-			return true
-		}
-		for w := w0 + 1; w < w1; w++ {
-			if row[w] != 0 {
-				return true
-			}
-		}
-	}
-	return false
+// rockStops reports whether the rock standing stops mask
+func (x *Index[E]) rockStops(mask Mask) bool {
+	return x.rock != nil && (mask == 0 || x.rock.Mask&mask != 0)
 }
 
 // Blocks reports whether a wall stands at (x, y) for mask: the rock's, or a
@@ -212,10 +162,13 @@ func (x *Index[E]) Blocks(px, py int, mask Mask) bool {
 	if px < 0 || px >= x.Width || py < 0 || py >= x.Height {
 		return false
 	}
-	if x.rock != nil && x.rock.blocks(px, py, mask) {
+	if x.stale {
+		x.rebuild()
+	}
+	if x.rockStops(mask) && x.rockBits.Bit(px, py) {
 		return true
 	}
-	return x.planeFor(mask).bits[py*x.stride+px>>6]>>(uint(px)&63)&1 != 0
+	return x.planeFor(mask).Bit(px, py)
 }
 
 // BlocksArea reports whether a wall stands in [x, x+width) × [y, y+height) for
@@ -226,10 +179,13 @@ func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
 	if x0 >= x1 || y0 >= y1 {
 		return false
 	}
-	if x.rock != nil && x.rock.blocksArea(x0, y0, x1, y1, mask) {
+	if x.stale {
+		x.rebuild()
+	}
+	if x.rockStops(mask) && x.rockBits.Any(x0, x1, y0, y1) {
 		return true
 	}
-	return x.planeFor(mask).any(x.stride, x0, x1, y0, y1)
+	return x.planeFor(mask).Any(x0, x1, y0, y1)
 }
 
 // blockedCells counts the cells of an area that walls block for mask
@@ -243,6 +199,19 @@ func (x *Index[E]) blockedCells(px, py, width, height int, mask Mask) int {
 		}
 	}
 	return n
+}
+
+// WallBits returns Blocks for mask as a grid of bits in buf's storage: the plane's
+// cells and the rock's. It is exact while walls cannot change.
+func (x *Index[E]) WallBits(mask Mask, buf []uint64) Bits {
+	p := x.planeFor(mask)
+	b := Bits{Words: append(buf[:0], p.Words...), Stride: p.Stride}
+	if x.rockStops(mask) {
+		for i, w := range x.rockBits.Words {
+			b.Words[i] |= w
+		}
+	}
+	return b
 }
 
 // WallChangedAt logs (x, y) as a cell whose wall answer may have moved, a wall
@@ -311,47 +280,4 @@ func (l *changeLog) add(x, y, cells int) {
 func (l *changeLog) lose() {
 	l.base += uint64(len(l.cells)) + 1
 	l.cells = l.cells[:0]
-}
-
-// WallTest returns Blocks for mask as a grid copied into buf on its first call,
-// reused across calls. A derivation that probes every cell several times pays one
-// copy instead; it is exact while walls cannot change.
-func (x *Index[E]) WallTest(mask Mask, buf *[]bool) func(px, py int) bool {
-	var w, h int
-	built := false
-	return func(px, py int) bool {
-		if !built {
-			w, h = x.Width, x.Height
-			*buf = x.walls(mask, (*buf)[:0])
-			built = true
-		}
-		if px < 0 || py < 0 || px >= w || py >= h {
-			return false
-		}
-		return (*buf)[py*w+px]
-	}
-}
-
-// walls appends mask's grid of Blocks to buf: the plane's bits, then the rock
-func (x *Index[E]) walls(mask Mask, buf []bool) []bool {
-	w, h := x.Width, x.Height
-	if cap(buf) < w*h {
-		buf = make([]bool, w*h)
-	}
-	buf = buf[:w*h]
-	clear(buf)
-	p := x.planeFor(mask)
-	for py := range h {
-		row := buf[py*w : py*w+w]
-		for wi, word := range p.bits[py*x.stride : py*x.stride+x.stride] {
-			for word != 0 {
-				row[wi*64+bits.TrailingZeros64(word)] = true
-				word &= word - 1
-			}
-		}
-	}
-	if r := x.rock; r != nil && (mask == 0 || r.Mask&mask != 0) {
-		r.mark(w, h, buf)
-	}
-	return buf
 }

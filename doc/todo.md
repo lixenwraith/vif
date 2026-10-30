@@ -104,16 +104,15 @@ log behind one blocker surface, and `engine.Position` binds them, keeping every
 holds the choices made). What remains, in the order of
 [its phases](position-package.md#3-phases):
 
-- Navigation over the planes' words: the index answers a point as a bit and an
-  area as a few words a row, but `CompositePassability.Compute` still asks a cell
-  at a time and `applyWalls` re-reads a lost log cell by cell (`navigation.Diff`);
-  a row of words at a time and an XOR diff take td's whole derivations and storms
-  further, if the td profile asks. td's worst ticks are those where hundreds of
-  walls go at once: under a storm with eight walking cursors they reach 40–60 ms
-  and compute no field, the wall system's event peaking at 34–51 ms and navigation
-  at 15–17 ms; the wall system's part is its box-drawing neighbours, read a cell's
-  occupants at a time (`hasWallWithStyle`). The walls stay entities, which species
-  move and break.
+- Batch skips: the index answers walls in words, but every reader of a cell's
+  occupants still reads the cell, 256 bytes, empty or not: the wall system's
+  box-drawing neighbours (`hasWallWithStyle`), the cursor overlaps (`overlapOf`),
+  the area sweeps. A presence grid of bits per class, kept by the grid as cells
+  fill and empty, lets an area scan pass the empty cells a word at a time. td's
+  worst ticks are those where hundreds of walls go at once: under a storm with
+  eight walking cursors they reach 40–60 ms and compute no field, the wall
+  system's event peaking at 34–51 ms and navigation at 15–17 ms. The walls stay
+  entities, which species move and break.
 - The call sites take the package's names and the binding narrows; `SetRock` loses
   its look, which the wall system publishes in `CaveResource` for the rock renderer.
 - Footprints: navigation steers each body by its footprint's tier

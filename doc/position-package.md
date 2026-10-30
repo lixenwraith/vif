@@ -21,10 +21,14 @@ In `pkg/position`:
   within; the `Frame` it reads the cell aspect through; `wallOf`, the caller's word
   on which shared occupant is a wall and what it stops (a `Mask`, 0 asking for any
   wall); a plane of bits for each mask a query asked, kept with every wall change,
-  so a point is a bit and an area a few words a row; the wall log; `WallTest`,
-  which copies a plane into the caller's grid; and the searches: free area by
-  spiral, by pattern and around an exclusion, point and area line of sight, rays,
-  batches, the closest occupant in a direction.
+  so a point is a bit and an area a few words a row; the rock's bits, moved a
+  column with it; the wall log; `WallBits`, the plane's words with the rock's for
+  a reader deriving whole; and the searches: free area by spiral, by pattern and
+  around an exclusion, point and area line of sight, rays, batches, the closest
+  occupant in a direction.
+- `Bits`: the grid of bits the planes, the rock and navigation share, each row
+  starting on a word: a point a bit, an area a few words a row, a row shifted a
+  column in a word, two grids diffed by XOR.
 - `Rock`: the cluster no entity holds, a ceiling and a floor per column, shifted a
   column at a time, its columns ahead for a frame drawn between ticks; a wall query
   reads it before the cell's occupants.
@@ -76,6 +80,18 @@ Each names the choice taken and what the other would have cost.
   move and break; the planes are derived, never captured.
 - The mask, the package's: `component.WallBlockMask` is `position.Mask`, since the
   package names no game type and the game's constants stay where they are.
+- Navigation reads words: a composite passability is a bit a header, each row the
+  OR of the walls' words under the footprint's rows shifted to the header's column
+  (`CompositePassability.Compute`), and a change derives again the header rows
+  and words the changed cells' footprints reach, reporting the headers whose bit
+  turned (`Moved`); the lost log's re-read is the words diffed by XOR
+  (`position.Diff`). Counting the walls under each footprint, which a changed
+  cell moved in place, went with it: a count is a second record of the walls to
+  keep in step. Two shapes were tried on the way: re-testing each header over a
+  changed cell read a cave step, which turns hundreds of cells, at twice main's,
+  and deriving whole rows with a scan of every row read one wall's move a fifth
+  slower on the largest map; the rows a change reaches, in the words it reaches,
+  read both at main or under.
 - Rows, in `engine` for now: the sparse index is `Store`'s, and the row type is
   `component.PositionComponent`. Moving the rows means a point type of the package's
   aliased by `component`, and the generator walking the alias; the third axis
@@ -93,18 +109,51 @@ Each names the choice taken and what the other would have cost.
    boundary. Done.
 2. The blocking model: the planes, the mask alias, td's tick with sixteen cursors
    and the benches measured before and after. Done.
-2b. Navigation over the planes' words, if the profile asks: `CompositePassability`
-   derived a row of words at a time and the lost-log re-read diffed by XOR instead
-   of a cell at a time (`applyWalls`, `navigation.Diff`).
-3. The call sites: readers take the package's names (`position.ScopeAll`,
-   `position.Column`) and the binding narrows to what the rows need; `SetRock` loses
-   its look, which the wall system publishes in `CaveResource` for the rock renderer.
-4. Footprints and axes: the direct-path test from the body's header, the 1:1 cell
-   for a graphical host (authored geometry stays at `RefAspect`, the package owns the
-   conversion), the third axis in the row type, the sparse grid for a ceiling-sized
-   empty map.
+2b. Navigation over the planes' words: `CompositePassability` derived a row of
+   words at a time, the lost log's re-read diffed by XOR, the search grids filled
+   from bits. Done. The route solver and the flow fields still ask a cell at a time
+   through `WallChecker`.
+3. The call sites and the point: readers take the package's names
+   (`position.ScopeAll`, `position.Column`), the binding narrows to what the rows
+   need, `SetRock` loses its look, which the wall system publishes in `CaveResource`
+   for the rock renderer, and the row type becomes the package's `Pos`, with the
+   third axis (§4), `component.PositionComponent` its alias.
+4. Footprints and the volume: the direct-path test from the body's header, the 1:1
+   cell for a graphical host (authored geometry stays at `RefAspect`, the package
+   owns the conversion), a depth to the grid, chunked cells for a volume and the
+   ceiling-sized empty map, a 3D line of sight.
+5. Batch skips: a presence grid per class, kept as cells fill and empty, so an
+   area scan of occupants passes empty cells a word at a time.
 
-## 4. Measurements
+## 4. The third axis
+
+The axis is an actual 3D space: a position with a Z, a body of depth as well as
+width and height, a line of sight through a volume. The same index serves a 2D
+map as a volume one cell deep, at no cost to it. What enters, and where:
+
+- The point: `position.Pos{X, Y, Z int}`, `component.PositionComponent` its
+  alias, so a 2D caller writes `Pos{X: x, Y: y}` and reads Z as zero. A capture
+  gains a column of zeros, which deflates to nothing, and the digest hashes three
+  coordinates: a schema bump, taken with phase 3.
+- The grid: a `Depth`, 1 on a 2D map, cells indexed `(z*Height+y)*Width+x`, the
+  planes and the rock a `Bits` per layer, the arithmetic in one place. A dense
+  grid cannot hold a volume at 256 bytes a cell: a volume allocates cells by chunk
+  on demand, which also serves the ceiling-sized empty 2D map
+  ([Shrink the spatial grid](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps));
+  the dense grid stays the path while every map is one layer.
+- The queries: a point and an area gain a depth (`BlocksBox`), a line of sight
+  walks a 3D line (`vmath` gains the stepper), a body of depth tests a box a step.
+  The placement searches, spiral, pattern and exclusion, stay a layer's, as
+  placing on a floor, and take a 3D form when a game asks for one.
+- Navigation: a footprint gains a depth and a passability a layer; a flow field
+  through a volume is a later ask.
+
+To settle with the game that first needs it: whether a 2D-only reader of a
+Z-aware entity reads its layer or ignores Z (a one-layer map has no difference),
+and whether overlapping spaces that share cells (a room in three timelines) are a
+Z range of one index or an index per space.
+
+## 5. Measurements
 
 Phase 1, main's and the branch's test binaries alternated five rounds on one
 container, medians of ns/op. A reading there moves a fifth between rounds, so a
@@ -177,3 +226,37 @@ planes do cost is a wall's move, which brings them to two cells, a cell scan
 each, paid once where every probe of the cell paid before; nothing measured
 moves walls in bulk but a cave with pattern walls riding its scroll, which a
 vanguard profile should read when one lands.
+
+Phase 2b, navigation over the words, main at phase 2 against the branch. td's tick
+with sixteen cursors, ms a tick, five readings each:
+
+```
+main      0.35  0.30  0.33  0.31  0.35   median 0.33
+phase 2b  0.31  0.32  0.29  0.34  0.40   median 0.32
+```
+
+A whole derivation of a 5×3 footprint's passability and its search grid on a
+500×250 map three tenths walls (`CompositePassability.Compute` and the grid's
+fill, three readings each, ms): main 2.35, 2.75, 2.43; phase 2b 0.67, 0.63, 0.71.
+The benches, medians of ns/op:
+
+```
+                                   main  phase 2b   change
+CaveStep/200x60                   9783     10280    +5.1%
+CaveStep/400x120                 22420     23799    +6.2%
+CaveStep/500x254                 30098     28526    -5.2%
+CaveStepNavigation/200x60        31521     29644    -6.0%
+CaveStepNavigation/400x120       64195     57859    -9.9%
+CaveStepNavigation/500x254       79784     75900    -4.9%
+CaveNavigation/200x60/near       75660     75286    -0.5%
+CaveNavigation/200x60/far       134611    124159    -7.8%
+CaveNavigation/400x120/near     106149     96458    -9.1%
+CaveNavigation/400x120/far      151718    148477    -2.1%
+CaveNavigation/500x254/near     126652    121319    -4.2%
+CaveNavigation/500x254/far      195127    188969    -3.2%
+NavigationWallMoves/200x60        3923      3983    +1.5%
+NavigationWallMoves/400x120       3951      3903    -1.2%
+NavigationWallMoves/500x254       4276      4222    -1.3%
+GlyphRender/200x60               53428     55661    +4.2%
+GlyphRender/400x120              86806     81071    -6.6%
+```

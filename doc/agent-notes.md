@@ -216,6 +216,11 @@ that proves wrong or that a document now states, and link the document instead.
 - A headless test reads the checkout's `wad/` (`soakRoot`), so main's test binary run
   from the branch's package directory reads the branch's scenarios and refuses a key
   main does not know: run main's from its worktree's package directory.
+- Navigation's per-tick wall path is read by two benches with opposite shapes:
+  `BenchmarkNavigationWallMoves` moves one wall, `BenchmarkCaveStepNavigation`
+  turns hundreds of cells a step. A cost per changed cell shows in the second
+  alone, a cost per row or per map in the first alone, at the largest map; read
+  both before calling a change to `applyWalls` or `CompositePassability` neutral.
 - Vanguard's fourth-rank raiders fly 4.5 cells a second, so a raider that moved two
   cells in half a second is not stuck; read a stuck raider as one out of sight a full
   second that moved less than a cell in it.

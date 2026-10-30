@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"github.com/lixenwraith/vif/pkg/position"
 	"math"
 	"math/bits"
 
@@ -330,8 +331,8 @@ type SearchGrid struct {
 // Fill reads the passability of a w×h field and the directions open from each
 // cell: into a passable cell, and along a diagonal only past both corners beside it.
 func (g *SearchGrid) Fill(w, h int, isBlocked WallChecker) {
-	pw, ph := w+2, h+2
-	g.free = grow(g.free, pw*ph)
+	pw := w + 2
+	g.free = grow(g.free, pw*(h+2))
 	clear(g.free)
 	for y := range h {
 		row := g.free[(y+1)*pw+1 : (y+1)*pw+1+w]
@@ -341,6 +342,30 @@ func (g *SearchGrid) Fill(w, h int, isBlocked WallChecker) {
 			}
 		}
 	}
+	g.finish(w, h)
+}
+
+// FillBlocked is Fill from a grid of bits, set where a cell is impassable.
+func (g *SearchGrid) FillBlocked(w, h int, blocked position.Bits) {
+	pw := w + 2
+	g.free = grow(g.free, pw*(h+2))
+	clear(g.free)
+	for y := range h {
+		row := g.free[(y+1)*pw+1 : (y+1)*pw+1+w]
+		for i, word := range blocked.Row(y) {
+			for x := i * 64; x < min(i*64+64, w); x++ {
+				if word>>(uint(x)&63)&1 == 0 {
+					row[x] = 1
+				}
+			}
+		}
+	}
+	g.finish(w, h)
+}
+
+// finish reads the directions open from each filled cell
+func (g *SearchGrid) finish(w, h int) {
+	pw := w + 2
 	g.w, g.h = w, h
 	for k := range DirCount {
 		g.step[k] = int32(DirVectors[k][1]*w + DirVectors[k][0])
@@ -411,16 +436,6 @@ func (g *SearchGrid) inside(c vmath.Point) bool {
 
 // Size is the field size the grid was filled at.
 func (g *SearchGrid) Size() (w, h int) { return g.w, g.h }
-
-// Diff calls fn with the new state of every cell whose passability differs
-// between prev and next, two w-wide grids of one size.
-func Diff(prev, next []bool, w int, fn func(x, y int, blocked bool)) {
-	for i := range next {
-		if prev[i] != next[i] {
-			fn(i%w, i/w, next[i])
-		}
-	}
-}
 
 // Blocked reports whether a cell is impassable; every cell off the grid is.
 func (g *SearchGrid) Blocked(x, y int) bool {

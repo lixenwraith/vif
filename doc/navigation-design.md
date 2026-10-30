@@ -83,10 +83,12 @@ Navigation keeps the walls everything stands on and brings them up to the walls
 once a tick, re-testing only the cells the engine's wall log names
 (`Position.WallChanges`): a moving map costs the cells that moved, not the map.
 When the log no longer reaches back, after an install, a resize or a restore, it
-reads every cell through `Position.WallTest` and diffs them. A changed cell moves
-the point tier. A composite passability counts the walls under each header's
-footprint, so a changed cell moves only the counts of the headers over it
-(`Moved`), and a composite tier moves only where its footprint's fit changed,
+takes the walls' bits whole (`Position.WallBits`) and diffs them a word at a time
+(`position.Diff`). A changed cell moves the point tier. A composite passability is
+a bit a header, derived from the walls' bits a row of words at a time (`Compute`),
+and a change derives again only the header rows, and the words of them, the
+changed cells' footprints reach (`Moved`), so a composite tier moves only where
+its footprint's fit changed,
 which a storm's single-cell holes rarely do; a header two cells turned the same
 tick is named only if its fit did change. Each tier has a generation that a field
 or route graph is stamped with when computed. A wholesale change, more than an
