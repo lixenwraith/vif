@@ -129,10 +129,6 @@ func (x *Index[E]) merge() {
 		x.solid[i].pending = 0
 		x.solid[i].lay(x.Width, x.Height)
 	}
-	x.aheadFrom = math.MaxInt
-	for _, s := range x.surfaces {
-		x.aheadFrom = min(x.aheadFrom, len(s.heights))
-	}
 }
 
 // shifted notes that s moved a column: once every surface of its mask has, the
@@ -202,6 +198,7 @@ func (x *Index[E]) AddSurface(mask Mask, side Side, origin int64, heights []int)
 	x.surfaces = append(x.surfaces, s)
 	x.log.lose()
 	x.unmerged = true
+	x.widths()
 	return s
 }
 
@@ -211,6 +208,7 @@ func (x *Index[E]) LaySurface(s *Surface, origin int64, heights []int) {
 	s.Origin, s.heights, s.ahead = origin, append(s.heights[:0], heights...), s.ahead[:0]
 	x.log.lose()
 	x.unmerged = true
+	x.widths()
 }
 
 // RemoveSurface lifts s.
@@ -219,6 +217,7 @@ func (x *Index[E]) RemoveSurface(s *Surface) {
 		x.surfaces = slices.Delete(x.surfaces, i, i+1)
 		x.log.lose()
 		x.unmerged = true
+		x.widths()
 	}
 }
 
@@ -253,16 +252,16 @@ func (x *Index[E]) ShiftSurface(s *Surface, enter int) {
 // the surfaces and the blocks ride it, so cell (x, y) shows what x+carry holds
 // now, and past a surface's right end the heights ahead of it
 func (x *Index[E]) BlocksCarried(px, py, carry int, mask Mask) bool {
-	if carry <= 0 || px < 0 {
-		return x.Blocks(px, py, mask)
+	if carry > 0 && px >= 0 {
+		if px += carry; px >= x.aheadFrom {
+			return x.blocksAhead(px, py, mask)
+		}
 	}
-	px += carry
-	if x.unmerged {
-		x.merge()
-	}
-	if px < x.aheadFrom {
-		return x.Blocks(px, py, mask)
-	}
+	return x.Blocks(px, py, mask)
+}
+
+// blocksAhead is BlocksCarried past the first surface's right end
+func (x *Index[E]) blocksAhead(px, py int, mask Mask) bool {
 	for _, s := range x.surfaces {
 		if i := px - len(s.heights); i >= 0 && i < len(s.ahead) && s.stops(mask) &&
 			py >= 0 && py < x.Height && s.solidAt(s.ahead[i], py) {
@@ -270,4 +269,13 @@ func (x *Index[E]) BlocksCarried(px, py, carry int, mask Mask) bool {
 		}
 	}
 	return x.Blocks(px, py, mask)
+}
+
+// widths notes the surfaces' widths: the first column past one is where its
+// heights ahead answer
+func (x *Index[E]) widths() {
+	x.aheadFrom = math.MaxInt
+	for _, s := range x.surfaces {
+		x.aheadFrom = min(x.aheadFrom, len(s.heights))
+	}
 }

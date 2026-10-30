@@ -97,6 +97,7 @@ func (x *Index[E]) Resize(w, h int) {
 func (x *Index[E]) Clear() {
 	x.Grid.Clear()
 	x.surfaces, x.solid, x.unmerged = x.surfaces[:0], x.solid[:0], false
+	x.widths()
 	x.log.lose()
 	x.stale = true
 }
