@@ -412,3 +412,51 @@ where it read the rock's bits from a field, a load or two a probe over 1,460 to
 5,800 scenery glyphs a frame. That is the price of several surfaces behind one
 probe; a fixed array for the first few masks would take it back if a frame
 ever needs it.
+
+Iteration 5, the call sites and the binding, main at iteration 4 against the
+branch, alternated five times, the same bench files on both. td's tick with
+sixteen cursors, ms a tick:
+
+```
+main      0.32  0.31  0.30  0.30  0.31   median 0.31
+branch    0.30  0.29  0.37  0.28  0.29   median 0.29
+```
+
+The benches, medians of ns/op:
+
+```
+                                   main    branch   change
+CaveStep/200x60                   8029      8331    +3.8%
+CaveStep/400x120                 13984     13562    -3.0%
+CaveStep/500x254                 16392     16307    -0.5%
+CaveStepNavigation/200x60        28507     28847    +1.2%
+CaveStepNavigation/400x120       56530     58034    +2.7%
+CaveStepNavigation/500x254       70537     71729    +1.7%
+CaveNavigation/200x60/near       71141     71099    -0.1%
+CaveNavigation/200x60/far       120303    119088    -1.0%
+CaveNavigation/400x120/near      88425     93522    +5.8%
+CaveNavigation/400x120/far      137209    138329    +0.8%
+CaveNavigation/500x254/near     111214    106942    -3.8%
+CaveNavigation/500x254/far      179056    176753    -1.3%
+NavigationWallMoves/200x60        3920      4048    +3.3%
+NavigationWallMoves/400x120       3986      3968    -0.5%
+NavigationWallMoves/500x254       3951      4214    +6.7%
+GlyphRender/120x40               34039     32822    -3.6%
+GlyphRender/200x60               61121     59630    -2.4%
+GlyphRender/400x120              85388     84207    -1.4%
+RockRender/200x60/visual        155329    153016    -1.5%
+RockRender/200x60/stone         249582    247982    -0.6%
+RockRender/200x60/redraw       2148421   2142352    -0.3%
+RockRender/400x120/visual       748379    791428    +5.8%
+RockRender/400x120/stone       1036714   1053760    +1.6%
+RockRender/400x120/redraw     10867088  12122980   +11.6%
+RockRender/500x254/visual      2921694   3317260   +13.5%
+RockRender/500x254/stone       4613480   4673072    +1.3%
+RockRender/500x254/redraw     31413435  31869157    +1.5%
+```
+
+Parity, as a change of names should read: every call reaches the index method
+it reached through the binding, which the compiler inlined either way. The two
+rock readings past a tenth are the band, not a cost: their five readings
+overlap, the 500×254 visual's running 2.4 to 4.9 ms on main and 2.6 to 4.7 on
+the branch, and the path they draw changed only in where it reads the look.
