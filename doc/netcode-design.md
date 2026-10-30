@@ -616,6 +616,13 @@ spends what the cadence saves, and a rate measured on padding is still a floor
 on capacity unless the padding queues, which is the backlog's reading already.
 The in-process cadence tests read the plan's priced rate (`CapacityBps`) and the
 constraint, not whether the latest sample happened to read the link as the limit.
+A link standing past the corrector's bound (`bulkHeld`) holds too, with nothing
+owed: the session's epochs, syncs, manifests and echoes share it and keep it there
+while the corrector's own frames wait less than two probe intervals. Over five seeds
+on links of 150 to 300 bytes a tick, 460 ticks each, the link read as the limit in
+13 of 20 runs before, none of the five at 200 bytes, and in 20 after; the round trip
+over the last 230 ticks, by rate, averaged 2.76, 1.54, 0.31 and 0.34 s before and
+2.24, 1.05, 0.24 and 0.29 s after. The four shapes' late counts hold.
 
 **A relayed topology.** `TestARelayedTopologyConvergesUnderShape` runs always: a
 host, a relay and a person behind it over the default shape, 300 ticks, the storm,
