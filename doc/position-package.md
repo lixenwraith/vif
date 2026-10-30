@@ -16,8 +16,10 @@ states what the end must keep.
 In `pkg/position`:
 
 - `Grid[E]`: the cells, each two halves (`ClassShared` from the front, `ClassPrivate`
-  from the back within `PrivateBudget`), `Scope`, the occupied list, `Clamp` and the
-  map ceiling, stats, and the load and reorder a world copy and an install use.
+  from the back within `PrivateBudget`), `Scope`, the occupied list, the presence
+  bits of each class (`Present`), by which a probe passes an empty cell on a word
+  that stays in cache and a scan passes empty cells a word at a time, `Clamp` and
+  the map ceiling, stats, and the load and reorder a world copy and an install use.
 - `Index[E]`: the grid, whose dimensions are the bounds every query answers
   within; the `Frame` it reads the cell aspect through; `blockOf`, the caller's
   word on which shared occupant is a block and what it stops (a `Mask`, 0 asking
@@ -109,6 +111,12 @@ Each names the choice taken and what the other would have cost.
   surfaces that move together; a floor alone or a ceiling alone is one.
 - The mask, the package's: `component.WallBlockMask` is `position.Mask`, since the
   package names no game type and the game's constants stay where they are.
+- Presence bits, a `Bits` a class kept by the grid as cells fill and empty: an
+  occupant probe (`EntitiesAt`, `HasAnyEntityAt`) tests the bit before it reads
+  the cell, so the empty cells a sweep, a particle or a shot asks about cost a
+  word in cache rather than 256 bytes out of it, and the directional scan the
+  motions make passes an empty row or column on one word. An occupied cell pays
+  one more load; §5 reads the trade.
 - Navigation reads words: a composite passability is a bit a header, each row the
   OR of the walls' words under the footprint's rows shifted to the header's column
   (`CompositePassability.Compute`), and a change derives again the header rows
@@ -150,8 +158,9 @@ Each names the choice taken and what the other would have cost.
    cell for a graphical host (authored geometry stays at `RefAspect`, the package
    owns the conversion), a depth to the grid, chunked cells for a volume and the
    ceiling-sized empty map, a 3D line of sight.
-5. Batch skips: a presence grid per class, kept as cells fill and empty, so an
-   area scan of occupants passes empty cells a word at a time.
+5. Batch skips: the presence bits, a class each, kept as cells fill and empty, so
+   a probe passes an empty cell on a word and a scan passes empty cells a word at
+   a time. Done, measured in §5.
 
 ## 4. The third axis
 

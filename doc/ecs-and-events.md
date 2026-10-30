@@ -112,6 +112,9 @@ model](domain-design.md#3-spatial-and-entity-classification)).
 
 The grid is dense, so a map costs cells: `Cell` is exactly 256 bytes, and the
 grid is sized to its map with grow-only backing, so a shrink never reallocates.
+Beside the cells it keeps a bit a cell for each class that holds something
+(`Grid.Present`), so a probe of an empty cell costs a word in cache rather than a
+cell out of it, and a scan passes empty cells a word at a time.
 `position.Clamp` is the single gate in front of that allocation, bounding a map by
 `MaxWidth`, `MaxHeight` and `MaxCells` (32 MB of cells per world at the ceiling),
 which `parameter` names as the game reads them. It clamps rather than rejects
