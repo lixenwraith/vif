@@ -31,7 +31,7 @@ func (p *Position) RockLook() RockLook { return p.rockLook }
 // column, drawn in look; no columns lift the field
 func (p *Position) SetRock(mask component.WallBlockMask, look RockLook, origin int64, cols []RockColumn) {
 	p.rockLook = look
-	p.index.SetRock(position.Mask(mask), origin, cols)
+	p.index.SetRock(mask, origin, cols)
 }
 
 // SetRockAhead keeps cols as the columns past the field's right end, in entry order
@@ -41,7 +41,7 @@ func (p *Position) SetRockAhead(cols []RockColumn) { p.index.SetRockAhead(cols) 
 // on: rock and shared walls ride its scroll, so cell (x, y) shows what x+carry holds
 // now, and past the map's right edge the field's columns ahead
 func (p *Position) HasBlockingWallDrawnAt(x, y, carry int, mask component.WallBlockMask) bool {
-	return p.index.BlocksDrawn(x, y, carry, position.Mask(mask))
+	return p.index.BlocksDrawn(x, y, carry, mask)
 }
 
 // ShiftRock moves the field a column left: map column 0 leaves it and enter stands

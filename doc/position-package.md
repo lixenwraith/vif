@@ -2,10 +2,11 @@
 
 `pkg/position` is a map's spatial index and the geometry over it, free of the game
 and of `engine`: a dense grid of cells holding what stands in each, the walls among
-them and the rock no entity holds, the log of the cells whose wall answer changed,
-and the searches a placement, a line or a ray makes over them. `engine.Position`
-binds it to a `World`: the rows (entity to cell), the component mask, which shared
-occupant is a wall, the domain names, telemetry and typing's top glyph. This document holds
+them kept as a bit a cell for each mask asked, the rock no entity holds, the log of
+the cells whose wall answer changed, and the searches a placement, a line or a ray
+makes over them. `engine.Position` binds it to a `World`: the rows (entity to
+cell), the component mask, which shared occupant is a wall and what it stops, the
+domain names, telemetry and typing's top glyph. This document holds
 the move's decisions and its phases; the item in [todo](todo.md#move-position-into-a-package-of-its-own-walls-and-rock-one-blocking-model)
 states what the end must keep.
 
@@ -17,11 +18,13 @@ In `pkg/position`:
   from the back within `PrivateBudget`), `Scope`, the occupied list, `Clamp` and the
   map ceiling, stats, and the load and reorder a world copy and an install use.
 - `Index[E]`: the grid, whose dimensions are the bounds every query answers
-  within; the `Frame` it reads the cell aspect through; `isWall`, the caller's word
-  on which shared occupant blocks a `Mask` (0 is any); the wall epoch and log; the
-  per-mask `WallTest` grid; and the searches: free area by spiral, by pattern and
-  around an exclusion, point and area line of sight, rays, batches, the closest
-  occupant in a direction.
+  within; the `Frame` it reads the cell aspect through; `wallOf`, the caller's word
+  on which shared occupant is a wall and what it stops (a `Mask`, 0 asking for any
+  wall); a plane of bits for each mask a query asked, kept with every wall change,
+  so a point is a bit and an area a few words a row; the wall log; `WallTest`,
+  which copies a plane into the caller's grid; and the searches: free area by
+  spiral, by pattern and around an exclusion, point and area line of sight, rays,
+  batches, the closest occupant in a direction.
 - `Rock`: the cluster no entity holds, a ceiling and a floor per column, shifted a
   column at a time, its columns ahead for a frame drawn between ticks; a wall query
   reads it before the cell's occupants.
@@ -30,8 +33,9 @@ In `engine`:
 
 - `Position`: the rows and their sparse index (shared with `Store`), `SetPosition`
   and its kin over rows and grid, `Shift`, batches, the mask upkeep that tells the
-  index which moves are a wall's, `isWall` over `Components.Wall`, the typing
-  queries (`TopGlyphAt`, `IsTypeable`, `IsScenery`), telemetry, and the rock's look.
+  index which moves are a wall's, once the grid holds the move, `wallOf` over
+  `Components.Wall`, the typing queries (`TopGlyphAt`, `IsTypeable`, `IsScenery`),
+  telemetry, and the rock's look. `component.WallBlockMask` is the package's `Mask`.
 - The names the game reads: `DomainScope`, `ScopeShared`, `ScopePlayer`, `ScopeBoth`,
   `Cell`, `SpatialGrid`, `RockField`, `RockColumn`, `Exclusion`, the pattern kinds,
   as aliases of the package's. A class is an entity's domain
@@ -60,13 +64,18 @@ Each names the choice taken and what the other would have cost.
   renderer, which asks a wall per scenery glyph a frame, a quarter of its time; a
   writer that does not resize the grid is a bug, and `TestSetupLevelRecordsOnlyBoundsTheGridHolds`
   pins the pair.
-- Walls, a predicate: the rock answers first, then each shared occupant of the
-  cell through the caller's `isWall`, so an open cell costs no indirect call. An
-  interface over the wall entities, asked on every probe, cost the same renderer a
-  tenth. The next phase keeps per-mask row bitsets from the log, so a point, an
-  area or a line is answered in words with no component lookup, and brings the
-  cluster surface a second cluster needs; whether a maze's walls stay entities a
-  cluster indexes or become one is open.
+- Walls, a plane of bits per mask asked: the rock answers first, then the bit. A
+  plane is built from the cells on the first query of its mask and brought to a
+  cell's shared occupants by `WallChangedAt`, which the binding calls once the grid
+  holds a wall's move, so a storm's hundreds of walls cost a cell scan each; a
+  resize, a copy loaded or masks rewritten wholesale mark every plane stale, and
+  the next query rebuilds them from the occupied cells. The first phase scanned the
+  cell's occupants on every probe through a predicate; the td profile put the area
+  test, navigation's direct-path probe over a footprint, at a sixth of the tick,
+  most of it cell reads of 256 bytes each. The walls stay entities, which species
+  move and break; the planes are derived, never captured.
+- The mask, the package's: `component.WallBlockMask` is `position.Mask`, since the
+  package names no game type and the game's constants stay where they are.
 - Rows, in `engine` for now: the sparse index is `Store`'s, and the row type is
   `component.PositionComponent`. Moving the rows means a point type of the package's
   aliased by `component`, and the generator walking the alias; the third axis
@@ -82,9 +91,11 @@ Each names the choice taken and what the other would have cost.
 
 1. The package and the binding, no behaviour change, measured: this document's
    boundary. Done.
-2. The blocking model: bitset or run clusters in the package, updated from the log;
-   the entity blocker reduced to keeping them; td's storm ticks measured before
-   and after (the wall system's event and navigation, netcode design §3.7's shape).
+2. The blocking model: the planes, the mask alias, td's tick with sixteen cursors
+   and the benches measured before and after. Done.
+2b. Navigation over the planes' words, if the profile asks: `CompositePassability`
+   derived a row of words at a time and the lost-log re-read diffed by XOR instead
+   of a cell at a time (`applyWalls`, `navigation.Diff`).
 3. The call sites: readers take the package's names (`position.ScopeAll`,
    `position.Column`) and the binding narrows to what the rows need; `SetRock` loses
    its look, which the wall system publishes in `CaveResource` for the rock renderer.
@@ -126,3 +137,43 @@ RockRender/500x254/visual      2654428   2979538   +12.2%
 RockRender/500x254/stone       4897718   4444327    -9.3%
 RockRender/500x254/redraw     31366822  33556171    +7.0%
 ```
+
+Phase 2, the same way, main at phase 1 against the planes. td's tick with sixteen
+cursors (`TestTickProfileTD16`, 500×250, 5,000 ticks on one core), ms a tick,
+five readings each:
+
+```
+main      0.40  0.40  0.40  0.38  0.37   median 0.40
+phase 2   0.36  0.40  0.34  0.32  0.34   median 0.34
+```
+
+In main's profile the area query, navigation's direct-path probe over a
+footprint, was 16% of the tick and the cell view under it 9%; in phase 2's the
+area query is off the top of the profile and the index's share of the tick fell
+from 0.56 s to 0.47 s of 1.8 s and 1.7 s. The benches, medians of ns/op:
+
+```
+                                   main   phase 2   change
+CaveStep/200x60                   9625     10538    +9.5%
+CaveStep/400x120                 22044     24673   +11.9%
+CaveStep/500x254                 28149     27295    -3.0%
+CaveStepNavigation/200x60        34076     31485    -7.6%
+CaveStepNavigation/400x120       70025     67554    -3.5%
+CaveStepNavigation/500x254       91356     92495    +1.2%
+NavigationWallMoves/200x60        3991      3916    -1.9%
+NavigationWallMoves/400x120       3744      4041    +7.9%
+NavigationWallMoves/500x254       4039      4266    +5.6%
+GlyphRender/120x40               31823     32451    +2.0%
+GlyphRender/200x60               52047     53878    +3.5%
+GlyphRender/400x120              94424     86311    -8.6%
+RockRender/200x60/stone         274489    259675    -5.4%
+RockRender/400x120/stone       1137142   1035326    -9.0%
+RockRender/500x254/stone       4059707   4300285    +5.9%
+```
+
+`CaveStep` turns rock alone, no wall entity, and its readings overlap (9.3 to
+10.5 µs on main against 9.9 to 11.2 on phase 2 at 200×60): the band. What the
+planes do cost is a wall's move, which brings them to two cells, a cell scan
+each, paid once where every probe of the cell paid before; nothing measured
+moves walls in bulk but a cave with pattern walls riding its scroll, which a
+vanguard profile should read when one lands.

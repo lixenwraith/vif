@@ -82,10 +82,6 @@ type Grid[E comparable] struct {
 	// copy, a clear and the gauges read what the map holds rather than the map: the
 	// ceiling is 125,000 cells, 32 MB, which a scan touches whole.
 	occupied []int32
-
-	// generation moves on a clear and a resize, which change membership with no
-	// position changing.
-	generation uint64
 }
 
 // NewGrid makes a grid of width×height cells, clamped to the map ceiling.
@@ -250,7 +246,6 @@ func (g *Grid[E]) HasAnyEntityInArea(x, y, width, height int, scope Scope, predi
 
 // Clear removes every entity from every cell.
 func (g *Grid[E]) Clear() {
-	g.generation++
 	for _, i := range g.occupied {
 		g.Cells[i].Count = 0
 		g.Cells[i].SharedCount = 0
@@ -269,7 +264,6 @@ func (g *Grid[E]) Resize(newWidth, newHeight int) {
 	// grid recording bounds that disagree with the cells it holds answers Set and
 	// every enumeration from two different maps.
 	newWidth, newHeight = max(newWidth, 0), max(newHeight, 0)
-	g.generation++
 	g.occupied = g.occupied[:0]
 	need := newWidth * newHeight
 	if need <= cap(g.Cells) {

@@ -104,16 +104,16 @@ log behind one blocker surface, and `engine.Position` binds them, keeping every
 holds the choices made). What remains, in the order of
 [its phases](position-package.md#3-phases):
 
-- One blocking model that pays: the entity blocker still reads each Shared
-  occupant's `Wall` component a cell. A maze kept as per-mask row bitsets (or runs)
-  updated from the wall log answers an area or a line in words, with no component
-  lookup; the rock already answers an area by a column's bounds. td (500×250,
-  narrow mazes everywhere) proves it and navigation with it: its passability
-  (`CompositePassability.Compute`), the search grids `applyWalls` refills whole, its
-  direct-path tests. td's worst ticks are those where hundreds of walls go at once:
-  under a storm with eight walking cursors they reach 40–60 ms and compute no field,
-  the wall system's event peaking at 34–51 ms and navigation at 15–17 ms. Open:
-  whether a maze's walls stay entities a cluster indexes or become the cluster.
+- Navigation over the planes' words: the index answers a point as a bit and an
+  area as a few words a row, but `CompositePassability.Compute` still asks a cell
+  at a time and `applyWalls` re-reads a lost log cell by cell (`navigation.Diff`);
+  a row of words at a time and an XOR diff take td's whole derivations and storms
+  further, if the td profile asks. td's worst ticks are those where hundreds of
+  walls go at once: under a storm with eight walking cursors they reach 40–60 ms
+  and compute no field, the wall system's event peaking at 34–51 ms and navigation
+  at 15–17 ms; the wall system's part is its box-drawing neighbours, read a cell's
+  occupants at a time (`hasWallWithStyle`). The walls stay entities, which species
+  move and break.
 - The call sites take the package's names and the binding narrows; `SetRock` loses
   its look, which the wall system publishes in `CaveResource` for the rock renderer.
 - Footprints: navigation steers each body by its footprint's tier

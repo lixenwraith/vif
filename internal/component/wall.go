@@ -3,10 +3,12 @@ package component
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
-// WallBlockMask defines what entity types a wall blocks
-type WallBlockMask uint8
+// WallBlockMask is the position index's mask: the kinds of mover a wall stops
+type WallBlockMask = position.Mask
 
 const (
 	WallBlockNone     WallBlockMask = 0

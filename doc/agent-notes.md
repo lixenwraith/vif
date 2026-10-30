@@ -154,6 +154,14 @@ that proves wrong or that a document now states, and link the document instead.
 - `pkg/position` knows no entity: a test over walls or glyphs needs a world and
   stays in `internal/engine`; a grid-only test goes to the package with a test id
   whose class is its top byte.
+- A wall plane is brought to a cell when `WallChangedAt` runs, so the binding
+  calls `wallMoved` only once the grid holds the move: a wall logged before its
+  insert leaves its bit stale, which no test but the fuzz test's oracle, a scan of
+  the cell's own wall components, catches, since every other reader asks the plane.
+- A change to a package's API is compiled against every test file by
+  `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
+  nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
+  package the change never touched.
 
 ## Glyphs and colours
 
