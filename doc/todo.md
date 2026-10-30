@@ -971,14 +971,6 @@ A mounted ray destroying walls and glyphs, mounted weapons striking other specie
 
 PvP: a hit on a remote cursor crosses as its impact and the victim's owner applies it, as `strikeCursor` does for mounts.
 
-### Tune the charge-cap effects after play tests
-
-- Priority: P1
-- Affected files: `internal/parameter/{combat,player,effect}.go`,
-  `internal/system/weapon.go`
-
-Arc reward (an arc pays the lightning's full energy reward; halve it if the cap doubles the rod's income too far), the sustained ray's scale (three damage per covered member per immunity window, continuously), the burn figures and whether the charged pulse's stun should shorten to offset them, `LightningArcRange`, `WeaponStreamInterval` and `TurretStream`, the gun's lane offsets at two charges, `LightningZapDuration` for an arc, and a burn tint on species renderers, which show only the hit flash per tick now.
-
 ### Move storm's green circle onto a disruptor mount
 
 - Priority: P3
