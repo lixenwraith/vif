@@ -34,13 +34,13 @@ const (
 	CombatDamageExplosion = 2
 
 	// CombatDamageMissile is damage per missile impact
-	CombatDamageMissile = 2
+	CombatDamageMissile = 1
 
 	// CombatDamagePulse is damage per pulse stun hit
 	CombatDamagePulse = 1
 
 	// CombatDamageBullet is damage per turret bullet hit
-	CombatDamageBullet = 1
+	CombatDamageBullet = 5
 
 	// CombatDamageRay is damage per member a ray covers, times its charges
 	CombatDamageRay = 1
