@@ -75,9 +75,10 @@ red glyphs it crosses into blossom, a negative one turns blue ones green and
 releases decay from them.
 
 **`mount`** (shared) fires the one weapon a Shared host carries. A level attaches
-it with `EventMountRequest` (host, weapon, interval, range, muzzle, lane, width),
-capturing the host from `EventSpeciesCreated` as a gateway is attached; a species
-may set the component itself. Each tick it:
+it with `EventMountRequest` (host, weapon, interval, range, muzzle, lane, width, the
+`energy` and `heat` a hit costs, and a `pulse` table), capturing the host from
+`EventSpeciesCreated` as a gateway is attached; a species may set the component
+itself. Each tick it:
 
 - aims at the nearest cursor within range, aspect-corrected, from Shared positions;
 - fires when ready and, under `MountArmed`, only while the host holds `Armed`;
@@ -116,7 +117,11 @@ ageing nor striking, while a `MountArmed` mount is disarmed, so a stun holds the
 green's attack and its pulse alike. A cursor's strike resolves its drains locally
 and crosses its geometry (§5); a mount's strikes each cursor inside it through
 `strikeCursor`. `WeaponSpecs` holds the kind's `PulseSpec` and a mount overrides it
-field by field, as it overrides `Damage`.
+field by field, as it overrides `Damage`: a scenario writes `pulse = { radius,
+duration_ms, sustained, grow_ms, hit_interval_ms, style, attack, charged }`, style
+`ring`, `glow` or `hidden`. A mount's pulse carries its attack family and charge,
+but the cursors it strikes take only its `CursorDamage` until cursors take a
+family's effects (todo: PvP).
 
 ## 4. At the charge cap
 

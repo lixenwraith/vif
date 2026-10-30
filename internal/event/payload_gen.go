@@ -900,6 +900,17 @@ var codecFireSpecialRequestPayload = structCodec{size: unsafe.Sizeof(FireSpecial
 	{off: unsafe.Offsetof(FireSpecialRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
+var codecMountPulse = structCodec{size: unsafe.Sizeof(MountPulse{}), fields: []field{
+	{off: unsafe.Offsetof(MountPulse{}.Radius), kind: kindFloat},
+	{off: unsafe.Offsetof(MountPulse{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountPulse{}.Sustained), kind: kindBool},
+	{off: unsafe.Offsetof(MountPulse{}.GrowMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountPulse{}.HitIntervalMs), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountPulse{}.Style), kind: kindUint, size: unsafe.Sizeof(component.PulseStyle(0))},
+	{off: unsafe.Offsetof(MountPulse{}.Attack), kind: kindInt, size: unsafe.Sizeof(component.CombatAttackType(0))},
+	{off: unsafe.Offsetof(MountPulse{}.Charged), kind: kindBool},
+}}
+
 func (p *MountRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecMountRequestPayload, unsafe.Pointer(p)
 }
@@ -912,6 +923,9 @@ var codecMountRequestPayload = structCodec{size: unsafe.Sizeof(MountRequestPaylo
 	{off: unsafe.Offsetof(MountRequestPayload{}.Muzzle), kind: kindFloat},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Lane), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MountRequestPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.Energy), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.Heat), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MountRequestPayload{}.Pulse), kind: kindStruct, sub: &codecMountPulse},
 }}
 
 func (p *HeatAddRequestPayload) codec() (*structCodec, unsafe.Pointer) {
