@@ -82,6 +82,11 @@ type Grid[E comparable] struct {
 	// copy, a clear and the gauges read what the map holds rather than the map: the
 	// ceiling is 125,000 cells, 32 MB, which a scan touches whole.
 	occupied []int32
+
+	// present marks the cells holding an entity of each class, a bit a cell, so a
+	// probe passes an empty cell on a word that stays in cache rather than a cell
+	// of 256 bytes that does not, and a scan passes empty cells a word at a time.
+	present [2]Bits
 }
 
 // NewGrid makes a grid of width×height cells, clamped to the map ceiling.
@@ -89,10 +94,27 @@ func NewGrid[E comparable](width, height int) *Grid[E] {
 	width, height = Clamp(width, height)
 	width, height = max(width, 0), max(height, 0)
 	return &Grid[E]{
-		Cells:  make([]Cell[E], width*height),
-		Width:  width,
-		Height: height,
+		Cells:   make([]Cell[E], width*height),
+		Width:   width,
+		Height:  height,
+		present: [2]Bits{NewBits(width, height), NewBits(width, height)},
 	}
+}
+
+// Present is the cells holding an entity of class c, a bit a cell. Read-only.
+func (g *Grid[E]) Present(c Class) Bits { return g.present[c] }
+
+// anyIn reports whether a cell of [x0, x1) × [y0, y1), which the caller has
+// bounded and found non-empty, holds anything scope selects, by the bits
+func (g *Grid[E]) anyIn(x0, x1, y0, y1 int, scope Scope) bool {
+	return scope&ScopeShared != 0 && g.present[ClassShared].Any(x0, x1, y0, y1) ||
+		scope&ScopePrivate != 0 && g.present[ClassPrivate].Any(x0, x1, y0, y1)
+}
+
+// holds reports whether a cell scope selects holds anything, by the bits
+func (g *Grid[E]) holds(x, y int, scope Scope) bool {
+	return scope&ScopeShared != 0 && g.present[ClassShared].Bit(x, y) ||
+		scope&ScopePrivate != 0 && g.present[ClassPrivate].Bit(x, y)
 }
 
 // Set inserts e into its class's half of (x, y). O(1); false when out of bounds,
@@ -114,6 +136,9 @@ func (g *Grid[E]) Set(e E, class Class, x, y int) bool {
 			return false
 		}
 		g.fill(idx, cell)
+		if cell.Count == cell.SharedCount {
+			g.present[ClassPrivate].Set(x, y)
+		}
 		cell.Entities[cell.Count] = e
 		cell.Count++
 		return true
@@ -121,6 +146,9 @@ func (g *Grid[E]) Set(e E, class Class, x, y int) bool {
 
 	// A shared insert splits the run: the first private entity moves to the tail
 	g.fill(idx, cell)
+	if cell.SharedCount == 0 {
+		g.present[ClassShared].Set(x, y)
+	}
 	cell.Entities[cell.Count] = cell.Entities[cell.SharedCount]
 	cell.Entities[cell.SharedCount] = e
 	cell.SharedCount++
@@ -150,6 +178,9 @@ func (g *Grid[E]) Load(idx int32, count, shared uint8, occupants []E) {
 	g.fill(idx, cell)
 	cell.Count, cell.SharedCount = count, shared
 	copy(cell.Entities[:count], occupants)
+	x, y := int(idx)%g.Width, int(idx)/g.Width
+	g.present[ClassShared].Put(x, y, shared > 0)
+	g.present[ClassPrivate].Put(x, y, count > shared)
 }
 
 // Occupied is every cell holding an entity, in the order they filled. Read-only.
@@ -177,10 +208,16 @@ func (g *Grid[E]) RemoveEntityAt(e E, x, y int) {
 			if lastShared != cell.Count {
 				cell.Entities[lastShared] = cell.Entities[cell.Count]
 			}
+			if cell.SharedCount == 0 {
+				g.present[ClassShared].Clear(x, y)
+			}
 		} else {
 			cell.Count--
 			if i != cell.Count {
 				cell.Entities[i] = cell.Entities[cell.Count]
+			}
+			if cell.Count == cell.SharedCount {
+				g.present[ClassPrivate].Clear(x, y)
 			}
 		}
 
@@ -196,6 +233,15 @@ func (g *Grid[E]) RemoveEntityAt(e E, x, y int) {
 // EntitiesAt returns a view of the entities scope selects at (x, y), nil if empty
 // or out of bounds: the cell's own storage, to copy or to read before it changes.
 func (g *Grid[E]) EntitiesAt(x, y int, scope Scope) []E {
+	if x < 0 || x >= g.Width || y < 0 || y >= g.Height || !g.holds(x, y, scope) {
+		return nil
+	}
+	return g.Cells[y*g.Width+x].view(scope)
+}
+
+// Occupants is EntitiesAt without the presence test, for a caller that knows the
+// cell holds something, as one asking about an entity's own cell does.
+func (g *Grid[E]) Occupants(x, y int, scope Scope) []E {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return nil
 	}
@@ -204,7 +250,7 @@ func (g *Grid[E]) EntitiesAt(x, y int, scope Scope) []E {
 
 // HasAnyEntityAt reports whether scope selects at least one entity at (x, y). O(1)
 func (g *Grid[E]) HasAnyEntityAt(x, y int, scope Scope) bool {
-	return len(g.EntitiesAt(x, y, scope)) > 0
+	return x >= 0 && x < g.Width && y >= 0 && y < g.Height && g.holds(x, y, scope)
 }
 
 // Holds reports whether the grid holds e in its class's half of (x, y), which tells
@@ -218,32 +264,6 @@ func (g *Grid[E]) Holds(e E, class Class, x, y int) bool {
 	return false
 }
 
-// HasAnyEntityInArea reports whether any entity scope selects within
-// [x, x+width) × [y, y+height), clipped to the grid, satisfies the predicate.
-func (g *Grid[E]) HasAnyEntityInArea(x, y, width, height int, scope Scope, predicate func(E) bool) bool {
-	startX := max(0, x)
-	startY := max(0, y)
-	endX := min(g.Width, x+width)
-	endY := min(g.Height, y+height)
-
-	if startX >= endX || startY >= endY {
-		return false
-	}
-
-	for row := startY; row < endY; row++ {
-		rowOffset := row * g.Width
-		for col := startX; col < endX; col++ {
-			cell := &g.Cells[rowOffset+col]
-			for _, e := range cell.view(scope) {
-				if predicate(e) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 // Clear removes every entity from every cell.
 func (g *Grid[E]) Clear() {
 	for _, i := range g.occupied {
@@ -251,6 +271,8 @@ func (g *Grid[E]) Clear() {
 		g.Cells[i].SharedCount = 0
 	}
 	g.occupied = g.occupied[:0]
+	clear(g.present[ClassShared].Words)
+	clear(g.present[ClassPrivate].Words)
 }
 
 // Resize sets the grid's dimensions, emptying it. Backing storage is grow-only:
@@ -278,6 +300,9 @@ func (g *Grid[E]) Resize(newWidth, newHeight int) {
 	}
 	g.Width = newWidth
 	g.Height = newHeight
+	for c := range g.present {
+		g.present[c] = g.present[c].sized(Stride(newWidth), newHeight)
+	}
 }
 
 // Stats is what the occupied cells hold.

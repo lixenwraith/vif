@@ -106,7 +106,11 @@ func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
 		}
 		var want Stats
 		for i := range g.Cells {
-			if n := int(g.Cells[i].Count); n > 0 {
+			c := &g.Cells[i]
+			if x, y := i%7, i/7; g.Present(ClassShared).Bit(x, y) != (c.SharedCount > 0) || g.Present(ClassPrivate).Bit(x, y) != (c.Count > c.SharedCount) {
+				t.Fatalf("cell %d holds %d shared of %d, the presence bits say otherwise", i, c.SharedCount, c.Count)
+			}
+			if n := int(c.Count); n > 0 {
 				if !seen[int32(i)] {
 					t.Fatalf("cell %d holds %d and is not listed", i, n)
 				}

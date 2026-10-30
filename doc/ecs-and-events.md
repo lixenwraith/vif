@@ -112,6 +112,9 @@ model](domain-design.md#3-spatial-and-entity-classification)).
 
 The grid is dense, so a map costs cells: `Cell` is exactly 256 bytes, and the
 grid is sized to its map with grow-only backing, so a shrink never reallocates.
+Beside the cells it keeps a bit a cell for each class that holds something
+(`Grid.Present`), so a probe of an empty cell costs a word in cache rather than a
+cell out of it, and a scan passes empty cells a word at a time.
 `position.Clamp` is the single gate in front of that allocation, bounding a map by
 `MaxWidth`, `MaxHeight` and `MaxCells` (32 MB of cells per world at the ceiling),
 which `parameter` names as the game reads them. It clamps rather than rejects
@@ -136,17 +139,21 @@ shares, and `position.Index` keeps the cells: a write moves both. The index
 answers point and area queries, out-of-bounds checks, line-of-sight traversal and
 free-space searches by pattern or spiral, which a negative radius sends over the
 whole map, within its grid's bounds and at the cell aspect it reads live from the
-config (`position.Frame`). A wall query answers for a `Mask` (0 is any) from the
-rock field first (`position.Rock`, `Position.SetRock`), a ceiling and a floor row
-per map column with one mask, so a cave's rock costs a column, not an entity per
-cell, and `ShiftRock` moves it a column left with the column entering; then from a
-plane of bits the index keeps for the mask, a bit a cell, built from the cells on
-the mask's first query and brought to a cell's shared occupants whenever a wall is
-placed, moved, removed or remasked there (`Position.wallOf` names a wall and what
-it stops), so a point is a bit and an area a few words a row, and the rock's
-bits move a column with it. `WallBits` hands a reader deriving whole the plane's
-words with the rock's (`position.Bits`, which navigation derives its passability
-from). The rock's look (`RockLook`) stays the engine's, beside the field. A wall's
+config (`position.Frame`). The package's words are *block*, a cell an occupant
+blocks for a mask, and *surface*, a height a column with a solid side; the game's
+are wall and rock ([Position package §1](position-package.md#1-the-boundary)). A
+wall query answers for a `Mask` (0 is any) from the surfaces first: the cave's
+rock is two (`engine.RockField`, `Position.SetRock`), the ceiling solid above its
+height and the floor below, so a cave's rock costs a height per column, not an
+entity per cell, and `ShiftRock` moves both a column left with the column
+entering; then from a plane of bits the index keeps for the mask, a bit a cell,
+built from the cells on the mask's first query and brought to a cell's shared
+occupants whenever a wall is placed, moved, removed or remasked there
+(`Position.wallOf` names a wall and what it stops), so a point is a bit and an
+area a few words a row. `WallBits` hands a reader deriving whole the plane's words
+with the surfaces' solid cells (`position.Bits`, which navigation derives its
+passability from). The rock's look (`RockLook`) stays the engine's, beside the
+field. A wall's
 placement and its store membership bring the plane to the cell, and a `BlockMask`
 written in place calls `Position.WallChanged` for its wall. The
 same changes log the cells they can have turned, both cells of a wall's move and each

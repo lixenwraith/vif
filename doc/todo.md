@@ -99,16 +99,15 @@ A full session of its own, last: it moves what the rest builds on.
   [Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)
 
 Phase 1 landed: `pkg/position` holds the grid, the geometry, the rock and the wall
-log behind one blocker surface, and `engine.Position` binds them, keeping every
+log behind one set of queries, and `engine.Position` binds them, keeping every
 `World.Positions` method ([Position package §2](position-package.md#2-decisions)
 holds the choices made). What remains, in the order of
 [its phases](position-package.md#3-phases):
 
-- Batch skips: the index answers walls in words, but every reader of a cell's
-  occupants still reads the cell, 256 bytes, empty or not: the wall system's
-  box-drawing neighbours (`hasWallWithStyle`), the cursor overlaps (`overlapOf`),
-  the area sweeps. A presence grid of bits per class, kept by the grid as cells
-  fill and empty, lets an area scan pass the empty cells a word at a time. td's
+- The readers that still pay a cell: the wall system's box-drawing neighbours
+  (`hasWallWithStyle`, a wall's four neighbours read and their `Wall` component
+  looked up, on every spawn and every destruction in a storm), and the route
+  solver and flow fields, which ask a cell at a time through `WallChecker`. td's
   worst ticks are those where hundreds of walls go at once: under a storm with
   eight walking cursors they reach 40–60 ms and compute no field, the wall
   system's event peaking at 34–51 ms and navigation at 15–17 ms. The walls stay
