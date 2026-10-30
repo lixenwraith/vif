@@ -99,7 +99,7 @@ A full session of its own, last: it moves what the rest builds on.
   [Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)
 
 Phase 1 landed: `pkg/position` holds the grid, the geometry, the rock and the wall
-log behind one blocker surface, and `engine.Position` binds them, keeping every
+log behind one set of queries, and `engine.Position` binds them, keeping every
 `World.Positions` method ([Position package §2](position-package.md#2-decisions)
 holds the choices made). What remains, in the order of
 [its phases](position-package.md#3-phases):

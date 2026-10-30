@@ -1,12 +1,13 @@
 # Position package
 
 `pkg/position` is a map's spatial index and the geometry over it, free of the game
-and of `engine`: a dense grid of cells holding what stands in each, the walls among
-them kept as a bit a cell for each mask asked, the rock no entity holds, the log of
-the cells whose wall answer changed, and the searches a placement, a line or a ray
-makes over them. `engine.Position` binds it to a `World`: the rows (entity to
-cell), the component mask, which shared occupant is a wall and what it stops, the
-domain names, telemetry and typing's top glyph. This document holds
+and of `engine`: a dense grid of cells holding what stands in each, the blocks
+among them kept as a bit a cell for each mask asked, the surfaces no entity holds,
+the log of the cells whose block answer changed, and the searches a placement, a
+line or a ray makes over them. `engine.Position` binds it to a `World`: the rows
+(entity to cell), the component mask, which shared occupant is a block and what it
+stops, the domain names, telemetry and typing's top glyph. The package's terms
+and the game's are mapped in §1. This document holds
 the move's decisions and its phases; the item in [todo](todo.md#move-position-into-a-package-of-its-own-walls-and-rock-one-blocking-model)
 states what the end must keep.
 
@@ -18,32 +19,54 @@ In `pkg/position`:
   from the back within `PrivateBudget`), `Scope`, the occupied list, `Clamp` and the
   map ceiling, stats, and the load and reorder a world copy and an install use.
 - `Index[E]`: the grid, whose dimensions are the bounds every query answers
-  within; the `Frame` it reads the cell aspect through; `wallOf`, the caller's word
-  on which shared occupant is a wall and what it stops (a `Mask`, 0 asking for any
-  wall); a plane of bits for each mask a query asked, kept with every wall change,
-  so a point is a bit and an area a few words a row; the rock's bits, moved a
-  column with it; the wall log; `WallBits`, the plane's words with the rock's for
+  within; the `Frame` it reads the cell aspect through; `blockOf`, the caller's
+  word on which shared occupant is a block and what it stops (a `Mask`, 0 asking
+  for any block); a plane of bits for each mask a query asked, kept with every
+  block change, so a point is a bit and an area a few words a row; the surfaces;
+  the block log; `BlockBits`, the plane's words with the surfaces' solid cells for
   a reader deriving whole; and the searches: free area by spiral, by pattern and
   around an exclusion, point and area line of sight, rays, batches, the closest
   occupant in a direction.
-- `Bits`: the grid of bits the planes, the rock and navigation share, each row
-  starting on a word: a point a bit, an area a few words a row, a row shifted a
-  column in a word, two grids diffed by XOR.
-- `Rock`: the cluster no entity holds, a ceiling and a floor per column, shifted a
-  column at a time, its columns ahead for a frame drawn between ticks; a wall query
-  reads it before the cell's occupants.
+- `Bits`: the grid of bits the planes and navigation share, each row starting on
+  a word: a point a bit, an area a few words a row, a row shifted a column in a
+  word, two grids diffed by XOR.
+- `Surface`: a boundary no entity holds, a height for each column with the cells
+  on one `Side` of it solid (`Above`, a ceiling; `Below`, a floor), blocking its
+  mask as a block does; laid from its writer's record, shifted a column at a time
+  with the heights ahead of it for a frame drawn between shifts, and answered
+  before the cell's occupants by its heights alone, no bits to keep.
+
+The terms, the package's and the game's:
+
+- A *block* is a cell an occupant blocks for a mask: in the game a *wall*, the
+  entity with a `WallComponent`, whose `BlockMask` is the mask. `Blocks`,
+  `BlocksArea`, `BlockBits` answer; `BlockChangedAt`, `BlocksChanged`,
+  `BlockChanges` keep the planes and the log. The binding keeps the game's
+  names (`HasBlockingWallAt`, `WallChanged`, `WallsChanged`, `WallChanges`,
+  `WallBits`, the *wall log*).
+- A *surface* is a height a column with a solid side: in the game the cave's
+  *rock*, two surfaces, the ceiling above and the floor below, which
+  `engine.RockField` keeps with one mask, one origin and the `RockColumn` pairs the
+  renderer and the wall system read. `SetRock`, `ShiftRock`, `SetRockAhead` and
+  `HasBlockingWallDrawnAt` are the binding's names for `AddSurface`/`LaySurface`,
+  `ShiftSurface`, `SetSurfaceAhead` and `BlocksCarried`.
+- A *shape*, a line or polygon rasterised into blocks or a volume into solid
+  cells, is the third kind a game may want; none is implemented, and it would
+  enter as a surface does, laid from its writer's record.
 
 In `engine`:
 
 - `Position`: the rows and their sparse index (shared with `Store`), `SetPosition`
   and its kin over rows and grid, `Shift`, batches, the mask upkeep that tells the
   index which moves are a wall's, once the grid holds the move, `wallOf` over
-  `Components.Wall`, the typing queries (`TopGlyphAt`, `IsTypeable`, `IsScenery`),
-  telemetry, and the rock's look. `component.WallBlockMask` is the package's `Mask`.
+  `Components.Wall` as the index's `blockOf`, the typing queries (`TopGlyphAt`,
+  `IsTypeable`, `IsScenery`), telemetry, and the rock: `RockField`, the two
+  surfaces with their columns and look. `component.WallBlockMask` is the package's
+  `Mask`.
 - The names the game reads: `DomainScope`, `ScopeShared`, `ScopePlayer`, `ScopeBoth`,
-  `Cell`, `SpatialGrid`, `RockField`, `RockColumn`, `Exclusion`, the pattern kinds,
-  as aliases of the package's. A class is an entity's domain
-  (`position.Class(e.Domain())`), which `entityClass` states once.
+  `Cell`, `SpatialGrid`, `Exclusion`, the pattern kinds, as aliases of the
+  package's; `RockField` and `RockColumn` are the engine's own. A class is an
+  entity's domain (`position.Class(e.Domain())`), which `EntityClass` states once.
 - The snapshot and copy paths, which read the rows and the cells.
 
 ## 2. Decisions
@@ -68,16 +91,22 @@ Each names the choice taken and what the other would have cost.
   renderer, which asks a wall per scenery glyph a frame, a quarter of its time; a
   writer that does not resize the grid is a bug, and `TestSetupLevelRecordsOnlyBoundsTheGridHolds`
   pins the pair.
-- Walls, a plane of bits per mask asked: the rock answers first, then the bit. A
-  plane is built from the cells on the first query of its mask and brought to a
-  cell's shared occupants by `WallChangedAt`, which the binding calls once the grid
-  holds a wall's move, so a storm's hundreds of walls cost a cell scan each; a
-  resize, a copy loaded or masks rewritten wholesale mark every plane stale, and
-  the next query rebuilds them from the occupied cells. The first phase scanned the
-  cell's occupants on every probe through a predicate; the td profile put the area
-  test, navigation's direct-path probe over a footprint, at a sixth of the tick,
-  most of it cell reads of 256 bytes each. The walls stay entities, which species
-  move and break; the planes are derived, never captured.
+- Blocks, a plane of bits per mask asked: the surfaces answer first, then the
+  bit. A plane is built from the cells on the first query of its mask and brought
+  to a cell's shared occupants by `BlockChangedAt`, which the binding calls once
+  the grid holds a wall's move, so a storm's hundreds of walls cost a cell scan
+  each; a resize, a copy loaded or masks rewritten wholesale mark every plane
+  stale, and the next query rebuilds them from the occupied cells. The first phase
+  scanned the cell's occupants on every probe through a predicate; the td profile
+  put the area test, navigation's direct-path probe over a footprint, at a sixth
+  of the tick, most of it cell reads of 256 bytes each. The walls stay entities,
+  which species move and break; the planes are derived, never captured.
+- Surfaces, heights with a side rather than bits: a probe compares a row to a
+  height, as cheap as a bit, a shift moves a slice of heights and logs the rows
+  crossed, and only a reader deriving whole (`BlockBits`) rasterises them. The
+  rock kept bits for one phase, shifted a column at a time with it; two surfaces
+  would have doubled that shift for nothing a probe needs. The game's rock is two
+  surfaces that move together; a floor alone or a ceiling alone is one.
 - The mask, the package's: `component.WallBlockMask` is `position.Mask`, since the
   package names no game type and the game's constants stay where they are.
 - Navigation reads words: a composite passability is a bit a header, each row the
