@@ -144,7 +144,7 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 		t.Fatal(err)
 	}
 	p := &player{a: a, src: botSource{d}, driven: true, interactive: true, interval: parameter.GameUpdateInterval,
-		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
+		scale: engine.ScaleNormal}
 	press := func(key terminal.Key, char rune) {
 		t.Helper()
 		if !p.key(terminal.Event{Type: terminal.EventKey, Key: key, Rune: char}) {
@@ -201,7 +201,7 @@ func TestAPresentedScriptInASessionKeepsOnlyPanAndQuit(t *testing.T) {
 	}
 	a.AttachTransport(network.NewMesh().Node(1))
 	p := &player{a: a, src: scriptSource{d}, driven: true, interval: parameter.GameUpdateInterval,
-		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
+		scale: engine.ScaleNormal}
 	for _, r := range " .,+-" {
 		p.key(terminal.Event{Key: terminal.KeyRune, Rune: r})
 	}
@@ -231,7 +231,7 @@ func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	}
 	a.AttachTransport(network.NewMesh().Node(1))
 	p := &player{a: a, src: journalSource{d, a.log}, interval: parameter.GameUpdateInterval,
-		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
+		scale: engine.ScaleNormal}
 	p.key(terminal.Event{Key: terminal.KeyRune, Rune: ' '})
 	if !p.paused || p.live {
 		t.Fatal("recorded network participant was treated as a live bot")
@@ -297,7 +297,7 @@ func replayPlayer(t *testing.T, set journal.Set, edit func(*Config)) *player {
 	}
 	shown := &replayCopy{a: a, src: journalSource{d, a.log}}
 	p := &player{a: a, src: shown.src, interval: parameter.GameUpdateInterval,
-		rec: engine.ScaleNormal, scale: engine.ScaleNormal}
+		scale: engine.ScaleNormal}
 	p.rw = newRewinder(shown, a, replayCopies(a, cfg, stream, NewHeadless))
 	t.Cleanup(func() {
 		p.rw.close()

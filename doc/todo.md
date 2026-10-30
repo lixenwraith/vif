@@ -26,8 +26,7 @@ What vanguard met in the machine and is still open, its certain faults having
 landed. Open items elsewhere it meets:
 [payload field names at load](#check-payload-field-names-against-their-event-at-load),
 [a program spawning another](#let-a-program-spawn-another-program),
-[attack and materialize rows](#give-data-species-attack-and-materialize-rows-of-their-own)
-and [a one-tick defeat in a session](#forgive-a-one-tick-defeat-in-a-session-as-solo-play-does).
+and [attack and materialize rows](#give-data-species-attack-and-materialize-rows-of-their-own).
 
 #### Give a program's entrance an entering state
 
@@ -651,6 +650,22 @@ What would close it:
 - A test per case on the probe's shape, with `meshSession` handing back its mesh:
   participant 3 follows 2 at term 2, and no Wraith but the lost host's remains.
 
+### Cross a departure a reset dropped
+
+- Priority: P2
+- Affected files: `internal/system/network.go` (`Init`, `announceDeparture`),
+  `internal/app/transport_test.go`
+
+A link lost within a lead of a reset loses its departure: the reset clears the
+barrier (`NetworkSystem.Init` drops `scheduled` and `departed`) before the
+departure crossed for it applies, and the next game rebuilds that participant's
+cursor from the roster as a live one nobody drives, which never turns Wraith, never
+times out and holds the slot its claim comes back for: a player who quits as its
+defeat ends the game can leave one. `TestTwoLiveParticipantsConvergeOverTCP` shows
+it once its scripted defeat's reset is moved into the disconnect's lead. What would
+close it: after a reset the authority crosses, once, the departure of every
+rostered participant it neither links nor carries.
+
 ### Publish a player's session at the router
 
 - Priority: P3
@@ -798,56 +813,42 @@ to watch: [Run a scenario with no players](#run-a-scenario-with-no-players).
 
 ## Netcode
 
-### Let a session's host set its speed
+### Cap a session's rate at what it carries
 
-- Priority: P1
-- Affected files: `internal/system/meta.go` (`handleSpeedRequest`,
-  `handleStepRequest`), `internal/system/network.go` (`admissibleFromSource`),
-  `internal/engine/game_context.go` (`ResetSessionState`), `internal/app/seat.go`
-  (`seatConfigLocked`), `internal/app/script.go` (`scriptPacing`),
-  `internal/converge/authority.go`, `internal/parameter/network.go`
-- Guide: [Runtime §9](runtime.md#9-time-control),
-  [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
+- Priority: P2
+- Affected files: `internal/system/meta.go` (`handleSpeedRequest`),
+  `internal/converge/authority.go`, `internal/system/network.go` (`ownLead`),
+  `internal/engine/scheduler.go`, `internal/parameter/network.go`
+- Guide: [Multi-player §3.6](multi-player.md#36-holding-a-session),
+  [§3.5](multi-player.md#35-command-frames-the-commit-and-pacing)
 
-A rate chosen solo stays for the life of any session the run opens, and nobody can
-change it. `:speed` and `:step` are refused once `Session().Live` is set, which
-`:host` and the first `:bot add` both do (`handleSpeedRequest`); `:new!` keeps the
-rate in a live session (`ResetSessionState`); a guest adopts the host's from the
-offer's anchor (`ConfigForJoin`). A host at 2x cannot bring a person who joins back
-to 1x, short of leaving the session.
+A session's rate is its host's (`EventGameSpeed`), every participant and seat paces
+at it, and the authority's budgets count a second of game time; nothing caps it.
+The simulation step is fixed, so a rate moves wall pacing alone, and every
+tick-counted window shrinks with it: at 8x a tick is 6.25 ms, the largest lead
+(`NetworkBarrierMaxDelayTicks`, 20) covers 125 ms instead of a second, a crossing
+that much late is void (`NetworkCommitLateTicks`), and syncs, epochs and
+corrections come eight times as often. A LAN hides this: a host at 8x with a guest,
+its bot and one of the host's held 155 ticks a second (7.7x), and two seats under an
+8x patrol holder ran 478 and 479 ticks in 3 s, none of 114 and 124 corrections
+jumping their clocks (on the main before the rate crossed, 25 of 29 and 29 of 29
+did). Over the internet it shows as voided actions (`network.commit_void`), a lead
+at its cap (`network.barrier_delay_ticks`) and corrections.
 
-Bot seats run at another rate than their holder: a seat's config carries none, so
-`scriptPacing` paces it at 1x and corrections drag it along. Two roam seats under a
-patrol holder, 3 s each: at 1x no correction jumped a seat's clock (0 of 13 and 0
-of 14); at 8x nearly all did (29 of 29 and 25 of 26, `snapshot.corrections_jumped`).
-A seat at 8x plays a world that leaps forward each correction instead of one it
-simulates.
-
-What closes it:
-- The rate becomes the authority's, as the hold is
-  ([Multi-player §3.6](multi-player.md#36-holding-a-session)): `:speed` on the
-  authority crosses as an event only the coordinator may author
-  (`admissibleFromSource`) and every instance sets it at its apply tick; a replay's
-  presentation, paced by the opening rate (`JournalAnchor.Speed`), follows it. A
-  guest's `:speed` is refused or asks the host; `:step` and breakpoints stay solo.
-  A host with only its own seats (`SessionState.SeatsOnly`) changes it as solo.
-- A seat paces at its holder's rate, read live, not from its config.
-- A ceiling. The simulation step is fixed, so a rate moves only wall pacing, but
-  every tick-counted window shrinks with it. At 8x a tick is 6.25 ms: the largest
-  lead (`NetworkBarrierMaxDelayTicks`, 20) covers 125 ms instead of a second, a
-  crossing that much late is void (`NetworkCommitLateTicks`), and syncs, epochs and
-  corrections come eight times as often. The wall-time budgets do not scale: a
-  playing guest uses about a sixth of `NetworkIngressBytesPerSecond` at 1x, so a
-  busy one passes it near 6x and is evicted, and `-slow-late` counts late epochs a
-  second. A LAN hides this: a host at 8x with a guest, its bot and one of the
-  host's held 155 ticks a second (7.7x). Over the internet it shows as voided
-  actions (`network.commit_void`), a lead at its cap
-  (`network.barrier_delay_ticks`) and evictions. Cap the rate the authority takes
-  at the highest its worst link carries with headroom, and scale the per-second
-  budgets by the rate.
-- No arrival changes the rate, a person's or a bot's: the host sets it, and while
-  it is not 1x every participant's status bar warns that the game runs fast or
-  slow, at what rate.
+Decisions it waits on:
+- What caps it. Measured: the authority refuses a rate at which its worst link's
+  path, read in wall time from the epochs' ages at commit (`WireBatch.Age`), needs
+  a lead past `NetworkBarrierMaxDelayTicks` with headroom, or at which its tick's
+  cost passes the interval (the gauge [shedding](#shed-load-when-a-host-cannot-keep-its-tick)
+  asks for). Static: a session with a remote guest caps at one rung, seats and a
+  LAN aside. Or the windows become wall durations at the rate, which keeps a lead a
+  second at any rate and lands a guest's action eight seconds of game time late
+  at 8x.
+- The headroom, measured at each rung: the share of the lead cap and of the
+  interval a rate may use.
+- What a refused `:speed` says, and whether a cap that falls below the rate in
+  force, a link degrading at 4x, lowers it: shedding's first valve.
+- Whether a guest's `:speed` stays refused or asks the host.
 
 Verify with the staged netem gate
 (`TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers`, `VIF_NETEM=1` as root)
@@ -871,7 +872,7 @@ so refuse none up front; gauge and relieve instead:
   against its interval at the current rate (no `engine.` key publishes the cost
   today), the worst lead in force, commit voids and correction floor breaches.
 - Valves, one at a time, each announced to every participant: lower the session
-  rate a step ([Let a session's host set its speed](#let-a-sessions-host-set-its-speed)),
+  rate a step (`EventGameSpeed`, which every participant and seat already follows),
   drop bots newest first and tell their holders, stop admitting joins, then drop a
   participant with a reason its client prints
   ([Let an authority drop a participant](#let-an-authority-drop-a-participant)) or
@@ -880,26 +881,18 @@ so refuse none up front; gauge and relieve instead:
   after the gauges stay under a lower threshold, so the session does not swing.
   Thresholds are parameters, with an off switch as `-slow-window 0` is.
 
+Decisions it waits on:
+- Who opens a valve: the authority on its own, the host told and choosing (a status
+  line and a menu row), or the authority on its own only where nobody plays it, a
+  dedicated host.
+- Whether the rate valve goes below 1x, the cheapest relief there is but a slower
+  game for everyone, or stops at 1x and leaves the rest to the later valves.
+- Which gauge opens which valve, and over what window: measured on
+  [Measure a full roster](#measure-a-full-roster), a rate cap's tick cost included.
+- What every participant reads: one sentence per valve, its notice and the refusal
+  of what it closed being the same.
+
 Related: [Measure a full roster](#measure-a-full-roster).
-
-### Forgive a one-tick defeat in a session as solo play does
-
-- Priority: P2
-- Affected files: `internal/system/energy.go`, `internal/system/heat.go`,
-  `internal/system/combat.go`, `internal/system/meta.go`
-
-A cursor's defeat (`pushDefeatTransition`) and the gun hits that pay energy back
-(`applyEnergyDrain`, 100 a hit) each cross the barrier. Solo, a cursor standing on a
-pylon reached zero heat and energy on a tick whose four hits paid 400 back, so the
-defeat and its undoing landed in that tick and the monitor never saw it. Hosted,
-both land a lead later, and the recovery the hits' energy produces crosses only
-then, so `session.any_defeated` reads true for a lead (3 ticks) and td's monitor
-ended the run every time. Options: a monitor that confirms a defeat lasting longer
-than a lead, or the hit's reward paid as the owner's own energy when it fires, so a
-defeat and its undoing cross in one batch.
-Proper approach is a few second immunity period. Consider having cursor as Wraith till
-world is settled, and then allow play. Visual representation of Wraith state for the local
-and remote cursors to be added.
 
 ### Price the log's and journal's 50 ms sync
 
@@ -953,19 +946,36 @@ authority with no peers.
 
 At time scale 8x vanguard's parallax reads as depth on its own, every layer stepping
 at least twenty times a second; a faster tick would give every motion that, where
-the renderer now carries only scenery and the cave between ticks. `GameUpdateInterval` (50 ms)
-is a constant: a frame is a third of it, `SimTime` derives each tick's instant from
-it, and parameters count in ticks, the network's windows most
-(`NetworkBarrierDelayTicks`, `NetworkPaceStepTicks`, `SnapshotFloorKeyframeTicks`
-and the rest), so a shorter tick shortens each of them in time. Every participant
-of a session must step the same interval, so it would travel in the session's
-handshake and the journal, and a session's traffic per second, command frames,
-epochs and corrections, grows with the rate, as it already does for a session run
-above 1x ([Let a session's host set its speed](#let-a-sessions-host-set-its-speed)).
-Vanguard's rock is drawn at the frame's moment but blocks where its tick left it, so
-what it hits follows the interval. The smallest step is an interval set per run and carried
-where every participant reads it, the tick-counted windows derived from durations,
-and the divergence harness run at two intervals.
+the renderer now carries only scenery and the cave between ticks.
+`GameUpdateInterval` (50 ms) is a constant: a frame is a third of it, `SimTime`
+derives each tick's instant from it, and parameters count in ticks, the network's
+windows most (`NetworkBarrierDelayTicks`, `NetworkPaceStepTicks`,
+`SnapshotFloorKeyframeTicks` and the rest), so a shorter tick shortens each of them
+in time, and a session's traffic a second grows with it as it does with a session
+rate above 1x ([Cap a session's rate at what it carries](#cap-a-sessions-rate-at-what-it-carries)).
+Vanguard's rock is drawn at the frame's moment but blocks where its tick left it,
+so what it hits follows the interval.
+
+The interval already travels: the handshake's build identity
+(`PeerIdentity.TickIntervalNS`), the join's anchor fields
+(`sessionAnchorFields`), the journal anchor and the capture header carry it, each
+compared against the build's constant, which a replay refuses a journal on. An
+interval per run compares against the run's instead.
+
+Decisions it waits on:
+- Per build or per run. A build ticking at 25 ms halves every window for every
+  session, the internet's included; one per run, carried where it already travels,
+  keeps 50 ms where links are slow and lets a solo run or a LAN tick faster.
+- Which tick counts are durations: each `*Ticks` parameter that means time (leads,
+  the late bound, syncs, pace windows, keyframe floors, FSM delays) derives from a
+  duration at the interval; one that means a count (rings, sequence windows) stays.
+  The classification is a list to make, one parameter at a time.
+- The frame: a third of the tick at 25 ms is 120 a second, or the frame decouples
+  from the tick.
+- What content means by a tick: a scenario's tick-counted rule plays faster at a
+  shorter interval unless it is authored in time.
+
+Then the divergence harness at two intervals.
 
 ## Session membership
 
@@ -988,44 +998,6 @@ prints, playing on alone as after `:leave` instead of starting over, and an
 operator route on the router, since a dedicated host has no console. Keeping a
 dropped player out is a separate decision: the session name is a routing key, not
 an identity.
-
-### Show a Wraith as a Wraith
-
-- Priority: P2
-- Affected files: `internal/render/renderer/shield.go` (`ShieldRenderer.Render`,
-  `ShieldPainter`), `internal/render/renderer/peer_cursor.go`,
-  `internal/parameter/visual/shield.go` (`buildShieldConfig`),
-  `internal/parameter/player.go`, `internal/parameter/visual` colours
-- Guide: [Multi-player §5.4](multi-player.md#54-wraiths)
-
-A Wraith, a person's or a bot's, reads as one more cursor: the peer renderer draws
-it as its slot label alone, in the slot's colour, where a live peer's label sits on
-that colour. Give it the boost's look, paler and slower, so every player sees who is
-away.
-
-The boost's look is the player shield's rotating glow: `ShieldRenderer` paints the
-field with `GlowPeriod` set to `ShieldBoostRotationDuration` (500 ms) while boost is
-active, and `ShieldPainter` rotates the bright side by game time, in truecolor a
-gradient with a glow lobe, in 256 colours a rim band (`Rim256Min`..`Rim256Max`)
-whose cells facing the lobe take the glow colour. A Wraith has no shield to paint:
-`CursorSystem.wraith` strips everything but `Cursor`, `Protection` and the `Wraith`
-component, which holds the cell it stood on (`X`, `Y`, -1 off the map).
-
-The plan:
-- A Wraith field config built by `buildShieldConfig` on the player shield's
-  geometry: a pale truecolor field and glow (near white, a little cool), a green
-  256 rim with a paler green glow, and a glow period well above the boost's (a
-  `WraithGlowPeriod` near 1.5 s, tuned live), in the parameter packages beside the
-  shield's.
-- `ShieldRenderer.Render` paints it for each Wraith at its held cell, skipping one
-  off the map, before its early return on no shields, and blended as a peer field
-  is (`PeerFieldBlend`) so a Wraith never outshines a live cursor. The holder's own
-  bots draw the same, since nobody drives a Wraith and the local cursor is never
-  one.
-- The label stays the peer renderer's, drawn over the field.
-- A renderer test in each colour mode: field cells around a Wraith's cell, none for
-  one off the map, and the lit side moving between two game times a quarter period
-  apart. Then a look in tmux at both tiers (`TERM=linux COLORTERM=` for 256).
 
 ### Keep a Wraith's stats in the session
 

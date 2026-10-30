@@ -63,6 +63,7 @@ const (
 	// Loot256Rim is the magenta the Linux console showed its rose rim as, which reads well
 	Loot256Rim        = ConBrightMagenta
 	Quasar256Rim      = ConWhite
+	Wraith256Rim      = ConGreen
 	Bullet256StormRed = ConBrightRed
 	Bullet256Player   = ConBrightBlue
 )

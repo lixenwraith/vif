@@ -150,6 +150,65 @@ func TestTheBarrierHoldsAnInputToTheTicksItCouldBeMadeAt(t *testing.T) {
 	}
 }
 
+// TestADefeatSettlesBeforeItCrosses: a cursor's defeat waits on its owner's barrier
+// for the crossings it made by the close of the defeat's tick, so one the energy a
+// hit already on its way pays back undoes never crosses, as one tick settles both
+// in solo play; with nothing on its way, a defeat crosses as it is made.
+func TestADefeatSettlesBeforeItCrosses(t *testing.T) {
+	t.Parallel()
+	s := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1}})
+	s.Flush(100)
+	defeat := func(down bool) {
+		s.world.PushCrossing(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: 7, Defeated: down})
+	}
+	hit := func() { s.world.PushCrossing(event.EventInputPressed, &event.InputPayload{Key: "1"}) }
+	crossed := func() (ticks []uint64) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for _, a := range s.scheduled {
+			if a.frame.Event == event.EventCursorDefeatState {
+				ticks = append(ticks, a.applyTick)
+			}
+		}
+		return ticks
+	}
+	lead := uint64(parameter.NetworkBarrierDelayTicks)
+
+	hit()
+	defeat(true)
+	for tick := uint64(101); tick < 101+lead; tick++ {
+		s.Flush(tick)
+	}
+	defeat(false) // the energy the hit paid back as it applied
+	s.Flush(101 + lead)
+	if got := crossed(); len(got) != 0 {
+		t.Fatalf("a defeat its hit undid crossed, at %v", got)
+	}
+
+	hit()
+	defeat(true)
+	for tick := 102 + lead; tick < 102+2*lead; tick++ {
+		s.Flush(tick)
+	}
+	if got := crossed(); len(got) != 0 {
+		t.Fatalf("a defeat crossed before its hit applied, at %v", got)
+	}
+	s.Flush(102 + 2*lead)
+	if got := crossed(); len(got) != 1 || got[0] != 102+3*lead {
+		t.Fatalf("a defeat that stood crossed at %v, want once at %d", got, 102+3*lead)
+	}
+
+	defeat(false)
+	for tick := 103 + 2*lead; tick <= 103+3*lead; tick++ {
+		s.Flush(tick)
+	}
+	defeat(true)
+	s.Flush(104 + 3*lead)
+	if got := crossed(); len(got) != 3 || got[2] != 104+4*lead {
+		t.Fatalf("defeats crossed at %v, the last with nothing on its way want at %d", got, 104+4*lead)
+	}
+}
+
 // TestACommittedCopyRestartsItsHopCount: the authority originates the copy it
 // commits, so a raw path that spent most of the hop limit cannot strand it on the
 // way back to the relays behind it.

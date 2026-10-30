@@ -358,7 +358,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:quit`, `:q` | Exit. |
 | `:pause [on\|off]`, `:p` | Hold the game until the next `:pause`; in a live session only the host may, every participant stops at the same tick, and a joiner lands held. `:step` ends a solo hold, `:new` any. |
 | `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and every participant resets. |
-| `:new!`, `:n!` | Reset, clear the initiating operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and speed to their startup values. |
+| `:new!`, `:n!` | Reset, clear the initiating operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and speed to their startup values; a live session keeps its host's speed. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:g`, `:config` | Open the [configuration menu](config-menu.md). |
@@ -375,7 +375,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:player [drop <slot>]` | List all players and bots. Host-only removal drops the player and its bots, or one bot alone; uses the same slot grammar. |
 | `:system <runtime-name> enable\|disable`, `:s` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |
-| `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate. |
+| `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate; in a live session only the host sets it, and every participant changes at the same tick. |
 | `:step [n]`, `:st` | Pause and advance complete ticks. |
 | `:step [rate] fsm [region] [pause]` | Run until an FSM transition, optionally pausing there. |
 | `:step [rate] ev <Event> [pause]` | Run until the named event is dispatched. |
@@ -400,11 +400,12 @@ The event registry validates `:emit` names and uses generated payload type
 metadata to decode optional inline TOML. Rows from `:system` down are mainly
 developer and authoring controls.
 
-In a live session, pause, speed, step, breakpoints, system mutation, raw `:emit` and
-FSM region operations are refused because applying them to only one scheduler would
+In a live session, pause, step, breakpoints, system mutation, raw `:emit` and FSM
+region operations are refused because applying them to only one scheduler would
 desynchronise shared state. Pause alone is allowed to the authority while every
 other participant is its own bot, which stands still with it; an arrival ends the
-pause. The host's `:pause` crosses instead, so it stops everyone. Help, telemetry
+pause. The host's `:pause` crosses instead, so it stops everyone, and its `:speed`
+crosses so everyone changes rate; a guest's is refused. Help, telemetry
 and about overlays stay local and do not pause, logging and view controls are local
 inspection, and resizes retain D-14's locked map bounds. Player grants and effect
 commands remain available because they author the invoking cursor or use the

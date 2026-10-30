@@ -176,7 +176,7 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 	// but may not mutate shared scheduling, systems or FSM configuration locally.
 	if ctx.World.LiveSession() {
 		switch cmd {
-		case "sp", "speed", "st", "step", "s", "system", "e", "emit", "event", "r", "region":
+		case "st", "step", "s", "system", "e", "emit", "event", "r", "region":
 			return "Unavailable in a live session"
 		}
 	}
@@ -1471,6 +1471,10 @@ func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
 		ctx.SetStatusMessage("Speed "+cur.String()+"x", parameter.StatusNotice)
 		return CommandResult{Continue: true}
 	}
+	if why := speedRefused(ctx); why != "" {
+		setCommandError(ctx, why)
+		return CommandResult{Continue: true}
+	}
 
 	var next engine.TimeScale
 	switch strings.ToLower(args[0]) {
@@ -1492,6 +1496,15 @@ func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
 	ctx.PushLocal(event.EventGameSpeedRequest, &event.GameSpeedPayload{Num: next.Num, Den: next.Den})
 	ctx.SetStatusMessage("Speed "+next.String()+"x", parameter.StatusNotice)
 	return CommandResult{Continue: true}
+}
+
+// speedRefused is why this instance may not set the rate: in a live session that is
+// the host's alone, since every participant runs at it.
+func speedRefused(ctx *engine.GameContext) string {
+	if ctx.World.LiveSession() && !ctx.World.IsSessionCoordinator() {
+		return "Only the host can change the speed in a live session"
+	}
+	return ""
 }
 
 // handleStepCommand advances the paused simulation or arms a run-until breakpoint

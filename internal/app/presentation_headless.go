@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"os"
-	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/mode"
@@ -63,6 +62,6 @@ func PlayJournal(Config, ...string) error {
 	return fmt.Errorf("journal presentation is unavailable in a vif_headless build")
 }
 
-func runPresented(*App, pacedSource, string, string, time.Duration, bool, <-chan os.Signal) error {
+func runPresented(*App, pacedSource, string, string, bool, <-chan os.Signal) error {
 	return fmt.Errorf("presentation is unavailable in a vif_headless build")
 }

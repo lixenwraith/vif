@@ -576,10 +576,14 @@ func TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom(t *testing.T) {
 		}
 	}
 
-	// The region ends, and the owner's effects end with it: a scoped hold that
-	// nothing released would stop that participant's drains for the rest of the run.
-	for range 24 {
+	// The region ends, here with the run once its idle cursors are defeated, and the
+	// owner's effects end with it: a scoped hold that nothing released would stop that
+	// participant's drains for the rest of the run.
+	for range 48 {
 		tickAll(apps)
+		if quasarState(apps[0]) == "-" && quasarState(apps[1]) == "-" {
+			break
+		}
 	}
 	for i, a := range apps {
 		if s := quasarState(a); s != "-" {

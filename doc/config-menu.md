@@ -48,7 +48,7 @@ unavailable in this run`).
 | Audio | Sound effects, their volume in 5% steps, music. |
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
 | Display | Telemetry HUD and clearing its pins, navigation flow field and route graph. |
-| Simulation | Solo speed from 1/8x through 8x; a replay's restart. |
+| Simulation | Speed from 1/8x through 8x, in a session the host's; a replay's restart. |
 | Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth, FSM trigger and flush, profiler, CPU/heap/mutex profiles and execution trace, telemetry snapshot, the replay journal toggle. |
 | Startup settings | Guidance for paths/scenario, audio device/buffer, colour depth, key bindings and identity. |
 
