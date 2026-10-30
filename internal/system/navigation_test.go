@@ -99,12 +99,12 @@ func TestNavigationOnTheWallLogStandsAsAWholeReread(t *testing.T) {
 					t.Fatalf("seed %d tick %d: navigator %d steers %+v on the log, %+v on a reread", seed, tick, i, steer[i], n)
 				}
 			}
-			if !slices.Equal(logged.walls, reread.walls) || logged.gen != reread.gen || len(logged.tiers) != len(reread.tiers) {
+			if !slices.Equal(logged.walls.Words, reread.walls.Words) || logged.gen != reread.gen || len(logged.tiers) != len(reread.tiers) {
 				t.Fatalf("seed %d tick %d: walls, generations or tiers differ", seed, tick)
 			}
 			for i, lt := range logged.tiers {
 				rt := reread.tiers[i]
-				if lt.foot != rt.foot || lt.gen != rt.gen || lt.pass != nil && !slices.Equal(lt.pass.Valid, rt.pass.Valid) {
+				if lt.foot != rt.foot || lt.gen != rt.gen || lt.pass != nil && !slices.Equal(lt.pass.Bits().Words, rt.pass.Bits().Words) {
 					t.Fatalf("seed %d tick %d: tier %d differs", seed, tick, i)
 				}
 				for y := range cfg.MapHeight {
@@ -192,7 +192,7 @@ func TestABodyTheEyeDoesNotHoldRoutesByATierOfItsOwn(t *testing.T) {
 		t.Fatal(err)
 	}
 	again, _ := joiner.SaveShared()
-	if !bytes.Equal(phase, again) || joiner.tierOf(big) != tier || !slices.Equal(joiner.tiers[tier].pass.Valid, nav.tiers[tier].pass.Valid) {
+	if !bytes.Equal(phase, again) || joiner.tierOf(big) != tier || !slices.Equal(joiner.tiers[tier].pass.Bits().Words, nav.tiers[tier].pass.Bits().Words) {
 		t.Fatal("an install did not derive the tier its capture names")
 	}
 }

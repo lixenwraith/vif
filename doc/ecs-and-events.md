@@ -143,11 +143,12 @@ cell, and `ShiftRock` moves it a column left with the column entering; then from
 plane of bits the index keeps for the mask, a bit a cell, built from the cells on
 the mask's first query and brought to a cell's shared occupants whenever a wall is
 placed, moved, removed or remasked there (`Position.wallOf` names a wall and what
-it stops), so a point is a bit and an area a few words a row. `WallTest` copies a
-plane into the caller's grid. The rock's look (`RockLook`) stays the engine's,
-beside the field. `WallTest` serves a derivation that probes every cell from a
-per-mask plane: a wall's placement and its store membership bring the plane to the cell,
-and a `BlockMask` written in place calls `Position.WallChanged` for its wall. The
+it stops), so a point is a bit and an area a few words a row, and the rock's
+bits move a column with it. `WallBits` hands a reader deriving whole the plane's
+words with the rock's (`position.Bits`, which navigation derives its passability
+from). The rock's look (`RockLook`) stays the engine's, beside the field. A wall's
+placement and its store membership bring the plane to the cell, and a `BlockMask`
+written in place calls `Position.WallChanged` for its wall. The
 same changes log the cells they can have turned, both cells of a wall's move and each
 cell a rock shift crossed, and `Position.WallChanges` hands a reader that keeps
 its own copy of the answers those cells since the sequence it last read, so a

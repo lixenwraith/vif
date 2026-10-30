@@ -31,7 +31,7 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 		e    entity
 		x, y int
 	}
-	var buf []bool
+	var buf []uint64
 	for step := range 3000 {
 		switch rng.IntN(12) {
 		case 0, 1, 2, 3:
@@ -110,11 +110,12 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 		}
 		if step%50 == 0 {
 			mask := masks[rng.IntN(len(masks))]
-			test := x.WallTest(mask, &buf)
+			bits := x.WallBits(mask, buf)
+			buf = bits.Words
 			for py := range h {
 				for px := range w {
-					if got, want := test(px, py), x.Blocks(px, py, mask); got != want {
-						t.Fatalf("step %d mask %d at (%d,%d): WallTest %t, Blocks %t", step, mask, px, py, got, want)
+					if got, want := bits.Bit(px, py), x.Blocks(px, py, mask); got != want {
+						t.Fatalf("step %d mask %d at (%d,%d): WallBits %t, Blocks %t", step, mask, px, py, got, want)
 					}
 				}
 			}
