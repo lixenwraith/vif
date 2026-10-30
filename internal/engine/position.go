@@ -364,12 +364,11 @@ func (p *Position) ClearAllComponents() {
 
 // --- Wall ---
 
-// WallTest returns HasBlockingWallAt for mask as a grid copied into buf on its first
-// call, reused across calls. A derivation that probes every cell several times pays
-// one copy instead; it is exact while walls cannot change.
-// SYNC: caller holds World.updateMutex for as long as it calls the result
-func (p *Position) WallTest(mask component.WallBlockMask, buf *[]bool) func(x, y int) bool {
-	return p.index.WallTest(mask, buf)
+// WallBits returns HasBlockingWallAt for mask as a grid of bits in buf's storage,
+// exact while walls cannot change.
+// SYNC: caller holds World.updateMutex for as long as it reads the result
+func (p *Position) WallBits(mask component.WallBlockMask, buf []uint64) position.Bits {
+	return p.index.WallBits(mask, buf)
 }
 
 // WallsChanged moves the wall epoch for walls rewritten wholesale, an install's,

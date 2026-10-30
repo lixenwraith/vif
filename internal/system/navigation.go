@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"github.com/lixenwraith/vif/pkg/position"
 	"slices"
 	"sync/atomic"
 
@@ -62,9 +63,9 @@ type NavigationSystem struct {
 	// tiers are the point tier, the eye's, which every body it covers rides, then one
 	// for each other footprint a navigator or a route graph needs, in footprint order
 	tiers []*navTier
-	// walls are what everything derived stands on, wallsW×wallsH, read from the
-	// cells the wall log named since wallsSeq; scratch takes a whole re-read
-	walls, scratch []bool
+	// walls are what everything derived stands on, wallsW×wallsH as bits, read
+	// from the cells the wall log named since wallsSeq; scratch takes a whole re-read
+	walls, scratch position.Bits
 	wallsW, wallsH int
 	wallsSeq       uint64
 
@@ -239,7 +240,16 @@ func (s *NavigationSystem) resize(width, height int) {
 
 // wallAt is the walls everything derived stands on, none off them
 func (s *NavigationSystem) wallAt(x, y int) bool {
-	return x >= 0 && y >= 0 && x < s.wallsW && y < s.wallsH && s.walls[y*s.wallsW+x]
+	return x >= 0 && y >= 0 && x < s.wallsW && y < s.wallsH && s.walls.Bit(x, y)
+}
+
+// blockedBits is blocked as a grid of bits: the walls on the point tier, the
+// headers no footprint fits on on a composite one
+func (t *navTier) blockedBits(s *NavigationSystem) position.Bits {
+	if t.pass == nil {
+		return s.walls
+	}
+	return t.pass.Bits()
 }
 
 // blocked is the test a tier's grid and route graphs read: the walls on the point
@@ -264,7 +274,7 @@ func (s *NavigationSystem) applyWalls() {
 	// searched on them: those are refilled before any change, which may find nothing
 	if s.derived && s.gridsAt != point.gen {
 		for _, t := range s.tiers {
-			t.grid.Fill(w, h, t.blocked(s))
+			t.grid.FillBlocked(w, h, t.blockedBits(s))
 		}
 		s.gridsAt = point.gen
 	}
@@ -294,10 +304,9 @@ func (s *NavigationSystem) applyWalls() {
 	}
 	switch {
 	case whole || !logged:
-		test := s.world.Positions.WallTest(component.WallBlockKinetic, &s.scratch)
-		test(-1, -1) // the first call copies the grid
+		s.scratch = s.world.Positions.WallBits(component.WallBlockKinetic, s.scratch.Words)
 		if !whole {
-			navigation.Diff(s.walls, s.scratch, ww, turned)
+			position.Diff(s.walls, s.scratch, ww, turned)
 		}
 		s.walls, s.scratch, s.wallsW, s.wallsH = s.scratch, s.walls, ww, wh
 	default:
@@ -305,9 +314,8 @@ func (s *NavigationSystem) applyWalls() {
 			if c.X < 0 || c.Y < 0 || c.X >= ww || c.Y >= wh {
 				continue
 			}
-			i := c.Y*ww + c.X
-			if blocked := s.world.Positions.HasBlockingWallAt(c.X, c.Y, component.WallBlockKinetic); blocked != s.walls[i] {
-				s.walls[i] = blocked
+			if blocked := s.world.Positions.HasBlockingWallAt(c.X, c.Y, component.WallBlockKinetic); blocked != s.walls.Bit(c.X, c.Y) {
+				s.walls.Put(c.X, c.Y, blocked)
 				turned(c.X, c.Y, blocked)
 			}
 		}
@@ -337,7 +345,7 @@ func (s *NavigationSystem) applyWalls() {
 	for _, t := range s.tiers[1:] {
 		// Every header whose footprint covers a changed cell may fit differently.
 		s.statROICells.Add(int64((len(point.closed) + len(point.opened)) * t.foot.Width * t.foot.Height))
-		t.pass.Moved(point.closed, point.opened, func(x, y int, valid bool) {
+		t.pass.Moved(s.walls, point.closed, point.opened, func(x, y int, valid bool) {
 			if valid {
 				t.opened = append(t.opened, vmath.Point{X: x, Y: y})
 			} else {
@@ -365,9 +373,9 @@ func (s *NavigationSystem) applyWalls() {
 func (s *NavigationSystem) derive(t *navTier) {
 	config := s.world.Resources.Config
 	if t.pass != nil {
-		t.pass.Compute(s.wallAt)
+		t.pass.Compute(s.walls)
 	}
-	t.grid.Fill(config.MapWidth, config.MapHeight, t.blocked(s))
+	t.grid.FillBlocked(config.MapWidth, config.MapHeight, t.blockedBits(s))
 	s.gen++
 	t.gen = s.gen
 }
@@ -1440,7 +1448,7 @@ func restoreField(c *navigation.FlowFieldCache, at, gen uint64, grid *navigation
 type navState struct {
 	groups            map[uint8]targetGroupNav
 	tiers             []navTier
-	walls             []bool
+	walls             position.Bits
 	wallsW, wallsH    int
 	gen               uint64
 	derived           bool
@@ -1453,7 +1461,7 @@ type navState struct {
 // CopyState carries every field and route a copy would otherwise rebuild, and the
 // phase each was rebuilt in, which LoadShared re-derives as a joiner would.
 func (s *NavigationSystem) CopyState() any {
-	c := navState{groups: make(map[uint8]targetGroupNav, len(s.groups)), walls: slices.Clone(s.walls),
+	c := navState{groups: make(map[uint8]targetGroupNav, len(s.groups)), walls: s.walls.Clone(),
 		wallsW: s.wallsW, wallsH: s.wallsH, gen: s.gen, derived: s.derived, targets: s.targets, routeRebuildTicks: s.routeRebuildTicks,
 		refreshTicks: s.refreshTicks, graphs: s.world.Resources.RouteGraph.Graphs()}
 	for _, t := range s.tiers {
@@ -1477,7 +1485,7 @@ func (s *NavigationSystem) RestoreState(v any) error {
 		n := t.copy()
 		s.tiers = append(s.tiers, &n)
 	}
-	s.walls, s.wallsW, s.wallsH, s.gen, s.derived = slices.Clone(c.walls), c.wallsW, c.wallsH, c.gen, c.derived
+	s.walls, s.wallsW, s.wallsH, s.gen, s.derived = c.walls.Clone(), c.wallsW, c.wallsH, c.gen, c.derived
 	s.gridsAt, s.wallsSeq = 0, 0
 	s.targets, s.routeRebuildTicks, s.refreshTicks = c.targets, c.routeRebuildTicks, c.refreshTicks
 	s.world.Resources.RouteGraph.SetGraphs(c.graphs)

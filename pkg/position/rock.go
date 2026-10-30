@@ -10,7 +10,7 @@ type Column struct {
 func (c Column) Rock(y int) bool { return y < c.Ceil || y >= c.Floor }
 
 // Rock is rock no entity holds, a column for each map column from x 0, blocking
-// Mask as a wall does; every wall query reads it beside the blockers. Its writer
+// Mask as a wall does; every wall query reads it before the cells. Its writer
 // lays it from state of its own, so a capture carries that state and never the
 // field. Origin is the profile column at map column 0, which what draws the rock
 // anchors to.
@@ -41,41 +41,6 @@ func (r *Rock) Column(x int) (Column, bool) {
 	return r.cols[x], true
 }
 
-// blocks reports whether the field's rock fills (x, y) for mask (0 = any wall);
-// the caller has bounded y by the map
-func (r *Rock) blocks(x, y int, mask Mask) bool {
-	if x < 0 || x >= len(r.cols) || (mask != 0 && r.Mask&mask == 0) {
-		return false
-	}
-	return r.cols[x].Rock(y)
-}
-
-// blocksArea reports whether the field's rock fills any cell of [x0, x1) × [y0, y1)
-// for mask; the caller has bounded the rows by the map
-func (r *Rock) blocksArea(x0, y0, x1, y1 int, mask Mask) bool {
-	if (mask != 0 && r.Mask&mask == 0) || y0 >= y1 {
-		return false
-	}
-	for x := max(x0, 0); x < min(x1, len(r.cols)); x++ {
-		if c := r.cols[x]; y0 < c.Ceil || y1 > c.Floor {
-			return true
-		}
-	}
-	return false
-}
-
-// mark sets every rock cell within w×h in cells
-func (r *Rock) mark(w, h int, cells []bool) {
-	for x, c := range r.cols[:min(len(r.cols), w)] {
-		for y := range min(c.Ceil, h) {
-			cells[y*w+x] = true
-		}
-		for y := max(c.Floor, 0); y < h; y++ {
-			cells[y*w+x] = true
-		}
-	}
-}
-
 // Rock returns the rock field, or nil when none stands; it changes only through
 // SetRock, SetRockAhead and ShiftRock.
 func (x *Index[E]) Rock() *Rock { return x.rock }
@@ -86,14 +51,38 @@ func (x *Index[E]) SetRock(mask Mask, origin int64, cols []Column) {
 	x.log.lose()
 	if len(cols) == 0 {
 		x.rock = nil
+	} else {
+		if x.rock == nil {
+			x.rock = &Rock{}
+		}
+		x.rock.Mask, x.rock.Origin = mask, origin
+		x.rock.cols = append(x.rock.cols[:0], cols...)
+		x.rock.ahead = x.rock.ahead[:0]
+	}
+	if !x.stale {
+		x.layRock()
+	}
+}
+
+// layRock sets the rock's bits from its columns, within the grid
+func (x *Index[E]) layRock() {
+	x.rockBits = x.rockBits.sized(Stride(x.Width), x.Height)
+	if x.rock == nil {
 		return
 	}
-	if x.rock == nil {
-		x.rock = &Rock{}
+	for px, c := range x.rock.cols[:min(len(x.rock.cols), x.Width)] {
+		x.layColumn(px, c)
 	}
-	x.rock.Mask, x.rock.Origin = mask, origin
-	x.rock.cols = append(x.rock.cols[:0], cols...)
-	x.rock.ahead = x.rock.ahead[:0]
+}
+
+// layColumn sets map column px's bits for c
+func (x *Index[E]) layColumn(px int, c Column) {
+	for py := range min(c.Ceil, x.Height) {
+		x.rockBits.Set(px, py)
+	}
+	for py := max(c.Floor, 0); py < x.Height; py++ {
+		x.rockBits.Set(px, py)
+	}
 }
 
 // SetRockAhead keeps cols as the columns past the field's right end, in entry order
@@ -118,7 +107,8 @@ func (x *Index[E]) BlocksDrawn(px, py, carry int, mask Mask) bool {
 }
 
 // ShiftRock moves the field a column left: map column 0 leaves it and enter stands
-// at its right end. The log takes the cells each column's ends crossed.
+// at its right end. The log takes the cells each column's ends crossed, and the
+// rock's bits move a column with it.
 func (x *Index[E]) ShiftRock(enter Column) {
 	r := x.rock
 	if r == nil {
@@ -140,4 +130,16 @@ func (x *Index[E]) ShiftRock(enter Column) {
 	copy(r.cols, r.cols[1:])
 	r.cols[len(r.cols)-1] = enter
 	r.Origin++
+	if x.stale {
+		return
+	}
+	// Every bit a column left, then the last column the map shows laid afresh,
+	// since its bits came from past the map's edge or past the field's
+	for py := range h {
+		row := x.rockBits.Row(py)
+		ShiftRow(row, row, 1)
+	}
+	if last := min(len(r.cols), w) - 1; last >= 0 {
+		x.layColumn(last, r.cols[last])
+	}
 }

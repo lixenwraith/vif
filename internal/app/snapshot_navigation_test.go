@@ -287,20 +287,17 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 		graphs map[uint32]*navigation.RouteGraph
 		gens   [2]uint32
 		fields [2][]int
-		comp   []bool
+		comp   []uint64
 	}
 	read := func() (d derived) {
 		d.graphs = routeGraphs(origin)
 		origin.World().RunSafe(func() {
 			w, dbg := origin.World(), origin.World().Resources.NavigationDebug
-			d.comp = slices.Clone(dbg.CompositePassability.Valid)
-			var grid []bool
-			point := w.Positions.WallTest(component.WallBlockKinetic, &grid)
-			point(-1, -1)
+			d.comp = slices.Clone(dbg.CompositePassability.Bits().Words)
 			cfg := w.Resources.Config
 			var pointGrid, compositeGrid navigation.SearchGrid
-			pointGrid.Fill(cfg.MapWidth, cfg.MapHeight, point)
-			compositeGrid.Fill(cfg.MapWidth, cfg.MapHeight, dbg.CompositePassability.IsBlocked)
+			pointGrid.FillBlocked(cfg.MapWidth, cfg.MapHeight, w.Positions.WallBits(component.WallBlockKinetic, nil))
+			compositeGrid.FillBlocked(cfg.MapWidth, cfg.MapHeight, dbg.CompositePassability.Bits())
 			dbg.Flow.Materialize(&pointGrid)
 			dbg.CompositeFlow.Materialize(&compositeGrid)
 			for i, c := range []*navigation.FlowFieldCache{dbg.Flow, dbg.CompositeFlow} {
@@ -386,8 +383,8 @@ func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
 	hx, hy := -1, -1
 	origin.World().RunSafe(func() {
 		p := passability()
-		for i := range p.Valid {
-			if x, y := i%p.Width, i/p.Width; hx < 0 && p.Valid[i] && !origin.World().Positions.HasAnyEntityAt(x, y) {
+		for i := range p.Width * p.Height {
+			if x, y := i%p.Width, i/p.Width; hx < 0 && p.IsValid(x, y) && !origin.World().Positions.HasAnyEntityAt(x, y) {
 				hx, hy = x, y
 			}
 		}
@@ -410,8 +407,8 @@ func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
 	origin.World().RunSafe(func() {
 		w, got := origin.World(), passability()
 		want := navigation.NewCompositePassability(got.Width, got.Height, got.Footprint())
-		want.Compute(func(x, y int) bool { return w.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) })
-		if !slices.Equal(got.Valid, want.Valid) {
+		want.Compute(w.Positions.WallBits(component.WallBlockKinetic, nil))
+		if !slices.Equal(got.Bits().Words, want.Bits().Words) {
 			t.Fatal("the installed world's passability is not what its walls derive")
 		}
 	})

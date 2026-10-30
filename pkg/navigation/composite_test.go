@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"github.com/lixenwraith/vif/pkg/position"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -41,20 +42,35 @@ func FuzzCompositePassabilityFollowsItsWalls(f *testing.F) {
 		for i := range walls {
 			walls[i] = rng.Float64() < density*0.4
 		}
-		isWall := func(x, y int) bool { return walls[y*w+x] }
+		bitsOf := func() position.Bits {
+			b := position.NewBits(w, h)
+			for i, wall := range walls {
+				if wall {
+					b.Set(i%w, i/w)
+				}
+			}
+			return b
+		}
+		valid := func() []bool {
+			v := make([]bool, w*h)
+			for i := range v {
+				v[i] = p.IsValid(i%w, i/w)
+			}
+			return v
+		}
 		check := func(stage string) {
 			t.Helper()
-			for i, v := range p.Valid {
+			for i, v := range valid() {
 				if want := fitsAt(p, walls, i%w, i/w); v != want {
 					t.Fatalf("%s: header (%d,%d) valid %t, its footprint says %t", stage, i%w, i/w, v, want)
 				}
 			}
 		}
-		p.Compute(isWall)
+		p.Compute(bitsOf())
 		check("computed")
 
 		for storm := range 12 {
-			before := slices.Clone(p.Valid)
+			before := valid()
 			var closed, opened []vmath.Point
 			for i := range walls {
 				if rng.IntN(8) != 0 {
@@ -68,7 +84,7 @@ func FuzzCompositePassabilityFollowsItsWalls(f *testing.F) {
 				}
 			}
 			flipped := map[int]bool{}
-			p.Moved(closed, opened, func(x, y int, valid bool) {
+			p.Moved(bitsOf(), closed, opened, func(x, y int, valid bool) {
 				i := y*w + x
 				if _, twice := flipped[i]; twice || valid == before[i] {
 					t.Fatalf("storm %d: header (%d,%d) flipped to %t, again %t or to what it was", storm, x, y, valid, twice)
@@ -76,15 +92,15 @@ func FuzzCompositePassabilityFollowsItsWalls(f *testing.F) {
 				flipped[i] = valid
 			})
 			check("moved")
-			for i := range before {
-				if _, ok := flipped[i]; ok != (before[i] != p.Valid[i]) {
-					t.Fatalf("storm %d: header (%d,%d) went %t -> %t, flip named %t", storm, i%w, i/w, before[i], p.Valid[i], ok)
+			for i, v := range valid() {
+				if _, ok := flipped[i]; ok != (before[i] != v) {
+					t.Fatalf("storm %d: header (%d,%d) went %t -> %t, flip named %t", storm, i%w, i/w, before[i], v, ok)
 				}
 			}
 			again := p.Clone()
-			again.Compute(isWall)
-			if !slices.Equal(again.walls, p.walls) {
-				t.Fatalf("storm %d: moved counts differ from computed ones", storm)
+			again.Compute(bitsOf())
+			if !slices.Equal(again.blocked.Words, p.blocked.Words) {
+				t.Fatalf("storm %d: moved bits differ from computed ones", storm)
 			}
 		}
 	})
