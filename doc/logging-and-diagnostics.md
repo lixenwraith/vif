@@ -834,7 +834,7 @@ user-state or cache location falls back to `./vif/journal/`. See
 | `network` | Remote producer. |
 | `debug` | Harness or out-of-band APIs such as `App.Region`. |
 | `session` | Roster/lifecycle observation from the session layer, and what it settled: kill confirmations and the session state the simulation reads. |
-| `device` | This machine's own output, the audio mute; never journaled. |
+| `device` | This machine's own: the audio mute, and its operator's pause and overlay requests; never journaled, and outside the event tallies a replay compares. |
 
 The dispatcher does not branch on origin. The value exists for APM admission
 and replay capture; replay injects the same event with the recorded origin.
@@ -924,8 +924,9 @@ interval, the content source, pin and fingerprint, and geometry.
 stands, solo, hosting or joined, and the run plays on as it was. Its replay boots
 afresh from the anchor (non-zero `start_run` or `start_tick`), so the journal's
 first `capture`, flagged `opens`, carries everything that boot would otherwise
-decide: the live shared world, the operator state (`mode`, `paused`, `held` and `start`, the
-toggled systems that are `off`, the `slot` input follows) and the run's own side (`own`).
+decide: the live shared world, the run's state (`mode`, the play mode under any command
+line or overlay, which with the operator's pause are no part of the run; `held` and `start`;
+the toggled systems that are `off`; the `slot` input follows) and its own side (`own`).
 That is its player domain under the same entity IDs, the camera, APM and gesture
 tracking, timed effects, the player domain's streams, the cells its input has in
 flight, each system's own state (`engine.LocalStateSaver`), the corpus position,
@@ -937,7 +938,7 @@ itself, before the journal attaches; only the transport, audio and music keep
 their own state. A start is refused while a new game is starting, between a
 reset's cleanup and its boot spawn. A replay writes the opening as any written
 world, binds its slot, writes the own side over what that settle derived, takes up
-the operator state and engages its crossing barrier at once, as the run's was;
+the run's state and engages its crossing barrier at once, as the run's was;
 `app.loadJournal` refuses a mid-run journal whose files lack the opening. A `capture`
 a join into a held session writes carries `held` and `start` too, the hold the world
 it installed landed in, so a replay holds there as the run did.

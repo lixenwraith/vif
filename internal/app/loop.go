@@ -298,7 +298,6 @@ func (a *App) takeEvent(ev terminal.Event) bool {
 	if ev.Type == terminal.EventPaste {
 		return pasteKeys(ev.Text, a.takeTap)
 	}
-	a.router.SyncNormal()
 	intent := a.inputMachine.Process(ev)
 	if ev.Type == terminal.EventMouse && ev.MouseAction == terminal.MouseActionPress {
 		a.touched = ev.Touch

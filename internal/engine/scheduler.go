@@ -804,7 +804,7 @@ func (s *Scheduler) breakHit(bs *BreakState, cause string) {
 		"on", bs.Label, "cause", cause, "scale", bs.Restore.String(), "pause", bs.Pause)
 
 	if bs.Pause {
-		s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
+		s.world.PushLocalOrigin(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true}, event.OriginDevice)
 	}
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: "Break: " + cause})
 }
@@ -818,7 +818,7 @@ func (s *Scheduler) breakpointHit(bp *Breakpoint, cause string) {
 	s.world.Log().Info("app", "msg", "breakpoint hit", "on", bp.Label, "cause", cause, "pause", pause)
 	msg := "Break on " + bp.Label + ": " + cause
 	if pause {
-		s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
+		s.world.PushLocalOrigin(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true}, event.OriginDevice)
 		s.ctl.MarkHit()
 	} else {
 		msg += " (a live session does not pause)"
@@ -978,16 +978,23 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	}
 	breaks := s.ctl.Breaks()
 
-	// APM admission; input while paused is not gameplay
-	apmOpen := !s.ctl.IsPaused()
+	// APM admission; input under a hold is not gameplay. The operator's pause, which
+	// no journal holds, gates nothing a replay must reproduce.
+	apmOpen := !s.ctl.Held()
 	var apmKey uint64
 	var apmPointer bool
 
 	// Harness observer, hoisted with the other gates
 	tap := s.tap
 
-	var nFSM, nSys, nDead int
+	// A device event is this machine's own, which no replay holds: it dispatches
+	// outside the tallies a replay reproduces
+	var nFSM, nSys, nDead, nRun int
 	for _, ev := range eventsList {
+		run := ev.Origin != event.OriginDevice
+		if run {
+			nRun++
+		}
 		// Before any handler runs: a pooled payload is still the producer's
 		if tap != nil {
 			tap(ev)
@@ -1014,12 +1021,12 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 			nSys++
 		}
 		dead := !took && len(handlers) == 0
-		if dead {
+		if dead && run {
 			nDead++
 		}
 		if ev.Type <= event.EventNone || int(ev.Type) >= event.EventTypeCount {
 			s.statEvInvalid.Add(1)
-		} else {
+		} else if run {
 			s.world.Resources.Event.Queue.RecordDispatch(ev.Type, dead)
 		}
 
@@ -1054,8 +1061,8 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 		}
 	}
 
-	// A pass carries one intent's events, so it is one gesture: `:` pauses and changes
-	// mode, a click fires and places the cursor
+	// A pass carries one intent's events, so it is one gesture: `i` changes mode, a
+	// click fires and places the cursor
 	if apmKey != 0 || apmPointer {
 		s.world.Resources.Game.State.AdmitAction(apmKey)
 	}
@@ -1069,9 +1076,11 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 			"dead", nDead)
 	}
 
-	s.statEvDispatches.Add(int64(len(eventsList)))
+	s.statEvDispatches.Add(int64(nRun))
 	s.statEvDead.Add(int64(nDead))
-	s.recordSettlePass(src)
+	if nRun > 0 {
+		s.recordSettlePass(src)
+	}
 	return len(eventsList)
 }
 
@@ -1265,7 +1274,7 @@ func (s *Scheduler) executeReset() {
 	//    settled before the FSM re-enters: an entry action's sound reaching
 	//    AudioSystem under the reset's own pause would be dropped. The last game's
 	//    machine is held out, so a transition on the unpause cannot act in this one.
-	s.world.PushLocal(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
+	s.world.PushLocalOrigin(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false}, event.OriginDevice)
 	s.fsmHeld = true
 	s.dispatchAndProcessEvents("reset")
 	s.fsmHeld = false

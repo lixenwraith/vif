@@ -422,8 +422,9 @@ boundary after each non-empty explicit settle group (the tick's own `pre`,
 `post` and `close` phases and a reset's settles are not groups). The counters
 advance even without a journal, so one attached mid-run stamps its first event
 honestly. Every origin but `system` (derived simulation work) and `device` (this
-machine's speakers) is captured, as is this instance's own crossing whatever its
-origin, and replay reinjects records in queue-slot order. `EventQueue.Note`
+machine's speakers and its operator's pause and overlays) is captured, as is this
+instance's own crossing whatever its origin, and replay reinjects records in
+queue-slot order. `EventQueue.Note`
 journals a record that is never dispatched, such as `EventCursorPredicted` or
 `EventSessionState`, at the slot the next publish takes.
 

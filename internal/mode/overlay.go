@@ -165,7 +165,7 @@ func (r *Router) handleOverlayActivate() bool {
 	}
 	r.ctx.ToggleOverlayPin(key)
 	// Telemetry is the only card layout; MetaSystem owns the projection
-	r.ctx.PushLocal(event.EventMetaTelemetryRequest, nil)
+	r.ctx.PushLocalOrigin(event.EventMetaTelemetryRequest, nil, event.OriginDevice)
 	return true
 }
 
@@ -189,7 +189,7 @@ func (r *Router) endOverlayFilter() {
 // setOverlayFilter narrows the cards as the query is typed
 func (r *Router) setOverlayFilter(query string) {
 	r.ctx.SetOverlayFilter(query)
-	r.ctx.PushLocal(event.EventMetaTelemetryRequest, nil)
+	r.ctx.PushLocalOrigin(event.EventMetaTelemetryRequest, nil, event.OriginDevice)
 }
 
 // moveOverlaySelection resolves a directional move against the published card index

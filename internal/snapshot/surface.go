@@ -117,6 +117,7 @@ func SharedKey(key string) bool {
 // group mixes these with simulation counters.
 var deniedSimKey = map[string]bool{
 	"engine.paused":     true,
+	"context.mode":      true,
 	"engine.speed":      true,
 	"engine.speed_pct":  true,
 	"engine.step":       true,

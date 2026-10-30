@@ -113,8 +113,9 @@ func runScript(t *testing.T, a *App) int {
 	}
 	r.step(1)
 
-	// Command mode: opens paused, so the next tick executes under a pause the
-	// manual clock records but does not enforce
+	// Command mode: opens paused, so the next tick executes under the operator's
+	// pause, which the manual clock does not enforce and no journal holds: the
+	// replay ticks it unpaused, and must still match
 	r.step(1, intentModeSwitch(input.ModeTargetCommand))
 	if !a.Context().TimeCtl.IsPaused() {
 		t.Fatal("command mode did not pause: the script no longer covers paused-tick replay")
@@ -1536,10 +1537,57 @@ func guestSurface(a *App) []string {
 		s.SeatsOnly, a.Context().TimeCtl.IsPaused()))
 }
 
-// TestModeChangedAppliesWithoutRouter covers the applier directly, so a MetaSystem
-// regression fails here rather than as an opaque snapshot diff. Leaving overlay mode
-// closes the overlay, or a replayed :help would stay open with no router to close it.
-func TestModeChangedAppliesWithoutRouter(t *testing.T) {
+// TestTheJournalHoldsNoOperatorState: the operator's pause, command line and overlays
+// are no part of the run, so a journal opened from under the command line opens on the
+// play mode beneath it and records none of them, while every play mode is recorded.
+func TestTheJournalHoldsNoOperatorState(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	a.Tick(1)
+	inject := func(intents ...*input.Intent) {
+		for _, in := range intents {
+			if !a.Inject(in) {
+				t.Fatal("an intent quit the game")
+			}
+		}
+	}
+	inject(intentModeSwitch(input.ModeTargetInsert), intentModeSwitch(input.ModeTargetCommand))
+	cap := journal.NewCapture()
+	a.cfg.JournalSink = cap
+	if _, err := a.scribe.openJournal(); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	inject(intentCommandBody("t")...)
+	inject(intentOverlayClose(), intentModeSwitch(input.ModeTargetSearch), intentEscape())
+	a.Tick(1)
+
+	if cs := cap.Captures(); len(cs) == 0 || cs[0].Mode != core.ModeInsert {
+		t.Fatalf("the journal opened on %v, want the play mode %s", cs, core.ModeNames[core.ModeInsert])
+	}
+	var modes []core.GameMode
+	for _, r := range cap.Records() {
+		switch r.Type {
+		case event.EventGamePauseRequest, event.EventGamePauseChanged, event.EventMetaTelemetryRequest:
+			t.Errorf("the journal holds %s", event.GetEventName(r.Type))
+		case event.EventModeChanged:
+			p, err := event.DecodePayload(r.Type, r.Payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			modes = append(modes, p.(*event.ModeChangedPayload).Mode)
+		}
+	}
+	if want := []core.GameMode{core.ModeNormal, core.ModeSearch, core.ModeNormal}; !slices.Equal(modes, want) {
+		t.Errorf("the journal holds modes %v, want %v", modes, want)
+	}
+}
+
+// TestAReplayedPlayModeLandsUnderTheOperators covers the applier directly, so a
+// MetaSystem regression fails here rather than as an opaque snapshot diff: a play mode
+// the journal holds applies with no router, under the command line the operator has
+// open, and an operator mode never reaches the run.
+func TestAReplayedPlayModeLandsUnderTheOperators(t *testing.T) {
 	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
@@ -1548,29 +1596,17 @@ func TestModeChangedAppliesWithoutRouter(t *testing.T) {
 	defer a.Close()
 
 	a.Tick(1)
-	a.Context().PushLocalOrigin(event.EventModeChanged,
-		&event.ModeChangedPayload{Mode: core.ModeVisual}, event.OriginDebug)
-	a.Settle()
-
-	if got := a.Context().GetMode(); got != core.ModeVisual {
-		t.Fatalf("mode %d, want %d", got, core.ModeVisual)
+	ctx := a.Context()
+	a.World().RunSafe(func() { ctx.SetMode(core.ModeCommand) })
+	for _, m := range []core.GameMode{core.ModeVisual, core.ModeOverlay} {
+		ctx.PushLocalOrigin(event.EventModeChanged, &event.ModeChangedPayload{Mode: m}, event.OriginDebug)
 	}
-	if s := a.World().Resources.Status.Strings.Get("context.mode").Load(); s != core.ModeNames[core.ModeVisual] {
-		t.Fatalf("context.mode %q, want %q", s, core.ModeNames[core.ModeVisual])
-	}
-
-	a.Context().PushLocalOrigin(event.EventModeChanged,
-		&event.ModeChangedPayload{Mode: core.ModeOverlay}, event.OriginDebug)
-	a.Context().PushLocalOrigin(event.EventMetaHelpRequest, nil, event.OriginDebug)
 	a.Settle()
-	if !a.Context().IsOverlayActive() {
-		t.Fatal("a replayed help request opened no overlay")
+	if got := a.World().Resources.Game.State.GetMode(); got != core.ModeVisual {
+		t.Fatalf("play mode %s, want %s", core.ModeNames[got], core.ModeNames[core.ModeVisual])
 	}
-	a.Context().PushLocalOrigin(event.EventModeChanged,
-		&event.ModeChangedPayload{Mode: core.ModeNormal}, event.OriginDebug)
-	a.Settle()
-	if a.Context().IsOverlayActive() {
-		t.Fatal("the overlay outlived overlay mode")
+	if got := ctx.GetMode(); got != core.ModeCommand {
+		t.Fatalf("mode %s, want the operator's command line", core.ModeNames[got])
 	}
 }
 

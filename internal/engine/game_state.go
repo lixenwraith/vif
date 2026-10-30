@@ -12,7 +12,7 @@ import (
 // GameState centralizes game state with clear ownership boundaries
 type GameState struct {
 	// === REAL-TIME STATE (lock-free atomics) ===
-	Mode atomic.Int32 // Game mode (core.GameMode); set by Router
+	Mode atomic.Int32 // Play mode (core.GameMode), which the context's operator mode opens over
 
 	// Runtime Metrics
 	GameTicks      atomic.Uint64
@@ -44,12 +44,9 @@ type GameState struct {
 	keyStreak   uint64
 }
 
-// initState initializes all game state fields to starting values
-// Called by both NewGameState and Reset to avoid duplication
+// initState sets a new game's counters for NewGameState and Reset. The play mode
+// outlives a reset, as the operator's does; its zero value is NORMAL.
 func (gs *GameState) initState() {
-	// Reset game mode
-	gs.Mode.Store(int32(core.ModeNormal))
-	// Reset metrics
 	gs.GameTicks.Store(0)
 	gs.CurrentAPM.Store(0)
 	gs.MusicAPM.Store(0)

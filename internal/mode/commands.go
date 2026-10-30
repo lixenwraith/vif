@@ -694,7 +694,7 @@ func handleTelemetryCommand(ctx *engine.GameContext, args []string) CommandResul
 
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.PauseForInput()
-	ctx.PushLocal(event.EventMetaTelemetryRequest, nil)
+	ctx.PushLocalOrigin(event.EventMetaTelemetryRequest, nil, event.OriginDevice)
 	return CommandResult{Continue: true}
 }
 
@@ -740,7 +740,7 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
 		ctx.RequestMode(core.ModeOverlay)
 		ctx.PauseForInput()
-		ctx.PushLocal(event.EventMetaDebugRequest, nil)
+		ctx.PushLocalOrigin(event.EventMetaDebugRequest, nil, event.OriginDevice)
 		return CommandResult{Continue: true}
 	}
 
@@ -1048,7 +1048,7 @@ func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.PauseForInput()
 	ctx.SetOverlayContent(nil)
-	ctx.PushLocal(event.EventMetaHelpRequest, nil)
+	ctx.PushLocalOrigin(event.EventMetaHelpRequest, nil, event.OriginDevice)
 	return CommandResult{Continue: true}
 }
 
@@ -1285,7 +1285,7 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 func handleAboutCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.PauseForInput()
-	ctx.PushLocal(event.EventMetaAboutRequest, nil)
+	ctx.PushLocalOrigin(event.EventMetaAboutRequest, nil, event.OriginDevice)
 	return CommandResult{Continue: true}
 }
 
