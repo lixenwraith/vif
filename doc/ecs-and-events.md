@@ -139,14 +139,16 @@ whole map, within its grid's bounds and at the cell aspect it reads live from th
 config (`position.Frame`). A wall query answers for a `Mask` (0 is any) from the
 rock field first (`position.Rock`, `Position.SetRock`), a ceiling and a floor row
 per map column with one mask, so a cave's rock costs a column, not an entity per
-cell, and `ShiftRock` moves it a column left with the column entering; then from
-the cell's shared occupants, each one the engine names a wall by its
-`Components.Wall` mask (`Position.isWall`). The rock's look (`RockLook`) stays the
-engine's, beside the field. `WallTest` serves a derivation that probes every cell from a
-per-mask wall grid rebuilt only when the wall epoch or the grid's generation
-moved: a wall's placement and its store membership move the epoch, and a
-`BlockMask` written in place calls `Position.WallChanged` for its wall. The same
-changes log the cells they can have turned, both cells of a wall's move and each
+cell, and `ShiftRock` moves it a column left with the column entering; then from a
+plane of bits the index keeps for the mask, a bit a cell, built from the cells on
+the mask's first query and brought to a cell's shared occupants whenever a wall is
+placed, moved, removed or remasked there (`Position.wallOf` names a wall and what
+it stops), so a point is a bit and an area a few words a row. `WallTest` copies a
+plane into the caller's grid. The rock's look (`RockLook`) stays the engine's,
+beside the field. `WallTest` serves a derivation that probes every cell from a
+per-mask plane: a wall's placement and its store membership bring the plane to the cell,
+and a `BlockMask` written in place calls `Position.WallChanged` for its wall. The
+same changes log the cells they can have turned, both cells of a wall's move and each
 cell a rock shift crossed, and `Position.WallChanges` hands a reader that keeps
 its own copy of the answers those cells since the sequence it last read, so a
 moving map costs it the cells that moved. A change that names no cells (an

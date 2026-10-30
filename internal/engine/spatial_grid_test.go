@@ -158,6 +158,32 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					w.Positions.SetRock(0, RockLook{}, 0, nil)
 				}
 			}
+			// The planes answer as the cells' own wall components do, cell by cell
+			oracle := func(x, y int, mask component.WallBlockMask) bool {
+				if x < 0 || y < 0 || x >= cfg.MapWidth || y >= cfg.MapHeight {
+					return false
+				}
+				if r := w.Positions.Rock(); r != nil && (mask == 0 || r.Mask&mask != 0) {
+					if col, ok := r.Column(x); ok && col.Rock(y) {
+						return true
+					}
+				}
+				for _, e := range w.Positions.GetEntitiesAt(x, y, ScopeShared) {
+					if wall, ok := w.Components.Wall.GetComponent(e); ok && (mask == 0 || wall.BlockMask&mask != 0) {
+						return true
+					}
+				}
+				return false
+			}
+			for _, mask := range masks {
+				for y := -1; y <= cfg.MapHeight; y++ {
+					for x := -1; x <= cfg.MapWidth; x++ {
+						if got, want := w.Positions.HasBlockingWallAt(x, y, mask), oracle(x, y, mask); got != want {
+							t.Fatalf("round %d mask %d at (%d,%d): HasBlockingWallAt %t, the cell's walls say %t", round, mask, x, y, got, want)
+						}
+					}
+				}
+			}
 			// A reader of the wall log re-testing only the cells it names keeps every
 			// answer HasBlockingWallAt gives
 			cells, now, logged := w.Positions.WallChanges(since)
