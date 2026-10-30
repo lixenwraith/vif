@@ -233,7 +233,7 @@ func payloadTrue(payload any, field string) bool {
 // game. Credit left idle is capped at one second's worth, so a quiet bot bursts no
 // further.
 func (d *Driver) Step() (bool, error) {
-	tick := d.ctx.World.Resources.Config.TickInterval
+	tick := d.ctx.World.TickInterval()
 	d.credit = min(d.credit+d.rate*tick.Milliseconds(), d.rate*1000)
 	var err error
 	d.ctx.World.RunSafe(func() {

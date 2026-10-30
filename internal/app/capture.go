@@ -171,7 +171,7 @@ func (c *corrector) captureLightLocked() (snapshot.SharedCapture, error) {
 		JournalSchema:  uint64(event.JournalSchema),
 		Run:            st.Run,
 		Tick:           st.Tick,
-		TickInterval:   cfg.TickInterval,
+		TickInterval:   c.world.TickInterval(),
 		Seed:           c.world.Resources.Rand.Root(),
 		Session:        c.world.Resources.Rand.Session(),
 		ScenarioID:     c.scenario.Name,

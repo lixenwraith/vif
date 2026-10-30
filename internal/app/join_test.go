@@ -306,7 +306,7 @@ func TestAJoinerAdoptsTheHostsTick(t *testing.T) {
 		t.Fatalf("join app: %v", err)
 	}
 	defer guest.Close()
-	if got := guest.World().Resources.Config.TickInterval; got != tick {
+	if got := guest.World().TickInterval(); got != tick {
 		t.Fatalf("the joiner ticks at %s, its host at %s", got, tick)
 	}
 	if err := identityFromAnchor(an).Verify(guest.membership.sessionIdentity()); err != nil {

@@ -70,7 +70,7 @@ func PlayJournal(viewer Config, paths ...string) error {
 	}
 	a.log.Info("journal", "msg", "replay opened",
 		"records", len(set.Records), "digests", len(set.Digests), "seed", an.Seed, "speed", an.Speed)
-	shown := &replayCopy{a: a, src: journalSource{d, a.log, a.world.Resources.Config.TickInterval}}
+	shown := &replayCopy{a: a, src: journalSource{d, a.log, a.world.TickInterval()}}
 	p := &player{a: a, src: shown.src, interval: time.Duration(an.TickInterval), scale: engine.ScaleNormal}
 	rw = newRewinder(shown, a, replayCopies(a, cfg, stream, newReplay))
 	p.rw = rw
@@ -95,7 +95,7 @@ func replayCopies(lender *App, cfg Config, stream *journal.Stream, newApp func(C
 			twin.Close()
 			return nil, nil, err
 		}
-		return twin, journalSource{td, twin.log, twin.world.Resources.Config.TickInterval}, nil
+		return twin, journalSource{td, twin.log, twin.world.TickInterval()}, nil
 	}
 }
 
@@ -104,7 +104,7 @@ func replayCopies(lender *App, cfg Config, stream *journal.Stream, newApp func(C
 // presented as fast as the frame loop can render it.
 func runPresented(a *App, src pacedSource, kind, name string, paced bool, signals <-chan os.Signal) error {
 	live := a.membership.sessionTransport() != nil
-	interval := a.world.Resources.Config.TickInterval
+	interval := a.world.TickInterval()
 	if !paced {
 		interval = time.Millisecond // the floor perTick already clamps to
 	}
@@ -275,7 +275,7 @@ func (p *player) advance(elapsed time.Duration) {
 	}
 	p.live = p.driven && p.a.membership.sessionTransport() != nil
 	if p.live {
-		p.paused, p.scale, p.interval = false, engine.ScaleNormal, p.a.world.Resources.Config.TickInterval
+		p.paused, p.scale, p.interval = false, engine.ScaleNormal, p.a.world.TickInterval()
 	}
 	commandHeld := p.cmd != nil && !(p.interactive && p.live)
 	held := p.driven && p.a.ctx.TimeCtl.Held()

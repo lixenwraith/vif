@@ -382,7 +382,7 @@ only clock.
 | Event attempt | 4 ms | event goroutine | Settle queued events between simulation ticks, including while paused. |
 | Audio buffer | 50 ms | audio mixer goroutine | Drain audio commands, synthesize/mix the next PCM buffer, and write it. |
 
-The tick is the run's, fixed for its life (`ConfigResource.TickInterval`): a host
+The tick is the run's, fixed for its life (`World.TickInterval`): a host
 chooses it with `-tick`, a joiner adopts it from the offer, a journal records it and
 its replay ticks at it. Rules counted in ticks stay counted in ticks, so a shorter
 tick plays them faster; only the status bar says so, with the tick rate beside the

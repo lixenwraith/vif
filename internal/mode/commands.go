@@ -1599,7 +1599,7 @@ func handleReplayCommand(ctx *engine.GameContext, args []string) CommandResult {
 			setCommandError(ctx, usage)
 			break
 		}
-		tick := ctx.World.Resources.Config.TickInterval
+		tick := ctx.World.TickInterval()
 		ctx.ReplaySeek(uint64((at+tick/2)/tick), false)
 	default:
 		setCommandError(ctx, usage)

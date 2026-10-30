@@ -534,7 +534,7 @@ func (a *App) initScheduler() error {
 	a.scheduler, a.gameUpdateDone, resetChan = engine.NewScheduler(
 		a.world,
 		a.ctx.TimeCtl,
-		a.world.Resources.Config.TickInterval,
+		a.world.TickInterval(),
 		a.frameReady,
 	)
 	a.ctx.ResetChan = resetChan

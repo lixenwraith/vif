@@ -214,7 +214,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		}
 		if paced {
 			trim, step := a.scheduler.TakePace()
-			tick := a.ctx.TimeCtl.Scale().Wall(a.ctx.World.Resources.Config.TickInterval)
+			tick := a.ctx.TimeCtl.Scale().Wall(a.ctx.World.TickInterval())
 			nextTick = nextTick.Add(engine.PacedInterval(tick, trim, step))
 			if !waitScriptTick(signals, time.Until(nextTick)) {
 				return false, nil

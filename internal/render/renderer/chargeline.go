@@ -103,7 +103,7 @@ func (r *ChargeLineRenderer) renderPulses(
 	pulseIndex := int(pulseElapsed / pulse)
 	// Elapsed moves a tick at a time, so the head reaches the landing on a pulse's
 	// last tick rather than at the instant after it, which no frame shows
-	span := max(pulse-r.gameCtx.World.Resources.Config.TickInterval, 1)
+	span := max(pulse-r.gameCtx.World.TickInterval(), 1)
 	headT := min(float64(pulseElapsed%pulse)/float64(span), 1)
 
 	// Escalating alpha per pulse

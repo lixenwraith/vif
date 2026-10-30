@@ -623,7 +623,7 @@ func (sc *scribe) buildAnchor() event.JournalAnchor {
 		ContentLines:   uint64(reg.Ints.Get("content.lines").Load()),
 		Seed:           sc.world.Resources.Rand.Root(),
 		Session:        sc.world.Resources.Rand.Session(),
-		TickInterval:   int64(cfg.TickInterval),
+		TickInterval:   int64(sc.world.TickInterval()),
 		Width:          sc.ctx.Width,
 		Height:         sc.ctx.Height,
 		MapWidth:       cfg.MapWidth,

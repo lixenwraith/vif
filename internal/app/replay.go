@@ -79,7 +79,7 @@ func (sc *scribe) sessionAnchorFields(an event.JournalAnchor) []anchorField {
 		{"seed", an.Seed, sc.world.Resources.Rand.Root()},
 		{"session", an.Session, sc.world.Resources.Rand.Session()},
 		{"scenario_digest", an.ScenarioDigest, sc.scenario.Digest()},
-		{"tick_ns", an.TickInterval, int64(sc.world.Resources.Config.TickInterval)},
+		{"tick_ns", an.TickInterval, int64(sc.world.TickInterval())},
 	}
 }
 

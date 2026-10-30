@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -25,6 +26,11 @@ type World struct {
 	Resources  *Resource
 	Components Component
 	Positions  *Position
+
+	// tick is the game time one tick advances, the run's for its life: session
+	// identity a joiner adopts, set by SetTickInterval before anything runs. Outside
+	// Resources, so a world copied in never writes it and any goroutine reads it.
+	tick time.Duration
 
 	// systems pairs each registered system with its declared profile. Appended only
 	// by AddSystem during single-threaded
@@ -101,6 +107,7 @@ func NewWorld() *World {
 		Resources:     &Resource{Rand: NewRandResource(0)}, // app overwrites with the run seed
 		systems:       make([]systemEntry, 0),
 		systemsOff:    make(map[string]bool),
+		tick:          parameter.GameUpdateInterval,
 	}
 	for d := range w.nextEntityID {
 		w.nextEntityID[d] = 1
@@ -110,6 +117,8 @@ func NewWorld() *World {
 
 	return w
 }
+
+func (w *World) TickInterval() time.Duration { return w.tick }
 
 // Log is the handle this world's producers write through; the process's until a
 // context binds its registry.

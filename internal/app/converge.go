@@ -34,8 +34,7 @@ func (m *membership) Driven() bool           { return m.cfg.Mode.Driven() }
 func (m *membership) Held() bool             { return m.ctx.TimeCtl.Held() }
 func (m *membership) Rate() engine.TimeScale { return m.ctx.TimeCtl.Scale() }
 
-// TickInterval is fixed before the run starts, so it is read without the lock.
-func (m *membership) TickInterval() time.Duration { return m.world.Resources.Config.TickInterval }
+func (m *membership) TickInterval() time.Duration { return m.world.TickInterval() }
 
 func (m *membership) LocalParticipant() uint32 { return m.localParticipant() }
 

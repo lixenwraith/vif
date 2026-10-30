@@ -694,7 +694,7 @@ func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
 		return r.pal.alarm.with(r.timeText.hold(-1, speed, brk, func() string { return fmt.Sprintf(" %sx>%s ", speed, brk) })), true
 	}
 	fast := speed != "" && speed != "1"
-	tick := r.gameCtx.World.Resources.Config.TickInterval
+	tick := r.gameCtx.World.TickInterval()
 	if !fast && tick == parameter.GameUpdateInterval {
 		return statusItem{}, false
 	}
