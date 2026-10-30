@@ -22,8 +22,8 @@ import (
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
-	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // EmbeddedLabel is the name recorded for a built-in asset, scenario or corpus.
@@ -415,11 +415,11 @@ func (s *Scenario) readMap(v any) error {
 			s.MapMinHeight = int(n)
 		}
 	}
-	if w, h := engine.ClampMapSize(max(s.MapMinWidth, 1), max(s.MapMinHeight, 1)); w < s.MapMinWidth || h < s.MapMinHeight {
+	if w, h := position.Clamp(max(s.MapMinWidth, 1), max(s.MapMinHeight, 1)); w < s.MapMinWidth || h < s.MapMinHeight {
 		return fmt.Errorf("map floor %dx%d is larger than a map can be", s.MapMinWidth, s.MapMinHeight)
 	}
 	if s.MapFixedWidth > 0 {
-		if w, h := engine.ClampMapSize(s.MapFixedWidth, s.MapFixedHeight); w != s.MapFixedWidth || h != s.MapFixedHeight ||
+		if w, h := position.Clamp(s.MapFixedWidth, s.MapFixedHeight); w != s.MapFixedWidth || h != s.MapFixedHeight ||
 			w < s.MapMinWidth || h < s.MapMinHeight {
 			return fmt.Errorf("map.fixed %dx%d is not a map this scenario can have",
 				s.MapFixedWidth, s.MapFixedHeight)

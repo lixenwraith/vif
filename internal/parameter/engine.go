@@ -1,6 +1,10 @@
 package parameter
 
-import "time"
+import (
+	"time"
+
+	"github.com/lixenwraith/vif/pkg/position"
+)
 
 // Time domain convention: durations in this package are game time and dilate
 // with the simulation rate. Wall-clock durations are marked [wall].
@@ -113,10 +117,6 @@ const (
 
 	// EventBufferMask is the bitmask for fast modulo operations (2048 - 1)
 	EventBufferMask = 2047
-
-	// FreeAreaSearchRadius is the spiral radius FindFreeAreaSpiral walks when a
-	// caller names none
-	FreeAreaSearchRadius = 20
 )
 
 // Store index: an entity's ID selects a slot in a page of 1<<StoreIndexPageBits.
@@ -129,24 +129,12 @@ const (
 	StoreIndexEntityBytes = 256
 )
 
-// MaxEntitiesPerCell keeps a Cell at exactly 256 bytes, four cache lines:
-// 31 eight-byte entities, two counts and six bytes of padding.
-const MaxEntitiesPerCell = 31
-
-// ReservedPlayerPerCell caps the player half of a cell so a pile of local effects
-// can never consume the slots a shared entity needs.
-const ReservedPlayerPerCell = 12
-
-// Map bounds, a clamp rather than a rejection: LevelSetup is replicated, so every
-// participant must reach the same bounds, and the product reaches make(). A grid
-// is sized to its map at 256 bytes a cell, so the ceiling costs 32 MB per world.
+// A cell's capacity, the player half's budget and the map ceiling are the spatial
+// index's (pkg/position), named here as the game reads them.
 const (
-	// MaxMapWidth is the widest simulation map, in cells.
-	MaxMapWidth = 2000
-
-	// MaxMapHeight is the tallest simulation map, in cells.
-	MaxMapHeight = 2000
-
-	// MaxMapCells is the most cells a map may hold, whatever its shape.
-	MaxMapCells = 500 * 250
+	MaxEntitiesPerCell    = position.CellCapacity
+	ReservedPlayerPerCell = position.PrivateBudget
+	MaxMapWidth           = position.MaxWidth
+	MaxMapHeight          = position.MaxHeight
+	MaxMapCells           = position.MaxCells
 )

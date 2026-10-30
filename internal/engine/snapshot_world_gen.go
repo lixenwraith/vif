@@ -546,7 +546,7 @@ type WorldOrder struct {
 //
 // Caller MUST hold updateMutex.
 func (w *World) CaptureOrder() WorldOrder {
-	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.grid.cellOrder()}
+	o := WorldOrder{Positions: orderOf(w.Positions.entities), Cells: w.Positions.cellOrder()}
 	o.Glyph = orderOf(w.Components.Glyph.entities)
 	o.Sigil = orderOf(w.Components.Sigil.entities)
 	o.Nugget = orderOf(w.Components.Nugget.entities)

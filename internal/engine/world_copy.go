@@ -53,8 +53,8 @@ func (w *World) CopyOut(reuse *WorldCopy) *WorldCopy {
 		components: w.copyComponentsOut(&reuse.components),
 		positions: storeCopy[component.PositionComponent]{
 			dense: append(reuse.positions.dense[:0], p.dense...), entities: append(reuse.positions.entities[:0], p.entities...)},
-		gridW: p.grid.Width,
-		gridH: p.grid.Height,
+		gridW: p.index.Width,
+		gridH: p.index.Height,
 		mask:  reuse.mask,
 		next:  w.nextEntityID,
 	}
@@ -66,8 +66,8 @@ func (w *World) CopyOut(reuse *WorldCopy) *WorldCopy {
 	}
 	// Every held entity has a position, which bounds both without a pass to count them.
 	c.cells, c.occupants = sized(reuse.cells, 0, len(p.entities)), sized(reuse.occupants, 0, len(p.entities))
-	for _, i := range p.grid.Occupied() {
-		cell := &p.grid.Cells[i]
+	for _, i := range p.index.Occupied() {
+		cell := &p.index.Cells[i]
 		c.cells = append(c.cells, occupiedCell{index: i, count: cell.Count, shared: cell.SharedCount})
 		c.occupants = append(c.occupants, cell.Entities[:cell.Count]...)
 	}
@@ -94,17 +94,16 @@ func (w *World) CopyOut(reuse *WorldCopy) *WorldCopy {
 func (w *World) CopyIn(c *WorldCopy) {
 	w.copyComponentsIn(c.components)
 	p := w.Positions
-	p.index.clear()
+	p.slots.clear()
 	p.dense = append(p.dense[:0], c.positions.dense...)
 	p.entities = append(p.entities[:0], c.positions.entities...)
 	for i, e := range p.entities {
-		p.index.set(e, int32(i))
+		p.slots.set(e, int32(i))
 	}
-	p.grid.Resize(c.gridW, c.gridH)
-	p.wallLog.lose()
+	p.index.Resize(c.gridW, c.gridH)
 	at := 0
 	for _, oc := range c.cells {
-		p.grid.load(oc.index, oc.count, oc.shared, c.occupants[at:at+int(oc.count)])
+		p.index.Load(oc.index, oc.count, oc.shared, c.occupants[at:at+int(oc.count)])
 		at += int(oc.count)
 	}
 	w.componentMask = maps.Clone(c.mask)

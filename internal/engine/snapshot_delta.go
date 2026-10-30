@@ -1,12 +1,12 @@
 package engine
 
 import (
-	"errors"
 	"slices"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // StoreDelta is one component store's exact difference against a baseline: Changed
@@ -332,7 +332,7 @@ func (p *Position) capturePlayer() ([]StoreEntry[component.PositionComponent], [
 	placed := captureRows(p.dense, p.entities, core.DomainPlayer)
 	var out []core.Entity
 	for _, en := range placed {
-		if !p.grid.containsEntityAt(en.Entity, en.Value.X, en.Value.Y) {
+		if !p.index.Holds(en.Entity, EntityClass(en.Entity), en.Value.X, en.Value.Y) {
 			out = append(out, en.Entity)
 		}
 	}
@@ -358,13 +358,7 @@ func (p *Position) installPlayer(placed []StoreEntry[component.PositionComponent
 	}
 }
 
-// CellOrder is one grid cell's occupants in order, the cell named by its grid index.
-type CellOrder struct {
-	Index    int           `json:"i"`
-	Entities []core.Entity `json:"e"`
-}
-
-var errOrderMismatch = errors.New("the order names other entities than the world holds")
+var errOrderMismatch = position.ErrOrderMismatch
 
 // orderOf is a store's dense sequence, where two or more rows give it one.
 func orderOf(entities []core.Entity) []core.Entity {
@@ -418,57 +412,14 @@ func reorderRows[T any](index *sparseIndex, dense []T, entities, order []core.En
 
 // reorder puts the placements in order and each cell's occupants in its own.
 func (p *Position) reorder(order []core.Entity, cells []CellOrder) error {
-	if err := reorderRows(&p.index, p.dense, p.entities, order); err != nil {
+	if err := reorderRows(&p.slots, p.dense, p.entities, order); err != nil {
 		return err
 	}
-	return p.grid.reorderCells(cells)
+	return p.index.Reorder(cells, EntityClass)
 }
 
 // cellOrder reads the occupants of every cell holding two or more.
-func (g *SpatialGrid) cellOrder() []CellOrder {
-	var out []CellOrder
-	for i := range g.Cells {
-		if c := &g.Cells[i]; c.Count >= 2 {
-			out = append(out, CellOrder{Index: i, Entities: slices.Clone(c.Entities[:c.Count])})
-		}
-	}
-	return out
-}
-
-// reorderCells puts each listed cell's occupants in order, refusing a list that
-// names other occupants, breaks the shared-first partition or leaves a cell of two
-// or more out.
-func (g *SpatialGrid) reorderCells(cells []CellOrder) error {
-	listed := make(map[int]struct{}, len(cells))
-	for _, co := range cells {
-		if _, twice := listed[co.Index]; twice || co.Index < 0 || co.Index >= len(g.Cells) {
-			return errOrderMismatch
-		}
-		listed[co.Index] = struct{}{}
-		c := &g.Cells[co.Index]
-		held := c.Entities[:c.Count]
-		if c.Count < 2 || len(co.Entities) != len(held) {
-			return errOrderMismatch
-		}
-		for k, e := range co.Entities {
-			shared := k < int(c.SharedCount)
-			if shared != (e.Domain() == core.DomainShared) || !slices.Contains(held, e) || slices.Contains(co.Entities[:k], e) {
-				return errOrderMismatch
-			}
-		}
-		copy(held, co.Entities)
-	}
-	crowded := 0
-	for i := range g.Cells {
-		if g.Cells[i].Count >= 2 {
-			crowded++
-		}
-	}
-	if crowded != len(cells) {
-		return errOrderMismatch
-	}
-	return nil
-}
+func (p *Position) cellOrder() []CellOrder { return p.index.Order() }
 
 // WorldReconcile is one world brought to another's shared half in place, store by
 // store, with no capture of either: the comparison first, reading both and writing

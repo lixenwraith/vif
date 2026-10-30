@@ -86,50 +86,36 @@ A full session of its own, last: it moves what the rest builds on.
 #### Move Position into a package of its own, walls and rock one blocking model
 
 - Priority: P0
-- Affected files: `internal/engine/position.go`, `internal/engine/spatial_grid.go`,
-  `internal/engine/rock.go`, `internal/engine/snapshot_world_gen.go` (generated),
-  `internal/snapshot/digest.go`, `internal/system/wall.go`,
-  `internal/system/navigation.go`, `pkg/navigation/composite.go`,
-  `internal/render/renderer/rock.go`, and the 473 `Positions.` calls in 80 files (42
-  in `internal/system`, 23 in the renderers)
-- Guide: [ECS and events §3](ecs-and-events.md#3-position-and-spatial-queries),
+- Affected files: `pkg/position`, `internal/engine/position.go`,
+  `internal/engine/rock.go`, `internal/engine/snapshot_delta.go`,
+  `internal/system/wall.go`, `internal/system/navigation.go`,
+  `pkg/navigation/composite.go`, `internal/render/renderer/rock.go`, and the 441
+  `Positions.` calls in 80 files (42 in `internal/system`, 23 in the renderers)
+- Guide: [Position package](position-package.md),
+  [ECS and events §3](ecs-and-events.md#3-position-and-spatial-queries),
   [D-12](domain-design.md#d-12--shared-geometry-may-inspect-both-domains),
   [D-14](domain-design.md#d-14--map-bounds-are-shared-authority),
   [Rendering §2.2](rendering.md#22-the-cell-aspect),
   [Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)
 
-`engine/rock.go` put one kind of environment into the engine, a cave's columns with
-their stone look: right for a first iteration, wrong for an engine meant to outlive
-this game, and hard to move because `Position` is the spatial index and the game's
-geometry at once. It holds a dense row store and a grid of fixed-capacity cells (31
-entities, Shared before Player); the wall queries, where `HasBlockingWallAt` reads
-the rock, then each Shared occupant's `Wall` component; a `WallTest` grid per mask,
-with the wall epoch and change log navigation reads incrementally; the area and line
-queries (point and area line of sight, `FindFreeAreaSpiral`, `FindFreeFromPattern`,
-`FindPlacementAroundExclusion`, `ScanLine`); typing's `TopGlyphAt`; batches and
-`Shift`. It reads `World.Components.Wall` and `Resources.Config` (bounds,
-`CellAspect`), so nothing in it stands alone.
+Phase 1 landed: `pkg/position` holds the grid, the geometry, the rock and the wall
+log behind one blocker surface, and `engine.Position` binds them, keeping every
+`World.Positions` method ([Position package §2](position-package.md#2-decisions)
+holds the choices made). What remains, in the order of
+[its phases](position-package.md#3-phases):
 
-Goals:
-
-- A position package that knows no game: placement, the cell index and the geometry
-  queries, given its masks and its blockers rather than reading the world. A 1:1
-  cell for a graphical host, and later a third axis, enter there: authored geometry
-  stays at `RefAspect` and the package owns the conversion.
-- One blocking model: a blocker is a single cell (a wall entity) or a cluster (a
-  field a system owns: a cave's columns, a maze, a composite wall), each with its
-  mask and bounds, behind one surface for point, area and line tests and the change
-  log. The cave's columns and look leave the engine for the wall system and
-  `pkg/cave`, the look becoming the rock renderer's input.
-- The rock's bounds check for walls where it pays: the rock answers an area by a
-  column's bounds (`RockField.blocksArea`), not cell by cell; a maze kept as
-  per-mask row bitsets (or runs) updated from the wall log answers an area or a line
-  in words, with no component lookup a cell. td (500×250, narrow mazes everywhere)
-  proves it and navigation with it: its passability
+- One blocking model that pays: the entity blocker still reads each Shared
+  occupant's `Wall` component a cell. A maze kept as per-mask row bitsets (or runs)
+  updated from the wall log answers an area or a line in words, with no component
+  lookup; the rock already answers an area by a column's bounds. td (500×250,
+  narrow mazes everywhere) proves it and navigation with it: its passability
   (`CompositePassability.Compute`), the search grids `applyWalls` refills whole, its
   direct-path tests. td's worst ticks are those where hundreds of walls go at once:
   under a storm with eight walking cursors they reach 40–60 ms and compute no field,
-  the wall system's event peaking at 34–51 ms and navigation at 15–17 ms.
+  the wall system's event peaking at 34–51 ms and navigation at 15–17 ms. Open:
+  whether a maze's walls stay entities a cluster indexes or become the cluster.
+- The call sites take the package's names and the binding narrows; `SetRock` loses
+  its look, which the wall system publishes in `CaveResource` for the rock renderer.
 - Footprints: navigation steers each body by its footprint's tier
   ([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)), but
   the direct-path test centres the footprint and accepts it turned 90°
@@ -137,7 +123,10 @@ Goals:
   16 headless vanguard games (8 seeds at 120×40 and 200×60, 2,400 ticks each),
   1,988 of the 25,168 chase ticks it called direct, 7.9%, had the raider's own body
   blocked on the way.
-- A sparse or tiled grid for a ceiling-sized empty map
+- A 1:1 cell for a graphical host and later a third axis enter in the package:
+  authored geometry stays at `RefAspect` and the package owns the conversion; the
+  row type moves to the package with the axis, `component.PositionComponent` its
+  alias. A sparse or tiled grid for a ceiling-sized empty map
   ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)).
 
 What it must keep, across multiplayer, netcode and interactions:
@@ -145,9 +134,9 @@ What it must keep, across multiplayer, netcode and interactions:
 - Determinism: Shared positions, each cell's order (`WorldOrder.Cells`) and every
   query's answer alike on every instance; the journal digest hashes positions, and
   the divergence harness and the cross-instance tests read as before.
-- Domains: the Shared and Player halves of a cell (`ReservedPlayerPerCell`),
-  geometry over both (D-12), bounds as Shared authority (D-14), prediction's private
-  writes (D-18), the staging world's grid.
+- Domains: the Shared and Player halves of a cell (`PrivateBudget`), geometry over
+  both (D-12), bounds as Shared authority (D-14), prediction's private writes
+  (D-18), the staging world's grid.
 - Records: positions ship as rows and the index is derived; a cluster derives from
   its owner's record as the rock does, so an idle harness still matches main; any
   change to what ships moves `snapshot.Schema` and `JournalSchema`.
@@ -158,14 +147,8 @@ What it must keep, across multiplayer, netcode and interactions:
 - Cost, measured before and after: `TestTickProfileTD16`, `BenchmarkCaveStep`,
   `BenchmarkCaveStepNavigation`, the renderer benches, the harness counts.
 
-A full session at the highest effort (or ultracode): the plan first, each of its
-choices confirmed before any code. The choices to settle early: the package's
-boundary and what stays in `engine` (the `World` wiring, the generated snapshot
-code); a cluster's representation (bitsets, runs, a summed-area table) and its
-update path; whether a maze's walls stay entities a cluster indexes or become the
-cluster; the coordinate type (2D with a third axis reserved, or 3D now); the
-migration (a façade keeping the `World.Positions` surface while the call sites move,
-then narrowed); the footprint grids' cost on td.
+Each phase is a session at the highest effort: its choices confirmed before any
+code, one PR.
 
 ## Bots
 

@@ -128,7 +128,7 @@ func digestEntities(entities []core.Entity, scope engine.DomainScope) []core.Ent
 	}
 	out := make([]core.Entity, 0, len(entities))
 	for _, e := range entities {
-		if scope.Selects(e) {
+		if scope.Selects(engine.EntityClass(e)) {
 			out = append(out, e)
 		}
 	}
