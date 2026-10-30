@@ -476,7 +476,7 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 	s.ctx.PublishMapLock()
 
 	// Grid tracks map dimensions; a level-sized grid would outlive the level
-	s.ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	s.ctx.World.Positions.Resize(config.MapWidth, config.MapHeight)
 
 	// 6. Release the scenario's captured keys and clear the status. The play mode and
 	// the operator's, with its lines and overlay, outlive the reset, so a command line

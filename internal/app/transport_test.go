@@ -18,6 +18,7 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	link "github.com/lixenwraith/vif/pkg/network"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -932,7 +933,7 @@ func glyphRun(t *testing.T, a *App, runes string) {
 		var buf [parameter.MaxEntitiesPerCell]core.Entity
 		for i, r := range runes {
 			cell := component.PositionComponent{X: pos.X + i, Y: pos.Y}
-			n := w.Positions.GetAllEntitiesAtInto(cell.X, cell.Y, buf[:])
+			n := copy(buf[:], w.Positions.EntitiesAt(cell.X, cell.Y, position.ScopeAll))
 			for _, e := range buf[:n] {
 				if !w.Components.Glyph.HasEntity(e) {
 					continue

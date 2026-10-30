@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/profile"
 	"github.com/lixenwraith/vif/pkg/navigation"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -424,7 +425,7 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owne
 			if !s.isValidSpawnPos(spawnX, spawnY) {
 				if freeX, freeY, found := s.world.Positions.FindFreeFromPattern(
 					cx, cy, 1, 1,
-					engine.PatternCardinalFirst,
+					position.PatternCardinalFirst,
 					1, 5, true,
 					component.WallBlockKinetic, nil,
 				); found {

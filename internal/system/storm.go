@@ -515,7 +515,7 @@ func (s *StormSystem) isCirclePositionValid(centerX, centerY int) bool {
 		if cellX < 0 || cellX >= config.MapWidth || cellY < 0 || cellY >= config.MapHeight {
 			return false
 		}
-		if s.world.Positions.HasBlockingWallAt(cellX, cellY, component.WallBlockSpawn) {
+		if s.world.Positions.Blocks(cellX, cellY, component.WallBlockSpawn) {
 			return false
 		}
 	}
@@ -653,7 +653,7 @@ func (s *StormSystem) collectAndDestroyWallsInEllipse(centerX, centerY int) bool
 		cellX := centerX + off.X
 		cellY := centerY + off.Y
 
-		if s.world.Positions.HasBlockingWallAt(cellX, cellY, component.WallBlockKinetic) {
+		if s.world.Positions.Blocks(cellX, cellY, component.WallBlockKinetic) {
 			s.world.PushEvent(event.EventWallDespawnRequest, &event.WallDespawnRequestPayload{
 				X:      cellX,
 				Y:      cellY,

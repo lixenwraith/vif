@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // cellSweep collects the occupants a shared system clears from geometry it claims.
@@ -27,7 +28,7 @@ func (s *cellSweep) reset() {
 
 // collect appends the occupants of one cell that clearable admits
 func (s *cellSweep) collect(w *engine.World, x, y int, clearable func(core.Entity) bool) {
-	n := w.Positions.GetAllEntitiesAtInto(x, y, s.buf[:])
+	n := copy(s.buf[:], w.Positions.EntitiesAt(x, y, position.ScopeAll))
 	for i := range n {
 		e := s.buf[i]
 		if e == 0 || !clearable(e) {

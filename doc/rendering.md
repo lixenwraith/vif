@@ -390,7 +390,7 @@ columns ahead (`RockField.Ahead`), which come in at the right edge. A rock drawn
 its tick moves 20 times a second at any pace, so 24 columns a second is four steps
 of one column and one of two; carried, it moves 24 times a column at a time, and
 any pace up to 60 moves a column at a time. Scenery standing in rock or a wall that
-blocks spawns, as drawn (`Position.HasBlockingWallDrawnAt`), is not drawn: rock and
+blocks spawns, as drawn (`Index.BlocksCarried`), is not drawn: rock and
 walls draw first and a glyph prints over them foreground-only, so the text passes
 behind them; the sigil renderer leaves out a sigil there the same way, so a particle
 passing through rock goes behind it, and a ray stops at it. In truecolor each scenery layer mixes its

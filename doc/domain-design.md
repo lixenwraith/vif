@@ -553,8 +553,9 @@ Shared occupants are the prefix `Entities[:SharedCount]`; Player occupants follo
 `ReservedPlayerPerCell` preserves Shared capacity, and insertion rejects rather
 than evicts when full.
 
-Spatial queries take `ScopeShared`, `ScopePlayer`, or `ScopeBoth`. Shared species
-target Shared entities; local weapons may target both. `PositionBatch.CommitShared`
+Spatial queries take a `position.Scope`: `ScopeShared`, `ScopePrivate` (the Player
+half) or `ScopeAll`. Shared species target Shared entities; local weapons may
+target both. `PositionBatch.CommitShared`
 is the Shared placement gate.
 
 | Domain | Entities |

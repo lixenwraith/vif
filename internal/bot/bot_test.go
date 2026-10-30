@@ -267,7 +267,7 @@ func TestAPointerAimedPastTheViewportLandsOnTheNearestOpenCell(t *testing.T) {
 	w, ctx := soloWorld(10, 5)
 	cfg := w.Resources.Config
 	cfg.MapWidth = 200
-	w.Positions.ResizeGrid(cfg.MapWidth, cfg.MapHeight)
+	w.Positions.Resize(cfg.MapWidth, cfg.MapHeight)
 	_, _, maxX, _, _ := cfg.VisibleMapRect()
 	place(w, core.DomainPlayer, 150, 5, func(e core.Entity) {
 		w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: 'a', Type: component.GlyphGreen})
@@ -504,7 +504,7 @@ func TestABotSightsAndClicksButtons(t *testing.T) {
 		}
 		cfg := w.Resources.Config
 		cfg.MapWidth = mapW
-		w.Positions.ResizeGrid(cfg.MapWidth, cfg.MapHeight)
+		w.Positions.Resize(cfg.MapWidth, cfg.MapHeight)
 		for slot := 1; slot <= 3; slot++ {
 			e := w.CreateEntity(core.DomainShared)
 			w.Components.Button.SetComponent(e, component.ButtonComponent{Slot: slot, Key: rune('0' + slot)})

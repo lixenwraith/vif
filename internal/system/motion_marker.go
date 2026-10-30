@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -187,7 +188,7 @@ func (s *MotionMarkerSystem) regenerateBaseMarkers(cursorX, cursorY int) {
 
 	for _, dir := range directions {
 		// Markers must enumerate exactly what the motions enumerate: player glyphs and shared gold
-		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorX, cursorY, dir[0], dir[1], bounds, engine.ScopeBoth, glyphFilter)
+		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorX, cursorY, dir[0], dir[1], bounds.Rect, position.ScopeAll, glyphFilter)
 
 		if found {
 			s.spawnMarker(x, y, &s.baseMarkers)
@@ -224,7 +225,7 @@ func (s *MotionMarkerSystem) showColoredMarkers(dx, dy int) {
 		}
 
 		// Use the consolidated search logic from engine
-		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorPos.X, cursorPos.Y, dx, dy, bounds, engine.ScopeBoth, filter)
+		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorPos.X, cursorPos.Y, dx, dy, bounds.Rect, position.ScopeAll, filter)
 
 		if found {
 			s.spawnMarker(x, y, &s.coloredMarkers)
@@ -252,7 +253,7 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 	expectedCount := 0
 
 	for i, dir := range directions {
-		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorPos.X, cursorPos.Y, dir[0], dir[1], bounds, engine.ScopeBoth, glyphFilter)
+		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorPos.X, cursorPos.Y, dir[0], dir[1], bounds.Rect, position.ScopeAll, glyphFilter)
 		expectedFound[i] = found
 		if found {
 			expectedPositions[i] = vmath.Point{X: x, Y: y}

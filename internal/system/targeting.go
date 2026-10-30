@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -86,15 +87,15 @@ func targetCell(w *engine.World, e core.Entity) (int, int, bool) {
 // scope selects the enumerated domains; shared species pass ScopeShared, weapons ScopeBoth.
 // It excludes self and the player side: every cursor, cursor-owned orbs, the tower
 // and whatever ownerEntity owns.
-func HasCombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEntity, ownerEntity core.Entity) bool {
+func HasCombatTargetAt(w *engine.World, x, y int, scope position.Scope, selfEntity, ownerEntity core.Entity) bool {
 	_, _, ok := CombatTargetAt(w, x, y, scope, selfEntity, ownerEntity)
 	return ok
 }
 
 // CombatTargetAt is HasCombatTargetAt naming the first target found and the occupant it was hit through
-func CombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEntity, ownerEntity core.Entity) (target, hit core.Entity, ok bool) {
+func CombatTargetAt(w *engine.World, x, y int, scope position.Scope, selfEntity, ownerEntity core.Entity) (target, hit core.Entity, ok bool) {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := w.Positions.GetEntitiesAtInto(x, y, scope, entities[:])
+	count := copy(entities[:], w.Positions.EntitiesAt(x, y, scope))
 	for i := range count {
 		target, hit, valid := ResolveTargetFromEntity(w, entities[i], selfEntity)
 		if !valid || isPlayerSide(w, target, ownerEntity) {
@@ -106,7 +107,7 @@ func CombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEnt
 }
 
 // FindTargetsInEllipse returns all combat targets with members inside the ellipse; see FindTargetsIn
-func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64, scope engine.DomainScope, ownerEntity core.Entity) []TargetGroup {
+func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64, scope position.Scope, ownerEntity core.Entity) []TargetGroup {
 	return FindTargetsIn(w, func(x, y int) bool {
 		return vmath.EllipseContainsPoint(x, y, cx, cy, invRxSq, invRySq)
 	}, scope, ownerEntity)
@@ -116,7 +117,7 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 // grouped: one TargetGroup per composite header or single entity. The player side,
 // ownerEntity's own included, is excluded. Order is store order, never map order:
 // callers emit one event per group and combat resolution consumes RNG per event.
-func FindTargetsIn(w *engine.World, contains func(x, y int) bool, scope engine.DomainScope, ownerEntity core.Entity) []TargetGroup {
+func FindTargetsIn(w *engine.World, contains func(x, y int) bool, scope position.Scope, ownerEntity core.Entity) []TargetGroup {
 	index := make(map[core.Entity]int)
 	result := make([]TargetGroup, 0, 8)
 
@@ -188,7 +189,7 @@ func (f *headerFilter) targets(w *engine.World, header core.Entity) bool {
 
 // nearestTargets collects every target a point can reach with its closest member
 // and distance, composites and singles apart, each in store order
-func nearestTargets(w *engine.World, fromX, fromY float64, scope engine.DomainScope, ownerEntity core.Entity) (composites, singles []TargetAssignment) {
+func nearestTargets(w *engine.World, fromX, fromY float64, scope position.Scope, ownerEntity core.Entity) (composites, singles []TargetAssignment) {
 	compositeIdx := make(map[core.Entity]int)
 
 	// 1. Simple combat entities
@@ -245,7 +246,7 @@ func nearestTargets(w *engine.World, fromX, fromY float64, scope engine.DomainSc
 
 // Nearest targets prioritize composites, then singles, excluding owner-owned entities.
 // Store order breaks distance ties; overflow cycles through the available targets.
-func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope engine.DomainScope, ownerEntity core.Entity) []TargetAssignment {
+func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope position.Scope, ownerEntity core.Entity) []TargetAssignment {
 	if count <= 0 {
 		return nil
 	}
@@ -294,7 +295,7 @@ func traceRay(w *engine.World, r vmath.Ray) int {
 	limit := w.Resources.Config.MapWidth + w.Resources.Config.MapHeight
 	for i := 1; i <= limit; i++ {
 		x, y := r.Center(i)
-		if w.Positions.IsOutOfBounds(x, y) || w.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+		if w.Positions.IsOutOfBounds(x, y) || w.Positions.Blocks(x, y, component.WallBlockKinetic) {
 			return i - 1
 		}
 	}

@@ -505,12 +505,12 @@ func (s *EnvironmentSystem) wayBlocked(pos component.PositionComponent, stepX, s
 		dy = -1
 	}
 	for range vmath.IntAbs(stepX) {
-		if pos.X += dx; s.world.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn) {
+		if pos.X += dx; s.world.Positions.Blocks(pos.X, pos.Y, component.WallBlockSpawn) {
 			return true
 		}
 	}
 	for range vmath.IntAbs(stepY) {
-		if pos.Y += dy; s.world.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn) {
+		if pos.Y += dy; s.world.Positions.Blocks(pos.X, pos.Y, component.WallBlockSpawn) {
 			return true
 		}
 	}

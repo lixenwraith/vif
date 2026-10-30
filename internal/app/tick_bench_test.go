@@ -153,7 +153,7 @@ func TestTickProfileTD16(t *testing.T) {
 	a.Tick(ticks)
 	elapsed := time.Since(start)
 	pprof.StopCPUProfile()
-	w, h := a.World().Positions.GridDimensions()
+	w, h := a.World().Positions.Width, a.World().Positions.Height
 	t.Logf("td %dx%d, %d cursors, %d ticks on one core: %.2f ms a tick", w, h, parameter.MaxPlayers, ticks, float64(elapsed.Microseconds())/1000/ticks)
 }
 

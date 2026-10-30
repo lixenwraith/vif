@@ -101,7 +101,7 @@ func TestACountdownIsPlacedByItsInk(t *testing.T) {
 		const ceiling, floor = 4, 4 + parameter.SplashCharHeight // rows 5 to 15 open
 		w, c := newCountdown(t, 60, 5, func(_, y int) bool { return y <= ceiling || y >= floor })
 		for _, cell := range countdownInk(w, c) {
-			if w.Positions.HasBlockingWallAt(cell.X, cell.Y, component.WallBlockAll) {
+			if w.Positions.Blocks(cell.X, cell.Y, component.WallBlockAll) {
 				t.Fatalf("the digit inks (%d, %d), a wall, in a corridor of rows %d to %d", cell.X, cell.Y, ceiling+1, floor-1)
 			}
 		}

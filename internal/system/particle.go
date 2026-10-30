@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -509,7 +510,7 @@ func (s *ParticleSystem) vortex(p *event.ParticleVortexPayload) {
 // behind them, where no conversion reaches
 func (s *ParticleSystem) behindWall(e core.Entity) bool {
 	pos, ok := s.world.Positions.GetPosition(e)
-	return ok && s.world.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockSpawn)
+	return ok && s.world.Positions.Blocks(pos.X, pos.Y, component.WallBlockSpawn)
 }
 
 // carry moves every particle no anchor holds left with the cave's steps, the cell it
@@ -649,7 +650,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 					}
 					continue // bound reflection already holds a bouncing particle in
 				}
-				if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockParticle) {
+				if s.world.Positions.Blocks(x, y, component.WallBlockParticle) {
 					state.statWallCollisions.Add(1)
 					if prof.bounce == 0 {
 						destroyParticle = true
@@ -842,7 +843,7 @@ func (s *ParticleSystem) touch(behavior component.ParticleBehavior, state *parti
 	}
 	state.processedGridCells[flatIdx] = true
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
-	targets := collisionBuf[:s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])]
+	targets := collisionBuf[:copy(collisionBuf[:], s.world.Positions.EntitiesAt(x, y, position.ScopeAll))]
 	if behavior == component.ParticleDecay {
 		return s.processDecayTargets(state, entity, targets)
 	}

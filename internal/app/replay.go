@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/service"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // ConfigFromAnchor rebuilds the headless config a journal was recorded under, mid-run
@@ -153,7 +154,7 @@ func (t replayTarget) Digest() (d event.JournalDigest) {
 // journalDigestLocked is the world a journal's digest carries: both domains, since
 // a replay reproduces the player's own as well. Caller MUST hold updateMutex.
 func (sc *scribe) journalDigestLocked() event.JournalDigest {
-	return snapshot.DigestWorld(sc.world, engine.ScopeBoth).Journal()
+	return snapshot.DigestWorld(sc.world, position.ScopeAll).Journal()
 }
 
 // Install writes a world the recorded run wrote, rebuilt from the one this replay

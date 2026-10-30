@@ -23,7 +23,8 @@ func stoneField(w *engine.World, look engine.RockLook, origin int64) {
 	for x := range cols {
 		cols[x] = stoneProfile(w, origin+int64(x))
 	}
-	w.Positions.SetRock(component.WallBlockAll, look, origin, cols)
+	w.Resources.Cave.Look = look
+	w.Positions.SetRock(component.WallBlockAll, origin, cols)
 }
 
 // stoneProfile is profile column i: a ceiling of two to eight rows, a floor of three to
@@ -50,7 +51,7 @@ func TestSceneryPassesBehindRock(t *testing.T) {
 	for x := range cols {
 		cols[x] = engine.RockColumn{Ceil: 3, Floor: config.MapHeight}
 	}
-	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{}, 0, cols)
+	w.Positions.SetRock(component.WallBlockAll, 0, cols)
 	for _, at := range []component.PositionComponent{{X: 5, Y: 1}, {X: 5, Y: 6}} {
 		e := w.CreateEntity(core.DomainPlayer)
 		w.Positions.SetPosition(e, at)
@@ -76,7 +77,7 @@ func TestAParticlePassesHiddenThroughRock(t *testing.T) {
 	for x := range cols {
 		cols[x] = engine.RockColumn{Ceil: 3, Floor: config.MapHeight}
 	}
-	w.Positions.SetRock(component.WallBlockAll&^component.WallBlockParticle, engine.RockLook{}, 0, cols)
+	w.Positions.SetRock(component.WallBlockAll&^component.WallBlockParticle, 0, cols)
 	for _, at := range []component.PositionComponent{{X: 5, Y: 1}, {X: 5, Y: 6}} {
 		e := w.CreateEntity(core.DomainPlayer)
 		w.Positions.SetPosition(e, at)
@@ -104,7 +105,8 @@ func TestRockDrawsWhereTheScrollStandsAtTheFrame(t *testing.T) {
 		cols[x] = engine.RockColumn{Floor: config.MapHeight}
 	}
 	cols[10].Ceil = 5
-	w.Positions.SetRock(component.WallBlockAll, engine.RockLook{Visual: component.WallVisualConfig{Char: '#', RenderFg: true}}, 0, cols)
+	w.Resources.Cave.Look = engine.RockLook{Visual: component.WallVisualConfig{Char: '#', RenderFg: true}}
+	w.Positions.SetRock(component.WallBlockAll, 0, cols)
 	w.Positions.SetRockAhead([]engine.RockColumn{{Ceil: 5, Floor: config.MapHeight}})
 	wall := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(wall, component.PositionComponent{X: 20, Y: 8})
@@ -284,7 +286,8 @@ func BenchmarkRockRender(b *testing.B) {
 				for x := range cols {
 					cols[x] = column(int64(x))
 				}
-				w.Positions.SetRock(component.WallBlockAll, c.look, 0, cols)
+				w.Resources.Cave.Look = c.look
+				w.Positions.SetRock(component.WallBlockAll, 0, cols)
 				r := NewWallRenderer(game)
 				buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
 				ctx := render.RenderContext{MapWidth: config.MapWidth, MapHeight: config.MapHeight,
@@ -296,7 +299,8 @@ func BenchmarkRockRender(b *testing.B) {
 					if c.redraw {
 						look := c.look
 						look.Seed = uint64(next)
-						w.Positions.SetRock(component.WallBlockAll, look, 0, w.Positions.Rock().Columns())
+						w.Resources.Cave.Look = look
+						w.Positions.SetRock(component.WallBlockAll, 0, w.Positions.Rock().Columns())
 					}
 					w.Positions.ShiftRock(column(next))
 					next++

@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
@@ -159,7 +160,7 @@ func (s *BulletSystem) traverseAndCollide(
 			return true
 		}
 
-		if s.world.Positions.HasBlockingWallAt(cx, cy, component.WallBlockKinetic) {
+		if s.world.Positions.Blocks(cx, cy, component.WallBlockKinetic) {
 			s.statWallCollisions.Add(1)
 			return true
 		}
@@ -170,7 +171,7 @@ func (s *BulletSystem) traverseAndCollide(
 				s.statHits.Add(1)
 				return true
 			}
-		} else if target, hit, ok := CombatTargetAt(s.world, cx, cy, engine.ScopeBoth, 0, bullet.Owner); ok {
+		} else if target, hit, ok := CombatTargetAt(s.world, cx, cy, position.ScopeAll, 0, bullet.Owner); ok {
 			// Resolved by the target, not by the firing cursor's domain (D-10)
 			s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   bullet.Attack,

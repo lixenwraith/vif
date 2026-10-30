@@ -151,14 +151,15 @@ func (r *DriftResource) Carry(level int, since time.Duration) (dx, dy int) {
 // --- Cave Resource ---
 
 // CaveResource is the cave's scroll as the wall system left it this tick: the
-// columns its rock and shared walls stepped left, its part-column and its rate. The
-// wall system writes, the particle system reads to carry what rides the cave's frame
-// and renderers to draw the scroll between ticks; it is derived state and never
-// copied with a world.
+// columns its rock and shared walls stepped left, its part-column and its rate, and
+// how its rock draws. The wall system writes, the particle system reads to carry
+// what rides the cave's frame and renderers to draw the scroll between ticks; it is
+// derived state and never copied with a world.
 type CaveResource struct {
 	Steps int
-	Phase int64 // rate times nanoseconds toward the next column
-	Rate  int64 // microcolumns a second, 0 while no cave scrolls
+	Phase int64    // rate times nanoseconds toward the next column
+	Rate  int64    // microcolumns a second, 0 while no cave scrolls
+	Look  RockLook // how the rock field draws, laid with it from the cave's record
 }
 
 // Carry is how many columns the scroll moves in since past the tick, at the rate it has
@@ -409,11 +410,11 @@ type CursorRosterEntry struct {
 	Waited  time.Duration // how long it has been away, which the new game's wait goes on from
 }
 
-// PingAbsoluteBounds holds absolute coordinates derived from cursor position and radius
+// PingAbsoluteBounds is the cells a cursor's ping reaches, as the index takes a
+// bounds; Active while the ping's radius sets them
 type PingAbsoluteBounds struct {
-	MinX, MaxX int
-	MinY, MaxY int
-	Active     bool
+	position.Rect
+	Active bool
 }
 
 // Valid reports whether a local cursor exists

@@ -347,7 +347,7 @@ func (s *KrakenSystem) syncMembers(e core.Entity, k *component.KrakenComponent, 
 	s.spare = append(s.spare, s.idle...)
 	next := 0
 	for _, cell := range s.cells {
-		if s.world.Positions.HasBlockingWallAt(cell.X, cell.Y, 0) {
+		if s.world.Positions.Blocks(cell.X, cell.Y, 0) {
 			s.world.PushEvent(event.EventWallDespawnRequest, &event.WallDespawnRequestPayload{
 				X: cell.X, Y: cell.Y, Width: 1, Height: 1,
 			})

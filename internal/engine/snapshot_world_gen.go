@@ -9,6 +9,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // StoreEntry is one entity's component in a capture. The reference is a
@@ -482,64 +483,64 @@ func (w *World) InstallPlayerWorld(s PlayerWorldState) {
 // holds another, so a journal's opening carries it: the run it opens on, and every
 // replay of it, then play on in the run's own order.
 type WorldOrder struct {
-	Positions    []core.Entity `json:"positions,omitempty"`
-	Cells        []CellOrder   `json:"cells,omitempty"`
-	Glyph        []core.Entity `json:"glyph,omitempty"`
-	Sigil        []core.Entity `json:"sigil,omitempty"`
-	Nugget       []core.Entity `json:"nugget,omitempty"`
-	Cursor       []core.Entity `json:"cursor,omitempty"`
-	Wraith       []core.Entity `json:"wraith,omitempty"`
-	Protection   []core.Entity `json:"protection,omitempty"`
-	Kinetic      []core.Entity `json:"kinetic,omitempty"`
-	Wall         []core.Entity `json:"wall,omitempty"`
-	Loot         []core.Entity `json:"loot,omitempty"`
-	Gateway      []core.Entity `json:"gateway,omitempty"`
-	Energy       []core.Entity `json:"energy,omitempty"`
-	Heat         []core.Entity `json:"heat,omitempty"`
-	Shield       []core.Entity `json:"shield,omitempty"`
-	Boost        []core.Entity `json:"boost,omitempty"`
-	Weapon       []core.Entity `json:"weapon,omitempty"`
-	Orb          []core.Entity `json:"orb,omitempty"`
-	Ping         []core.Entity `json:"ping,omitempty"`
-	CursorView   []core.Entity `json:"cursorview,omitempty"`
-	Particle     []core.Entity `json:"particle,omitempty"`
-	Tracer       []core.Entity `json:"tracer,omitempty"`
-	Navigation   []core.Entity `json:"navigation,omitempty"`
-	Combat       []core.Entity `json:"combat,omitempty"`
-	Genotype     []core.Entity `json:"genotype,omitempty"`
-	Lightning    []core.Entity `json:"lightning,omitempty"`
-	Missile      []core.Entity `json:"missile,omitempty"`
-	Mount        []core.Entity `json:"mount,omitempty"`
-	Ray          []core.Entity `json:"ray,omitempty"`
-	Pulse        []core.Entity `json:"pulse,omitempty"`
-	Spirit       []core.Entity `json:"spirit,omitempty"`
-	Materialize  []core.Entity `json:"materialize,omitempty"`
-	Target       []core.Entity `json:"target,omitempty"`
-	TargetAnchor []core.Entity `json:"targetanchor,omitempty"`
-	Drain        []core.Entity `json:"drain,omitempty"`
-	Quasar       []core.Entity `json:"quasar,omitempty"`
-	Swarm        []core.Entity `json:"swarm,omitempty"`
-	Storm        []core.Entity `json:"storm,omitempty"`
-	StormCircle  []core.Entity `json:"stormcircle,omitempty"`
-	Bullet       []core.Entity `json:"bullet,omitempty"`
-	Pylon        []core.Entity `json:"pylon,omitempty"`
-	Snake        []core.Entity `json:"snake,omitempty"`
-	SnakeHead    []core.Entity `json:"snakehead,omitempty"`
-	SnakeBody    []core.Entity `json:"snakebody,omitempty"`
-	SnakeMember  []core.Entity `json:"snakemember,omitempty"`
-	Eye          []core.Entity `json:"eye,omitempty"`
-	Tower        []core.Entity `json:"tower,omitempty"`
-	Kraken       []core.Entity `json:"kraken,omitempty"`
-	Behavior     []core.Entity `json:"behavior,omitempty"`
-	Header       []core.Entity `json:"header,omitempty"`
-	Member       []core.Entity `json:"member,omitempty"`
-	Flash        []core.Entity `json:"flash,omitempty"`
-	Fadeout      []core.Entity `json:"fadeout,omitempty"`
-	Splash       []core.Entity `json:"splash,omitempty"`
-	Marker       []core.Entity `json:"marker,omitempty"`
-	Button       []core.Entity `json:"button,omitempty"`
-	Death        []core.Entity `json:"death,omitempty"`
-	Timer        []core.Entity `json:"timer,omitempty"`
+	Positions    []core.Entity                     `json:"positions,omitempty"`
+	Cells        []position.CellOrder[core.Entity] `json:"cells,omitempty"`
+	Glyph        []core.Entity                     `json:"glyph,omitempty"`
+	Sigil        []core.Entity                     `json:"sigil,omitempty"`
+	Nugget       []core.Entity                     `json:"nugget,omitempty"`
+	Cursor       []core.Entity                     `json:"cursor,omitempty"`
+	Wraith       []core.Entity                     `json:"wraith,omitempty"`
+	Protection   []core.Entity                     `json:"protection,omitempty"`
+	Kinetic      []core.Entity                     `json:"kinetic,omitempty"`
+	Wall         []core.Entity                     `json:"wall,omitempty"`
+	Loot         []core.Entity                     `json:"loot,omitempty"`
+	Gateway      []core.Entity                     `json:"gateway,omitempty"`
+	Energy       []core.Entity                     `json:"energy,omitempty"`
+	Heat         []core.Entity                     `json:"heat,omitempty"`
+	Shield       []core.Entity                     `json:"shield,omitempty"`
+	Boost        []core.Entity                     `json:"boost,omitempty"`
+	Weapon       []core.Entity                     `json:"weapon,omitempty"`
+	Orb          []core.Entity                     `json:"orb,omitempty"`
+	Ping         []core.Entity                     `json:"ping,omitempty"`
+	CursorView   []core.Entity                     `json:"cursorview,omitempty"`
+	Particle     []core.Entity                     `json:"particle,omitempty"`
+	Tracer       []core.Entity                     `json:"tracer,omitempty"`
+	Navigation   []core.Entity                     `json:"navigation,omitempty"`
+	Combat       []core.Entity                     `json:"combat,omitempty"`
+	Genotype     []core.Entity                     `json:"genotype,omitempty"`
+	Lightning    []core.Entity                     `json:"lightning,omitempty"`
+	Missile      []core.Entity                     `json:"missile,omitempty"`
+	Mount        []core.Entity                     `json:"mount,omitempty"`
+	Ray          []core.Entity                     `json:"ray,omitempty"`
+	Pulse        []core.Entity                     `json:"pulse,omitempty"`
+	Spirit       []core.Entity                     `json:"spirit,omitempty"`
+	Materialize  []core.Entity                     `json:"materialize,omitempty"`
+	Target       []core.Entity                     `json:"target,omitempty"`
+	TargetAnchor []core.Entity                     `json:"targetanchor,omitempty"`
+	Drain        []core.Entity                     `json:"drain,omitempty"`
+	Quasar       []core.Entity                     `json:"quasar,omitempty"`
+	Swarm        []core.Entity                     `json:"swarm,omitempty"`
+	Storm        []core.Entity                     `json:"storm,omitempty"`
+	StormCircle  []core.Entity                     `json:"stormcircle,omitempty"`
+	Bullet       []core.Entity                     `json:"bullet,omitempty"`
+	Pylon        []core.Entity                     `json:"pylon,omitempty"`
+	Snake        []core.Entity                     `json:"snake,omitempty"`
+	SnakeHead    []core.Entity                     `json:"snakehead,omitempty"`
+	SnakeBody    []core.Entity                     `json:"snakebody,omitempty"`
+	SnakeMember  []core.Entity                     `json:"snakemember,omitempty"`
+	Eye          []core.Entity                     `json:"eye,omitempty"`
+	Tower        []core.Entity                     `json:"tower,omitempty"`
+	Kraken       []core.Entity                     `json:"kraken,omitempty"`
+	Behavior     []core.Entity                     `json:"behavior,omitempty"`
+	Header       []core.Entity                     `json:"header,omitempty"`
+	Member       []core.Entity                     `json:"member,omitempty"`
+	Flash        []core.Entity                     `json:"flash,omitempty"`
+	Fadeout      []core.Entity                     `json:"fadeout,omitempty"`
+	Splash       []core.Entity                     `json:"splash,omitempty"`
+	Marker       []core.Entity                     `json:"marker,omitempty"`
+	Button       []core.Entity                     `json:"button,omitempty"`
+	Death        []core.Entity                     `json:"death,omitempty"`
+	Timer        []core.Entity                     `json:"timer,omitempty"`
 }
 
 // CaptureOrder reads the order this world holds its entities in.

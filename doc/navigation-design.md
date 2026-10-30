@@ -80,10 +80,10 @@ nothing needs it (`syncTiers`). Riding the eye's tier keeps one composite tier's
 upkeep and fields; it only refuses a gap a smaller body fits.
 
 Navigation keeps the walls everything stands on and brings them up to the walls
-once a tick, re-testing only the cells the engine's wall log names
-(`Position.WallChanges`): a moving map costs the cells that moved, not the map.
+once a tick, re-testing only the cells the index's block log names
+(`Index.BlockChanges`): a moving map costs the cells that moved, not the map.
 When the log no longer reaches back, after an install, a resize or a restore, it
-takes the walls' bits whole (`Position.WallBits`) and diffs them a word at a time
+takes the walls' bits whole (`Index.BlockBits`) and diffs them a word at a time
 (`position.Diff`). A changed cell moves the point tier. A composite passability is
 a bit a header, derived from the walls' bits a row of words at a time (`Compute`),
 and a change derives again only the header rows, and the words of them, the

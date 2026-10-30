@@ -69,7 +69,7 @@ func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.
 				live++
 				h, _ := w.Components.Header.GetComponent(header)
 				for _, m := range h.MemberEntries {
-					if pos, ok := w.Positions.GetPosition(m.Entity); ok && w.Positions.HasBlockingWallAt(pos.X, pos.Y, component.WallBlockKinetic) {
+					if pos, ok := w.Positions.GetPosition(m.Entity); ok && w.Positions.Blocks(pos.X, pos.Y, component.WallBlockKinetic) {
 						stuck = header
 					}
 				}
@@ -491,7 +491,7 @@ func TestVanguardsCaveWearsOneOfItsStoneArts(t *testing.T) {
 		var look engine.RockLook
 		w.RunSafe(func() {
 			if w.Positions.Rock() != nil {
-				look = w.Positions.RockLook()
+				look = w.Resources.Cave.Look
 			}
 		})
 		art := pattern.ArtPreset(look.Art).String()
@@ -892,7 +892,7 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 	rock := func() (art string, origin int64) {
 		w.RunSafe(func() {
 			if r := w.Positions.Rock(); r != nil {
-				art, origin = pattern.ArtPreset(w.Positions.RockLook().Art).String(), r.Origin
+				art, origin = pattern.ArtPreset(w.Resources.Cave.Look.Art).String(), r.Origin
 			}
 		})
 		return art, origin

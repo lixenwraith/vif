@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 // TestCombatDigestCoversStatusSlots: a status a hit left on a shared combatant is
@@ -15,11 +16,11 @@ func TestCombatDigestCoversStatusSlots(t *testing.T) {
 	w := engine.NewWorld()
 	e := w.CreateEntity(core.DomainShared)
 	w.Components.Combat.SetComponent(e, component.CombatComponent{HitPoints: 3})
-	before := DigestWorld(w, engine.ScopeShared).Combat
+	before := DigestWorld(w, position.ScopeShared).Combat
 
 	c, _ := w.Components.Combat.GetPtr(e)
 	c.Status[component.StatusStun].Remaining = time.Second
-	if DigestWorld(w, engine.ScopeShared).Combat == before {
+	if DigestWorld(w, position.ScopeShared).Combat == before {
 		t.Fatal("a stun did not move the combat digest")
 	}
 }

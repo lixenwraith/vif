@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -64,7 +65,7 @@ func (wd WorldDigest) Journal() event.JournalDigest {
 
 // DigestWorld hashes one domain scope, so two instances compare shared state
 // without their player-domain effects. Caller MUST hold the world lock.
-func DigestWorld(w *engine.World, scope engine.DomainScope) WorldDigest {
+func DigestWorld(w *engine.World, scope position.Scope) WorldDigest {
 	var wd WorldDigest
 
 	wd.Positions = newHash()
@@ -89,7 +90,7 @@ func DigestWorld(w *engine.World, scope engine.DomainScope) WorldDigest {
 
 	// A cursor's combat is owner-authored and transported (D-13), so it is compared
 	// only within one instance; every other combatant is re-derived and must match.
-	shared := scope != engine.ScopeBoth
+	shared := scope != position.ScopeAll
 	wd.Combat = newHash()
 	for _, e := range digestEntities(w.Components.Combat.Entities(), scope) {
 		if shared && w.Components.Cursor.HasEntity(e) {
@@ -122,8 +123,8 @@ func DigestWorld(w *engine.World, scope engine.DomainScope) WorldDigest {
 }
 
 // digestEntities canonically projects a mixed dense store for cross-instance comparison.
-func digestEntities(entities []core.Entity, scope engine.DomainScope) []core.Entity {
-	if scope == engine.ScopeBoth {
+func digestEntities(entities []core.Entity, scope position.Scope) []core.Entity {
+	if scope == position.ScopeAll {
 		return entities
 	}
 	out := make([]core.Entity, 0, len(entities))
@@ -160,7 +161,7 @@ func RecordName(line string) string {
 // readers that must not disagree about it: the lines a test compares and the
 // digest the session's drift gauge hashes. Caller MUST hold the world lock.
 func SharedSurface(ctx *engine.GameContext, w *engine.World) (wd WorldDigest, digestLine string, context, status []string) {
-	wd = DigestWorld(w, engine.ScopeShared)
+	wd = DigestWorld(w, position.ScopeShared)
 	context = make([]string, 0, 8)
 	ctx.SnapshotContext(func(sub string, args ...any) {
 		if IsRecord(args, "session") || IsRecord(args, "view") {
@@ -192,7 +193,7 @@ func SharedLines(ctx *engine.GameContext, w *engine.World) []string {
 // describes how a run is watched and driven. Caller MUST hold the world lock.
 func Lines(ctx *engine.GameContext, w *engine.World, simOnly bool) []string {
 	lines := make([]string, 0, 64)
-	lines = append(lines, DigestWorld(w, engine.ScopeBoth).Line(true))
+	lines = append(lines, DigestWorld(w, position.ScopeAll).Line(true))
 
 	ctx.SnapshotContext(func(sub string, args ...any) {
 		if simOnly && IsRecord(args, "session") {

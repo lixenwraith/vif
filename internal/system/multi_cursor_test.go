@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T) {
@@ -503,7 +504,7 @@ func TestShotContactStrikesOnlyTheTouchedOwnedCursor(t *testing.T) {
 
 func TestCombatQueriesExcludeEveryCursor(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	if HasCombatTargetAt(w, 15, 5, engine.ScopeBoth, 0, first) {
+	if HasCombatTargetAt(w, 15, 5, position.ScopeAll, 0, first) {
 		t.Fatalf("slot-one cursor %d was treated as a combat target", second)
 	}
 
@@ -514,7 +515,7 @@ func TestCombatQueriesExcludeEveryCursor(t *testing.T) {
 		CombatEntityType: component.CombatEntityDrain,
 		HitPoints:        1,
 	})
-	targets := FindNearestTargets(w, 15, 5, 1, engine.ScopeBoth, first)
+	targets := FindNearestTargets(w, 15, 5, 1, position.ScopeAll, first)
 	if len(targets) != 1 || targets[0].Target != target {
 		t.Fatalf("nearest targets = %#v, want only combat target %d", targets, target)
 	}
@@ -799,10 +800,10 @@ func TestNoPlayersWeaponTargetsTheTower(t *testing.T) {
 	member, _ := w.Positions.GetPosition(headerComp.MemberEntries[0].Entity)
 
 	for _, cursor := range []core.Entity{first, second} {
-		if HasCombatTargetAt(w, member.X, member.Y, engine.ScopeBoth, 0, cursor) {
+		if HasCombatTargetAt(w, member.X, member.Y, position.ScopeAll, 0, cursor) {
 			t.Fatalf("cursor %d targets the tower at (%d, %d)", cursor, member.X, member.Y)
 		}
-		if got := FindNearestTargets(w, float64(member.X), float64(member.Y), 1, engine.ScopeBoth, cursor); len(got) != 0 {
+		if got := FindNearestTargets(w, float64(member.X), float64(member.Y), 1, position.ScopeAll, cursor); len(got) != 0 {
 			t.Fatalf("cursor %d finds %#v next to the tower", cursor, got)
 		}
 	}
@@ -1031,7 +1032,7 @@ func TestCameraAnchorsOnThePredictedCell(t *testing.T) {
 
 	config := w.Resources.Config
 	config.MapWidth, config.MapHeight = 200, 100
-	w.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	w.Positions.Resize(config.MapWidth, config.MapHeight)
 
 	w.PushCursorMove(local, 150, 60)
 	if config.CameraX == 0 || config.CameraY == 0 {
@@ -1069,7 +1070,7 @@ func TestAPointerHeldStillLeavesTheMapStill(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
 	config := w.Resources.Config
 	config.MapWidth, config.MapHeight = 400, 100
-	w.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+	w.Positions.Resize(config.MapWidth, config.MapHeight)
 	w.PushCursorMove(local, 300, 50) // a key move scrolls the view to the right side
 
 	report := func(vx, vy int) (int, int) {

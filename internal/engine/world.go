@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/vlog"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -865,17 +866,16 @@ func (w *World) PingAbsoluteBoundsOf(e core.Entity) PingAbsoluteBounds {
 
 	ping, ok := w.Components.Ping.GetComponent(e)
 	if !ok || !ping.BoundsActive {
-		return PingAbsoluteBounds{MinX: pos.X, MaxX: pos.X, MinY: pos.Y, MaxY: pos.Y}
+		return PingAbsoluteBounds{Rect: position.Rect{MinX: pos.X, MaxX: pos.X, MinY: pos.Y, MaxY: pos.Y}}
 	}
 
 	config := w.Resources.Config
-	return PingAbsoluteBounds{
-		MinX:   max(0, pos.X-ping.BoundsRadiusX),
-		MaxX:   min(config.MapWidth-1, pos.X+ping.BoundsRadiusX),
-		MinY:   max(0, pos.Y-ping.BoundsRadiusY),
-		MaxY:   min(config.MapHeight-1, pos.Y+ping.BoundsRadiusY),
-		Active: true,
-	}
+	return PingAbsoluteBounds{Rect: position.Rect{
+		MinX: max(0, pos.X-ping.BoundsRadiusX),
+		MaxX: min(config.MapWidth-1, pos.X+ping.BoundsRadiusX),
+		MinY: max(0, pos.Y-ping.BoundsRadiusY),
+		MaxY: min(config.MapHeight-1, pos.Y+ping.BoundsRadiusY),
+	}, Active: true}
 }
 
 // === Validation ===
@@ -891,7 +891,7 @@ func (w *World) ResolveFreeCell(x, y int, mask component.WallBlockMask) (int, in
 	maxRadius := max(config.MapWidth, config.MapHeight) / 2
 
 	newX, newY, found := w.Positions.FindFreeFromPattern(
-		x, y, 1, 1, PatternCardinalFirst, 1, maxRadius, true, mask, nil,
+		x, y, 1, 1, position.PatternCardinalFirst, 1, maxRadius, true, mask, nil,
 	)
 	if !found {
 		return x, y, false
@@ -1137,7 +1137,7 @@ func (w *World) SetupLevel(width, height int, clearEntities, cropOnResize, prese
 	config.CropOnResize = cropOnResize
 
 	// Grid tracks map dimensions; grow-only backing makes this cheap
-	w.Positions.ResizeGrid(width, height)
+	w.Positions.Resize(width, height)
 
 	// Reset camera to origin
 	config.CameraX = 0
