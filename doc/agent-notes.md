@@ -139,6 +139,22 @@ that proves wrong or that a document now states, and link the document instead.
   `RunSafe`, so a goroutine that reads the run's config off the world lock (the
   drive loop, a bot seat) reads the copy it started with instead.
 
+## Position
+
+- The index's bounds are its grid's: every writer of `Config.MapWidth` resizes the
+  grid before a query runs (`SetupLevel`, the reset, a crop, `CopyIn`), and a new
+  writer must too, or every wall query and bounds check answers for the old map.
+- An indirect call on a per-cell probe shows: reading the bounds through an
+  interface on each `Blocks` cost `BenchmarkGlyphRender` a quarter, and an
+  interface over the wall entities a tenth more. Measure a probe path with the
+  renderer's benches, not only the tick's.
+- A method cannot be declared on an alias (`engine.DomainScope = position.Scope`),
+  so a scope selects a class, `engine.EntityClass(e)`, which the two guard arrays in
+  `internal/engine/position.go` hold to the domain numbering.
+- `pkg/position` knows no entity: a test over walls or glyphs needs a world and
+  stays in `internal/engine`; a grid-only test goes to the package with a test id
+  whose class is its top byte.
+
 ## Glyphs and colours
 
 - A new non-ASCII rune in a drawing package or a shipped scenario's TOML needs the

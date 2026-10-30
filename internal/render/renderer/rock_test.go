@@ -294,7 +294,9 @@ func BenchmarkRockRender(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {
 					if c.redraw {
-						w.Positions.Rock().Look.Seed = uint64(next)
+						look := c.look
+						look.Seed = uint64(next)
+						w.Positions.SetRock(component.WallBlockAll, look, 0, w.Positions.Rock().Columns())
 					}
 					w.Positions.ShiftRock(column(next))
 					next++

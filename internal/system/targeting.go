@@ -122,7 +122,7 @@ func FindTargetsIn(w *engine.World, contains func(x, y int) bool, scope engine.D
 
 	// 1. Simple combat entities (no Header, no Member component)
 	for _, e := range w.Components.Combat.Entities() {
-		if !scope.Selects(e) {
+		if !scope.Selects(engine.EntityClass(e)) {
 			continue
 		}
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
@@ -144,7 +144,7 @@ func FindTargetsIn(w *engine.World, contains func(x, y int) bool, scope engine.D
 	headers := headerFilter{owner: ownerEntity}
 	w.Components.Member.Each(func(memberEntity core.Entity, memberComp *component.MemberComponent) bool {
 		headerEntity := memberComp.HeaderEntity
-		if !scope.Selects(memberEntity) || !headers.targets(w, headerEntity) {
+		if !scope.Selects(engine.EntityClass(memberEntity)) || !headers.targets(w, headerEntity) {
 			return true
 		}
 		x, y, ok := targetCell(w, memberEntity)
@@ -193,7 +193,7 @@ func nearestTargets(w *engine.World, fromX, fromY float64, scope engine.DomainSc
 
 	// 1. Simple combat entities
 	for _, e := range w.Components.Combat.Entities() {
-		if !scope.Selects(e) {
+		if !scope.Selects(engine.EntityClass(e)) {
 			continue
 		}
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
@@ -215,7 +215,7 @@ func nearestTargets(w *engine.World, fromX, fromY float64, scope engine.DomainSc
 	headers := headerFilter{owner: ownerEntity}
 	w.Components.Member.Each(func(memberEntity core.Entity, memberComp *component.MemberComponent) bool {
 		headerEntity := memberComp.HeaderEntity
-		if !scope.Selects(memberEntity) || !headers.targets(w, headerEntity) {
+		if !scope.Selects(engine.EntityClass(memberEntity)) || !headers.targets(w, headerEntity) {
 			return true
 		}
 		x, y, ok := targetCell(w, memberEntity)

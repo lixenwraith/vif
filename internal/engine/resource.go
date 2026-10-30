@@ -22,6 +22,7 @@ import (
 	"github.com/lixenwraith/vif/pkg/linkpace"
 	"github.com/lixenwraith/vif/pkg/navigation"
 	link "github.com/lixenwraith/vif/pkg/network"
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -258,7 +259,7 @@ type ConfigResource struct {
 // so a wide map keeps the floor's height and gives up width instead; the floor
 // itself always fits, which the scenario loader checks.
 func (c *ConfigResource) FloorMapSize(width, height int) (int, int) {
-	width, height = ClampMapSize(max(width, c.MapMinWidth), max(height, c.MapMinHeight))
+	width, height = position.Clamp(max(width, c.MapMinWidth), max(height, c.MapMinHeight))
 	if height < c.MapMinHeight {
 		height = c.MapMinHeight
 		width = parameter.MaxMapCells / height
