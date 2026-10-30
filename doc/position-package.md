@@ -142,11 +142,10 @@ Each names the choice taken and what the other would have cost.
    words at a time, the lost log's re-read diffed by XOR, the search grids filled
    from bits. Done. The route solver and the flow fields still ask a cell at a time
    through `WallChecker`.
-3. The call sites and the point: readers take the package's names
-   (`position.ScopeAll`, `position.Column`), the binding narrows to what the rows
-   need, `SetRock` loses its look, which the wall system publishes in `CaveResource`
-   for the rock renderer, and the row type becomes the package's `Pos`, with the
-   third axis (§4), `component.PositionComponent` its alias.
+3. The call sites: readers take the package's names (`position.ScopeAll`,
+   `position.Surface`), the binding narrows to what the rows need, and `SetRock`
+   loses its look, which the wall system publishes in `CaveResource` for the rock
+   renderer. The point with its third axis (§4) landed ahead of it.
 4. Footprints and the volume: the direct-path test from the body's header, the 1:1
    cell for a graphical host (authored geometry stays at `RefAspect`, the package
    owns the conversion), a depth to the grid, chunked cells for a volume and the
@@ -160,10 +159,18 @@ The axis is an actual 3D space: a position with a Z, a body of depth as well as
 width and height, a line of sight through a volume. The same index serves a 2D
 map as a volume one cell deep, at no cost to it. What enters, and where:
 
-- The point: `position.Pos{X, Y, Z int}`, `component.PositionComponent` its
-  alias, so a 2D caller writes `Pos{X: x, Y: y}` and reads Z as zero. A capture
-  gains a column of zeros, which deflates to nothing, and the digest hashes three
-  coordinates: a schema bump, taken with phase 3.
+- The point, landed: `vmath.Point` is `{X, Y, Z int}`, the one integer cell
+  coordinate, `position.Point` and `component.PositionComponent` its aliases, so
+  a 2D caller writes `Point{X: x, Y: y}` and reads Z as zero; `Vec3` stays the
+  float vector of a body's physics. A capture gains a column of zeros for every
+  point it carries (positions, tracer trails), which deflates to nothing, and the
+  digest hashes three coordinates: `snapshot.Schema` 46, `JournalSchema` 59.
+- The default a body with a height takes today, the storm: its circles keep a
+  float `Pos3D` and `Vel3D` for their physics, and their Z, which picks the half
+  drawn in front, never reaches their position, whose Z is 0 like every cell's on
+  a one-layer map. A body's continuous height belongs in its physics state and is
+  projected to a layer only in a volume, where the point's Z is the layer the cell
+  index reads; a 2D-presented 3D body changes nothing until then.
 - The grid: a `Depth`, 1 on a 2D map, cells indexed `(z*Height+y)*Width+x`, the
   planes and the rock a `Bits` per layer, the arithmetic in one place. A dense
   grid cannot hold a volume at 256 bytes a cell: a volume allocates cells by chunk

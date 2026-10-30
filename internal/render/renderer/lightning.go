@@ -135,7 +135,8 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 		detailJitter := detailFrac * detailMagnitude * envelope
 
 		totalJitter := spineJitter + detailJitter
-		points = append(points, struct{ X, Y int }(vmath.PointAt(bx+perpX*totalJitter, by+perpY*totalJitter)))
+		q := vmath.PointAt(bx+perpX*totalJitter, by+perpY*totalJitter)
+		points = append(points, struct{ X, Y int }{q.X, q.Y})
 	}
 	points = append(points, endQuadrant(x2, y2, points[len(points)-1]))
 	points[0] = endQuadrant(x1, y1, points[1])

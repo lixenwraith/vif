@@ -11,6 +11,10 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
+// Point is a cell's coordinate, vmath's: a column, a row and, in a volume, a layer.
+// The index answers for one layer, so a point's Z is 0 on every map it holds.
+type Point = vmath.Point
+
 // Frame is the map's frame, read live: the cell aspect the searches round on. The
 // bounds every query answers within are the grid's.
 type Frame interface {

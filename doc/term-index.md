@@ -217,7 +217,7 @@ code does not have yet, described only by a design such as
 
 **cell** — six senses. See also **spatial grid**, **status**, **interest cell**, **coordinate space**, **maze**.
 - *Spatial grid*: one 256-byte grid bucket holding up to 31 entities, Shared first, with the Player half capped at 12. [ECS §3](ecs-and-events.md#3-position-and-spatial-queries) · `pkg/position` `Cell`, `Grid`
-- *Map*: the integer simulation coordinate of positions, walls and motion. [Rendering §2](rendering.md#2-render-context-and-coordinates) · `internal/component` `PositionComponent`
+- *Map*: the integer simulation coordinate of positions, walls and motion: a column, a row and, in a volume, a layer, 0 on every map today. [Rendering §2](rendering.md#2-render-context-and-coordinates) · `pkg/vmath` `Point` · `internal/component` `PositionComponent`
 - *Terminal*: one character cell of the render buffer: rune, foreground, background and attributes. [Rendering §3](rendering.md#3-compositor-data-model) · `internal/render` `RenderBuffer`
 - *Status*: one typed atomic metric in the status registry; one asked for after `Freeze` is a detached cell, usable but absent from snapshots and counted in `stat.late`. [Logging: Freeze](logging-and-diagnostics.md#freeze) · `internal/status` `Registry`
 - *Interest*: a peer's reported cursor cell, carried in its link report as a relevance hint for correction scheduling and never as simulation input. [Services and networking §8](services-and-networking.md#8-wire-frame-and-session-messages) · `pkg/linkpace` `Cell`
