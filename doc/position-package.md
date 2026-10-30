@@ -95,12 +95,34 @@ Each names the choice taken and what the other would have cost.
 
 ## 4. Measurements
 
-Phase 1, the same binaries alternated five times each on one container, medians:
+Phase 1, main's and the branch's test binaries alternated five rounds on one
+container, medians of ns/op. A reading there moves a fifth between rounds, so a
+difference inside that band is noise; the first cut of the binding, which read
+the bounds through an interface on every probe and asked an interface over the
+wall entities, read +25% to +40% on `BenchmarkGlyphRender` in every round, and the
+binding as merged reads inside the band.
 
 ```
-                                  main        phase 1
-BenchmarkCaveStep                 (pending)   (pending)
-BenchmarkCaveStepNavigation       (pending)   (pending)
-BenchmarkNavigationWallMoves      (pending)   (pending)
-BenchmarkGlyphRender              (pending)   (pending)
+                                   main   phase 1   change
+CaveStep/200x60                   9984      9821    -1.6%
+CaveStep/400x120                 21859     22124    +1.2%
+CaveStep/500x254                 30416     27567    -9.4%
+CaveStepNavigation/200x60        35845     35399    -1.2%
+CaveStepNavigation/400x120       73981     75553    +2.1%
+CaveStepNavigation/500x254       95456    105666   +10.7%
+NavigationWallMoves/200x60        4077      3958    -2.9%
+NavigationWallMoves/400x120       3932      3886    -1.2%
+NavigationWallMoves/500x254       3986      4403   +10.5%
+GlyphRender/120x40               33221     33285    +0.2%
+GlyphRender/200x60               51926     53526    +3.1%
+GlyphRender/400x120              96740    100285    +3.7%
+RockRender/200x60/visual        155989    164271    +5.3%
+RockRender/200x60/stone         277727    287299    +3.4%
+RockRender/200x60/redraw       2150936   2197494    +2.2%
+RockRender/400x120/visual       771866    819161    +6.1%
+RockRender/400x120/stone       1075013   1156223    +7.6%
+RockRender/400x120/redraw     10885271  10964935    +0.7%
+RockRender/500x254/visual      2654428   2979538   +12.2%
+RockRender/500x254/stone       4897718   4444327    -9.3%
+RockRender/500x254/redraw     31366822  33556171    +7.0%
 ```
