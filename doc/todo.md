@@ -740,6 +740,50 @@ does; today Android finishes the activity and leaves the reason in logcat. Open:
 host, list or both; a second screen or rows on this one; what a session that ends
 returns to.
 
+### Find games on the local network
+
+- Priority: P2
+- Affected files: `pkg/network`, `internal/network`, `internal/app/host.go`,
+  `internal/mode/config_menu.go`, `internal/mode/commands.go`,
+  `internal/paths/settings.go`, `internal/parameter`, `android/game/game.go`,
+  `android/app/src/main/java/com/lixen/vif/MainActivity.java`
+- Guide: [Multiplayer](multi-player.md#50-who-listens-who-authors-who-can-be-reached) §5.0
+
+Players on one home network reach a host only by typing its address. A visible
+host binds UDP on its game port (7777 beside TCP 7777), broadcasts a beacon every
+2 s to each interface's directed broadcast and 255.255.255.255, and answers a probe
+with the same beacon, unicast to its source. A run showing its game list binds that
+port too and probes from it at open and every 2 s, so a reply reaches the port a
+firewall rule already opens; a row is joined as `:join` joins, at the datagram's
+source. The join, the session stream and the simulation are unchanged.
+- Switch: "Visible on this network" on the Multiplayer page, `:lan on|off`, and
+  `[play] lan` written back as `relay` is; off by default, it applies whenever the
+  run hosts. A successor announces at its own door only if its own `lan` is on;
+  the offer and the handoff record carry nothing.
+- Datagrams: magic, version and kind. A beacon is at most 512 bytes of JSON:
+  session nonce, name, scenario, players and ceiling, start wait, protocol and
+  build, doors as scheme and port. A probe is padded to 512 bytes, so no reply
+  outweighs it. Both decoders are bounded, strict and fuzzed.
+- Host: one goroutine started and stopped with its port, reading an atomic
+  summary so it takes no world or session lock. It answers only full-size probes
+  from private, link-local or on-link sources, within a per-source and a total
+  budget.
+- Client: listens only while the Multiplayer page's list is open or a command
+  asks, and stops once it joins. Rows are keyed by nonce and source, expire after
+  5 s, at most 64.
+- Android: a Wi-Fi multicast lock only while the run listens, as a client or a
+  visible host, dropped while paused; broadcast addresses from Java, since
+  `net.Interfaces` fails there (golang/go#40569); at targetSdk 37,
+  `ACCESS_LOCAL_NETWORK` on the player's gesture, which a typed LAN `:join` needs
+  too.
+- Browser: no UDP, so its list reads "Nearby games unavailable in a browser". It
+  plays a LAN game through a relay at a node it knows (the site's router, or a LAN
+  run with a `ws://` door), or directly over `ws://` where the browser allows it
+  (Chrome, after its Local Network Access prompt).
+- Not chosen: beacon only (no instant list, no host on its own hotspot),
+  mDNS/DNS-SD (a DNS codec, port 5353 shared with the system's daemon), a
+  multicast group, a subnet scan, listing by the site.
+
 ### Watch a session as a spectator
 
 - Priority: P2
