@@ -628,7 +628,7 @@ have) the page paints on a 2D canvas instead and says so in a notice at the star
 each changed cell is a fill and a glyph tinted through a scratch cell, the same
 picture, slower on a large grid.
 On a touch-first screen (phone, tablet) a tap raises no system
-keyboard; three taps on the status bar or two fingers tapped together twice toggle
+keyboard; three taps on the status bar toggle
 it, as on Android, and so does a strip along the top, which also sends Tab (and Esc
 while it is up) and goes fullscreen where the browser can. Neither the strip nor the keyboard refits the
 grid: the keyboard covers it, and the status bar's bottom row is drawn again above
