@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "leave", "relay", "session", "bot", "player", "g", "config", "journal", "wait",
+	"host", "join", "leave", "relay", "session", "bot", "player", "g", "config", "journal", "wait", "fps",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -106,6 +106,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return applyToggle(ctx, &ctx.OverlayHUD, args, "hud", "Telemetry HUD")
 	case "wait":
 		return applyToggle(ctx, &ctx.WaitStart, args, "wait", "Wait to start")
+	case "fps":
+		return handleFPSCommand(ctx, args)
 	case "d", "debug":
 		return handleDebugCommand(ctx, args)
 	case "h", "help", "?":
@@ -166,7 +168,7 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 	// A replay's viewer inspects a world the recording authors
 	if ctx.Viewer.Load() {
 		switch cmd {
-		case "g", "config", "h", "help", "?", "about", "t", "telemetry", "hud", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
+		case "g", "config", "h", "help", "?", "about", "t", "telemetry", "hud", "fps", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
 		default:
 			return "Unavailable in a replay"
 		}
@@ -515,6 +517,36 @@ func applyToggle(ctx *engine.GameContext, flag *atomic.Bool, args []string, cmd,
 	}
 	ctx.SetStatusMessage(label+" "+state, parameter.StatusNotice)
 	return CommandResult{Continue: true}
+}
+
+// handleFPSCommand caps the frames this run draws a second, which [play] max_fps
+// keeps; auto or 0 leaves the rate to the presentation
+// Usage: :fps [auto|<n>]
+func handleFPSCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) == 0 {
+		ctx.SetStatusMessage("Max FPS "+fpsWord(ctx.MaxFPS.Load()), parameter.StatusNotice)
+		return CommandResult{Continue: true}
+	}
+	var fps int
+	if !strings.EqualFold(args[0], "auto") {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n != 0 && (n < parameter.FrameRateMin || n > parameter.FrameRateMax) {
+			setCommandError(ctx, fmt.Sprintf("Usage: :fps [auto|%d-%d]", parameter.FrameRateMin, parameter.FrameRateMax))
+			return CommandResult{Continue: true}
+		}
+		fps = n
+	}
+	ctx.MaxFPS.Store(int32(fps))
+	ctx.SetStatusMessage("Max FPS "+fpsWord(int32(fps)), parameter.StatusNotice)
+	return CommandResult{Continue: true}
+}
+
+// fpsWord names a max_fps: auto for the presentation's own rate, else the cap
+func fpsWord(fps int32) string {
+	if fps == 0 {
+		return "auto"
+	}
+	return strconv.Itoa(int(fps))
 }
 
 // parseToggleArg accepts an empty argument list (toggle) or a single on|off

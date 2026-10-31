@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 func TestConfigRootsPutOverrideAndUserBeforeSystem(t *testing.T) {
@@ -116,6 +117,20 @@ func TestSettingsNameEveryUnknownKey(t *testing.T) {
 	}
 	if s.Audio.BufferMs != 20 || path != filepath.Join(root, SettingsFile) {
 		t.Errorf("read %q with buffer_ms %d, want the file's 20 read alongside", path, s.Audio.BufferMs)
+	}
+}
+
+// TestSettingsTakeAMaxFPSInRange: [play] max_fps is 0 for the presentation's own
+// rate or a rate between parameter.FrameRateMin and FrameRateMax; any other fails.
+func TestSettingsTakeAMaxFPSInRange(t *testing.T) {
+	for fps, ok := range map[int]bool{
+		0: true, parameter.FrameRateMin: true, 24: true, parameter.FrameRateMax: true,
+		parameter.FrameRateMin - 1: false, parameter.FrameRateMax + 1: false, -24: false,
+	} {
+		s, err := ParseSettings(fmt.Appendf(nil, "[play]\nmax_fps = %d\n", fps))
+		if (err == nil) != ok || ok && s.Play.MaxFPS != fps {
+			t.Errorf("max_fps = %d: read %d, error %v", fps, s.Play.MaxFPS, err)
+		}
 	}
 }
 

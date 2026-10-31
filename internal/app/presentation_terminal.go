@@ -88,17 +88,6 @@ func frameFloor(getenv func(string) string) time.Duration {
 	return 0
 }
 
-// frameInterval is how often the run is drawn: the context's interval, held to the
-// floor of a presentation that cannot show frames faster, but never past a tick,
-// since at real time each tick waits for a frame
-func (a *App) frameInterval() time.Duration {
-	d := a.ctx.FrameInterval()
-	if p, ok := a.pres.(pacedPresentation); ok {
-		d = max(d, min(p.FrameFloor(), a.ctx.World.TickInterval()))
-	}
-	return d
-}
-
 func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode, vmath.Aspect) {
 	colorMode, aspect := fallbackColorMode, a.cfg.CellAspect
 	if aspect == 0 {

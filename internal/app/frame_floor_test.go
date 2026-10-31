@@ -43,11 +43,12 @@ type flooredPresentation struct {
 func (p flooredPresentation) FrameFloor() time.Duration { return p.floor }
 
 // TestFrameIntervalHoldsToThePresentationsFloor: a presentation's floor slows the
-// frame loop, but never past a frame a tick, which a tick at real time waits for;
-// one without a floor leaves the context's interval.
+// frame loop, and the player's max_fps takes its place, faster or slower; neither
+// draws faster than the context's interval or slower than a frame a tick, which a
+// tick at real time waits for.
 func TestFrameIntervalHoldsToThePresentationsFloor(t *testing.T) {
 	t.Parallel()
-	interval := func(pres Presentation, tick time.Duration) time.Duration {
+	interval := func(pres Presentation, tick time.Duration, fps int32) time.Duration {
 		a, err := newSessionApp(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true},
 			Host: Host{Presentation: pres}})
 		if err != nil {
@@ -55,18 +56,29 @@ func TestFrameIntervalHoldsToThePresentationsFloor(t *testing.T) {
 		}
 		t.Cleanup(a.Close)
 		a.ctx.SetTickInterval(tick)
+		a.ctx.MaxFPS.Store(fps)
 		return a.frameInterval()
 	}
-	tick := parameter.GameUpdateInterval
-	if got := interval(&framePresentation{w: 120, h: 40}, tick); got != parameter.FrameUpdateInterval {
-		t.Errorf("unfloored: frames every %v, want %v", got, parameter.FrameUpdateInterval)
-	}
+	tick, short := parameter.GameUpdateInterval, parameter.TickIntervalMin
+	plain := &framePresentation{w: 120, h: 40}
 	floored := flooredPresentation{&framePresentation{w: 120, h: 40}, parameter.MultiplexerFrameInterval}
-	if got := interval(floored, tick); got != parameter.MultiplexerFrameInterval {
-		t.Errorf("floored: frames every %v, want %v", got, parameter.MultiplexerFrameInterval)
-	}
-	short := parameter.TickIntervalMin
-	if got := interval(floored, short); got != short {
-		t.Errorf("floored at a %v tick: frames every %v, want one a tick", short, got)
+	for _, c := range []struct {
+		name string
+		pres Presentation
+		tick time.Duration
+		fps  int32
+		want time.Duration
+	}{
+		{"unfloored", plain, tick, 0, parameter.FrameUpdateInterval},
+		{"floored", floored, tick, 0, parameter.MultiplexerFrameInterval},
+		{"floored at a short tick", floored, short, 0, short},
+		{"max fps 30", plain, tick, 30, time.Second / 30},
+		{"max fps 60 over the floor", floored, tick, 60, parameter.FrameUpdateInterval},
+		{"max fps past the run's rate", plain, tick, int32(parameter.FrameRateMax), parameter.FrameUpdateInterval},
+		{"max fps under a frame a tick", plain, tick, int32(parameter.FrameRateMin), tick},
+	} {
+		if got := interval(c.pres, c.tick, c.fps); got != c.want {
+			t.Errorf("%s: frames every %v, want %v", c.name, got, c.want)
+		}
 	}
 }

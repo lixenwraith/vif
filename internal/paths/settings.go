@@ -60,6 +60,8 @@ type Play struct {
 	HUD         bool    `toml:"hud"`
 	Relay       bool    `toml:"relay"`
 	Wait        bool    `toml:"wait"`
+	// MaxFPS caps the frames drawn a second; 0 is the presentation's own rate
+	MaxFPS int `toml:"max_fps"`
 }
 
 func (p Play) check() error {
@@ -70,6 +72,9 @@ func (p Play) check() error {
 	}
 	if p.SfxVolume < 0 || p.SfxVolume > 1 {
 		return fmt.Errorf("play.sfx_volume %g is not between 0 and 1", p.SfxVolume)
+	}
+	if p.MaxFPS != 0 && (p.MaxFPS < parameter.FrameRateMin || p.MaxFPS > parameter.FrameRateMax) {
+		return fmt.Errorf("play.max_fps %d is not 0 or between %d and %d", p.MaxFPS, parameter.FrameRateMin, parameter.FrameRateMax)
 	}
 	return nil
 }

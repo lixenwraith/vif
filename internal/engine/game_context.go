@@ -141,6 +141,10 @@ type GameContext struct {
 	// only a run a person plays turns it on
 	WaitStart atomic.Bool
 
+	// MaxFPS caps the frames this run draws a second, as [play] max_fps sets it; 0
+	// leaves the rate to the presentation
+	MaxFPS atomic.Int32
+
 	KeyCapture input.KeyCapture // Keys the scenario takes from play-mode parsing
 
 	// Viewer marks the command line as a replay viewer's: the recording authors the
