@@ -41,17 +41,17 @@ type krakenShade struct {
 	minX, minY, maxX, maxY int
 }
 
-// krakenColor is a sample's color once a cell of this shade needed it
+// krakenColor is a sample's color, and its console entry in 256 colors, once a cell
+// of this shade needed it
 type krakenColor struct {
 	set   bool
 	color color.RGB
+	entry uint8
 }
 
-// krakenCell is a shaded cell's index into the visible cells, its map position, and
-// its palette indices in 256 colors
+// krakenCell is a shaded cell's index into the visible cells and its map position
 type krakenCell struct {
 	index, x, y int32
-	fg, bg      uint8
 }
 
 func NewKrakenRenderer(ctx *engine.GameContext) *KrakenRenderer {
@@ -95,8 +95,8 @@ func (r *KrakenRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			}
 			cell := &r.cells[c.index]
 			if r.palette {
-				buf.SetBg256(sx, sy, c.bg)
-				buf.SetFgOnly(sx, sy, cell.Rune, color.RGB{R: c.fg}, terminal.AttrFg256)
+				buf.SetBg256(sx, sy, cell.Bg.R)
+				buf.SetFgOnly(sx, sy, cell.Rune, cell.Fg, terminal.AttrFg256)
 			} else {
 				buf.SetWithBg(sx, sy, cell.Rune, cell.Fg, cell.Bg)
 			}
@@ -177,7 +177,12 @@ func (r *KrakenRenderer) shade(k *component.KrakenComponent, samples []component
 		}
 	}
 
+	// In 256 colors a cell holds console entries, as its color's red channel
 	colors, cells, drawn := r.colors, r.cells, r.drawn
+	background := visual.RgbBackground
+	if r.palette {
+		background = color.RGB{R: visual.ConBlack}
+	}
 	for cy, span := range r.spans {
 		row := cy*width - minX
 		for cx := span[0]; cx <= span[1]; cx++ {
@@ -198,10 +203,13 @@ func (r *KrakenRenderer) shade(k *component.KrakenComponent, samples []component
 				r.mix(k, s, slot)
 			}
 			c := colors[slot].color
+			if r.palette {
+				c = color.RGB{R: colors[slot].entry}
+			}
 			if solid {
 				cells[i] = terminal.Cell{Rune: ' ', Fg: c, Bg: c}
 			} else {
-				cells[i] = terminal.Cell{Rune: visual.KrakenRimRune, Fg: c, Bg: visual.RgbBackground}
+				cells[i] = terminal.Cell{Rune: visual.KrakenRimRune, Fg: c, Bg: background}
 			}
 			drawn = append(drawn, krakenCell{index: int32(i), x: int32(cx), y: int32(minY + cy)})
 		}
@@ -220,22 +228,23 @@ func (r *KrakenRenderer) shade(k *component.KrakenComponent, samples []component
 			i := (cy-minY)*width + cx - minX
 			cell := &r.cells[i]
 			if cell.Rune == 0 {
-				*cell = terminal.Cell{Rune: ' ', Bg: visual.RgbBackground}
+				*cell = terminal.Cell{Rune: ' ', Bg: background}
 				r.drawn = append(r.drawn, krakenCell{index: int32(i), x: int32(cx), y: int32(cy)})
 			}
 			alpha := 1 - distance
 			alpha *= alpha * (3 - 2*alpha)
+			if r.palette {
+				// The console cannot blend the void, so the body is solid in the legs' color
+				if alpha >= visual.Effect256Threshold {
+					leg := color.RGB{R: visual.Kraken256Leg}
+					*cell = terminal.Cell{Rune: ' ', Fg: leg, Bg: leg}
+				}
+				continue
+			}
 			cell.Bg = color.Lerp(cell.Bg, visual.RgbKrakenVoid, alpha)
 			if alpha > visual.KrakenVoidOpaque {
 				cell.Rune = ' '
 			}
-		}
-	}
-
-	if r.palette {
-		for i := range r.drawn {
-			c := &r.drawn[i]
-			c.fg, c.bg = color.RGBTo256(r.cells[c.index].Fg), color.RGBTo256(r.cells[c.index].Bg)
 		}
 	}
 }
@@ -248,5 +257,9 @@ func (r *KrakenRenderer) mix(k *component.KrakenComponent, s *component.KrakenSa
 	if s.Attacking {
 		heat = max(heat, s.Step*s.Step*k.AttackT)
 	}
-	r.colors[slot] = krakenColor{true, color.Lerp(color.Lerp(visual.RgbKrakenLegBase, visual.RgbKrakenLegTip, s.Step), visual.RgbKrakenAttack, heat)}
+	entry := visual.Kraken256Leg
+	if heat >= visual.Effect256Threshold {
+		entry = visual.Kraken256Heat
+	}
+	r.colors[slot] = krakenColor{true, color.Lerp(color.Lerp(visual.RgbKrakenLegBase, visual.RgbKrakenLegTip, s.Step), visual.RgbKrakenAttack, heat), entry}
 }

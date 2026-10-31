@@ -381,7 +381,10 @@ disc stamps its box with squared distances, and only a cell within
 compares, so the cells are exactly those of the per-cell distance test. The rim is
 one shade, `KrakenRimRune`, in the color of the first disc reaching a cell: that
 disc reaches it near its outer edge, so a rim graded by distance from it showed its
-outer shade alone.
+outer shade alone. In 256 colors, where the console showed the legs' dark half and
+the body's void as black, the Kraken draws in console entries: legs, rim and body in
+`Kraken256Leg`, the body solid where its void passes `Effect256Threshold`, and a leg
+heated past that threshold in `Kraken256Heat`.
 
 The discs sit `KrakenSampleStep` apart toward the tip and every third, then every
 second, within 10 and 20 cells of the body (`KrakenSampleStrides`), where they are

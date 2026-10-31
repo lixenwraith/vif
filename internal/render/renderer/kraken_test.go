@@ -16,15 +16,26 @@ import (
 // krakenByDefinition shades the samples one after another as the definition reads: a
 // disc covering a cell makes it solid in the sample's color, a rim reaching a cell no
 // disc covered yet draws the rim's rune there, and the body's void blends over both.
-func krakenByDefinition(k *component.KrakenComponent, samples []component.KrakenSample, x, y float64, minX, minY, maxX, maxY int) []terminal.Cell {
+// In 256 colors a color is a console entry and the void solid past the threshold.
+func krakenByDefinition(k *component.KrakenComponent, samples []component.KrakenSample, x, y float64, minX, minY, maxX, maxY int, palette bool) []terminal.Cell {
 	width := maxX - minX + 1
 	cells := make([]terminal.Cell, width*(maxY-minY+1))
+	background := visual.RgbBackground
+	if palette {
+		background = color.RGB{R: visual.ConBlack}
+	}
 	for _, s := range samples {
 		heat := s.Step * s.Step * k.MoveBlend * visual.KrakenMoveHeat
 		if s.Attacking {
 			heat = max(heat, s.Step*s.Step*k.AttackT)
 		}
 		c := color.Lerp(color.Lerp(visual.RgbKrakenLegBase, visual.RgbKrakenLegTip, s.Step), visual.RgbKrakenAttack, heat)
+		if palette {
+			c = color.RGB{R: visual.Kraken256Leg}
+			if heat >= visual.Effect256Threshold {
+				c = color.RGB{R: visual.Kraken256Heat}
+			}
+		}
 		reach := s.Radius + visual.KrakenRimReach + 1
 		for cy := max(minY, int(math.Floor(s.Y-reach))); cy <= min(maxY, int(math.Ceil(s.Y+reach))); cy++ {
 			for cx := max(minX, int(math.Floor(s.X-reach))); cx <= min(maxX, int(math.Ceil(s.X+reach))); cx++ {
@@ -36,7 +47,7 @@ func krakenByDefinition(k *component.KrakenComponent, samples []component.Kraken
 					continue
 				}
 				if cell.Rune == 0 && distance-s.Radius < visual.KrakenRimReach {
-					*cell = terminal.Cell{Rune: visual.KrakenRimRune, Fg: c, Bg: visual.RgbBackground}
+					*cell = terminal.Cell{Rune: visual.KrakenRimRune, Fg: c, Bg: background}
 				}
 			}
 		}
@@ -51,10 +62,17 @@ func krakenByDefinition(k *component.KrakenComponent, samples []component.Kraken
 			}
 			cell := &cells[(cy-minY)*width+cx-minX]
 			if cell.Rune == 0 {
-				*cell = terminal.Cell{Rune: ' ', Bg: visual.RgbBackground}
+				*cell = terminal.Cell{Rune: ' ', Bg: background}
 			}
 			alpha := 1 - distance
 			alpha *= alpha * (3 - 2*alpha)
+			if palette {
+				if alpha >= visual.Effect256Threshold {
+					leg := color.RGB{R: visual.Kraken256Leg}
+					*cell = terminal.Cell{Rune: ' ', Fg: leg, Bg: leg}
+				}
+				continue
+			}
 			cell.Bg = color.Lerp(cell.Bg, visual.RgbKrakenVoid, alpha)
 			if alpha > visual.KrakenVoidOpaque {
 				cell.Rune = ' '
@@ -104,7 +122,7 @@ func TestKrakenShadingMatchesItsDefinition(t *testing.T) {
 		}
 		r.palette = n%3 == 0
 		r.shade(&k, samples, x, y, minX, minY, maxX, maxY)
-		want := krakenByDefinition(&k, samples, x, y, minX, minY, maxX, maxY)
+		want := krakenByDefinition(&k, samples, x, y, minX, minY, maxX, maxY, r.palette)
 		width, drawn := maxX-minX+1, 0
 		for i := range want {
 			if r.cells[i] != want[i] {
@@ -118,9 +136,6 @@ func TestKrakenShadingMatchesItsDefinition(t *testing.T) {
 			i := int(c.index)
 			if want[i].Rune == 0 || int(c.x) != minX+i%width || int(c.y) != minY+i/width {
 				t.Fatalf("shade %d draws %+v, which is no shaded cell of its own", n, c)
-			}
-			if r.palette && (c.fg != color.RGBTo256(want[i].Fg) || c.bg != color.RGBTo256(want[i].Bg)) {
-				t.Fatalf("shade %d cell %d palette (%d,%d), want (%d,%d)", n, i, c.fg, c.bg, color.RGBTo256(want[i].Fg), color.RGBTo256(want[i].Bg))
 			}
 		}
 		if len(r.drawn) != drawn {

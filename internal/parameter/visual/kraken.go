@@ -15,6 +15,14 @@ const (
 	KrakenVoidOpaque = 0.3
 )
 
+// In 256 colors the console shows the legs' dark gradient and the body's void as
+// black, so legs, rim and body draw in Kraken256Leg alike, and a leg heated past
+// Effect256Threshold toward the attack color in Kraken256Heat
+const (
+	Kraken256Leg  = ConMagenta
+	Kraken256Heat = ConBrightRed
+)
+
 var (
 	RgbKrakenVoid    = color.RGB{R: 12, G: 12, B: 18}
 	RgbKrakenLegBase = color.RGB{R: 35, G: 10, B: 50}
