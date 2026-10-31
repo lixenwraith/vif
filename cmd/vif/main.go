@@ -352,6 +352,8 @@ func setupDiagnostics() {
 
 // shutdownDiagnostics drains what the runtime wrote, closes the logger, then
 // hands fd 2 back so late runtime output reaches the restored terminal
+// Journal paths go to stdout like the launch notices: fd 2 still feeds the
+// capture file here, and a path line would also keep an empty capture on disk
 func shutdownDiagnostics() {
 	core.StopStderrDrain()
 	core.DrainStderr(logRuntimeReport) // last blocks, while the sink lives
@@ -359,7 +361,7 @@ func shutdownDiagnostics() {
 	vlog.Shutdown(logShutdownTimeout)
 
 	for _, path := range vlog.JournalPaths() {
-		fmt.Fprintf(os.Stderr, "replay journal: %s\n", path)
+		fmt.Printf("replay journal: %s\n", path)
 	}
 	if path := core.CloseCapture(); path != "" && core.CaptureCount() > 0 {
 		fmt.Fprintf(os.Stderr, "runtime output captured: %s (%d report(s))\n",
