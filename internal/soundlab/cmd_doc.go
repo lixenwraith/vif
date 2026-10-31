@@ -134,7 +134,7 @@ func cmdRip(s *Session, a []string) error {
 		return err
 	}
 	defer f.Close()
-	r, err := audio.RipWAV(f, audio.DefaultRipParams())
+	r, err := audio.RipWAV(f, s.rip)
 	if err != nil {
 		return err
 	}

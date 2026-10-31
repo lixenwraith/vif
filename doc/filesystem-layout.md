@@ -55,7 +55,7 @@ vif/
 │   ├── main/    optional default override
 │   └── vanguard/behavior/  behavior programs its scenario.toml lists
 ├── input/       keymap.toml
-├── audio/       music.toml, sounds.toml (optional overrides)
+├── audio/       music.toml, sounds.toml (optional overrides), rip.toml (soundlab's rip parameters)
 ├── content/     .txt and .toml typing corpus
 ├── image/       .vifimg wall assets
 └── bot/         bot graphs, one <name>.toml each
@@ -95,6 +95,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Keymap | `input/keymap.toml` | embedded keymap |
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
+| Rip parameters | `audio/rip.toml` | soundlab alone reads it; `DefaultRipParams` |
 | Content | `content/` | embedded tutorial corpus |
 | Wall image | `image/<name>.vifimg` | none; failure is reported in the game status |
 | Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |

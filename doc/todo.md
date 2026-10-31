@@ -1251,15 +1251,18 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
 - Affected files: `pkg/audio/rip.go`, `pkg/audio/rip_test.go`, `internal/soundlab`
 
 `RipSamples` ([Audio §11](audio.md#11-ripping-a-recording)) reads tempo, bars,
-key, drums, melody and bass off a recording under `DefaultRipParams`, hand-set
-from one rendered loop. What would make it good:
+key, drums, melody and bass off a recording under `RipParams`. The search is in
+place: `RenderMusic`, `ExpectedRip` and `CompareRips` grade a set on loops the
+engine renders of registered patterns, soundlab's `tune` runs `pkg/genetic` over
+the gene vector, and `audio/rip.toml` carries the result. What remains:
 
-1. A corpus the engine renders itself, patterns and tempo known, over the shipped
-   banks and voices at several tempos, keys and mixes, with a score (hits, notes
-   and bars matched) a search can maximize; `rip_test.go`'s `renderLoop` is its
-   seed, and `pkg/genetic`'s generational engine over `RipParams` the search. The
-   result ships as data, a `[rip]` table of the sound document or its own file,
-   with the defaults kept for a recording nothing tuned for.
+1. A corpus beyond the shipped bank: loops with a mix, a room and a codec
+   between the render and the rip (impulse convolution, noise, equalisation, a
+   low-pass), chance steps graded as optional rather than as misses, and a small
+   set of real recordings with hand-checked beats and notes held out for
+   validation, so a tuned set does not learn the synthesizer. Then a tuned set
+   ships as the default, with `DefaultRipParams` kept for a recording nothing
+   tuned for.
 2. A bass attack reads as a kick and a chord's attack as a snare: a harmonic
    check on the hit (a percussive rise with a pitched tail is a note) or the
    learned front end below.
@@ -1268,7 +1271,8 @@ from one rendered loop. What would make it good:
    key per phrase.
 4. A small learned front end (onset and pitch salience from a few hundred
    thousand weights, trained on the rendered corpus, run in pure Go) under the
-   same beat tracking and note segmentation, sized for a phone.
+   same beat tracking and note segmentation, sized for a phone; `tune` then
+   searches the decoder's thresholds over it.
 
 ### Render a conductor timeline offline
 
@@ -1277,7 +1281,9 @@ from one rendered loop. What would make it good:
 
 The offline conductor render that compared bass voicings for the music-smoothing
 review, an APM timeline through the sequencer with no device, is a test-only
-harness in a scratch repository and would be a `soundlab` or `vif-log` verb.
+harness in a scratch repository. `AudioEngine.RenderMusic` now renders placed
+patterns offline; the verb would drive an APM timeline through the conductor's
+tier and tempo policy over it and write the WAV.
 
 ### Spin off `pkg/audio` as its own module
 

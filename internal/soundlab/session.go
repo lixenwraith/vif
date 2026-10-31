@@ -45,6 +45,10 @@ type Session struct {
 	scale    audio.ScaleID
 	startErr error
 	files    Files
+	// rip is what rip listens with, the root's audio/rip.toml when one holds it,
+	// and ripSrc that file, where tune writes
+	rip    audio.RipParams
+	ripSrc string
 }
 
 // Files is where the game reads its audio overrides and where an untitled save
@@ -52,7 +56,9 @@ type Session struct {
 // ResolveFiles, with the mixer period vif.toml sets
 type Files struct {
 	music, sounds             string // "" = the embedded bank
+	rip                       string // "" = the built-in parameters
 	musicTarget, soundsTarget string // "" = no configuration root
+	ripTarget                 string
 	buffer                    time.Duration
 	skipped                   error // vif.toml keys this build does not know
 }
@@ -80,8 +86,12 @@ func ResolveFiles(dir, music, sounds string) (Files, error) {
 	if f.sounds, err = paths.ConfigFile(roots, sounds, paths.AudioDirName, paths.SoundConfigFile); err != nil {
 		return f, fmt.Errorf("sound config: %w", err)
 	}
+	if f.rip, err = paths.ConfigFile(roots, "", paths.AudioDirName, paths.RipConfigFile); err != nil {
+		return f, fmt.Errorf("rip config: %w", err)
+	}
 	f.musicTarget, _ = paths.ConfigTarget(roots, music, paths.AudioDirName, paths.MusicConfigFile)
 	f.soundsTarget, _ = paths.ConfigTarget(roots, sounds, paths.AudioDirName, paths.SoundConfigFile)
+	f.ripTarget, _ = paths.ConfigTarget(roots, "", paths.AudioDirName, paths.RipConfigFile)
 	return f, nil
 }
 
@@ -138,6 +148,17 @@ func NewSession(o Options) (*Session, error) {
 		root:   audio.DefaultRootNote,
 		scale:  audio.ScalePhrygian,
 		files:  files,
+		rip:    audio.DefaultRipParams(),
+	}
+	if f := files.rip; f != "" {
+		if data, err := os.ReadFile(f); err != nil {
+			fmt.Fprintf(out, "rip params %s: %v (built-in used)\n", f, err)
+		} else if p, err := audio.LoadRipParams(data); err != nil {
+			fmt.Fprintf(out, "rip params %s: %v (built-in used)\n", f, err)
+		} else {
+			s.rip, s.ripSrc = p, f
+			fmt.Fprintf(out, "rip params %s\n", f)
+		}
 	}
 	// A failed Start latches silent mode but the engine stays valid, and
 	// rendering is engine-independent: edit, validate and export all work

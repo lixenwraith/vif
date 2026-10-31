@@ -41,6 +41,7 @@ func init() {
 		"write":   {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
 		"export":  {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
 		"rip":     {"rip <file.wav> <name> [bars]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key", 2, 3, cmdRip},
+		"tune":    {"tune [generations] [file]", "search rip's parameters over loops the engine renders from the registered patterns; the best write to file (the first root's audio/rip.toml) and listen from now on; 8 generations take minutes", 0, 2, cmdTune},
 
 		"ls":    {"ls sound|pattern|voice [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
 		"show":  {"show <name>[.path]", "bare name = full TOML; deeper = leaf value or keys", 1, 1, cmdShow},
