@@ -596,7 +596,7 @@ code does not have yet, described only by a design such as
 
 ## E
 
-**each** — A TOML macro invocation key on an array element: it names parameters bound to arrays of one length, and the macro expands once per zipped element, each result spliced into the array or appended as one element; the music bank's note lines are written this way. [TOML macros §4](toml-macros.md#4-invocations) · `pkg/tomlmacro`
+**each** — A TOML macro invocation key on an array element: it names parameters bound to arrays of one length, and the macro expands once per zipped element, each result spliced into the array or appended as one element; the music bank's note lines are written this way. [TOML macros §4](toml-macros.md#4-invocations) · `toml/macro`
 
 **echo** — two senses.
 - *Input*: the journaled local event (`EventInputPressEcho`, `EventInputReleaseEcho`) that lights and sounds a captured key's button on the pressing instance at once, a playout lead before the crossing applies on every instance (D-18). [Input §1](input-and-modes.md#1-input-pipeline) · [Domain design D-18](domain-design.md#d-18--local-prediction-is-private) · `internal/engine` `World.PushInputPress`
@@ -1002,7 +1002,7 @@ code does not have yet, described only by a design such as
 
 **internal transition** (also: `internal = true`) — A targetless FSM transition that consumes its trigger and runs its actions without leaving the state or resetting `TimeInState`. Declared on a composite state, it fires while any descendant is active. [FSM reference: Internal Transitions](fsm-reference.md#internal-transitions) · `internal/fsm`
 
-**invocation** (also: macro invocation) — In a TOML document, any table with a `macro` key: the loader replaces it with that macro's body, binding its other keys as typed arguments, splicing an array result into the array it stands in, and expanding once per element of the zipped arrays `each` names. See also **macro**, **TOML macro**. [TOML macros §4](toml-macros.md#4-invocations) · `pkg/tomlmacro` `ExpandDocument`
+**invocation** (also: macro invocation) — In a TOML document, any table with a `macro` key: the loader replaces it with that macro's body, binding its other keys as typed arguments, splicing an array result into the array it stands in, and expanding once per element of the zipped arrays `each` names. See also **macro**, **TOML macro**. [TOML macros §4](toml-macros.md#4-invocations) · `toml/macro` `ExpandDocument`
 
 ## J
 
@@ -1160,7 +1160,7 @@ code does not have yet, described only by a design such as
 
 **macro** — two senses. See also **TOML macro**, **invocation**.
 - *Input*: A vim-style macro records parsed intents into a register `a`–`z` (`qa` … `q`) and plays them back (`@a`, `3@a`, `@@a` indefinitely, `@@@` every register), one intent per register per playback interval; playback presses no captured key. [Input §6](input-and-modes.md#6-macros) · `internal/mode` `MacroManager`
-- *Content*: A TOML macro is a `[macros.<Name>]` table with typed parameters, defaults and a body, expanded wherever an invocation names it with `${name}` references substituted; a scenario entry, its `macro_files` and a bot graph define them. [TOML macros §2](toml-macros.md#2-definitions) · [TOML macros §3](toml-macros.md#3-references) · `pkg/tomlmacro` `ExpandDocument`
+- *Content*: A TOML macro is a `[macros.<Name>]` table with typed parameters, defaults and a body, expanded wherever an invocation names it with `${name}` references substituted; a scenario entry, its `macro_files` and a bot graph define them. [TOML macros §2](toml-macros.md#2-definitions) · [TOML macros §3](toml-macros.md#3-references) · `toml/macro` `ExpandDocument`
 
 **main fire** (also: `fire_main`, special fire, `fire_special`) — two senses. See also **loadout**, **auto-fire**.
 - *Gameplay*: Main fire (`fire_main`, Enter, a left click) fires every owned, ready kind of the cursor's loadout, the innate gun included; it has its own cooldown, which the gun shares, and each other kind keeps its own. [Gameplay §7](gameplay.md#7-weapons-and-attacks) · [Combat §3](combat.md#3-drivers) · `internal/system` `WeaponSystem.fireLoadout`
@@ -1840,7 +1840,7 @@ code does not have yet, described only by a design such as
 
 **splice** — three senses.
 - *Fleet*: the router copies bytes both ways between a player's connection and the session pod with half-close, ending a direction whose write stalls ten seconds. [Fleet design §9](kubernetes-fleet.md#9-the-session-routes) · `tool/vif-router/tcp_proxy.go` `splice`
-- *TOML macros*: an invocation standing as an array element whose expansion is itself an array is spliced into that array. [TOML macros §4](toml-macros.md#4-invocations) · `pkg/tomlmacro`
+- *TOML macros*: an invocation standing as an array element whose expansion is itself an array is spliced into that array. [TOML macros §4](toml-macros.md#4-invocations) · `toml/macro`
 - *Correction*: `ApplyShardSet` splices a validated shard set's pages into the receiver's own capture and refuses one whose rebuilt root differs. [Netcode design §2](netcode-design.md#2-the-correction-pipeline) · `internal/snapshot` `ApplyShardSet`
 
 **SSE** (also: server-sent events, /vif/api/logs) — The long-lived HTTP event stream on which the LogWisp node service serves the fleet's session logs from loopback; the router reverse-proxies it at `/vif/api/logs`, and the site's edge must pass it unbuffered. [Deploy §10](kube-docker-deploy.md#10-logwisp-the-node-log-reader) · [Fleet design §1](kubernetes-fleet.md#1-what-is-deployed) · `tool/vif-router/log_proxy.go`
@@ -1959,7 +1959,7 @@ code does not have yet, described only by a design such as
 **template** — four senses. See also **30-session.yaml**, **TOML macro**.
 - *Fleet*: `deploy/k3s/30-session.yaml` is a template, not an object: the router builds the same Job and Service per session, and `session.sh create` renders the file itself. [Fleet deploy §9](kube-docker-deploy.md#9-the-fleet-objects-and-the-shared-volumes) · `tool/vif-router` `manifest.go`
 - *Gameplay*: the cursor template is the heat and energy the boot script declares, applied to every admitted cursor, not only slot zero. [Gameplay §2](gameplay.md#2-cursor-and-player-state) · `internal/engine` `PlayerResource.SetInitialResources`
-- *TOML macros*: a macro's body is the template an invocation's arguments are substituted into through `${name}`; an argument's own text is never scanned. [TOML macros §3](toml-macros.md#3-references) · `pkg/tomlmacro`
+- *TOML macros*: a macro's body is the template an invocation's arguments are substituted into through `${name}`; an argument's own text is never scanned. [TOML macros §3](toml-macros.md#3-references) · `toml/macro`
 - *FSM payloads*: an action's event payload is compiled once at load and shared by every emission, so handlers treat it as immutable; `payload_vars` emits a modified copy. [FSM reference: notes](fsm-reference.md#notes) · `internal/fsm` `Action.Args` · `internal/fsm/std` `ApplyPayloadVars`
 
 **term** — three senses. See also **succession**, **handoff**, **terminal service**.
@@ -2002,7 +2002,7 @@ code does not have yet, described only by a design such as
 - *Fleet*: the router's Kubernetes credential is a short-lived ServiceAccount token in a file, rotated by `vif-router-token.timer` and re-read on every request. [Fleet deploy §11](kube-docker-deploy.md#11-the-router) · `deploy/guest/vif-router-refresh-token.sh`
 - *Speed*: a ladder token is one rate as written for `-speed` or `:speed` (`1/8` to `8`), which a journal anchor records exactly. See **time scale**. [Logging: record and anchor shapes](logging-and-diagnostics.md#record-and-anchor-shapes) · `internal/engine` `ParseScale`
 
-**TOML macro** (also: `[macros]`, `macro_files`, `tomlmacro`) — A `[macros.<Name>]` table with typed `params`, `defaults`, a `doc` line and a `body`; any table with a `macro` key is an invocation, replaced by the body with its arguments substituted. Expansion runs on the parsed tree before `toml.Decode`, is deterministic, and has no built-in library, so equal scenario bytes expand alike on every peer. Scenarios with their behavior programs, bot graphs and the audio banks use it. See also **macro**. [TOML macros §2](toml-macros.md#2-definitions) · [TOML macros §5](toml-macros.md#5-where-macros-live) · `pkg/tomlmacro` `ExpandDocument`
+**TOML macro** (also: `[macros]`, `macro_files`, `toml/macro`) — A `[macros.<Name>]` table with typed `params`, `defaults`, a `doc` line and a `body`; any table with a `macro` key is an invocation, replaced by the body with its arguments substituted. Expansion runs on the parsed tree before `toml.Decode`, is deterministic, and has no built-in library, so equal scenario bytes expand alike on every peer. Scenarios with their behavior programs, bot graphs and the audio banks use it. See also **macro**. [TOML macros §2](toml-macros.md#2-definitions) · [TOML macros §5](toml-macros.md#5-where-macros-live) · `toml/macro` `ExpandDocument`
 
 **top glyph** (also: `TopGlyphAt`, `TopGlyphIs`, `IsTypeable`) — The one glyph of a cell that is drawn and that typing acts on: `Position.TopGlyphAt` passes over **scenery** and picks a Shared (gold) glyph before a player glyph, then the nearer drift layer, then the lower entity ID; `TopGlyphIs` answers whether a typeable entity is the one drawn, by the same order, and from the cell's length when it is alone; scenery is drawn in its layer's order instead, far to near and under typeable text (**parallax**). Motions, markers and bots look through scenery by `Position.IsTypeable`. [Gameplay §3](gameplay.md#3-typing-rules) · [Rendering §7](rendering.md#7-layer-inventory) · `internal/engine` `Position.TopGlyphAt`, `Position.TopGlyphIs`, `Position.IsTypeable`
 

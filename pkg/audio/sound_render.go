@@ -1,7 +1,7 @@
 package audio
 
 import (
-	"github.com/lixenwraith/vif/pkg/vmath"
+	"hash/fnv"
 	"math"
 	"math/rand/v2"
 	"slices"
@@ -438,10 +438,7 @@ func samplesOf(sec float64) int {
 }
 
 func fnv64a(s string) uint64 {
-	h := vmath.FNVOffset64
-	for i := range len(s) {
-		h ^= uint64(s[i])
-		h *= vmath.FNVPrime64
-	}
-	return h
+	h := fnv.New64a()
+	h.Write([]byte(s))
+	return h.Sum64()
 }

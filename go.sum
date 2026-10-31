@@ -8,6 +8,10 @@ github.com/lixenwraith/terminal v0.6.1 h1:W2a/yM83dY9bTKIu5CdnuIEHzlcy+NCwdqpwvC
 github.com/lixenwraith/terminal v0.6.1/go.mod h1:V0P/FDpY+UeSvx1VIVuTG7llo0RbK3XrSJLDA7GqHqY=
 github.com/lixenwraith/toml v0.4.0 h1:Wsxd56QxNNSzsyCA8zs+M09OWZtRhdYtFob+QvO9oTY=
 github.com/lixenwraith/toml v0.4.0/go.mod h1:itcT/Vt5mwmX9KVGCMsWZr6vbU/JgZ24wV/I0J5cMt0=
+github.com/lixenwraith/toml v0.4.1-0.20261031201941-1aad3f664149 h1:VChuA3eGVT7csXxKbC+okRZgbMB0B0YFI/+bmsJFCcE=
+github.com/lixenwraith/toml v0.4.1-0.20261031201941-1aad3f664149/go.mod h1:itcT/Vt5mwmX9KVGCMsWZr6vbU/JgZ24wV/I0J5cMt0=
+github.com/lixenwraith/toml v0.5.0 h1:2B2S7u45TSP6EUN3rLzcqbnFZeeREeS5V+OQ3jKuLJc=
+github.com/lixenwraith/toml v0.5.0/go.mod h1:itcT/Vt5mwmX9KVGCMsWZr6vbU/JgZ24wV/I0J5cMt0=
 golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
 golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 golang.org/x/term v0.47.0 h1:cpyOwQkr2Nzxe2p6KnrTG7Ei2wtzjsuSjhpXXepZ/BM=

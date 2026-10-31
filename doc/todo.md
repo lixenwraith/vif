@@ -1263,11 +1263,16 @@ keyboard's text into `terminal.Event`s and flushes cell frames through
 ### Spin off `pkg/audio` as its own module
 
 - Priority: P2
-- Affected files: `pkg/audio`, `pkg/audio/model`, `pkg/tomlmacro`, `cmd/soundlab`
+- Affected files: `pkg/audio`, `pkg/audio/model`, `internal/parameter`,
+  `internal/service`, `internal/resource`, `internal/soundlab`, `go.mod`
 
-Two in-repository imports remain: `pkg/vmath` for three hash and stream
-constants, which inline, and `pkg/tomlmacro` for the macros both document
-loaders expand, which moves with it or into `lixenwraith/toml`.
+No in-repository import remains: beside the standard library the package imports
+only `lixenwraith/toml` and its `macro` expander, which moved there for this.
+What remains is the move itself: a `lixenwraith/audio` repository with the
+package at its root and `model` under it, the package README as its README with
+import paths rewritten, the repository LICENSE and a `go.mod` at this module's
+Go version; then this module's importers take the new path and `go.mod` requires
+it.
 
 ## Genetic library
 

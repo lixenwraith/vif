@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/toml/macro"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
-	"github.com/lixenwraith/vif/pkg/tomlmacro"
 )
 
 // LoadScenario parses a one-document scenario, expands the macros it defines and
@@ -22,7 +22,7 @@ func (m *Machine[T]) LoadScenario(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse scenario: %w", err)
 	}
-	if parsed, err = tomlmacro.ExpandDocument(parsed); err != nil {
+	if parsed, err = macro.ExpandDocument(parsed); err != nil {
 		return fmt.Errorf("failed to expand scenario: %w", err)
 	}
 	return m.LoadScenarioFromMap(parsed)

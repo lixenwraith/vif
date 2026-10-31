@@ -42,6 +42,8 @@ flowchart TD
 
 `pkg/audio` carries no ECS or APM concept. The app injects its sfx levels and
 sound shapes, and `MusicSystem` interprets the game's five-second APM signal.
+Beside the standard library the package imports only `lixenwraith/toml` and its
+`macro` expander, so it can leave the module whole.
 
 Runtime mode and build capability select whether this layer exists. In a full
 build, `ModePlay`, `ModeReplay` and `ModeScript` register the audio service;

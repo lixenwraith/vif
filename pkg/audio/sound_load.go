@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vif/pkg/tomlmacro"
+	"github.com/lixenwraith/toml/macro"
 )
 
 // LoadSoundsTOML parses one document held in memory, so an include, which needs
@@ -116,7 +116,7 @@ func decodeSpecFile(data []byte) (*SoundSpecFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sound spec: %w", err)
 	}
-	if raw, err = tomlmacro.ExpandDocument(raw); err != nil {
+	if raw, err = macro.ExpandDocument(raw); err != nil {
 		return nil, fmt.Errorf("sound spec: %w", err)
 	}
 	if err := checkKeys("", raw, reflect.TypeOf(SoundSpecFile{})); err != nil {
