@@ -128,6 +128,10 @@ that proves wrong or that a document now states, and link the document instead.
 - In a CI log a `--- FAIL` line sits inside its package's block, not at the end:
   save the whole log and search it. For a hang, find `panic: test timed out` and
   match the goroutines blocked in `sync.Mutex.Lock` against what each holds.
+- The mixer drops ticks under load, so audio time lags the wall clock and one tick
+  can take 200 ms under `-race`: a test waiting on mixer state gives it seconds, not
+  periods. Load `cmd/soundlab` with ~24 race processes pinned to one CPU
+  (`taskset -c 0`), or force it with a sleep at the top of `renderTick`.
 - A closed listener's port is no refusing address: under `go test ./...` another
   package's listener can be given it and answer. Dial the near end of a held
   connection instead, which stays bound with nothing listening (vif-router's
