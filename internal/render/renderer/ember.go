@@ -13,11 +13,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// radToJaggedIdx maps radians to the 256-bucket jagged/radii LUT index
-const radToJaggedIdx = 256.0 / vmath.TwoPi
-
-// emberRingThreshold is the ring visibility under which a cell shows no ring
-const emberRingThreshold = 0.001
+// radToJaggedIdx maps radians to the jagged/radii LUT index
+const radToJaggedIdx = visual.EmberJaggedBuckets / vmath.TwoPi
 
 // emberLayerColors is one radial step of the glow: each layer's colour, and the lit
 // layers composed over the theme background, which is what most cells start from
@@ -68,7 +65,7 @@ type EmberPainter struct {
 	lastHeat      int
 	lutBlend      float64 // the blend the colour LUT was composed at
 	colorLUT      [256]emberLayerColors
-	invRadiiSqLUT [256]struct{ invRxSq, invRySq float64 }
+	invRadiiSqLUT [visual.EmberJaggedBuckets]struct{ invRxSq, invRySq float64 }
 	angleIdx      []uint8 // jagged LUT bucket per cell offset, over the widest box
 	angleW        int
 	halfW, halfH  int
@@ -201,7 +198,7 @@ func (p *EmberPainter) buildAngleTable() {
 		for dx := -p.halfW; dx <= p.halfW; dx++ {
 			// Atan2 depends only on the ratio, so raw cell deltas are sufficient
 			theta := vmath.Atan2(float64(dy), float64(dx))
-			p.angleIdx[(dy+p.halfH)*p.angleW+dx+p.halfW] = uint8(int(theta*radToJaggedIdx) & 255)
+			p.angleIdx[(dy+p.halfH)*p.angleW+dx+p.halfW] = uint8(int(theta*radToJaggedIdx) & (visual.EmberJaggedBuckets - 1))
 		}
 	}
 }
@@ -271,8 +268,8 @@ func (p *EmberPainter) buildRadiiLUT() {
 		return
 	}
 	timePhase := p.gameTime * p.params.JaggedSpeed
-	for i := range 256 {
-		theta := float64(i) * vmath.TwoPi / 256.0
+	for i := range visual.EmberJaggedBuckets {
+		theta := float64(i) * vmath.TwoPi / visual.EmberJaggedBuckets
 		disp := p.computeJaggedDisplacement(theta, timePhase)
 		invRxSq, invRySq := vmath.EllipseInvRadiiSq(p.radiusX+disp, p.radiusY+p.aspect.FromCircular(disp))
 		p.invRadiiSqLUT[i].invRxSq, p.invRadiiSqLUT[i].invRySq = invRxSq, invRySq
@@ -314,7 +311,7 @@ func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, rebuild bool) 
 }
 
 // ringSkipDist is the squared distance from a ring's plane past which its Gaussian,
-// at the pulse's peak, stays under emberRingThreshold, so a cell skips the lookup.
+// at the pulse's peak, stays under visual.EmberRingThreshold, so a cell skips the lookup.
 // One step of slack covers the rounding between this quotient and a cell's product.
 func (p *EmberPainter) ringSkipDist() float64 {
 	k := p.ringInvWidthSq * visual.ExpLUTDecayK
@@ -323,7 +320,7 @@ func (p *EmberPainter) ringSkipDist() float64 {
 	}
 	peak := p.ringAlpha + visual.PulseAmplitude
 	li := 0
-	for li < vmath.ExpLUTMaxInput && vmath.ExpDecay(li)*peak > emberRingThreshold {
+	for li < vmath.ExpLUTMaxInput && vmath.ExpDecay(li)*peak > visual.EmberRingThreshold {
 		li++
 	}
 	return float64(li+1) / k
@@ -422,7 +419,7 @@ func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, scre
 	if p.ringAlpha > 0 {
 		ringVis = p.computeRingVisibility(normDist, dx, dy)
 	}
-	ringLit := ringVis > emberRingThreshold
+	ringLit := ringVis > visual.EmberRingThreshold
 	if !layer.Active && !ringLit {
 		return
 	}
