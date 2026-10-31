@@ -5,33 +5,37 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 	"slices"
 	"sort"
+
+	"github.com/lixenwraith/toml"
 )
 
 // RipParams tunes the analysis a Rip makes of a recording. DefaultRipParams is
-// the hand-set starting point; a search over material the engine rendered, whose
-// patterns are known, is how they are meant to be refined.
+// the hand-set starting point; a search over material the engine renders, whose
+// patterns are known, refines them (RenderMusic, ExpectedRip, CompareRips), and
+// a [rip] table in a TOML document carries the result (LoadRipParams).
 type RipParams struct {
-	TempoPrior float64 // the BPM the tempo prior centres on
-	TempoWidth float64 // the prior's width, in octaves
-	Tightness  float64 // how hard beat tracking holds to the period
+	TempoPrior float64 `toml:"tempo_prior"` // the BPM the tempo prior centres on
+	TempoWidth float64 `toml:"tempo_width"` // the prior's width, in octaves
+	Tightness  float64 `toml:"tightness"`   // how hard beat tracking holds to the period
 
-	OnsetFloor float64 // a hit rises this far above its band's local median
-	OnsetMin   float64 // and this far, as a share of the band's loudest, at least
-	OnsetGap   float64 // seconds between two hits of one drum
-	KickShare  float64 // the share of a hit's percussive rise under 100 Hz that makes it a kick
-	SnareShare float64 // the share between 200 Hz and 4 kHz a snare has at least
-	SnareNoise float64 // and the share above 5 kHz its wires give it at least
-	HatShare   float64 // the share above 5 kHz that makes a hit a hihat
+	OnsetFloor float64 `toml:"onset_floor"` // a hit rises this far above its band's local median
+	OnsetMin   float64 `toml:"onset_min"`   // and this far, as a share of the band's loudest, at least
+	OnsetGap   float64 `toml:"onset_gap"`   // seconds between two hits of one drum
+	KickShare  float64 `toml:"kick_share"`  // the share of a hit's percussive rise under 100 Hz that makes it a kick
+	SnareShare float64 `toml:"snare_share"` // the share between 200 Hz and 4 kHz a snare has at least
+	SnareNoise float64 `toml:"snare_noise"` // and the share above 5 kHz its wires give it at least
+	HatShare   float64 `toml:"hat_share"`   // the share above 5 kHz that makes a hit a hihat
 
-	Harmonics     int     // partials summed into a pitch's salience
-	HarmonicDecay float64 // the weight ratio between successive partials
-	Voicing       float64 // the salience, against the recording's loud frames, under which a frame carries no note
-	Jump          float64 // the pitch track's cost per semitone moved
-	Switch        float64 // its cost of a note starting or ending
-	Retrigger     float64 // the fraction of a note's peak salience it dips under before a rise is a new note
-	MinNote       float64 // seconds a note lasts at least
+	Harmonics     int     `toml:"harmonics"`      // partials summed into a pitch's salience
+	HarmonicDecay float64 `toml:"harmonic_decay"` // the weight ratio between successive partials
+	Voicing       float64 `toml:"voicing"`        // the salience, against the recording's loud frames, under which a frame carries no note
+	Jump          float64 `toml:"jump"`           // the pitch track's cost per semitone moved
+	Switch        float64 `toml:"switch"`         // its cost of a note starting or ending
+	Retrigger     float64 `toml:"retrigger"`      // the fraction of a note's peak salience it dips under before a rise is a new note
+	MinNote       float64 `toml:"min_note"`       // seconds a note lasts at least
 }
 
 func DefaultRipParams() RipParams {
@@ -40,6 +44,120 @@ func DefaultRipParams() RipParams {
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
 	}
+}
+
+// ripGene is one parameter as a search sees it: its range, and where it lives.
+type ripGene struct {
+	name     string
+	min, max float64
+	at       func(*RipParams) *float64
+}
+
+// ripGenes is the parameters in gene order with the range each is sane in; the
+// partial count is the one integer, rounded when read back.
+var ripGenes = []ripGene{
+	{"tempo_prior", 90, 150, func(p *RipParams) *float64 { return &p.TempoPrior }},
+	{"tempo_width", 0.5, 2, func(p *RipParams) *float64 { return &p.TempoWidth }},
+	{"tightness", 20, 400, func(p *RipParams) *float64 { return &p.Tightness }},
+	{"onset_floor", 1.2, 4, func(p *RipParams) *float64 { return &p.OnsetFloor }},
+	{"onset_min", 0.02, 0.3, func(p *RipParams) *float64 { return &p.OnsetMin }},
+	{"onset_gap", 0.03, 0.12, func(p *RipParams) *float64 { return &p.OnsetGap }},
+	{"kick_share", 0.02, 0.3, func(p *RipParams) *float64 { return &p.KickShare }},
+	{"snare_share", 0.3, 0.7, func(p *RipParams) *float64 { return &p.SnareShare }},
+	{"snare_noise", 0.02, 0.3, func(p *RipParams) *float64 { return &p.SnareNoise }},
+	{"hat_share", 0.15, 0.6, func(p *RipParams) *float64 { return &p.HatShare }},
+	{"harmonics", 3, 8, nil},
+	{"harmonic_decay", 0.5, 0.95, func(p *RipParams) *float64 { return &p.HarmonicDecay }},
+	{"voicing", 0.1, 0.6, func(p *RipParams) *float64 { return &p.Voicing }},
+	{"jump", 0.01, 0.2, func(p *RipParams) *float64 { return &p.Jump }},
+	{"switch", 0.1, 0.8, func(p *RipParams) *float64 { return &p.Switch }},
+	{"retrigger", 0.2, 0.7, func(p *RipParams) *float64 { return &p.Retrigger }},
+	{"min_note", 0.03, 0.15, func(p *RipParams) *float64 { return &p.MinNote }},
+}
+
+func (g *ripGene) get(p *RipParams) float64 {
+	if g.at == nil {
+		return float64(p.Harmonics)
+	}
+	return *g.at(p)
+}
+
+func (g *ripGene) set(p *RipParams, v float64) {
+	if g.at == nil {
+		p.Harmonics = int(math.Round(v))
+		return
+	}
+	*g.at(p) = v
+}
+
+// RipGeneRanges is the range of each gene of Genes, in its order, for a search
+// to stay inside.
+func RipGeneRanges() [][2]float64 {
+	out := make([][2]float64, len(ripGenes))
+	for i, g := range ripGenes {
+		out[i] = [2]float64{g.min, g.max}
+	}
+	return out
+}
+
+// Genes is the parameters as a vector a search moves, in RipGeneRanges' order.
+func (p RipParams) Genes() []float64 {
+	out := make([]float64, len(ripGenes))
+	for i := range ripGenes {
+		out[i] = ripGenes[i].get(&p)
+	}
+	return out
+}
+
+// RipParamsFromGenes is Genes' inverse, each gene held to its range.
+func RipParamsFromGenes(genes []float64) RipParams {
+	p := DefaultRipParams()
+	for i := range ripGenes {
+		if i < len(genes) {
+			ripGenes[i].set(&p, min(max(genes[i], ripGenes[i].min), ripGenes[i].max))
+		}
+	}
+	return p
+}
+
+// ValidateRipParams refuses a parameter outside its range, by its key.
+func ValidateRipParams(p RipParams) error {
+	for i := range ripGenes {
+		if v := ripGenes[i].get(&p); !finite(v) || v < ripGenes[i].min || v > ripGenes[i].max {
+			return fmt.Errorf("rip: %s %v outside [%v,%v]", ripGenes[i].name, v, ripGenes[i].min, ripGenes[i].max)
+		}
+	}
+	return nil
+}
+
+// ripFile is the root of a rip parameters document.
+type ripFile struct {
+	Rip RipParams `toml:"rip"`
+}
+
+// LoadRipParams reads a [rip] table, every key present and in range; a key the
+// document omits keeps its default.
+func LoadRipParams(data []byte) (RipParams, error) {
+	raw, err := toml.NewParser(data).Parse()
+	if err != nil {
+		return RipParams{}, fmt.Errorf("rip params: %w", err)
+	}
+	if err := checkKeys("", raw, reflect.TypeOf(ripFile{})); err != nil {
+		return RipParams{}, fmt.Errorf("rip params: %w", err)
+	}
+	f := ripFile{Rip: DefaultRipParams()}
+	if err := toml.Decode(raw, &f); err != nil {
+		return RipParams{}, fmt.Errorf("rip params: %w", err)
+	}
+	if err := ValidateRipParams(f.Rip); err != nil {
+		return RipParams{}, err
+	}
+	return f.Rip, nil
+}
+
+// MarshalRipParams writes the parameters as a document LoadRipParams reads.
+func MarshalRipParams(p RipParams) ([]byte, error) {
+	return toml.Marshal(ripFile{Rip: p})
 }
 
 // Rip is what the analysis heard in a recording: its tempo, where its bars fall,
@@ -869,6 +987,124 @@ func (f *ripFrames) place(g ripGrid, r *Rip, n ripNote, part func(*RipBar) *[]St
 	}
 	*evs = append(*evs, s)
 	slices.SortFunc(*evs, func(a, b Step) int { return a.Pos - b.Pos })
+}
+
+// ExpectedRip is the rip a perfect listener would make of patterns placed in the
+// slots and played for bars bars under the harmony given: each bar's drum hits by
+// instrument and its tonal notes by pitch, a note under E3 a bass note, as the
+// rip reports them, with chance steps left out since they may not sound. It is
+// what CompareRips grades a rip of RenderMusic's output against.
+func ExpectedRip(slots [MusicSlots]PatternID, bpm, bars, root int, scale ScaleID, prog []int) *Rip {
+	h := newHarmony()
+	h.set(root, scale, prog)
+	r := &Rip{BPM: bpm, Root: root, Scale: scale, Bars: make([]RipBar, bars)}
+	for bar := range bars {
+		if bar > 0 {
+			h.advanceBar()
+		}
+		for _, id := range slots {
+			p := GetPattern(id)
+			if p == nil || p.Steps <= 0 {
+				continue
+			}
+			for _, tr := range p.Tracks {
+				for _, ev := range tr.Events {
+					if ev.Prob > 0 && ev.Prob < 1 || ev.Vel <= 0 {
+						continue
+					}
+					step := ev.Pos - (bar*StepsPerBar)%p.Steps
+					if step < 0 || step >= StepsPerBar {
+						continue
+					}
+					b := &r.Bars[bar]
+					if tr.Instr.IsDrum() {
+						if tr.Instr < InstrClap {
+							b.Drums[tr.Instr] = append(b.Drums[tr.Instr], Step{Pos: step, Vel: ev.Vel})
+						}
+						continue
+					}
+					midi := h.resolve(ev.Deg, ev.Oct, tr.FollowChord)
+					deg, oct := degreeIn(midi, root, scaleTable[scale])
+					s := Step{Pos: step, Vel: ev.Vel, Deg: deg, Oct: oct, Dur: max(ev.Dur, 1)}
+					if midi < ripBassTop {
+						b.Bass = append(b.Bass, s)
+					} else {
+						b.Melody = append(b.Melody, s)
+					}
+				}
+			}
+		}
+	}
+	return r
+}
+
+// RipScore grades a rip against what was played, each part in [0, 1]: the tempo
+// within two BPM, the bars found, and the drums, melody and bass as the harmonic
+// mean of recall and precision of their steps, a note's pitch included. Total
+// weighs the drums and the melody double.
+type RipScore struct {
+	Tempo, Bars, Drums, Melody, Bass, Total float64
+}
+
+// CompareRips grades got against want, the bars aligned by got's downbeat, so a
+// rip that missed the first bar is graded on the rest.
+func CompareRips(got, want *Rip) RipScore {
+	var s RipScore
+	if d := got.BPM - want.BPM; d >= -2 && d <= 2 {
+		s.Tempo = 1
+	}
+	offset := 0
+	if got.BPM > 0 {
+		offset = int(math.Round(got.Downbeat / (float64(BeatsPerBar*60) / float64(got.BPM))))
+	}
+	n := min(len(got.Bars), len(want.Bars)-offset)
+	if len(want.Bars) > 0 {
+		s.Bars = float64(max(n, 0)) / float64(len(want.Bars))
+	}
+	key := func(r *Rip, st Step, pitched bool) int {
+		if !pitched {
+			return st.Pos
+		}
+		return st.Pos<<8 | r.Root + 12*st.Oct + scaleTable[r.Scale][st.Deg]
+	}
+	f := func(pick func(*RipBar) []Step, pitched bool) float64 {
+		var tp, fp, fn int
+		for i := 0; i < n; i++ {
+			have := map[int]bool{}
+			for _, st := range pick(&got.Bars[i]) {
+				have[key(got, st, pitched)] = true
+			}
+			wantKeys := map[int]bool{}
+			for _, st := range pick(&want.Bars[i+offset]) {
+				wantKeys[key(want, st, pitched)] = true
+			}
+			for k := range wantKeys {
+				if have[k] {
+					tp++
+				} else {
+					fn++
+				}
+			}
+			for k := range have {
+				if !wantKeys[k] {
+					fp++
+				}
+			}
+		}
+		if tp+fp+fn == 0 {
+			return 1 // nothing played, nothing heard
+		}
+		return 2 * float64(tp) / float64(2*tp+fp+fn)
+	}
+	var drums float64
+	for d := range InstrClap {
+		drums += f(func(b *RipBar) []Step { return b.Drums[d] }, false)
+	}
+	s.Drums = drums / float64(InstrClap)
+	s.Melody = f(func(b *RipBar) []Step { return b.Melody }, true)
+	s.Bass = f(func(b *RipBar) []Step { return b.Bass }, true)
+	s.Total = (s.Tempo + s.Bars + 2*s.Drums + 2*s.Melody + s.Bass) / 7
+	return s
 }
 
 // degreeIn is the degree and octave of the scale nearest midi over root, the

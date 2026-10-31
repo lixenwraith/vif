@@ -688,6 +688,46 @@ func (ae *AudioEngine) DefinePattern(p *Pattern) (PatternID, error) {
 	return id, nil
 }
 
+// RenderMusic plays the registered patterns placed in slots for bars bars at bpm,
+// under the harmony given and the draws of seed, offline and without the
+// start's fade-in, and returns the music as the sequencer sums it: the engine's
+// own render of what it would play, for a test, a tuner or an offline conductor.
+// It needs a started engine, whose registries and shapes it reads, renders the
+// drums again rather than share the mixer's cache, and leaves the live sequencer
+// alone.
+func (ae *AudioEngine) RenderMusic(slots [MusicSlots]PatternID, bpm, bars, root int, scale ScaleID, prog []int, seed int64) ([]float64, error) {
+	if !ae.running.Load() {
+		return nil, errors.New("render needs a started engine")
+	}
+	if bpm < MinBPM || bpm > MaxBPM || bars < 1 {
+		return nil, fmt.Errorf("render: %d bpm or %d bars out of range", bpm, bars)
+	}
+	ae.mu.RLock()
+	shapes := ae.config.SoundShapes
+	ae.mu.RUnlock()
+	k := &kit{voices: voiceTable()}
+	for i := InstrumentType(0); i <= InstrClap; i++ {
+		if d := SoundDefByName(drumSoundNames[i]); d != nil {
+			k.ids[i] = SoundIDByName(d.Name)
+			k.variants[i] = RenderVariants(d, shapes[d.Name])
+		}
+	}
+	s := NewSequencer(bpm, k)
+	s.autoFill = false
+	s.Reseed(seed)
+	s.SetHarmonyCfg(root, scale, prog)
+	for slot, id := range slots {
+		if id != PatternSilence {
+			s.SetPattern(slot, id, 0, false)
+		}
+	}
+	s.Start()
+	s.startGain, s.startInc = 1, 0
+	buf := make([]float64, SamplesPerBar(bpm)*bars)
+	s.Generate(buf)
+	return buf, nil
+}
+
 // DefineVoice registers a voice, a tonal instrument's in place or a new
 // instrument's, and hands it to the mixer: a note already sounding finishes on the
 // voice it began with, the next trigger takes the new one. Pass a Clone, as the
