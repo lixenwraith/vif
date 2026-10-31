@@ -1025,20 +1025,6 @@ A request overriding the disruptor's `PulseSpec` for every cursor field by field
 
 ## Species
 
-### Pace a quasar fusion as its own timer did
-
-- Priority: P3
-- Affected files: `internal/system/fuse.go` (`fuseInto`), `internal/parameter/effect.go`
-
-A quasar fusion's quasar lands as its materialize ends, a whole spawn's
-materialize, where the timer the materialize replaced landed it a little after half
-of it. A session sweep with both fusions waiting a whole materialize cost quasar
-kills, the one gap beyond the noise; a drain pair's swarm lands at half a second
-again, as its spirits arrive, so the sweep decides whether the quasar's wait alone
-still costs them. A `DurationMs` on the quasar's materialize request, a fusion
-tunable near half the style's second, would give the old pacing back, spawn and
-visual still ending on one tick.
-
 ### Show a species' machine state in a debug overlay
 
 - Priority: P3
@@ -1116,8 +1102,7 @@ species, so quasars and swarms fuse as drains do.
 - **One request.** An `EventFuseRequest` names its sources, by species and count or
   as a cursor's, the target species and the `FuseEffect`, and
   `EventFuseSwarmRequest` and `EventFuseQuasarRequest` become two uses of it: the
-  drain system's pairs and the quasar scenario's trigger play as now, the quasar's
-  pacing with **Pace a quasar fusion as its own timer did**.
+  drain system's pairs and the quasar scenarios' triggers play as now.
 - **Domains.** Drains are Player-domain, so a drain fusion is local and crosses one
   spawn request from the causal participant (D-3). A composite is Shared, so
   consuming one is a Shared outcome every peer applies at one tick, from a Shared
