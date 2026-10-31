@@ -12,10 +12,10 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// FuseSystem orchestrates the visual and timing transition of entity fusions and manages fusion source system
-// Every spawn it plays rides what plays it, so it holds nothing: a drain pair's swarm lands as the spirits its
-// drains fly in arrive, and a quasar, which no drains fly in, as its materialize ends.
-// A fusion is player-domain: it consumes drains and their visuals; the crossing is the geometry-only spawn request.
+// FuseSystem plays drain fusions and holds nothing: each spawn rides what plays it, a
+// drain pair's swarm landing as the spirits its drains fly in arrive and a quasar,
+// which no drains fly in, as its materialize ends. A fusion is player-domain: it
+// consumes drains and their visuals and crosses only the geometry-only spawn request.
 type FuseSystem struct {
 	world *engine.World
 
@@ -26,7 +26,6 @@ type FuseSystem struct {
 	toggle
 }
 
-// NewFuseSystem creates a new fuse system
 func NewFuseSystem(world *engine.World) engine.System {
 	s := &FuseSystem{
 		world: world,
@@ -44,7 +43,6 @@ func (s *FuseSystem) Init() {
 	s.enabled = true
 }
 
-// Name returns system's name
 func (s *FuseSystem) Name() string {
 	return "fuse"
 }
@@ -85,8 +83,8 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 		if p, ok := ev.Payload.(*event.FuseQuasarRequestPayload); ok {
 			owner = p.Entity
 		}
-		// Nil is retained for debug/backward compatibility. In a live session it
-		// elects the coordinator, so a shared legacy trigger still cannot fan out.
+		// A nil owner, td's trigger, is the coordinator's cursor in a live session, so
+		// a Shared trigger fuses on one instance
 		if owner == 0 {
 			if session := s.world.Session(); session.Live && !session.Coordinator() {
 				return
@@ -221,7 +219,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	)
 	if !found {
 		s.statSpawnFailures.Add(1)
-		return // No valid position - cancel fusion
+		return
 	}
 
 	s.killDrains([]core.Entity{drainA, drainB})
@@ -242,7 +240,6 @@ func (s *FuseSystem) handleQuasarFuse() {
 		}
 	}
 
-	// Calculate centroid
 	sumX, sumY := 0, 0
 	for _, p := range sources {
 		sumX += p.X
@@ -269,7 +266,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 	)
 	if !found {
 		s.statSpawnFailures.Add(1)
-		return // No valid position - cancel fusion
+		return
 	}
 
 	area := vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
