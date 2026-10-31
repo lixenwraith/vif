@@ -1,9 +1,9 @@
 # TOML Macros
 
 Decision record and authoring reference for macros in vif's TOML documents.
-`pkg/tomlmacro` is the one expander; scenarios with their behavior programs, bot
-graphs and the audio banks (`sounds.toml`, `music.toml`) use it today, and the map
-editor is meant to.
+`lixenwraith/toml/macro` is the one expander; scenarios with their behavior
+programs, bot graphs and the audio banks (`sounds.toml`, `music.toml`) use it
+today, and the map editor is meant to.
 
 ## 1. Decision
 
@@ -38,6 +38,9 @@ between parsing and `toml.Decode`:
   macro "Retarget": unknown argument "x"`.
 - An editor reads and writes macros and invocations as ordinary tables with the
   same parser and encoder, and needs to understand expansion only to preview it.
+- The expander lives in the TOML module (`lixenwraith/toml/macro`): it needs only
+  parsed trees, and the audio engine's own module needs it outside vif. The bounds
+  and the reserved keys went with it; this document stays the authoring reference.
 
 ## 2. Definitions
 
@@ -161,9 +164,6 @@ as `[[frames]]`. `wad/scenario/simon` is one document that defines its own.
   Deferred to the map editor, whose encounter blocks need it; state-valued
   invocations cover the shipped scenarios. Key interpolation is already supported
   so the extension is additive.
-- **Placing the expander in `lixenwraith/toml`.** It needs only parsed trees, so it
-  can move there once another module wants it; the bounds and the reserved keys
-  are vif's choices until then.
 
 ## 8. Next consumer
 

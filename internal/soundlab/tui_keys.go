@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+package soundlab
 
 // The editor's keys tab: the tonal voices on a tracker keyboard, drawn as a piano
 // with the key's scale marked. Notes go through Execute("note ...") like
@@ -142,8 +142,9 @@ func (a *tuiApp) keysRune(r rune) {
 
 // nextVoice steps through the tonal voices, the drums skipped
 func nextVoice(i audio.InstrumentType, d int) audio.InstrumentType {
-	n := int(audio.InstrumentCount - audio.InstrBass)
-	return audio.InstrBass + audio.InstrumentType((int(i-audio.InstrBass)+d+n)%n)
+	fam := audio.TonalInstruments()
+	n := len(fam)
+	return fam[(max(slices.Index(fam, i), 0)+d+n)%n]
 }
 
 // cycleBars walks the pattern through 1, 2 and 4 bars, refusing a length that
@@ -452,12 +453,11 @@ func stepsWord(n int) string {
 
 // instrFamily is the drums or the tonal voices, whichever i belongs to
 func instrFamily(i audio.InstrumentType) []audio.InstrumentType {
-	lo, hi := audio.InstrBass, audio.InstrumentCount
-	if i.IsDrum() {
-		lo, hi = audio.InstrKick, audio.InstrBass
+	if !i.IsDrum() {
+		return audio.TonalInstruments()
 	}
-	f := make([]audio.InstrumentType, 0, hi-lo)
-	for j := lo; j < hi; j++ {
+	f := make([]audio.InstrumentType, 0, audio.InstrBass)
+	for j := audio.InstrKick; j < audio.InstrBass; j++ {
 		f = append(f, j)
 	}
 	return f
@@ -468,7 +468,7 @@ func instrFamily(i audio.InstrumentType) []audio.InstrumentType {
 func instrFamilyRow(r tui.Region, fam []audio.InstrumentType, cur audio.InstrumentType, th *palette) int {
 	x := 0
 	for _, i := range fam {
-		name := " " + i.String() + " "
+		name := " " + audio.InstrumentName(i) + " "
 		fg, bg, attr := th.HintFg, th.Bg, terminal.AttrNone
 		if i == cur {
 			fg, bg, attr = th.Bg, th.Selected, terminal.AttrBold

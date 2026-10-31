@@ -9,6 +9,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/soundlab"
 )
 
 // CLI flags, matching the game binary's house style; the -config flags are vif's.
@@ -37,7 +40,7 @@ func run() error {
 	if *flagHeadless {
 		backend = "null"
 	}
-	files, err := resolveAudioFiles(*flagConfigDir, *flagMusic, *flagSounds)
+	files, err := soundlab.ResolveFiles(*flagConfigDir, *flagMusic, *flagSounds)
 	if err != nil {
 		return err
 	}
@@ -45,17 +48,17 @@ func run() error {
 	// show only after the full screen closes
 	tui := *flagTUI && *flagScript == ""
 	var out io.Writer = os.Stdout
-	lb := newLogBuffer(500)
+	lb := soundlab.NewLogBuffer(500)
 	if tui {
 		out = lb
 	}
-	s, err := NewSession(backend, *flagVol, out, files)
+	s, err := soundlab.NewSession(soundlab.Options{Backend: backend, SfxVolume: *flagVol, Out: out, Files: files})
 	if err != nil {
 		return err
 	}
 	defer s.Close()
-	if s.startErr != nil {
-		fmt.Fprintf(s.out, "audio backend: %v (silent mode; edit/validate/export still work)\n", s.startErr)
+	if err := s.StartError(); err != nil {
+		fmt.Fprintf(out, "audio backend: %v (silent mode; edit/validate/export still work)\n", err)
 	}
 
 	if *flagScript != "" {
@@ -64,17 +67,41 @@ func run() error {
 			return err
 		}
 		defer f.Close()
-		return runScript(s, f)
+		return soundlab.RunScript(s, f)
 	}
 	if tui {
-		// runTUI owns terminal teardown; signals become a clean loop exit so
-		// the deferred Fini always runs. The REPL's exit-on-signal handler
-		// must not be installed alongside it.
 		return runTUI(s, lb)
 	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() { <-sig; s.Close(); os.Exit(130) }()
-	runREPL(s, os.Stdin)
+	runREPL(s, os.Stdin, os.Stdout)
 	return nil
+}
+
+// runTUI runs the TUI on this process's terminal. A signal becomes a clean loop
+// exit rather than os.Exit, so the terminal is never left raw on the alternate
+// screen, and Close's warning reaches stdout once the screen is gone.
+func runTUI(s *soundlab.Session, lb *soundlab.LogBuffer) error {
+	defer s.SetOut(os.Stdout)
+	term := terminal.New()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sig)
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-sig:
+			term.PostEvent(terminal.Event{Type: terminal.EventClosed})
+		case <-done:
+		}
+	}()
+	err := soundlab.RunTUI(s, lb, term)
+	if err != nil {
+		for _, l := range lb.Lines() { // what the session said before the screen failed to open
+			fmt.Println(l)
+		}
+	}
+	return err
 }

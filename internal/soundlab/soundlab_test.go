@@ -1,10 +1,11 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+package soundlab
 
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -21,7 +22,7 @@ import (
 
 func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
 	t.Helper()
-	s, err := NewSession("null", 0.5, out, audioFiles{})
+	s, err := NewSession(Options{Backend: "null", SfxVolume: 0.5, Out: out})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +34,7 @@ func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
 
 func runOrFatal(t *testing.T, s *Session, out *bytes.Buffer, script string) {
 	t.Helper()
-	if err := runScript(s, strings.NewReader(script)); err != nil {
+	if err := RunScript(s, strings.NewReader(script)); err != nil {
 		t.Fatalf("script: %v\noutput:\n%s", err, out.String())
 	}
 }
@@ -321,7 +322,7 @@ func TestEditOpensWhatIsSelected(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 	runOrFatal(t, s, &out, "new pattern bp1\nnew sound bs1")
-	a := newTUIApp(s, newLogBuffer(100))
+	a := newTUIApp(s, NewLogBuffer(100))
 	key := func(k terminal.Key, r rune) { a.editorKey(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r}) }
 
 	a.kind = kindSound
@@ -400,8 +401,67 @@ write ws1 %s
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sdefs) != 1 || sdefs[0].Name != "ws1" {
-		t.Fatalf("want exactly ws1, got %d sound(s)", len(sdefs))
+	if len(sdefs.Sound) != 1 || sdefs.Sound[0].Name != "ws1" {
+		t.Fatalf("want exactly ws1, got %d sound(s)", len(sdefs.Sound))
+	}
+}
+
+// TestVoicesAreAuthoredAsData is the rule that a tonal voice is an entry of the
+// sound document: made, edited, validated, applied and heard like a sound, saved
+// with the sounds and loaded back, a new name an instrument a pattern takes.
+func TestVoicesAreAuthoredAsData(t *testing.T) {
+	dir := t.TempDir()
+	sndFile := filepath.Join(dir, "sounds.toml")
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+builtin voice
+ls voice
+new voice glass
+set glass.wave modal
+set glass.partials 16
+set glass.decay_time 1.5
+set glass.unison 9                   # set checks syntax alone; the bound holds at validate
+! validate glass
+unset glass.unison
+validate glass
+new voice kick                       # a drum's name is not a voice's: validate says so
+! validate kick
+del kick
+set lead.wave square                 # retune a shipped voice in place
+apply all
+music start
+note 60 0.8 2 glass
+new pattern gp
+set gp.track.0.instr glass
+set gp.track.0.event.0.deg 2
+validate gp
+apply gp
+music stop
+save sound %s
+stat
+`, sndFile))
+	if !strings.Contains(out.String(), "auto-applied") && !strings.Contains(out.String(), "applied voice \"glass\"") {
+		t.Fatalf("glass was never applied:\n%s", out.String())
+	}
+	if id, ok := audio.InstrumentByName("glass"); !ok || id < audio.InstrumentCount {
+		t.Fatalf("glass is not an instrument after apply: %d %v", id, ok)
+	}
+	if audio.VoiceDefByName("lead").Wave != "square" {
+		t.Fatal("the retuned lead did not reach the registry")
+	}
+	teardown(t, s)
+
+	var out2 bytes.Buffer
+	s2 := newTestSession(t, &out2)
+	runOrFatal(t, s2, &out2, fmt.Sprintf(`
+load sound %s
+show glass
+ls voice glass
+`, sndFile))
+	teardown(t, s2)
+	if !strings.Contains(out2.String(), "wave = \"modal\"") || !strings.Contains(out2.String(), "voice(s) loaded") {
+		t.Fatalf("the saved voice did not come back:\n%s", out2.String())
 	}
 }
 
@@ -461,7 +521,7 @@ func TestAutoSlotAssign(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	runOrFatal(t, s, &out, "new pattern ap")
 	a.cursorTo("ap")
 
@@ -488,7 +548,7 @@ func TestDeleteKey(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	runOrFatal(t, s, &out, "new pattern dp")
 	a.cursorTo("dp")
 
@@ -536,7 +596,7 @@ func TestTooSmallTakesNoKeys(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	a.w, a.h, a.dirty = minW-1, minH, false
 	lines := len(a.log.lines)
 	for _, r := range "ne: m" {
@@ -559,7 +619,7 @@ func TestRollPlacesANoteOnItsPitch(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 	runOrFatal(t, s, &out, "new pattern rl\nset rl.track.0.instr lead\ndel rl.track.0.event.0")
-	a := newTUIApp(s, newLogBuffer(100))
+	a := newTUIApp(s, NewLogBuffer(100))
 	a.openEditor("rl", focusGrid)
 	key := func(r rune) { a.editorKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}) }
 	key('r') // an empty track opens on the second octave's root
@@ -584,7 +644,7 @@ func TestUnknownSettingsAreSkipped(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, paths.SettingsFile), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f, err := resolveAudioFiles(dir, "", "")
+	f, err := ResolveFiles(dir, "", "")
 	if err != nil || f.skipped == nil || f.buffer != 20*time.Millisecond {
 		t.Fatalf("resolve = %+v, %v; want buffer 20ms with the unknown table named", f, err)
 	}
@@ -610,7 +670,7 @@ func TestAudioFilesFollowVif(t *testing.T) {
 	}
 
 	for _, root := range []string{"", dir} {
-		f, err := resolveAudioFiles(root, "", "")
+		f, err := ResolveFiles(root, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -620,9 +680,9 @@ func TestAudioFilesFollowVif(t *testing.T) {
 		}
 	}
 
-	f, _ := resolveAudioFiles("", "", "")
+	f, _ := ResolveFiles("", "", "")
 	var out bytes.Buffer
-	s, err := NewSession("null", 0.5, &out, f)
+	s, err := NewSession(Options{Backend: "null", SfxVolume: 0.5, Out: &out, Files: f})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +709,7 @@ func TestTabWalksThePanesOnScreen(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	a.term, a.w, a.h = frameTerm{}, 100, 40
 	key := func(k terminal.Key, r rune) {
 		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
@@ -695,7 +755,7 @@ func TestMixerStaysWhereItIsLeft(t *testing.T) {
 	runOrFatal(t, s, &out, "new pattern one\nnew pattern big\n"+strings.Repeat("mix one big\n", 11)+"apply big\nslot 0 big")
 	id := audio.PatternIDByName("big")
 	waitFor(t, func() bool { return s.eng.SlotPattern(0) == id }, "big must reach slot 0")
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	a.term, a.w, a.h = frameTerm{}, 100, 24
 	key := func(k terminal.Key, r rune) {
 		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
@@ -724,7 +784,7 @@ func TestNewPatternPlaysAlongAndGoes(t *testing.T) {
 	runOrFatal(t, s, &out, "bpm 999\nnew pattern bg\nslot 0 bg\nmusic start")
 	bg := audio.PatternIDByName("bg")
 	waitFor(t, func() bool { return s.eng.SlotPattern(0) == bg }, "bg must play in slot 0")
-	a := newTUIApp(s, newLogBuffer(100))
+	a := newTUIApp(s, NewLogBuffer(100))
 	a.promptNew(-1)
 	a.promptKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter})
 	d, ok := s.pats.get("new_1")
@@ -760,7 +820,7 @@ func TestMixerMutesTheCursorsSlot(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	a.term, a.w, a.h = frameTerm{}, 100, 24
 	key := func(k terminal.Key, r rune) {
 		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
@@ -780,5 +840,52 @@ func TestMixerMutesTheCursorsSlot(t *testing.T) {
 	runOrFatal(t, s, &out, "mute slot 3 on\nwhere")
 	if !strings.Contains(out.String(), "slot3=- (muted)") {
 		t.Fatalf("where must name the muted slot:\n%s", out.String())
+	}
+}
+
+// TestRipMakesPatternsOfARecording is the verb's contract: a recording's beat and
+// melody come into the document as dirty patterns under the given name, and the
+// transport takes the tempo and key heard.
+func TestRipMakesPatternsOfARecording(t *testing.T) {
+	// Eight seconds at 120 bpm: a low thump on every beat and a tone on every bar
+	const rate, bpm = audio.AudioSampleRate, 120
+	beat := rate * 60 / bpm
+	buf := make([]float64, 16*beat)
+	for i := range buf {
+		p := i % beat
+		if p < rate/10 {
+			buf[i] += 0.8 * math.Sin(2*math.Pi*55*float64(i)/rate) * math.Exp(-float64(p)/(rate/40))
+		}
+		if i%(4*beat) < beat {
+			buf[i] += 0.3 * math.Sin(2*math.Pi*440*float64(i)/rate)
+		}
+	}
+	wav := filepath.Join(t.TempDir(), "loop.wav")
+	f, err := os.Create(wav)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := audio.WriteWAV(f, buf); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+! rip %s loop                        # not a recording
+rip %s loop
+! rip %s loop                        # the names are taken
+ls pattern loop*
+validate all
+`, filepath.Join(t.TempDir(), "missing.wav"), wav, wav))
+	if !s.pats.has("loop_beat_1") || !s.pats.isDirty("loop_beat_1") {
+		t.Fatalf("no dirty loop_beat_1 in the document:\n%s", out.String())
+	}
+	if s.bpm < bpm-3 || s.bpm > bpm+3 {
+		t.Errorf("tempo %d, want about %d", s.bpm, bpm)
+	}
+	if !strings.Contains(out.String(), "ripped") {
+		t.Errorf("no report:\n%s", out.String())
 	}
 }

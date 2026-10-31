@@ -4,8 +4,6 @@ import (
 	"math/rand/v2"
 	"slices"
 	"sync/atomic"
-
-	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 type patternTransition struct {
@@ -126,8 +124,8 @@ func (ss *slotState) reset() {
 // separate streams so a bar of timing skew between two runs of one seed moves no
 // later draw: the arrangement holds even where the notes under it differ.
 const (
-	seqStream  = vmath.Golden64
-	stepStream = vmath.Golden64 ^ 0x5bd1e995
+	seqStream  = 0x9e3779b97f4a7c15 // 2^64 over the golden ratio, as vmath.Golden64
+	stepStream = seqStream ^ 0x5bd1e995
 )
 
 // drawnSlots are the slots a tier draws; slot 2 is the fill's
@@ -177,7 +175,7 @@ type Sequencer struct {
 	running bool
 }
 
-func NewSequencer(bpm int, kit *drumKit) *Sequencer {
+func NewSequencer(bpm int, k *kit) *Sequencer {
 	s := &Sequencer{
 		harmony:  newHarmony(),
 		gains:    [MusicSlots]float64{0.62, 0.46, 0.46, 0.5},
@@ -188,7 +186,7 @@ func NewSequencer(bpm int, kit *drumKit) *Sequencer {
 	s.Reseed(1)
 	for i := range s.slots {
 		for j := range s.slots[i].players {
-			s.slots[i].players[j] = NewPatternPlayer(kit)
+			s.slots[i].players[j] = NewPatternPlayer(k)
 		}
 	}
 	s.setGroup(-1)

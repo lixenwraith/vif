@@ -185,7 +185,7 @@ everything a build must be able to play without a filesystem:
 | Keymap | `internal/asset/input/keymap.toml` | Default bindings; also what `make install-config` installs. |
 | Settings | `internal/asset/vif.toml` | The defaults a root's `vif.toml` overrides; also installed. |
 | Bot graphs | `internal/asset/bot/*.toml` | Shipped graphs, `default` among them; also installed. |
-| Sound bank | `internal/asset/audio/sfx.toml`, `drums.toml` | Built-in specs `pkg/audio` renders, a later file overriding an earlier one by name. |
+| Sound bank | `internal/asset/audio/sfx.toml`, `drums.toml`, `voices.toml` | Built-in specs `pkg/audio` renders and the tonal voices it plays, a later file overriding an earlier one by name. |
 | Music bank | `internal/asset/audio/music.toml` | Built-in patterns the conductor arranges. |
 | Version stamp | `internal/asset/version.txt` | Tag and commit `git archive` writes for `-version`. |
 | Splash font | `internal/asset/splash_font.go` | 95 printable ASCII glyphs plus fallback, each a 12-row bitmap; Go source, not embedded. |

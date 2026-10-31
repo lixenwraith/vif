@@ -644,7 +644,7 @@ event counter plus an outer tick transition.
 | Region commands and scheduler adapter | `internal/mode/commands.go`, `internal/engine/scheduler.go` |
 | TOML schema/compiler | `internal/fsm/config.go`, `loader.go`, `builder.go` |
 | External and macro files | `internal/fsm/file_loader.go` |
-| Macro expansion | `pkg/tomlmacro` |
+| Macro expansion | `lixenwraith/toml/macro` |
 | Scenario resolution, canonical form, `-check` | `internal/resource/resolve.go`, `scenario.go`, `check.go` |
 | Standard actions/guards | `internal/fsm/std/*.go` |
 | Ops, strict argument decode, guard trees, vocabulary entries | `internal/fsm/dialect` |

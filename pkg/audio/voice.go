@@ -25,7 +25,7 @@ type VoiceParams struct {
 
 // DrumVoice plays from a pre-rendered variant set; no allocation on trigger
 type DrumVoice struct {
-	kit      *drumKit
+	kit      *kit
 	instr    InstrumentType
 	buffer   floatBuffer
 	pos      int
@@ -35,8 +35,8 @@ type DrumVoice struct {
 }
 
 // NewDrumVoice creates a drum voice over a variant set
-func NewDrumVoice(kit *drumKit, instr InstrumentType) *DrumVoice {
-	return &DrumVoice{kit: kit, instr: instr}
+func NewDrumVoice(k *kit, instr InstrumentType) *DrumVoice {
+	return &DrumVoice{kit: k, instr: instr}
 }
 
 func (v *DrumVoice) Trigger(params VoiceParams) {
@@ -78,75 +78,6 @@ func (v *DrumVoice) Reset() {
 
 // --- TonalVoice: Pitched instrument with ADSR ---
 
-// voiceSpec is one tonal instrument: an oscillator stack through a resonant
-// low-pass under a filter envelope, into an amplitude ADSR. Times are seconds,
-// frequencies Hz, sustain and levels linear.
-type voiceSpec struct {
-	wave    int     // waveSine, waveSaw, waveSquare or waveString
-	unison  int     // oscillators, each detuned from the last by detune
-	detune  float64 // frequency ratio between neighbouring oscillators
-	sub     float64 // level of a sine an octave below, added after the drive
-	fmRatio float64 // 2-operator FM when fmIndex > 0
-	fmIndex float64
-	fmDecay float64 // the index's own decay; 0 rides the amplitude envelope
-	bright  float64 // waveString: 0 a dull string, 1 a wiry one
-	ring    float64 // waveString: seconds a plucked string takes to die away
-
-	// waveModal, a struck or plucked string as its partials: partials caps the
-	// bank, strikePos is where along the string the hammer or finger lands and
-	// tilt the spectral slope (1 struck, 2 plucked); inharm is the stretch B of a
-	// middle-C string, growing with pitch by inharmTrack
-	partials    int
-	strikePos   float64
-	tilt        float64
-	inharm      float64
-	inharmTrack float64
-	// decayT is the prompt decay at middle C, growing toward the bass by
-	// decayTrack; a partial at dampHz decays twice as fast. The coupled pair is a
-	// second string pair cents away whose aftersound sits pairLevel under the
-	// prompt sound and decays pairSlow times as fast. hammerHz low-passes the
-	// excitation at full velocity; knock is the level of the contact noise.
-	decayT     float64
-	decayTrack float64
-	dampHz     float64
-	pair       float64
-	pairLevel  float64
-	pairSlow   float64
-	hammerHz   float64
-	knock      float64
-
-	cutoff   float64 // Hz at rest
-	keyTrack float64 // Hz added per Hz of the note
-	envAmt   float64 // Hz added at the filter envelope's peak
-	envDecay float64 // filter envelope decay; 0 rides the amplitude envelope
-	q        float64 // resonance; 0 bypasses the filter
-
-	attack, decay, sustain, release float64
-	drive                           float64 // tanh drive after the filter; 0 = clean
-	level                           float64
-}
-
-// voiceSpecs is the instrument table; drums have none. The bass and the piano are
-// strings as their partials: a finger-plucked bass through a pickup resonance and
-// an amp, a hammered piano with a grand's stretch and double decay. The pluck is
-// a string a noise burst sets ringing.
-var voiceSpecs = [InstrumentCount]voiceSpec{
-	InstrBass: {wave: waveModal, partials: 40, strikePos: 0.2, tilt: 1.7, inharm: 0.00008, inharmTrack: 1,
-		decayT: 0.7, decayTrack: 0.5, dampHz: 900, pair: 1.2, pairLevel: 0.3, pairSlow: 0.4, hammerHz: 3000, knock: 0.08,
-		cutoff: 2200, q: 1.3, attack: 0.003, sustain: 1, release: 0.045, drive: 1.4, level: 1.0},
-	InstrPiano: {wave: waveModal, partials: 40, strikePos: 0.12, tilt: 1.0, inharm: 0.0004, inharmTrack: 1.3,
-		decayT: 0.9, decayTrack: 0.6, dampHz: 2600, pair: 1.6, pairLevel: 0.28, pairSlow: 0.3, hammerHz: 2600, knock: 0.12,
-		cutoff: 1200, keyTrack: 6, q: 0.5, attack: 0.002, sustain: 1, release: 0.09, level: 0.8},
-	InstrPad: {wave: waveSaw, unison: 3, detune: 1.006, cutoff: 200, keyTrack: 2.2, q: 0.6,
-		attack: 0.35, decay: 0.3, sustain: 0.8, release: 1.3, level: 1.0},
-	InstrLead: {wave: waveSaw, unison: 2, detune: 1.004, cutoff: 300, keyTrack: 3.0, envAmt: 1600, envDecay: 0.18, q: 0.7,
-		attack: 0.005, decay: 0.2, sustain: 0.55, release: 0.25, drive: 1.0, level: 1.1},
-	InstrPluck: {wave: waveString, unison: 1, bright: 0.3, ring: 0.7, cutoff: 900, keyTrack: 2.5, q: 0.5,
-		attack: 0.001, decay: 0.1, sustain: 1, release: 0.12, level: 1.0},
-}
-
-var defaultVoiceSpec = voiceSpec{wave: waveSine, unison: 1, attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.2, level: 0.6}
-
 // ADSRState tracks envelope phase
 type ADSRState int
 
@@ -176,9 +107,14 @@ const (
 	modalCheck   = 1024 // samples between checks that a bank has rung out
 )
 
-// TonalVoice generates pitched sounds with envelope
+// TonalVoice generates pitched sounds with envelope; the voice it plays is the
+// kit's for the instrument at trigger time, so a redefined voice reaches the next
+// note while a sounding one keeps its own
 type TonalVoice struct {
-	spec     *voiceSpec
+	kit      *kit
+	spec     *VoiceDef
+	wave     int     // the spec's wave, resolved at trigger
+	level    float64 // the spec's level, 1 when unset
 	note     int
 	freq     float64
 	velocity float64
@@ -224,9 +160,9 @@ type TonalVoice struct {
 	releasing bool
 }
 
-// NewTonalVoice creates a tonal voice
-func NewTonalVoice() *TonalVoice {
-	return &TonalVoice{spec: &defaultVoiceSpec}
+// NewTonalVoice creates a tonal voice playing k's voices
+func NewTonalVoice(k *kit) *TonalVoice {
+	return &TonalVoice{kit: k, spec: &defaultVoice, level: defaultVoice.Level}
 }
 
 func (v *TonalVoice) Sample() float64 {
@@ -235,42 +171,43 @@ func (v *TonalVoice) Sample() float64 {
 	}
 	sp := v.spec
 	dt := v.freq / float64(AudioSampleRate)
+	n := max(min(sp.Unison, maxUnison), 1)
 	var raw float64
 	switch {
-	case sp.wave == waveModal:
+	case v.wave == waveModal:
 		raw = v.modal()
-	case sp.wave == waveString:
+	case v.wave == waveString:
 		raw = v.pluck()
-	case sp.fmIndex > 0:
-		idx := sp.fmIndex * v.envLevel
-		if sp.fmDecay > 0 {
+	case sp.FMIndex > 0:
+		idx := sp.FMIndex * v.envLevel
+		if sp.FMDecay > 0 {
 			v.ienv *= v.ienvCoef
-			idx = sp.fmIndex * v.ienv
+			idx = sp.FMIndex * v.ienv
 		}
-		for i := range sp.unison {
+		for i := range n {
 			d := dt * v.ratio[i]
 			mod := math.Sin(2 * math.Pi * v.modPhase[i])
 			raw += math.Sin(2*math.Pi*v.phase[i] + idx*mod)
 			v.phase[i] = wrap(v.phase[i] + d)
-			v.modPhase[i] = wrap(v.modPhase[i] + d*sp.fmRatio)
+			v.modPhase[i] = wrap(v.modPhase[i] + d*sp.FMRatio)
 		}
-		raw /= float64(sp.unison)
+		raw /= float64(n)
 	default:
-		for i := range sp.unison {
+		for i := range n {
 			d := dt * v.ratio[i]
-			raw += blepWave(sp.wave, v.phase[i], d)
+			raw += blepWave(v.wave, v.phase[i], d)
 			v.phase[i] = wrap(v.phase[i] + d)
 		}
-		raw /= float64(sp.unison)
+		raw /= float64(n)
 	}
-	if sp.q > 0 {
+	if sp.Q > 0 {
 		raw = v.filter(raw)
 	}
-	if sp.drive > 0 {
-		raw = math.Tanh(raw * sp.drive)
+	if sp.Drive > 0 {
+		raw = math.Tanh(raw * sp.Drive)
 	}
-	if sp.sub > 0 {
-		raw += sp.sub * math.Sin(2*math.Pi*v.subPhase)
+	if sp.Sub > 0 {
+		raw += sp.Sub * math.Sin(2*math.Pi*v.subPhase)
 		v.subPhase = wrap(v.subPhase + dt/2)
 	}
 
@@ -286,7 +223,7 @@ func (v *TonalVoice) Sample() float64 {
 			v.Release()
 		}
 	}
-	return raw * env * v.velocity * sp.level
+	return raw * env * v.velocity * v.level
 }
 
 // pluck reads the string and feeds back the average of its last two samples, which
@@ -295,14 +232,14 @@ func (v *TonalVoice) pluck() float64 {
 	out := v.str[v.strPos]
 	next := v.str[(v.strPos+1)%v.strLen]
 	sp := v.spec
-	v.str[v.strPos] = v.strGain * ((1-sp.bright)*(out+next)*0.5 + sp.bright*out)
+	v.str[v.strPos] = v.strGain * ((1-sp.Bright)*(out+next)*0.5 + sp.Bright*out)
 	v.strPos = (v.strPos + 1) % v.strLen
 	return out
 }
 
 // strike fills the string with a noise burst from a small generator seeded by the
 // note and the voice's trigger order, so a replay plucks the same string
-func (v *TonalVoice) strike(sp *voiceSpec) {
+func (v *TonalVoice) strike(sp *VoiceDef) {
 	v.strLen = min(max(int(float64(AudioSampleRate)/v.freq+0.5), 2), stringMaxLen)
 	if cap(v.str) < stringMaxLen {
 		v.str = make([]float64, stringMaxLen)
@@ -317,7 +254,7 @@ func (v *TonalVoice) strike(sp *voiceSpec) {
 	}
 	v.strPos = 0
 	// the loss per period that takes the string to a thousandth over ring seconds
-	v.strGain = math.Pow(0.001, 1/(max(sp.ring, 0.05)*v.freq))
+	v.strGain = math.Pow(0.001, 1/(max(sp.Ring, 0.05)*v.freq))
 }
 
 // modal advances every partial's phasor and sums them, adds the contact noise
@@ -357,30 +294,30 @@ func (v *TonalVoice) modal() float64 {
 // the inharmonicity, at the amplitude the strike position's comb, the spectral
 // tilt and the hammer's low-pass leave it, decaying faster the higher it is; the
 // lowest partials get the coupled pair's slower, slightly detuned second string
-func (v *TonalVoice) excite(sp *voiceSpec) {
-	n := max(min(sp.partials, maxPartials, int(modalTopHz/v.freq)), 4)
+func (v *TonalVoice) excite(sp *VoiceDef) {
+	n := max(min(sp.Partials, maxPartials, int(modalTopHz/v.freq)), 4)
 	if cap(v.mre) < maxPartials+pairPartials {
 		c := maxPartials + pairPartials
 		v.mre, v.mim, v.mcr, v.mci = make([]float64, 0, c), make([]float64, 0, c), make([]float64, 0, c), make([]float64, 0, c)
 	}
 	v.mre, v.mim, v.mcr, v.mci = v.mre[:0], v.mim[:0], v.mcr[:0], v.mci[:0]
-	h := sp.strikePos
+	h := sp.StrikePos
 	if h <= 0 {
 		h = 0.12
 	}
-	tilt := sp.tilt
+	tilt := sp.Tilt
 	if tilt <= 0 {
 		tilt = 1
 	}
 	vel := max(v.velocity, 0.05)
-	b := sp.inharm * math.Pow(v.freq/modalRefHz, sp.inharmTrack)
-	tau := max(sp.decayT, 0.05) * math.Pow(modalRefHz/v.freq, sp.decayTrack)
-	fc := sp.hammerHz * (0.3 + 0.7*vel)
-	slow := sp.pairSlow
+	b := sp.Inharm * math.Pow(v.freq/modalRefHz, sp.InharmTrack)
+	tau := max(sp.DecayTime, 0.05) * math.Pow(modalRefHz/v.freq, sp.DecayTrack)
+	fc := sp.HammerHz * (0.3 + 0.7*vel)
+	slow := sp.PairSlow
 	if slow <= 0 {
 		slow = 0.35
 	}
-	detune := math.Pow(2, sp.pair/1200)
+	detune := math.Pow(2, sp.Pair/1200)
 	comb0 := math.Abs(math.Sin(math.Pi * h))
 	var sum float64
 	add := func(f, a, sigma float64) {
@@ -401,19 +338,19 @@ func (v *TonalVoice) excite(sp *voiceSpec) {
 			a /= 1 + (f/fc)*(f/fc)
 		}
 		sigma := 1 / tau
-		if sp.dampHz > 0 {
-			sigma *= 1 + (f/sp.dampHz)*(f/sp.dampHz)
+		if sp.DampHz > 0 {
+			sigma *= 1 + (f/sp.DampHz)*(f/sp.DampHz)
 		}
-		if k <= pairPartials && sp.pairLevel > 0 {
-			add(f, a/(1+sp.pairLevel), sigma)
-			add(f*detune, a*sp.pairLevel/(1+sp.pairLevel), sigma*slow)
+		if k <= pairPartials && sp.PairLevel > 0 {
+			add(f, a/(1+sp.PairLevel), sigma)
+			add(f*detune, a*sp.PairLevel/(1+sp.PairLevel), sigma*slow)
 		} else {
 			add(f, a, sigma)
 		}
 	}
 	v.mscale = 1 / max(sum, 1e-9)
 	v.mcheck = 0
-	v.knockEnv, v.knockLP = sp.knock*vel, 0
+	v.knockEnv, v.knockLP = sp.Knock*vel, 0
 	v.knockSeed = uint32(v.note)*2654435761 + uint32(v.serial)*40503 + 1
 }
 
@@ -421,17 +358,17 @@ func (v *TonalVoice) excite(sp *voiceSpec) {
 // the filter envelope; coefficients refresh every filterCoefHold samples
 func (v *TonalVoice) filter(x float64) float64 {
 	sp := v.spec
-	if sp.envDecay > 0 {
+	if sp.EnvDecay > 0 {
 		v.fenv *= v.fenvCoef
 	} else {
 		v.fenv = v.envLevel
 	}
 	if v.coefLeft--; v.coefLeft <= 0 {
 		v.coefLeft = filterCoefHold
-		fc := sp.cutoff + sp.keyTrack*v.freq + sp.envAmt*v.fenv
+		fc := sp.Cutoff + sp.KeyTrack*v.freq + sp.EnvAmount*v.fenv
 		fc = min(max(fc, 20), 0.45*AudioSampleRate)
 		g := math.Tan(math.Pi * fc / AudioSampleRate)
-		k := 1 / sp.q
+		k := 1 / sp.Q
 		v.fa1 = 1 / (1 + g*(g+k))
 		v.fa2 = g * v.fa1
 		v.fa3 = g * v.fa2
@@ -502,32 +439,38 @@ func (v *TonalVoice) Active() bool {
 }
 
 func (v *TonalVoice) Trigger(params VoiceParams) {
-	sp := &defaultVoiceSpec
-	if i := params.Instrument; i >= 0 && i < InstrumentCount && voiceSpecs[i].level > 0 {
-		sp = &voiceSpecs[i]
-	}
+	sp := v.kit.voice(params.Instrument)
 	v.spec = sp
+	v.wave = waveOf(sp.Wave)
+	v.level = sp.Level
+	if v.level <= 0 {
+		v.level = 1
+	}
 	v.note = params.Note
 	v.freq = NoteFreq(params.Note)
 	v.velocity = params.Velocity
 	// Unison spreads symmetrically about the note; phases stagger so the stack
 	// does not start as one in-phase saw
-	n := max(min(sp.unison, maxUnison), 1)
+	n := max(min(sp.Unison, maxUnison), 1)
+	detune := sp.Detune
+	if detune <= 0 {
+		detune = 1
+	}
 	for i := range n {
-		v.ratio[i] = math.Pow(sp.detune, float64(i)-float64(n-1)/2)
+		v.ratio[i] = math.Pow(detune, float64(i)-float64(n-1)/2)
 		v.phase[i] = float64(i) / float64(n)
 		v.modPhase[i] = 0
 	}
 	v.subPhase = 0
 	v.ic1, v.ic2, v.coefLeft = 0, 0, 0
 	v.fenv, v.ienv = 1, 1
-	if sp.envDecay > 0 {
-		v.fenvCoef = math.Exp(-1 / (sp.envDecay * AudioSampleRate))
+	if sp.EnvDecay > 0 {
+		v.fenvCoef = math.Exp(-1 / (sp.EnvDecay * AudioSampleRate))
 	}
-	if sp.fmDecay > 0 {
-		v.ienvCoef = math.Exp(-1 / (sp.fmDecay * AudioSampleRate))
+	if sp.FMDecay > 0 {
+		v.ienvCoef = math.Exp(-1 / (sp.FMDecay * AudioSampleRate))
 	}
-	switch sp.wave {
+	switch v.wave {
 	case waveString:
 		v.strike(sp)
 	case waveModal:
@@ -535,10 +478,10 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 	}
 
 	sr := float64(AudioSampleRate)
-	v.attack = int(sp.attack * sr)
-	v.decay = int(sp.decay * sr)
-	v.sustain = sp.sustain
-	v.release = int(sp.release * sr)
+	v.attack = int(sp.Attack * sr)
+	v.decay = int(sp.Decay * sr)
+	v.sustain = sp.Sustain
+	v.release = int(sp.Release * sr)
 
 	v.envState = ADSRAttack
 	v.envPos = 0

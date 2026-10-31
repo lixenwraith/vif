@@ -3,6 +3,7 @@ package audio
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -11,6 +12,77 @@ import (
 )
 
 const wavHeaderSize = 44
+
+// ReadWAV decodes a RIFF WAVE stream: PCM of 8, 16, 24 or 32 bits or IEEE float
+// of 32 or 64, any channel count, mixed down to mono in [-1, 1] at the stream's
+// own rate. Chunks it does not know are skipped, so a tagged export reads.
+func ReadWAV(r io.Reader) (mono []float64, rate int, err error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(data) < 12 || string(data[0:4]) != "RIFF" || string(data[8:12]) != "WAVE" {
+		return nil, 0, errors.New("wav: not a RIFF WAVE stream")
+	}
+	le := binary.LittleEndian
+	var format, channels, bits int
+	var pcm []byte
+	for off := 12; off+8 <= len(data); {
+		id, size := string(data[off:off+4]), int(le.Uint32(data[off+4:]))
+		body := data[off+8:]
+		if size > len(body) {
+			size = len(body) // a header written before the stream ended
+		}
+		body = body[:size]
+		switch id {
+		case "fmt ":
+			if size < 16 {
+				return nil, 0, errors.New("wav: short fmt chunk")
+			}
+			format, channels = int(le.Uint16(body)), int(le.Uint16(body[2:]))
+			rate, bits = int(le.Uint32(body[4:])), int(le.Uint16(body[14:]))
+			if format == 0xFFFE && size >= 26 { // extensible: the sub-format's first word
+				format = int(le.Uint16(body[24:]))
+			}
+		case "data":
+			pcm = body
+		}
+		off += 8 + size + size&1
+	}
+	if pcm == nil || channels < 1 || channels > 32 || rate < 8000 || rate > 192000 {
+		return nil, 0, fmt.Errorf("wav: no data, %d channels or %d Hz", channels, rate)
+	}
+	var sample func([]byte) float64
+	switch {
+	case format == 1 && bits == 8:
+		sample = func(b []byte) float64 { return (float64(b[0]) - 128) / 128 }
+	case format == 1 && bits == 16:
+		sample = func(b []byte) float64 { return float64(int16(le.Uint16(b))) / 32768 }
+	case format == 1 && bits == 24:
+		sample = func(b []byte) float64 {
+			return float64(int32(uint32(b[0])<<8|uint32(b[1])<<16|uint32(b[2])<<24)>>8) / 8388608
+		}
+	case format == 1 && bits == 32:
+		sample = func(b []byte) float64 { return float64(int32(le.Uint32(b))) / 2147483648 }
+	case format == 3 && bits == 32:
+		sample = func(b []byte) float64 { return float64(math.Float32frombits(le.Uint32(b))) }
+	case format == 3 && bits == 64:
+		sample = func(b []byte) float64 { return math.Float64frombits(le.Uint64(b)) }
+	default:
+		return nil, 0, fmt.Errorf("wav: format %d at %d bits is not PCM or float", format, bits)
+	}
+	width := bits / 8
+	frame := width * channels
+	mono = make([]float64, len(pcm)/frame)
+	for i := range mono {
+		var sum float64
+		for c := range channels {
+			sum += sample(pcm[i*frame+c*width:])
+		}
+		mono[i] = sum / float64(channels)
+	}
+	return mono, rate, nil
+}
 
 // WriteWAV emits samples as 16-bit stereo PCM. The sample path is floatToBytes
 // — the same soft limiter, hard clip and L/R duplication the mixer uses — so an

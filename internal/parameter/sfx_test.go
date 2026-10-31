@@ -13,14 +13,14 @@ import (
 
 func loadBuiltins(t *testing.T) []*audio.SoundDef {
 	t.Helper()
-	defs, err := BuiltinSounds()
+	bank, err := BuiltinSounds()
 	if err != nil {
 		t.Fatalf("builtin sounds: %v", err)
 	}
-	if len(defs) == 0 {
-		t.Fatal("shipped sound bank is empty")
+	if len(bank.Sound) == 0 || len(bank.Voice) == 0 {
+		t.Fatal("shipped sound bank is missing its sounds or voices")
 	}
-	return defs
+	return bank.Sound
 }
 
 // A SfxSet field with no sfxTable row stays SoundNone forever, and
@@ -150,10 +150,11 @@ func TestBuiltinSoundsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	back, err := audio.LoadSoundsTOML(data)
+	bank, err := audio.LoadSoundsTOML(data)
 	if err != nil {
 		t.Fatalf("reload: %v\n%s", err, data)
 	}
+	back := bank.Sound
 	if len(back) != len(defs) {
 		t.Fatalf("round trip produced %d sounds, want %d", len(back), len(defs))
 	}

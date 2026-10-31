@@ -10,8 +10,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
-// BuiltinSounds parses the shipped sound bank.
-func BuiltinSounds() ([]*audio.SoundDef, error) {
+// BuiltinSounds parses the shipped sound bank: the sounds and the tonal voices.
+func BuiltinSounds() (*audio.SoundSpecFile, error) {
 	return audio.LoadSoundsFS(asset.DefaultSounds, asset.DefaultSoundFiles...)
 }
 

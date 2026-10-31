@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+package soundlab
 
 // The pattern editor: one pattern, new or edited, on two tabs. Keys plays the
 // tonal voices and records takes into it; grid lays its tracks on a step grid, or
@@ -468,7 +468,7 @@ func (a *tuiApp) gridCycleInstr(d *audio.PatternDef, other bool) {
 	cur, _ := audio.InstrumentByName(d.Track[b.trk].Instr)
 	next := cur
 	if other {
-		next = audio.InstrBass
+		next = audio.TonalInstruments()[0]
 		if !cur.IsDrum() {
 			next = audio.InstrKick
 		}

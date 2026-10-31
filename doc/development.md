@@ -510,7 +510,7 @@ execute a Windows artifact or a real terminal/audio backend; Windows is played b
 hand, not a supported release target, and its known issues are in [Build profiles
 §4](multi-platform.md#4-platform-matrix).
 
-Tests cover `cmd/vif`, `cmd/soundlab`, the headless/replay application harness
+Tests cover `cmd/vif`, `internal/soundlab`, the headless/replay application harness
 (seeded soak, mutation, bisect, reset, journal density, replay, operator-state
 comparison, staged corrections, hosting, joins, migration, mesh reach and the
 dedicated host), the network protocol and handshake, convergence, snapshots, clocks,

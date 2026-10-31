@@ -24,10 +24,12 @@ type AudioConfig struct {
 	// Sink is the host's speakers: a writer that takes the stream in place of any
 	// backend found by name, closed with the engine.
 	Sink io.WriteCloser
-	// BaseSounds and BasePatterns are the banks registered at Start. The package
-	// ships no specs or authored patterns of its own: the embedder owns them, and
-	// the sounds document and PatternTOML override them by name.
+	// BaseSounds, BaseVoices and BasePatterns are the banks registered at Start.
+	// The package ships no specs, voices or authored patterns of its own: the
+	// embedder owns them, and the sounds document and PatternTOML override them by
+	// name. A tonal instrument no voice defines plays a plain sine.
 	BaseSounds   []*SoundDef
+	BaseVoices   []*VoiceDef
 	BasePatterns []*Pattern // their roles, groups and tiers are the drawn arrangement
 	// SoundFS and SoundFile name the sounds document, read at Start with its
 	// includes resolved inside SoundFS; a nil SoundFS reads none

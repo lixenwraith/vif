@@ -11,7 +11,7 @@ import (
 	"slices"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vif/pkg/tomlmacro"
+	"github.com/lixenwraith/toml/macro"
 )
 
 // LoadScenarioFromPath loads a scenario from an OS entry path
@@ -67,7 +67,7 @@ func ScenarioFiles(fsys fs.FS, entry string) ([]string, error) {
 // includes, and an entry's behavior programs. stack holds the ancestors being
 // resolved, popped on return; visited, when non-nil, collects every file read.
 // macros is nil for the entry, which defines the set every file expands against.
-func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]string, macros *tomlmacro.Set) (map[string]any, error) {
+func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]string, macros *macro.Set) (map[string]any, error) {
 	cleanName := path.Clean(name)
 	if stack[cleanName] {
 		return nil, fmt.Errorf("circular include detected: %s", cleanName)
@@ -139,7 +139,7 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 
 // readExpanded reads and parses one file of a scenario and expands it against
 // macros; nil macros makes it the entry, whose macros every file expands against
-func readExpanded(fsys fs.FS, name string, visited *[]string, macros *tomlmacro.Set) (map[string]any, *tomlmacro.Set, error) {
+func readExpanded(fsys fs.FS, name string, visited *[]string, macros *macro.Set) (map[string]any, *macro.Set, error) {
 	if visited != nil {
 		*visited = append(*visited, name)
 	}
@@ -152,7 +152,7 @@ func readExpanded(fsys fs.FS, name string, visited *[]string, macros *tomlmacro.
 		return nil, nil, fmt.Errorf("failed to parse %s: %w", name, err)
 	}
 	if macros == nil {
-		macros = tomlmacro.NewSet()
+		macros = macro.NewSet()
 		if err := defineMacros(fsys, parsed, path.Dir(name), macros, visited); err != nil {
 			return nil, nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -165,7 +165,7 @@ func readExpanded(fsys fs.FS, name string, visited *[]string, macros *tomlmacro.
 
 // includeBehaviors replaces each behaviors.<name> table naming a file with that
 // file, read as the entry's other files are; a table without file is the program
-func includeBehaviors(fsys fs.FS, entry map[string]any, baseDir string, visited *[]string, macros *tomlmacro.Set) error {
+func includeBehaviors(fsys fs.FS, entry map[string]any, baseDir string, visited *[]string, macros *macro.Set) error {
 	raw, ok := entry["behaviors"]
 	if !ok {
 		return nil
@@ -200,7 +200,7 @@ func includeBehaviors(fsys fs.FS, entry map[string]any, baseDir string, visited 
 }
 
 // defineMacros reads the entry's macro_files, then its own [macros], into set.
-func defineMacros(fsys fs.FS, entry map[string]any, baseDir string, set *tomlmacro.Set, visited *[]string) error {
+func defineMacros(fsys fs.FS, entry map[string]any, baseDir string, set *macro.Set, visited *[]string) error {
 	if raw, ok := entry["macro_files"]; ok {
 		delete(entry, "macro_files")
 		files, ok := raw.([]any)
