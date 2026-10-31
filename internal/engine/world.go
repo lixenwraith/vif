@@ -1146,6 +1146,8 @@ func (w *World) SetupLevel(width, height int, clearEntities, cropOnResize, prese
 	if clearEntities {
 		w.clearNonProtectedEntities(preserveLoot)
 	}
+	// What a shrink left past the new bounds, kept loot included, is off the map
+	w.killOutOfBounds(width, height)
 
 	// Clamp every cursor into the new bounds; CursorSystem applies and announces
 	w.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
@@ -1158,6 +1160,20 @@ func (w *World) SetupLevel(width, height int, clearEntities, cropOnResize, prese
 		w.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
 		return true
 	})
+}
+
+// killOutOfBounds tags every entity outside [0, width) × [0, height) for death;
+// one protected from death, the cursor among them, stays and is clamped by its owner
+func (w *World) killOutOfBounds(width, height int) {
+	for _, e := range w.Positions.AllEntities() {
+		if prot, ok := w.Components.Protection.GetComponent(e); ok && prot.Mask&component.ProtectFromDeath != 0 {
+			continue
+		}
+		pos, _ := w.Positions.GetPosition(e)
+		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
+			w.Components.Death.SetComponent(e, component.DeathComponent{})
+		}
+	}
 }
 
 // clearNonProtectedEntities destroys all entities except those with ProtectAll
