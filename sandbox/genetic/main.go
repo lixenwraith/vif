@@ -135,8 +135,8 @@ func newWorld(seed uint64) *world {
 	cfg.PoolSize = 48
 	// A shallow queue keeps proposals bred from the current archive, not a stale one
 	cfg.ProposalCapacity = 8
-	// Pending bounds the flights in the air at once, which the slots cap at 32
-	cfg.PendingCapacity = 64
+	// Four times the flights in the air, so an id's window of slots never fills
+	cfg.PendingCapacity = 128
 	cfg.MinOutcomesPerGen = landerCount
 	// Four genes: mutate two per child on average, at a tenth of each range
 	cfg.PerturbationRate = 0.5
