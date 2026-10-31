@@ -74,7 +74,7 @@ func DigestWorld(w *engine.World, scope position.Scope) WorldDigest {
 		if !ok {
 			continue
 		}
-		wd.Positions = wd.Positions.u64(uint64(e)).i64(int64(pos.X)).i64(int64(pos.Y)).i64(int64(pos.Z))
+		wd.Positions = wd.Positions.u64(uint64(e)).i64(int64(pos.X)).i64(int64(pos.Y))
 	}
 
 	// Float divergence surfaces here many ticks before it moves a grid cell

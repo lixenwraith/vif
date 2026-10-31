@@ -32,9 +32,10 @@ In `pkg/position`:
   reader deriving whole; and the searches: free area by spiral, by pattern and
   around an exclusion, point and area line of sight, rays, batches, the closest
   occupant in a direction. A query taking a column and a row answers for the
-  first layer, as a flat game's do; one taking a `Point` (`BlocksAt`, `BlocksBox`,
-  `IsBlockedAt`, `EntitiesAtPoint`, `HasAnyEntityAtPoint`, `HasLineOfSightBetween`,
-  `HasBoxLineOfSight`) for any, a line through the volume walking `vmath.Line3`.
+  first layer, as a flat game's do; one taking a `Point3` (`BlocksAt`, `BlocksBox`,
+  `IsBlockedAt`, `EntitiesIn`, `HasAnyEntityIn`, `HasLineOfSightBetween`,
+  `HasBoxLineOfSight`) for any, a line through the volume walking `vmath.Line3`;
+  the mutators take a `Point3`, a flat caller placing on the first layer.
 - `Bits`: the grid of bits the planes and navigation share, each row starting on
   a word: a point a bit, an area a few words a row, a row shifted a column in a
   word, two grids diffed by XOR.
@@ -170,7 +171,9 @@ Each names the choice taken and what the other would have cost.
   turned 90° accepted a body that cannot turn; the two erred both ways, rejecting
   clear bodies about as often as accepting blocked ones.
 - Rows, in `engine`: the sparse index is `Store`'s, and the row type is
-  `component.PositionComponent`, `vmath.Point` by alias with its third axis.
+  `component.PositionComponent`, `vmath.Point` by alias, the flat cell of two
+  ints; the binding places it on the first layer at the index boundary
+  (`Point.Layer`), which inlines.
 - Names: the package's classes are shared and private, the game's shared and
   player; the game reads the package's types by the package's names, never
   through an engine alias, since a method cannot be declared on an alias and a
@@ -196,11 +199,15 @@ The third axis is an actual 3D space: a position with a Z, a body of depth as
 well as width and height, a line of sight through a volume. The same index
 serves a flat map as a volume one cell deep, at no cost to it.
 
-- The point: `vmath.Point` is `{X, Y, Z int}`, the one integer cell coordinate,
-  `position.Point` and `component.PositionComponent` its aliases, so a flat caller
-  writes `Point{X: x, Y: y}` and reads Z as zero; `Vec3` stays the float vector of
-  a body's physics. A capture carries a column of zeros for every point, which
-  deflates to nothing, and the digest hashes three coordinates.
+- The point, two integer types and no sentinel: `vmath.Point` is the flat cell,
+  `{X, Y int}`, which the rows, the captures and the digest carry; `vmath.Point3`
+  is a cell of the volume, `{X, Y, Z int}`, which the index's mutators and volume
+  queries take, and `Point.Layer` places a flat cell on a layer. One point with a
+  Z of zero on a flat map cost every row, log entry and capture column a third
+  more for nothing, and read as a 3D type among 2D functions. `Vec3` stays the
+  float vector of a body's physics. A generic index over the coordinate type is
+  the todo's [item](todo.md#a-generic-index-over-the-coordinate-type) for when
+  vmath and the physics go to three axes.
 - The grid: `Depth` layers, one on a flat map, the cells indexed
   `(z*Height+y)*Width+x`, the planes and the presence bits each one `Bits` whose
   rows are the layers' in turn, so a cell's index names its row and a flat query
@@ -281,6 +288,10 @@ not. What each change read, against the main it landed on:
 - The readers that paid a cell: the maze spawn, some 3,700 box-drawn walls laid
   and taken down whole, 7.5% under main at 200×60, 18% at 400×120 and 11% at
   500×254; the route graph 3.5% under, its fill a small share of its Dijkstra.
+- The flat point, two ints where three stood: a position costs 16 bytes in a row,
+  a log entry or a trail cell where it cost 24, and a capture no column of
+  zeros; the world copy at the map limit 8% under main fresh and 3% reused, td's
+  headless ticks 6% under, td's tick with sixteen cursors at parity.
 
 Across the changes td's tick read from 0.40 ms before the move to 0.29 ms, each
 step against its own main; the tables each PR carried are in the git history.

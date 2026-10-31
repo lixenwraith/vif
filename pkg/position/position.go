@@ -12,10 +12,13 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// Point is a cell's coordinate, vmath's: a column, a row and a layer, 0 on a map
-// one layer deep. A query taking a column and a row answers for the first layer;
-// one taking a Point, for any layer.
-type Point = vmath.Point
+// Point is a cell's coordinate on a flat map, vmath's, and Point3 a cell's in a
+// volume, its Z the layer. A query taking a column and a row answers for the
+// first layer; one taking a Point3, for any layer.
+type (
+	Point  = vmath.Point
+	Point3 = vmath.Point3
+)
 
 // Frame is the map's frame, read live: the cell aspect the searches round on. The
 // bounds every query answers within are the grid's.
@@ -180,7 +183,7 @@ func (x *Index[E]) Blocks(px, py int, mask Mask) bool {
 }
 
 // BlocksAt is Blocks for a cell of any layer; the surfaces lie on the first.
-func (x *Index[E]) BlocksAt(p Point, mask Mask) bool {
+func (x *Index[E]) BlocksAt(p Point3, mask Mask) bool {
 	if p.Z == 0 {
 		return x.Blocks(p.X, p.Y, mask)
 	}
@@ -211,7 +214,7 @@ func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
 
 // BlocksBox reports whether a cell of the box from p, width×height×depth cells, is
 // blocked for mask, the cells outside the volume passed over.
-func (x *Index[E]) BlocksBox(p Point, width, height, depth int, mask Mask) bool {
+func (x *Index[E]) BlocksBox(p Point3, width, height, depth int, mask Mask) bool {
 	x0, y0, z0 := max(p.X, 0), max(p.Y, 0), max(p.Z, 0)
 	x1, y1, z1 := min(p.X+width, x.Width), min(p.Y+height, x.Height), min(p.Z+depth, x.Depth)
 	if x0 >= x1 || y0 >= y1 || z0 >= z1 {
@@ -264,7 +267,7 @@ func (x *Index[E]) BlockBits(mask Mask, buf []uint64) Bits {
 // BlockChangedAt logs p as a cell whose block answer may have moved, a block
 // placed, moved or removed there or its mask rewritten, and brings the planes to
 // what the cell holds now.
-func (x *Index[E]) BlockChangedAt(p Point) {
+func (x *Index[E]) BlockChangedAt(p Point3) {
 	x.log.add(p, len(x.Cells))
 	if !x.stale && x.InBounds(p) {
 		x.update(x.row(p)*x.Width + p.X)
@@ -285,7 +288,7 @@ func (x *Index[E]) BlocksChanged() {
 // to since, or since is zero: the reader then re-reads every cell. The cells are
 // the log's, to read before blocks change again; entries before since are
 // dropped, so a second reader of one index re-reads more often.
-func (x *Index[E]) BlockChanges(since uint64) (cells []vmath.Point, now uint64, ok bool) {
+func (x *Index[E]) BlockChanges(since uint64) (cells []vmath.Point3, now uint64, ok bool) {
 	l := &x.log
 	if l.base == 0 {
 		l.base = 1
@@ -307,12 +310,12 @@ func (x *Index[E]) BlockChanges(since uint64) (cells []vmath.Point, now uint64, 
 // more cells than re-testing would beat re-reading the grid; a reader from before
 // then re-reads.
 type changeLog struct {
-	cells []vmath.Point
+	cells []vmath.Point3
 	base  uint64 // the sequence before cells[0]; zero is no sequence read
 }
 
 // add logs one cell, losing the log past an eighth of the grid's cells
-func (l *changeLog) add(p vmath.Point, cells int) {
+func (l *changeLog) add(p vmath.Point3, cells int) {
 	if l.base == 0 {
 		l.base = 1
 	}

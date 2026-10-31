@@ -95,13 +95,13 @@ func TestSetPositionSameCellIsStableAndSoftClipStillRetries(t *testing.T) {
 	}
 	overflow := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(overflow, fullPos)
-	if w.Positions.Index.Holds(overflow, EntityClass(overflow), fullPos) {
+	if w.Positions.Index.Holds(overflow, EntityClass(overflow), fullPos.Layer(0)) {
 		t.Fatal("overflow entity unexpectedly entered a full cell")
 	}
 
 	w.DestroyEntity(full[0])
 	w.Positions.SetPosition(overflow, fullPos)
-	if !w.Positions.Index.Holds(overflow, EntityClass(overflow), fullPos) {
+	if !w.Positions.Index.Holds(overflow, EntityClass(overflow), fullPos.Layer(0)) {
 		t.Fatal("same-cell retry did not index a previously soft-clipped entity")
 	}
 }

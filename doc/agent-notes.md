@@ -171,8 +171,9 @@ that proves wrong or that a document now states, and link the document instead.
   is the four mover kinds and never `0xFF`: a query with it must not match a
   styled wall that stops nothing.
 - The flat queries (`Blocks`, `EntitiesAt`, the searches) answer for the first layer
-  and the point forms (`BlocksAt`, `EntitiesAtPoint`) for any, so a flat game's call
-  sites never gain a layer argument; the planes' and the presence bits' rows are
+  and the `Point3` forms (`BlocksAt`, `EntitiesIn`) for any, so a flat game's call
+  sites never gain a layer argument, and the mutators take a `Point3` the binding
+  makes with `Point.Layer(0)`; the planes' and the presence bits' rows are
   the layers' in turn, so a cell's grid index `i` is `(i%Width, i/Width)` in them
   whatever its layer.
 - `World.Positions` embeds the index, so the grid's writes (`Set`, `RemoveEntityAt`,

@@ -102,6 +102,22 @@ the first layer), and cells chunked on demand for a volume past the ceiling
 (`ClampVolume` holds a volume to the map's 125,000 cells), which also serves
 [a ceiling-sized empty map](#shrink-the-spatial-grid-on-ceiling-sized-maps).
 
+#### A generic index over the coordinate type
+
+- Priority: P3, with the first 3D game, once `vmath` and the physics go to three axes
+- Affected files: `pkg/position`, `pkg/vmath`, `pkg/vmath/physics`,
+  `internal/engine/position.go`
+- Guide: [Position §3](position-package.md#3-the-volume)
+
+The index takes a flat `Point` and a `Point3` apart: the flat queries read ints
+and the volume's a `Point3`, which keeps a flat game's rows at two ints and its
+call sites as they are. One API shape for both would be an index generic over
+the coordinate type, `Index[E, P]`, every coordinate read through a constraint's
+methods, each shape specialised by the compiler at no runtime cost, and every
+call site building a `P`. That churn pays only when a game in depth exists and
+`vmath`, its vectors and the physics speak three axes alike; take it then, with
+the volume's foundation above.
+
 #### Profile td's storm peaks
 
 - Priority: P2

@@ -55,22 +55,35 @@ const (
 
 // === Grid types ===
 
-// Point is an integer grid cell coordinate: a column, a row and, in a volume, a
-// layer; on a map one layer deep Z is 0.
+// Point is an integer grid cell coordinate on a flat map: a column and a row.
 type Point struct {
-	X, Y, Z int
+	X, Y int
 }
 
-// Center returns the float64 position of the cell's center in its layer
+// Center returns the float64 position of the cell's center
 func (p Point) Center() (px, py float64) {
 	return float64(p.X) + CellCenter, float64(p.Y) + CellCenter
 }
 
 // Add returns the component-wise sum
-func (p Point) Add(q Point) Point { return Point{X: p.X + q.X, Y: p.Y + q.Y, Z: p.Z + q.Z} }
+func (p Point) Add(q Point) Point { return Point{X: p.X + q.X, Y: p.Y + q.Y} }
 
 // Sub returns the component-wise difference
-func (p Point) Sub(q Point) Point { return Point{X: p.X - q.X, Y: p.Y - q.Y, Z: p.Z - q.Z} }
+func (p Point) Sub(q Point) Point { return Point{X: p.X - q.X, Y: p.Y - q.Y} }
+
+// Layer is the cell in layer z of a volume
+func (p Point) Layer(z int) Point3 { return Point3{X: p.X, Y: p.Y, Z: z} }
+
+// Point3 is an integer cell coordinate in a volume: a column, a row and a layer.
+type Point3 struct {
+	X, Y, Z int
+}
+
+// Add returns the component-wise sum
+func (p Point3) Add(q Point3) Point3 { return Point3{X: p.X + q.X, Y: p.Y + q.Y, Z: p.Z + q.Z} }
+
+// Sub returns the component-wise difference
+func (p Point3) Sub(q Point3) Point3 { return Point3{X: p.X - q.X, Y: p.Y - q.Y, Z: p.Z - q.Z} }
 
 // PointAt returns the cell containing the float64 position
 // Floor preserves cell mapping for negative coordinates.
