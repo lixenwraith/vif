@@ -67,10 +67,10 @@ func TestStreaming_Elitism(t *testing.T) {
 	}
 }
 
-// Under SetEqual a genotype is archived once, at its best score: a repeat
-// outcome below it is discarded and one above it moves the member up, while a
-// distinct genotype with an equal score is still admitted
-func TestStreaming_HoldsAGenotypeOnceAtItsBestScore(t *testing.T) {
+// Under SetEqual a genotype is archived once, at its latest score: a repeat
+// outcome moves the member down or up to where it now sorts, while a distinct
+// genotype with an equal score is still admitted
+func TestStreaming_ARepeatOutcomeReplacesItsGenotypesScore(t *testing.T) {
 	cfg := DefaultStreamingConfig()
 	cfg.PoolSize = 8
 	e := newTestEngine(t, cfg)
@@ -95,10 +95,10 @@ func TestStreaming_HoldsAGenotypeOnceAtItsBestScore(t *testing.T) {
 		}
 	}
 	if members[0].Score != 3 || members[0].Data[0] != 2 {
-		t.Fatalf("the better repeat did not move its genotype up: %v", members[0])
+		t.Fatalf("the higher repeat did not move its genotype up: %v", members[0])
 	}
-	if members[3].Score != 1 {
-		t.Fatalf("the worse repeat changed the archive: %v", members)
+	if members[3].Score != 0.25 || members[3].Data[0] != 0.5 {
+		t.Fatalf("the lower repeat did not move its genotype down: %v", members[3])
 	}
 }
 
