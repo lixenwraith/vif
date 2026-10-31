@@ -1270,20 +1270,6 @@ squared plane distance, fewer jagged buckets, or ring evaluation only inside the
 band the pulse can light. None is visible in principle, none is bit-identical.
 Revisit only if `:d prof` ranks `draw ember` high again.
 
-### Sample the kraken's tentacles more coarsely
-
-- Priority: P3
-- Affected files: `internal/parameter/kraken.go`, `internal/component/kraken.go`
-
-What the kraken still costs scales with its tentacle samples, about 780 discs a
-tick at `KrakenSampleStep` 0.35, which the footprint and the shading each stamp.
-A step of 0.7 in the browser build took the first frame after a tick from about
-0.35 to 0.24 ms and the kraken region's tick from about 0.9 to 0.8 ms, at a
-visible cost over the same poses: 0.6% of drawn cells appear or vanish at the
-edges, 1.8% take another rim glyph and 0.5% another color, and the footprint's
-edges move by a cell in places, so contact and wall clearing shift with them.
-Revisit only if `:d prof` ranks `sys kraken` or `draw kraken` high again.
-
 ## Audio
 
 ### Bring soundlab to Android (soundlab mobile)

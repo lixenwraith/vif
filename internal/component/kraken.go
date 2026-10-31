@@ -35,14 +35,25 @@ type KrakenComponent struct {
 	AttackT           float64
 }
 
-// krakenBend is the inertia curve at each sample radius up to the longest reach
-var krakenBend = func() []float64 {
+// krakenLattice is each sample's distance from the root, and the inertia curve
+// there, out past the longest reach
+var krakenLattice = func() (lattice []struct{ r, bend float64 }) {
 	reach := parameter.KrakenLegLength + parameter.KrakenAttackReach + parameter.KrakenMoveReach
-	curve := make([]float64, int(reach/parameter.KrakenSampleStep)+2)
-	for i := range curve {
-		curve[i] = math.Pow(float64(i)*parameter.KrakenSampleStep/parameter.KrakenBendRadiusScale, parameter.KrakenInertiaCurve)
+	for i := 0; ; {
+		r := float64(i) * parameter.KrakenSampleStep
+		lattice = append(lattice, struct{ r, bend float64 }{r, math.Pow(r/parameter.KrakenBendRadiusScale, parameter.KrakenInertiaCurve)})
+		if r > reach {
+			return lattice
+		}
+		stride := 1
+		for _, zone := range parameter.KrakenSampleStrides {
+			if r < zone.Reach {
+				stride = zone.Stride
+				break
+			}
+		}
+		i += stride
 	}
-	return curve
 }()
 
 // KrakenSample is one disc along a tentacle, the Index-th from the root; Step runs
@@ -70,7 +81,7 @@ func (k *KrakenComponent) AppendTentacleSamples(dst []KrakenSample, x, y float64
 		}
 		length[g] = parameter.KrakenLegLength + extension*parameter.KrakenAttackReach + k.MoveBlend*parameter.KrakenMoveReach
 		amplitude[g] = parameter.KrakenWiggleAmp * (1 - k.MoveBlend*parameter.KrakenWiggleMoveDamp) * (1 - extension*parameter.KrakenWiggleAttackDamp)
-		for count[g] < len(krakenBend) && float64(count[g])*parameter.KrakenSampleStep <= length[g] {
+		for count[g] < len(krakenLattice) && krakenLattice[count[g]].r <= length[g] {
 			count[g]++
 		}
 	}
@@ -85,8 +96,8 @@ func (k *KrakenComponent) AppendTentacleSamples(dst []KrakenSample, x, y float64
 	}
 	dst = slices.Grow(dst, n-len(dst))[:n]
 	for i := range max(count[0], count[1]) {
-		r := float64(i) * parameter.KrakenSampleStep
-		drag := -k.RotSpeed * parameter.KrakenInertiaBend * parameter.KrakenInertiaScale * krakenBend[i]
+		r := krakenLattice[i].r
+		drag := -k.RotSpeed * parameter.KrakenInertiaBend * parameter.KrakenInertiaScale * krakenLattice[i].bend
 		wave := math.Sin(r*parameter.KrakenWiggleFreq - k.Time*parameter.KrakenWiggleSpeed)
 		var step, radius [2]float64
 		for g := range groups {

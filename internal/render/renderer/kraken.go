@@ -130,13 +130,12 @@ func (r *KrakenRenderer) shade(k *component.KrakenComponent, samples []component
 	// thresholds decides by comparison alone, and the band takes in every one within it,
 	// where the distance itself decides as the definition has it.
 	disc, rim := r.disc, r.rim
-	outer := visual.KrakenRimShades[len(visual.KrakenRimShades)-1].Below
 	keys := int32(len(samples))
 	for i := range samples {
 		s := &samples[i]
 		sx, radius := s.X, s.Radius
 		id, key := int32(i+1), keys-int32(i)
-		rimRadius := s.Radius + visual.KrakenRimWidth*outer
+		rimRadius := s.Radius + visual.KrakenRimReach
 		discT, rimT := s.Radius*s.Radius, rimRadius*rimRadius
 		discIn, rimIn := discT-vmath.RoundingMargin, rimT-vmath.RoundingMargin
 		reach := rimRadius + vmath.RoundingMargin
@@ -169,7 +168,7 @@ func (r *KrakenRenderer) shade(k *component.KrakenComponent, samples []component
 					if distance <= radius {
 						owner = id
 					}
-					if (distance-radius)/visual.KrakenRimWidth < outer {
+					if distance-radius < visual.KrakenRimReach {
 						first = key
 					}
 				}
@@ -179,7 +178,6 @@ func (r *KrakenRenderer) shade(k *component.KrakenComponent, samples []component
 	}
 
 	colors, cells, drawn := r.colors, r.cells, r.drawn
-	shades := visual.KrakenRimShades
 	for cy, span := range r.spans {
 		row := cy*width - minX
 		for cx := span[0]; cx <= span[1]; cx++ {
@@ -203,15 +201,7 @@ func (r *KrakenRenderer) shade(k *component.KrakenComponent, samples []component
 			if solid {
 				cells[i] = terminal.Cell{Rune: ' ', Fg: c, Bg: c}
 			} else {
-				// The first shade the rim fraction falls below
-				fraction := (krakenDistance(s, cx, minY+cy) - s.Radius) / visual.KrakenRimWidth
-				shade := shades[len(shades)-1].Rune
-				for j := len(shades) - 1; j >= 0; j-- {
-					if fraction < shades[j].Below {
-						shade = shades[j].Rune
-					}
-				}
-				cells[i] = terminal.Cell{Rune: shade, Fg: c, Bg: visual.RgbBackground}
+				cells[i] = terminal.Cell{Rune: visual.KrakenRimRune, Fg: c, Bg: visual.RgbBackground}
 			}
 			drawn = append(drawn, krakenCell{index: int32(i), x: int32(cx), y: int32(minY + cy)})
 		}
@@ -248,12 +238,6 @@ func (r *KrakenRenderer) shade(k *component.KrakenComponent, samples []component
 			c.fg, c.bg = color.RGBTo256(r.cells[c.index].Fg), color.RGBTo256(r.cells[c.index].Bg)
 		}
 	}
-}
-
-// krakenDistance is how far a cell's center lies from a sample's, rows squashed
-func krakenDistance(s *component.KrakenSample, cx, cy int) float64 {
-	dx, dy := float64(cx)+vmath.CellCenter-s.X, (float64(cy)+vmath.CellCenter-s.Y)*parameter.KrakenRowSquash
-	return math.Sqrt(dx*dx + dy*dy)
 }
 
 // mix stores a sample's color at its slot: its gradient from root to tip, heated
