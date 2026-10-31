@@ -177,7 +177,7 @@ type viewerCommand struct {
 // run drives the presentation loop until the viewer quits. NewReplay has already
 // started the replay's services through newDriven.
 func (p *player) run() error {
-	frameTicker := time.NewTicker(p.a.ctx.FrameInterval())
+	frameTicker := time.NewTicker(p.a.frameInterval())
 	defer frameTicker.Stop()
 
 	events := p.a.pres.Events()

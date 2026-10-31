@@ -4,6 +4,8 @@ package app
 
 import (
 	"github.com/lixenwraith/vif/pkg/vmath"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -59,7 +61,42 @@ func newTerminal(cfg Config) terminalHost {
 	if cfg.ColorModeSet {
 		colorMode = cfg.ColorMode
 	}
-	return terminalHost{service.NewTerminalService(colorMode)}
+	return terminalHost{TerminalService: service.NewTerminalService(colorMode), floor: frameFloor(os.Getenv)}
+}
+
+// The environment that names a terminal multiplexer: tmux sets multiplexerEnv for
+// the programs in it, and TERM names tmux or screen there and over an ssh hop out
+const (
+	multiplexerEnv = "TMUX"
+	termEnv        = "TERM"
+)
+
+var multiplexerTerms = []string{"tmux", "screen"}
+
+// frameFloor is the frame interval a terminal keeps up with: inside a multiplexer,
+// parameter.MultiplexerFrameInterval, anywhere else any
+func frameFloor(getenv func(string) string) time.Duration {
+	if getenv(multiplexerEnv) != "" {
+		return parameter.MultiplexerFrameInterval
+	}
+	term := getenv(termEnv)
+	for _, prefix := range multiplexerTerms {
+		if strings.HasPrefix(term, prefix) {
+			return parameter.MultiplexerFrameInterval
+		}
+	}
+	return 0
+}
+
+// frameInterval is how often the run is drawn: the context's interval, held to the
+// floor of a presentation that cannot show frames faster, but never past a tick,
+// since at real time each tick waits for a frame
+func (a *App) frameInterval() time.Duration {
+	d := a.ctx.FrameInterval()
+	if p, ok := a.pres.(pacedPresentation); ok {
+		d = max(d, min(p.FrameFloor(), a.ctx.World.TickInterval()))
+	}
+	return d
 }
 
 func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode, vmath.Aspect) {

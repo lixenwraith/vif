@@ -20,7 +20,15 @@ flowchart TD
 ```
 
 The app draws a frame every third of a tick, 60 per second, so each tick shows for
-three frames. `RenderOrchestrator` owns one reusable `RenderBuffer`, clears it,
+three frames. Inside tmux or screen the terminal presentation floors that at
+`parameter.MultiplexerFrameInterval`, 24 a second, but never below a frame a tick,
+which a tick at real time waits for. tmux drops a client's output once more than
+eight bytes a cell back up, then repaints it only every 100 ms until a quiet 100 ms
+comes, which a scrolling playfield never gives, so 60 frames a second showed as
+about 10. The terminal reads `TMUX` and `TERM` when it opens; other presentations
+draw at the run's rate.
+
+`RenderOrchestrator` owns one reusable `RenderBuffer`, clears it,
 acquires the world lock, invokes visible renderers in ascending priority, and
 releases the lock. Finalization and the flush to the surface
 happen outside the world lock, and the terminal writes on a goroutine of its own:
