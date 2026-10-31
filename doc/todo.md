@@ -1211,21 +1211,20 @@ insert mode, where it types; whether a solo run pauses while it is down, as the
 menu does; its height and what a resize does; and whether the history outlives
 the run in the state directory, as a shell's does.
 
-### Give the configuration menu a touch target on Android
+### Draw the configuration menu with the page's own widgets
 
 - Priority: P1
-- Affected files: `internal/mode/config_menu.go`, `internal/mode/config_form.go`,
-  `internal/core/overlay.go`, `internal/app/presentation.go`, `internal/app/loop.go`,
-  `internal/render/renderer/overlay.go`, `android/game/game.go`, `android/game/view.go`,
-  `android/app/src/main/java/com/lixen/vif/MainActivity.java`, a `MenuDialog.java`;
-  then `cmd/vif/browser.go` and `web/`
+- Affected files: `cmd/vif/browser.go`, `web/terminal.js`, `web/index.html`,
+  `web/terminal.css`, `android/game/game_test.go` (the contract test)
 
-A menu row is one cell, 12 dp on a phone against Android's 48 dp touch target, so
-the text is hard to read and a tap lands on a neighbour. The host draws the menu with
-its own widgets from a JSON snapshot of a menu tree, and answers with ops on a node's
-id; Android first, the browser next. The decisions, model, hooks, phases and risks
-are in [Native menu](native-menu.md). A row pitch on the `tui` menu (3 or 4 cells a
-row where the presentation reports touch) is the fallback if the native menu stalls.
+A `tui` menu row is one cell against a finger's touch target, so on a phone's
+browser the text is hard to read and a tap lands on a neighbour, as it was on
+Android before the app drew the menu itself. The page draws it the same way, from
+the snapshot the run already builds for a `menuPresentation` and with the same ops
+([Native menu §8](native-menu.md#8-browser)): `browser.go` implements the seam over
+the Worker, `terminal.js` a `<dialog>` with the kinds and layout Android's dialog
+has, in the site's tokens; every browser draws it, touch or not, so each host has
+one look. The contract test then reads `web/terminal.js` beside `MenuDialog.java`.
 
 ### Configuration menu follow-up
 

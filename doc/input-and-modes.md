@@ -113,7 +113,7 @@ stateDiagram-v2
 
 Escape in Normal cancels a pending key sequence, or with none pending flashes the
 ping grid; from any other mode it returns to Normal, and in the configuration menu
-it goes back one level. The router unpauses before it runs a command: an overlay
+it goes back one level, as Android's Back does in the menu the app draws. The router unpauses before it runs a command: an overlay
 command (`:help`, `:t`, `:g`) requests the pause again, and a reset pauses until the
 scheduler has rebuilt the run. `MetaSystem` refuses a pause in a live session unless
 every other participant is one of this run's bots (§9), which leaves Command and
@@ -293,7 +293,7 @@ When terminal mouse reporting is enabled:
 | Left press | Move the cursor to the translated map cell and fire main. |
 | Left or right press, or a finger, on a button | Press the button's key (§1), held until that button or finger lets go; never moves or fires. |
 | Wheel over a button | Press the button's key for one notch, released at once (§1); never moves. |
-| Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on Android and in the browser. The hold, and every overlay, take the pointer with mouse input disabled too, so a phone can enable it again. |
+| Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on Android and in the browser; on Android the menu it opens is the app's own ([Menu: Android](config-menu.md#android)), whose taps never reach the run as presses. The hold, and every overlay, take the pointer with mouse input disabled too, so a phone can enable it again. |
 | Left release | End held fire; release a held button or scrollbar thumb. Passed on from every mode. |
 | Left press in an overlay | Outside its window, act as Escape: the configuration menu goes back a level, the telemetry filter's edit ends, any other overlay closes. On the scrollbar, move the thumb's middle to the press, or take hold where it lands on the thumb. In the configuration menu, select and act on its rows or focus a form field ([Config menu](config-menu.md#navigation)); in telemetry, select a card, or pin the one selected as Enter does. |
 | Left drag in an overlay | Carry the scrollbar thumb a press holds, keeping the row it holds under the pointer. |
