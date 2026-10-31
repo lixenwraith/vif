@@ -58,6 +58,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private HandlerThread thread;
     private Handler handler;
     private boolean looping; // a frame callback is posted on the render thread
+    private volatile boolean away; // the activity is paused: no frame is asked for once the last flushed is painted
     private volatile int covered; // the surface's bottom pixels under the keyboard
 
     private long downAt; // when the first finger landed
@@ -138,11 +139,24 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         }
         handler.post(() -> {
             present();
-            if (!looping) {
-                looping = true;
-                Choreographer.getInstance().postFrameCallback(this);
-            }
+            loop();
         });
+    }
+
+    /** The activity's pause and resume: a paused one stops asking for frames once it has painted the last the run flushed. */
+    void away(boolean away) {
+        this.away = away;
+        if (!away && handler != null) {
+            handler.post(this::loop);
+        }
+    }
+
+    // Posts the frame callback unless one is posted; render thread only
+    private void loop() {
+        if (!looping) {
+            looping = true;
+            Choreographer.getInstance().postFrameCallback(this);
+        }
     }
 
     @Override
@@ -159,9 +173,13 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
 
     @Override
     public void doFrame(long vsyncNanos) {
-        Choreographer.getInstance().postFrameCallback(this);
         long start = System.nanoTime();
         byte[] frame = Game.frame();
+        if (frame == null && away) {
+            looping = false; // the run flushes nothing while its player is away; their return posts again
+            return;
+        }
+        Choreographer.getInstance().postFrameCallback(this);
         if (frame != null && drawer.apply(frame)) {
             present();
             stats.add(System.nanoTime() - start);

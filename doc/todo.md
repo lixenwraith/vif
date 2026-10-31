@@ -1364,17 +1364,6 @@ the check on both sides.
 
 ## Engine
 
-### Drop what a shrinking level setup leaves off the map
-
-- Priority: P2
-- Affected files: `internal/engine/world.go` (`SetupLevel`),
-  `internal/engine/game_context.go` (`cleanupOutOfBoundsEntities`)
-
-An `EventLevelSetup` without `clear_entities` that shrinks the map keeps entities
-past the new bounds, out of the grid. The campaign's Kraken return now keeps its
-text, so a solo run resized smaller mid-Kraken carries such glyphs. Moving the
-crop's out-of-bounds cleanup onto `World` and running it from `SetupLevel` closes it.
-
 ### Give the composite lifecycle methods a user
 
 - Priority: P3
@@ -1385,73 +1374,6 @@ crop's out-of-bounds cleanup onto `World` and running it from `SetupLevel` close
 down composites at run time, but no system or scenario uses them. A species or
 scenario that assembles composites would; it reaches them through events, since
 another system may not call them directly.
-
-### Start the next tick where a late frame let the last one start
-
-- Priority: P3
-- Affected files: `internal/engine/scheduler.go` (`schedulerLoop`, `awaitFrame`)
-
-A tick that, with the frame it waits for, outlasts the 50 ms interval (from about
-40 ms on one thread, as in a browser) starts the next tick late, and since the
-deadline is not re-anchored the tick after comes early: drawn for two frames, then
-four. Re-anchoring the deadline when `awaitFrame` waited evens the ticks after at
-the cost of the run trailing wall time by the wait, which a guest's trim and step
-read, so the divergence harness decides it. It cannot help the frame a long tick
-delays itself, and no region entry comes near: the heaviest, a cold kraken entry,
-ticks in 13 ms in the browser build ([Runtime §3](runtime.md#3-runtime-clocks-and-cadence)).
-
-### Let a paused run sleep
-
-- Priority: P2
-- Affected files: `internal/engine/scheduler.go` (`eventLoop`), `internal/app/loop.go`
-  (`Loop`'s tickers), `android/app/src/main/java/com/lixen/vif/GameView.java` (`doFrame`)
-
-A paused run keeps every clock of a running one: the event loop wakes each 4 ms
-with or without a queued event, the input tick each 16 ms, the frame tick at 60 Hz,
-and on Android the render thread asks for a frame at each vsync. On the Pixel 7
-emulator that is 19 to 23% of a core on the start screen and 9% with the app in
-the background, where nothing is drawn (2026-10-22); the background is what costs
-a phone its battery. While a solo run is away, the event loop could wait on a push
-instead of its ticker, the app loop drop its input and frame tickers until a report
-or event comes, and the render thread stop its vsync callback once it has painted
-the last frame flushed.
-
-### Run every clock for the span it is set to
-
-- Priority: P3
-- Affected files: `internal/engine/scheduler.go` (`processTick`), `internal/event`
-  (the journal's settle groups), `doc/runtime.md` §5
-
-A light set to 250 ms should show for 250 ms whoever lights it. Today simon's Show
-buttons, set to 250 ms, show for 200, and a level-1 note set to 550 ms shows for
-500, solo and in a session alike; the same light armed between ticks, as an input
-arms one, shows for its whole span. Every relative clock behaves so: a timer slot, a
-carried age (the ember simon lights at a turn spends its first heat point a tick
-early), a species countdown, a machine's elapsed time.
-
-Each advances in its owner's `Update`, and nothing renders inside a tick, so a clock
-started in a tick before its owner runs is advanced once before any frame shows it
-([Runtime §5](runtime.md#5-simulation-tick-steps)). Three settles start clocks there:
-
-- wire: every crossing, which in a session carries each input and each FSM
-  transition with its actions;
-- pre: what was pushed since the last tick and not yet settled;
-- post: the FSM's events, which carry every scenario action in a solo run and the
-  delayed and `on_update` ones in a session.
-
-The pre and post settles also follow the tick's time advance, so their clocks read a
-tick ahead of game time; the wire settle precedes it, so its clocks only show short.
-
-The fix is to advance, then settle: game time, the FSM's update and the systems run
-first, then one settle takes what the tick applies (the wire artifacts due, what was
-pushed since the last tick, the FSM's and the systems' events). Every clock started
-in a tick then first counts on the next, with no rule at any start. Its costs: a
-system's `Update` first sees a crossing or an FSM action a tick later than today,
-though its handler still runs in the tick it lands; the journal's settle groups
-change, so its format moves; tests pinned to such an effect's tick move. Moving only
-the pre and post settles would leave a crossing's clock a tick short on screen, and
-a session's lights a tick shorter than a solo run's; skipping each clock's first
-pass would put a rule in every owner.
 
 ## Structure
 

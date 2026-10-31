@@ -362,12 +362,11 @@ the component on first use, and stop one by writing the idle zero `Countdown`.
 The component has only reads (`Running`, `Expired`, `Progress`, `Elapsed`), which
 owners and renderers use instead of keeping their own clock.
 
-A slot armed by a handler settled before a tick's systems run counts that tick,
-because the pass follows that dispatch; one armed in an owner's `Update`, or by
-a handler the closing settle runs, starts counting on the next tick, as every
-relative clock does ([Runtime §5](runtime.md#5-simulation-tick-steps) says what
-that does to a span). Systems whose entities end or act on a slot declare
-`Requires: timer`.
+A slot armed in an owner's `Update`, or by a handler the tick's settle runs after
+the systems, starts counting on the next tick, as every relative clock does, so it
+runs for its whole span ([Runtime §5](runtime.md#5-simulation-tick-steps)); one
+armed between ticks counts the next tick as well. Systems whose entities end or
+act on a slot declare `Requires: timer`.
 Cursor countdowns stay in their owner-authored stores (D-13), and species phase
 timers stay in the species component beside the phase they time: the swarm's,
 the quasar's and a storm circle's as their behavior machines' elapsed time and
@@ -428,22 +427,23 @@ tick order; the dispatch tap a driven bot or harness installs sees it first.
 This makes state transitions and captures part of the same deterministic
 event-settling phase as gameplay reactions. A settle drains the queue in passes,
 up to `parameter.EventLoopIterations` (16), so reactions can publish follow-up
-work without unbounded recursion. A tick settles a pending pointer placement as
-input and the wire artifacts due at it, then what was pushed since the last tick
-(`pre`), the FSM's events (`post`) and the systems' events (`close`). Input,
+work without unbounded recursion. A tick opens by settling what was pushed since
+the last tick, a pending pointer placement among it (`pre`, or `input`), and
+after its FSM and systems have run settles what it applies in one pass sequence
+(`tick`): the wire artifacts due at it, the FSM's events and the systems'. Input,
 reset and harness settles use the same loop; a reset holds the last game's
-machine out of the settle that unpauses it. The closing settle makes an outcome
-a system applies through a queued event part of the tick that decided it on
-every reader, and a reset any of these settles dispatches ends the tick there.
-The independent 4 ms event loop settles what was pushed outside a tick, such as
+machine out of the settle that unpauses it. The tick's settle makes an outcome
+any of them applies through a queued event part of the tick that decided it on
+every reader, and a reset either settle dispatches ends the tick there.
+The independent event loop, woken by each push, settles what was pushed outside a tick, such as
 the session layer's records, between 50 ms game ticks.
 
 ### Replay capture
 
 The queue also owns the replay position `(run, tick, boundary)`: run advances
-when a reset rebases tick, tick opens at the top of a simulation body, and
-boundary after each non-empty explicit settle group (the tick's own `pre`,
-`post` and `close` phases and a reset's settles are not groups). The counters
+when a reset rebases tick, tick opens at the top of a simulation body, at group
+0, and boundary when a settle group closes: the body's own settle first, then
+each non-empty between-tick group (a reset's settles are not groups). The counters
 advance even without a journal, so one attached mid-run stamps its first event
 honestly. Every origin but `system` (derived simulation work) and `device` (this
 machine's speakers and its operator's pause and overlays) is captured, as is this

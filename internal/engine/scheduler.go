@@ -132,17 +132,15 @@ type regionStat struct {
 
 const (
 	settleSourcePre = iota
-	settleSourcePost
+	settleSourceTick
 	settleSourceLoop
 	settleSourceReset
 	settleSourceInput
 	settleSourceManual
-	settleSourceWire
-	settleSourceClose
 	settleSourceCount
 )
 
-var settleSourceNames = [settleSourceCount]string{"pre", "post", "loop", "reset", "input", "settle", "wire", "close"}
+var settleSourceNames = [settleSourceCount]string{"pre", "tick", "loop", "reset", "input", "settle"}
 
 // NewScheduler creates a scheduler on the given tick interval
 // Receives frameReady sync (receive) channel and returns game updateDone (send) and resetRequest (send) channels
@@ -728,14 +726,21 @@ func (s *Scheduler) schedulerLoop() {
 			deadline := s.nextTickDeadline
 
 			if !gameNow.Before(deadline) {
-				if !s.awaitFrame(frameTimer) {
+				waited, ok := s.awaitFrame(frameTimer)
+				if !ok {
 					return
+				}
+				// A frame that let this tick start late paces the next from the start,
+				// or it would come early by the wait and be drawn for fewer frames
+				anchor := s.nextTickDeadline
+				if waited {
+					anchor = s.ctl.Now()
 				}
 
 				s.processTick()
 
 				trim, step := s.TakePace()
-				s.nextTickDeadline = s.nextTickDeadline.Add(PacedInterval(s.tickInterval, trim, step))
+				s.nextTickDeadline = anchor.Add(PacedInterval(s.tickInterval, trim, step))
 
 				// Re-read after the tick: the debt is what the tick consumed,
 				// not what was owed when it started
@@ -830,10 +835,15 @@ func (s *Scheduler) breakpointHit(bp *Breakpoint, cause string) {
 // for the render loop, bounded by a timeout so a stalled terminal cannot freeze
 // the simulation. Above real time the operator has asked the world to outrun the
 // display, so the handshake is skipped and the tick deadline is the only pacing.
-// Returns false on shutdown.
-func (s *Scheduler) awaitFrame(t *time.Timer) bool {
+// waited reports a frame that came only after the deadline; ok is false on shutdown.
+func (s *Scheduler) awaitFrame(t *time.Timer) (waited, ok bool) {
 	if s.ctl.Scale().Faster() {
-		return true
+		return false, true
+	}
+	select {
+	case <-s.frameReady:
+		return false, true
+	default:
 	}
 	timeout := s.ctl.ToReal(s.tickInterval * 2)
 	if timeout <= 0 {
@@ -844,12 +854,13 @@ func (s *Scheduler) awaitFrame(t *time.Timer) bool {
 
 	select {
 	case <-s.frameReady:
-	case <-t.C:
+		return true, true
+	case <-t.C: // a stalled display: the tick runs on its deadline, owing the wait
 	case <-s.ctl.Wake(): // rate or pause changed; recompute rather than wait it out
 	case <-s.stopChan:
-		return false
+		return false, false
 	}
-	return true
+	return false, true
 }
 
 // TakePace returns the trim and the owed step the last tick read, clearing the step.
@@ -884,47 +895,46 @@ func drainTimer(t *time.Timer) {
 }
 
 // eventLoop settles queued events between ticks, pause or not, a whole settle at a
-// time so a journal's groups never interleave by wall time. Consume is
-// single-consumer, so it runs under the world lock: tried first, since short holds
-// are cheaper to skip, and blocking after EventLoopBackoffMax misses, so a long
-// hold cannot keep back what was pushed outside a tick.
+// time so a journal's groups never interleave by wall time, sleeping on the queue's
+// wake while it is empty. Consume is single-consumer, so it runs under the world
+// lock: tried first, since short holds are cheaper to skip, retried an interval on,
+// and blocking after EventLoopBackoffMax misses, so a long hold cannot keep back
+// what was pushed outside a tick.
 func (s *Scheduler) eventLoop() {
 	defer s.wg.Done()
 
-	ticker := time.NewTicker(s.eventLoopInterval)
-	defer ticker.Stop()
+	queue := s.world.Resources.Event.Queue
+	retry := stoppedTimer() // armed only while a miss or a pass cap defers a settle
+	defer retry.Stop()
 
 	backoffCount := 0
 	var pendingBackoffs int64
 	var pendingRun uint64
 
 	for {
-		select {
-		case <-s.stopChan:
-			return
-
-		case <-ticker.C:
-			// Skip if queue empty (prevents busy-wait contention)
-			if s.world.Resources.Event.Queue.Len() == 0 {
-				backoffCount = 0
-				continue
+		if queue.Len() == 0 {
+			backoffCount = 0
+			select {
+			case <-s.stopChan:
+				return
+			case <-queue.Wake():
 			}
+			continue
+		}
 
-			// Attempt non-blocking lock
-			if s.world.TryLock() {
-				if pendingBackoffs != 0 && pendingRun == s.world.Resources.Event.Queue.Stamp().Run {
-					s.evBackoffs += pendingBackoffs
-				}
-				pendingBackoffs = 0
-				s.settleLocked("loop")
-				s.world.Unlock()
-				backoffCount = 0
-				continue
+		// Attempt non-blocking lock
+		if s.world.TryLock() {
+			if pendingBackoffs != 0 && pendingRun == queue.Stamp().Run {
+				s.evBackoffs += pendingBackoffs
 			}
-
+			pendingBackoffs = 0
+			s.settleLocked("loop")
+			s.world.Unlock()
+			backoffCount = 0
+		} else {
 			// Backoff tracking
 			backoffCount++
-			run := s.world.Resources.Event.Queue.Stamp().Run
+			run := queue.Stamp().Run
 			if pendingBackoffs == 0 || pendingRun == run {
 				pendingBackoffs++
 			} else {
@@ -939,7 +949,7 @@ func (s *Scheduler) eventLoop() {
 					return
 				}
 				s.world.Lock()
-				if pendingRun == s.world.Resources.Event.Queue.Stamp().Run {
+				if pendingRun == queue.Stamp().Run {
 					s.evBackoffs += pendingBackoffs
 				}
 				pendingBackoffs = 0
@@ -947,6 +957,16 @@ func (s *Scheduler) eventLoop() {
 				s.world.Unlock()
 				backoffCount = 0
 			}
+		}
+		if queue.Len() == 0 {
+			continue
+		}
+		// A miss, or a settle its pass cap stopped: the next attempt waits an interval
+		retry.Reset(s.eventLoopInterval)
+		select {
+		case <-s.stopChan:
+			return
+		case <-retry.C:
 		}
 	}
 }
@@ -1134,8 +1154,8 @@ func (s *Scheduler) recordSettlePass(src string) {
 	switch src {
 	case "pre":
 		index = settleSourcePre
-	case "post":
-		index = settleSourcePost
+	case "tick":
+		index = settleSourceTick
 	case "loop":
 		index = settleSourceLoop
 	case "reset":
@@ -1144,10 +1164,6 @@ func (s *Scheduler) recordSettlePass(src string) {
 		index = settleSourceInput
 	case "settle":
 		index = settleSourceManual
-	case "wire":
-		index = settleSourceWire
-	case "close":
-		index = settleSourceClose
 	default:
 		return
 	}
@@ -1364,10 +1380,17 @@ func (s *Scheduler) processTick() {
 
 		s.world.LatchSession()
 		s.publishInputHorizon()
-		// Pointer reports since the last tick cross as one placement, settled as the
-		// input they are before the barrier opens the tick
+		s.steerFSM()
+		// Pointer reports since the last tick cross as one placement, an input. It and
+		// anything else pushed since the last tick settle before the tick opens, as the
+		// event loop would have settled them, so a replay settles them where the run did
+		src := "pre"
 		if s.world.FlushPointerMove() {
-			s.settleLocked("input")
+			src = "input"
+		}
+		s.settleLocked(src)
+		if ended = s.ResetPending(); ended {
+			return
 		}
 		if r := s.world.Resources.Network; r != nil {
 			s.paceTrim = r.Pace.Load()
@@ -1380,19 +1403,7 @@ func (s *Scheduler) processTick() {
 			s.ticksDropped += s.slipPending
 			s.slipPending = 0
 		}
-		// The barrier applies against the completed tick's stamp. Its settle group
-		// therefore replays between ticks, before the next BeginTick resets Boundary.
 		tick := s.world.Resources.Game.State.GetGameTicks() + 1
-
-		// Settled on every tick of a session, not only one that delivered something:
-		// arrivals are this instance's own traffic, and settling on them gave what was
-		// pushed since the last tick a different phase and GameTime on each instance.
-		if s.world.Resources.Event.Queue.ReceiveWire(tick) {
-			s.settleLocked("wire")
-		}
-		if ended = s.ResetPending(); ended {
-			return
-		}
 
 		// The simulation instant is derived from the tick, never from the pacing
 		// clock: it is shared state, and every participant must read the same value
@@ -1416,21 +1427,19 @@ func (s *Scheduler) processTick() {
 		// 2. Update game elapsed time status
 		s.statGameElapsedMs.Store(tickTime.Sub(s.gameStartTime).Milliseconds())
 
-		// 3. Initial Settling: Resolve everything pushed since the last tick closed.
-
-		// Ensures FSM and Systems start with a consistent, settled world
-		s.steerFSM()
-		s.dispatchAndProcessEvents("pre")
-		if ended = s.ResetPending(); ended {
-			return
-		}
+		// 3. The barrier's artifacts due at this tick join the queue, stamped in its
+		// body, and dispatch with the tick's own after the systems. Received on every
+		// tick of a session, not only one that delivered something: arrivals are this
+		// instance's own traffic, and reading them only then gave each instance its
+		// own phase.
+		s.world.Resources.Event.Queue.ReceiveWire(tick)
 
 		// 4. FSM Update: Advance state machine (may emit new events via Actions)
 		fsmSpan := p.BeginPhase(prof.PhaseFSM)
 		s.fsm.Update(s.world, s.tickInterval)
 		fsmSpan.End()
 
-		// 5. FSM telemetry (after update, before post-settling)
+		// 5. FSM telemetry (after update, before the settle)
 		// Transitions are reported by the OnTransition tap, not sampled here:
 		// sampling collapses intra-tick chains and cannot see background regions
 		stateName, stateID, timeInState := s.fsm.GetActiveRegionTelemetry()
@@ -1441,24 +1450,22 @@ func (s *Scheduler) processTick() {
 		s.statFSMTotal.Store(int64(s.fsm.StateCount))
 		s.publishRegionStats()
 
-		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
-		s.dispatchAndProcessEvents("post")
-		if ended = s.ResetPending(); ended {
-			return
-		}
-
-		// 7. System Execution: Systems run on the final, settled state for this tick
+		// 6. System Execution: every clock a system advances here was started by an
+		// earlier tick or between ticks, so each runs for the span it was set to
 		s.world.UpdateLocked()
 
-		// 8. Closing Settling: Resolve what the systems queued, so every capture,
-		// crossing and digest that reads this tick reads its outcomes, not their
-		// pending events. A tick phase like pre and post: no group of its own.
-		s.dispatchAndProcessEvents("close")
+		// 7. One settle takes what the tick applies: the crossings due at it, the FSM's
+		// and the systems' events. Every capture, crossing and digest that reads this
+		// tick reads its outcomes, not their pending events, and a clock started here
+		// first counts on the next tick. The settle closes the body's group, 0; what
+		// follows is between ticks.
+		s.dispatchAndProcessEvents("tick")
+		s.world.Resources.Event.Queue.NextBoundary()
 		if ended = s.ResetPending(); ended {
 			return
 		}
 
-		// 9. Commit the tick and every registry write while the world is stable.
+		// 8. Commit the tick and every registry write while the world is stable.
 		gs := s.world.Resources.Game.State
 		ticks = gs.IncrementGameTicks()
 		gs.UpdateAPM(tickTime)

@@ -735,9 +735,10 @@ Socket goroutines never touch `World`, the event queue or component stores.
 channel (256 by default); a full buffer increments `Dropped` rather than blocking
 the socket. `NetworkService` contributes that port through `NetworkResource`.
 
-`NetworkSystem` is manifest-registered with a `dual` profile. At tick open,
-`WireSink.Receive` drains notifications and applies scheduled local/peer artifacts;
-at tick close, `Flush` sends the closed production epoch. `Cross` stamps a crossing
+`NetworkSystem` is manifest-registered with a `dual` profile. As a tick opens,
+`WireSink.Receive` drains notifications and queues the scheduled local/peer
+artifacts due into the tick's body, where they settle after the systems; at tick
+close, `Flush` sends the closed production epoch. `Cross` stamps a crossing
 with this instance's playout lead and schedules every copy, the producer's
 included, for that one apply tick; there is no producer copy published sooner. The
 artifacts that decide what the world *is* — roster, run, shared species, the

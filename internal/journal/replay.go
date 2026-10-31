@@ -16,6 +16,7 @@ type ReplayTarget interface {
 	Tick(int)
 	Settle()
 	PushRecord(event.JournalRecord, any) bool // false: applied, nothing queued
+	PushBody(event.JournalRecord, any)        // for the next tick's body, which applied it
 	Install(event.JournalCapture) error
 	Digest() event.JournalDigest // the world now; the driver stamps nothing
 }
@@ -355,6 +356,13 @@ func (d *ReplayDriver) Step() (bool, error) {
 	}
 
 	if k.tick > d.cur.tick {
+		if k.tick == d.cur.tick+1 && k.boundary == 0 {
+			// The next tick's body applied this group: it goes in ahead of the tick,
+			// where the recorded run's barrier put it
+			if err := d.pushBody(k); err != nil {
+				return false, err
+			}
+		}
 		d.tick()
 		d.cur.tick++
 		if k.tick > d.cur.tick {
@@ -393,24 +401,21 @@ func (d *ReplayDriver) settleTo(boundary uint64) {
 	}
 }
 
+// injectGroup pushes a between-tick group and settles it as the recorded run did.
 func (d *ReplayDriver) injectGroup(k groupKey) error {
+	if k.boundary == 0 {
+		return fmt.Errorf("replay: jseq %d is the body of run %d tick %d, which the replay has run",
+			d.s.records[d.next].JSeq, k.run, k.tick)
+	}
 	if p := d.target.Position(); p.Run == k.run && p.Tick == k.tick && !d.held {
 		d.settleTo(k.boundary)
 	}
-	j := segmentEnd(d.s.records, d.next, d.s.captures, d.nextCap)
-	group := d.s.records[d.next:j]
-
 	queued := false
-	for i := range group {
-		rec := &group[i]
-		if err := checkRecord(rec); err != nil {
-			return fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
-		}
-		payload, err := event.DecodePayload(rec.Type, rec.Payload)
-		if err != nil {
-			return fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
-		}
-		queued = d.target.PushRecord(*rec, payload) || queued
+	j, err := d.decodeGroup(func(rec event.JournalRecord, payload any) {
+		queued = d.target.PushRecord(rec, payload) || queued
+	})
+	if err != nil {
+		return err
 	}
 	// The recorded run settles only what it pushed; a settle here would dispatch
 	// events it held until its next tick. A world written among a group was written
@@ -420,14 +425,43 @@ func (d *ReplayDriver) injectGroup(k groupKey) error {
 		d.held = false
 		d.target.Settle()
 	}
-
-	d.stats.Injected += len(group)
-	d.stats.Groups++
 	d.next = j
 	if !k.before(d.cur) {
 		d.cur = k
 	}
 	return nil
+}
+
+// pushBody queues the group the next tick's body applied, for its wire step, and
+// settles nothing: the tick's own settle takes it after the systems, as the run's did.
+func (d *ReplayDriver) pushBody(k groupKey) error {
+	j, err := d.decodeGroup(d.target.PushBody)
+	if err != nil {
+		return err
+	}
+	d.next = j
+	return nil
+}
+
+// decodeGroup hands each record of the part opening at next to push, decoded, and
+// returns where the part ends.
+func (d *ReplayDriver) decodeGroup(push func(event.JournalRecord, any)) (int, error) {
+	j := segmentEnd(d.s.records, d.next, d.s.captures, d.nextCap)
+	group := d.s.records[d.next:j]
+	for i := range group {
+		rec := &group[i]
+		if err := checkRecord(rec); err != nil {
+			return 0, fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
+		}
+		payload, err := event.DecodePayload(rec.Type, rec.Payload)
+		if err != nil {
+			return 0, fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
+		}
+		push(*rec, payload)
+	}
+	d.stats.Injected += len(group)
+	d.stats.Groups++
+	return j, nil
 }
 
 func captureKey(c event.JournalCapture) groupKey {
