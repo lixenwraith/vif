@@ -25,12 +25,14 @@ var (
 // real sound (the SoundNone sentinel is omitted). Setup and editor path only.
 func RegisteredSounds() []*SoundDef { return registeredSounds()[1:] }
 
-// ResetRegistries clears both registries and unfreezes sound registration for a
-// later Start, invalidating every SoundID and PatternID handed out, an embedder's
-// cached ones included. Process-wide and unsynchronized: call it only with no
-// engine running, between a Stop and the next Start, as editors and tests do.
+// ResetRegistries clears the sound, voice and pattern registries and unfreezes
+// sound registration for a later Start, invalidating every SoundID, PatternID and
+// added instrument handed out, an embedder's cached ones included. Process-wide
+// and unsynchronized: call it only with no engine running, between a Stop and the
+// next Start, as editors and tests do.
 func ResetRegistries() {
 	resetSoundRegistry()
+	resetVoiceRegistry()
 	resetPatternRegistry()
 }
 

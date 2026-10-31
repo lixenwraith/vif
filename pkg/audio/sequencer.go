@@ -175,7 +175,7 @@ type Sequencer struct {
 	running bool
 }
 
-func NewSequencer(bpm int, kit *drumKit) *Sequencer {
+func NewSequencer(bpm int, k *kit) *Sequencer {
 	s := &Sequencer{
 		harmony:  newHarmony(),
 		gains:    [MusicSlots]float64{0.62, 0.46, 0.46, 0.5},
@@ -186,7 +186,7 @@ func NewSequencer(bpm int, kit *drumKit) *Sequencer {
 	s.Reseed(1)
 	for i := range s.slots {
 		for j := range s.slots[i].players {
-			s.slots[i].players[j] = NewPatternPlayer(kit)
+			s.slots[i].players[j] = NewPatternPlayer(k)
 		}
 	}
 	s.setGroup(-1)

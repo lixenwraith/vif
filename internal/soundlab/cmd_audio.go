@@ -65,9 +65,16 @@ func cmdNote(s *Session, a []string) error {
 		}
 	}
 	if len(a) > 3 {
+		// A voice edited but not applied would sound stale: apply it, visibly
+		if s.voices.has(a[3]) && s.voices.isDirty(a[3]) {
+			if err := s.applyName(a[3]); err != nil {
+				return fmt.Errorf("auto-apply %q: %w", a[3], err)
+			}
+			fmt.Fprintf(s.out, "auto-applied dirty voice %q\n", a[3])
+		}
 		i, ok := audio.InstrumentByName(a[3])
 		if !ok {
-			return fmt.Errorf("unknown instrument %q", a[3])
+			return fmt.Errorf("unknown voice %q (apply it, or check spelling)", a[3])
 		}
 		if i.IsDrum() {
 			return fmt.Errorf("%q is a drum; use hit", a[3])
@@ -291,11 +298,12 @@ func cmdStat(s *Session, a []string) error {
 	if err := s.eng.SpecError(); err != nil {
 		fmt.Fprintf(s.out, "spec error: %v\n", err)
 	}
-	fmt.Fprintf(s.out, "sounds %d (dirty %v)  patterns %d (dirty %v)\n",
+	fmt.Fprintf(s.out, "sounds %d (dirty %v)  voices %d (dirty %v)  patterns %d (dirty %v)\n",
 		len(s.sounds.order), s.sounds.dirtyNames(),
+		len(s.voices.order), s.voices.dirtyNames(),
 		len(s.pats.order), s.pats.dirtyNames())
 	fmt.Fprintf(s.out, "unsaved to disk: sounds=%v patterns=%v\n",
-		s.sounds.modified, s.pats.modified)
+		s.soundsModified(), s.pats.modified)
 	return nil
 }
 

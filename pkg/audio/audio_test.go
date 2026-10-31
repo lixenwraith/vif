@@ -415,7 +415,10 @@ func FuzzLoadSoundsTOML(f *testing.F) {
 	f.Add([]byte("[[sound]]\nname=\"a\"\nduration=0.1\n[[sound.layer]]\nsource={kind=\"noise\"}\n"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		got, _ := LoadSoundsTOML(data)
-		for _, d := range got {
+		if got == nil {
+			return
+		}
+		for _, d := range got.Sound {
 			buf, err := RenderPreview(d, SoundShape{})
 			if err != nil {
 				t.Fatalf("%s: validated at load but failed to render: %v", d.Name, err)
@@ -921,5 +924,115 @@ event = [{ macro = "Note", each = { pos = [0, 4, 8], deg = [0, 2, 4] } }]
 	ev := pats[0].Tracks[0].Events
 	if len(ev) != 3 || ev[2].Pos != 8 || ev[2].Deg != 4 {
 		t.Errorf("events %v, want three notes ending on pos 8 deg 4", ev)
+	}
+}
+
+// TestVoiceDocumentAddsAnInstrument is the rule that a [[voice]] in the sound
+// document is an instrument patterns name: a model name retunes that instrument in
+// place, a new name adds one, and a pattern's def carries the name both ways.
+func TestVoiceDocumentAddsAnInstrument(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	f, err := LoadSoundsTOML([]byte(`
+[[voice]]
+name = "lead"
+wave = "square"
+attack = 0.01
+sustain = 0.5
+[[voice]]
+name = "rhodes"
+wave = "modal"
+partials = 20
+decay_time = 1.2
+level = 0.9
+`))
+	if err != nil || len(f.Voice) != 2 {
+		t.Fatalf("load: %v, %d voices", err, len(f.Voice))
+	}
+	for _, v := range f.Voice {
+		if _, err := RegisterVoice(v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if id, _ := InstrumentByName("lead"); id != InstrLead {
+		t.Errorf("lead resolved to %d, want its model number %d", id, InstrLead)
+	}
+	id, ok := InstrumentByName("rhodes")
+	if !ok || id < InstrumentCount || InstrumentName(id) != "rhodes" {
+		t.Fatalf("rhodes resolved to %d (%v), named %q", id, ok, InstrumentName(id))
+	}
+	def := &PatternDef{Name: "p", Steps: 16, Track: []TrackDef{{Instr: "rhodes", Event: []StepDef{{Pos: 0, Vel: 0.5}}}}}
+	p, err := def.Pattern()
+	if err != nil {
+		t.Fatalf("a pattern naming an added voice: %v", err)
+	}
+	if got := p.Def().Track[0].Instr; got != "rhodes" {
+		t.Errorf("def names the track %q, want rhodes", got)
+	}
+	out, err := MarshalSoundsFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := LoadSoundsTOML(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back, _ := MarshalSoundsFile(again); !bytes.Equal(out, back) {
+		t.Errorf("voices do not round-trip:\n%s\n%s", out, back)
+	}
+}
+
+// TestDefineVoiceReachesTheNextNote is the hot swap: a voice defined after Start
+// is what the next trigger of its instrument plays, a redefined one and an added
+// one alike, while a note already sounding keeps the voice it began on.
+func TestDefineVoiceReachesTheNextNote(t *testing.T) {
+	ae := startNullEngine(t)
+	lead := &VoiceDef{Name: "lead", Wave: "square", Attack: 0.01, Sustain: 1}
+	glass := &VoiceDef{Name: "glass", Wave: "modal", Partials: 12, DecayTime: 2}
+	if _, err := ae.DefineVoice(lead); err != nil {
+		t.Fatal(err)
+	}
+	id, err := ae.DefineVoice(glass)
+	if err != nil || id < InstrumentCount {
+		t.Fatalf("define glass: %v, id %d", err, id)
+	}
+	time.Sleep(3 * AudioBufferDuration)
+	ae.Stop()
+	if !ae.mixer.Wait(testStopWait) {
+		t.Fatal("mix goroutine still running; kit inspection would race")
+	}
+	k := ae.mixer.kit
+	if k.voice(InstrLead) != lead || k.voice(id) != glass {
+		t.Fatal("the kit does not hold the defined voices")
+	}
+	v := NewTonalVoice(k)
+	v.Trigger(VoiceParams{Note: 60, Velocity: 1, Instrument: id})
+	k.setVoice(id, &VoiceDef{Name: "glass", Wave: "sine"})
+	if v.spec != glass {
+		t.Error("a sounding note lost the voice it began on")
+	}
+	v.Trigger(VoiceParams{Note: 60, Velocity: 1, Instrument: id})
+	if v.spec == glass {
+		t.Error("the next trigger kept the superseded voice")
+	}
+}
+
+// TestVoiceValidationRejects holds ValidateVoice to the mixer's bounds.
+func TestVoiceValidationRejects(t *testing.T) {
+	for _, d := range []*VoiceDef{
+		{Name: "kick"},
+		{Name: "v", Wave: "triangle"},
+		{Name: "v", Unison: 4},
+		{Name: "v", Detune: 3},
+		{Name: "v", Sustain: 1.5},
+		{Name: "v", Cutoff: math.Inf(1)},
+		{Name: "v", Partials: maxPartials + 1},
+	} {
+		if ValidateVoice(d) == nil {
+			t.Errorf("%+v validated", d)
+		}
+	}
+	if err := ValidateVoice(&VoiceDef{Name: "v", Wave: "saw", Unison: 2, Detune: 1.01, Attack: 0.01}); err != nil {
+		t.Errorf("a plain voice failed: %v", err)
 	}
 }

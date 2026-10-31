@@ -403,6 +403,8 @@ func waveSample(wave int, phase float64, rng *rand.Rand) float64 {
 	}
 }
 
+// waveOf names a source's or a voice's wave; the string and the modal bank are
+// voices' alone, which ValidateSound never admits
 func waveOf(s string) int {
 	switch s {
 	case "square":
@@ -411,6 +413,10 @@ func waveOf(s string) int {
 		return waveSaw
 	case "noise":
 		return waveNoise
+	case "string":
+		return waveString
+	case "modal":
+		return waveModal
 	default:
 		return waveSine
 	}

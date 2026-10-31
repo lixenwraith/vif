@@ -24,12 +24,14 @@ import (
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
-// Session owns the engine and the two working documents. Single-goroutine by
-// construction — every mutation funnels through Execute — which is what lets
-// document and registry pointers flow into RenderPreview without locks.
+// Session owns the engine and the working documents: the sounds and the voices,
+// one file, and the patterns. Single-goroutine by construction, every mutation
+// funnelling through Execute, which is what lets document and registry pointers
+// flow into RenderPreview without locks.
 type Session struct {
 	eng    *audio.AudioEngine
 	sounds *doc[*audio.SoundDef]
+	voices *doc[*audio.VoiceDef]
 	pats   *doc[*audio.PatternDef]
 	out    io.Writer
 
@@ -105,11 +107,11 @@ func NewSession(o Options) (*Session, error) {
 	cfg.Sink = o.Sink
 	cfg.Buffer = files.buffer
 	// The same banks the game registers, from the same embedded assets.
-	base, err := parameter.BuiltinSounds()
+	bank, err := parameter.BuiltinSounds()
 	if err != nil {
 		return nil, err
 	}
-	cfg.BaseSounds = base
+	cfg.BaseSounds, cfg.BaseVoices = bank.Sound, bank.Voice
 	if cfg.BasePatterns, err = parameter.BuiltinPatterns(); err != nil {
 		return nil, err
 	}
@@ -129,6 +131,7 @@ func NewSession(o Options) (*Session, error) {
 	s := &Session{
 		eng:    eng,
 		sounds: newSoundDoc(),
+		voices: newVoiceDoc(),
 		pats:   newPatternDoc(),
 		out:    out,
 		bpm:    audio.DefaultBPM,
@@ -166,6 +169,7 @@ func (s *Session) adoptOverrides() {
 			s.files.soundsTarget = ""
 		} else {
 			s.sounds.replaceAll(s.sounds.all(), s.files.soundsTarget, false)
+			s.voices.replaceAll(s.voices.all(), s.files.soundsTarget, false)
 		}
 	}
 	if f := s.files.music; f != "" {
@@ -196,17 +200,18 @@ func (s *Session) SetOut(w io.Writer) { s.out = w }
 
 // --- documents ---
 
-// loadSoundFile parses one document with includes resolved relative to the
-// file's directory. DirFS confines every include to that subtree — a spec
-// cannot reach ../ — which is LoadSoundsFS's capability model kept intact.
+// loadSoundFile parses one document, its sounds and voices, with includes
+// resolved relative to the file's directory. DirFS confines every include to that
+// subtree, so a spec cannot reach ../, which is LoadSoundsFS's capability model
+// kept intact.
 func (s *Session) loadSoundFile(file string, replace bool) error {
 	abs, err := filepath.Abs(file)
 	if err != nil {
 		return err
 	}
 	dir, base := filepath.Dir(abs), filepath.Base(abs)
-	defs, lerr := audio.LoadSoundsFS(os.DirFS(dir), base)
-	if len(defs) == 0 && lerr != nil {
+	bank, lerr := audio.LoadSoundsFS(os.DirFS(dir), base)
+	if bank == nil || (len(bank.Sound)+len(bank.Voice) == 0 && lerr != nil) {
 		return lerr
 	}
 	// The root's include list must survive to save (MarshalSoundsFile), but
@@ -219,15 +224,17 @@ func (s *Session) loadSoundFile(file string, replace bool) error {
 		_ = toml.Unmarshal(raw, &head)
 	}
 	if replace {
-		s.sounds.replaceAll(defs, abs, true) // diverges from registry until apply
+		s.sounds.replaceAll(bank.Sound, abs, true) // diverges from registry until apply
+		s.voices.replaceAll(bank.Voice, abs, true)
 		s.sounds.include = head.Include
 	} else {
-		s.sounds.mergeAll(defs, true)
+		s.sounds.mergeAll(bank.Sound, true)
+		s.voices.mergeAll(bank.Voice, true)
 	}
 	if lerr != nil {
 		fmt.Fprintf(s.out, "loaded with errors (invalid entries dropped):\n%v\n", lerr)
 	}
-	fmt.Fprintf(s.out, "%d sound(s) loaded\n", len(defs))
+	fmt.Fprintf(s.out, "%d sound(s) and %d voice(s) loaded\n", len(bank.Sound), len(bank.Voice))
 	return nil
 }
 
@@ -253,16 +260,32 @@ func (s *Session) loadPatternFile(file string, replace bool) error {
 	return nil
 }
 
+// seedBuiltinSounds seeds the sound document, voices included, from a fresh
+// parse of the shipped bank, so nothing aliases the registry.
 func (s *Session) seedBuiltinSounds() error {
-	defs, err := parameter.BuiltinSounds() // fresh parse; no registry aliasing
+	bank, err := parameter.BuiltinSounds()
 	if err != nil {
 		return err
 	}
-	s.sounds.replaceAll(defs, "", false) // registry holds identical content: clean
+	s.sounds.replaceAll(bank.Sound, "", false) // registry holds identical content: clean
+	s.voices.replaceAll(bank.Voice, "", false)
 	s.sounds.include = nil
-	fmt.Fprintf(s.out, "%d built-in sound(s) seeded\n", len(defs))
+	fmt.Fprintf(s.out, "%d built-in sound(s) and %d voice(s) seeded\n", len(bank.Sound), len(bank.Voice))
 	return nil
 }
+
+func (s *Session) seedBuiltinVoices() error {
+	bank, err := parameter.BuiltinSounds()
+	if err != nil {
+		return err
+	}
+	s.voices.replaceAll(bank.Voice, s.sounds.src, false)
+	fmt.Fprintf(s.out, "%d built-in voice(s) seeded\n", len(bank.Voice))
+	return nil
+}
+
+// soundsModified reports the sound document, voices included, diverging from disk
+func (s *Session) soundsModified() bool { return s.sounds.modified || s.voices.modified }
 
 // seedBuiltinPatterns snapshots the registry, which Start filled from the shipped
 // bank plus the code-owned melody_gen. Def() allocates, so live mixer pointers are
@@ -296,23 +319,23 @@ func (s *Session) saveSounds(named string) error {
 	if err != nil {
 		return err
 	}
-	// Name-shadow model: the root re-emits every sound in the document.
+	// Name-shadow model: the root re-emits every sound and voice in the document.
 	// Includes still load first and are overridden per name, so reloading
 	// reproduces this document exactly while the include set is preserved.
-	data, err := audio.MarshalSoundsFile(s.sounds.include, s.sounds.all())
+	data, err := audio.MarshalSoundsFile(&audio.SoundSpecFile{Include: s.sounds.include, Sound: s.sounds.all(), Voice: s.voices.all()})
 	if err != nil {
 		return err
 	}
 	if err := os.WriteFile(file, data, 0o644); err != nil {
 		return err
 	}
-	s.sounds.src = file
-	fmt.Fprintf(s.out, "wrote %s (%d sounds", file, len(s.sounds.order))
+	s.sounds.src, s.voices.src = file, file
+	fmt.Fprintf(s.out, "wrote %s (%d sounds, %d voices", file, len(s.sounds.order), len(s.voices.order))
 	if len(s.sounds.include) > 0 {
 		fmt.Fprintf(s.out, ", %d includes preserved; root overrides by name", len(s.sounds.include))
 	}
 	fmt.Fprintln(s.out, ")")
-	s.sounds.modified = false
+	s.sounds.modified, s.voices.modified = false, false
 	return nil
 }
 
@@ -343,6 +366,9 @@ func (s *Session) validateName(name string) error {
 	if d, ok := s.sounds.get(name); ok {
 		return audio.ValidateSound(d)
 	}
+	if d, ok := s.voices.get(name); ok {
+		return audio.ValidateVoice(d)
+	}
 	if d, ok := s.pats.get(name); ok {
 		_, err := d.Pattern()
 		return err
@@ -363,6 +389,7 @@ func (s *Session) validateAll() error {
 		}
 	}
 	check(s.sounds.order)
+	check(s.voices.order)
 	check(s.pats.order)
 	if fails > 0 {
 		return fmt.Errorf("%d invalid", fails)
@@ -381,6 +408,15 @@ func (s *Session) applyName(name string) error {
 		}
 		s.sounds.clearDirty(name)
 		fmt.Fprintf(s.out, "applied sound %q (id %d)\n", name, id)
+		return nil
+	}
+	if d, ok := s.voices.get(name); ok {
+		id, err := s.eng.DefineVoice(d.Clone()) // the mixer reads what it is given
+		if err != nil {
+			return err
+		}
+		s.voices.clearDirty(name)
+		fmt.Fprintf(s.out, "applied voice %q (instrument %d)\n", name, id)
 		return nil
 	}
 	if d, ok := s.pats.get(name); ok {
@@ -402,7 +438,7 @@ func (s *Session) applyName(name string) error {
 // applyAll flushes dirty entries only; re-rendering clean sounds would burn
 // full variant-set renders for nothing.
 func (s *Session) applyAll() error {
-	names := append(s.sounds.dirtyNames(), s.pats.dirtyNames()...)
+	names := append(append(s.sounds.dirtyNames(), s.voices.dirtyNames()...), s.pats.dirtyNames()...)
 	fails := 0
 	for _, n := range names {
 		if err := s.applyName(n); err != nil {
@@ -447,6 +483,20 @@ func (s *Session) revertName(name string) error {
 		}
 		return nil
 	}
+	if cur, ok := s.voices.get(name); ok {
+		reg := audio.VoiceDefByName(name)
+		if reg == nil {
+			return fmt.Errorf("%q: never registered; nothing to revert to (del to drop)", name)
+		}
+		noop := sameCanonical(audio.MarshalVoices, cur, reg)
+		s.voices.put(reg.Clone(), false)
+		if noop {
+			fmt.Fprintf(s.out, "%q matches registry — nothing to revert (apply committed these edits; load restores disk state)\n", name)
+		} else {
+			fmt.Fprintf(s.out, "reverted voice %q to registry state\n", name)
+		}
+		return nil
+	}
 	if cur, ok := s.pats.get(name); ok {
 		id := audio.PatternIDByName(name)
 		p := audio.GetPattern(id)
@@ -467,7 +517,7 @@ func (s *Session) revertName(name string) error {
 }
 
 func (s *Session) revertAll() error {
-	names := append(s.sounds.dirtyNames(), s.pats.dirtyNames()...)
+	names := append(append(s.sounds.dirtyNames(), s.voices.dirtyNames()...), s.pats.dirtyNames()...)
 	for _, n := range names {
 		if err := s.revertName(n); err != nil {
 			fmt.Fprintf(s.out, "  skip %-24s %v\n", n, err)
@@ -491,12 +541,15 @@ func (s *Session) resolveSoundDef(name string) (*audio.SoundDef, bool) {
 	return nil, false
 }
 
-// docRoot maps a path head to its owning document entry. Sounds shadow
-// patterns on a name collision; the collision is user-inflicted and mv fixes
-// it.
+// docRoot maps a path head to its owning document entry. Sounds shadow voices
+// and patterns on a name collision; the collision is user-inflicted and mv
+// fixes it.
 func (s *Session) docRoot(name string) (root any, mark func(), err error) {
 	if d, ok := s.sounds.get(name); ok {
 		return d, func() { s.sounds.markDirty(name) }, nil
+	}
+	if d, ok := s.voices.get(name); ok {
+		return d, func() { s.voices.markDirty(name) }, nil
 	}
 	if d, ok := s.pats.get(name); ok {
 		return d, func() { s.pats.markDirty(name) }, nil

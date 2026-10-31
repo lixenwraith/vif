@@ -38,6 +38,16 @@ func newSoundDoc() *doc[*audio.SoundDef] {
 	}
 }
 
+func newVoiceDoc() *doc[*audio.VoiceDef] {
+	return &doc[*audio.VoiceDef]{
+		byName:  map[string]*audio.VoiceDef{},
+		dirty:   map[string]bool{},
+		nameOf:  func(d *audio.VoiceDef) string { return d.Name },
+		setName: func(d *audio.VoiceDef, n string) { d.Name = n },
+		clone:   func(d *audio.VoiceDef) *audio.VoiceDef { return d.Clone() },
+	}
+}
+
 func newPatternDoc() *doc[*audio.PatternDef] {
 	return &doc[*audio.PatternDef]{
 		byName:  map[string]*audio.PatternDef{},

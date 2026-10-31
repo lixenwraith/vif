@@ -48,9 +48,7 @@ const (
 )
 
 const (
-	kindPattern = 0
-	kindSound   = 1
-	tickEvery   = 100 * time.Millisecond
+	tickEvery = 100 * time.Millisecond
 	// minW and minH fit the keys tab's drawn keyboard and the grid's bar
 	minW, minH = 60, 16
 )
@@ -107,8 +105,8 @@ type tuiApp struct {
 	mode  uiMode
 
 	kind     int
-	brCursor [2]int
-	brScroll [2]int
+	brCursor [kindCount]int
+	brScroll [kindCount]int
 	brPageH  int    // rows the browser showed last render, a page for PgUp/PgDn
 	search   string // the last / term, prefilled so / again finds the next
 
@@ -239,7 +237,7 @@ func (a *tuiApp) execQ(line string) error {
 // requestQuit guards unsaved work once, then quits. Applies to Ctrl+Q and
 // :quit alike.
 func (a *tuiApp) requestQuit() {
-	if (a.s.sounds.modified || a.s.pats.modified) && !a.quitArmed {
+	if (a.s.soundsModified() || a.s.pats.modified) && !a.quitArmed {
 		a.quitArmed = true
 		fmt.Fprintln(a.log, "unsaved changes — ^S saves to provenance (:save sound|pattern <file> picks a path); quit again to discard")
 		return
@@ -251,7 +249,7 @@ func (a *tuiApp) requestQuit() {
 // path, or, the first time, to a path a prompt asks for, offering the file the
 // next vif run reads first.
 func (a *tuiApp) saveModified() {
-	if !a.s.sounds.modified && !a.s.pats.modified {
+	if !a.s.soundsModified() && !a.s.pats.modified {
 		fmt.Fprintln(a.log, "nothing to save — no document diverges from disk")
 		return
 	}
@@ -262,7 +260,7 @@ func (a *tuiApp) saveModified() {
 		}
 		a.exec("save pattern")
 	}
-	if a.s.sounds.modified {
+	if a.s.soundsModified() {
 		if a.s.sounds.src == "" {
 			a.promptSavePath("sound", a.s.files.soundsTarget)
 			return
@@ -277,7 +275,7 @@ func (a *tuiApp) saveModified() {
 func (a *tuiApp) promptSavePath(kind, target string) {
 	a.openPrompt("save "+kind+" -> file: ", cmp.Or(target, kind+"s.toml"), func(file string) {
 		a.exec("save " + kind + " " + file)
-		if a.s.sounds.modified || a.s.pats.modified {
+		if a.s.soundsModified() || a.s.pats.modified {
 			a.saveModified()
 		}
 	})
@@ -513,8 +511,10 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 		a.promptMix()
 	case r == 'd':
 		a.deleteSel()
-	case ev.Key == terminal.KeyLeft || ev.Key == terminal.KeyRight || r == 'h' || r == 'l':
-		a.kind ^= 1
+	case ev.Key == terminal.KeyLeft || r == 'h':
+		a.kind = (a.kind + kindCount - 1) % kindCount
+	case ev.Key == terminal.KeyRight || r == 'l':
+		a.kind = (a.kind + 1) % kindCount
 	case ev.Key == terminal.KeyEnter:
 		if a.selName() != "" {
 			a.focus = focusInspector
@@ -548,6 +548,7 @@ func (a *tuiApp) deleteSel() {
 		a.delArmed = n
 		where := "unapplied and unsaved — this discard is final"
 		if (a.kind == kindSound && audio.SoundDefByName(n) != nil) ||
+			(a.kind == kindVoice && audio.VoiceDefByName(n) != nil) ||
 			(a.kind == kindPattern && audio.PatternIDByName(n) != audio.PatternSilence) {
 			where = "registry keeps the applied copy (load/builtin to re-import)"
 		}
@@ -559,15 +560,25 @@ func (a *tuiApp) deleteSel() {
 }
 
 // auditionSel is the space action, shared by browser and inspector: sounds
-// audition immediately; patterns ensure they are audible.
+// audition immediately, a voice plays middle C through the sequencer, and
+// patterns ensure they are audible.
 func (a *tuiApp) auditionSel() {
 	if a.kind == kindPattern {
 		a.playPattern()
 		return
 	}
-	if n, ok := a.addressableSel(); ok {
-		a.exec("play " + n)
+	n, ok := a.addressableSel()
+	if !ok {
+		return
 	}
+	if a.kind == kindVoice {
+		if !a.s.eng.IsMusicPlaying() && !a.s.eng.IsMusicMuted() {
+			a.exec("music start") // the voices sound through the sequencer
+		}
+		a.exec(fmt.Sprintf("note %d 0.8 4 %s", audio.MIDINote(audio.NoteC, 4), n))
+		return
+	}
+	a.exec("play " + n)
 }
 
 // playPattern makes space mean "hear this": already in a slot, it toggles the
@@ -624,7 +635,7 @@ func (a *tuiApp) roleSlot(name string) int {
 // while it runs lands on the next bar, so the pattern enters in step.
 func (a *tuiApp) assignSlot(slot int) {
 	if a.kind != kindPattern {
-		fmt.Fprintln(a.log, "slots take patterns — space auditions a sound")
+		fmt.Fprintln(a.log, "slots take patterns — space plays a sound or a voice")
 		return
 	}
 	n, ok := a.addressableSel()
@@ -955,7 +966,7 @@ func (a *tuiApp) promptNew(slot int) {
 		kind = "pattern"
 	}
 	name := "new_1"
-	for i := 2; a.s.pats.has(name) || a.s.sounds.has(name); i++ {
+	for i := 2; a.s.has(name); i++ {
 		name = fmt.Sprintf("new_%d", i)
 	}
 	a.openPrompt("new "+kind+" name: ", name, func(name string) {
@@ -963,7 +974,7 @@ func (a *tuiApp) promptNew(slot int) {
 			return
 		}
 		a.cursorTo(name)
-		if kind == "sound" {
+		if kind != "pattern" {
 			a.focus, a.fresh = focusInspector, name
 			return
 		}
@@ -978,13 +989,13 @@ func (a *tuiApp) promptNew(slot int) {
 	})
 }
 
-// editSel: e in the browser. A pattern opens in the editor's grid, a sound in the
-// inspector, either to edit what is there.
+// editSel: e in the browser. A pattern opens in the editor's grid, a sound or a
+// voice in the inspector, either to edit what is there.
 func (a *tuiApp) editSel() {
 	n, ok := a.addressableSel()
 	switch {
 	case !ok:
-	case a.kind == kindSound:
+	case a.kind != kindPattern:
 		a.focus = focusInspector
 	default:
 		a.openEditor(n, focusGrid)
@@ -1018,11 +1029,12 @@ func (a *tuiApp) promptClone() {
 			return // cp failed (exists / bad name); error already logged
 		}
 		a.focus = focusInspector
-		list := "layer"
-		if a.kind == kindPattern {
-			list = "track"
+		switch a.kind {
+		case kindPattern:
+			a.exp.Expand(dst + ".track")
+		case kindSound:
+			a.exp.Expand(dst + ".layer")
 		}
-		a.exp.Expand(dst + "." + list)
 	})
 }
 
@@ -1036,11 +1048,4 @@ func (a *tuiApp) promptWrite() {
 	a.openPrompt("write "+n+" -> file: ", n+".toml", func(file string) {
 		a.exec("write " + n + " " + file)
 	})
-}
-
-func kindWord(kind int) string {
-	if kind == kindPattern {
-		return "pattern"
-	}
-	return "sound"
 }

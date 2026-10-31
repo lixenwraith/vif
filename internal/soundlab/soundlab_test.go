@@ -400,8 +400,67 @@ write ws1 %s
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sdefs) != 1 || sdefs[0].Name != "ws1" {
-		t.Fatalf("want exactly ws1, got %d sound(s)", len(sdefs))
+	if len(sdefs.Sound) != 1 || sdefs.Sound[0].Name != "ws1" {
+		t.Fatalf("want exactly ws1, got %d sound(s)", len(sdefs.Sound))
+	}
+}
+
+// TestVoicesAreAuthoredAsData is the rule that a tonal voice is an entry of the
+// sound document: made, edited, validated, applied and heard like a sound, saved
+// with the sounds and loaded back, a new name an instrument a pattern takes.
+func TestVoicesAreAuthoredAsData(t *testing.T) {
+	dir := t.TempDir()
+	sndFile := filepath.Join(dir, "sounds.toml")
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+builtin voice
+ls voice
+new voice glass
+set glass.wave modal
+set glass.partials 16
+set glass.decay_time 1.5
+set glass.unison 9                   # set checks syntax alone; the bound holds at validate
+! validate glass
+unset glass.unison
+validate glass
+new voice kick                       # a drum's name is not a voice's: validate says so
+! validate kick
+del kick
+set lead.wave square                 # retune a shipped voice in place
+apply all
+music start
+note 60 0.8 2 glass
+new pattern gp
+set gp.track.0.instr glass
+set gp.track.0.event.0.deg 2
+validate gp
+apply gp
+music stop
+save sound %s
+stat
+`, sndFile))
+	if !strings.Contains(out.String(), "auto-applied") && !strings.Contains(out.String(), "applied voice \"glass\"") {
+		t.Fatalf("glass was never applied:\n%s", out.String())
+	}
+	if id, ok := audio.InstrumentByName("glass"); !ok || id < audio.InstrumentCount {
+		t.Fatalf("glass is not an instrument after apply: %d %v", id, ok)
+	}
+	if audio.VoiceDefByName("lead").Wave != "square" {
+		t.Fatal("the retuned lead did not reach the registry")
+	}
+	teardown(t, s)
+
+	var out2 bytes.Buffer
+	s2 := newTestSession(t, &out2)
+	runOrFatal(t, s2, &out2, fmt.Sprintf(`
+load sound %s
+show glass
+ls voice glass
+`, sndFile))
+	teardown(t, s2)
+	if !strings.Contains(out2.String(), "wave = \"modal\"") || !strings.Contains(out2.String(), "voice(s) loaded") {
+		t.Fatalf("the saved voice did not come back:\n%s", out2.String())
 	}
 }
 

@@ -13,10 +13,10 @@ import (
 )
 
 // LoadSoundsTOML parses one document held in memory, so an include, which needs
-// a filesystem, is refused; the engine reads through LoadSoundsFS. The returned
-// slice holds every sound that validated; err is a join of the ones that did not,
-// so one bad spec does not discard the file.
-func LoadSoundsTOML(data []byte) ([]*SoundDef, error) {
+// a filesystem, is refused; the engine reads through LoadSoundsFS. The result
+// holds every sound and voice that validated; err is a join of the ones that did
+// not, so one bad spec does not discard the file.
+func LoadSoundsTOML(data []byte) (*SoundSpecFile, error) {
 	f, err := decodeSpecFile(data)
 	if err != nil {
 		return nil, err
@@ -24,14 +24,14 @@ func LoadSoundsTOML(data []byte) ([]*SoundDef, error) {
 	if len(f.Include) > 0 {
 		return nil, errors.New("sound spec: include requires LoadSoundsFS")
 	}
-	return partitionValid(f.Sound)
+	return partitionValid(f)
 }
 
 // LoadSoundsFS loads documents from a filesystem capability, resolving nested
 // includes. Includes are loaded depth-first and before the including file's own
 // definitions, so an including file overrides what it includes.
-func LoadSoundsFS(fsys fs.FS, names ...string) ([]*SoundDef, error) {
-	l := &specLoader{fsys: fsys, seen: make(map[string]bool)}
+func LoadSoundsFS(fsys fs.FS, names ...string) (*SoundSpecFile, error) {
+	l := &specLoader{fsys: fsys, seen: make(map[string]bool), out: &SoundSpecFile{}}
 	for _, n := range names {
 		if err := l.load(path.Clean(n), 0); err != nil {
 			return nil, err
@@ -40,23 +40,27 @@ func LoadSoundsFS(fsys fs.FS, names ...string) ([]*SoundDef, error) {
 	return partitionValid(l.out)
 }
 
-// MarshalSoundsFile re-emits a document with its include directives intact.
-// MarshalSounds drops them, which flattens a multi-file spec set on first save.
-func MarshalSoundsFile(include []string, defs []*SoundDef) ([]byte, error) {
-	return toml.Marshal(SoundSpecFile{Include: include, Sound: defs})
+// MarshalSoundsFile re-emits a document whole, its include directives intact.
+// MarshalSounds and MarshalVoices emit entries of one kind and no includes, which
+// flattens a multi-file spec set on first save. Arrays keep their order; scalar
+// keys are sorted. Reloading the output yields identical audio.
+func MarshalSoundsFile(f *SoundSpecFile) ([]byte, error) {
+	return toml.Marshal(*f)
 }
 
-// MarshalSounds re-emits specs as TOML. Arrays keep their order; scalar keys
-// are sorted. Reloading the output yields identical audio.
 func MarshalSounds(defs []*SoundDef) ([]byte, error) {
 	return toml.Marshal(SoundSpecFile{Sound: defs})
+}
+
+func MarshalVoices(defs []*VoiceDef) ([]byte, error) {
+	return toml.Marshal(SoundSpecFile{Voice: defs})
 }
 
 type specLoader struct {
 	fsys fs.FS
 	seen map[string]bool
 	n    int
-	out  []*SoundDef
+	out  *SoundSpecFile
 }
 
 func (l *specLoader) load(name string, depth int) error {
@@ -91,7 +95,8 @@ func (l *specLoader) load(name string, depth int) error {
 			return err
 		}
 	}
-	l.out = append(l.out, f.Sound...)
+	l.out.Sound = append(l.out.Sound, f.Sound...)
+	l.out.Voice = append(l.out.Voice, f.Voice...)
 	return nil
 }
 
@@ -188,10 +193,12 @@ func pathOr(s, dflt string) string {
 	return strings.TrimPrefix(s, ".")
 }
 
-func partitionValid(in []*SoundDef) ([]*SoundDef, error) {
-	out := make([]*SoundDef, 0, len(in))
+// partitionValid keeps the sounds and voices that validate and joins the errors
+// of those that do not.
+func partitionValid(in *SoundSpecFile) (*SoundSpecFile, error) {
+	out := &SoundSpecFile{Include: in.Include}
 	var errs []error
-	for _, d := range in {
+	for _, d := range in.Sound {
 		if d == nil {
 			continue
 		}
@@ -199,7 +206,17 @@ func partitionValid(in []*SoundDef) ([]*SoundDef, error) {
 			errs = append(errs, err)
 			continue
 		}
-		out = append(out, d)
+		out.Sound = append(out.Sound, d)
+	}
+	for _, d := range in.Voice {
+		if d == nil {
+			continue
+		}
+		if err := ValidateVoice(d); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		out.Voice = append(out.Voice, d)
 	}
 	return out, errors.Join(errs...)
 }

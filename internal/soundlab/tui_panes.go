@@ -60,8 +60,11 @@ func (l *LogBuffer) push(s string) {
 // --- selection ---
 
 func (a *tuiApp) browserNames() []string {
-	if a.kind == kindSound {
+	switch a.kind {
+	case kindSound:
 		return a.s.sounds.order
+	case kindVoice:
+		return a.s.voices.order
 	}
 	return a.s.pats.order
 }
@@ -419,10 +422,10 @@ func (a *tuiApp) renderHeader(r tui.Region) {
 	}
 	slots := len(secs)
 	secs = append(secs, tui.BarSection{Label: "slots ", Value: strings.Join(names[:], "·"), LabelStyle: lab, ValueStyle: val, Priority: 1})
-	if a.s.sounds.modified || a.s.pats.modified {
+	if a.s.soundsModified() || a.s.pats.modified {
 		secs = append(secs, tui.BarSection{Value: "● unsaved", ValueStyle: warn, Priority: 4})
 	}
-	if n := len(a.s.sounds.dirty) + len(a.s.pats.dirty); n > 0 {
+	if n := len(a.s.sounds.dirty) + len(a.s.voices.dirty) + len(a.s.pats.dirty); n > 0 {
 		secs = append(secs, tui.BarSection{Label: "unapplied ", Value: strconv.Itoa(n), LabelStyle: lab, ValueStyle: warn, Priority: 3})
 	}
 	be := g.backend
@@ -486,11 +489,7 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 	content := r.Pane(tui.PaneOpts{Border: tui.LineSingle, BorderFg: a.paneBorder(focusMain), Bg: a.theme.Bg})
 	// The tabs are the title: patterns first, the active one lit
 	x := 2
-	for _, k := range []int{kindPattern, kindSound} {
-		n := len(a.s.pats.order)
-		if k == kindSound {
-			n = len(a.s.sounds.order)
-		}
+	for k, n := range [kindCount]int{len(a.s.pats.order), len(a.s.sounds.order), len(a.s.voices.order)} {
 		tab := fmt.Sprintf(" %ss %d ", kindWord(k), n)
 		fg, attr := a.theme.HintFg, terminal.AttrNone
 		if k == a.kind {
@@ -506,8 +505,11 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 		return
 	}
 	cols := []column{{"role", 6}, {"steps", 5}, {"trk", 3}}
-	if a.kind == kindSound {
+	switch a.kind {
+	case kindSound:
 		cols = []column{{"role", 4}, {"layer", 5}, {"secs", 5}}
+	case kindVoice:
+		cols = []column{{"wave", 6}, {"level", 5}}
 	}
 	// Columns drop from the right until the name keeps a dozen cells
 	avail := content.W - 2
@@ -522,7 +524,19 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 	for _, n := range names {
 		it := tui.ListItem{Icon: tui.IconBullet, IconFg: a.theme.Unselected, TextStyle: tui.Style{Fg: a.theme.Fg}}
 		var field func(column) string
-		if a.kind == kindSound {
+		switch a.kind {
+		case kindVoice:
+			d, _ := a.s.voices.get(n)
+			field = func(c column) string {
+				if c.head == "wave" {
+					return cmp.Or(d.Wave, "sine")
+				}
+				return strconv.FormatFloat(cmp.Or(d.Level, 1), 'f', 2, 64)
+			}
+			if a.s.voices.isDirty(n) {
+				it.Icon, it.IconFg = '*', a.theme.Warning
+			}
+		case kindSound:
 			d, _ := a.s.sounds.get(n)
 			role := "sfx"
 			if i, ok := audio.InstrumentByName(n); ok && i.IsDrum() {
@@ -540,7 +554,7 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 			if a.s.sounds.isDirty(n) {
 				it.Icon, it.IconFg = '*', a.theme.Warning
 			}
-		} else {
+		default:
 			d, _ := a.s.pats.get(n)
 			field = func(c column) string {
 				switch c.head {
@@ -737,7 +751,7 @@ func (a *tuiApp) drawMixRow(r tui.Region, row mixRow, tl timeline, cursor bool) 
 		return
 	}
 	tr := &pat.Tracks[row.trk]
-	r.Text(0, 0, tui.PadRight(tui.Truncate(tr.Instr.String(), mixLabW-1), mixLabW-1), th.HintFg, labBg, terminal.AttrNone)
+	r.Text(0, 0, tui.PadRight(tui.Truncate(audio.InstrumentName(tr.Instr), mixLabW-1), mixLabW-1), th.HintFg, labBg, terminal.AttrNone)
 	span := tl.bars * audio.StepsPerBar
 	first := g.step - g.step%span // the window holding the playhead
 	for i := range span {
@@ -863,9 +877,9 @@ func (a *tuiApp) footHint() string {
 	case a.focus == focusLog:
 		return "j/k scroll  g/G ends  tab next pane  esc back  : cmd  ? keys  ^Q quit"
 	case a.kind == kindPattern:
-		return "j/k move  space play  0-3 slot  n new  e edit  enter inspect  h/l sounds  tab next pane  ? keys  ^Q quit"
+		return "j/k move  space play  0-3 slot  n new  e edit  enter inspect  h/l tabs  tab next pane  ? keys  ^Q quit"
 	}
-	return "j/k move  space play  n new  e edit  enter inspect  h/l patterns  / find  tab next pane  ? keys  ^Q quit"
+	return "j/k move  space play  n new  e edit  enter inspect  h/l tabs  / find  tab next pane  ? keys  ^Q quit"
 }
 
 // renderHelp lays the view's key reference, then the global keys, over

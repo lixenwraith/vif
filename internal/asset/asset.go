@@ -21,8 +21,8 @@ var (
 	MainScenario fs.FS
 	// DefaultContent is the fallback typing corpus.
 	DefaultContent fs.FS
-	// DefaultSounds holds the built-in sound specs; DefaultSoundFiles is their
-	// load order, a later file overriding an earlier one by name.
+	// DefaultSounds holds the built-in sound specs and voices; DefaultSoundFiles is
+	// their load order, a later file overriding an earlier one by name.
 	DefaultSounds fs.FS
 	// DefaultBots holds the shipped bot graphs, one <name>.toml each.
 	DefaultBots fs.FS
@@ -30,7 +30,7 @@ var (
 
 const MainScenarioEntry = "scenario.toml"
 
-var DefaultSoundFiles = []string{"sfx.toml", "drums.toml"}
+var DefaultSoundFiles = []string{"sfx.toml", "drums.toml", "voices.toml"}
 
 // DefaultKeymap is the keymap TOML the binary falls back to.
 var DefaultKeymap []byte

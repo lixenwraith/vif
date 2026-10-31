@@ -143,19 +143,32 @@ func (ae *AudioEngine) Start() error {
 			return fmt.Errorf("base sounds: %w", err)
 		}
 	}
+	for _, d := range ae.config.BaseVoices {
+		if _, err := RegisterVoice(d); err != nil {
+			ae.running.Store(false)
+			return fmt.Errorf("base voices: %w", err)
+		}
+	}
 	if ae.config.SoundFS != nil {
-		defs, err := LoadSoundsFS(ae.config.SoundFS, ae.config.SoundFile)
+		bank, err := LoadSoundsFS(ae.config.SoundFS, ae.config.SoundFile)
 		ae.specErr = err
-		for _, d := range defs {
-			if _, rerr := RegisterSound(d); rerr != nil {
-				ae.specErr = errors.Join(ae.specErr, rerr)
+		if bank != nil {
+			for _, d := range bank.Sound {
+				if _, rerr := RegisterSound(d); rerr != nil {
+					ae.specErr = errors.Join(ae.specErr, rerr)
+				}
+			}
+			for _, d := range bank.Voice {
+				if _, rerr := RegisterVoice(d); rerr != nil {
+					ae.specErr = errors.Join(ae.specErr, rerr)
+				}
 			}
 		}
 	}
 	freezeSounds()
 
 	ae.cache.preloadAll(ae.config.SoundShapes)
-	kit := buildDrumKit(ae.cache)
+	kit := buildKit(ae.cache)
 	ae.resolveLevels()
 	registerMelodyGen()
 	for _, p := range ae.config.BasePatterns {
@@ -672,6 +685,21 @@ func (ae *AudioEngine) DefinePattern(p *Pattern) (PatternID, error) {
 		return PatternSilence, fmt.Errorf("pattern %q: registration failed", p.Name)
 	}
 	ae.send(audioCmd{op: cmdReloadPattern, pattern: id})
+	return id, nil
+}
+
+// DefineVoice registers a voice, a tonal instrument's in place or a new
+// instrument's, and hands it to the mixer: a note already sounding finishes on the
+// voice it began with, the next trigger takes the new one. Pass a Clone, as the
+// mixer reads the registered struct.
+func (ae *AudioEngine) DefineVoice(d *VoiceDef) (InstrumentType, error) {
+	id, err := RegisterVoice(d)
+	if err != nil {
+		return 0, err
+	}
+	if !ae.send(audioCmd{op: cmdReloadVoice, instr: id, voice: d}) {
+		return id, fmt.Errorf("voice %q: mixer queue full, reload dropped", d.Name)
+	}
 	return id, nil
 }
 

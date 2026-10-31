@@ -10,41 +10,47 @@ import (
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
+// errVoiceFile is the answer to a file verb on voices, which live in the sound document
+var errVoiceFile = fmt.Errorf("voices are part of the sound document: name sound")
+
 func cmdLoad(s *Session, a []string) error {
-	snd, err := kindArg(a[0])
-	if err != nil {
+	switch k, err := kindArg(a[0]); {
+	case err != nil:
 		return err
-	}
-	if snd {
+	case k == kindSound:
 		return s.loadSoundFile(a[1], true)
+	case k == kindPattern:
+		return s.loadPatternFile(a[1], true)
 	}
-	return s.loadPatternFile(a[1], true)
+	return errVoiceFile
 }
 
 func cmdMerge(s *Session, a []string) error {
-	snd, err := kindArg(a[0])
-	if err != nil {
+	switch k, err := kindArg(a[0]); {
+	case err != nil:
 		return err
-	}
-	if snd {
+	case k == kindSound:
 		return s.loadSoundFile(a[1], false)
+	case k == kindPattern:
+		return s.loadPatternFile(a[1], false)
 	}
-	return s.loadPatternFile(a[1], false)
+	return errVoiceFile
 }
 
 func cmdBuiltin(s *Session, a []string) error {
-	snd, err := kindArg(a[0])
-	if err != nil {
+	switch k, err := kindArg(a[0]); {
+	case err != nil:
 		return err
-	}
-	if snd {
+	case k == kindSound:
 		return s.seedBuiltinSounds()
+	case k == kindVoice:
+		return s.seedBuiltinVoices()
 	}
 	return s.seedBuiltinPatterns()
 }
 
 func cmdSave(s *Session, a []string) error {
-	snd, err := kindArg(a[0])
+	k, err := kindArg(a[0])
 	if err != nil {
 		return err
 	}
@@ -52,10 +58,13 @@ func cmdSave(s *Session, a []string) error {
 	if len(a) > 1 {
 		file = a[1]
 	}
-	if snd {
+	switch k {
+	case kindSound:
 		return s.saveSounds(file)
+	case kindPattern:
+		return s.savePatterns(file)
 	}
-	return s.savePatterns(file)
+	return errVoiceFile
 }
 
 func cmdExport(s *Session, a []string) error {
@@ -118,6 +127,17 @@ func cmdWrite(s *Session, a []string) error {
 			return err
 		}
 		fmt.Fprintf(s.out, "wrote %s (sound %q)\n", file, name)
+		return nil
+	}
+	if d, ok := s.voices.get(name); ok {
+		data, err := audio.MarshalVoices([]*audio.VoiceDef{d})
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(file, data, 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintf(s.out, "wrote %s (voice %q)\n", file, name)
 		return nil
 	}
 	if d, ok := s.pats.get(name); ok {

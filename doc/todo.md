@@ -238,20 +238,6 @@ gap one level down: the behavior system drops it and counts
 `behavior.unknown_program_rejects`. `ValidateScenario`, which holds the machine and
 the compiled programs, can resolve each request's `program` against `[behaviors]`.
 
-### Author the tonal instruments as data
-
-- Priority: P3
-- Affected files: `pkg/audio/voice.go`, `pkg/audio/sound_spec.go`, `cmd/soundlab`
-
-The tonal voices (bass, piano, pad, lead, pluck) are a table in code, so a new
-timbre or a retuned bass is a Go change and soundlab cannot audition one. A
-`[[voice]]` table in `sounds.toml` with the same fields, loaded like a sound and
-hot-swapped like one, would put them under the author's hand; the bass voicing
-alternatives rendered for the music-smoothing review would then be a file edit.
-The offline conductor render that produced those comparisons (an APM timeline
-through the sequencer, no device) is a test-only harness in the review branch's
-scratch repository, and would be a `soundlab` or `vif-log` verb.
-
 ### Build the map and scenario editor
 
 - Priority: P2
@@ -1258,6 +1244,15 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
    the system keyboard serves `:` and the prompts, as in the game.
 3. Size: the views need 60×16 cells. A phone held landscape fits at the default
    cell; portrait needs the pinch zoom out, or a keyboard of fewer keys.
+
+### Render a conductor timeline offline
+
+- Priority: P3
+- Affected files: `internal/soundlab`, `cmd/vif-log`
+
+The offline conductor render that compared bass voicings for the music-smoothing
+review, an APM timeline through the sequencer with no device, is a test-only
+harness in a scratch repository and would be a `soundlab` or `vif-log` verb.
 
 ### Spin off `pkg/audio` as its own module
 

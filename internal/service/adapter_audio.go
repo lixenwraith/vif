@@ -53,12 +53,12 @@ func (s *AudioService) Init() error {
 	config.SfxLevels = parameter.SfxLevels
 	config.SoundShapes = parameter.SfxShapes
 
-	// pkg/audio ships no specs or authored patterns; both banks are embedder data.
-	base, err := parameter.BuiltinSounds()
+	// pkg/audio ships no specs, voices or authored patterns; the banks are embedder data.
+	bank, err := parameter.BuiltinSounds()
 	if err != nil {
 		return fmt.Errorf("built-in sounds: %w", err)
 	}
-	config.BaseSounds = base
+	config.BaseSounds, config.BaseVoices = bank.Sound, bank.Voice
 	if config.BasePatterns, err = parameter.BuiltinPatterns(); err != nil {
 		return fmt.Errorf("built-in patterns: %w", err)
 	}

@@ -3,6 +3,7 @@
 package soundlab
 
 import (
+	"cmp"
 	"fmt"
 	"reflect"
 	"slices"
@@ -61,7 +62,7 @@ func cmdDel(s *Session, a []string) error {
 	if len(segs) == 1 {
 		n := segs[0]
 		switch {
-		case s.sounds.del(n), s.pats.del(n):
+		case s.sounds.del(n), s.voices.del(n), s.pats.del(n):
 			// Registry deletion does not exist: IDs are table indices sized
 			// at Start. The registered entry, if any, keeps playing until a
 			// registry rebuild.
@@ -96,6 +97,14 @@ func cmdShow(s *Session, a []string) error {
 			s.out.Write(data)
 			return nil
 		}
+		if d, ok := s.voices.get(name); ok {
+			data, err := audio.MarshalVoices([]*audio.VoiceDef{d})
+			if err != nil {
+				return err
+			}
+			s.out.Write(data)
+			return nil
+		}
 		if d, ok := s.pats.get(name); ok {
 			data, err := audio.MarshalPatternDefs([]*audio.PatternDef{d})
 			if err != nil {
@@ -119,7 +128,7 @@ func cmdShow(s *Session, a []string) error {
 }
 
 func cmdLs(s *Session, a []string) error {
-	snd, err := kindArg(a[0])
+	k, err := kindArg(a[0])
 	if err != nil {
 		return err
 	}
@@ -127,7 +136,8 @@ func cmdLs(s *Session, a []string) error {
 	if len(a) > 1 {
 		glob = a[1]
 	}
-	if snd {
+	switch k {
+	case kindSound:
 		names, err := s.sounds.names(glob)
 		if err != nil {
 			return err
@@ -136,6 +146,17 @@ func cmdLs(s *Session, a []string) error {
 			d, _ := s.sounds.get(n)
 			fmt.Fprintf(s.out, "%s %-24s %2d layer(s) %5.2fs\n",
 				dirtyMark(s.sounds.isDirty(n)), n, len(d.Layer), soundDur(d))
+		}
+		return nil
+	case kindVoice:
+		names, err := s.voices.names(glob)
+		if err != nil {
+			return err
+		}
+		for _, n := range names {
+			d, _ := s.voices.get(n)
+			fmt.Fprintf(s.out, "%s %-24s %-6s level %.2f\n",
+				dirtyMark(s.voices.isDirty(n)), n, cmp.Or(d.Wave, "sine"), cmp.Or(d.Level, 1))
 		}
 		return nil
 	}
@@ -159,7 +180,7 @@ func dirtyMark(d bool) string {
 }
 
 func cmdNew(s *Session, a []string) error {
-	snd, err := kindArg(a[0])
+	k, err := kindArg(a[0])
 	if err != nil {
 		return err
 	}
@@ -167,11 +188,12 @@ func cmdNew(s *Session, a []string) error {
 	if err := badName(name); err != nil {
 		return err
 	}
-	if s.sounds.has(name) || s.pats.has(name) {
+	if s.has(name) {
 		return fmt.Errorf("%q: already exists", name)
 	}
 
-	if snd {
+	switch k {
+	case kindSound:
 		// Minimal valid spec: a new entry must be playable immediately, not
 		// a validation error. 0.2s sine with a click-free release.
 		s.sounds.put(&audio.SoundDef{
@@ -181,7 +203,10 @@ func cmdNew(s *Session, a []string) error {
 				Chain:  []audio.Proc{{Kind: "ar", Attack: 0.005, Release: 0.05}},
 			}},
 		}, true)
-	} else {
+	case kindVoice:
+		// A plain sine with a click-free envelope: an instrument from its first note
+		s.voices.put(&audio.VoiceDef{Name: name, Wave: "sine", Attack: 0.01, Decay: 0.1, Sustain: 0.6, Release: 0.2}, true)
+	default:
 		s.pats.put(&audio.PatternDef{
 			Name: name, Steps: 16,
 			Track: []audio.TrackDef{{
@@ -202,7 +227,7 @@ func cmdCp(s *Session, a []string) error {
 	if err := badName(dst); err != nil {
 		return err
 	}
-	if s.sounds.has(dst) || s.pats.has(dst) {
+	if s.has(dst) {
 		return fmt.Errorf("%q: already exists", dst)
 	}
 	if d, ok := s.sounds.get(src); ok {
@@ -210,6 +235,13 @@ func cmdCp(s *Session, a []string) error {
 		c.Name = dst
 		s.sounds.put(c, true)
 		fmt.Fprintf(s.out, "copied sound %q -> %q\n", src, dst)
+		return nil
+	}
+	if d, ok := s.voices.get(src); ok {
+		c := d.Clone()
+		c.Name = dst
+		s.voices.put(c, true)
+		fmt.Fprintf(s.out, "copied voice %q -> %q\n", src, dst)
 		return nil
 	}
 	if d, ok := s.pats.get(src); ok {
@@ -232,7 +264,7 @@ func cmdMv(s *Session, a []string) error {
 	}
 	// doc.rename checks only its own kind; docRoot shadows patterns behind
 	// sounds on collision — mv must not create the state new/cp refuse.
-	if s.sounds.has(dst) || s.pats.has(dst) {
+	if s.has(dst) {
 		return fmt.Errorf("%q: already exists", dst)
 	}
 	if s.sounds.has(src) {
@@ -240,6 +272,13 @@ func cmdMv(s *Session, a []string) error {
 			return err
 		}
 		fmt.Fprintf(s.out, "renamed sound %q -> %q; noise variants will re-roll (rng seeds from name)\n", src, dst)
+		return nil
+	}
+	if s.voices.has(src) {
+		if err := s.voices.rename(src, dst); err != nil {
+			return err
+		}
+		fmt.Fprintf(s.out, "renamed voice %q -> %q; applied, the new name is a new instrument\n", src, dst)
 		return nil
 	}
 	if s.pats.has(src) {
@@ -294,7 +333,16 @@ func cmdMix(s *Session, a []string) error {
 			src, dst, len(c.Track), dd.Steps)
 		return nil
 	}
+	if s.voices.has(src) {
+		return fmt.Errorf("%q: a voice has no parts to mix; cp copies it", src)
+	}
 	return fmt.Errorf("%q: not in any document", src)
+}
+
+// has reports a name in any document; new, cp and mv refuse one, since the
+// command grammar addresses an entry by name alone
+func (s *Session) has(name string) bool {
+	return s.sounds.has(name) || s.voices.has(name) || s.pats.has(name)
 }
 
 // cmdTake adds a track of one tonal voice playing the notes of a take, each at its
@@ -334,14 +382,14 @@ func cmdTake(s *Session, a []string) error {
 		}
 		notes[at{e.Pos, e.Deg, e.Oct}] = e
 	}
-	tr := audio.TrackDef{Instr: instr.String(), Humanize: 0.15}
+	tr := audio.TrackDef{Instr: audio.InstrumentName(instr), Humanize: 0.15}
 	for _, e := range notes {
 		tr.Event = append(tr.Event, e)
 	}
 	slices.SortFunc(tr.Event, func(x, y audio.StepDef) int { return cmpInts(x.Pos, y.Pos, x.Oct, y.Oct, x.Deg, y.Deg) })
 	d.Track = append(d.Track, tr)
 	s.pats.markDirty(a[0])
-	fmt.Fprintf(s.out, "take: %d note(s) into %s, track %d (%s)\n", len(tr.Event), a[0], len(d.Track)-1, instr)
+	fmt.Fprintf(s.out, "take: %d note(s) into %s, track %d (%s)\n", len(tr.Event), a[0], len(d.Track)-1, tr.Instr)
 	if snapped > 0 {
 		fmt.Fprintf(s.out, "%d note(s) outside %s moved to the nearest degree\n", snapped, s.keyName())
 	}

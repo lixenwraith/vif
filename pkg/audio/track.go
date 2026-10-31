@@ -34,14 +34,14 @@ type PatternPlayer struct {
 	pendN int
 }
 
-func NewPatternPlayer(kit *drumKit) *PatternPlayer {
+func NewPatternPlayer(k *kit) *PatternPlayer {
 	p := &PatternPlayer{mask: ^uint32(0), stealStrategy: StealLowest}
 	for i := InstrumentType(0); i <= InstrClap; i++ {
-		p.drums[i][0] = NewDrumVoice(kit, i)
-		p.drums[i][1] = NewDrumVoice(kit, i)
+		p.drums[i][0] = NewDrumVoice(k, i)
+		p.drums[i][1] = NewDrumVoice(k, i)
 	}
 	for i := range p.tonal {
-		p.tonal[i] = NewTonalVoice()
+		p.tonal[i] = NewTonalVoice(k)
 	}
 	return p
 }

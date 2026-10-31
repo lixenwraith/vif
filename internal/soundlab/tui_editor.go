@@ -468,7 +468,7 @@ func (a *tuiApp) gridCycleInstr(d *audio.PatternDef, other bool) {
 	cur, _ := audio.InstrumentByName(d.Track[b.trk].Instr)
 	next := cur
 	if other {
-		next = audio.InstrBass
+		next = audio.TonalInstruments()[0]
 		if !cur.IsDrum() {
 			next = audio.InstrKick
 		}

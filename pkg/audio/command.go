@@ -25,6 +25,7 @@ const (
 	cmdIntensity
 	cmdReloadSound   // swap a rendered variant set; grows per-ID tables
 	cmdReloadPattern // re-resolve slots pointing at a replaced pattern
+	cmdReloadVoice   // install a voice; grows the kit's table for a new instrument
 	cmdPlayBuffer    // audition a caller-rendered buffer, unregistered
 	cmdAutoFill
 	cmdMusicTap // w receives the music bus alone, as it plays; nil detaches
@@ -49,4 +50,5 @@ type audioCmd struct {
 	w       io.Writer
 	bufs    []floatBuffer // cmdReloadSound: rendered variant set, mixer-owned on receipt
 	buf     floatBuffer   // cmdPlayBuffer: single take, mixer-owned on receipt
+	voice   *VoiceDef     // cmdReloadVoice: the registered entry, read-only once sent
 }
