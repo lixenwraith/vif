@@ -5,7 +5,9 @@ enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
 regions that defines a game; a **game** is a scenario running in the engine. The
 Settings page and Relay for others are `vif.toml`'s `[play]`: a run writes them
 back as they change, and the next run starts as this one was left; the rest
-changes this run alone, and the keymap is never rewritten.
+changes this run alone, and the keymap is never rewritten. The terminal, the
+desktop window and the browser draw the menu as the overlay below; Android draws
+the same menu with its own widgets ([Android](#android)).
 
 ## Navigation
 
@@ -35,6 +37,34 @@ viewers retain their inspection-only command restrictions. A bracketed value mar
 a row that is unavailable or read only; for an unavailable row the description
 below the list starts with the reason, the sentence its command gives (`Logging
 unavailable in a browser`, `Audio unavailable in this run`).
+
+## Android
+
+The Android app draws the menu with the platform's widgets, in the site's dark
+theme, from a snapshot of the same pages and rows the run holds, and the run applies
+each tap as it applies a key ([Native menu](native-menu.md)); a page's content, its
+commands, its refusals and what `[play]` keeps are the same. The differences are the
+host's:
+
+- The six pages are rows that expand in place under a chevron, their sections titles
+  over their rows; which pages are open is kept for the run. A search field under the
+  title lists the rows of every page matching the words typed, each with its page, in
+  place of the tree, and they act in place.
+- A setting is a switch, a value that opens a radio list, or − and + around a value;
+  a scenario is a radio row, and Start names the one marked; an action is a row that
+  acts when tapped, after a confirming dialog where it restarts, starts or leaves a
+  game or drops a player or a bot; a one-field form is a field on its row, whose
+  keyboard key submits, and a longer one opens a sheet with the focused field's help
+  under it and Submit and Cancel; a read-only row is a label over its description.
+  A field raises the keyboard its input takes: numbers for Count and Players,
+  addresses for Address, Target and Site.
+- A row that cannot act is dimmed and starts its description with the reason. The
+  status bar's line, a refusal included, shows at the menu's foot while it is up.
+- Back closes the innermost of a confirm, a radio list and a sheet, then clears a
+  search, then closes the menu; so does a tap outside the window. × closes it.
+- A hardware keyboard works as in the overlay, except in a field being typed in:
+  `j`/`k` move, `h`/`l` change the focused row, `/` finds the search field, `q` and
+  Escape go back, and Ctrl-G, F10 and F1 close the menu or open help over it.
 
 ## Pages
 

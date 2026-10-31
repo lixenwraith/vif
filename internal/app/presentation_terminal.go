@@ -37,6 +37,11 @@ type presentationState struct {
 	startScreen bool
 	// cell is the zoom the presentation opened at or the run last wrote back
 	cell float64
+	// menuHost is the presentation when it draws the menu itself, menu the snapshot
+	// it was last handed, and menuSent whether the first frame handed it one
+	menuHost menuPresentation
+	menu     []byte
+	menuSent bool
 }
 
 func validateBuildConfig(Config) error { return nil }
@@ -123,6 +128,7 @@ func (a *App) initPresentation() {
 	if z, ok := a.pres.(zoomPresentation); ok {
 		a.cell = z.Cell()
 	}
+	a.menuHost, _ = a.pres.(menuPresentation)
 	w, h := a.pres.Size()
 	a.orchestrator = render.NewRenderOrchestrator(a.pres.Surface(), w, h)
 	// 256 colors is for a text console, whose palette renderers choose their colors from

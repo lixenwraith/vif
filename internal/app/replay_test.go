@@ -1276,7 +1276,7 @@ func TestAReplayShowsNoInputTheRunPausedFor(t *testing.T) {
 	inject(t, a, &input.Intent{Type: input.IntentConfigMenu, Count: 1})
 	a.ctx.SetOverlaySelection("developer")
 	inject(t, a, &input.Intent{Type: input.IntentOverlayScroll, Motion: input.MotionRight, Count: 1})
-	a.ctx.SetOverlaySelection("journal")
+	a.ctx.SetOverlaySelection("developer/#Recording/journal")
 	inject(t, a, &input.Intent{Type: input.IntentOverlayScroll, Motion: input.MotionRight, Count: 1})
 	a.scribe.serveJournal()
 	if a.scribe.recorder.Load() == nil || a.ctx.SessionCtl.Journaling() {

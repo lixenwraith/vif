@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/glyph"
@@ -26,15 +27,18 @@ const cellDP = 12
 // view is the activity's SurfaceView as an app.Presentation. Frames wait in the
 // embedded glyph.Frames for the drawer to take them; the grid is the cells the
 // view's pixels hold, and the drawer stretches it over them, so a touch maps in
-// proportion; touches and keys arrive as terminal events.
+// proportion; touches and keys arrive as terminal events. The app draws the menu
+// itself: each snapshot goes to the listener, and its ops come back on a channel.
 type view struct {
 	*glyph.Frames
 	tex          *glyph.Texture
 	density      float32 // the screen's, which the zoom scales
 	cellW, cellH int     // the pixels a cell takes at least, sized by the density and the zoom
+	listener     Listener
 
 	events  chan terminal.Event
 	away    chan bool
+	menuOps chan mode.MenuOp
 	keys    hostkey.Report
 	pointer atomic.Bool
 	covered atomic.Bool // the keyboard is up: the status bar keeps to the half it repeats
@@ -52,7 +56,7 @@ type view struct {
 // newView opens the view at cell, a zoom vif.toml kept, 0 for none
 func newView(tex *glyph.Texture, raster bool, density float32, cell float64) *view {
 	v := &view{Frames: glyph.NewFrames(tex, raster), tex: tex, density: density, cell: cell,
-		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue)}
+		events: make(chan terminal.Event, eventQueue), away: make(chan bool, eventQueue), menuOps: make(chan mode.MenuOp, eventQueue)}
 	v.keys.Post = v.post
 	v.setCell()
 	return v
@@ -94,7 +98,12 @@ func (v *view) Stop() error            { return nil }
 func (v *view) Surface() render.Surface       { return v }
 func (v *view) Events() <-chan terminal.Event { return v.events }
 func (v *view) Away() <-chan bool             { return v.away }
+func (v *view) MenuOps() <-chan mode.MenuOp   { return v.menuOps }
 func (v *view) Covered() bool                 { return v.covered.Load() }
+
+// Menu hands the app the menu to draw, as gomobile passes a tree: JSON in a string,
+// empty for a closed menu
+func (v *view) Menu(snapshot []byte) { v.listener.Menu(string(snapshot)) }
 
 func (v *view) CellAspect() vmath.Aspect { return v.tex.Atlas().Aspect() }
 

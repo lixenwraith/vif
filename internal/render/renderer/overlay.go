@@ -140,6 +140,10 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	if !g.Valid {
 		return // Terminal too small to draw a legible window
 	}
+	content := r.gameCtx.GetOverlayContent()
+	if ctx.NativeMenu && content != nil && content.Layout == core.OverlayLayoutMenu {
+		return
+	}
 
 	if r.adapter == nil {
 		r.adapter = NewTUIAdapter(g.W, g.H)
@@ -150,7 +154,6 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	r.aspect = ctx.CellAspect
 
 	root := r.adapter.Region()
-	content := r.gameCtx.GetOverlayContent()
 
 	title := ""
 	if content != nil {

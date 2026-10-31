@@ -855,13 +855,18 @@ func (ctx *GameContext) GetStatusMessage() string {
 	return ""
 }
 
-// ShownStatusMessage returns the message the bar draws at now (Unix nano): the one
+// ShownStatus is the message the bar draws at now (Unix nano) and its kind: the one
 // last posted, until its kind's Shown has passed.
-func (ctx *GameContext) ShownStatusMessage(now int64) string {
+func (ctx *GameContext) ShownStatus(now int64) (string, parameter.StatusKind) {
 	if l := ctx.statusMessage.Load(); l != nil && now < l.since+parameter.StatusKinds[l.kind].Shown.Nanoseconds() {
-		return l.text
+		return l.text, l.kind
 	}
-	return ""
+	return "", parameter.StatusNotice
+}
+
+func (ctx *GameContext) ShownStatusMessage(now int64) string {
+	text, _ := ctx.ShownStatus(now)
+	return text
 }
 
 // ClearStatusMessage removes the message, whatever its kind

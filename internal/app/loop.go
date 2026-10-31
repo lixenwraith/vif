@@ -3,6 +3,7 @@
 package app
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -183,6 +184,10 @@ func (a *App) Loop() (*restartRequest, error) {
 	if p, ok := a.pres.(awayPresentation); ok {
 		awayChan = p.Away()
 	}
+	var menuOps <-chan mode.MenuOp
+	if a.menuHost != nil {
+		menuOps = a.menuHost.MenuOps()
+	}
 	a.holdFirstGame(awayChan)
 
 	// Prime the first tick, then start the game clock
@@ -279,6 +284,9 @@ func (a *App) Loop() (*restartRequest, error) {
 			} else {
 				wake()
 			}
+
+		case op := <-menuOps:
+			a.menuOp(op)
 
 		case <-inputs:
 			if !a.inputTick() {
@@ -596,20 +604,46 @@ func (a *App) startPrompt() string {
 	return "Click or press a key to start"
 }
 
+// menuOp applies what the host's menu asked and dispatches what it pushed, as a
+// key's intent is
+func (a *App) menuOp(op mode.MenuOp) {
+	before := a.pushed()
+	a.world.RunSafe(func() { a.router.MenuOp(op) })
+	if a.pushed() != before {
+		a.scheduler.DispatchEventsImmediately()
+	}
+}
+
+// pushMenu hands a host drawing the menu itself the snapshot when it changed. The
+// first frame hands over the menu as it stands, closed or not, so a run replacing
+// another dismisses what that one left up.
+func (a *App) pushMenu(snapshot []byte) {
+	if a.menuHost == nil || a.menuSent && bytes.Equal(snapshot, a.menu) {
+		return
+	}
+	a.menu, a.menuSent = snapshot, true
+	a.menuHost.Menu(snapshot)
+}
+
 // renderContext reads everything a frame draws from, in one critical section: Config
 // is mutated under updateMutex by LevelSetup and reset handlers, so it has to be read
 // with the cursor and the clock. The clock read is the continuous one — tick-written
 // stamps are quantised and show as stepped animation at a slowed rate. Everything
-// taken here is a local copy; a render never writes a tick-owned resource.
+// taken here is a local copy; a render never writes a tick-owned resource. The menu's
+// snapshot is built here too, after its refresh, and pushed off the lock.
 func (a *App) renderContext() render.RenderContext {
 	var (
 		snapTime         engine.TimeResource
 		cursorX, cursorY int
 		cursorValid      bool
 		out              render.RenderContext
+		menu             []byte
 	)
 	a.world.RunSafe(func() {
 		a.router.RefreshConfigMenu()
+		if a.menuHost != nil {
+			menu = a.router.MenuSnapshot()
+		}
 		snapTime.GameTime = a.ctx.TimeCtl.Now()
 		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
 		if pos, ok := a.world.LocalCursor(); ok {
@@ -620,6 +654,8 @@ func (a *App) renderContext() render.RenderContext {
 		// The start screen lifts with the launch's hold, whatever ended it
 		a.startScreen = a.startScreen && a.ctx.TimeCtl.Holds(engine.HoldStart)
 	})
+	a.pushMenu(menu)
+	out.NativeMenu = a.menuHost != nil
 	out.StartScreen = a.startScreen
 	if a.startScreen {
 		out.StartHelp = a.startHelpLabel()

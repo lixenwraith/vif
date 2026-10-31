@@ -35,7 +35,7 @@ func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
 	}
 	ctx.SetOverlaySelection("settings")
 	key(terminal.KeyEnter, 0)
-	ctx.SetOverlaySelection("auto")
+	ctx.SetOverlaySelection("settings/#Controls/auto")
 	key(terminal.KeyEnter, 0)
 	if ctx.AutoFire.Load() != engine.AutoFireOff || !ctx.TimeCtl.IsPaused() {
 		t.Fatal("auto-fire change did not apply while paused")
@@ -53,18 +53,18 @@ func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
 	key(terminal.KeyEnter, 0)
 	ctx.SetOverlaySelection("game")
 	key(terminal.KeyEnter, 0)
-	ctx.SetOverlaySelection("speed")
+	ctx.SetOverlaySelection("game/speed")
 	key(terminal.KeyRight, 0)
 	a.World().RunSafe(a.router.RefreshConfigMenu)
 	m := ctx.GetOverlayContent().Menu
-	if i := slices.IndexFunc(m.Rows, func(r core.OverlayMenuRow) bool { return r.Key == "speed" }); i < 0 || m.Rows[i].Value != "2x" || !ctx.TimeCtl.IsPaused() {
+	if i := slices.IndexFunc(m.Rows, func(r core.OverlayMenuRow) bool { return r.Key == "game/speed" }); i < 0 || m.Rows[i].Value != "2x" || !ctx.TimeCtl.IsPaused() {
 		t.Fatalf("queued speed change was not reflected: %+v", m)
 	}
 	key(terminal.KeyEscape, 0)
 	ctx.SetOverlaySelection("developer")
 	ctx.World.Resources.Status.SetSnapshotInterval(77)
 	key(terminal.KeyEnter, 0)
-	ctx.SetOverlaySelection("stat")
+	ctx.SetOverlaySelection("developer/#Logging/stat")
 	key(terminal.KeyRight, 0)
 	if got := ctx.World.Resources.Status.SnapshotInterval(); got != 200 {
 		t.Fatalf("numeric preset should increase a custom value, got %d", got)
@@ -106,7 +106,7 @@ func TestASoloPauseStandsUntilTheNextPause(t *testing.T) {
 	key(terminal.KeyCtrlG, 0)
 	ctx.SetOverlaySelection("game")
 	key(terminal.KeyEnter, 0)
-	ctx.SetOverlaySelection("pause")
+	ctx.SetOverlaySelection("game/pause")
 	key(terminal.KeyEnter, 0)
 	at := a.Position().Tick
 	a.Tick(3)

@@ -1,10 +1,12 @@
 package app
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/lifecycle"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
@@ -851,5 +854,84 @@ func TestAResetLeavesTheOperatorsMode(t *testing.T) {
 	if got := a.ctx.GetCommandText(); !a.ctx.IsCommandMode() || got != "log" {
 		t.Fatalf("after the reset the command line is open %t holding %q, want open holding %q",
 			a.ctx.IsCommandMode(), got, "log")
+	}
+}
+
+// menuScreen is a screen that draws the menu itself: it keeps each snapshot it is
+// handed and carries its player's ops
+type menuScreen struct {
+	awayScreen
+	ops   chan mode.MenuOp
+	mu    sync.Mutex
+	menus [][]byte
+}
+
+func (s *menuScreen) MenuOps() <-chan mode.MenuOp { return s.ops }
+
+func (s *menuScreen) Menu(snapshot []byte) {
+	s.mu.Lock()
+	s.menus = append(s.menus, snapshot)
+	s.mu.Unlock()
+}
+
+// handed is how many snapshots the screen was handed, and the last
+func (s *menuScreen) handed() (int, []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.menus) == 0 {
+		return 0, nil
+	}
+	return len(s.menus), s.menus[len(s.menus)-1]
+}
+
+// TestAHostDrawingTheMenuIsHandedItAsItChanges: a screen with a menu of its own is
+// handed the closed menu on the run's first frame, the menu when a key opens it and
+// nothing more while it stands unchanged, and the closed menu again once an op of
+// its own, carried by the loop, closes it.
+func TestAHostDrawingTheMenuIsHandedItAsItChanges(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	screen := &menuScreen{awayScreen: awayScreen{framePresentation: framePresentation{w: 80, h: 24},
+		away: make(chan bool, 1), events: make(chan terminal.Event, 1)}, ops: make(chan mode.MenuOp, 1)}
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5747,
+		Host: Host{Presentation: screen}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	done := make(chan error, 1)
+	go func() {
+		_, err := a.Loop()
+		done <- err
+	}()
+	wait := func(what string, ok func(n int, last []byte) bool) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) { // [wall] a bound
+			if n, last := screen.handed(); ok(n, last) {
+				return
+			} else if time.Now().After(deadline) {
+				t.Fatalf("%s: handed %d, the last %s", what, n, last)
+			}
+		}
+	}
+	wait("the first frame hands over the closed menu", func(n int, last []byte) bool { return n == 1 && last == nil })
+	screen.events <- terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlG}
+	wait("Ctrl-G hands over the menu", func(n int, last []byte) bool { return n == 2 && bytes.Contains(last, []byte(`"id":"game"`)) })
+	time.Sleep(300 * time.Millisecond) // frames of a menu standing unchanged
+	if n, _ := screen.handed(); n != 2 {
+		t.Fatalf("handed %d snapshots of a menu that stood unchanged", n)
+	}
+	screen.ops <- mode.MenuOp{Op: "close"}
+	wait("close hands over the closed menu", func(n int, last []byte) bool { return n == 3 && last == nil })
+	if a.ctx.IsOverlayActive() {
+		t.Fatal("the close op left the menu open")
+	}
+	screen.events <- terminal.Event{Type: terminal.EventClosed}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the loop did not end on the closed event")
 	}
 }

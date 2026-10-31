@@ -13,14 +13,38 @@ that proves wrong or that a document now states, and link the document instead.
   `"$(go env GOROOT)/bin/gofmt" -l`.
 - `android/` is its own module: a dependency bump in the root `go.mod` also needs
   `go -C android mod tidy`, which `android/toolchain.sh` checks before Gradle. A
-  container without egress to the Android SDK and JDK hosts cannot build the APK;
-  that check runs on a device.
-- The Java app type-checks without an SDK: `javac -cp android-all.jar` (Robolectric's
-  `org.robolectric:android-all` from Maven Central, the release `compileSdk` names;
-  an older release checks a change that uses no newer API) over
+  container without egress to `dl.google.com` cannot build the APK; with it, the
+  steps of `android/toolchain.sh install` by hand (the command-line tools zip it
+  pins, then `sdkmanager --licenses` and the platform, NDK, build-tools and
+  platform-tools) set the SDK up under `~/Android/Sdk` in minutes, and
+  `sdk.dir=` in `android/local.properties` names it. Gradle then stops on Maven
+  Central's 429 to the shared egress even for an artifact another repository holds:
+  an init script hooking `beforeSettings` and re-pointing every `mavenCentral()` at
+  Google's mirror (`maven-central.storage-download.googleapis.com/maven2/`), passed
+  with `-I`, builds the APKs in about four minutes.
+- The Java app type-checks without an SDK: `javac --release 17 -cp android-all.jar`
+  (Robolectric's `org.robolectric:android-all` from Maven Central, the release
+  `compileSdk` names: `16-robolectric-13921718` for `android-36.1`) over
   `android/app/src/main/java` and stubs for `R` and the bound `Game`, `Speaker` and
-  `Listener`. Maven Central answers a shared egress 429 at times, its listing too:
-  fetch the jar by its full path and retry after a pause.
+  `Listener`; the jar's `UnsupportedAppUsage` annotation warnings are noise to
+  filter. Maven Central answers a shared egress 429 at times, its listing too: fetch
+  the jar by its full path and retry after a pause.
+- The emulator runs without KVM: `emulator -avd <name> -no-window -no-audio
+  -no-boot-anim -gpu swiftshader_indirect -accel off -memory 2048 -cores 2
+  -no-snapshot` on the `android-36` default x86_64 image boots in about 14 minutes
+  on 4 vCPUs and takes `adb install`, `am start`, `input tap`, `input swipe x y x
+  y 3000` (a held press) and `exec-out screencap -p`. It is some 30x slower than a
+  phone, so the app, the launcher and system apps hit Android's 5 s input limit:
+  an "isn't responding" dialog swallows every tap until its Wait is tapped (read
+  its place from `dumpsys window windows`), `settings put global
+  hide_error_dialogs 1` hides them but then kills the app at its first ANR, and
+  `setprop ro.hw_timeout_multiplier 10` as root followed by `stop; start` (a
+  minute) multiplies the limits for the next framework. Even so a press and its
+  release can reach the app together after a stall, which no hold survives: the
+  menu's device pass belongs on a phone or an accelerated emulator. The
+  navigation bar takes the screen's bottom 126 px, so a hold on the game's status
+  bar lands about 150 px above the screen's foot; the vanguard game restarts
+  itself when nobody plays it, which looks like a reset the test caused.
 - `adb shell input` taps one finger only, and the emulator's user image refuses
   `sendevent` (SELinux). `adb shell uinput -` registers a touchscreen from JSON and
   injects multi-touch frames with millisecond delays, about 3 s after it starts. Its

@@ -23,6 +23,7 @@ import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 
 import com.lixen.vif.game.Game;
+import com.lixen.vif.game.Listener;
 
 import java.util.Arrays;
 
@@ -127,7 +128,17 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         if (!started) {
             try {
                 Game.start(files, wad, width, height, getResources().getDisplayMetrics().density, raster,
-                        activity.waiting(), speaker, err -> activity.runOnUiThread(() -> activity.exited(err)));
+                        activity.waiting(), speaker, new Listener() {
+                            @Override
+                            public void exited(String err) {
+                                activity.runOnUiThread(() -> activity.exited(err));
+                            }
+
+                            @Override
+                            public void menu(String json) {
+                                activity.runOnUiThread(() -> activity.menu(json));
+                            }
+                        });
             } catch (Exception e) {
                 Log.e(MainActivity.TAG, "game not started", e);
                 activity.finish();
@@ -373,7 +384,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     }
 
     /** The character a key types without Ctrl or Alt, 0 for none or a dead key. */
-    private static int typed(KeyEvent e) {
+    static int typed(KeyEvent e) {
         int typed = e.getUnicodeChar(e.getMetaState() & ~(KeyEvent.META_CTRL_MASK | KeyEvent.META_ALT_MASK));
         return (typed & KeyCharacterMap.COMBINING_ACCENT) != 0 ? 0 : typed;
     }

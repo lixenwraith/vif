@@ -7,7 +7,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 | Path | What |
 |---|---|
 | `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
-| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows, Android's splash screen insets to the start screen's size on its page (`themes.xml`) and the launcher icon insets on black, with its lines alone as the themed icon. |
+| `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `MenuDialog` (the configuration menu, drawn from the run's snapshot), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows, Android's splash screen insets to the start screen's size on its page (`themes.xml`) and the launcher icon insets on black, with its lines alone as the themed icon. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
 | `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sfx, music, sfx volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |
 | `toolchain.sh` | What the build needs: `make android` checks it, and `go.mod` here against the root's, before Gradle runs; `make android-toolchain` installs it. |
@@ -92,7 +92,13 @@ and max of take, paint and post.
 
 Controls: a tap is a left press and release on the cell under it, a finger moved
 while down drags the cursor, and one held on the status bar opens the
-configuration menu, whose rows a tap selects and a second tap acts on; keys, a
+configuration menu, which the app draws with its own widgets from the run's
+snapshot ([Menu: Android](../doc/config-menu.md#android)): pages that expand in
+place, switches, radio lists, − and + steppers, radio rows, buttons that confirm
+a destructive action, fields with the keyboard each takes, a search field, and
+the status line at the foot; Back closes the innermost window, clears a search,
+then the menu, and a hardware keyboard's `j`/`k`, `h`/`l`, `/`, `q`, Escape,
+Ctrl-G, F10 and F1 work as in the terminal's menu; keys, a
 hardware keyboard's or the system keyboard's, arrive as a terminal reports them;
 the keyboard's paste button, the Paste key, Ctrl-Shift-V and Shift-Insert type the
 clipboard's text, a `:join` link copied from the lobby for one, however long;
@@ -115,7 +121,9 @@ Back within a second and a half sends the app to the background, the game paused
 
 ## Test
 
-`go test ./...` here covers the tap and key mapping; the frame hand-off and that a
+`go test ./...` here covers the tap and key mapping, the menu crossing the binding
+and that `MenuDialog.java` names the node kinds, ops and field inputs the run's
+snapshot uses; the frame hand-off and that a
 cell frame painted from the atlas texture is the raster's pixels are `pkg/glyph`'s
 tests. On a device or
 emulator, `./gradlew connectedDebugAndroidTest` checks `CellDrawer.OnCanvas`
