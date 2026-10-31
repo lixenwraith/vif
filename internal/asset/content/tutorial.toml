@@ -3,11 +3,30 @@
 schema = 1
 
 [[blocks]]
+id = "welcome"
+lines = [
+  "welcome to vif, the cursor is you",
+  "move like vim, type to stay alive",
+  "f1 opens help from any mode",
+]
+
+[[blocks]]
 id = "modes"
 lines = [
   "i enters insert mode",
   "esc returns to normal mode",
   "esc in normal mode pings the grid",
+  "v toggles visual mode",
+  "where each step is the shield radius",
+]
+
+[[blocks]]
+id = "typing"
+lines = [
+  "type the glyph under the cursor",
+  "a match feeds your heat and boost",
+  "a miss burns ten heat and the boost",
+  "space clears ahead, backspace behind",
 ]
 
 [[blocks]]
@@ -16,6 +35,8 @@ lines = [
   "h moves the cursor left",
   "j moves down and k moves up",
   "l moves right",
+  "H J K L leap half a screen",
+  "the arrow keys move as well",
 ]
 
 [[blocks]]
@@ -24,6 +45,7 @@ lines = [
   "w jumps forward one word",
   "b jumps back one word",
   "e lands on the word end",
+  "W B and E step over punctuation",
 ]
 
 [[blocks]]
@@ -35,11 +57,23 @@ lines = [
 ]
 
 [[blocks]]
-id = "motion-screen"
+id = "motion-map"
 lines = [
-  "gg jumps to the top",
-  "G jumps to the bottom",
-  "M centers you vertically",
+  "gg jumps to the top, G to the bottom",
+  "M finds the middle row, m the column",
+  "gm lands in the center of the map",
+  "go is the top left corner",
+  "g$ is the bottom right",
+]
+
+[[blocks]]
+id = "motion-column"
+lines = [
+  "o finds the next glyph below",
+  "O finds the next glyph above",
+  "[ and ] do the same, up and down",
+  "{ and } hop between empty rows",
+  "% bounces to the matching bracket",
 ]
 
 [[blocks]]
@@ -52,12 +86,22 @@ lines = [
 ]
 
 [[blocks]]
+id = "markers"
+lines = [
+  "gl lights the colours to your right",
+  "then r, g or b jumps to that glyph",
+  "gh, gj and gk look the other ways",
+  "gll leaps to the nearest of any colour",
+]
+
+[[blocks]]
 id = "delete"
 lines = [
   "x deletes the char under you",
   "d plus a motion deletes a range",
   "dd clears the whole line",
   "D deletes to the end of line",
+  "u undoes a move, not a delete",
 ]
 
 [[blocks]]
@@ -66,6 +110,7 @@ lines = [
   "a count goes before a motion",
   "3w moves three words on",
   "5x deletes five chars",
+  "2dd clears two lines",
 ]
 
 [[blocks]]
@@ -74,22 +119,62 @@ lines = [
   "/ opens search mode",
   "enter jumps to the first match",
   "n and N walk the matches",
+  "the search wraps around the map",
 ]
 
 [[blocks]]
-id = "combat"
+id = "fire"
 lines = [
-  "tab jumps to the nearest nugget",
   "enter fires the main weapon",
-  "a cycles auto fire both off main",
+  "space or backspace fires the special",
+  "the special spends one heat",
+  "and bursts the dark glyphs and dust",
+]
+
+[[blocks]]
+id = "auto-fire"
+lines = [
+  "a cycles auto fire: both, off, main",
+  ":auto off and :auto main pick one",
+  "manual fire works in every state",
+  "the next run keeps your choice",
+]
+
+[[blocks]]
+id = "loot"
+lines = [
+  "tab jumps to your nugget",
+  "shift+tab finds the first gold glyph",
+  "each jump costs a slice of energy",
+  "grab a nugget for ten heat",
 ]
 
 [[blocks]]
 id = "state"
 lines = [
-  "heat rises when you mistype",
-  "energy feeds the shield",
-  "visual mode widens the ping",
+  "good keys raise heat, bad ones cost it",
+  "full heat boils over into a burst",
+  "energy of either sign holds the shield",
+  "a hit on the shield drains energy",
+]
+
+[[blocks]]
+id = "keys"
+lines = [
+  "p pauses the game and p resumes it",
+  "ctrl+s cycles music, effects, silence",
+  "ctrl+g or f10 opens the menu",
+  "ctrl+q quits from any mode",
+]
+
+[[blocks]]
+id = "pointer"
+lines = [
+  "a click or a tap moves you and fires",
+  "hold it down to keep on firing",
+  "a right click fires the special",
+  "the wheel moves you without a shot",
+  ":free toggles follow mouse",
 ]
 
 [[blocks]]
@@ -98,22 +183,60 @@ lines = [
   "q then a letter records a macro",
   "q again stops recording",
   "@ plus the letter replays it",
+  "@@ plus the letter loops it",
+  "q@ stops every playing macro",
 ]
 
 [[blocks]]
-id = "command"
+id = "command-line"
 lines = [
-  ": opens command mode",
-  ":h shows the help overlay",
-  ":t shows the telemetry overlay",
+  ": opens the command line",
+  "enter runs it, esc throws it away",
+  "up and down walk the history",
+  "a solo game waits while you type",
+]
+
+[[blocks]]
+id = "commands"
+lines = [
   ":n starts a new game",
+  ":p pauses, as p does",
+  ":h opens help, :t the telemetry",
+  ":g opens the menu",
   ":q quits",
+]
+
+[[blocks]]
+id = "pace"
+lines = [
+  ":speed + runs the game faster",
+  ":speed - slows it down",
+  ":speed reset brings it back",
+  ":step 5 pauses and steps five ticks",
+]
+
+[[blocks]]
+id = "together"
+lines = [
+  ":host :7777 opens your game",
+  ":join and an address joins theirs",
+  ":bot add seats a bot beside you",
+  ":leave plays on alone",
 ]
 
 [[blocks]]
 id = "corpus"
 lines = [
-  "drop txt files into ~/.config/vif/content/",
-  "pass -f dir to pick a corpus",
-  "this text ships in the binary",
+  "this primer ships inside vif",
+  "txt files in your content folder",
+  "replace it with text of your own",
+  "-f picks one file or folder to type",
+  ":content names what you are typing",
+]
+
+[[blocks]]
+id = "loop"
+lines = [
+  "that is the whole primer",
+  "it loops, so keep on typing",
 ]
