@@ -42,6 +42,8 @@ flowchart TD
 
 `pkg/audio` carries no ECS or APM concept. The app injects its sfx levels and
 sound shapes, and `MusicSystem` interprets the game's five-second APM signal.
+Beside the standard library the package imports only `lixenwraith/toml` and its
+`macro` expander, so it can leave the module whole.
 
 Runtime mode and build capability select whether this layer exists. In a full
 build, `ModePlay`, `ModeReplay` and `ModeScript` register the audio service;
@@ -176,13 +178,13 @@ structure before rendering.
 
 At startup the engine:
 
-1. registers `AudioConfig.BaseSounds`, which the game fills from the embedded
-   bank in `internal/asset/audio` via `parameter.BuiltinSounds`;
-2. loads a resolved optional `audio/sounds.toml`, replacing same-name
-   definitions;
-3. freezes the name-to-ID registry;
+1. registers `AudioConfig.BaseSounds` and `BaseVoices`, which the game fills
+   from the embedded bank in `internal/asset/audio` via `parameter.BuiltinSounds`;
+2. loads a resolved optional `audio/sounds.toml`, its sounds and voices
+   replacing same-name definitions and a new voice name adding an instrument;
+3. freezes the name-to-ID registry of sounds;
 4. pre-renders the variant cache, under the game's sound shapes
-   (`SoundShapes`), and the drum kit;
+   (`SoundShapes`), and the kit: the drums' variants and the tonal voices;
 5. resolves the game's sfx levels (`SfxLevels`) by stable sound name;
 6. registers `melody_gen`, `BasePatterns` and a resolved `audio/music.toml`
    (same name replaces), and builds the group arrangement before probing
@@ -244,11 +246,17 @@ crossfading slots:
 
 A pattern has up to 64 steps, 32 tracks, and 512 events per track. A track sets
 its instrument, chord-following, and humanization; its events set step position,
-velocity, scale degree, octave, duration, and probability. Tonal voices are a
-table of instruments, each an oscillator stage through a resonant low-pass under
-a filter envelope into an ADSR; the drum kit plays cached sounds. The pad and
-the lead are band-limited saws; the pluck a delay line a noise burst sets
-ringing. The bass and the piano are modal voices: a string as its partials, each
+velocity, scale degree, octave, duration, and probability. The tonal voices are
+data: a `[[voice]]` of the sound document names an instrument and its synthesis,
+an oscillator stage (sine, saw or square) through a resonant low-pass under a
+filter envelope into an ADSR, or a string, as a delay line or as its partials
+(`VoiceDef`). The shipped five are `voices.toml`; a document's voice of a shipped
+name retunes that instrument in place and a new name adds an instrument, which
+patterns name as they name any. `DefineVoice` hot-swaps one: the next note plays
+the new voice while a sounding one finishes on its own, and an instrument no voice
+defines plays a plain sine. The drum kit plays cached sounds. Of the shipped
+voices, the pad and the lead are band-limited saws; the pluck a delay line a noise
+burst sets ringing. The bass and the piano are modal voices: a string as its partials, each
 a decaying phasor at `k·f0` stretched by the string's inharmonicity, at the
 amplitude the strike position's comb, the spectral tilt (1/k struck, 1/k²
 plucked) and a velocity-dependent hammer low-pass leave it, decaying faster the
@@ -349,7 +357,7 @@ and `internal/system`, leaving `pkg/audio` reusable.
 The service receives optional files resolved through the common config-root
 hierarchy:
 
-- `sounds.toml` supplies sound definitions and name-based overrides;
+- `sounds.toml` supplies sound and voice definitions and name-based overrides;
 - `music.toml` supplies pattern definitions.
 
 The categorized locations are `audio/sounds.toml` and `audio/music.toml`.
@@ -365,9 +373,10 @@ status bar;
 `vif -check` checks music, then sounds, before startup and stops at the first
 document that fails, listing every invalid definition in it.
 
-The shipped banks are `internal/asset/audio/sfx.toml`, `drums.toml` and
-`music.toml`, embedded and handed to the engine as `BaseSounds` and
-`BasePatterns`; `pkg/audio` ships no authored content. Both documents may define
+The shipped banks are `internal/asset/audio/sfx.toml`, `drums.toml`,
+`voices.toml` and `music.toml`, embedded and handed to the engine as
+`BaseSounds`, `BaseVoices` and `BasePatterns`; `pkg/audio` ships no authored
+content. Both documents may define
 `[macros]` and invoke them ([TOML macros](toml-macros.md)); the shipped bank
 writes each drum lane and note line through one. `melody_gen` reserves its fixed
 ID in code and takes its placement from the bank; the generator rewrites its last
@@ -377,11 +386,14 @@ live tooling to update a playing registry.
 
 ## 10. Soundlab
 
-`cmd/soundlab` is the supported terminal authoring environment built on the
-same engine. It offers:
+Soundlab is the supported authoring environment built on the same engine.
+`internal/soundlab` holds the session, its documents, the verb table and the
+TUI, which runs over any `terminal.Terminal`; `cmd/soundlab` is its terminal
+command, the flags and the REPL, and a host with its own screen and speakers
+runs the package in-process, handing `NewSession` the speakers. It offers:
 
 - a command REPL;
-- a full-screen TUI: a browser of patterns and sounds beside a mixer that draws
+- a full-screen TUI: a browser of patterns, sounds and voices beside a mixer that draws
   every slot on one timeline and mutes a slot, a structural inspector, and the
   pattern editor, new or on an existing pattern: a drawn keyboard that records
   takes onto the key's degrees, and a step grid with a piano roll;
@@ -407,7 +419,43 @@ dotted path grammar follows TOML tags and Go types, while domain validation
 runs at `validate`/`apply`. See `cmd/soundlab/README.md` for the command/TUI
 reference.
 
-## 11. Extension checklist
+## 11. Ripping a recording
+
+`RipWAV` and `RipSamples` listen to a recording and estimate what the sequencer
+would need to play it: the tempo, where the bars fall, the key, the chord root
+each bar leans on, and per bar the kick, snare and hihat hits, the melody and the
+bass line as steps of the sixteenth grid (`Rip`). `Patterns` writes them as
+patterns of up to four bars, named `<name>_beat_<n>`, `<name>_melody_<n>` and
+`<name>_bass_<n>` in a group of their own and no tier; soundlab's `rip` adds
+them to the document, dirty, and sets the transport's tempo and key, so a slot
+plays the estimate at once. `ReadWAV` reads the file, any PCM or float width.
+
+The analysis runs at 22.05 kHz over 93 ms frames every 11.6 ms, each split into
+a harmonic and a percussive part by the medians across time and across frequency
+around it. The percussive onsets, each drum's band against its own peak with the
+kick's counting double, give the tempo (autocorrelation under a log-Gaussian
+prior centred on 120 BPM, folded into the sequencer's range) and the beats (a
+dynamic programme that holds to the period). A hit is a kick by its rise under
+100 Hz, a hihat by its rise above 5 kHz, a snare by the middle with some noise
+above 5 kHz, and may be two drums at once; the bar line is the phase whose
+downbeats carry a kick, no snare and the key's root in the bass, the snare on two
+and four, and the most change of chroma. The key is the root and scale whose tones
+hold the most chroma and whose others the least, the bass register voting for the
+tonic. Pitch salience sums a candidate's partials, the bass register's from its
+first three and the melody's with the bass's partials cancelled, so a bass's
+octave does not read as a melody note; a hidden path through the frames, scored
+against the costs of moving and of starting or ending a note, is cut into notes,
+which land on the key's nearest degree. `RipParams` holds every threshold.
+`DefaultRipParams` is the hand-set start, meant to be refined by a search over
+material the engine renders itself, whose patterns are known
+([TODO](todo.md#tune-the-rip)).
+
+What it does not yet tell apart: a bass note's attack from a kick, a plucked
+chord's attack from a snare, two voices in one register, and a note off the key
+from a change of key. What it writes is the engine's grid and scale, an estimate
+to edit, not a transcription.
+
+## 12. Extension checklist
 
 For a new sound effect:
 
@@ -422,16 +470,22 @@ For a new sound effect:
 5. verify rapid-fire, polyphony, mute, pause, silent-backend, and 256-command
    saturation behavior.
 
+For a new instrument, author a `[[voice]]` in `voices.toml` or in a user
+`sounds.toml` and name it in a pattern's track; soundlab auditions it with `note`
+and its keys.
+
 For music, keep new APM/campaign decisions in `MusicSystem` or configuration
 events and keep the sequencer unaware of gameplay concepts.
 
-## 12. Source map
+## 13. Source map
 
+- The package's own README, the module's at the spin-off: `pkg/audio/README.md`
 - Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
-- Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `drumkit.go`,
+- Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`
+- Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `kit.go`,
   `sound_render.go`
-- Sound schema, loading and registry: `pkg/audio/sound_spec.go`,
-  `sound_valid.go`, `sound_load.go`, `sound_registry.go`
+- Sound and voice schema, loading and registries: `pkg/audio/sound_spec.go`,
+  `sound_valid.go`, `sound_load.go`, `sound_registry.go`, `voice_spec.go`
 - Shared protocol identifiers: `pkg/audio/model`
 - Shipped sound and music banks: `internal/asset/audio/*.toml`,
   `internal/parameter.BuiltinSounds`, `BuiltinPatterns`
@@ -444,4 +498,5 @@ events and keep the sequencer unaware of gameplay concepts.
   `audio.go`, `audio_none.go`, `play.go`
 - Game policy: `internal/parameter/audio.go`, `music.go`, `sfx.go`,
   `sfx_audio.go`
-- Authoring tool: `cmd/soundlab`, `cmd/soundlab/README.md`
+- Authoring tool: `internal/soundlab`, its command `cmd/soundlab`,
+  `cmd/soundlab/README.md`

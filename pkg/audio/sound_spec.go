@@ -13,10 +13,12 @@ import "slices"
 //   - Source frequencies always track pitch variance; processor frequencies
 //     only when track_pitch is set.
 
-// SoundSpecFile is the root of a sound TOML document.
+// SoundSpecFile is the root of a sound TOML document: the sounds, and the voices
+// the tonal instruments play. The loaders return one with its includes flattened.
 type SoundSpecFile struct {
 	Include []string    `toml:"include,omitempty"`
-	Sound   []*SoundDef `toml:"sound"`
+	Sound   []*SoundDef `toml:"sound,omitempty"`
+	Voice   []*VoiceDef `toml:"voice,omitempty"`
 }
 
 // SoundDef is one renderable sound. Registration is by Name; a later

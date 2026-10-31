@@ -25,11 +25,17 @@ const (
 	InstrumentCount = model.InstrumentCount
 )
 
-// InstrumentByName resolves a canonical instrument name — the InstrumentType
-// String form, which is the TOML key space and is stable across enum
-// reordering.
+// InstrumentByName resolves an instrument's name: the drums and tonal voices the
+// model names, the TOML key space that is stable across enum reordering, and the
+// voices a sound document added (InstrumentName is the inverse).
 func InstrumentByName(s string) (InstrumentType, bool) {
-	return model.InstrumentByName(s)
+	if i, ok := model.InstrumentByName(s); ok {
+		return i, true
+	}
+	voiceMu.RLock()
+	defer voiceMu.RUnlock()
+	i, ok := voiceByName[s]
+	return i, ok
 }
 
 // === Patterns ===

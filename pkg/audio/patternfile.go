@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vif/pkg/tomlmacro"
+	"github.com/lixenwraith/toml/macro"
 )
 
 // LoadPatternDefs parses a music document into the authoring form without
@@ -19,7 +19,7 @@ func LoadPatternDefs(data []byte) ([]*PatternDef, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pattern spec: %w", err)
 	}
-	if raw, err = tomlmacro.ExpandDocument(raw); err != nil {
+	if raw, err = macro.ExpandDocument(raw); err != nil {
 		return nil, fmt.Errorf("pattern spec: %w", err)
 	}
 	if err := checkKeys("", raw, reflect.TypeOf(PatternSpecFile{})); err != nil {

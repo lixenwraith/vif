@@ -40,7 +40,7 @@ type Mixer struct {
 	output    io.Writer
 	outBroken bool
 	cache     *soundCache
-	kit       *drumKit
+	kit       *kit
 	sequencer *Sequencer
 	active    []activeSound
 
@@ -61,17 +61,17 @@ type Mixer struct {
 }
 
 // NewMixer creates a mixer writing to out
-func NewMixer(out io.Writer, cache *soundCache, kit *drumKit, period time.Duration) *Mixer {
+func NewMixer(out io.Writer, cache *soundCache, k *kit, period time.Duration) *Mixer {
 	m := &Mixer{
 		period:    period,
 		output:    out,
 		cache:     cache,
-		kit:       kit,
+		kit:       k,
 		cmds:      make(chan audioCmd, 256),
 		stopChan:  make(chan struct{}),
 		done:      make(chan struct{}),
 		errChan:   make(chan error, 1),
-		sequencer: NewSequencer(DefaultBPM, kit),
+		sequencer: NewSequencer(DefaultBPM, k),
 		active:    make([]activeSound, 0, 8),
 		pauseGain: 1.0,
 		duckGain:  1.0,
@@ -248,6 +248,8 @@ func (m *Mixer) apply(c audioCmd) {
 		m.kit.rebind(c.sound, c.bufs)
 	case cmdReloadPattern:
 		m.sequencer.ReloadPattern(c.pattern)
+	case cmdReloadVoice:
+		m.kit.setVoice(c.instr, c.voice)
 	case cmdPlayBuffer:
 		m.startBuffer(c.buf, c.f1)
 	case cmdAutoFill:

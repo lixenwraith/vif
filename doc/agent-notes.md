@@ -161,12 +161,28 @@ that proves wrong or that a document now states, and link the document instead.
   match the goroutines blocked in `sync.Mutex.Lock` against what each holds.
 - The mixer drops ticks under load, so audio time lags the wall clock and one tick
   can take 200 ms under `-race`: a test waiting on mixer state gives it seconds, not
-  periods. Load `cmd/soundlab` with ~24 race processes pinned to one CPU
+  periods. Load `internal/soundlab` with ~24 race processes pinned to one CPU
   (`taskset -c 0`), or force it with a sleep at the top of `renderTick`.
 - A closed listener's port is no refusing address: under `go test ./...` another
   package's listener can be given it and answer. Dial the near end of a held
   connection instead, which stays bound with nothing listening (vif-router's
   `TestEitherRouteRefusesBeforeDialling`).
+
+## Audio
+
+- A labelled corpus for the rip renders offline with no device: register a bank and
+  voices, `freezeSounds`, `newSoundCache().preloadAll(nil)`, `buildKit`,
+  `NewSequencer(bpm, kit)` with patterns placed in its slots, then `Generate` over
+  whole bars (`rip_test.go`'s `renderLoop`). The music fades in over
+  `MusicStartFadeIn`, so the first bar is quiet and a recall test skips it.
+- The rip's spectrogram frames are centred, so every onset reads about two frames
+  (23 ms) early in every band alike; the beat grid and the events share the bias,
+  and the sixteenth quantization cancels it. Do not correct one without the other.
+- The default drum rules were set from the band shares a scratch test printed for
+  the rendered loop's hits (a kick's rise under 100 Hz was 0.09 to 0.19 of its
+  rise, a hat's above 5 kHz 0.45, a snare's noise above 5 kHz 0.15 to 0.21):
+  print them again before moving a threshold, and expect a bass note's attack to
+  read as a kick.
 
 ## Locks
 

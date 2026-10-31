@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+package soundlab
 
 import (
 	"fmt"
@@ -10,25 +10,11 @@ import (
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
-// doc is an ordered, name-keyed working set. Order is document order — it is
-// what save emits and what ls shows — and survives replace-by-name so an edit
-// does not shuffle the file.
-//
-// Divergence is tracked on two independent axes (registry-vs-mixer is the
-// engine's problem):
-//
-//	dirty — per entry, document vs registry ('*' in ls/browser). Set by any
-//	entry mutation; cleared per entry by apply (registry now holds this
-//	content) and revert (this entry now holds registry content).
-//
-//	modified — per document, document vs disk ('● unsaved', quit guard). A
-//	one-way latch: any mutation sets it; only baseline events clear it —
-//	save (the document became the file) and replaceAll (load/builtin
-//	installed a new baseline). revert deliberately does NOT clear it:
-//	revert restores registry state, which has no defined relationship to
-//	what is on disk, so the unsaved warning must survive until a save
-//	re-anchors. The latch may over-warn (edit, then hand-restore
-//	baseline-identical content); it never under-warns.
+// doc is an ordered, name-keyed working set in document order, which save emits
+// and ls shows. dirty marks an entry diverging from the registry ('*'): any
+// mutation sets it, apply or revert of the entry clears it. modified latches a
+// document diverging from disk ('● unsaved'): any mutation sets it and only save
+// and replaceAll clear it, revert included, so it may over-warn, never under-warn.
 type doc[T any] struct {
 	order   []string
 	byName  map[string]T
@@ -49,6 +35,16 @@ func newSoundDoc() *doc[*audio.SoundDef] {
 		nameOf:  func(d *audio.SoundDef) string { return d.Name },
 		setName: func(d *audio.SoundDef, n string) { d.Name = n },
 		clone:   func(d *audio.SoundDef) *audio.SoundDef { return d.Clone() },
+	}
+}
+
+func newVoiceDoc() *doc[*audio.VoiceDef] {
+	return &doc[*audio.VoiceDef]{
+		byName:  map[string]*audio.VoiceDef{},
+		dirty:   map[string]bool{},
+		nameOf:  func(d *audio.VoiceDef) string { return d.Name },
+		setName: func(d *audio.VoiceDef, n string) { d.Name = n },
+		clone:   func(d *audio.VoiceDef) *audio.VoiceDef { return d.Clone() },
 	}
 }
 

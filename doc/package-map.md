@@ -101,6 +101,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, text-console palette detection and the quantizer that maps a 256-color frame to its sixteen colors, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for categorized files, terminal, content, audio, and network transport. |
+| `internal/soundlab` | The audio authoring environment over `pkg/audio`: a session holding the engine and the working documents, the verb table every front end dispatches through, the script runner, and the TUI over any `terminal.Terminal`, so a host with its own screen and speakers runs it in-process ([Audio §10](audio.md#10-soundlab)). |
 | `internal/snapshot` | Shared-capture wire model: the capture and its header, the compressed JSON envelope, the correction manifest with its pages and section hashes, and the selective shard set — none of which reads a world. Also the comparison surface: the key filters, the line format and diff, the per-store digest, the assembled shared and whole-instance line sets, and the capture/correction telemetry cells. The surface readers take the caller's world lock and never acquire one. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, per-slot player metrics and the bare key that mirrors this instance's own slot, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order; `behavior.go` runs every species a scenario's behavior programs define. |
@@ -123,7 +124,6 @@ flowchart TD
     Game --> Window["pkg/window"]
     Game --> Browser["pkg/browser"]
     Game --> HostKey["pkg/hostkey"]
-    Game --> Macro["pkg/tomlmacro"]
     Game --> Socket["pkg/websocket"]
 ```
 
@@ -135,7 +135,7 @@ flowchart TD
 | `pkg/window` | A desktop window that draws a cell grid: Xlib, EGL and GLES 2 loaded at run time with purego, keys and pointer posted as terminal events. Built on Linux and FreeBSD; `cmd/vif` links it unless `vif_nogui` or `vif_headless`, and `vif_gui` opens it by default. | `pkg/glyph` draws the frame; external terminal module and purego. |
 | `pkg/browser` | A web page as the screen and speakers on `js/wasm`: frames handed to the page one at a time as the cells changed since the one it holds, the mixer's PCM posted to the page (`Speaker`), keys, text, the pointer and resizes taken back as terminal events. | `pkg/glyph` encodes the frames; external terminal module and `syscall/js`. The page is `web/`. |
 | `pkg/hostkey` | The key report of a host that reads its platform's own key events: presses until a run asks for releases, then each key's press, repeats and release paired by the host's code for the physical key, taps for keys with no release, every hold ended when focus leaves. The window, the page and Android share it. | External terminal module only (its `KeyHolds` pairs the releases). |
-| `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the sound bank* are injected; the package ships no specs and imports nothing under `internal/`. |
+| `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the banks* are injected; the package ships no specs, and beside the standard library imports only `lixenwraith/toml` and its `macro` expander, so it can leave the module whole. |
 | `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
 | `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | The package and its subpackages use the standard library only; its default seed restates `vmath.Golden64` rather than importing it. |
 | `pkg/genetic/fitness` | Convert lifetime metric bundles to scalar fitness. | Depends on tracking types. |
@@ -145,7 +145,6 @@ flowchart TD
 | `pkg/network` | Framed messages over TCP or WebSocket (the browser's own socket on `js/wasm`), deflated per link once a handshake opens the stream; the accept and dial transport with its handshake budget and the hooks a session's handshakes plug into; the port's tick-drained inbound queue, bundled sends and the link probe it answers itself; an in-process mesh with shaped links; chunked bodies; crossing fences; session addresses and TLS. | Standard library, `pkg/linkpace` and `pkg/websocket`. It knows no kinds and no game: `Kinds` is the session layer's table over the kind byte, and the handshakes, the timing and the kinds come from its caller's `Config`. |
 | `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
 | `pkg/machine` | Per-entity state machines: an `Instance` a component carries (a state, its elapsed time, its entry's duration), and an immutable `Graph` built and validated once from typed hooks and stepped in fixed phases. | Standard library only: hooks reach the world through their host, by the context it passes or as its methods, and the host writes the state's flags to its components; `SwarmSystem`, `QuasarSystem`, `StormSystem` and `BehaviorSystem` are its hosts ([Behavior machines §2](machine-design.md#2-runtime)). |
-| `pkg/tomlmacro` | Expand macros in parsed TOML documents: typed parameters, substitution, array splicing, zipped `each`, bounded nesting and output. | Standard library only: it works on the parser's generic trees, so the FSM loader and bot graphs share one expander. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Standard library only, with its own `Point` and a default seed restating `vmath.Golden64`; surfaced through wall/maze events. |
 | `pkg/cave` | Side-scrolling cave profiles: each column's ceiling and floor rows as a pure integer function of its index and seed, from smoothed value noise, a snaking channel or jagged fractal walls, rough-rock detail, a ramp from a centred mouth or open map and an opening that widens it from a column on. | Standard library and `pkg/vmath`'s seed mix; surfaced through `EventCaveStart` and `EventCaveOpen`, which `WallSystem` lays and scrolls. |
 | `pkg/navigation` | Flow fields, recompute caches, flow steering, composite passability, multi-route graphs. | Owns its route-graph tuning; wall access is callback-based. |
@@ -218,7 +217,7 @@ The practical dependency rules are:
 | External module | Used by | What remains in vif |
 |---|---|---|
 | `lixenwraith/terminal` | app, service, input, mode (`tui` forms), render and renderers, ascimage, cmds and tools; core's crash reset and a few attribute and color-mode types in component, engine, pattern and system | Game-specific input semantics, compositor, renderers, and layout. |
-| `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, genetic persistence, soundlab, the router | Schemas, validation policy, semantic models, and application resolution. |
+| `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, genetic persistence, soundlab, the router; its `macro` package expands the macros scenarios, bot graphs and audio documents define ([TOML macros](toml-macros.md)) | Schemas, validation policy, semantic models, and application resolution. |
 | `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
@@ -232,7 +231,7 @@ duplicating version strings that would become stale.
 |---|---|
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (the view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
 | `cmd/ascimage` | Supported image converter/viewer command. |
-| `cmd/soundlab` | Supported audio document editor, REPL/TUI, sequencer audition environment, and script runner. |
+| `cmd/soundlab` | The audio document editor's terminal command: its flags and the REPL over `internal/soundlab`. |
 | `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |

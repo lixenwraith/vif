@@ -238,20 +238,6 @@ gap one level down: the behavior system drops it and counts
 `behavior.unknown_program_rejects`. `ValidateScenario`, which holds the machine and
 the compiled programs, can resolve each request's `program` against `[behaviors]`.
 
-### Author the tonal instruments as data
-
-- Priority: P3
-- Affected files: `pkg/audio/voice.go`, `pkg/audio/sound_spec.go`, `cmd/soundlab`
-
-The tonal voices (bass, piano, pad, lead, pluck) are a table in code, so a new
-timbre or a retuned bass is a Go change and soundlab cannot audition one. A
-`[[voice]]` table in `sounds.toml` with the same fields, loaded like a sound and
-hot-swapped like one, would put them under the author's hand; the bass voicing
-alternatives rendered for the music-smoothing review would then be a file edit.
-The offline conductor render that produced those comparisons (an APM timeline
-through the sequencer, no device) is a test-only harness in the review branch's
-scratch repository, and would be a `soundlab` or `vif-log` verb.
-
 ### Build the map and scenario editor
 
 - Priority: P2
@@ -1240,34 +1226,72 @@ nothing.
 
 Soundlab runs on Android in-process, as the game does, over the same engine and
 the user root's `audio/` documents, so a pattern written on the phone plays in the
-phone's game. The engine already runs there (`AudioConfig.Sink` takes the
-`Speaker`), and the host already turns taps, drags, keys and the system
-keyboard's text into `terminal.Event`s and flushes cell frames through
+phone's game. The foundation is in place: `internal/soundlab` holds the session,
+documents, verbs and TUI, `NewSession` takes the host's speakers as its sink
+(`Options.Sink`), and `RunTUI` runs over any `terminal.Terminal`, the host posting
+`EventClosed` to end it; the Android host already turns taps, drags, keys and the
+system keyboard's text into `terminal.Event`s and flushes cell frames through
 `glyph.Frames`. What remains:
 
-1. The session, documents, command table and `Execute`, with the TUI, move out of
-   `cmd/soundlab`'s `package main` into `internal/soundlab`; `cmd/soundlab` keeps
-   its flags and the REPL. The TUI already runs over `terminal.Terminal` alone.
-2. A `terminal.Terminal` over the Android view (its grid as `Size`, its event
+1. A `terminal.Terminal` over the Android view (its grid as `Size`, its event
    queue as `PollEvent`, `glyph.Frames.Flush`) runs it, started by a second bound
    entry beside `game.Start` that hands `NewSession` the `Speaker` as its sink;
    the start screen offers soundlab beside the game.
-3. Touch: the TUI reads keys alone. A tap hit-tests what was drawn: a key of the
+2. Touch: the TUI reads keys alone. A tap hit-tests what was drawn: a key of the
    keyboard plays its note, a step toggles, a tab or a pane takes the keys, a mixer
    row mutes its slot, a browser row selects. A strip of buttons stands for the
    keys a phone lacks (record, play, delete, save, new, edit, tempo, Tab, Esc), and
    the system keyboard serves `:` and the prompts, as in the game.
-4. Size: the views need 60×16 cells. A phone held landscape fits at the default
+3. Size: the views need 60×16 cells. A phone held landscape fits at the default
    cell; portrait needs the pinch zoom out, or a keyboard of fewer keys.
+
+### Tune the rip
+
+- Priority: P1
+- Affected files: `pkg/audio/rip.go`, `pkg/audio/rip_test.go`, `internal/soundlab`
+
+`RipSamples` ([Audio §11](audio.md#11-ripping-a-recording)) reads tempo, bars,
+key, drums, melody and bass off a recording under `DefaultRipParams`, hand-set
+from one rendered loop. What would make it good:
+
+1. A corpus the engine renders itself, patterns and tempo known, over the shipped
+   banks and voices at several tempos, keys and mixes, with a score (hits, notes
+   and bars matched) a search can maximize; `rip_test.go`'s `renderLoop` is its
+   seed, and `pkg/genetic`'s generational engine over `RipParams` the search. The
+   result ships as data, a `[rip]` table of the sound document or its own file,
+   with the defaults kept for a recording nothing tuned for.
+2. A bass attack reads as a kick and a chord's attack as a snare: a harmonic
+   check on the hit (a percussive rise with a pitched tail is a note) or the
+   learned front end below.
+3. Two voices in one register, chromatic notes and key changes within a recording
+   are outside the model: a second pass with the first estimate cancelled, and a
+   key per phrase.
+4. A small learned front end (onset and pitch salience from a few hundred
+   thousand weights, trained on the rendered corpus, run in pure Go) under the
+   same beat tracking and note segmentation, sized for a phone.
+
+### Render a conductor timeline offline
+
+- Priority: P3
+- Affected files: `internal/soundlab`, `cmd/vif-log`
+
+The offline conductor render that compared bass voicings for the music-smoothing
+review, an APM timeline through the sequencer with no device, is a test-only
+harness in a scratch repository and would be a `soundlab` or `vif-log` verb.
 
 ### Spin off `pkg/audio` as its own module
 
 - Priority: P2
-- Affected files: `pkg/audio`, `pkg/audio/model`, `pkg/tomlmacro`, `cmd/soundlab`
+- Affected files: `pkg/audio`, `pkg/audio/model`, `internal/parameter`,
+  `internal/service`, `internal/resource`, `internal/soundlab`, `go.mod`
 
-Two in-repository imports remain: `pkg/vmath` for three hash and stream
-constants, which inline, and `pkg/tomlmacro` for the macros both document
-loaders expand, which moves with it or into `lixenwraith/toml`.
+No in-repository import remains: beside the standard library the package imports
+only `lixenwraith/toml` and its `macro` expander, which moved there for this.
+What remains is the move itself: a `lixenwraith/audio` repository with the
+package at its root and `model` under it, the package README as its README with
+import paths rewritten, the repository LICENSE and a `go.mod` at this module's
+Go version; then this module's importers take the new path and `go.mod` requires
+it.
 
 ## Genetic library
 

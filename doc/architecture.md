@@ -235,7 +235,7 @@ The machine itself is generic. `internal/fsm/std` provides reusable variables,
 regions, guards, status/config access, and event actions through a capability
 host. `internal/manifest/fsm_bridge.go` binds those capabilities to the ECS and
 adds the small amount of game-specific behavior. Scenario and bot-graph documents
-expand `pkg/tomlmacro` macros between parsing and decoding
+expand their macros (`lixenwraith/toml/macro`) between parsing and decoding
 ([TOML macros](toml-macros.md)).
 
 Snapshot import has a side-effect-free staging form and a live reconciliation

@@ -13,13 +13,13 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/toml/macro"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
 	"github.com/lixenwraith/vif/internal/fsm/std"
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/pkg/tomlmacro"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -52,7 +52,7 @@ func ParseGraph(name string, data []byte) (*Graph, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
-	if doc, err = tomlmacro.ExpandDocument(doc); err != nil {
+	if doc, err = macro.ExpandDocument(doc); err != nil {
 		return nil, fmt.Errorf("bot %s: %w", name, err)
 	}
 	g := &Graph{Name: name, Settings: Settings{ActionsPerSecond: DefaultActionsPerSecond}, doc: doc}

@@ -1,20 +1,19 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
-
-// The verb table is the whole API: the REPL, script runner and TUI all
-// dispatch through Execute, so nothing one front-end can do is invisible to
-// another — that is what keeps the scripted E2E meaningful.
+package soundlab
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"slices"
 	"strings"
 )
 
-var errQuit = errors.New("quit")
+// ErrQuit is what the quit verb returns; a front end ends its loop on it
+var ErrQuit = errors.New("quit")
 
 type command struct {
 	usage    string
@@ -23,6 +22,9 @@ type command struct {
 	fn       func(*Session, []string) error
 }
 
+// commands is the verb table, the whole API: the REPL, the script runner and the
+// TUI dispatch through Execute, so nothing one front end can do is invisible to
+// another, which is what keeps the scripted end-to-end test authoritative.
 var commands map[string]*command
 
 // init, not a var literal: cmdHelp closes over the table.
@@ -30,21 +32,22 @@ func init() {
 	commands = map[string]*command{
 		"help": {"help [verb|keys]", "list commands or describe one", 0, 1, cmdHelp},
 		"quit": {"quit", "stop the engine and exit", 0, 0,
-			func(*Session, []string) error { return errQuit }},
+			func(*Session, []string) error { return ErrQuit }},
 
-		"load":    {"load sound|pattern <file>", "replace document from file (sound includes resolve within the file's dir)", 2, 2, cmdLoad},
+		"load":    {"load sound|pattern <file>", "replace document from file (sound includes resolve within the file's dir; voices come with the sounds)", 2, 2, cmdLoad},
 		"merge":   {"merge sound|pattern <file>", "overlay file onto document by name", 2, 2, cmdMerge},
-		"builtin": {"builtin sound|pattern", "seed document from built-ins (patterns: current registry snapshot)", 1, 1, cmdBuiltin},
-		"save":    {"save sound|pattern [file]", "write document; bare = provenance path", 1, 2, cmdSave},
+		"builtin": {"builtin sound|pattern|voice", "seed document from built-ins (patterns: current registry snapshot; sound seeds the voices too)", 1, 1, cmdBuiltin},
+		"save":    {"save sound|pattern [file]", "write document; bare = provenance path (the sound document carries the voices)", 1, 2, cmdSave},
 		"write":   {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
 		"export":  {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
+		"rip":     {"rip <file.wav> <name> [bars]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key", 2, 3, cmdRip},
 
-		"ls":    {"ls sound|pattern [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
+		"ls":    {"ls sound|pattern|voice [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
 		"show":  {"show <name>[.path]", "bare name = full TOML; deeper = leaf value or keys", 1, 1, cmdShow},
 		"where": {"where", "transport bar:step and per-slot sounding pattern", 0, 0, cmdWhere},
 		"stat":  {"stat", "backend, silent mode, play stats, dirty entries", 0, 0, cmdStat},
 
-		"new":   {"new sound|pattern <name>", "create an entry seeded with a minimal valid spec", 2, 2, cmdNew},
+		"new":   {"new sound|pattern|voice <name>", "create an entry seeded with a minimal valid spec", 2, 2, cmdNew},
 		"cp":    {"cp <src> <dst>", "duplicate an entry", 2, 2, cmdCp},
 		"mv":    {"mv <src> <dst>", "rename (sound noise variants re-roll: rng seeds from name)", 2, 2, cmdMv},
 		"mix":   {"mix <src> <dst>", "append src's tracks/layers into dst (same kind; src unchanged; validate dst after)", 2, 2, cmdMix},
@@ -60,7 +63,7 @@ func init() {
 
 		"play": {"play <name> [vol]", "audition document state (canonical take); falls back to registry", 1, 2, cmdPlay},
 		"hit":  {"hit kick|snare|hihat|clap [vol]", "audition a drum", 1, 2, cmdHit},
-		"note": {"note <midi> [vel] [steps] [instr]", "tonal audition via the melody slot (needs music running)", 1, 4, cmdNote},
+		"note": {"note <midi> [vel] [steps] [voice]", "tonal audition via the melody slot (needs music running); a dirty voice auto-applies", 1, 4, cmdNote},
 		"slot": {"slot <0|1|2|3> <pattern|-> [fade_ms] [q]", "assign a pattern (0 rhythm, 1 melody, 2 fill, 3 bass); dirty patterns auto-apply; - = silence", 2, 4, cmdSlot},
 
 		"music": {"music start|stop|reset", "transport control", 1, 1, cmdMusic},
@@ -98,7 +101,7 @@ func Execute(s *Session, raw string) error {
 
 	err := dispatch(s, line)
 	switch {
-	case errors.Is(err, errQuit):
+	case errors.Is(err, ErrQuit):
 		return err
 	case mustFail && err == nil:
 		return fmt.Errorf("expected failure: %s", line)
@@ -110,6 +113,26 @@ func Execute(s *Session, raw string) error {
 		return nil
 	}
 	return err
+}
+
+// RunScript runs lines until the end or a quit, strict: any outcome the line did
+// not ask for with - or ! aborts with its line number, since an unprefixed failure
+// in a script is a bug in the script or the editor.
+func RunScript(s *Session, in io.Reader) error {
+	sc := bufio.NewScanner(in)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	ln := 0
+	for sc.Scan() {
+		ln++
+		err := Execute(s, sc.Text())
+		if errors.Is(err, ErrQuit) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("line %d: %w", ln, err)
+		}
+	}
+	return sc.Err()
 }
 
 func dispatch(s *Session, line string) error {
@@ -138,8 +161,8 @@ type helpSection struct {
 var (
 	helpBrowse = helpSection{"browser", []keyHelp{
 		{"j k PgUp PgDn", "move; g G the ends; / finds the next name containing a term"},
-		{"h l", "patterns ⇄ sounds"},
-		{"space", "play a sound; put a pattern in its role's slot, or play and pause"},
+		{"h l", "patterns, sounds, voices"},
+		{"space", "play a sound or a voice's note; put a pattern in its role's slot, or play and pause"},
 		{"0-3", "put the pattern in that slot, or take it out"},
 		{"n", "new: a pattern opens in the editor, empty, playing along in a free slot; a sound in the inspector"},
 		{"e", "edit: a pattern in the editor's grid, a sound in the inspector"},
@@ -232,12 +255,21 @@ func cmdHelp(s *Session, a []string) error {
 	return nil
 }
 
-func kindArg(s string) (sound bool, err error) {
-	switch s {
-	case "sound":
-		return true, nil
-	case "pattern":
-		return false, nil
+// The kinds a document entry is of, in the order the browser's tabs stand
+const (
+	kindPattern = iota
+	kindSound
+	kindVoice
+	kindCount
+)
+
+var kindWords = [kindCount]string{"pattern", "sound", "voice"}
+
+func kindWord(kind int) string { return kindWords[kind] }
+
+func kindArg(s string) (int, error) {
+	if i := slices.Index(kindWords[:], s); i >= 0 {
+		return i, nil
 	}
-	return false, fmt.Errorf("want sound|pattern, got %q", s)
+	return 0, fmt.Errorf("want sound|pattern|voice, got %q", s)
 }

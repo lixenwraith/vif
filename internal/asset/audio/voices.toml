@@ -1,0 +1,104 @@
+# The tonal voices: an oscillator stack through a resonant low-pass under a filter
+# envelope into an ADSR, or a string, as a delay line ("string") or as its partials
+# ("modal"). A name patterns use binds to that instrument; a later file overrides
+# one by name, and a new name adds an instrument. Times are seconds, frequencies Hz,
+# sustain and levels linear; an omitted key is the neutral default.
+
+[[voice]]
+name = "bass"
+desc = "finger-plucked string into a pickup resonance and an amp; the note-off a 45 ms damper"
+wave = "modal"
+partials = 40
+strike_pos = 0.2
+tilt = 1.7
+inharm = 0.00008
+inharm_track = 1
+decay_time = 0.7
+decay_track = 0.5
+damp_hz = 900
+pair = 1.2
+pair_level = 0.3
+pair_slow = 0.4
+hammer_hz = 3000
+knock = 0.08
+cutoff = 2200
+q = 1.3
+attack = 0.003
+sustain = 1
+release = 0.045
+drive = 1.4
+level = 1.0
+
+[[voice]]
+name = "piano"
+desc = "hammered string with a grand's stretch, the soundboard's roll-off and the double decay"
+wave = "modal"
+partials = 40
+strike_pos = 0.12
+tilt = 1.0
+inharm = 0.0004
+inharm_track = 1.3
+decay_time = 0.9
+decay_track = 0.6
+damp_hz = 2600
+pair = 1.6
+pair_level = 0.28
+pair_slow = 0.3
+hammer_hz = 2600
+knock = 0.12
+cutoff = 1200
+key_track = 6
+q = 0.5
+attack = 0.002
+sustain = 1
+release = 0.09
+level = 0.8
+
+[[voice]]
+name = "pad"
+desc = "three detuned saws under a slow low-pass"
+wave = "saw"
+unison = 3
+detune = 1.006
+cutoff = 200
+key_track = 2.2
+q = 0.6
+attack = 0.35
+decay = 0.3
+sustain = 0.8
+release = 1.3
+level = 1.0
+
+[[voice]]
+name = "lead"
+desc = "two detuned saws through a plucked filter and a drive"
+wave = "saw"
+unison = 2
+detune = 1.004
+cutoff = 300
+key_track = 3.0
+env_amount = 1600
+env_decay = 0.18
+q = 0.7
+attack = 0.005
+decay = 0.2
+sustain = 0.55
+release = 0.25
+drive = 1.0
+level = 1.1
+
+[[voice]]
+name = "pluck"
+desc = "a string a noise burst sets ringing"
+wave = "string"
+unison = 1
+bright = 0.3
+ring = 0.7
+cutoff = 900
+key_track = 2.5
+q = 0.5
+attack = 0.001
+decay = 0.1
+sustain = 1
+release = 0.12
+level = 1.0

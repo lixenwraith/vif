@@ -113,7 +113,7 @@ func (p *Pattern) Def() *PatternDef {
 	for i := range p.Tracks {
 		tr := &p.Tracks[i]
 		td := TrackDef{
-			Instr:       tr.Instr.String(),
+			Instr:       InstrumentName(tr.Instr),
 			Desc:        tr.Desc,
 			FollowChord: tr.FollowChord,
 			Humanize:    tr.Humanize,
@@ -164,7 +164,7 @@ func ValidatePattern(p *Pattern) error {
 	}
 	for i := range p.Tracks {
 		tr := &p.Tracks[i]
-		if tr.Instr < 0 || tr.Instr >= InstrumentCount {
+		if !instrumentKnown(tr.Instr) {
 			return e("track %d: instrument %d out of range", i, tr.Instr)
 		}
 		// TriggerStep computes rng.IntN(int(Humanize*HumanizeMaxDelaySamples)+1).

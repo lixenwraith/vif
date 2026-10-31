@@ -94,7 +94,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Scenario | `scenario/main/scenario.toml` | embedded scenario |
 | Keymap | `input/keymap.toml` | embedded keymap |
 | Music | `audio/music.toml` | built-in patterns |
-| Sounds | `audio/sounds.toml` | built-in sound bank |
+| Sounds | `audio/sounds.toml` | built-in sound bank and voices |
 | Content | `content/` | embedded tutorial corpus |
 | Wall image | `image/<name>.vifimg` | none; failure is reported in the game status |
 | Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |
