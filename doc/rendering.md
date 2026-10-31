@@ -382,6 +382,15 @@ one shade, `KrakenRimRune`, in the color of the first disc reaching a cell: that
 disc reaches it near its outer edge, so a rim graded by distance from it showed its
 outer shade alone.
 
+The discs sit `KrakenSampleStep` apart toward the tip and every third, then every
+second, within 10 and 20 cells of the body (`KrakenSampleStrides`), where they are
+widest. Over 4,000 poses of the campaign's kraken region that is 518 discs instead
+of 790 and 49% fewer stamped cells, against the even spacing: 0.06% of drawn cells
+vanish at the edges, 0.15% turn between solid and rim, 0.2% shift color by more
+than two levels and 0.25% of footprint cells change. `BenchmarkKrakenRegion` in the
+browser build, medians of five alternating runs: a tick's three frames 0.24 to
+0.15 ms, the region's tick 0.58 to 0.49 ms; native, 112 to 64 µs and 174 to 152 µs.
+
 A cell can hold several glyphs while drift carries layers past one another. The
 glyph renderer draws typeable text in its cell, only the cell's top glyph, the one
 typing acts on (`Position.TopGlyphIs` settles a cell holding one entity by its
