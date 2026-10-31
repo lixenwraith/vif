@@ -37,13 +37,15 @@ final class StartScreen extends FrameLayout {
             {"Back", "Escape; twice quickly, leave with the game paused"},
     };
     private static final String KEYBOARD = "With a keyboard, F1 or :help lists every key and command, and :q quits.";
-    // The site's hairline, muted text, the primary button's blue and the periwinkle a
-    // ring of that blue is labelled in, as web/terminal.css names them; its page is
-    // R.color.page, which the window and the splash wear too
-    private static final int LINE = 0x26FFFFFF, MUTED = 0xFF94A3B8, BUTTON = 0xFF2563EB, ACCENT = 0xFF8EA2FF;
+    // The site's surface, hairline, muted text, the primary button's blue and the royal
+    // blue it fills while pressed, the periwinkle a ring of that blue is labelled in and
+    // its red, as web/terminal.css names them; its page is R.color.page, which the
+    // window and the splash wear too. The menu (MenuDialog) wears the same.
+    static final int SURFACE = 0xFF1A1B26, LINE = 0x26FFFFFF, MUTED = 0xFF94A3B8, BUTTON = 0xFF2563EB,
+            HOVER = 0xFF5F57F5, ACCENT = 0xFF8EA2FF, DANGER = 0xFFF87171;
     // The buttons' fade in after the splash, which showed the logo alone while the app loaded
     private static final long FADE_MS = 150;
-    private static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+    static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
 
     private final int logoSide;
     private final TextView prompt;
@@ -114,11 +116,7 @@ final class StartScreen extends FrameLayout {
         LinearLayout window = new LinearLayout(c);
         window.setOrientation(LinearLayout.VERTICAL);
         window.setClickable(true); // a tap inside is not one outside
-        GradientDrawable frame = new GradientDrawable();
-        frame.setColor(c.getColor(R.color.page));
-        frame.setStroke(dp(1), LINE);
-        frame.setCornerRadius(dp(8));
-        window.setBackground(frame);
+        window.setBackground(frame(c));
         LayoutParams margin = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
         margin.setMargins(dp(16), dp(16), dp(16), dp(16));
         outside.addView(window, margin);
@@ -164,12 +162,27 @@ final class StartScreen extends FrameLayout {
     }
 
     private TextView text(String s, float sp, int color) {
-        TextView t = new TextView(getContext());
+        return text(getContext(), s, sp, color);
+    }
+
+    /** A line of the site's text: Roboto at sp, in color. */
+    static TextView text(Context c, String s, float sp, int color) {
+        TextView t = new TextView(c);
         t.setText(s);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         t.setTextColor(color);
         t.setTypeface(Typeface.SANS_SERIF);
         return t;
+    }
+
+    /** A window's frame: the page inside a hairline, its corners rounded. */
+    static GradientDrawable frame(Context c) {
+        float density = c.getResources().getDisplayMetrics().density;
+        GradientDrawable frame = new GradientDrawable();
+        frame.setColor(c.getColor(R.color.page));
+        frame.setStroke(Math.round(density), LINE);
+        frame.setCornerRadius(8 * density);
+        return frame;
     }
 
     private int dp(float v) {

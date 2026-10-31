@@ -1,6 +1,8 @@
 package game
 
 import (
+	"os"
+	"regexp"
 	"slices"
 	"testing"
 
@@ -206,5 +208,31 @@ func TestTheMenuCrossesTheBindingAsJSONAndOps(t *testing.T) {
 	}
 	if len(v.menuOps) != eventQueue {
 		t.Fatalf("%d ops queued past the queue's %d", len(v.menuOps), eventQueue)
+	}
+}
+
+// TestTheAppIsWrittenToTheRunsMenuContract: MenuDialog.java names the node kinds, the
+// ops and the field inputs the run's snapshot and hooks use, each list in the run's
+// order, so the two sides of one APK cannot drift.
+func TestTheAppIsWrittenToTheRunsMenuContract(t *testing.T) {
+	src, err := os.ReadFile("../app/src/main/java/com/lixen/vif/MenuDialog.java")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		want []string
+	}{{"KINDS", mode.MenuKinds[:]}, {"OPS", mode.MenuOps}, {"INPUTS", mode.MenuInputs}} {
+		m := regexp.MustCompile(`static final String\[\] ` + c.name + ` = \{([^}]*)\};`).FindSubmatch(src)
+		if m == nil {
+			t.Fatalf("MenuDialog.java declares no %s", c.name)
+		}
+		var got []string
+		for _, q := range regexp.MustCompile(`"([^"]*)"`).FindAllSubmatch(m[1], -1) {
+			got = append(got, string(q[1]))
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%s is %q in the app, %q in the run", c.name, got, c.want)
+		}
 	}
 }
