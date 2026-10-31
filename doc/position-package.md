@@ -288,6 +288,10 @@ not. What each change read, against the main it landed on:
 - The readers that paid a cell: the maze spawn, some 3,700 box-drawn walls laid
   and taken down whole, 7.5% under main at 200×60, 18% at 400×120 and 11% at
   500×254; the route graph 3.5% under, its fill a small share of its Dijkstra.
+- The flat point, two ints where three stood: a position costs 16 bytes in a row,
+  a log entry or a trail cell where it cost 24, and a capture no column of
+  zeros; the world copy at the map limit 8% under main fresh and 3% reused, td's
+  headless ticks 6% under, td's tick with sixteen cursors at parity.
 
 Across the changes td's tick read from 0.40 ms before the move to 0.29 ms, each
 step against its own main; the tables each PR carried are in the git history.
