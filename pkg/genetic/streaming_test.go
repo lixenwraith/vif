@@ -67,9 +67,10 @@ func TestStreaming_Elitism(t *testing.T) {
 	}
 }
 
-// With SetEqual the archive never holds two equal genotypes, while a distinct
-// genotype with the same score is still admitted
-func TestStreaming_RejectsDuplicates(t *testing.T) {
+// Under SetEqual a genotype is archived once, at its best score: a repeat
+// outcome below it is discarded and one above it moves the member up, while a
+// distinct genotype with an equal score is still admitted
+func TestStreaming_HoldsAGenotypeOnceAtItsBestScore(t *testing.T) {
 	cfg := DefaultStreamingConfig()
 	cfg.PoolSize = 8
 	e := newTestEngine(t, cfg)
@@ -79,18 +80,44 @@ func TestStreaming_RejectsDuplicates(t *testing.T) {
 		e.CompleteEvaluation(e.BeginEvaluation([]float64{0.5}), 1)
 		e.CompleteEvaluation(e.BeginEvaluation([]float64{float64(i % 3)}), 1)
 	}
+	e.CompleteEvaluation(e.BeginEvaluation([]float64{0.5}), 0.25)
+	e.CompleteEvaluation(e.BeginEvaluation([]float64{2}), 3)
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if len(e.archive) != 4 {
-		t.Fatalf("archive holds %d members, want 4 distinct", len(e.archive))
+	members := e.Snapshot().Members
+	if len(members) != 4 {
+		t.Fatalf("archive holds %d members, want 4 distinct", len(members))
 	}
-	for i := range e.archive {
-		for j := i + 1; j < len(e.archive); j++ {
-			if slices.Equal(e.archive[i].Data, e.archive[j].Data) {
-				t.Fatalf("duplicate genotype %v", e.archive[i].Data)
+	for i := range members {
+		for j := i + 1; j < len(members); j++ {
+			if slices.Equal(members[i].Data, members[j].Data) {
+				t.Fatalf("duplicate genotype %v", members[i].Data)
 			}
 		}
+	}
+	if members[0].Score != 3 || members[0].Data[0] != 2 {
+		t.Fatalf("the better repeat did not move its genotype up: %v", members[0])
+	}
+	if members[3].Score != 1 {
+		t.Fatalf("the worse repeat changed the archive: %v", members)
+	}
+}
+
+// An evaluation is evicted only when every slot its id may occupy holds a newer
+// one, so one left in flight outlives any number of completed issues
+func TestStreaming_LongEvaluationOutlivesCompletedIssues(t *testing.T) {
+	cfg := DefaultStreamingConfig()
+	cfg.PendingCapacity = 16
+	cfg.Seed = 6
+	e := newTestEngine(t, cfg)
+
+	_, long := e.Propose()
+	for range 10_000 {
+		g, id := e.Propose()
+		e.CompleteEvaluation(id, g[0])
+	}
+	e.CompleteEvaluation(long, 2)
+	if s := e.Stats(); s.Evicted != 0 || s.BestScore != 2 {
+		t.Fatalf("the long evaluation was lost: evicted %d, best %v", s.Evicted, s.BestScore)
 	}
 }
 
@@ -285,6 +312,7 @@ func TestStreaming_CheckpointContinuesTheExactStream(t *testing.T) {
 
 func TestStreaming_RestoreRejectsInvalidStateWithoutMutation(t *testing.T) {
 	e := newTestEngine(t, DefaultStreamingConfig())
+	e.Propose()
 	before, err := e.Checkpoint()
 	if err != nil {
 		t.Fatal(err)
@@ -293,9 +321,13 @@ func TestStreaming_RestoreRejectsInvalidStateWithoutMutation(t *testing.T) {
 	badVersion.Version++
 	badConfig := before
 	badConfig.Config.PoolSize++
+	badSlot := before
+	badSlot.Pending = slices.Clone(before.Pending)
+	badSlot.Pending[0].Slot = (badSlot.Pending[0].Slot + pendingWindow) & int(e.pending.mask)
 	for name, bad := range map[string]StreamingState[[]float64, float64]{
 		"version": badVersion,
 		"config":  badConfig,
+		"slot":    badSlot,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := e.Restore(bad); err == nil {

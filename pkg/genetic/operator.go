@@ -125,7 +125,7 @@ type TournamentSelector[S Solution, F Numeric] struct {
 	TournamentSize int
 }
 
-func (ts *TournamentSelector[S, F]) Select(members, dst []Candidate[S, F], rng *rand.Rand) {
+func (ts *TournamentSelector[S, F]) Select(members, dst []Candidate[S, F], _ uint64, rng *rand.Rand) {
 	n := len(members)
 	if n == 0 {
 		return
@@ -144,19 +144,38 @@ func (ts *TournamentSelector[S, F]) Select(members, dst []Candidate[S, F], rng *
 }
 
 // RouletteSelector picks proportionally to score, shifted to tolerate negatives.
+// Its cumulative table is rebuilt only when the archive version changes.
 // Not goroutine-safe; the owning engine serializes access
 type RouletteSelector[S Solution, F Numeric] struct {
-	cum []float64
 	// Floor is added to every shifted weight so the worst member stays selectable
 	Floor float64
+
+	cum     []float64
+	total   float64
+	version uint64
+	built   bool
 }
 
-func (rs *RouletteSelector[S, F]) Select(members, dst []Candidate[S, F], rng *rand.Rand) {
+func (rs *RouletteSelector[S, F]) Select(members, dst []Candidate[S, F], version uint64, rng *rand.Rand) {
 	n := len(members)
 	if n == 0 {
 		return
 	}
+	if !rs.built || rs.version != version {
+		rs.build(members, version)
+	}
 
+	for i := range dst {
+		idx := sort.SearchFloat64s(rs.cum, rng.Float64()*rs.total)
+		if idx >= n {
+			idx = n - 1
+		}
+		dst[i] = members[idx]
+	}
+}
+
+func (rs *RouletteSelector[S, F]) build(members []Candidate[S, F], version uint64) {
+	n := len(members)
 	if cap(rs.cum) < n {
 		rs.cum = make([]float64, n)
 	}
@@ -179,14 +198,7 @@ func (rs *RouletteSelector[S, F]) Select(members, dst []Candidate[S, F], rng *ra
 		total += float64(members[i].Score) - minScore + floor
 		rs.cum[i] = total
 	}
-
-	for i := range dst {
-		idx := sort.SearchFloat64s(rs.cum, rng.Float64()*total)
-		if idx >= n {
-			idx = n - 1
-		}
-		dst[i] = members[idx]
-	}
+	rs.total, rs.version, rs.built = total, version, true
 }
 
 // --- Recombination ---

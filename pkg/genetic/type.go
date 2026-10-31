@@ -1,3 +1,7 @@
+// Package genetic is an evolutionary optimizer for simulations and games: a
+// caller-driven steady-state StreamingEngine whose evaluations complete
+// asynchronously and checkpoint exactly, a generational Engine with a
+// synchronous evaluator, and the operators both share. Standard library only.
 package genetic
 
 import "math/rand/v2"
@@ -48,9 +52,11 @@ type (
 	EqualFunc[S Solution] func(a, b S) bool
 )
 
-// Selector fills dst with parents drawn from members. Implementations must not allocate
+// Selector fills dst with parents drawn from members. version changes whenever
+// members does, so a selector may keep work derived from them between calls.
+// Implementations must not allocate on a steady version
 type Selector[S Solution, F Numeric] interface {
-	Select(members []Candidate[S, F], dst []Candidate[S, F], rng *rand.Rand)
+	Select(members []Candidate[S, F], dst []Candidate[S, F], version uint64, rng *rand.Rand)
 }
 
 // Combiner writes offspring into dst, reusing dst buffers when shape-compatible.
