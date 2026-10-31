@@ -25,8 +25,9 @@ three frames. Inside tmux or screen the terminal presentation floors that at
 which a tick at real time waits for. tmux drops a client's output once more than
 eight bytes a cell back up, then repaints it only every 100 ms until a quiet 100 ms
 comes, which a scrolling playfield never gives, so 60 frames a second showed as
-about 10. The terminal reads `TMUX` and `TERM` when it opens; other presentations
-draw at the run's rate. The player's `[play] max_fps` (`:fps`, Display → Max FPS)
+about 10. The terminal reads `TMUX` and `TERM` when it opens, and skips the floor
+when `vif.toml`'s `[presentation] tmux_frame_cap` is false (true by default); other
+presentations draw at the run's rate. The player's `[play] max_fps` (`:fps`, Display → Max FPS)
 takes the floor's place on any presentation, above it or below, within the same
 bounds: never faster than the run's rate, never slower than a frame a tick. The
 frame loop reads it after each frame and resets its ticker when it moves. Nothing
