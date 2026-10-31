@@ -231,7 +231,8 @@ that proves wrong or that a document now states, and link the document instead.
   `go test ./internal/asset`, a package the change never touches, catches it.
   Regenerate into scratch and diff: only the new glyph changes. The test reads
   every string in `internal/mode`, `app`, `help` and `prof` too, so a key nobody
-  sees stays ASCII.
+  sees stays ASCII, and a comment after code on its line as code, so that comment
+  does too.
 - Linux console fonts (console-setup's Uni and Lat sets) have █ ░ ▒ and single box
   lines but no ▀ ▄ ▌ ▐, quadrants or ▓, and draw double lines single; the 256 tier
   uses only what they have.

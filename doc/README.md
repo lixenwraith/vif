@@ -92,12 +92,13 @@ changing a subsystem, update the source that actually owns its shape.
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound and music banks | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`/`BuiltinPatterns`, `AudioConfig.BaseSounds`/`BasePatterns` |
-| CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
+| CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go`, and the manual's prose in its `writeManual` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
 | Release archive READMEs | `deploy/package/release-readme.md` | `make release-readme`, the `README.md` in each release archive |
 | External package versions | `go.mod` | Go module resolver |
 
 Run `make generate` after changing a manifest or generator input, and
-`VIF_WRITE_GENERATED=1 go test ./cmd/vif -run Generated` after changing a flag.
+`VIF_WRITE_GENERATED=1 go test ./cmd/vif -run Generated` after changing a flag or
+the manual's prose.
 Do not edit a generated file by hand.
 
 ## Accuracy conventions
