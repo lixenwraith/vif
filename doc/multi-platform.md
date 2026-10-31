@@ -548,10 +548,13 @@ its cells; the run hears of the keyboard (`Covered`, which the status bar reads 
 which the view draws again above the keyboard at twice its size from the same
 picture. A second Back within a second and a half sends the app to the
 background. A tap held on the status bar opens the configuration menu, the hold
-every host shares (`MenuHoldDuration`), and taps drive its rows; with mouse input
-off a press on the bar's rows still reaches the run, and an open overlay takes the
-pointer: a tap picks a row or a card or moves the scrollbar's thumb, a finger drags
-the thumb, and a tap outside the window is Escape. The page does each of these
+every host shares (`MenuHoldDuration`); the app draws it with its own widgets from
+the run's snapshot, a `Dialog` the view's `menuPresentation` hands each change to and
+whose taps come back as ops on a node's id ([Native menu](native-menu.md), [Menu:
+Android](config-menu.md#android)), while the `tui` overlay stays undrawn under it.
+With mouse input off a press on the bar's rows still reaches the run, and an open
+`tui` overlay (help, telemetry) takes the pointer: a tap picks a card or moves the
+scrollbar's thumb, a finger drags the thumb, and a tap outside the window is Escape. The page does each of these
 on a touch screen, timed alike: the triple
 tap (or the key strip's button), a keyboard measured from `visualViewport`, the
 bottom row drawn again above it, and the hold. Every page opens on the same start
@@ -594,9 +597,11 @@ emulator widget was measured at 80x the cell copy per frame;
 `terminal.NewWithBackend` keeps that seam for tooling); the font is a bitmap atlas
 generated once, not a TrueType rasterized at load; Android draws on a Canvas
 behind a drawer interface, and a GLES drawer is written only if a device misses
-60 fps; the configuration menu is the `tui` one on every host, summoned by a held
-press and driven by taps, and a menu Android draws itself is a later item
-([todo](todo.md#give-the-configuration-menu-a-touch-target-on-android)); the
+60 fps; the configuration menu is one tree the router holds, which the terminal, the
+desktop window and the browser draw as the `tui` overlay and Android with its own
+widgets from a JSON snapshot, answering with ops on a node's id (`menuPresentation`,
+[Native menu](native-menu.md)), the browser to follow Android
+([todo](todo.md#draw-the-configuration-menu-with-the-pages-own-widgets)); the
 cell aspect the presentation reports is one parameter of the simulation
 ([Rendering §2.2](rendering.md#22-the-cell-aspect)). Host adapters plug through
 `Host`; simulation modules plug through the manifest and the generator

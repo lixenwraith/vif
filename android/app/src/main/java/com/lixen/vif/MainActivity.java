@@ -37,6 +37,7 @@ public final class MainActivity extends Activity {
     private Speaker speaker;
     private GameView view;
     private StartScreen start; // over the view until its tap, null after
+    private MenuDialog menu; // the configuration menu while the run has it open
     private long backAt;
 
     @Override
@@ -59,8 +60,9 @@ public final class MainActivity extends Activity {
             Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             // The keyboard covers the view rather than shrinking it: a resize crops a
-            // crop_on_resize map, and what it cropped is gone when the keyboard is
-            view.keyboardCovers(Math.max(0, insets.getInsets(WindowInsets.Type.ime()).bottom - bars.bottom));
+            // crop_on_resize map, and what it cropped is gone when the keyboard is. One
+            // raised for the menu's fields is the menu's window's, not the game's
+            view.keyboardCovers(menu != null ? 0 : Math.max(0, insets.getInsets(WindowInsets.Type.ime()).bottom - bars.bottom));
             return WindowInsets.CONSUMED;
         });
         setContentView(root);
@@ -154,7 +156,28 @@ public final class MainActivity extends Activity {
         if (!err.isEmpty()) {
             Log.e(TAG, "game ended: " + err);
         }
+        menu("");
         finish();
+    }
+
+    /**
+     * The menu as the run has it, drawn with the platform's widgets over the game: a
+     * snapshot opens it or rewrites it in place, and an empty one dismisses it with
+     * whatever it has up. The run alone decides when it closes.
+     */
+    void menu(String json) {
+        if (json.isEmpty()) {
+            if (menu != null) {
+                menu.dismiss();
+                menu = null;
+            }
+            return;
+        }
+        if (menu == null) {
+            menu = new MenuDialog(this);
+            menu.show();
+        }
+        menu.apply(json);
     }
 
     /** Copies the APK's wad once per install; the stamp is the install's update time. */

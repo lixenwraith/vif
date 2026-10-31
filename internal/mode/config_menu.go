@@ -19,7 +19,24 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-type configOption struct {
+// nodeKind is what a menu row is to a host that draws the menu with its own
+// widgets; the tui menu draws every kind as a row
+type nodeKind uint8
+
+const (
+	kindGroup  nodeKind = iota // a page or a section, holding nodes
+	kindToggle                 // two states, a switch
+	kindChoice                 // one of several named values
+	kindStep                   // moved by a direction, − and +
+	kindPick                   // one of a pick list, which a press marks at once
+	kindAction                 // runs when activated and leaves the menu
+	kindForm                   // text fields: one typed in on its row, more in a window
+	kindInfo                   // read only
+)
+
+// configNode is a menu row, or a group of them: a page or a section
+type configNode struct {
+	kind                    nodeKind
 	key, label, description string
 	name                    func(*engine.GameContext) string // A label that follows the state, where the row's action does
 	command                 string
@@ -27,44 +44,35 @@ type configOption struct {
 	steps                   []uint64
 	read                    func(*engine.GameContext) string
 	change                  func(*engine.GameContext, int)
-	activate                func(*Router)
+	activate                func(*Router) // A run-time row's own action, which closes the menu itself
 	disabled                func(*engine.GameContext) string
-	action                  bool // Enter alone runs command, then leaves the menu
-	pick                    bool // One of a list a press marks at once, as Enter does
-	header                  bool // A section title, never selected
-	text                    bool // A text box typed in on its row
+	confirm                 bool                                   // A native host asks before it acts
+	marked                  bool                                   // The pick its list marks
+	form                    string                                 // The form a kindForm row opens, in configForms
+	nodes                   []configNode                           // A group's rows
+	extra                   func(*engine.GameContext) []configNode // A group's rows built at run time, after nodes
 }
 
-type configPage struct {
-	key, label, description string
-	options                 []configOption
-	extra                   func(*engine.GameContext) []configOption
-}
-
-// configPages is the menu's pages; set in init, since the forms its rows open
-// publish the menu it makes
-var configPages []configPage
-
-func init() {
-	configPages = []configPage{
-		{key: "game", label: "Game", description: "The game running now: pause it, restart it from its scenario's first tick, or change its speed.", options: []configOption{
-			{key: "pause", label: "Pause", name: pauseName, command: "pause", action: true, read: enterValue, disabled: pauseRefused,
-				description: "Stop the game until Resume, as :pause or p does; the menu closes and leaves it stopped. In a session only the host can, and every participant stops at the same tick."},
-			withDisabled(commandAction("restart", "Restart game", "Start this game over from its scenario's first tick. In a session only the host can, and every participant restarts with it.", "new"),
-				hostOnly("Only the host can restart the game in a session")),
-			{key: "speed", label: "Game speed", description: "Left slows down; Right or Enter speeds up. 1x is real time; range 1/8x to 8x. In a session only the host can, and every participant changes with it.",
-				command: "speed", read: func(ctx *engine.GameContext) string { return ctx.TimeCtl.Scale().String() + "x" },
-				change: func(ctx *engine.GameContext, d int) {
-					handleSpeedCommand(ctx, []string{engine.ScaleStep(ctx.TimeCtl.Scale(), d).String()})
-				}, disabled: speedRefused},
-		}, extra: replayConfigOptions},
-		{key: "scenarios", label: "Scenarios", description: "Choose a scenario and start a game of it, or name one that is not listed.", extra: scenarioConfigOptions},
-		{key: "multiplayer", label: "Multiplayer", description: "Host this game, join or leave a session, drop players, and add or remove your bots.", extra: multiplayerConfigOptions},
-		{key: "settings", label: "Settings", description: "Sound, controls, display and start: your preferences, each saved as it changes for the next run.", options: []configOption{
-			section("Sound"),
-			{key: "sfx", label: "Sound effects", description: "Game sound effects; independent of music.",
+// configPages is the menu's pages, each a group of its sections and rows
+var configPages = []configNode{
+	{kind: kindGroup, key: "game", label: "Game", description: "The game running now: pause it, restart it from its scenario's first tick, or change its speed.", nodes: []configNode{
+		{kind: kindAction, key: "pause", label: "Pause", name: pauseName, command: "pause", read: enterValue, disabled: pauseRefused,
+			description: "Stop the game until Resume, as :pause or p does; the menu closes and leaves it stopped. In a session only the host can, and every participant stops at the same tick."},
+		{kind: kindAction, key: "restart", label: "Restart game", command: "new", read: enterValue, confirm: true, disabled: hostOnly("Only the host can restart the game in a session"),
+			description: "Start this game over from its scenario's first tick. In a session only the host can, and every participant restarts with it."},
+		{kind: kindStep, key: "speed", label: "Game speed", description: "1x is real time; range 1/8x to 8x. In a session only the host can, and every participant changes with it.",
+			command: "speed", read: func(ctx *engine.GameContext) string { return ctx.TimeCtl.Scale().String() + "x" },
+			change: func(ctx *engine.GameContext, d int) {
+				handleSpeedCommand(ctx, []string{engine.ScaleStep(ctx.TimeCtl.Scale(), d).String()})
+			}, disabled: speedRefused},
+	}, extra: replayConfigOptions},
+	{kind: kindGroup, key: "scenarios", label: "Scenarios", description: "Choose a scenario and start a game of it, or name one that is not listed.", extra: scenarioConfigOptions},
+	{kind: kindGroup, key: "multiplayer", label: "Multiplayer", description: "Host this game, join or leave a session, drop players, and add or remove your bots.", extra: multiplayerConfigOptions},
+	{kind: kindGroup, key: "settings", label: "Settings", description: "Sound, controls, display and start: your preferences, each saved as it changes for the next run.", nodes: []configNode{
+		section("Sound", []configNode{
+			{kind: kindToggle, key: "sfx", label: "Sound effects", description: "Game sound effects; independent of music.",
 				read: audioChannelValue(parameter.AudioChanSfx), change: toggleAudioChannel(parameter.AudioChanSfx), disabled: audioUnavailable},
-			{key: "sfx_volume", label: "Effects volume", description: "Sound effect volume, in steps of 5%; music is not affected. Muting keeps this level.",
+			{kind: kindStep, key: "sfx_volume", label: "Effects volume", description: "Sound effect volume, in steps of 5%; music is not affected. Muting keeps this level.",
 				read: func(ctx *engine.GameContext) string {
 					return fmt.Sprintf("%.0f%%", ctx.World.Resources.SfxVolume()*100)
 				},
@@ -72,13 +80,14 @@ func init() {
 					r := ctx.World.Resources
 					r.SetSfxVolume((math.Round(r.SfxVolume()*100) + float64(d*5)) / 100)
 				}, disabled: audioUnavailable},
-			{key: "music", label: "Music", description: "Procedural music; independent of sound effects.",
+			{kind: kindToggle, key: "music", label: "Music", description: "Procedural music; independent of sound effects.",
 				read: audioChannelValue(parameter.AudioChanMusic), change: toggleAudioChannel(parameter.AudioChanMusic), disabled: audioUnavailable},
-			section("Controls"),
-			{key: "auto", label: "Auto-fire", description: "off: manual fire; main: main weapon only; on: both weapons.",
+		}),
+		section("Controls", []configNode{
+			{kind: kindChoice, key: "auto", label: "Auto-fire", description: "off: manual fire; main: main weapon only; on: both weapons.",
 				command: "auto", choices: []string{"off", "main", "on"},
 				read: func(ctx *engine.GameContext) string { return engine.AutoFireWords[ctx.AutoFire.Load()] }},
-			{key: "mouse", label: "Mouse input", description: "Enable or ignore mouse movement and buttons.",
+			{kind: kindToggle, key: "mouse", label: "Mouse input", description: "Enable or ignore mouse movement and buttons.",
 				command: "mouse", choices: []string{"disable", "enable"},
 				read: func(ctx *engine.GameContext) string {
 					if ctx.MouseDisabled.Load() {
@@ -86,50 +95,55 @@ func init() {
 					}
 					return "enable"
 				}},
-			{key: "free", label: "Follow mouse", description: "Move the cursor with the pointer, without holding a button.",
+			{kind: kindToggle, key: "free", label: "Follow mouse", description: "Move the cursor with the pointer, without holding a button.",
 				command: "free", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.MouseFreeMode.Load()) }},
-			section("Display"),
-			{key: "fps", label: "Max FPS", description: "The most frames drawn a second, never under one a tick. Auto is three a tick (60 at the default tick), or 24 inside tmux or screen, which drop output that comes faster.",
+		}),
+		section("Display", []configNode{
+			{kind: kindStep, key: "fps", label: "Max FPS", description: "The most frames drawn a second, never under one a tick. Auto is three a tick (60 at the default tick), or 24 inside tmux or screen, which drop output that comes faster.",
 				command: "fps", read: func(ctx *engine.GameContext) string { return fpsWord(ctx.MaxFPS.Load()) },
 				change: func(ctx *engine.GameContext, d int) {
 					handleFPSCommand(ctx, []string{strconv.Itoa(fpsStep(int(ctx.MaxFPS.Load()), d))})
 				}},
-			{key: "hud", label: "Telemetry HUD", description: "Show pinned telemetry cards over the game. Pin cards in :t with Enter.",
+			{kind: kindToggle, key: "hud", label: "Telemetry HUD", description: "Show pinned telemetry cards over the game. Pin cards in the telemetry view (:t) with Enter or a press.",
 				command: "hud", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.OverlayHUD.Load()) }},
-			section("Pause"),
-			{key: "pause_menu", label: "Pause in menu", description: "Pause the game while this menu, help or telemetry is open. Applies where the game can pause: solo, or hosting only your own bots; a session with other players plays on.",
+		}),
+		section("Pause", []configNode{
+			{kind: kindToggle, key: "pause_menu", label: "Pause in menu", description: "Pause the game while this menu, help or telemetry is open. Applies where the game can pause: solo, or hosting only your own bots; a session with other players plays on.",
 				command: "pause menu", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.PauseMenu.Load()) }},
-			{key: "pause_command", label: "Pause in command line", description: "Pause the game while the command line is open. Applies where the game can pause: solo, or hosting only your own bots. With it off, :pause or p still pauses.",
+			{kind: kindToggle, key: "pause_command", label: "Pause in command line", description: "Pause the game while the command line is open. Applies where the game can pause: solo, or hosting only your own bots. With it off, :pause or p still pauses.",
 				command: "pause command", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.PauseCommand.Load()) }},
-			section("Start"),
-			{key: "wait", label: "Wait to start", description: "Hold each game you start or restart at its first tick until a key, click or tap starts it; in a session, the host's. A scenario's own restart never waits.",
+		}),
+		section("Start", []configNode{
+			{kind: kindToggle, key: "wait", label: "Wait to start", description: "Hold each game you start or restart at its first tick until a key, click or tap starts it; in a session, the host's. A scenario's own restart never waits.",
 				command: "wait", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.WaitStart.Load()) }},
-		}},
-		{key: "developer", label: "Developer", description: "Logging, flight recorder, profiling, telemetry, navigation overlays and the replay journal.", options: []configOption{
-			section("Logging"),
-			{key: "logging", label: "File logging", description: "Start or stop writing diagnostic logs to the configured log directory.",
+		}),
+	}},
+	{kind: kindGroup, key: "developer", label: "Developer", description: "Logging, flight recorder, profiling, telemetry, navigation overlays and the replay journal.", nodes: []configNode{
+		section("Logging", []configNode{
+			{kind: kindToggle, key: "logging", label: "File logging", description: "Start or stop writing diagnostic logs to the configured log directory.",
 				command: "log", choices: []string{"off", "on"}, read: func(*engine.GameContext) string { return toggleWord(vlog.Enabled()) }, disabled: loggingUnavailable},
-			{key: "level", label: "Log level", description: "Minimum severity to record. Trace and debug can produce large log files.",
+			{kind: kindChoice, key: "level", label: "Log level", description: "Minimum severity to record. Trace and debug can produce large log files.",
 				command: "log level", choices: []string{"trace", "debug", "info", "warn", "error"},
 				read: func(*engine.GameContext) string { return strings.ToLower(vlog.LevelName()) }, disabled: loggingUnavailable},
-			{key: "scope", label: "Log scope preset", description: "Choose all, app+fsm+stat, or none. :log scope allows individual categories.",
+			{kind: kindChoice, key: "scope", label: "Log scope preset", description: "Choose all, app+fsm+stat, or none. :log scope allows individual categories.",
 				command: "log scope", choices: []string{"all", "app+fsm+stat", "none"},
 				read: func(*engine.GameContext) string { return vlog.ScopeString(vlog.Scopes()) }, disabled: loggingUnavailable},
-			{key: "stat", label: "Snapshot ticks", description: "Ticks between log snapshots; 0 disables them. :log stat accepts any interval.",
+			{kind: kindStep, key: "stat", label: "Snapshot ticks", description: "Ticks between log snapshots; 0 disables them. :log stat accepts any interval.",
 				command: "log stat", steps: []uint64{0, 60, 200, 600, 3600},
 				read: func(ctx *engine.GameContext) string {
 					return strconv.FormatUint(ctx.World.Resources.Status.SnapshotInterval(), 10)
 				}, disabled: loggingUnavailable},
-			section("Flight recorder"),
-			{key: "rec", label: "Recorder ticks", description: "Flight recorder history depth; 0 disables it. Changing depth discards existing history.",
+		}),
+		section("Flight recorder", []configNode{
+			{kind: kindStep, key: "rec", label: "Recorder ticks", description: "Flight recorder history depth; 0 disables it. Changing depth discards existing history.",
 				command: "log rec", steps: []uint64{0, 120, 600, 1800, 3600},
 				read: func(ctx *engine.GameContext) string { return strconv.Itoa(ctx.World.Resources.Status.RecorderDepth()) }, disabled: loggingUnavailable},
-			{key: "fsm", label: "Record FSM transitions", description: "Flush flight recorder history when an FSM transition occurs.",
+			{kind: kindToggle, key: "fsm", label: "Record FSM transitions", description: "Flush flight recorder history when an FSM transition occurs.",
 				command: "log rec fsm", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string {
 					rc := ctx.World.Resources.Status.Recorder()
@@ -137,34 +151,38 @@ func init() {
 				},
 				disabled: recorderUnavailable},
 			withDisabled(commandAction("flush", "Flush flight recorder", "Write the recorder window on the next tick; needs rec in the log scope.", "log rec flush"), recorderUnavailable),
-			section("Profiling"),
-			{key: "prof", label: "Runtime profiler", description: "Collect module timings, logged each second while file logging is on. Enabling also pins profiler cards to the telemetry HUD.",
+		}),
+		section("Profiling", []configNode{
+			{kind: kindToggle, key: "prof", label: "Runtime profiler", description: "Collect module timings, logged each second while file logging is on. Enabling also pins profiler cards to the telemetry HUD.",
 				command: "debug prof", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.World.Resources.Prof.Profiling()) }},
 			withDisabled(commandAction("cpu", "CPU profile", captureDescription("a CPU profile"), "debug cpu"), lacking(paths.ExternalFiles(), "CPU profile")),
 			withDisabled(commandAction("heap", "Heap profile", "Write a heap profile; the status bar names the file.", "debug heap"), lacking(paths.ExternalFiles(), "Heap profile")),
 			withDisabled(commandAction("mutex", "Mutex profile", captureDescription("a mutex profile"), "debug mutex"), lacking(paths.ExternalFiles(), "Mutex profile")),
 			withDisabled(commandAction("trace", "Execution trace", captureDescription("an execution trace"), "debug trace"), lacking(paths.ExternalFiles(), "Execution trace")),
-			section("Telemetry"),
+		}),
+		section("Telemetry", []configNode{
 			withDisabled(commandAction("snap", "Telemetry snapshot", "Write every metric with the view and session state to a snapshot file in the log directory.", "t save"), lacking(vlog.Linked, "Telemetry snapshot")),
 			commandAction("unpin", "Clear HUD pins", "Unpin every telemetry card from the HUD.", "t unpin"),
-			section("Navigation"),
-			{key: "flow", label: "Flow field", description: "Show the navigation flow field for the selected target group (:flow <group>).",
+		}),
+		section("Navigation", []configNode{
+			{kind: kindToggle, key: "flow", label: "Flow field", description: "Show the navigation flow field for the selected target group (:flow <group>).",
 				command: "flow", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowFlow) }},
-			{key: "graph", label: "Route graph", description: "Show composite navigation routes (:graph <group> selects a target group).",
+			{kind: kindToggle, key: "graph", label: "Route graph", description: "Show composite navigation routes (:graph <group> selects a target group).",
 				command: "graph", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowComposite) }},
-			section("Recording"),
-			{key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. The game plays on as it was. :journal start <slot> records a bot of yours.",
+		}),
+		section("Recording", []configNode{
+			{kind: kindToggle, key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. The game plays on as it was. :journal start <slot> records a bot of yours.",
 				command: "journal", choices: []string{"off", "on"}, read: journalValue, disabled: journalUnavailable},
-		}},
-		{key: "launch", label: "Launch options", description: cmp.Or(startupNotes[runtime.GOOS], "What is set when the game launches, and where to set it: these rows only explain."), options: []configOption{
-			{key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. The Scenarios page starts another scenario now.", read: startupValue},
-			{key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at launch.", read: startupValue},
-			{key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at launch.", read: startupValue},
-			{key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. A key names one action, and an action can have several keys: config_menu has Ctrl+G and F10, help has F1.", read: startupValue},
-			{key: "session", label: "Identity", description: "Session identity and seed are launch options. Use the Multiplayer page for live session actions, Developer to start a replay journal.", read: startupValue},
-		}},
-	}
+		}),
+	}},
+	{kind: kindGroup, key: "launch", label: "Launch options", description: cmp.Or(startupNotes[runtime.GOOS], "What is set when the game launches, and where to set it: these rows only explain."), nodes: []configNode{
+		{kind: kindInfo, key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. The Scenarios page starts another scenario now.", read: startupValue},
+		{kind: kindInfo, key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at launch.", read: startupValue},
+		{kind: kindInfo, key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at launch.", read: startupValue},
+		{kind: kindInfo, key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. A key names one action, and an action can have several keys: config_menu has Ctrl+G and F10, help has F1.", read: startupValue},
+		{kind: kindInfo, key: "session", label: "Identity", description: "Session identity and seed are launch options. Use the Multiplayer page for live session actions, Developer to start a replay journal.", read: startupValue},
+	}},
 }
 
 func startupValue(*engine.GameContext) string { return "info" }
@@ -176,16 +194,18 @@ var startupNotes = map[string]string{
 	"android": "Settings fixed when the app started. Android has no command line: vif.toml in the app's files directory sets what these rows name.",
 }
 
-// commandAction is a row Enter runs command from, leaving the menu as an action does.
-func commandAction(key, label, description, command string) configOption {
-	return configOption{key: key, label: label, description: description, command: command, action: true, read: enterValue}
+// commandAction is a row that runs command when activated, leaving the menu
+func commandAction(key, label, description, command string) configNode {
+	return configNode{kind: kindAction, key: key, label: label, description: description, command: command, read: enterValue}
 }
 
+// enterValue is an action row's value in the tui menu, where Enter runs it; a native
+// host draws a button instead
 func enterValue(*engine.GameContext) string { return "Enter" }
 
-// section titles the rows after it, up to the next
-func section(label string) configOption {
-	return configOption{key: "#" + label, label: label, header: true}
+// section titles the rows it holds
+func section(label string, nodes []configNode) configNode {
+	return configNode{kind: kindGroup, key: "#" + label, label: label, nodes: nodes}
 }
 
 // pauseName is what the Pause row does now: a game this instance holds resumes,
@@ -219,9 +239,9 @@ func fpsStep(fps, d int) int {
 	return steps[(i%len(steps)+len(steps))%len(steps)]
 }
 
-func withDisabled(o configOption, disabled func(*engine.GameContext) string) configOption {
-	o.disabled = disabled
-	return o
+func withDisabled(n configNode, disabled func(*engine.GameContext) string) configNode {
+	n.disabled = disabled
+	return n
 }
 
 // hostOnly refuses what only a live session's host may do, as its command does
@@ -234,51 +254,55 @@ func hostOnly(why string) func(*engine.GameContext) string {
 	}
 }
 
-func replayConfigOptions(ctx *engine.GameContext) []configOption {
+func replayConfigOptions(ctx *engine.GameContext) []configNode {
 	if ctx.ReplaySeek == nil {
 		return nil
 	}
-	return []configOption{commandAction("replay", "Restart replay", "Play the recording again from its first tick. :r tick and :r time go to any other.", "replay restart")}
+	return []configNode{commandAction("replay", "Restart replay", "Play the recording again from its first tick. :r tick and :r time go to any other.", "replay restart")}
 }
 
-// scenarioConfigOptions lists the scenarios the roots hold, one marked, then the
-// button that starts the marked one as :n <name> does and a box for any other.
+// scenarioConfigOptions lists the scenarios the menu opened with, one marked, then
+// the button that starts the marked one as :n <name> does and a box for any other.
 // The mark starts on the current scenario; a phone has no name to type.
-func scenarioConfigOptions(ctx *engine.GameContext) []configOption {
+func scenarioConfigOptions(ctx *engine.GameContext) []configNode {
 	if ctx.SessionCtl == nil {
 		return nil
 	}
-	names, current := ctx.SessionCtl.Scenarios()
+	names, current := menuScenarios(ctx)
 	picked := current
 	if m := configMenu(ctx); m != nil && slices.Contains(names, m.Choice) {
 		picked = m.Choice
 	}
-	options := make([]configOption, 0, len(names)+3)
-	options = append(options, section("Installed"))
+	picks := make([]configNode, 0, len(names))
 	for _, name := range names {
-		mark, value := "( ) ", ""
-		if name == picked {
-			mark = "(*) "
-		}
+		value := ""
 		if name == current {
 			value = "current"
 		}
-		options = append(options, configOption{key: "pick/" + name, label: mark + name, pick: true,
+		picks = append(picks, configNode{kind: kindPick, key: "pick/" + name, label: name, marked: name == picked,
 			description: "Mark " + name + " to start; Start below starts the scenario marked.",
 			read:        func(*engine.GameContext) string { return value },
 			activate:    func(r *Router) { r.pickConfigRow(name) }})
 	}
-	start := "Start " + picked
 	description := "Start a game of " + picked + " from its first tick. In a session only the host can, and its participants rejoin it."
 	if picked == current {
 		description = "Start " + picked + ", the current scenario, over from its first tick. In a session only the host can, and every participant restarts with it."
 	}
-	return append(options,
-		withDisabled(configOption{key: "start", label: start, name: func(*engine.GameContext) string { return start },
-			command: "new " + picked, action: true, read: enterValue, description: description},
-			hostOnly("Only the host can start a scenario in a session")),
-		section("Other"),
-		configFormOption("scenario"))
+	return []configNode{
+		section("Installed", picks),
+		{kind: kindAction, key: "start", label: "Start " + picked, command: "new " + picked, read: enterValue, confirm: true,
+			description: description, disabled: hostOnly("Only the host can start a scenario in a session")},
+		section("Other", []configNode{formRow("scenario")}),
+	}
+}
+
+// menuScenarios is the scenario list the menu opened with and the scenario running,
+// scanned once per open: a host drawing its own menu rebuilds the whole tree every frame
+func menuScenarios(ctx *engine.GameContext) ([]string, string) {
+	if m := configMenu(ctx); m != nil && m.Scenarios != nil {
+		return m.Scenarios, m.Running
+	}
+	return ctx.SessionCtl.Scenarios()
 }
 
 func captureDescription(what string) string {
@@ -357,27 +381,65 @@ func toggleAudioChannel(mask uint8) func(*engine.GameContext, int) {
 	}
 }
 
-func (o configOption) unavailable(ctx *engine.GameContext) string {
-	if o.command != "" {
-		if why := commandUnavailable(ctx, strings.Fields(o.command)[0]); why != "" {
+// unavailable is why the row cannot act now, the sentence its command gives
+func (n configNode) unavailable(ctx *engine.GameContext) string {
+	if n.command != "" {
+		if why := commandUnavailable(ctx, strings.Fields(n.command)[0]); why != "" {
 			return why
 		}
 	}
-	if o.disabled != nil {
-		return o.disabled(ctx)
+	if n.disabled != nil {
+		return n.disabled(ctx)
 	}
-	if o.command == "" && o.change == nil && o.activate == nil {
+	if n.kind == kindInfo {
 		return "Read only"
 	}
 	return ""
 }
 
-func (p configPage) entries(ctx *engine.GameContext) []configOption {
-	options := slices.Clone(p.options)
-	if p.extra != nil {
-		options = append(options, p.extra(ctx)...)
+// setting reports a row a direction changes: a toggle, a choice or a step
+func (n configNode) setting() bool {
+	return n.kind == kindToggle || n.kind == kindChoice || n.kind == kindStep
+}
+
+// inline reports a form typed in on its row rather than in a window: one field
+func (n configNode) inline() bool {
+	return n.kind == kindForm && len(configForms[n.form].fields) == 1
+}
+
+// children is a group's rows: its own, then those built at run time
+func (n configNode) children(ctx *engine.GameContext) []configNode {
+	if n.extra == nil {
+		return n.nodes
 	}
-	return options
+	return append(slices.Clone(n.nodes), n.extra(ctx)...)
+}
+
+// nodeID is a node's id, its keys from the root joined by /; a host echoes it back
+func nodeID(parent, key string) string {
+	if parent == "" {
+		return key
+	}
+	return parent + "/" + key
+}
+
+// configNodeFor resolves an id to its node, building only the groups on its path
+func configNodeFor(ctx *engine.GameContext, id string) (configNode, bool) {
+	nodes, prefix := configPages, ""
+	for {
+		i := slices.IndexFunc(nodes, func(n configNode) bool {
+			nid := nodeID(prefix, n.key)
+			return nid == id || n.kind == kindGroup && strings.HasPrefix(id, nid+"/")
+		})
+		if i < 0 {
+			return configNode{}, false
+		}
+		n := nodes[i]
+		if nodeID(prefix, n.key) == id {
+			return n, true
+		}
+		prefix, nodes = nodeID(prefix, n.key), n.children(ctx)
+	}
 }
 
 func handleConfigCommand(ctx *engine.GameContext, args []string) CommandResult {
@@ -415,33 +477,30 @@ func configMenuTitle(ctx *engine.GameContext, page string) string {
 	return title + " · game running"
 }
 
+// newOverlayMenu is a menu on page carrying what the one up holds for the run: the
+// pick marked and the scenarios scanned when it opened
+func newOverlayMenu(ctx *engine.GameContext, page string) *core.OverlayMenu {
+	menu := &core.OverlayMenu{Page: page}
+	if old := configMenu(ctx); old != nil {
+		menu.Choice, menu.Scenarios, menu.Running = old.Choice, old.Scenarios, old.Running
+	}
+	if menu.Scenarios == nil && ctx.SessionCtl != nil {
+		menu.Scenarios, menu.Running = ctx.SessionCtl.Scenarios()
+	}
+	return menu
+}
+
 // configMenuView is the menu as it stands: the pages, one page's rows, or with a
 // query the rows of every page that match all its words, each naming its page
 func configMenuView(ctx *engine.GameContext, page string) *core.OverlayContent {
-	menu := &core.OverlayMenu{Page: page}
-	if old := configMenu(ctx); old != nil {
-		menu.Choice = old.Choice
-	}
+	menu := newOverlayMenu(ctx, page)
 	if terms := strings.Fields(strings.ToLower(ctx.OverlayFilter())); len(terms) > 0 {
-		for _, p := range configPages {
-			var heading string
-			for _, o := range p.entries(ctx) {
-				if o.header {
-					heading = o.label
-					continue
-				}
-				text := strings.ToLower(strings.Join([]string{p.label, heading, o.label, o.description}, " "))
-				if !slices.ContainsFunc(terms, func(t string) bool { return !strings.Contains(text, t) }) {
-					row := o.row(ctx, p.key+":"+o.key)
-					row.Label = p.label + " / " + row.Label
-					menu.Rows = append(menu.Rows, row)
-				}
-			}
-		}
+		menu.Rows = menuMatches(ctx, terms)
+		title := fmt.Sprintf("Menu / search: %d found", len(menu.Rows))
 		if len(menu.Rows) == 0 {
 			menu.Rows = append(menu.Rows, core.OverlayMenuRow{Key: "#none", Label: "Nothing matches", Header: true})
 		}
-		return &core.OverlayContent{Title: fmt.Sprintf("Menu / search: %d found", len(menu.Rows)), Layout: core.OverlayLayoutMenu, Menu: menu}
+		return &core.OverlayContent{Title: title, Layout: core.OverlayLayoutMenu, Menu: menu}
 	}
 	if page == "" {
 		for _, p := range configPages {
@@ -451,27 +510,67 @@ func configMenuView(ctx *engine.GameContext, page string) *core.OverlayContent {
 	}
 	title := configMenuTitle(ctx, "")
 	menu.Rows = append(menu.Rows, core.OverlayMenuRow{Key: "..", Label: "Back", Value: "<", Description: "Return to the menu."})
-	for _, p := range configPages {
-		if p.key == page {
-			title = configMenuTitle(ctx, p.label)
-			for _, o := range p.entries(ctx) {
-				menu.Rows = append(menu.Rows, o.row(ctx, o.key))
-			}
-			break
-		}
+	if n, ok := configNodeFor(ctx, page); ok && n.kind == kindGroup {
+		title = configMenuTitle(ctx, n.label)
+		menu.Rows = pageRows(ctx, page, n.children(ctx), menu.Rows)
 	}
 	return &core.OverlayContent{Title: title, Layout: core.OverlayLayoutMenu, Menu: menu}
 }
 
-func (o configOption) row(ctx *engine.GameContext, key string) core.OverlayMenuRow {
-	if o.header {
-		return core.OverlayMenuRow{Key: key, Label: o.label, Header: true}
+// pageRows lists a group's rows for the tui menu: a group inside it is a section
+// title over its own rows, at any depth
+func pageRows(ctx *engine.GameContext, prefix string, nodes []configNode, rows []core.OverlayMenuRow) []core.OverlayMenuRow {
+	for _, n := range nodes {
+		id := nodeID(prefix, n.key)
+		rows = append(rows, n.row(ctx, id))
+		if n.kind == kindGroup {
+			rows = pageRows(ctx, id, n.children(ctx), rows)
+		}
 	}
-	label := o.label
-	if o.name != nil {
-		label = o.name(ctx)
+	return rows
+}
+
+// menuMatches is the rows of every page matching all of terms in the page, its
+// sections, the label and the description, each labelled Page / Row
+func menuMatches(ctx *engine.GameContext, terms []string) []core.OverlayMenuRow {
+	var rows []core.OverlayMenuRow
+	for _, p := range configPages {
+		var walk func(prefix, heading string, nodes []configNode)
+		walk = func(prefix, heading string, nodes []configNode) {
+			for _, n := range nodes {
+				id := nodeID(prefix, n.key)
+				if n.kind == kindGroup {
+					walk(id, heading+" "+n.label, n.children(ctx))
+					continue
+				}
+				text := strings.ToLower(strings.Join([]string{p.label, heading, n.label, n.description}, " "))
+				if !slices.ContainsFunc(terms, func(t string) bool { return !strings.Contains(text, t) }) {
+					row := n.row(ctx, id)
+					row.Label = p.label + " / " + row.Label
+					rows = append(rows, row)
+				}
+			}
+		}
+		walk(p.key, "", p.children(ctx))
 	}
-	return core.OverlayMenuRow{Key: key, Label: label, Value: o.read(ctx), Description: o.description, Disabled: o.unavailable(ctx), Text: o.text}
+	return rows
+}
+
+// row is the node as the tui menu draws it, keyed by its id
+func (n configNode) row(ctx *engine.GameContext, id string) core.OverlayMenuRow {
+	if n.kind == kindGroup {
+		return core.OverlayMenuRow{Key: id, Label: n.label, Header: true}
+	}
+	label := n.label
+	switch {
+	case n.name != nil:
+		label = n.name(ctx)
+	case n.kind == kindPick && n.marked:
+		label = "(*) " + label
+	case n.kind == kindPick:
+		label = "( ) " + label
+	}
+	return core.OverlayMenuRow{Key: id, Label: label, Value: n.read(ctx), Description: n.description, Disabled: n.unavailable(ctx), Text: n.inline()}
 }
 
 func showConfigMenu(ctx *engine.GameContext, page string) {
@@ -596,6 +695,8 @@ func (r *Router) moveConfigMenu(motion input.MotionOp, pageDelta int) bool {
 	return true
 }
 
+// changeConfigMenu acts on the row selected: Back, a page to enter, or the node
+// its key names
 func (r *Router) changeConfigMenu(direction int, activate bool) bool {
 	m := configMenu(r.ctx)
 	key := r.ctx.GetOverlaySelection()
@@ -612,34 +713,53 @@ func (r *Router) changeConfigMenu(direction int, activate bool) bool {
 		}
 		return true
 	}
-	o, ok := configOptionFor(r.ctx, m.Page, key)
-	if !ok || (o.activate != nil || o.action) && !activate && !o.pick {
+	n, ok := configNodeFor(r.ctx, key)
+	if !ok {
 		return true
 	}
-	if why := o.unavailable(r.ctx); why != "" {
+	return r.applyConfigNode(key, n, direction, activate)
+}
+
+// applyConfigNode acts on the node keyed id as a key or a host's op does: a direction
+// steps or cycles a setting and marks a pick, activate runs an action or opens a
+// form; a refusal is answered on the status line, as the command's would be
+func (r *Router) applyConfigNode(id string, n configNode, direction int, activate bool) bool {
+	switch n.kind {
+	case kindGroup:
+		return true
+	case kindAction, kindForm:
+		if !activate {
+			return true
+		}
+	}
+	if why := n.unavailable(r.ctx); why != "" {
 		setCommandError(r.ctx, why)
 		return true
 	}
+	if n.kind == kindForm {
+		r.openConfigForm(id, n)
+		return true
+	}
 	r.ctx.WithOrigin(event.OriginCommand, func() {
-		if o.activate != nil {
-			o.activate(r)
+		if n.activate != nil {
+			n.activate(r)
 			return
 		}
-		if o.change != nil {
-			o.change(r.ctx, direction)
+		if n.change != nil {
+			n.change(r.ctx, direction)
 			return
 		}
-		command := o.command
-		if len(o.steps) > 0 {
-			current, _ := strconv.ParseUint(o.read(r.ctx), 10, 64)
+		command := n.command
+		if len(n.steps) > 0 {
+			current, _ := strconv.ParseUint(n.read(r.ctx), 10, 64)
 			next := current
-			for _, n := range o.steps {
-				if direction > 0 && n > current {
-					next = n
+			for _, v := range n.steps {
+				if direction > 0 && v > current {
+					next = v
 					break
 				}
-				if direction < 0 && n < current {
-					next = n
+				if direction < 0 && v < current {
+					next = v
 				}
 			}
 			// A key at the limit must not discard recorder history.
@@ -647,39 +767,21 @@ func (r *Router) changeConfigMenu(direction int, activate bool) bool {
 				return
 			}
 			command += " " + strconv.FormatUint(next, 10)
-		} else if len(o.choices) > 0 {
-			i := slices.Index(o.choices, o.read(r.ctx))
+		} else if len(n.choices) > 0 {
+			i := slices.Index(n.choices, n.read(r.ctx))
 			if i < 0 && direction < 0 {
 				i = 0
 			}
-			i = (i + direction + len(o.choices)) % len(o.choices)
-			command += " " + o.choices[i]
+			i = (i + direction + len(n.choices)) % len(n.choices)
+			command += " " + n.choices[i]
 		}
 		ExecuteCommand(r.ctx, command)
 	})
-	if o.action {
+	if n.kind == kindAction && n.activate == nil {
 		return r.closeOverlay()
 	}
 	r.RefreshConfigMenu()
 	return true
-}
-
-// configOptionFor resolves a row's key on page; a search's rows name their page
-func configOptionFor(ctx *engine.GameContext, page, key string) (configOption, bool) {
-	if p, k, ok := strings.Cut(key, ":"); ok {
-		page, key = p, k
-	}
-	for _, p := range configPages {
-		if p.key != page {
-			continue
-		}
-		for _, o := range p.entries(ctx) {
-			if o.key == key && !o.header {
-				return o, true
-			}
-		}
-	}
-	return configOption{}, false
 }
 
 // pointConfigMenu is a left press on a body cell of the menu: on a form field it
@@ -710,11 +812,11 @@ func (r *Router) pointConfigMenu(x, y int) bool {
 	}
 	selected := max(slices.IndexFunc(m.Rows, func(row core.OverlayMenuRow) bool { return row.Key == r.ctx.GetOverlaySelection() }), 0)
 	r.ctx.SetOverlaySelection(m.Rows[i].Key)
-	o, ok := configOptionFor(r.ctx, m.Page, m.Rows[i].Key)
-	if i != selected && !o.pick {
+	n, ok := configNodeFor(r.ctx, m.Rows[i].Key)
+	if i != selected && n.kind != kindPick {
 		return true
 	}
-	if ok && o.activate == nil && !o.action && x < g.ContentW/2 {
+	if ok && n.setting() && x < g.ContentW/2 {
 		return r.changeConfigMenu(-1, false)
 	}
 	return r.changeConfigMenu(1, true)

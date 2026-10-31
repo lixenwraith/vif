@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
@@ -27,9 +28,12 @@ type Speaker interface {
 	Close() error
 }
 
-// Listener hears the run end: err is what ended it, empty when the player quit
+// Listener hears the run end, err being what ended it, empty when the player quit,
+// and takes the configuration menu as JSON each time it changes (native-menu.md §4),
+// empty once it closed; the app draws it with its own widgets and answers with Menu
 type Listener interface {
 	Exited(err string)
+	Menu(json string)
 }
 
 var (
@@ -81,6 +85,7 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	vlog.Configure(vlog.Config{Dir: cmp.Or(p.Log, paths.DefaultLogDir()),
 		JournalDir: cmp.Or(p.Journal, paths.DefaultJournalDir()), Spawn: core.Go})
 	v := newView(tex, raster, density, settings.Presentation.Cell)
+	v.listener = listener
 	v.setGrid(int(width), int(height))
 	if away {
 		v.setAway(true) // before the run reads its reports, so it never starts going
@@ -239,6 +244,19 @@ func Zoom(scale float32) {
 	w, h := v.w, v.h
 	v.mu.Unlock()
 	Resize(int32(w), int32(h))
+}
+
+// Menu is what the player asked of the menu the app draws: an op on the node id
+// names (set, step, activate, submit, search or close) with its argument, applied by
+// the run as the key path would (native-menu.md §5). The UI thread never waits: with
+// the queue full the op is lost, as a touch would be.
+func Menu(op, id, arg string) {
+	if v := current(); v != nil {
+		select {
+		case v.menuOps <- mode.MenuOp{Op: op, ID: id, Arg: arg}:
+		default:
+		}
+	}
 }
 
 // Keyboard says whether the system keyboard covers the view: while it does, the
