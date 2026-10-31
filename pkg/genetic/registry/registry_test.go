@@ -16,11 +16,10 @@ func TestRegistry_RegisterAndSample(t *testing.T) {
 	reg := NewRegistry(nil)
 
 	config := SpeciesConfig{
-		ID:                 1,
-		Name:               "test",
-		GeneCount:          2,
-		Bounds:             []genetic.ParameterBounds{{Min: 0, Max: 1}, {Min: 0, Max: 10}},
-		PerturbationStdDev: 0.1,
+		ID:        1,
+		Name:      "test",
+		GeneCount: 2,
+		Bounds:    []genetic.ParameterBounds{{Min: 0, Max: 1}, {Min: 0, Max: 10}},
 	}
 
 	if err := reg.Register(config, nil); err != nil {
@@ -91,11 +90,10 @@ func TestRegistry_FullLifecycle(t *testing.T) {
 	}
 
 	config := SpeciesConfig{
-		ID:                 1,
-		Name:               "lifecycle_test",
-		GeneCount:          1,
-		Bounds:             []genetic.ParameterBounds{{Min: 0, Max: 1}},
-		PerturbationStdDev: 0.1,
+		ID:        1,
+		Name:      "lifecycle_test",
+		GeneCount: 1,
+		Bounds:    []genetic.ParameterBounds{{Min: 0, Max: 1}},
 	}
 
 	reg.Register(config, agg)
@@ -123,8 +121,8 @@ func TestRegistry_FullLifecycle(t *testing.T) {
 
 	// Check stats
 	stats := reg.Stats(1)
-	if stats.TotalEvals < 1 {
-		t.Errorf("expected at least 1 eval, got %d", stats.TotalEvals)
+	if stats.Evaluations < 1 {
+		t.Errorf("expected at least 1 eval, got %d", stats.Evaluations)
 	}
 
 	// Save and reload
@@ -188,27 +186,27 @@ func TestRegistry_Evolution(t *testing.T) {
 		reg.ReportFitness(1, evalID, genes[0])
 
 		if i == 40 {
-			early = reg.Stats(1).AvgFitness
+			early = reg.Stats(1).AverageScore
 		}
 	}
-	late = reg.Stats(1).AvgFitness
+	late = reg.Stats(1).AverageScore
 
 	st := reg.Stats(1)
-	if st.PoolSize != cfg.PoolSize {
-		t.Fatalf("archive not saturated: %d", st.PoolSize)
+	if st.Size != cfg.PoolSize {
+		t.Fatalf("archive not saturated: %d", st.Size)
 	}
-	if st.BestFitness < st.AvgFitness || st.AvgFitness < st.WorstFitness {
+	if st.BestScore < st.AverageScore || st.AverageScore < st.WorstScore {
 		t.Fatalf("archive not sorted: best=%v avg=%v worst=%v",
-			st.BestFitness, st.AvgFitness, st.WorstFitness)
+			st.BestScore, st.AverageScore, st.WorstScore)
 	}
 	if late <= early {
 		t.Fatalf("no convergence: %v -> %v", early, late)
 	}
-	if st.BestFitness < 90 {
-		t.Errorf("expected convergence near upper bound, got %v", st.BestFitness)
+	if st.BestScore < 90 {
+		t.Errorf("expected convergence near upper bound, got %v", st.BestScore)
 	}
-	if st.PendingCount != 0 {
-		t.Errorf("expected no pending evaluations, got %d", st.PendingCount)
+	if st.Pending != 0 {
+		t.Errorf("expected no pending evaluations, got %d", st.Pending)
 	}
 }
 
