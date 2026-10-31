@@ -3,6 +3,9 @@
 
 # --- Setup ---
 
+# Boot: settled before the clock starts, drawn behind the start prompt; the game
+# begins at the first Tick, after the press. The level and its maze stand before
+# it; the towers come after
 [states.TdSetup]
 parent = "Root"
 on_enter = [
