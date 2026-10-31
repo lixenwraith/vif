@@ -200,17 +200,17 @@ func TestAPressDrivesTheMenu(t *testing.T) {
 		t.Fatalf("a press on an unselected row: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
 	}
 	press(left, row(3))
-	if m := configMenu(ctx); m.Page != "settings" || ctx.GetOverlaySelection() != "sfx" {
+	if m := configMenu(ctx); m.Page != "settings" || ctx.GetOverlaySelection() != "settings/#Sound/sfx" {
 		t.Fatalf("a press on the selected page: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
 	}
 	// Back, Sound's title and three rows, then Controls' title: auto-fire is row 6
 	press(left, row(5))
-	if got := ctx.GetOverlaySelection(); got != "sfx" {
+	if got := ctx.GetOverlaySelection(); got != "settings/#Sound/sfx" {
 		t.Fatalf("a press on a section title selected %q", got)
 	}
 	auto := ctx.AutoFire.Load()
 	press(right, row(6))
-	if got := ctx.AutoFire.Load(); got != auto || ctx.GetOverlaySelection() != "auto" {
+	if got := ctx.AutoFire.Load(); got != auto || ctx.GetOverlaySelection() != "settings/#Controls/auto" {
 		t.Fatalf("a press on an unselected setting: auto-fire %d to %d, selection %q", auto, got, ctx.GetOverlaySelection())
 	}
 	press(right, row(6))
@@ -227,14 +227,14 @@ func TestAPressDrivesTheMenu(t *testing.T) {
 	}
 
 	showConfigMenu(ctx, "multiplayer")
-	ctx.SetOverlaySelection("host")
+	ctx.SetOverlaySelection("multiplayer/#Session/host")
 	r.handleOverlayActivate()
 	press(left, row(1))
 	if r.configForm == nil || r.configForm.state.Focus != 1 {
 		t.Fatal("a press on a form field did not focus it")
 	}
 	press(left, g.Y+g.H)
-	if r.configForm != nil || ctx.GetOverlaySelection() != "host" {
+	if r.configForm != nil || ctx.GetOverlaySelection() != "multiplayer/#Session/host" {
 		t.Fatal("a press outside the window did not cancel the form")
 	}
 	press(left, g.Y-1)
@@ -366,7 +366,7 @@ func TestConfigFormsPreserveEditsOnFailureAndCancelWithoutSubmitting(t *testing.
 	key(terminal.KeyCtrlG, 0)
 	ctx.SetOverlaySelection("multiplayer")
 	key(terminal.KeyEnter, 0)
-	ctx.SetOverlaySelection("host")
+	ctx.SetOverlaySelection("multiplayer/#Session/host")
 	key(terminal.KeyRight, 0)
 	if r.configForm != nil {
 		t.Fatal("arrow key opened an action")
@@ -384,7 +384,7 @@ func TestConfigFormsPreserveEditsOnFailureAndCancelWithoutSubmitting(t *testing.
 	}
 	key(terminal.KeyEnter, 0)
 	view := configMenu(ctx).Form
-	if view.Error != "address in use" || view.Fields[0].Value != ":4243" || view.Fields[1].Value != "host" {
+	if view.Error != "Address in use" || view.Fields[0].Value != ":4243" || view.Fields[1].Value != "host" {
 		t.Fatalf("failed submission lost edits: %+v", view)
 	}
 	r.RefreshConfigMenu()
@@ -392,7 +392,7 @@ func TestConfigFormsPreserveEditsOnFailureAndCancelWithoutSubmitting(t *testing.
 		t.Fatal("refresh replaced a form in progress")
 	}
 	key(terminal.KeyEscape, 0)
-	if r.configForm != nil || configMenu(ctx).Form != nil || ctx.GetOverlaySelection() != "host" || len(session.calls) != 0 {
+	if r.configForm != nil || configMenu(ctx).Form != nil || ctx.GetOverlaySelection() != "multiplayer/#Session/host" || len(session.calls) != 0 {
 		t.Fatal("cancel submitted or lost the parent selection")
 	}
 	key(terminal.KeyEnter, 0)
@@ -413,10 +413,10 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 		values    []string
 		want      string
 	}{
-		{"multiplayer", "add", []string{"2", "default"}, "add 2:default"},
-		{"multiplayer", "host", []string{"127.0.0.1:0", "host"}, "host 127.0.0.1:0 host"},
-		{"multiplayer", "join", []string{"vif://example.test:4242/run"}, "join vif://example.test:4242/run"},
-		{"multiplayer", "request", []string{"https://example.test", "3", "tower"}, "request https://example.test 3 tower"},
+		{"multiplayer", "multiplayer/#Bots/add", []string{"2", "default"}, "add 2:default"},
+		{"multiplayer", "multiplayer/#Session/host", []string{"127.0.0.1:0", "host"}, "host 127.0.0.1:0 host"},
+		{"multiplayer", "multiplayer/#Session/join", []string{"vif://example.test:4242/run"}, "join vif://example.test:4242/run"},
+		{"multiplayer", "multiplayer/#Session/request", []string{"https://example.test", "3", "tower"}, "request https://example.test 3 tower"},
 	} {
 		r.handleConfigMenu()
 		showConfigMenu(ctx, tt.page)
@@ -438,7 +438,7 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 	}
 	r.handleConfigMenu()
 	showConfigMenu(ctx, "multiplayer")
-	ctx.SetOverlaySelection("drop/10")
+	ctx.SetOverlaySelection("multiplayer/#Bots/drop/10")
 	r.moveConfigMenu(input.MotionRight, 0)
 	if len(session.calls) != 4 {
 		t.Fatal("arrow key removed a bot")
@@ -449,7 +449,7 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 		t.Fatal("stale selection removed a replacement on the same slot")
 	}
 	r.RefreshConfigMenu()
-	ctx.SetOverlaySelection("drop/11")
+	ctx.SetOverlaySelection("multiplayer/#Bots/drop/11")
 	r.handleOverlayActivate()
 	if session.calls[len(session.calls)-1] != "remove 11" || ctx.IsOverlayActive() {
 		t.Fatal("bot removal failed to submit and resume")
@@ -483,9 +483,9 @@ func TestConfigMenuHonorsCommandRestrictionsAtActivation(t *testing.T) {
 		ExecuteCommand(ctx, "g")
 		ctx.SetOverlaySelection("game")
 		r.handleOverlayActivate()
-		ctx.SetOverlaySelection("speed")
+		ctx.SetOverlaySelection("game/speed")
 		w.Resources.Event.Queue.Consume()
-		if menuRow(ctx, "speed").Disabled == "" {
+		if menuRow(ctx, "game/speed").Disabled == "" {
 			t.Fatalf("viewer=%v: speed appears editable", viewer)
 		}
 		r.handleOverlayActivate()
@@ -495,7 +495,7 @@ func TestConfigMenuHonorsCommandRestrictionsAtActivation(t *testing.T) {
 		ctx.Viewer.Store(false)
 		w.Resources.Network = nil
 		r.RefreshConfigMenu()
-		if menuRow(ctx, "speed").Disabled != "" || ctx.GetOverlaySelection() != "speed" {
+		if menuRow(ctx, "game/speed").Disabled != "" || ctx.GetOverlaySelection() != "game/speed" {
 			t.Fatal("refresh failed to unlock speed or lost selection")
 		}
 	}
@@ -512,7 +512,7 @@ func TestMaxFPSStepsInTheMenuAndTakesRatesInRange(t *testing.T) {
 	ctx.SetOverlaySelection("settings")
 	r.handleOverlayActivate()
 	step := func(d int) int32 {
-		ctx.SetOverlaySelection("fps")
+		ctx.SetOverlaySelection("settings/#Display/fps")
 		r.changeConfigMenu(d, false)
 		return ctx.MaxFPS.Load()
 	}
@@ -594,7 +594,7 @@ func TestTheHelpKeyOpensHelpOverAnyModeAndClosesIt(t *testing.T) {
 	}
 	ctx.SetOverlaySelection("multiplayer")
 	key(terminal.KeyEnter, 0)
-	ctx.SetOverlaySelection("host")
+	ctx.SetOverlaySelection("multiplayer/#Session/host")
 	key(terminal.KeyEnter, 0)
 	if r.configForm == nil {
 		t.Fatal("Enter did not open the host form")
@@ -650,10 +650,10 @@ func TestTheMenuSearchFindsRowsOnEveryPageAndActsInPlace(t *testing.T) {
 	for _, row := range configMenu(ctx).Rows {
 		keys = append(keys, row.Key)
 	}
-	if want := []string{"game:pause", "settings:pause_menu", "settings:pause_command"}; !slices.Equal(keys, want) {
+	if want := []string{"game/pause", "settings/#Pause/pause_menu", "settings/#Pause/pause_command"}; !slices.Equal(keys, want) {
 		t.Fatalf("a search for pause listed %q, want %q", keys, want)
 	}
-	if got := menuRow(ctx, "settings:pause_menu").Label; got != "Settings / Pause in menu" {
+	if got := menuRow(ctx, "settings/#Pause/pause_menu").Label; got != "Settings / Pause in menu" {
 		t.Fatalf("a found row is labelled %q", got)
 	}
 	key(terminal.KeyDown, 0)
@@ -686,19 +686,19 @@ func TestAOneFieldFormIsATextBoxOnItsRow(t *testing.T) {
 	key(terminal.KeyCtrlG, 0)
 	ctx.SetOverlaySelection("scenarios")
 	key(terminal.KeyEnter, 0)
-	ctx.SetOverlaySelection("scenario")
+	ctx.SetOverlaySelection("scenarios/#Other/scenario")
 	key(terminal.KeyEnter, 0)
 	for _, ch := range "nope" {
 		key(terminal.KeyRune, ch)
 	}
 	key(terminal.KeyEnter, 0)
-	row := menuRow(ctx, "scenario")
+	row := menuRow(ctx, "scenarios/#Other/scenario")
 	if configMenu(ctx).Form != nil || !row.Typing || row.Value != "nope" || !strings.HasPrefix(row.Description, "Error: ") {
 		t.Fatalf("an unknown scenario in the box: %+v", row)
 	}
 	key(terminal.KeyUp, 0)
-	if r.configForm != nil || menuRow(ctx, "scenario").Typing || ctx.GetOverlaySelection() != "start" {
-		t.Fatalf("Up left the box to %q, typing %v", ctx.GetOverlaySelection(), menuRow(ctx, "scenario").Typing)
+	if r.configForm != nil || menuRow(ctx, "scenarios/#Other/scenario").Typing || ctx.GetOverlaySelection() != "scenarios/start" {
+		t.Fatalf("Up left the box to %q, typing %v", ctx.GetOverlaySelection(), menuRow(ctx, "scenarios/#Other/scenario").Typing)
 	}
 	key(terminal.KeyDown, 0)
 	key(terminal.KeyEnter, 0)
@@ -761,7 +761,7 @@ func TestThePauseFlagsGateTheMenuAndCommandLinePauses(t *testing.T) {
 	ExecuteCommand(ctx, "g")
 	ctx.SetOverlaySelection("game")
 	r.handleOverlayActivate()
-	if row := menuRow(ctx, "pause"); row.Label != "Pause" || !strings.Contains(row.Disabled, "first press") {
+	if row := menuRow(ctx, "game/pause"); row.Label != "Pause" || !strings.Contains(row.Disabled, "first press") {
 		t.Fatalf("the Pause row while the game waits to start: %+v", row)
 	}
 }

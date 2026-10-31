@@ -79,3 +79,25 @@ func TestConfigFormKeepsCursorVisibleWithoutMutatingPublishedFields(t *testing.T
 		t.Fatal("render mutated the form snapshot")
 	}
 }
+
+// TestAHostDrawingTheMenuLeavesTheOverlayUndrawn: with NativeMenu set the menu layout
+// paints no cell, while help is drawn as before, so the host's widgets stand over the
+// game and not over a second menu.
+func TestAHostDrawingTheMenuLeavesTheOverlayUndrawn(t *testing.T) {
+	ctx := engine.NewGameContext(engine.NewWorld(), 100, 40)
+	r := NewOverlayRenderer(ctx)
+	painted := func(content *core.OverlayContent, native bool) bool {
+		t.Helper()
+		ctx.SetOverlayContent(content)
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 100, 40)
+		r.Render(render.RenderContext{NativeMenu: native}, buf)
+		g := ctx.OverlayGeometry()
+		return buf.CellAt(g.X, g.Y).Rune != 0 && buf.CellAt(g.X, g.Y).Rune != ' '
+	}
+	menu := &core.OverlayContent{Title: "Menu", Layout: core.OverlayLayoutMenu,
+		Menu: &core.OverlayMenu{Rows: []core.OverlayMenuRow{{Key: "game", Label: "Game", Value: ">"}}}}
+	help := &core.OverlayContent{Title: core.OverlayHelpTitle, Layout: core.OverlayLayoutDoc}
+	if painted(menu, true) || !painted(menu, false) || !painted(help, true) {
+		t.Fatalf("menu drawn with a host menu %v, without %v, help with %v", painted(menu, true), painted(menu, false), painted(help, true))
+	}
+}

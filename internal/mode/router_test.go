@@ -155,12 +155,12 @@ func TestAHoldTakesNoPlayButOpensTheMenu(t *testing.T) {
 	ctx.SetOverlaySelection("game")
 	key(terminal.KeyEnter, 0)
 	m := configMenu(ctx)
-	i := slices.IndexFunc(m.Rows, func(row core.OverlayMenuRow) bool { return row.Key == "pause" })
+	i := slices.IndexFunc(m.Rows, func(row core.OverlayMenuRow) bool { return row.Key == "game/pause" })
 	if i < 0 || m.Rows[i].Label != "Resume" || m.Rows[i].Disabled != "" {
 		t.Fatalf("the Game page under a hold shows %+v", m.Rows)
 	}
 	w.Resources.Event.Queue.Consume()
-	ctx.SetOverlaySelection("pause")
+	ctx.SetOverlaySelection("game/pause")
 	key(terminal.KeyEnter, 0)
 	var asked []bool
 	for _, ev := range w.Resources.Event.Queue.Consume() {

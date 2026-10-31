@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/service"
 )
@@ -29,6 +30,14 @@ type Presentation interface {
 // awayPresentation is one its player can leave without quitting, an app sent to the
 // background: it reports leaving and returning, and a solo run pauses meanwhile
 type awayPresentation interface{ Away() <-chan bool }
+
+// menuPresentation is one that draws the configuration menu with its own widgets:
+// Menu takes the menu's snapshot each time it changes, nil once it closed, and
+// MenuOps is what its player asks of the menu
+type menuPresentation interface {
+	Menu(snapshot []byte)
+	MenuOps() <-chan mode.MenuOp
+}
 
 // coveredPresentation is one a keyboard can cover: while it does, the host shows
 // the left half of the status bar's bottom row again above the keyboard, and the

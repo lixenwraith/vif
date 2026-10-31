@@ -1,9 +1,13 @@
 package game
 
 import (
+	"os"
+	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
@@ -161,5 +165,74 @@ func TestAPinchZoomsTheCellWithinBounds(t *testing.T) {
 	v.zoom(0.01)
 	if a := v.tex.Atlas(); v.Cell() != 9.5 || v.cellW != a.Width || v.cellH != a.Height {
 		t.Fatalf("zoomed out to %g dp, a %dx%d cell, where the atlas is %dx%d", v.Cell(), v.cellW, v.cellH, a.Width, a.Height)
+	}
+}
+
+// menuListener keeps what the run handed the app to draw
+type menuListener struct{ menus []string }
+
+func (l *menuListener) Exited(string)    {}
+func (l *menuListener) Menu(json string) { l.menus = append(l.menus, json) }
+
+// TestTheMenuCrossesTheBindingAsJSONAndOps: a snapshot reaches the app's listener as
+// its JSON, a closed menu as the empty string; an op the app sends reaches the run's
+// channel with its fields, and with the queue full it is dropped rather than waited on.
+func TestTheMenuCrossesTheBindingAsJSONAndOps(t *testing.T) {
+	v := testView(t, false, 1)
+	l := &menuListener{}
+	v.listener = l
+	v.Menu([]byte(`{"title":"Menu"}`))
+	v.Menu(nil)
+	if want := []string{`{"title":"Menu"}`, ""}; !slices.Equal(l.menus, want) {
+		t.Fatalf("the app was handed %q, want %q", l.menus, want)
+	}
+	mu.Lock()
+	run = v
+	mu.Unlock()
+	defer func() {
+		mu.Lock()
+		run = nil
+		mu.Unlock()
+	}()
+	Menu("set", "settings/#Controls/auto", "main")
+	select {
+	case op := <-v.MenuOps():
+		if op != (mode.MenuOp{Op: "set", ID: "settings/#Controls/auto", Arg: "main"}) {
+			t.Fatalf("the op crossed as %+v", op)
+		}
+	default:
+		t.Fatal("the op did not reach the run")
+	}
+	for range eventQueue + 1 {
+		Menu("close", "", "")
+	}
+	if len(v.menuOps) != eventQueue {
+		t.Fatalf("%d ops queued past the queue's %d", len(v.menuOps), eventQueue)
+	}
+}
+
+// TestTheAppIsWrittenToTheRunsMenuContract: MenuDialog.java names the node kinds, the
+// ops and the field inputs the run's snapshot and hooks use, each list in the run's
+// order, so the two sides of one APK cannot drift.
+func TestTheAppIsWrittenToTheRunsMenuContract(t *testing.T) {
+	src, err := os.ReadFile("../app/src/main/java/com/lixen/vif/MenuDialog.java")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		want []string
+	}{{"KINDS", mode.MenuKinds[:]}, {"OPS", mode.MenuOps}, {"INPUTS", mode.MenuInputs}} {
+		m := regexp.MustCompile(`static final String\[\] ` + c.name + ` = \{([^}]*)\};`).FindSubmatch(src)
+		if m == nil {
+			t.Fatalf("MenuDialog.java declares no %s", c.name)
+		}
+		var got []string
+		for _, q := range regexp.MustCompile(`"([^"]*)"`).FindAllSubmatch(m[1], -1) {
+			got = append(got, string(q[1]))
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%s is %q in the app, %q in the run", c.name, got, c.want)
+		}
 	}
 }
