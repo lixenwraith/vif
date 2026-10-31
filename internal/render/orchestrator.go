@@ -127,17 +127,23 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 	o.buffer.FlushToTerminal(o.surface)
 }
 
-// RenderStatus draws the status bar, and the start screen while it is up, every other
-// cell out of play: the frame for a world that is not the one to show yet, as a
-// joiner's is until its session's arrives.
+// RenderStatus draws the status bar, the start screen while it is up and the overlay
+// the operator opened, every other cell out of play: the frame for a world that is
+// not the one to show yet, as a joiner's is until its session's arrives.
 func (o *RenderOrchestrator) RenderStatus(ctx RenderContext, world *engine.World) {
 	o.buffer.Clear()
 	o.buffer.SetVoidRegion(o.buffer.Bounds(), Rect{}, visual.RgbVoid)
 	world.Lock()
 	for _, entry := range o.renderers {
-		if entry.priority == PriorityStatusBar || entry.priority == PriorityStartScreen {
-			entry.renderer.Render(ctx, o.buffer)
+		switch entry.priority {
+		case PriorityStatusBar, PriorityStartScreen, PriorityOverlay:
+		default:
+			continue
 		}
+		if vt, ok := entry.renderer.(VisibilityToggle); ok && !vt.IsVisible() {
+			continue
+		}
+		entry.renderer.Render(ctx, o.buffer)
 	}
 	world.Unlock()
 	o.buffer.FlushToTerminal(o.surface)

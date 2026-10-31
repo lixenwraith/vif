@@ -478,8 +478,10 @@ run fetches the scenario it lacks, builds and checks its world on the preview, s
 it is ready, and asks on its status line, or at a terminal's or desktop window's
 launch on the start screen's button: "Click or press a key to join *host*",
 "Press a key" with the mouse off, "Tap" after a touch. A key that types or moves, or
-a click, seats it; Escape, Tab, the function keys and chords do not, and Ctrl-C
-leaves (`joinPress`). The seat binds the identity the run's port and world were
+a click off the status bar, seats it; the operator's keys work over the wait as over
+a held game, the command line, the menu, help, mute and quit, and seat nobody, Tab
+and the other function keys do nothing, and Ctrl-C leaves (`App.joinPressed`,
+`Router.Operates`). The seat binds the identity the run's port and world were
 built without (`PendingJoin.Hand`), and the run replies and meets the gate as
 any joiner does. The host keeps the handshake for a ready period of 5 s, and tells
 its player who is ready to join and waiting for their press; a press

@@ -1282,40 +1282,47 @@ func (r *Router) heldInPlay() bool {
 	return r.ctx.TimeCtl.Held() && !r.ctx.IsCommandMode() && !r.ctx.IsOverlayMode()
 }
 
-// heldAdmits reports whether an intent acts during a hold, which takes no play: the
-// command line and the overlays take everything, and play only what opens them,
-// quits, mutes, pauses, lets go of a key, or the status bar press the pointer gate kept.
-func (r *Router) heldAdmits(intent *input.Intent) bool {
-	if !r.heldInPlay() || isMouseIntent(intent.Type) {
-		return true
+// Operates reports an intent of the operator's rather than the player's, which a
+// game waiting for its press, a held one's or a join's, takes as such whoever the
+// run is: what opens or works the command line and the overlays, quits, mutes or
+// lets go of a key, and the status bar press the menu is under; a pointer press
+// anywhere else, or with the mouse off, is play
+func (r *Router) Operates(intent *input.Intent) bool {
+	if isMouseIntent(intent.Type) {
+		return r.ctx.MouseDisabled.Load() || r.onStatusBar(intent)
 	}
 	switch intent.Type {
 	case input.IntentQuit, input.IntentEscape, input.IntentToggleAudioCycle, input.IntentConfigMenu,
 		input.IntentHelp, input.IntentKeyRelease:
 		return true
-	case input.IntentPause:
-		return !r.ctx.TimeCtl.Holds(engine.HoldStart) // A waiting game takes it as its start
 	case input.IntentModeSwitch:
 		return intent.ModeTarget == input.ModeTargetCommand
 	}
 	return false
 }
 
+// heldAdmits reports whether an intent acts during a hold, which takes no play: the
+// command line and the overlays take everything, and play only the operator's, a
+// pause, or the status bar press the pointer gate kept.
+func (r *Router) heldAdmits(intent *input.Intent) bool {
+	if !r.heldInPlay() || isMouseIntent(intent.Type) {
+		return true
+	}
+	if intent.Type == input.IntentPause {
+		return !r.ctx.TimeCtl.Holds(engine.HoldStart) // A waiting game takes it as its start
+	}
+	return r.Operates(intent)
+}
+
 // TakeStart starts a waiting game at its player's press, which does nothing else: a
 // key the held game would ignore, nil when the keymap binds none or waits for more,
-// or a pointer press off the status bar, whose press opens the menu. Whatever a held
-// game takes keeps its meaning; false leaves the press to Handle.
+// or a pointer press off the status bar, whose press opens the menu. The operator's
+// keeps its meaning; false leaves the press to Handle.
 func (r *Router) TakeStart(intent *input.Intent) bool {
 	if !r.ctx.TimeCtl.Holds(engine.HoldStart) || !r.heldInPlay() || holdRefused(r.ctx, false) != "" {
 		return false
 	}
-	switch {
-	case intent == nil:
-	case isMouseIntent(intent.Type):
-		if r.ctx.MouseDisabled.Load() || r.onStatusBar(intent) {
-			return false
-		}
-	case r.heldAdmits(intent):
+	if intent != nil && r.Operates(intent) {
 		return false
 	}
 	r.machine.Reset()

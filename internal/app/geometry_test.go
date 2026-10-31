@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -680,6 +681,70 @@ func TestTheLaunchWaitsBehindTheStartScreen(t *testing.T) {
 	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'j'})
 	if rc := a.renderContext(); a.ctx.TimeCtl.Holds(engine.HoldStart) || rc.StartScreen || rc.StartHelp != "" {
 		t.Fatalf("after the start: waiting %v, start screen up %v", a.ctx.TimeCtl.Holds(engine.HoldStart), rc.StartScreen)
+	}
+}
+
+// TestAWaitingJoinTakesTheOperatorsKeysAsAHeldGameDoes: over a join waiting for its
+// press, the command line opens on `:` and takes what is typed, the menu opens on
+// Ctrl+G and is drawn over the void, Escape closes either, `:q` leaves, and none of
+// them seats; a key that types does.
+func TestAWaitingJoinTakesTheOperatorsKeysAsAHeldGameDoes(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	const w, h = 120, 40
+	screen := &framePresentation{w: w, h: h}
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5747,
+		Host: Host{Presentation: screen}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	press := func(k terminal.Key, r rune) (pressed, on bool) {
+		t.Helper()
+		ev := terminal.Event{Type: terminal.EventKey, Action: terminal.KeyPress, Key: k, Rune: r}
+		on = a.takeEventWith(ev, func(ev terminal.Event, intent *input.Intent) bool {
+			pressed = a.joinPressed(ev, intent)
+			return pressed
+		})
+		a.showJoinAsk()
+		return pressed, on
+	}
+	ctx := a.Context()
+	if pressed, _ := press(terminal.KeyRune, ':'); pressed || !ctx.IsCommandMode() {
+		t.Fatalf("':' seated %v, command line open %v; want it to open the command line", pressed, ctx.IsCommandMode())
+	}
+	if pressed, _ := press(terminal.KeyRune, 'h'); pressed || !ctx.IsCommandMode() {
+		t.Fatalf("a key typed on the command line seated %v, line open %v", pressed, ctx.IsCommandMode())
+	}
+	if pressed, _ := press(terminal.KeyEscape, 0); pressed || ctx.IsCommandMode() {
+		t.Fatalf("Escape seated %v, command line open %v; want it closed", pressed, ctx.IsCommandMode())
+	}
+	if pressed, _ := press(terminal.KeyCtrlG, 0); pressed || !ctx.IsOverlayMode() {
+		t.Fatalf("Ctrl+G seated %v, overlay open %v; want the menu", pressed, ctx.IsOverlayMode())
+	}
+	// The menu is drawn over the void a joiner's world is kept out of
+	drawn := false
+	last := screen.frames[len(screen.frames)-1]
+	for y := parameter.TopMargin; y < h-parameter.BottomMargin && !drawn; y++ {
+		for x := parameter.LeftMargin; x < w; x++ {
+			if last[y*w+x].Bg != visual.RgbVoid {
+				drawn = true
+				break
+			}
+		}
+	}
+	if !drawn {
+		t.Fatal("the menu opened over the wait was not drawn")
+	}
+	if pressed, _ := press(terminal.KeyEscape, 0); pressed || ctx.IsOverlayMode() {
+		t.Fatalf("Escape seated %v, overlay open %v; want the menu closed", pressed, ctx.IsOverlayMode())
+	}
+	if pressed, _ := press(terminal.KeyRune, 'j'); !pressed {
+		t.Fatal("a key that types did not seat the join")
+	}
+	press(terminal.KeyRune, ':')
+	press(terminal.KeyRune, 'q')
+	if _, on := press(terminal.KeyEnter, 0); on {
+		t.Fatal(":q over the wait did not leave")
 	}
 }
 

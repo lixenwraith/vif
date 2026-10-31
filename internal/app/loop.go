@@ -335,9 +335,15 @@ func (a *App) showDoorError(err error) {
 }
 
 // takeEvent passes a presentation's event down the dumb pipe: key event → machine →
-// intent → router. The key cell shows what the machine holds, pending or completed,
-// whatever the router does. False means the player quit.
-func (a *App) takeEvent(ev terminal.Event) bool {
+// intent → router, a waiting game's start press taken on the way. The key cell shows
+// what the machine holds, pending or completed, whatever the router does. False
+// means the player quit.
+func (a *App) takeEvent(ev terminal.Event) bool { return a.takeEventWith(ev, a.takeStart) }
+
+// takeEventWith is takeEvent with press deciding what a waiting run's press does, a
+// held game's start or the seat a join waits for; the operator's intents reach the
+// router on either path alike.
+func (a *App) takeEventWith(ev terminal.Event, press func(terminal.Event, *input.Intent) bool) bool {
 	if ev.Type == terminal.EventPaste {
 		return pasteKeys(ev.Text, a.takeTap)
 	}
@@ -348,8 +354,8 @@ func (a *App) takeEvent(ev terminal.Event) bool {
 	if a.startHelp(ev) {
 		intent = &input.Intent{Type: input.IntentHelp}
 	}
-	if a.takeStart(ev, intent) {
-		intent = nil // the press that starts a waiting game is nothing else
+	if press(ev, intent) {
+		intent = nil // the press that starts or seats a waiting run is nothing else
 	}
 	if ev.Type == terminal.EventKey {
 		a.ctx.SetLastCommand(a.inputMachine.Feedback())
@@ -493,9 +499,12 @@ func (a *App) takeStart(ev terminal.Event, intent *input.Intent) bool {
 }
 
 // awaitJoinPress seats this joining run at its player's press, its world built and
-// checked and its session told it is ready. A press after the host's ready period
-// dials again (takeSeat); a session that started another game meanwhile is joined
-// anew by the next run, which the press already seats.
+// checked and its session told it is ready. Its keys go down the pipe the loop's do,
+// so the operator's work over the wait as over a held game: the command line, the
+// menu, help, mute and quit, drawn on the status bar and over the void, and seat
+// nobody. A press after the host's ready period dials again (takeSeat); a session
+// that started another game meanwhile is joined anew by the next run, which the
+// press already seats.
 func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) {
 	a.showJoinAsk()
 	for {
@@ -503,14 +512,15 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 		case <-signals:
 			return nil, errSessionSignalled
 		case ev := <-a.lobbyEvents():
-			if a.lobbyEventCancels(ev) {
+			pressed := false
+			if !a.takeEventWith(ev, func(ev terminal.Event, intent *input.Intent) bool {
+				pressed = a.joinPressed(ev, intent)
+				return pressed
+			}) {
 				return nil, errSessionCanceled
 			}
-			if ev.Type == terminal.EventMouse && ev.MouseAction == terminal.MouseActionPress {
-				a.touched = ev.Touch
-			}
-			if !joinPress(ev, a.ctx.MouseDisabled.Load()) {
-				a.showJoinAsk() // redrawn after a resize, and asked as a touch was
+			if !pressed {
+				a.showJoinAsk() // drawn again with what the key opened, typed or resized
 				continue
 			}
 			a.showJoinStatus("Joining " + link.Shown(a.cfg.JoinAddress) + "...")
@@ -523,6 +533,20 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 			return nil, err
 		}
 	}
+}
+
+// joinPressed reports whether ev is the press that seats a waiting join: one that
+// types, moves or clicks (joinPress) with no command line or overlay open to take it
+// and no meaning of the operator's, as a held game's start press is admitted
+func (a *App) joinPressed(ev terminal.Event, intent *input.Intent) bool {
+	if a.ctx.IsCommandMode() || a.ctx.IsOverlayMode() || !joinPress(ev, a.ctx.MouseDisabled.Load()) {
+		return false
+	}
+	operates := false
+	if intent != nil {
+		a.world.RunSafe(func() { operates = a.router.Operates(intent) })
+	}
+	return !operates
 }
 
 // joinPress reports whether ev is the press that seats a waiting join: a key going
