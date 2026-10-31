@@ -3,6 +3,7 @@
 package soundlab
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"strconv"
@@ -134,7 +135,7 @@ func cmdRip(s *Session, a []string) error {
 		return err
 	}
 	defer f.Close()
-	r, err := audio.RipWAV(f, s.rip)
+	r, err := s.ripper().WAV(f)
 	if err != nil {
 		return err
 	}
@@ -142,10 +143,24 @@ func cmdRip(s *Session, a []string) error {
 	if len(defs) == 0 {
 		return fmt.Errorf("%s: nothing heard to write", a[0])
 	}
+	voices := r.Voices(a[1])
 	for _, d := range defs {
 		if s.has(d.Name) {
 			return fmt.Errorf("%q: already exists", d.Name)
 		}
+	}
+	for _, v := range voices {
+		if s.has(v.Name) {
+			return fmt.Errorf("%q: already exists", v.Name)
+		}
+	}
+	// The voices heard register at once, so the patterns naming them play; the
+	// patterns stay dirty until a slot or an apply takes them
+	for _, v := range voices {
+		if _, err := s.eng.DefineVoice(v.Clone()); err != nil {
+			return fmt.Errorf("voice %q: %w", v.Name, err)
+		}
+		s.voices.put(v, false)
 	}
 	for _, d := range defs {
 		s.pats.put(d, true)
@@ -153,7 +168,7 @@ func cmdRip(s *Session, a []string) error {
 	s.bpm = r.BPM
 	s.eng.SetMusicBPM(r.BPM)
 	s.eng.SetHarmony(r.Root, r.Scale, r.Progression)
-	s.root, s.scale = r.Root, r.Scale
+	s.root, s.scale, s.prog = r.Root, r.Scale, r.Progression
 	var hits [audio.InstrClap]int
 	notes, low := 0, 0
 	for _, b := range r.Bars {
@@ -169,6 +184,43 @@ func cmdRip(s *Session, a []string) error {
 		names = append(names, d.Name)
 	}
 	fmt.Fprintf(s.out, "%d pattern(s) added: %s; tempo and key set, slot them to hear the estimate\n", len(defs), strings.Join(names, " "))
+	for _, v := range voices {
+		fmt.Fprintf(s.out, "voice %s heard: %s, registered\n", v.Name, cmp.Or(v.Wave, "sine"))
+	}
+	return nil
+}
+
+// cmdRender writes what the slots hold, played for bars bars at the transport's
+// tempo and key with the engine's offline render, to a WAV: the estimate a rip
+// made, or any arrangement, heard without a device.
+func cmdRender(s *Session, a []string) error {
+	bars := 4
+	if len(a) > 1 {
+		n, err := strconv.Atoi(a[1])
+		if err != nil || n < 1 || n > 256 {
+			return fmt.Errorf("bars %q: want 1 to 256", a[1])
+		}
+		bars = n
+	}
+	if s.slots == [audio.MusicSlots]audio.PatternID{} {
+		return fmt.Errorf("every slot is silent; slot a pattern first")
+	}
+	buf, err := s.eng.RenderMusic(s.slots, s.bpm, bars, s.root, s.scale, s.prog, 1)
+	if err != nil {
+		return err
+	}
+	f, err := os.Create(a[0])
+	if err != nil {
+		return err
+	}
+	werr := audio.WriteWAV(f, buf)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return werr
+	}
+	fmt.Fprintf(s.out, "wrote %s: %d bar(s) at %d bpm, %s (%.1fs)\n", a[0], bars, s.bpm, s.keyName(), float64(len(buf))/audio.AudioSampleRate)
 	return nil
 }
 

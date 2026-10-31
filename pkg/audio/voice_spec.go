@@ -3,6 +3,7 @@ package audio
 import (
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -64,6 +65,116 @@ type VoiceDef struct {
 	Release float64 `toml:"release,omitempty"`
 	Drive   float64 `toml:"drive,omitempty"` // tanh drive after the filter; 0 = clean
 	Level   float64 `toml:"level,omitempty"` // 0 = 1
+}
+
+// VoiceWaves names the waves a voice may have, in the order a model's wave head
+// scores them.
+var VoiceWaves = [...]string{"sine", "saw", "square", "string", "modal"}
+
+// voiceGene is one voice parameter as a search or a model sees it: its range,
+// whether it is read on a log scale, and where it lives.
+type voiceGene struct {
+	name     string
+	min, max float64
+	log      bool
+	at       func(*VoiceDef) *float64
+}
+
+// voiceGenes is every continuous voice parameter in gene order, the wave aside;
+// the two counts are read as floats and rounded back.
+var voiceGenes = []voiceGene{
+	{"unison", 1, 3, false, nil},
+	{"detune", 1, 1.02, false, func(v *VoiceDef) *float64 { return &v.Detune }},
+	{"sub", 0, 1, false, func(v *VoiceDef) *float64 { return &v.Sub }},
+	{"fm_ratio", 0, 8, false, func(v *VoiceDef) *float64 { return &v.FMRatio }},
+	{"fm_index", 0, 8, false, func(v *VoiceDef) *float64 { return &v.FMIndex }},
+	{"fm_decay", 0, 2, false, func(v *VoiceDef) *float64 { return &v.FMDecay }},
+	{"bright", 0, 1, false, func(v *VoiceDef) *float64 { return &v.Bright }},
+	{"ring", 0.05, 4, true, func(v *VoiceDef) *float64 { return &v.Ring }},
+	{"partials", 4, 48, false, nil},
+	{"strike_pos", 0.05, 0.5, false, func(v *VoiceDef) *float64 { return &v.StrikePos }},
+	{"tilt", 0.5, 3, false, func(v *VoiceDef) *float64 { return &v.Tilt }},
+	{"inharm", 1e-5, 1e-2, true, func(v *VoiceDef) *float64 { return &v.Inharm }},
+	{"inharm_track", 0, 2, false, func(v *VoiceDef) *float64 { return &v.InharmTrack }},
+	{"decay_time", 0.05, 4, true, func(v *VoiceDef) *float64 { return &v.DecayTime }},
+	{"decay_track", 0, 1.5, false, func(v *VoiceDef) *float64 { return &v.DecayTrack }},
+	{"damp_hz", 200, 8000, true, func(v *VoiceDef) *float64 { return &v.DampHz }},
+	{"pair", 0, 10, false, func(v *VoiceDef) *float64 { return &v.Pair }},
+	{"pair_level", 0, 0.6, false, func(v *VoiceDef) *float64 { return &v.PairLevel }},
+	{"pair_slow", 0.1, 1, false, func(v *VoiceDef) *float64 { return &v.PairSlow }},
+	{"hammer_hz", 500, 8000, true, func(v *VoiceDef) *float64 { return &v.HammerHz }},
+	{"knock", 0, 0.5, false, func(v *VoiceDef) *float64 { return &v.Knock }},
+	{"cutoff", 50, 10000, true, func(v *VoiceDef) *float64 { return &v.Cutoff }},
+	{"key_track", 0, 8, false, func(v *VoiceDef) *float64 { return &v.KeyTrack }},
+	{"env_amount", 0, 5000, false, func(v *VoiceDef) *float64 { return &v.EnvAmount }},
+	{"env_decay", 0, 1, false, func(v *VoiceDef) *float64 { return &v.EnvDecay }},
+	{"q", 0, 4, false, func(v *VoiceDef) *float64 { return &v.Q }},
+	{"attack", 0.001, 1, true, func(v *VoiceDef) *float64 { return &v.Attack }},
+	{"decay", 0.005, 2, true, func(v *VoiceDef) *float64 { return &v.Decay }},
+	{"sustain", 0, 1, false, func(v *VoiceDef) *float64 { return &v.Sustain }},
+	{"release", 0.005, 3, true, func(v *VoiceDef) *float64 { return &v.Release }},
+	{"drive", 0, 4, false, func(v *VoiceDef) *float64 { return &v.Drive }},
+	{"level", 0.1, 2, false, func(v *VoiceDef) *float64 { return &v.Level }},
+}
+
+// VoiceGeneCount is the length of a voice's gene vector
+var VoiceGeneCount = len(voiceGenes)
+
+func (g *voiceGene) get(v *VoiceDef) float64 {
+	switch g.name {
+	case "unison":
+		return float64(v.Unison)
+	case "partials":
+		return float64(v.Partials)
+	}
+	return *g.at(v)
+}
+
+func (g *voiceGene) set(v *VoiceDef, x float64) {
+	switch g.name {
+	case "unison":
+		v.Unison = int(math.Round(x))
+	case "partials":
+		v.Partials = int(math.Round(x))
+	default:
+		*g.at(v) = x
+	}
+}
+
+// Genes is the voice's continuous parameters as a vector in [0, 1], each over its
+// range, on a log scale where the ear hears one; the wave is not in it. A zero
+// parameter the voice leaves unset reads as the range's floor.
+func (d *VoiceDef) Genes() []float64 {
+	out := make([]float64, len(voiceGenes))
+	for i := range voiceGenes {
+		g := &voiceGenes[i]
+		x := min(max(g.get(d), g.min), g.max)
+		if g.log {
+			out[i] = math.Log(x/g.min) / math.Log(g.max/g.min)
+		} else {
+			out[i] = (x - g.min) / (g.max - g.min)
+		}
+	}
+	return out
+}
+
+// VoiceFromGenes is Genes' inverse under a wave, each gene held to [0, 1]; the
+// voice has no name.
+func VoiceFromGenes(wave string, genes []float64) *VoiceDef {
+	v := &VoiceDef{Wave: wave}
+	for i := range voiceGenes {
+		g := &voiceGenes[i]
+		x := 0.0
+		if i < len(genes) {
+			x = min(max(genes[i], 0), 1)
+		}
+		if g.log {
+			g.set(v, g.min*math.Pow(g.max/g.min, x))
+		} else {
+			g.set(v, g.min+x*(g.max-g.min))
+		}
+	}
+	return v
 }
 
 // defaultVoice plays an instrument no voice defines: a plain sine.

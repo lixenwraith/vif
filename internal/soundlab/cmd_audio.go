@@ -3,6 +3,7 @@
 package soundlab
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -119,6 +120,7 @@ func cmdSlot(s *Session, a []string) error {
 		}
 	}
 	s.eng.SetPattern(slot, id, fadeMS*audio.AudioSampleRate/1000, quantize)
+	s.slots[slot] = id
 	fmt.Fprintf(s.out, "slot %d <- %s\n", slot, patName(id))
 	return nil
 }
@@ -214,6 +216,9 @@ func cmdKey(s *Session, a []string) error {
 		s.root = root // the engine keeps its root for any other
 	}
 	s.scale = sc
+	if prog != nil {
+		s.prog = prog
+	}
 	return nil
 }
 
@@ -298,6 +303,11 @@ func cmdStat(s *Session, a []string) error {
 	if err := s.eng.SpecError(); err != nil {
 		fmt.Fprintf(s.out, "spec error: %v\n", err)
 	}
+	ear := "the analysis"
+	if s.frontEnd != nil {
+		ear = fmt.Sprintf("model %s (%d weights)", s.files.model, s.frontEnd.Model.Parameters())
+	}
+	fmt.Fprintf(s.out, "rip hears with %s; params %s\n", ear, cmp.Or(s.ripSrc, "built-in"))
 	fmt.Fprintf(s.out, "sounds %d (dirty %v)  voices %d (dirty %v)  patterns %d (dirty %v)\n",
 		len(s.sounds.order), s.sounds.dirtyNames(),
 		len(s.voices.order), s.voices.dirtyNames(),

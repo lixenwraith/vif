@@ -32,6 +32,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |
 | [Audio](audio.md) | Domain detail | How are sound effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
+| [Rip design](rip-design.md) | Design | Where the rip is going: its front ends, the voices and patterns it fits by the engine's own renders, the dictionary and its compression, and what the searches need. |
 | [Navigation](navigation-design.md) | Domain detail | How do flow fields, passability tiers, target groups, the snake lock, loot's pursuit and route graphs move species, and what does each cost? |
 | [Position](position-package.md) | Domain detail | What does `pkg/position` hold and how does `engine.Position` bind it: the cells, the blocks and surfaces as bit planes, the block log, the searches and the volume, and what did each choice cost? |
 | [AI, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do route learning, genetics, float64 geometry, and collision/steering work together? |

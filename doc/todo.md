@@ -1251,28 +1251,45 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
 - Affected files: `pkg/audio/rip.go`, `pkg/audio/rip_test.go`, `internal/soundlab`
 
 `RipSamples` ([Audio §11](audio.md#11-ripping-a-recording)) reads tempo, bars,
-key, drums, melody and bass off a recording under `RipParams`. The search is in
-place: `RenderMusic`, `ExpectedRip` and `CompareRips` grade a set on loops the
-engine renders of registered patterns, soundlab's `tune` runs `pkg/genetic` over
-the gene vector, and `audio/rip.toml` carries the result. What remains:
+key, drums, melody and bass off a recording under `RipParams`, through the
+built-in analysis or `ripnet`; [Rip design](rip-design.md) is the whole plan.
+The search over the parameters is in place (`tune`), as are the corpus the
+engine exports (`corpus`), the model, its trainer (`tool/rip-train`) and the
+front-end seam. What remains, in the design's order:
 
 1. A corpus beyond the shipped bank: loops with a mix, a room and a codec
-   between the render and the rip (impulse convolution, noise, equalisation, a
-   low-pass), chance steps graded as optional rather than as misses, and a small
-   set of real recordings with hand-checked beats and notes held out for
-   validation, so a tuned set does not learn the synthesizer. Then a tuned set
-   ships as the default, with `DefaultRipParams` kept for a recording nothing
-   tuned for.
-2. A bass attack reads as a kick and a chord's attack as a snare: a harmonic
-   check on the hit (a percussive rise with a pitched tail is a note) or the
-   learned front end below.
-3. Two voices in one register, chromatic notes and key changes within a recording
+   between the render and the frames (impulse convolution, noise, equalisation,
+   a low-pass), voices of random genes beside the shipped five, chance steps
+   graded as optional rather than as misses, and a small set of real recordings
+   with hand-checked notes held out for validation, so neither a model nor a
+   tuned set learns the synthesizer.
+2. A training run of `ripnet.Spec` on that corpus, measured against the analysis
+   with `CompareRips` on rendered loops and by ear on the held-out recordings
+   (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then the weights
+   and a tuned parameter set shipped as data, `DefaultRipParams` kept for a
+   recording nothing tuned for.
+3. A bass attack reads as a kick and a chord's attack as a snare in the analysis:
+   a harmonic check on the hit (a percussive rise with a pitched tail is a note)
+   until the model takes the front end.
+4. Two voices in one register, chromatic notes and key changes within a recording
    are outside the model: a second pass with the first estimate cancelled, and a
    key per phrase.
-4. A small learned front end (onset and pitch salience from a few hundred
-   thousand weights, trained on the rendered corpus, run in pure Go) under the
-   same beat tracking and note segmentation, sized for a phone; `tune` then
-   searches the decoder's thresholds over it.
+
+### Fit the rip's voices and patterns by the engine's own renders
+
+- Priority: P1
+- Affected files: `pkg/genetic`, `pkg/audio/rip.go`, `internal/soundlab`
+
+The next iteration, [Rip design](rip-design.md) §2 stages 4 to 7 and §6: the
+`pkg/genetic` additions the searches need (assignment genomes and their
+operators, a scalarized fitness with a size term, an adaptive step for the
+continuous searches, evaluation caching, a checkpoint for the batch engine,
+seeding from several candidates); the voice fit by analysis-by-synthesis, the
+engine rendering a candidate voice at a note's pitch and the mel frames compared;
+the pattern dictionary, the matching of bars to its members and the compression
+of members within a threshold; the refinement loop over render, compare and
+refine, its convergence measured; and the timeline document, which bar plays
+which patterns, the one form the engine lacks for a ripped song.
 
 ### Render a conductor timeline offline
 

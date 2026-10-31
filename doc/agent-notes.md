@@ -183,6 +183,21 @@ that proves wrong or that a document now states, and link the document instead.
   rise, a hat's above 5 kHz 0.45, a snare's noise above 5 kHz 0.15 to 0.21):
   print them again before moving a threshold, and expect a bass note's attack to
   read as a kick.
+- The rip's front end is a seam: `analysis` and `ripnet` both fill `RipFrames`,
+  and the decoders read nothing else, so a front end is checked by the frames it
+  makes and the rip they give, as `ripnet`'s test does with an untrained model.
+- `pkg/transformer` and `tool/rip-train` agree to float32 rounding, checked by
+  exporting a random `ripnet` model from Python, running both on a corpus loop's
+  `.mel` frames (`train.read_mel` and a scratch Go module with a `replace` to the
+  checkout) and comparing the first outputs; redo that check before trusting a
+  trained file after any change to either side. A CPU PyTorch installs in this
+  container in about three minutes (`pip install --user torch --index-url
+  https://download.pytorch.org/whl/cpu`); `corpus 8 4` plus sixty training steps
+  of a width-32 model take under a minute, enough to exercise the whole path.
+- `slot` is asynchronous: the mixer applies the pattern a tick later and
+  `SlotPattern` reads silence until then, so a verb that acts on what was just
+  slotted reads the session's own `slots`, as `render` does; a test that checks
+  the engine's readout waits a tick.
 - The test loop scores 0.98 under `DefaultRipParams` and loops of the shipped bank
   0.51 (`CompareRips.Total`): busy drum lanes whose chance hits count as misses,
   several tracks a slot and melodies under chord changes are where the model falls

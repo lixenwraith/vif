@@ -87,7 +87,11 @@ key, each bar's chord root and, per bar, the kick, snare and hihat hits, the
 melody and the bass line as steps of the grid; `Rip.Patterns` writes them as
 patterns of up to four bars. `RipParams` holds every threshold and
 `DefaultRipParams` the hand-set start, which the engine's own rendered music
-checks. `ReadWAV` reads any PCM or float width to mono.
+checks (`RenderMusic`, `ExpectedRip`, `CompareRips`). The front end is a seam:
+a `Ripper` hears through the package's analysis or through any `RipFrontEnd`
+that fills `RipFrames` from `MelFrames`, as the `ripnet` subpackage does with a
+transformer, which also hears the voices the notes are played with
+(`VoiceDef.Genes`). `ReadWAV` reads any PCM or float width to mono.
 
 ## Determinism
 
