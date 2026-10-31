@@ -98,10 +98,10 @@ A full session of its own, last: it moves what the rest builds on.
   [Rendering §2.2](rendering.md#22-the-cell-aspect),
   [Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)
 
-Phases 1 to 3 landed: `pkg/position` holds the grid, the blocks, the surfaces, the
-block log and the geometry behind one set of queries, `engine.Position` embeds the
-index and keeps what the rows, the components and the rock need, and the game asks
-by the package's names ([Position package §2](position-package.md#2-decisions)
+Phases 1 to 4 landed: `pkg/position` holds the grid, a volume of layers one deep
+on a flat map, the blocks, the surfaces, the block log and the geometry behind one
+set of queries, `engine.Position` embeds the index and keeps what the rows, the
+components and the rock need, and the game asks by the package's names ([Position package §2](position-package.md#2-decisions)
 holds the choices made). What remains, in the order of
 [its phases](position-package.md#3-phases):
 
@@ -120,11 +120,11 @@ holds the choices made). What remains, in the order of
   16 headless vanguard games (8 seeds at 120×40 and 200×60, 2,400 ticks each),
   1,988 of the 25,168 chase ticks it called direct, 7.9%, had the raider's own body
   blocked on the way.
-- A 1:1 cell for a graphical host and later a third axis enter in the package:
-  authored geometry stays at `RefAspect` and the package owns the conversion; the
-  row type moves to the package with the axis, `component.PositionComponent` its
-  alias. A sparse or tiled grid for a ceiling-sized empty map
-  ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)).
+- A 1:1 cell for a graphical host enters in the package: authored geometry stays
+  at `RefAspect` and the package owns the conversion. A volume past the ceiling
+  needs cells chunked on demand, which also serves a ceiling-sized empty map
+  ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)),
+  and a heightfield for its surface.
 
 What it must keep, across multiplayer, netcode and interactions:
 

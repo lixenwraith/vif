@@ -2,6 +2,7 @@ package position
 
 import (
 	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -43,10 +44,10 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 	}
 	masks := []Mask{0, 1, 2, 1 | 8, 0xFF}
 	w, h = 70, 9
-	x.Resize(w, h)
+	x.Resize(w, h, 1)
 	place := func(e entity, px, py int) {
-		if x.Set(e, e.class(), px, py) {
-			x.BlockChangedAt(px, py)
+		if x.Set(e, e.class(), Point{X: px, Y: py}) {
+			x.BlockChangedAt(Point{X: px, Y: py})
 		}
 	}
 	var held []struct {
@@ -73,8 +74,8 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 				break
 			}
 			i := rng.IntN(len(held))
-			x.RemoveEntityAt(held[i].e, held[i].x, held[i].y)
-			x.BlockChangedAt(held[i].x, held[i].y)
+			x.RemoveEntityAt(held[i].e, Point{X: held[i].x, Y: held[i].y})
+			x.BlockChangedAt(Point{X: held[i].x, Y: held[i].y})
 			if rng.IntN(2) == 0 { // gone for good, or moved
 				delete(walls, held[i].e)
 				held[i] = held[len(held)-1]
@@ -87,7 +88,7 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 			if len(held) > 0 {
 				i := rng.IntN(len(held))
 				walls[held[i].e] = masks[rng.IntN(len(masks))]
-				x.BlockChangedAt(held[i].x, held[i].y)
+				x.BlockChangedAt(Point{X: held[i].x, Y: held[i].y})
 			}
 		case 7: // surfaces narrower or wider than the map, or none
 			if rng.IntN(5) == 0 {
@@ -105,12 +106,12 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 		case 10:
 			if step%300 == 10 { // the planes follow a resize once the grid is filled again
 				w, h = 40+rng.IntN(100), 3+rng.IntN(10)
-				x.Resize(w, h)
+				x.Resize(w, h, 1)
 				lift()
 				held = held[:0]
 				for e := range walls {
 					px, py := rng.IntN(w), rng.IntN(h)
-					if x.Set(e, e.class(), px, py) {
+					if x.Set(e, e.class(), Point{X: px, Y: py}) {
 						held = append(held, struct {
 							e    entity
 							x, y int
@@ -154,10 +155,10 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 func TestAPointAnswersAsTheCellsBlocks(t *testing.T) {
 	walls := map[entity]Mask{mk(ClassShared, 1): 2, mk(ClassShared, 2): 0, mk(ClassPrivate, 3): 0xFF}
 	x := New[entity](frame{}, func(e entity) (Mask, bool) { m, ok := walls[e]; return m, ok })
-	x.Resize(130, 4)
+	x.Resize(130, 4, 1)
 	for e := range walls {
-		x.Set(e, e.class(), 100, 2)
-		x.BlockChangedAt(100, 2)
+		x.Set(e, e.class(), Point{X: 100, Y: 2})
+		x.BlockChangedAt(Point{X: 100, Y: 2})
 	}
 	for _, tt := range []struct {
 		mask Mask
@@ -170,9 +171,116 @@ func TestAPointAnswersAsTheCellsBlocks(t *testing.T) {
 			t.Fatalf("mask %d around the cell: %t, want %t", tt.mask, got, tt.want)
 		}
 	}
-	x.RemoveEntityAt(mk(ClassShared, 1), 100, 2)
-	x.BlockChangedAt(100, 2)
+	x.RemoveEntityAt(mk(ClassShared, 1), Point{X: 100, Y: 2})
+	x.BlockChangedAt(Point{X: 100, Y: 2})
 	if x.Blocks(100, 2, 2) || !x.Blocks(100, 2, 0) {
 		t.Fatal("a block gone still blocks, or the block of mask 0 left with it")
+	}
+}
+
+// TestAVolumeAnswersLayerByLayer: a point, a box and a line of sight through a
+// volume answer from the layer each cell lies in, the flat queries answering for
+// the first layer as the point forms do there and the surfaces lying on it alone,
+// and a depth the ceiling cannot hold is clamped.
+func TestAVolumeAnswersLayerByLayer(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3, 9))
+	walls := map[entity]Mask{}
+	x := New[entity](frame{}, func(e entity) (Mask, bool) { m, ok := walls[e]; return m, ok })
+	const w, h, d = 9, 6, 4
+	x.Resize(w, h, d)
+	if x.Depth != d || len(x.Cells) != w*h*d {
+		t.Fatalf("a %d×%d×%d volume has depth %d and %d cells", w, h, d, x.Depth, len(x.Cells))
+	}
+	masks := []Mask{0, 1, 2, 4, 3}
+	cells := map[Point][]entity{}
+	for i := range 80 {
+		if i == 40 { // the planes stand from here, so the rest reach them cell by cell
+			for _, m := range masks {
+				x.BlocksAt(Point{Z: 1}, m)
+			}
+		}
+		e := mk(ClassShared, uint64(i+1))
+		if rng.IntN(4) == 0 {
+			e = mk(ClassPrivate, uint64(i+1))
+		}
+		if rng.IntN(2) == 0 {
+			walls[e] = Mask(1 << rng.IntN(3))
+		}
+		p := Point{X: rng.IntN(w), Y: rng.IntN(h), Z: rng.IntN(d)}
+		if x.Set(e, e.class(), p) {
+			x.BlockChangedAt(p)
+			cells[p] = append(cells[p], e)
+		}
+	}
+	heights := make([]int, w)
+	for i := range heights {
+		heights[i] = rng.IntN(h + 1)
+	}
+	x.AddSurface(1, Above, 0, heights)
+	blocked := func(p Point, mask Mask) bool {
+		if p.Z == 0 && p.Y < heights[p.X] && (mask == 0 || mask&1 != 0) {
+			return true
+		}
+		for _, e := range cells[p] {
+			if m, ok := walls[e]; ok && e.class() == ClassShared && (mask == 0 || m&mask != 0) {
+				return true
+			}
+		}
+		return false
+	}
+	for z := range d {
+		for y := range h {
+			for px := range w {
+				p := Point{X: px, Y: y, Z: z}
+				for _, mask := range masks {
+					if got, want := x.BlocksAt(p, mask), blocked(p, mask); got != want {
+						t.Fatalf("mask %d at %v: BlocksAt %t, the cell says %t", mask, p, got, want)
+					}
+					if z == 0 && x.Blocks(px, y, mask) != x.BlocksAt(p, mask) {
+						t.Fatalf("mask %d at %v: the flat query and the point form differ", mask, p)
+					}
+				}
+				got, want := slices.Clone(x.EntitiesAtPoint(p, ScopeAll)), slices.Clone(cells[p])
+				slices.Sort(got)
+				slices.Sort(want)
+				if !slices.Equal(got, want) || x.HasAnyEntityAtPoint(p, ScopeAll) != (len(want) > 0) {
+					t.Fatalf("at %v: holds %v, placed %v", p, got, want)
+				}
+				if z == 0 && len(x.EntitiesAt(px, y, ScopeAll)) != len(got) {
+					t.Fatalf("at %v: the flat query and the point form differ", p)
+				}
+			}
+		}
+	}
+	inside := func() Point { return Point{X: rng.IntN(w), Y: rng.IntN(h), Z: rng.IntN(d)} }
+	for range 500 {
+		mask := masks[rng.IntN(len(masks))]
+		p := Point{X: rng.IntN(w+4) - 2, Y: rng.IntN(h+4) - 2, Z: rng.IntN(d+4) - 2}
+		bw, bh, bd := 1+rng.IntN(4), 1+rng.IntN(4), 1+rng.IntN(3)
+		want := false
+		for z := p.Z; z < p.Z+bd; z++ {
+			for y := p.Y; y < p.Y+bh; y++ {
+				for px := p.X; px < p.X+bw; px++ {
+					want = want || x.BlocksAt(Point{X: px, Y: y, Z: z}, mask)
+				}
+			}
+		}
+		if got := x.BlocksBox(p, bw, bh, bd, mask); got != want {
+			t.Fatalf("mask %d box %v %d×%d×%d: BlocksBox %t, its cells say %t", mask, p, bw, bh, bd, got, want)
+		}
+		a, b := inside(), inside()
+		want = true
+		for l := vmath.NewLine3(a, b).Next(); !l.AtEnd(); l = l.Next() {
+			want = want && !x.BlocksAt(l.Point(), mask)
+		}
+		if got := x.HasLineOfSightBetween(a, b, mask); got != want {
+			t.Fatalf("mask %d %v→%v: HasLineOfSightBetween %t, the line's cells say %t", mask, a, b, got, want)
+		}
+	}
+	if x.Resize(500, 250, 3); x.Depth != 1 {
+		t.Fatalf("a map at the ceiling took depth %d, want 1", x.Depth)
+	}
+	if x.Resize(100, 50, 30); x.Depth != 25 {
+		t.Fatalf("100×50×30 took depth %d, want the 25 layers the ceiling allows", x.Depth)
 	}
 }

@@ -128,18 +128,18 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	countSaturation := true
 	if i, ok := p.slots.get(e); ok {
 		old := p.dense[i]
-		if old == pos && p.Index.Holds(e, EntityClass(e), old.X, old.Y) {
+		if old == pos && p.Index.Holds(e, EntityClass(e), old) {
 			return
 		}
-		countSaturation = old.X != pos.X || old.Y != pos.Y
-		p.Index.RemoveEntityAt(e, old.X, old.Y)
-		p.wallMoved(e, old.X, old.Y)
+		countSaturation = old != pos
+		p.Index.RemoveEntityAt(e, old)
+		p.wallMoved(e, old)
 		p.dense[i] = pos
 	} else {
 		p.insert(e, pos)
 	}
-	p.setGrid(e, pos.X, pos.Y, countSaturation)
-	p.wallMoved(e, pos.X, pos.Y)
+	p.setGrid(e, pos, countSaturation)
+	p.wallMoved(e, pos)
 }
 
 // insert places an entity new to the store, leaving the spatial index to the caller.
@@ -153,15 +153,15 @@ func (p *Position) insert(e core.Entity, pos component.PositionComponent) {
 
 // setGrid preserves soft clipping while exposing saturation, budget rejection, and
 // data loss; it reports whether the cell took the entity.
-func (p *Position) setGrid(e core.Entity, x, y int, countSaturation bool) bool {
+func (p *Position) setGrid(e core.Entity, pos component.PositionComponent, countSaturation bool) bool {
 	class := EntityClass(e)
-	if x < 0 || x >= p.Index.Width || y < 0 || y >= p.Index.Height {
-		return p.Index.Set(e, class, x, y)
+	cell := p.Index.CellAt(pos)
+	if cell == nil {
+		return p.Index.Set(e, class, pos)
 	}
-	cell := &p.Index.Cells[y*p.Index.Width+x]
 	before := cell.Count
 	playerBefore := cell.Count - cell.SharedCount
-	if !p.Index.Set(e, class, x, y) {
+	if !p.Index.Set(e, class, pos) {
 		// A player insert stopped by its own budget is not cell exhaustion
 		if class == position.ClassPrivate && playerBefore >= position.PrivateBudget {
 			if p.statPlayerRejects != nil {
@@ -222,9 +222,9 @@ func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 		return
 	}
 	pos := p.dense[i]
-	p.Index.RemoveEntityAt(e, pos.X, pos.Y)
+	p.Index.RemoveEntityAt(e, pos)
 	p.removeAt(i)
-	p.wallMoved(e, pos.X, pos.Y)
+	p.wallMoved(e, pos)
 	if len(skipMask) == 0 || !skipMask[0] {
 		p.world.RemoveComponentMask(e, p.bit)
 	}
@@ -242,9 +242,9 @@ func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 			continue
 		}
 		pos := p.dense[i]
-		p.Index.RemoveEntityAt(e, pos.X, pos.Y)
+		p.Index.RemoveEntityAt(e, pos)
 		p.removeAt(i)
-		p.wallMoved(e, pos.X, pos.Y)
+		p.wallMoved(e, pos)
 		if clearMask {
 			p.world.RemoveComponentMask(e, p.bit)
 		}
@@ -254,12 +254,12 @@ func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 // Resize sizes the grid to the map and places every entity in it again; the
 // backing storage is grow-only, so a shrink is cheap
 func (p *Position) Resize(width, height int) {
-	p.Index.Resize(width, height)
+	p.Index.Resize(width, height, 1)
 
 	// Re-populate grid from dense component data
 	for i, e := range p.entities {
 		// Explicit ignore for OOB and Cell full
-		p.setGrid(e, p.dense[i].X, p.dense[i].Y, true)
+		p.setGrid(e, p.dense[i], true)
 	}
 }
 
@@ -305,16 +305,16 @@ func (p *Position) Clear() {
 // BlockMask set in place, or a wall component overwritten.
 func (p *Position) WallChanged(e core.Entity) {
 	if i, ok := p.slots.get(e); ok {
-		p.Index.BlockChangedAt(p.dense[i].X, p.dense[i].Y)
+		p.Index.BlockChangedAt(p.dense[i])
 	}
 }
 
-// wallMoved logs (x, y) once e, a wall a grid can hold, has left or entered it in
+// wallMoved logs pos once e, a wall a grid can hold, has left or entered it in
 // the grid. The mask, not the wall store, names a wall: a destroy empties the
 // store first.
-func (p *Position) wallMoved(e core.Entity, x, y int) {
+func (p *Position) wallMoved(e core.Entity, pos component.PositionComponent) {
 	if e.Domain() != core.DomainPlayer && p.world.componentMask[e]&WallBit != 0 {
-		p.Index.BlockChangedAt(x, y)
+		p.Index.BlockChangedAt(pos)
 	}
 }
 
@@ -326,12 +326,12 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 		return
 	}
 	old := p.dense[i]
-	p.Index.RemoveEntityAt(e, old.X, old.Y)
-	p.wallMoved(e, old.X, old.Y)
+	p.Index.RemoveEntityAt(e, old)
+	p.wallMoved(e, old)
 	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
-	p.setGrid(e, newPos.X, newPos.Y, old.X != newPos.X || old.Y != newPos.Y)
-	p.wallMoved(e, newPos.X, newPos.Y)
+	p.setGrid(e, newPos, old != newPos)
+	p.wallMoved(e, newPos)
 }
 
 // Shift translates every entity by (dx, dy) in two phases, all leaving their cells
@@ -345,17 +345,17 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 	for _, e := range entities {
 		if i, ok := p.slots.get(e); ok {
 			old := p.dense[i]
-			p.Index.RemoveEntityAt(e, old.X, old.Y)
-			p.wallMoved(e, old.X, old.Y)
-			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
+			p.Index.RemoveEntityAt(e, old)
+			p.wallMoved(e, old)
+			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy, Z: old.Z}
 		}
 	}
 	for _, e := range entities {
 		if i, ok := p.slots.get(e); ok {
-			if !p.setGrid(e, p.dense[i].X, p.dense[i].Y, true) {
+			if !p.setGrid(e, p.dense[i], true) {
 				unplaced = append(unplaced, e)
 			}
-			p.wallMoved(e, p.dense[i].X, p.dense[i].Y)
+			p.wallMoved(e, p.dense[i])
 		}
 	}
 	return unplaced

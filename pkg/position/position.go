@@ -1,5 +1,6 @@
 // Package position is a map's spatial index and the geometry over it: a dense grid
-// of cells holding what stands in each; the blocks among them, cells an occupant
+// of cells, a map or a volume of layers, holding what stands in each; the blocks
+// among them, cells an occupant
 // blocks for a mask, kept as a bit a cell for each mask asked; the surfaces no
 // entity holds, a height a column with a solid side; the log of the cells whose
 // block answer changed; and the searches a placement, a line or a ray makes over
@@ -11,8 +12,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// Point is a cell's coordinate, vmath's: a column, a row and, in a volume, a layer.
-// The index answers for one layer, so a point's Z is 0 on every map it holds.
+// Point is a cell's coordinate, vmath's: a column, a row and a layer, 0 on a map
+// one layer deep. A query taking a column and a row answers for the first layer;
+// one taking a Point, for any layer.
 type Point = vmath.Point
 
 // Frame is the map's frame, read live: the cell aspect the searches round on. The
@@ -78,17 +80,17 @@ type plane struct {
 func New[E comparable](frame Frame, blockOf func(e E) (Mask, bool)) *Index[E] {
 	// The grid is sized by the caller to the map it indexes: a ceiling-sized one
 	// costs 32 MB, which an instance per bot multiplies.
-	x := &Index[E]{Grid: NewGrid[E](0, 0), frame: frame, blockOf: blockOf}
+	x := &Index[E]{Grid: NewGrid[E](0, 0, 1), frame: frame, blockOf: blockOf}
 	for i := range x.planeOf {
 		x.planeOf[i] = -1
 	}
 	return x
 }
 
-// Resize sizes the grid to w×h, emptying it, and loses the log, since the cells
+// Resize sizes the grid to w×h×d, emptying it, and loses the log, since the cells
 // moved; the caller places its entities again, and the planes follow.
-func (x *Index[E]) Resize(w, h int) {
-	x.Grid.Resize(w, h)
+func (x *Index[E]) Resize(w, h, d int) {
+	x.Grid.Resize(w, h, d)
 	x.log.lose()
 	x.stale, x.unmerged = true, true
 }
@@ -111,7 +113,7 @@ func (x *Index[E]) planeFor(mask Mask) *plane {
 		return &x.planes[i]
 	}
 	x.planeOf[mask] = int8(len(x.planes))
-	x.planes = append(x.planes, plane{mask: mask, Bits: NewBits(x.Width, x.Height)})
+	x.planes = append(x.planes, plane{mask: mask, Bits: NewBits(x.Width, x.Height*x.Depth)})
 	p := &x.planes[len(x.planes)-1]
 	for _, i := range x.occupied {
 		if m, block := x.cellBlock(int(i)); block && (mask == 0 || m&mask != 0) {
@@ -126,7 +128,7 @@ func (x *Index[E]) rebuild() {
 	x.stale = false
 	stride := Stride(x.Width)
 	for i := range x.planes {
-		x.planes[i].Bits = x.planes[i].Bits.sized(stride, x.Height)
+		x.planes[i].Bits = x.planes[i].Bits.sized(stride, x.Height*x.Depth)
 	}
 	for _, i := range x.occupied {
 		x.update(int(i))
@@ -151,14 +153,15 @@ func (x *Index[E]) update(i int) {
 		return
 	}
 	mask, block := x.cellBlock(i)
-	px, py := i%x.Width, i/x.Width
+	px, row := i%x.Width, i/x.Width
 	for p := range x.planes {
-		x.planes[p].Put(px, py, block && (x.planes[p].mask == 0 || mask&x.planes[p].mask != 0))
+		x.planes[p].Put(px, row, block && (x.planes[p].mask == 0 || mask&x.planes[p].mask != 0))
 	}
 }
 
-// Blocks reports whether (x, y) is blocked for mask: a surface's solid side, or
-// a shared occupant blockOf names. Outside the map nothing is.
+// Blocks reports whether (x, y) of the first layer is blocked for mask: a
+// surface's solid side, or a shared occupant blockOf names. Outside the map
+// nothing is.
 func (x *Index[E]) Blocks(px, py int, mask Mask) bool {
 	if px < 0 || px >= x.Width || py < 0 || py >= x.Height {
 		return false
@@ -174,8 +177,19 @@ func (x *Index[E]) Blocks(px, py int, mask Mask) bool {
 	return x.planeFor(mask).Bit(px, py)
 }
 
-// BlocksArea reports whether a cell of [x, x+width) × [y, y+height) is blocked
-// for mask, the cells outside the map passed over.
+// BlocksAt is Blocks for a cell of any layer; the surfaces lie on the first.
+func (x *Index[E]) BlocksAt(p Point, mask Mask) bool {
+	if p.Z == 0 {
+		return x.Blocks(p.X, p.Y, mask)
+	}
+	if !x.InBounds(p) {
+		return false
+	}
+	return x.planeFor(mask).Bit(p.X, x.row(p))
+}
+
+// BlocksArea reports whether a cell of [x, x+width) × [y, y+height) of the first
+// layer is blocked for mask, the cells outside the map passed over.
 func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
 	x0, y0 := max(px, 0), max(py, 0)
 	x1, y1 := min(px+width, x.Width), min(py+height, x.Height)
@@ -191,6 +205,26 @@ func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
 		}
 	}
 	return x.planeFor(mask).Any(x0, x1, y0, y1)
+}
+
+// BlocksBox reports whether a cell of the box from p, width×height×depth cells, is
+// blocked for mask, the cells outside the volume passed over.
+func (x *Index[E]) BlocksBox(p Point, width, height, depth int, mask Mask) bool {
+	x0, y0, z0 := max(p.X, 0), max(p.Y, 0), max(p.Z, 0)
+	x1, y1, z1 := min(p.X+width, x.Width), min(p.Y+height, x.Height), min(p.Z+depth, x.Depth)
+	if x0 >= x1 || y0 >= y1 || z0 >= z1 {
+		return false
+	}
+	if z0 == 0 && x.BlocksArea(x0, y0, x1-x0, y1-y0, mask) {
+		return true
+	}
+	plane := x.planeFor(mask)
+	for z := max(z0, 1); z < z1; z++ {
+		if plane.Any(x0, x1, z*x.Height+y0, z*x.Height+y1) {
+			return true
+		}
+	}
+	return false
 }
 
 // blockedCells counts the cells of an area blocked for mask
@@ -225,13 +259,13 @@ func (x *Index[E]) BlockBits(mask Mask, buf []uint64) Bits {
 	return b
 }
 
-// BlockChangedAt logs (x, y) as a cell whose block answer may have moved, a block
+// BlockChangedAt logs p as a cell whose block answer may have moved, a block
 // placed, moved or removed there or its mask rewritten, and brings the planes to
 // what the cell holds now.
-func (x *Index[E]) BlockChangedAt(px, py int) {
-	x.log.add(px, py, len(x.Cells))
-	if !x.stale && px >= 0 && px < x.Width && py >= 0 && py < x.Height {
-		x.update(py*x.Width + px)
+func (x *Index[E]) BlockChangedAt(p Point) {
+	x.log.add(p, len(x.Cells))
+	if !x.stale && x.InBounds(p) {
+		x.update(x.row(p)*x.Width + p.X)
 	}
 }
 
@@ -276,7 +310,7 @@ type changeLog struct {
 }
 
 // add logs one cell, losing the log past an eighth of the grid's cells
-func (l *changeLog) add(x, y, cells int) {
+func (l *changeLog) add(p vmath.Point, cells int) {
 	if l.base == 0 {
 		l.base = 1
 	}
@@ -284,7 +318,7 @@ func (l *changeLog) add(x, y, cells int) {
 		l.lose()
 		return
 	}
-	l.cells = append(l.cells, vmath.Point{X: x, Y: y})
+	l.cells = append(l.cells, p)
 }
 
 // lose forgets every cell, leaving each reader before now to re-read

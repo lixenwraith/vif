@@ -16,6 +16,7 @@ type WorldCopy struct {
 	components         componentCopies
 	positions          storeCopy[component.PositionComponent]
 	gridW, gridH       int
+	gridD              int
 	cells              []occupiedCell
 	occupants          []core.Entity // every occupied cell's entities, cell after cell
 	mask               map[core.Entity]uint64
@@ -55,6 +56,7 @@ func (w *World) CopyOut(reuse *WorldCopy) *WorldCopy {
 			dense: append(reuse.positions.dense[:0], p.dense...), entities: append(reuse.positions.entities[:0], p.entities...)},
 		gridW: p.Index.Width,
 		gridH: p.Index.Height,
+		gridD: p.Index.Depth,
 		mask:  reuse.mask,
 		next:  w.nextEntityID,
 	}
@@ -100,7 +102,7 @@ func (w *World) CopyIn(c *WorldCopy) {
 	for i, e := range p.entities {
 		p.slots.set(e, int32(i))
 	}
-	p.Index.Resize(c.gridW, c.gridH)
+	p.Index.Resize(c.gridW, c.gridH, c.gridD)
 	at := 0
 	for _, oc := range c.cells {
 		p.Index.Load(oc.index, oc.count, oc.shared, c.occupants[at:at+int(oc.count)])

@@ -16,11 +16,13 @@ states what the end must keep.
 
 In `pkg/position`:
 
-- `Grid[E]`: the cells, each two halves (`ClassShared` from the front, `ClassPrivate`
-  from the back within `PrivateBudget`), `Scope`, the occupied list, the presence
-  bits of each class (`Present`), by which a probe passes an empty cell on a word
-  that stays in cache and a scan passes empty cells a word at a time, `Clamp` and
-  the map ceiling, stats, and the load and reorder a world copy and an install use.
+- `Grid[E]`: the cells, a volume of `Depth` layers, one on a flat map, each two
+  halves (`ClassShared` from the front, `ClassPrivate` from the back within
+  `PrivateBudget`), indexed `(z*Height+y)*Width+x`; `Scope`; the occupied list;
+  the presence bits of each class (`Present`), the layers' rows in turn, by which
+  a probe passes an empty cell on a word that stays in cache and a scan passes
+  empty cells a word at a time; `Clamp` and `ClampVolume` under the one cell
+  ceiling; stats; and the load and reorder a world copy and an install use.
 - `Index[E]`: the grid, whose dimensions are the bounds every query answers
   within; the `Frame` it reads the cell aspect through; `blockOf`, the caller's
   word on which shared occupant is a block and what it stops (a `Mask`, 0 asking
@@ -29,12 +31,15 @@ In `pkg/position`:
   the block log; `BlockBits`, the plane's words with the surfaces' solid cells for
   a reader deriving whole; and the searches: free area by spiral, by pattern and
   around an exclusion, point and area line of sight, rays, batches, the closest
-  occupant in a direction.
+  occupant in a direction. A query taking a column and a row answers for the first
+  layer, as a flat game's do; one taking a `Point` (`BlocksAt`, `BlocksBox`,
+  `IsBlockedAt`, `EntitiesAtPoint`, `HasAnyEntityAtPoint`, `HasLineOfSightBetween`,
+  `HasBoxLineOfSight`) for any, a line through the volume walking `vmath.Line3`.
 - `Bits`: the grid of bits the planes and navigation share, each row starting on
   a word: a point a bit, an area a few words a row, a row shifted a column in a
   word, two grids diffed by XOR.
-- `Surface`: a boundary no entity holds, a height for each column with the cells
-  on one `Side` of it solid (`Above`, a ceiling; `Below`, a floor), blocking its
+- `Surface`: a boundary no entity holds on the first layer, a height for each
+  column with the cells on one `Side` of it solid (`Above`, a ceiling; `Below`, a floor), blocking its
   mask as a block does; laid from its writer's record, shifted a column at a time
   with the heights ahead of it for a frame drawn between shifts. The surfaces of
   one mask are merged for the probes into a ceiling and a floor per column and
@@ -181,10 +186,13 @@ Each names the choice taken and what the other would have cost.
    `World.Positions`, and `SetRock` loses its look, which the wall system lays in
    `CaveResource` for the rock renderer. Done, measured in §5 at parity. The point
    with its third axis (§4) landed ahead of it.
-4. Footprints and the volume: the direct-path test from the body's header, the 1:1
+4. The volume: a depth to the grid, the planes and the presence bits the layers'
+   rows in turn, the point forms of the queries, a 3D line of sight and a box
+   along it, the binding placing by the point. Done, measured in §5 at parity.
+4b. Footprints and the cell: the direct-path test from the body's header, the 1:1
    cell for a graphical host (authored geometry stays at `RefAspect`, the package
-   owns the conversion), a depth to the grid, chunked cells for a volume and the
-   ceiling-sized empty map, a 3D line of sight.
+   owns the conversion), a heightfield surface for a volume, chunked cells for a
+   volume past the ceiling and the ceiling-sized empty map.
 5. Batch skips: the presence bits, a class each, kept as cells fill and empty, so
    a probe passes an empty cell on a word and a scan passes empty cells a word at
    a time. Done, measured in §5.
@@ -206,24 +214,33 @@ map as a volume one cell deep, at no cost to it. What enters, and where:
   drawn in front, never reaches their position, whose Z is 0 like every cell's on
   a one-layer map. A body's continuous height belongs in its physics state and is
   projected to a layer only in a volume, where the point's Z is the layer the cell
-  index reads; a 2D-presented 3D body changes nothing until then.
-- The grid: a `Depth`, 1 on a 2D map, cells indexed `(z*Height+y)*Width+x`, the
-  planes and the rock a `Bits` per layer, the arithmetic in one place. A dense
-  grid cannot hold a volume at 256 bytes a cell: a volume allocates cells by chunk
-  on demand, which also serves the ceiling-sized empty 2D map
-  ([Shrink the spatial grid](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps));
-  the dense grid stays the path while every map is one layer.
-- The queries: a point and an area gain a depth (`BlocksBox`), a line of sight
-  walks a 3D line (`vmath` gains the stepper), a body of depth tests a box a step.
-  The placement searches, spiral, pattern and exclusion, stay a layer's, as
-  placing on a floor, and take a 3D form when a game asks for one.
+  index reads; a 2D-presented 3D body changes nothing until then. The storm is 3D
+  physics drawn flattened, not a body a render in depth targets.
+- The grid, landed: `Depth` layers, one on a flat map, the cells indexed
+  `(z*Height+y)*Width+x`, the planes and the presence bits each one `Bits` whose
+  rows are the layers' in turn, so a cell's index names its row and a flat query
+  costs what it did; the surfaces lie on the first layer. The one ceiling bounds
+  the volume's cells as the map's (`ClampVolume`), so a volume stays small while
+  every cell is dense, 100×50×25 at most; cells chunked on demand would lift that
+  and serve the ceiling-sized empty 2D map
+  ([Shrink the spatial grid](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps)).
+- The queries, landed: one taking a column and a row answers for the first layer,
+  so no call site of a flat game moves; one taking a `Point` answers for any
+  (`BlocksAt`, `BlocksBox`, `IsBlockedAt`, `EntitiesAtPoint`, `HasAnyEntityAtPoint`);
+  a line of sight walks `vmath.Line3`, the axis of the longest span stepping every
+  cell and in one plane the cells `Line` walks (`HasLineOfSightBetween`), and a
+  body of depth tests a box a step (`HasBoxLineOfSight`). The placement searches,
+  spiral, pattern and exclusion, stay a layer's, as placing on a floor, and take a
+  3D form when a game asks for one.
 - Navigation: a footprint gains a depth and a passability a layer; a flow field
   through a volume is a later ask.
 
-To settle with the game that first needs it: whether a 2D-only reader of a
-Z-aware entity reads its layer or ignores Z (a one-layer map has no difference),
-and whether overlapping spaces that share cells (a room in three timelines) are a
-Z range of one index or an index per space.
+Settled: a flat presentation reads an entity at its layer, as the renderer will
+once a volume stands; a presentation in depth, as `sandbox/3d` draws, orders what
+overlaps by a depth buffer over every layer projected, while a flat render's
+overlap stays the render priorities', which do not conflict with it. Open: the
+heightfield a volume's surface is, and the chunked cells a volume past the
+ceiling needs.
 
 ## 5. Measurements
 
