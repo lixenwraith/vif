@@ -96,9 +96,10 @@ func (e *StreamingEngine[S, F]) SetDiversity(fn DiversityFunc[S, F]) {
 	e.mu.Unlock()
 }
 
-// SetEqual holds each genotype once, at its best score: a repeat outcome below
-// it is discarded and one above it moves the member up. Without it an elitist
-// archive fills with clones of its best member
+// SetEqual holds each genotype once, at its latest score: a repeat outcome
+// moves the member to where its new score sorts, so an archive whose members
+// are re-evaluated follows a changing objective. Without it an elitist archive
+// fills with clones of its best member
 func (e *StreamingEngine[S, F]) SetEqual(fn EqualFunc[S]) {
 	e.mu.Lock()
 	e.equal = fn
@@ -293,29 +294,26 @@ func (e *StreamingEngine[S, F]) beginLocked(sol S) EvalID {
 }
 
 // insertLocked places a scored candidate into the descending archive, evicting
-// the tail when full. Under SetEqual a genotype already archived keeps its
-// better score, so the archive never holds one twice
+// the tail when full. Under SetEqual a genotype already archived leaves first
+// and re-enters at the new score, so the archive never holds one twice
 func (e *StreamingEngine[S, F]) insertLocked(sol S, score F) {
 	n := len(e.archive)
-	if n == cap(e.archive) && score <= e.archive[n-1].Score {
-		e.recycleLocked(sol)
-		return
-	}
 	if e.equal != nil {
 		for i := range e.archive {
 			if !e.equal(e.archive[i].Data, sol) {
 				continue
 			}
-			if e.archive[i].Score >= score {
-				e.recycleLocked(sol)
-				return
-			}
 			e.recycleLocked(e.archive[i].Data)
 			copy(e.archive[i:], e.archive[i+1:n])
 			n--
 			e.archive = e.archive[:n]
+			e.version++
 			break
 		}
+	}
+	if n == cap(e.archive) && score <= e.archive[n-1].Score {
+		e.recycleLocked(sol)
+		return
 	}
 
 	idx := n

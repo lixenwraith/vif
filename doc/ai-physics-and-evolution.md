@@ -91,8 +91,9 @@ flowchart LR
 ```
 
 Only scored candidates enter the fixed-capacity, descending archive, so elitism
-is structural, and an optional equality hook holds a genotype once, at its best
-score, so the archive does not fill with clones of its best member. Outcome
+is structural, and an optional equality hook holds a genotype once, at its
+latest score, so the archive does not fill with clones of its best member and a
+re-evaluated member follows a changing objective. Outcome
 count advances generations. The proposal ring is bounded; the pending table is
 open-addressed, an evaluation occupying one of the eight slots from its id's
 home slot, so `PendingCapacity` bounds the evaluations in flight and one is

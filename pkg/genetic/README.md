@@ -25,14 +25,15 @@ Two engines share one operator set:
 | `genetic/persistence` | `genetic` | Population save/load, atomic writes, JSON by default |
 
 `genetic` never imports its own subpackages. Using `StreamingEngine` directly
-requires nothing else. Two runnable examples live beside the package:
-
-- `sandbox/genetic` evolves lander controllers: four real genes, flights that
-  end out of order, a terminal view, and a `-headless N` mode that prints a
-  convergence table.
-- `sandbox/life` evolves 5×5 cell patterns that cross a Game of Life field to a
-  goal from eight sources, one population each, over a bit genome with its own
-  perturbator and diversity metric. Moving the goal re-scores every archive.
+requires nothing else. `sandbox/genetic` is a runnable example: two streams of
+lander controllers, a population each, released in step from opposite corners
+toward one pad, where two landers of different streams that meet are both
+destroyed. Each population's best answer depends on the other's, so the example
+shows what a game needs from the engine: flights that end out of order, a score
+that is the mean of several flights against the other stream, archive members
+re-flown so their scores follow the other population, and a moved pad that
+re-scores every archive. It has a terminal view and a `-headless N` mode that
+prints a convergence table.
 
 ---
 
@@ -104,13 +105,13 @@ crossover stops contributing. `SetEqual` closes it:
 e.SetEqual(slices.Equal[[]float64])
 ```
 
-With it a genotype is archived once, at its best score: a repeat outcome below
-that score is discarded, and one above it moves the member up instead of adding
-a second copy. The check is one comparison per archive member on each admitted
-outcome, after the tail test has already rejected most. A discrete genome
-evaluated under noise needs it even more than a real one: the same pattern
-scored ten different ways would otherwise take ten slots. `registry` installs it
-for every species.
+With it a genotype is archived once, at its latest score: a repeat outcome
+moves the member to where its new score sorts, up or down, instead of adding a
+second copy. The check is one comparison per archive member on each outcome.
+That is what lets an archive follow a changing objective: a host that re-flies
+archived genotypes now and then, as the lander example does, replaces scores
+set when the world was otherwise, where a best-score rule would keep every
+lucky outcome for good. `registry` installs it for every species.
 
 Generations advance on *outcome count*, not on batch boundaries:
 `MinOutcomesPerGen` completed evaluations increment `Generation` and trigger a
@@ -169,6 +170,13 @@ until the archive holds two members, so when a short lifetime correlates with a
 poor outcome, expect the first generations to breed from poor stock before the
 slow, good outcomes arrive. Waiting for a full archive before breeding was
 measured on the lander example and changed nothing, so the engine does not.
+
+An elitist archive admits an outcome, not a genotype's expectation, so under a
+noisy objective it selects for luck: a controller that crashes two flights in
+five is archived on the three it did not. When the noise is the point, as it is
+whenever another population is part of the objective, score each genotype by
+the mean of several evaluations and report that once; the lander example flies
+each genotype four times before completing its evaluation.
 
 ### Ownership
 
@@ -241,7 +249,9 @@ engine; use them when retaining learned candidates matters but exact continuatio
 does not. Pending evaluations survive `Inject` and complete into the new archive;
 abandon them first if their scores belong to the old objective. Re-scoring a
 `Snapshot` and injecting it is how a host changes the objective without
-discarding what was learned; both examples do it when their goal moves.
+discarding what was learned; the lander example does it when the pad moves, then
+re-flies every member live, since a score computed alone knows nothing of the
+other stream.
 
 ```go
 state, err := e.Checkpoint()         // Complete, caller-owned continuation point
@@ -332,21 +342,19 @@ reuse `dst[i]` capacity when shape-compatible.
 `PerturbationRate` of 0.2 with `PerturbationStrength` 0.15 mutates one gene in
 five with a sigma of 15% of its range. Size `rate` to the genome: with four
 genes, 0.2 leaves 41% of offspring unmutated, so short genomes want a rate near
-`1/len` or above, and a genome whose value depends on an exact arrangement, as
-a cell pattern does, wants a rate near `1/len` or below with a `MixProbability`
-near 1, so that most children differ from a parent by one element. `BoundaryClamp`
-piles mutated mass onto the bounds; prefer `BoundaryReflect` when a gene is
-decoded into bins.
+`1/len` or above, and a genome whose value depends on an exact arrangement
+wants a rate near `1/len` or below with a `MixProbability` near 1, so that most
+children differ from a parent by one element. `BoundaryClamp` piles mutated
+mass onto the bounds; prefer `BoundaryReflect` when a gene is decoded into bins.
 
 `ParameterBounds.Bin(v, n)` decodes a gene into one of `n` equal bins, half-open
 at the top so `Max` lands in bin `n-1`; `BinCenter(i, n)` is its inverse.
 
 A genome that is not a real vector brings its own perturbator and, if wanted,
-diversity metric, and reuses the rest. The life example's `[]bool` patterns run
-under `TournamentSelector`, `UniformCombiner[[]bool, bool, float64]`,
-`SliceCloner[[]bool, bool]`, a ten-line perturbator that flips each bit with
-probability `rate` and ignores `strength`, and a diversity metric over bit
-frequencies.
+diversity metric, and reuses the rest: `[]bool` patterns run under
+`TournamentSelector`, `UniformCombiner[[]bool, bool, float64]` and
+`SliceCloner[[]bool, bool]` with a ten-line perturbator that flips each bit
+with probability `rate` and ignores `strength`.
 
 ---
 
@@ -683,9 +691,10 @@ whole point of the streaming model.
 
 - The archive is sorted by `Score` descending and never exceeds `PoolSize`.
 - Outside `Inject` and `Restore`, a candidate leaves the archive only by being
-  displaced by a strictly better one, or, under `SetEqual`, by its own genotype
-  scoring better.
-- With `SetEqual`, no two archive members share a genotype.
+  displaced by a strictly better one, or, under `SetEqual`, by a new outcome for
+  its own genotype.
+- With `SetEqual`, no two archive members share a genotype, and a member's score
+  is its genotype's latest.
 - Unevaluated genotypes never appear in the archive, statistics, or selection.
 - `EvalID` is monotonic; `0` is never issued.
 - `pending` never exceeds `PendingCapacity`, regardless of host behaviour, and
@@ -706,6 +715,9 @@ whole point of the streaming model.
 - Without `SetEqual` the streaming archive converges to copies of one genotype;
   `Diversity` reads 0 and `AverageScore` equals `BestScore` long before the
   search is done.
+- Under a noisy objective the archive holds lucky outcomes: complete each
+  evaluation with the mean of several, and re-evaluate archived genotypes when
+  the objective can move.
 - `PendingCapacity` and `ProposalCapacity` round up to powers of two. Size the
   pending table at several times the evaluations in flight; a window of eight
   consecutive live ids is what evicts.

@@ -280,7 +280,11 @@ that proves wrong or that a document now states, and link the document instead.
   `snapshot.Schema` beside `StreamingStateVersion`.
 - A sandbox over `pkg/genetic` is tuned by its `-headless` table, several seeds
   at once in the background with a `sed` variant per constant, not by watching
-  it: `sandbox/life`'s arrivals vary threefold between seeds at one setting.
+  it: `sandbox/genetic`'s crash rate at one setting varies by half between
+  seeds, and its archive statistics read well long before its streams do.
+- An elitist archive under a noisy objective selects for luck. Score a
+  genotype by the mean of several evaluations and re-evaluate archived members
+  (`sandbox/genetic`'s trials and refreshes) before touching the operators.
 
 ## Branches
 
