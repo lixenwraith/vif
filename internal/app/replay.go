@@ -145,6 +145,9 @@ func (t replayTarget) Settle()               { t.a.Settle() }
 func (t replayTarget) PushRecord(rec event.JournalRecord, payload any) bool {
 	return t.a.world.PushRecord(rec, payload)
 }
+func (t replayTarget) PushBody(rec event.JournalRecord, payload any) {
+	t.a.world.PushBody(rec, payload)
+}
 
 func (t replayTarget) Digest() (d event.JournalDigest) {
 	t.a.world.RunSafe(func() { d = t.a.scribe.journalDigestLocked() })

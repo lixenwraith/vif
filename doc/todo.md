@@ -1375,43 +1375,6 @@ down composites at run time, but no system or scenario uses them. A species or
 scenario that assembles composites would; it reaches them through events, since
 another system may not call them directly.
 
-### Run every clock for the span it is set to
-
-- Priority: P3
-- Affected files: `internal/engine/scheduler.go` (`processTick`), `internal/event`
-  (the journal's settle groups), `doc/runtime.md` §5
-
-A light set to 250 ms should show for 250 ms whoever lights it. Today simon's Show
-buttons, set to 250 ms, show for 200, and a level-1 note set to 550 ms shows for
-500, solo and in a session alike; the same light armed between ticks, as an input
-arms one, shows for its whole span. Every relative clock behaves so: a timer slot, a
-carried age (the ember simon lights at a turn spends its first heat point a tick
-early), a species countdown, a machine's elapsed time.
-
-Each advances in its owner's `Update`, and nothing renders inside a tick, so a clock
-started in a tick before its owner runs is advanced once before any frame shows it
-([Runtime §5](runtime.md#5-simulation-tick-steps)). Three settles start clocks there:
-
-- wire: every crossing, which in a session carries each input and each FSM
-  transition with its actions;
-- pre: what was pushed since the last tick and not yet settled;
-- post: the FSM's events, which carry every scenario action in a solo run and the
-  delayed and `on_update` ones in a session.
-
-The pre and post settles also follow the tick's time advance, so their clocks read a
-tick ahead of game time; the wire settle precedes it, so its clocks only show short.
-
-The fix is to advance, then settle: game time, the FSM's update and the systems run
-first, then one settle takes what the tick applies (the wire artifacts due, what was
-pushed since the last tick, the FSM's and the systems' events). Every clock started
-in a tick then first counts on the next, with no rule at any start. Its costs: a
-system's `Update` first sees a crossing or an FSM action a tick later than today,
-though its handler still runs in the tick it lands; the journal's settle groups
-change, so its format moves; tests pinned to such an effect's tick move. Moving only
-the pre and post settles would leave a crossing's clock a tick short on screen, and
-a session's lights a tick shorter than a solo run's; skipping each clock's first
-pass would put a rule in every owner.
-
 ## Structure
 
 ### Move the three run types to packages

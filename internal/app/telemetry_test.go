@@ -461,14 +461,19 @@ func TestEveryParticipantsResourcesAreReported(t *testing.T) {
 	for range 60 {
 		tickAll([]*App{host, guest})
 	}
-
+	// A sync lands in its receiver's tick body after the systems published, so the
+	// receiver reports it a tick on, and the host commits a guest's to the tick after
+	// the one it arrives in: each value is read where its owner published it
 	slot0 := status.PlayerKey(0, "energy.current")
 	slot1 := status.PlayerKey(1, "energy.current")
-	if a, b := statOf(host, slot0), statOf(guest, slot0); a == 0 || a != b {
-		t.Fatalf("%s = %d on the host and %d on the guest, want one non-zero value", slot0, a, b)
+	hostOwn, guestOwn := statOf(host, slot0), statOf(guest, slot1)
+	guest.Tick(1)
+	host.Tick(2)
+	if got := statOf(guest, slot0); hostOwn == 0 || got != hostOwn {
+		t.Fatalf("%s = %d on the host and %d on the guest, want one non-zero value", slot0, hostOwn, got)
 	}
-	if a, b := statOf(host, slot1), statOf(guest, slot1); a == 0 || a != b {
-		t.Fatalf("%s = %d on the host and %d on the guest, want one non-zero value", slot1, a, b)
+	if got := statOf(host, slot1); guestOwn == 0 || got != guestOwn {
+		t.Fatalf("%s = %d on the guest and %d on the host, want one non-zero value", slot1, guestOwn, got)
 	}
 	if got, want := statOf(host, "energy.current"), statOf(host, slot0); got != want {
 		t.Fatalf("the host's bare energy.current = %d, want its own slot's %d", got, want)

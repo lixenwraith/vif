@@ -757,26 +757,43 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 // recorded barrier applied is a record, so a replay's barrier drops its own
 // re-derivations; an own one keeps its identity, as the D-18 queue settles by it.
 func (w *World) PushRecord(rec event.JournalRecord, payload any) bool {
-	if w.Resources.Event.Queue == nil {
-		return false
+	ev, ok := w.recordEvent(rec, payload)
+	if ok {
+		w.Resources.Event.Queue.PushReady(ev)
 	}
-	// A note is applied, never dispatched: a noted placement is a record of its
-	// own, stamped where the barrier released it a lead later.
+	return ok
+}
+
+// PushBody is PushRecord for a record the recorded run's tick body applied, a
+// crossing: it waits for the next tick's body, which publishes it where the barrier
+// did (EventQueue.Defer). Caller MUST hold updateMutex or drive the run.
+func (w *World) PushBody(rec event.JournalRecord, payload any) {
+	if ev, ok := w.recordEvent(rec, payload); ok {
+		w.Resources.Event.Queue.Defer(ev)
+	}
+}
+
+// recordEvent is the event a record is, or false for a note, applied here and
+// never dispatched: a noted placement is a record of its own, stamped where the
+// barrier released it a lead later.
+func (w *World) recordEvent(rec event.JournalRecord, payload any) (event.GameEvent, bool) {
+	if w.Resources.Event.Queue == nil {
+		return event.GameEvent{}, false
+	}
 	switch p := payload.(type) {
 	case *event.CursorMoveRequestPayload:
 		if rec.Type == event.EventCursorPredicted {
 			w.predictCursorMove(p.Entity, p.X, p.Y, p.Pointer)
-			return false
+			return event.GameEvent{}, false
 		}
 	case *event.SessionStatePayload:
 		w.AdoptSession(SessionState{Live: p.Live, Participant: p.Participant, Authority: p.Authority,
 			SeatsOnly: p.SeatsOnly, Peers: p.Peers})
-		return false
+		return event.GameEvent{}, false
 	}
-	w.Resources.Event.Queue.PushReady(event.GameEvent{
+	return event.GameEvent{
 		Type: rec.Type, Payload: payload, Origin: rec.Origin, Domain: rec.Domain, CrossingSeq: rec.Crossing,
-	})
-	return true
+	}, true
 }
 
 // notePrediction journals the D-18 prediction a placement just made, at the

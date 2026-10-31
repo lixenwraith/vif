@@ -31,6 +31,10 @@ type EventQueue struct {
 	// consumeBuf is what Consume returns, reused: one consumer, and a pass's slice
 	// is dead by the next call.
 	consumeBuf []GameEvent
+
+	// deferred waits for the next tick's body, where ReceiveWire publishes it: a
+	// replay's recorded crossings. Written and read under the world lock.
+	deferred []GameEvent
 }
 
 // wireHolder boxes the interface so the pointer swap stays atomic
@@ -38,7 +42,7 @@ type wireHolder struct{ sink WireSink }
 
 func NewEventQueue() *EventQueue {
 	eq := &EventQueue{wake: make(chan struct{}, 1)}
-	eq.stamp.Store(&Stamp{})
+	eq.stamp.Store(&Stamp{Boundary: 1}) // between ticks: no body precedes tick 1
 	return eq
 }
 
@@ -131,13 +135,21 @@ func (eq *EventQueue) SetWireSink(w WireSink) {
 	eq.wire.Store(&wireHolder{sink: w})
 }
 
-// ReceiveWire admits artifacts due before nextTick and reports whether a session
-// is live. Caller holds the world lock.
-func (eq *EventQueue) ReceiveWire(nextTick uint64) (live bool) {
-	if w := eq.wire.Load(); w != nil {
-		return w.sink.Receive(nextTick)
+// Defer holds an event for the next tick's body, where ReceiveWire publishes it
+// ahead of the barrier's: a crossing a replay's recorded run applied there. Caller
+// MUST hold the world lock.
+func (eq *EventQueue) Defer(ev GameEvent) { eq.deferred = append(eq.deferred, ev) }
+
+// ReceiveWire publishes what was deferred to this tick, then admits the barrier's
+// artifacts due before nextTick. Caller holds the world lock.
+func (eq *EventQueue) ReceiveWire(nextTick uint64) {
+	for _, ev := range eq.deferred {
+		eq.publish(ev)
 	}
-	return false
+	eq.deferred = eq.deferred[:0]
+	if w := eq.wire.Load(); w != nil {
+		w.sink.Receive(nextTick)
+	}
 }
 
 // FlushWire closes completedTick's production epoch. Caller holds the world lock.
@@ -301,15 +313,17 @@ func (eq *EventQueue) Journal() *Journal { return eq.journal.Load() }
 // a journal is installed, so one attached mid-run stamps correctly from its first record.
 func (eq *EventQueue) Stamp() Stamp { return *eq.stamp.Load() }
 
-// NextRun opens the next run at tick 0. Called where the tick counter is re-based,
-// so the two can never disagree. Caller MUST hold the world lock.
+// NextRun opens the next run at tick 0, between ticks: no body precedes its first
+// tick. Called where the tick counter is re-based, so the two can never disagree.
+// Caller MUST hold the world lock.
 func (eq *EventQueue) NextRun() uint64 {
 	run := eq.stamp.Load().Run + 1
-	eq.stamp.Store(&Stamp{Run: run})
+	eq.stamp.Store(&Stamp{Run: run, Boundary: 1})
 	return run
 }
 
-// BeginTick opens tick t at settle group 0. Caller MUST hold the world lock.
+// BeginTick opens tick t's body, settle group 0, which the body's own settle closes
+// with NextBoundary. Caller MUST hold the world lock.
 func (eq *EventQueue) BeginTick(tick uint64) {
 	eq.stamp.Store(&Stamp{Run: eq.stamp.Load().Run, Tick: tick})
 }
@@ -319,10 +333,11 @@ func (eq *EventQueue) BeginTick(tick uint64) {
 // It is the counterpart of NextRun for a capture rather than a reset: the tick is
 // shared identity, and an instance that adopted a world without adopting the
 // position it was taken at would stamp its records — and schedule every crossing's
-// apply tick — against a tick number the session left behind. Settle group 0,
-// because an install lands between two ticks. Caller MUST hold the world lock.
+// apply tick — against a tick number the session left behind. Settle group 1,
+// because an install lands between two ticks, after the tick's body. Caller MUST
+// hold the world lock.
 func (eq *EventQueue) RebaseStamp(run, tick uint64) {
-	eq.stamp.Store(&Stamp{Run: run, Tick: tick})
+	eq.stamp.Store(&Stamp{Run: run, Tick: tick, Boundary: 1})
 }
 
 // NextBoundary closes the current settle group; a replay settles the same groups.
@@ -349,10 +364,10 @@ func (eq *EventQueue) AnchorJournal(live AnchorLive) {
 	}
 }
 
-// QueueCopy is a queue's undispatched events, slot counter, telemetry and stamp,
-// detached from it, for a replay copy restored where another stood.
+// QueueCopy is a queue's undispatched and deferred events, slot counter, telemetry
+// and stamp, detached from it, for a replay copy restored where another stood.
 type QueueCopy struct {
-	pending                []GameEvent
+	pending, deferred      []GameEvent
 	tail, overwritten      uint64
 	dispatched, deadLetter [EventTypeCount]int64
 	stamp                  Stamp
@@ -365,6 +380,10 @@ func (eq *EventQueue) CopyOut() QueueCopy {
 		ev := eq.events[i&parameter.EventBufferMask]
 		ev.Payload = ClonePayload(ev.Payload)
 		c.pending = append(c.pending, ev)
+	}
+	for _, ev := range eq.deferred {
+		ev.Payload = ClonePayload(ev.Payload)
+		c.deferred = append(c.deferred, ev)
 	}
 	eq.SnapshotTelemetry(&c.dispatched, &c.deadLetter)
 	return c
@@ -383,6 +402,11 @@ func (eq *EventQueue) CopyIn(c QueueCopy) {
 	}
 	eq.head.Store(head)
 	eq.tail.Store(c.tail)
+	eq.deferred = eq.deferred[:0]
+	for _, ev := range c.deferred {
+		ev.Payload = ClonePayload(ev.Payload)
+		eq.deferred = append(eq.deferred, ev)
+	}
 	eq.overwritten.Store(c.overwritten)
 	for i := 1; i < EventTypeCount; i++ {
 		eq.dispatched[i].Store(c.dispatched[i])

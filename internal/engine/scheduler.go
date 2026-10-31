@@ -132,17 +132,15 @@ type regionStat struct {
 
 const (
 	settleSourcePre = iota
-	settleSourcePost
+	settleSourceTick
 	settleSourceLoop
 	settleSourceReset
 	settleSourceInput
 	settleSourceManual
-	settleSourceWire
-	settleSourceClose
 	settleSourceCount
 )
 
-var settleSourceNames = [settleSourceCount]string{"pre", "post", "loop", "reset", "input", "settle", "wire", "close"}
+var settleSourceNames = [settleSourceCount]string{"pre", "tick", "loop", "reset", "input", "settle"}
 
 // NewScheduler creates a scheduler on the given tick interval
 // Receives frameReady sync (receive) channel and returns game updateDone (send) and resetRequest (send) channels
@@ -1156,8 +1154,8 @@ func (s *Scheduler) recordSettlePass(src string) {
 	switch src {
 	case "pre":
 		index = settleSourcePre
-	case "post":
-		index = settleSourcePost
+	case "tick":
+		index = settleSourceTick
 	case "loop":
 		index = settleSourceLoop
 	case "reset":
@@ -1166,10 +1164,6 @@ func (s *Scheduler) recordSettlePass(src string) {
 		index = settleSourceInput
 	case "settle":
 		index = settleSourceManual
-	case "wire":
-		index = settleSourceWire
-	case "close":
-		index = settleSourceClose
 	default:
 		return
 	}
@@ -1386,10 +1380,17 @@ func (s *Scheduler) processTick() {
 
 		s.world.LatchSession()
 		s.publishInputHorizon()
-		// Pointer reports since the last tick cross as one placement, settled as the
-		// input they are before the barrier opens the tick
+		s.steerFSM()
+		// Pointer reports since the last tick cross as one placement, an input. It and
+		// anything else pushed since the last tick settle before the tick opens, as the
+		// event loop would have settled them, so a replay settles them where the run did
+		src := "pre"
 		if s.world.FlushPointerMove() {
-			s.settleLocked("input")
+			src = "input"
+		}
+		s.settleLocked(src)
+		if ended = s.ResetPending(); ended {
+			return
 		}
 		if r := s.world.Resources.Network; r != nil {
 			s.paceTrim = r.Pace.Load()
@@ -1402,19 +1403,7 @@ func (s *Scheduler) processTick() {
 			s.ticksDropped += s.slipPending
 			s.slipPending = 0
 		}
-		// The barrier applies against the completed tick's stamp. Its settle group
-		// therefore replays between ticks, before the next BeginTick resets Boundary.
 		tick := s.world.Resources.Game.State.GetGameTicks() + 1
-
-		// Settled on every tick of a session, not only one that delivered something:
-		// arrivals are this instance's own traffic, and settling on them gave what was
-		// pushed since the last tick a different phase and GameTime on each instance.
-		if s.world.Resources.Event.Queue.ReceiveWire(tick) {
-			s.settleLocked("wire")
-		}
-		if ended = s.ResetPending(); ended {
-			return
-		}
 
 		// The simulation instant is derived from the tick, never from the pacing
 		// clock: it is shared state, and every participant must read the same value
@@ -1438,21 +1427,19 @@ func (s *Scheduler) processTick() {
 		// 2. Update game elapsed time status
 		s.statGameElapsedMs.Store(tickTime.Sub(s.gameStartTime).Milliseconds())
 
-		// 3. Initial Settling: Resolve everything pushed since the last tick closed.
-
-		// Ensures FSM and Systems start with a consistent, settled world
-		s.steerFSM()
-		s.dispatchAndProcessEvents("pre")
-		if ended = s.ResetPending(); ended {
-			return
-		}
+		// 3. The barrier's artifacts due at this tick join the queue, stamped in its
+		// body, and dispatch with the tick's own after the systems. Received on every
+		// tick of a session, not only one that delivered something: arrivals are this
+		// instance's own traffic, and reading them only then gave each instance its
+		// own phase.
+		s.world.Resources.Event.Queue.ReceiveWire(tick)
 
 		// 4. FSM Update: Advance state machine (may emit new events via Actions)
 		fsmSpan := p.BeginPhase(prof.PhaseFSM)
 		s.fsm.Update(s.world, s.tickInterval)
 		fsmSpan.End()
 
-		// 5. FSM telemetry (after update, before post-settling)
+		// 5. FSM telemetry (after update, before the settle)
 		// Transitions are reported by the OnTransition tap, not sampled here:
 		// sampling collapses intra-tick chains and cannot see background regions
 		stateName, stateID, timeInState := s.fsm.GetActiveRegionTelemetry()
@@ -1463,24 +1450,22 @@ func (s *Scheduler) processTick() {
 		s.statFSMTotal.Store(int64(s.fsm.StateCount))
 		s.publishRegionStats()
 
-		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
-		s.dispatchAndProcessEvents("post")
-		if ended = s.ResetPending(); ended {
-			return
-		}
-
-		// 7. System Execution: Systems run on the final, settled state for this tick
+		// 6. System Execution: every clock a system advances here was started by an
+		// earlier tick or between ticks, so each runs for the span it was set to
 		s.world.UpdateLocked()
 
-		// 8. Closing Settling: Resolve what the systems queued, so every capture,
-		// crossing and digest that reads this tick reads its outcomes, not their
-		// pending events. A tick phase like pre and post: no group of its own.
-		s.dispatchAndProcessEvents("close")
+		// 7. One settle takes what the tick applies: the crossings due at it, the FSM's
+		// and the systems' events. Every capture, crossing and digest that reads this
+		// tick reads its outcomes, not their pending events, and a clock started here
+		// first counts on the next tick. The settle closes the body's group, 0; what
+		// follows is between ticks.
+		s.dispatchAndProcessEvents("tick")
+		s.world.Resources.Event.Queue.NextBoundary()
 		if ended = s.ResetPending(); ended {
 			return
 		}
 
-		// 9. Commit the tick and every registry write while the world is stable.
+		// 8. Commit the tick and every registry write while the world is stable.
 		gs := s.world.Resources.Game.State
 		ticks = gs.IncrementGameTicks()
 		gs.UpdateAPM(tickTime)

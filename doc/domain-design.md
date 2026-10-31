@@ -578,8 +578,10 @@ A local crossing is scheduled on this instance's own barrier at the `ApplyTick` 
 stamps and encoded into the source's next epoch for peers. Every other copy
 applies at the tick the authority commits: the stamp when on time, the authority's
 next tick when late, nowhere once more than `NetworkCommitLateTicks` late
-(multi-player.md §3.5). At tick open, due frames sort by
-`(ApplyTick, Source, Seq)` and settle before `BeginTick`. There is no exception: a
+(multi-player.md §3.5). As a tick opens, due frames sort by
+`(ApplyTick, Source, Seq)` into its body, where they settle after the systems,
+stamped as the tick's own ([Runtime §5](runtime.md#5-simulation-tick-steps)).
+There is no exception: a
 typed gold member leaves at its tick too, and the typist's next keystroke validates
 against the run without the members it has already typed.
 

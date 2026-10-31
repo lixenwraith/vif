@@ -210,7 +210,8 @@ parent. A passing internal `Tick` transition consumes that tick and can shadow
 outer tick transitions, so use it deliberately.
 
 The scheduler updates the machine once per game tick by the fixed tick interval,
-after the tick's opening event settle and before the systems run
+after the tick's opening settle and before the systems run, and its actions'
+events settle with the systems' after them
 ([Runtime](runtime.md#5-simulation-tick-steps)); a paused game ticks only when
 stepped, so region time and delayed countdowns stop with it. A paused region
 neither updates nor handles events; other regions continue.

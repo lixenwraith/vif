@@ -686,66 +686,62 @@ own and seats its bots again there, so only the run ends its seats (`membership.
 
 ```mermaid
 flowchart TD
-    Latch["Latch session, flush pointer placement"] --> Wire["Apply due wire artifacts, settle them"]
-    Wire --> Time["Stamp the tick, set game and real time"]
-    Time --> Pre["Settle pre-existing events"]
-    Pre --> FSM["Advance all active HFSM regions"]
-    FSM --> Post["Settle FSM-emitted events"]
-    Post --> Systems["Run priority-ordered systems"]
-    Systems --> Close["Settle system-emitted events"]
-    Close --> Stats["Commit tick, APM and counters"]
+    Latch["Latch session, flush pointer placement"] --> Pre["Settle what was pushed since the last tick"]
+    Pre --> Time["Stamp the tick, set game and real time"]
+    Time --> Wire["Queue the wire artifacts due"]
+    Wire --> FSM["Advance all active HFSM regions"]
+    FSM --> Systems["Run priority-ordered systems"]
+    Systems --> Settle["Settle the artifacts, the FSM's and the systems' events"]
+    Settle --> Stats["Commit tick, APM and counters"]
     Stats --> Flush["Close and send this tick's production epoch"]
     Flush --> Tail["Unlocked tail: breakpoints, overflow, status, anchor"]
 ```
 
-`Scheduler.processTick` holds the world lock for steps 1–11:
+`Scheduler.processTick` holds the world lock for steps 1–9:
 
-1. latch the session state and, if a pointer placement is pending (§4), push it
-   and settle it as an `"input"` group; read the guest pace trim;
-2. apply the wire artifacts whose fixed playout deadline has arrived and settle
-   them in their own `"wire"` group — before the tick stamp advances, so both
-   copies of a crossing land at the same absolute tick
-   ([domain model](domain-design.md#41-receive-lead) §4.1). A run that is
-   session-shared settles this group every tick, whether or not a peer is linked;
-   a solo run has none;
-3. open the next journal tick stamp, then set `GameTime` to `SimTime(tick)` —
-   derived from the tick, never from the pacing clock, so every participant reads
-   the same instant — with wall `RealTime` and fixed `DeltaTime`, and `PaceTime`,
-   the pacing clock's instant, which only renderers read, to draw motion between
-   ticks;
-4. update elapsed-time status;
-5. consume/dispatch events accumulated before the tick until the queue is empty
-   or the settling cap is reached;
-6. advance the FSM by the fixed interval, then publish foreground telemetry and
+1. latch the session state, then settle what was pushed since the last tick, a
+   pending pointer placement (§4) pushed first, as one between-tick group: an
+   `"input"` group when a placement was pending, a `"pre"` group otherwise, where
+   the event loop would have settled them and where a replay does; read the
+   guest pace trim;
+2. open the next journal tick stamp, the body's settle group 0, then set
+   `GameTime` to `SimTime(tick)` — derived from the tick, never from the pacing
+   clock, so every participant reads the same instant — with wall `RealTime` and
+   fixed `DeltaTime`, and `PaceTime`, the pacing clock's instant, which only
+   renderers read, to draw motion between ticks;
+3. update elapsed-time status;
+4. queue the wire artifacts whose fixed playout deadline has arrived, stamped in
+   the body, so both copies of a crossing land at the same absolute tick
+   ([domain model](domain-design.md#41-receive-lead) §4.1): a session-shared run
+   receives every tick, whether or not a peer is linked, and a solo run has none;
+5. advance the FSM by the fixed interval, then publish foreground telemetry and
    one metric set per declared region;
-7. settle events emitted by state transitions and actions;
-8. run all systems sequentially against that settled state;
-9. settle the events the systems emitted, as a tick phase like steps 5 and 7, so
-   an outcome a system applies through a queued event belongs to this tick for
-   every reader after it;
-10. commit the tick count and APM, and snapshot entity, queue and event counters;
-11. raise the session layer's own journaled records, which settle between ticks,
-    then close this tick's production epoch and hand it to the transport, so a
-    peer receives one tick's artifacts as one tick's worth, and write the journal
-    digest when it is due.
+6. run all systems sequentially;
+7. settle what the tick applies in one `"tick"` settle, until the queue is empty
+   or the settling cap is reached: the artifacts due, the FSM's events and the
+   systems', so an outcome any of them applies through a queued event belongs to
+   this tick for every reader after it, and close the body's group;
+8. commit the tick count and APM, and snapshot entity, queue and event counters;
+9. raise the session layer's own journaled records, which settle between ticks,
+   then close this tick's production epoch and hand it to the transport, so a
+   peer receives one tick's artifacts as one tick's worth, and write the journal
+   digest when it is due.
 
-A reset dispatched by step 2, 5, 7 or 9 — a crossed `:new`, or the scenario's
-own — ends the tick there, as one between ticks does: the rest of the body, the
-epoch flush and the tail are skipped on every participant alike, and the
-scheduler resets the FSM before the new run's tick 1.
+A reset dispatched by step 1 or 7 — a crossed `:new`, or the scenario's own —
+ends the tick there, as one between ticks does: the rest of the body, the epoch
+flush and the tail are skipped on every participant alike, and the scheduler
+resets the FSM before the new run's tick 1.
 
 Every relative clock (a timer slot, a carried age, a species countdown, a
-machine's elapsed time) advances in its owner's `Update`: step 8, or step 6 for the
-FSM's own. Nothing renders inside a tick, so a clock started earlier in the tick
-that advances it shows one tick (50 ms) less than its span; one started between
-ticks or in step 9 shows all of it. Steps 5 and 7 also follow step 3, so a clock
-they start reads a tick ahead of game time, while one started in step 2 agrees with
-it. A solo run's scenario actions settle in step 7; in a session a transition and
-its actions land in step 2, and delayed and `on_update` actions settle in step 7.
-The reorder that gives every clock its whole span is a
-[todo](todo.md#run-every-clock-for-the-span-it-is-set-to) item.
+machine's elapsed time) advances in its owner's `Update`: step 6, or step 5 for the
+FSM's own. Nothing renders inside a tick, and every clock a tick starts, it starts
+in step 7, after every owner has run, so each first counts on the next tick and
+shows its whole span, whoever started it: a light simon's machine lights for 250 ms
+shows for 250 ms, as one an input lights between ticks does. The cost is that a
+system's `Update` first sees a crossing or an FSM action the tick after the one
+whose settle ran its handler.
 
-Step 10 is inside the critical section deliberately: `Position` has no internal
+Step 8 is inside the critical section deliberately: `Position` has no internal
 lock, so counting entities after unlocking would race removals on the
 event-loop and main goroutines.
 
@@ -767,17 +763,18 @@ registration surface before any tick reads it:
 `Seal` freezes the system list, `Freeze` freezes the metric set and lays out
 the recorder ring.
 
-Systems may emit events during `Update`; step 9 settles them before the guest's
+Systems may emit events during `Update`; step 7 settles them before the guest's
 tick-close capture, the epoch flush and the journal digest read the world. What
 a capture still does not carry is a queued event: one pushed after that settle
 (the session layer's records, an install's re-derivations, a breakpoint's
 pause) or one a settle stopped at its pass cap left behind.
 
-Each non-empty explicit settle group (input, wire, the between-tick event loop
-and an injected `Settle`) advances the journal `boundary` counter; a tick's own
-pre, post and close phases and a reset's settles are not groups. This preserves
-distinctions between separately injected groups whose system events would be
-ordered differently if merged. See
+The tick's body is settle group 0 of its stamp, which step 7 closes; each
+non-empty between-tick settle group (input, pre, the event loop and an injected
+`Settle`) advances the journal `boundary` counter from 1, and a reset's settles
+are not groups. This preserves distinctions between separately injected groups
+whose system events would be ordered differently if merged, and tells a replay
+which records its tick applied. See
 [Logging and diagnostics](logging-and-diagnostics.md) for the complete journal
 stamp lattice.
 

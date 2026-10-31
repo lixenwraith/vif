@@ -40,22 +40,27 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Ticks and events
 
-- An event a system pushes in its `Update` dispatches in the close settle, after
-  every system's `Update` that tick
-  ([runtime §5](runtime.md#5-simulation-tick-steps)). A consumer that must act on it
-  inside the same tick, before its own motion, reads a derived resource the producer
-  writes instead, as the particle system reads `CaveResource` and the glyph spawner
+- An event a system pushes in its `Update`, a crossing due at the tick and an FSM
+  action's event all dispatch in the tick's one settle, after every system's
+  `Update` that tick ([runtime §5](runtime.md#5-simulation-tick-steps)): a system
+  first sees them in its next `Update`. A consumer that must act on it inside the
+  same tick, before its own motion, reads a derived resource the producer writes
+  instead, as the particle system reads `CaveResource` and the glyph spawner
   `DriftResource`.
 - A derived resource is created in `engine.newGameContext`, rewritten by its owner
   every tick and never captured, so it bumps no schema. Systems run in ascending
   `Priority`, so only a later system reads it the same tick.
 - A journaled event, of any origin but a system or a device, is never pushed inside
-  the tick body: the close settle would dispatch it live while a replay injects it
-  after the tick.
-- A clock started inside a tick before its owner's `Update` shows one tick short of
-  its span ([runtime §5](runtime.md#5-simulation-tick-steps)).
+  the tick body: the tick's settle would dispatch it live while a replay injects it
+  after the tick. The barrier's are the exception, stamped as the body's (settle
+  group 0), which a replay queues for its own tick (`ReplayTarget.PushBody`,
+  `EventQueue.Defer`) instead of settling before it.
+- `NetworkSystem.localTick` is the completed tick count, not the queue stamp's
+  tick: `Receive` runs inside the body, where the stamp names the tick being made,
+  and reading it there judged every on-time crossing a tick late and raised the
+  guest's lead by two on every shape of the divergence harness.
 - A mount creates the pulse it fires in its own `Update` rather than by request, as
-  missiles are: a request dispatches in the close settle, a tick behind the machine
+  missiles are: a request dispatches in the tick's settle, a tick behind the machine
   that armed the mount, and the pulse, which holds with that machine, falls out of
   step with it and lingers into the cooldown.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
@@ -68,7 +73,7 @@ that proves wrong or that a document now states, and link the document instead.
   authority's may already: what the run itself is, a bot seat, is its own word
   (`Instance.Seated`), never read off its roster entry.
 - `NetworkSystem.Flush` runs at the tick's close under the world lock, after the
-  close settle, so a hold it releases at a crossing's apply tick sees everything
+  tick's settle, so a hold it releases at a crossing's apply tick sees everything
   that crossing paid in that tick (`NetworkSystem.crossSettled`).
 - `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
   the game resets near tick 35; a session test that waits a fixed count of ticks

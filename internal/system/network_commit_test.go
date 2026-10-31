@@ -62,6 +62,7 @@ func sessionSystem(t *testing.T, local uint32, tick uint64, port *linkedPort) *N
 	s.world.Resources.Network = r
 	s.world.RunSafe(s.world.LatchSession)
 	s.world.Resources.Event.Queue.RebaseStamp(0, tick)
+	s.world.Resources.Game.State.SetGameTicks(tick) // between ticks, where the two agree
 	s.Init()
 	return s
 }
@@ -349,7 +350,7 @@ func TestAGuestStepsOnceForOneLateness(t *testing.T) {
 	if got := r.PaceStep.Load(); got != first {
 		t.Fatalf("the step owed grew to %d while %d was being served", got, first)
 	}
-	guest.world.Resources.Event.Queue.RebaseStamp(0, 100+parameter.NetworkPaceServedTicks)
+	guest.world.Resources.Game.State.SetGameTicks(100 + parameter.NetworkPaceServedTicks)
 	window(60)
 	if got := r.PaceStep.Load(); got == first {
 		t.Fatal("a late window after the step was served ordered none")
