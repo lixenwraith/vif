@@ -326,7 +326,7 @@ its edges, then what its host does around the step.
     increase lands after `QuasarSpeedIncreaseTicks` of movement, and a stun pauses
     the count.
   - A header move sweeps the new footprint (`processCollisionsAtNewPositions`),
-    and each glyph it kills dies in the tick's closing settle. A glyph can stand
+    and each glyph it kills dies in the tick's settle. A glyph can stand
     under a member only through the one-tick lag between the header's move and
     the composite sync, which the next move's sweep covers.
 - `quasarCtx` holds the entity, the component, the sensed `stunned` and `inRange`

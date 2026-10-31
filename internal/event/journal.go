@@ -10,10 +10,12 @@ import (
 // JournalSchema is the record layout version; bump on any field change, or on a
 // change to what an unchanged field means. A join refuses a peer on another one,
 // since the anchor it offers is the journal's. Each bump's reason is its commit.
-const JournalSchema = 61
+const JournalSchema = 62
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
-// reset, tick on each simulation step, boundary on each completed settle group.
+// reset, tick on each simulation step, boundary on each settle group that closes:
+// the tick's own body is group 0, and the between-tick groups after it count from 1,
+// where a run and a written world open.
 type Stamp struct {
 	Run      uint64
 	Tick     uint64
@@ -31,7 +33,7 @@ type JournalRecord struct {
 	Crossing  uint64 // own crossing sequence the barrier applied it under; 0 otherwise
 	Run       uint64 // reset generation; the tick counter restarts in each
 	Tick      uint64 // completed ticks in this run
-	Boundary  uint64 // completed between-tick settles this tick
+	Boundary  uint64 // settle group: 0 the tick's body, then the between-tick groups from 1
 	Type      EventType
 	Origin    Origin
 	Domain    core.Domain // producer domain; replication filters on it

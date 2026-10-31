@@ -374,6 +374,66 @@ func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	}
 }
 
+// TestALightShowsForItsWholeSpan: a light simon's machine lights for 250 ms in a tick
+// stays lit for 250 ms of ticks, as one lit between ticks does: the clock it arms
+// first counts on the tick after the one that armed it.
+func TestALightShowsForItsWholeSpan(t *testing.T) {
+	t.Parallel()
+	opts := resource.Options{Dir: soakRoot, Scenario: "simon"}
+	if _, err := resource.ScenarioPath(opts); err != nil {
+		t.Skip("simon scenario not present")
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	w := a.World()
+	state := func() string { return w.Resources.Status.Strings.Get("fsm.simon.state").Load() }
+	for range 400 {
+		if state() == "Ready" {
+			break
+		}
+		a.Tick(1)
+	}
+	a.Inject(a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: '1'}))
+	// After the press: the legend before it showed every button in turn
+	var lit *event.ButtonLightRequestPayload
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		if p, ok := ev.Payload.(*event.ButtonLightRequestPayload); ok && lit == nil {
+			lit = &event.ButtonLightRequestPayload{Button: p.Button, DurationMs: p.DurationMs}
+		}
+	})
+	for range 400 {
+		a.Tick(1) // the light request dispatches inside this tick, the machine's own
+		if lit != nil {
+			break
+		}
+	}
+	if lit == nil {
+		t.Fatal("simon lit no button after the press")
+	}
+	var button core.Entity
+	w.Components.Button.Each(func(e core.Entity, b *component.ButtonComponent) bool {
+		if b.Slot == lit.Button {
+			button = e
+		}
+		return true
+	})
+	running := func() bool {
+		timer, ok := w.Components.Timer.GetPtr(button)
+		return ok && timer.Running(component.TimerDeadline)
+	}
+	ticks := 0
+	for ; running() && ticks < 100; ticks++ {
+		a.Tick(1)
+	}
+	if want := int(time.Duration(lit.DurationMs) * time.Millisecond / w.TickInterval()); ticks != want {
+		t.Fatalf("a %d ms light stayed lit %d ticks, want %d", lit.DurationMs, ticks, want)
+	}
+}
+
 // TestSimonTakesBackWhatItShowed plays the shipped simon scenario through each way a
 // press arrives: a typed key, a click on the button, and a bot's press. Each level
 // shows one more note, a press sounds once on the pressing instance, a key the game

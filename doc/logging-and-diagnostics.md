@@ -386,10 +386,8 @@ caller:
 
 | `src` | Call site |
 |---|---|
-| `wire` | `processTick` settling the wire artifacts due before the tick opens |
-| `pre` | `processTick` initial settling |
-| `post` | `processTick` settling after the FSM update |
-| `close` | `processTick` settling after the systems, before the tick closes |
+| `pre` | `processTick` settling what was pushed since the last tick, before the tick opens |
+| `tick` | `processTick` settling what the tick applies, after the systems: the wire artifacts due, the FSM's and the systems' events |
 | `loop` | inter-tick event loop |
 | `settle` | `Settle`, from a driven or headless caller |
 | `input` | `DispatchEventsImmediately`, from an intent or macro, and `processTick` settling the pointer placement before the tick opens |
@@ -847,18 +845,21 @@ Each record is stamped synchronously at queue push with
 | Counter | Advances when |
 |---|---|
 | `run` | `EventGameResetRequest` rebuilds the world and rebases tick to zero. |
-| `tick` | The next tick body opens, before its pre-settle/FSM/system phases. |
-| `boundary` | A non-empty explicit settle group completes; it resets to zero at each tick/run and written world. |
+| `tick` | The next tick body opens, at settle group 0. |
+| `boundary` | A settle group closes: the tick's own settle first, from 0 to 1, then each non-empty between-tick group; a run and a written world open at 1. |
 
-A record `(R,T,b)` was produced after tick `T` of run `R` completed, in the
-`b`th settle group since. Separate boundaries matter: merging two injected
-groups can change their order relative to system events. A tick's own events
-settle inside it, before its digest, so the replay's tick reproduces them. Every
-between-tick dispatch is a whole settle, the interactive event loop's included,
-so a group that held no record is one settle a replay reproduces before the next
-group it reaches. A journaled event is therefore never pushed before a tick
-body's last settle: the session layer raises its records at the epoch flush,
-after the closing settle. Nor is one pushed by a handler: a pending pointer
+A record `(R,T,0)` was applied inside tick `T` of run `R`: a crossing the barrier
+released into its body, which a replay queues for its own tick `T` to apply
+(`ReplayTarget.PushBody`). A record `(R,T,b)`, `b` from 1, was produced after
+tick `T` completed, in the `b`th settle group since, which a replay injects and
+settles. Separate boundaries matter: merging two injected groups can change
+their order relative to system events. A tick's own events settle inside it,
+before its digest, so the replay's tick reproduces them. Every between-tick
+dispatch is a whole settle, the interactive event loop's included and the one a
+tick opens with, so a group that held no record is one settle a replay reproduces
+before the next group it reaches. A journaled event is therefore never pushed in a
+tick body but by the barrier: the session layer raises its records at the epoch
+flush, after the tick's settle. Nor is one pushed by a handler: a pending pointer
 placement crosses before the next tick or ahead of the next journaled push, not
 from a crossing some handler raises, which a replay would dispatch ahead of
 that handler's earlier events. A `:new` or crossed reset is recorded in run `R`,
@@ -979,13 +980,13 @@ rebuilds it from its own world at that place, refuses a rebuild whose hash diffe
 journal replays from its join. The install leaves the replay where the write left
 the run: on the barrier it left, which a host's write engages in the same hold (else
 crossings dispatched after it apply at once and again where the journal records
-them), and at settle group 0, a host's write included. A host takes its own write
+them), and at settle group 1, a host's write included. A host takes its own write
 as an install takes it, journaled or not, so what an install derives from the world
 it writes (the spatial gauges, what carriers publish as they load) stands on the run
 as on its replay. A write can land between
 ticks while records of its settle group are still queued, as a seat added from
 another goroutine does between a keystroke's push and its settle. They dispatch with
-what is pushed at group 0 before the next settle, so replay pushes them on both
+what is pushed at group 1 before the next settle, so replay pushes them on both
 sides of the write and settles them once, after. A correction that changed nothing
 costs a few hundred bytes. Owner syncs and kill confirmations are records; the
 authority's worlds that proved them are not.
@@ -1005,7 +1006,7 @@ recorded run did.
 Every `parameter.DigestIntervalTicks` (20) ticks the run writes a `digest` record,
 `jrun`, `jtick` and four hex hashes from `snapshot.DigestWorld` over both domains:
 `positions`, `kinetics`, `combat` and `entities`. It is taken last in the tick
-body, after the tick's closing settle; a replay compares
+body, after the tick's settle; a replay compares
 it after the tick that reaches the same place, before injecting that tick's
 groups. The first one it does not reproduce names the tick, the classes that
 differ and the last digest that matched, so a replay that left its run is caught

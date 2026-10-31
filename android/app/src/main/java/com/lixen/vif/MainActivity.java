@@ -119,17 +119,19 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** The player is at the game: the speakers play and the run goes on. */
+    /** The player is at the game: the speakers play, the run goes on and the view draws it. */
     private void goOn() {
         if (speaker != null) {
             speaker.resume();
         }
         Game.resume();
+        view.away(false);
     }
 
     @Override
     protected void onPause() {
         Game.pause();
+        view.away(true);
         if (speaker != null) {
             speaker.pause();
         }

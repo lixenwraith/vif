@@ -522,7 +522,8 @@ atlas, and the run keeps it in `vif.toml`'s `[presentation] cell` as it keeps
 `[play]` (`paths.SaveCell`), so the next run opens at it. A
 Java render thread takes the newest frame at each vsync as the cells changed
 since the one it holds (`glyph.Frames`, the hand-off every host drawing in another
-runtime shares), which `CellDrawer.OnCanvas` paints from the atlas as one texture
+runtime shares), and while the activity is paused stops asking for frames once it
+has painted the last one flushed (`GameView.away`), which `CellDrawer.OnCanvas` paints from the atlas as one texture
 (`glyph.Texture`, `game.Atlas`) at the atlas's size, as an instrumented test checks
 against `glyph.Raster` pixel for pixel, and posts it on a hardware canvas stretched
 over the whole view, filtered, so no margin is left; a tap maps to its cell in

@@ -623,11 +623,11 @@ func (s *NetworkSystem) participantID() uint32 {
 	return s.localSource
 }
 
-// localTick is this instance's own simulation position, which is what an arriving
-// apply tick is judged against. It is read rather than passed in because the two
-// drain paths differ on whether a tick is in progress and the answer must not.
+// localTick is this instance's completed tick, which an arriving apply tick is
+// judged against: the count a tick in progress has not advanced, so the two drain
+// paths, a tick's body and a join's between ticks, read alike.
 func (s *NetworkSystem) localTick() uint64 {
-	return s.world.Resources.Event.Queue.Stamp().Tick
+	return s.world.Resources.Game.State.GetGameTicks()
 }
 
 // localRun is the run this instance's ticks count in, which every batch it

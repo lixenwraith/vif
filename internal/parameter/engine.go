@@ -40,7 +40,7 @@ const (
 	// tick or a configured tick-interval change.
 	MaxSimulationDeltaSeconds = 0.1
 
-	// EventLoopInterval is the frequency at which events are attempted to be processed
+	// EventLoopInterval is how long the event loop defers a settle the world lock refused
 	EventLoopInterval = 4 * time.Millisecond
 
 	// InputTickInterval drives the router input tick: auto-fire, macro playback, etc.
@@ -65,7 +65,7 @@ const (
 	// StepRunMaxTicks is the tick budget a run-until request spends before self-disarming
 	StepRunMaxTicks = 20000
 
-	// EventLoopBackoffMax is how many intervals a failed lock acquisition may defer
+	// EventLoopBackoffMax is how many misses the event loop defers before it blocks on the lock
 	EventLoopBackoffMax = 2
 
 	// EventLoopIterations is the cycles event loop attempts to consume events for immediate settling

@@ -217,6 +217,30 @@ func (a *App) Loop() (*restartRequest, error) {
 	inputTicker := time.NewTicker(parameter.InputTickInterval)
 	defer inputTicker.Stop()
 
+	// A paused run its player left sleeps: one frame of the world as they left it,
+	// then no frame or input tick until they return or a tick runs, which something
+	// else unpausing it (a joiner admitted to a seats-only session) shows
+	frames, inputs := frameTicker.C, inputTicker.C
+	var ticked <-chan struct{}
+	var away, asleep bool
+	sleep := func() {
+		if asleep || !away || !a.ctx.TimeCtl.IsPaused() {
+			return
+		}
+		a.frame()
+		frameTicker.Stop()
+		inputTicker.Stop()
+		frames, inputs, ticked, asleep = nil, nil, a.gameUpdateDone, true
+	}
+	wake := func() {
+		if !asleep {
+			return
+		}
+		frameTicker.Reset(interval)
+		inputTicker.Reset(parameter.InputTickInterval)
+		frames, inputs, ticked, asleep = frameTicker.C, inputTicker.C, nil, false
+	}
+
 	eventChan := a.pres.Events()
 
 	for {
@@ -248,21 +272,35 @@ func (a *App) Loop() (*restartRequest, error) {
 				return nil, nil // player quit
 			}
 
-		case away := <-awayChan:
+		case away = <-awayChan:
 			a.setAway(away)
+			if away {
+				sleep()
+			} else {
+				wake()
+			}
 
-		case <-inputTicker.C:
+		case <-inputs:
 			if !a.inputTick() {
 				return nil, nil
 			}
+			sleep() // a run paused since its player left
 
-		case <-frameTicker.C:
+		case <-frames:
 			if !a.frame() {
 				return nil, nil
 			}
 			if d := a.frameInterval(); d != interval { // :fps changed it
 				interval = d
 				frameTicker.Reset(d)
+			}
+
+		case <-ticked:
+			// The tick took the frame token the handshake owes it; the frame draws next
+			wake()
+			select {
+			case a.frameReady <- struct{}{}:
+			default:
 			}
 
 		case err := <-a.doorErrors():

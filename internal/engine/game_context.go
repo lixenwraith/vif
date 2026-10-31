@@ -398,7 +398,7 @@ func (ctx *GameContext) HandleResizeLocked() {
 	ctx.PublishMapLock()
 	if cropped {
 		config.MapWidth, config.MapHeight = config.FloorMapSize(viewportWidth, viewportHeight)
-		ctx.cleanupOutOfBoundsEntities(config.MapWidth, config.MapHeight)
+		ctx.World.killOutOfBounds(config.MapWidth, config.MapHeight)
 		// Reset camera
 		config.CameraX = 0
 		config.CameraY = 0
@@ -630,28 +630,6 @@ func (ctx *GameContext) clampCamera(config *ConfigResource) {
 		config.CameraY = 0
 	} else {
 		config.CameraY = max(0, min(config.CameraY, maxCameraY))
-	}
-}
-
-// cleanupOutOfBoundsEntities tags entities outside valid map area for destruction
-func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
-	deathStore := ctx.World.Components.Death
-
-	// Unified cleanup: single Positions iteration handles all entity types
-	allEntities := ctx.World.Positions.AllEntities()
-	for _, e := range allEntities {
-		// Protected entities survive the crop; the cursor is one of them
-		if prot, ok := ctx.World.Components.Protection.GetComponent(e); ok &&
-			prot.Mask&component.ProtectFromDeath != 0 {
-			continue
-		}
-
-		// Mark entities outside valid coordinate space [0, width) × [0, height)
-		// Death systems informs respective systems of their entity destruction
-		pos, _ := ctx.World.Positions.GetPosition(e)
-		if pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0 {
-			deathStore.SetComponent(e, component.DeathComponent{})
-		}
 	}
 }
 
