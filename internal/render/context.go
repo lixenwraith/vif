@@ -63,6 +63,10 @@ type RenderContext struct {
 	// wait has not.
 	StartScreen bool
 	StartHelp   string
+
+	// NativeMenu: the host draws the configuration menu with its own widgets, so the
+	// overlay leaves the menu layout undrawn
+	NativeMenu bool
 }
 
 // NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource
