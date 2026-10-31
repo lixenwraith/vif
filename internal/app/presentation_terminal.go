@@ -174,7 +174,7 @@ func (a *App) showStartupStatus(message string) {
 
 // showJoinAsk asks for the press that seats a waiting join: on the start screen's
 // button at the launch, where the host has no start screen of its own, else on the
-// status line. The wait has no help to open, its world not running yet.
+// status line, drawing the command line or overlay the operator opened over the wait.
 func (a *App) showJoinAsk() {
 	if !a.cfg.startScreen {
 		a.showJoinStatus(a.joinPrompt())

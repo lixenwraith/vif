@@ -54,8 +54,9 @@ satisfy it, and it is all a host has to provide to draw the same cells
 Before the lock the orchestrator derives the frame's playfield rectangle and
 declares the void around it; each simulation layer then draws clipped to the
 playfield and each screen-space layer to the whole buffer. See section 2.1.
-`RenderStatus` draws the status bar alone over a void screen, for a world not yet
-the one to show: a joiner's, until the start gate installs its session's.
+`RenderStatus` draws the status bar, the start screen while it is up and the overlay
+the operator opened over a void screen, for a world not yet the one to show: a
+joiner's, until the start gate installs its session's.
 
 Renderers are registered during application assembly. Insertion sort preserves
 priority order, and registration index is the stable tie-breaker. A renderer

@@ -143,9 +143,13 @@ press on a button; a click on a terminal's "F1 help" opens help as F1 does
 A join the player started waits the same way, before any game is shown, for the
 press that seats it in the session: a key that types or moves (a character, Enter,
 Space, Backspace, Delete, an arrow, Home, End, Page Up, Page Down, Insert) without
-Ctrl or Alt, or a left or right click with the mouse on. Escape, Tab and the
-function keys do nothing there, and Ctrl-C or Ctrl-Q leaves
-([Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity)).
+Ctrl or Alt, or a left or right click with the mouse on, off the status bar. Its
+keys go down the same pipe as a held game's, so the operator's work over the wait
+as over the hold and seat nobody: `:` opens the command line on the status bar,
+Ctrl+G the configuration menu, F1 help, Ctrl+S cycles the audio, Escape closes what
+is open, and Ctrl-C, Ctrl-Q or `:q` leaves; Tab and the other function keys do
+nothing there (`Router.Operates`, `App.joinPressed`;
+[Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity)).
 
 ## 3. Normal-mode grammar
 
