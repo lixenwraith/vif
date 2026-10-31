@@ -419,7 +419,43 @@ dotted path grammar follows TOML tags and Go types, while domain validation
 runs at `validate`/`apply`. See `cmd/soundlab/README.md` for the command/TUI
 reference.
 
-## 11. Extension checklist
+## 11. Ripping a recording
+
+`RipWAV` and `RipSamples` listen to a recording and estimate what the sequencer
+would need to play it: the tempo, where the bars fall, the key, the chord root
+each bar leans on, and per bar the kick, snare and hihat hits, the melody and the
+bass line as steps of the sixteenth grid (`Rip`). `Patterns` writes them as
+patterns of up to four bars, named `<name>_beat_<n>`, `<name>_melody_<n>` and
+`<name>_bass_<n>` in a group of their own and no tier; soundlab's `rip` adds
+them to the document, dirty, and sets the transport's tempo and key, so a slot
+plays the estimate at once. `ReadWAV` reads the file, any PCM or float width.
+
+The analysis runs at 22.05 kHz over 93 ms frames every 11.6 ms, each split into
+a harmonic and a percussive part by the medians across time and across frequency
+around it. The percussive onsets, each drum's band against its own peak with the
+kick's counting double, give the tempo (autocorrelation under a log-Gaussian
+prior centred on 120 BPM, folded into the sequencer's range) and the beats (a
+dynamic programme that holds to the period). A hit is a kick by its rise under
+100 Hz, a hihat by its rise above 5 kHz, a snare by the middle with some noise
+above 5 kHz, and may be two drums at once; the bar line is the phase whose
+downbeats carry a kick, no snare and the key's root in the bass, the snare on two
+and four, and the most change of chroma. The key is the root and scale whose tones
+hold the most chroma and whose others the least, the bass register voting for the
+tonic. Pitch salience sums a candidate's partials, the bass register's from its
+first three and the melody's with the bass's partials cancelled, so a bass's
+octave does not read as a melody note; a hidden path through the frames, scored
+against the costs of moving and of starting or ending a note, is cut into notes,
+which land on the key's nearest degree. `RipParams` holds every threshold.
+`DefaultRipParams` is the hand-set start, meant to be refined by a search over
+material the engine renders itself, whose patterns are known
+([TODO](todo.md#tune-the-rip)).
+
+What it does not yet tell apart: a bass note's attack from a kick, a plucked
+chord's attack from a snare, two voices in one register, and a note off the key
+from a change of key. What it writes is the engine's grid and scale, an estimate
+to edit, not a transcription.
+
+## 12. Extension checklist
 
 For a new sound effect:
 
@@ -441,9 +477,10 @@ and its keys.
 For music, keep new APM/campaign decisions in `MusicSystem` or configuration
 events and keep the sequencer unaware of gameplay concepts.
 
-## 12. Source map
+## 13. Source map
 
 - Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
+- Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`
 - Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `kit.go`,
   `sound_render.go`
 - Sound and voice schema, loading and registries: `pkg/audio/sound_spec.go`,

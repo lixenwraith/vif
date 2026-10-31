@@ -168,6 +168,22 @@ that proves wrong or that a document now states, and link the document instead.
   connection instead, which stays bound with nothing listening (vif-router's
   `TestEitherRouteRefusesBeforeDialling`).
 
+## Audio
+
+- A labelled corpus for the rip renders offline with no device: register a bank and
+  voices, `freezeSounds`, `newSoundCache().preloadAll(nil)`, `buildKit`,
+  `NewSequencer(bpm, kit)` with patterns placed in its slots, then `Generate` over
+  whole bars (`rip_test.go`'s `renderLoop`). The music fades in over
+  `MusicStartFadeIn`, so the first bar is quiet and a recall test skips it.
+- The rip's spectrogram frames are centred, so every onset reads about two frames
+  (23 ms) early in every band alike; the beat grid and the events share the bias,
+  and the sixteenth quantization cancels it. Do not correct one without the other.
+- The default drum rules were set from the band shares a scratch test printed for
+  the rendered loop's hits (a kick's rise under 100 Hz was 0.09 to 0.19 of its
+  rise, a hat's above 5 kHz 0.45, a snare's noise above 5 kHz 0.15 to 0.21):
+  print them again before moving a threshold, and expect a bass note's attack to
+  read as a kick.
+
 ## Locks
 
 - The order is the world lock (`engine.UpdateMutex`, taken by `RunSafe`, not

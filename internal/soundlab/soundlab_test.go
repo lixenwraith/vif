@@ -5,6 +5,7 @@ package soundlab
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -839,5 +840,52 @@ func TestMixerMutesTheCursorsSlot(t *testing.T) {
 	runOrFatal(t, s, &out, "mute slot 3 on\nwhere")
 	if !strings.Contains(out.String(), "slot3=- (muted)") {
 		t.Fatalf("where must name the muted slot:\n%s", out.String())
+	}
+}
+
+// TestRipMakesPatternsOfARecording is the verb's contract: a recording's beat and
+// melody come into the document as dirty patterns under the given name, and the
+// transport takes the tempo and key heard.
+func TestRipMakesPatternsOfARecording(t *testing.T) {
+	// Eight seconds at 120 bpm: a low thump on every beat and a tone on every bar
+	const rate, bpm = audio.AudioSampleRate, 120
+	beat := rate * 60 / bpm
+	buf := make([]float64, 16*beat)
+	for i := range buf {
+		p := i % beat
+		if p < rate/10 {
+			buf[i] += 0.8 * math.Sin(2*math.Pi*55*float64(i)/rate) * math.Exp(-float64(p)/(rate/40))
+		}
+		if i%(4*beat) < beat {
+			buf[i] += 0.3 * math.Sin(2*math.Pi*440*float64(i)/rate)
+		}
+	}
+	wav := filepath.Join(t.TempDir(), "loop.wav")
+	f, err := os.Create(wav)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := audio.WriteWAV(f, buf); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+! rip %s loop                        # not a recording
+rip %s loop
+! rip %s loop                        # the names are taken
+ls pattern loop*
+validate all
+`, filepath.Join(t.TempDir(), "missing.wav"), wav, wav))
+	if !s.pats.has("loop_beat_1") || !s.pats.isDirty("loop_beat_1") {
+		t.Fatalf("no dirty loop_beat_1 in the document:\n%s", out.String())
+	}
+	if s.bpm < bpm-3 || s.bpm > bpm+3 {
+		t.Errorf("tempo %d, want about %d", s.bpm, bpm)
+	}
+	if !strings.Contains(out.String(), "ripped") {
+		t.Errorf("no report:\n%s", out.String())
 	}
 }

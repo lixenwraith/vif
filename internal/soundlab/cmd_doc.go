@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vif/pkg/audio"
 )
@@ -109,6 +110,65 @@ func cmdExport(s *Session, a []string) error {
 	}
 	fmt.Fprintf(s.out, "wrote %s: %d samples (%.2fs)\n",
 		a[1], len(buf), float64(len(buf))/audio.AudioSampleRate)
+	return nil
+}
+
+// cmdRip reads a recording into the pattern document: a beat, a melody and a
+// bass pattern per window of bars, dirty, under the names the rip gives them, and
+// sets the transport's tempo and key to what it heard, so a slot plays the
+// estimate at once. Notes off the key sit on its nearest degree.
+func cmdRip(s *Session, a []string) error {
+	if err := badName(a[1]); err != nil {
+		return err
+	}
+	bars := audio.MaxPatternLen / audio.StepsPerBar
+	if len(a) > 2 {
+		n, err := strconv.Atoi(a[2])
+		if err != nil || n < 1 || n > bars {
+			return fmt.Errorf("bars %q: want 1 to %d", a[2], bars)
+		}
+		bars = n
+	}
+	f, err := os.Open(a[0])
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r, err := audio.RipWAV(f, audio.DefaultRipParams())
+	if err != nil {
+		return err
+	}
+	defs := r.Patterns(a[1], bars)
+	if len(defs) == 0 {
+		return fmt.Errorf("%s: nothing heard to write", a[0])
+	}
+	for _, d := range defs {
+		if s.has(d.Name) {
+			return fmt.Errorf("%q: already exists", d.Name)
+		}
+	}
+	for _, d := range defs {
+		s.pats.put(d, true)
+	}
+	s.bpm = r.BPM
+	s.eng.SetMusicBPM(r.BPM)
+	s.eng.SetHarmony(r.Root, r.Scale, r.Progression)
+	s.root, s.scale = r.Root, r.Scale
+	var hits [audio.InstrClap]int
+	notes, low := 0, 0
+	for _, b := range r.Bars {
+		for d := range b.Drums {
+			hits[d] += len(b.Drums[d])
+		}
+		notes, low = notes+len(b.Melody), low+len(b.Bass)
+	}
+	fmt.Fprintf(s.out, "ripped %s: %d bpm, %s, %d bar(s) from %.2fs; kicks %d snares %d hats %d, melody notes %d, bass notes %d\n",
+		a[0], r.BPM, s.keyName(), len(r.Bars), r.Downbeat, hits[audio.InstrKick], hits[audio.InstrSnare], hits[audio.InstrHihat], notes, low)
+	names := make([]string, 0, len(defs))
+	for _, d := range defs {
+		names = append(names, d.Name)
+	}
+	fmt.Fprintf(s.out, "%d pattern(s) added: %s; tempo and key set, slot them to hear the estimate\n", len(defs), strings.Join(names, " "))
 	return nil
 }
 

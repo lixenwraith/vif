@@ -12,6 +12,7 @@ Supports interactive REPL, TUI, and headless script execution. The session, its 
 - **Validation Bounds**: The REPL bounds checks are purely structural (type width, float finiteness). Domain-specific validation (Nyquist bounds, envelope durations) happens synchronously at `validate` and `apply`.
 - **Slots**: 0 rhythm, 1 melody, 2 fill, 3 bass, as the game draws them; a melody pattern carries no bass, so slot 1 alone is the melody as authored. The engine's phrase auto-fill is off in soundlab so slots stay deterministic; `fill on` restores it to audition the fill bank.
 - **Audition**: `play`, `hit` and `export` render a spec as authored; vif's per-sound volume and shape table is not applied.
+- **Rip**: `rip <file.wav> <name> [bars]` hears a recording's beat, melody and bass as patterns of up to `bars` bars each (`<name>_beat_1`, `<name>_melody_1`, `<name>_bass_1`, ...), added to the document dirty, and sets the transport's tempo and key to what it heard; `slot` them to hear the estimate, then edit. Notes off the key land on its nearest degree, and a bass note's attack can read as a kick ([Audio §11](../doc/audio.md#11-ripping-a-recording)).
 - **Voices**: the tonal instruments are `[[voice]]` entries of the sound document, listed by `ls voice`, made by `new voice`, edited by path like a sound and applied into the running mixer, where the next note takes the new voice; a new name is a new instrument a pattern's track names. They load and save with the sounds.
 
 ## Usage
@@ -56,6 +57,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 | `builtin` | `builtin sound\|pattern\|voice` | Seed the document from the built-ins; `sound` seeds the voices too. |
 | `save`/`write` | `save sound\|pattern [file]` | Write the document (bare = provenance path); `write <name> <file>` saves one entry. |
 | `export` | `export <name> <out.wav> [variant]` | Render definition into a PCM WAV. |
+| `rip` | `rip <file.wav> <name> [bars]` | Hear a recording's beat, melody and bass as patterns of up to `bars` (4) bars each, named `<name>_beat_1`..., and take its tempo and key. |
 | `ls`/`show` | `ls sound\|pattern\|voice [glob]`, `show <name>[.path]` | List entries (`*` marks dirty); dump TOML shape, or print leaf value. |
 | `where`/`stat` | `stat` | Transport position and slot patterns, a muted slot marked; backend, play stats, dirty entries. |
 | `new`/`cp`/`mv`/`del` | `new sound\|pattern\|voice <name>` | Seed, duplicate, rename or discard an entry. `new` seeds a minimal valid spec; `del <name.path.idx>` removes a list element, and a discarded entry keeps any applied registry copy. |
