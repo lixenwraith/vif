@@ -728,14 +728,21 @@ func (s *Scheduler) schedulerLoop() {
 			deadline := s.nextTickDeadline
 
 			if !gameNow.Before(deadline) {
-				if !s.awaitFrame(frameTimer) {
+				waited, ok := s.awaitFrame(frameTimer)
+				if !ok {
 					return
+				}
+				// A frame that let this tick start late paces the next from the start,
+				// or it would come early by the wait and be drawn for fewer frames
+				anchor := s.nextTickDeadline
+				if waited {
+					anchor = s.ctl.Now()
 				}
 
 				s.processTick()
 
 				trim, step := s.TakePace()
-				s.nextTickDeadline = s.nextTickDeadline.Add(PacedInterval(s.tickInterval, trim, step))
+				s.nextTickDeadline = anchor.Add(PacedInterval(s.tickInterval, trim, step))
 
 				// Re-read after the tick: the debt is what the tick consumed,
 				// not what was owed when it started
@@ -830,10 +837,15 @@ func (s *Scheduler) breakpointHit(bp *Breakpoint, cause string) {
 // for the render loop, bounded by a timeout so a stalled terminal cannot freeze
 // the simulation. Above real time the operator has asked the world to outrun the
 // display, so the handshake is skipped and the tick deadline is the only pacing.
-// Returns false on shutdown.
-func (s *Scheduler) awaitFrame(t *time.Timer) bool {
+// waited reports a frame that came only after the deadline; ok is false on shutdown.
+func (s *Scheduler) awaitFrame(t *time.Timer) (waited, ok bool) {
 	if s.ctl.Scale().Faster() {
-		return true
+		return false, true
+	}
+	select {
+	case <-s.frameReady:
+		return false, true
+	default:
 	}
 	timeout := s.ctl.ToReal(s.tickInterval * 2)
 	if timeout <= 0 {
@@ -844,12 +856,13 @@ func (s *Scheduler) awaitFrame(t *time.Timer) bool {
 
 	select {
 	case <-s.frameReady:
-	case <-t.C:
+		return true, true
+	case <-t.C: // a stalled display: the tick runs on its deadline, owing the wait
 	case <-s.ctl.Wake(): // rate or pause changed; recompute rather than wait it out
 	case <-s.stopChan:
-		return false
+		return false, false
 	}
-	return true
+	return false, true
 }
 
 // TakePace returns the trim and the owed step the last tick read, clearing the step.

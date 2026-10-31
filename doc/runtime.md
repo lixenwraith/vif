@@ -399,7 +399,12 @@ A tick holds the world lock a frame renders under, so one longer than a frame dr
 that frame late: the world before it stays up longer and its own for less. Later
 ticks keep their deadlines unless the long tick and the frame it waits for outlast
 the interval, from about 40 ms on one thread as in a browser; then the next starts
-late and the one after comes early. A region's entry is the heaviest ordinary tick.
+late, and the scheduler paces the one after from that late start rather than the
+missed deadline, so the ticks after it stay evenly spaced and the run trails wall
+time by the wait, which a guest's pace trim takes up as any lag. Measured on a
+50 ms tick with a 15 ms frame (the gaps in ms around one tick of 40 ms, then of
+52 ms): 55, 45 and 67, 32 before; 55, 50 and 67, 50 after. A region's entry is
+the heaviest ordinary tick.
 The wall system finds an area's walls through the spatial grid and reads the
 cursors once per push check, so the Kraken breaking the walls under its footprint
 one cell at a time reads one cell a request, not every wall. A kraken entry at 200×50,

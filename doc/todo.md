@@ -1375,20 +1375,6 @@ down composites at run time, but no system or scenario uses them. A species or
 scenario that assembles composites would; it reaches them through events, since
 another system may not call them directly.
 
-### Start the next tick where a late frame let the last one start
-
-- Priority: P3
-- Affected files: `internal/engine/scheduler.go` (`schedulerLoop`, `awaitFrame`)
-
-A tick that, with the frame it waits for, outlasts the 50 ms interval (from about
-40 ms on one thread, as in a browser) starts the next tick late, and since the
-deadline is not re-anchored the tick after comes early: drawn for two frames, then
-four. Re-anchoring the deadline when `awaitFrame` waited evens the ticks after at
-the cost of the run trailing wall time by the wait, which a guest's trim and step
-read, so the divergence harness decides it. It cannot help the frame a long tick
-delays itself, and no region entry comes near: the heaviest, a cold kraken entry,
-ticks in 13 ms in the browser build ([Runtime §3](runtime.md#3-runtime-clocks-and-cadence)).
-
 ### Let a paused run sleep
 
 - Priority: P2
