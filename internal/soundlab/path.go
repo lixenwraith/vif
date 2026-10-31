@@ -1,11 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
-
-// Path addressing over the toml key space. Deliberately a reflection walk
-// rather than a setter table: the key space is defined by the struct tags, and
-// anything that restates it drifts. audio.checkKeys made the same call for the
-// same reason; this mirrors its shape so there is one walk to reason about.
+package soundlab
 
 import (
 	"fmt"
@@ -16,8 +11,10 @@ import (
 	"strings"
 )
 
-// tagIndex maps toml key -> field index. Single-goroutine editor, fixed type
-// set: a plain map is enough, sync.Map is machinery for nothing.
+// tagCache maps a type's toml keys to field indices: the command paths address
+// the key space the struct tags define, by a reflection walk, as audio.checkKeys
+// does, rather than a setter table that would restate it and drift. The editor
+// is single-goroutine, so a plain map.
 var tagCache = map[reflect.Type]map[string]int{}
 
 func tagIndex(t reflect.Type) map[string]int {
@@ -61,12 +58,10 @@ func keysOf(t reflect.Type) []string {
 	return out
 }
 
-// resolve walks a dotted path from a struct pointer to the addressed value.
-//
-// create allocates nil pointers on the way down, so `set x.source.vibrato.rate`
-// works on a spec with no vibrato table. A read walk stops at the first nil and
-// says "unset" rather than fabricating a sub-table the document does not have —
-// show must not invent structure that save would then emit.
+// resolve walks a dotted path from a struct pointer to the addressed value. create
+// allocates nil pointers on the way down, so `set x.source.vibrato.rate` works on
+// a spec with no vibrato table; a read walk stops at the first nil and says
+// "unset", since show must not invent structure that save would then emit.
 func resolve(v reflect.Value, path []string, create bool) (reflect.Value, error) {
 	at := ""
 	for i, seg := range path {

@@ -101,6 +101,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, text-console palette detection and the quantizer that maps a 256-color frame to its sixteen colors, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for categorized files, terminal, content, audio, and network transport. |
+| `internal/soundlab` | The audio authoring environment over `pkg/audio`: a session holding the engine and the working documents, the verb table every front end dispatches through, the script runner, and the TUI over any `terminal.Terminal`, so a host with its own screen and speakers runs it in-process ([Audio §10](audio.md#10-soundlab)). |
 | `internal/snapshot` | Shared-capture wire model: the capture and its header, the compressed JSON envelope, the correction manifest with its pages and section hashes, and the selective shard set — none of which reads a world. Also the comparison surface: the key filters, the line format and diff, the per-store digest, the assembled shared and whole-instance line sets, and the capture/correction telemetry cells. The surface readers take the caller's world lock and never acquire one. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, per-slot player metrics and the bare key that mirrors this instance's own slot, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order; `behavior.go` runs every species a scenario's behavior programs define. |
@@ -230,7 +231,7 @@ duplicating version strings that would become stale.
 |---|---|
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (the view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
 | `cmd/ascimage` | Supported image converter/viewer command. |
-| `cmd/soundlab` | Supported audio document editor, REPL/TUI, sequencer audition environment, and script runner. |
+| `cmd/soundlab` | The audio document editor's terminal command: its flags and the REPL over `internal/soundlab`. |
 | `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |

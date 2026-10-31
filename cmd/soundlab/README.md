@@ -2,7 +2,7 @@
 
 `soundlab` is the terminal-based audio authoring environment and sequencer for `vif`. It runs entirely on the `pkg/audio` engine and provides a reflective, command-driven interface over the TOML audio specifications.
 
-Supports interactive REPL, TUI, and headless script execution.
+Supports interactive REPL, TUI, and headless script execution. The session, its documents, the verb table and the TUI are `internal/soundlab`, which runs over any `terminal.Terminal` and takes a host's own speakers as its sink; this command adds the flags, the REPL and the process's terminal and signals.
 
 ## Architecture & Concepts
 

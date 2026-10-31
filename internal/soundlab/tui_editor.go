@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+package soundlab
 
 // The pattern editor: one pattern, new or edited, on two tabs. Keys plays the
 // tonal voices and records takes into it; grid lays its tracks on a step grid, or

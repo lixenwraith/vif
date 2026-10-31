@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+package soundlab
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 
 func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
 	t.Helper()
-	s, err := NewSession("null", 0.5, out, audioFiles{})
+	s, err := NewSession(Options{Backend: "null", SfxVolume: 0.5, Out: out})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
 
 func runOrFatal(t *testing.T, s *Session, out *bytes.Buffer, script string) {
 	t.Helper()
-	if err := runScript(s, strings.NewReader(script)); err != nil {
+	if err := RunScript(s, strings.NewReader(script)); err != nil {
 		t.Fatalf("script: %v\noutput:\n%s", err, out.String())
 	}
 }
@@ -321,7 +321,7 @@ func TestEditOpensWhatIsSelected(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 	runOrFatal(t, s, &out, "new pattern bp1\nnew sound bs1")
-	a := newTUIApp(s, newLogBuffer(100))
+	a := newTUIApp(s, NewLogBuffer(100))
 	key := func(k terminal.Key, r rune) { a.editorKey(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r}) }
 
 	a.kind = kindSound
@@ -461,7 +461,7 @@ func TestAutoSlotAssign(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	runOrFatal(t, s, &out, "new pattern ap")
 	a.cursorTo("ap")
 
@@ -488,7 +488,7 @@ func TestDeleteKey(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	runOrFatal(t, s, &out, "new pattern dp")
 	a.cursorTo("dp")
 
@@ -536,7 +536,7 @@ func TestTooSmallTakesNoKeys(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	a.w, a.h, a.dirty = minW-1, minH, false
 	lines := len(a.log.lines)
 	for _, r := range "ne: m" {
@@ -559,7 +559,7 @@ func TestRollPlacesANoteOnItsPitch(t *testing.T) {
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
 	runOrFatal(t, s, &out, "new pattern rl\nset rl.track.0.instr lead\ndel rl.track.0.event.0")
-	a := newTUIApp(s, newLogBuffer(100))
+	a := newTUIApp(s, NewLogBuffer(100))
 	a.openEditor("rl", focusGrid)
 	key := func(r rune) { a.editorKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}) }
 	key('r') // an empty track opens on the second octave's root
@@ -584,7 +584,7 @@ func TestUnknownSettingsAreSkipped(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, paths.SettingsFile), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f, err := resolveAudioFiles(dir, "", "")
+	f, err := ResolveFiles(dir, "", "")
 	if err != nil || f.skipped == nil || f.buffer != 20*time.Millisecond {
 		t.Fatalf("resolve = %+v, %v; want buffer 20ms with the unknown table named", f, err)
 	}
@@ -610,7 +610,7 @@ func TestAudioFilesFollowVif(t *testing.T) {
 	}
 
 	for _, root := range []string{"", dir} {
-		f, err := resolveAudioFiles(root, "", "")
+		f, err := ResolveFiles(root, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -620,9 +620,9 @@ func TestAudioFilesFollowVif(t *testing.T) {
 		}
 	}
 
-	f, _ := resolveAudioFiles("", "", "")
+	f, _ := ResolveFiles("", "", "")
 	var out bytes.Buffer
-	s, err := NewSession("null", 0.5, &out, f)
+	s, err := NewSession(Options{Backend: "null", SfxVolume: 0.5, Out: &out, Files: f})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +649,7 @@ func TestTabWalksThePanesOnScreen(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	a.term, a.w, a.h = frameTerm{}, 100, 40
 	key := func(k terminal.Key, r rune) {
 		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
@@ -695,7 +695,7 @@ func TestMixerStaysWhereItIsLeft(t *testing.T) {
 	runOrFatal(t, s, &out, "new pattern one\nnew pattern big\n"+strings.Repeat("mix one big\n", 11)+"apply big\nslot 0 big")
 	id := audio.PatternIDByName("big")
 	waitFor(t, func() bool { return s.eng.SlotPattern(0) == id }, "big must reach slot 0")
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	a.term, a.w, a.h = frameTerm{}, 100, 24
 	key := func(k terminal.Key, r rune) {
 		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
@@ -724,7 +724,7 @@ func TestNewPatternPlaysAlongAndGoes(t *testing.T) {
 	runOrFatal(t, s, &out, "bpm 999\nnew pattern bg\nslot 0 bg\nmusic start")
 	bg := audio.PatternIDByName("bg")
 	waitFor(t, func() bool { return s.eng.SlotPattern(0) == bg }, "bg must play in slot 0")
-	a := newTUIApp(s, newLogBuffer(100))
+	a := newTUIApp(s, NewLogBuffer(100))
 	a.promptNew(-1)
 	a.promptKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter})
 	d, ok := s.pats.get("new_1")
@@ -760,7 +760,7 @@ func TestMixerMutesTheCursorsSlot(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
-	a := newTUIApp(s, newLogBuffer(50))
+	a := newTUIApp(s, NewLogBuffer(50))
 	a.term, a.w, a.h = frameTerm{}, 100, 24
 	key := func(k terminal.Key, r rune) {
 		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})

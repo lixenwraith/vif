@@ -1,21 +1,13 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
-
-// TUI shell over the same dispatch table the REPL uses. Every mutation and
-// every audition goes through Execute — direct keybindings are macros that
-// assemble a command line — so nothing the TUI can do is unreachable from a
-// script, which is what keeps the scripted E2E authoritative.
+package soundlab
 
 import (
 	"cmp"
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/lixenwraith/color"
@@ -94,10 +86,13 @@ type engineSig struct {
 	musicMuted bool
 }
 
+// tuiApp is the TUI shell over the dispatch table the REPL uses. Every mutation
+// and every audition goes through Execute, the keys assembling command lines, so
+// nothing the TUI can do is unreachable from a script.
 type tuiApp struct {
 	s     *Session
 	term  terminal.Terminal
-	log   *logBuffer
+	log   *LogBuffer
 	theme palette
 
 	w, h  int
@@ -152,7 +147,7 @@ type tuiApp struct {
 	helpTop    int    // the overlay's first row shown
 }
 
-func newTUIApp(s *Session, lb *logBuffer) *tuiApp {
+func newTUIApp(s *Session, lb *LogBuffer) *tuiApp {
 	return &tuiApp{
 		s: s, log: lb, theme: defaultPalette, dirty: true,
 		exp:       tui.NewTreeExpansion(),
@@ -165,35 +160,14 @@ func newTUIApp(s *Session, lb *logBuffer) *tuiApp {
 	}
 }
 
-// runTUI takes over the terminal; lb is the log the session already writes to
-func runTUI(s *Session, lb *logBuffer) error {
-	// Close's wedged-mixer warning must reach a visible stream after the
-	// alternate screen is gone. Deferred first, so it runs after Fini.
-	defer func() { s.out = os.Stdout }()
-
-	term := terminal.New()
+// RunTUI takes over term until the player quits or the host posts EventClosed;
+// lb is the log the session already writes to. The host owns what ends the loop
+// from outside: a signal, or a view going away, posted as EventClosed.
+func RunTUI(s *Session, lb *LogBuffer, term terminal.Terminal) error {
 	if err := term.Init(); err != nil {
-		for _, l := range lb.lines {
-			fmt.Println(l)
-		}
 		return err
 	}
 	defer term.Fini()
-
-	// Signals become a clean loop exit rather than os.Exit: Fini must run or
-	// the terminal is left raw on the alternate screen.
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sig)
-	sigDone := make(chan struct{})
-	defer close(sigDone)
-	go func() {
-		select {
-		case <-sig:
-			term.PostEvent(terminal.Event{Type: terminal.EventClosed})
-		case <-sigDone:
-		}
-	}()
 
 	// The transport readout animates without input: a ticker wakes the
 	// blocking PollEvent with KeyNone, which unknown escape sequences already
@@ -254,7 +228,7 @@ func (a *tuiApp) execQ(line string) error {
 	a.logScroll = 0 // new output re-sticks the log to its tail
 	err := Execute(a.s, line)
 	switch {
-	case errors.Is(err, errQuit):
+	case errors.Is(err, ErrQuit):
 		a.requestQuit()
 	case err != nil:
 		fmt.Fprintf(a.log, "error: %v\n", err)

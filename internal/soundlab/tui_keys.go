@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+package soundlab
 
 // The editor's keys tab: the tonal voices on a tracker keyboard, drawn as a piano
 // with the key's scale marked. Notes go through Execute("note ...") like

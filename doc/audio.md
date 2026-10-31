@@ -379,8 +379,11 @@ live tooling to update a playing registry.
 
 ## 10. Soundlab
 
-`cmd/soundlab` is the supported terminal authoring environment built on the
-same engine. It offers:
+Soundlab is the supported authoring environment built on the same engine.
+`internal/soundlab` holds the session, its documents, the verb table and the
+TUI, which runs over any `terminal.Terminal`; `cmd/soundlab` is its terminal
+command, the flags and the REPL, and a host with its own screen and speakers
+runs the package in-process, handing `NewSession` the speakers. It offers:
 
 - a command REPL;
 - a full-screen TUI: a browser of patterns and sounds beside a mixer that draws
@@ -446,4 +449,5 @@ events and keep the sequencer unaware of gameplay concepts.
   `audio.go`, `audio_none.go`, `play.go`
 - Game policy: `internal/parameter/audio.go`, `music.go`, `sfx.go`,
   `sfx_audio.go`
-- Authoring tool: `cmd/soundlab`, `cmd/soundlab/README.md`
+- Authoring tool: `internal/soundlab`, its command `cmd/soundlab`,
+  `cmd/soundlab/README.md`

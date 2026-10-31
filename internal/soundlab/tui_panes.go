@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+package soundlab
 
 // Data and render side of the TUI: log capture, browser lists, the
 // reflection-built inspector tree, header/footer. The inspector walks the
@@ -23,18 +23,21 @@ import (
 
 // --- log capture ---
 
-// logBuffer captures Session output for the log pane. Main-goroutine
-// confined: every Execute call and every render runs on the event loop, so
-// no lock. A partial line (no trailing newline) is held until completed.
-type logBuffer struct {
+// LogBuffer captures what a session says for the log pane, the last max lines.
+// Event-loop confined: every Execute call and every render runs there, so no
+// lock. A partial line (no trailing newline) is held until completed.
+type LogBuffer struct {
 	lines []string
 	part  string
 	max   int
 }
 
-func newLogBuffer(max int) *logBuffer { return &logBuffer{max: max} }
+func NewLogBuffer(max int) *LogBuffer { return &LogBuffer{max: max} }
 
-func (l *logBuffer) Write(p []byte) (int, error) {
+// Lines is what the buffer holds, for a host whose screen never opened
+func (l *LogBuffer) Lines() []string { return slices.Clone(l.lines) }
+
+func (l *LogBuffer) Write(p []byte) (int, error) {
 	l.part += string(p)
 	for {
 		i := strings.IndexByte(l.part, '\n')
@@ -47,7 +50,7 @@ func (l *logBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (l *logBuffer) push(s string) {
+func (l *LogBuffer) push(s string) {
 	l.lines = append(l.lines, s)
 	if n := len(l.lines) - l.max; n > 0 {
 		l.lines = slices.Delete(l.lines, 0, n)

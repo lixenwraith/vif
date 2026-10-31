@@ -1,20 +1,19 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
-
-// The verb table is the whole API: the REPL, script runner and TUI all
-// dispatch through Execute, so nothing one front-end can do is invisible to
-// another — that is what keeps the scripted E2E meaningful.
+package soundlab
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"slices"
 	"strings"
 )
 
-var errQuit = errors.New("quit")
+// ErrQuit is what the quit verb returns; a front end ends its loop on it
+var ErrQuit = errors.New("quit")
 
 type command struct {
 	usage    string
@@ -23,6 +22,9 @@ type command struct {
 	fn       func(*Session, []string) error
 }
 
+// commands is the verb table, the whole API: the REPL, the script runner and the
+// TUI dispatch through Execute, so nothing one front end can do is invisible to
+// another, which is what keeps the scripted end-to-end test authoritative.
 var commands map[string]*command
 
 // init, not a var literal: cmdHelp closes over the table.
@@ -30,7 +32,7 @@ func init() {
 	commands = map[string]*command{
 		"help": {"help [verb|keys]", "list commands or describe one", 0, 1, cmdHelp},
 		"quit": {"quit", "stop the engine and exit", 0, 0,
-			func(*Session, []string) error { return errQuit }},
+			func(*Session, []string) error { return ErrQuit }},
 
 		"load":    {"load sound|pattern <file>", "replace document from file (sound includes resolve within the file's dir)", 2, 2, cmdLoad},
 		"merge":   {"merge sound|pattern <file>", "overlay file onto document by name", 2, 2, cmdMerge},
@@ -98,7 +100,7 @@ func Execute(s *Session, raw string) error {
 
 	err := dispatch(s, line)
 	switch {
-	case errors.Is(err, errQuit):
+	case errors.Is(err, ErrQuit):
 		return err
 	case mustFail && err == nil:
 		return fmt.Errorf("expected failure: %s", line)
@@ -110,6 +112,26 @@ func Execute(s *Session, raw string) error {
 		return nil
 	}
 	return err
+}
+
+// RunScript runs lines until the end or a quit, strict: any outcome the line did
+// not ask for with - or ! aborts with its line number, since an unprefixed failure
+// in a script is a bug in the script or the editor.
+func RunScript(s *Session, in io.Reader) error {
+	sc := bufio.NewScanner(in)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	ln := 0
+	for sc.Scan() {
+		ln++
+		err := Execute(s, sc.Text())
+		if errors.Is(err, ErrQuit) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("line %d: %w", ln, err)
+		}
+	}
+	return sc.Err()
 }
 
 func dispatch(s *Session, line string) error {

@@ -1,6 +1,11 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package main
+// Package soundlab is the audio authoring environment over pkg/audio: a session
+// holding the engine and the working documents, the verb table every front end
+// dispatches through (Execute), the script runner and the full-screen TUI over any
+// terminal.Terminal. cmd/soundlab is its terminal command; a host with its own
+// screen and speakers runs it in-process, handing NewSession the speakers.
+package soundlab
 
 import (
 	"bytes"
@@ -37,33 +42,33 @@ type Session struct {
 	root     int
 	scale    audio.ScaleID
 	startErr error
-	files    audioFiles
+	files    Files
 }
 
-// audioFiles is where the game reads its audio overrides and where an untitled
-// save must land for the next run to read it first, resolved as vif resolves them,
-// with the mixer period vif.toml sets
-type audioFiles struct {
+// Files is where the game reads its audio overrides and where an untitled save
+// must land for the next run to read it first, resolved as vif resolves them by
+// ResolveFiles, with the mixer period vif.toml sets
+type Files struct {
 	music, sounds             string // "" = the embedded bank
 	musicTarget, soundsTarget string // "" = no configuration root
 	buffer                    time.Duration
 	skipped                   error // vif.toml keys this build does not know
 }
 
-// resolveAudioFiles applies vif's -config-dir, -config-music and -config-sounds,
+// ResolveFiles applies vif's -config-dir, -config-music and -config-sounds,
 // and vif.toml's [paths] root and [audio] buffer_ms as vif does. Those are all it
 // reads, so a key another vif build knows is skipped, never dropped as a run does.
-func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
+func ResolveFiles(dir, music, sounds string) (Files, error) {
 	if err := paths.CheckRoot(dir); err != nil {
-		return audioFiles{}, err
+		return Files{}, err
 	}
 	settings, _, err := paths.LoadSettings(dir)
-	var f audioFiles
+	var f Files
 	if errors.As(err, new(paths.UnknownKeys)) {
 		f.skipped, err = err, nil
 	}
 	if err != nil {
-		return audioFiles{}, err
+		return Files{}, err
 	}
 	roots := paths.ConfigRoots(cmp.Or(dir, settings.Paths.Root))
 	f.buffer = time.Duration(settings.Audio.BufferMs) * time.Millisecond
@@ -78,13 +83,26 @@ func resolveAudioFiles(dir, music, sounds string) (audioFiles, error) {
 	return f, nil
 }
 
+// Options opens a session: the backend forced by name ("" detects, "null"
+// discards) or the host's own speakers in its place, the sfx volume, the writer
+// the session reports to, and the files vif would read (ResolveFiles)
+type Options struct {
+	Backend   string
+	Sink      io.WriteCloser
+	SfxVolume float64
+	Out       io.Writer
+	Files     Files
+}
+
 // NewSession starts the engine on the banks and overrides the game would load, and
 // seeds each document from its override so a save writes back what the game reads.
-func NewSession(backend string, sfxVolume float64, out io.Writer, files audioFiles) (*Session, error) {
+func NewSession(o Options) (*Session, error) {
+	files, out := o.Files, o.Out
 	cfg := audio.DefaultAudioConfig()
 	cfg.Enabled = true
-	cfg.SfxVolume = sfxVolume
-	cfg.ForceBackend = backend
+	cfg.SfxVolume = o.SfxVolume
+	cfg.ForceBackend = o.Backend
+	cfg.Sink = o.Sink
 	cfg.Buffer = files.buffer
 	// The same banks the game registers, from the same embedded assets.
 	base, err := parameter.BuiltinSounds()
@@ -167,6 +185,14 @@ func (s *Session) Close() {
 		fmt.Fprintln(s.out, "warning: mixer did not stop; a backend write is wedged")
 	}
 }
+
+// StartError is why the engine runs silent, nil when a backend took the stream;
+// editing, validation and export work either way.
+func (s *Session) StartError() error { return s.startErr }
+
+// SetOut redirects what the session says, as a front end does when its screen
+// opens or closes.
+func (s *Session) SetOut(w io.Writer) { s.out = w }
 
 // --- documents ---
 
