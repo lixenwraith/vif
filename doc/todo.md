@@ -1329,24 +1329,22 @@ loaders expand, which moves with it or into `lixenwraith/toml`.
 
 - Priority: P2
 - Affected files: `pkg/genetic`, `pkg/genetic/registry`, `pkg/genetic/fitness`,
-  `pkg/genetic/tracking`, `pkg/genetic/persistence`, `sandbox/genetic`
+  `pkg/genetic/tracking`, `pkg/genetic/persistence`, `sandbox/genetic`,
+  `sandbox/life`, `internal/system/genetic.go`, `internal/engine/resource.go`,
+  `internal/parameter/genetic.go`, `go.mod`
 
-The audit before the spin-off left these for the new module, none of which the
-game needs. The pending table is direct-mapped, so a long evaluation is evicted
-by issue distance even when the table is nearly empty; bounded linear probing
-that evicts the oldest id in its window would make `PendingCapacity` a live-count
-bound, at the cost of a checkpoint-format version. The streaming engine breeds as
-soon as two outcomes exist; breeding only once the archive is full was measured
-on the lander example and changed nothing, so it stays unimplemented. The batch
-`Engine` spawns one goroutine per candidate under a semaphore and reallocates
-offspring every generation; a fixed worker set over an atomic index and a free
-list would remove both. `RouletteSelector` rebuilds its cumulative table on every
-`Select`; cache it by archive version. `registry.Stats` restates
-`genetic.PoolStats` field for field and `SpeciesConfig.PerturbationStdDev`
-restates `EngineConfig.PerturbationStrength`; collapse each pair. The `fitness`
-context keys and most `tracking` metric keys are conventions of this game, and
-the `persistence` default codec is the one external dependency: make JSON the
-default and move the TOML codec to the caller, or drop the subpackage.
+The audit's items have landed: the pending table probes a window, selectors
+cache by archive version, the batch engine runs a worker set over recycled
+buffers, `registry.Stats` and `PerturbationStdDev` are gone, the game's metric
+and context keys left `fitness` and `tracking`, and `persistence` defaults to
+JSON, so nothing under `pkg/genetic` imports anything outside the standard
+library. What remains is the move itself: a `lixenwraith/genetic` repository
+with the five packages at its root (`genetic`, `genetic/registry`, ...), the
+two sandboxes as its `examples/`, the package README as its README with import
+paths rewritten, the repository LICENSE, and a `go.mod` at the Go version this
+module builds with; then this module's four importers take the new path and
+`go.mod` requires it. The sandboxes' `-headless` tables and `go test ./...`
+are the check on both sides.
 
 ## Engine
 

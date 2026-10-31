@@ -273,6 +273,15 @@ that proves wrong or that a document now states, and link the document instead.
 - Materialize names the materialize effect alone; a teleport's or a charge's line is
   a line, never a beam.
 
+## Genetic
+
+- The capture carries `registry.SpeciesState`, which embeds the streaming
+  engine's checkpoint, so a change to `genetic.StreamingState`'s layout bumps
+  `snapshot.Schema` beside `StreamingStateVersion`.
+- A sandbox over `pkg/genetic` is tuned by its `-headless` table, several seeds
+  at once in the background with a `sed` variant per constant, not by watching
+  it: `sandbox/life`'s arrivals vary threefold between seeds at one setting.
+
 ## Branches
 
 - A session pushes only its own branch and a force push is refused, so a branch
