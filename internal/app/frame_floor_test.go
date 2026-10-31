@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
@@ -31,6 +32,22 @@ func TestFrameFloorNamesMultiplexers(t *testing.T) {
 		if got := frameFloor(func(k string) string { return c.env[k] }); got != c.want {
 			t.Errorf("%s: floor %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// TestTmuxFrameCapTurnsTheFloorOff: inside tmux the terminal keeps the floor
+// unless the run's [presentation] tmux_frame_cap is false, which the embedded
+// vif.toml leaves true.
+func TestTmuxFrameCapTurnsTheFloorOff(t *testing.T) {
+	t.Setenv(multiplexerEnv, "/tmp/tmux-1000/default,1234,0")
+	if s, err := paths.ParseSettings(nil); err != nil || !s.Presentation.TmuxFrameCap {
+		t.Fatalf("embedded tmux_frame_cap = %v, %v; want true", s.Presentation.TmuxFrameCap, err)
+	}
+	if got := newTerminal(Config{}).FrameFloor(); got != parameter.MultiplexerFrameInterval {
+		t.Errorf("capped: floor %v, want %v", got, parameter.MultiplexerFrameInterval)
+	}
+	if got := newTerminal(Config{NoTmuxFrameCap: true}).FrameFloor(); got != 0 {
+		t.Errorf("uncapped: floor %v, want none", got)
 	}
 }
 

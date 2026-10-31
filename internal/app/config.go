@@ -115,6 +115,9 @@ type Config struct {
 	// ColorMode overrides terminal detection when ColorModeSet is true
 	ColorMode    terminal.ColorMode
 	ColorModeSet bool
+	// NoTmuxFrameCap draws the terminal at the run's rate inside tmux or screen,
+	// vif.toml's [presentation] tmux_frame_cap = false
+	NoTmuxFrameCap bool
 
 	// AudioBackend forces a named backend; "" = auto-detect priority chain
 	AudioBackend string

@@ -129,7 +129,9 @@ the join.
 journal and music directories, and the scenario, content and keymap `-s`, `-f` and `-k`
 take; `[audio] buffer_ms` sets the mixer period; `[presentation] window = true` opens
 the desktop window by default, as `-g` does, and `maximized` or `fullscreen` the
-state it opens in, and `cell` is the zoom Android and a browser open at; `[play]` is
+state it opens in, `cell` is the zoom Android and a browser open at, and
+`tmux_frame_cap` (true) draws the terminal at most 24 frames a second inside tmux
+or screen ([Rendering §1](rendering.md#1-frame-pipeline)); `[play]` is
 how a run starts and what the configuration menu changes in it: the audio channels
 (`sfx`, `music`), the sfx volume (`sfx_volume`), auto-fire, mouse input, pointer
 following, the telemetry HUD, relaying for others, each new game waiting for

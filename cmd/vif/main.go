@@ -456,6 +456,7 @@ func buildConfig() app.Config {
 	})
 	cfg.MusicWAV = musicWAVDir()
 	cfg.AudioBuffer = time.Duration(settings.Audio.BufferMs) * time.Millisecond
+	cfg.NoTmuxFrameCap = !settings.Presentation.TmuxFrameCap
 
 	switch *flagColor {
 	case colourTrue:
