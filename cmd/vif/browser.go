@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/render"
@@ -18,7 +19,11 @@ import (
 )
 
 func init() {
-	platformHost = app.Host{Presentation: &browserHost{}, Audio: browser.Speaker(), Pressed: true, StartScreen: true}
+	var pres app.Presentation = &browserHost{}
+	if browser.HasMenu() {
+		pres = &menuHost{browserHost: &browserHost{}, ops: make(chan mode.MenuOp, menuOps)}
+	}
+	platformHost = app.Host{Presentation: pres, Audio: browser.Speaker(), Pressed: true, StartScreen: true}
 	pageSettings = keptSettings
 	pageClaims = tabClaims{}
 }
@@ -99,3 +104,30 @@ func (h *browserHost) Away() <-chan bool                   { return h.host.Away(
 func (h *browserHost) SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error {
 	return h.host.SetKeyReport(report, allow)
 }
+
+// menuOps bounds the ops a page's menu queues; a post never waits on the run
+const menuOps = 256
+
+// menuHost is the page as a host that draws the configuration menu itself, which a
+// worker defining vifMenu does: snapshots go to the page and its ops come back on a
+// channel the loop selects on. The ops channel outlives a run, as the host does.
+type menuHost struct {
+	*browserHost
+	ops chan mode.MenuOp
+}
+
+func (h *menuHost) Init() error {
+	if err := h.browserHost.Init(); err != nil {
+		return err
+	}
+	h.host.MenuOp = func(op, id, arg string) {
+		select {
+		case h.ops <- mode.MenuOp{Op: op, ID: id, Arg: arg}:
+		default:
+		}
+	}
+	return nil
+}
+
+func (h *menuHost) Menu(snapshot []byte)        { h.host.Menu(snapshot) }
+func (h *menuHost) MenuOps() <-chan mode.MenuOp { return h.ops }

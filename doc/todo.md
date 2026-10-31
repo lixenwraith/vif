@@ -1196,21 +1196,6 @@ insert mode, where it types; whether a solo run pauses while it is down, as the
 menu does; its height and what a resize does; and whether the history outlives
 the run in the state directory, as a shell's does.
 
-### Draw the configuration menu with the page's own widgets
-
-- Priority: P1
-- Affected files: `cmd/vif/browser.go`, `web/terminal.js`, `web/index.html`,
-  `web/terminal.css`, `android/game/game_test.go` (the contract test)
-
-A `tui` menu row is one cell against a finger's touch target, so on a phone's
-browser the text is hard to read and a tap lands on a neighbour, as it was on
-Android before the app drew the menu itself. The page draws it the same way, from
-the snapshot the run already builds for a `menuPresentation` and with the same ops
-([Native menu §8](native-menu.md#8-browser)): `browser.go` implements the seam over
-the Worker, `terminal.js` a `<dialog>` with the kinds and layout Android's dialog
-has, in the site's tokens; every browser draws it, touch or not, so each host has
-one look. The contract test then reads `web/terminal.js` beside `MenuDialog.java`.
-
 ### Configuration menu follow-up
 
 - Priority: P2
