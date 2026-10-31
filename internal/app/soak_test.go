@@ -407,9 +407,9 @@ func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	})
 }
 
-// TestALightShowsForItsWholeSpan: a light simon's machine lights for 250 ms in a tick
-// stays lit for 250 ms of ticks, as one lit between ticks does: the clock it arms
-// first counts on the tick after the one that armed it.
+// TestALightShowsForItsWholeSpan: a note simon's machine lights in a tick stays lit
+// its whole span of ticks, as one lit between ticks does: the clock it arms first
+// counts on the tick after the one that armed it.
 func TestALightShowsForItsWholeSpan(t *testing.T) {
 	t.Parallel()
 	opts := resource.Options{Dir: soakRoot, Scenario: "simon"}
