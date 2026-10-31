@@ -3,6 +3,8 @@ package position
 import (
 	"math"
 	"slices"
+
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Side is the side of a surface that is solid: Above, the rows before its height,
@@ -14,11 +16,11 @@ const (
 	Below
 )
 
-// Surface is a boundary no entity holds: a height for each column from x 0, the
-// cells on Side of it solid, blocking Mask as a block does. A ceiling is Above, a
-// floor Below. Its writer lays it from a record of its own, so a capture carries
-// that record and never the surface. Origin is the profile column at column 0,
-// which what draws the surface anchors to.
+// Surface is a boundary no entity holds: a height for each column from x 0 of the
+// first layer, the cells on Side of it solid, blocking Mask as a block does. A
+// ceiling is Above, a floor Below. Its writer lays it from a record of its own, so
+// a capture carries that record and never the surface. Origin is the profile
+// column at column 0, which what draws the surface anchors to.
 type Surface struct {
 	Mask   Mask
 	Side   Side
@@ -237,7 +239,7 @@ func (x *Index[E]) ShiftSurface(s *Surface, enter int) {
 		}
 		// A row the height did not cross is solid in both columns or in neither
 		for y := max(min(was, now), 0); y < min(max(was, now), h); y++ {
-			x.log.add(col, y, len(x.Cells))
+			x.log.add(vmath.Point{X: col, Y: y}, len(x.Cells))
 		}
 	}
 	if len(s.heights) > 0 {

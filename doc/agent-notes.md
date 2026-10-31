@@ -166,6 +166,11 @@ that proves wrong or that a document now states, and link the document instead.
 - `pkg/position` knows no entity: a test over walls or glyphs needs a world and
   stays in `internal/engine`; a grid-only test goes to the package with a test id
   whose class is its top byte.
+- The flat queries (`Blocks`, `EntitiesAt`, the searches) answer for the first layer
+  and the point forms (`BlocksAt`, `EntitiesAtPoint`) for any, so a flat game's call
+  sites never gain a layer argument; the planes' and the presence bits' rows are
+  the layers' in turn, so a cell's grid index `i` is `(i%Width, i/Width)` in them
+  whatever its layer.
 - `World.Positions` embeds the index, so the grid's writes (`Set`, `RemoveEntityAt`,
   `Load`, `Reorder`) are reachable from every system and move no row: a placement
   goes through `SetPosition`, `Move` or `Shift`; `Resize` and `Clear` are the

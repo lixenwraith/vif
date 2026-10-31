@@ -105,6 +105,11 @@ func (x *Index[E]) IsBlocked(px, py int, mask Mask) bool {
 	return x.Blocks(px, py, mask)
 }
 
+// IsBlockedAt is IsBlocked for a cell of any layer
+func (x *Index[E]) IsBlockedAt(p Point, mask Mask) bool {
+	return !x.InBounds(p) || x.BlocksAt(p, mask)
+}
+
 // IsOutOfBounds reports whether (x, y) is outside the map
 func (x *Index[E]) IsOutOfBounds(px, py int) bool {
 	return px < 0 || px >= x.Width || py < 0 || py >= x.Height
@@ -136,6 +141,17 @@ func (x *Index[E]) IsAnyBlockedInSet(points []vmath.Point, mask Mask) bool {
 func (x *Index[E]) HasLineOfSight(x0, y0, x1, y1 int, mask Mask) bool {
 	for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
 		if x.Blocks(line.X(), line.Y(), mask) {
+			return false
+		}
+	}
+	return true
+}
+
+// HasLineOfSightBetween is HasLineOfSight through the volume: no cell strictly
+// between a and b on the line is blocked for mask
+func (x *Index[E]) HasLineOfSightBetween(a, b Point, mask Mask) bool {
+	for line := vmath.NewLine3(a, b).Next(); !line.AtEnd(); line = line.Next() {
+		if x.BlocksAt(line.Point(), mask) {
 			return false
 		}
 	}
@@ -194,6 +210,26 @@ func (x *Index[E]) HasAreaLineOfSightRotatable(x0, y0, x1, y1, width, height int
 		return false
 	}
 	return x.HasAreaLineOfSight(x0, y0, x1, y1, height, width, mask)
+}
+
+// HasBoxLineOfSight is HasAreaLineOfSight for a body of width×height×depth cells
+// through the volume, centred on each cell of the line strictly between a and b
+func (x *Index[E]) HasBoxLineOfSight(a, b Point, width, height, depth int, mask Mask) bool {
+	if width <= 1 && height <= 1 && depth <= 1 {
+		return x.HasLineOfSightBetween(a, b, mask)
+	}
+	for line := vmath.NewLine3(a, b).Next(); !line.AtEnd(); line = line.Next() {
+		c := line.Point()
+		box := Point{X: c.X - width/2, Y: c.Y - height/2, Z: c.Z - depth/2}
+		if box.X < 0 || box.Y < 0 || box.Z < 0 ||
+			box.X+width > x.Width || box.Y+height > x.Height || box.Z+depth > x.Depth {
+			return false
+		}
+		if x.BlocksBox(box, width, height, depth, mask) {
+			return false
+		}
+	}
+	return true
 }
 
 // Rect is an inclusive range of cells: the cross axis a directional scan is held to.

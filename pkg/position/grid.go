@@ -23,7 +23,7 @@ const (
 	// MaxHeight is the tallest map, in cells.
 	MaxHeight = 2000
 
-	// MaxCells is the most cells a map may hold, whatever its shape.
+	// MaxCells is the most cells a map or a volume may hold, whatever its shape.
 	MaxCells = 500 * 250
 )
 
@@ -71,38 +71,69 @@ func Clamp(width, height int) (int, int) {
 	return width, height
 }
 
-// Grid is a dense 2D grid for spatial queries without allocation, every cell of
-// the map a Cell.
+// ClampVolume is Clamp with a depth: the layers the cells left under MaxCells
+// allow, at least one, so a map at the ceiling is one layer deep.
+func ClampVolume(width, height, depth int) (int, int, int) {
+	width, height = Clamp(width, height)
+	depth = max(depth, 1)
+	if cells := max(width, 0) * max(height, 0); cells > 0 {
+		depth = min(depth, max(MaxCells/cells, 1))
+	}
+	return width, height, depth
+}
+
+// Grid is a dense grid for spatial queries without allocation, every cell of the
+// map a Cell: a volume of Depth layers, one on a flat map, each Width×Height.
 type Grid[E comparable] struct {
-	Cells  []Cell[E] // 1D array: index = y*Width + x
+	Cells  []Cell[E] // 1D array: index = (z*Height+y)*Width + x
 	Width  int
 	Height int
+	Depth  int
 
 	// occupied lists the cells holding an entity, in the order they filled, so a
 	// copy, a clear and the gauges read what the map holds rather than the map: the
 	// ceiling is 125,000 cells, 32 MB, which a scan touches whole.
 	occupied []int32
 
-	// present marks the cells holding an entity of each class, a bit a cell, so a
-	// probe passes an empty cell on a word that stays in cache rather than a cell
-	// of 256 bytes that does not, and a scan passes empty cells a word at a time.
+	// present marks the cells holding an entity of each class, a bit a cell, the
+	// layers' rows in turn, so a probe passes an empty cell on a word that stays in
+	// cache rather than a cell of 256 bytes that does not, and a scan passes empty
+	// cells a word at a time.
 	present [2]Bits
 }
 
-// NewGrid makes a grid of width×height cells, clamped to the map ceiling.
-func NewGrid[E comparable](width, height int) *Grid[E] {
-	width, height = Clamp(width, height)
+// NewGrid makes a grid of width×height×depth cells, clamped to the ceiling.
+func NewGrid[E comparable](width, height, depth int) *Grid[E] {
+	width, height, depth = ClampVolume(width, height, depth)
 	width, height = max(width, 0), max(height, 0)
 	return &Grid[E]{
-		Cells:   make([]Cell[E], width*height),
+		Cells:   make([]Cell[E], width*height*depth),
 		Width:   width,
 		Height:  height,
-		present: [2]Bits{NewBits(width, height), NewBits(width, height)},
+		Depth:   depth,
+		present: [2]Bits{NewBits(width, height*depth), NewBits(width, height*depth)},
 	}
 }
 
-// Present is the cells holding an entity of class c, a bit a cell. Read-only.
+// Present is the cells holding an entity of class c, a bit a cell, the layers'
+// rows in turn. Read-only.
 func (g *Grid[E]) Present(c Class) Bits { return g.present[c] }
+
+// InBounds reports whether the volume holds a cell at p.
+func (g *Grid[E]) InBounds(p Point) bool {
+	return p.X >= 0 && p.X < g.Width && p.Y >= 0 && p.Y < g.Height && p.Z >= 0 && p.Z < g.Depth
+}
+
+// row is the row of the presence bits and the planes that p's cell lies in
+func (g *Grid[E]) row(p Point) int { return p.Z*g.Height + p.Y }
+
+// CellAt returns p's cell, or nil outside the volume. Read-only.
+func (g *Grid[E]) CellAt(p Point) *Cell[E] {
+	if !g.InBounds(p) {
+		return nil
+	}
+	return &g.Cells[g.row(p)*g.Width+p.X]
+}
 
 // anyIn reports whether a cell of [x0, x1) × [y0, y1), which the caller has
 // bounded and found non-empty, holds anything scope selects, by the bits
@@ -117,13 +148,14 @@ func (g *Grid[E]) holds(x, y int, scope Scope) bool {
 		scope&ScopePrivate != 0 && g.present[ClassPrivate].Bit(x, y)
 }
 
-// Set inserts e into its class's half of (x, y). O(1); false when out of bounds,
+// Set inserts e into its class's half of p's cell. O(1); false when out of bounds,
 // the cell is full, or the private budget is spent (soft clip).
-func (g *Grid[E]) Set(e E, class Class, x, y int) bool {
-	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
+func (g *Grid[E]) Set(e E, class Class, p Point) bool {
+	if !g.InBounds(p) {
 		return false
 	}
 
+	x, y := p.X, g.row(p)
 	idx := int32(y*g.Width + x)
 	cell := &g.Cells[idx]
 	if cell.Count >= CellCapacity {
@@ -186,13 +218,14 @@ func (g *Grid[E]) Load(idx int32, count, shared uint8, occupants []E) {
 // Occupied is every cell holding an entity, in the order they filled. Read-only.
 func (g *Grid[E]) Occupied() []int32 { return g.occupied }
 
-// RemoveEntityAt deletes e from (x, y). O(k), k the cell's occupants: swap-removes
-// within e's half, refilling the shared tail from the private run.
-func (g *Grid[E]) RemoveEntityAt(e E, x, y int) {
-	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
+// RemoveEntityAt deletes e from p's cell. O(k), k the cell's occupants:
+// swap-removes within e's half, refilling the shared tail from the private run.
+func (g *Grid[E]) RemoveEntityAt(e E, p Point) {
+	if !g.InBounds(p) {
 		return
 	}
 
+	x, y := p.X, g.row(p)
 	cell := &g.Cells[y*g.Width+x]
 	for i := uint8(0); i < cell.Count; i++ {
 		if cell.Entities[i] != e {
@@ -230,13 +263,22 @@ func (g *Grid[E]) RemoveEntityAt(e E, x, y int) {
 	}
 }
 
-// EntitiesAt returns a view of the entities scope selects at (x, y), nil if empty
-// or out of bounds: the cell's own storage, to copy or to read before it changes.
+// EntitiesAt returns a view of the entities scope selects at (x, y) of the first
+// layer, nil if empty or out of bounds: the cell's own storage, to copy or to read
+// before it changes.
 func (g *Grid[E]) EntitiesAt(x, y int, scope Scope) []E {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height || !g.holds(x, y, scope) {
 		return nil
 	}
 	return g.Cells[y*g.Width+x].view(scope)
+}
+
+// EntitiesAtPoint is EntitiesAt for a cell of any layer.
+func (g *Grid[E]) EntitiesAtPoint(p Point, scope Scope) []E {
+	if !g.InBounds(p) || !g.holds(p.X, g.row(p), scope) {
+		return nil
+	}
+	return g.Cells[g.row(p)*g.Width+p.X].view(scope)
 }
 
 // Occupants is EntitiesAt without the presence test, for a caller that knows the
@@ -248,15 +290,21 @@ func (g *Grid[E]) Occupants(x, y int, scope Scope) []E {
 	return g.Cells[y*g.Width+x].view(scope)
 }
 
-// HasAnyEntityAt reports whether scope selects at least one entity at (x, y). O(1)
+// HasAnyEntityAt reports whether scope selects at least one entity at (x, y) of
+// the first layer. O(1)
 func (g *Grid[E]) HasAnyEntityAt(x, y int, scope Scope) bool {
 	return x >= 0 && x < g.Width && y >= 0 && y < g.Height && g.holds(x, y, scope)
 }
 
-// Holds reports whether the grid holds e in its class's half of (x, y), which tells
-// an idempotent write from a soft-clipped entity that needs another insertion.
-func (g *Grid[E]) Holds(e E, class Class, x, y int) bool {
-	for _, occupant := range g.EntitiesAt(x, y, 1<<class) {
+// HasAnyEntityAtPoint is HasAnyEntityAt for a cell of any layer.
+func (g *Grid[E]) HasAnyEntityAtPoint(p Point, scope Scope) bool {
+	return g.InBounds(p) && g.holds(p.X, g.row(p), scope)
+}
+
+// Holds reports whether the grid holds e in its class's half of p's cell, which
+// tells an idempotent write from a soft-clipped entity that needs another insertion.
+func (g *Grid[E]) Holds(e E, class Class, p Point) bool {
+	for _, occupant := range g.EntitiesAtPoint(p, 1<<class) {
 		if occupant == e {
 			return true
 		}
@@ -275,19 +323,20 @@ func (g *Grid[E]) Clear() {
 	clear(g.present[ClassPrivate].Words)
 }
 
-// Resize sets the grid's dimensions, emptying it. Backing storage is grow-only:
-// shrinking keeps capacity, so a map that oscillates never reallocates; growth
-// allocates once and holds. It clamps rather than trusting its caller: every path
-// into it carries dimensions from a replicated payload or a terminal report, and
-// an unbounded product here is a panic in the allocator rather than a rejected map.
-func (g *Grid[E]) Resize(newWidth, newHeight int) {
-	newWidth, newHeight = Clamp(newWidth, newHeight)
+// Resize sets the grid's dimensions, a volume of newDepth layers, emptying it.
+// Backing storage is grow-only: shrinking keeps capacity, so a map that oscillates
+// never reallocates; growth allocates once and holds. It clamps rather than
+// trusting its caller: every path into it carries dimensions from a replicated
+// payload or a terminal report, and an unbounded product here is a panic in the
+// allocator rather than a rejected map.
+func (g *Grid[E]) Resize(newWidth, newHeight, newDepth int) {
+	newWidth, newHeight, newDepth = ClampVolume(newWidth, newHeight, newDepth)
 	// Floored before the dimensions are stored, not just before they are used: a
 	// grid recording bounds that disagree with the cells it holds answers Set and
 	// every enumeration from two different maps.
 	newWidth, newHeight = max(newWidth, 0), max(newHeight, 0)
 	g.occupied = g.occupied[:0]
-	need := newWidth * newHeight
+	need := newWidth * newHeight * newDepth
 	if need <= cap(g.Cells) {
 		g.Cells = g.Cells[:need]
 		// Every cell, as a re-grown one may hold stale counts from a larger layout
@@ -298,10 +347,9 @@ func (g *Grid[E]) Resize(newWidth, newHeight int) {
 	} else {
 		g.Cells = make([]Cell[E], need)
 	}
-	g.Width = newWidth
-	g.Height = newHeight
+	g.Width, g.Height, g.Depth = newWidth, newHeight, newDepth
 	for c := range g.present {
-		g.present[c] = g.present[c].sized(Stride(newWidth), newHeight)
+		g.present[c] = g.present[c].sized(Stride(newWidth), newHeight*newDepth)
 	}
 }
 

@@ -22,22 +22,22 @@ func TestCellFitsFourCacheLines(t *testing.T) {
 }
 
 func TestGridPartitionSurvivesRemoval(t *testing.T) {
-	g := NewGrid[entity](4, 4)
+	g := NewGrid[entity](4, 4, 1)
 	shared := []entity{mk(ClassShared, 1), mk(ClassShared, 2)}
 	private := []entity{mk(ClassPrivate, 1), mk(ClassPrivate, 2), mk(ClassPrivate, 3)}
 
 	// Interleaved insertion must still yield a partitioned cell
-	g.Set(private[0], ClassPrivate, 1, 1)
-	g.Set(shared[0], ClassShared, 1, 1)
-	g.Set(private[1], ClassPrivate, 1, 1)
-	g.Set(shared[1], ClassShared, 1, 1)
-	g.Set(private[2], ClassPrivate, 1, 1)
+	g.Set(private[0], ClassPrivate, Point{X: 1, Y: 1})
+	g.Set(shared[0], ClassShared, Point{X: 1, Y: 1})
+	g.Set(private[1], ClassPrivate, Point{X: 1, Y: 1})
+	g.Set(shared[1], ClassShared, Point{X: 1, Y: 1})
+	g.Set(private[2], ClassPrivate, Point{X: 1, Y: 1})
 	assertPartition(t, g, 1, 1, 2, 3)
 
-	g.RemoveEntityAt(shared[0], 1, 1)
+	g.RemoveEntityAt(shared[0], Point{X: 1, Y: 1})
 	assertPartition(t, g, 1, 1, 1, 3)
 
-	g.RemoveEntityAt(private[1], 1, 1)
+	g.RemoveEntityAt(private[1], Point{X: 1, Y: 1})
 	assertPartition(t, g, 1, 1, 1, 2)
 
 	if got := g.EntitiesAt(1, 1, ScopeShared)[0]; got != shared[1] {
@@ -46,17 +46,17 @@ func TestGridPartitionSurvivesRemoval(t *testing.T) {
 }
 
 func TestPrivateBudgetPreservesSharedCapacity(t *testing.T) {
-	g := NewGrid[entity](1, 1)
+	g := NewGrid[entity](1, 1, 1)
 	for i := range PrivateBudget {
-		if !g.Set(mk(ClassPrivate, uint64(i+1)), ClassPrivate, 0, 0) {
+		if !g.Set(mk(ClassPrivate, uint64(i+1)), ClassPrivate, Point{X: 0, Y: 0}) {
 			t.Fatalf("private %d rejected inside the budget", i)
 		}
 	}
-	if g.Set(mk(ClassPrivate, 9999), ClassPrivate, 0, 0) {
+	if g.Set(mk(ClassPrivate, 9999), ClassPrivate, Point{X: 0, Y: 0}) {
 		t.Fatal("private insert exceeded the budget")
 	}
 	for i := range CellCapacity - PrivateBudget {
-		if !g.Set(mk(ClassShared, uint64(i+1)), ClassShared, 0, 0) {
+		if !g.Set(mk(ClassShared, uint64(i+1)), ClassShared, Point{X: 0, Y: 0}) {
 			t.Fatalf("shared %d displaced by a saturated private run", i)
 		}
 	}
@@ -87,7 +87,7 @@ func assertPartition(t *testing.T, g *Grid[entity], x, y, wantShared, wantPrivat
 // something is listed once at its slot, and the stats read off the list are the
 // full scan's.
 func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
-	g := NewGrid[entity](7, 5)
+	g := NewGrid[entity](7, 5, 1)
 	rng := rand.New(rand.NewPCG(3, 9))
 	type placed struct {
 		e    entity
@@ -128,7 +128,7 @@ func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
 		switch {
 		case len(held) > 0 && rng.IntN(3) == 0:
 			i := rng.IntN(len(held))
-			g.RemoveEntityAt(held[i].e, held[i].x, held[i].y)
+			g.RemoveEntityAt(held[i].e, Point{X: held[i].x, Y: held[i].y})
 			held[i] = held[len(held)-1]
 			held = held[:len(held)-1]
 		case step%97 == 96:
@@ -141,7 +141,7 @@ func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
 			}
 			e := mk(c, uint64(step+1))
 			x, y := rng.IntN(7), rng.IntN(5)
-			if g.Set(e, c, x, y) {
+			if g.Set(e, c, Point{X: x, Y: y}) {
 				held = append(held, placed{e, x, y})
 			}
 		}
@@ -197,7 +197,7 @@ func TestClampLeavesALegalMapAlone(t *testing.T) {
 // and under a crash handler that is the process.
 func TestTheGridSurvivesAHostileResize(t *testing.T) {
 	t.Parallel()
-	g := NewGrid[entity](80, 24)
+	g := NewGrid[entity](80, 24, 1)
 	for _, tt := range [][2]int{
 		{math.MaxInt32, math.MaxInt32},
 		{math.MaxInt, math.MaxInt},
@@ -206,7 +206,7 @@ func TestTheGridSurvivesAHostileResize(t *testing.T) {
 		{0, 0},
 		{MaxWidth * 100, MaxHeight * 100},
 	} {
-		g.Resize(tt[0], tt[1]) // must not panic
+		g.Resize(tt[0], tt[1], 1) // must not panic
 		if len(g.Cells) > MaxCells {
 			t.Fatalf("resize to %dx%d allocated %d cells", tt[0], tt[1], len(g.Cells))
 		}

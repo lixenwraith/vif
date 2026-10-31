@@ -1,6 +1,10 @@
 package vmath
 
-import "testing"
+import (
+	"math/rand/v2"
+	"slices"
+	"testing"
+)
 
 // lineRef is the hand-rolled loop Line reproduces, appending the cells from (x0, y0)
 // through (x1, y1) to dst
@@ -137,4 +141,46 @@ func BenchmarkLineReference(b *testing.B) {
 		}
 	}
 	sinkI = int64(len(cells))
+}
+
+// TestLine3WalksTheLongestSpanOneCellAStep: a walk through a volume starts on a,
+// ends on b after as many steps as its longest span, moves at most one cell on
+// each axis a step, and in one plane walks Line's cells.
+func TestLine3WalksTheLongestSpanOneCellAStep(t *testing.T) {
+	rng := rand.New(rand.NewPCG(7, 3))
+	for range 3000 {
+		a := Point{X: rng.IntN(31) - 15, Y: rng.IntN(31) - 15, Z: rng.IntN(31) - 15}
+		b := Point{X: rng.IntN(31) - 15, Y: rng.IntN(31) - 15, Z: rng.IntN(31) - 15}
+		if rng.IntN(2) == 0 {
+			b.Z = a.Z
+		}
+		span := max(IntAbs(b.X-a.X), IntAbs(b.Y-a.Y), IntAbs(b.Z-a.Z))
+		l := NewLine3(a, b)
+		if l.Point() != a || l.Steps() != span {
+			t.Fatalf("%v→%v starts on %v with %d steps, want %d", a, b, l.Point(), l.Steps(), span)
+		}
+		prev, cells := a, []Point(nil)
+		for !l.AtEnd() {
+			l = l.Next()
+			c := l.Point()
+			if c == prev || IntAbs(c.X-prev.X) > 1 || IntAbs(c.Y-prev.Y) > 1 || IntAbs(c.Z-prev.Z) > 1 {
+				t.Fatalf("%v→%v stepped from %v to %v", a, b, prev, c)
+			}
+			prev, cells = c, append(cells, c)
+		}
+		if prev != b || len(cells) != span {
+			t.Fatalf("%v→%v ended on %v after %d steps, want %d", a, b, prev, len(cells), span)
+		}
+		if b.Z != a.Z {
+			continue
+		}
+		var flat []Point
+		for f := NewLine(a.X, a.Y, b.X, b.Y); !f.AtEnd(); {
+			f = f.Next()
+			flat = append(flat, Point{X: f.X(), Y: f.Y(), Z: a.Z})
+		}
+		if !slices.Equal(flat, cells) {
+			t.Fatalf("%v→%v in one plane walks %v, Line walks %v", a, b, cells, flat)
+		}
+	}
 }
