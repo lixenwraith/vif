@@ -2,7 +2,7 @@
 // streams of landers, a population each, are released in step from opposite
 // corners toward one pad, and two landers of different streams that meet in
 // the air are both destroyed. Arrow keys or hjkl move the pad and re-score the
-// archives; q quits; -headless N runs N ticks without the view and tabulates.
+// archives, f toggles 20x, q quits; -headless N tabulates N ticks, no view.
 package main
 
 import (
@@ -26,6 +26,7 @@ const (
 	fieldHeight = 18
 	maxTicks    = 300
 	frame       = 16 * time.Millisecond
+	fastForward = 20 // Ticks a frame under f
 
 	gravity   = 0.04
 	maxThrust = 0.08
@@ -462,7 +463,6 @@ func main() {
 	seed := flag.Uint64("seed", 1, "PCG seed; the same seed replays the same run")
 	headless := flag.Int("headless", 0, "run this many ticks without the terminal view, moving the pad once halfway")
 	sources := flag.Int("sources", 2, "streams of landers, 1 to 4")
-	speed := flag.Int("speed", 4, "ticks per frame")
 	flag.Parse()
 
 	w := newWorld(*seed, min(max(*sources, 1), maxSources))
@@ -470,7 +470,7 @@ func main() {
 		runHeadless(w, *headless)
 		return
 	}
-	runInteractive(w, max(*speed, 1))
+	runInteractive(w)
 }
 
 func runHeadless(w *world, ticks int) {
@@ -497,7 +497,7 @@ func runHeadless(w *world, ticks int) {
 	}
 }
 
-func runInteractive(w *world, speed int) {
+func runInteractive(w *world) {
 	defer rawTerminal()()
 
 	keys := make(chan byte, 8)
@@ -508,6 +508,7 @@ func runInteractive(w *world, speed int) {
 	defer ticker.Stop()
 
 	buf := bytes.NewBuffer(make([]byte, 0, 16<<10))
+	speed := 1
 	for {
 		select {
 		case <-sig:
@@ -516,6 +517,8 @@ func runInteractive(w *world, speed int) {
 			switch k {
 			case 'q':
 				return
+			case 'f':
+				speed = fastForward + 1 - speed
 			case '<':
 				w.retarget(-3)
 			case '>':
@@ -525,7 +528,7 @@ func runInteractive(w *world, speed int) {
 			for range speed {
 				w.advance()
 			}
-			render(buf, w)
+			render(buf, w, speed)
 		}
 	}
 }
@@ -546,7 +549,7 @@ func rawTerminal() func() {
 	}
 }
 
-// readKeys maps q, h/l, a/d and the arrow keys onto 'q', '<' and '>'
+// readKeys maps q, f, h/l, a/d and the arrow keys onto 'q', 'f', '<' and '>'
 func readKeys(keys chan<- byte) {
 	b := make([]byte, 3)
 	for {
@@ -558,6 +561,8 @@ func readKeys(keys chan<- byte) {
 		switch {
 		case b[0] == 'q' || b[0] == 'Q':
 			keys <- 'q'
+		case b[0] == 'f' || b[0] == 'F':
+			keys <- 'f'
 		case b[0] == 'h' || b[0] == 'a' || (arrow && b[2] == 'D'):
 			keys <- '<'
 		case b[0] == 'l' || b[0] == 'd' || (arrow && b[2] == 'C'):
@@ -576,12 +581,12 @@ const (
 
 func (s *source) sgr() string { return "\033[38;5;" + s.colour + "m" }
 
-func render(buf *bytes.Buffer, w *world) {
+func render(buf *bytes.Buffer, w *world, speed int) {
 	buf.Reset()
 	buf.WriteString("\033[H")
 
-	fmt.Fprintf(buf, "%s genetic landers%s | tick %d | pad %d | %s[<] [>]%s move pad  %s[q]%s quit%s",
-		ansiBold, ansiReset, w.tick, int(w.padX), ansiBold, ansiReset, ansiBold, ansiReset, ansiClear)
+	fmt.Fprintf(buf, "%s genetic landers%s | tick %d | pad %d | %dx | %s[<] [>]%s pad  %s[f]%s fast  %s[q]%s quit%s",
+		ansiBold, ansiReset, w.tick, int(w.padX), speed, ansiBold, ansiReset, ansiBold, ansiReset, ansiBold, ansiReset, ansiClear)
 	for s := range w.sources {
 		src := &w.sources[s]
 		fmt.Fprintf(buf, "%s■ %-6s%s gen %-3d flights %-5d recent %.2f  soft %3.0f%%  crash %3.0f%%  zone %+.1f%s",
