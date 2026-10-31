@@ -143,6 +143,9 @@ background = true
 # cave and a run's seed replays its caves in order. The first cave's art is its seed modulo
 # four; each cave after a boss wears one of the other three and scrolls faster, its
 # drift with it, and each Kraken has twice the last one's hit points (BossDown).
+# Boot: settled before the clock starts, drawn behind the start prompt; the game
+# begins at the first Tick, after the press. The cave stands before it; the raid
+# (RaidWait) counts from it
 [states.CaveStart]
 parent = "Root"
 on_enter = [

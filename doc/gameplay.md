@@ -539,7 +539,8 @@ drift, or under a drift without `scenery`, is typeable as before.
 The campaign has one source, `internal/asset/scenario/`, compiled into native,
 headless, and browser builds. `-s main` uses it unless a configuration root supplies
 an explicit `scenario/main` override. Only the background monitor starts at boot;
-it spawns and arms the cursor before opening `main`.
+it spawns and arms the cursor there and opens `main` at the first tick, the game's
+start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 
 1. `main` cycles gold sequences and decay waves. Ten drain kills elect the causal
    cursor, pause `main`, and begin a quasar encounter.

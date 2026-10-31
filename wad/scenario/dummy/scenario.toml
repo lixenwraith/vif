@@ -103,8 +103,10 @@ body = [
 
 # --- Range ---
 
-# The range is laid once the cursor stands on the map: a drop is the cursor's own,
-# so one laid before it would belong to nobody
+# Boot: settled before the clock starts, drawn behind the start prompt; the game
+# begins at the first Tick, after the press. The range is laid before it, once the
+# cursor stands on the map: a drop is the cursor's own, so one laid before it would
+# belong to nobody
 [states.RangeWait]
 parent = "Root"
 transitions = [

@@ -436,7 +436,9 @@ join installed (`JournalCapture.Held`, `Start`), so a replay holds there as the 
 did, and the resume the run recorded ends it there. A joiner admitted while
 its host's new game waits for the host's press is held as a start
 (`SessionOffer.Start`): it waits as every guest there does, and the host's first
-epoch starts it with nothing said.
+epoch starts it with nothing said. The world it waits in is the boot's: the
+scenario's initial states settled and drawn, nothing a tick counts
+([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 
 A session runs at its host's rate as it stops at its host's hold. The host's
 `:speed` (Simulation → Game speed) crosses `EventGameSpeed`, admissible from the

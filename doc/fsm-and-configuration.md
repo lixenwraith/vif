@@ -119,7 +119,7 @@ min_height = 20
 field_refresh_ticks = 4
 
 [regions.main]
-initial = "MainStart"
+initial = "MainBoot"
 file = "main.toml"
 background = false
 enabled_systems = ["glyph"]
@@ -144,7 +144,7 @@ only_systems = ["typing", "button"] # or disabled_systems, not both
 | `map.fixed` | `"WxH"`, the size a scenario's map holds throughout, for front-ends such as the fleet lobby; the scenario's level setups are what hold it. A scenario whose regions size the map differently leaves it out. |
 | `navigation.field_refresh_ticks` | How often, in ticks, a navigator or drop out of sight reads its flow field, holding the way it read between ([Navigation §4](navigation-design.md#4-throttle-phase-and-laziness)); 1, every tick, when unset. |
 | `navigation.route_rebuild_ticks` | The fewest ticks between two rebuilds of a stale gateway route graph; 20 when unset. |
-| `regions.<name>.initial` | Initial state for a region started during machine initialization. Omit for a region spawned later. |
+| `regions.<name>.initial` | Initial state for a region started during machine initialization: its boot, settled before the clock starts (§5). Omit for a region spawned later. |
 | `file` | File supplying additional `[states.*]` tables. |
 | `background` | Keeps the region out of the foreground summary the status bar shows; it still updates, handles events and publishes its own `fsm.<region>.*` metrics. |
 | `enabled_systems` | Systems on while the region runs. |
@@ -215,6 +215,19 @@ events settle with the systems' after them
 ([Runtime](runtime.md#5-simulation-tick-steps)); a paused game ticks only when
 stepped, so region time and delayed countdowns stop with it. A paused region
 neither updates nor handles events; other regions continue.
+
+The first `Tick` is the game's start. Every initial state's entry, and every
+transition an event of that settle triggers, runs before the clock starts: when the
+scenario loads and at each reset, under the start hold a game waits in for its
+player's press, where a host's lobby stands and where a joiner lands. That world
+is drawn behind the start prompt, so the boot spawns the cursor and sets the level
+up, and what belongs to the started game waits for a `Tick` transition out of it: a
+region the boot spawns runs its own entry in the same settle, and a timer armed
+there would stand frozen on the held map until the press. Every shipped scenario
+opens so, its boot state marked: the campaign's `MonitorArm` spawns `main` from the
+state its first `Tick` enters, td's `TdSetup` lays the maze and raises its towers
+after a `Tick`, and vanguard's `RaidWait`, simon's `Intro`, dummy's `PlayerStart` and
+blank's `MainBoot` each leave on one. A `delay_ms` counts from that `Tick` too.
 
 ## 6. Event processing
 
@@ -530,6 +543,9 @@ flowchart TD
 - Spawn the required cursor roster from an initial/background region and wait
   for `EventCursorSpawned` (or retry `EventCursorSpawnFailed`) before emitting
   player-state events. A new world intentionally contains no cursor.
+- Open play on the first `Tick`: the initial state is the boot, settled before the
+  clock starts (§5), where the cursor is spawned and the level set up; a `Tick`
+  transition out of it starts what the game counts, as every shipped scenario's does.
 - Put one encounter family in one external state file.
 - Spawn boss/side regions dynamically and pause the loop they supersede.
 - Treat system status metrics as observations and events as domain facts.

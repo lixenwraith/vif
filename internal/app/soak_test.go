@@ -316,10 +316,10 @@ func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
 	t.Fatalf("the gun drop was not collected into a lane: %d", lanes())
 }
 
-// Each shipped scenario must pass -check, boot a player and end the run on one
-// participant defeat.
-func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
-	t.Parallel()
+// forEachShippedScenario runs test on a checked headless run of every shipped
+// scenario, the embedded one included, each as a parallel subtest.
+func forEachShippedScenario(t *testing.T, test func(t *testing.T, a *App)) {
+	t.Helper()
 	event.EnsureRegistry()
 	for _, name := range []string{"main", "blank", "td", "simon", "vanguard", "dummy", ""} {
 		label := name
@@ -344,34 +344,67 @@ func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 				t.Fatalf("headless: %v", err)
 			}
 			defer a.Close()
-			a.Tick(60)
-			var placed bool
-			a.World().RunSafe(func() { _, placed = a.World().LocalCursor() })
-			if !placed {
-				t.Fatal("no cursor on the map after 60 ticks")
-			}
-			a.Context().PushEventOrigin(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
-				Slot: 1, X: 2, Y: 2, Heat: 10, Energy: 100, Control: uint8(component.ControlRemote), PeerID: 2,
-			}, event.OriginDebug)
-			a.Settle()
-			remote := a.World().Resources.Player.Slot(1)
-			resets := 0
-			a.SetDispatchTap(func(ev event.GameEvent) {
-				if ev.Type == event.EventGameResetRequest {
-					resets++
-				}
-				if p, ok := ev.Payload.(*event.LevelSetupPayload); ok && p.ClearEntities && !p.PreserveLoot {
-					resets++
-				}
-			})
-			a.Context().PushCrossing(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: remote, Defeated: true, ProducedTick: a.World().Resources.Game.State.GetGameTicks()})
-			a.Tick(110)
-			if resets == 0 {
-				t.Fatal("a remote participant's defeat did not reset the run while the local cursor survived")
-			}
-
+			test(t, a)
 		})
 	}
+}
+
+// TestEveryShippedScenarioBeginsAtItsFirstTick: the boot settles before the clock
+// starts and leaves the cursor on the map, and nothing a tick counts runs until the
+// first one, so a game held for its press shows its level and no frozen clock.
+func TestEveryShippedScenarioBeginsAtItsFirstTick(t *testing.T) {
+	t.Parallel()
+	forEachShippedScenario(t, func(t *testing.T, a *App) {
+		a.Settle() // the boot, as the hold a waiting game stands in settles it
+		w := a.World()
+		var placed bool
+		w.RunSafe(func() { _, placed = w.LocalCursor() })
+		running := 0
+		w.Components.Timer.Each(func(_ core.Entity, tm *component.TimerComponent) bool {
+			for slot := range tm.Slots {
+				if tm.Running(component.TimerSlot(slot)) {
+					running++
+				}
+			}
+			return true
+		})
+		if !placed || running != 0 {
+			t.Fatalf("after the boot the cursor is placed %v and %d countdowns run; want the cursor and no clock", placed, running)
+		}
+	})
+}
+
+// TestEveryShippedScenarioResetsOnAnyCursorDefeat: each shipped scenario boots a
+// player and ends the run on one participant's defeat.
+func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
+	t.Parallel()
+	forEachShippedScenario(t, func(t *testing.T, a *App) {
+		a.Tick(60)
+		var placed bool
+		a.World().RunSafe(func() { _, placed = a.World().LocalCursor() })
+		if !placed {
+			t.Fatal("no cursor on the map after 60 ticks")
+		}
+		a.Context().PushEventOrigin(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
+			Slot: 1, X: 2, Y: 2, Heat: 10, Energy: 100, Control: uint8(component.ControlRemote), PeerID: 2,
+		}, event.OriginDebug)
+		a.Settle()
+		remote := a.World().Resources.Player.Slot(1)
+		resets := 0
+		a.SetDispatchTap(func(ev event.GameEvent) {
+			if ev.Type == event.EventGameResetRequest {
+				resets++
+			}
+			if p, ok := ev.Payload.(*event.LevelSetupPayload); ok && p.ClearEntities && !p.PreserveLoot {
+				resets++
+			}
+		})
+		a.Context().PushCrossing(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{Entity: remote, Defeated: true, ProducedTick: a.World().Resources.Game.State.GetGameTicks()})
+		a.Tick(110)
+		if resets == 0 {
+			t.Fatal("a remote participant's defeat did not reset the run while the local cursor survived")
+		}
+	})
 }
 
 // TestALightShowsForItsWholeSpan: a light simon's machine lights for 250 ms in a tick

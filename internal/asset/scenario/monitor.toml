@@ -1,6 +1,8 @@
 # Parallel region for player lifecycle, global state and reset
 
-# Boot: the world starts with no cursor, so spawning one is a deliberate step
+# Boot: settled before the clock starts, drawn behind the start prompt; the game
+# begins at the first Tick, after the press. The world starts with no cursor, so
+# spawning one is a deliberate step
 [states.MonitorBoot]
 parent = "Root"
 on_enter = [
@@ -17,12 +19,12 @@ transitions = [
     { trigger = "Tick", target = "MonitorBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
-# Arm the spawned cursor and open gameplay; the reset gate needs a non-zero start
+# Arm the spawned cursor; the first Tick opens gameplay, and the reset gate needs a
+# non-zero start
 [states.MonitorArm]
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = 10, energy = 100 } },
-    { action = "SpawnRegion", region = "main", initial_state = "MainSpawnGold" },
 ]
 transitions = [
     { trigger = "Tick", target = "MonitorActive" },
@@ -40,8 +42,12 @@ transitions = [
     ] },
 ]
 
+# The game: gold spawned in the boot would stand on the held map with a frozen timer
 [states.MonitorActive]
 parent = "MonitorCycle"
+on_enter = [
+    { action = "SpawnRegion", region = "main", initial_state = "MainSpawnGold" },
+]
 transitions = [
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
 ]
