@@ -477,3 +477,47 @@ it reached through the binding, which the compiler inlined either way. The two
 rock readings past a tenth are the band, not a cost: their five readings
 overlap, the 500×254 visual's running 2.4 to 4.9 ms on main and 2.6 to 4.7 on
 the branch, and the path they draw changed only in where it reads the look.
+
+Iteration 6, the volume, main at iteration 5 against the branch, alternated five
+times, the same bench files on both. td's tick with sixteen cursors, ms a tick:
+
+```
+main      0.29  0.29  0.30  0.28  0.28   median 0.29
+branch    0.29  0.32  0.29  0.28  0.28   median 0.29
+```
+
+The benches, medians of ns/op:
+
+```
+                                   main    branch   change
+CaveStep/200x60                   7726      7531    -2.5%
+CaveStep/400x120                 12457     12940    +3.9%
+CaveStep/500x254                 15255     15573    +2.1%
+CaveStepNavigation/200x60        27285     27525    +0.9%
+CaveStepNavigation/400x120       53639     54519    +1.6%
+CaveStepNavigation/500x254       66032     66329    +0.4%
+CaveNavigation/200x60/near       71694     71194    -0.7%
+CaveNavigation/200x60/far       112807    114543    +1.5%
+CaveNavigation/400x120/near      85450     85096    -0.4%
+CaveNavigation/400x120/far      133557    133896    +0.3%
+CaveNavigation/500x254/near     102495    107591    +5.0%
+CaveNavigation/500x254/far      162327    167041    +2.9%
+NavigationWallMoves/200x60        4035      3825    -5.2%
+NavigationWallMoves/400x120       3850      3924    +1.9%
+NavigationWallMoves/500x254       3807      4090    +7.4%
+GlyphRender/120x40               32602     33240    +2.0%
+GlyphRender/200x60               55093     55838    +1.4%
+GlyphRender/400x120              80807     80878    +0.1%
+RockRender/200x60/visual        154065    150656    -2.2%
+RockRender/200x60/stone         251637    242923    -3.5%
+RockRender/200x60/redraw       1992751   1925646    -3.4%
+RockRender/400x120/visual       718239    704892    -1.9%
+RockRender/400x120/stone        993342    992465    -0.1%
+RockRender/400x120/redraw     10187478  10952590    +7.5%
+RockRender/500x254/visual      2368554   2444215    +3.2%
+RockRender/500x254/stone       3248798   3442712    +6.0%
+RockRender/500x254/redraw     30485011  29989426    -1.6%
+```
+
+Parity, within the band throughout: a flat query's body did not change, and a
+cell's index, row and bit on a map one layer deep are what they were.
