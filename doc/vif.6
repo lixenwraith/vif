@@ -221,58 +221,61 @@ Print the module version and commit a package should report
   Combine   join names or letters with +, a comma or a space \[u2014] "app+fsm+stat" and "afs" are one set
   Adjust    lead with + or \- to add to or remove from the set already selected
 .fi
-.SH IN-GAME CONFIGURATION
-Ctrl-G or F10, :g (:config) or a press held on the status bar opens the
-configuration menu, and F1 or :help the help. Select a category or setting with
-Up/Down or j/k. Left/Right or h/l changes values; Enter/Space chooses. A press
-selects a row, and on the selected row acts as Enter. Escape or q returns to
-categories, then closes; Ctrl-G or F10 closes from any page. Home/End and
-PageUp/PageDown navigate longer pages.
+.SH IN-GAME MENU
+Ctrl-G or F10, :menu (:g, :config) or a press held on the status bar opens the
+menu, and F1 or :help the help. Select a page or row with Up/Down or j/k; section
+titles are skipped. Left/Right or h/l changes values; Enter/Space chooses. A press
+selects a row, and on the selected row acts as Enter. / searches every page: the
+rows matching all the words typed list with their page and act in place; Enter
+keeps the search and Escape clears it. Escape or q returns to the pages, then
+closes; Ctrl-G or F10 closes from any page. Home/End and PageUp/PageDown navigate
+longer pages. A scenario is the set of regions that defines a game; a game is a
+scenario running.
 .PP
-Game pauses until Pause is turned off again, as :pause (:p) does; in a session
-only the host can, and every participant stops at the same tick. It also starts a
-new game, as :n does, or another scenario: a row for each one the configuration
-roots hold, or one given by name or path. In a session only the host can, and its
-participants rejoin.
+Game pauses the game until Resume, as :pause (:p) or p does, restarts it from its
+scenario's first tick, as :n does, and sets its speed; in a session only the host
+can, and every participant follows at the same tick. A replay adds its restart.
 .PP
-Bots adds local bots by count and policy graph, and removes this run's admitted
-bots by cursor slot, or cancels a joining bot. Leaving bots show their state.
-:bot lists this run's bots; :bot add [N[:graph]|graph] seats more.
-Host before adding bots to solo play if remote players should join; otherwise
-bots open a session only they can join.
+Scenarios lists the scenarios the configuration roots hold, the running one
+marked current: Enter or a press marks one, and Start starts a game of it. Other
+scenario is a text box on its row for a name or path the list does not hold. In
+a session only the host can, and its participants rejoin.
 .PP
-Multiplayer hosts this run, joins an address/link, or requests a session from
-an HTTP(S) vif-router site with a player count and scenario. Player count 0
-and a blank scenario use server defaults. The request asks for no bots of the
-session's own; the Bots page adds bots held by this run once it has joined.
-Hosts can remove individual bots or players with all their bots
-on the Multiplayer page. :player lists slots; :player drop <slot> removes a player
-and its bots. :bot drop <slot> removes your bot, or any bot when hosting. Slots
-accept decimal 10, hexadecimal A or 0xA for the cursor marked A.
-Current session status is available on the same page.
-Forms use Up/Down between fields, Left/Right and Home/End to move the text
+Multiplayer hosts this game, joins an address or link typed in its row's text
+box, requests a session from an HTTP(S) vif-router site with a player count and
+scenario, leaves the session, and relays for others. Player count 0 and a blank
+scenario use server defaults. Current session status heads the page. Hosts drop
+a player with its bots, or one bot, under Players; :player lists slots and
+:player drop <slot> removes one. Bots adds local bots by count and policy graph,
+and removes this run's bots by cursor slot or cancels a joining bot; :bot drop
+<slot> removes your bot, or any bot when hosting. Slots accept decimal 10,
+hexadecimal A or 0xA for the cursor marked A. Host before adding bots to solo
+play if remote players should join; otherwise bots open a session only they can
+join. Forms use Up/Down between fields, Left/Right and Home/End to move the text
 cursor, Backspace/Delete to edit, Enter to submit, and Escape to cancel.
-Session actions require Enter/Space; arrows only adjust settings.
-Successful submissions resume play; asynchronous progress and failures appear
-in the status bar. A failed join preserves the current run.
+Successful submissions resume play; asynchronous progress and failures appear in
+the status bar. A failed join preserves the current game.
 .PP
-Audio controls sound effects, their volume and music. Controls adjusts mouse
-input, pointer following and auto-fire. Display controls the telemetry HUD and
-navigation overlays. Simulation changes solo speed and restarts a replay. Diagnostics controls logging, log level and
-scope presets, snapshot interval, flight-recorder depth, FSM trigger and flush,
-and the runtime profiler, and captures profiles, an execution trace, a telemetry
-snapshot and a replay journal. Values in brackets are unavailable or read only; the
-selected row explains why. Startup settings explains the relevant file or flag.
+Settings holds sound effects, their volume and music; auto-fire, mouse input and
+pointer following; the frame cap and the telemetry HUD; whether the menu and
+other windows, or the command line, pause the game; and whether a game waits for
+its first press. Developer controls logging, the flight recorder and the runtime
+profiler, captures profiles, an execution trace and a telemetry snapshot, clears
+HUD pins, shows the navigation overlays and records a replay journal. Values in
+brackets are unavailable or read only; the selected row explains why. Launch
+options explains the file or flag that sets what a running game cannot change.
 .PP
-The Audio and Controls settings and the HUD are vif.toml's [play]: a run writes
-each back as it changes, so the next run starts as this one was left: to the
-vif.toml it read when that is in the user root or the \-config-dir root, else to
-the user root's, created at the first change from the one read. Every other change
-lasts the run. Solo play pauses while the menu is
-open, and so may a host whose only other participants are its own bots; any other
-session keeps running. The menu shares the command line's replay and session
-restrictions. The keymap binds config_menu and help in normal_keys, text_keys and
-overlay_keys; a key names one action, and an action can have several keys.
+Settings and Relay for others are vif.toml's [play]: a run writes each back as it
+changes, so the next run starts as this one was left: to the vif.toml it read when
+that is in the user root or the \-config-dir root, else to the user root's,
+created at the first change from the one read. Every other change lasts the run.
+A game that can pause, solo or a host whose only other participants are its own
+bots, pauses while the menu is open unless Pause in menu is off, and while the
+command line is open unless Pause in command line is off; the menu's title says
+whether the game is paused or running. Any other session keeps running. The menu
+shares the command line's replay and session restrictions. The keymap binds
+config_menu and help in normal_keys, text_keys and overlay_keys, and pause in
+normal; a key names one action, and an action can have several keys.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/vif

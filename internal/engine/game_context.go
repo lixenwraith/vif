@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/lixenwraith/vif/pkg/vmath"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 	"github.com/lixenwraith/vif/pkg/navigation"
 	"github.com/lixenwraith/vif/pkg/position"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 const (
@@ -145,6 +146,10 @@ type GameContext struct {
 	// leaves the rate to the presentation
 	MaxFPS atomic.Int32
 
+	// PauseMenu and PauseCommand pause a run that may pause while an overlay or the
+	// command line is open, as [play] pause_menu and pause_command set them
+	PauseMenu, PauseCommand atomic.Bool
+
 	KeyCapture input.KeyCapture // Keys the scenario takes from play-mode parsing
 
 	// Viewer marks the command line as a replay viewer's: the recording authors the
@@ -241,8 +246,10 @@ func newGameContext(world *World, width, height int, clock Clock, log *vlog.Log)
 		StartMouseFree: parameter.DefaultMouseFreeMode,
 	}
 
+	ctx.PauseMenu.Store(true)
+	ctx.PauseCommand.Store(true)
+
 	// Calculate game area
-	// gameWidth, gameHeight := ctx.updateGameArea()
 	viewportWidth, viewportHeight := ctx.updateGameArea()
 
 	// -- Initialize Resources --
@@ -958,13 +965,13 @@ func (ctx *GameContext) syncOverlaySelection(content *core.OverlayContent) {
 		ctx.overlaySelectable.Store(false)
 		prev := ctx.GetOverlaySelection()
 		for _, row := range content.Menu.Rows {
-			if row.Key == prev {
+			if row.Key == prev && !row.Header {
 				return
 			}
 		}
 		key := ""
-		if len(content.Menu.Rows) > 0 {
-			key = content.Menu.Rows[0].Key
+		if i := slices.IndexFunc(content.Menu.Rows, func(row core.OverlayMenuRow) bool { return !row.Header }); i >= 0 {
+			key = content.Menu.Rows[i].Key
 		}
 		ctx.SetOverlaySelection(key)
 		return
@@ -1025,11 +1032,27 @@ func (ctx *GameContext) HoldAs(kind HoldKind) {
 	}
 }
 
-// PauseForInput pauses a solo run while the operator types a command or reads an
-// overlay. A live session keeps ticking for every participant, so there the request
-// is not made: it would only earn the refusal an explicit pause does.
+// PauseForInput pauses a solo run while its player is away or a reset rebuilds it.
+// A live session keeps ticking for every participant, so there the request is not
+// made: it would only earn the refusal an explicit pause does.
 func (ctx *GameContext) PauseForInput() {
 	if ctx.World.Session().Pausable() {
 		ctx.SetPaused(true)
+	}
+}
+
+// PauseForMenu is PauseForInput while an overlay is open, unless its player turned
+// [play] pause_menu off
+func (ctx *GameContext) PauseForMenu() {
+	if ctx.PauseMenu.Load() {
+		ctx.PauseForInput()
+	}
+}
+
+// PauseForCommand is PauseForInput while the command line is open, unless its player
+// turned [play] pause_command off
+func (ctx *GameContext) PauseForCommand() {
+	if ctx.PauseCommand.Load() {
+		ctx.PauseForInput()
 	}
 }

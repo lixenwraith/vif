@@ -3,6 +3,7 @@ package renderer
 import (
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -185,7 +186,12 @@ func (r *OverlayRenderer) renderContent(root tui.Region, g engine.OverlayGeometr
 			r.renderHint(root, g, parameter.OverlayHintsForm)
 		} else {
 			r.renderMenu(root, body, g, data.Menu)
-			r.renderHint(root, g, parameter.OverlayHintsMenu)
+			switch {
+			case data.Menu != nil && slices.ContainsFunc(data.Menu.Rows, func(row core.OverlayMenuRow) bool { return row.Typing }):
+				r.renderHint(root, g, parameter.OverlayHintsMenuText)
+			default:
+				r.renderFilterHint(root, g, parameter.OverlayHintsMenu, parameter.OverlayHintsMenuFilter, parameter.OverlayHintsMenuFilterEdit)
+			}
 		}
 		return
 
@@ -204,7 +210,7 @@ func (r *OverlayRenderer) renderContent(root tui.Region, g engine.OverlayGeometr
 		if r.masonry != nil {
 			r.renderScrollBar(root, g, r.masonry.Viewport)
 		}
-		r.renderCardsHint(root, g)
+		r.renderFilterHint(root, g, parameter.OverlayHintsCards, parameter.OverlayHintsFilter, parameter.OverlayHintsFilterEdit)
 	}
 }
 
@@ -282,27 +288,45 @@ func (r *OverlayRenderer) renderMenu(root, body tui.Region, g engine.OverlayGeom
 	r.gameCtx.SetOverlayScroll(scroll.Offset)
 
 	items := make([]tui.ListItem, len(menu.Rows))
+	boxW := max(body.W/2, 1)
 	for i, row := range menu.Rows {
 		fg := visual.RgbOverlayValue
 		if row.Disabled != "" {
 			fg = visual.RgbOverlayHint
 		}
 		bg := visual.RgbOverlayBg
-		if i == selected {
+		if i == selected && !row.Header {
 			fg, bg = visual.RgbOverlayBg, visual.RgbOverlaySelected
 		}
-		value := row.Value
-		if row.Disabled != "" {
-			value = "[" + value + "]"
+		var text string
+		switch {
+		case row.Header:
+			// A section's rule runs to the scrollbar's edge, its title set in it
+			fg, text = visual.RgbOverlayHeader, string(parameter.OverlayMenuRule)+" "+row.Label+" "
+			text += strings.Repeat(string(parameter.OverlayMenuRule), max(body.W-2-tui.RuneLen(text), 0))
+		case row.Text:
+			labelW := max(1, body.W-boxW-3)
+			text = tui.PadRight(tui.Truncate(row.Label, labelW), labelW)
+		default:
+			value := row.Value
+			if row.Disabled != "" {
+				value = "[" + value + "]"
+			}
+			valueW := min(tui.RuneLen(value), max(1, body.W/3))
+			labelW := max(1, body.W-valueW-3)
+			text = tui.PadRight(tui.Truncate(row.Label, labelW), labelW) + " " + tui.Truncate(value, valueW)
 		}
-		valueW := min(tui.RuneLen(value), max(1, body.W/3))
-		labelW := max(1, body.W-valueW-3)
-		text := tui.PadRight(tui.Truncate(row.Label, labelW), labelW) + " " + tui.Truncate(value, valueW)
 		items[i] = tui.ListItem{Text: text, TextStyle: tui.Style{Fg: fg, Bg: bg}}
 	}
-	body.Sub(0, 0, body.W, listH).List(items, selected, scroll.Offset, tui.ListOpts{
+	list := body.Sub(0, 0, body.W, listH)
+	list.List(items, selected, scroll.Offset, tui.ListOpts{
 		CursorBg: visual.RgbOverlaySelected, DefaultBg: visual.RgbOverlayBg, IconWidth: 1,
 	})
+	for y := range listH {
+		if i := scroll.Offset + y; i < len(menu.Rows) && menu.Rows[i].Text {
+			r.renderMenuTextBox(list.Sub(body.W-boxW-1, y, boxW, 1), menu.Rows[i])
+		}
+	}
 	if g.ScrollW > 0 {
 		root.Sub(g.ScrollX, g.ContentY, g.ScrollW, listH).ScrollBarStyled(0, scroll.Offset, listH, len(menu.Rows), tui.ScrollBarOpts{
 			ThumbFg: visual.RgbOverlayScrollThumb, TrackFg: visual.RgbOverlayScrollTrack, Bg: visual.RgbOverlayBg,
@@ -320,6 +344,20 @@ func (r *OverlayRenderer) renderMenu(root, body tui.Region, g engine.OverlayGeom
 		}
 		body.Text(0, y, line, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrNone)
 	}
+}
+
+// renderMenuTextBox draws a text row's box, its cursor shown while it is typed in
+func (r *OverlayRenderer) renderMenuTextBox(box tui.Region, row core.OverlayMenuRow) {
+	state := tui.NewTextFieldState(row.Value)
+	state.Cursor = row.Cursor
+	placeholder := parameter.OverlayTextPlaceholder
+	if row.Disabled != "" {
+		placeholder = parameter.OverlayTextUnavailable
+	}
+	box.TextField(state, tui.TextFieldOpts{Placeholder: placeholder, Focused: row.Typing, Border: tui.LineNone, Style: tui.TextFieldStyle{
+		TextFg: visual.RgbOverlayValue, TextBg: visual.RgbOverlayScrollTrack, CursorFg: visual.RgbOverlayBg,
+		CursorBg: visual.RgbOverlaySelected, PlaceholderFg: visual.RgbOverlayHint,
+	}})
 }
 
 // buildCards computes the masonry layout and publishes the card index
@@ -533,12 +571,12 @@ func (r *OverlayRenderer) renderHint(root tui.Region, g engine.OverlayGeometry, 
 	}
 }
 
-// renderCardsHint puts the filter prompt left of the hints while a query is
-// edited or kept, otherwise draws the plain card hints
-func (r *OverlayRenderer) renderCardsHint(root tui.Region, g engine.OverlayGeometry) {
-	query, editing := r.gameCtx.OverlayFilter(), r.gameCtx.IsOverlayFilterEditing()
-	if query == "" && !editing {
-		r.renderHint(root, g, parameter.OverlayHintsCards)
+// renderFilterHint puts the query's prompt left of the hints while it is edited
+// (editing) or kept (kept), otherwise draws the plain hints
+func (r *OverlayRenderer) renderFilterHint(root tui.Region, g engine.OverlayGeometry, plain, kept, editing []string) {
+	query, typing := r.gameCtx.OverlayFilter(), r.gameCtx.IsOverlayFilterEditing()
+	if query == "" && !typing {
+		r.renderHint(root, g, plain)
 		return
 	}
 	if g.HintY < 0 {
@@ -546,9 +584,9 @@ func (r *OverlayRenderer) renderCardsHint(root tui.Region, g engine.OverlayGeome
 	}
 
 	avail := g.W - 4 // one cell of margin inside each border
-	prompt, tiers := "/"+query, parameter.OverlayHintsFilter
-	if editing {
-		prompt, tiers = prompt+string(parameter.StatusCursorChar), parameter.OverlayHintsFilterEdit
+	prompt, tiers := "/"+query, kept
+	if typing {
+		prompt, tiers = prompt+string(parameter.StatusCursorChar), editing
 	}
 	prompt = tui.TruncateLeft(prompt, avail)
 	root.Text(2, g.HintY, prompt, visual.RgbSearchInputText, visual.RgbOverlayBg, terminal.AttrNone)

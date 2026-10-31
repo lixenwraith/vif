@@ -851,10 +851,11 @@ logging call sites pass primitive values or copies.
 
 The clock stands still for either of two reasons (`TimeControl.IsPaused`): this
 instance's own pause (`SetPaused`, `OwnPause`) — the command line or an overlay in
-a solo run, its player away, a breakpoint hit, `:step` — and a hold (`SetHeld`,
-`Held`), which
-`:pause` or Game → Pause starts and only another ends, so closing a menu leaves it
-standing. Pause freezes simulation ticks through `PausableClock` and the
+a solo run, unless `[play] pause_command` or `pause_menu` is off
+(`GameContext.PauseForCommand`, `PauseForMenu`), its player away, a breakpoint hit,
+`:step` — and a hold (`SetHeld`, `Held`), which `:pause`, `p` or Game → Pause
+starts and only another ends, so closing a menu leaves it standing; the status bar
+shows `PAUSED` while it stands. Pause freezes simulation ticks through `PausableClock` and the
 scheduler's pause gate. It does not freeze the whole process:
 
 - terminal input and signals still arrive;

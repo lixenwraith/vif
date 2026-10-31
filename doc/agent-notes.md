@@ -198,7 +198,9 @@ that proves wrong or that a document now states, and link the document instead.
 - A new non-ASCII rune in a drawing package or a shipped scenario's TOML needs the
   desktop font atlas regenerated (`tool/font-atlas/README.md`), and only
   `go test ./internal/asset`, a package the change never touches, catches it.
-  Regenerate into scratch and diff: only the new glyph changes.
+  Regenerate into scratch and diff: only the new glyph changes. The test reads
+  every string in `internal/mode`, `app`, `help` and `prof` too, so a key nobody
+  sees stays ASCII.
 - Linux console fonts (console-setup's Uni and Lat sets) have █ ░ ▒ and single box
   lines but no ▀ ▄ ▌ ▐, quadrants or ▓, and draw double lines single; the 256 tier
   uses only what they have.
@@ -207,6 +209,11 @@ that proves wrong or that a document now states, and link the document instead.
 - On the Linux console the 256 tier shows sixteen colours: a pale tint over a rim
   falls to the rim's own, so a glow that must read there is near white, as the
   Wraith field's is.
+
+## Widgets
+
+- `tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
+  a one-row text box (the menu's) passes `tui.LineNone` or draws nothing.
 
 ## Looking at the game without a device
 

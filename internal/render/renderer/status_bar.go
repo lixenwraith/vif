@@ -682,11 +682,14 @@ func latencySeverity(ms int64) int {
 	return severitySettled
 }
 
-// timeItem builds the time control indicator, present only when the simulation is
-// off real time, ticks at another rate than the default, or a step is pending
+// timeItem builds the time control indicator, present only when the game is paused
+// until resumed, off real time, ticks at another rate than the default, or a step is pending
 func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
 	if step := r.statStep.Load(); step > 0 {
 		return r.pal.alarm.with(r.timeText.hold(step, "", "", func() string { return fmt.Sprintf(" STEP %d ", step) })), true
+	}
+	if r.gameCtx.TimeCtl.Holds(engine.HoldPause) {
+		return r.pal.alarm.with(" PAUSED "), true
 	}
 
 	speed := r.statSpeed.Load()

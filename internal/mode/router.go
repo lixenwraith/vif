@@ -261,6 +261,9 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleConfigMenu()
 	case input.IntentHelp:
 		return r.handleHelp()
+	case input.IntentPause:
+		r.ctx.WithOrigin(event.OriginCommand, func() { handlePauseCommand(r.ctx, nil) })
+		return true
 
 	// Normal mode navigation
 	case input.IntentMotion:
@@ -740,7 +743,7 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 		r.ctx.SetCommandText("")
 		r.ctx.SetCommandCursorPos(0)
 		r.resetCommandHistoryBrowse()
-		r.ctx.PauseForInput()
+		r.ctx.PauseForCommand()
 	case input.ModeTargetVisual:
 		if r.ctx.IsVisualMode() {
 			newMode = core.ModeNormal // Toggle off
@@ -925,6 +928,10 @@ func (r *Router) handleTextConfirm() bool {
 }
 
 func (r *Router) handleTextNav(intent *input.Intent) bool {
+	// The menu's query: Up and Down pick among the rows it found as it is typed
+	if configMenu(r.ctx) != nil && (intent.Motion == input.MotionUp || intent.Motion == input.MotionDown) {
+		return r.moveConfigMenu(intent.Motion, 0)
+	}
 	// Command mode: cursor movement + history navigation
 	if r.ctx.GetMode() == core.ModeCommand {
 		text := r.ctx.GetCommandText()
@@ -1277,7 +1284,7 @@ func (r *Router) heldInPlay() bool {
 
 // heldAdmits reports whether an intent acts during a hold, which takes no play: the
 // command line and the overlays take everything, and play only what opens them,
-// quits, mutes, lets go of a key, or the status bar press the pointer gate kept.
+// quits, mutes, pauses, lets go of a key, or the status bar press the pointer gate kept.
 func (r *Router) heldAdmits(intent *input.Intent) bool {
 	if !r.heldInPlay() || isMouseIntent(intent.Type) {
 		return true
@@ -1286,6 +1293,8 @@ func (r *Router) heldAdmits(intent *input.Intent) bool {
 	case input.IntentQuit, input.IntentEscape, input.IntentToggleAudioCycle, input.IntentConfigMenu,
 		input.IntentHelp, input.IntentKeyRelease:
 		return true
+	case input.IntentPause:
+		return !r.ctx.TimeCtl.Holds(engine.HoldStart) // A waiting game takes it as its start
 	case input.IntentModeSwitch:
 		return intent.ModeTarget == input.ModeTargetCommand
 	}

@@ -1274,7 +1274,7 @@ func TestAReplayShowsNoInputTheRunPausedFor(t *testing.T) {
 	injectExCommand(t, a, "bot add")
 	a.Tick(60)
 	inject(t, a, &input.Intent{Type: input.IntentConfigMenu, Count: 1})
-	a.ctx.SetOverlaySelection("diagnostics")
+	a.ctx.SetOverlaySelection("developer")
 	inject(t, a, &input.Intent{Type: input.IntentOverlayScroll, Motion: input.MotionRight, Count: 1})
 	a.ctx.SetOverlaySelection("journal")
 	inject(t, a, &input.Intent{Type: input.IntentOverlayScroll, Motion: input.MotionRight, Count: 1})

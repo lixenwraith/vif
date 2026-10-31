@@ -61,7 +61,16 @@ func (s *menuSession) LeaveError() error                         { return nil }
 func (s *menuSession) SessionSummary() string                    { return "Test session" }
 func (s *menuSession) Bots() []engine.BotSeat                    { return s.bots }
 func (s *menuSession) Participants() []engine.SessionParticipant { return nil }
-func (s *menuSession) Scenarios() ([]string, string)             { return nil, "" }
+func (s *menuSession) Scenarios() ([]string, string)             { return []string{"main", "tower"}, "main" }
+func (s *menuSession) Journaling() bool                          { return false }
+func (s *menuSession) JournalError() error                       { return nil }
+func (s *menuSession) ChangeScenario(name string) (bool, error) {
+	if !slices.Contains([]string{"main", "tower"}, name) {
+		return false, fmt.Errorf("scenario %q not found", name)
+	}
+	s.calls = append(s.calls, "scenario "+name)
+	return true, nil
+}
 func (s *menuSession) BeginHosting(addr, authority string) error {
 	if s.err != nil {
 		return s.err
@@ -186,25 +195,34 @@ func TestAPressDrivesTheMenu(t *testing.T) {
 	row := func(i int) int { return g.Y + g.ContentY + i }
 	r.handleConfigMenu()
 
-	press(left, row(4))
-	if m := configMenu(ctx); m.Page != "" || ctx.GetOverlaySelection() != "controls" {
+	press(left, row(3))
+	if m := configMenu(ctx); m.Page != "" || ctx.GetOverlaySelection() != "settings" {
 		t.Fatalf("a press on an unselected row: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
 	}
-	press(left, row(4))
-	if m := configMenu(ctx); m.Page != "controls" || ctx.GetOverlaySelection() != "auto" {
-		t.Fatalf("a press on the selected category: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
+	press(left, row(3))
+	if m := configMenu(ctx); m.Page != "settings" || ctx.GetOverlaySelection() != "sfx" {
+		t.Fatalf("a press on the selected page: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
+	}
+	// Back, Sound's title and three rows, then Controls' title: auto-fire is row 6
+	press(left, row(5))
+	if got := ctx.GetOverlaySelection(); got != "sfx" {
+		t.Fatalf("a press on a section title selected %q", got)
 	}
 	auto := ctx.AutoFire.Load()
-	press(right, row(1))
+	press(right, row(6))
+	if got := ctx.AutoFire.Load(); got != auto || ctx.GetOverlaySelection() != "auto" {
+		t.Fatalf("a press on an unselected setting: auto-fire %d to %d, selection %q", auto, got, ctx.GetOverlaySelection())
+	}
+	press(right, row(6))
 	if got := ctx.AutoFire.Load(); got != (auto+1)%3 {
 		t.Fatalf("the right half of a setting stepped auto-fire %d to %d", auto, got)
 	}
-	press(left, row(1))
+	press(left, row(6))
 	if got := ctx.AutoFire.Load(); got != auto {
 		t.Fatalf("the left half of a setting stepped auto-fire back to %d, want %d", got, auto)
 	}
-	press(g.X-1, row(1))
-	if m := configMenu(ctx); m.Page != "" || ctx.GetOverlaySelection() != "controls" {
+	press(g.X-1, row(6))
+	if m := configMenu(ctx); m.Page != "" || ctx.GetOverlaySelection() != "settings" {
 		t.Fatalf("a press outside the window: page %q, selection %q", m.Page, ctx.GetOverlaySelection())
 	}
 
@@ -267,7 +285,7 @@ func TestThePointerScrollsAnOverlay(t *testing.T) {
 	}
 
 	r.handleConfigMenu()
-	showConfigMenu(ctx, "diagnostics")
+	showConfigMenu(ctx, "developer")
 	m := configMenu(ctx)
 	if len(m.Rows) <= g.ListH()+parameter.OverlayWheelRows {
 		t.Fatalf("the page's %d rows fit a list of %d", len(m.Rows), g.ListH())
@@ -395,7 +413,7 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 		values    []string
 		want      string
 	}{
-		{"bots", "add", []string{"2", "default"}, "add 2:default"},
+		{"multiplayer", "add", []string{"2", "default"}, "add 2:default"},
 		{"multiplayer", "host", []string{"127.0.0.1:0", "host"}, "host 127.0.0.1:0 host"},
 		{"multiplayer", "join", []string{"vif://example.test:4242/run"}, "join vif://example.test:4242/run"},
 		{"multiplayer", "request", []string{"https://example.test", "3", "tower"}, "request https://example.test 3 tower"},
@@ -419,7 +437,7 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 		}
 	}
 	r.handleConfigMenu()
-	showConfigMenu(ctx, "bots")
+	showConfigMenu(ctx, "multiplayer")
 	ctx.SetOverlaySelection("drop/10")
 	r.moveConfigMenu(input.MotionRight, 0)
 	if len(session.calls) != 4 {
@@ -438,6 +456,15 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 	}
 }
 
+// menuRow is the menu's row keyed key, a zero row when it shows none
+func menuRow(ctx *engine.GameContext, key string) core.OverlayMenuRow {
+	m := configMenu(ctx)
+	if i := slices.IndexFunc(m.Rows, func(row core.OverlayMenuRow) bool { return row.Key == key }); i >= 0 {
+		return m.Rows[i]
+	}
+	return core.OverlayMenuRow{}
+}
+
 type menuPeers struct{ engine.NetworkPort }
 
 func (menuPeers) PeerCount() int  { return 1 }
@@ -454,10 +481,11 @@ func TestConfigMenuHonorsCommandRestrictionsAtActivation(t *testing.T) {
 		}
 		r := NewRouter(ctx, input.NewMachine())
 		ExecuteCommand(ctx, "g")
-		ctx.SetOverlaySelection("simulation")
+		ctx.SetOverlaySelection("game")
 		r.handleOverlayActivate()
+		ctx.SetOverlaySelection("speed")
 		w.Resources.Event.Queue.Consume()
-		if m := configMenu(ctx); m.Rows[1].Disabled == "" {
+		if menuRow(ctx, "speed").Disabled == "" {
 			t.Fatalf("viewer=%v: speed appears editable", viewer)
 		}
 		r.handleOverlayActivate()
@@ -467,7 +495,7 @@ func TestConfigMenuHonorsCommandRestrictionsAtActivation(t *testing.T) {
 		ctx.Viewer.Store(false)
 		w.Resources.Network = nil
 		r.RefreshConfigMenu()
-		if configMenu(ctx).Rows[1].Disabled != "" || ctx.GetOverlaySelection() != "speed" {
+		if menuRow(ctx, "speed").Disabled != "" || ctx.GetOverlaySelection() != "speed" {
 			t.Fatal("refresh failed to unlock speed or lost selection")
 		}
 	}
@@ -481,7 +509,7 @@ func TestMaxFPSStepsInTheMenuAndTakesRatesInRange(t *testing.T) {
 	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
 	r := NewRouter(ctx, input.NewMachine())
 	ExecuteCommand(ctx, "g")
-	ctx.SetOverlaySelection("display")
+	ctx.SetOverlaySelection("settings")
 	r.handleOverlayActivate()
 	step := func(d int) int32 {
 		ctx.SetOverlaySelection("fps")
@@ -589,5 +617,151 @@ func TestConfigMenuKeyCanBeRemapped(t *testing.T) {
 	}
 	if got := machine.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyF2}); got == nil || got.Type != input.IntentConfigMenu {
 		t.Fatalf("remapped menu key = %+v", got)
+	}
+}
+
+// menuKeys drives a router by keys, as a terminal sends them
+func menuKeys(t *testing.T, machine *input.Machine, r *Router) func(terminal.Key, rune) {
+	return func(k terminal.Key, ch rune) {
+		t.Helper()
+		if intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); intent != nil {
+			r.Handle(intent)
+		}
+	}
+}
+
+// TestTheMenuSearchFindsRowsOnEveryPageAndActsInPlace: `/` lists the rows of every
+// page matching all the words typed, a section's title included, each naming its
+// page; Down selects while typing, Enter keeps the search and a setting changes in
+// place; Escape clears the search, then closes the menu.
+func TestTheMenuSearchFindsRowsOnEveryPageAndActsInPlace(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	ctx.SessionCtl = &menuSession{}
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	key := menuKeys(t, machine, r)
+	key(terminal.KeyCtrlG, 0)
+	key(terminal.KeyRune, '/')
+	for _, ch := range "pause" {
+		key(terminal.KeyRune, ch)
+	}
+	var keys []string
+	for _, row := range configMenu(ctx).Rows {
+		keys = append(keys, row.Key)
+	}
+	if want := []string{"game:pause", "settings:pause_menu", "settings:pause_command"}; !slices.Equal(keys, want) {
+		t.Fatalf("a search for pause listed %q, want %q", keys, want)
+	}
+	if got := menuRow(ctx, "settings:pause_menu").Label; got != "Settings / Pause in menu" {
+		t.Fatalf("a found row is labelled %q", got)
+	}
+	key(terminal.KeyDown, 0)
+	key(terminal.KeyEnter, 0)
+	key(terminal.KeyRune, 'l')
+	if ctx.PauseMenu.Load() || ctx.TimeCtl.IsPaused() || ctx.OverlayFilter() != "pause" {
+		t.Fatalf("l on a found setting: pause in menu %v, paused %v, search %q", ctx.PauseMenu.Load(), ctx.TimeCtl.IsPaused(), ctx.OverlayFilter())
+	}
+	key(terminal.KeyEscape, 0)
+	if m := configMenu(ctx); m == nil || m.Page != "" || ctx.OverlayFilter() != "" || m.Rows[0].Key != "game" {
+		t.Fatal("Escape did not clear the search back to the pages")
+	}
+	key(terminal.KeyEscape, 0)
+	if ctx.IsOverlayActive() {
+		t.Fatal("Escape after the search did not close the menu")
+	}
+}
+
+// TestAOneFieldFormIsATextBoxOnItsRow: Other scenario is typed in on its row; a name
+// that does not resolve keeps the text with the error beside it, Up leaves the box
+// for the row above, and a name that does closes the menu.
+func TestAOneFieldFormIsATextBoxOnItsRow(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	session := &menuSession{}
+	ctx.SessionCtl = session
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	key := menuKeys(t, machine, r)
+	key(terminal.KeyCtrlG, 0)
+	ctx.SetOverlaySelection("scenarios")
+	key(terminal.KeyEnter, 0)
+	ctx.SetOverlaySelection("scenario")
+	key(terminal.KeyEnter, 0)
+	for _, ch := range "nope" {
+		key(terminal.KeyRune, ch)
+	}
+	key(terminal.KeyEnter, 0)
+	row := menuRow(ctx, "scenario")
+	if configMenu(ctx).Form != nil || !row.Typing || row.Value != "nope" || !strings.HasPrefix(row.Description, "Error: ") {
+		t.Fatalf("an unknown scenario in the box: %+v", row)
+	}
+	key(terminal.KeyUp, 0)
+	if r.configForm != nil || menuRow(ctx, "scenario").Typing || ctx.GetOverlaySelection() != "start" {
+		t.Fatalf("Up left the box to %q, typing %v", ctx.GetOverlaySelection(), menuRow(ctx, "scenario").Typing)
+	}
+	key(terminal.KeyDown, 0)
+	key(terminal.KeyEnter, 0)
+	for _, ch := range "tower" {
+		key(terminal.KeyRune, ch)
+	}
+	key(terminal.KeyEnter, 0)
+	if ctx.IsOverlayActive() || !slices.Equal(session.calls, []string{"scenario tower"}) {
+		t.Fatalf("a known scenario in the box: overlay %v, calls %q", ctx.IsOverlayActive(), session.calls)
+	}
+}
+
+// TestThePauseFlagsGateTheMenuAndCommandLinePauses: Pause in menu and Pause in
+// command line decide whether opening each asks to pause a solo game, the menu's
+// change asking at once; p asks for the pause only another ends, and a game waiting
+// for its first press refuses :pause and greys the Pause row.
+func TestThePauseFlagsGateTheMenuAndCommandLinePauses(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	key := menuKeys(t, machine, r)
+	// asked is what the pause or hold requests of kind asked for since the last call
+	asked := func(kind event.EventType) (out []bool) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.GamePausePayload); ok && ev.Type == kind {
+				out = append(out, p.Paused)
+			}
+		}
+		return out
+	}
+	ExecuteCommand(ctx, "pause menu off")
+	key(terminal.KeyCtrlG, 0)
+	if got := asked(event.EventGamePauseRequest); slices.Contains(got, true) {
+		t.Fatalf("with pause in menu off the menu asked for pauses %v", got)
+	}
+	ExecuteCommand(ctx, "pause menu on")
+	if got := asked(event.EventGamePauseRequest); !slices.Equal(got, []bool{true}) {
+		t.Fatalf("turning pause in menu on with the menu open asked for pauses %v", got)
+	}
+	key(terminal.KeyCtrlG, 0)
+	ExecuteCommand(ctx, "pause command off")
+	asked(event.EventGamePauseRequest)
+	key(terminal.KeyRune, ':')
+	if got := asked(event.EventGamePauseRequest); !ctx.IsCommandMode() || slices.Contains(got, true) {
+		t.Fatalf("with pause in command line off: command mode %v, pauses asked %v", ctx.IsCommandMode(), got)
+	}
+	key(terminal.KeyEscape, 0)
+	asked(event.EventGameHoldRequest)
+
+	key(terminal.KeyRune, 'p')
+	if got := asked(event.EventGameHoldRequest); !slices.Equal(got, []bool{true}) {
+		t.Fatalf("p asked for holds %v, want a pause", got)
+	}
+	ctx.TimeCtl.HoldAs(engine.HoldStart)
+	ExecuteCommand(ctx, "pause")
+	if got := asked(event.EventGameHoldRequest); len(got) != 0 {
+		t.Fatalf(":pause while the game waits to start asked for holds %v", got)
+	}
+	ExecuteCommand(ctx, "g")
+	ctx.SetOverlaySelection("game")
+	r.handleOverlayActivate()
+	if row := menuRow(ctx, "pause"); row.Label != "Pause" || !strings.Contains(row.Disabled, "first press") {
+		t.Fatalf("the Pause row while the game waits to start: %+v", row)
 	}
 }

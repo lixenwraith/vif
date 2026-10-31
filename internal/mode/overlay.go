@@ -169,10 +169,11 @@ func (r *Router) handleOverlayActivate() bool {
 	return true
 }
 
-// handleOverlayFilter opens the card query for editing; the overlay keeps its
-// mode and only the input machine switches to text entry
+// handleOverlayFilter opens the query over the cards or the menu's rows for
+// editing; the overlay keeps its mode and only the input machine takes text
 func (r *Router) handleOverlayFilter() bool {
-	if c := r.ctx.GetOverlayContent(); c == nil || c.Layout != core.OverlayLayoutCards {
+	c := r.ctx.GetOverlayContent()
+	if c == nil || c.Layout != core.OverlayLayoutCards && (configMenu(r.ctx) == nil || r.configForm != nil) {
 		return true
 	}
 	r.ctx.SetOverlayFilterEditing(true)
@@ -186,9 +187,13 @@ func (r *Router) endOverlayFilter() {
 	r.machine.SetMode(input.ModeOverlay)
 }
 
-// setOverlayFilter narrows the cards as the query is typed
+// setOverlayFilter narrows the cards or the menu's rows as the query is typed
 func (r *Router) setOverlayFilter(query string) {
 	r.ctx.SetOverlayFilter(query)
+	if m := configMenu(r.ctx); m != nil {
+		showConfigMenu(r.ctx, m.Page)
+		return
+	}
 	r.ctx.PushLocalOrigin(event.EventMetaTelemetryRequest, nil, event.OriginDevice)
 }
 

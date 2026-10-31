@@ -636,9 +636,9 @@ const releaseAction = "release"
 func intentFor(name string, count int, char string) (input.Intent, error) {
 	if name != releaseAction {
 		intent, err := input.IntentFor(name, count, char)
-		if err == nil && (intent.Type == input.IntentConfigMenu ||
+		if err == nil && (intent.Type == input.IntentConfigMenu || intent.Type == input.IntentPause ||
 			intent.Type == input.IntentModeSwitch && intent.ModeTarget == input.ModeTargetCommand) {
-			err = fmt.Errorf("intent %q opens the command line or the menu; a bot issues no commands", name)
+			err = fmt.Errorf("intent %q opens the command line or the menu, or pauses; a bot issues no commands", name)
 		}
 		return intent, err
 	}

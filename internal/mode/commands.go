@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "leave", "relay", "session", "bot", "player", "g", "config", "journal", "wait", "fps",
+	"host", "join", "leave", "relay", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -70,7 +70,7 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 
 	// Execute based on command
 	switch cmd {
-	case "g", "config":
+	case "menu", "g", "config":
 		return handleConfigCommand(ctx, args)
 	case "flow":
 		return handleFlowCommand(ctx, args)
@@ -168,7 +168,7 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 	// A replay's viewer inspects a world the recording authors
 	if ctx.Viewer.Load() {
 		switch cmd {
-		case "g", "config", "h", "help", "?", "about", "t", "telemetry", "hud", "fps", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
+		case "menu", "g", "config", "h", "help", "?", "about", "t", "telemetry", "hud", "fps", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
 		default:
 			return "Unavailable in a replay"
 		}
@@ -413,16 +413,31 @@ func resetGame(ctx *engine.GameContext, purge bool) bool {
 
 // handlePauseCommand starts, ends or toggles a hold: the pause only another :pause
 // ends. A live session's hold is its host's, and stops every participant at once.
+// :pause menu and :pause command set whether the menu or the command line pauses.
 func handlePauseCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) > 0 {
+		switch args[0] {
+		case "menu":
+			result := applyToggle(ctx, &ctx.PauseMenu, args[1:], "pause menu", "Pause in menu")
+			if ctx.IsOverlayMode() && ctx.PauseMenu.Load() {
+				ctx.PauseForMenu() // An open menu shows the change at once
+			} else if ctx.IsOverlayMode() {
+				ctx.SetPaused(false)
+			}
+			return result
+		case "command":
+			return applyToggle(ctx, &ctx.PauseCommand, args[1:], "pause command", "Pause in command line")
+		}
+	}
 	held, explicit, ok := parseToggleArg(args)
 	if !ok {
-		setCommandError(ctx, "Usage: :pause [on|off]")
+		setCommandError(ctx, "Usage: :pause [on|off], :pause menu [on|off] or :pause command [on|off]")
 		return CommandResult{Continue: true}
 	}
 	if !explicit {
-		held = !ctx.TimeCtl.Held()
+		held = !ctx.TimeCtl.Holds(engine.HoldPause)
 	}
-	if why := holdRefused(ctx, held); why != "" {
+	if why := pauseRefusedFor(ctx, held); why != "" {
 		setCommandError(ctx, why)
 		return CommandResult{Continue: true}
 	}
@@ -442,31 +457,48 @@ func holdRefused(ctx *engine.GameContext, held bool) string {
 	return "Only the host can resume a live session"
 }
 
+// pauseRefusedFor is why :pause may not start (held) or end the pause: a hold of
+// another kind stands, which only what it waits for ends, or the session is its host's
+func pauseRefusedFor(ctx *engine.GameContext, held bool) string {
+	switch {
+	case held && ctx.TimeCtl.Holds(engine.HoldStart):
+		return "The game waits for its first press: a key, click or tap starts it"
+	case held && ctx.TimeCtl.Holds(engine.HoldFreeze):
+		return "The session stands still while its host changes"
+	}
+	return holdRefused(ctx, held)
+}
+
 // changeScenario asks the runtime to rebuild this run on another scenario. The
 // controller validates before it latches, so a name that does not resolve is
 // reported here with the game still running.
 func changeScenario(ctx *engine.GameContext, name string) CommandResult {
+	if err := startScenario(ctx, name); err != nil {
+		setCommandError(ctx, sentence(err))
+	}
+	return CommandResult{Continue: true}
+}
+
+// startScenario is changeScenario's work, the error unreported: the menu's text box
+// keeps it beside the name typed
+func startScenario(ctx *engine.GameContext, name string) error {
 	if ctx.SessionCtl == nil {
-		setCommandError(ctx, sessionsUnavailable)
-		return CommandResult{Continue: true}
+		return errors.New(sessionsUnavailable)
 	}
 	changed, err := ctx.SessionCtl.ChangeScenario(name)
 	if err != nil {
-		setCommandError(ctx, sentence(err))
-		return CommandResult{Continue: true}
+		return err
 	}
 	if !changed {
 		// Already running these bytes, so a reset is the same new game without a
 		// restart's cost — and in a session it crosses, as a bare :n does
-		if !resetGame(ctx, false) {
-			return CommandResult{Continue: true}
-		}
-		return CommandResult{Continue: true}
+		resetGame(ctx, false)
+		return nil
 	}
-	ctx.MacroClearFlag.Store(true)
 	// Nothing to report on the restart path: the loop returns before the next
 	// frame, and what the operator sees is the new scenario.
-	return CommandResult{Continue: true}
+	ctx.MacroClearFlag.Store(true)
+	return nil
 }
 
 // handleFreeCommand toggles or sets mouse motion cursor tracking
@@ -725,7 +757,7 @@ func handleTelemetryCommand(ctx *engine.GameContext, args []string) CommandResul
 	}
 
 	ctx.RequestMode(core.ModeOverlay)
-	ctx.PauseForInput()
+	ctx.PauseForMenu()
 	ctx.PushLocalOrigin(event.EventMetaTelemetryRequest, nil, event.OriginDevice)
 	return CommandResult{Continue: true}
 }
@@ -771,7 +803,7 @@ func handleTelemetrySaveCommand(ctx *engine.GameContext) CommandResult {
 func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
 		ctx.RequestMode(core.ModeOverlay)
-		ctx.PauseForInput()
+		ctx.PauseForMenu()
 		ctx.PushLocalOrigin(event.EventMetaDebugRequest, nil, event.OriginDevice)
 		return CommandResult{Continue: true}
 	}
@@ -1078,7 +1110,7 @@ func diagnosticsDir() string {
 // handleHelpCommand asks for the help overlay in place of any overlay shown
 func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
-	ctx.PauseForInput()
+	ctx.PauseForMenu()
 	ctx.SetOverlayContent(nil)
 	ctx.PushLocalOrigin(event.EventMetaHelpRequest, nil, event.OriginDevice)
 	return CommandResult{Continue: true}
@@ -1316,7 +1348,7 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 // handleAboutCommand triggers about overlay event
 func handleAboutCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
-	ctx.PauseForInput()
+	ctx.PauseForMenu()
 	ctx.PushLocalOrigin(event.EventMetaAboutRequest, nil, event.OriginDevice)
 	return CommandResult{Continue: true}
 }

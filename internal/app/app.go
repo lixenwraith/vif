@@ -426,6 +426,8 @@ func (a *App) applyPlay() {
 	a.ctx.Relaying.Store(p.Relay)
 	a.ctx.WaitStart.Store(p.Wait && a.cfg.Mode.OwnsInput())
 	a.ctx.MaxFPS.Store(int32(p.MaxFPS))
+	a.ctx.PauseMenu.Store(p.PauseMenu)
+	a.ctx.PauseCommand.Store(p.PauseCommand)
 }
 
 // livePlay is the run's [play] as it stands: what the next run starts from and
@@ -438,6 +440,8 @@ func (a *App) livePlay() paths.Play {
 	p.HUD = a.ctx.OverlayHUD.Load()
 	p.Relay = a.ctx.Relaying.Load()
 	p.MaxFPS = int(a.ctx.MaxFPS.Load())
+	p.PauseMenu = a.ctx.PauseMenu.Load()
+	p.PauseCommand = a.ctx.PauseCommand.Load()
 	if a.cfg.Mode.OwnsInput() { // a run nobody plays never waits, whatever the setting
 		p.Wait = a.ctx.WaitStart.Load()
 	}

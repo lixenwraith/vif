@@ -363,7 +363,7 @@ scenario, its SHA-256 the digest a session names. The plan, same origin only:
    already links (fetch in a page), reads the index, fetches a file, holds it to
    `UnmarshalScenario`'s bounds and the index's digest, and hands it on as
    `Options.Provided`. The page's `-s` (`?arg=-s=td`) resolves through it, the
-   menu's Game page lists the index, and a hosting page
+   menu's Scenarios page lists the index, and a hosting page
    ([Publish a player's session](#publish-a-players-session-at-the-router)) offers
    any listed scenario.
 

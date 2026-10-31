@@ -110,6 +110,8 @@ func (i IntentType) String() string {
 		return "IntentOverlayDrag"
 	case IntentOverlayWheel:
 		return "IntentOverlayWheel"
+	case IntentPause:
+		return "IntentPause"
 	default:
 		return fmt.Sprintf("IntentType(%d)", i)
 	}

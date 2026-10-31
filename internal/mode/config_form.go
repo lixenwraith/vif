@@ -28,6 +28,8 @@ type configForm struct {
 	spec   configFormSpec
 	state  *tui.FormState
 	page   string
+	row    string // The menu row it opened from, a search's included
+	inline bool   // One field, typed in on its row rather than in a window
 	err    string
 }
 
@@ -46,12 +48,12 @@ var configForms = map[string]configFormSpec{
 			if err := ctx.SessionCtl.AddBot(fmt.Sprintf("%d:%s", n, strings.TrimSpace(f.Value(1)))); err != nil {
 				return err
 			}
-			ctx.SetStatusMessage("Bots joining; open Configuration / Bots to remove them", parameter.StatusNotice)
+			ctx.SetStatusMessage("Bots joining; Menu / Multiplayer removes them", parameter.StatusNotice)
 			return nil
 		},
 	},
 	"host": {
-		label: "Host this run", description: "Open this running game to other players at a listening address.", command: "host",
+		label: "Host this game", description: "Open this running game to other players at a listening address.", command: "host",
 		fields: []configFormField{
 			{"Address", ":4242", "Listen address, e.g. :4242, 127.0.0.1:4242 or ws://:4242. Share a reachable address with guests."},
 			{"Authority", "", "Blank keeps the startup policy. host ends the session when you leave; migrate allows a successor."},
@@ -62,10 +64,8 @@ var configForms = map[string]configFormSpec{
 		},
 	},
 	"join": {
-		label: "Join a session", description: "Join an existing session; a failed connection keeps this run intact.", command: "join",
-		fields: []configFormField{
-			{"Target", "", "Session address or link: host:port[/name], vif://, tcp:// or ws(s)://. An http(s):// site requests a session with server defaults."},
-		},
+		label: "Join a session", description: "Type a session address or link here: host:port[/name], vif://, tcp:// or ws(s)://; an http(s):// site requests a session with server defaults. A failed connection keeps this game intact.", command: "join",
+		fields:      []configFormField{{"Target", "", ""}},
 		unavailable: engine.SessionController.JoinError,
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
 			if err := ctx.SessionCtl.Join(strings.TrimSpace(f.Value(0))); err != nil {
@@ -76,17 +76,14 @@ var configForms = map[string]configFormSpec{
 		},
 	},
 	"scenario": {
-		label: "Scenario by name", description: "Start a scenario the rows below do not list: a name or a path, as -s takes it. In a session only the host can, and its participants rejoin it.", command: "new",
-		fields: []configFormField{
-			{"Scenario", "", "Scenario name from the config roots, a scenario.toml or a scenario directory, as -s takes it. The current one's name starts a new game."},
-		},
+		label: "Other scenario", description: "Type a scenario the list does not hold, by name or path as -s takes it: a scenario.toml or a scenario directory. In a session only the host can, and its participants rejoin it.", command: "new",
+		fields: []configFormField{{"Scenario", "", ""}},
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
 			name := strings.TrimSpace(f.Value(0))
 			if name == "" {
 				return errors.New("name a scenario")
 			}
-			changeScenario(ctx, name)
-			return nil
+			return startScenario(ctx, name)
 		},
 	},
 	"request": {
@@ -127,26 +124,52 @@ func sessionRefusal(check func(engine.SessionController) error) func(*engine.Gam
 	}
 }
 
+// configFormOption is the row a form opens from: a form of one field is a text box
+// typed in on the row, a longer one opens its own window
 func configFormOption(key string) configOption {
 	spec := configForms[key]
-	o := configOption{key: key, label: spec.label, description: spec.description, command: spec.command,
-		read: func(*engine.GameContext) string { return "Enter" }, disabled: sessionRefusal(spec.unavailable)}
+	inline := len(spec.fields) == 1
+	o := configOption{key: key, label: spec.label, description: spec.description, command: spec.command, text: inline,
+		read: enterValue, disabled: sessionRefusal(spec.unavailable)}
+	if inline {
+		o.read = func(*engine.GameContext) string { return spec.fields[0].value }
+	}
 	o.activate = func(r *Router) {
 		state := tui.NewFormState()
 		for _, f := range spec.fields {
 			state.Fields = append(state.Fields, tui.FormField{Label: f.label, State: tui.NewTextFieldState(f.value)})
 		}
-		r.configForm = &configForm{option: o, spec: spec, state: state, page: configMenu(r.ctx).Page}
+		r.configForm = &configForm{option: o, spec: spec, state: state, page: configMenu(r.ctx).Page, row: r.ctx.GetOverlaySelection(), inline: inline}
 		r.machine.SetMode(input.ModeSearch)
 		r.publishConfigForm()
 	}
 	return o
 }
 
-func botConfigOptions(ctx *engine.GameContext) []configOption {
-	if ctx.SessionCtl == nil {
-		return nil
+// multiplayerConfigOptions is the session's rows, then the other participants a
+// host may drop, then this run's bots
+func multiplayerConfigOptions(ctx *engine.GameContext) []configOption {
+	options := []configOption{section("Session")}
+	if ctx.SessionCtl != nil {
+		options = append(options, configOption{key: "status", label: "Current session", description: ctx.SessionCtl.SessionSummary(), read: startupValue})
 	}
+	options = append(options,
+		configFormOption("host"), configFormOption("join"), configFormOption("request"),
+		withDisabled(commandAction("leave", "Leave the session", "Play on in a session of your own from where this one stands; your bots come along, and the others play on without you.", "leave"),
+			sessionRefusal(engine.SessionController.LeaveError)),
+		configOption{key: "relay", label: "Relay for others", description: "Carry the game for players who reach this run and not their host, as after a host loss. Off by default; one that joined through this run is carried either way. Saved for the next run.",
+			command: "relay", choices: []string{"off", "on"},
+			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Relaying.Load()) }, disabled: relayUnavailable})
+	if ctx.SessionCtl == nil {
+		return options
+	}
+	if players := participantConfigOptions(ctx); len(players) > 0 {
+		options = append(append(options, section("Players")), players...)
+	}
+	return append(append(options, section("Bots"), configFormOption("add")), botConfigOptions(ctx)...)
+}
+
+func botConfigOptions(ctx *engine.GameContext) []configOption {
 	bots := ctx.SessionCtl.Bots()
 	if len(bots) == 0 {
 		return []configOption{{key: "empty", label: "No bots held by this run", description: "Add bots above. Bots held by another player cannot be removed here.", read: startupValue}}
@@ -176,17 +199,7 @@ func botConfigOptions(ctx *engine.GameContext) []configOption {
 	return options
 }
 
-func sessionConfigOptions(ctx *engine.GameContext) []configOption {
-	if ctx.SessionCtl == nil {
-		return nil
-	}
-	return append([]configOption{{key: "status", label: "Current session", description: ctx.SessionCtl.SessionSummary(), read: startupValue}}, participantConfigOptions(ctx)...)
-}
-
 func participantConfigOptions(ctx *engine.GameContext) []configOption {
-	if ctx.SessionCtl == nil {
-		return nil
-	}
 	var out []configOption
 	for _, p := range ctx.SessionCtl.Participants() {
 		if p.Local {
@@ -221,11 +234,25 @@ func participantConfigOptions(ctx *engine.GameContext) []configOption {
 
 func (r *Router) publishConfigForm() {
 	f := r.configForm
+	if f.inline {
+		content := configMenuView(r.ctx, f.page)
+		for i := range content.Menu.Rows {
+			if row := &content.Menu.Rows[i]; row.Key == f.row {
+				field := f.state.Fields[0].State
+				row.Value, row.Typing, row.Cursor = field.Value(), true, field.Cursor
+				if f.err != "" {
+					row.Description = "Error: " + f.err + ". " + row.Description
+				}
+			}
+		}
+		publishConfigMenu(r.ctx, content)
+		return
+	}
 	view := &core.OverlayForm{Focus: f.state.Focus, Help: f.spec.fields[f.state.Focus].help, Error: f.err}
 	for _, field := range f.state.Fields {
 		view.Fields = append(view.Fields, core.OverlayFormField{Label: field.Label, Value: field.State.Value(), Cursor: field.State.Cursor})
 	}
-	r.ctx.SetOverlayContent(&core.OverlayContent{Title: "Configuration / " + f.spec.label, Layout: core.OverlayLayoutMenu,
+	r.ctx.SetOverlayContent(&core.OverlayContent{Title: "Menu / " + f.spec.label, Layout: core.OverlayLayoutMenu,
 		Menu: &core.OverlayMenu{Page: f.page, Form: view}})
 }
 
@@ -240,6 +267,13 @@ func (r *Router) handleConfigForm(intent *input.Intent) bool {
 	case input.IntentInsertDeleteCurrent:
 		field.DeleteForward()
 	case input.IntentTextNav:
+		switch intent.Motion {
+		case input.MotionUp, input.MotionDown:
+			if f.inline {
+				r.configMenuBack() // Up and Down leave a text box for the rows beside it
+				return r.moveConfigMenu(intent.Motion, 0)
+			}
+		}
 		switch intent.Motion {
 		case input.MotionUp, input.MotionHalfPageUp:
 			f.state.FocusPrev()

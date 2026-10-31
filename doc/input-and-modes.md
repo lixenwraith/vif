@@ -108,8 +108,8 @@ stateDiagram-v2
 | Visual | Normal's grammar over the shield's ping bounds: while the shield is active, `h j k l` step by the bounds radius and word, find and line motions scan every row the bounds cover. | Continues. |
 | Insert | Type glyphs at the cursor; arrows move; Delete/Space/Backspace support edit-like deletion. | Continues in real time. |
 | Search | Type a pattern; Enter jumps to the next match, wrapping round the map; `n`/`N` repeat later. | Continues. |
-| Command | Edit and execute a colon command with history. | Pauses a single-instance game; a live network session continues. |
-| Overlay | Navigate help, about, telemetry, the profiler report or the [configuration menu](config-menu.md); `/` filters telemetry cards. | Pauses a single-instance game; a live network session continues. |
+| Command | Edit and execute a colon command with history. | Pauses a single-instance game unless `[play] pause_command` is off; a live network session continues. |
+| Overlay | Navigate help, about, telemetry, the profiler report or the [menu](config-menu.md); `/` filters telemetry cards and searches the menu. | Pauses a single-instance game unless `[play] pause_menu` is off; a live network session continues. |
 
 Escape in Normal cancels a pending key sequence, or with none pending flashes the
 ping grid; from any other mode it returns to Normal, and in the configuration menu
@@ -117,9 +117,9 @@ it goes back one level. The router unpauses before it runs a command: an overlay
 command (`:help`, `:t`, `:g`) requests the pause again, and a reset pauses until the
 scheduler has rebuilt the run. `MetaSystem` refuses a pause in a live session unless
 every other participant is one of this run's bots (§9), which leaves Command and
-Overlay as non-blocking inspection there. `:pause` is a hold, which no mode change
-ends: under it Normal takes no play, only `:`, the menu, help, quit, the audio
-toggle and a key's release.
+Overlay as non-blocking inspection there. `:pause` (and `p`) is a hold, which no
+mode change ends: under it Normal takes no play, only `:`, the menu, help, `p`,
+quit, the audio toggle and a key's release.
 
 Normal, Visual, Insert and Search are play modes: the run's world holds the
 current one (`GameState`), each change is an event the journal records, and a
@@ -130,8 +130,8 @@ them, nor what an overlay shows. Leaving one returns to Normal, recorded when th
 changes the play mode.
 
 A new game a person plays waits at its first tick in a start hold, the `:pause`
-hold marked `engine.HoldStart`: at launch, on `:n`, the menu's New game and a map
-change, unless `[play] wait` is off (`:wait`, `-nw`). The first press the held
+hold marked `engine.HoldStart`: at launch, on `:n`, the menu's Restart game and Start and a
+map change, unless `[play] wait` is off (`:wait`, `-nw`). The first press the held
 game would not take starts it and does nothing else: a key without Ctrl or Alt,
 one the keymap binds to nothing included, or a left or right press off the status
 bar. What a hold admits keeps its meaning and leaves it waiting. In a live session
