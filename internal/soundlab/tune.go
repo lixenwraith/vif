@@ -3,12 +3,18 @@
 package soundlab
 
 import (
+	"bufio"
+	"cmp"
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 
 	"github.com/lixenwraith/vif/pkg/audio"
@@ -22,10 +28,15 @@ type tuneOptions struct {
 	seed                           uint64
 }
 
-// tuneLoop is one rendered loop and the rip a perfect listener makes of it
+// tuneLoop is one rendered loop, what made it, and the rip a perfect listener
+// makes of it
 type tuneLoop struct {
 	audio []float64
 	want  *audio.Rip
+	slots [audio.MusicSlots]audio.PatternID
+	bpm   int
+	root  int
+	scale audio.ScaleID
 }
 
 // tempos spread the corpus over the sequencer's range
@@ -76,9 +87,153 @@ func (s *Session) corpus(o tuneOptions) ([]tuneLoop, error) {
 		if err != nil {
 			return nil, err
 		}
-		loops = append(loops, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil)})
+		loops = append(loops, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale})
 	}
 	return loops, nil
+}
+
+// corpusEvent is one labelled event of an exported loop, in frames of the rip's
+// grid: a drum's hit, or a note with the wave and voice genes it was played with
+type corpusEvent struct {
+	Frame int       `json:"frame"`
+	End   int       `json:"end"`
+	Drum  int       `json:"drum"` // kick 0, snare 1, hihat 2; -1 for a note
+	MIDI  int       `json:"midi"`
+	Wave  int       `json:"wave"` // index into the waves of the manifest; -1 unknown
+	Voice []float64 `json:"voice,omitempty"`
+}
+
+// corpusLoop is an exported loop's label file
+type corpusLoop struct {
+	BPM    int           `json:"bpm"`
+	Root   int           `json:"root"`
+	Scale  int           `json:"scale"`
+	Bars   int           `json:"bars"`
+	Frames int           `json:"frames"`
+	Events []corpusEvent `json:"events"`
+}
+
+// corpusManifest names the corpus's layout for the trainer
+type corpusManifest struct {
+	Version    int      `json:"version"`
+	Loops      int      `json:"loops"`
+	Rate       int      `json:"rate"`
+	Hop        int      `json:"hop"`
+	MelBands   int      `json:"mel_bands"`
+	MinMIDI    int      `json:"min_midi"`
+	Pitches    int      `json:"pitches"`
+	Drums      []string `json:"drums"`
+	Waves      []string `json:"waves"`
+	VoiceGenes int      `json:"voice_genes"`
+}
+
+func cmdCorpus(s *Session, a []string) error {
+	o := tuneOptions{loops: 24, bars: 4, seed: 1}
+	for i, p := range []*int{&o.loops, &o.bars} {
+		if len(a) > i+1 {
+			n, err := strconv.Atoi(a[i+1])
+			if err != nil || n < 1 || n > 4096 {
+				return fmt.Errorf("%q: want 1 to 4096", a[i+1])
+			}
+			*p = n
+		}
+	}
+	return s.exportCorpus(a[0], o)
+}
+
+// exportCorpus writes loops into dir: loop_NNN.wav as rendered, loop_NNN.mel as
+// the log-mel frames a front-end model hears (frames, bands, then float32 rows,
+// little-endian), loop_NNN.json as the events that sound in it with their frames
+// and voices, and corpus.json naming the layout.
+func (s *Session) exportCorpus(dir string, o tuneOptions) error {
+	loops, err := s.corpus(o)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for i, l := range loops {
+		base := filepath.Join(dir, fmt.Sprintf("loop_%03d", i))
+		f, err := os.Create(base + ".wav")
+		if err != nil {
+			return err
+		}
+		werr := audio.WriteWAV(f, l.audio)
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
+		if werr != nil {
+			return werr
+		}
+		mel := audio.MelFrames(l.audio, audio.AudioSampleRate)
+		if err := writeMel(base+".mel", mel); err != nil {
+			return err
+		}
+		lab := corpusLoop{BPM: l.bpm, Root: l.root, Scale: int(l.scale), Bars: o.bars, Frames: len(mel)}
+		stepSec := float64(audio.SamplesPerStep(l.bpm)) / audio.AudioSampleRate
+		for _, e := range audio.ExpectedEvents(l.slots, o.bars, l.root, l.scale, nil) {
+			start := float64(e.Bar*audio.StepsPerBar+e.Step) * stepSec
+			ev := corpusEvent{Frame: int(start/audio.RipFrameSec + 0.5), Drum: -1, Wave: -1}
+			if e.Instr.IsDrum() {
+				if e.Instr >= audio.InstrClap {
+					continue
+				}
+				ev.Drum, ev.End = int(e.Instr), ev.Frame
+			} else {
+				ev.MIDI = e.MIDI
+				ev.End = int((start+float64(e.Dur)*stepSec)/audio.RipFrameSec + 0.5)
+				if v := audio.VoiceDefByName(audio.InstrumentName(e.Instr)); v != nil {
+					ev.Wave = max(slices.Index(audio.VoiceWaves[:], cmp.Or(v.Wave, "sine")), 0)
+					ev.Voice = v.Genes()
+				}
+			}
+			if ev.Frame < len(mel) {
+				lab.Events = append(lab.Events, ev)
+			}
+		}
+		if err := writeJSON(base+".json", lab); err != nil {
+			return err
+		}
+	}
+	m := corpusManifest{Version: 1, Loops: len(loops), Rate: audio.RipRate, Hop: audio.RipHop, MelBands: audio.RipMelBands,
+		MinMIDI: audio.RipMinMIDI, Pitches: audio.RipPitches, Drums: []string{"kick", "snare", "hihat"}, Waves: audio.VoiceWaves[:], VoiceGenes: audio.VoiceGeneCount}
+	if err := writeJSON(filepath.Join(dir, "corpus.json"), m); err != nil {
+		return err
+	}
+	fmt.Fprintf(s.out, "wrote %d loop(s) of %d bar(s) to %s\n", len(loops), o.bars, dir)
+	return nil
+}
+
+func writeMel(file string, mel [][]float32) error {
+	f, err := os.Create(file)
+	if err != nil {
+		return err
+	}
+	w := bufio.NewWriter(f)
+	le := binary.LittleEndian
+	bands := 0
+	if len(mel) > 0 {
+		bands = len(mel[0])
+	}
+	binary.Write(w, le, uint32(len(mel)))
+	binary.Write(w, le, uint32(bands))
+	for _, row := range mel {
+		binary.Write(w, le, row)
+	}
+	if err := w.Flush(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func writeJSON(file string, v any) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(file, data, 0o644)
 }
 
 // tune searches the rip's parameters: the current ones seed a pool the rest of

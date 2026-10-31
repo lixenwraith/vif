@@ -920,3 +920,43 @@ func TestTuneSearchesTheRipParameters(t *testing.T) {
 ! tune 1 2 3
 `)
 }
+
+// TestRenderAndCorpusWriteWhatTheEngineHears: render writes the slots' music to a
+// WAV the rip reads back at the transport's tempo, and corpus writes loops with
+// their frames and labelled events in the layout the trainer reads.
+func TestRenderAndCorpusWriteWhatTheEngineHears(t *testing.T) {
+	dir := t.TempDir()
+	wav := filepath.Join(dir, "slots.wav")
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+! render %s                           # nothing slotted
+builtin pattern
+bpm 128
+slot 0 beat_basic
+render %s 4
+corpus %s 2 2
+`, wav, wav, filepath.Join(dir, "corpus")))
+	f, err := os.Open(wav)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := audio.RipWAV(f, s.rip)
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := r.BPM - 128; d < -2 || d > 2 {
+		t.Errorf("the rendered slots rip at %d bpm, want 128", r.BPM)
+	}
+	for _, name := range []string{"corpus.json", "loop_000.wav", "loop_000.mel", "loop_001.json"} {
+		if _, err := os.Stat(filepath.Join(dir, "corpus", name)); err != nil {
+			t.Errorf("corpus lacks %s", name)
+		}
+	}
+	lab, err := os.ReadFile(filepath.Join(dir, "corpus", "loop_000.json"))
+	if err != nil || !strings.Contains(string(lab), "\"events\"") || !strings.Contains(string(lab), "\"voice\"") {
+		t.Errorf("loop_000.json: %v\n%.200s", err, lab)
+	}
+}
