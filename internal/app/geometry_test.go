@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -86,6 +87,7 @@ func TestAServerWithNoSizeTakesItsMapFromItsFirstPerson(t *testing.T) {
 type framePresentation struct {
 	w, h   int
 	frames [][]terminal.Cell
+	drawn  atomic.Int64 // frames flushed, read off the loop's goroutine
 }
 
 func (p *framePresentation) Name() string                  { return "frames" }
@@ -103,6 +105,7 @@ func (p *framePresentation) ColorMode() terminal.ColorMode { return terminal.Col
 func (p *framePresentation) Sync()                         {}
 func (p *framePresentation) Flush(cells []terminal.Cell, _, _ int) {
 	p.frames = append(p.frames, slices.Clone(cells))
+	p.drawn.Add(1)
 }
 
 // TestAJoinerDrawsNoWorldBeforeItsSessions: a joiner builds its world on the map its
@@ -468,10 +471,63 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 // awayScreen is a framePresentation its player can leave, as Android's view is
 type awayScreen struct {
 	framePresentation
-	away chan bool
+	away   chan bool
+	events chan terminal.Event
 }
 
-func (s *awayScreen) Away() <-chan bool { return s.away }
+func (s *awayScreen) Away() <-chan bool             { return s.away }
+func (s *awayScreen) Events() <-chan terminal.Event { return s.events }
+
+// TestAPausedRunItsPlayerLeftDrawsNothingUntilTheyReturn: the loop draws one frame
+// of the world as its player left it, then none while they are away and the run
+// stands paused, and draws again when they return.
+func TestAPausedRunItsPlayerLeftDrawsNothingUntilTheyReturn(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	screen := &awayScreen{framePresentation: framePresentation{w: 80, h: 24},
+		away: make(chan bool, 1), events: make(chan terminal.Event, 1)}
+	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5746,
+		Host: Host{Presentation: screen}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	done := make(chan error, 1)
+	go func() {
+		_, err := a.Loop()
+		done <- err
+	}()
+	drawnPast := func(n int64, what string) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); screen.drawn.Load() <= n; { // [wall] a bound
+			if time.Now().After(deadline) {
+				t.Fatalf("no frame drawn %s", what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	drawnPast(0, "at the start")
+
+	screen.away <- true
+	time.Sleep(200 * time.Millisecond) // the frame of the world as left, and any tick already due
+	before := screen.drawn.Load()
+	time.Sleep(400 * time.Millisecond)
+	if n := screen.drawn.Load(); n != before || !a.ctx.TimeCtl.IsPaused() {
+		t.Fatalf("drew %d frames while away, paused %v; want none of a paused run", n-before, a.ctx.TimeCtl.IsPaused())
+	}
+
+	screen.away <- false
+	drawnPast(before, "once the player came back")
+
+	screen.events <- terminal.Event{Type: terminal.EventClosed}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the loop did not end on the closed event")
+	}
+}
 
 // TestAWaitingGameStartsOverAtTheScreensNewSize: a player away before the clock
 // starts, as behind Android's start screen, finds the game waiting at its first
@@ -501,7 +557,7 @@ func TestAWaitingGameStartsOverAtTheScreensNewSize(t *testing.T) {
 		return at
 	}
 
-	screen := &awayScreen{framePresentation{w: pw, h: ph}, make(chan bool, 1)}
+	screen := &awayScreen{framePresentation: framePresentation{w: pw, h: ph}, away: make(chan bool, 1)}
 	a := open(screen)
 	screen.away <- true
 	a.holdFirstGame(screen.away)

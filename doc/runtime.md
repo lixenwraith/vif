@@ -379,8 +379,15 @@ only clock.
 | Render frame | 16.7 ms (a third of a tick, no faster than 120 a second) | main goroutine | Snapshot frame state, render, flush, and release the next simulation tick. |
 | Input tick | 16 ms | main goroutine | Reconcile the presentation's pointer mode, open the command line after a breakpoint hit, repeat held/automatic fire, and advance macros. |
 | Simulation tick | 50 ms (`-tick`, 10 to 100 ms) | scheduler goroutine | Advance pause-aware game time, FSM, systems, APM, and telemetry. |
-| Event attempt | 4 ms | event goroutine | Settle queued events between simulation ticks, including while paused. |
+| Event settle | on a push; a lock miss retries in 4 ms | event goroutine | Settle queued events between simulation ticks, including while paused. |
 | Audio buffer | 50 ms | audio mixer goroutine | Drain audio commands, synthesize/mix the next PCM buffer, and write it. |
+
+A paused run its player left (Android's background, the page's start screen)
+sleeps: the loop draws one frame of the world as they left it, then stops its frame
+and input ticks until they return or a tick runs, which something else unpausing
+it shows (a joiner admitted to a seats-only session); the event goroutine sleeps
+whenever the queue is empty, and Android's render thread stops asking for frames
+once it has painted the last one flushed.
 
 The tick is the run's, fixed for its life (`World.TickInterval`): a host
 chooses it with `-tick`, a joiner adopts it from the offer, a journal records it and
@@ -784,11 +791,12 @@ The event goroutine exists only where `Scheduler.Start` runs: `ModePlay` and
 `ModeServer`. Driven Apps use `Tick` and `Settle` on the caller goroutine and
 therefore do not need the `TryLock` backoff path.
 
-On each event-loop interval:
+The event goroutine sleeps on the queue's wake (`EventQueue.Wake`, which every
+publish raises) while the queue is empty. Woken:
 
-- an empty approximate queue length avoids lock contention;
 - `World.TryLock` handles short idle windows cheaply;
-- a miss increments backoff telemetry;
+- a miss increments backoff telemetry and retries after `EventLoopInterval` (4 ms),
+  as does a settle its pass cap stopped;
 - after a configured number of misses, the event loop takes a blocking lock to
   guarantee progress after a long tick or render pass;
 - one whole settle runs, then the lock is released. A single pass would split a
@@ -864,7 +872,8 @@ scheduler's pause gate. It does not freeze the whole process:
 
 - terminal input and signals still arrive;
 - the event loop still dispatches queued events;
-- the pause/overlay frame still renders using wall-clock time;
+- the pause/overlay frame still renders using wall-clock time, unless the player
+  is away, when the loop sleeps after one frame (§3);
 - mouse reporting state can still be reconciled;
 - gameplay pointer input, auto-fire, and macros are withheld while input is
   suspended;

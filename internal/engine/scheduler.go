@@ -897,47 +897,46 @@ func drainTimer(t *time.Timer) {
 }
 
 // eventLoop settles queued events between ticks, pause or not, a whole settle at a
-// time so a journal's groups never interleave by wall time. Consume is
-// single-consumer, so it runs under the world lock: tried first, since short holds
-// are cheaper to skip, and blocking after EventLoopBackoffMax misses, so a long
-// hold cannot keep back what was pushed outside a tick.
+// time so a journal's groups never interleave by wall time, sleeping on the queue's
+// wake while it is empty. Consume is single-consumer, so it runs under the world
+// lock: tried first, since short holds are cheaper to skip, retried an interval on,
+// and blocking after EventLoopBackoffMax misses, so a long hold cannot keep back
+// what was pushed outside a tick.
 func (s *Scheduler) eventLoop() {
 	defer s.wg.Done()
 
-	ticker := time.NewTicker(s.eventLoopInterval)
-	defer ticker.Stop()
+	queue := s.world.Resources.Event.Queue
+	retry := stoppedTimer() // armed only while a miss or a pass cap defers a settle
+	defer retry.Stop()
 
 	backoffCount := 0
 	var pendingBackoffs int64
 	var pendingRun uint64
 
 	for {
-		select {
-		case <-s.stopChan:
-			return
-
-		case <-ticker.C:
-			// Skip if queue empty (prevents busy-wait contention)
-			if s.world.Resources.Event.Queue.Len() == 0 {
-				backoffCount = 0
-				continue
+		if queue.Len() == 0 {
+			backoffCount = 0
+			select {
+			case <-s.stopChan:
+				return
+			case <-queue.Wake():
 			}
+			continue
+		}
 
-			// Attempt non-blocking lock
-			if s.world.TryLock() {
-				if pendingBackoffs != 0 && pendingRun == s.world.Resources.Event.Queue.Stamp().Run {
-					s.evBackoffs += pendingBackoffs
-				}
-				pendingBackoffs = 0
-				s.settleLocked("loop")
-				s.world.Unlock()
-				backoffCount = 0
-				continue
+		// Attempt non-blocking lock
+		if s.world.TryLock() {
+			if pendingBackoffs != 0 && pendingRun == queue.Stamp().Run {
+				s.evBackoffs += pendingBackoffs
 			}
-
+			pendingBackoffs = 0
+			s.settleLocked("loop")
+			s.world.Unlock()
+			backoffCount = 0
+		} else {
 			// Backoff tracking
 			backoffCount++
-			run := s.world.Resources.Event.Queue.Stamp().Run
+			run := queue.Stamp().Run
 			if pendingBackoffs == 0 || pendingRun == run {
 				pendingBackoffs++
 			} else {
@@ -952,7 +951,7 @@ func (s *Scheduler) eventLoop() {
 					return
 				}
 				s.world.Lock()
-				if pendingRun == s.world.Resources.Event.Queue.Stamp().Run {
+				if pendingRun == queue.Stamp().Run {
 					s.evBackoffs += pendingBackoffs
 				}
 				pendingBackoffs = 0
@@ -960,6 +959,16 @@ func (s *Scheduler) eventLoop() {
 				s.world.Unlock()
 				backoffCount = 0
 			}
+		}
+		if queue.Len() == 0 {
+			continue
+		}
+		// A miss, or a settle its pass cap stopped: the next attempt waits an interval
+		retry.Reset(s.eventLoopInterval)
+		select {
+		case <-s.stopChan:
+			return
+		case <-retry.C:
 		}
 	}
 }

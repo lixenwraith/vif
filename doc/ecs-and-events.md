@@ -435,7 +435,7 @@ reset and harness settles use the same loop; a reset holds the last game's
 machine out of the settle that unpauses it. The closing settle makes an outcome
 a system applies through a queued event part of the tick that decided it on
 every reader, and a reset any of these settles dispatches ends the tick there.
-The independent 4 ms event loop settles what was pushed outside a tick, such as
+The independent event loop, woken by each push, settles what was pushed outside a tick, such as
 the session layer's records, between 50 ms game ticks.
 
 ### Replay capture

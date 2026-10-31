@@ -26,6 +26,7 @@ type EventQueue struct {
 	journal     atomic.Pointer[Journal] // nil = journaling off
 	wire        atomic.Pointer[wireHolder]
 	stamp       atomic.Pointer[Stamp] // record position; advanced under the world lock
+	wake        chan struct{}         // raised by every publish; a consumer sleeps on it
 
 	// consumeBuf is what Consume returns, reused: one consumer, and a pass's slice
 	// is dead by the next call.
@@ -36,9 +37,20 @@ type EventQueue struct {
 type wireHolder struct{ sink WireSink }
 
 func NewEventQueue() *EventQueue {
-	eq := &EventQueue{}
+	eq := &EventQueue{wake: make(chan struct{}, 1)}
 	eq.stamp.Store(&Stamp{})
 	return eq
+}
+
+// Wake fires when an event is published, so a consumer sleeps on it rather than
+// polling and reads the queue after each; a pending wake absorbs repeats.
+func (eq *EventQueue) Wake() <-chan struct{} { return eq.wake }
+
+func (eq *EventQueue) signal() {
+	select {
+	case eq.wake <- struct{}{}:
+	default:
+	}
 }
 
 // Push adds event using lock-free CAS with published flags pattern
@@ -91,6 +103,7 @@ func (eq *EventQueue) publish(event GameEvent) {
 
 			eq.events[idx] = event
 			eq.published[idx].Store(true) // MUST be after write
+			eq.signal()
 
 			// Advance head if overwriting unread events
 			currentHead := eq.head.Load()
@@ -377,6 +390,9 @@ func (eq *EventQueue) CopyIn(c QueueCopy) {
 	}
 	st := c.stamp
 	eq.stamp.Store(&st)
+	if len(c.pending) > 0 {
+		eq.signal()
+	}
 }
 
 // ClonePayload returns a payload sharing no storage with p: a queued one may be
