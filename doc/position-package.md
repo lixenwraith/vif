@@ -49,8 +49,9 @@ In `pkg/position`:
 
 The terms, the package's and the game's:
 
-- A *block* is a cell an occupant blocks for a mask: in the game a *wall*, the
-  entity with a `WallComponent`, whose `BlockMask` is the mask. `Blocks`,
+- A *block* is a cell an occupant blocks for a mask, the kinds `blockOf` names:
+  in the game a *wall*, the entity with a `WallComponent`, its kinds the movers
+  its `BlockMask` stops and the box style it draws in. `Blocks`,
   `BlocksArea`, `BlockBits` answer; `BlockChangedAt`, `BlocksChanged`,
   `BlockChanges` keep the planes and the log, and the game asks by those names
   through `World.Positions`. The binding keeps `WallChanged`, which finds a wall's
@@ -178,8 +179,7 @@ Each names the choice taken and what the other would have cost.
    and the benches measured before and after. Done.
 2b. Navigation over the planes' words: `CompositePassability` derived a row of
    words at a time, the lost log's re-read diffed by XOR, the search grids filled
-   from bits. Done. The route solver and the flow fields still ask a cell at a time
-   through `WallChecker`.
+   from bits. Done.
 3. The call sites: readers take the package's names (`position.ScopeAll`,
    `position.Pattern`, `Blocks`, `EntitiesAt`), the binding narrows to what the
    rows, the components and the rock need, the index promoted through
@@ -199,6 +199,10 @@ Each names the choice taken and what the other would have cost.
 5. Batch skips: the presence bits, a class each, kept as cells fill and empty, so
    a probe passes an empty cell on a word and a scan passes empty cells a word at
    a time. Done, measured in §5.
+6. The readers that paid a cell: the box-drawing neighbour test reads the plane of
+   its style, a kind the engine reports beside the mask, and the route solver and
+   the flow fields fill their grids from the bits, the cell-at-a-time checker gone.
+   Done, measured in §5.
 
 ## 4. The third axis
 
