@@ -337,23 +337,47 @@ self-signed door only by being told to: pinning from a page needs WebTransport's
 ### Fetch a content-addressed bundle over HTTP
 
 - Priority: P1
-- Affected files: `internal/resource`, browser resource provider
-- Prerequisite: decide publisher trust, allowed origins, and cache policy; the
-  format and the limits are `resource.Scenario`'s and are already decided
+- Affected files: `internal/resource`, `cmd/vif/browser.go`, `pkg/browser`,
+  `web/terminal.js`, `web/worker.js`, `Makefile` (`wasm`); on the site, `make vif`,
+  `make compress` and `_partials/apps/publish.html`
+- Prerequisite: the decisions in the last paragraph
 
-Two of the three routes to content exist. A native player downloads the release
-wad and extracts it as a config root; a guest joining a session is served the
-coordinator's scenario and verifies its digest before constructing its `App`. The
-corpus needs neither: it is player domain, resolved per instance and never
-reconciled, so a peer holding a different one is not a disagreement to settle.
+The page plays the embedded `main` alone: a guest is served its coordinator's
+scenario and a native player unpacks the wad, but nothing reaches a client with no
+config root and no peer, so `wad/scenario/` is out of the site's solo Play. The
+corpus needs no route, being player domain. A URL cannot carry one: the launcher
+takes 1,024 characters an argument, `vanguard` deflates to about 13 KB, and a query
+is logged and kept in history
+([Multi-platform §6](multi-platform.md#6-browser-launch-arguments)).
 
-The third route is a client with no config root and no peer — a WASM build before
-it has joined anything, which has no roots at all. An HTTP-backed provider reading
-the same content-addressed container is what [Multi-platform](multi-platform.md)
-anticipates, and it is one provider for both the browser case and a native player
-who would rather fetch a scenario than unpack one. What it needs before it is
-written is whose signature makes bytes trustworthy, which origins may serve them,
-and how long a fetched container is kept.
+The container is decided: `resource.Scenario`'s canonical form, one file a
+scenario, its SHA-256 the digest a session names. The plan, same origin only:
+
+1. `make wasm` has `vif` write `web/scenario/<name>.vifscen`, each scenario's
+   `Marshal`, uncompressed so the file's SHA-256 is its digest (the site gzips it
+   as it does the binary), and `index.json` beside them: name, description,
+   players, fixed map, digest. The bytes are then the ones a coordinator sends.
+2. The site publishes each under its content hash, which is that digest (`make
+   vif` refuses a mismatch), and the index under its own, named to the launcher
+   as `data-scenarios`, as `data-wasm` names the binary.
+3. An HTTP provider in `internal/resource`, on the `net/http` `pkg/network`
+   already links (fetch in a page), reads the index, fetches a file, holds it to
+   `UnmarshalScenario`'s bounds and the index's digest, and hands it on as
+   `Options.Provided`. The page's `-s` (`?arg=-s=td`) resolves through it, the
+   menu's Game page lists the index, and a hosting page
+   ([Publish a player's session](#publish-a-players-session-at-the-router)) offers
+   any listed scenario.
+
+Served from the binary's own origin, a scenario adds no trust root, and the page's
+CSP (`connect-src 'self'`) already admits the fetch. To decide: the extension, and
+how the site's edge caches and precompresses it (the site's `doc/nginx.md`); every
+`wad/scenario/` or only those a scenario marks for publishing; where the site
+offers them (a picker by the lobby's Play solo, links per scenario); a visitor's
+own scenario, picked or dropped on the start screen or carried in a link's
+fragment, which no server sees (about 17 KB for `vanguard`), and whether one from
+a stranger may run; a native `-s https://…`, which needs an index at a fixed path,
+and from another origin a publisher's signature; any cache by digest beyond
+HTTP's own.
 
 ### Launch the page and Android without their start screen
 
