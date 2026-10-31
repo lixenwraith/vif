@@ -134,10 +134,10 @@ lines = [
 [[blocks]]
 id = "auto-fire"
 lines = [
-  "auto fire starts on both weapons",
-  "a cycles it: both, off, main only",
+  "a cycles auto fire: both, off, main",
   ":auto off and :auto main pick one",
   "manual fire works in every state",
+  "the next run keeps your choice",
 ]
 
 [[blocks]]
@@ -174,7 +174,7 @@ lines = [
   "hold it down to keep on firing",
   "a right click fires the special",
   "the wheel moves you without a shot",
-  "the cursor trails the mouse till :free",
+  ":free toggles follow mouse",
 ]
 
 [[blocks]]
