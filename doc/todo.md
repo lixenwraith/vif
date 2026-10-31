@@ -1346,7 +1346,7 @@ loaders expand, which moves with it or into `lixenwraith/toml`.
 - Priority: P2
 - Affected files: `pkg/genetic`, `pkg/genetic/registry`, `pkg/genetic/fitness`,
   `pkg/genetic/tracking`, `pkg/genetic/persistence`, `sandbox/genetic`,
-  `sandbox/life`, `internal/system/genetic.go`, `internal/engine/resource.go`,
+  `internal/system/genetic.go`, `internal/engine/resource.go`,
   `internal/parameter/genetic.go`, `go.mod`
 
 The audit's items have landed: the pending table probes a window, selectors
@@ -1356,11 +1356,11 @@ and context keys left `fitness` and `tracking`, and `persistence` defaults to
 JSON, so nothing under `pkg/genetic` imports anything outside the standard
 library. What remains is the move itself: a `lixenwraith/genetic` repository
 with the five packages at its root (`genetic`, `genetic/registry`, ...), the
-two sandboxes as its `examples/`, the package README as its README with import
+lander sandbox as its `examples/`, the package README as its README with import
 paths rewritten, the repository LICENSE, and a `go.mod` at the Go version this
 module builds with; then this module's four importers take the new path and
-`go.mod` requires it. The sandboxes' `-headless` tables and `go test ./...`
-are the check on both sides.
+`go.mod` requires it. The sandbox's `-headless` table and `go test ./...` are
+the check on both sides.
 
 ## Engine
 
