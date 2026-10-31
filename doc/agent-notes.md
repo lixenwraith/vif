@@ -331,6 +331,13 @@ that proves wrong or that a document now states, and link the document instead.
   (vanguard's U within two kills), and counts a kill's drops as the loot new since
   it, since earlier drops may still be flying (`internal/app/vanguard_test.go`).
 
+## Corpus
+
+- `vif -d -check` parses the embedded corpus and prints its block and line counts,
+  the quick test of an edit to `internal/asset/content/tutorial.toml`. A line wider
+  than the map is cropped (`GlyphSystem.placeLine`), so the tutorial's stay under
+  40 columns.
+
 ## Words
 
 - Materialize names the materialize effect alone; a teleport's or a charge's line is
