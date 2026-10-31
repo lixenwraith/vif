@@ -26,17 +26,22 @@ import android.widget.TextView;
  * same screen (web/index.html); both wear lixen.com's dark theme in Roboto.
  */
 final class StartScreen extends FrameLayout {
-    // The touch controls as web/index.html words them; Back is each platform's own
+    // The touch controls as web/index.html words them; Back is each platform's own.
+    // The status bar's come last under their own title, which says where the bar is
     private static final String[][] CONTROLS = {
             {"Tap", "Move the cursor there and fire the main weapon; hold to repeat"},
             {"Drag", "Drag the cursor with your finger"},
             {"Double tap", "Fire the special weapon as well"},
-            {"Hold the status bar", "Open the configuration menu: audio, bots, multiplayer and more"},
-            {"Triple tap the status bar", "Show or hide the keyboard, to type commands such as :help"},
             {"Pinch", "Zoom in or out; the zoom is kept for next time"},
             {"Back", "Escape; twice quickly, leave with the game paused"},
     };
-    private static final String KEYBOARD = "With a keyboard, F1 or :help lists every key and command, and :q quits.";
+    private static final String BAR_TITLE = "Status bar";
+    private static final String BAR = "The strip along the bottom edge of the screen: the mode, messages and what you type.";
+    private static final String[][] BAR_CONTROLS = {
+            {"Tap and hold", "Open the configuration menu: audio, bots, multiplayer and more"},
+            {"Triple tap", "Show or hide the keyboard, to type commands such as :help"},
+    };
+    private static final String KEYBOARD = "With a keyboard, F1 or the command :help lists every key and command, and the command :q quits.";
     // The site's surface, hairline, muted text, the primary button's blue and the royal
     // blue it fills while pressed, the periwinkle a ring of that blue is labelled in and
     // its red, as web/terminal.css names them; its page is R.color.page, which the
@@ -137,14 +142,17 @@ final class StartScreen extends FrameLayout {
         LinearLayout rows = new LinearLayout(c);
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setPadding(dp(16), dp(4), dp(16), dp(16));
-        for (String[] control : CONTROLS) {
-            TextView gesture = text(control[0], 15, Color.WHITE);
-            gesture.setTypeface(MEDIUM);
-            rows.addView(gesture);
-            TextView does = text(control[1], 15, MUTED);
-            does.setPadding(dp(16), dp(2), 0, dp(14));
-            rows.addView(does);
-        }
+        controls(rows, CONTROLS);
+        TextView bar = text(BAR_TITLE, 12, ACCENT);
+        bar.setTypeface(MEDIUM);
+        bar.setAllCaps(true);
+        bar.setLetterSpacing(0.08f);
+        bar.setPadding(0, dp(8), 0, dp(4));
+        rows.addView(bar);
+        TextView where = text(BAR, 15, MUTED);
+        where.setPadding(0, 0, 0, dp(14));
+        rows.addView(where);
+        controls(rows, BAR_CONTROLS);
         TextView keyboard = text(KEYBOARD, 15, MUTED);
         keyboard.setPadding(0, dp(8), 0, 0);
         rows.addView(keyboard);
@@ -159,6 +167,17 @@ final class StartScreen extends FrameLayout {
         help.setVisibility(INVISIBLE);
         dialog.setOnDismissListener(d -> help.setVisibility(VISIBLE));
         dialog.show();
+    }
+
+    private void controls(LinearLayout rows, String[][] controls) {
+        for (String[] control : controls) {
+            TextView gesture = text(control[0], 15, Color.WHITE);
+            gesture.setTypeface(MEDIUM);
+            rows.addView(gesture);
+            TextView does = text(control[1], 15, MUTED);
+            does.setPadding(dp(16), dp(2), 0, dp(14));
+            rows.addView(does);
+        }
     }
 
     private TextView text(String s, float sp, int color) {
