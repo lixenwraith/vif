@@ -33,6 +33,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |
 | [Audio](audio.md) | Domain detail | How are sound effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
 | [Navigation](navigation-design.md) | Domain detail | How do flow fields, passability tiers, target groups, the snake lock, loot's pursuit and route graphs move species, and what does each cost? |
+| [Position](position-package.md) | Domain detail | What does `pkg/position` hold and how does `engine.Position` bind it: the cells, the blocks and surfaces as bit planes, the block log, the searches and the volume, and what did each choice cost? |
 | [AI, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Behavior machines](machine-design.md) | Domain detail | How does a species step its per-entity state machine, how does a behavior program define a species from data, and why this runtime rather than another? |
 | [Generic kinetic analysis](generic-kinetic.md) | Future design | Which kinetic paths exist, why one universal motion system is unsafe today, and how could they be consolidated incrementally? A design for future implementation. |

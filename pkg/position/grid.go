@@ -90,9 +90,10 @@ type Grid[E comparable] struct {
 	Height int
 	Depth  int
 
-	// occupied lists the cells holding an entity, in the order they filled, so a
-	// copy, a clear and the gauges read what the map holds rather than the map: the
-	// ceiling is 125,000 cells, 32 MB, which a scan touches whole.
+	// occupied lists the cells holding an entity, each knowing its slot, so a cell
+	// that empties is swapped out by the last in constant time and a copy, a clear
+	// and the gauges read what the map holds rather than the map: the ceiling is
+	// 125,000 cells, 32 MB, which a scan touches whole.
 	occupied []int32
 
 	// present marks the cells holding an entity of each class, a bit a cell, the

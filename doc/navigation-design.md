@@ -306,7 +306,7 @@ the line and accepted turned 90° that preceded it called 71% and 78% of chase
 ticks direct with 1.6% and 1.2% of those blocked for the body as it stands; the
 body flown as it is calls 73% and 79% direct with 0.3% and 0.1% blocked, the
 rest the body's motion within the tick after navigation decided
-([Position package §5](position-package.md#5-measurements)).
+([Position §5](position-package.md#5-costs)).
 
 Over nine such games at 120×40 and 200×60 for each refresh of 1, 4, 6, 10 and
 1,000, the raiders' contacts, charges, teleports, kills and wall hits, the share of
