@@ -159,15 +159,13 @@ func (f *FlowField) GetDistance(x, y int) int {
 	return d
 }
 
-// WallChecker is a function that returns true if cell blocks navigation
-type WallChecker func(x, y int) bool
-
 const maxSearchRadius = 8
 
 // Compute performs weighted Dijkstra from all target points across the entire
-// valid field, reading the walls into the field's own grid.
-func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
-	f.search.Fill(f.Width, f.Height, isBlocked)
+// valid field, reading blocked, a grid of bits set where a cell is impassable,
+// into the field's own grid.
+func (f *FlowField) Compute(targets []vmath.Point, blocked position.Bits) {
+	f.search.Fill(f.Width, f.Height, blocked)
 	f.ComputeOn(&f.search, targets)
 }
 
@@ -328,25 +326,10 @@ type SearchGrid struct {
 	mark    uint32
 }
 
-// Fill reads the passability of a w×h field and the directions open from each
-// cell: into a passable cell, and along a diagonal only past both corners beside it.
-func (g *SearchGrid) Fill(w, h int, isBlocked WallChecker) {
-	pw := w + 2
-	g.free = grow(g.free, pw*(h+2))
-	clear(g.free)
-	for y := range h {
-		row := g.free[(y+1)*pw+1 : (y+1)*pw+1+w]
-		for x := range row {
-			if !isBlocked(x, y) {
-				row[x] = 1
-			}
-		}
-	}
-	g.finish(w, h)
-}
-
-// FillBlocked is Fill from a grid of bits, set where a cell is impassable.
-func (g *SearchGrid) FillBlocked(w, h int, blocked position.Bits) {
+// Fill reads the passability of a w×h field from blocked, a grid of bits set
+// where a cell is impassable, and the directions open from each cell: into a
+// passable cell, and along a diagonal only past both corners beside it.
+func (g *SearchGrid) Fill(w, h int, blocked position.Bits) {
 	pw := w + 2
 	g.free = grow(g.free, pw*(h+2))
 	clear(g.free)

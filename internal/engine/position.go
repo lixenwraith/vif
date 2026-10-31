@@ -60,13 +60,14 @@ func NewPosition(w *World, bit uint64) *Position {
 // Aspect is the cell aspect the searches round on, the config's.
 func (p *Position) Aspect() vmath.Aspect { return p.world.Resources.Config.CellAspect }
 
-// wallOf reports whether shared occupant e is a wall, and what it stops
+// wallOf reports whether shared occupant e is a wall, and its kinds: the movers it
+// stops and the box style it draws in
 func (p *Position) wallOf(e core.Entity) (component.WallBlockMask, bool) {
 	wall, ok := p.world.Components.Wall.GetPtr(e)
 	if !ok {
 		return 0, false
 	}
-	return wall.BlockMask, true
+	return wall.BlockMask&component.WallBlockAll | component.BoxKind(wall.BoxStyle), true
 }
 
 // BindTelemetry registers spatial diagnostics after GameContext creates the registry.

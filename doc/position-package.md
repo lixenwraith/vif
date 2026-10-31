@@ -49,8 +49,9 @@ In `pkg/position`:
 
 The terms, the package's and the game's:
 
-- A *block* is a cell an occupant blocks for a mask: in the game a *wall*, the
-  entity with a `WallComponent`, whose `BlockMask` is the mask. `Blocks`,
+- A *block* is a cell an occupant blocks for a mask, the kinds `blockOf` names:
+  in the game a *wall*, the entity with a `WallComponent`, its kinds the movers
+  its `BlockMask` stops and the box style it draws in. `Blocks`,
   `BlocksArea`, `BlockBits` answer; `BlockChangedAt`, `BlocksChanged`,
   `BlockChanges` keep the planes and the log, and the game asks by those names
   through `World.Positions`. The binding keeps `WallChanged`, which finds a wall's
@@ -178,8 +179,7 @@ Each names the choice taken and what the other would have cost.
    and the benches measured before and after. Done.
 2b. Navigation over the planes' words: `CompositePassability` derived a row of
    words at a time, the lost log's re-read diffed by XOR, the search grids filled
-   from bits. Done. The route solver and the flow fields still ask a cell at a time
-   through `WallChecker`.
+   from bits. Done.
 3. The call sites: readers take the package's names (`position.ScopeAll`,
    `position.Pattern`, `Blocks`, `EntitiesAt`), the binding narrows to what the
    rows, the components and the rock need, the index promoted through
@@ -199,6 +199,10 @@ Each names the choice taken and what the other would have cost.
 5. Batch skips: the presence bits, a class each, kept as cells fill and empty, so
    a probe passes an empty cell on a word and a scan passes empty cells a word at
    a time. Done, measured in §5.
+6. The readers that paid a cell: the box-drawing neighbour test reads the plane of
+   its style, a kind the engine reports beside the mask, and the route solver and
+   the flow fields fill their grids from the bits, the cell-at-a-time checker gone.
+   Done, measured in §5.
 
 ## 4. The third axis
 
@@ -547,3 +551,41 @@ blocked ticks left are the body's own motion within the tick after navigation
 decided, the rock stepping a column every tick. `BenchmarkCaveNavigation` reads
 its sighted share at 200×60 up from 0.80 to 0.86 far and 0.92 to 0.94 near, its
 cost inside the band.
+
+Iteration 8, the readers that paid a cell, main at iteration 7 against the
+branch, alternated five times, the same bench files on both, main's route graph
+bench passing its walls as the checker it took. td's tick with sixteen cursors,
+ms a tick:
+
+```
+main      0.28  0.30  0.28  0.31  0.27   median 0.28
+branch    0.32  0.32  0.29  0.27  0.27   median 0.29
+```
+
+The benches, medians of ns/op:
+
+```
+                                   main    branch   change
+MazeSpawn/200x60                4241602   3925575    -7.5%
+MazeSpawn/400x120              24526186  20064131   -18.2%
+MazeSpawn/500x254              90428782  80703271   -10.8%
+RouteGraph                      5521642   5330685    -3.5%
+CaveStepNavigation/200x60        27874     28694    +2.9%
+CaveStepNavigation/400x120       55700     54360    -2.4%
+CaveStepNavigation/500x254       69546     68279    -1.8%
+CaveNavigation/200x60/near       68730     68095    -0.9%
+CaveNavigation/200x60/far       108687    101969    -6.2%
+CaveNavigation/400x120/near      85832     84719    -1.3%
+CaveNavigation/400x120/far      134487    128676    -4.3%
+CaveNavigation/500x254/near     104035    106494    +2.4%
+CaveNavigation/500x254/far      170755    173057    +1.3%
+NavigationWallMoves/200x60        3945      3858    -2.2%
+NavigationWallMoves/400x120       4032      3891    -3.5%
+NavigationWallMoves/500x254       3994      3954    -1.0%
+```
+
+The maze, some 3,700 box-drawn walls at 200×60 laid and taken down whole, reads
+a tenth to a fifth under main, each neighbour probe a bit where it copied a cell
+and looked every occupant's wall up; the route graph, whose fill is a small
+share of its Dijkstra, a thirtieth. td's tick does not move: its maze is laid
+once, and the storms that take walls down draw no box characters.

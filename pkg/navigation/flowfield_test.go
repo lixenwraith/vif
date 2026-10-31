@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -61,7 +62,22 @@ func (h *minHeap) pop() heapEntry {
 // referenceCompute is Compute as it stood before its wall answers were memoized
 // and its heap became a bucket queue: every neighbour and both corners of every
 // diagonal asked of isBlocked directly.
-func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked WallChecker) {
+type wallChecker func(x, y int) bool
+
+// bitsOf is blocked as the grid of bits the package reads, within w×h
+func bitsOf(w, h int, blocked wallChecker) position.Bits {
+	b := position.NewBits(w, h)
+	for y := range h {
+		for x := range w {
+			if blocked(x, y) {
+				b.Set(x, y)
+			}
+		}
+	}
+	return b
+}
+
+func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked wallChecker) {
 	if len(targets) == 0 {
 		f.Valid = false
 		return
@@ -124,7 +140,7 @@ func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked WallChecker
 }
 
 // referenceSeed is seedVirtualTargets onto a heap
-func referenceSeed(f *FlowField, heap *minHeap, tx, ty int, isBlocked WallChecker) {
+func referenceSeed(f *FlowField, heap *minHeap, tx, ty int, isBlocked wallChecker) {
 	for radius := 1; radius <= maxSearchRadius; radius++ {
 		found := false
 		for dy := -radius; dy <= radius; dy++ {
@@ -150,7 +166,7 @@ func referenceSeed(f *FlowField, heap *minHeap, tx, ty int, isBlocked WallChecke
 
 // shortestStep reports whether a direction at (x, y) leads to a neighbour the
 // field may step to whose distance plus the step's cost is the cell's own.
-func shortestStep(f *FlowField, x, y int, isBlocked WallChecker) bool {
+func shortestStep(f *FlowField, x, y int, isBlocked wallChecker) bool {
 	d := f.GetDirection(x, y)
 	if d == DirTarget || d == DirNone {
 		return true
@@ -212,7 +228,7 @@ func FuzzComputeMatchesReference(f *testing.F) {
 			}
 			want := NewFlowField(w, h)
 			referenceCompute(want, goals, isBlocked)
-			got.Compute(goals, isBlocked)
+			got.Compute(goals, bitsOf(w, h, isBlocked))
 			if got.Valid != want.Valid {
 				t.Fatalf("round %d: valid %t, reference %t", round, got.Valid, want.Valid)
 			}
@@ -270,12 +286,12 @@ func FuzzReachMeasuresWhatTheFieldsRead(f *testing.F) {
 					}
 				}
 			}
-			g.Fill(w, h, isBlocked)
+			g.Fill(w, h, bitsOf(w, h, isBlocked))
 			from := vmath.Point{X: rng.IntN(w), Y: rng.IntN(h)}
 			r.Measure(g, &refCosts, from.X, from.Y, goals, got)
 			for j, goal := range goals {
 				field := NewFlowField(w, h)
-				field.Compute([]vmath.Point{goal}, isBlocked)
+				field.Compute([]vmath.Point{goal}, bitsOf(w, h, isBlocked))
 				want := field.GetDistance(from.X, from.Y)
 				if want < 0 {
 					want = CostUnreachable
@@ -324,7 +340,7 @@ func FuzzOpenedRepairsAsARecomputeWould(f *testing.F) {
 			goals[i] = vmath.Point{X: rng.IntN(w+2) - 1, Y: rng.IntN(h+2) - 1}
 		}
 		g := new(SearchGrid)
-		g.Fill(w, h, isBlocked)
+		g.Fill(w, h, bitsOf(w, h, isBlocked))
 		field := NewFlowField(w, h)
 		field.ComputeOn(g, goals)
 		if !field.Valid {
@@ -342,7 +358,7 @@ func FuzzOpenedRepairsAsARecomputeWould(f *testing.F) {
 		}
 		g.Move(nil, opened)
 		fresh := new(SearchGrid)
-		fresh.Fill(w, h, isBlocked)
+		fresh.Fill(w, h, bitsOf(w, h, isBlocked))
 		if !slices.Equal(g.open, fresh.open) || !slices.Equal(g.free, fresh.free) {
 			t.Fatal("a moved grid differs from one filled whole")
 		}
@@ -377,7 +393,7 @@ func TestCacheRefreshesSmallTargetMovesAndChangedWalls(t *testing.T) {
 	walls := make([]bool, 48)
 	blocked := func(x, y int) bool { return walls[y*8+x] }
 	g := new(SearchGrid)
-	g.Fill(8, 6, blocked)
+	g.Fill(8, 6, bitsOf(8, 6, blocked))
 	goal := []vmath.Point{{X: 1, Y: 1}}
 	c.Update(goal, g)
 	goal[0].X++
@@ -412,7 +428,7 @@ func TestALazyCacheKeepsTheEagerPhase(t *testing.T) {
 	}
 	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= 30 || y >= 12 || walls[y*30+x] }
 	g := new(SearchGrid)
-	g.Fill(30, 12, blocked)
+	g.Fill(30, 12, bitsOf(30, 12, blocked))
 	eager, lazy := NewFlowFieldCache(30, 12, 3, 4, 8), NewFlowFieldCache(30, 12, 3, 4, 8)
 	lazy.Lazy = true
 	goal := []vmath.Point{{X: 15, Y: 6}}
@@ -481,7 +497,7 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 
 		sc := new(routeScratch)
 		sc.grow(w * h)
-		sc.search.Fill(w, h, isBlocked)
+		sc.search.Fill(w, h, bitsOf(w, h, isBlocked))
 		path, cost := sc.penalizedShortestPath(start, goal, w, penalty, &refCosts)
 		if path == nil {
 			if want[goal] != CostUnreachable {
@@ -545,10 +561,10 @@ func TestASolverReusedAcrossGraphsComputesEachAfresh(t *testing.T) {
 	}
 	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
 
-	fresh := ComputeRouteGraph(1, 1, 38, 22, w, h, Point, blocked)
+	fresh := ComputeRouteGraph(1, 1, 38, 22, w, h, Point, bitsOf(w, h, blocked))
 	rs := new(RouteSolver)
-	rs.Compute(20, 12, 1, 1, w, h, Point, blocked)
-	reused := rs.Compute(1, 1, 38, 22, w, h, Point, blocked)
+	rs.Compute(20, 12, 1, 1, w, h, Point, bitsOf(w, h, blocked))
+	reused := rs.Compute(1, 1, 38, 22, w, h, Point, bitsOf(w, h, blocked))
 	if fresh == nil || reused == nil || len(fresh.Routes) != len(reused.Routes) {
 		t.Fatalf("fresh %v, reused %v", fresh, reused)
 	}
@@ -584,7 +600,7 @@ func TestACorridorFieldIsTheFieldConfinedToItsCorridor(t *testing.T) {
 		walls[i*w+1], walls[i*w+58] = false, false
 	}
 	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
-	rg := ComputeRouteGraph(1, 1, 58, 15, w, h, Point, blocked)
+	rg := ComputeRouteGraph(1, 1, 58, 15, w, h, Point, bitsOf(w, h, blocked))
 	if rg == nil || len(rg.Routes) < 2 {
 		t.Fatalf("graph %v has too few routes to compare", rg)
 	}
@@ -610,9 +626,9 @@ func TestACorridorFieldIsTheFieldConfinedToItsCorridor(t *testing.T) {
 			}
 		}
 		want := NewFlowField(w, h)
-		want.Compute([]vmath.Point{{X: rg.TargetX, Y: rg.TargetY}}, func(x, y int) bool {
+		want.Compute([]vmath.Point{{X: rg.TargetX, Y: rg.TargetY}}, bitsOf(w, h, func(x, y int) bool {
 			return blocked(x, y) || !corridor[y*w+x]
-		})
+		}))
 		for y := range h {
 			for x := range w {
 				if route.Field.GetDistance(x, y) != want.GetDistance(x, y) || route.Field.GetDirection(x, y) != want.GetDirection(x, y) {
@@ -632,7 +648,7 @@ func TestAResetCacheIsANewCache(t *testing.T) {
 	walls[2*8+3] = true
 	blocked := func(x, y int) bool { return x < 0 || y < 0 || x >= 8 || y >= 6 || walls[y*8+x] }
 	g := new(SearchGrid)
-	g.Fill(8, 6, blocked)
+	g.Fill(8, 6, bitsOf(8, 6, blocked))
 	used := NewFlowFieldCache(8, 6, 3, 4, 6)
 	used.Lazy = true
 	goal := []vmath.Point{{X: 1, Y: 1}}
@@ -659,6 +675,31 @@ func TestAResetCacheIsANewCache(t *testing.T) {
 	for i := range 48 {
 		if x, y := i%8, i/8; used.GetDistance(x, y) != fresh.GetDistance(x, y) {
 			t.Fatalf("distance at (%d,%d) is %d, fresh %d", x, y, used.GetDistance(x, y), fresh.GetDistance(x, y))
+		}
+	}
+}
+
+// BenchmarkRouteGraph is a route graph computed over a 200×60 map a fifth walls,
+// its search grid filled from the bits each time
+func BenchmarkRouteGraph(b *testing.B) {
+	const w, h = 200, 60
+	rng := rand.New(rand.NewPCG(3, 5))
+	walls := make([]bool, w*h)
+	for i := range walls {
+		walls[i] = rng.IntN(5) == 0
+	}
+	for i := range w { // open rows and columns keep the ends reachable
+		walls[1*w+i], walls[(h-2)*w+i] = false, false
+	}
+	for i := range h {
+		walls[i*w+1], walls[i*w+w-2] = false, false
+	}
+	blocked := bitsOf(w, h, func(x, y int) bool { return walls[y*w+x] })
+	rs := new(RouteSolver)
+	b.ReportAllocs()
+	for b.Loop() {
+		if rs.Compute(1, 1, w-2, h-2, w, h, Point, blocked) == nil {
+			b.Fatal("no routes")
 		}
 	}
 }
