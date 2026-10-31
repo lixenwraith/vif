@@ -479,6 +479,7 @@ events and keep the sequencer unaware of gameplay concepts.
 
 ## 13. Source map
 
+- The package's own README, the module's at the spin-off: `pkg/audio/README.md`
 - Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
 - Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`
 - Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `kit.go`,
