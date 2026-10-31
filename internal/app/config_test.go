@@ -33,15 +33,16 @@ func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
 	if ctx.GetMode() != core.ModeOverlay || !ctx.TimeCtl.IsPaused() {
 		t.Fatal("menu did not pause solo play in overlay mode")
 	}
-	ctx.SetOverlaySelection("controls")
+	ctx.SetOverlaySelection("settings")
 	key(terminal.KeyEnter, 0)
+	ctx.SetOverlaySelection("auto")
 	key(terminal.KeyEnter, 0)
 	if ctx.AutoFire.Load() != engine.AutoFireOff || !ctx.TimeCtl.IsPaused() {
 		t.Fatal("auto-fire change did not apply while paused")
 	}
 	key(terminal.KeyEscape, 0)
-	if ctx.GetOverlaySelection() != "controls" {
-		t.Fatal("back lost the category selection")
+	if ctx.GetOverlaySelection() != "settings" {
+		t.Fatal("back lost the page selection")
 	}
 	key(terminal.KeyEscape, 0)
 	if ctx.GetMode() != core.ModeNormal || ctx.IsOverlayActive() || ctx.TimeCtl.IsPaused() || ctx.AutoFire.Load() != engine.AutoFireOff {
@@ -50,16 +51,17 @@ func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
 	key(terminal.KeyRune, ':')
 	key(terminal.KeyRune, 'g')
 	key(terminal.KeyEnter, 0)
-	ctx.SetOverlaySelection("simulation")
+	ctx.SetOverlaySelection("game")
 	key(terminal.KeyEnter, 0)
+	ctx.SetOverlaySelection("speed")
 	key(terminal.KeyRight, 0)
 	a.World().RunSafe(a.router.RefreshConfigMenu)
 	m := ctx.GetOverlayContent().Menu
-	if m.Rows[1].Value != "2x" || !ctx.TimeCtl.IsPaused() {
+	if i := slices.IndexFunc(m.Rows, func(r core.OverlayMenuRow) bool { return r.Key == "speed" }); i < 0 || m.Rows[i].Value != "2x" || !ctx.TimeCtl.IsPaused() {
 		t.Fatalf("queued speed change was not reflected: %+v", m)
 	}
 	key(terminal.KeyEscape, 0)
-	ctx.SetOverlaySelection("diagnostics")
+	ctx.SetOverlaySelection("developer")
 	ctx.World.Resources.Status.SetSnapshotInterval(77)
 	key(terminal.KeyEnter, 0)
 	ctx.SetOverlaySelection("stat")
@@ -74,8 +76,9 @@ func TestConfigMenuChangesStayAppliedAfterClose(t *testing.T) {
 }
 
 // TestASoloPauseStandsUntilTheNextPause: the Game page's Pause row holds a solo run
-// at once, and a tick asked of it takes none. Closing the menu or the command line
-// ends only the pause each made; :pause runs the game on, and so does a step.
+// at once and closes the menu, and a tick asked of it takes none. Closing the menu or
+// the command line ends only the pause each made; p runs the game on, and so does a
+// step after :pause.
 func TestASoloPauseStandsUntilTheNextPause(t *testing.T) {
 	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
@@ -105,7 +108,6 @@ func TestASoloPauseStandsUntilTheNextPause(t *testing.T) {
 	key(terminal.KeyEnter, 0)
 	ctx.SetOverlaySelection("pause")
 	key(terminal.KeyEnter, 0)
-	key(terminal.KeyCtrlG, 0)
 	at := a.Position().Tick
 	a.Tick(3)
 	if !ctx.TimeCtl.Held() || ctx.GetMode() != core.ModeNormal || a.Position().Tick != at {
@@ -117,10 +119,10 @@ func TestASoloPauseStandsUntilTheNextPause(t *testing.T) {
 	if !ctx.TimeCtl.Held() {
 		t.Fatal("closing the command line ended the hold")
 	}
-	command("pause")
+	key(terminal.KeyRune, 'p')
 	a.Tick(1)
 	if ctx.TimeCtl.IsPaused() || a.Position().Tick != at+1 {
-		t.Fatalf(":pause again left paused %v at tick %d, want running at %d", ctx.TimeCtl.IsPaused(), a.Position().Tick, at+1)
+		t.Fatalf("p left paused %v at tick %d, want running at %d", ctx.TimeCtl.IsPaused(), a.Position().Tick, at+1)
 	}
 	command("pause")
 	command("step")
@@ -292,9 +294,11 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	ctx.AutoFire.Store(engine.AutoFireMain)
 	ctx.MouseDisabled.Store(false)
 	ctx.MaxFPS.Store(24)
+	ctx.PauseCommand.Store(true)
 	a.persistPlay()
 	s, path, err := paths.LoadSettings(dir)
-	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.MaxFPS != 24 || s.Play.HUD != paths.DefaultPlay().HUD {
+	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.MaxFPS != 24 || s.Play.HUD != paths.DefaultPlay().HUD ||
+		!s.Play.PauseCommand {
 		t.Fatalf("written back: %+v from %q, %v", s.Play, path, err)
 	}
 	ctx.ResetSessionState()

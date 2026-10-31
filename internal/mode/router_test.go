@@ -113,7 +113,7 @@ func TestTheMenuKeepsThePointerWithTheMouseDisabled(t *testing.T) {
 
 // TestAHoldTakesNoPlayButOpensTheMenu: under a hold a key that plays and a press on
 // the map do nothing, while the command line opens and the status bar's press opens
-// the menu, whose Pause row reads on and ends the hold.
+// the menu, whose Pause row reads Resume and ends the hold.
 func TestAHoldTakesNoPlayButOpensTheMenu(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)
@@ -156,7 +156,7 @@ func TestAHoldTakesNoPlayButOpensTheMenu(t *testing.T) {
 	key(terminal.KeyEnter, 0)
 	m := configMenu(ctx)
 	i := slices.IndexFunc(m.Rows, func(row core.OverlayMenuRow) bool { return row.Key == "pause" })
-	if i < 0 || m.Rows[i].Value != "on" || m.Rows[i].Disabled != "" {
+	if i < 0 || m.Rows[i].Label != "Resume" || m.Rows[i].Disabled != "" {
 		t.Fatalf("the Game page under a hold shows %+v", m.Rows)
 	}
 	w.Resources.Event.Queue.Consume()

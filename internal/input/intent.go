@@ -63,7 +63,7 @@ const (
 	IntentOverlayClose    // ESC/q
 	IntentOverlayPageUp   // PgUp
 	IntentOverlayPageDown // PgDn
-	IntentOverlayFilter   // / - edit the telemetry card filter
+	IntentOverlayFilter   // / - edit the telemetry card or menu row filter
 
 	// Mouse
 	IntentMouseLeftDown  // Left press: move cursor + fire main
@@ -82,6 +82,7 @@ const (
 	IntentHelp         // F1
 	IntentOverlayDrag  // Left drag while an overlay has the keys: X, Y
 	IntentOverlayWheel // Wheel step while an overlay has the keys: X, Y, ScrollDir
+	IntentPause        // p - :pause, the pause only another ends
 )
 
 // MotionOp identifies motion algorithm
