@@ -568,23 +568,10 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		isComposite := navComp.Width > 1 || navComp.Height > 1
-		width, height := navComp.Width, navComp.Height
-		if width == 0 {
-			width = 1
-		}
-		if height == 0 {
-			height = 1
-		}
-
-		hasLOS := false
-		if !isComposite {
-			hasLOS = s.world.Positions.HasLineOfSight(gridX, gridY, targetX, targetY, component.WallBlockKinetic)
-		} else {
-			hasLOS = s.world.Positions.HasAreaLineOfSightRotatable(gridX, gridY, targetX, targetY, width, height, component.WallBlockKinetic)
-		}
-
-		if hasLOS {
+		// The body as it is, from its header: a wider or taller one flies no
+		// straighter, and a centred box is not where the body stands
+		foot := bodyOf(navComp)
+		if bodyHasLineOfSight(s.world, gridX, gridY, targetX, targetY, foot.Width, foot.Height, foot.HeaderX, foot.HeaderY) {
 			navComp.HasDirectPath = true
 			navComp.FlowX = 0
 			navComp.FlowY = 0

@@ -302,11 +302,9 @@ func traceRay(w *engine.World, r vmath.Ray) int {
 	return limit
 }
 
-// bodyHasLineOfSight is whether a body flies clear from one header cell to another.
-// The area query centres its box, so both ends move by the header's offset from it.
+// bodyHasLineOfSight is whether a body flies clear from one header cell to another
 func bodyHasLineOfSight(w *engine.World, x0, y0, x1, y1, width, height, headerX, headerY int) bool {
-	dx, dy := width/2-headerX, height/2-headerY
-	return w.Positions.HasAreaLineOfSight(x0+dx, y0+dy, x1+dx, y1+dy, width, height, component.WallBlockKinetic)
+	return w.Positions.HasAreaLineOfSight(x0, y0, x1, y1, width, height, headerX, headerY, component.WallBlockKinetic)
 }
 
 // isPlayerSide excludes what no player's weapon targets: every player, every weapon

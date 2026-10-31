@@ -160,8 +160,8 @@ snake heads locked on it. A private group costs nothing until read.
 
 `NavigationComponent` records the footprint, whether an actor follows a group
 field or a route, the graph and route IDs, a snake head's lock, and each tick's
-output: `HasDirectPath` when the target is in sight (area line of sight for a
-composite), otherwise the flow vector, bilinear over the four cells around a
+output: `HasDirectPath` when the target is in sight, the body flown from its
+header along the line with every cell of it clear, otherwise the flow vector, bilinear over the four cells around a
 point and header-anchored for a composite, with the neighbour nearest the goal
 as the escape from a cell the field does not cover. Species systems turn that
 into a homing target through `ResolveMovementTarget` (`targeting.go`) — the
@@ -300,6 +300,14 @@ navigation and the whole tick, in µs:
 400×120  147   1137    98   1081    80   1017
 ```
 
+The direct path is the body flown from its header along the line of sight. In
+16 such games of 2,400 ticks, 8 seeds at 120×40 and 200×60, the box centred on
+the line and accepted turned 90° that preceded it called 71% and 78% of chase
+ticks direct with 1.6% and 1.2% of those blocked for the body as it stands; the
+body flown as it is calls 73% and 79% direct with 0.3% and 0.1% blocked, the
+rest the body's motion within the tick after navigation decided
+([Position package §5](position-package.md#5-measurements)).
+
 Over nine such games at 120×40 and 200×60 for each refresh of 1, 4, 6, 10 and
 1,000, the raiders' contacts, charges, teleports, kills and wall hits, the share of
 their chase ticks out of sight spent standing (11–15%) and the length of a chase
@@ -319,8 +327,7 @@ steers alike by a field a few ticks old.
 - A body the eye's 5×3 holds around its header rides the eye's tier, so it never
   takes a gap narrower than an eye's; any other footprint costs a tier of its own
   while it navigates, its passability moved on every wall change and a field for
-  each group. Line of sight still tests the body centred and accepts it turned
-  ([todo](todo.md#move-position-into-a-package-of-its-own-walls-and-rock-one-blocking-model)).
+  each group.
 - Eight targets a group, sixteen groups, sixteen private groups; a map's size
   scales every field, and every instance computes the same ones.
 

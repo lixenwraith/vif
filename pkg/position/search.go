@@ -173,21 +173,19 @@ func (x *Index[E]) FindLastFreeOnRay(startX, startY, endX, endY int, mask Mask) 
 	return lastFreeX, lastFreeY, true
 }
 
-// HasAreaLineOfSight reports whether a width×height body centred on each cell of
-// the line strictly between (x0, y0) and (x1, y1) lies inside the map and clear of
-// walls matching mask
-func (x *Index[E]) HasAreaLineOfSight(x0, y0, x1, y1, width, height int, mask Mask) bool {
+// HasAreaLineOfSight reports whether a width×height body whose anchor, the cell
+// it moves by, is anchorX, anchorY from its top-left lies inside the map and clear
+// of walls matching mask with its anchor on each cell of the line strictly between
+// (x0, y0) and (x1, y1)
+func (x *Index[E]) HasAreaLineOfSight(x0, y0, x1, y1, width, height, anchorX, anchorY int, mask Mask) bool {
 	// Degenerate case: point entity
 	if width <= 1 && height <= 1 {
 		return x.HasLineOfSight(x0, y0, x1, y1, mask)
 	}
 
-	halfW := width / 2
-	halfH := height / 2
-
 	for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
-		boxX := line.X() - halfW
-		boxY := line.Y() - halfH
+		boxX := line.X() - anchorX
+		boxY := line.Y() - anchorY
 
 		if boxX < 0 || boxY < 0 || boxX+width > x.Width || boxY+height > x.Height {
 			return false
@@ -199,28 +197,16 @@ func (x *Index[E]) HasAreaLineOfSight(x0, y0, x1, y1, width, height int, mask Ma
 	return true
 }
 
-// HasAreaLineOfSightRotatable is HasAreaLineOfSight for the body as given, then
-// turned 90°
-func (x *Index[E]) HasAreaLineOfSightRotatable(x0, y0, x1, y1, width, height int, mask Mask) bool {
-	if x.HasAreaLineOfSight(x0, y0, x1, y1, width, height, mask) {
-		return true
-	}
-	// Square entities cannot benefit from rotation
-	if width == height {
-		return false
-	}
-	return x.HasAreaLineOfSight(x0, y0, x1, y1, height, width, mask)
-}
-
 // HasBoxLineOfSight is HasAreaLineOfSight for a body of width×height×depth cells
-// through the volume, centred on each cell of the line strictly between a and b
-func (x *Index[E]) HasBoxLineOfSight(a, b Point, width, height, depth int, mask Mask) bool {
+// through the volume, anchor from its corner, on each cell of the line strictly
+// between a and b
+func (x *Index[E]) HasBoxLineOfSight(a, b Point, width, height, depth int, anchor Point, mask Mask) bool {
 	if width <= 1 && height <= 1 && depth <= 1 {
 		return x.HasLineOfSightBetween(a, b, mask)
 	}
 	for line := vmath.NewLine3(a, b).Next(); !line.AtEnd(); line = line.Next() {
 		c := line.Point()
-		box := Point{X: c.X - width/2, Y: c.Y - height/2, Z: c.Z - depth/2}
+		box := Point{X: c.X - anchor.X, Y: c.Y - anchor.Y, Z: c.Z - anchor.Z}
 		if box.X < 0 || box.Y < 0 || box.Z < 0 ||
 			box.X+width > x.Width || box.Y+height > x.Height || box.Z+depth > x.Depth {
 			return false
