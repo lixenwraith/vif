@@ -1214,34 +1214,18 @@ the run in the state directory, as a shell's does.
 ### Give the configuration menu a touch target on Android
 
 - Priority: P1
-- Affected files: `internal/engine/overlay_geometry.go`, `internal/render/renderer/overlay.go`,
-  `internal/mode/config_menu.go`, `internal/mode/overlay.go`, `internal/app/presentation.go`,
-  `android/game/view.go`, `android/app/src/main/java/com/lixen/vif/GameView.java`
+- Affected files: `internal/mode/config_menu.go`, `internal/mode/config_form.go`,
+  `internal/core/overlay.go`, `internal/app/presentation.go`, `internal/app/loop.go`,
+  `internal/render/renderer/overlay.go`, `android/game/game.go`, `android/game/view.go`,
+  `android/app/src/main/java/com/lixen/vif/MainActivity.java`, a `MenuDialog.java`;
+  then `cmd/vif/browser.go` and `web/`
 
 A menu row is one cell, 12 dp on a phone against Android's 48 dp touch target, so
-a tap lands on a neighbour. Three ways, in rising cost:
-
-1. A row pitch on a touch host. `OverlayGeometry` gains a pitch the renderer,
-   `pointConfigMenu` and the scrollbar's track in `Router.overlayView` share: 1 on
-   a terminal, 3 or 4 where the presentation reports touch (one method on
-   `Presentation`, true for Android and the browser's touch strip), so a row is 36
-   to 48 dp and the list shows a third of its rows a page. The menu stays the `tui`
-   one; every host behaves the same; smallest change.
-2. A menu the host draws. The overlay content (`core.OverlayMenu`: rows with key,
-   label, value, description and disabled reason; the form) crosses the binding as
-   it changes, through an optional `menuPresentation` on `Presentation`
-   (`ShowMenu`, `HideMenu`), and the host answers with the keys the router already
-   takes plus a select-by-key the terminal vocabulary has no event for, so a new
-   event or a call into the router under the world lock. Java draws a radial menu
-   (the console style) or a list with 48 dp targets; the browser could do the same
-   in HTML. A second renderer for one screen and a protocol for its state.
-3. A separate Activity or bottom sheet: 2 with Android's own widgets, and the
-   game's Surface left behind while it shows.
-
-Recommended: 1 now, since it serves the browser's touch strip too; 2 only if a
-radial menu is wanted for its own sake, after 1 shows what a bigger row is worth.
-The typing strip above the keyboard already repeats the status row from the same
-picture (`CellDrawer.drawStrip`), the pattern 2 would extend.
+the text is hard to read and a tap lands on a neighbour. The host draws the menu with
+its own widgets from a JSON snapshot of a menu tree, and answers with ops on a node's
+id; Android first, the browser next. The decisions, model, hooks, phases and risks
+are in [Native menu](native-menu.md). A row pitch on the `tui` menu (3 or 4 cells a
+row where the presentation reports touch) is the fallback if the native menu stalls.
 
 ### Configuration menu follow-up
 

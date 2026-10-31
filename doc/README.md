@@ -37,6 +37,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [AI, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Behavior machines](machine-design.md) | Domain detail | How does a species step its per-entity state machine, how does a behavior program define a species from data, and why this runtime rather than another? |
 | [Generic kinetic analysis](generic-kinetic.md) | Future design | Which kinetic paths exist, why one universal motion system is unsafe today, and how could they be consolidated incrementally? A design for future implementation. |
+| [Native menu](native-menu.md) | Future design | How does a host draw the menu with its own widgets, Android first and the browser next: the snapshot it is sent, the ops it answers with, and the phases to build it? A design for future implementation. |
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, how does a session's transport start, frame, relay, poll, time out and disconnect, and what does a supervised run's endpoint answer? |
 | [External filesystem layout](filesystem-layout.md) | Operational detail | Where do the `wad/` and embedded payloads live, and how are config, content, logs, and journals discovered and installed? |
