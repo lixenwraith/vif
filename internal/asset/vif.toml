@@ -36,6 +36,9 @@ fullscreen = false
 # in a browser left it, from 4 to 40, written back like [play]; 0 is the screen's
 # own size. The terminal and the desktop window ignore it.
 cell = 0
+# Inside tmux or screen, draw at most 24 frames a second: past that they drop the
+# output and repaint about 10 a second. false draws at full rate; max_fps wins.
+tmux_frame_cap = true
 
 # What the configuration menu changes in a run, written back so the next starts
 # as this one was left: the two audio channels, sound effects (sfx) and music, the

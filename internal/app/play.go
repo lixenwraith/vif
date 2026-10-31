@@ -33,6 +33,7 @@ func PlayJournal(viewer Config, paths ...string) error {
 	an := set.Anchors[0]
 	cfg.Play, cfg.AudioBackend, cfg.AudioBuffer = viewer.Play, viewer.AudioBackend, viewer.AudioBuffer
 	cfg.MusicWAV, cfg.ColorMode, cfg.ColorModeSet = viewer.MusicWAV, viewer.ColorMode, viewer.ColorModeSet
+	cfg.NoTmuxFrameCap = viewer.NoTmuxFrameCap
 	// A replay's clock opens at the rate its journal did, and its records move it as
 	// the run's moved, which is the rate it is presented at.
 	rate := parseSpeed(an.Speed)

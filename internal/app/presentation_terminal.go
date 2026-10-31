@@ -55,13 +55,18 @@ func (a *App) initPresentationService() error {
 	return a.hub.Register(a.pres)
 }
 
-// newTerminal is the build's own presentation, in the colour mode cfg asks for.
+// newTerminal is the build's own presentation, in the colour mode cfg asks for,
+// held to a multiplexer's frame floor unless cfg turns that off.
 func newTerminal(cfg Config) terminalHost {
 	colorMode := terminal.DetectColorMode()
 	if cfg.ColorModeSet {
 		colorMode = cfg.ColorMode
 	}
-	return terminalHost{TerminalService: service.NewTerminalService(colorMode), floor: frameFloor(os.Getenv)}
+	t := terminalHost{TerminalService: service.NewTerminalService(colorMode)}
+	if !cfg.NoTmuxFrameCap {
+		t.floor = frameFloor(os.Getenv)
+	}
+	return t
 }
 
 // The environment that names a terminal multiplexer: tmux sets multiplexerEnv for

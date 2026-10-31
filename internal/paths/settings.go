@@ -38,12 +38,14 @@ type Settings struct {
 	} `toml:"audio"`
 	// Presentation.Window opens the desktop window by default, as -g does, and
 	// Maximized or Fullscreen the state it opens in, as the flags of those names do;
-	// Cell is the zoom a run writes back, 0 for the screen's own
+	// Cell is the zoom a run writes back, 0 for the screen's own; TmuxFrameCap draws
+	// the terminal no faster than tmux or screen keep up with
 	Presentation struct {
-		Window     bool    `toml:"window"`
-		Maximized  bool    `toml:"maximized"`
-		Fullscreen bool    `toml:"fullscreen"`
-		Cell       float64 `toml:"cell"`
+		Window       bool    `toml:"window"`
+		Maximized    bool    `toml:"maximized"`
+		Fullscreen   bool    `toml:"fullscreen"`
+		Cell         float64 `toml:"cell"`
+		TmuxFrameCap bool    `toml:"tmux_frame_cap"`
 	} `toml:"presentation"`
 	Play Play `toml:"play"`
 }
