@@ -27,7 +27,7 @@ const (
 	kindGroup  nodeKind = iota // a page or a section, holding nodes
 	kindToggle                 // two states, a switch
 	kindChoice                 // one of several named values
-	kindStep                   // moved by a direction, − and +
+	kindStep                   // moved by a direction, - and +
 	kindPick                   // one of a pick list, which a press marks at once
 	kindAction                 // runs when activated and leaves the menu
 	kindForm                   // text fields: one typed in on its row, more in a window
