@@ -1,3 +1,7 @@
+// Package tracking accumulates one subject's metrics over its lifetime: a
+// MetricBundle a tick, folded by a StandardCollector into averages, extremes
+// and active time, by a CompositeCollector into member counts as well, and
+// handed out of a CollectorPool that reuses them.
 package tracking
 
 import "time"
@@ -6,14 +10,13 @@ import "time"
 // Keys are metric names, values are float64 measurements
 type MetricBundle map[string]float64
 
-// Standard metric keys (conventions)
+// The keys the collectors themselves read or write; a host names its own
 const (
-	MetricTicksAlive      = "ticks_alive"
-	MetricDistanceSquared = "distance_sq"
-	MetricTimeInZone      = "time_in_zone"
-	MetricDeathAtTarget   = "death_at_target"
-	MetricMemberCount     = "member_count"
-	MetricPeakMemberCount = "peak_member_count"
+	MetricTicksAlive       = "ticks_alive"
+	MetricMemberCount      = "member_count"
+	MetricPeakMemberCount  = "peak_member_count"
+	MetricFinalMemberCount = "final_member_count"
+	MetricMemberRetention  = "member_retention"
 )
 
 // Get returns metric value or default if not present

@@ -31,10 +31,10 @@ func (c *CompositeCollector) Finalize(deathCondition MetricBundle) MetricBundle 
 	result := c.StandardCollector.Finalize(deathCondition)
 
 	result[MetricPeakMemberCount] = float64(c.peakMembers)
-	result["final_member_count"] = float64(c.currentMembers)
+	result[MetricFinalMemberCount] = float64(c.currentMembers)
 
 	if c.peakMembers > 0 {
-		result["member_retention"] = float64(c.currentMembers) / float64(c.peakMembers)
+		result[MetricMemberRetention] = float64(c.currentMembers) / float64(c.peakMembers)
 	}
 
 	return result

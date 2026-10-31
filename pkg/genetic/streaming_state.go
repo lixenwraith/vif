@@ -4,23 +4,24 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"slices"
 )
 
 // StreamingStateVersion is the serialized layout understood by Checkpoint and
 // Restore. The normalized configuration is embedded and checked; operator
 // identities are deliberately not serializable, so callers must restore into an
 // engine constructed with semantically equivalent operators.
-const StreamingStateVersion = 1
+const StreamingStateVersion = 2
 
 // ErrInvalidStreamingState identifies a checkpoint that cannot describe this
 // engine. Restore validates the complete value before changing live state.
 var ErrInvalidStreamingState = errors.New("genetic: invalid streaming state")
 
 // PendingEvaluation is one genotype handed to a caller and still awaiting an
-// outcome. ID is preserved so a restored host can complete work already in flight.
+// outcome. ID is preserved so a restored host can complete work already in
+// flight, and Slot so the restored table evicts as the source would.
 type PendingEvaluation[S Solution] struct {
 	ID   EvalID `json:"id" toml:"id"`
+	Slot int    `json:"slot" toml:"slot"`
 	Data S      `json:"data" toml:"data"`
 }
 
@@ -48,8 +49,8 @@ type StreamingState[S Solution, F Numeric] struct {
 }
 
 // Checkpoint returns a complete, canonically ordered continuation point.
-// Pending evaluations are ordered by ID and proposals retain FIFO order, making
-// the value suitable for deterministic encoding and comparison.
+// Pending evaluations are listed in slot order and proposals retain FIFO order,
+// making the value suitable for deterministic encoding and comparison.
 func (e *StreamingEngine[S, F]) Checkpoint() (StreamingState[S, F], error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -86,19 +87,9 @@ func (e *StreamingEngine[S, F]) Checkpoint() (StreamingState[S, F], error) {
 			continue
 		}
 		state.Pending = append(state.Pending, PendingEvaluation[S]{
-			ID: id, Data: e.cloneForCaller(e.pending.data[i]),
+			ID: id, Slot: i, Data: e.cloneForCaller(e.pending.data[i]),
 		})
 	}
-	slices.SortFunc(state.Pending, func(a, b PendingEvaluation[S]) int {
-		switch {
-		case a.ID < b.ID:
-			return -1
-		case a.ID > b.ID:
-			return 1
-		default:
-			return 0
-		}
-	})
 	return state, nil
 }
 
@@ -127,7 +118,7 @@ func (e *StreamingEngine[S, F]) Restore(state StreamingState[S, F]) error {
 		e.proposals.push(e.cloneForEngineLocked(proposal))
 	}
 	for _, pending := range state.Pending {
-		e.pending.put(pending.ID, e.cloneForEngineLocked(pending.Data))
+		e.pending.place(pending.Slot, pending.ID, e.cloneForEngineLocked(pending.Data))
 	}
 
 	e.gen = state.Generation
@@ -136,7 +127,7 @@ func (e *StreamingEngine[S, F]) Restore(state StreamingState[S, F]) error {
 	e.nextID = state.NextID
 	e.evicted = state.Evicted
 	e.started.Store(state.Running)
-	e.aggDirty = true
+	e.version++
 	e.publishLocked()
 	return nil
 }
@@ -187,7 +178,7 @@ func (e *StreamingEngine[S, F]) validateState(state StreamingState[S, F]) (*rand
 	}
 
 	ids := make(map[EvalID]struct{}, len(state.Pending))
-	slots := make(map[uint64]EvalID, len(state.Pending))
+	slots := make(map[int]EvalID, len(state.Pending))
 	for _, pending := range state.Pending {
 		if pending.ID == 0 {
 			return invalid("pending evaluation has zero id")
@@ -199,11 +190,13 @@ func (e *StreamingEngine[S, F]) validateState(state StreamingState[S, F]) (*rand
 			return invalid("duplicate pending id %d", pending.ID)
 		}
 		ids[pending.ID] = struct{}{}
-		slot := uint64(pending.ID) & e.pending.mask
-		if other, exists := slots[slot]; exists {
-			return invalid("pending ids %d and %d collide in slot %d", other, pending.ID, slot)
+		if pending.Slot < 0 || pending.Slot >= len(e.pending.ids) || !e.pending.inWindow(pending.Slot, pending.ID) {
+			return invalid("pending id %d cannot occupy slot %d", pending.ID, pending.Slot)
 		}
-		slots[slot] = pending.ID
+		if other, exists := slots[pending.Slot]; exists {
+			return invalid("pending ids %d and %d share slot %d", other, pending.ID, pending.Slot)
+		}
+		slots[pending.Slot] = pending.ID
 	}
 	return source, nil
 }

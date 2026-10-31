@@ -33,16 +33,18 @@ type StreamingEngine[S Solution, F Numeric] struct {
 	rngSource *rand.PCG
 	rng       *rand.Rand
 	archive   []Candidate[S, F]
-	gen       int
-	outcomes  int
-	lastDiv   float64
-	aggBest   F
-	aggWorst  F
-	aggAvg    F
-	aggDirty  bool
+	// version counts archive changes; the aggregates were computed at aggVersion
+	version    uint64
+	aggVersion uint64
+	gen        int
+	outcomes   int
+	lastDiv    float64
+	aggBest    F
+	aggWorst   F
+	aggAvg     F
 
 	proposals ring[S]
-	free      []S
+	free      freeList[S]
 	parents   []Candidate[S, F]
 	offspring []S
 	pending   pendingTable[S]
@@ -79,8 +81,8 @@ func NewStreamingEngine[S Solution, F Numeric](
 		archive:     make([]Candidate[S, F], 0, cfg.PoolSize),
 		parents:     make([]Candidate[S, F], 2),
 		offspring:   make([]S, 2),
-		free:        make([]S, 0, cfg.PoolSize),
 	}
+	e.free.init(cfg.PoolSize)
 	e.proposals.init(cfg.ProposalCapacity)
 	e.pending.init(cfg.PendingCapacity)
 	e.publishLocked()
@@ -94,9 +96,9 @@ func (e *StreamingEngine[S, F]) SetDiversity(fn DiversityFunc[S, F]) {
 	e.mu.Unlock()
 }
 
-// SetEqual installs duplicate rejection: a scored genotype equal to an archive
-// member with the same score is discarded instead of displacing a distinct one.
-// Without it an elitist archive fills with clones of its best member
+// SetEqual holds each genotype once, at its best score: a repeat outcome below
+// it is discarded and one above it moves the member up. Without it an elitist
+// archive fills with clones of its best member
 func (e *StreamingEngine[S, F]) SetEqual(fn EqualFunc[S]) {
 	e.mu.Lock()
 	e.equal = fn
@@ -200,7 +202,7 @@ func (e *StreamingEngine[S, F]) Reset() {
 	e.mu.Lock()
 	e.pending.clear()
 	e.proposals.clear()
-	e.free = e.free[:0]
+	e.free.clear()
 	e.outcomes = 0
 	if e.started.Load() {
 		e.fillLocked()
@@ -264,7 +266,7 @@ func (e *StreamingEngine[S, F]) Inject(candidates []Candidate[S, F], generation 
 		e.recycleLocked(e.archive[i].Data)
 	}
 	e.archive = e.archive[:0]
-	e.aggDirty = true
+	e.version++
 
 	for _, c := range candidates {
 		e.insertLocked(c.Data, c.Score)
@@ -290,27 +292,35 @@ func (e *StreamingEngine[S, F]) beginLocked(sol S) EvalID {
 	return id
 }
 
-// insertLocked places a scored candidate into the descending archive,
-// evicting the tail when full. Equal-score members sit just above the insertion
-// point, so duplicate rejection only scans that run
+// insertLocked places a scored candidate into the descending archive, evicting
+// the tail when full. Under SetEqual a genotype already archived keeps its
+// better score, so the archive never holds one twice
 func (e *StreamingEngine[S, F]) insertLocked(sol S, score F) {
 	n := len(e.archive)
 	if n == cap(e.archive) && score <= e.archive[n-1].Score {
 		e.recycleLocked(sol)
 		return
 	}
+	if e.equal != nil {
+		for i := range e.archive {
+			if !e.equal(e.archive[i].Data, sol) {
+				continue
+			}
+			if e.archive[i].Score >= score {
+				e.recycleLocked(sol)
+				return
+			}
+			e.recycleLocked(e.archive[i].Data)
+			copy(e.archive[i:], e.archive[i+1:n])
+			n--
+			e.archive = e.archive[:n]
+			break
+		}
+	}
 
 	idx := n
 	for idx > 0 && e.archive[idx-1].Score < score {
 		idx--
-	}
-	if e.equal != nil {
-		for i := idx - 1; i >= 0 && e.archive[i].Score == score; i-- {
-			if e.equal(e.archive[i].Data, sol) {
-				e.recycleLocked(sol)
-				return
-			}
-		}
 	}
 	if n == cap(e.archive) {
 		e.recycleLocked(e.archive[n-1].Data)
@@ -320,7 +330,7 @@ func (e *StreamingEngine[S, F]) insertLocked(sol S, score F) {
 	e.archive = e.archive[:n+1]
 	copy(e.archive[idx+1:], e.archive[idx:n])
 	e.archive[idx] = Candidate[S, F]{Data: sol, Score: score}
-	e.aggDirty = true
+	e.version++
 }
 
 // fillLocked tops up the proposal queue within the tick budget
@@ -351,7 +361,7 @@ func (e *StreamingEngine[S, F]) produceLocked() bool {
 		return e.proposals.push(e.initializer(e.rng))
 	}
 
-	e.selector.Select(e.archive, e.parents, e.rng)
+	e.selector.Select(e.archive, e.parents, e.version, e.rng)
 	n := e.combiner.Combine(e.parents, e.offspring, e.rng)
 
 	pushed := false
@@ -368,8 +378,8 @@ func (e *StreamingEngine[S, F]) produceLocked() bool {
 }
 
 func (e *StreamingEngine[S, F]) publishLocked() {
-	if e.aggDirty {
-		e.aggDirty = false
+	if e.aggVersion != e.version {
+		e.aggVersion = e.version
 		e.aggBest, e.aggWorst, e.aggAvg = 0, 0, 0
 		if n := len(e.archive); n > 0 {
 			var total F
@@ -392,21 +402,12 @@ func (e *StreamingEngine[S, F]) publishLocked() {
 	})
 }
 
+// recycleLocked keeps a buffer for later offspring; without a Cloner the
+// buffer may be what a caller holds, so nothing is kept
 func (e *StreamingEngine[S, F]) recycleLocked(sol S) {
-	if e.cloner == nil || len(e.free) == cap(e.free) {
-		return
+	if e.cloner != nil {
+		e.free.put(sol)
 	}
-	e.free = append(e.free, sol)
 }
 
-func (e *StreamingEngine[S, F]) takeFreeLocked() S {
-	var zero S
-	n := len(e.free)
-	if n == 0 {
-		return zero
-	}
-	v := e.free[n-1]
-	e.free[n-1] = zero
-	e.free = e.free[:n-1]
-	return v
-}
+func (e *StreamingEngine[S, F]) takeFreeLocked() S { return e.free.take() }

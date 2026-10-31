@@ -12,7 +12,7 @@ func TestStandardCollector_Accumulation(t *testing.T) {
 	c.Collect(MetricBundle{"distance": 20.0, "in_zone": 0.0}, 50*time.Millisecond)
 	c.Collect(MetricBundle{"distance": 30.0, "in_zone": 1.0}, 50*time.Millisecond)
 
-	result := c.Finalize(MetricBundle{MetricDeathAtTarget: 1.0})
+	result := c.Finalize(MetricBundle{"death_at_target": 1.0})
 
 	if result[MetricTicksAlive] != 3 {
 		t.Errorf("expected 3 ticks, got %v", result[MetricTicksAlive])
@@ -27,8 +27,8 @@ func TestStandardCollector_Accumulation(t *testing.T) {
 		t.Errorf("expected time_in_zone 0.1, got %v", result["time_in_zone"])
 	}
 
-	if result[MetricDeathAtTarget] != 1.0 {
-		t.Errorf("expected death_at_target 1.0, got %v", result[MetricDeathAtTarget])
+	if result["death_at_target"] != 1.0 {
+		t.Errorf("expected death_at_target 1.0, got %v", result["death_at_target"])
 	}
 }
 
