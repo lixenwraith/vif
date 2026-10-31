@@ -101,7 +101,7 @@ one without updating the other.
 ## 3. Position and spatial queries
 
 `pkg/position` is the spatial index and the geometry over a map, free of the game
-([Position package](position-package.md)); `engine.Position` binds it to the world.
+([Position](position-package.md)); `engine.Position` binds it to the world.
 `position.Grid` maps every map coordinate to a fixed-capacity `Cell` of up to
 `CellCapacity` (31) entity IDs, which spares the collision, typing and targeting hot
 paths a per-query allocation. Shared occupants precede private ones,
@@ -115,7 +115,7 @@ grid is sized to its map with grow-only backing, so a shrink never reallocates. 
 is a volume of layers, one on today's maps: a `Point`'s Z is its layer, the
 queries taking a column and a row answer for the first, and `BlocksAt`,
 `BlocksBox`, `EntitiesAtPoint` and `HasLineOfSightBetween` for any
-([Position package §4](position-package.md#4-the-third-axis)).
+([Position §3](position-package.md#3-the-volume)).
 Beside the cells it keeps a bit a cell for each class that holds something
 (`Grid.Present`), so a probe of an empty cell costs a word in cache rather than a
 cell out of it, and a scan passes empty cells a word at a time.
@@ -147,7 +147,7 @@ free-space searches by pattern or spiral, which a negative radius sends over the
 whole map, within its grid's bounds and at the cell aspect it reads live from the
 config (`position.Frame`). The package's words are *block*, a cell an occupant
 blocks for a mask, and *surface*, a height a column with a solid side; the game's
-are wall and rock ([Position package §1](position-package.md#1-the-boundary)). A
+are wall and rock ([Position §1](position-package.md#1-the-boundary)). A
 wall query answers for a `Mask` (0 is any) from the surfaces first: the cave's
 rock is two (`engine.RockField`, `Position.SetRock`), the ceiling solid above its
 height and the floor below, so a cave's rock costs a height per column, not an

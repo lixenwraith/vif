@@ -13,12 +13,10 @@ wanted next, P2 is convenient follow-up, and P3 is an idea.
 The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
 by area so an agent can take a group. The faster scroll, the jagged cave, the stone
 art, the raider types by cave, the scenery text, the boss stage, the machine's
-certain faults and navigation's cost over the cave have landed. What is left is the
-machine follow-ups and, last, the position package in a session of its own. Until
-that lands, nothing here adds engine surface for rock or caves: a cave's shape stays
-in `pkg/cave` and its scenario, the rock behind `Positions.Rock()` and the wall
-system and renderers that read it, and a query a footprint needs is built by its
-caller from the existing ones, so the move inherits nothing new.
+certain faults, navigation's cost over the cave and the position package
+([Position](position-package.md)) have landed. What is left is the machine
+follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
+`Positions.Rock()` and the wall system and renderers that read it.
 
 ### Machine follow-ups
 
@@ -81,56 +79,41 @@ read in vanguard's narrowest cave (9 rows).
 
 ### Position, blocking and navigation
 
-A full session of its own, last: it moves what the rest builds on.
+The move into `pkg/position` is done ([Position](position-package.md)); what
+remains stands on its own.
 
-#### Move Position into a package of its own, walls and rock one blocking model
+#### Play a volume: the third axis's remaining foundation
 
-- Priority: P0
+- Priority: P3, not now: it needs other foundation changes first
 - Affected files: `pkg/position`, `internal/engine/position.go`,
-  `internal/engine/rock.go`, `internal/engine/snapshot_delta.go`,
-  `internal/system/wall.go`, `internal/system/navigation.go`,
-  `pkg/navigation/composite.go`, `internal/render/renderer/rock.go`, and the 441
-  `Positions.` calls in 80 files (42 in `internal/system`, 23 in the renderers)
-- Guide: [Position package](position-package.md),
-  [ECS and events §3](ecs-and-events.md#3-position-and-spatial-queries),
-  [D-12](domain-design.md#d-12--shared-geometry-may-inspect-both-domains),
-  [D-14](domain-design.md#d-14--map-bounds-are-shared-authority),
-  [Rendering §2.2](rendering.md#22-the-cell-aspect),
-  [Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)
+  `internal/app/config.go`, `internal/system/navigation.go`, `pkg/navigation`,
+  `internal/render/renderer`
+- Guide: [Position §3](position-package.md#3-the-volume),
+  [Rendering §2](rendering.md#2-render-context-and-coordinates)
 
-Phases 1 to 4 landed: `pkg/position` holds the grid, a volume of layers one deep
-on a flat map, the blocks, the surfaces, the block log and the geometry behind one
-set of queries, `engine.Position` embeds the index and keeps what the rows, the
-components and the rock need, and the game asks by the package's names ([Position package §2](position-package.md#2-decisions)
-holds the choices made). What remains, in the order of
-[its phases](position-package.md#3-phases):
+The index holds a volume one layer deep on every map, and a game in depth asks it
+by the point. What such a game still needs is not laid: a depth in the config the
+binding resizes to (`Position.Resize` passes one layer), the placement searches
+(spiral, pattern, exclusion) in a 3D form, a footprint with depth and a
+passability per layer in navigation, a flat renderer reading the layer it looks
+at, a render in depth ordering overlap by a depth buffer over every layer
+projected (`sandbox/3d`), a heightfield as a volume's surface (the surfaces lie on
+the first layer), and cells chunked on demand for a volume past the ceiling
+(`ClampVolume` holds a volume to the map's 125,000 cells), which also serves
+[a ceiling-sized empty map](#shrink-the-spatial-grid-on-ceiling-sized-maps).
 
-- A 1:1 cell for a graphical host enters in the package: authored geometry stays
-  at `RefAspect` and the package owns the conversion. A volume past the ceiling
-  needs cells chunked on demand, which also serves a ceiling-sized empty map
-  ([Shrink the spatial grid on ceiling-sized maps](#shrink-the-spatial-grid-on-ceiling-sized-maps)),
-  and a heightfield for its surface.
+#### Profile td's storm peaks
 
-What it must keep, across multiplayer, netcode and interactions:
+- Priority: P2
+- Affected files: `internal/system/wall.go`, `internal/system/death.go`,
+  `internal/system/navigation.go`
+- Guide: [Navigation §10](navigation-design.md#10-costs)
 
-- Determinism: Shared positions, each cell's order (`WorldOrder.Cells`) and every
-  query's answer alike on every instance; the journal digest hashes positions, and
-  the divergence harness and the cross-instance tests read as before.
-- Domains: the Shared and Player halves of a cell (`PrivateBudget`), geometry over
-  both (D-12), bounds as Shared authority (D-14), prediction's private writes
-  (D-18), the staging world's grid.
-- Records: positions ship as rows and the index is derived; a cluster derives from
-  its owner's record as the rock does, so an idle harness still matches main; any
-  change to what ships moves `snapshot.Schema` and `JournalSchema`.
-- Interactions: the wall push and crush (`displaceComposite`,
-  `World.ShiftComposite`), drift's layer `Shift` and scenery behind rock and walls,
-  splash, loot and spawn placement, tracer and line walks, typing's top glyph, every
-  renderer's read.
-- Cost, measured before and after: `TestTickProfileTD16`, `BenchmarkCaveStep`,
-  `BenchmarkCaveStepNavigation`, the renderer benches, the harness counts.
-
-Each phase is a session at the highest effort: its choices confirmed before any
-code, one PR.
+Under a raised storm with eight cursors walking, td's ticks where hundreds of
+walls go reach 40–60 ms and compute no field, the wall system's event peaking at
+34–51 ms and navigation at 15–17 ms. The box characters' neighbour test, once the
+suspect, reads a bit of the index's planes now, and td's storms draw none: the
+peak is elsewhere in the walls' death, to be profiled before anything is changed.
 
 ## Bots
 
