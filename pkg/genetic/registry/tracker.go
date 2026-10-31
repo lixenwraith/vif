@@ -32,9 +32,6 @@ func NewTrackedSpecies(cfg SpeciesConfig, agg fitness.Aggregator) *TrackedSpecie
 	if cfg.EngineConfig != nil {
 		engineCfg = *cfg.EngineConfig
 	}
-	if cfg.PerturbationStdDev > 0 {
-		engineCfg.PerturbationStrength = cfg.PerturbationStdDev
-	}
 	probeSource := rand.NewPCG(engineCfg.Seed^0xA5A5A5A5, engineCfg.Seed)
 
 	bounds := cfg.Bounds
@@ -229,17 +226,4 @@ func (ts *TrackedSpecies) CompleteTracking(evalID uint64, death tracking.MetricB
 	ts.trackMu.Unlock()
 }
 
-func (ts *TrackedSpecies) Stats() Stats {
-	s := ts.Engine.Stats()
-	return Stats{
-		Generation:   s.Generation,
-		BestFitness:  s.BestScore,
-		WorstFitness: s.WorstScore,
-		AvgFitness:   s.AverageScore,
-		Diversity:    s.Diversity,
-		PoolSize:     s.Size,
-		PendingCount: s.Pending,
-		TotalEvals:   s.Evaluations,
-		Evicted:      s.Evicted,
-	}
-}
+func (ts *TrackedSpecies) Stats() genetic.PoolStats[float64] { return ts.Engine.Stats() }

@@ -240,18 +240,20 @@ func (s *GeneticSystem) registerSpeciesLocked(payload *event.GeneticRegisterSpec
 	cfg := parameter.GAStreamingConfig()
 	// Per-species seed: one root, independent streams, stable across runs
 	cfg.Seed = vmath.DeriveSeed(s.seedRoot, "genetic:"+strconv.Itoa(int(payload.Species)))
+	if payload.PerturbationStdDev > 0 {
+		cfg.PerturbationStrength = payload.PerturbationStdDev
+	}
 	config := registry.SpeciesConfig{
-		ID:                 registry.SpeciesID(payload.Species),
-		Name:               fmt.Sprintf("species_%d", payload.Species),
-		GeneCount:          payload.GeneCount,
-		ProbeBins:          payload.ProbeBins,
-		Bounds:             bounds,
-		Boundary:           parameter.GABoundaryMode,
-		PerturbationStdDev: payload.PerturbationStdDev,
-		TournamentSize:     parameter.GATournamentSize,
-		MixProbability:     parameter.GACrossoverMixProbability,
-		IsComposite:        payload.IsComposite,
-		EngineConfig:       &cfg,
+		ID:             registry.SpeciesID(payload.Species),
+		Name:           fmt.Sprintf("species_%d", payload.Species),
+		GeneCount:      payload.GeneCount,
+		ProbeBins:      payload.ProbeBins,
+		Bounds:         bounds,
+		Boundary:       parameter.GABoundaryMode,
+		TournamentSize: parameter.GATournamentSize,
+		MixProbability: parameter.GACrossoverMixProbability,
+		IsComposite:    payload.IsComposite,
+		EngineConfig:   &cfg,
 	}
 
 	// Start is idempotent; run it even when this species was already registered
@@ -417,10 +419,10 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY 
 func (s *GeneticSystem) updateTelemetry() {
 	st := s.registry.Stats(registry.SpeciesID(component.SpeciesEye))
 	s.statGeneration.Store(int64(st.Generation))
-	s.statBest.Store(int64(st.BestFitness * 1000))
-	s.statAvg.Store(int64(st.AvgFitness * 1000))
-	s.statPending.Store(int64(st.PendingCount))
-	s.statOutcomes.Store(int64(st.TotalEvals))
+	s.statBest.Store(int64(st.BestScore * 1000))
+	s.statAvg.Store(int64(st.AverageScore * 1000))
+	s.statPending.Store(int64(st.Pending))
+	s.statOutcomes.Store(int64(st.Evaluations))
 	s.statTracked.Store(s.eyeTracked)
 
 	// Per-type EMA is string-formatted; publish at the snapshot rate, not per tick

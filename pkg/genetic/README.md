@@ -1,9 +1,7 @@
 # genetic
 
-Generic evolutionary optimization for Go. The core package and every subpackage
-use only the standard library, except `persistence`, whose TOML codec imports
-`github.com/lixenwraith/toml`; `registry` imports `persistence` and so carries
-that dependency too.
+Evolutionary optimization for simulations and games, in Go. The core package and
+every subpackage use only the standard library.
 
 Two engines share one operator set:
 
@@ -24,12 +22,17 @@ Two engines share one operator set:
 | `genetic/registry` | `genetic`, `fitness`, `tracking`, `persistence` | Multi-population manager keyed by a `uint8` id |
 | `genetic/fitness` | `tracking` | Scalarizing multi-objective metrics into one score |
 | `genetic/tracking` | stdlib | Per-entity metric accumulation over a lifetime |
-| `genetic/persistence` | `genetic`, `toml` | Population save/load, atomic writes |
+| `genetic/persistence` | `genetic` | Population save/load, atomic writes, JSON by default |
 
 `genetic` never imports its own subpackages. Using `StreamingEngine` directly
-requires nothing else. `sandbox/genetic` is a runnable example: lander
-controllers evolved with asynchronous flights, a terminal view, and a
-`-headless N` mode that prints a convergence table.
+requires nothing else. Two runnable examples live beside the package:
+
+- `sandbox/genetic` evolves lander controllers: four real genes, flights that
+  end out of order, a terminal view, and a `-headless N` mode that prints a
+  convergence table.
+- `sandbox/life` evolves 5×5 cell patterns that cross a Game of Life field to a
+  goal from eight sources, one population each, over a bit genome with its own
+  perturbator and diversity metric. Moving the goal re-scores every archive.
 
 ---
 
@@ -62,8 +65,8 @@ type PoolStats[F Numeric] struct {
 }
 ```
 
-`Solution` is unconstrained: `[]float64` is the common case, but permutations,
-trees, and strings work as long as the operators match.
+`Solution` is unconstrained: `[]float64` is the common case, but bit patterns,
+permutations, trees and strings work as long as the operators match.
 
 ```go
 type InitializerFunc[S Solution]            func(rng *rand.Rand) S
@@ -84,7 +87,7 @@ The engine maintains three disjoint structures:
 ```
   archive       fixed-capacity, score-sorted, scored candidates only
   proposals     FIFO ring of unevaluated offspring awaiting a caller
-  pending       slot table of in-flight evaluations, keyed by EvalID
+  pending       open-addressed table of in-flight evaluations, keyed by EvalID
 ```
 
 Only the archive participates in selection and statistics. Unevaluated offspring
@@ -101,9 +104,13 @@ crossover stops contributing. `SetEqual` closes it:
 e.SetEqual(slices.Equal[[]float64])
 ```
 
-A scored genotype equal to an archive member with the same score is discarded.
-Equal-score members are adjacent in the sorted archive, so the check costs one
-comparison per tie. `registry` installs it for every species.
+With it a genotype is archived once, at its best score: a repeat outcome below
+that score is discarded, and one above it moves the member up instead of adding
+a second copy. The check is one comparison per archive member on each admitted
+outcome, after the tail test has already rejected most. A discrete genome
+evaluated under noise needs it even more than a real one: the same pattern
+scored ten different ways would otherwise take ten slots. `registry` installs it
+for every species.
 
 Generations advance on *outcome count*, not on batch boundaries:
 `MinOutcomesPerGen` completed evaluations increment `Generation` and trigger a
@@ -146,22 +153,22 @@ id := e.BeginEvaluation(myGenes)  // Copied under a Cloner; kept as is when nil
 
 `EvalID` is monotonic and `0` is never issued, so it doubles as a validity flag.
 
-**Completion is optional.** The pending table is direct-mapped by id: an
-evaluation is evicted when the id `PendingCapacity` issues later lands in its
-slot, whether or not the table is full. The genotype is recycled,
+**Completion is optional.** An evaluation occupies one of the eight slots from
+its id's home slot in the pending table, and a new one evicts the oldest id in
+its window only when all eight hold newer ones. So `PendingCapacity` bounds the
+evaluations in flight, an evaluation left alone in a sparse table is never lost,
+and under load the oldest goes first. An evicted genotype is recycled,
 `PoolStats.Evicted` increments, and a late `CompleteEvaluation` for it is
-ignored. This bounds memory without a sweep and makes it safe for the host to
-drop evaluations it can no longer score. Sizing rule: `PendingCapacity` must
-exceed the number of evaluations that can *start* during the longest-lived one,
-that is in-flight count × (longest lifetime ÷ shortest lifetime). When slow
-evaluations are the good ones, undersizing silently discards exactly the
-outcomes worth keeping; a climbing `Evicted` is the symptom.
+ignored, which makes it safe for the host to drop evaluations it can no longer
+score. Size `PendingCapacity` at about four times the evaluations the host keeps
+in flight, so a window rarely fills; a climbing `Evicted` says it did.
 
-Asynchronous completion also biases the early archive: evaluations that finish
-fast are admitted first and become the first parents. The initializer is used
-only until the archive holds two members, so when a short lifetime correlates
-with a poor outcome, expect the first generations to breed from poor stock
-before the slow, good outcomes arrive.
+Asynchronous completion biases the early archive: evaluations that finish fast
+are admitted first and become the first parents. The initializer is used only
+until the archive holds two members, so when a short lifetime correlates with a
+poor outcome, expect the first generations to breed from poor stock before the
+slow, good outcomes arrive. Waiting for a full archive before breeding was
+measured on the lander example and changed nothing, so the engine does not.
 
 ### Ownership
 
@@ -174,7 +181,9 @@ The `Cloner` argument decides who owns what:
 
 `SliceCloner[S, T]` covers slice genotypes and reuses `dst` capacity. Pass `nil`
 only when the caller provably reads the genotype and discards it before the next
-`Propose`. `Best`, `Snapshot` and `Checkpoint` clone under the same rule.
+`Propose`. `Best`, `Snapshot` and `Checkpoint` clone under the same rule. With a
+cloner, buffers the archive drops and evaluations the host abandons are reused
+for later offspring, so a steady host allocates nothing per proposal.
 
 ### Diversity
 
@@ -232,7 +241,7 @@ engine; use them when retaining learned candidates matters but exact continuatio
 does not. Pending evaluations survive `Inject` and complete into the new archive;
 abandon them first if their scores belong to the old objective. Re-scoring a
 `Snapshot` and injecting it is how a host changes the objective without
-discarding what was learned.
+discarding what was learned; both examples do it when their goal moves.
 
 ```go
 state, err := e.Checkpoint()         // Complete, caller-owned continuation point
@@ -240,14 +249,16 @@ err = other.Restore(state)           // Exact next proposal and EvalID
 ```
 
 `StreamingState` carries the archive, generation and last diversity, plus the
-normalized configuration, PCG position, FIFO proposal ring, pending evaluations,
-partial-generation outcome count, next ID, eviction counter and running state.
-`Restore` validates the complete value before changing the engine, refusing a
-mismatch with `ErrInvalidStreamingState`, and `ValidateState` runs that check
-alone, to preflight several engines before restoring any. The destination must
-use the same normalized configuration and equivalent initializer/operators. The
-state is plain generic data and standard-library `encoding/json` can encode it
-when the solution type can be encoded.
+normalized configuration, PCG position, FIFO proposal ring, pending evaluations
+with the slots they occupy, partial-generation outcome count, next ID, eviction
+counter and running state. `Restore` validates the complete value before changing
+the engine, refusing a mismatch with `ErrInvalidStreamingState`, and
+`ValidateState` runs that check alone, to preflight several engines before
+restoring any. The destination must use the same normalized configuration and
+equivalent initializer/operators. The state is plain generic data and
+standard-library `encoding/json` can encode it when the solution type can be
+encoded. `StreamingStateVersion` names the layout; a checkpoint of another
+version is refused.
 
 ---
 
@@ -264,15 +275,18 @@ best, err := e.Best()
 history := e.History()   // PoolStats per generation
 ```
 
-Each `step` carries the sorted head over as elites (`EliteCount`), fills the rest
-by selection → recombination → mutation, scores the new members, then re-sorts.
-Solution *generation* is serial because `*rand.Rand` is not goroutine-safe;
-*scoring* fans out to `Parallelism` goroutines, so **the evaluator must be
-goroutine-safe when `Parallelism > 1`**. `Run` honours context cancellation
-between generations. The batch engine takes no `Cloner`: `Best` and the returned
-`Pool` alias engine memory, and offspring buffers are freshly allocated each
-generation because ownership moves into the pool. Its `SetDiversity` takes the
-same `DiversityFunc`, evaluated once per generation into `PoolStats.Diversity`.
+Each generation carries the sorted head over as elites (`EliteCount`), fills the
+rest by selection → recombination → mutation, scores the new members, then
+re-sorts. Solution *generation* is serial because `*rand.Rand` is not
+goroutine-safe; *scoring* runs on a worker set of `Parallelism` goroutines over
+one atomic index, so **the evaluator must be goroutine-safe when
+`Parallelism > 1`**. The result does not depend on `Parallelism`. `Run` honours
+context cancellation between generations. The batch engine takes no `Cloner`:
+`Best` and the returned `Pool` alias engine memory, and the buffers of the
+members a generation replaces are written over by the next generation's
+offspring, so a terminator or a caller between runs copies what it keeps. A
+steady generation allocates nothing. Its `SetDiversity` takes the same
+`DiversityFunc`, evaluated once per generation into `PoolStats.Diversity`.
 
 ---
 
@@ -284,7 +298,7 @@ in place.
 
 ```go
 type Selector[S Solution, F Numeric] interface {
-    Select(members []Candidate[S, F], dst []Candidate[S, F], rng *rand.Rand)
+    Select(members []Candidate[S, F], dst []Candidate[S, F], version uint64, rng *rand.Rand)
 }
 type Combiner[S Solution, F Numeric] interface {
     Combine(parents []Candidate[S, F], dst []S, rng *rand.Rand) int
@@ -297,8 +311,10 @@ type Cloner[S Solution] interface {
 }
 ```
 
-`Combine` returns the number of `dst` entries written and must reuse `dst[i]`
-capacity when shape-compatible.
+`version` changes whenever `members` does, so a selector may keep work derived
+from them between calls; `RouletteSelector` rebuilds its cumulative table only
+on a new version. `Combine` returns the number of `dst` entries written and must
+reuse `dst[i]` capacity when shape-compatible.
 
 | Implementation | Notes |
 |---|---|
@@ -316,11 +332,21 @@ capacity when shape-compatible.
 `PerturbationRate` of 0.2 with `PerturbationStrength` 0.15 mutates one gene in
 five with a sigma of 15% of its range. Size `rate` to the genome: with four
 genes, 0.2 leaves 41% of offspring unmutated, so short genomes want a rate near
-`1/len` or above. `BoundaryClamp` piles mutated mass onto the bounds; prefer
-`BoundaryReflect` when a gene is decoded into bins.
+`1/len` or above, and a genome whose value depends on an exact arrangement, as
+a cell pattern does, wants a rate near `1/len` or below with a `MixProbability`
+near 1, so that most children differ from a parent by one element. `BoundaryClamp`
+piles mutated mass onto the bounds; prefer `BoundaryReflect` when a gene is
+decoded into bins.
 
 `ParameterBounds.Bin(v, n)` decodes a gene into one of `n` equal bins, half-open
 at the top so `Max` lands in bin `n-1`; `BinCenter(i, n)` is its inverse.
+
+A genome that is not a real vector brings its own perturbator and, if wanted,
+diversity metric, and reuses the rest. The life example's `[]bool` patterns run
+under `TournamentSelector`, `UniformCombiner[[]bool, bool, float64]`,
+`SliceCloner[[]bool, bool]`, a ten-line perturbator that flips each bit with
+probability `rate` and ignores `strength`, and a diversity metric over bit
+frequencies.
 
 ---
 
@@ -345,12 +371,12 @@ cfg.Seed = 0xC0FFEE
 | `PerturbationRate` | 0.2 | Per-element mutation probability, clamped to [0,1] |
 | `PerturbationStrength` | 0.15 | Mutation sigma as a fraction of element range, clamped to [0,1] |
 | `MaxIterations` | 1000 | Batch engine generation cap |
-| `Parallelism` | 4 | Batch engine evaluator concurrency |
+| `Parallelism` | 4 | Batch engine evaluator workers |
 | `Seed` | 0 | PCG seed; every value including 0 is reproducible |
 | `RefillMode` | `RefillDeterministic` | Full deterministic refill; opt into `RefillTimeBudget` only when scheduling-dependent streams are acceptable |
 | `TickBudget` | 500µs | Wall-clock cap for `RefillTimeBudget`; ignored by deterministic refills |
 | `ProposalCapacity` | 32 | Depth of the unevaluated offspring ring; rounded up to a power of two |
-| `PendingCapacity` | 512 | Pending-table slots, direct-mapped by id and rounded up to a power of two. An evaluation is evicted once this many later ones have started |
+| `PendingCapacity` | 512 | Pending-table slots, rounded up to a power of two; bounds the evaluations in flight, and an evaluation is evicted only when the eight slots from its id's home slot all hold newer ones |
 | `MinOutcomesPerGen` | 5 | Completed evaluations that advance `Generation` |
 | `DefaultTournamentSize` | 3 | Consumed by `registry`, not by config |
 | `DefaultMixProbability` | 0.5 | Consumed by `registry`, not by config |
@@ -369,6 +395,7 @@ with its own engine, bounds, and optional metric pipeline.
 reg := registry.NewRegistry(store)   // store may be nil to disable persistence
 
 cfg := genetic.DefaultStreamingConfig()
+cfg.PerturbationStrength = 0.1
 reg.Register(registry.SpeciesConfig{
     ID:        1,
     Name:      "walker",
@@ -386,14 +413,15 @@ defer reg.Stop()
 
 `Register` validates `GeneCount == len(Bounds)` and rejects duplicate ids. Unset
 `TournamentSize` / `MixProbability` take the package defaults, an unset `Name`
-becomes `species_<id>`, and a positive `PerturbationStdDev` overrides the engine's
-`PerturbationStrength`. Every species engine runs tournament selection, uniform
-crossover, bounded Gaussian mutation under `Boundary`, and duplicate rejection.
-`Start` is idempotent — it loads and starts only species not already running, so
-it is safe to call after each late registration. A missing persistence file is
-not an error; other I/O failures are returned. `Deregister` stops and drops one
-species, `Registered` lists the held ids, and `Reset` clears every species'
-pending evaluations and queued proposals while keeping its archive.
+becomes `species_<id>`, and a nil `EngineConfig` takes `DefaultStreamingConfig`;
+mutation rate and strength are the engine configuration's. Every species engine
+runs tournament selection, uniform crossover, bounded Gaussian mutation under
+`Boundary`, and duplicate rejection. `Start` is idempotent — it loads and starts
+only species not already running, so it is safe to call after each late
+registration. A missing persistence file is not an error; other I/O failures are
+returned. `Deregister` stops and drops one species, `Registered` lists the held
+ids, and `Reset` clears every species' pending evaluations and queued proposals
+while keeping its archive.
 
 Hot-path methods (`Sample`, `SampleScout`, `Stats`, `ReportFitness`) resolve the
 species through an `atomic.Pointer` array, with no map and no registry lock.
@@ -450,18 +478,10 @@ signal of zero.
 
 ### Stats
 
-```go
-type Stats struct {
-    Generation                            int
-    BestFitness, WorstFitness, AvgFitness float64
-    Diversity                             float64
-    PoolSize, PendingCount                int
-    TotalEvals, Evicted                   uint64
-}
-```
-
-Lock-free; poll freely. `Evicted` climbing steadily means `PendingCapacity` is
-undersized or the host is dropping evaluations.
+`Stats(id)` returns the species engine's `genetic.PoolStats[float64]`, or the
+zero value for an unregistered id. Lock-free; poll freely. `Evicted` climbing
+steadily means `PendingCapacity` is undersized or the host is dropping
+evaluations.
 
 ---
 
@@ -476,6 +496,8 @@ type Aggregator interface {
 `WeightedAggregator` is a weighted sum of optionally normalized metrics:
 
 ```go
+const threat = "threat"   // A context key is the host's own
+
 agg := &fitness.WeightedAggregator{
     Weights: map[string]float64{
         tracking.MetricTicksAlive: 0.4,
@@ -485,7 +507,7 @@ agg := &fitness.WeightedAggregator{
         tracking.MetricTicksAlive: fitness.NormalizeCap(600),
     },
     WeightAdjuster: func(key string, w float64, ctx fitness.Context) float64 {
-        if t, ok := ctx.Get(fitness.ContextThreatLevel); ok && t > 0.7 && key == "avg_speed" {
+        if t, ok := ctx.Get(threat); ok && t > 0.7 && key == "avg_speed" {
             return w * 2
         }
         return w
@@ -506,7 +528,7 @@ Normalizers: `NormalizeLinear(min, max)` clamped to [0,1] · `NormalizeInverse(s
 Inverse substitutes a scale of 1 for `scale <= 0`.
 
 `Context` is a `Get(key) (float64, bool)` lookup; `MapContext` is the trivial
-implementation.
+implementation. The package defines no keys: what a host measures is its own.
 
 ---
 
@@ -529,7 +551,10 @@ keys win.
 
 `CompositeCollector` reads `member_count` from each bundle and adds
 `peak_member_count`, `final_member_count`, and (when the peak is positive)
-`member_retention` for multi-part entities.
+`member_retention` for multi-part entities. The package names only the keys its
+collectors read or write (`MetricTicksAlive`, `MetricMemberCount`,
+`MetricPeakMemberCount`, `MetricFinalMemberCount`, `MetricMemberRetention`);
+every other key is the host's.
 
 `CollectorPool` is a LIFO free list — deterministic reuse, no `sync.Pool`
 scavenging, resets on acquire. Both collectors satisfy:
@@ -551,7 +576,7 @@ evaluation from one goroutine.
 ## persistence
 
 ```go
-store := persistence.NewManager("./state", nil)  // nil codec selects TOML
+store := persistence.NewManager("./state", nil)  // nil codec selects JSON
 reg := registry.NewRegistry(store)
 // ... register, Start, evolve ...
 err := reg.SaveAll()
@@ -565,7 +590,8 @@ File persistence is archive persistence, not an in-flight checkpoint: proposal
 queues, pending evaluations, IDs and RNG positions are not written. Use
 `Registry.Export`/`Import` when the next sample must continue exactly.
 
-Supply a `Codec` to change format:
+Supply a `Codec` to change format; the DTOs carry `toml` tags beside their
+`json` tags, so a TOML codec is a few lines over any TOML package:
 
 ```go
 type Codec interface {
@@ -573,10 +599,16 @@ type Codec interface {
     Unmarshal(data []byte, v any) error
     Ext() string   // Including the leading dot
 }
+
+type tomlCodec struct{}
+
+func (tomlCodec) Marshal(v any) ([]byte, error)   { return toml.Marshal(v) }
+func (tomlCodec) Unmarshal(b []byte, v any) error { return toml.Unmarshal(b, v) }
+func (tomlCodec) Ext() string                     { return ".toml" }
 ```
 
-`TOMLCodec` (default) and `JSONCodec` ship with the package. Implement `Store`
-directly for non-file backends — the registry only needs `Save`/`Load`.
+Implement `Store` directly for non-file backends — the registry only needs
+`Save`/`Load`.
 
 ---
 
@@ -651,15 +683,19 @@ whole point of the streaming model.
 
 - The archive is sorted by `Score` descending and never exceeds `PoolSize`.
 - Outside `Inject` and `Restore`, a candidate leaves the archive only by being
-  displaced by a strictly better one.
-- With `SetEqual`, no two archive members share both genotype and score.
+  displaced by a strictly better one, or, under `SetEqual`, by its own genotype
+  scoring better.
+- With `SetEqual`, no two archive members share a genotype.
 - Unevaluated genotypes never appear in the archive, statistics, or selection.
 - `EvalID` is monotonic; `0` is never issued.
-- `pending` never exceeds `PendingCapacity`, regardless of host behaviour.
+- `pending` never exceeds `PendingCapacity`, regardless of host behaviour, and
+  an evaluation is evicted only when the eight slots from its home slot all
+  hold newer ones.
 - With a non-nil `Cloner`, no solution handed to a caller aliases engine memory.
 - `Stats()` never blocks and never observes a torn snapshot.
-- A successful `Restore(Checkpoint())` reproduces the next proposal, ID and every
-  later state transition under the same operation sequence.
+- A successful `Restore(Checkpoint())` reproduces the next proposal, ID, every
+  later state transition and every later eviction under the same operation
+  sequence.
 
 ## Gotchas
 
@@ -670,12 +706,14 @@ whole point of the streaming model.
 - Without `SetEqual` the streaming archive converges to copies of one genotype;
   `Diversity` reads 0 and `AverageScore` equals `BestScore` long before the
   search is done.
-- `PendingCapacity` and `ProposalCapacity` round up to powers of two. Eviction
-  is by issue distance, not by live count; size for the longest evaluation.
+- `PendingCapacity` and `ProposalCapacity` round up to powers of two. Size the
+  pending table at several times the evaluations in flight; a window of eight
+  consecutive live ids is what evicts.
 - `Snapshot`, `Checkpoint`, and `Best` clone when a `Cloner` is configured;
   `Stats` does not touch solutions at all. Prefer `Stats` for telemetry.
 - `RefillTimeBudget` intentionally weakens seeded reproducibility; deterministic
   refill is the default.
-- The batch `Engine`'s evaluator runs concurrently when `Parallelism > 1`.
+- The batch `Engine`'s evaluator runs concurrently when `Parallelism > 1`, and
+  its pool is rewritten in place each generation: copy what a terminator keeps.
 - `RouletteSelector` and `NPointCombiner` carry scratch buffers; do not share
   one instance across engines.

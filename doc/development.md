@@ -14,7 +14,7 @@ The modules it requires:
 |---|---|
 | `github.com/lixenwraith/terminal` | Raw terminal, input events, cell flush, color-mode detection. |
 | `github.com/lixenwraith/color` | RGB/palette values and blend functions. |
-| `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing, and genetics persistence. |
+| `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing. |
 | `github.com/lixenwraith/log` | Asynchronous structured file logger behind `internal/vlog`. |
 | `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window, with cgo off. |
 | `golang.org/x/sys`; `x/term` (indirect) | The desktop window's Unix calls; terminal support for the terminal module. |

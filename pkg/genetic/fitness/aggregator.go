@@ -1,3 +1,6 @@
+// Package fitness scalarizes a lifetime's metrics into one score: an Aggregator
+// over a tracking.MetricBundle, the weighted sum with per-metric normalizers,
+// and a Context a host passes to reweigh terms at completion time.
 package fitness
 
 import "github.com/lixenwraith/vif/pkg/genetic/tracking"

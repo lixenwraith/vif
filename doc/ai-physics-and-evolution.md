@@ -91,13 +91,14 @@ flowchart LR
 ```
 
 Only scored candidates enter the fixed-capacity, descending archive, so elitism
-is structural, and an optional equality hook rejects a genotype already archived
-at the same score, so the archive does not fill with clones of its best member.
-Outcome count advances generations. The proposal ring is bounded; the pending
-table is direct-mapped by id, so an evaluation is abandoned explicitly or
-evicted once `PendingCapacity` later evaluations have started. The registry
-manages up to 256 independent species through atomic slots, so sampling and
-stats find a species without a lock.
+is structural, and an optional equality hook holds a genotype once, at its best
+score, so the archive does not fill with clones of its best member. Outcome
+count advances generations. The proposal ring is bounded; the pending table is
+open-addressed, an evaluation occupying one of the eight slots from its id's
+home slot, so `PendingCapacity` bounds the evaluations in flight and one is
+evicted only when its whole window holds newer ones. The registry manages up to
+256 independent species through atomic slots, so sampling and stats find a
+species without a lock.
 
 The root `genetic` package uses `math/rand/v2` PCG streams and depends only on the
 standard library. `Seed` is explicit (`0` is valid), and deterministic queue
@@ -112,7 +113,8 @@ Operators include tournament/roulette selection, uniform/N-point crossover,
 bounded or Gaussian perturbation, capacity-reusing slice cloning, and a
 normalized gene-spread diversity metric. The optional fitness/tracking packages
 scalarize multi-metric lifetimes, and the optional persistence package provides
-atomic store/codecs without coupling the core engine to disk.
+an atomic file store, JSON by default, without coupling the core engine to disk.
+No package under `pkg/genetic` imports anything outside the standard library.
 
 ## 4. Game genetic adapter
 

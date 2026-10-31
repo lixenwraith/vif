@@ -51,10 +51,11 @@ func TestWeightedAggregator_WithNormalizers(t *testing.T) {
 }
 
 func TestWeightedAggregator_ContextAdjuster(t *testing.T) {
+	const threat = "threat"
 	agg := &WeightedAggregator{
 		Weights: map[string]float64{"attack": 0.5, "defense": 0.5},
 		WeightAdjuster: func(key string, w float64, ctx Context) float64 {
-			if threat, ok := ctx.Get(ContextThreatLevel); ok && threat > 0.7 && key == "defense" {
+			if level, ok := ctx.Get(threat); ok && level > 0.7 && key == "defense" {
 				return w * 2.0
 			}
 			return w
@@ -64,10 +65,10 @@ func TestWeightedAggregator_ContextAdjuster(t *testing.T) {
 	metrics := tracking.MetricBundle{"attack": 1.0, "defense": 1.0}
 
 	// Low threat: normal weights
-	approx(t, agg.Calculate(metrics, MapContext{ContextThreatLevel: 0.3}), 1.0)
+	approx(t, agg.Calculate(metrics, MapContext{threat: 0.3}), 1.0)
 
 	// High threat: defense doubled (0.5*1 + 1.0*1)
-	approx(t, agg.Calculate(metrics, MapContext{ContextThreatLevel: 0.8}), 1.5)
+	approx(t, agg.Calculate(metrics, MapContext{threat: 0.8}), 1.5)
 }
 
 func TestNormalizeInverse(t *testing.T) {

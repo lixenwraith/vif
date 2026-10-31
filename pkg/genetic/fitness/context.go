@@ -12,11 +12,3 @@ func (c MapContext) Get(key string) (float64, bool) {
 	v, ok := c[key]
 	return v, ok
 }
-
-// Standard context keys
-const (
-	ContextThreatLevel      = "threat_level"
-	ContextEnergyManagement = "energy_management"
-	ContextHeatManagement   = "heat_management"
-	ContextTypingAccuracy   = "typing_accuracy"
-)

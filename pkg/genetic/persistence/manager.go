@@ -1,3 +1,6 @@
+// Package persistence saves a population's scored archive and loads it back:
+// a Store the registry calls, a Manager that writes one file per population
+// atomically, and the Codec that decides the file's format, JSON by default.
 package persistence
 
 import (
@@ -17,10 +20,10 @@ type Manager struct {
 	basePath string
 }
 
-// NewManager creates a file-backed store; a nil codec selects TOML
+// NewManager creates a file-backed store; a nil codec selects JSON
 func NewManager(basePath string, codec Codec) *Manager {
 	if codec == nil {
-		codec = TOMLCodec{}
+		codec = JSONCodec{}
 	}
 	return &Manager{basePath: basePath, codec: codec}
 }

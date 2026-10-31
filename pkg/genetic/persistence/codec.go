@@ -1,10 +1,6 @@
 package persistence
 
-import (
-	"encoding/json"
-
-	"github.com/lixenwraith/toml"
-)
+import "encoding/json"
 
 // Codec serializes population state. Embedders supply their own format
 type Codec interface {
@@ -14,14 +10,7 @@ type Codec interface {
 	Ext() string
 }
 
-// TOMLCodec is the default; selected when NewManager receives a nil codec
-type TOMLCodec struct{}
-
-func (TOMLCodec) Marshal(v any) ([]byte, error)   { return toml.Marshal(v) }
-func (TOMLCodec) Unmarshal(b []byte, v any) error { return toml.Unmarshal(b, v) }
-func (TOMLCodec) Ext() string                     { return ".toml" }
-
-// JSONCodec is the stdlib alternative
+// JSONCodec is the default; selected when NewManager receives a nil codec
 type JSONCodec struct{}
 
 func (JSONCodec) Marshal(v any) ([]byte, error)   { return json.Marshal(v) }

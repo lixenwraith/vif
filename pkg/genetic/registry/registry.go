@@ -177,10 +177,10 @@ func (r *Registry) CompleteTracking(id SpeciesID, evalID uint64, death tracking.
 }
 
 // Stats returns a lock-free statistics snapshot
-func (r *Registry) Stats(id SpeciesID) Stats {
+func (r *Registry) Stats(id SpeciesID) genetic.PoolStats[float64] {
 	ts := r.get(id)
 	if ts == nil {
-		return Stats{}
+		return genetic.PoolStats[float64]{}
 	}
 	return ts.Stats()
 }
