@@ -239,7 +239,7 @@ func (x *Index[E]) ShiftSurface(s *Surface, enter int) {
 		}
 		// A row the height did not cross is solid in both columns or in neither
 		for y := max(min(was, now), 0); y < min(max(was, now), h); y++ {
-			x.log.add(vmath.Point{X: col, Y: y}, len(x.Cells))
+			x.log.add(vmath.Point3{X: col, Y: y}, len(x.Cells))
 		}
 	}
 	if len(s.heights) > 0 {

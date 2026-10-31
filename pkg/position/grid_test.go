@@ -27,17 +27,17 @@ func TestGridPartitionSurvivesRemoval(t *testing.T) {
 	private := []entity{mk(ClassPrivate, 1), mk(ClassPrivate, 2), mk(ClassPrivate, 3)}
 
 	// Interleaved insertion must still yield a partitioned cell
-	g.Set(private[0], ClassPrivate, Point{X: 1, Y: 1})
-	g.Set(shared[0], ClassShared, Point{X: 1, Y: 1})
-	g.Set(private[1], ClassPrivate, Point{X: 1, Y: 1})
-	g.Set(shared[1], ClassShared, Point{X: 1, Y: 1})
-	g.Set(private[2], ClassPrivate, Point{X: 1, Y: 1})
+	g.Set(private[0], ClassPrivate, Point3{X: 1, Y: 1})
+	g.Set(shared[0], ClassShared, Point3{X: 1, Y: 1})
+	g.Set(private[1], ClassPrivate, Point3{X: 1, Y: 1})
+	g.Set(shared[1], ClassShared, Point3{X: 1, Y: 1})
+	g.Set(private[2], ClassPrivate, Point3{X: 1, Y: 1})
 	assertPartition(t, g, 1, 1, 2, 3)
 
-	g.RemoveEntityAt(shared[0], Point{X: 1, Y: 1})
+	g.RemoveEntityAt(shared[0], Point3{X: 1, Y: 1})
 	assertPartition(t, g, 1, 1, 1, 3)
 
-	g.RemoveEntityAt(private[1], Point{X: 1, Y: 1})
+	g.RemoveEntityAt(private[1], Point3{X: 1, Y: 1})
 	assertPartition(t, g, 1, 1, 1, 2)
 
 	if got := g.EntitiesAt(1, 1, ScopeShared)[0]; got != shared[1] {
@@ -48,15 +48,15 @@ func TestGridPartitionSurvivesRemoval(t *testing.T) {
 func TestPrivateBudgetPreservesSharedCapacity(t *testing.T) {
 	g := NewGrid[entity](1, 1, 1)
 	for i := range PrivateBudget {
-		if !g.Set(mk(ClassPrivate, uint64(i+1)), ClassPrivate, Point{X: 0, Y: 0}) {
+		if !g.Set(mk(ClassPrivate, uint64(i+1)), ClassPrivate, Point3{X: 0, Y: 0}) {
 			t.Fatalf("private %d rejected inside the budget", i)
 		}
 	}
-	if g.Set(mk(ClassPrivate, 9999), ClassPrivate, Point{X: 0, Y: 0}) {
+	if g.Set(mk(ClassPrivate, 9999), ClassPrivate, Point3{X: 0, Y: 0}) {
 		t.Fatal("private insert exceeded the budget")
 	}
 	for i := range CellCapacity - PrivateBudget {
-		if !g.Set(mk(ClassShared, uint64(i+1)), ClassShared, Point{X: 0, Y: 0}) {
+		if !g.Set(mk(ClassShared, uint64(i+1)), ClassShared, Point3{X: 0, Y: 0}) {
 			t.Fatalf("shared %d displaced by a saturated private run", i)
 		}
 	}
@@ -128,7 +128,7 @@ func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
 		switch {
 		case len(held) > 0 && rng.IntN(3) == 0:
 			i := rng.IntN(len(held))
-			g.RemoveEntityAt(held[i].e, Point{X: held[i].x, Y: held[i].y})
+			g.RemoveEntityAt(held[i].e, Point3{X: held[i].x, Y: held[i].y})
 			held[i] = held[len(held)-1]
 			held = held[:len(held)-1]
 		case step%97 == 96:
@@ -141,7 +141,7 @@ func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
 			}
 			e := mk(c, uint64(step+1))
 			x, y := rng.IntN(7), rng.IntN(5)
-			if g.Set(e, c, Point{X: x, Y: y}) {
+			if g.Set(e, c, Point3{X: x, Y: y}) {
 				held = append(held, placed{e, x, y})
 			}
 		}
