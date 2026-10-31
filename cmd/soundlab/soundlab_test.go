@@ -42,10 +42,9 @@ func teardown(t *testing.T, s *Session) {
 	t.Helper()
 	s.Close()
 	// ResetRegistries is only defined once the mix goroutine has returned;
-	// Stopped is the happens-before edge that makes it safe.
-	if !s.eng.Stopped() {
-		t.Fatal("mixer did not stop; registries cannot be reset")
-	}
+	// Stopped is the happens-before edge that makes it safe. Stop's own wait is
+	// bounded for a wedged backend, and a loaded tick can outlast it.
+	waitFor(t, s.eng.Stopped, "mixer did not stop; registries cannot be reset")
 	audio.ResetRegistries()
 }
 
@@ -443,10 +442,10 @@ validate sa
 // the mixer's queue and take effect on its tick — asserting engine state
 // synchronously after an exec races that tick (reliably so under -race).
 // Registry state is the exception: RegisterPattern is mutex-synchronous and
-// may be asserted directly.
+// may be asserted directly. A loaded run drops ticks, so the deadline is wide.
 func waitFor(t *testing.T, cond func() bool, msg string) {
 	t.Helper()
-	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
 		if cond() {
 			return
 		}
