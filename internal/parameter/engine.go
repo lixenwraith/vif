@@ -17,6 +17,19 @@ const (
 	FrameUpdateInterval = GameUpdateInterval / 3
 	FrameMinInterval    = time.Second / 120
 
+	// MultiplexerFrameInterval is the frame interval inside tmux or screen [wall].
+	// tmux drops a client's output once more than eight bytes a cell back up and
+	// from then on repaints it every 100 ms, about 10 frames a second, until a quiet
+	// 100 ms that a scrolling playfield never gives. Two vanguard panes at 8x get
+	// there at 60 frames a second and at times at 30; at 24 tmux kept up
+	MultiplexerFrameInterval = time.Second / 24
+
+	// FrameRateMin and FrameRateMax bound [play] max_fps, frames a second [wall]; 0
+	// there leaves the rate to the presentation. A rate under one frame a tick draws
+	// one a tick, which a tick at real time waits for
+	FrameRateMin = 10
+	FrameRateMax = int(time.Second / FrameMinInterval)
+
 	// GameUpdateInterval is the default tick, the game time one tick advances; a run's
 	// host may choose another between TickIntervalMin and TickIntervalMax [game]
 	GameUpdateInterval = 50 * time.Millisecond
@@ -109,6 +122,10 @@ const (
 	JournalLineBytes    = 8 << 20
 	JournalLineHeadroom = 64 << 10
 )
+
+// FrameRateSteps are the max_fps values the configuration menu steps through, 0
+// first for the presentation's own; tmux's 24, a tick's 20, then every third of one
+var FrameRateSteps = []int{0, 20, 24, 30, 60, FrameRateMax}
 
 // ECS & Resources Limits
 const (

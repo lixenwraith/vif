@@ -2,7 +2,7 @@
 
 Press **Ctrl-G** or **F10**, hold a left press (a finger) on the status bar, or
 enter **`:g`** (`:config`) during play. Settings take effect in the current run.
-The Audio and Controls rows, the HUD, Relay and Wait to start are also
+The Audio and Controls rows, Max FPS, the HUD, Relay and Wait to start are also
 `vif.toml`'s `[play]`: a run writes them back as they change, and the next run
 starts as this one was left; the rest changes this run alone, and the keymap is
 never rewritten.
@@ -47,7 +47,7 @@ unavailable in this run`).
 | Multiplayer | Host this run, join an existing session, request an allocated session, leave the session, relay for others, inspect status, drop a player with its bots or an individual bot (host only). |
 | Audio | Sound effects, their volume in 5% steps, music. |
 | Controls | Auto-fire (`off`, `main`, `on`), mouse input, pointer following. |
-| Display | Telemetry HUD and clearing its pins, navigation flow field and route graph. |
+| Display | Max FPS, telemetry HUD and clearing its pins, navigation flow field and route graph. |
 | Simulation | Speed from 1/8x through 8x, in a session the host's; a replay's restart. |
 | Diagnostics | Logging, level and scope presets, snapshot interval, flight recorder depth, FSM trigger and flush, profiler, CPU/heap/mutex profiles and execution trace, telemetry snapshot, the replay journal toggle. |
 | Startup settings | Guidance for paths/scenario, audio device/buffer, colour depth, key bindings and identity. |
@@ -152,7 +152,7 @@ stay on the command line.
 Use CLI arguments and `vif.toml` for startup defaults. The Startup settings page
 identifies options that need a restart; it does not edit files. `[play]` is the
 exception: sound effects, music, sfx volume, auto-fire, mouse input, Follow
-mouse, the telemetry HUD, Relay and Wait to start are written back as they change,
+mouse, Max FPS, the telemetry HUD, Relay and Wait to start are written back as they change,
 from the menu or the command line, and a scenario change carries them into the
 next run. A flag (`-mute`, `-nw`) sets its value for its run alone and is never
 written. Every platform writes them the same way: the `vif.toml` the run read when

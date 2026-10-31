@@ -291,9 +291,10 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	}
 	ctx.AutoFire.Store(engine.AutoFireMain)
 	ctx.MouseDisabled.Store(false)
+	ctx.MaxFPS.Store(24)
 	a.persistPlay()
 	s, path, err := paths.LoadSettings(dir)
-	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.HUD != paths.DefaultPlay().HUD {
+	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.MaxFPS != 24 || s.Play.HUD != paths.DefaultPlay().HUD {
 		t.Fatalf("written back: %+v from %q, %v", s.Play, path, err)
 	}
 	ctx.ResetSessionState()

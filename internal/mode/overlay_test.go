@@ -473,6 +473,52 @@ func TestConfigMenuHonorsCommandRestrictionsAtActivation(t *testing.T) {
 	}
 }
 
+// TestMaxFPSStepsInTheMenuAndTakesRatesInRange: the Display row steps through
+// parameter.FrameRateSteps around to auto, a value between steps moves to the
+// step on that side, and :fps takes auto or a rate in range and refuses others.
+func TestMaxFPSStepsInTheMenuAndTakesRatesInRange(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	r := NewRouter(ctx, input.NewMachine())
+	ExecuteCommand(ctx, "g")
+	ctx.SetOverlaySelection("display")
+	r.handleOverlayActivate()
+	step := func(d int) int32 {
+		ctx.SetOverlaySelection("fps")
+		r.changeConfigMenu(d, false)
+		return ctx.MaxFPS.Load()
+	}
+	steps := parameter.FrameRateSteps
+	for i := range steps {
+		want := steps[(i+1)%len(steps)]
+		if got := step(1); got != int32(want) {
+			t.Fatalf("step %d up: max fps %d, want %d", i, got, want)
+		}
+	}
+	if got := step(-1); got != int32(steps[len(steps)-1]) {
+		t.Fatalf("down from auto: max fps %d, want %d", got, steps[len(steps)-1])
+	}
+	for _, c := range []struct{ from, d, want int32 }{{45, 1, 60}, {45, -1, 30}} {
+		ctx.MaxFPS.Store(c.from)
+		if got := step(int(c.d)); got != c.want {
+			t.Errorf("%d stepped %d: max fps %d, want %d", c.from, c.d, got, c.want)
+		}
+	}
+	ctx.MaxFPS.Store(0)
+	for _, c := range []struct {
+		command string
+		want    int32
+	}{
+		{"fps 24", 24}, {"fps", 24}, {"fps 9", 24}, {"fps 121", 24}, {"fps x", 24},
+		{"fps 10", 10}, {"fps AUTO", 0}, {"fps 120", 120}, {"fps 0", 0},
+	} {
+		ExecuteCommand(ctx, c.command)
+		if got := ctx.MaxFPS.Load(); got != c.want {
+			t.Errorf("%q: max fps %d, want %d", c.command, got, c.want)
+		}
+	}
+}
+
 // TestTheHelpKeyOpensHelpOverAnyModeAndClosesIt: F1 asks for help from NORMAL and
 // from a text mode, takes the place of the menu and drops its form, and closes help
 // where help is shown; F10 opens the menu over help as Ctrl-G does.
