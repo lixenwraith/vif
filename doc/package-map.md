@@ -125,6 +125,7 @@ flowchart TD
     Game --> Browser["pkg/browser"]
     Game --> HostKey["pkg/hostkey"]
     Game --> Socket["pkg/websocket"]
+    Audio --> Net["pkg/audio/ripnet over pkg/transformer"]
 ```
 
 | Package | Public purpose | Important coupling |
@@ -137,6 +138,8 @@ flowchart TD
 | `pkg/hostkey` | The key report of a host that reads its platform's own key events: presses until a run asks for releases, then each key's press, repeats and release paired by the host's code for the physical key, taps for keys with no release, every hold ended when focus leaves. The window, the page and Android share it. | External terminal module only (its `KeyHolds` pairs the releases). |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy *and the banks* are injected; the package ships no specs, and beside the standard library imports only `lixenwraith/toml` and its `macro` expander, so it can leave the module whole. |
 | `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
+| `pkg/audio/ripnet` | The rip's learned front end: the model's shape (`Spec`), a weight file loaded into a `RipFrontEnd` that hears log-mel frames into the frames the rip's decoders read, voices included ([Rip design](rip-design.md)). | `pkg/audio` and `pkg/transformer`; goes with `audio` to its module. |
+| `pkg/transformer` | Inference over sequences of frames in pure Go: a linear input, pre-norm attention blocks with ALiBi biases over a window, exact-GELU feed-forwards, named output heads, and the versioned weight file a trainer writes. | Standard library only; `tool/rip-train` is the PyTorch twin that writes its files. |
 | `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | The package and its subpackages use the standard library only; its default seed restates `vmath.Golden64` rather than importing it. |
 | `pkg/genetic/fitness` | Convert lifetime metric bundles to scalar fitness. | Depends on tracking types. |
 | `pkg/genetic/tracking` | Pooled lifetime metric collectors for simple and composite subjects. | No game-specific component dependency. |
@@ -232,6 +235,7 @@ duplicating version strings that would become stale.
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (the view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
 | `cmd/ascimage` | Supported image converter/viewer command. |
 | `cmd/soundlab` | The audio document editor's terminal command: its flags and the REPL over `internal/soundlab`. |
+| `tool/rip-train` | Train the rip's front-end model on a corpus soundlab exports and write the weight file `pkg/transformer` loads; Python, outside the module ([README](../tool/rip-train/README.md)). |
 | `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |
