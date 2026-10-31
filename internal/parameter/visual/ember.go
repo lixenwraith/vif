@@ -77,6 +77,13 @@ var (
 	emberRingSpeed   = [2]float64{3.0 * vmath.TwoPi, vmath.TwoPi / 5.0}
 )
 
+// EmberJaggedBuckets is the jagged edge's angle resolution, a power of two: each
+// frame displaces one radius per bucket
+const EmberJaggedBuckets = 64
+
+// EmberRingThreshold is the ring visibility under which a cell shows no ring
+const EmberRingThreshold = 0.03
+
 // Ring orbital plane normals (3 rings with different tilts)
 // Precomputed for Dyson-sphere effect
 const EmberRingCount = 3

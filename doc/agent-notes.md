@@ -262,6 +262,15 @@ that proves wrong or that a document now states, and link the document instead.
 - Benchmarks in a cloud container move a fifth between runs, and benchstat is not
   installed: build main's and the branch's test binaries (`go test -c` in a `git
   worktree` of main) and compare medians of alternating runs.
+- A renderer's first call in a live frame runs about twice its hot-bench time,
+  its tables and code gone cold under the frame's other work: the ember paints in
+  9-12 µs when repeated at once and 20-26 µs as the frame's first. Read a gain
+  live, with `:d prof` under `:log on` (`prof.top` lines) or a `time.Now` probe
+  round the call in a scratch build, before calling a bench gain felt.
+- A frame diff of a renderer compares each cell's `BackgroundAt` with a sentinel
+  fallback, not the theme background: a write that leaves a cell's colour as it
+  was still marks it drawn and adds the layer's mask, which dim, grayout, strobe
+  and a later `SetBgScreen` base read.
 - Navigation's cost in vanguard depends on how the ship is flown: one that keeps
   still keeps sight of the raiders and shows little of it. Measure as a player
   flies, headless under `:god` with auto-fire, the ship sweeping between the map's
