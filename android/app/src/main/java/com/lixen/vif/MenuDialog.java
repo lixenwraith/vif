@@ -5,7 +5,9 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.text.Editable;
 import android.text.InputType;
@@ -43,9 +45,10 @@ import java.util.Set;
 /**
  * The configuration menu drawn with the platform's widgets from the run's snapshot
  * (doc/native-menu.md): a window nearly the screen's size in lixen.com's dark theme,
- * its rows 48 dp tall at least, each kind of node its own widget. A snapshot rewrites
- * the rows in place by id, so expansion, scroll and focus stay; a tap sends the run an
- * op, and the widget keeps the snapshot's value until the next says what happened.
+ * each page a ruled heading whose rows open under it in a tinted panel, every row 48
+ * dp tall at least and each kind of node its own widget. A snapshot rewrites the rows
+ * in place by id, so expansion, scroll and focus stay; a tap sends the run an op, and
+ * the widget keeps the snapshot's value until the next says what happened.
  */
 final class MenuDialog extends Dialog {
     // The contract with the run (internal/mode MenuKinds, MenuOps, MenuInputs), which a Go test holds this file to
@@ -53,7 +56,9 @@ final class MenuDialog extends Dialog {
     static final String[] OPS = {"set", "step", "activate", "submit", "search", "close"};
     static final String[] INPUTS = {"text", "number", "uri"};
 
-    private static final int PRESS = 0x268EA2FF; // a row pressed or focused: the accent, faint
+    // A row pressed or focused: the accent, faint; the panel an open page's rows sit in,
+    // the site's card tint, with the stripe that edges it and its own pressed tint
+    private static final int PRESS = 0x268EA2FF, TINT = 0x295F57F5, STRIPE = 0xFF5F57F5, DOWN = 0x4D8EA2FF;
     private static final String NONE = "#none"; // the row shown when a search finds nothing
 
     // Which pages are expanded, kept for the run and not saved
@@ -90,7 +95,7 @@ final class MenuDialog extends Dialog {
         title.setPadding(dp(16), 0, dp(56), 0);
         head.addView(title, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL | Gravity.START));
-        TextView close = StartScreen.text(c, "×", 28, Color.WHITE);
+        TextView close = StartScreen.text(c, "\u00D7", 28, Color.WHITE);
         close.setGravity(Gravity.CENTER);
         close.setContentDescription("Close");
         close.setFocusable(true);
@@ -131,7 +136,15 @@ final class MenuDialog extends Dialog {
         rows.setPadding(0, 0, 0, dp(8));
         ScrollView scroll = new ScrollView(c);
         scroll.addView(rows);
-        window.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        GradientDrawable thumb = new GradientDrawable();
+        thumb.setColor(0x808EA2FF);
+        thumb.setSize(dp(4), dp(48));
+        thumb.setCornerRadius(dp(2));
+        scroll.setVerticalScrollbarThumbDrawable(thumb);
+        // The list stops short of the frame's rounded corners, so its scrollbar does too
+        LinearLayout.LayoutParams scrollAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1);
+        scrollAt.setMargins(0, dp(4), dp(4), dp(12));
+        window.addView(scroll, scrollAt);
 
         status = StartScreen.text(c, "", 14, Color.WHITE);
         status.setPadding(dp(16), dp(8), dp(16), dp(12));
@@ -398,27 +411,46 @@ final class MenuDialog extends Dialog {
             view.setGravity(Gravity.CENTER_VERTICAL);
             view.setMinimumHeight(dp(48));
             view.setPadding(dp(16), dp(10), dp(16), dp(10));
-            boolean section = kind.equals("group") && depth > 0;
-            label = StartScreen.text(c, e.label, section ? 13 : 16, Color.WHITE);
-            detail = StartScreen.text(c, "", 14, StartScreen.MUTED);
+            boolean page = kind.equals("group") && depth == 0, section = kind.equals("group") && depth > 0;
+            label = StartScreen.text(c, e.label, page ? 18 : section ? 12 : 16, Color.WHITE);
+            detail = StartScreen.text(c, "", page ? 14 : 13, StartScreen.MUTED);
             LinearLayout column = new LinearLayout(c);
             column.setOrientation(LinearLayout.VERTICAL);
             column.addView(label);
             column.addView(detail);
+            if (page) {
+                // A page is a heading ruled off from the one above; its rows sit under it
+                // in a tinted panel behind a stripe, as the site's cards do
+                label.setTypeface(StartScreen.MEDIUM);
+                chevron = StartScreen.text(c, "", 18, StartScreen.ACCENT);
+                chevron.setPadding(dp(12), 0, 0, 0);
+                view.setPadding(dp(16), dp(14), dp(16), dp(14));
+                view.setBackground(ruled(states(Color.TRANSPARENT, PRESS)));
+                actable();
+            } else {
+                View stripe = new View(c);
+                stripe.setBackgroundColor(STRIPE);
+                LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(dp(3), ViewGroup.LayoutParams.MATCH_PARENT);
+                at.setMargins(0, 0, dp(13), 0);
+                view.addView(stripe, at);
+                view.setPadding(0, dp(10), dp(16), dp(10));
+                view.setBackground(states(TINT, DOWN));
+            }
             switch (kind) {
                 case "group":
-                    label.setTypeface(StartScreen.MEDIUM);
                     if (section) {
+                        label.setTypeface(StartScreen.MEDIUM);
                         label.setTextColor(StartScreen.ACCENT);
-                        label.setLetterSpacing(0.06f);
+                        label.setLetterSpacing(0.08f);
                         label.setAllCaps(true);
-                        view.setPadding(dp(16), dp(18), dp(16), dp(2));
+                        View rule = new View(c);
+                        rule.setBackgroundColor(StartScreen.LINE);
+                        LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
+                        at.setMargins(0, dp(4), 0, 0);
+                        column.addView(rule, 1, at);
+                        view.setPadding(0, dp(18), dp(16), dp(2));
                         view.setMinimumHeight(0);
                         detail.setVisibility(View.GONE);
-                    } else {
-                        chevron = StartScreen.text(c, "", 16, StartScreen.ACCENT);
-                        chevron.setPadding(dp(12), 0, 0, 0);
-                        actable(c);
                     }
                     break;
                 case "toggle":
@@ -428,19 +460,18 @@ final class MenuDialog extends Dialog {
                     toggle.setThumbTintList(checked(StartScreen.BUTTON, StartScreen.MUTED));
                     toggle.setTrackTintList(checked(0x802563EB, StartScreen.LINE));
                     toggle.setPadding(dp(12), 0, 0, 0);
-                    actable(c);
+                    actable();
                     break;
                 case "choice":
                     value = StartScreen.text(c, "", 16, StartScreen.ACCENT);
                     value.setPadding(dp(12), 0, 0, 0);
-                    actable(c);
+                    actable();
                     break;
                 case "step":
                     value = StartScreen.text(c, "", 16, Color.WHITE);
                     value.setGravity(Gravity.CENTER);
                     value.setMinWidth(dp(56));
                     view.setFocusable(true);
-                    view.setBackground(pressable());
                     break;
                 case "pick":
                     radio = new RadioButton(c);
@@ -449,12 +480,13 @@ final class MenuDialog extends Dialog {
                     radio.setButtonTintList(checked(StartScreen.BUTTON, StartScreen.MUTED));
                     value = StartScreen.text(c, "", 14, StartScreen.MUTED);
                     value.setPadding(dp(12), 0, 0, 0);
-                    actable(c);
+                    actable();
                     break;
                 case "action":
                     label.setTextColor(StartScreen.ACCENT);
                     label.setTypeface(StartScreen.MEDIUM);
-                    actable(c);
+                    value = arrow(c);
+                    actable();
                     break;
                 case "form":
                     label.setTypeface(StartScreen.MEDIUM);
@@ -477,7 +509,8 @@ final class MenuDialog extends Dialog {
                         column.addView(error, 2);
                     } else {
                         label.setTextColor(StartScreen.ACCENT);
-                        actable(c);
+                        value = arrow(c);
+                        actable();
                     }
                     break;
                 default:
@@ -489,7 +522,7 @@ final class MenuDialog extends Dialog {
             }
             view.addView(column, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             if (kind.equals("step")) {
-                view.addView(stepper("−", -1));
+                view.addView(stepper("\u2212", -1));
                 view.addView(value);
                 view.addView(stepper("+", 1));
             } else {
@@ -502,11 +535,17 @@ final class MenuDialog extends Dialog {
         }
 
         // actable makes the whole row the touch target, which a tap acts on and a key focuses
-        private void actable(Context c) {
+        private void actable() {
             view.setClickable(true);
             view.setFocusable(true);
-            view.setBackground(pressable());
             view.setOnClickListener(v -> act());
+        }
+
+        // arrow marks a row that opens something when tapped
+        private TextView arrow(Context c) {
+            TextView a = StartScreen.text(c, "\u203A", 22, StartScreen.MUTED);
+            a.setPadding(dp(12), 0, 0, 0);
+            return a;
         }
 
         private View stepper(String sign, int direction) {
@@ -550,7 +589,7 @@ final class MenuDialog extends Dialog {
                 case "group":
                     if (chevron != null) {
                         boolean open = expanded.contains(id);
-                        chevron.setText(open ? "▾" : "▸");
+                        chevron.setText(open ? "\u25BE" : "\u25B8");
                         view.setContentDescription(e.label + (open ? ", expanded" : ", collapsed"));
                     }
                     return;
@@ -558,7 +597,7 @@ final class MenuDialog extends Dialog {
                     toggle.setChecked(choices.length == 2 && shown.equals(choices[1]));
                     break;
                 case "choice":
-                    value.setText(shown + " ▾");
+                    value.setText(shown + " \u25BE");
                     break;
                 case "step":
                     value.setText(shown);
@@ -902,10 +941,21 @@ final class MenuDialog extends Dialog {
 
     // pressable tints a row while it is pressed or focused and leaves it clear otherwise
     private static StateListDrawable pressable() {
+        return states(Color.TRANSPARENT, PRESS);
+    }
+
+    private static StateListDrawable states(int rest, int pressed) {
         StateListDrawable d = new StateListDrawable();
-        d.addState(new int[] {android.R.attr.state_pressed}, new ColorDrawable(PRESS));
-        d.addState(new int[] {android.R.attr.state_focused}, new ColorDrawable(PRESS));
-        d.addState(new int[] {}, new ColorDrawable(Color.TRANSPARENT));
+        d.addState(new int[] {android.R.attr.state_pressed}, new ColorDrawable(pressed));
+        d.addState(new int[] {android.R.attr.state_focused}, new ColorDrawable(pressed));
+        d.addState(new int[] {}, new ColorDrawable(rest));
+        return d;
+    }
+
+    // ruled draws a hairline along the top of fill
+    private Drawable ruled(Drawable fill) {
+        LayerDrawable d = new LayerDrawable(new Drawable[] {new ColorDrawable(StartScreen.LINE), fill});
+        d.setLayerInset(1, 0, dp(1), 0, 0);
         return d;
     }
 

@@ -46,8 +46,10 @@ each tap as it applies a key ([Native menu](native-menu.md)); a page's content, 
 commands, its refusals and what `[play]` keeps are the same. The differences are the
 host's:
 
-- The six pages are rows that expand in place under a chevron, their sections titles
-  over their rows; which pages are open is kept for the run. A search field under the
+- The six pages are headings, each ruled off from the one above, that expand in
+  place under a chevron: an open page's rows sit under it in a tinted panel behind a
+  stripe, its sections small capitals over a rule; which pages are open is kept for
+  the run. A row that opens something ends in a chevron. A search field under the
   title lists the rows of every page matching the words typed, each with its page, in
   place of the tree, and they act in place.
 - A setting is a switch, a value that opens a radio list, or − and + around a value;

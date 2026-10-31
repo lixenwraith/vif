@@ -66,7 +66,8 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     private boolean pairDown; // a second landed with it: the two are a pinch's
     private int barTaps; // one finger's taps on the status bar in a row
     private long barTapAt; // when the last of them lifted
-    private boolean barDown; // the finger down landed on the status bar and stayed near
+    private boolean barPress; // the finger down landed on the status bar or within BAR_REACH_DP of the foot: it presses the bar
+    private boolean barDown; // that finger stayed near where it landed
     private float barX, barY; // where it landed
 
     GameView(MainActivity activity, String files, String wad, boolean raster, Speaker speaker) {
@@ -234,6 +235,14 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     public boolean onTouchEvent(MotionEvent e) {
         int x = (int) e.getX(), y = (int) e.getY();
         boolean strip = covered > 0 && y >= getHeight() - covered - drawer.stripHeight(getHeight());
+        if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            barPress = covered == 0 && (y >= getHeight() - barReach || Game.onStatusBar(y));
+        }
+        // A press within the bar's touch target is the bar's, where the hold that
+        // opens the menu waits, and its finger wobbling there is no drift
+        if (barPress) {
+            y = getHeight() - 1;
+        }
         barTap(e, strip);
         if (strip) {
             return true; // the strip is a readout, not the map under it
@@ -279,12 +288,13 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     /**
      * Counts one finger's taps on the status bar, which the strip stands for above the
      * keyboard: they may land anywhere on it, or BAR_REACH_DP from the foot where the
-     * bar is drawn thinner, and the third in time toggles the keyboard.
+     * bar is drawn thinner, as the menu's hold may, and the third in time toggles the
+     * keyboard.
      */
     private void barTap(MotionEvent e, boolean strip) {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                barDown = covered > 0 ? strip : e.getY() >= getHeight() - barReach || Game.onStatusBar((int) e.getY());
+                barDown = covered > 0 ? strip : barPress;
                 barX = e.getX();
                 barY = e.getY();
                 break;

@@ -83,7 +83,7 @@ var configForms = map[string]configFormSpec{
 		},
 	},
 	"scenario": {
-		label: "Other scenario", description: "Type a scenario the list does not hold, by name or path as -s takes it: a scenario.toml or a scenario directory. In a session only the host can, and its participants rejoin it.", command: "new",
+		label: "Other scenario", description: "Type a scenario the list does not hold, by name or path as the launch flag -s takes it: a scenario.toml or a scenario directory. In a session only the host can, and its participants rejoin it.", command: "new",
 		fields: []configFormField{{"Scenario", "", "", inputText}},
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
 			name := strings.TrimSpace(f.Value(0))

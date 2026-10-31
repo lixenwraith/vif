@@ -1218,10 +1218,12 @@ one look. The contract test then reads `web/terminal.js` beside `MenuDialog.java
 - `[play]` persists the audio channels, sfx volume, auto-fire, mouse, pointer
   following and the HUD, and a scenario change carries them over. What `:new`
   keeps beyond those (rate, pins, standing breakpoints) a restart or scenario
-  change still drops. Music gain needs an authoritative readback before joining
-  the sfx volume in the menu. Keymap, backend, paths and colour depth remain
-  startup settings; `:d break` stays on the command line, since a row cannot take
-  its arguments.
+  change still drops. A Music volume row under Sound, stepped as Effects volume
+  is and kept as `[play] music_volume`, needs a music gain in the mixer with an
+  authoritative readback first; the row then follows `sfx_volume`'s shape on
+  every host, the native menu's stepper included. Keymap, backend, paths and
+  colour depth remain startup settings; `:d break` stays on the command line,
+  since a row cannot take its arguments.
 
 ### Use sixteen console backgrounds on Linux
 

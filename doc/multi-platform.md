@@ -540,7 +540,8 @@ clipboard as the Paste key, Ctrl-Shift-V and Shift-Insert do; Back is Escape. A 
 repeats; the system keyboard's text, its delete and Back tap; the window losing
 focus ends every hold. Three taps on the status bar, landing anywhere on it (the
 strip above the keyboard stands for it) or within a 48 dp touch target of the view's
-foot, raise or drop the system keyboard through the input method manager, whose state is read
+foot, which a press for the menu's hold shares, its finger wobbling there as it may,
+raise or drop the system keyboard through the input method manager, whose state is read
 from the window's insets rather than a flag of the app's; the
 keyboard covers the view instead of resizing it, so a `crop_on_resize` map keeps
 its cells; the run hears of the keyboard (`Covered`, which the status bar reads as
