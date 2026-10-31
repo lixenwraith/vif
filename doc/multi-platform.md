@@ -494,6 +494,9 @@ opens an `AudioContext` at the first and plays them through an AudioWorklet
 (`web/audio-worklet.js`) that holds two buffers ahead and goes silent when the
 Worker falls behind, as a tick longer than a mixer period makes it; rendering a
 50 ms buffer with music and sfx playing costs the Worker's thread about 1.3 ms.
+The configuration menu is the page's own, a `<dialog>` drawn from the run's
+snapshot and answering with ops, as Android's app draws it (`menuPresentation`,
+[Native menu §8](native-menu.md#8-browser)), on a mouse's page and a finger's alike.
 A muted game posts nothing; the touch strip's speaker button sends Ctrl-S, as a
 keyboard would, to cycle the channels.
 
@@ -598,12 +601,11 @@ emulator widget was measured at 80x the cell copy per frame;
 `terminal.NewWithBackend` keeps that seam for tooling); the font is a bitmap atlas
 generated once, not a TrueType rasterized at load; Android draws on a Canvas
 behind a drawer interface, and a GLES drawer is written only if a device misses
-60 fps; the configuration menu is one tree the router holds, which the terminal, the
-desktop window and the browser draw as the `tui` overlay and Android with its own
-widgets from a JSON snapshot, answering with ops on a node's id (`menuPresentation`,
-[Native menu](native-menu.md)), the browser to follow Android
-([todo](todo.md#draw-the-configuration-menu-with-the-pages-own-widgets)); the
-cell aspect the presentation reports is one parameter of the simulation
+60 fps; the configuration menu is one tree the router holds, which the terminal and
+the desktop window draw as the `tui` overlay and Android and the browser with their
+own widgets from a JSON snapshot, answering with ops on a node's id
+(`menuPresentation`, [Native menu](native-menu.md)); the cell aspect the
+presentation reports is one parameter of the simulation
 ([Rendering §2.2](rendering.md#22-the-cell-aspect)). Host adapters plug through
 `Host`; simulation modules plug through the manifest and the generator
 ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)), never through a second registry.

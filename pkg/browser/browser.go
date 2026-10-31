@@ -31,9 +31,9 @@ const fitWait = time.Second
 
 // The Worker's side of the bridge, web/worker.js: vifGrid, vifSettings and vifClaims
 // hold the grid the page measured at the start and the settings and claims it kept;
-// vifAtlas, vifZoom, vifFrame, vifPointer, vifAudio, vifKeepSettings and vifKeepClaims
-// post the texture, the zoom and the bar's rows, a frame, the pointer mode, PCM, and
-// settings and claims to keep; goEvent takes what the page sends, one object a message
+// vifAtlas, vifZoom, vifFrame, vifPointer, vifAudio, vifKeepSettings, vifKeepClaims
+// and vifMenu post the texture, the zoom and the bar's rows, a frame, the pointer mode,
+// PCM, settings and claims to keep, and the menu; goEvent takes what the page sends
 const (
 	jsGrid       = "vifGrid"
 	jsSettings   = "vifSettings"
@@ -45,6 +45,7 @@ const (
 	jsAudio      = "vifAudio"
 	jsKeep       = "vifKeepSettings"
 	jsKeepClaims = "vifKeepClaims"
+	jsMenu       = "vifMenu"
 	jsEvent      = "goEvent"
 )
 
@@ -74,6 +75,10 @@ type Host struct {
 	fitted  chan struct{} // closed once the page has fitted its grid to the zoom
 	fitOnce sync.Once
 	away    chan bool // the player left for the page's start screen, or came back
+
+	// MenuOp takes what the page's menu asks of a node by its id, on a page that draws
+	// the configuration menu itself (HasMenu); nil leaves its asks unheard
+	MenuOp func(op, id, arg string)
 
 	mu       sync.Mutex
 	inflight bool // a frame the page has not reported drawn
@@ -157,6 +162,13 @@ func (h *Host) SetPointerMode(enabled, motion bool) {
 // last row's left half again above it
 func (h *Host) Covered() bool { return h.covered.Load() }
 
+// HasMenu reports whether the page draws the configuration menu itself: its worker
+// defines vifMenu. An older page keeps the tui menu.
+func HasMenu() bool { return js.Global().Get(jsMenu).Type() == js.TypeFunction }
+
+// Menu hands the page the menu to draw, JSON in a string, empty once it closed
+func (h *Host) Menu(snapshot []byte) { js.Global().Call(jsMenu, string(snapshot)) }
+
 // Cell is the zoom the page was left at, a cell's height in CSS pixels, 0 for its own
 func (h *Host) Cell() float64 { return math.Float64frombits(h.cell.Load()) }
 
@@ -195,8 +207,8 @@ func (h *Host) present() {
 
 // handle takes what the page sent: a frame drawn, a key going down or up, its keys
 // going elsewhere, text, the pointer, a keyboard over it, a zoom, a new size, the
-// grid fitted to the zoom Open sent, the player leaving or returning, or a request
-// for a whole frame
+// grid fitted to the zoom Open sent, the player leaving or returning, a request for
+// a whole frame, or what its menu asks
 func (h *Host) handle(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -249,6 +261,10 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 		}
 	case "sync":
 		h.Sync()
+	case "menu":
+		if h.MenuOp != nil {
+			h.MenuOp(msg.Get("op").String(), msg.Get("id").String(), msg.Get("arg").String())
+		}
 	}
 	return nil
 }

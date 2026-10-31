@@ -954,8 +954,9 @@ final class MenuDialog extends Dialog {
 
     // ruled draws a hairline along the top of fill
     private Drawable ruled(Drawable fill) {
-        LayerDrawable d = new LayerDrawable(new Drawable[] {new ColorDrawable(StartScreen.LINE), fill});
-        d.setLayerInset(1, 0, dp(1), 0, 0);
+        LayerDrawable d = new LayerDrawable(new Drawable[] {fill, new ColorDrawable(StartScreen.LINE)});
+        d.setLayerHeight(1, dp(1));
+        d.setLayerGravity(1, Gravity.TOP);
         return d;
     }
 

@@ -693,6 +693,9 @@ void main() {
             case 'claims':
                 keepClaims(msg.text);
                 break;
+            case 'menu':
+                applyMenu(msg.json);
+                break;
             case 'exit':
                 showExit(msg.code, msg.reason);
                 stop();
@@ -1365,8 +1368,564 @@ void main() {
             function() { say('Copy refused'); });
     }
 
+
+    // === Configuration menu ===
+    /* The run's menu, drawn here from its snapshot as Android's app draws it
+       (doc/native-menu.md): a page is a heading whose rows open under it in a
+       panel, each kind of row its own control, and a tap sends the run an op by the
+       node's id. A snapshot rewrites the rows in place, so expansion, scroll and
+       focus stay, and a control shows the snapshot's value until the next says
+       what happened. The contract with the run: its node kinds, its ops and its
+       field inputs, which a Go test holds this file to. */
+    const MENU_KINDS = ['group', 'toggle', 'choice', 'step', 'pick', 'action', 'form', 'info'];
+    const MENU_OPS = ['set', 'step', 'activate', 'submit', 'search', 'close'];
+    const MENU_INPUTS = ['text', 'number', 'uri'];
+    const config = document.getElementById('config');
+    const configBody = document.getElementById('config-body');
+    const configSearch = document.getElementById('config-search');
+    const configStatus = document.getElementById('config-status');
+    const expanded = new Set();   // the pages open, kept while the page lives
+    const menuRows = new Map();   // the rows shown, by node id
+    let menuJSON = '';            // the snapshot applied, which an expansion applies again
+    let menuQuery = '';           // the search the run holds
+    let sheet = null;             // the confirm, radio list or form up over the menu
+
+    function menuOp(op, id, arg) {
+        if (MENU_OPS.includes(op)) send({ type: 'menu', op: op, id: id || '', arg: arg || '' });
+    }
+
+    // applyMenu draws the menu as the run has it; an empty snapshot closes it
+    function applyMenu(json) {
+        if (!json) {
+            closeMenu();
+            return;
+        }
+        let snap;
+        try {
+            snap = JSON.parse(json);
+        } catch (err) {
+            console.error('vif: menu snapshot', err);
+            return;
+        }
+        menuJSON = json;
+        document.getElementById('config-title').textContent = snap.title || 'Menu';
+        const line = snap.status;
+        configStatus.hidden = !line;
+        if (line) {
+            configStatus.textContent = line.text;
+            configStatus.className = line.kind || '';
+        }
+        const nodes = new Map();
+        indexNodes(snap.nodes, nodes);
+        const wanted = [];
+        menuQuery = snap.query || '';
+        if (menuQuery) {
+            for (const f of snap.found || []) {
+                const n = nodes.get(f.id);
+                if (n) wanted.push({ node: n, label: f.label, depth: 1 });
+            }
+            if (!wanted.length) wanted.push({ node: { id: '#none', kind: 'info', label: 'Nothing matches' }, label: 'Nothing matches', depth: 1 });
+        } else {
+            walkNodes(snap.nodes, 0, wanted);
+            // The run dropped the search, as Escape does: the field follows, unless it is being typed in
+            if (configSearch.value && document.activeElement !== configSearch) configSearch.value = '';
+        }
+        reconcileRows(wanted);
+        const form = snap.form || {};
+        for (const row of menuRows.values()) row.error(row.id === form.id ? form.error : '');
+        if (sheet) {
+            if (sheet.error) sheet.error.textContent = sheet.id === form.id ? form.error : '';
+            if (!nodes.has(sheet.id)) closeSheet();   // the row it was up for is gone: a bot that left
+        }
+        if (!config.open) {
+            config.showModal();
+            lost();
+            send({ type: 'blur' });
+        }
+    }
+
+    function indexNodes(nodes, into) {
+        for (const n of nodes || []) {
+            into.set(n.id, n);
+            indexNodes(n.nodes, into);
+        }
+    }
+
+    // walkNodes lists the rows to show: every page, the rows of the open ones, and a
+    // section as a title over its own rows
+    function walkNodes(nodes, depth, into) {
+        for (const n of nodes || []) {
+            into.push({ node: n, label: n.label, depth: depth });
+            if (n.kind === 'group' && (depth > 0 || expanded.has(n.id))) walkNodes(n.nodes, depth + 1, into);
+        }
+    }
+
+    // reconcileRows makes the rows shown the entries wanted, in order, keeping every
+    // row whose node stands so its state stays
+    function reconcileRows(wanted) {
+        for (let i = 0; i < wanted.length; i++) {
+            const e = wanted[i], id = e.node.id;
+            let row = menuRows.get(id);
+            if (row && (row.kind !== e.node.kind || row.depth !== e.depth)) {
+                row.el.remove();
+                menuRows.delete(id);
+                row = null;
+            }
+            if (!row) {
+                row = makeRow(e);
+                menuRows.set(id, row);
+            }
+            if (configBody.children[i] !== row.el) configBody.insertBefore(row.el, configBody.children[i] || null);
+            row.update(e);
+        }
+        while (configBody.children.length > wanted.length) {
+            const el = configBody.lastElementChild;
+            menuRows.delete(el.dataset.id);
+            el.remove();
+        }
+    }
+
+    // nodeOf is a node of the snapshot applied last, by id
+    function nodeOf(id) {
+        const nodes = new Map();
+        try {
+            indexNodes(JSON.parse(menuJSON).nodes, nodes);
+        } catch (err) {
+            return {};
+        }
+        return nodes.get(id) || {};
+    }
+
+    function span(cls, text) {
+        const el = document.createElement('span');
+        el.className = cls;
+        if (text) el.textContent = text;
+        return el;
+    }
+
+    /* makeRow builds a node's row: a label over its description, and the control its
+       kind takes, which shows the snapshot's value and sends an op when touched. A
+       page is a heading with a chevron that opens its rows under it; a section is
+       a title. */
+    function makeRow(e) {
+        const n = e.node, kind = n.kind, depth = e.depth, id = n.id;
+        const row = { id: id, kind: kind, depth: depth, choices: [], fields: [], disabled: false };
+        const el = document.createElement('div');
+        const page = kind === 'group' && depth === 0, section = kind === 'group' && depth > 0;
+        el.className = 'row ' + (page ? 'page' : section ? 'section' : kind) + (depth > 0 ? ' in' : '');
+        el.dataset.id = id;
+        row.el = el;
+        const text = span('text'), label = span('label'), detail = span('detail');
+        text.append(label, detail);
+        let value = null, control = null, trailing = null, field = null, error = null;
+        const actable = function() {
+            el.classList.add('act');
+            el.tabIndex = 0;
+            el.setAttribute('role', 'button');
+            el.addEventListener('click', function(ev) {
+                if (ev.target.closest('select, .field, .stepper')) return;
+                row.act();
+            });
+        };
+        if (page) {
+            trailing = span('chevron');
+            actable();
+        }
+        switch (kind) {
+        case 'toggle':
+            control = document.createElement('input');
+            control.type = 'checkbox';
+            control.className = 'switch';
+            control.setAttribute('role', 'switch');
+            control.tabIndex = -1;
+            control.addEventListener('click', function(ev) { ev.preventDefault(); });   // controlled: the snapshot sets it
+            actable();
+            break;
+        case 'choice':
+            control = document.createElement('select');
+            control.className = 'choice';
+            control.addEventListener('change', function() {
+                menuOp('set', id, control.value);
+                control.value = nodeOf(id).value || '';
+            });
+            break;
+        case 'step':
+            value = span('value');
+            el.tabIndex = 0;
+            break;
+        case 'pick':
+            control = document.createElement('input');
+            control.type = 'radio';
+            control.className = 'radio';
+            control.tabIndex = -1;
+            control.addEventListener('click', function(ev) { ev.preventDefault(); });
+            value = span('note');
+            actable();
+            break;
+        case 'action':
+            trailing = span('arrow', '›');
+            actable();
+            break;
+        case 'form':
+            row.fields = n.fields || [];
+            if (row.fields.length === 1) {
+                field = fieldFor(row.fields[0]);
+                field.value = row.fields[0].value || '';
+                field.placeholder = row.fields[0].label || '';
+                field.setAttribute('enterkeyhint', 'go');
+                field.addEventListener('keydown', function(ev) {
+                    if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        menuOp('submit', id, JSON.stringify([field.value]));
+                    }
+                });
+                error = span('error');
+                text.insertBefore(field, detail);
+                text.append(error);
+            } else {
+                el.classList.add('sheet');
+                trailing = span('arrow', '›');
+                actable();
+            }
+            break;
+        default:
+            break;
+        }
+        if (kind === 'pick') el.append(control);
+        el.append(text);
+        if (kind === 'step') {
+            el.append(stepper('−', -1), value, stepper('+', 1));
+        } else {
+            for (const w of [value, kind === 'pick' ? null : control, trailing]) {
+                if (w) el.append(w);
+            }
+        }
+
+        function stepper(sign, direction) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'stepper';
+            b.textContent = sign;
+            b.setAttribute('aria-label', direction < 0 ? 'Less' : 'More');
+            b.addEventListener('click', function() { row.turn(direction); });
+            return b;
+        }
+
+        // update rewrites the row from a snapshot's node; what was typed into a field stays
+        row.update = function(entry) {
+            const node = entry.node;
+            label.textContent = entry.label;
+            const reason = node.disabled || '', description = node.description || '';
+            row.disabled = reason !== '';
+            detail.textContent = row.disabled && description ? reason + '. ' + description : row.disabled ? reason : description;
+            el.classList.toggle('off', row.disabled);
+            row.choices = node.choices || [];
+            const shown = node.value || '';
+            switch (kind) {
+            case 'group':
+                if (trailing) {
+                    const open = expanded.has(id);
+                    trailing.textContent = open ? '▾' : '▸';
+                    el.setAttribute('aria-expanded', open);
+                }
+                return;
+            case 'toggle':
+                control.checked = row.choices.length === 2 && shown === row.choices[1];
+                control.disabled = row.disabled;
+                break;
+            case 'choice':
+                while (control.options.length) control.remove(0);
+                for (const c of row.choices) {
+                    const o = document.createElement('option');
+                    o.value = c;
+                    o.textContent = c;
+                    control.append(o);
+                }
+                control.value = shown;
+                control.disabled = row.disabled;
+                break;
+            case 'step':
+                value.textContent = shown;
+                break;
+            case 'pick':
+                control.checked = !!node.marked;
+                value.textContent = shown;
+                break;
+            default:
+                break;
+            }
+            if (field) field.disabled = row.disabled;
+            let said = entry.label;
+            if (shown && kind !== 'form') said += ', ' + shown;
+            el.setAttribute('aria-label', row.disabled ? said + ', unavailable: ' + reason : said);
+        };
+
+        // error is what a submit of this form left, shown under its field
+        row.error = function(message) {
+            if (error) error.textContent = message || '';
+        };
+
+        // act is a tap on the row, or Enter on it
+        row.act = function() {
+            switch (kind) {
+            case 'group':
+                if (!expanded.delete(id)) expanded.add(id);
+                applyMenu(menuJSON);
+                break;
+            case 'toggle':
+                if (!row.disabled && row.choices.length === 2) menuOp('set', id, control.checked ? row.choices[0] : row.choices[1]);
+                break;
+            case 'pick':
+                if (!row.disabled) menuOp('activate', id, '');
+                break;
+            case 'action':
+                if (row.disabled) break;
+                if (nodeOf(id).confirm) confirmSheet(id, entry());
+                else menuOp('activate', id, '');
+                break;
+            case 'form':
+                if (row.disabled) break;
+                if (field) field.focus();
+                else formSheet(id, nodeOf(id));
+                break;
+            default:
+                break;
+            }
+        };
+
+        // turn is h or l, or the steppers: a step moves, a toggle turns, a choice cycles
+        row.turn = function(direction) {
+            if (row.disabled) return;
+            switch (kind) {
+            case 'step':
+                menuOp('step', id, direction > 0 ? '+1' : '-1');
+                break;
+            case 'toggle':
+                if (row.choices.length === 2) menuOp('set', id, row.choices[direction > 0 ? 1 : 0]);
+                break;
+            case 'choice': {
+                const i = row.choices.indexOf(nodeOf(id).value || '');
+                if (row.choices.length) menuOp('set', id, row.choices[((i + direction) % row.choices.length + row.choices.length) % row.choices.length]);
+                break;
+            }
+            case 'pick':
+                row.act();
+                break;
+            default:
+                break;
+            }
+        };
+
+        function entry() { return { label: label.textContent, node: nodeOf(id) }; }
+        return row;
+    }
+
+    // fieldFor is a field taking what its input names: numbers, an address or text
+    function fieldFor(f) {
+        const el = document.createElement('input');
+        el.type = 'text';
+        el.className = 'field';
+        el.autocomplete = 'off';
+        el.spellcheck = false;
+        const kind = MENU_INPUTS.includes(f.input) ? f.input : 'text';
+        el.inputMode = kind === 'number' ? 'numeric' : kind === 'uri' ? 'url' : 'text';
+        return el;
+    }
+
+    // openSheet opens the window the picker, the confirm and a form share, titled,
+    // and returns it; closing it forgets it
+    function openSheet(id, heading) {
+        closeSheet();
+        const d = document.createElement('dialog');
+        d.className = 'sheet';
+        const h = document.createElement('h2');
+        h.textContent = heading;
+        d.append(h);
+        d.addEventListener('click', function(ev) { if (ev.target === d) d.close(); });   // the backdrop
+        d.addEventListener('close', function() {
+            if (sheet && sheet.el === d) sheet = null;
+            d.remove();
+            configBody.focus({ preventScroll: true });
+        });
+        document.body.append(d);
+        sheet = { el: d, id: id, error: null };
+        return d;
+    }
+
+    function closeSheet() {
+        if (sheet && sheet.el.open) sheet.el.close();
+        sheet = null;
+    }
+
+    function about(d, node, pad) {
+        const p = document.createElement('p');
+        p.className = 'about';
+        p.textContent = node.description || '';
+        if (pad) p.style.paddingBottom = pad;
+        d.append(p);
+    }
+
+    // sheetButtons is Cancel beside the action named, the site's ring and fill
+    function sheetButtons(d, action, onAction) {
+        const row = document.createElement('div');
+        row.className = 'actions';
+        const cancel = button('Cancel', function() { d.close(); });
+        const go = button(action, onAction);
+        go.className = 'go';
+        row.append(cancel, go);
+        d.append(row);
+    }
+
+    // The question before a destructive action: its description, Cancel and the action
+    function confirmSheet(id, e) {
+        const d = openSheet(id, e.label);
+        about(d, e.node, '8px');
+        sheetButtons(d, e.label, function() {
+            menuOp('activate', id, '');
+            d.close();
+        });
+        d.showModal();
+    }
+
+    // The fields of a longer form, the focused one's help under it, the error above Submit
+    function formSheet(id, node) {
+        const d = openSheet(id, node.label || '');
+        about(d, node);
+        const inputs = [];
+        for (const f of node.fields || []) {
+            const name = span('name', f.label);
+            const el = fieldFor(f);
+            el.value = f.value || '';
+            const help = document.createElement('p');
+            help.className = 'help';
+            help.textContent = f.help || '';
+            help.hidden = true;
+            el.addEventListener('focus', function() { help.hidden = !f.help; });
+            el.addEventListener('blur', function() { help.hidden = true; });
+            d.append(name, el, help);
+            inputs.push(el);
+        }
+        const error = span('error');
+        d.append(error);
+        sheet.error = error;
+        const submit = function() { menuOp('submit', id, JSON.stringify(inputs.map(function(i) { return i.value; }))); };
+        for (let i = 0; i < inputs.length; i++) {
+            inputs[i].setAttribute('enterkeyhint', i === inputs.length - 1 ? 'done' : 'next');
+            inputs[i].addEventListener('keydown', function(ev) {
+                if (ev.key !== 'Enter') return;
+                ev.preventDefault();
+                if (i < inputs.length - 1) inputs[i + 1].focus(); else submit();
+            });
+        }
+        sheetButtons(d, 'Submit', submit);
+        d.showModal();
+        if (inputs.length) inputs[0].focus();
+    }
+
+    // back closes the innermost of confirm, picker and form, then clears a search, then sends close
+    function back() {
+        if (sheet) closeSheet();
+        else if (configSearch.value || menuQuery) {
+            configSearch.value = '';
+            menuOp('search', '', '');
+        } else {
+            menuOp('close', '', '');
+        }
+    }
+
+    // closeMenu is the run's word that the menu closed: the window goes, whatever is up with it
+    function closeMenu() {
+        menuJSON = '';
+        closeSheet();
+        if (config.open) config.close();
+        focus();
+    }
+
+    function rowOf(el) {
+        const r = el && el.closest ? el.closest('.row') : null;
+        return r ? menuRows.get(r.dataset.id) : null;
+    }
+
+    function wireMenu() {
+        document.getElementById('config-close').addEventListener('click', function() { menuOp('close', '', ''); });
+        config.addEventListener('click', function(ev) { if (ev.target === config) back(); });   // the backdrop
+        // Escape asks to close: Back's order instead. A browser may close the window
+        // regardless, and the run is told then, so it never holds a menu nobody sees.
+        config.addEventListener('cancel', function(ev) {
+            ev.preventDefault();
+            back();
+        });
+        config.addEventListener('close', function() {
+            if (menuJSON) {
+                menuJSON = '';
+                closeSheet();
+                menuOp('close', '', '');
+                focus();
+            }
+        });
+        configSearch.addEventListener('input', function() { menuOp('search', '', configSearch.value); });
+        configSearch.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                configBody.focus({ preventScroll: true });   // the rows found stay; a soft keyboard drops
+            }
+        });
+        /* Keys as in the terminal's menu, except in a field being typed in: j and k
+           move, h and l turn the row focused, / finds the search field, q goes back,
+           and Ctrl-G, F10 and F1 go to the run, which closes the menu or opens help. */
+        config.addEventListener('keydown', function(ev) {
+            const typing = ev.target.matches('input, select, textarea');
+            const plain = !ev.ctrlKey && !ev.altKey && !ev.metaKey;
+            if (ev.key === 'F10' || ev.key === 'F1' || (ev.ctrlKey && !ev.shiftKey && ev.key.toLowerCase() === 'g')) {
+                send({ type: 'key', key: ev.key, mods: mods(ev), code: ev.code, repeat: ev.repeat });
+                ev.preventDefault();
+                return;
+            }
+            if (typing || !plain) return;
+            const row = rowOf(ev.target);
+            switch (ev.key) {
+            case 'q':
+                back();
+                break;
+            case 'j':
+                moveFocus(1);
+                break;
+            case 'k':
+                moveFocus(-1);
+                break;
+            case 'h':
+                if (row) row.turn(-1);
+                break;
+            case 'l':
+                if (row) row.turn(1);
+                break;
+            case '/':
+                configSearch.focus();
+                break;
+            case 'Enter':
+            case ' ':
+                if (row && ev.target.classList.contains('row')) row.act();
+                else return;
+                break;
+            default:
+                return;
+            }
+            ev.preventDefault();
+        });
+    }
+
+    // moveFocus takes the focus to the next or previous focusable row
+    function moveFocus(direction) {
+        const rows = [...configBody.querySelectorAll('.row[tabindex="0"]')];
+        if (!rows.length) return;
+        const at = rows.indexOf(document.activeElement.closest && document.activeElement.closest('.row'));
+        const next = at < 0 ? (direction > 0 ? 0 : rows.length - 1) : Math.min(rows.length - 1, Math.max(0, at + direction));
+        rows[next].focus();
+    }
+
     // === Entry Point ===
     document.addEventListener('DOMContentLoaded', function() {
+        wireMenu();
         if (initScreen()) loadWasm();
     });
 })();

@@ -1,7 +1,8 @@
-/* The Go program's thread. The page draws the frames and plays the sound posted
-   from here and reports back what it saw: keys, the pointer, its size and each frame
-   drawn. This side presents those to Go as the globals pkg/browser expects, and
-   keeps Go's stderr for the page to show once the program ends. */
+/* The Go program's thread. The page draws the frames, the menu and plays the sound
+   posted from here and reports back what it saw: keys, the pointer, its size, each
+   frame drawn and the menu's asks. This side presents those to Go as the globals
+   pkg/browser expects, and keeps Go's stderr for the page to show once the program
+   ends. */
 'use strict';
 
 /* Why the program ended. stderr is a Go program's only word on that, and
@@ -53,6 +54,10 @@ globalThis.vifKeepSettings = function(text) {
 };
 globalThis.vifKeepClaims = function(text) {
     postMessage({ type: 'claims', text: text });
+};
+// The configuration menu as the page draws it, JSON; empty once it closed.
+globalThis.vifMenu = function(json) {
+    postMessage({ type: 'menu', json: json });
 };
 
 // The program compiled and held for the page's start screen, until its tap posts run

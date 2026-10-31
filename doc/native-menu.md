@@ -1,10 +1,8 @@
 # Native menu
 
-The configuration menu as a host draws it with its own widgets. Android does, from
-one JSON snapshot of the menu's tree, answering with ops on a node's id; the browser
-is to follow from the same snapshot and ops
-([todo](todo.md#draw-the-configuration-menu-with-the-pages-own-widgets)). The
-terminal and the desktop window keep the `tui` menu.
+The configuration menu as a host draws it with its own widgets: Android and the
+browser do, from one JSON snapshot of the menu's tree, answering with ops on a
+node's id. The terminal and the desktop window keep the `tui` menu.
 
 ## 1. Problem and scope
 
@@ -20,12 +18,13 @@ terminal and the desktop window keep the `tui` menu.
 - **Runtime model, no generator.** Go sends the whole menu as one JSON snapshot
   whenever it changes, and the host draws it with one renderer per node kind and
   answers with hooks naming a node by its id. The Go library and the Java app ship
-  in one APK built from one commit, so they cannot drift at runtime; a generated
-  template would miss the rows built at run time (scenarios, players, bots) and
-  duplicate every label. The contract is the node kinds, the hook ops and the field
-  input types (`mode.MenuKinds`, `MenuOps`, `MenuInputs`); a test reads them from the
-  Java source and fails on a mismatch. If `android/` ever leaves this repository,
-  the snapshot gains a schema version then.
+  in one APK built from one commit, and the page's files go out with the wasm they
+  were built beside, so neither can drift at runtime; a generated template would
+  miss the rows built at run time (scenarios, players, bots) and duplicate every
+  label. The contract is the node kinds, the hook ops and the field input types
+  (`mode.MenuKinds`, `MenuOps`, `MenuInputs`); a test reads them from the Java
+  source and from `web/terminal.js` and fails on a mismatch. If `android/` ever
+  leaves this repository, the snapshot gains a schema version then.
 - **General tree.** Pages, sections and rows are one tree of nodes of any depth,
   which both menus draw: the `tui` menu enters a top-level group as a page and draws
   a deeper one as a section title over its rows; the native menu expands a page in
@@ -129,8 +128,9 @@ own, nil otherwise; the app pushes it when its bytes differ from the last pushed
 ## 5. Hooks
 
 The host makes one call, which never blocks its UI thread: `Game.menu(op, id, arg)`
-on Android. The view queues the op on a channel, the loop selects on it as it does on
-`Away`, applies it with `Router.MenuOp` under `RunSafe` and dispatches what it pushed.
+on Android, a `menu` message to the Worker in the browser. The host queues the op on
+a channel, the loop selects on it as it does on `Away`, applies it with
+`Router.MenuOp` under `RunSafe` and dispatches what it pushed.
 
 - `set id value`: a `toggle` or a `choice` to one of its choices; a value the node
   lacks or already shows changes nothing.
@@ -205,34 +205,54 @@ stay one mechanism. The `vif_headless` profile builds without it.
 
 ## 8. Browser
 
-The next task, from the same snapshot and ops: `cmd/vif/browser.go` implements
-`menuPresentation` over the Worker, a `menu` message carrying the snapshot to the
-page and the page's `menu` message an op back; `web/terminal.js` and
-`web/index.html` draw it as a `<dialog>` with the layout and kinds of §7, and
-`web/terminal.css` holds its rules in the site's tokens; the contract test reads
-`web/terminal.js` too. Recommended: every browser draws it, as every Android device
-does even with a keyboard attached, so each host has one look.
+- `pkg/browser`: `Host.Menu` hands the page a snapshot through the Worker's
+  `vifMenu`, and a `menu` message from the page reaches `Host.MenuOp`; `HasMenu`
+  says whether the worker defines `vifMenu`. `cmd/vif/browser.go` wraps the host
+  as `menuHost`, the `menuPresentation`, only when it does, so an older page keeps
+  the `tui` menu rather than none.
+- `web/index.html` holds the `<dialog id="config">`, `web/terminal.css` its rules
+  in the site's tokens, shared with the controls window, and `web/terminal.js` its
+  section, the layout and kinds of §7 in the page's controls: a page is a heading
+  ruled off from the one above whose rows open under it in the tinted panel behind
+  the stripe; a toggle is a switch, a choice a `<select>`, a step − and +, a pick a
+  radio row, an action a row ending in a chevron with a confirm sheet where the run
+  says so, a one-field form a field on its row whose Enter submits, a longer one a
+  sheet; the sheets are nested `<dialog>`s. Every browser draws it, touch or not,
+  so each host has one look. Rows are keyed by id and rewritten in place, as on
+  Android, and the search field under the title lists the rows found.
+- Back and Escape take the innermost sheet, then a search, then send `close`; a
+  browser that closes the window on Escape regardless has the run told, so no menu
+  stands unseen. `j`/`k`, `h`/`l`, `/`, `q`, Ctrl-G, F10 and F1 work as in §7. The
+  browser's Back button is the game's Escape, as it was, which the run answers by
+  clearing the search or closing the menu.
 
 ## 9. Verification
 
 - Go gates: `go build ./...`, `GOOS=js GOARCH=wasm go build ./...`,
   `go build -tags vif_headless ./...`, `gofmt -l` on changed files,
   `go test ./internal/mode ./internal/render/renderer` and the menu and
-  presentation tests of `./internal/app`, and `go -C android test ./...`.
+  presentation tests of `./internal/app`, `go -C android test ./...`, and
+  `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"
+  ./pkg/browser`.
 - Tests, one per rule: every node's kind matches its fields and ids are unique; a
   host's op and the key path reach the same state, for each kind; an op on a
   vanished id is dropped; an op on a disabled id answers with its reason; a failed
   submit keeps its error and a successful one closes the menu; `search` finds what
   `/` finds; `close` resumes a game the menu paused; the snapshot changes only with
   the menu, and a host is handed it only then, the first frame included; the overlay
-  leaves the menu undrawn under a host's; the Java contract matches Go's; the
-  binding carries snapshots out and ops in.
+  leaves the menu undrawn under a host's; the Java and page contracts match Go's;
+  the binding and the bridge carry snapshots out and ops in.
 - Java: type-check with `javac` against Robolectric's `android-all`
   ([agent notes](agent-notes.md#toolchain)), build the APK with `make android`,
   and on a device or emulator: open the menu by each summon; try every kind, a
   search and a one-field form; fill the request form with the keyboard up; rotate
   the device with the menu open; press Back at each layer; join a session as a
   guest, where the host-only rows are disabled; use it with TalkBack.
+- Browser: `make wasm` into a copy of `web/`, served and driven with Playwright
+  ([agent notes](agent-notes.md#looking-at-the-game-without-a-device)): Ctrl-G
+  and a finger held on the status bar open it, a switch turns through the run, a
+  select and a stepper apply, a confirm sheet opens and Escape closes it alone,
+  a search finds the rows `/` finds, and × closes.
 
 ## 10. Notes
 

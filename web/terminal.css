@@ -250,9 +250,10 @@ html, body {
 
 #share-done[hidden] { display: none; }
 
-/* The controls: a window inset 16px from the page's edges, its list scrolling under
-   the title and the close button. */
-#help {
+/* The controls and the configuration menu: a window inset 16px from the page's
+   edges, its list scrolling under the title and the close button. */
+#help,
+#config {
     position: fixed;
     inset: 16px;
     width: auto;
@@ -267,7 +268,8 @@ html, body {
     font: 15px/1.5 var(--ui);
 }
 
-#help[open] {
+#help[open],
+#config[open] {
     display: flex;
     flex-direction: column;
 }
@@ -275,7 +277,8 @@ html, body {
 /* A mouse's and keyboard's window: centred, as tall as its list, at most the touch
    window's size. */
 @media not all and (pointer: coarse) {
-    #help {
+    #help,
+    #config {
         inset: 0;
         width: min(42em, 100% - 32px);
         height: fit-content;
@@ -284,9 +287,11 @@ html, body {
     }
 }
 
-#help::backdrop { background: rgba(0, 0, 0, 0.6); }
+#help::backdrop,
+#config::backdrop { background: rgba(0, 0, 0, 0.6); }
 
-#help-head {
+#help-head,
+#config-head {
     display: flex;
     flex: none;
     align-items: center;
@@ -295,12 +300,20 @@ html, body {
     padding-left: 16px;
 }
 
-#help-head h2 {
+#help-head h2,
+#config-head h2 {
     color: var(--text);
     font: 500 18px var(--ui);
 }
 
-#help-close {
+#config-head h2 {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+#help-close,
+#config-close {
     width: 48px;
     height: 48px;
     border: 0;
@@ -333,6 +346,305 @@ html, body {
     color: var(--accent);
 }
 #help h3 + p { padding: 4px 0 14px; }
+
+/* The menu (doc/native-menu.md): a search field under the title, the pages as
+   headings whose rows open under them in a panel tinted as the site's cards are,
+   behind a stripe, and the status line at the foot; every row 48px tall at least. */
+#config-search,
+.row .field,
+.sheet .field {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    color: var(--text);
+    font: 16px var(--ui);
+}
+
+#config-search {
+    flex: none;
+    width: auto;
+    margin: 0 16px 8px;
+}
+
+#config-search:focus,
+.row .field:focus,
+.sheet .field:focus {
+    outline: none;
+    border-color: var(--button);
+}
+
+#config-search::placeholder,
+.field::placeholder { color: var(--muted); }
+
+#config-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 4px 12px 0;
+    scrollbar-color: rgba(142, 162, 255, 0.5) transparent;
+    scrollbar-width: thin;
+}
+
+#config-body:focus { outline: none; }
+
+#config-status {
+    flex: none;
+    padding: 8px 16px 12px;
+    color: var(--text);
+    font: 14px/1.4 var(--ui);
+}
+
+#config-status[hidden] { display: none; }
+#config-status.progress { color: var(--accent); }
+#config-status.alert { color: var(--danger); }
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 10px 16px;
+    color: var(--text);
+    font: 16px/1.3 var(--ui);
+}
+
+.row .text {
+    flex: 1;
+    min-width: 0;
+}
+
+.row .label { display: block; }
+
+.row .detail {
+    display: block;
+    padding-top: 2px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.row .detail:empty { display: none; }
+
+.row.page {
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+}
+
+.row.page .label {
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.row.page .detail { font-size: 14px; }
+
+.row .chevron {
+    color: var(--accent);
+    font-size: 18px;
+}
+
+/* An open page's rows: the panel, edged by the stripe */
+.row.in {
+    padding-left: 13px;
+    border-left: 3px solid #5f57f5;
+    background: rgba(95, 87, 245, 0.16);
+}
+
+.row.section {
+    min-height: 0;
+    padding: 18px 16px 2px 13px;
+}
+
+.row.section .text {
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+}
+
+.row.section .label {
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.row.act { cursor: pointer; }
+
+.row.act:hover,
+.row.act:focus,
+.row.step:focus {
+    outline: none;
+    background: rgba(142, 162, 255, 0.15);
+}
+
+.row.in.act:hover,
+.row.in.act:focus,
+.row.in.step:focus { background: rgba(142, 162, 255, 0.3); }
+
+.row.action .label,
+.row.sheet .label {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.row .arrow {
+    color: var(--muted);
+    font-size: 22px;
+}
+
+.row.off { opacity: 0.5; }
+.row.off.act { cursor: default; }
+
+.row .value {
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+.row.step .value {
+    min-width: 3.5em;
+    color: var(--text);
+    text-align: center;
+}
+
+.row .note {
+    color: var(--muted);
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.row .stepper {
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--button);
+    border-radius: 0.5rem;
+    background: none;
+    color: var(--accent);
+    font: 20px/1 var(--ui);
+}
+
+.row .stepper:hover,
+.row .stepper:focus-visible {
+    background: var(--button);
+    color: var(--text);
+}
+
+.row .switch {
+    flex: none;
+    position: relative;
+    width: 44px;
+    height: 24px;
+    margin: 0;
+    border: 0;
+    border-radius: 12px;
+    background: var(--line);
+    appearance: none;
+    cursor: pointer;
+}
+
+.row .switch::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform 0.15s ease;
+}
+
+.row .switch:checked { background: rgba(37, 99, 235, 0.5); }
+
+.row .switch:checked::before {
+    background: var(--button);
+    transform: translateX(20px);
+}
+
+.row .radio,
+.sheet .radio {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    accent-color: var(--button);
+}
+
+.row .choice {
+    flex: none;
+    max-width: 45%;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    color: var(--accent);
+    font: 16px var(--ui);
+}
+
+.row .field { margin-top: 6px; }
+
+.row .error,
+.sheet .error {
+    display: block;
+    padding-top: 4px;
+    color: var(--danger);
+    font-size: 14px;
+}
+
+.row .error:empty,
+.sheet .error:empty { display: none; }
+
+/* A confirm, a radio list or a longer form, in a window over the menu */
+.sheet {
+    width: min(28em, 100% - 48px);
+    max-height: calc(100% - 48px);
+    margin: auto;
+    padding: 16px 20px;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--bg);
+    color: var(--muted);
+    font: 14px/1.5 var(--ui);
+}
+
+.sheet::backdrop { background: rgba(0, 0, 0, 0.4); }
+
+.sheet h2 {
+    padding-bottom: 8px;
+    color: var(--text);
+    font: 500 18px var(--ui);
+}
+
+.sheet .about { padding-bottom: 8px; }
+
+.sheet label.option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    color: var(--text);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.sheet .name { display: block; padding: 8px 0 4px; }
+.sheet .help { padding-top: 4px; }
+.sheet .help[hidden] { display: none; }
+.sheet .error { padding-top: 12px; }
+
+.sheet .actions {
+    justify-content: flex-end;
+    padding-top: 16px;
+}
+
+.sheet .actions .go {
+    background: var(--button);
+    color: var(--text);
+}
+
+.sheet .actions .go:hover,
+.sheet .actions .go:focus-visible { background: var(--button-hover); }
 
 /* A line over the game, gone after a while: the fallback drawer in use. */
 #notice {
