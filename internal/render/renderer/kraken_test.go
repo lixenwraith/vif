@@ -15,8 +15,7 @@ import (
 
 // krakenByDefinition shades the samples one after another as the definition reads: a
 // disc covering a cell makes it solid in the sample's color, a rim reaching a cell no
-// disc covered yet shades it by how far past the disc the cell lies, and the body's
-// void blends over both.
+// disc covered yet draws the rim's rune there, and the body's void blends over both.
 func krakenByDefinition(k *component.KrakenComponent, samples []component.KrakenSample, x, y float64, minX, minY, maxX, maxY int) []terminal.Cell {
 	width := maxX - minX + 1
 	cells := make([]terminal.Cell, width*(maxY-minY+1))
@@ -26,7 +25,7 @@ func krakenByDefinition(k *component.KrakenComponent, samples []component.Kraken
 			heat = max(heat, s.Step*s.Step*k.AttackT)
 		}
 		c := color.Lerp(color.Lerp(visual.RgbKrakenLegBase, visual.RgbKrakenLegTip, s.Step), visual.RgbKrakenAttack, heat)
-		reach := s.Radius + visual.KrakenRimWidth + 1
+		reach := s.Radius + visual.KrakenRimReach + 1
 		for cy := max(minY, int(math.Floor(s.Y-reach))); cy <= min(maxY, int(math.Ceil(s.Y+reach))); cy++ {
 			for cx := max(minX, int(math.Floor(s.X-reach))); cx <= min(maxX, int(math.Ceil(s.X+reach))); cx++ {
 				dx, dy := float64(cx)+vmath.CellCenter-s.X, (float64(cy)+vmath.CellCenter-s.Y)*parameter.KrakenRowSquash
@@ -36,14 +35,8 @@ func krakenByDefinition(k *component.KrakenComponent, samples []component.Kraken
 					*cell = terminal.Cell{Rune: ' ', Fg: c, Bg: c}
 					continue
 				}
-				if cell.Rune != 0 {
-					continue
-				}
-				for _, shade := range visual.KrakenRimShades {
-					if (distance-s.Radius)/visual.KrakenRimWidth < shade.Below {
-						*cell = terminal.Cell{Rune: shade.Rune, Fg: c, Bg: visual.RgbBackground}
-						break
-					}
+				if cell.Rune == 0 && distance-s.Radius < visual.KrakenRimReach {
+					*cell = terminal.Cell{Rune: visual.KrakenRimRune, Fg: c, Bg: visual.RgbBackground}
 				}
 			}
 		}
@@ -72,8 +65,8 @@ func krakenByDefinition(k *component.KrakenComponent, samples []component.Kraken
 }
 
 // krakenEdgeSamples centers discs on cell centers and corners, with radii that put a
-// cell exactly on a disc's edge, a rim's edge or a shade's, where the comparison by
-// squared distance hands the decision to the distance itself
+// cell exactly on a disc's edge or a rim's, where the comparison by squared distance
+// hands the decision to the distance itself
 func krakenEdgeSamples(rng *rand.Rand, minX, minY, maxX, maxY int) []component.KrakenSample {
 	samples := make([]component.KrakenSample, 1+rng.IntN(40))
 	for i := range samples {
@@ -81,8 +74,7 @@ func krakenEdgeSamples(rng *rand.Rand, minX, minY, maxX, maxY int) []component.K
 		distance := math.Sqrt(dx*dx + dy*dy)
 		radius := distance
 		if rng.IntN(2) == 0 {
-			shade := visual.KrakenRimShades[rng.IntN(len(visual.KrakenRimShades))]
-			radius = max(0, distance-visual.KrakenRimWidth*shade.Below)
+			radius = max(0, distance-visual.KrakenRimReach)
 		}
 		samples[i] = component.KrakenSample{
 			X:      float64(minX+rng.IntN(maxX-minX+1)) + vmath.CellCenter*float64(rng.IntN(2)),

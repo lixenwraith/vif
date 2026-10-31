@@ -377,7 +377,10 @@ tentacle samples the Kraken system built that tick from `KrakenShape` and sample
 the shape itself only when something moved the Kraken after its system ran. Each
 disc stamps its box with squared distances, and only a cell within
 `vmath.RoundingMargin` of a disc or rim edge takes the square root the definition
-compares, so the cells are exactly those of the per-cell distance test.
+compares, so the cells are exactly those of the per-cell distance test. The rim is
+one shade, `KrakenRimRune`, in the color of the first disc reaching a cell: that
+disc reaches it near its outer edge, so a rim graded by distance from it showed its
+outer shade alone.
 
 A cell can hold several glyphs while drift carries layers past one another. The
 glyph renderer draws typeable text in its cell, only the cell's top glyph, the one
