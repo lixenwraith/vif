@@ -217,7 +217,7 @@ code does not have yet, described only by a design such as
 
 **cell** — six senses. See also **spatial grid**, **status**, **interest cell**, **coordinate space**, **maze**.
 - *Spatial grid*: one 256-byte grid bucket holding up to 31 entities, Shared first, with the Player half capped at 12. [ECS §3](ecs-and-events.md#3-position-and-spatial-queries) · `pkg/position` `Cell`, `Grid`
-- *Map*: the integer simulation coordinate of positions, walls and motion: a column, a row and, in a volume, a layer, 0 on every map today. [Rendering §2](rendering.md#2-render-context-and-coordinates) · `pkg/vmath` `Point` · `internal/component` `PositionComponent`
+- *Map*: the integer simulation coordinate of positions, walls and motion, a column and a row; a cell of a volume adds its layer. [Rendering §2](rendering.md#2-render-context-and-coordinates) · `pkg/vmath` `Point`, `Point3` · `internal/component` `PositionComponent`
 - *Terminal*: one character cell of the render buffer: rune, foreground, background and attributes. [Rendering §3](rendering.md#3-compositor-data-model) · `internal/render` `RenderBuffer`
 - *Status*: one typed atomic metric in the status registry; one asked for after `Freeze` is a detached cell, usable but absent from snapshots and counted in `stat.late`. [Logging: Freeze](logging-and-diagnostics.md#freeze) · `internal/status` `Registry`
 - *Interest*: a peer's reported cursor cell, carried in its link report as a relevance hint for correction scheduling and never as simulation input. [Services and networking §8](services-and-networking.md#8-wire-frame-and-session-messages) · `pkg/linkpace` `Cell`
@@ -1083,7 +1083,7 @@ code does not have yet, described only by a design such as
 - *Rendering*: A render layer is a renderer, or a group of them, drawn at its `RenderPriority`; layers stack in ascending priority from background guidance to debug and telemetry. [Rendering §7](rendering.md#7-layer-inventory) · `internal/render` `RenderPriority`
 - *Gameplay*: A drift layer is all loose player glyphs of one level, moving as a rigid group at that level's fraction of the drift speed (`DriftLayerFactor`) so text scrolls in parallax; where layers share a cell, the nearest draws on top and typing acts on the nearest typeable glyph, while typeable text draws over **scenery** of any layer. See also **drift**, **parallax**. [Gameplay §9](gameplay.md#9-walls-maps-navigation-and-environment) · `internal/system` `EnvironmentSystem` · `internal/parameter` `DriftLayerFactor`
 - *Audio*: A sound layer is one source through one processor chain inside a `SoundDef`, mixed into a bus or the master. [Audio §5](audio.md#5-sounds-and-sound-effects) · `pkg/audio` `Layer`
-- *Volume*: a slice of the position index at one Z, a `Point`'s layer, 0 on a flat map; a query taking a column and a row answers for the first layer, one taking a `Point` (`BlocksAt`, `BlocksBox`, `EntitiesAtPoint`, `HasLineOfSightBetween`) for any. See also **spatial grid**. [Position §3](position-package.md#3-the-volume) · `pkg/position` `Grid.Depth`, `Index.BlocksAt`
+- *Volume*: a slice of the position index at one Z, a `Point3`'s layer; a query taking a column and a row answers for the first layer, one taking a `Point3` (`BlocksAt`, `BlocksBox`, `EntitiesIn`, `HasLineOfSightBetween`) for any. See also **spatial grid**. [Position §3](position-package.md#3-the-volume) · `pkg/position` `Grid.Depth`, `Index.BlocksAt`
 
 **lead** (also: own lead, `ownLead`) — A participant's **playout lead**: how many ticks after production its crossings are stamped to apply.
 

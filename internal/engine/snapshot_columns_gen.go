@@ -625,9 +625,6 @@ func encodeColumnsPositions(dst []byte, rows []StoreEntry[component.PositionComp
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.Y)
 	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.Z)
-	}
 	return dst
 }
 
@@ -643,9 +640,6 @@ func decodeColumnsPositions(r *columnReader) []StoreEntry[component.PositionComp
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Y, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.Z, r)
 	}
 	return rows
 }
@@ -1717,11 +1711,6 @@ func encodeColumnsTracer(dst []byte, rows []StoreEntry[component.TracerComponent
 		}
 	}
 	for i := range rows {
-		for j := range rows[i].Value.TrailRing {
-			dst = appendInt(dst, rows[i].Value.TrailRing[j].Z)
-		}
-	}
-	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.TrailHead)
 	}
 	for i := range rows {
@@ -1769,11 +1758,6 @@ func decodeColumnsTracer(r *columnReader) []StoreEntry[component.TracerComponent
 	for i := range rows {
 		for j := range rows[i].Value.TrailRing {
 			readInt(&rows[i].Value.TrailRing[j].Y, r)
-		}
-	}
-	for i := range rows {
-		for j := range rows[i].Value.TrailRing {
-			readInt(&rows[i].Value.TrailRing[j].Z, r)
 		}
 	}
 	for i := range rows {
@@ -3353,11 +3337,6 @@ func encodeColumnsSnakeHead(dst []byte, rows []StoreEntry[component.SnakeHeadCom
 		}
 	}
 	for i := range rows {
-		for j := range rows[i].Value.Trail {
-			dst = appendInt(dst, rows[i].Value.Trail[j].Z)
-		}
-	}
-	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.TrailHead)
 	}
 	for i := range rows {
@@ -3396,11 +3375,6 @@ func decodeColumnsSnakeHead(r *columnReader) []StoreEntry[component.SnakeHeadCom
 	for i := range rows {
 		for j := range rows[i].Value.Trail {
 			readInt(&rows[i].Value.Trail[j].Y, r)
-		}
-	}
-	for i := range rows {
-		for j := range rows[i].Value.Trail {
-			readInt(&rows[i].Value.Trail[j].Z, r)
 		}
 	}
 	for i := range rows {

@@ -69,7 +69,7 @@ type Line3 struct {
 }
 
 // NewLine3 starts a walk on a toward b
-func NewLine3(a, b Point) Line3 {
+func NewLine3(a, b Point3) Line3 {
 	l := Line3{cell: [3]int32{int32(a.X), int32(a.Y), int32(a.Z)}}
 	for i, d := range [3]int{b.X - a.X, b.Y - a.Y, b.Z - a.Z} {
 		l.step[i], l.span[i] = 1, int32(d)
@@ -105,7 +105,7 @@ func (l Line3) Next() Line3 {
 }
 
 // Point is the current cell
-func (l Line3) Point() Point { return Point{X: int(l.cell[0]), Y: int(l.cell[1]), Z: int(l.cell[2])} }
+func (l Line3) Point() Point3 { return Point3{X: int(l.cell[0]), Y: int(l.cell[1]), Z: int(l.cell[2])} }
 
 // AtEnd reports whether the current cell is the end
 func (l Line3) AtEnd() bool { return l.steps == 0 }

@@ -332,7 +332,7 @@ func (p *Position) capturePlayer() ([]StoreEntry[component.PositionComponent], [
 	placed := captureRows(p.dense, p.entities, core.DomainPlayer)
 	var out []core.Entity
 	for _, en := range placed {
-		if !p.Index.Holds(en.Entity, EntityClass(en.Entity), en.Value) {
+		if !p.Index.Holds(en.Entity, EntityClass(en.Entity), en.Value.Layer(0)) {
 			out = append(out, en.Entity)
 		}
 	}

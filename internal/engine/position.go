@@ -129,11 +129,11 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	countSaturation := true
 	if i, ok := p.slots.get(e); ok {
 		old := p.dense[i]
-		if old == pos && p.Index.Holds(e, EntityClass(e), old) {
+		if old == pos && p.Index.Holds(e, EntityClass(e), old.Layer(0)) {
 			return
 		}
 		countSaturation = old != pos
-		p.Index.RemoveEntityAt(e, old)
+		p.Index.RemoveEntityAt(e, old.Layer(0))
 		p.wallMoved(e, old)
 		p.dense[i] = pos
 	} else {
@@ -156,13 +156,13 @@ func (p *Position) insert(e core.Entity, pos component.PositionComponent) {
 // data loss; it reports whether the cell took the entity.
 func (p *Position) setGrid(e core.Entity, pos component.PositionComponent, countSaturation bool) bool {
 	class := EntityClass(e)
-	cell := p.Index.CellAt(pos)
+	cell := p.Index.CellAt(pos.Layer(0))
 	if cell == nil {
-		return p.Index.Set(e, class, pos)
+		return p.Index.Set(e, class, pos.Layer(0))
 	}
 	before := cell.Count
 	playerBefore := cell.Count - cell.SharedCount
-	if !p.Index.Set(e, class, pos) {
+	if !p.Index.Set(e, class, pos.Layer(0)) {
 		// A player insert stopped by its own budget is not cell exhaustion
 		if class == position.ClassPrivate && playerBefore >= position.PrivateBudget {
 			if p.statPlayerRejects != nil {
@@ -223,7 +223,7 @@ func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 		return
 	}
 	pos := p.dense[i]
-	p.Index.RemoveEntityAt(e, pos)
+	p.Index.RemoveEntityAt(e, pos.Layer(0))
 	p.removeAt(i)
 	p.wallMoved(e, pos)
 	if len(skipMask) == 0 || !skipMask[0] {
@@ -243,7 +243,7 @@ func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 			continue
 		}
 		pos := p.dense[i]
-		p.Index.RemoveEntityAt(e, pos)
+		p.Index.RemoveEntityAt(e, pos.Layer(0))
 		p.removeAt(i)
 		p.wallMoved(e, pos)
 		if clearMask {
@@ -306,7 +306,7 @@ func (p *Position) Clear() {
 // BlockMask set in place, or a wall component overwritten.
 func (p *Position) WallChanged(e core.Entity) {
 	if i, ok := p.slots.get(e); ok {
-		p.Index.BlockChangedAt(p.dense[i])
+		p.Index.BlockChangedAt(p.dense[i].Layer(0))
 	}
 }
 
@@ -315,7 +315,7 @@ func (p *Position) WallChanged(e core.Entity) {
 // store first.
 func (p *Position) wallMoved(e core.Entity, pos component.PositionComponent) {
 	if e.Domain() != core.DomainPlayer && p.world.componentMask[e]&WallBit != 0 {
-		p.Index.BlockChangedAt(pos)
+		p.Index.BlockChangedAt(pos.Layer(0))
 	}
 }
 
@@ -327,7 +327,7 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 		return
 	}
 	old := p.dense[i]
-	p.Index.RemoveEntityAt(e, old)
+	p.Index.RemoveEntityAt(e, old.Layer(0))
 	p.wallMoved(e, old)
 	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
@@ -346,9 +346,9 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 	for _, e := range entities {
 		if i, ok := p.slots.get(e); ok {
 			old := p.dense[i]
-			p.Index.RemoveEntityAt(e, old)
+			p.Index.RemoveEntityAt(e, old.Layer(0))
 			p.wallMoved(e, old)
-			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy, Z: old.Z}
+			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
 		}
 	}
 	for _, e := range entities {

@@ -149,8 +149,8 @@ func BenchmarkLineReference(b *testing.B) {
 func TestLine3WalksTheLongestSpanOneCellAStep(t *testing.T) {
 	rng := rand.New(rand.NewPCG(7, 3))
 	for range 3000 {
-		a := Point{X: rng.IntN(31) - 15, Y: rng.IntN(31) - 15, Z: rng.IntN(31) - 15}
-		b := Point{X: rng.IntN(31) - 15, Y: rng.IntN(31) - 15, Z: rng.IntN(31) - 15}
+		a := Point3{X: rng.IntN(31) - 15, Y: rng.IntN(31) - 15, Z: rng.IntN(31) - 15}
+		b := Point3{X: rng.IntN(31) - 15, Y: rng.IntN(31) - 15, Z: rng.IntN(31) - 15}
 		if rng.IntN(2) == 0 {
 			b.Z = a.Z
 		}
@@ -159,7 +159,7 @@ func TestLine3WalksTheLongestSpanOneCellAStep(t *testing.T) {
 		if l.Point() != a || l.Steps() != span {
 			t.Fatalf("%v→%v starts on %v with %d steps, want %d", a, b, l.Point(), l.Steps(), span)
 		}
-		prev, cells := a, []Point(nil)
+		prev, cells := a, []Point3(nil)
 		for !l.AtEnd() {
 			l = l.Next()
 			c := l.Point()
@@ -174,10 +174,10 @@ func TestLine3WalksTheLongestSpanOneCellAStep(t *testing.T) {
 		if b.Z != a.Z {
 			continue
 		}
-		var flat []Point
+		var flat []Point3
 		for f := NewLine(a.X, a.Y, b.X, b.Y); !f.AtEnd(); {
 			f = f.Next()
-			flat = append(flat, Point{X: f.X(), Y: f.Y(), Z: a.Z})
+			flat = append(flat, Point3{X: f.X(), Y: f.Y(), Z: a.Z})
 		}
 		if !slices.Equal(flat, cells) {
 			t.Fatalf("%v→%v in one plane walks %v, Line walks %v", a, b, cells, flat)

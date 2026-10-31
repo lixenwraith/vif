@@ -46,8 +46,8 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 	w, h = 70, 9
 	x.Resize(w, h, 1)
 	place := func(e entity, px, py int) {
-		if x.Set(e, e.class(), Point{X: px, Y: py}) {
-			x.BlockChangedAt(Point{X: px, Y: py})
+		if x.Set(e, e.class(), Point3{X: px, Y: py}) {
+			x.BlockChangedAt(Point3{X: px, Y: py})
 		}
 	}
 	var held []struct {
@@ -74,8 +74,8 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 				break
 			}
 			i := rng.IntN(len(held))
-			x.RemoveEntityAt(held[i].e, Point{X: held[i].x, Y: held[i].y})
-			x.BlockChangedAt(Point{X: held[i].x, Y: held[i].y})
+			x.RemoveEntityAt(held[i].e, Point3{X: held[i].x, Y: held[i].y})
+			x.BlockChangedAt(Point3{X: held[i].x, Y: held[i].y})
 			if rng.IntN(2) == 0 { // gone for good, or moved
 				delete(walls, held[i].e)
 				held[i] = held[len(held)-1]
@@ -88,7 +88,7 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 			if len(held) > 0 {
 				i := rng.IntN(len(held))
 				walls[held[i].e] = masks[rng.IntN(len(masks))]
-				x.BlockChangedAt(Point{X: held[i].x, Y: held[i].y})
+				x.BlockChangedAt(Point3{X: held[i].x, Y: held[i].y})
 			}
 		case 7: // surfaces narrower or wider than the map, or none
 			if rng.IntN(5) == 0 {
@@ -111,7 +111,7 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 				held = held[:0]
 				for e := range walls {
 					px, py := rng.IntN(w), rng.IntN(h)
-					if x.Set(e, e.class(), Point{X: px, Y: py}) {
+					if x.Set(e, e.class(), Point3{X: px, Y: py}) {
 						held = append(held, struct {
 							e    entity
 							x, y int
@@ -157,8 +157,8 @@ func TestAPointAnswersAsTheCellsBlocks(t *testing.T) {
 	x := New[entity](frame{}, func(e entity) (Mask, bool) { m, ok := walls[e]; return m, ok })
 	x.Resize(130, 4, 1)
 	for e := range walls {
-		x.Set(e, e.class(), Point{X: 100, Y: 2})
-		x.BlockChangedAt(Point{X: 100, Y: 2})
+		x.Set(e, e.class(), Point3{X: 100, Y: 2})
+		x.BlockChangedAt(Point3{X: 100, Y: 2})
 	}
 	for _, tt := range []struct {
 		mask Mask
@@ -171,8 +171,8 @@ func TestAPointAnswersAsTheCellsBlocks(t *testing.T) {
 			t.Fatalf("mask %d around the cell: %t, want %t", tt.mask, got, tt.want)
 		}
 	}
-	x.RemoveEntityAt(mk(ClassShared, 1), Point{X: 100, Y: 2})
-	x.BlockChangedAt(Point{X: 100, Y: 2})
+	x.RemoveEntityAt(mk(ClassShared, 1), Point3{X: 100, Y: 2})
+	x.BlockChangedAt(Point3{X: 100, Y: 2})
 	if x.Blocks(100, 2, 2) || !x.Blocks(100, 2, 0) {
 		t.Fatal("a block gone still blocks, or the block of mask 0 left with it")
 	}
@@ -192,11 +192,11 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 		t.Fatalf("a %d×%d×%d volume has depth %d and %d cells", w, h, d, x.Depth, len(x.Cells))
 	}
 	masks := []Mask{0, 1, 2, 4, 3}
-	cells := map[Point][]entity{}
+	cells := map[Point3][]entity{}
 	for i := range 80 {
 		if i == 40 { // the planes stand from here, so the rest reach them cell by cell
 			for _, m := range masks {
-				x.BlocksAt(Point{Z: 1}, m)
+				x.BlocksAt(Point3{Z: 1}, m)
 			}
 		}
 		e := mk(ClassShared, uint64(i+1))
@@ -206,7 +206,7 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 		if rng.IntN(2) == 0 {
 			walls[e] = Mask(1 << rng.IntN(3))
 		}
-		p := Point{X: rng.IntN(w), Y: rng.IntN(h), Z: rng.IntN(d)}
+		p := Point3{X: rng.IntN(w), Y: rng.IntN(h), Z: rng.IntN(d)}
 		if x.Set(e, e.class(), p) {
 			x.BlockChangedAt(p)
 			cells[p] = append(cells[p], e)
@@ -217,7 +217,7 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 		heights[i] = rng.IntN(h + 1)
 	}
 	x.AddSurface(1, Above, 0, heights)
-	blocked := func(p Point, mask Mask) bool {
+	blocked := func(p Point3, mask Mask) bool {
 		if p.Z == 0 && p.Y < heights[p.X] && (mask == 0 || mask&1 != 0) {
 			return true
 		}
@@ -231,7 +231,7 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 	for z := range d {
 		for y := range h {
 			for px := range w {
-				p := Point{X: px, Y: y, Z: z}
+				p := Point3{X: px, Y: y, Z: z}
 				for _, mask := range masks {
 					if got, want := x.BlocksAt(p, mask), blocked(p, mask); got != want {
 						t.Fatalf("mask %d at %v: BlocksAt %t, the cell says %t", mask, p, got, want)
@@ -240,10 +240,10 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 						t.Fatalf("mask %d at %v: the flat query and the point form differ", mask, p)
 					}
 				}
-				got, want := slices.Clone(x.EntitiesAtPoint(p, ScopeAll)), slices.Clone(cells[p])
+				got, want := slices.Clone(x.EntitiesIn(p, ScopeAll)), slices.Clone(cells[p])
 				slices.Sort(got)
 				slices.Sort(want)
-				if !slices.Equal(got, want) || x.HasAnyEntityAtPoint(p, ScopeAll) != (len(want) > 0) {
+				if !slices.Equal(got, want) || x.HasAnyEntityIn(p, ScopeAll) != (len(want) > 0) {
 					t.Fatalf("at %v: holds %v, placed %v", p, got, want)
 				}
 				if z == 0 && len(x.EntitiesAt(px, y, ScopeAll)) != len(got) {
@@ -252,16 +252,16 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 			}
 		}
 	}
-	inside := func() Point { return Point{X: rng.IntN(w), Y: rng.IntN(h), Z: rng.IntN(d)} }
+	inside := func() Point3 { return Point3{X: rng.IntN(w), Y: rng.IntN(h), Z: rng.IntN(d)} }
 	for range 500 {
 		mask := masks[rng.IntN(len(masks))]
-		p := Point{X: rng.IntN(w+4) - 2, Y: rng.IntN(h+4) - 2, Z: rng.IntN(d+4) - 2}
+		p := Point3{X: rng.IntN(w+4) - 2, Y: rng.IntN(h+4) - 2, Z: rng.IntN(d+4) - 2}
 		bw, bh, bd := 1+rng.IntN(4), 1+rng.IntN(4), 1+rng.IntN(3)
 		want := false
 		for z := p.Z; z < p.Z+bd; z++ {
 			for y := p.Y; y < p.Y+bh; y++ {
 				for px := p.X; px < p.X+bw; px++ {
-					want = want || x.BlocksAt(Point{X: px, Y: y, Z: z}, mask)
+					want = want || x.BlocksAt(Point3{X: px, Y: y, Z: z}, mask)
 				}
 			}
 		}
@@ -298,7 +298,7 @@ func TestAnAreaLineOfSightFliesTheBodyFromItsAnchor(t *testing.T) {
 	for i := range 40 {
 		e := mk(ClassShared, uint64(i+1))
 		walls[e] = Mask(1 << rng.IntN(2))
-		p := Point{X: rng.IntN(w), Y: rng.IntN(h)}
+		p := Point3{X: rng.IntN(w), Y: rng.IntN(h)}
 		if x.Set(e, e.class(), p) {
 			x.BlockChangedAt(p)
 		}
