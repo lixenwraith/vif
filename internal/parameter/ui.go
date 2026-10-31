@@ -144,6 +144,11 @@ const (
 	OverlayUsableHeight   = 5
 	OverlayMenuDetailRows = 4 // Separator and selected-setting explanation
 
+	// OverlayMenuRule draws a menu section's title line; OverlayText* fill an empty text box
+	OverlayMenuRule        = '─'
+	OverlayTextPlaceholder = "Enter to type"
+	OverlayTextUnavailable = "unavailable"
+
 	// OverlayPaddingX is the padding inside the left and right border
 	OverlayPaddingX = 2
 
@@ -246,10 +251,25 @@ const (
 // Overlay hint variants per layout, longest first; the renderer draws the widest that fits
 var (
 	OverlayHintsMenu = []string{
-		"j/k select · h/l change · ENTER choose · ESC back · this run only",
-		"↑↓ select · ←→ change · ENTER choose · ESC back",
-		"↑↓ select · ←→ change · ESC back",
+		"j/k select · h/l change · ENTER choose · / search · ESC back",
+		"↑↓ select · ←→ change · ENTER choose · / search · ESC back",
+		"↑↓ select · ENTER choose · / search · ESC back",
+		"/ search · ESC back",
 		"ESC back",
+	}
+	// Menu hints behind the search prompt, once kept and while editing
+	OverlayHintsMenuFilter = []string{
+		"ESC clear · / edit · j/k select · h/l change · ENTER choose",
+		"ESC clear · / edit · ENTER choose",
+		"ESC clear",
+	}
+	OverlayHintsMenuFilterEdit = []string{"↑↓ select · ENTER keep · ESC clear", "ENTER keep · ESC clear", "ESC clear"}
+	// Menu hints while a row's text box is typed in
+	OverlayHintsMenuText = []string{
+		"←→ cursor · HOME/END · ENTER submit · ↑↓ leave · ESC cancel",
+		"ENTER submit · ↑↓ leave · ESC cancel",
+		"ENTER submit · ESC cancel",
+		"ESC cancel",
 	}
 	OverlayHintsForm = []string{
 		"↑↓ field · ←→ cursor · HOME/END · ENTER submit · ESC cancel",

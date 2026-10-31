@@ -24,6 +24,7 @@ func buildActionRegistry() map[string]KeyEntry {
 		"toggle_audio_cycle": {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleAudioCycle},
 		"config_menu":        {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentConfigMenu},
 		"help":               {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentHelp},
+		"pause":              {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentPause},
 
 		// Basic motions
 		"motion_left":             {BehaviorMotion, MotionLeft, SpecialNone, ModeTargetNone, IntentNone},

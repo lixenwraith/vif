@@ -64,6 +64,10 @@ type Play struct {
 	Wait        bool    `toml:"wait"`
 	// MaxFPS caps the frames drawn a second; 0 is the presentation's own rate
 	MaxFPS int `toml:"max_fps"`
+	// PauseMenu and PauseCommand pause a game that may pause while the menu or
+	// another window, or the command line, is open
+	PauseMenu    bool `toml:"pause_menu"`
+	PauseCommand bool `toml:"pause_command"`
 }
 
 func (p Play) check() error {

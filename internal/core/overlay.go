@@ -24,9 +24,10 @@ type OverlayContent struct {
 
 // OverlayMenu is a value snapshot; only the input router applies settings.
 type OverlayMenu struct {
-	Page string
-	Rows []OverlayMenuRow
-	Form *OverlayForm
+	Page   string
+	Choice string // The row a page's pick list marks
+	Rows   []OverlayMenuRow
+	Form   *OverlayForm
 }
 
 type OverlayForm struct {
@@ -43,6 +44,10 @@ type OverlayFormField struct {
 type OverlayMenuRow struct {
 	Key, Label, Value, Description string
 	Disabled                       string // Why this setting cannot be changed
+	Header                         bool   // A section title, which is never selected
+	Text                           bool   // Value is a text box's content
+	Typing                         bool   // The text box takes keys, its cursor at Cursor
+	Cursor                         int
 }
 
 // OverlayItem is implemented by all overlay component types

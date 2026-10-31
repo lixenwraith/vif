@@ -1168,7 +1168,7 @@ use their independently configured journal directory.
 | `:content` | Corpus telemetry in the status bar |
 
 `:log` reports `log <path> | level <L> | scope <S> | stat <N> | rec <M>`. The
-configuration menu's Diagnostics page (`:g`) carries the same controls as
+menu's Developer page (`:menu`) carries the same controls as
 presets ([Configuration menu](config-menu.md)).
 
 Starting a session opens a file under the world lock — a deliberate operator

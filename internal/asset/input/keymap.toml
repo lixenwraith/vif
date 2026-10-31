@@ -73,6 +73,7 @@ N = "special_search_prev"
 "," = "special_repeat_find_rev"
 q = "macro_record_toggle"
 "@" = "prefix_macro_play"
+p = "pause"
 
 [operator]
 w = "motion_word_forward"
