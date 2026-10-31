@@ -284,3 +284,44 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 		t.Fatalf("100×50×30 took depth %d, want the 25 layers the ceiling allows", x.Depth)
 	}
 }
+
+// TestAnAreaLineOfSightFliesTheBodyFromItsAnchor: a body clears the line between
+// two anchor cells when, with its anchor on each cell strictly between them, every
+// cell of it lies on the map and none is blocked; a body of one cell is a point's
+// line of sight.
+func TestAnAreaLineOfSightFliesTheBodyFromItsAnchor(t *testing.T) {
+	rng := rand.New(rand.NewPCG(8, 2))
+	walls := map[entity]Mask{}
+	x := New[entity](frame{}, func(e entity) (Mask, bool) { m, ok := walls[e]; return m, ok })
+	const w, h = 24, 12
+	x.Resize(w, h, 1)
+	for i := range 40 {
+		e := mk(ClassShared, uint64(i+1))
+		walls[e] = Mask(1 << rng.IntN(2))
+		p := Point{X: rng.IntN(w), Y: rng.IntN(h)}
+		if x.Set(e, e.class(), p) {
+			x.BlockChangedAt(p)
+		}
+	}
+	for range 2000 {
+		bw, bh := 1+rng.IntN(5), 1+rng.IntN(4)
+		ax, ay := rng.IntN(bw), rng.IntN(bh)
+		x0, y0, x1, y1 := rng.IntN(w+2)-1, rng.IntN(h+2)-1, rng.IntN(w+2)-1, rng.IntN(h+2)-1
+		mask := Mask(rng.IntN(3))
+		want := true
+		for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
+			for by := range bh {
+				for bx := range bw {
+					cx, cy := line.X()-ax+bx, line.Y()-ay+by
+					if (bw > 1 || bh > 1) && (cx < 0 || cy < 0 || cx >= w || cy >= h) || x.Blocks(cx, cy, mask) {
+						want = false
+					}
+				}
+			}
+		}
+		if got := x.HasAreaLineOfSight(x0, y0, x1, y1, bw, bh, ax, ay, mask); got != want {
+			t.Fatalf("%d×%d body anchored %d,%d from (%d,%d) to (%d,%d) mask %d: %t, its cells say %t",
+				bw, bh, ax, ay, x0, y0, x1, y1, mask, got, want)
+		}
+	}
+}
