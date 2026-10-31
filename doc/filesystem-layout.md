@@ -96,6 +96,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
 | Rip parameters | `audio/rip.toml` | soundlab alone reads it; `DefaultRipParams` |
+| Rip model | `audio/ripnet.bin` | soundlab alone reads it; the built-in analysis |
 | Content | `content/` | embedded tutorial corpus |
 | Wall image | `image/<name>.vifimg` | none; failure is reported in the game status |
 | Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |

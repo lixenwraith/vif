@@ -461,6 +461,20 @@ loops rendered from the registered patterns across tempos and keys with
 a set that beats it ([TODO](todo.md#tune-the-rip) for what the corpus still
 lacks).
 
+The front end is a seam (`RipFrontEnd`): whatever hears the recording into
+`RipFrames`, the onset strengths, the pitch salience and the chroma per frame,
+feeds the same decoders. The analysis above is one front end; `ripnet` is the
+other, a transformer over the log-mel frames `MelFrames` makes, whose heads say
+per frame what struck, what sounds, and the wave and voice genes
+(`VoiceDef.Genes`) the note is played with, so a rip through it also names the
+voices its registers were played with (`Rip.Voices`). `tool/rip-train` trains it
+on loops soundlab exports (`corpus`), and soundlab hears with the first root's
+`audio/ripnet.bin` when there is one; `render` writes what the slots hold to a
+WAV through `RenderMusic`, so an estimate is heard without a device.
+[Rip design](rip-design.md) is where the rip is going: voices fitted by the
+engine's own renders, a pattern dictionary with matching and compression, and
+the loop that refines both.
+
 What it does not yet tell apart: a bass note's attack from a kick, a plucked
 chord's attack from a snare, two voices in one register, and a note off the key
 from a change of key. What it writes is the engine's grid and scale, an estimate
@@ -492,7 +506,9 @@ events and keep the sequencer unaware of gameplay concepts.
 
 - The package's own README, the module's at the spin-off: `pkg/audio/README.md`
 - Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
-- Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`
+- Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`; its learned front
+  end `pkg/audio/ripnet`, over `pkg/transformer`, trained by `tool/rip-train`;
+  the design: `doc/rip-design.md`
 - Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `kit.go`,
   `sound_render.go`
 - Sound and voice schema, loading and registries: `pkg/audio/sound_spec.go`,

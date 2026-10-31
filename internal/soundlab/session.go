@@ -22,6 +22,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/vif/pkg/audio/ripnet"
 )
 
 // Session owns the engine and the working documents: the sounds and the voices,
@@ -39,16 +40,22 @@ type Session struct {
 	// steps. The sequencer clamps and beat-quantizes its own copy; one pending
 	// change of skew does not matter for an audition length.
 	bpm int
-	// root and scale mirror the harmony `key` set, which the mixer keeps to
+	// root, scale and prog mirror the harmony `key` set, which the mixer keeps to
 	// itself: the editors name notes and place a played one on a degree by them
-	root     int
-	scale    audio.ScaleID
+	root  int
+	scale audio.ScaleID
+	prog  []int
+	// slots is what slot last asked of each sequencer slot; the engine reports
+	// what sounds a mixer tick later, which render cannot wait for
+	slots    [audio.MusicSlots]audio.PatternID
 	startErr error
 	files    Files
 	// rip is what rip listens with, the root's audio/rip.toml when one holds it,
-	// and ripSrc that file, where tune writes
-	rip    audio.RipParams
-	ripSrc string
+	// and ripSrc that file, where tune writes; frontEnd is the model the root's
+	// audio/ripnet.bin holds, nil for the package's own analysis
+	rip      audio.RipParams
+	ripSrc   string
+	frontEnd *ripnet.FrontEnd
 }
 
 // Files is where the game reads its audio overrides and where an untitled save
@@ -57,6 +64,7 @@ type Session struct {
 type Files struct {
 	music, sounds             string // "" = the embedded bank
 	rip                       string // "" = the built-in parameters
+	model                     string // "" = no model: the analysis listens
 	musicTarget, soundsTarget string // "" = no configuration root
 	ripTarget                 string
 	buffer                    time.Duration
@@ -88,6 +96,9 @@ func ResolveFiles(dir, music, sounds string) (Files, error) {
 	}
 	if f.rip, err = paths.ConfigFile(roots, "", paths.AudioDirName, paths.RipConfigFile); err != nil {
 		return f, fmt.Errorf("rip config: %w", err)
+	}
+	if f.model, err = paths.ConfigFile(roots, "", paths.AudioDirName, paths.RipModelFile); err != nil {
+		return f, fmt.Errorf("rip model: %w", err)
 	}
 	f.musicTarget, _ = paths.ConfigTarget(roots, music, paths.AudioDirName, paths.MusicConfigFile)
 	f.soundsTarget, _ = paths.ConfigTarget(roots, sounds, paths.AudioDirName, paths.SoundConfigFile)
@@ -160,6 +171,13 @@ func NewSession(o Options) (*Session, error) {
 			fmt.Fprintf(out, "rip params %s\n", f)
 		}
 	}
+	if f := files.model; f != "" {
+		if err := s.loadModel(f); err != nil {
+			fmt.Fprintf(out, "rip model %s: %v (the analysis listens)\n", f, err)
+		} else {
+			fmt.Fprintf(out, "rip model %s (%d weights)\n", f, s.frontEnd.Model.Parameters())
+		}
+	}
 	// A failed Start latches silent mode but the engine stays valid, and
 	// rendering is engine-independent: edit, validate and export all work
 	// with no backend. Record the error and continue rather than abort.
@@ -209,6 +227,30 @@ func (s *Session) Close() {
 	if !s.eng.Stopped() {
 		fmt.Fprintln(s.out, "warning: mixer did not stop; a backend write is wedged")
 	}
+}
+
+// loadModel makes a weight file the front end rip hears with
+func (s *Session) loadModel(file string) error {
+	f, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	fe, err := ripnet.Load(f)
+	if err != nil {
+		return err
+	}
+	s.frontEnd = fe
+	return nil
+}
+
+// ripper is what rip listens with: the parameters, and the model when one loaded
+func (s *Session) ripper() audio.Ripper {
+	r := audio.Ripper{Params: s.rip}
+	if s.frontEnd != nil {
+		r.FrontEnd = s.frontEnd
+	}
+	return r
 }
 
 // StartError is why the engine runs silent, nil when a backend took the stream;
