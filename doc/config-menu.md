@@ -5,9 +5,9 @@ enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
 regions that defines a game; a **game** is a scenario running in the engine. The
 Settings page and Relay for others are `vif.toml`'s `[play]`: a run writes them
 back as they change, and the next run starts as this one was left; the rest
-changes this run alone, and the keymap is never rewritten. The terminal, the
-desktop window and the browser draw the menu as the overlay below; Android draws
-the same menu with its own widgets ([Android](#android)).
+changes this run alone, and the keymap is never rewritten. The terminal and the
+desktop window draw the menu as the overlay below; Android and the browser draw
+the same menu with their own widgets ([Android and the browser](#android-and-the-browser)).
 
 ## Navigation
 
@@ -38,13 +38,13 @@ a row that is unavailable or read only; for an unavailable row the description
 below the list starts with the reason, the sentence its command gives (`Logging
 unavailable in a browser`, `Audio unavailable in this run`).
 
-## Android
+## Android and the browser
 
-The Android app draws the menu with the platform's widgets, in the site's dark
-theme, from a snapshot of the same pages and rows the run holds, and the run applies
-each tap as it applies a key ([Native menu](native-menu.md)); a page's content, its
-commands, its refusals and what `[play]` keeps are the same. The differences are the
-host's:
+The Android app and the page draw the menu with their own widgets, in the site's
+dark theme, from a snapshot of the same pages and rows the run holds, and the run
+applies each tap as it applies a key ([Native menu](native-menu.md)); a page's
+content, its commands, its refusals and what `[play]` keeps are the same. The
+differences are the host's:
 
 - The six pages are headings, each ruled off from the one above, that expand in
   place under a chevron: an open page's rows sit under it in a tinted panel behind a
@@ -52,7 +52,7 @@ host's:
   the run. A row that opens something ends in a chevron. A search field under the
   title lists the rows of every page matching the words typed, each with its page, in
   place of the tree, and they act in place.
-- A setting is a switch, a value that opens a radio list, or − and + around a value;
+- A setting is a switch, a value that opens a list, or − and + around a value;
   a scenario is a radio row, and Start names the one marked; an action is a row that
   acts when tapped, after a confirming dialog where it restarts, starts or leaves a
   game or drops a player or a bot; a one-field form is a field on its row, whose
@@ -62,8 +62,9 @@ host's:
   addresses for Address, Target and Site.
 - A row that cannot act is dimmed and starts its description with the reason. The
   status bar's line, a refusal included, shows at the menu's foot while it is up.
-- Back closes the innermost of a confirm, a radio list and a sheet, then clears a
-  search, then closes the menu; so does a tap outside the window. × closes it.
+- Back closes the innermost of a confirm, a list and a sheet, then clears a search,
+  then closes the menu; so does a tap outside the window, and Escape in a browser.
+  × closes it.
 - A hardware keyboard works as in the overlay, except in a field being typed in:
   `j`/`k` move, `h`/`l` change the focused row, `/` finds the search field, `q` and
   Escape go back, and Ctrl-G, F10 and F1 close the menu or open help over it.

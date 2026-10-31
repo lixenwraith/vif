@@ -56,3 +56,40 @@ func TestTheStatusBarTakesATapWithThePointerOff(t *testing.T) {
 		t.Fatal("a finger on the status bar was not taken with its release")
 	}
 }
+
+// TestTheMenuCrossesTheBridge: with the worker defining vifMenu the page draws the
+// menu, a snapshot reaches it as its JSON and a closed menu as the empty string, and
+// a menu message from the page reaches the host's MenuOp with its fields; a page
+// without vifMenu draws none.
+func TestTheMenuCrossesTheBridge(t *testing.T) {
+	if HasMenu() {
+		t.Fatal("a menu without vifMenu")
+	}
+	var handed []string
+	fn := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		handed = append(handed, args[0].String())
+		return nil
+	})
+	defer fn.Release()
+	js.Global().Set(jsMenu, fn)
+	defer js.Global().Delete(jsMenu)
+	if !HasMenu() {
+		t.Fatal("no menu with vifMenu defined")
+	}
+	h := &Host{}
+	h.Menu([]byte(`{"title":"Menu"}`))
+	h.Menu(nil)
+	if len(handed) != 2 || handed[0] != `{"title":"Menu"}` || handed[1] != "" {
+		t.Fatalf("the page was handed %q", handed)
+	}
+	var got [3]string
+	h.MenuOp = func(op, id, arg string) { got = [3]string{op, id, arg} }
+	msg := js.Global().Get("Object").New()
+	for k, v := range map[string]string{"type": "menu", "op": "set", "id": "settings/#Controls/auto", "arg": "main"} {
+		msg.Set(k, v)
+	}
+	h.handle(js.Undefined(), []js.Value{msg})
+	if got != [3]string{"set", "settings/#Controls/auto", "main"} {
+		t.Fatalf("the op crossed as %q", got)
+	}
+}

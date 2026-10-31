@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"slices"
@@ -211,28 +212,35 @@ func TestTheMenuCrossesTheBindingAsJSONAndOps(t *testing.T) {
 	}
 }
 
-// TestTheAppIsWrittenToTheRunsMenuContract: MenuDialog.java names the node kinds, the
-// ops and the field inputs the run's snapshot and hooks use, each list in the run's
-// order, so the two sides of one APK cannot drift.
-func TestTheAppIsWrittenToTheRunsMenuContract(t *testing.T) {
-	src, err := os.ReadFile("../app/src/main/java/com/lixen/vif/MenuDialog.java")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range []struct {
-		name string
-		want []string
-	}{{"KINDS", mode.MenuKinds[:]}, {"OPS", mode.MenuOps}, {"INPUTS", mode.MenuInputs}} {
-		m := regexp.MustCompile(`static final String\[\] ` + c.name + ` = \{([^}]*)\};`).FindSubmatch(src)
-		if m == nil {
-			t.Fatalf("MenuDialog.java declares no %s", c.name)
+// TestTheHostsAreWrittenToTheRunsMenuContract: MenuDialog.java and the page's
+// terminal.js name the node kinds, the ops and the field inputs the run's snapshot
+// and hooks use, each list in the run's order, so no host drifts from the run.
+func TestTheHostsAreWrittenToTheRunsMenuContract(t *testing.T) {
+	for _, host := range []struct {
+		path, declaration string
+	}{
+		{"../app/src/main/java/com/lixen/vif/MenuDialog.java", `static final String\[\] %s = \{([^}]*)\};`},
+		{"../../web/terminal.js", `const MENU_%s = \[([^\]]*)\];`},
+	} {
+		src, err := os.ReadFile(host.path)
+		if err != nil {
+			t.Fatal(err)
 		}
-		var got []string
-		for _, q := range regexp.MustCompile(`"([^"]*)"`).FindAllSubmatch(m[1], -1) {
-			got = append(got, string(q[1]))
-		}
-		if !slices.Equal(got, c.want) {
-			t.Errorf("%s is %q in the app, %q in the run", c.name, got, c.want)
+		for _, c := range []struct {
+			name string
+			want []string
+		}{{"KINDS", mode.MenuKinds[:]}, {"OPS", mode.MenuOps}, {"INPUTS", mode.MenuInputs}} {
+			m := regexp.MustCompile(fmt.Sprintf(host.declaration, c.name)).FindSubmatch(src)
+			if m == nil {
+				t.Fatalf("%s declares no %s", host.path, c.name)
+			}
+			var got []string
+			for _, q := range regexp.MustCompile(`["']([^"']*)["']`).FindAllSubmatch(m[1], -1) {
+				got = append(got, string(q[1]))
+			}
+			if !slices.Equal(got, c.want) {
+				t.Errorf("%s is %q in %s, %q in the run", c.name, got, host.path, c.want)
+			}
 		}
 	}
 }

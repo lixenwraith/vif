@@ -265,7 +265,11 @@ that proves wrong or that a document now states, and link the document instead.
 - The browser launcher runs end to end in the container: `GOOS=js GOARCH=wasm go
   build -o <copy>/vif.wasm ./cmd/vif` into a copy of `web/`, serve the copy with
   `python3 -m http.server` and drive it with Playwright. `?arg=-join=ws://127.0.0.1:9/x`
-  ends the run at once with a refused join's message.
+  ends the run at once with a refused join's message. A `devices['Pixel 7']`
+  context is the phone's page, where a held `mouse.down` on the canvas's last
+  rows is the finger that opens the menu; `page.keyboard.press('Control+g')` is
+  the desktop's. `pkg/browser`'s tests run under node with
+  `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"`.
 - The scheduler loop's cadence is read with a probe system whose `Update` records
   `time.Now()` and sleeps on one tick, under a goroutine that answers each
   `updateDone` with a `frameReady` after a frame's delay (`NewScheduler`, `Start`);
