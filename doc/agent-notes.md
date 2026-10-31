@@ -16,9 +16,11 @@ that proves wrong or that a document now states, and link the document instead.
   container without egress to the Android SDK and JDK hosts cannot build the APK;
   that check runs on a device.
 - The Java app type-checks without an SDK: `javac -cp android-all.jar` (Robolectric's
-  `org.robolectric:android-all` from Maven Central, the release `compileSdk` names)
-  over `android/app/src/main/java` and stubs for `R` and the bound `Game`, `Speaker`
-  and `Listener`.
+  `org.robolectric:android-all` from Maven Central, the release `compileSdk` names;
+  an older release checks a change that uses no newer API) over
+  `android/app/src/main/java` and stubs for `R` and the bound `Game`, `Speaker` and
+  `Listener`. Maven Central answers a shared egress 429 at times, its listing too:
+  fetch the jar by its full path and retry after a pause.
 - `adb shell input` taps one finger only, and the emulator's user image refuses
   `sendevent` (SELinux). `adb shell uinput -` registers a touchscreen from JSON and
   injects multi-touch frames with millisecond delays, about 3 s after it starts. Its
@@ -232,6 +234,10 @@ that proves wrong or that a document now states, and link the document instead.
   build -o <copy>/vif.wasm ./cmd/vif` into a copy of `web/`, serve the copy with
   `python3 -m http.server` and drive it with Playwright. `?arg=-join=ws://127.0.0.1:9/x`
   ends the run at once with a refused join's message.
+- The scheduler loop's cadence is read with a probe system whose `Update` records
+  `time.Now()` and sleeps on one tick, under a goroutine that answers each
+  `updateDone` with a `frameReady` after a frame's delay (`NewScheduler`, `Start`);
+  the gaps between starts around the slow tick show what a late frame does.
 - Whether a motion reads smooth is a frame question, not a tick one: render each of
   a tick's three frames with the context's `GameTime` set that far past
   `Time.PaceTime` and count the cells the layer moved. A pace off a multiple of
