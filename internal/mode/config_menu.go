@@ -57,7 +57,7 @@ type configNode struct {
 var configPages = []configNode{
 	{kind: kindGroup, key: "game", label: "Game", description: "The game running now: pause it, restart it from its scenario's first tick, or change its speed.", nodes: []configNode{
 		{kind: kindAction, key: "pause", label: "Pause", name: pauseName, command: "pause", read: enterValue, disabled: pauseRefused,
-			description: "Stop the game until Resume, as :pause or p does; the menu closes and leaves it stopped. In a session only the host can, and every participant stops at the same tick."},
+			description: "Stop the game until Resume, as the command :pause or the key p in Normal mode does; the menu closes and leaves it stopped. In a session only the host can, and every participant stops at the same tick."},
 		{kind: kindAction, key: "restart", label: "Restart game", command: "new", read: enterValue, confirm: true, disabled: hostOnly("Only the host can restart the game in a session"),
 			description: "Start this game over from its scenario's first tick. In a session only the host can, and every participant restarts with it."},
 		{kind: kindStep, key: "speed", label: "Game speed", description: "1x is real time; range 1/8x to 8x. In a session only the host can, and every participant changes with it.",
@@ -105,7 +105,7 @@ var configPages = []configNode{
 				change: func(ctx *engine.GameContext, d int) {
 					handleFPSCommand(ctx, []string{strconv.Itoa(fpsStep(int(ctx.MaxFPS.Load()), d))})
 				}},
-			{kind: kindToggle, key: "hud", label: "Telemetry HUD", description: "Show pinned telemetry cards over the game. Pin cards in the telemetry view (:t) with Enter or a press.",
+			{kind: kindToggle, key: "hud", label: "Telemetry HUD", description: "Show pinned telemetry cards over the game. The command :t opens the telemetry view, where Enter or a press pins a card.",
 				command: "hud", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.OverlayHUD.Load()) }},
 		}),
@@ -113,7 +113,7 @@ var configPages = []configNode{
 			{kind: kindToggle, key: "pause_menu", label: "Pause in menu", description: "Pause the game while this menu, help or telemetry is open. Applies where the game can pause: solo, or hosting only your own bots; a session with other players plays on.",
 				command: "pause menu", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.PauseMenu.Load()) }},
-			{kind: kindToggle, key: "pause_command", label: "Pause in command line", description: "Pause the game while the command line is open. Applies where the game can pause: solo, or hosting only your own bots. With it off, :pause or p still pauses.",
+			{kind: kindToggle, key: "pause_command", label: "Pause in command line", description: "Pause the game while the command line is open. Applies where the game can pause: solo, or hosting only your own bots. With it off, the command :pause and the key p still pause.",
 				command: "pause command", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.PauseCommand.Load()) }},
 		}),
@@ -130,10 +130,10 @@ var configPages = []configNode{
 			{kind: kindChoice, key: "level", label: "Log level", description: "Minimum severity to record. Trace and debug can produce large log files.",
 				command: "log level", choices: []string{"trace", "debug", "info", "warn", "error"},
 				read: func(*engine.GameContext) string { return strings.ToLower(vlog.LevelName()) }, disabled: loggingUnavailable},
-			{kind: kindChoice, key: "scope", label: "Log scope preset", description: "Choose all, app+fsm+stat, or none. :log scope allows individual categories.",
+			{kind: kindChoice, key: "scope", label: "Log scope preset", description: "Choose all, app+fsm+stat, or none. The command :log scope <categories> allows individual categories.",
 				command: "log scope", choices: []string{"all", "app+fsm+stat", "none"},
 				read: func(*engine.GameContext) string { return vlog.ScopeString(vlog.Scopes()) }, disabled: loggingUnavailable},
-			{kind: kindStep, key: "stat", label: "Snapshot ticks", description: "Ticks between log snapshots; 0 disables them. :log stat accepts any interval.",
+			{kind: kindStep, key: "stat", label: "Snapshot ticks", description: "Ticks between log snapshots; 0 disables them. The command :log stat <ticks> accepts any interval.",
 				command: "log stat", steps: []uint64{0, 60, 200, 600, 3600},
 				read: func(ctx *engine.GameContext) string {
 					return strconv.FormatUint(ctx.World.Resources.Status.SnapshotInterval(), 10)
@@ -166,22 +166,22 @@ var configPages = []configNode{
 			commandAction("unpin", "Clear HUD pins", "Unpin every telemetry card from the HUD.", "t unpin"),
 		}),
 		section("Navigation", []configNode{
-			{kind: kindToggle, key: "flow", label: "Flow field", description: "Show the navigation flow field for the selected target group (:flow <group>).",
+			{kind: kindToggle, key: "flow", label: "Flow field", description: "Show the navigation flow field for the selected target group; the command :flow <group> selects one.",
 				command: "flow", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowFlow) }},
-			{kind: kindToggle, key: "graph", label: "Route graph", description: "Show composite navigation routes (:graph <group> selects a target group).",
+			{kind: kindToggle, key: "graph", label: "Route graph", description: "Show composite navigation routes; the command :graph <group> selects a target group.",
 				command: "graph", read: func(ctx *engine.GameContext) string { return toggleWord(ctx.NavigationDebug.ShowComposite) }},
 		}),
 		section("Recording", []configNode{
-			{kind: kindToggle, key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. The game plays on as it was. :journal start <slot> records a bot of yours.",
+			{kind: kindToggle, key: "journal", label: "Replay journal", description: "Record a replay journal from here, or close the one recording. The game plays on as it was. The command :journal start <slot> records a bot of yours.",
 				command: "journal", choices: []string{"off", "on"}, read: journalValue, disabled: journalUnavailable},
 		}),
 	}},
 	{kind: kindGroup, key: "launch", label: "Launch options", description: cmp.Or(startupNotes[runtime.GOOS], "What is set when the game launches, and where to set it: these rows only explain."), nodes: []configNode{
-		{kind: kindInfo, key: "files", label: "Paths and scenario", description: "Use vif.toml [paths] or -config-dir, -s, -f, -k. The Scenarios page starts another scenario now.", read: startupValue},
-		{kind: kindInfo, key: "backend", label: "Audio device / buffer", description: "Use -audio-backend and vif.toml [audio].buffer_ms. The audio device opens at launch.", read: startupValue},
-		{kind: kindInfo, key: "color", label: "Colour depth", description: "Use -color auto|256|true. Rendering resources are selected at launch.", read: startupValue},
-		{kind: kindInfo, key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your config root, or use -k. A key names one action, and an action can have several keys: config_menu has Ctrl+G and F10, help has F1.", read: startupValue},
-		{kind: kindInfo, key: "session", label: "Identity", description: "Session identity and seed are launch options. Use the Multiplayer page for live session actions, Developer to start a replay journal.", read: startupValue},
+		{kind: kindInfo, key: "files", label: "Paths and scenario", description: "Set by vif.toml's [paths] table or the launch flags -config-dir, -s, -f and -k. The Scenarios page starts another scenario now.", read: startupValue},
+		{kind: kindInfo, key: "backend", label: "Audio device / buffer", description: "Set by the launch flag -audio-backend and vif.toml's [audio] buffer_ms. The audio device opens at launch.", read: startupValue},
+		{kind: kindInfo, key: "color", label: "Colour depth", description: "Set by the launch flag -color (auto, 256 or true). Rendering resources are selected at launch.", read: startupValue},
+		{kind: kindInfo, key: "keymap", label: "Key bindings", description: "Edit input/keymap.toml in your configuration root, or name a file with the launch flag -k. A key names one action, and an action can have several keys: config_menu has Ctrl+G and F10, help has F1.", read: startupValue},
+		{kind: kindInfo, key: "session", label: "Identity", description: "Session identity and seed are launch flags. The Multiplayer page holds the live session actions, Developer the replay journal.", read: startupValue},
 	}},
 }
 
@@ -258,7 +258,7 @@ func replayConfigOptions(ctx *engine.GameContext) []configNode {
 	if ctx.ReplaySeek == nil {
 		return nil
 	}
-	return []configNode{commandAction("replay", "Restart replay", "Play the recording again from its first tick. :r tick and :r time go to any other.", "replay restart")}
+	return []configNode{commandAction("replay", "Restart replay", "Play the recording again from its first tick. The commands :r tick and :r time go to any other tick or time.", "replay restart")}
 }
 
 // scenarioConfigOptions lists the scenarios the menu opened with, one marked, then
