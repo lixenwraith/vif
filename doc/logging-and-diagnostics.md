@@ -810,7 +810,7 @@ correlated by `run` and `tick`.
 `event.Journal` to the event queue and open a dedicated `vif-jrn-*.jsonl`
 logger, one per journal the process keeps: its own run's and each bot seat's. A
 journal opened within the second another was takes a `-2`, `-3`… suffix, and the
-process prints every path it opened when it exits. The Recorder owns attachment,
+process prints every path it opened to stdout when it exits. The Recorder owns attachment,
 final counters, and file drain; an injected
 in-memory `journal.Capture` remains caller-owned. Capture records every event
 whose origin is `Journaled` (all but `system` and `device`) and every own crossing
