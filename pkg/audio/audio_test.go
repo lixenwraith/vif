@@ -441,6 +441,9 @@ func FuzzLoadPatternsTOML(f *testing.F) {
 	})
 }
 
+// testStopWait outlasts a loaded tick, which Stop's own bound may not
+const testStopWait = 10 * time.Second
+
 // startNullEngine brings up an engine on the discard backend with testBank
 // registered.
 func startNullEngine(t *testing.T) *AudioEngine {
@@ -519,10 +522,10 @@ func TestDefineSoundRebindsDrumKit(t *testing.T) {
 	}
 	time.Sleep(3 * AudioBufferDuration)
 
-	// Stop before inspecting: Wait inside Stop establishes happens-before
-	// against the mix goroutine, the only writer of kit and cache.
+	// Stop before inspecting: Wait establishes happens-before against the mix
+	// goroutine, the only writer of kit and cache.
 	ae.Stop()
-	if !ae.Stopped() {
+	if !ae.mixer.Wait(testStopWait) {
 		t.Fatal("mix goroutine still running; kit inspection would race")
 	}
 
@@ -555,7 +558,7 @@ func TestDefinePatternSwapsUnderPlayback(t *testing.T) {
 	}
 	time.Sleep(3 * AudioBufferDuration)
 	ae.Stop()
-	if !ae.Stopped() {
+	if !ae.mixer.Wait(testStopWait) {
 		t.Fatal("mix goroutine still running; slot inspection would race")
 	}
 

@@ -185,6 +185,10 @@ func (m *Mixer) loop() {
 		case <-m.stopChan:
 			return
 		case <-ticker.C:
+			// select picks at random once a slow tick leaves both cases ready
+			if m.stopped.Load() {
+				return
+			}
 			m.drainCmds()
 			m.renderTick(mixBuf, outBytes, n, pauseStep, duckAtk, duckRel, limRel)
 		}
