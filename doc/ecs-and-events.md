@@ -111,7 +111,11 @@ paths a per-query allocation. Shared occupants precede private ones,
 model](domain-design.md#3-spatial-and-entity-classification)).
 
 The grid is dense, so a map costs cells: `Cell` is exactly 256 bytes, and the
-grid is sized to its map with grow-only backing, so a shrink never reallocates.
+grid is sized to its map with grow-only backing, so a shrink never reallocates. It
+is a volume of layers, one on today's maps: a `Point`'s Z is its layer, the
+queries taking a column and a row answer for the first, and `BlocksAt`,
+`BlocksBox`, `EntitiesAtPoint` and `HasLineOfSightBetween` for any
+([Position package §4](position-package.md#4-the-third-axis)).
 Beside the cells it keeps a bit a cell for each class that holds something
 (`Grid.Present`), so a probe of an empty cell costs a word in cache rather than a
 cell out of it, and a scan passes empty cells a word at a time.
