@@ -113,13 +113,6 @@ holds the choices made). What remains, in the order of
   eight walking cursors they reach 40–60 ms and compute no field, the wall
   system's event peaking at 34–51 ms and navigation at 15–17 ms. The walls stay
   entities, which species move and break.
-- Footprints: navigation steers each body by its footprint's tier
-  ([Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes)), but
-  the direct-path test centres the footprint and accepts it turned 90°
-  (`HasAreaLineOfSightRotatable`) rather than testing the body from its header: in
-  16 headless vanguard games (8 seeds at 120×40 and 200×60, 2,400 ticks each),
-  1,988 of the 25,168 chase ticks it called direct, 7.9%, had the raider's own body
-  blocked on the way.
 - A 1:1 cell for a graphical host enters in the package: authored geometry stays
   at `RefAspect` and the package owns the conversion. A volume past the ceiling
   needs cells chunked on demand, which also serves a ceiling-sized empty map

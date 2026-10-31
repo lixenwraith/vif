@@ -189,10 +189,13 @@ Each names the choice taken and what the other would have cost.
 4. The volume: a depth to the grid, the planes and the presence bits the layers'
    rows in turn, the point forms of the queries, a 3D line of sight and a box
    along it, the binding placing by the point. Done, measured in §5 at parity.
-4b. Footprints and the cell: the direct-path test from the body's header, the 1:1
-   cell for a graphical host (authored geometry stays at `RefAspect`, the package
-   owns the conversion), a heightfield surface for a volume, chunked cells for a
-   volume past the ceiling and the ceiling-sized empty map.
+4b. The direct-path test from the body's header: `HasAreaLineOfSight` flies the
+   body by its anchor, the cell it moves by, in place of a box centred on the line
+   and accepted turned 90°. Done, measured in §5.
+4c. The cell: the 1:1 cell for a graphical host (authored geometry stays at
+   `RefAspect`, the package owns the conversion), a heightfield surface for a
+   volume, chunked cells for a volume past the ceiling and the ceiling-sized
+   empty map.
 5. Batch skips: the presence bits, a class each, kept as cells fill and empty, so
    a probe passes an empty cell on a word and a scan passes empty cells a word at
    a time. Done, measured in §5.
@@ -521,3 +524,26 @@ RockRender/500x254/redraw     30485011  29989426    -1.6%
 
 Parity, within the band throughout: a flat query's body did not change, and a
 cell's index, row and bit on a map one layer deep are what they were.
+
+Iteration 7, the direct path flown from the body's header, 16 headless vanguard
+games on main and on the branch, 8 seeds at 120×40 and 200×60, 2,400 ticks each
+after the ship armed, the ship under `:god` sweeping between the map's middle and
+near its left edge every three seconds and firing every sixth tick. Each tick,
+after it, every composite navigator was read: a chase tick, a direct tick when
+`HasDirectPath` held, and a body-blocked tick when its body from its header met
+rock, a wall or the edge on the line to the ship's cell.
+
+```
+                      chase   direct          body blocked
+main    120×40        24743   17652  71.3%    282  1.6% of direct
+branch  120×40        24349   17867  73.4%     60  0.3% of direct
+main    200×60        23428   18236  77.8%    213  1.2% of direct
+branch  200×60        23351   18426  78.9%     22  0.1% of direct
+```
+
+The box centred on the line rejected a clear body as often as its turn accepted
+a blocked one, so the body flown as it is goes direct a little more often; the
+blocked ticks left are the body's own motion within the tick after navigation
+decided, the rock stepping a column every tick. `BenchmarkCaveNavigation` reads
+its sighted share at 200×60 up from 0.80 to 0.86 far and 0.92 to 0.94 near, its
+cost inside the band.
