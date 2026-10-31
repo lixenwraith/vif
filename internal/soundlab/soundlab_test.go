@@ -889,3 +889,34 @@ validate all
 		t.Errorf("no report:\n%s", out.String())
 	}
 }
+
+// TestTuneSearchesTheRipParameters is the verb's contract on a search too small
+// to be good: it renders a corpus from the registered patterns, scores the
+// current parameters, runs the generations asked, and leaves the session with
+// parameters that load back, written when a candidate beat the start.
+func TestTuneSearchesTheRipParameters(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	file := filepath.Join(t.TempDir(), "rip.toml")
+	if err := s.tune(tuneOptions{loops: 2, bars: 2, generations: 1, pool: 4, seed: 1}, file); err != nil {
+		t.Fatalf("tune: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "generation 0") || !strings.Contains(out.String(), "current parameters score") {
+		t.Fatalf("no search reported:\n%s", out.String())
+	}
+	if audio.ValidateRipParams(s.rip) != nil {
+		t.Errorf("the session listens with parameters out of range: %+v", s.rip)
+	}
+	if data, err := os.ReadFile(file); err == nil {
+		if _, err := audio.LoadRipParams(data); err != nil {
+			t.Errorf("the written parameters do not load: %v", err)
+		}
+	} else if !strings.Contains(out.String(), "they stay") {
+		t.Errorf("neither written nor kept:\n%s", out.String())
+	}
+	runOrFatal(t, s, &out, `
+! tune 0
+! tune 1 2 3
+`)
+}

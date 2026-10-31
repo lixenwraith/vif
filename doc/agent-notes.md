@@ -183,6 +183,13 @@ that proves wrong or that a document now states, and link the document instead.
   rise, a hat's above 5 kHz 0.45, a snare's noise above 5 kHz 0.15 to 0.21):
   print them again before moving a threshold, and expect a bass note's attack to
   read as a kick.
+- The test loop scores 0.98 under `DefaultRipParams` and loops of the shipped bank
+  0.51 (`CompareRips.Total`): busy drum lanes whose chance hits count as misses,
+  several tracks a slot and melodies under chord changes are where the model falls
+  short, not the thresholds. `tune 4` over 12 four-bar loops took 36 s on four
+  cores and reached 0.59; a set tuned on renders alone pushes `tightness` and
+  `kick_share` to their range's ends, which a recording with tempo drift would
+  pay for, so the defaults stay hand-set until the corpus has real material.
 
 ## Locks
 

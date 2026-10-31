@@ -32,7 +32,7 @@ go run ./cmd/soundlab -headless -s script.slab
 - `-tui`, `-T`: Full-screen Terminal User Interface. Empty documents are seeded from the built-ins; the REPL and scripts leave that to `builtin`.
 - `-headless`: Discard audio output (`-ab null`).
 - `-s <file>`: Execute a `.slab` script file line-by-line and exit.
-- `-config-dir <dir>`, `-config-music <file>`, `-config-sounds <file>`: vif's flags, resolved the same way, with `vif.toml`'s `[paths] root` and `[audio] buffer_ms` read as vif reads them; any key this build does not know is named and skipped. The overrides vif would load are registered and opened as the working documents; `save` writes where the next vif run reads first.
+- `-config-dir <dir>`, `-config-music <file>`, `-config-sounds <file>`: vif's flags, resolved the same way, with `vif.toml`'s `[paths] root` and `[audio] buffer_ms` read as vif reads them; any key this build does not know is named and skipped. The overrides vif would load are registered and opened as the working documents; `save` writes where the next vif run reads first. The first root's `audio/rip.toml`, when there is one, is what `rip` listens with and where `tune` writes.
 - `-ab <name>`: Force audio backend (`pacat`, `aplay`, `null`, `wav:out.wav`).
 - `-vol <f>`: Sound effect volume 0..1 (default 0.7); music keeps its own level.
 
@@ -58,6 +58,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 | `save`/`write` | `save sound\|pattern [file]` | Write the document (bare = provenance path); `write <name> <file>` saves one entry. |
 | `export` | `export <name> <out.wav> [variant]` | Render definition into a PCM WAV. |
 | `rip` | `rip <file.wav> <name> [bars]` | Hear a recording's beat, melody and bass as patterns of up to `bars` (4) bars each, named `<name>_beat_1`..., and take its tempo and key. |
+| `tune` | `tune [generations] [file]` | Search `rip`'s parameters over loops the engine renders from the registered patterns; a set that beats the current one is written (default the first root's `audio/rip.toml`) and listened with from then on. Eight generations take minutes. |
 | `ls`/`show` | `ls sound\|pattern\|voice [glob]`, `show <name>[.path]` | List entries (`*` marks dirty); dump TOML shape, or print leaf value. |
 | `where`/`stat` | `stat` | Transport position and slot patterns, a muted slot marked; backend, play stats, dirty entries. |
 | `new`/`cp`/`mv`/`del` | `new sound\|pattern\|voice <name>` | Seed, duplicate, rename or discard an entry. `new` seeds a minimal valid spec; `del <name.path.idx>` removes a list element, and a discarded entry keeps any applied registry copy. |

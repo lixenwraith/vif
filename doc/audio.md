@@ -445,10 +445,21 @@ tonic. Pitch salience sums a candidate's partials, the bass register's from its
 first three and the melody's with the bass's partials cancelled, so a bass's
 octave does not read as a melody note; a hidden path through the frames, scored
 against the costs of moving and of starting or ending a note, is cut into notes,
-which land on the key's nearest degree. `RipParams` holds every threshold.
-`DefaultRipParams` is the hand-set start, meant to be refined by a search over
-material the engine renders itself, whose patterns are known
-([TODO](todo.md#tune-the-rip)).
+which land on the key's nearest degree.
+
+`RipParams` holds every threshold, each with a range (`RipGeneRanges`) and a
+place in a gene vector (`Genes`, `RipParamsFromGenes`); a `[rip]` table in a TOML
+document carries a set (`LoadRipParams`, `MarshalRipParams`), and soundlab
+listens with the first root's `audio/rip.toml` when one is there. `DefaultRipParams`
+is the hand-set start. The engine grades a set itself: `RenderMusic` plays
+registered patterns offline, `ExpectedRip` is the rip a perfect listener would
+make of them, and `CompareRips` scores a rip against it, tempo within two BPM,
+bars found, and the drums, melody and bass as the harmonic mean of recall and
+precision per step and pitch. Soundlab's `tune` searches the parameters over
+loops rendered from the registered patterns across tempos and keys with
+`pkg/genetic`'s generational engine, the current set seeding the pool, and writes
+a set that beats it ([TODO](todo.md#tune-the-rip) for what the corpus still
+lacks).
 
 What it does not yet tell apart: a bass note's attack from a kick, a plucked
 chord's attack from a snare, two voices in one register, and a note off the key
