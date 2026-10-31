@@ -297,8 +297,8 @@ func TestAnInstallKeepsNavigationOnlyOverUnmovedWalls(t *testing.T) {
 			d.comp = slices.Clone(dbg.CompositePassability.Bits().Words)
 			cfg := w.Resources.Config
 			var pointGrid, compositeGrid navigation.SearchGrid
-			pointGrid.FillBlocked(cfg.MapWidth, cfg.MapHeight, w.Positions.BlockBits(component.WallBlockKinetic, nil))
-			compositeGrid.FillBlocked(cfg.MapWidth, cfg.MapHeight, dbg.CompositePassability.Bits())
+			pointGrid.Fill(cfg.MapWidth, cfg.MapHeight, w.Positions.BlockBits(component.WallBlockKinetic, nil))
+			compositeGrid.Fill(cfg.MapWidth, cfg.MapHeight, dbg.CompositePassability.Bits())
 			dbg.Flow.Materialize(&pointGrid)
 			dbg.CompositeFlow.Materialize(&compositeGrid)
 			for i, c := range []*navigation.FlowFieldCache{dbg.Flow, dbg.CompositeFlow} {

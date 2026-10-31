@@ -7,7 +7,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/position"
 )
 
-// WallBlockMask is the position index's mask: the kinds of mover a wall stops
+// WallBlockMask is the position index's mask as a wall carries it: the kinds of
+// mover it stops. The index also keeps the wall's box style as a kind, which the
+// engine reports beside the mask and no wall's BlockMask carries.
 type WallBlockMask = position.Mask
 
 const (
@@ -16,7 +18,7 @@ const (
 	WallBlockKinetic  WallBlockMask = 1 << 1 // Drain, Swarm, Quasar
 	WallBlockParticle WallBlockMask = 1 << 2 // Particle and Dust
 	WallBlockSpawn    WallBlockMask = 1 << 3 // All entity spawning
-	WallBlockAll      WallBlockMask = 0xFF
+	WallBlockAll      WallBlockMask = WallBlockCursor | WallBlockKinetic | WallBlockParticle | WallBlockSpawn
 )
 
 // WallBlockNames are what a document calls each blocked kind, and none or all
@@ -40,6 +42,24 @@ const (
 
 // BoxDrawStyleNames are what a document calls each BoxDrawStyle
 var BoxDrawStyleNames = [...]string{BoxDrawNone: "none", BoxDrawSingle: "single", BoxDrawDouble: "double"}
+
+// The kinds a box-drawn wall has in the position index, one a style, so the
+// neighbour test the box characters are drawn from reads a bit, not the cell
+const (
+	WallKindBoxSingle WallBlockMask = 1 << 6
+	WallKindBoxDouble WallBlockMask = 1 << 7
+)
+
+// BoxKind is the index kind of a box style, none for BoxDrawNone
+func BoxKind(style BoxDrawStyle) WallBlockMask {
+	switch style {
+	case BoxDrawSingle:
+		return WallKindBoxSingle
+	case BoxDrawDouble:
+		return WallKindBoxDouble
+	}
+	return 0
+}
 
 // WallComponent marks an entity as a wall/obstacle with visual properties
 type WallComponent struct {

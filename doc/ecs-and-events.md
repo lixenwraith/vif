@@ -155,7 +155,8 @@ entity per cell, and `ShiftRock` moves both a column left with the column
 entering; then from a plane of bits the index keeps for the mask, a bit a cell,
 built from the cells on the mask's first query and brought to a cell's shared
 occupants whenever a wall is placed, moved, removed or remasked there
-(`Position.wallOf` names a wall and what it stops), so a point is a bit and an
+(`Position.wallOf` names a wall, what it stops and the box style it draws in,
+which the box characters' neighbour test reads), so a point is a bit and an
 area a few words a row. `BlockBits` hands a reader deriving whole the plane's
 words with the surfaces' solid cells (`position.Bits`, which navigation derives
 its passability from). The rock's look (`RockLook`) is the wall system's to lay in

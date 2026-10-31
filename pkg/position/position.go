@@ -23,7 +23,9 @@ type Frame interface {
 	Aspect() vmath.Aspect
 }
 
-// Mask selects the kinds of mover a block stops; a query's 0 asks for any block.
+// Mask selects the kinds of block a query asks for, the kinds blockOf names: in a
+// game the movers a block stops, and whatever else tells its blocks apart. A
+// query's 0 asks for any block.
 type Mask uint8
 
 // Class is one half of a cell: the shared half fills it from the front, the

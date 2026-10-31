@@ -1673,23 +1673,11 @@ func popCount8(b uint8) int {
 	return int((b + (b >> 4)) & 0x0F)
 }
 
-// hasWallWithStyle checks if position contains wall entity with matching BoxStyle
+// hasWallWithStyle reports whether a wall drawn in style stands at (x, y), by the
+// index's plane of that kind
 func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bool {
-	config := s.world.Resources.Config
-	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
-		return false
-	}
-
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := copy(entities[:], s.world.Positions.EntitiesAt(x, y, position.ScopeShared))
-	for i := range count {
-		if wall, ok := s.world.Components.Wall.GetPtr(entities[i]); ok {
-			if wall.BoxStyle == style {
-				return true
-			}
-		}
-	}
-	return false
+	kind := component.BoxKind(style)
+	return kind != 0 && s.world.Positions.Blocks(x, y, kind)
 }
 
 // isPerimeterWall returns true if wall at (x,y) has at least one non-wall neighbor

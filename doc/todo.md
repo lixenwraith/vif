@@ -105,14 +105,6 @@ components and the rock need, and the game asks by the package's names ([Positio
 holds the choices made). What remains, in the order of
 [its phases](position-package.md#3-phases):
 
-- The readers that still pay a cell: the wall system's box-drawing neighbours
-  (`hasWallWithStyle`, a wall's four neighbours read and their `Wall` component
-  looked up, on every spawn and every destruction in a storm), and the route
-  solver and flow fields, which ask a cell at a time through `WallChecker`. td's
-  worst ticks are those where hundreds of walls go at once: under a storm with
-  eight walking cursors they reach 40–60 ms and compute no field, the wall
-  system's event peaking at 34–51 ms and navigation at 15–17 ms. The walls stay
-  entities, which species move and break.
 - A 1:1 cell for a graphical host enters in the package: authored geometry stays
   at `RefAspect` and the package owns the conversion. A volume past the ceiling
   needs cells chunked on demand, which also serves a ceiling-sized empty map

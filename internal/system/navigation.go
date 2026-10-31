@@ -238,27 +238,13 @@ func (s *NavigationSystem) resize(width, height int) {
 	s.showDebug()
 }
 
-// wallAt is the walls everything derived stands on, none off them
-func (s *NavigationSystem) wallAt(x, y int) bool {
-	return x >= 0 && y >= 0 && x < s.wallsW && y < s.wallsH && s.walls.Bit(x, y)
-}
-
-// blockedBits is blocked as a grid of bits: the walls on the point tier, the
-// headers no footprint fits on on a composite one
+// blockedBits is what a tier's grid and route graphs read, a bit a cell: the
+// walls on the point tier, the headers no footprint fits on on a composite one
 func (t *navTier) blockedBits(s *NavigationSystem) position.Bits {
 	if t.pass == nil {
 		return s.walls
 	}
 	return t.pass.Bits()
-}
-
-// blocked is the test a tier's grid and route graphs read: the walls on the point
-// tier, the cells no header fits on on a composite one
-func (t *navTier) blocked(s *NavigationSystem) navigation.WallChecker {
-	if t.pass == nil {
-		return s.wallAt
-	}
-	return t.pass.IsBlocked
 }
 
 // applyWalls brings every tier, its grid and its fields up to the walls as they
@@ -274,7 +260,7 @@ func (s *NavigationSystem) applyWalls() {
 	// searched on them: those are refilled before any change, which may find nothing
 	if s.derived && s.gridsAt != point.gen {
 		for _, t := range s.tiers {
-			t.grid.FillBlocked(w, h, t.blockedBits(s))
+			t.grid.Fill(w, h, t.blockedBits(s))
 		}
 		s.gridsAt = point.gen
 	}
@@ -375,7 +361,7 @@ func (s *NavigationSystem) derive(t *navTier) {
 	if t.pass != nil {
 		t.pass.Compute(s.walls)
 	}
-	t.grid.FillBlocked(config.MapWidth, config.MapHeight, t.blockedBits(s))
+	t.grid.Fill(config.MapWidth, config.MapHeight, t.blockedBits(s))
 	s.gen++
 	t.gen = s.gen
 }
@@ -1155,7 +1141,7 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 func (s *NavigationSystem) computeRouteGraph(sourceX, sourceY, targetX, targetY int, foot navigation.Footprint) *navigation.RouteGraph {
 	config := s.world.Resources.Config
 	t := s.tiers[s.keepTier(foot)]
-	rg := s.solver.Compute(sourceX, sourceY, targetX, targetY, config.MapWidth, config.MapHeight, foot, t.blocked(s))
+	rg := s.solver.Compute(sourceX, sourceY, targetX, targetY, config.MapWidth, config.MapHeight, foot, t.blockedBits(s))
 	if rg != nil {
 		rg.Grid = t.gen
 	}

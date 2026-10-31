@@ -166,6 +166,10 @@ that proves wrong or that a document now states, and link the document instead.
 - `pkg/position` knows no entity: a test over walls or glyphs needs a world and
   stays in `internal/engine`; a grid-only test goes to the package with a test id
   whose class is its top byte.
+- A block's kinds are its mask bits, and the engine reports a wall's box style as
+  two of them (`component.BoxKind`) beside the movers it stops, so `WallBlockAll`
+  is the four mover kinds and never `0xFF`: a query with it must not match a
+  styled wall that stops nothing.
 - The flat queries (`Blocks`, `EntitiesAt`, the searches) answer for the first layer
   and the point forms (`BlocksAt`, `EntitiesAtPoint`) for any, so a flat game's call
   sites never gain a layer argument; the planes' and the presence bits' rows are

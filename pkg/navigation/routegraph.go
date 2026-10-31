@@ -2,6 +2,7 @@ package navigation
 
 import (
 	"cmp"
+	"github.com/lixenwraith/vif/pkg/position"
 	"math/bits"
 	"slices"
 )
@@ -118,14 +119,15 @@ type RouteSolver struct {
 	corridor    []int32  // the cells of the corridor being searched
 }
 
-// ComputeRouteGraph computes routes using iterative penalized Dijkstra
+// ComputeRouteGraph computes routes using iterative penalized Dijkstra over
+// blocked, a grid of bits set where a cell is impassable
 func ComputeRouteGraph(
 	sourceX, sourceY, targetX, targetY int,
 	mapW, mapH int,
 	foot Footprint,
-	isBlocked WallChecker,
+	blocked position.Bits,
 ) *RouteGraph {
-	return new(RouteSolver).Compute(sourceX, sourceY, targetX, targetY, mapW, mapH, foot, isBlocked)
+	return new(RouteSolver).Compute(sourceX, sourceY, targetX, targetY, mapW, mapH, foot, blocked)
 }
 
 // Compute is ComputeRouteGraph on the solver's scratch
@@ -133,7 +135,7 @@ func (rs *RouteSolver) Compute(
 	sourceX, sourceY, targetX, targetY int,
 	mapW, mapH int,
 	foot Footprint,
-	isBlocked WallChecker,
+	blocked position.Bits,
 ) *RouteGraph {
 	if mapW <= 0 || mapH <= 0 {
 		return nil
@@ -142,7 +144,7 @@ func (rs *RouteSolver) Compute(
 		targetX < 0 || targetY < 0 || targetX >= mapW || targetY >= mapH {
 		return nil
 	}
-	if isBlocked(sourceX, sourceY) || isBlocked(targetX, targetY) {
+	if blocked.Bit(sourceX, sourceY) || blocked.Bit(targetX, targetY) {
 		return nil
 	}
 	if rs.Costs.X == 0 {
@@ -158,7 +160,7 @@ func (rs *RouteSolver) Compute(
 	size := mapW * mapH
 	sc := &rs.sc
 	sc.grow(size)
-	sc.search.Fill(mapW, mapH, isBlocked)
+	sc.search.Fill(mapW, mapH, blocked)
 	tolerance := 0
 	rs.penalty, rs.usedDilated = scratch(rs.penalty, size), scratch(rs.usedDilated, size)
 	penalty, usedDilated := rs.penalty, rs.usedDilated

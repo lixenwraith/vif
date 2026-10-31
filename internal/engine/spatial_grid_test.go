@@ -27,7 +27,8 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 		NewGameContextWithClock(w, 12+rng.IntN(40), 8+rng.IntN(20), NewManualClock())
 		cfg := w.Resources.Config
 		masks := []component.WallBlockMask{component.WallBlockNone, component.WallBlockCursor,
-			component.WallBlockKinetic, component.WallBlockKinetic | component.WallBlockSpawn, component.WallBlockAll}
+			component.WallBlockKinetic, component.WallBlockKinetic | component.WallBlockSpawn, component.WallBlockAll,
+			component.WallKindBoxSingle, component.WallKindBoxDouble}
 		var walls []core.Entity
 		spawn := func() {
 			domain := core.DomainShared
@@ -42,7 +43,8 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 			}
 			e := w.CreateEntity(domain)
 			w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
-			w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: masks[rng.IntN(len(masks))]})
+			w.Components.Wall.SetComponent(e, component.WallComponent{BlockMask: masks[rng.IntN(len(masks))],
+				BoxStyle: component.BoxDrawStyle(rng.IntN(3))})
 			walls = append(walls, e)
 		}
 		for range rng.IntN(cfg.MapWidth * cfg.MapHeight / 2) {
@@ -71,7 +73,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						w.DestroyEntity(e)
 					case 1:
 						if wall, ok := w.Components.Wall.GetPtr(e); ok {
-							wall.BlockMask = masks[rng.IntN(len(masks))]
+							wall.BlockMask, wall.BoxStyle = masks[rng.IntN(len(masks))], component.BoxDrawStyle(rng.IntN(3))
 							if rng.IntN(2) == 0 {
 								w.Positions.WallChanged(e)
 							} else {
@@ -171,7 +173,8 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					}
 				}
 				for _, e := range w.Positions.EntitiesAt(x, y, position.ScopeShared) {
-					if wall, ok := w.Components.Wall.GetComponent(e); ok && (mask == 0 || wall.BlockMask&mask != 0) {
+					if wall, ok := w.Components.Wall.GetComponent(e); ok &&
+						(mask == 0 || (wall.BlockMask&component.WallBlockAll|component.BoxKind(wall.BoxStyle))&mask != 0) {
 						return true
 					}
 				}
