@@ -232,19 +232,19 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 	}
 	p.buildRadiiLUT()
 
+	// Every cell within the visible bounds maps to the screen by one offset
+	offX := ctx.GameXOffset + ctx.MapOffsetX - ctx.CameraX
+	offY := ctx.GameYOffset + ctx.MapOffsetY - ctx.CameraY
 	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
 		cellDY := mapY - centerY
 		dy := float64(cellDY)
 		angleRow := (cellDY+p.halfH)*p.angleW + p.halfW
+		screenY := mapY + offY
 		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
 			if mapX == skipX && mapY == skipY {
 				continue
 			}
-
-			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-			if !visible {
-				continue
-			}
+			screenX := mapX + offX
 
 			cellDX := mapX - centerX
 			radii := &p.invRadiiSqLUT[p.angleIdx[angleRow+cellDX]]
@@ -287,7 +287,6 @@ func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, rebuild bool) 
 		p.buildColorLUT()
 	}
 
-	// Cache geometric reciprocals once per frame.
 	if p.params.RingWidth > 0 {
 		p.ringInvWidthSq = 1.0 / (p.params.RingWidth * p.params.RingWidth)
 	} else {
@@ -304,7 +303,6 @@ func emberFrameTrueColor(p *EmberPainter, _ render.RenderContext, rebuild bool) 
 		p.ringSkipDistSq = p.ringSkipDist()
 	}
 
-	// Compute ring rotation and pulse state once per frame.
 	for i := range visual.EmberRingCount {
 		effectiveSpeed := p.params.RingSpeed * visual.EmberRingVelocities[i]
 		angle := vmath.NormalizeAngle(p.gameTime*effectiveSpeed + visual.EmberRingPhaseOffsets[i])
@@ -381,7 +379,6 @@ func (p *EmberPainter) composeLayers(bg color.RGB, layer *emberLayerColors) (col
 
 // computeRingVisibility calculates combined ring visibility
 func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float64 {
-	// Quadratic edge fade: 1 - (normDist/ringVisible)²
 	edgeFade := 1.0 - normDistF*normDistF*p.ringVisibleInvSq
 	if edgeFade <= 0 {
 		return 0
@@ -394,18 +391,15 @@ func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float6
 		rs := &p.ringStates[i]
 		norms := &visual.EmberRingNormals[i]
 
-		// Ring distance using raw dx, dy
 		rz := dxF*rs.sinA*norms[0] + dyF*rs.sinA*norms[1] + dzF*rs.cosA*norms[2]
 		ringDistSq := rz * rz
 		if ringDistSq >= p.ringSkipDistSq {
 			continue
 		}
 
-		// Gaussian visibility via ExpDecay LUT
 		lutInput := int(ringDistSq * p.ringInvWidthSq * visual.ExpLUTDecayK)
 		vis := vmath.ExpDecay(lutInput) * edgeFade * rs.pulseAlpha
 
-		// Back-face dimming
 		if rz < visual.BackFaceThreshold {
 			vis *= visual.BackFaceDimming
 		}
@@ -422,7 +416,6 @@ func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float6
 func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy float64) {
 	normDist := min(math.Sqrt(normDistSq), 1.0)
 
-	// Query 1D color mapping cache
 	layer := &p.colorLUT[min(int(normDist*255.0), 255)]
 
 	ringVis := 0.0

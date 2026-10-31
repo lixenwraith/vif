@@ -1258,18 +1258,6 @@ layout is already cached, removes them. The menu and form overlays allocate
 likewise but show while `PauseForInput` holds the simulation, so they cost play
 nothing.
 
-### Take the ember further only with a visual trade-off
-
-- Priority: P3
-- Affected files: `internal/render/renderer/ember.go`
-
-The painter's remaining cost is the ring pass, about two fifths of a low-heat
-paint, and the per-frame 256-bucket jagged table; both are exact today. What is
-left needs a compromise: a coarser table for the ring Gaussian keyed by the
-squared plane distance, fewer jagged buckets, or ring evaluation only inside the
-band the pulse can light. None is visible in principle, none is bit-identical.
-Revisit only if `:d prof` ranks `draw ember` high again.
-
 ### Sample the kraken's tentacles more coarsely
 
 - Priority: P3

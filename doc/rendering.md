@@ -441,7 +441,13 @@ background write. Its per-cell work is lookups: the angle of every cell offset
 it can visit is tabled once per painter, each radial step of the glow is composed
 over the theme background when heat or blend changes, so only a cell something
 else painted blends live, and a ring skips the cells its Gaussian cannot light.
-The box is clipped to the visible map before any per-frame table is built. Both
+The box is clipped to the visible map before any per-frame table is built, and
+every cell in it reaches the screen by one offset. One ember burning from heat
+100 to 0, a third of its cells on a painted background, paints in about 15 µs
+native and 42 µs in wasm; in a live frame `:d prof` reads about 26 µs, half of it
+the frame's first paint on cold caches. Fewer jagged buckets, a coarser ring
+table or a thinner ring tail save a microsecond or two of that and each changes
+the look, so the painter stays exact. Both
 field renderers compose peers first and the local cursor last, without sorting
 or changing store/slot order. The distinction remains render-only; no
 transported state changes.
