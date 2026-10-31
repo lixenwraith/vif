@@ -89,7 +89,12 @@ var configPages = []configPage{
 			command: "free", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.MouseFreeMode.Load()) }},
 	}},
-	{key: "display", label: "Display", description: "Telemetry and navigation overlays.", options: []configOption{
+	{key: "display", label: "Display", description: "Frame rate, telemetry and navigation overlays.", options: []configOption{
+		{key: "fps", label: "Max FPS", description: "The most frames drawn a second, never under one a tick. Auto is three a tick (60 at the default tick), or 24 inside tmux or screen, which drop output that comes faster.",
+			command: "fps", read: func(ctx *engine.GameContext) string { return fpsWord(ctx.MaxFPS.Load()) },
+			change: func(ctx *engine.GameContext, d int) {
+				handleFPSCommand(ctx, []string{strconv.Itoa(fpsStep(int(ctx.MaxFPS.Load()), d))})
+			}},
 		{key: "hud", label: "Telemetry HUD", description: "Show pinned telemetry cards over the game. Pin cards in :t with Enter.",
 			command: "hud", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.OverlayHUD.Load()) }},
@@ -165,6 +170,20 @@ var startupNotes = map[string]string{
 func commandAction(key, label, description, command string) configOption {
 	return configOption{key: key, label: label, description: description, command: command, action: true,
 		read: func(*engine.GameContext) string { return "Enter" }}
+}
+
+// fpsStep is the max_fps a menu step d from fps, around parameter.FrameRateSteps;
+// one between steps moves to the step on that side of it
+func fpsStep(fps, d int) int {
+	steps := parameter.FrameRateSteps
+	i, found := slices.BinarySearch(steps, fps)
+	switch {
+	case found:
+		i += d
+	case d < 0:
+		i-- // i is the first step above fps
+	}
+	return steps[(i%len(steps)+len(steps))%len(steps)]
 }
 
 func withDisabled(o configOption, disabled func(*engine.GameContext) string) configOption {

@@ -245,6 +245,12 @@ that proves wrong or that a document now states, and link the document instead.
 - Vanguard's fourth-rank raiders fly 4.5 cells a second, so a raider that moved two
   cells in half a second is not stuck; read a stuck raider as one out of sight a full
   second that moved less than a cell in it.
+- tmux can throw frames away while vif sees nothing: it reads a pane at once, so
+  writes return and held frames stay near zero. Attach a client (Alacritty under
+  Xvfb, or a Python pty reader sized with `TIOCSWINSZ`) and poll `tmux list-clients
+  -F '#{client_discarded}'`; a rising count means the client is repainted every
+  100 ms. To count what a client saw, replay its byte stream through `pyte`,
+  sampling 60 times a second, and count the samples where a pane changed.
 
 ## Scenario TOML
 

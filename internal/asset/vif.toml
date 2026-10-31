@@ -41,7 +41,10 @@ cell = 0
 # as this one was left: the two audio channels, sound effects (sfx) and music, the
 # sfx volume (0 to 1), auto-fire (off, main or on), mouse input, the cursor
 # following the pointer, the telemetry HUD, relaying for players who reach this run
-# and not their host, and each new game waiting for a key, click or tap to start it.
+# and not their host, each new game waiting for a key, click or tap to start it,
+# and the most frames drawn a second (max_fps, 10 to 120, never under one a tick;
+# 0 is three a tick, 60 at the default, and 24 inside tmux or screen, which drop
+# what a terminal sends them faster).
 # A run writes this file when it is in the user root or the
 # -config-dir root, and otherwise the user root's, made from this one at the first
 # change. A flag naming one of these, -mute for both channels or -nw for the wait,
@@ -56,3 +59,4 @@ follow_mouse = true
 hud = false
 relay = false
 wait = true
+max_fps = 0

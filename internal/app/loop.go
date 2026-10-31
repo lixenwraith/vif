@@ -210,7 +210,8 @@ func (a *App) Loop() (*restartRequest, error) {
 		a.ctx.SetStatusMessage("Bots: "+err.Error(), parameter.StatusAlert)
 	}
 
-	frameTicker := time.NewTicker(a.ctx.FrameInterval())
+	interval := a.frameInterval()
+	frameTicker := time.NewTicker(interval)
 	defer frameTicker.Stop()
 
 	inputTicker := time.NewTicker(parameter.InputTickInterval)
@@ -258,6 +259,10 @@ func (a *App) Loop() (*restartRequest, error) {
 		case <-frameTicker.C:
 			if !a.frame() {
 				return nil, nil
+			}
+			if d := a.frameInterval(); d != interval { // :fps changed it
+				interval = d
+				frameTicker.Reset(d)
 			}
 
 		case err := <-a.doorErrors():
@@ -565,6 +570,20 @@ func (a *App) renderContext() render.RenderContext {
 	// lifts off at its tap
 	out.IsPaused = out.IsPaused && !a.awayPaused && !a.ctx.TimeCtl.Holds(engine.HoldStart)
 	return out
+}
+
+// frameInterval is how often the run is drawn: the context's interval, held to the
+// player's max_fps or else to the floor of a presentation that cannot show frames
+// faster, but never past a tick, since at real time each tick waits for a frame
+func (a *App) frameInterval() time.Duration {
+	var floor time.Duration
+	if p, ok := a.pres.(pacedPresentation); ok {
+		floor = p.FrameFloor()
+	}
+	if fps := a.ctx.MaxFPS.Load(); fps > 0 {
+		floor = time.Second / time.Duration(fps)
+	}
+	return max(a.ctx.FrameInterval(), min(floor, a.ctx.World.TickInterval()))
 }
 
 // frame advances one render frame; false means the player quit. A hidden page draws

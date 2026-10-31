@@ -166,6 +166,7 @@ var topics = []topicDef{
 			{Keys: ":new! :n!", Desc: "Restart, clear this operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and the rate to their startup values; logging is untouched"},
 			{Keys: ":n <scenario>", Desc: "Rebuild the run on another scenario, by installed name or path; everything operator-owned restarts with it"},
 			{Keys: ":wait [on|off]", Desc: "Hold each new game until a key, click or tap starts it, in a live session the host's, and a join until the press that seats it; on by default, -nw turns it off for a run, and a scenario's own restart never waits"},
+			{Keys: ":fps [auto|n]", Desc: "Draw at most n frames a second, 10 to 120 and never under one a tick; auto, the default, is three a tick (60 at the default tick), or 24 inside tmux or screen, which drop output that comes faster. Kept in vif.toml"},
 			{Keys: ":q", Desc: "Quit"},
 			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},

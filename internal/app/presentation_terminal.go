@@ -4,6 +4,8 @@ package app
 
 import (
 	"github.com/lixenwraith/vif/pkg/vmath"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -59,7 +61,31 @@ func newTerminal(cfg Config) terminalHost {
 	if cfg.ColorModeSet {
 		colorMode = cfg.ColorMode
 	}
-	return terminalHost{service.NewTerminalService(colorMode)}
+	return terminalHost{TerminalService: service.NewTerminalService(colorMode), floor: frameFloor(os.Getenv)}
+}
+
+// The environment that names a terminal multiplexer: tmux sets multiplexerEnv for
+// the programs in it, and TERM names tmux or screen there and over an ssh hop out
+const (
+	multiplexerEnv = "TMUX"
+	termEnv        = "TERM"
+)
+
+var multiplexerTerms = []string{"tmux", "screen"}
+
+// frameFloor is the frame interval a terminal keeps up with: inside a multiplexer,
+// parameter.MultiplexerFrameInterval, anywhere else any
+func frameFloor(getenv func(string) string) time.Duration {
+	if getenv(multiplexerEnv) != "" {
+		return parameter.MultiplexerFrameInterval
+	}
+	term := getenv(termEnv)
+	for _, prefix := range multiplexerTerms {
+		if strings.HasPrefix(term, prefix) {
+			return parameter.MultiplexerFrameInterval
+		}
+	}
+	return 0
 }
 
 func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorMode, vmath.Aspect) {

@@ -516,7 +516,7 @@ which keeps only quit, the audio toggle, `:` and the config menu.
 | `:r tick <n>` | Go to the first step at or past tick `n` of the run shown, the status bar's `GT`. |
 | `:r time <[[h:]m:]s>` | Go to that game time at 1x: seconds alone, `m:s` or `h:m:s`. |
 | `:r restart` | Play again from the recording's start; also Simulation → Restart replay. |
-| `:` | Command line: `replay`, `config`, `help`, `about`, `telemetry`, `hud`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
+| `:` | Command line: `replay`, `config`, `help`, `about`, `telemetry`, `hud`, `fps`, `debug`, `content`, `flow`, `graph`, `log`, `q`. |
 | `q` | Quit. |
 
 The status bar adds `diverged by tick <n>` once the replay fails to reproduce a

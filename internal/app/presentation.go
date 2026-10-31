@@ -35,6 +35,10 @@ type awayPresentation interface{ Away() <-chan bool }
 // bar keeps its input to that half
 type coveredPresentation interface{ Covered() bool }
 
+// pacedPresentation is one that cannot show frames as fast as the run draws them:
+// FrameFloor is the shortest frame interval it keeps up with, zero for any
+type pacedPresentation interface{ FrameFloor() time.Duration }
+
 // zoomPresentation is one the player zooms: Cell is a cell's height in dp as they
 // left it, 0 for the screen's own, which the run writes back to vif.toml
 type zoomPresentation interface{ Cell() float64 }
@@ -60,8 +64,14 @@ type Host struct {
 
 const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
 
-// terminalHost is the terminal as a Presentation, around the service that opens it
-type terminalHost struct{ *service.TerminalService }
+// terminalHost is the terminal as a Presentation, around the service that opens it;
+// floor is the frame interval the terminal behind it keeps up with
+type terminalHost struct {
+	*service.TerminalService
+	floor time.Duration
+}
+
+func (t terminalHost) FrameFloor() time.Duration { return t.floor }
 
 func (t terminalHost) Surface() render.Surface  { return t.Terminal() }
 func (t terminalHost) Size() (int, int)         { return t.Terminal().Size() }
