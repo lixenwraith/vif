@@ -105,14 +105,14 @@ func TestDedicatedHostBootUsesTheSimulationEpoch(t *testing.T) {
 	if err := host.HostSession(offer); err != nil {
 		t.Fatalf("host session: %v", err)
 	}
-	host.Tick(1)
+	host.Tick(2) // the first tick spawns the gold, the second ages it
 	if !goldActive(host) {
-		t.Fatal("boot did not create a gold sequence; the deadline assertion is vacuous")
+		t.Fatal("the first tick did not spawn a gold sequence; the deadline assertion is vacuous")
 	}
 
 	want := parameter.GoldDuration - parameter.GameUpdateInterval
 	if got := time.Duration(goldTimer(host)); got != want {
-		t.Fatalf("gold deadline after tick one = %v, want %v", got, want)
+		t.Fatalf("gold deadline after tick two = %v, want %v", got, want)
 	}
 }
 

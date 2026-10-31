@@ -142,7 +142,10 @@ transitions = [...]                 # Transition rules
 { trigger = "Tick", target = "TargetState", guard = "StateTimeExceeds", guard_args = { ms = 1000 } }
 ```
 
-`Tick` — evaluated every game tick; use with guard to control timing.
+`Tick` — evaluated every game tick; use with guard to control timing. The first
+`Tick` is the game's start: a region's initial state settles before the clock
+starts, so an unguarded `Tick` out of it opens play at the player's press
+([FSM and configuration §5](fsm-and-configuration.md#5-tick-processing)).
 
 A region is shared state: in a live session the authority's machine takes its
 transitions and every instance applies each at one tick, a playout lead after the
@@ -325,7 +328,9 @@ fields after the pick, never the picked one.
 ```
 
 `region` must be declared under `[regions]` and `initial_state` must name a state,
-or the load fails. Spawning an active region does nothing. Each of the four
+or the load fails. Spawning an active region does nothing. A region an initial
+state's entry spawns runs its own entry in the boot settle, before the clock
+starts; spawn a gameplay region from the state the first `Tick` enters. Each of the four
 reconciles the systems with the regions that now run, so a region's
 `enabled_systems`, `disabled_systems` and `only_systems` hold while it runs and
 hand back when it pauses or ends ([System Control](#system-control)). A paused

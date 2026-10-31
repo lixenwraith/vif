@@ -128,8 +128,10 @@ transitions = [
     ] },
 ]
 
-# Buttons ascend in pitch left to right: the A major notes of the classic game. The
-# legend runs up them once, after the reset's board is drawn.
+# Boot: settled before the clock starts, drawn behind the start prompt; the game
+# begins at the first Tick, after the press. Buttons ascend in pitch left to
+# right, the A major notes of the classic game, and the legend runs up them once
+# from that Tick
 [states.Intro]
 parent = "Start"
 on_enter = [
