@@ -24,10 +24,12 @@ type OverlayContent struct {
 
 // OverlayMenu is a value snapshot; only the input router applies settings.
 type OverlayMenu struct {
-	Page   string
-	Choice string // The row a page's pick list marks
-	Rows   []OverlayMenuRow
-	Form   *OverlayForm
+	Page      string   // The group shown as a page, by its id; empty lists the pages
+	Choice    string   // The row a page's pick list marks
+	Scenarios []string // The scenarios installed, scanned once when the menu opened
+	Running   string   // The scenario running then
+	Rows      []OverlayMenuRow
+	Form      *OverlayForm
 }
 
 type OverlayForm struct {
