@@ -318,6 +318,13 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   F major, five bars from 0.79 s, 38 melody and 15 bass notes; the song rips
   back at 0.36 and 0.57 after two rounds of `refine`, against the analysis
   path's 0.59 and 0.88. The analysis path stays the sample's better transcript.
+- The sixth pass, the second melody line with steps, a track and a voice of
+  its own: the sample's melody has 25 notes in its first line and 5 in the
+  second, the bass 14; the mel fit gives the lines a square, a modal voice and
+  a modal bass, the song rips back at 0.54 through them and 0.88 after two
+  rounds of `refine`, each of the three voices searched in turn. The line's
+  own voice is what a violin under a pluck needed; what the first line still
+  mixes is two instruments taking turns as the louder.
 - The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
   where the analysis heard 86, F major where it heard A# harmonic minor (its
   fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips
