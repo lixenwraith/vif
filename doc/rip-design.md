@@ -360,8 +360,15 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   The model passes the analysis for the first time, on the loops with a room
   and a mix, on the strength of its drums; it loses the clean loops on tempo
   and both on pitch, and the analysis itself gained two hundredths from the
-  seventh pass. The weights stay out of the tree: a front end that wins on
-  drums and loses on pitch is not yet the rip's better ear.
+  seventh pass. The sample through it (`bite_model_*` on the scratch branch):
+  115 bpm, F major, six bars with a pickup bar from 1.94 s before the
+  recording, 21 melody notes with 27 under and 24 bass notes; the song sounds
+  0.57 like the recording before `refine` and 0.67 after two rounds (pitch
+  0.80, timbre 0.51, onset 0.71), ripping back at 0.66 and 0.71, against the
+  analysis path's 0.75 and 0.81 by fidelity and 0.87 and 0.89 by rip-back. The
+  weights stay out of the tree: a front end that wins on drums and loses on
+  pitch, and hears a clip forty cents flat at A440, is not yet the rip's
+  better ear.
 - The seventh pass, the sample heard on its own tuning: the transcript's note
   list (soundlab's `notes`) showed A#2 taking turns with A2 in sixteenths, G2
   with G#2 at the chord change, C5 with C#5 in the lead, ten melody notes
