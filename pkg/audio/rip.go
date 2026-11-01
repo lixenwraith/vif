@@ -37,6 +37,7 @@ type RipParams struct {
 	Switch        float64 `toml:"switch"`         // its cost of a note starting or ending
 	Retrigger     float64 `toml:"retrigger"`      // the fraction of a note's peak salience it dips under before a rise is a new note
 	MinNote       float64 `toml:"min_note"`       // seconds a note lasts at least
+	SecondVoice   float64 `toml:"second_voice"`   // the strength, against the melody's, a second voice in its register is kept from; 0 hears one
 }
 
 func DefaultRipParams() RipParams {
@@ -44,6 +45,7 @@ func DefaultRipParams() RipParams {
 		TempoPrior: 120, TempoWidth: 1, Tightness: 100,
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
+		SecondVoice: 0.5,
 	}
 }
 
@@ -74,6 +76,7 @@ var ripGenes = []ripGene{
 	{"switch", 0.1, 0.8, func(p *RipParams) *float64 { return &p.Switch }},
 	{"retrigger", 0.2, 0.7, func(p *RipParams) *float64 { return &p.Retrigger }},
 	{"min_note", 0.03, 0.15, func(p *RipParams) *float64 { return &p.MinNote }},
+	{"second_voice", 0, 0.9, func(p *RipParams) *float64 { return &p.SecondVoice }},
 }
 
 func (g *ripGene) get(p *RipParams) float64 {
@@ -201,12 +204,16 @@ type RipBar struct {
 // the bands the drums are told apart by, the pitches the salience spans and the
 // log-mel bands a front-end model hears: the frame grid every front end keeps.
 const (
-	RipRate      = 22050
-	RipN         = 2048
-	RipHop       = 256
-	RipFrameSec  = float64(RipHop) / RipRate
-	RipMelBands  = 80
-	ripKernel    = 17    // frames and bins a median spans in the harmonic-percussive split
+	RipRate     = 22050
+	RipN        = 2048
+	RipHop      = 256
+	RipFrameSec = float64(RipHop) / RipRate
+	RipMelBands = 80
+	ripKernel   = 17 // frames and bins a median spans in the harmonic-percussive split
+	// ripOnsetLead is the frames an event reads early under the centred window;
+	// the beat tracker shares it, and a pinned grid takes it on so a note on the
+	// beat lands on its step rather than the one before
+	ripOnsetLead = 2
 	ripSubHz     = 100.0 // a kick's body is under it; a snare's is not
 	ripKickHz    = 200.0
 	ripSnareHz   = 4000.0
@@ -269,11 +276,11 @@ func (f *RipFrames) pinned(gr *RipGrid) ripGrid {
 	before := int(start / beat)
 	var beats []int
 	for i := -before; ; i++ {
-		fr := int(math.Round(start + float64(i)*beat))
+		fr := int(math.Round(start+float64(i)*beat)) - ripOnsetLead
 		if float64(fr) > float64(f.frames())+beat/2 {
 			break
 		}
-		beats = append(beats, fr)
+		beats = append(beats, max(fr, 0))
 	}
 	g := ripGrid{beats: beats, first: before}
 	g.bars = max((len(beats)-1-g.first)/BeatsPerBar, 0)
@@ -507,6 +514,62 @@ func (r *Rip) Patterns(name string, bars int) []*PatternDef {
 	return out
 }
 
+// bassRows is the harmonic magnitude of the bass register's bins, up to the
+// third partial of its top, under a window four times the rip's, frame for
+// frame with it; the split is the rip's, a median over frames per bin against a
+// median over bins per frame, the latter over four times the bins since the
+// bins are four times as fine.
+func (f *RipFrames) bassRows(x []float64) ([][]float64, float64) {
+	const n, half = 4 * RipN, ripKernel / 2
+	width := float64(RipRate) / n
+	bins := int(NoteFreq(RipBassTop)*3/width) + 3
+	var rows [][]float64
+	spectrogram(x, n, RipHop, func(_ int, mag []float64) {
+		rows = append(rows, slices.Clone(mag[:bins]))
+	})
+	out := make([][]float64, len(rows))
+	timeMed := make([]*slidingMedian, bins)
+	for k := range timeMed {
+		timeMed[k] = newSlidingMedian(ripKernel)
+	}
+	const fk = 4*ripKernel + 1
+	freqMed := newSlidingMedian(fk)
+	hrow, prow := make([]float64, bins), make([]float64, bins)
+	zero := make([]float64, bins)
+	for t := 0; t < len(rows)+half; t++ {
+		row := zero
+		if t < len(rows) {
+			row = rows[t]
+		}
+		for k := range timeMed {
+			hrow[k] = timeMed[k].push(row[k])
+		}
+		c := t - half
+		if c < 0 {
+			continue
+		}
+		src := rows[c]
+		freqMed.reset()
+		for k := 0; k < bins+fk/2; k++ {
+			v := 0.0
+			if k < bins {
+				v = src[k]
+			}
+			m := freqMed.push(v)
+			if j := k - fk/2; j >= 0 {
+				prow[j] = m
+			}
+		}
+		h := make([]float64, bins)
+		for k := range h {
+			h2, p2 := hrow[k]*hrow[k], prow[k]*prow[k]
+			h[k] = src[k] * h2 / (h2 + p2 + 1e-12)
+		}
+		out[c] = h
+	}
+	return out, width
+}
+
 // analysis is the package's own front end: one pass over the spectrogram, each
 // frame split into a harmonic and a percussive part by the medians across time and
 // across frequency around it, so a frame is finished ripKernel/2 frames after it
@@ -540,31 +603,38 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 		pitchHz[i] = NoteFreq(RipMinMIDI + i)
 	}
 	subBin, loBin, midBin, hatBin := int(ripSubHz/binHz), int(ripKickHz/binHz), int(ripSnareHz/binHz), int(ripHatHz/binHz)
-	// partial reads the magnitude at a frequency between its bins, which tells
-	// neighbouring semitones apart where a bin is wider than one; zero past the band
-	partial := func(m []float64, hz float64) float64 {
-		pos := hz / binHz
+	// partialIn reads the magnitude at a frequency between the bins of a
+	// transform of the given bin width, which tells neighbouring semitones apart
+	// where a bin is wider than one; zero past the band
+	partialIn := func(m []float64, hz, width float64) float64 {
+		pos := hz / width
 		b := int(pos)
-		if b+1 >= bins {
+		if b+1 >= len(m) {
 			return 0
 		}
 		frac := pos - float64(b)
 		return m[b]*(1-frac) + m[b+1]*frac
 	}
-	// salience sums a pitch's partials, each weighted by its rank, scaled down as
-	// the fundamental falls short of the strongest partial, which a note's own
+	// salienceIn sums a pitch's partials, each weighted by its rank, scaled down
+	// as the fundamental falls short of the strongest partial, which a note's own
 	// octave above and a bass's second partial both do
-	salience := func(m []float64, f0 float64, n int) float64 {
+	salienceIn := func(m []float64, width, f0 float64, n int) float64 {
 		var s, top float64
 		for h := 0; h < n && h < len(weights); h++ {
-			v := partial(m, f0*float64(h+1))
+			v := partialIn(m, f0*float64(h+1), width)
 			s, top = s+weights[h]*v, max(top, v)
 		}
 		if top > 0 {
-			s *= min(1, partial(m, f0)/(0.3*top))
+			s *= min(1, partialIn(m, f0, width)/(0.3*top))
 		}
 		return s
 	}
+	salience := func(m []float64, f0 float64, n int) float64 { return salienceIn(m, binHz, f0, n) }
+	// The bass register is also read from a window four times longer, whose bins
+	// tell neighbouring semitones apart at 110 Hz where the short window's main
+	// lobe spans two and the pitch path wobbles between them; its harmonic part
+	// is split by the same medians over the bins the register's partials reach
+	hLong, longHz := f.bassRows(x)
 
 	finish := func(c int) {
 		row := ring[c%ripKernel]
@@ -611,21 +681,40 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 		for i, f0 := range pitchHz {
 			ch[(RipMinMIDI+i)%12] += salience(hm, f0, len(weights))
 		}
-		// the bass is the strongest pitch of its register by its first partials;
-		// those partials come out of what the melody is read from
-		bass, bassAt := -1, 0.0
+		// the bass is the strongest pitch of its register by its first partials,
+		// read from the long window; those partials come out of what the melody
+		// is read from
+		bass, second, bassAt, secondAt := -1, -1, 0.0, 0.0
+		var longRow []float64
+		if c < len(hLong) {
+			longRow = hLong[c]
+		}
 		for i := 0; i < RipBassTop-RipMinMIDI; i++ {
+			// the short window says when the register sounds, the long one which
+			// semitone: their geometric mean keeps the long window's pitch and the
+			// short window's onsets and ends
 			s := salience(hm, pitchHz[i], 3)
+			if longRow != nil {
+				s = math.Sqrt(s * salienceIn(longRow, longHz, pitchHz[i], 3))
+			}
 			f.Salience = append(f.Salience, float32(s))
 			bch[(RipMinMIDI+i)%12] += s
-			if s > bassAt {
-				bass, bassAt = i, s
+			switch {
+			case s > bassAt:
+				bass, second, bassAt, secondAt = i, bass, s, bassAt
+			case s > secondAt:
+				second, secondAt = i, s
 			}
 		}
+		// the bass's partials come out of what the melody is read from; a
+		// neighbour nearly as strong, the other bin of a wobble, loses its too
 		copy(cancelled, hm)
-		if bass >= 0 {
+		for _, i := range []int{bass, second} {
+			if i < 0 || i == second && (secondAt < 0.7*bassAt || second-bass > 2 || bass-second > 2) {
+				continue
+			}
 			for h := 1; h <= 3; h++ {
-				if b := int(pitchHz[bass]*float64(h)/binHz + 0.5); b+1 < bins && b >= 1 {
+				if b := int(pitchHz[i]*float64(h)/binHz + 0.5); b+1 < bins && b >= 1 {
 					cancelled[b-1], cancelled[b], cancelled[b+1] = 0, 0, 0
 				}
 			}
@@ -1121,21 +1210,72 @@ func (g *ripGrid) drums(r *Rip, hits [InstrClap][]ripHit) {
 type ripNote struct {
 	start, end, midi int
 	vel              float64
+	strength         float64 // mean salience over the note
+	second           bool    // heard under another note of the register
 	wave             int
 	voice            []float64
+}
+
+// notes tracks the register's loudest line, and in the melody register a second
+// line with the first's notes and their partials cancelled, kept where its notes
+// reach SecondVoice of the first's strength: two voices in one register, a
+// violin under a pluck, where one path heard only the louder.
+func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
+	first := f.path(lo, hi, p, nil)
+	if p.SecondVoice <= 0 || lo < RipMelodyLow || len(first) == 0 {
+		return first
+	}
+	mask := make([]bool, f.frames()*RipPitches)
+	var strength float64
+	for _, n := range first {
+		strength += n.strength
+		for t := n.start; t < n.end; t++ {
+			for _, h := range [...]int{0, 12, 19, 24, 28, 31} {
+				for d := -1; d <= 1; d++ {
+					if m := n.midi + h + d; m >= RipMinMIDI && m < RipMaxMIDI {
+						mask[t*RipPitches+m-RipMinMIDI] = true
+					}
+				}
+			}
+		}
+	}
+	strength /= float64(len(first))
+	// a second line is the sustained one under the louder: its notes are kept
+	// from twice the shortest note, which drops the fragments the mask leaves
+	short := max(int(2*p.MinNote/f.Hop), 1)
+	for _, n := range f.path(lo, hi, p, mask) {
+		if n.strength >= p.SecondVoice*strength && n.end-n.start >= short {
+			n.second = true
+			first = append(first, n)
+		}
+	}
+	return first
 }
 
 // notes tracks the pitch between lo and hi through every frame, a hidden path
 // scored by salience against the costs of moving and of starting or ending a
 // note, and cuts the track into notes, a note that dips and rises again being
 // two. A note shorter than MinNote is not one.
-func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
+// path is one line through a register: a hidden path through the salience,
+// masked where mask says, scored against the costs of moving and of starting
+// or ending a note, cut into notes; the reference loudness is the register's
+// own, masked or not.
+func (f *RipFrames) path(lo, hi int, p RipParams, mask []bool) []ripNote {
 	states := hi - lo // then the unvoiced state
-	sal := func(t, s int) float64 { return float64(f.Salience[t*RipPitches+lo+s-RipMinMIDI]) }
+	raw := func(t, s int) float64 { return float64(f.Salience[t*RipPitches+lo+s-RipMinMIDI]) }
+	sal := raw
+	if mask != nil {
+		sal = func(t, s int) float64 {
+			if mask[t*RipPitches+lo+s-RipMinMIDI] {
+				return 0
+			}
+			return raw(t, s)
+		}
+	}
 	peaks := make([]float64, f.frames())
 	for t := range peaks {
 		for s := range states {
-			peaks[t] = max(peaks[t], sal(t, s))
+			peaks[t] = max(peaks[t], raw(t, s))
 		}
 	}
 	sorted := slices.Clone(peaks)
@@ -1193,7 +1333,8 @@ func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 	minFrames := max(int(p.MinNote/f.Hop), 1)
 	flush := func(n ripNote, sum float64) {
 		if n.end-n.start >= minFrames {
-			n.vel = min(max(0.3, sum/float64(n.end-n.start)/ref), 1)
+			n.strength = sum / float64(n.end-n.start)
+			n.vel = min(max(0.3, n.strength/ref), 1)
 			n.wave, n.voice = f.voiceOver(n.start, n.end)
 			notes = append(notes, n)
 		}
@@ -1266,8 +1407,12 @@ func (f *RipFrames) place(g ripGrid, r *Rip, n ripNote, part func(*RipBar) *[]St
 	deg, oct := degreeIn(n.midi, r.Root, scaleTable[r.Scale])
 	dur := min(max(int(math.Round(float64(n.end-n.start)/g.stepFrames())), 1), MaxPatternLen)
 	s := Step{Pos: step, Vel: n.vel, Deg: deg, Oct: oct, Dur: dur}
+	// a second voice's note joins another pitch on its step; otherwise the
+	// louder of two on one step is kept
 	evs := part(&r.Bars[bar])
-	if i := slices.IndexFunc(*evs, func(e Step) bool { return e.Pos == step }); i >= 0 {
+	if i := slices.IndexFunc(*evs, func(e Step) bool {
+		return e.Pos == step && (!n.second || e.Deg == deg && e.Oct == oct)
+	}); i >= 0 {
 		if (*evs)[i].Vel < s.Vel {
 			(*evs)[i] = s
 		}

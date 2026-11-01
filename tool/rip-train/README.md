@@ -35,12 +35,17 @@ hundred loops of four bars are about fifteen minutes of music, 300 MB of WAV and
 60 MB of frames; the trainer reads the frames and the events alone.
 
 More variety is more patterns and voices applied before `corpus`: `new voice`,
-`set`, `apply` make an instrument the loops draw. `corpus corpus/ 200 4 aug`
-puts a room, a mix and voices of random genes behind each loop: a gain, a
-low-pass, a short reverb and a noise floor between the render and the frames,
+`set`, `apply` make an instrument the loops draw. `corpus corpus/ 300 4 aug gen`
+puts a room, a mix and voices of random genes behind each loop (`aug`: a gain,
+a low-pass, a short reverb and a noise floor between the render and the frames,
 and each tonal track's voice redrawn near the registered one, a third of the
-time on another wave, labelled as played. Train on an augmented corpus; measure
-on a clean one too (`bench`).
+time on another wave, labelled as played) and draws beats, melodies and bass
+lines the bank never had for three loops in five per part (`gen`: a walk over
+the key's degrees within two octaves, lengths of one to four steps, rests; the
+root and its neighbours in the bass; kicks, snares and hats with extras and
+ghosts). The bank alone repeats its few melodies, and a model trained on it
+learns them, not pitch. Train on both; measure with `bench`, whose loops carry
+generated parts too.
 
 ## Train
 
@@ -60,6 +65,17 @@ note sounds in. `--checkpoint` saves every `--every` steps and resumes from the
 file when it exists; `--dim`, `--layers`, `--heads`, `--ffn` and
 `--attention-window` reshape the model, and the weight file carries the shape, so
 `ripnet` loads any of them as long as the inputs and heads are its.
+
+A tenth of the loops are held out (`--holdout` sets how many, 0 none) and
+scored every `--every` steps in fixed windows; the step whose onset, drum,
+pitch and voicing heads score best on them, the heads the decoders read, is
+what `--out` gets, whatever the last step's training loss says (the wave and
+voice heads name a voice and learn the corpus's voices by heart, so they are
+reported and not followed). The training
+loss keeps falling long after the held-out loss turns: a run of 12000 steps on
+300 loops reached a training loss of 0.31 and scored worse on fresh loops than
+a run of 3000, having seen each loop three hundred times. Read the held-out
+line, not the training one, and `bench` the file after.
 
 ## Measure
 

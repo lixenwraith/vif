@@ -17,18 +17,20 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vif/pkg/audio"
 	"github.com/lixenwraith/vif/pkg/genetic"
 )
 
 // tuneOptions sizes a search: the loops rendered and their bars, the generations
-// run over a pool of candidates, the seed every draw follows, and whether the
-// loops are augmented, a room, a mix and random voices behind each
+// run over a pool of candidates, the seed every draw follows, whether the loops
+// are augmented, a room, a mix and random voices behind each, and whether parts
+// are generated, beats, melodies and bass lines the bank never had
 type tuneOptions struct {
 	loops, bars, generations, pool int
 	seed                           uint64
-	aug                            bool
+	aug, gen                       bool
 }
 
 // tuneLoop is one rendered loop, what made it, the rip a perfect listener makes
@@ -63,20 +65,34 @@ func cmdTune(s *Session, a []string) error {
 }
 
 // corpus renders loops of the registered rhythm, melody and bass patterns, drawn
-// by the seed over the tempos and the keys, each with its expected rip
+// by the seed over the tempos and the keys, each with its expected rip, all held
+// at once: what a search over them wants
 func (s *Session) corpus(o tuneOptions) ([]tuneLoop, error) {
+	loops := make([]tuneLoop, 0, o.loops)
+	err := s.eachLoop(o, func(_ int, l tuneLoop) error {
+		loops = append(loops, l)
+		return nil
+	})
+	return loops, err
+}
+
+// eachLoop renders the corpus's loops one at a time to visit, so an export of
+// thousands holds one in memory
+func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error {
 	var byRole [audio.MusicSlots][]audio.PatternID
 	for _, p := range audio.RegisteredPatterns() {
+		if strings.HasPrefix(p.Name, "corpus_") {
+			continue // a generated part of an earlier loop, not the bank's
+		}
 		switch p.Role {
 		case audio.RoleRhythm, audio.RoleMelody, audio.RoleBass:
 			byRole[p.Role-1] = append(byRole[p.Role-1], p.ID)
 		}
 	}
 	if len(byRole[0]) == 0 || len(byRole[1]) == 0 || len(byRole[3]) == 0 {
-		return nil, errors.New("tune needs registered rhythm, melody and bass patterns (builtin pattern, apply)")
+		return errors.New("tune needs registered rhythm, melody and bass patterns (builtin pattern, apply)")
 	}
 	rng := rand.New(rand.NewPCG(o.seed, 0x5bd1e995))
-	loops := make([]tuneLoop, 0, o.loops)
 	for i := range o.loops {
 		var slots [audio.MusicSlots]audio.PatternID
 		for slot, pool := range byRole {
@@ -87,21 +103,130 @@ func (s *Session) corpus(o tuneOptions) ([]tuneLoop, error) {
 		bpm := tuneTempos[i%len(tuneTempos)]
 		root := audio.DefaultRootNote + rng.IntN(12) - 6
 		scale := audio.ScaleID(rng.IntN(int(audio.ScaleCount)))
-		// the augmentation draws from a stream of its own, so a loop's patterns
-		// and key are the same with and without it
+		// the augmentation and the generated parts draw from streams of their
+		// own, so a loop's drawn patterns and key are the same with and without
+		if o.gen {
+			grng := rand.New(rand.NewPCG(o.seed^0x5a5a5a5a, uint64(i)+1))
+			degrees := len(audio.ScaleIntervals(scale))
+			for _, g := range []struct {
+				slot int
+				make func(*rand.Rand, int) *audio.Pattern
+			}{{0, genBeat}, {1, genMelody}, {3, genBass}} {
+				if grng.Float64() >= 0.6 {
+					continue
+				}
+				p := g.make(grng, degrees)
+				p.ID = audio.PatternIDByName(p.Name) // the last loop's, replaced in place
+				if id, err := s.eng.DefinePattern(p); err == nil {
+					slots[g.slot] = id
+				}
+			}
+		}
 		arng := rand.New(rand.NewPCG(o.seed^0xa5a5a5a5, uint64(i)+1))
 		voices, restore := s.loopVoices(slots, o.aug, arng)
 		buf, err := s.eng.RenderMusic(slots, bpm, o.bars, root, scale, nil, int64(i+1))
 		restore()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if o.aug {
 			buf = degrade(buf, arng)
 		}
-		loops = append(loops, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale, voices: voices})
+		if err := visit(i, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale, voices: voices}); err != nil {
+			return err
+		}
 	}
-	return loops, nil
+	return nil
+}
+
+// genBeat is a beat the bank never had: kicks on one and three with extras, the
+// snare on two and four with a ghost now and then, hats on the eighths or the
+// quarters, velocities drawn; registered under one name a loop at a time
+func genBeat(rng *rand.Rand, _ int) *audio.Pattern {
+	var kick, snare, hat []audio.Step
+	for _, pos := range []int{0, 8} {
+		kick = append(kick, audio.Step{Pos: pos, Vel: 0.9 + rng.Float64()*0.1})
+	}
+	for _, pos := range []int{3, 6, 10, 11, 14} {
+		if rng.Float64() < 0.25 {
+			kick = append(kick, audio.Step{Pos: pos, Vel: 0.6 + rng.Float64()*0.3})
+		}
+	}
+	for _, pos := range []int{4, 12} {
+		if rng.Float64() < 0.9 {
+			snare = append(snare, audio.Step{Pos: pos, Vel: 0.8 + rng.Float64()*0.2})
+		}
+	}
+	for _, pos := range []int{7, 15} {
+		if rng.Float64() < 0.2 {
+			snare = append(snare, audio.Step{Pos: pos, Vel: 0.4})
+		}
+	}
+	every := 2 + 2*rng.IntN(2)
+	for pos := 0; pos < 16; pos += every {
+		if rng.Float64() < 0.85 {
+			hat = append(hat, audio.Step{Pos: pos, Vel: 0.5 + rng.Float64()*0.3})
+		}
+	}
+	p := &audio.Pattern{Name: "corpus_beat", Steps: 16, Role: audio.RoleRhythm}
+	for _, tr := range []audio.Track{{Instr: audio.InstrKick, Events: kick}, {Instr: audio.InstrSnare, Events: snare}, {Instr: audio.InstrHihat, Events: hat}} {
+		if len(tr.Events) > 0 {
+			p.Tracks = append(p.Tracks, tr)
+		}
+	}
+	return p
+}
+
+// genMelody is a melody the bank never had: a walk over the key's degrees within
+// two octaves, lengths of one to four steps with a rest now and then, on a tonal
+// instrument drawn from the registered ones
+func genMelody(rng *rand.Rand, degrees int) *audio.Pattern {
+	steps := 16 * (1 + rng.IntN(2))
+	tonal := audio.TonalInstruments()
+	instr := tonal[rng.IntN(len(tonal))]
+	if instr == audio.InstrBass {
+		instr = audio.InstrLead
+	}
+	deg, oct := rng.IntN(degrees), 1+rng.IntN(2)
+	var evs []audio.Step
+	for pos := 0; pos < steps; {
+		dur := []int{1, 1, 2, 2, 3, 4}[rng.IntN(6)]
+		if rng.Float64() < 0.2 {
+			pos += dur
+			continue
+		}
+		deg += rng.IntN(5) - 2
+		for deg < 0 {
+			deg, oct = deg+degrees, oct-1
+		}
+		for deg >= degrees {
+			deg, oct = deg-degrees, oct+1
+		}
+		oct = min(max(oct, 1), 2)
+		evs = append(evs, audio.Step{Pos: pos, Vel: 0.5 + rng.Float64()*0.5, Deg: deg, Oct: oct, Dur: min(dur, steps-pos)})
+		pos += dur
+	}
+	if len(evs) == 0 {
+		evs = []audio.Step{{Pos: 0, Vel: 0.8, Deg: 0, Oct: 1, Dur: 4}}
+	}
+	return &audio.Pattern{Name: "corpus_melody", Steps: steps, Role: audio.RoleMelody, Tracks: []audio.Track{{Instr: instr, Events: evs}}}
+}
+
+// genBass is a bass line the bank never had: the root and its neighbours below
+// the fifth, in the root's octave, in halves, quarters and eighths
+func genBass(rng *rand.Rand, degrees int) *audio.Pattern {
+	steps := 16
+	var evs []audio.Step
+	for pos := 0; pos < steps; {
+		dur := []int{2, 4, 4, 8}[rng.IntN(4)]
+		deg := []int{0, 0, 0, 4, 3, 2}[rng.IntN(6)]
+		if deg >= degrees {
+			deg = 0
+		}
+		evs = append(evs, audio.Step{Pos: pos, Vel: 0.7 + rng.Float64()*0.3, Deg: deg, Oct: 0, Dur: min(dur, steps-pos)})
+		pos += dur
+	}
+	return &audio.Pattern{Name: "corpus_bass", Steps: steps, Role: audio.RoleBass, Tracks: []audio.Track{{Instr: audio.InstrBass, Events: evs}}}
 }
 
 // loopVoices is the voice each tonal instrument the slotted patterns name plays
@@ -253,8 +378,13 @@ type corpusManifest struct {
 
 func cmdCorpus(s *Session, a []string) error {
 	o := tuneOptions{loops: 24, bars: 4, seed: 1}
-	if n := len(a); n > 1 && a[n-1] == "aug" {
-		o.aug, a = true, a[:n-1]
+	for n := len(a); n > 1 && (a[n-1] == "aug" || a[n-1] == "gen"); n = len(a) {
+		if a[n-1] == "aug" {
+			o.aug = true
+		} else {
+			o.gen = true
+		}
+		a = a[:n-1]
 	}
 	for i, p := range []*int{&o.loops, &o.bars} {
 		if len(a) > i+1 {
@@ -273,14 +403,12 @@ func cmdCorpus(s *Session, a []string) error {
 // little-endian), loop_NNN.json as the events that sound in it with their frames
 // and voices, and corpus.json naming the layout.
 func (s *Session) exportCorpus(dir string, o tuneOptions) error {
-	loops, err := s.corpus(o)
-	if err != nil {
-		return err
-	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	for i, l := range loops {
+	written := 0
+	err := s.eachLoop(o, func(i int, l tuneLoop) error {
+		written++
 		base := filepath.Join(dir, fmt.Sprintf("loop_%03d", i))
 		f, err := os.Create(base + ".wav")
 		if err != nil {
@@ -319,11 +447,12 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 				lab.Events = append(lab.Events, ev)
 			}
 		}
-		if err := writeJSON(base+".json", lab); err != nil {
-			return err
-		}
+		return writeJSON(base+".json", lab)
+	})
+	if err != nil {
+		return err
 	}
-	m := corpusManifest{Version: 1, Loops: len(loops), Rate: audio.RipRate, Hop: audio.RipHop, MelBands: audio.RipMelBands,
+	m := corpusManifest{Version: 1, Loops: written, Rate: audio.RipRate, Hop: audio.RipHop, MelBands: audio.RipMelBands,
 		MinMIDI: audio.RipMinMIDI, Pitches: audio.RipPitches, Drums: []string{"kick", "snare", "hihat"}, Waves: audio.VoiceWaves[:], VoiceGenes: audio.VoiceGeneCount}
 	if err := writeJSON(filepath.Join(dir, "corpus.json"), m); err != nil {
 		return err
@@ -332,7 +461,10 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	if o.aug {
 		how = "through a room, a mix and voices of random genes"
 	}
-	fmt.Fprintf(s.out, "wrote %d loop(s) of %d bar(s) to %s, %s\n", len(loops), o.bars, dir, how)
+	if o.gen {
+		how += ", with generated beats, melodies and bass lines"
+	}
+	fmt.Fprintf(s.out, "wrote %d loop(s) of %d bar(s) to %s, %s\n", written, o.bars, dir, how)
 	return nil
 }
 
@@ -368,7 +500,7 @@ func writeJSON(file string, v any) error {
 }
 
 func cmdBench(s *Session, a []string) error {
-	o := tuneOptions{loops: 8, bars: 4, seed: 7}
+	o := tuneOptions{loops: 8, bars: 4, seed: 7, gen: true}
 	for i, p := range []*int{&o.loops, &o.bars} {
 		if len(a) > i {
 			n, err := strconv.Atoi(a[i])
@@ -382,9 +514,10 @@ func cmdBench(s *Session, a []string) error {
 }
 
 // bench grades the front ends the session has, the analysis and the model when
-// one loaded, on fresh loops the engine renders, clean and augmented: the mean
-// of each rip's score against the loop's expected rip, so a trained model is
-// measured against the analysis before it is trusted with a recording
+// one loaded, on fresh loops the engine renders with generated parts among the
+// bank's, clean and augmented: the mean of each rip's score against the loop's
+// expected rip, so a trained model is measured against the analysis before it
+// is trusted with a recording
 func (s *Session) bench(o tuneOptions) error {
 	type front struct {
 		name string

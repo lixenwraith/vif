@@ -44,7 +44,12 @@ flowchart LR
    autocorrelation under a prior, beats by dynamic programming, the bar line by
    the kick, the snare on two and four, the key's root in the bass and the
    chroma's change, the key and chords by chroma, hits by peak picking, notes by a
-   Viterbi path through the salience, cut and quantized to the grid. `RipParams`
+   Viterbi path through the salience, cut and quantized to the grid, the bass
+   register's salience from a window four times the rip's and the rip's own
+   together (the long one's semitones at 110 Hz, the short one's onsets), the
+   melody register twice, the second path with the first's notes and their partials
+   cancelled and its notes kept above a share of the first's strength, so two
+   voices in one register are heard where one path heard the louder. `RipParams`
    holds their thresholds as data a search tunes (`tune`).
 4. **Voices.** Each note carries the genes the front end heard it played with
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
@@ -116,8 +121,11 @@ offline (`song <name> <file.wav>`).
 - **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop, a
   gain, a one-pole low-pass, a Schroeder reverb and a noise floor drawn per
   loop, and redraws each tonal track's voice near the registered one, a third
-  of the time on another wave, labelled as played; the draws come from a stream
-  of their own, so a loop's patterns and key are the same with and without it.
+  of the time on another wave, labelled as played; `gen` draws beats, melodies
+  and bass lines from the key for three loops in five per part, since the bank
+  alone repeats its few melodies and a model trained on it learns them, not
+  pitch. Both draw from streams of their own, so a loop's bank patterns and key
+  are the same with and without them.
 - **Model.** `ripnet.Spec`: eighty bands in, width 128, four heads, four layers,
   feed-forward 512, a window of 64 frames either side, about 800 thousand
   weights; heads for the onset, the three drums, the sixty-nine pitches, voicing,
@@ -252,6 +260,62 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   its pitches are far behind, which is the head with the most classes and the
   least training. The shipped bank's few melodies cap what a corpus can teach:
   more patterns and more steps before the model is trusted with a melody.
+- The bass read from a window four times longer: the loop test's melody rises
+  from 0.92 to 0.95 and its bass holds at 1, the sample's bass notes last two
+  to four steps where they flipped every step between A#2 and A2, and the
+  pinned grid stops reading a bass note a step early once the long window's
+  reading is held to the short window's timing (the geometric mean of the two;
+  the long one alone read onsets early) and the grid takes the two-frame lead
+  the centred windows give every event. A sustained pad under the loop's melody
+  still moves the key estimate, G and B outvoting E, and the rip's own key then
+  snaps the F to E: the pad test's melody number says that, not the paths.
+  With the partials of the bass's near-equal neighbour cancelled as well, the
+  A3 and A#3 the sample's melody carried at the bass's octave on its first
+  steps are gone: 30 melody notes where the fourth pass had 36, the six that
+  went the bass's.
+- The fourth pass, the melody register tracked twice: the sample's melody has 36
+  notes where one path had 25, nine steps carrying two; the song rips back at
+  0.76 through the mel-fitted voices and 0.86 after two rounds of `refine`,
+  the second line costing the melody's own self-consistency (0.67 against
+  0.90), since two notes on a step through one voice do not rip back as two.
+  On a render with a sustained pad under the test loop's melody the second pass
+  finds eight of the pad's sixteen notes where one path found none, the first
+  of each bar and seldom the second, which the first path's note on the same
+  pitch a fifth below the bass's partial has already spent. None of the
+  sample's 36 notes is longer than three steps where the violin holds six to
+  twelve: the path flips between the semitone bins a vibrato crosses, the next
+  decoder item ([todo](todo.md#tune-the-rip)).
+- The second training run, 300 loops with generated parts and the room and
+  mix, 12000 steps of batch 8 in an hour and a half on four CPU cores, the
+  training loss down to 0.31 and the pitch head's to 0.15: worse on fresh
+  loops than the first run and than the analysis. `bench 12 4`, whose loops
+  now carry generated parts: the analysis 0.47 on clean loops (tempo 0.75,
+  bars 0.75, drums 0.52, melody 0.17, bass 0.39) and 0.46 augmented; the
+  model 0.40 (0.67, 0.71, 0.50, 0.11, 0.18) and 0.38 (0.58, 0.73, 0.53, 0.07,
+  0.13). Each loop was seen about three hundred times: the model learned the
+  corpus, not the music. The trainer now holds loops out, scores them as it
+  goes and exports the step whose decoder heads scored best on them; the
+  number that matters is the held-out loss, not the training loss, and `bench`
+  after it. A 6000-step run with thirty loops held out showed the held-out
+  loss near 3.6 against a training loss near 1.0 by step 2000, the wave head
+  learning each loop's voice by heart and the pitch head's held-out loss not
+  moving from 0.73: with hundreds of loops of random voices and rooms there is
+  too little to generalise from, so the next run takes thousands of loops,
+  each seen a few times.
+- The third run, 3000 loops with generated parts and the room and mix, sixty
+  held out, 6000 steps of batch 8 in forty minutes on four CPU cores, each
+  loop seen sixteen times: the held-out decoders' loss falls the whole way,
+  1.79 at step 1000 to 1.48 at 6000, the pitch head's 0.61 to 0.51, and the
+  last step is the one exported. `bench 12 4`: the analysis 0.47 on clean
+  loops (tempo 0.75, bars 0.75, drums 0.52, melody 0.17, bass 0.39), the model
+  0.44 (0.67, 0.75, 0.59, 0.11, 0.25); augmented, the analysis 0.46 (0.83,
+  0.81, 0.50, 0.16, 0.27), the model 0.45 (0.75, 0.77, 0.65, 0.11, 0.08). The
+  model is within three hundredths of the analysis overall, ahead on drums,
+  behind on pitch, and still improving when the run ended: more loops and more
+  steps are the next lever, not another head. The sample through it: 115 bpm,
+  F major, five bars from 0.79 s, 38 melody and 15 bass notes; the song rips
+  back at 0.36 and 0.57 after two rounds of `refine`, against the analysis
+  path's 0.59 and 0.88. The analysis path stays the sample's better transcript.
 - The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
   where the analysis heard 86, F major where it heard A# harmonic minor (its
   fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips

@@ -102,6 +102,32 @@ def batch(loops, window: int, size: int, rng: random.Random):
     return torch.from_numpy(np.stack(mels)), out
 
 
+def validation(loops, window: int):
+    """every held-out loop cut into windows of `window` frames, fixed, so the held-out loss is comparable step to step"""
+    rng = random.Random(0)
+    mels, tgs = [], []
+    for mel, t in loops:
+        for start in range(0, max(len(mel) - 1, 1), window):
+            sub = [(mel[start:start + window], {k: v[start:start + window] for k, v in t.items()})]
+            m, tg = batch(sub, window, 1, rng)
+            mels.append(m)
+            tgs.append(tg)
+    return mels, tgs
+
+
+def evaluate(model: ripnet.RipNet, mels, tgs, device: str) -> dict:
+    """the mean of the losses over the held-out windows, the model's weights untouched"""
+    model.eval()
+    sums: dict = {}
+    with torch.no_grad():
+        for mel, t in zip(mels, tgs):
+            l = losses(model, mel.to(device), {k: v.to(device) for k, v in t.items()})
+            for k, v in l.items():
+                sums[k] = sums.get(k, 0.0) + v.item()
+    model.train()
+    return {k: v / max(len(mels), 1) for k, v in sums.items()}
+
+
 def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
     y = model(mel)
     cfg = model.cfg
@@ -144,13 +170,18 @@ def main() -> None:
     ap.add_argument("--attention-window", type=int, default=64, help="frames attended either side")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--checkpoint", default="", help="write a .pt every --every steps, and resume from it when present")
-    ap.add_argument("--every", type=int, default=200)
+    ap.add_argument("--every", type=int, default=200, help="steps between checkpoints and held-out scores")
+    ap.add_argument("--holdout", type=int, default=-1, help="loops held out of training and scored every --every steps; the step that scores best is what --out gets (default a tenth, none under five loops)")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
     rng = random.Random(args.seed)
     manifest, loops = load_corpus(args.corpus)
+    holdout = args.holdout if args.holdout >= 0 else (len(loops) // 10 if len(loops) >= 5 else 0)
+    held = loops[len(loops) - holdout:] if holdout else []
+    loops = loops[:len(loops) - holdout] if holdout else loops
+    val_mels, val_tgs = validation(held, args.window) if held else ([], [])
     assert manifest["mel_bands"] == ripnet.MEL_BANDS and manifest["pitches"] == ripnet.PITCHES
     assert manifest["voice_genes"] == ripnet.VOICE_GENES and len(manifest["waves"]) == ripnet.WAVES
     cfg = ripnet.Config(dim=args.dim, layers=args.layers, heads=args.heads, ffn=args.ffn, window=args.attention_window)
@@ -163,8 +194,27 @@ def main() -> None:
         opt.load_state_dict(ck["opt"])
         step = ck["step"]
         print(f"resumed at step {step}")
-    print(f"{sum(p.numel() for p in model.parameters())} weights, {len(loops)} loops, {sum(len(m) for m, _ in loops)} frames")
+    print(f"{sum(p.numel() for p in model.parameters())} weights, {len(loops)} loops, {sum(len(m) for m, _ in loops)} frames, {len(held)} held out in {len(val_mels)} windows")
     t0 = time.time()
+    best_loss, best_step, best_state = float("inf"), step, None
+
+    def score() -> None:
+        nonlocal best_loss, best_step, best_state
+        if not val_mels:
+            return
+        v = evaluate(model, val_mels, val_tgs, args.device)
+        # the decoders read the onset, drum, pitch and voicing heads; the wave and
+        # voice heads name a voice and memorize the corpus's, so they do not pick
+        # the step exported
+        v["decoders"] = v["onset"] + v["drums"] + v["pitch"] + 0.5 * v["voicing"]
+        parts = " ".join(f"{k} {x:.3f}" for k, x in v.items() if k not in ("total", "decoders"))
+        mark = ""
+        if v["decoders"] < best_loss:
+            best_loss, best_step = v["decoders"], step
+            best_state = {k: t.detach().cpu().clone() for k, t in model.state_dict().items()}
+            mark = " (best)"
+        print(f"step {step} held-out {v['total']:.3f}, decoders {v['decoders']:.3f} ({parts}){mark}", flush=True)
+
     while step < args.steps:
         mel, t = batch(loops, args.window, args.batch, rng)
         mel, t = mel.to(args.device), {k: v.to(args.device) for k, v in t.items()}
@@ -180,8 +230,13 @@ def main() -> None:
         if step % 20 == 0 or step == args.steps:
             parts = " ".join(f"{k} {v.item():.3f}" for k, v in l.items() if k != "total")
             print(f"step {step} loss {l['total'].item():.3f} ({parts}) {time.time() - t0:.0f}s", flush=True)
-        if args.checkpoint and (step % args.every == 0 or step == args.steps):
-            torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step}, args.checkpoint)
+        if step % args.every == 0 or step == args.steps:
+            score()
+            if args.checkpoint:
+                torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step}, args.checkpoint)
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        print(f"best held-out decoders' loss {best_loss:.3f} at step {best_step}; exporting that")
     model.eval()
     ripnet.export(model.cpu(), args.out)
     print(f"wrote {args.out}")

@@ -232,7 +232,37 @@ that proves wrong or that a document now states, and link the document instead.
   count `bench` prints.
 - An augmented corpus draws its room, mix and voices from a stream seeded apart
   from the loop's patterns and key, so `corpus` with and without `aug` renders
-  the same music; a test comparing the two relies on it.
+  the same music; a test comparing the two relies on it. Generated parts register
+  under `corpus_*` names replaced in place each loop, and `corpus` leaves those
+  names out of the bank's pools, or the next draw would include the last loop's
+  generated patterns and no two runs would draw alike.
+- A long analysis window reads an onset early by about a quarter of the
+  window: the bass's notes from the 4×2048 window started a step before the
+  grid said, and lagging its rows made them start late instead. Multiply the
+  long window's salience by the short window's (their geometric mean) so the
+  short one keeps the timing and the long one the pitch; and give a pinned
+  grid the two-frame lead the beat tracker already has, or a note on the beat
+  lands on the step before.
+- A training loss that keeps falling says nothing about fresh loops: 12000
+  steps on 300 loops reached 0.31 and benched worse than 3000 steps on 120,
+  each loop seen three hundred times. `train.py` holds a tenth of the loops
+  out, scores them every `--every` steps and exports the best step; judge a run
+  by its held-out line and by `bench` on the file, never by the last training
+  loss, and prefer more loops to more steps.
+- A bass that wobbles between two semitones leaks its octave into the melody
+  register on the frames the cancellation picks the other bin: cancel the
+  partials of the strongest bass pitch and of a neighbour within two semitones
+  at seventy per cent of it, and the ghosts go while a clean render's melody
+  keeps its score.
+- A sustained pad changes the key the chroma votes for, and a note the key
+  lacks snaps to its neighbour: a melody score that falls when a pad is added
+  may be the key, not the pitch paths. Read the rip's root before blaming the
+  tracker.
+- A second voice in a register is found by masking the first path's notes with
+  their partials (the octave, the twelfth, the double octave and the seventeenth
+  and nineteenth, a semitone either side) before the path runs again; masking
+  the fundamental alone finds the octave ghost. The gate is relative to the first
+  path's mean note strength, so a clean render's second pass yields nothing.
 
 ## Locks
 
