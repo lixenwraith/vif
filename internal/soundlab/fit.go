@@ -133,7 +133,7 @@ func (s *Session) fitVoices(rp *ripped, o fitOptions, again bool) {
 		}
 		word := ripLines[reg].word
 		fmt.Fprintf(s.out, "fitting the %s voice over %d note(s), %d generation(s) of %d...\n", word, min(len(notes), o.notes), o.generations, o.pool)
-		v, from, to := s.fitVoice(rp.x, rp.rate, notes, *at, o)
+		v, from, to := s.fitVoice(rp.x, rp.rate, rp.rip.Tuning, notes, *at, o)
 		if v == nil {
 			continue
 		}
@@ -200,7 +200,7 @@ func genomeKey(g []float64) string {
 // scored by the mel distance between the recording around each sample note and
 // the voice playing that note. It returns the voice, the best seed's distance
 // and the fit's; nil when the register has no note long enough.
-func (s *Session) fitVoice(x []float64, rate int, notes []audio.RipNote, prior *audio.VoiceDef, o fitOptions) (*audio.VoiceDef, float64, float64) {
+func (s *Session) fitVoice(x []float64, rate int, cents float64, notes []audio.RipNote, prior *audio.VoiceDef, o fitOptions) (*audio.VoiceDef, float64, float64) {
 	samples := fitSamples(notes, max(o.notes, 1))
 	if len(samples) == 0 {
 		return nil, 0, 0
@@ -225,7 +225,7 @@ func (s *Session) fitVoice(x []float64, rate int, notes []audio.RipNote, prior *
 		}
 		var sum float64
 		for _, t := range targets {
-			note := audio.RenderNote(v, t.midi, t.vel, t.dur, fitTail)
+			note := audio.RenderNoteAt(v, t.midi, cents, t.vel, t.dur, fitTail)
 			sum += audio.MelDistance(audio.MelFrames(note, audio.AudioSampleRate), t.mel)
 		}
 		return -sum / float64(len(targets))
@@ -277,7 +277,7 @@ func (s *Session) fitVoice(x []float64, rate int, notes []audio.RipNote, prior *
 		n := samples[i]
 		lo, hi := min(int(n.Start*float64(rate)), len(x)), min(int(n.End*float64(rate)), len(x))
 		want += rms(x[lo:hi])
-		have += rms(audio.RenderNote(v, t.midi, t.vel, t.dur, 0))
+		have += rms(audio.RenderNoteAt(v, t.midi, cents, t.vel, t.dur, 0))
 	}
 	if have > 0 && want > 0 {
 		v.Level = min(max(v.Level*want/have, 0.1), 4) // the level ValidateVoice allows

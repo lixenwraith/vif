@@ -75,7 +75,8 @@ const (
 	MaxPatternTracks  = 32  // SetMask is a uint32; reveal shifts 1<<n
 	MaxPatternEvents  = 512 // per track
 	MaxStepDegree     = 64
-	MaxStepAccidental = 2 // semitones an accidental may move a degree
+	MaxStepAccidental = 2   // semitones an accidental may move a degree
+	MaxTuningCents    = 100 // the engine's tuning off A440, a semitone either way
 	MinStepOctave     = -2
 	MaxStepOctave     = 8
 
