@@ -1292,3 +1292,51 @@ func TestLongVerbsRunBehindTheScreen(t *testing.T) {
 		t.Errorf("the log after:\n%s", lines)
 	}
 }
+
+// TestCorpusGeneratesPartsTheBankNeverHad: gen draws a beat, a melody or a bass
+// line of its own for some loops, each valid, labelled with its notes, and
+// different from the bank's draw; the aug property, the same music with and
+// without, holds with gen on both sides
+func TestCorpusGeneratesPartsTheBankNeverHad(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	plain, err := s.corpus(tuneOptions{loops: 6, bars: 1, seed: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gen, err := s.corpus(tuneOptions{loops: 6, bars: 1, seed: 5, gen: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	both, err := s.corpus(tuneOptions{loops: 6, bars: 1, seed: 5, gen: true, aug: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, notes := 0, 0
+	for i := range gen {
+		if gen[i].slots != plain[i].slots {
+			changed++
+		}
+		if gen[i].slots != both[i].slots {
+			t.Errorf("loop %d: gen drew %v alone and %v with aug", i, gen[i].slots, both[i].slots)
+		}
+		for _, b := range gen[i].want.Bars {
+			notes += len(b.Melody) + len(b.Bass)
+		}
+	}
+	if changed == 0 || notes == 0 {
+		t.Errorf("%d loop(s) changed by gen, %d note(s) labelled", changed, notes)
+	}
+	for _, n := range []string{"corpus_beat", "corpus_melody", "corpus_bass"} {
+		if id := audio.PatternIDByName(n); id != audio.PatternSilence {
+			if p := audio.GetPattern(id); p == nil || audio.ValidatePattern(p) != nil {
+				t.Errorf("%s does not validate", n)
+			}
+		}
+	}
+	runOrFatal(t, s, &out, "corpus "+t.TempDir()+" 1 1 gen aug\n")
+	if !strings.Contains(out.String(), "generated beats") {
+		t.Errorf("corpus did not say it generated:\n%s", out.String())
+	}
+}
