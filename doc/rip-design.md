@@ -113,6 +113,11 @@ offline (`song <name> <file.wav>`).
   (random genes), chance steps as optional targets, and real recordings with
   hand-checked notes held out for validation, so neither a model nor a tuned set
   learns the synthesizer.
+- **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop, a
+  gain, a one-pole low-pass, a Schroeder reverb and a noise floor drawn per
+  loop, and redraws each tonal track's voice near the registered one, a third
+  of the time on another wave, labelled as played; the draws come from a stream
+  of their own, so a loop's patterns and key are the same with and without it.
 - **Model.** `ripnet.Spec`: eighty bands in, width 128, four heads, four layers,
   feed-forward 512, a window of 64 frames either side, about 800 thousand
   weights; heads for the onset, the three drums, the sixty-nine pitches, voicing,
@@ -191,12 +196,14 @@ and the checkpoint earn their keep.
    offline render, the truth and the score; the transformer, `ripnet`, the corpus
    and the trainer; the genetic additions; the voice fit by analysis-by-synthesis;
    the dictionary, matching and compression; the song document, rendered offline
-   and conducted live; the song's score against the rip.
-2. Next: train on a corpus with a room and a mix, and measure the model front end
-   against the analysis on rendered and on real material; the refinement loop,
-   voices and patterns refined in turn against the song's score, its convergence
-   measured; the matching scored by reconstruction; several voices in a register,
-   clustered by their genes.
+   and conducted live; the song's score against the rip; the augmented corpus, a
+   first training run and `bench`; the refinement loop (`refine`), voices and
+   steps refined in turn against the song's score.
+2. Next: a longer training run, on more loops and more patterns than the shipped
+   bank, measured by `bench` and by ear on the sample until the model front end
+   beats the analysis on clean and augmented renders; the matching scored by
+   reconstruction; several voices in a register, clustered by their genes; the
+   false drums gated by a harmonic check or by the model.
 3. Then: real recordings in the corpus, tuned parameters and weights shipped as
    data, and the rip on Android under the mobile budget.
 
@@ -223,6 +230,34 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
 - Before the grid was pinned every render ripped back at 115 bpm, a dotted
   eighth for the beat, and a beat late: two decoder faults the score of the
   compression must not carry, and two faults a real recording still pays for.
+- The third pass, `rip ... nodrums` so the false drums stay out: the song rips
+  back at 0.66 (melody 0.90, bass 0.79, drums 0 for the kicks the bass's
+  attacks still read as). `refine` over two rounds, each register's voice
+  searched by that score with the fitted voice and the shipped ones as seeds,
+  then the steps: 0.66 to 0.87 in the first round, all of it from the voices
+  (melody 0.66 to 0.80, bass to 0.87), 0.88 in the second, the steps' search
+  adding nothing either time. Four minutes on four cores. A voice that rips back
+  well is one the analysis hears the same notes from and no drums in, which is
+  not the same as the one nearest the recording's spectrum; the ear decides
+  between `bite_fit.wav` (the mel fit) and `bite_refined.wav` (the score fit).
+- The first training run: 120 augmented loops of four bars from the shipped
+  bank, `ripnet.Spec` at 818 thousand weights, 3000 steps of batch 8 in twenty
+  minutes on four CPU cores, the loss from 4.8 to 0.44 and the pitch head's
+  still falling. `bench 12 4` on fresh loops, total then tempo, bars, drums,
+  melody, bass: the analysis on clean loops 0.49 (0.75, 0.79, 0.51, 0.18,
+  0.50), the model 0.48 (0.83, 0.85, 0.63, 0.06, 0.27); on augmented loops the
+  analysis 0.45 (0.75, 0.75, 0.54, 0.11, 0.31), the model 0.47 (0.83, 0.88,
+  0.67, 0.05, 0.16). The model already hears onsets and drums better than the
+  analysis and holds up under the room and the mix where the analysis drops;
+  its pitches are far behind, which is the head with the most classes and the
+  least training. The shipped bank's few melodies cap what a corpus can teach:
+  more patterns and more steps before the model is trusted with a melody.
+- The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
+  where the analysis heard 86, F major where it heard A# harmonic minor (its
+  fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips
+  back at 0.45 through the mel-fitted voices and 0.63 after two rounds of
+  `refine`, against the analysis path's 0.66 and 0.88. The model's transcript
+  is the weaker one today, as `bench` said it would be; the loop lifts either.
 
 ## 9. Decisions
 

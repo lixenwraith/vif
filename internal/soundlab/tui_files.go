@@ -203,11 +203,7 @@ func (a *tuiApp) promptRip(path string) {
 		if a.exec("rip "+quotePath(path)+" "+name) != nil {
 			return
 		}
-		a.files.open = false
-		a.kind = kindPattern
-		if !a.cursorTo(name + "_melody_1") {
-			a.cursorTo(name + "_beat_1")
-		}
+		a.files.open = false // the rip runs behind the screen; its end lands the browser on it
 	})
 }
 

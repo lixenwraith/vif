@@ -32,6 +32,7 @@ func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
 	// the searches sized for a test: enough to run every path, not to be good
 	s.fit = fitOptions{notes: 2, generations: 1, pool: 4, seed: 1}
 	s.compressOpt = compressOptions{generations: 3, pool: 6, seed: 1}
+	s.refineOpt = refineOptions{generations: 1, pool: 4, seed: 1}
 	return s
 }
 
@@ -890,11 +891,15 @@ func TestRipMakesPatternsOfARecording(t *testing.T) {
 ! rip %s loop                        # not a recording
 rip %s loop
 ! rip %s loop                        # the names are taken
+rip %s quiet 4 nodrums
 ls pattern loop*
 validate all
-`, filepath.Join(t.TempDir(), "missing.wav"), wav, wav))
+`, filepath.Join(t.TempDir(), "missing.wav"), wav, wav, wav))
 	if !s.pats.has("loop_beat_1") || !s.pats.isDirty("loop_beat_1") {
 		t.Fatalf("no dirty loop_beat_1 in the document:\n%s", out.String())
+	}
+	if s.pats.has("quiet_beat_1") || !(s.pats.has("quiet_bass_1") || s.pats.has("quiet_melody_1")) {
+		t.Errorf("nodrums wrote a beat %v and notes %v:\n%s", s.pats.has("quiet_beat_1"), s.pats.has("quiet_bass_1") || s.pats.has("quiet_melody_1"), out.String())
 	}
 	if s.bpm < bpm-3 || s.bpm > bpm+3 {
 		t.Errorf("tempo %d, want about %d", s.bpm, bpm)
@@ -1041,6 +1046,15 @@ save pattern %s
 	if !strings.Contains(out.String(), "registered; the patterns naming it play it") {
 		t.Errorf("fit replaced no voice:\n%s", out.String())
 	}
+	// a refinement round: the voices and the steps each kept only when the song
+	// rips back nearer, and the song still valid after
+	runOrFatal(t, s, &out, "! refine nothing\nrefine loop 1\nvalidate all\n")
+	if !strings.Contains(out.String(), "before refining") || !strings.Contains(out.String(), "round 1: patterns") {
+		t.Errorf("refine reported no round:\n%s", out.String())
+	}
+	if err := audio.ValidateSong(d); err != nil {
+		t.Error(err)
+	}
 	// a short song conducted to its end, the way a ticking front end drives it
 	short := &audio.SongDef{Name: "short", BPM: 200, Root: audio.DefaultRootNote, Scale: "phrygian",
 		Bars: [][]string{{patName(slots[0]), "", "", ""}, {"", patName(slots[1]), "", ""}}}
@@ -1135,8 +1149,12 @@ func TestFilesOverlayLoadsRipsAndSavesHere(t *testing.T) {
 		t.Fatalf("enter on a recording: mode %d, name %q", a.mode, a.editField.Value())
 	}
 	key(terminal.KeyEnter, 0)
-	if a.files.open || !s.pats.has("loop_beat_1") {
-		t.Fatalf("the recording was not ripped: open %v\n%s", a.files.open, out.String())
+	if a.files.open || a.busy == "" {
+		t.Fatalf("the rip did not start behind the screen: open %v, busy %q", a.files.open, a.busy)
+	}
+	waitFor(t, func() bool { key(terminal.KeyNone, 0); return a.busy == "" }, "the rip never ended")
+	if !s.pats.has("loop_beat_1") || a.selName() != "loop_melody_1" && a.selName() != "loop_beat_1" {
+		t.Fatalf("the recording was not ripped, or the browser is not on it (%q):\n%s", a.selName(), out.String())
 	}
 	key(terminal.KeyCtrlO, 0)
 	key(terminal.KeyRune, 's')
@@ -1157,5 +1175,120 @@ func TestFilesOverlayLoadsRipsAndSavesHere(t *testing.T) {
 	}
 	if kind, err := sniffDocument(filepath.Join(dir, "saved.toml")); kind != "pattern" || err != nil {
 		t.Errorf("the saved document sniffs as %q, %v", kind, err)
+	}
+}
+
+// TestCorpusAugmentsAndLabelsTheVoices: an augmented corpus plays each loop's
+// tonal tracks through voices of random genes near the registered ones and
+// labels the events with those genes, the registered voices are as they were
+// afterwards, and the audio is not the clean render.
+func TestCorpusAugmentsAndLabelsTheVoices(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	before := audio.VoiceDefByName("lead").Genes()
+	clean, err := s.corpus(tuneOptions{loops: 2, bars: 1, seed: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	aug, err := s.corpus(tuneOptions{loops: 2, bars: 1, seed: 3, aug: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(audio.VoiceDefByName("lead").Genes(), before) {
+		t.Error("the registered lead was not put back")
+	}
+	changed, differs := 0, 0
+	for i := range aug {
+		if aug[i].slots != clean[i].slots {
+			t.Fatalf("loop %d drew other patterns under aug", i)
+		}
+		for name, v := range aug[i].voices {
+			if !reflect.DeepEqual(v.Genes(), clean[i].voices[name].Genes()) {
+				changed++
+			}
+		}
+		var d float64
+		for k := range min(len(aug[i].audio), len(clean[i].audio)) {
+			d += math.Abs(aug[i].audio[k] - clean[i].audio[k])
+		}
+		if d > 0 {
+			differs++
+		}
+	}
+	if changed == 0 || differs != len(aug) {
+		t.Errorf("%d voice(s) changed, %d of %d loop(s) differ from the clean render", changed, differs, len(aug))
+	}
+	dir := t.TempDir()
+	runOrFatal(t, s, &out, "corpus "+dir+" 1 1 aug\n")
+	data, err := os.ReadFile(filepath.Join(dir, "loop_000.json"))
+	if err != nil || !strings.Contains(string(data), "\"voice\":[") {
+		t.Errorf("the labels carry no voice genes: %v\n%s", err, data)
+	}
+	if !strings.Contains(out.String(), "random genes") {
+		t.Errorf("corpus did not say it augmented:\n%s", out.String())
+	}
+}
+
+// TestBenchGradesTheFrontEnds: bench renders fresh loops, clean and augmented,
+// and grades the analysis on both
+func TestBenchGradesTheFrontEnds(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "bench 1 2\n")
+	if !strings.Contains(out.String(), "analysis on 1 clean loop(s)") || !strings.Contains(out.String(), "analysis on 1 augmented loop(s)") {
+		t.Errorf("bench graded:\n%s", out.String())
+	}
+}
+
+// TestRunScriptVerb: run executes a script's lines in the session in hand, stops
+// at a failing line with its number, and a quit in it ends the script alone
+func TestRunScriptVerb(t *testing.T) {
+	dir := t.TempDir()
+	good := filepath.Join(dir, "good.slab")
+	bad := filepath.Join(dir, "bad.slab")
+	os.WriteFile(good, []byte("new pattern from_script\nquit\nnew pattern never\n"), 0o644)
+	os.WriteFile(bad, []byte("new pattern twice\nnew pattern twice\n"), 0o644)
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "run "+good+"\n")
+	if !s.pats.has("from_script") || s.pats.has("never") {
+		t.Errorf("run made %v and %v", s.pats.has("from_script"), s.pats.has("never"))
+	}
+	if err := Execute(s, "run "+bad); err == nil || !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("a failing line gave %v", err)
+	}
+}
+
+// TestLongVerbsRunBehindTheScreen: a long verb typed in the TUI runs on its own
+// goroutine under a working box, keys wait for it, and its output and its end
+// reach the log and the screen
+func TestLongVerbsRunBehindTheScreen(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	lb := NewLogBuffer(50)
+	s.SetOut(lb)
+	a := newTUIApp(s, lb)
+	a.term, a.w, a.h = frameTerm{}, 100, 40
+	a.render()
+	a.exec("bench 1 2")
+	if a.busy == "" {
+		t.Fatal("bench did not go behind the screen")
+	}
+	a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'n'})
+	if a.mode != modeNormal {
+		t.Error("a key opened a prompt while busy")
+	}
+	a.render()
+	waitFor(t, func() bool {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyNone})
+		return a.busy == ""
+	}, "bench never ended")
+	lines := strings.Join(lb.Lines(), "\n")
+	if !strings.Contains(lines, "analysis on 1 clean loop(s)") || !strings.Contains(lines, "keys wait") {
+		t.Errorf("the log after:\n%s", lines)
 	}
 }

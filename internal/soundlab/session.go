@@ -64,6 +64,7 @@ type Session struct {
 	// fit and compressOpt size the searches rip, fit and compress run
 	fit         fitOptions
 	compressOpt compressOptions
+	refineOpt   refineOptions
 	// song is the timeline being conducted through the live sequencer, nil when
 	// none; ticked says a front end drives conduct, so song play returns at once
 	song   *songPlay
@@ -176,7 +177,7 @@ func NewSession(o Options) (*Session, error) {
 		songs:  newSongDoc(),
 		fit:    defaultFit,
 	}
-	s.compressOpt = defaultCompress
+	s.compressOpt, s.refineOpt = defaultCompress, defaultRefine
 	if f := files.rip; f != "" {
 		if data, err := os.ReadFile(f); err != nil {
 			fmt.Fprintf(out, "rip params %s: %v (built-in used)\n", f, err)
