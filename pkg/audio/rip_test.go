@@ -148,6 +148,56 @@ func TestNoteRenderAndDistances(t *testing.T) {
 	}
 }
 
+// TestRipHearsASecondVoice: a sustained line under the melody, in its register,
+// is heard by the second pass and lost without it, and the first pass's own
+// notes are not traded for it.
+func TestRipHearsASecondVoice(t *testing.T) {
+	const bpm, bars = 140, 8
+	ae, slots := startLoopEngine(t)
+	pad, err := ae.DefinePattern(&Pattern{Name: "pad", Steps: 16, Role: RoleFill, Tracks: []Track{{Instr: InstrLead, Events: []Step{
+		{Pos: 0, Vel: 0.7, Deg: 2, Oct: 1, Dur: 8}, {Pos: 8, Vel: 0.7, Deg: 4, Oct: 1, Dur: 8}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slots[2] = pad
+	buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ExpectedRip(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil)
+	// on the render's own grid: the pad's change on the third beat moves the
+	// bar-line decoder, which is not the rule under test
+	one := DefaultRipParams()
+	one.SecondVoice = 0
+	solo, err := Ripper{Params: one, Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	both, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := CompareRips(solo, want), CompareRips(both, want)
+	// the pad's notes found: its two a bar, by step and absolute pitch, since
+	// the pad moves the key the rip reads its degrees in
+	padNotes := func(r *Rip) int {
+		n := 0
+		for _, bar := range r.Bars {
+			for _, st := range bar.Melody {
+				midi := r.Root + 12*st.Oct + scaleTable[r.Scale][st.Deg]
+				if st.Pos == 0 && midi == DefaultRootNote+15 || st.Pos == 8 && midi == DefaultRootNote+19 {
+					n++
+				}
+			}
+		}
+		return n
+	}
+	t.Logf("one voice %+v, %d pad notes; two voices %+v, %d pad notes of %d", a, padNotes(solo), b, padNotes(both), 2*bars)
+	if padNotes(both) <= padNotes(solo) || b.Melody <= a.Melody {
+		t.Errorf("the second pass found %d pad notes against %d, melody %.2f against %.2f", padNotes(both), padNotes(solo), b.Melody, a.Melody)
+	}
+}
+
 // TestRipParamsAreData is the rule the parameters live by: a [rip] document
 // round-trips, a key outside its range or unknown is refused, and the gene vector
 // is the parameters again.

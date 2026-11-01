@@ -44,7 +44,10 @@ flowchart LR
    autocorrelation under a prior, beats by dynamic programming, the bar line by
    the kick, the snare on two and four, the key's root in the bass and the
    chroma's change, the key and chords by chroma, hits by peak picking, notes by a
-   Viterbi path through the salience, cut and quantized to the grid. `RipParams`
+   Viterbi path through the salience, cut and quantized to the grid, the melody
+   register twice, the second path with the first's notes and their partials
+   cancelled and its notes kept above a share of the first's strength, so two
+   voices in one register are heard where one path heard the louder. `RipParams`
    holds their thresholds as data a search tunes (`tune`).
 4. **Voices.** Each note carries the genes the front end heard it played with
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
@@ -116,8 +119,11 @@ offline (`song <name> <file.wav>`).
 - **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop, a
   gain, a one-pole low-pass, a Schroeder reverb and a noise floor drawn per
   loop, and redraws each tonal track's voice near the registered one, a third
-  of the time on another wave, labelled as played; the draws come from a stream
-  of their own, so a loop's patterns and key are the same with and without it.
+  of the time on another wave, labelled as played; `gen` draws beats, melodies
+  and bass lines from the key for three loops in five per part, since the bank
+  alone repeats its few melodies and a model trained on it learns them, not
+  pitch. Both draw from streams of their own, so a loop's bank patterns and key
+  are the same with and without them.
 - **Model.** `ripnet.Spec`: eighty bands in, width 128, four heads, four layers,
   feed-forward 512, a window of 64 frames either side, about 800 thousand
   weights; heads for the onset, the three drums, the sixty-nine pitches, voicing,
@@ -252,6 +258,18 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   its pitches are far behind, which is the head with the most classes and the
   least training. The shipped bank's few melodies cap what a corpus can teach:
   more patterns and more steps before the model is trusted with a melody.
+- The fourth pass, the melody register tracked twice: the sample's melody has 36
+  notes where one path had 25, nine steps carrying two; the song rips back at
+  0.76 through the mel-fitted voices and 0.86 after two rounds of `refine`,
+  the second line costing the melody's own self-consistency (0.67 against
+  0.90), since two notes on a step through one voice do not rip back as two.
+  On a render with a sustained pad under the test loop's melody the second pass
+  finds eight of the pad's sixteen notes where one path found none, the first
+  of each bar and seldom the second, which the first path's note on the same
+  pitch a fifth below the bass's partial has already spent. None of the
+  sample's 36 notes is longer than three steps where the violin holds six to
+  twelve: the path flips between the semitone bins a vibrato crosses, the next
+  decoder item ([todo](todo.md#tune-the-rip)).
 - The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
   where the analysis heard 86, F major where it heard A# harmonic minor (its
   fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips

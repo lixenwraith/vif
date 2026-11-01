@@ -232,7 +232,15 @@ that proves wrong or that a document now states, and link the document instead.
   count `bench` prints.
 - An augmented corpus draws its room, mix and voices from a stream seeded apart
   from the loop's patterns and key, so `corpus` with and without `aug` renders
-  the same music; a test comparing the two relies on it.
+  the same music; a test comparing the two relies on it. Generated parts register
+  under `corpus_*` names replaced in place each loop, and `corpus` leaves those
+  names out of the bank's pools, or the next draw would include the last loop's
+  generated patterns and no two runs would draw alike.
+- A second voice in a register is found by masking the first path's notes with
+  their partials (the octave, the twelfth, the double octave and the seventeenth
+  and nineteenth, a semitone either side) before the path runs again; masking
+  the fundamental alone finds the octave ghost. The gate is relative to the first
+  path's mean note strength, so a clean render's second pass yields nothing.
 
 ## Locks
 

@@ -1257,12 +1257,13 @@ The search over the parameters is in place (`tune`), as are the corpus the
 engine exports (`corpus`), the model, its trainer (`tool/rip-train`) and the
 front-end seam. What remains, in the design's order:
 
-1. A corpus beyond the shipped bank: `corpus ... aug` puts a room, a mix and
-   voices of random genes behind each loop; what it still lacks is a codec, more
-   patterns than the shipped bank (the loops repeat its few melodies), chance
-   steps graded as optional rather than as misses, and a small set of real
-   recordings with hand-checked notes held out for validation, so neither a
-   model nor a tuned set learns the synthesizer.
+1. A corpus beyond the shipped bank: `corpus ... aug gen` puts a room, a mix
+   and voices of random genes behind each loop and draws beats, melodies and
+   bass lines from the key; what it still lacks is a codec, chords and two
+   lines in one register among the generated parts, chance steps graded as
+   optional rather than as misses, and a small set of real recordings with
+   hand-checked notes held out for validation, so neither a model nor a tuned
+   set learns the synthesizer.
 2. A longer training run of `ripnet.Spec` on that corpus, measured with `bench`
    against the analysis on clean and augmented loops and by ear on the held-out
    recordings (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then
@@ -1272,9 +1273,16 @@ front-end seam. What remains, in the design's order:
 3. A bass attack reads as a kick and a chord's attack as a snare in the analysis:
    a harmonic check on the hit (a percussive rise with a pitched tail is a note)
    until the model takes the front end.
-4. Two voices in one register, chromatic notes and key changes within a recording
-   are outside the model: a second pass with the first estimate cancelled, and a
-   key per phrase.
+4. Chromatic notes and key changes within a recording are outside the model: a
+   key per phrase. Two voices in one register have their second pass now; a
+   third, and a chord's inner notes, do not.
+5. A sustained note with vibrato reads as a flurry: the sample's violin holds
+   notes for six to twelve steps and the transcript has none longer than three,
+   the pitch path flipping between the two semitone bins the vibrato crosses.
+   A pitch prior that holds a semitone wobble (a higher cost for a one-semitone
+   move than per semitone of a leap, or the salience smoothed across the
+   neighbours before the path), measured on a rendered vibrato voice once the
+   voices have one, and on the sample by the count of long notes.
 
 ### Close the rip's loop
 
@@ -1292,8 +1300,10 @@ rip are in place; what remains:
 2. Matching by reconstruction: a bar's distance to a member as the rip of the
    member's render against the bar, in place of `BarDistance`, with `Memoize`
    paying for each render once; measure it against the mechanical grouping.
-3. Several voices in a register: notes clustered by their genes before the fit,
-   the second pluck apart from the first on the sample recording.
+3. Several voices in a register: the second path hears a second line now, but
+   both lines share the register's one fitted voice; cluster the notes by their
+   genes, or by their lengths and attacks until a model names them, and fit a
+   voice per cluster, so the violin and the pluck each get their own.
 4. The fit's sample notes are the mix around them: subtract the other register's
    estimate from the recording before the mel frames, or fit on the frames a
    trained front end attributes to the note.

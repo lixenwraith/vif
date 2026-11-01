@@ -37,6 +37,7 @@ type RipParams struct {
 	Switch        float64 `toml:"switch"`         // its cost of a note starting or ending
 	Retrigger     float64 `toml:"retrigger"`      // the fraction of a note's peak salience it dips under before a rise is a new note
 	MinNote       float64 `toml:"min_note"`       // seconds a note lasts at least
+	SecondVoice   float64 `toml:"second_voice"`   // the strength, against the melody's, a second voice in its register is kept from; 0 hears one
 }
 
 func DefaultRipParams() RipParams {
@@ -44,6 +45,7 @@ func DefaultRipParams() RipParams {
 		TempoPrior: 120, TempoWidth: 1, Tightness: 100,
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
+		SecondVoice: 0.5,
 	}
 }
 
@@ -74,6 +76,7 @@ var ripGenes = []ripGene{
 	{"switch", 0.1, 0.8, func(p *RipParams) *float64 { return &p.Switch }},
 	{"retrigger", 0.2, 0.7, func(p *RipParams) *float64 { return &p.Retrigger }},
 	{"min_note", 0.03, 0.15, func(p *RipParams) *float64 { return &p.MinNote }},
+	{"second_voice", 0, 0.9, func(p *RipParams) *float64 { return &p.SecondVoice }},
 }
 
 func (g *ripGene) get(p *RipParams) float64 {
@@ -1121,21 +1124,69 @@ func (g *ripGrid) drums(r *Rip, hits [InstrClap][]ripHit) {
 type ripNote struct {
 	start, end, midi int
 	vel              float64
+	strength         float64 // mean salience over the note
+	second           bool    // heard under another note of the register
 	wave             int
 	voice            []float64
+}
+
+// notes tracks the register's loudest line, and in the melody register a second
+// line with the first's notes and their partials cancelled, kept where its notes
+// reach SecondVoice of the first's strength: two voices in one register, a
+// violin under a pluck, where one path heard only the louder.
+func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
+	first := f.path(lo, hi, p, nil)
+	if p.SecondVoice <= 0 || lo < RipMelodyLow || len(first) == 0 {
+		return first
+	}
+	mask := make([]bool, f.frames()*RipPitches)
+	var strength float64
+	for _, n := range first {
+		strength += n.strength
+		for t := n.start; t < n.end; t++ {
+			for _, h := range [...]int{0, 12, 19, 24, 28, 31} {
+				for d := -1; d <= 1; d++ {
+					if m := n.midi + h + d; m >= RipMinMIDI && m < RipMaxMIDI {
+						mask[t*RipPitches+m-RipMinMIDI] = true
+					}
+				}
+			}
+		}
+	}
+	strength /= float64(len(first))
+	for _, n := range f.path(lo, hi, p, mask) {
+		if n.strength >= p.SecondVoice*strength {
+			n.second = true
+			first = append(first, n)
+		}
+	}
+	return first
 }
 
 // notes tracks the pitch between lo and hi through every frame, a hidden path
 // scored by salience against the costs of moving and of starting or ending a
 // note, and cuts the track into notes, a note that dips and rises again being
 // two. A note shorter than MinNote is not one.
-func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
+// path is one line through a register: a hidden path through the salience,
+// masked where mask says, scored against the costs of moving and of starting
+// or ending a note, cut into notes; the reference loudness is the register's
+// own, masked or not.
+func (f *RipFrames) path(lo, hi int, p RipParams, mask []bool) []ripNote {
 	states := hi - lo // then the unvoiced state
-	sal := func(t, s int) float64 { return float64(f.Salience[t*RipPitches+lo+s-RipMinMIDI]) }
+	raw := func(t, s int) float64 { return float64(f.Salience[t*RipPitches+lo+s-RipMinMIDI]) }
+	sal := raw
+	if mask != nil {
+		sal = func(t, s int) float64 {
+			if mask[t*RipPitches+lo+s-RipMinMIDI] {
+				return 0
+			}
+			return raw(t, s)
+		}
+	}
 	peaks := make([]float64, f.frames())
 	for t := range peaks {
 		for s := range states {
-			peaks[t] = max(peaks[t], sal(t, s))
+			peaks[t] = max(peaks[t], raw(t, s))
 		}
 	}
 	sorted := slices.Clone(peaks)
@@ -1193,7 +1244,8 @@ func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 	minFrames := max(int(p.MinNote/f.Hop), 1)
 	flush := func(n ripNote, sum float64) {
 		if n.end-n.start >= minFrames {
-			n.vel = min(max(0.3, sum/float64(n.end-n.start)/ref), 1)
+			n.strength = sum / float64(n.end-n.start)
+			n.vel = min(max(0.3, n.strength/ref), 1)
 			n.wave, n.voice = f.voiceOver(n.start, n.end)
 			notes = append(notes, n)
 		}
@@ -1266,8 +1318,12 @@ func (f *RipFrames) place(g ripGrid, r *Rip, n ripNote, part func(*RipBar) *[]St
 	deg, oct := degreeIn(n.midi, r.Root, scaleTable[r.Scale])
 	dur := min(max(int(math.Round(float64(n.end-n.start)/g.stepFrames())), 1), MaxPatternLen)
 	s := Step{Pos: step, Vel: n.vel, Deg: deg, Oct: oct, Dur: dur}
+	// a second voice's note joins another pitch on its step; otherwise the
+	// louder of two on one step is kept
 	evs := part(&r.Bars[bar])
-	if i := slices.IndexFunc(*evs, func(e Step) bool { return e.Pos == step }); i >= 0 {
+	if i := slices.IndexFunc(*evs, func(e Step) bool {
+		return e.Pos == step && (!n.second || e.Deg == deg && e.Oct == oct)
+	}); i >= 0 {
 		if (*evs)[i].Vel < s.Vel {
 			(*evs)[i] = s
 		}
