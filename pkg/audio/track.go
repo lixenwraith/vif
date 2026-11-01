@@ -89,7 +89,7 @@ func (p *PatternPlayer) TriggerStep(step, samplesPerStep int, h *harmony, rng *r
 			if dur <= 0 {
 				dur = 1
 			}
-			midi := h.resolve(ev.Deg, ev.Oct, tr.FollowChord)
+			midi := h.resolve(ev.Deg, ev.Oct, ev.Acc, tr.FollowChord)
 			if delay > 0 {
 				p.schedule(midi, vel, dur*samplesPerStep, tr.Instr, delay)
 			} else {

@@ -585,7 +585,8 @@ func TestDeleteKey(t *testing.T) {
 
 // TestTakeLandsOnTheKeysDegrees: take writes the notes played onto the degrees of
 // the key that sound them, a chord's notes kept apart on their step, and a note
-// outside the key moves to the nearest degree, the lower on a tie.
+// outside the key lands on the nearest degree, the lower on a tie, with an
+// accidental for the semitone left.
 func TestTakeLandsOnTheKeysDegrees(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
@@ -596,13 +597,16 @@ func TestTakeLandsOnTheKeysDegrees(t *testing.T) {
 	if len(d.Track) != 1 || d.Track[0].Instr != "piano" {
 		t.Fatalf("want one piano track:\n%s", out.String())
 	}
-	type at struct{ pos, deg, oct int }
+	type at struct{ pos, deg, oct, acc int }
 	var got []at
 	for _, e := range d.Track[0].Event {
-		got = append(got, at{e.Pos, e.Deg, e.Oct})
+		got = append(got, at{e.Pos, e.Deg, e.Oct, e.Acc})
 	}
-	if want := []at{{0, 0, 1}, {4, 2, 1}, {4, 4, 1}, {8, 1, 1}}; !slices.Equal(got, want) {
-		t.Fatalf("take events %v, want %v (F#3 on F)", got, want)
+	if want := []at{{0, 0, 1, 0}, {4, 2, 1, 0}, {4, 4, 1, 0}, {8, 1, 1, 1}}; !slices.Equal(got, want) {
+		t.Fatalf("take events %v, want %v (F#3 as F sharp)", got, want)
+	}
+	if !strings.Contains(out.String(), "1 note(s) outside E2 phrygian carry an accidental") {
+		t.Fatalf("take must say what carries an accidental:\n%s", out.String())
 	}
 }
 
@@ -893,8 +897,13 @@ rip %s loop
 ! rip %s loop                        # the names are taken
 rip %s quiet 4 nodrums
 ls pattern loop*
+! notes nothing
+notes loop
 validate all
 `, filepath.Join(t.TempDir(), "missing.wav"), wav, wav, wav))
+	if !strings.Contains(out.String(), "note(s) at") || !strings.Contains(out.String(), "bar 1 step") {
+		t.Errorf("notes listed no transcript:\n%s", out.String())
+	}
 	if !s.pats.has("loop_beat_1") || !s.pats.isDirty("loop_beat_1") {
 		t.Fatalf("no dirty loop_beat_1 in the document:\n%s", out.String())
 	}
@@ -1047,9 +1056,10 @@ save pattern %s
 		t.Errorf("fit replaced no voice:\n%s", out.String())
 	}
 	// a refinement round: the voices and the steps each kept only when the song
-	// rips back nearer, and the song still valid after
+	// sounds more like the recording, judged on the recording's own frames with
+	// the rip-back reported beside it, and the song still valid after
 	runOrFatal(t, s, &out, "! refine nothing\nrefine loop 1\nvalidate all\n")
-	if !strings.Contains(out.String(), "before refining") || !strings.Contains(out.String(), "round 1: patterns") {
+	if !strings.Contains(out.String(), "like the recording (pitch") || !strings.Contains(out.String(), "before refining") || !strings.Contains(out.String(), "round 1: patterns") {
 		t.Errorf("refine reported no round:\n%s", out.String())
 	}
 	if err := audio.ValidateSong(d); err != nil {

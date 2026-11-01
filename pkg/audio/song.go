@@ -269,7 +269,7 @@ func (r *Rip) Pattern(name, group string, part RipPart, lo, hi int) *PatternDef 
 		var evs []StepDef
 		for b := lo; b < hi; b++ {
 			for _, s := range pick(&r.Bars[b]) {
-				evs = append(evs, StepDef{Pos: s.Pos + (b-lo)*StepsPerBar, Vel: s.Vel, Deg: s.Deg, Oct: s.Oct, Dur: min(s.Dur, MaxPatternLen)})
+				evs = append(evs, StepDef{Pos: s.Pos + (b-lo)*StepsPerBar, Vel: s.Vel, Deg: s.Deg, Oct: s.Oct, Acc: s.Acc, Dur: min(s.Dur, MaxPatternLen)})
 			}
 		}
 		if len(evs) > 0 {

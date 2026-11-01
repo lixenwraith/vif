@@ -366,8 +366,9 @@ func (s *Session) has(name string) bool {
 }
 
 // cmdTake adds a track of one tonal voice playing the notes of a take, each at its
-// step on the degree of the mirrored key nearest its pitch, the later of two on one
-// step and pitch kept: what the keys write when a recording ends
+// step on the degree of the mirrored key nearest its pitch with an accidental for
+// the rest, the later of two on one step and pitch kept: what the keys write when
+// a recording ends
 func cmdTake(s *Session, a []string) error {
 	d, ok := s.pats.get(a[0])
 	if !ok {
@@ -377,8 +378,8 @@ func cmdTake(s *Session, a []string) error {
 	if !ok || instr.IsDrum() {
 		return fmt.Errorf("%q: not a tonal voice", a[1])
 	}
-	type at struct{ pos, deg, oct int }
-	notes, snapped := map[at]audio.StepDef{}, 0
+	type at struct{ pos, midi int }
+	notes, accidentals := map[at]audio.StepDef{}, 0
 	for _, n := range a[2:] {
 		f := strings.Split(n, ":")
 		e := audio.StepDef{Dur: 1, Vel: 0.8}
@@ -396,11 +397,10 @@ func cmdTake(s *Session, a []string) error {
 		if err != nil || len(f) < 2 || len(f) > 4 || e.Pos < 0 || e.Pos >= d.Steps {
 			return fmt.Errorf("note %q: want <pos>:<midi>[:<steps>[:<vel>]], pos under %d", n, d.Steps)
 		}
-		exact := false
-		if e.Deg, e.Oct, exact = s.degreeOf(midi); !exact {
-			snapped++
+		if e.Deg, e.Oct, e.Acc = audio.PitchStep(s.root, s.scale, midi); e.Acc != 0 {
+			accidentals++
 		}
-		notes[at{e.Pos, e.Deg, e.Oct}] = e
+		notes[at{e.Pos, midi}] = e
 	}
 	tr := audio.TrackDef{Instr: audio.InstrumentName(instr), Humanize: 0.15}
 	for _, e := range notes {
@@ -410,8 +410,8 @@ func cmdTake(s *Session, a []string) error {
 	d.Track = append(d.Track, tr)
 	s.pats.markDirty(a[0])
 	fmt.Fprintf(s.out, "take: %d note(s) into %s, track %d (%s)\n", len(tr.Event), a[0], len(d.Track)-1, tr.Instr)
-	if snapped > 0 {
-		fmt.Fprintf(s.out, "%d note(s) outside %s moved to the nearest degree\n", snapped, s.keyName())
+	if accidentals > 0 {
+		fmt.Fprintf(s.out, "%d note(s) outside %s carry an accidental\n", accidentals, s.keyName())
 	}
 	return nil
 }

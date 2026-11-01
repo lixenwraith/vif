@@ -11,6 +11,7 @@ type Step struct {
 	Vel  float64
 	Deg  int     // scale degree (tonal only)
 	Oct  int     // octave offset (tonal only)
+	Acc  int     // semitones off the degree, an accidental (tonal only)
 	Dur  int     // steps (tonal only); <=0 = 1
 	Prob float64 // 0 or 1 = always
 }

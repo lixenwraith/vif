@@ -38,10 +38,11 @@ const fitTail = 0.25
 // ripped is a recording ripped this session: what was heard, and the samples it
 // was heard in, so fit and compress work on it without the file
 type ripped struct {
-	rip  *audio.Rip
-	x    []float64
-	rate int
-	file string
+	rip   *audio.Rip
+	x     []float64
+	rate  int
+	file  string
+	sound *audio.RipSound // the recording as Fidelity hears it, heard on first use
 }
 
 func cmdFit(s *Session, a []string) error {
@@ -64,6 +65,36 @@ func cmdFit(s *Session, a []string) error {
 		}
 		s.voices.put(v, false)
 		fmt.Fprintf(s.out, "voice %s: %s, registered; the patterns naming it play it\n", v.Name, cmp.Or(v.Wave, "sine"))
+	}
+	return nil
+}
+
+// cmdNotes lists a rip's transcript, the notes as heard before the grid, each
+// with the bar and step it fell on, its pitch as the key's degree with any
+// accidental, its length and loudness, so a listener checks the rip by eye.
+func cmdNotes(s *Session, a []string) error {
+	rp, ok := s.rips[a[0]]
+	if !ok {
+		return fmt.Errorf("%q: nothing ripped under that name this session (rip first)", a[0])
+	}
+	r := rp.rip
+	fmt.Fprintf(s.out, "%s: %d note(s) at %d bpm in %s %s, tuned %+.0f cents, the first bar from %.2fs\n", a[0], len(r.Notes), r.BPM, noteName(r.Root), scaleName(r.Scale), r.Tuning, r.Downbeat)
+	marks := [...]string{"bb", "b", "", "#", "x"}
+	for _, n := range r.Notes {
+		line := "melody"
+		switch {
+		case n.Bass:
+			line = "bass"
+		case n.Second:
+			line = "under"
+		}
+		where, span := "before the first bar", 60/float64(max(r.BPM, 1))/audio.StepsPerBeat
+		if i := sort.SearchFloat64s(r.Beats, n.Start+1e-9) - 1; i >= 0 && i+1 < len(r.Beats) {
+			span = (r.Beats[i+1] - r.Beats[i]) / audio.StepsPerBeat
+			where = fmt.Sprintf("bar %d step %2d", i/audio.BeatsPerBar+1, audio.StepsPerBeat*(i%audio.BeatsPerBar)+int(math.Round((n.Start-r.Beats[i])/span)))
+		}
+		deg, oct, acc := audio.PitchStep(r.Root, r.Scale, n.MIDI)
+		fmt.Fprintf(s.out, "%-6s %7.3fs %-20s %-4s degree %d%s octave %d, %.1f step(s) at %.2f\n", line, n.Start, where, noteName(n.MIDI), deg, marks[acc+2], oct, (n.End-n.Start)/span, n.Vel)
 	}
 	return nil
 }

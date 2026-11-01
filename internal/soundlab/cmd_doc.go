@@ -197,8 +197,16 @@ func cmdRip(s *Session, a []string) error {
 		}
 		notes, under, low = notes+len(b.Melody), under+len(b.Under), low+len(b.Bass)
 	}
-	fmt.Fprintf(s.out, "ripped %s: %d bpm, %s, %d bar(s) from %.2fs; kicks %d snares %d hats %d, melody notes %d and %d under, bass notes %d\n",
-		a[0], r.BPM, s.keyName(), len(r.Bars), r.Downbeat, hits[audio.InstrKick], hits[audio.InstrSnare], hits[audio.InstrHihat], notes, under, low)
+	from := fmt.Sprintf("from %.2fs", r.Downbeat)
+	if r.Downbeat < 0 {
+		from = fmt.Sprintf("the first a pickup bar from %.2fs before the recording", -r.Downbeat)
+	}
+	tuned := ""
+	if r.Tuning <= -5 || r.Tuning >= 5 {
+		tuned = fmt.Sprintf(" tuned %+.0f cents", r.Tuning)
+	}
+	fmt.Fprintf(s.out, "ripped %s: %d bpm, %s%s, %d bar(s) %s; kicks %d snares %d hats %d, melody notes %d and %d under, bass notes %d\n",
+		a[0], r.BPM, s.keyName(), tuned, len(r.Bars), from, hits[audio.InstrKick], hits[audio.InstrSnare], hits[audio.InstrHihat], notes, under, low)
 	names := make([]string, 0, len(defs))
 	for _, d := range defs {
 		names = append(names, d.Name)

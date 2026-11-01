@@ -251,6 +251,39 @@ func (s *Session) songScore(d *audio.SongDef, want *audio.Rip) (audio.RipScore, 
 	return audio.CompareRips(got, want), nil
 }
 
+// songJudge is how much a song sounds like the recording it was ripped from: its
+// render heard through the front end beside the recording, bar by bar, with no
+// rip between them to mishear both the same way.
+func (s *Session) songJudge(d *audio.SongDef, rp *ripped) (audio.RipFidelity, error) {
+	want, err := s.soundOf(rp)
+	if err != nil {
+		return audio.RipFidelity{}, err
+	}
+	buf, err := s.renderSong(d)
+	if err != nil {
+		return audio.RipFidelity{}, err
+	}
+	r := s.ripper()
+	r.Grid = &audio.RipGrid{BPM: d.BPM}
+	got, err := r.Sound(buf, audio.AudioSampleRate, nil)
+	if err != nil {
+		return audio.RipFidelity{}, err
+	}
+	return audio.Fidelity(got, want), nil
+}
+
+// soundOf is the recording as Fidelity hears it, heard once per rip
+func (s *Session) soundOf(rp *ripped) (*audio.RipSound, error) {
+	if rp.sound == nil {
+		snd, err := s.ripper().Sound(rp.x, rp.rate, rp.rip.Beats)
+		if err != nil {
+			return nil, err
+		}
+		rp.sound = snd
+	}
+	return rp.sound, nil
+}
+
 // renderSong plays a song offline, the dirty patterns it names applied first
 func (s *Session) renderSong(d *audio.SongDef) ([]float64, error) {
 	tl, err := s.songTimeline(d)
@@ -449,12 +482,22 @@ func cmdRefine(s *Session, a []string) error {
 // recording's rip, so a voice or a step stays only when the song rips back
 // nearer; it stops when a round gains too little
 func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, o refineOptions) error {
-	score, err := s.songScore(d, rp.rip)
+	report := func(when string) (float64, error) {
+		fid, err := s.songJudge(d, rp)
+		if err != nil {
+			return 0, err
+		}
+		score, err := s.songScore(d, rp.rip)
+		if err != nil {
+			return 0, err
+		}
+		fmt.Fprintf(s.out, "%s sounds %.2f like the recording (pitch %.2f timbre %.2f onset %.2f) and rips back at %.2f %s\n", name, fid.Total, fid.Pitch, fid.Timbre, fid.Onset, score.Total, when)
+		return fid.Total, nil
+	}
+	total, err := report("before refining")
 	if err != nil {
 		return err
 	}
-	total := score.Total
-	fmt.Fprintf(s.out, "%s rips back at %.2f before refining\n", name, total)
 	for round := 1; round <= rounds; round++ {
 		start := total
 		voiced, err := s.refineVoices(name, rp, d, total, o)
@@ -470,12 +513,12 @@ func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, 
 		fmt.Fprintf(s.out, "round %d: patterns %.2f -> %.2f\n", round, total, stepped)
 		total = stepped
 		if total-start < 0.005 {
-			fmt.Fprintf(s.out, "converged at %.2f after %d round(s)\n", total, round)
-			return nil
+			fmt.Fprintf(s.out, "converged after %d round(s)\n", round)
+			break
 		}
 	}
-	fmt.Fprintf(s.out, "%s rips back at %.2f after %d round(s)\n", name, total, rounds)
-	return nil
+	_, err = report("after refining")
+	return err
 }
 
 // refineVoices searches each register's voice by the song's score: a genome of
@@ -506,12 +549,12 @@ func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base f
 				failure = err
 				return math.Inf(-1)
 			}
-			sc, err := s.songScore(d, rp.rip)
+			fid, err := s.songJudge(d, rp)
 			if err != nil {
 				failure = err
 				return math.Inf(-1)
 			}
-			return sc.Total
+			return fid.Total
 		})
 		seeds := [][]float64{voiceGenome(*at)}
 		for _, v := range audio.RegisteredVoices() {
@@ -571,15 +614,14 @@ func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base f
 	return base, nil
 }
 
-// refinePatterns searches the velocities and lengths of the tonal steps of the
-// patterns a song names, scored by the song's render ripped back on its grid,
-// the current steps seeding the pool; a better set goes into the document and
-// the registry, else the steps stay as they were. The registry holds each
-// candidate while it is scored, so the search runs on one worker.
+// refinePatterns searches the song's tonal steps, each one's velocity, length
+// and pitch, a semitone or an octave either way, for the render the recording's
+// frames like best; a step whose velocity falls to silence is dropped at the end.
 func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o refineOptions) (float64, error) {
 	type step struct {
 		pat     string
 		trk, ev int
+		drum    bool
 	}
 	var steps []step
 	var names []string
@@ -596,8 +638,9 @@ func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o r
 			originals[n] = clonePatternDef(pd)
 			names = append(names, n)
 			for ti := range pd.Track {
+				instr, _ := audio.InstrumentByName(pd.Track[ti].Instr)
 				for ei := range pd.Track[ti].Event {
-					steps = append(steps, step{n, ti, ei})
+					steps = append(steps, step{n, ti, ei, instr.IsDrum()})
 				}
 			}
 		}
@@ -619,20 +662,29 @@ func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o r
 		}
 		return nil
 	}
+	const genes = 4 // a step's velocity, length, semitones and octaves off
+	root, scale := d.Root, d.ScaleID()
 	apply := func(g []float64) error {
 		for i, st := range steps {
 			pd, _ := s.pats.get(st.pat)
+			was := originals[st.pat].Track[st.trk].Event[st.ev]
 			ev := &pd.Track[st.trk].Event[st.ev]
-			ev.Vel, ev.Dur = g[2*i], int(g[2*i+1])
+			ev.Vel, ev.Dur = g[genes*i], int(g[genes*i+1])
+			if st.drum {
+				continue
+			}
+			midi := audio.StepPitch(root, scale, was.Deg, was.Oct, was.Acc) + int(math.Round(g[genes*i+2])) + 12*int(math.Round(g[genes*i+3]))
+			ev.Deg, ev.Oct, ev.Acc = audio.PitchStep(root, scale, min(max(midi, audio.RipMinMIDI), audio.RipMaxMIDI-1))
 		}
 		return register()
 	}
-	seed := make([]float64, 2*len(steps))
+	seed := make([]float64, genes*len(steps))
 	bounds := make([]genetic.ParameterBounds, len(seed))
 	for i, st := range steps {
 		ev := originals[st.pat].Track[st.trk].Event[st.ev]
-		seed[2*i], seed[2*i+1] = min(max(ev.Vel, 0.1), 1), float64(max(ev.Dur, 1))+0.5
-		bounds[2*i], bounds[2*i+1] = genetic.ParameterBounds{Min: 0.1, Max: 1}, genetic.ParameterBounds{Min: 1, Max: 4.999}
+		seed[genes*i], seed[genes*i+1] = min(max(ev.Vel, 0.1), 1), float64(max(ev.Dur, 1))+0.5
+		bounds[genes*i], bounds[genes*i+1] = genetic.ParameterBounds{Min: 0, Max: 1}, genetic.ParameterBounds{Min: 1, Max: 4.999}
+		bounds[genes*i+2], bounds[genes*i+3] = genetic.ParameterBounds{Min: -2.5, Max: 2.499}, genetic.ParameterBounds{Min: -1.5, Max: 1.499}
 	}
 	var failure error
 	eval := genetic.Memoize(func(g []float64) string {
@@ -646,12 +698,12 @@ func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o r
 			failure = err
 			return math.Inf(-1)
 		}
-		sc, err := s.songScore(d, rp.rip)
+		fid, err := s.songJudge(d, rp)
 		if err != nil {
 			failure = err
 			return math.Inf(-1)
 		}
-		return sc.Total
+		return fid.Total
 	})
 	cfg := genetic.DefaultConfig()
 	cfg.PoolSize, cfg.EliteCount, cfg.MaxIterations = max(o.pool, 4), max(o.pool/4, 1), o.generations
@@ -670,7 +722,7 @@ func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o r
 	e.SetSeeds([][]float64{slices.Clone(seed)})
 	e.SetSchedule(genetic.AdaptiveStrength[float64](cfg.PerturbationRate, 0.15, 0.02, 0.4, 1.5))
 	e.SetTerminator(func(p *genetic.Pool[[]float64, float64], gen int) bool {
-		fmt.Fprintf(s.out, "generation %d: score %.3f\n", gen, p.Stats.BestScore)
+		fmt.Fprintf(s.out, "generation %d: steps %.3f\n", gen, p.Stats.BestScore)
 		return failure != nil
 	})
 	pool, err := e.Run(context.Background())
@@ -689,9 +741,21 @@ func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o r
 	if err := apply(pool.Members[0].Data); err != nil {
 		return base, err
 	}
+	dropped := 0
 	for _, n := range names {
+		pd, _ := s.pats.get(n)
+		for ti := range pd.Track {
+			before := len(pd.Track[ti].Event)
+			pd.Track[ti].Event = slices.DeleteFunc(pd.Track[ti].Event, func(e audio.StepDef) bool { return e.Vel < 0.05 })
+			dropped += before - len(pd.Track[ti].Event)
+		}
 		s.pats.markDirty(n) // the document moved; a save keeps it, apply already did
-		s.pats.clearDirty(n)
+	}
+	if err := register(); err != nil {
+		return base, err
+	}
+	if dropped > 0 {
+		fmt.Fprintf(s.out, "%d step(s) fell silent and were dropped\n", dropped)
 	}
 	return pool.Members[0].Score, nil
 }

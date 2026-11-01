@@ -863,7 +863,7 @@ func (a *tuiApp) gridCell(at []audio.StepDef, held, drum bool, s, cw int) stepCe
 			lo = e
 		}
 	}
-	text := strconv.Itoa(lo.Deg)
+	text := strconv.Itoa(lo.Deg) + strings.Repeat("#", max(lo.Acc, 0)) + strings.Repeat("b", max(-lo.Acc, 0))
 	if len(at) > 1 {
 		text += "+"
 	}

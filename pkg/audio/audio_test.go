@@ -211,6 +211,7 @@ func TestPatternValidationRejects(t *testing.T) {
 		{"steps zero", func(p *Pattern) { p.Steps = 0 }},
 		{"instrument out of range", func(p *Pattern) { p.Tracks[0].Instr = InstrumentCount }},
 		{"octave out of range", func(p *Pattern) { p.Tracks[0].Events[0].Oct = 99 }},
+		{"accidental out of range", func(p *Pattern) { p.Tracks[0].Events[0].Acc = 3 }},
 	}
 	for _, c := range cases {
 		p := base()
