@@ -1277,16 +1277,16 @@ front-end seam. What remains, in the design's order:
 3. A bass attack reads as a kick and a chord's attack as a snare in the analysis:
    a harmonic check on the hit (a percussive rise with a pitched tail is a note)
    until the model takes the front end.
-4. Chromatic notes and key changes within a recording are outside the model: a
-   key per phrase. Two voices in one register have their second pass now; a
+4. Key changes within a recording are outside the model: a key per phrase (a
+   chromatic note is an accidental on its step now). Two voices in one register have their second pass now; a
    third, and a chord's inner notes, do not.
-5. A sustained note with vibrato reads as a flurry: the sample's violin holds
-   notes for six to twelve steps and the transcript has none longer than three,
-   the pitch path flipping between the two semitone bins the vibrato crosses.
-   A pitch prior that holds a semitone wobble (a higher cost for a one-semitone
-   move than per semitone of a leap, or the salience smoothed across the
-   neighbours before the path), measured on a rendered vibrato voice once the
-   voices have one, and on the sample by the count of long notes.
+5. A sustained note with a wide vibrato can still read as two: the sample's
+   wobble was its tuning, forty cents off A440, which the front end reads first
+   now, and its notes hold for four to eight steps; a vibrato wider than a
+   quarter tone would still cross rows. A pitch prior that holds a semitone
+   wobble (a higher cost for a one-semitone move than per semitone of a leap,
+   or the salience smoothed across the neighbours before the path), measured
+   on a rendered vibrato voice once the voices have one.
 
 ### Close the rip's loop
 
@@ -1297,10 +1297,11 @@ front-end seam. What remains, in the design's order:
 dictionary and the song (`compress`, `song`) and the song's score against the
 rip are in place; what remains:
 
-1. The refinement loop (`refine`) refines the voices and the tonal steps'
-   velocities and lengths; what it does not yet move is the notes themselves,
-   their pitch and their steps, which the front end sets, and the drum part.
-   Measure its convergence on rendered loops whose truth is known.
+1. The refinement loop (`refine`) moves the voices and the tonal steps'
+   velocities, lengths and pitches, judged by `Fidelity` against the
+   recording's own frames; what it does not yet move is a step's position or
+   the drum part, and a note the front end never heard it cannot add. Measure
+   its convergence on rendered loops whose truth is known.
 2. Matching by reconstruction: a bar's distance to a member as the rip of the
    member's render against the bar, in place of `BarDistance`, with `Memoize`
    paying for each render once; measure it against the mechanical grouping.

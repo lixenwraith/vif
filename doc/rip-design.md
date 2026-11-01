@@ -44,7 +44,10 @@ flowchart LR
    autocorrelation under a prior, beats by dynamic programming, the bar line by
    the kick, the snare on two and four, the key's root in the bass and the
    chroma's change, the key and chords by chroma, hits by peak picking, notes by a
-   Viterbi path through the salience, cut and quantized to the grid, the bass
+   Viterbi path through the salience, cut and quantized to the grid with the
+   notes' median lag against the beats taken out, the recording's tuning read
+   first so the pitch table sits where its notes do, a pickup bar opened before
+   the first full bar when sound leads into it, the bass
    register's salience from a window four times the rip's and the rip's own
    together (the long one's semitones at 110 Hz, the short one's onsets), the
    melody register twice, the second path with the first's notes and their partials
@@ -75,7 +78,7 @@ flowchart LR
    song, which bar plays which (`SongDef`, a `[[song]]` in the pattern
    document). Matching assigns each bar to a member: today by `BarDistance`, the
    steps two bars do not share over the steps either has, a hit by drum and step
-   and a note by step, degree and octave; next by reconstruction, the rip of the
+   and a note by step and pitch, an accidental keeping a note off the key; next by reconstruction, the rip of the
    member's render against the bar's.
 6. **Compression.** Bars within a threshold of one another, a few per cent of
    their steps, merge into one member. The mechanical pass runs first
@@ -96,11 +99,17 @@ flowchart LR
    when the render's downbeat carries no kick; that rip is compared with the
    recording's (`CompareRips`), and the score `compress` prints is how much of
    the rip survives as the song, drums, melody and bass apart: a grade of the
-   fitted voices and the dictionary, with those decoders graded by `tune`. Next, voices and patterns are refined in turn against it
-   until it stops improving, the model hearing the render too, so its voice
-   estimate of the render against its estimate of the recording is a second,
-   cheaper distance for the voice search; a step that does not improve the
-   score is undone.
+   fitted voices and the dictionary, with those decoders graded by `tune`.
+   `refine` then moves the voices and the steps in turn, judged not by that
+   rip-back, which cannot see the rip's own mistakes (a note misheard in the
+   recording is misheard the same way in the render), but by `Fidelity`: the
+   render and the recording heard through one front end (`Ripper.Sound`), their
+   pitch salience, log-mel bands and onset strength compared bar by bar on each
+   one's own beats; the steps' pitches move a semitone or an octave either way
+   and a step may fall silent, until a round gains nothing, and a move that
+   does not improve it is undone. Next, the model hearing the render too, so
+   its voice estimate of the render against its estimate of the recording is a
+   second, cheaper distance for the voice search.
 
 The output is a sound document of voices, a pattern document of patterns and the
 song, which bar plays which at what tempo and in what key. The song is the form
@@ -208,7 +217,10 @@ and the checkpoint earn their keep.
    the dictionary, matching and compression; the song document, rendered offline
    and conducted live; the song's score against the rip; the augmented corpus, a
    first training run and `bench`; the refinement loop (`refine`), voices and
-   steps refined in turn against the song's score.
+   steps refined in turn; the seventh pass, where the sample was misheard
+   upstream of everything: the recording's tuning read first, a pickup bar,
+   the notes' lag, accidentals on steps, and `refine` judged by `Fidelity`
+   with the steps' pitches among its moves.
 2. Next: a longer training run, on more loops and more patterns than the shipped
    bank, measured by `bench` and by ear on the sample until the model front end
    beats the analysis on clean and augmented renders; the matching scored by
@@ -360,3 +372,14 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
 - **The score is the rip of the render.** A song is as good as the rip it rips
   back to; the same `CompareRips` grades a parameter set, a model and a
   compression, so their numbers compare.
+- **The judge is the recording itself.** The rip-back is blind to the rip's
+  own errors, so a search on it polishes a wrong transcript; `refine` judges a
+  render by `Fidelity`, its frames against the recording's through one front
+  end, so a wrong note costs what the ear hears, and the rip-back stays the
+  number that compares across passes.
+- **Accidentals, not a chromatic scale.** A step keeps its degree in the key
+  and carries the semitones left as `acc`, so the harmony, the chord following
+  and the editor's rows keep their meaning while a transcript loses no note.
+- **The front end reads the tuning.** A440 is an assumption a recording need
+  not share: forty cents off put every pitch of the sample between two salience
+  rows, and no decoder downstream could have repaired the wobble that made.

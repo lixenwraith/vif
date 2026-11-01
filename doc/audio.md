@@ -246,7 +246,9 @@ crossfading slots:
 
 A pattern has up to 64 steps, 32 tracks, and 512 events per track. A track sets
 its instrument, chord-following, and humanization; its events set step position,
-velocity, scale degree, octave, duration, and probability. The tonal voices are
+velocity, scale degree, octave, an accidental (`acc`, the semitones off the
+degree, so a note outside the key is written exactly), duration, and
+probability. The tonal voices are
 data: a `[[voice]]` of the sound document names an instrument and its synthesis,
 an oscillator stage (sine, saw or square) through a resonant low-pass under a
 filter envelope into an ADSR, or a string, as a delay line or as its partials
@@ -432,14 +434,22 @@ plays the estimate at once. `ReadWAV` reads the file, any PCM or float width.
 
 The analysis runs at 22.05 kHz over 93 ms frames every 11.6 ms, each split into
 a harmonic and a percussive part by the medians across time and across frequency
-around it. The percussive onsets, each drum's band against its own peak with the
+around it. It reads the recording's tuning first (`Rip.Tuning`): over windows
+four times longer, every spectral peak votes its offset from the nearest
+semitone, and the pitch table is read on the mean offset, so a clip tuned forty
+cents flat, where every note sits between two semitone rows and wobbles between
+them, reads as one in tune. The percussive onsets, each drum's band against its own peak with the
 kick's counting double, give the tempo (autocorrelation under a log-Gaussian
 prior centred on 120 BPM, folded into the sequencer's range) and the beats (a
 dynamic programme that holds to the period). A hit is a kick by its rise under
 100 Hz, a hihat by its rise above 5 kHz, a snare by the middle with some noise
 above 5 kHz, and may be two drums at once; the bar line is the phase whose
 downbeats carry a kick, no snare and the key's root in the bass, the snare on two
-and four, and the most change of chroma. The key is the root and scale whose tones
+and four, and the most change of chroma; a note or a hit more than half a step
+before the first bar line opens a pickup bar before it, its beats extrapolated
+into the time before the recording when it begins inside that bar
+(`Rip.Downbeat` is negative then), so a phrase that leads into the first bar is
+kept. The key is the root and scale whose tones
 hold the most chroma and whose others the least, the bass register voting for the
 tonic. Pitch salience sums a candidate's partials, the bass register's from its
 first three, read from a window four times longer as well as the rip's own,
@@ -449,7 +459,9 @@ the short window says when a note starts and ends; the melody's salience has
 the bass's partials cancelled, and those of a neighbour nearly as strong, the
 other bin of a wobble, so a bass's octave does not read as a melody note; a hidden path through the frames, scored
 against the costs of moving and of starting or ending a note, is cut into notes,
-which land on the key's nearest degree. The melody register is tracked twice:
+which land on the key's nearest degree with the semitones left as an accidental,
+the notes' median lag against the beats taken out first, since a pitch path
+starts a few frames after the attack the beats sit on. The melody register is tracked twice:
 the second path runs with the first's notes and their partials cancelled, and
 its notes are kept where they reach `second_voice` of the first's strength, so a
 slow line under a pluck is heard too, in the bar's own `Under` steps, a track
@@ -463,7 +475,13 @@ is the hand-set start. The engine grades a set itself: `RenderMusic` plays
 registered patterns offline, `ExpectedRip` is the rip a perfect listener would
 make of them, and `CompareRips` scores a rip against it, tempo within two BPM,
 bars found, and the drums, melody and bass as the harmonic mean of recall and
-precision per step and pitch. Soundlab's `tune` searches the parameters over
+precision per step and pitch. `Fidelity` grades a render against the recording
+itself rather than against its rip, which cannot see its own mistakes: both are
+heard through one front end into a `RipSound` (`Ripper.Sound`: the frames, the
+log-mel bands and the beats, a rip's or a pinned grid's), paired bar by bar on
+each one's own beats, and the cosine of their pitch salience, of their mel bands
+and of their onset strength over each beat is averaged, each one where they
+sound alike; soundlab's `refine` judges the voices and the steps by it. Soundlab's `tune` searches the parameters over
 loops rendered from the registered patterns across tempos and keys with
 `pkg/genetic`'s generational engine, the current set seeding the pool, and writes
 a set that beats it ([TODO](todo.md#tune-the-rip) for what the corpus still
