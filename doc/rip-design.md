@@ -344,6 +344,29 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   `refine`, against the analysis path's 0.66 and 0.88. The model's transcript
   is the weaker one today, as `bench` said it would be; the loop lifts either.
 
+- The seventh pass, the sample heard on its own tuning: the transcript's note
+  list (soundlab's `notes`) showed A#2 taking turns with A2 in sixteenths, G2
+  with G#2 at the chord change, C5 with C#5 in the lead, ten melody notes
+  before the first bar line dropped, and harmonic minor for a scale only the
+  wobble's leakage voted for. A histogram of the spectral peaks' offsets from
+  the nearest semitone put the recording 41 cents flat of A440, three quarters
+  of the weight at one offset: every pitch sat between two salience rows, and
+  no decoder downstream could have repaired that. With the tuning read first,
+  a pickup bar from 0.45 s before the recording and the notes' lag taken out,
+  the rip is A# minor at 86 bpm, four bars, 88 notes, 42 steps in the melody's
+  first line, 27 in the second and 9 in the bass; the bass is a held A#2, C#3
+  and G#2 line where it was 25 wobbling fragments, the lead holds notes for
+  three and four steps, and 3 notes sit off the key where 10 did, kept as
+  accidentals. The song sounds 0.75 like the recording before `refine` (pitch
+  0.81, timbre 0.69, onset 0.73) and rips back at 0.87 without a kit on either
+  side; two rounds judged by fidelity lift it to 0.81 (0.83, 0.74, 0.86) and
+  the rip-back to 0.89 (melody 0.70, bass 0.80), all of it from the voices:
+  the step search, 312 genes over six generations of twelve, kept no move in
+  either round, so the moves or the budget are the next question there. The
+  rip-back is no longer what `refine` maximizes and still passes the sixth
+  pass's 0.88, which a voice could game with attacks the analysis heard the
+  same notes from; the judge and the self-grade agree on this clip.
+
 ## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved
