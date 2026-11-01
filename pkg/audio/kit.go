@@ -11,9 +11,10 @@ type kit struct {
 	tuning   float64     // the ratio every tonal note's frequency is scaled by; zero reads as one, A440
 }
 
-// ratio is the tuning's frequency ratio, one when unset
+// ratio is the tuning's frequency ratio, one when unset and for the nil kit
+// tests play on
 func (k *kit) ratio() float64 {
-	if k.tuning <= 0 {
+	if k == nil || k.tuning <= 0 {
 		return 1
 	}
 	return k.tuning
