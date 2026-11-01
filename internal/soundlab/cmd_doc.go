@@ -189,6 +189,8 @@ func cmdRip(s *Session, a []string) error {
 	s.eng.SetMusicBPM(r.BPM)
 	s.eng.SetHarmony(r.Root, r.Scale, r.Progression)
 	s.root, s.scale, s.prog = r.Root, r.Scale, r.Progression
+	s.tuning = r.Tuning // the transport plays at the recording's pitch, as the song will
+	s.eng.SetTuning(r.Tuning)
 	var hits [audio.InstrClap]int
 	notes, under, low := 0, 0, 0
 	for _, b := range r.Bars {

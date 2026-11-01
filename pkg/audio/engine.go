@@ -558,7 +558,7 @@ func (ae *AudioEngine) SetMusicSwing(a float64) { ae.send(audioCmd{op: cmdSwing,
 // offline renders', within a semitone either way: the pitch standard of a
 // recording a render stands in for.
 func (ae *AudioEngine) SetTuning(cents float64) {
-	cents = min(max(cents, -100), 100)
+	cents = min(max(cents, -MaxTuningCents), MaxTuningCents)
 	ae.tuning.Store(math.Float64bits(cents))
 	ae.send(audioCmd{op: cmdTuning, f1: math.Pow(2, cents/1200)})
 }

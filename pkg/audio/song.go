@@ -45,6 +45,7 @@ type SongDef struct {
 	Root   int        `toml:"root"`
 	Scale  string     `toml:"scale"`
 	Chords []int      `toml:"chords,omitempty"` // the chord degrees the key cycles, as key takes them
+	Tuning float64    `toml:"tuning,omitempty"` // cents off A440 it plays at, a recording's
 	Bars   [][]string `toml:"bars"`
 }
 
@@ -85,6 +86,9 @@ func ValidateSong(d *SongDef) error {
 	}
 	if len(d.Bars) == 0 {
 		errs = append(errs, fmt.Errorf("song %q: no bars", d.Name))
+	}
+	if d.Tuning < -MaxTuningCents || d.Tuning > MaxTuningCents || d.Tuning != d.Tuning {
+		errs = append(errs, fmt.Errorf("song %q: tuning %v cents outside a semitone of A440", d.Name, d.Tuning))
 	}
 	for i, b := range d.Bars {
 		if len(b) > MusicSlots {
@@ -318,7 +322,7 @@ func (r *Rip) Cluster(part RipPart, threshold float64) []int {
 // leaves its slot silent; one assigned a bar that stands for no group of its own
 // still plays that bar's pattern.
 func (r *Rip) Song(name string, assign [RipParts][]int) ([]*PatternDef, *SongDef) {
-	song := &SongDef{Name: name, BPM: r.BPM, Root: r.Root, Scale: ScaleName(r.Scale), Chords: slices.Clone(r.Progression), Bars: make([][]string, len(r.Bars))}
+	song := &SongDef{Name: name, BPM: r.BPM, Root: r.Root, Scale: ScaleName(r.Scale), Chords: slices.Clone(r.Progression), Tuning: r.Tuning, Bars: make([][]string, len(r.Bars))}
 	for i := range song.Bars {
 		song.Bars[i] = make([]string, MusicSlots)
 	}

@@ -68,6 +68,7 @@ type Session struct {
 	// song is the timeline being conducted through the live sequencer, nil when
 	// none; ticked says a front end drives conduct, so song play returns at once
 	song   *songPlay
+	tuning float64 // cents off A440 the transport plays at, a rip's or the tuning verb's
 	ticked bool
 }
 

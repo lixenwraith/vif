@@ -157,6 +157,23 @@ func cmdBPM(s *Session, a []string) error {
 	return nil
 }
 
+// cmdTuning shows or sets the cents the transport plays off A440: a rip sets it
+// to the recording's, a song to its own; bare, it says where it is.
+func cmdTuning(s *Session, a []string) error {
+	if len(a) == 0 {
+		fmt.Fprintf(s.out, "tuning %+.0f cents off A440\n", s.tuning)
+		return nil
+	}
+	f, err := strconv.ParseFloat(a[0], 64)
+	if err != nil || f < -audio.MaxTuningCents || f > audio.MaxTuningCents {
+		return fmt.Errorf("tuning %q: want cents within %d of A440", a[0], audio.MaxTuningCents)
+	}
+	s.tuning = f
+	s.eng.SetTuning(f)
+	fmt.Fprintf(s.out, "tuning %+.0f cents off A440\n", f)
+	return nil
+}
+
 func cmdSwing(s *Session, a []string) error {
 	f, err := strconv.ParseFloat(a[0], 64)
 	if err != nil {
