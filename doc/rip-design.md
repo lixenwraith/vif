@@ -269,6 +269,10 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   the centred windows give every event. A sustained pad under the loop's melody
   still moves the key estimate, G and B outvoting E, and the rip's own key then
   snaps the F to E: the pad test's melody number says that, not the paths.
+  With the partials of the bass's near-equal neighbour cancelled as well, the
+  A3 and A#3 the sample's melody carried at the bass's octave on its first
+  steps are gone: 30 melody notes where the fourth pass had 36, the six that
+  went the bass's.
 - The fourth pass, the melody register tracked twice: the sample's melody has 36
   notes where one path had 25, nine steps carrying two; the song rips back at
   0.76 through the mel-fitted voices and 0.86 after two rounds of `refine`,

@@ -684,7 +684,7 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 		// the bass is the strongest pitch of its register by its first partials,
 		// read from the long window; those partials come out of what the melody
 		// is read from
-		bass, bassAt := -1, 0.0
+		bass, second, bassAt, secondAt := -1, -1, 0.0, 0.0
 		var longRow []float64
 		if c < len(hLong) {
 			longRow = hLong[c]
@@ -699,14 +699,22 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 			}
 			f.Salience = append(f.Salience, float32(s))
 			bch[(RipMinMIDI+i)%12] += s
-			if s > bassAt {
-				bass, bassAt = i, s
+			switch {
+			case s > bassAt:
+				bass, second, bassAt, secondAt = i, bass, s, bassAt
+			case s > secondAt:
+				second, secondAt = i, s
 			}
 		}
+		// the bass's partials come out of what the melody is read from; a
+		// neighbour nearly as strong, the other bin of a wobble, loses its too
 		copy(cancelled, hm)
-		if bass >= 0 {
+		for _, i := range []int{bass, second} {
+			if i < 0 || i == second && (secondAt < 0.7*bassAt || second-bass > 2 || bass-second > 2) {
+				continue
+			}
 			for h := 1; h <= 3; h++ {
-				if b := int(pitchHz[bass]*float64(h)/binHz + 0.5); b+1 < bins && b >= 1 {
+				if b := int(pitchHz[i]*float64(h)/binHz + 0.5); b+1 < bins && b >= 1 {
 					cancelled[b-1], cancelled[b], cancelled[b+1] = 0, 0, 0
 				}
 			}

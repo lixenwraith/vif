@@ -446,8 +446,8 @@ first three, read from a window four times longer as well as the rip's own,
 the two combined by their geometric mean so the long window tells the
 semitones apart at 110 Hz, where the short window's main lobe spans two, and
 the short window says when a note starts and ends; the melody's salience has
-the bass's partials cancelled, so a bass's octave does not read as a melody
-note; a hidden path through the frames, scored
+the bass's partials cancelled, and those of a neighbour nearly as strong, the
+other bin of a wobble, so a bass's octave does not read as a melody note; a hidden path through the frames, scored
 against the costs of moving and of starting or ending a note, is cut into notes,
 which land on the key's nearest degree. The melody register is tracked twice:
 the second path runs with the first's notes and their partials cancelled, and

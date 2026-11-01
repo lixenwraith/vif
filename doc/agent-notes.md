@@ -243,6 +243,11 @@ that proves wrong or that a document now states, and link the document instead.
   short one keeps the timing and the long one the pitch; and give a pinned
   grid the two-frame lead the beat tracker already has, or a note on the beat
   lands on the step before.
+- A bass that wobbles between two semitones leaks its octave into the melody
+  register on the frames the cancellation picks the other bin: cancel the
+  partials of the strongest bass pitch and of a neighbour within two semitones
+  at seventy per cent of it, and the ghosts go while a clean render's melody
+  keeps its score.
 - A sustained pad changes the key the chroma votes for, and a note the key
   lacks snaps to its neighbour: a melody score that falls when a pad is added
   may be the key, not the pitch paths. Read the rip's root before blaming the
