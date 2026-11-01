@@ -51,7 +51,7 @@ func init() {
 		"refine":   {"refine <name> [rounds]", "close the loop over a song compress made of a recording ripped as <name>: each round (3) fits the voices again and searches the tonal steps' velocities and lengths, a step kept when the song rips back nearer the recording's rip; minutes a round", 1, 2, cmdRefine},
 		"bench":    {"bench [loops] [bars]", "grade the analysis, and the model when one loaded, on fresh loops (8) of bars (4) bars the engine renders, clean and augmented: the mean score of each rip against the loop's expected rip", 0, 2, cmdBench},
 		"run":      {"run <file.slab>", "run a script's lines in this session, strict as -s is: a line that fails stops it with its number; quit in it ends the script, not the session", 1, 1, cmdRun},
-		"song":     {"song <name> [file.wav|play]", "show a song's bars; render it to a WAV; or play it through the sequencer, the slots changed at the bar lines (music stop ends it)", 1, 2, cmdSong},
+		"song":     {"song <name> [file.wav|play|score]", "show a song's bars; render it to a WAV; play it through the sequencer, the slots changed at the bar lines (music stop ends it); or score it, how it sounds against the recording ripped as <name> and how it rips back", 1, 2, cmdSong},
 
 		"ls":    {"ls sound|pattern|voice|song [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
 		"show":  {"show <name>[.path]", "bare name = full TOML; deeper = leaf value or keys", 1, 1, cmdShow},

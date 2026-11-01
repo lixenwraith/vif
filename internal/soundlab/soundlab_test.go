@@ -899,10 +899,17 @@ rip %s quiet 4 nodrums
 ls pattern loop*
 ! notes nothing
 notes loop
+compress quiet 5
+song quiet score
 validate all
 `, filepath.Join(t.TempDir(), "missing.wav"), wav, wav, wav))
 	if !strings.Contains(out.String(), "note(s) at") || !strings.Contains(out.String(), "bar 1 step") {
 		t.Errorf("notes listed no transcript:\n%s", out.String())
+	}
+	// a rip without a kit is compared without one, so the render's attacks
+	// cannot grade the song on drums it has none of; score prints both grades
+	if !strings.Contains(out.String(), "drums 1.00") || !strings.Contains(out.String(), "quiet sounds ") {
+		t.Errorf("the kitless song's score:\n%s", out.String())
 	}
 	if !s.pats.has("loop_beat_1") || !s.pats.isDirty("loop_beat_1") {
 		t.Fatalf("no dirty loop_beat_1 in the document:\n%s", out.String())

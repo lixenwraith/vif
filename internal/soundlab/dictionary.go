@@ -248,7 +248,42 @@ func (s *Session) songScore(d *audio.SongDef, want *audio.Rip) (audio.RipScore, 
 	if err != nil {
 		return audio.RipScore{}, err
 	}
+	// a rip without a kit (nodrums) is compared without one, or the render's
+	// plucks read as kicks and grade the song on drums it has none of
+	if !hasDrums(want) {
+		for b := range got.Bars {
+			got.Bars[b].Drums = [audio.InstrClap][]audio.Step{}
+		}
+	}
 	return audio.CompareRips(got, want), nil
+}
+
+func hasDrums(r *audio.Rip) bool {
+	for _, b := range r.Bars {
+		for d := range b.Drums {
+			if len(b.Drums[d]) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// reportSong prints how a song sounds against the recording it was ripped from
+// and how it rips back, drums, melody and bass apart; the fidelity's total is
+// what the searches maximize
+func (s *Session) reportSong(name string, d *audio.SongDef, rp *ripped, when string) (float64, error) {
+	fid, err := s.songJudge(d, rp)
+	if err != nil {
+		return 0, err
+	}
+	score, err := s.songScore(d, rp.rip)
+	if err != nil {
+		return 0, err
+	}
+	fmt.Fprintf(s.out, "%s sounds %.2f like the recording (pitch %.2f timbre %.2f onset %.2f) and rips back at %.2f (drums %.2f melody %.2f bass %.2f)%s\n",
+		name, fid.Total, fid.Pitch, fid.Timbre, fid.Onset, score.Total, score.Drums, score.Melody, score.Bass, when)
+	return fid.Total, nil
 }
 
 // songJudge is how much a song sounds like the recording it was ripped from: its
@@ -339,6 +374,14 @@ func cmdSong(s *Session, a []string) error {
 	}
 	if a[1] == "play" {
 		return s.playSong(d)
+	}
+	if a[1] == "score" {
+		rp, ok := s.rips[a[0]]
+		if !ok {
+			return fmt.Errorf("%q: nothing ripped under that name this session (rip first; the song's name is its rip's)", a[0])
+		}
+		_, err := s.reportSong(a[0], d, rp, "")
+		return err
 	}
 	buf, err := s.renderSong(d)
 	if err != nil {
@@ -482,19 +525,7 @@ func cmdRefine(s *Session, a []string) error {
 // recording's rip, so a voice or a step stays only when the song rips back
 // nearer; it stops when a round gains too little
 func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, o refineOptions) error {
-	report := func(when string) (float64, error) {
-		fid, err := s.songJudge(d, rp)
-		if err != nil {
-			return 0, err
-		}
-		score, err := s.songScore(d, rp.rip)
-		if err != nil {
-			return 0, err
-		}
-		fmt.Fprintf(s.out, "%s sounds %.2f like the recording (pitch %.2f timbre %.2f onset %.2f) and rips back at %.2f %s\n", name, fid.Total, fid.Pitch, fid.Timbre, fid.Onset, score.Total, when)
-		return fid.Total, nil
-	}
-	total, err := report("before refining")
+	total, err := s.reportSong(name, d, rp, " before refining")
 	if err != nil {
 		return err
 	}
@@ -517,7 +548,7 @@ func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, 
 			break
 		}
 	}
-	_, err = report("after refining")
+	_, err = s.reportSong(name, d, rp, " after refining")
 	return err
 }
 
