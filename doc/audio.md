@@ -442,8 +442,12 @@ downbeats carry a kick, no snare and the key's root in the bass, the snare on tw
 and four, and the most change of chroma. The key is the root and scale whose tones
 hold the most chroma and whose others the least, the bass register voting for the
 tonic. Pitch salience sums a candidate's partials, the bass register's from its
-first three and the melody's with the bass's partials cancelled, so a bass's
-octave does not read as a melody note; a hidden path through the frames, scored
+first three, read from a window four times longer as well as the rip's own,
+the two combined by their geometric mean so the long window tells the
+semitones apart at 110 Hz, where the short window's main lobe spans two, and
+the short window says when a note starts and ends; the melody's salience has
+the bass's partials cancelled, so a bass's octave does not read as a melody
+note; a hidden path through the frames, scored
 against the costs of moving and of starting or ending a note, is cut into notes,
 which land on the key's nearest degree. The melody register is tracked twice:
 the second path runs with the first's notes and their partials cancelled, and

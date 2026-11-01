@@ -236,6 +236,17 @@ that proves wrong or that a document now states, and link the document instead.
   under `corpus_*` names replaced in place each loop, and `corpus` leaves those
   names out of the bank's pools, or the next draw would include the last loop's
   generated patterns and no two runs would draw alike.
+- A long analysis window reads an onset early by about a quarter of the
+  window: the bass's notes from the 4×2048 window started a step before the
+  grid said, and lagging its rows made them start late instead. Multiply the
+  long window's salience by the short window's (their geometric mean) so the
+  short one keeps the timing and the long one the pitch; and give a pinned
+  grid the two-frame lead the beat tracker already has, or a note on the beat
+  lands on the step before.
+- A sustained pad changes the key the chroma votes for, and a note the key
+  lacks snaps to its neighbour: a melody score that falls when a pad is added
+  may be the key, not the pitch paths. Read the rip's root before blaming the
+  tracker.
 - A second voice in a register is found by masking the first path's notes with
   their partials (the octave, the twelfth, the double octave and the seventeenth
   and nineteenth, a semitone either side) before the path runs again; masking

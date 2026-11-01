@@ -44,8 +44,10 @@ flowchart LR
    autocorrelation under a prior, beats by dynamic programming, the bar line by
    the kick, the snare on two and four, the key's root in the bass and the
    chroma's change, the key and chords by chroma, hits by peak picking, notes by a
-   Viterbi path through the salience, cut and quantized to the grid, the melody
-   register twice, the second path with the first's notes and their partials
+   Viterbi path through the salience, cut and quantized to the grid, the bass
+   register's salience from a window four times the rip's and the rip's own
+   together (the long one's semitones at 110 Hz, the short one's onsets), the
+   melody register twice, the second path with the first's notes and their partials
    cancelled and its notes kept above a share of the first's strength, so two
    voices in one register are heard where one path heard the louder. `RipParams`
    holds their thresholds as data a search tunes (`tune`).
@@ -258,6 +260,15 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   its pitches are far behind, which is the head with the most classes and the
   least training. The shipped bank's few melodies cap what a corpus can teach:
   more patterns and more steps before the model is trusted with a melody.
+- The bass read from a window four times longer: the loop test's melody rises
+  from 0.92 to 0.95 and its bass holds at 1, the sample's bass notes last two
+  to four steps where they flipped every step between A#2 and A2, and the
+  pinned grid stops reading a bass note a step early once the long window's
+  reading is held to the short window's timing (the geometric mean of the two;
+  the long one alone read onsets early) and the grid takes the two-frame lead
+  the centred windows give every event. A sustained pad under the loop's melody
+  still moves the key estimate, G and B outvoting E, and the rip's own key then
+  snaps the F to E: the pad test's melody number says that, not the paths.
 - The fourth pass, the melody register tracked twice: the sample's melody has 36
   notes where one path had 25, nine steps carrying two; the song rips back at
   0.76 through the mel-fitted voices and 0.86 after two rounds of `refine`,
