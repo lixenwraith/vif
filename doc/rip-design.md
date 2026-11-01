@@ -294,8 +294,14 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   model 0.40 (0.67, 0.71, 0.50, 0.11, 0.18) and 0.38 (0.58, 0.73, 0.53, 0.07,
   0.13). Each loop was seen about three hundred times: the model learned the
   corpus, not the music. The trainer now holds loops out, scores them as it
-  goes and exports the step that scored best on them; the number that
-  matters is the held-out loss, not the training loss, and `bench` after it.
+  goes and exports the step whose decoder heads scored best on them; the
+  number that matters is the held-out loss, not the training loss, and `bench`
+  after it. A 6000-step run with thirty loops held out showed the held-out
+  loss near 3.6 against a training loss near 1.0 by step 2000, the wave head
+  learning each loop's voice by heart and the pitch head's held-out loss not
+  moving from 0.73: with hundreds of loops of random voices and rooms there is
+  too little to generalise from, so the next run takes thousands of loops,
+  each seen a few times.
 - The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
   where the analysis heard 86, F major where it heard A# harmonic minor (its
   fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips

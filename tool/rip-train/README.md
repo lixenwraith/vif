@@ -67,8 +67,11 @@ file when it exists; `--dim`, `--layers`, `--heads`, `--ffn` and
 `ripnet` loads any of them as long as the inputs and heads are its.
 
 A tenth of the loops are held out (`--holdout` sets how many, 0 none) and
-scored every `--every` steps in fixed windows; the step that scores best on them
-is what `--out` gets, whatever the last step's training loss says. The training
+scored every `--every` steps in fixed windows; the step whose onset, drum,
+pitch and voicing heads score best on them, the heads the decoders read, is
+what `--out` gets, whatever the last step's training loss says (the wave and
+voice heads name a voice and learn the corpus's voices by heart, so they are
+reported and not followed). The training
 loss keeps falling long after the held-out loss turns: a run of 12000 steps on
 300 loops reached a training loss of 0.31 and scored worse on fresh loops than
 a run of 3000, having seen each loop three hundred times. Read the held-out

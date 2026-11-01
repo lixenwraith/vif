@@ -65,8 +65,20 @@ func cmdTune(s *Session, a []string) error {
 }
 
 // corpus renders loops of the registered rhythm, melody and bass patterns, drawn
-// by the seed over the tempos and the keys, each with its expected rip
+// by the seed over the tempos and the keys, each with its expected rip, all held
+// at once: what a search over them wants
 func (s *Session) corpus(o tuneOptions) ([]tuneLoop, error) {
+	loops := make([]tuneLoop, 0, o.loops)
+	err := s.eachLoop(o, func(_ int, l tuneLoop) error {
+		loops = append(loops, l)
+		return nil
+	})
+	return loops, err
+}
+
+// eachLoop renders the corpus's loops one at a time to visit, so an export of
+// thousands holds one in memory
+func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error {
 	var byRole [audio.MusicSlots][]audio.PatternID
 	for _, p := range audio.RegisteredPatterns() {
 		if strings.HasPrefix(p.Name, "corpus_") {
@@ -78,10 +90,9 @@ func (s *Session) corpus(o tuneOptions) ([]tuneLoop, error) {
 		}
 	}
 	if len(byRole[0]) == 0 || len(byRole[1]) == 0 || len(byRole[3]) == 0 {
-		return nil, errors.New("tune needs registered rhythm, melody and bass patterns (builtin pattern, apply)")
+		return errors.New("tune needs registered rhythm, melody and bass patterns (builtin pattern, apply)")
 	}
 	rng := rand.New(rand.NewPCG(o.seed, 0x5bd1e995))
-	loops := make([]tuneLoop, 0, o.loops)
 	for i := range o.loops {
 		var slots [audio.MusicSlots]audio.PatternID
 		for slot, pool := range byRole {
@@ -116,14 +127,16 @@ func (s *Session) corpus(o tuneOptions) ([]tuneLoop, error) {
 		buf, err := s.eng.RenderMusic(slots, bpm, o.bars, root, scale, nil, int64(i+1))
 		restore()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if o.aug {
 			buf = degrade(buf, arng)
 		}
-		loops = append(loops, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale, voices: voices})
+		if err := visit(i, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale, voices: voices}); err != nil {
+			return err
+		}
 	}
-	return loops, nil
+	return nil
 }
 
 // genBeat is a beat the bank never had: kicks on one and three with extras, the
@@ -390,14 +403,12 @@ func cmdCorpus(s *Session, a []string) error {
 // little-endian), loop_NNN.json as the events that sound in it with their frames
 // and voices, and corpus.json naming the layout.
 func (s *Session) exportCorpus(dir string, o tuneOptions) error {
-	loops, err := s.corpus(o)
-	if err != nil {
-		return err
-	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	for i, l := range loops {
+	written := 0
+	err := s.eachLoop(o, func(i int, l tuneLoop) error {
+		written++
 		base := filepath.Join(dir, fmt.Sprintf("loop_%03d", i))
 		f, err := os.Create(base + ".wav")
 		if err != nil {
@@ -436,11 +447,12 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 				lab.Events = append(lab.Events, ev)
 			}
 		}
-		if err := writeJSON(base+".json", lab); err != nil {
-			return err
-		}
+		return writeJSON(base+".json", lab)
+	})
+	if err != nil {
+		return err
 	}
-	m := corpusManifest{Version: 1, Loops: len(loops), Rate: audio.RipRate, Hop: audio.RipHop, MelBands: audio.RipMelBands,
+	m := corpusManifest{Version: 1, Loops: written, Rate: audio.RipRate, Hop: audio.RipHop, MelBands: audio.RipMelBands,
 		MinMIDI: audio.RipMinMIDI, Pitches: audio.RipPitches, Drums: []string{"kick", "snare", "hihat"}, Waves: audio.VoiceWaves[:], VoiceGenes: audio.VoiceGeneCount}
 	if err := writeJSON(filepath.Join(dir, "corpus.json"), m); err != nil {
 		return err
@@ -452,7 +464,7 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	if o.gen {
 		how += ", with generated beats, melodies and bass lines"
 	}
-	fmt.Fprintf(s.out, "wrote %d loop(s) of %d bar(s) to %s, %s\n", len(loops), o.bars, dir, how)
+	fmt.Fprintf(s.out, "wrote %d loop(s) of %d bar(s) to %s, %s\n", written, o.bars, dir, how)
 	return nil
 }
 

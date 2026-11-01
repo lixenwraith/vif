@@ -203,13 +203,17 @@ def main() -> None:
         if not val_mels:
             return
         v = evaluate(model, val_mels, val_tgs, args.device)
-        parts = " ".join(f"{k} {x:.3f}" for k, x in v.items() if k != "total")
+        # the decoders read the onset, drum, pitch and voicing heads; the wave and
+        # voice heads name a voice and memorize the corpus's, so they do not pick
+        # the step exported
+        v["decoders"] = v["onset"] + v["drums"] + v["pitch"] + 0.5 * v["voicing"]
+        parts = " ".join(f"{k} {x:.3f}" for k, x in v.items() if k not in ("total", "decoders"))
         mark = ""
-        if v["total"] < best_loss:
-            best_loss, best_step = v["total"], step
+        if v["decoders"] < best_loss:
+            best_loss, best_step = v["decoders"], step
             best_state = {k: t.detach().cpu().clone() for k, t in model.state_dict().items()}
             mark = " (best)"
-        print(f"step {step} held-out {v['total']:.3f} ({parts}){mark}", flush=True)
+        print(f"step {step} held-out {v['total']:.3f}, decoders {v['decoders']:.3f} ({parts}){mark}", flush=True)
 
     while step < args.steps:
         mel, t = batch(loops, args.window, args.batch, rng)
@@ -232,7 +236,7 @@ def main() -> None:
                 torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step}, args.checkpoint)
     if best_state is not None:
         model.load_state_dict(best_state)
-        print(f"best held-out loss {best_loss:.3f} at step {best_step}; exporting that")
+        print(f"best held-out decoders' loss {best_loss:.3f} at step {best_step}; exporting that")
     model.eval()
     ripnet.export(model.cpu(), args.out)
     print(f"wrote {args.out}")
