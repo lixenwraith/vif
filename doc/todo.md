@@ -1257,17 +1257,18 @@ The search over the parameters is in place (`tune`), as are the corpus the
 engine exports (`corpus`), the model, its trainer (`tool/rip-train`) and the
 front-end seam. What remains, in the design's order:
 
-1. A corpus beyond the shipped bank: loops with a mix, a room and a codec
-   between the render and the frames (impulse convolution, noise, equalisation,
-   a low-pass), voices of random genes beside the shipped five, chance steps
-   graded as optional rather than as misses, and a small set of real recordings
-   with hand-checked notes held out for validation, so neither a model nor a
-   tuned set learns the synthesizer.
-2. A training run of `ripnet.Spec` on that corpus, measured against the analysis
-   with `CompareRips` on rendered loops and by ear on the held-out recordings
-   (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then the weights
-   and a tuned parameter set shipped as data, `DefaultRipParams` kept for a
-   recording nothing tuned for.
+1. A corpus beyond the shipped bank: `corpus ... aug` puts a room, a mix and
+   voices of random genes behind each loop; what it still lacks is a codec, more
+   patterns than the shipped bank (the loops repeat its few melodies), chance
+   steps graded as optional rather than as misses, and a small set of real
+   recordings with hand-checked notes held out for validation, so neither a
+   model nor a tuned set learns the synthesizer.
+2. A longer training run of `ripnet.Spec` on that corpus, measured with `bench`
+   against the analysis on clean and augmented loops and by ear on the held-out
+   recordings (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then
+   the weights and a tuned parameter set shipped as data, `DefaultRipParams`
+   kept for a recording nothing tuned for. [Rip design §8](rip-design.md#8-measured-on-the-sample-recording)
+   has the first run's numbers.
 3. A bass attack reads as a kick and a chord's attack as a snare in the analysis:
    a harmonic check on the hit (a percussive rise with a pitched tail is a note)
    until the model takes the front end.
@@ -1284,9 +1285,10 @@ front-end seam. What remains, in the design's order:
 dictionary and the song (`compress`, `song`) and the song's score against the
 rip are in place; what remains:
 
-1. The refinement loop: voices and patterns refined in turn against the song's
-   score, a step that does not improve it undone, convergence measured on the
-   sample recording and on rendered loops.
+1. The refinement loop (`refine`) refines the voices and the tonal steps'
+   velocities and lengths; what it does not yet move is the notes themselves,
+   their pitch and their steps, which the front end sets, and the drum part.
+   Measure its convergence on rendered loops whose truth is known.
 2. Matching by reconstruction: a bar's distance to a member as the rip of the
    member's render against the bar, in place of `BarDistance`, with `Memoize`
    paying for each render once; measure it against the mechanical grouping.

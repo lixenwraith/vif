@@ -7,6 +7,7 @@ package soundlab
 // through the live sequencer (song), and the score of what the compression kept.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -412,4 +413,285 @@ func (s *Session) conduct() {
 		}
 		p.next++
 	}
+}
+
+// refineOptions sizes the pattern search of a refinement round
+type refineOptions struct {
+	generations, pool int
+	seed              uint64
+}
+
+var defaultRefine = refineOptions{generations: 6, pool: 12, seed: 1}
+
+func cmdRefine(s *Session, a []string) error {
+	rp, ok := s.rips[a[0]]
+	if !ok {
+		return fmt.Errorf("%q: nothing ripped under that name this session (rip first)", a[0])
+	}
+	d, ok := s.songs.get(a[0])
+	if !ok {
+		return fmt.Errorf("%q: no song of that name (compress first)", a[0])
+	}
+	rounds := 3
+	if len(a) > 1 {
+		n, err := strconv.Atoi(a[1])
+		if err != nil || n < 1 || n > 50 {
+			return fmt.Errorf("rounds %q: want 1 to 50", a[1])
+		}
+		rounds = n
+	}
+	return s.refine(a[0], rp, d, rounds, s.refineOpt)
+}
+
+// refine closes the loop over a ripped song: each round searches each
+// register's voice and then the velocities and lengths of the song's tonal
+// steps, every candidate judged by the song's render ripped back against the
+// recording's rip, so a voice or a step stays only when the song rips back
+// nearer; it stops when a round gains too little
+func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, o refineOptions) error {
+	score, err := s.songScore(d, rp.rip)
+	if err != nil {
+		return err
+	}
+	total := score.Total
+	fmt.Fprintf(s.out, "%s rips back at %.2f before refining\n", name, total)
+	for round := 1; round <= rounds; round++ {
+		start := total
+		voiced, err := s.refineVoices(name, rp, d, total, o)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(s.out, "round %d: voices %.2f -> %.2f\n", round, total, voiced)
+		total = voiced
+		stepped, err := s.refinePatterns(rp, d, total, o)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(s.out, "round %d: patterns %.2f -> %.2f\n", round, total, stepped)
+		total = stepped
+		if total-start < 0.005 {
+			fmt.Fprintf(s.out, "converged at %.2f after %d round(s)\n", total, round)
+			return nil
+		}
+	}
+	fmt.Fprintf(s.out, "%s rips back at %.2f after %d round(s)\n", name, total, rounds)
+	return nil
+}
+
+// refineVoices searches each register's voice by the song's score: a genome of
+// the voice's genes and wave, seeded with the voice in hand and every registered
+// one, each candidate registered under the register's name while the song's
+// render is ripped back; the voice that rips back nearest stays, the one in hand
+// when none beats it. The registry holds each candidate, so one worker.
+func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base float64, o refineOptions) (float64, error) {
+	for reg, at := range []**audio.VoiceDef{&rp.rip.MelodyVoice, &rp.rip.BassVoice} {
+		if *at == nil {
+			continue
+		}
+		word := [2]string{"melody", "bass"}[reg]
+		vname := name + "_" + word + "_voice"
+		define := func(v *audio.VoiceDef) error {
+			c := v.Clone()
+			c.Name = vname
+			_, err := s.eng.DefineVoice(c)
+			return err
+		}
+		var failure error
+		eval := genetic.Memoize(genomeKey, func(g []float64) float64 {
+			v := voiceFromGenome(g)
+			if audio.ValidateVoice(v) != nil {
+				return math.Inf(-1)
+			}
+			if err := define(v); err != nil {
+				failure = err
+				return math.Inf(-1)
+			}
+			sc, err := s.songScore(d, rp.rip)
+			if err != nil {
+				failure = err
+				return math.Inf(-1)
+			}
+			return sc.Total
+		})
+		seeds := [][]float64{voiceGenome(*at)}
+		for _, v := range audio.RegisteredVoices() {
+			if v.Name != vname {
+				seeds = append(seeds, voiceGenome(v))
+			}
+		}
+		n := audio.VoiceGeneCount + 1
+		bounds := make([]genetic.ParameterBounds, n)
+		for i := range bounds {
+			bounds[i] = genetic.ParameterBounds{Min: 0, Max: 1}
+		}
+		cfg := genetic.DefaultConfig()
+		cfg.PoolSize, cfg.EliteCount, cfg.MaxIterations = max(o.pool, 4), max(o.pool/4, 1), o.generations
+		cfg.Parallelism, cfg.Seed = 1, o.seed+uint64(reg)
+		cfg.PerturbationRate, cfg.PerturbationStrength = 0.15, 0.1
+		e := genetic.NewEngine[[]float64, float64](eval, func(rng *rand.Rand) []float64 {
+			g := make([]float64, n)
+			for i := range g {
+				g[i] = rng.Float64()
+			}
+			return g
+		}, &genetic.TournamentSelector[[]float64, float64]{TournamentSize: 3},
+			&genetic.UniformCombiner[[]float64, float64, float64]{MixProbability: 0.5},
+			&genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect}, cfg)
+		e.SetSeeds(seeds)
+		e.SetSchedule(genetic.AdaptiveStrength[float64](0.15, 0.1, 0.01, 0.4, 1.5))
+		e.SetTerminator(func(p *genetic.Pool[[]float64, float64], gen int) bool {
+			fmt.Fprintf(s.out, "generation %d: %s voice %.3f\n", gen, word, p.Stats.BestScore)
+			return failure != nil
+		})
+		pool, err := e.Run(context.Background())
+		if err == nil {
+			err = failure
+		}
+		if err != nil || len(pool.Members) == 0 || pool.Members[0].Score <= base {
+			if derr := define(*at); err == nil {
+				err = derr
+			}
+			if err != nil {
+				return base, err
+			}
+			fmt.Fprintf(s.out, "the %s voice stays (%.2f)\n", word, base)
+			continue
+		}
+		v := voiceFromGenome(pool.Members[0].Data)
+		if err := define(v); err != nil {
+			return base, err
+		}
+		*at = v
+		named := v.Clone()
+		named.Name = vname
+		s.voices.put(named, false)
+		fmt.Fprintf(s.out, "%s voice: %s, %.2f -> %.2f\n", word, cmp.Or(v.Wave, "sine"), base, pool.Members[0].Score)
+		base = pool.Members[0].Score
+	}
+	return base, nil
+}
+
+// refinePatterns searches the velocities and lengths of the tonal steps of the
+// patterns a song names, scored by the song's render ripped back on its grid,
+// the current steps seeding the pool; a better set goes into the document and
+// the registry, else the steps stay as they were. The registry holds each
+// candidate while it is scored, so the search runs on one worker.
+func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o refineOptions) (float64, error) {
+	type step struct {
+		pat     string
+		trk, ev int
+	}
+	var steps []step
+	var names []string
+	originals := map[string]*audio.PatternDef{}
+	for _, bar := range d.Bars {
+		for slot, n := range bar {
+			if slot == 0 || n == "" || originals[n] != nil {
+				continue
+			}
+			pd, ok := s.pats.get(n)
+			if !ok {
+				continue
+			}
+			originals[n] = clonePatternDef(pd)
+			names = append(names, n)
+			for ti := range pd.Track {
+				for ei := range pd.Track[ti].Event {
+					steps = append(steps, step{n, ti, ei})
+				}
+			}
+		}
+	}
+	if len(steps) == 0 {
+		return base, nil
+	}
+	register := func() error {
+		for _, n := range names {
+			pd, _ := s.pats.get(n)
+			p, err := pd.Pattern()
+			if err == nil {
+				_, err = s.eng.DefinePattern(p)
+			}
+			if err != nil {
+				return fmt.Errorf("pattern %q: %w", n, err)
+			}
+			s.pats.clearDirty(n)
+		}
+		return nil
+	}
+	apply := func(g []float64) error {
+		for i, st := range steps {
+			pd, _ := s.pats.get(st.pat)
+			ev := &pd.Track[st.trk].Event[st.ev]
+			ev.Vel, ev.Dur = g[2*i], int(g[2*i+1])
+		}
+		return register()
+	}
+	seed := make([]float64, 2*len(steps))
+	bounds := make([]genetic.ParameterBounds, len(seed))
+	for i, st := range steps {
+		ev := originals[st.pat].Track[st.trk].Event[st.ev]
+		seed[2*i], seed[2*i+1] = min(max(ev.Vel, 0.1), 1), float64(max(ev.Dur, 1))+0.5
+		bounds[2*i], bounds[2*i+1] = genetic.ParameterBounds{Min: 0.1, Max: 1}, genetic.ParameterBounds{Min: 1, Max: 4.999}
+	}
+	var failure error
+	eval := genetic.Memoize(func(g []float64) string {
+		var b strings.Builder
+		for _, v := range g {
+			fmt.Fprintf(&b, "%.2f,", v)
+		}
+		return b.String()
+	}, func(g []float64) float64 {
+		if err := apply(g); err != nil {
+			failure = err
+			return math.Inf(-1)
+		}
+		sc, err := s.songScore(d, rp.rip)
+		if err != nil {
+			failure = err
+			return math.Inf(-1)
+		}
+		return sc.Total
+	})
+	cfg := genetic.DefaultConfig()
+	cfg.PoolSize, cfg.EliteCount, cfg.MaxIterations = max(o.pool, 4), max(o.pool/4, 1), o.generations
+	cfg.Parallelism, cfg.Seed = 1, o.seed
+	cfg.PerturbationRate, cfg.PerturbationStrength = 2/float64(len(seed)), 0.15
+	e := genetic.NewEngine[[]float64, float64](eval, func(rng *rand.Rand) []float64 {
+		g := slices.Clone(seed) // the current steps, a few moved
+		for range 1 + rng.IntN(3) {
+			i := rng.IntN(len(g))
+			g[i] = bounds[i].Min + rng.Float64()*(bounds[i].Max-bounds[i].Min)
+		}
+		return g
+	}, &genetic.TournamentSelector[[]float64, float64]{TournamentSize: 3},
+		&genetic.UniformCombiner[[]float64, float64, float64]{MixProbability: 0.9},
+		&genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect}, cfg)
+	e.SetSeeds([][]float64{slices.Clone(seed)})
+	e.SetSchedule(genetic.AdaptiveStrength[float64](cfg.PerturbationRate, 0.15, 0.02, 0.4, 1.5))
+	e.SetTerminator(func(p *genetic.Pool[[]float64, float64], gen int) bool {
+		fmt.Fprintf(s.out, "generation %d: score %.3f\n", gen, p.Stats.BestScore)
+		return failure != nil
+	})
+	pool, err := e.Run(context.Background())
+	if err == nil {
+		err = failure
+	}
+	if err != nil || len(pool.Members) == 0 || pool.Members[0].Score <= base {
+		for _, pd := range originals {
+			s.pats.put(pd, false)
+		}
+		if rerr := register(); err == nil {
+			err = rerr
+		}
+		return base, err
+	}
+	if err := apply(pool.Members[0].Data); err != nil {
+		return base, err
+	}
+	for _, n := range names {
+		s.pats.markDirty(n) // the document moved; a save keeps it, apply already did
+		s.pats.clearDirty(n)
+	}
+	return pool.Members[0].Score, nil
 }

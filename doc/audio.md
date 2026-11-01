@@ -491,7 +491,11 @@ bar lines. Soundlab's `compress` runs the grouping, refines the assignment with
 `pkg/genetic` under a term for the patterns in use, rips the song's render back
 on the song's own grid (`Ripper.Grid` pins a known tempo and downbeat and skips
 their decoders) and scores it against the rip; `song` shows, renders or
-conducts a song through the live sequencer. [Rip design](rip-design.md) is where the rip is going from
+conducts a song through the live sequencer; `refine` closes the loop, the
+voices fitted again and the tonal steps' velocities and lengths searched with
+that score as the fitness, a step kept only when it rises; `bench` grades the
+analysis and a loaded model on fresh renders, clean and augmented (`corpus ...
+aug`). [Rip design](rip-design.md) is where the rip is going from
 here: the loop that refines voices and patterns against that score.
 
 What it does not yet tell apart: a bass note's attack from a kick, a plucked

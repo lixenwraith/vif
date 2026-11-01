@@ -221,6 +221,18 @@ that proves wrong or that a document now states, and link the document instead.
 - A command line splits on blanks (`splitArgs`); a path with a space travels in
   double quotes, which the files overlay adds. Quotes at an argument's start are
   grammar now, so a `set` value in quotes loses them.
+- A verb that takes seconds freezes the TUI if it runs in the event loop: the
+  first rip from the files overlay read as a crash. `longVerbs` run on a
+  goroutine behind a working box; while one runs the screen draws the last frame
+  and the log's tail only, so nothing reads the session the goroutine owns, and
+  `LogBuffer` takes a lock because both sides write and read it. A test of such
+  a verb ticks (`KeyNone`) until `busy` clears.
+- `bench` and `tune` loops shorter than four seconds give no rip (a two-bar loop
+  at 176 bpm is 2.7 s): size a test's loops by bars, not loops, and read the
+  count `bench` prints.
+- An augmented corpus draws its room, mix and voices from a stream seeded apart
+  from the loop's patterns and key, so `corpus` with and without `aug` renders
+  the same music; a test comparing the two relies on it.
 
 ## Locks
 

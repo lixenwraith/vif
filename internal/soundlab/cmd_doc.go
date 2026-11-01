@@ -119,11 +119,16 @@ func cmdExport(s *Session, a []string) error {
 // sets the transport's tempo and key to what it heard, so a slot plays the
 // estimate at once. A register the front end heard no voice for gets one fitted
 // by the engine's own renders of its notes. Notes off the key sit on its nearest
-// degree. The rip is kept under its name for fit, compress and song.
+// degree. The rip is kept under its name for fit, compress and song. nodrums
+// leaves the drum part out, for a recording the listener knows has none.
 func cmdRip(s *Session, a []string) error {
 	name := a[1]
 	if err := badName(name); err != nil {
 		return err
+	}
+	nodrums := false
+	if n := len(a); a[n-1] == "nodrums" {
+		nodrums, a = true, a[:n-1]
 	}
 	bars := audio.MaxPatternLen / audio.StepsPerBar
 	if len(a) > 2 {
@@ -145,6 +150,11 @@ func cmdRip(s *Session, a []string) error {
 	r, err := s.ripper().Samples(x, rate)
 	if err != nil {
 		return err
+	}
+	if nodrums {
+		for b := range r.Bars {
+			r.Bars[b].Drums = [audio.InstrClap][]audio.Step{}
+		}
 	}
 	if len(r.Patterns(name, bars)) == 0 {
 		return fmt.Errorf("%s: nothing heard to write", a[0])

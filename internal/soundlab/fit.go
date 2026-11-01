@@ -30,7 +30,7 @@ type fitOptions struct {
 	seed                     uint64
 }
 
-var defaultFit = fitOptions{notes: 6, generations: 12, pool: 24, seed: 1}
+var defaultFit = fitOptions{notes: 6, generations: 8, pool: 16, seed: 1}
 
 // fitTail is how long past a note's end its sample runs, for the release
 const fitTail = 0.25
@@ -123,6 +123,30 @@ func fitSamples(notes []audio.RipNote, n int) []audio.RipNote {
 	return out
 }
 
+// voiceGenome is a voice as a search sees it: its genes and, last, its wave as a
+// fraction of the wave table; voiceFromGenome reads one back
+func voiceGenome(v *audio.VoiceDef) []float64 {
+	w := max(slices.Index(audio.VoiceWaves[:], cmp.Or(v.Wave, "sine")), 0)
+	return append(v.Genes(), (float64(w)+0.5)/float64(len(audio.VoiceWaves)))
+}
+
+func voiceFromGenome(g []float64) *audio.VoiceDef {
+	genes := audio.VoiceGeneCount
+	w := min(max(int(g[genes]*float64(len(audio.VoiceWaves))), 0), len(audio.VoiceWaves)-1)
+	v := audio.VoiceFromGenes(audio.VoiceWaves[w], g[:genes])
+	v.Name = "fitted"
+	return v
+}
+
+// genomeKey names a genome to three decimals, for a cache of its score
+func genomeKey(g []float64) string {
+	var b strings.Builder
+	for _, v := range g {
+		fmt.Fprintf(&b, "%.3f,", v)
+	}
+	return b.String()
+}
+
 // fitVoice searches the voices for the one whose notes, rendered by the engine,
 // sound most like a register's notes in the recording: a genome of the voice's
 // genes and its wave, seeded with every registered voice and the one given,
@@ -146,24 +170,8 @@ func (s *Session) fitVoice(x []float64, rate int, notes []audio.RipNote, prior *
 		targets[i] = target{mel: audio.MelFrames(x[lo:hi], rate), midi: n.MIDI, vel: n.Vel, dur: n.End - n.Start}
 	}
 	genes := audio.VoiceGeneCount
-	waves := float64(len(audio.VoiceWaves))
-	decode := func(g []float64) *audio.VoiceDef {
-		w := min(max(int(g[genes]*waves), 0), len(audio.VoiceWaves)-1)
-		v := audio.VoiceFromGenes(audio.VoiceWaves[w], g[:genes])
-		v.Name = "fitted"
-		return v
-	}
-	encode := func(v *audio.VoiceDef) []float64 {
-		w := max(slices.Index(audio.VoiceWaves[:], cmp.Or(v.Wave, "sine")), 0)
-		return append(v.Genes(), (float64(w)+0.5)/waves)
-	}
-	eval := genetic.Memoize(func(g []float64) string {
-		var b strings.Builder
-		for _, v := range g {
-			fmt.Fprintf(&b, "%.3f,", v)
-		}
-		return b.String()
-	}, func(g []float64) float64 {
+	decode, encode := voiceFromGenome, voiceGenome
+	eval := genetic.Memoize(genomeKey, func(g []float64) float64 {
 		v := decode(g)
 		if audio.ValidateVoice(v) != nil {
 			return math.Inf(-1)

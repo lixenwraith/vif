@@ -13,7 +13,9 @@ Supports interactive REPL, TUI, and headless script execution. The session, its 
 - **Slots**: 0 rhythm, 1 melody, 2 fill, 3 bass, as the game draws them; a melody pattern carries no bass, so slot 1 alone is the melody as authored. The engine's phrase auto-fill is off in soundlab so slots stay deterministic; `fill on` restores it to audition the fill bank.
 - **Audition**: `play`, `hit` and `export` render a spec as authored; vif's per-sound volume and shape table is not applied.
 - **Rip**: `rip <file.wav> <name> [bars]` hears a recording's beat, melody and bass as patterns of up to `bars` bars each (`<name>_beat_1`, `<name>_melody_1`, `<name>_bass_1`, ...), added to the document dirty, and sets the transport's tempo and key to what it heard; `slot` them to hear the estimate, then edit. A register the front end heard no voice for gets one fitted by the engine's own renders of its notes (`<name>_melody_voice`, `<name>_bass_voice`, registered at once; `fit <name> [generations]` fits them again, longer). Notes off the key land on its nearest degree, and a bass note's attack can read as a kick ([Audio §11](../doc/audio.md#11-ripping-a-recording)).
-- **Songs**: `compress <name> [percent]` matches a rip's bars to as few one-bar patterns as a difference of `percent` (5) of their steps allows, per part (`<name>_beat_a`, `_b`, ... `<name>_melody_a` ... `<name>_bass_a` ...), and writes the song `<name>`: which bar plays which, at the rip's tempo and key, a `[[song]]` the pattern document carries, listed by `ls song`, shown by `song <name>`, saved and loaded with the patterns. The song is rendered and ripped back on its own grid, tempo and downbeat pinned, and that rip scored against the recording's, so what the compression and the fitted voices lost is a number. `song <name> <file.wav>` renders it offline; `song <name> play` conducts it through the live sequencer, each bar's patterns landing on its bar line (`music stop` ends it). A rip is kept under its name for the session, so `fit`, `compress` and `song` need no file ([Rip design](../doc/rip-design.md)).
+- **Scripts**: `-s <file.slab>` runs a script and exits; `run <file.slab>` runs one in the session in hand, from the REPL or the TUI's command line, so a recipe (rip, compress, save) is one word. A line that fails stops the script with its number; `quit` in it ends the script alone.
+- **Songs**: `compress <name> [percent]` matches a rip's bars to as few one-bar patterns as a difference of `percent` (5) of their steps allows, per part (`<name>_beat_a`, `_b`, ... `<name>_melody_a` ... `<name>_bass_a` ...), and writes the song `<name>`: which bar plays which, at the rip's tempo and key, a `[[song]]` the pattern document carries, listed by `ls song`, shown by `song <name>`, saved and loaded with the patterns. The song is rendered and ripped back on its own grid, tempo and downbeat pinned, and that rip scored against the recording's, so what the compression and the fitted voices lost is a number. `song <name> <file.wav>` renders it offline; `song <name> play` conducts it through the live sequencer, each bar's patterns landing on its bar line (`music stop` ends it). A rip is kept under its name for the session, so `fit`, `compress`, `refine` and `song` need no file ([Rip design](../doc/rip-design.md)). `refine <name> [rounds]` closes the loop: each round fits the voices again and searches the tonal steps' velocities and lengths, each step kept only when the song's render rips back nearer the recording's rip. `rip ... nodrums` leaves the drum part out of a recording the listener knows has none.
+- **Measuring**: `bench [loops] [bars]` grades the analysis, and the model when one loaded, on fresh loops the engine renders, clean and augmented, by the mean score of each rip against the loop's expected rip; `corpus ... aug` exports loops through a room, a mix and voices of random genes for the trainer.
 - **Voices**: the tonal instruments are `[[voice]]` entries of the sound document, listed by `ls voice`, made by `new voice`, edited by path like a sound and applied into the running mixer, where the next note takes the new voice; a new name is a new instrument a pattern's track names. They load and save with the sounds.
 
 ## Usage
@@ -29,18 +31,29 @@ go run ./cmd/soundlab
 go run ./cmd/soundlab -headless -s script.slab
 ```
 
-To hear a ripped recording from its document, in the REPL or the TUI's command line:
+To rip a recording to a document and hear it, in the REPL or the TUI's command line:
 
 ```text
-load pattern one_more_bite_rip/bite_patterns.toml     # the patterns and the song bite
-song bite play                                        # conducts it; music stop ends it
-song bite out.wav                                     # or renders it to a file
-slot 1 bite_melody_1                                  # or play the windowed estimate yourself
-slot 3 bite_bass_1
-music start
+rip song.wav bite nodrums        # the patterns, the fitted voices; nodrums when it has no kit
+compress bite                    # the dictionary and the song bite
+song bite play                   # conducts it; music stop ends it
+save pattern bite_patterns.toml  # the patterns and the song
+write bite_melody_voice bite_melody_voice.toml
+write bite_bass_voice bite_bass_voice.toml
 ```
 
-The voices a rip fitted live in the sound document it was saved from (`write <voice> <file>` exports one); load them before the patterns that name them, or the tracks fall back to the shipped lead and bass. In the TUI, `^O` opens the files overlay: `Enter` on a `.toml` loads it, on a `.wav` rips it.
+and later, to hear the document again:
+
+```text
+load sound bite_melody_voice.toml      # the voices first, registered by apply
+apply bite_melody_voice
+merge sound bite_bass_voice.toml
+apply bite_bass_voice
+load pattern bite_patterns.toml        # the patterns and the song that name them
+song bite play                         # or: song bite out.wav
+```
+
+Put either in a `.slab` file and `run` it. Without the voices the tracks fall back to the shipped lead and bass. In the TUI, `^O` opens the files overlay: `Enter` on a `.toml` loads it, on a `.wav` rips it, and `s` saves into the directory shown.
 
 ### CLI Flags
 - `-tui`, `-T`: Full-screen Terminal User Interface. Empty documents are seeded from the built-ins; the REPL and scripts leave that to `builtin`.
@@ -59,6 +72,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 - **Pattern editor** (`n` new, `e` edit): one pattern on two tabs, `keys` and `grid`, which `Tab` walks before the mixer; the frame and the header say whether the pattern is new or edited and the slot it plays in. A new pattern starts empty, in the first silent slot (slot 2, the free layer, when all play), beside whatever plays there, so it loops with them before it is ever saved. `Enter` applies the pattern and plays it in its slot; `^R` records a take; `^D` twice deletes the pattern, out of its slot too; `Esc` closes it, kept in the document for `^S`.
   - **keys**: the tonal voices on a drawn keyboard of two octaves and a third from C: `z s x … m` the first octave, `q 2 w … u` the second, `i 9 o 0 p` the third's C to E (`, l . ; /` play the second's again). A dot marks each note of the key `:key` set, its root lit. `↑/↓` voice, `←/→` or `{ }` octave, `- =` velocity, `[ ]` note length, the keys the grid edits a note's with; `\` walks the pattern through 1, 2 and 4 bars, refusing a length that would cut a note off. `^R` plays the pattern and records over its length; `^R` again writes the take into it through `take`, a track per voice played, each note on the degree of the key that sounds it (a note outside the key moves to the nearest), and applies it, so the loop plays it from its next pass. `Backspace` drops the take's last note.
   - **grid**: the tracks on a step grid with a bar ruler and the playhead: a drum hit is a velocity meter, a tonal note its degree with its length drawn on, a chance under 1 dimmed. `h/l` step, `H/L` a beat, `PgUp/PgDn` a bar, `j/k` track; `space` toggles a hit or note (a note goes on from the line's last), `1-9 0` and `+/-` velocity, `c` chance, `[ ]` length, `, .` degree, `{ }` octave, `t`/`T` voice in the family or the other family, `f` follow the chord, `a` adds a track, `x` twice deletes one, `s` sets the steps. `r` shows a tonal track as a piano roll, a row per degree of the key, where `↑/↓` move the pitch and `space` places a note on it.
+- **Working**: a verb that takes seconds or minutes (`rip`, `fit`, `compress`, `refine`, `tune`, `bench`, `corpus`, `render`, `song`, `run`) runs behind the screen under a working box that counts the seconds and shows the last lines it said; keys wait for it, `^Q` twice leaves it. A rip from the files overlay ends with the browser on what it heard.
 - **Files** (`^O`): a directory's entries over the panes, directories first, then files newest first, opened where it last was, else the pattern document's directory, else the working directory. `j/k`, `PgUp/PgDn` and `g/G` move, `h`/`←`/`Backspace` go up, `Enter` (or `l`) opens a directory, loads a `.toml` document, sounds or patterns by the tables it holds, or rips a `.wav` under a name a prompt asks for, offered from the file's name; `m` merges a document onto the one in hand instead; `s` saves the tab's document, patterns or sounds, into the directory under a name asked for, offered from its own; `Esc` or `^O` closes. A path with a space travels in quotes, which the overlay adds.
 - **Size**: below 60×16 the screen shows only a centered notice of the size it needs, and keys other than quit do nothing. A large screen scales the editor: wider steps and taller tracks in the grid, a larger keyboard. Beneath the editor the mixer takes the rest of the screen, over the log's last line.
 
@@ -72,12 +86,15 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 | `builtin` | `builtin sound\|pattern\|voice` | Seed the document from the built-ins; `sound` seeds the voices too. |
 | `save`/`write` | `save sound\|pattern [file]` | Write the document (bare = provenance path); `write <name> <file>` saves one entry. |
 | `export` | `export <name> <out.wav> [variant]` | Render definition into a PCM WAV. |
-| `rip` | `rip <file.wav> <name> [bars]` | Hear a recording's beat, melody and bass as patterns of up to `bars` (4) bars each, named `<name>_beat_1`..., take its tempo and key, and fit a voice to each register the front end heard none for. |
+| `rip` | `rip <file.wav> <name> [bars] [nodrums]` | Hear a recording's beat, melody and bass as patterns of up to `bars` (4) bars each, named `<name>_beat_1`..., take its tempo and key, and fit a voice to each register the front end heard none for; `nodrums` leaves the drum part out. |
 | `fit` | `fit <name> [generations]` | Fit the voices of a recording ripped as `<name>` again, over `generations` (12) of candidates the engine plays at its notes; they replace `<name>_melody_voice` and `<name>_bass_voice`. |
 | `compress` | `compress <name> [percent]` | Match the bars of a recording ripped as `<name>` to as few one-bar patterns as a difference of `percent` (5) allows: the dictionary `<name>_<part>_a`..., and the song `<name>` that plays them in order, rendered and ripped back for a score. |
 | `song` | `song <name> [file.wav\|play]` | Show a song's bars; render it to a WAV; or play it through the sequencer, the slots changed at the bar lines (`music stop` ends it). |
+| `refine` | `refine <name> [rounds]` | Close the loop over a song `compress` made: each round (3) fits the voices again and searches the tonal steps' velocities and lengths, a step kept when the song rips back nearer the recording's rip. Minutes a round. |
+| `bench` | `bench [loops] [bars]` | Grade the analysis, and the model when one loaded, on fresh loops (8) of `bars` (4) bars, clean and augmented: the mean score of each rip against the loop's expected rip. |
+| `run` | `run <file.slab>` | Run a script's lines in this session, strict as `-s`: a failing line stops it with its number; `quit` in it ends the script alone. |
 | `render` | `render <file.wav> [bars]` | Write what the slots hold, `bars` (4) bars at the transport's tempo and key, to a WAV through the engine's offline render: a rip's estimate heard without a device. |
-| `corpus` | `corpus <dir> [loops] [bars]` | Render `loops` (24) of `bars` (4) bars from the registered patterns into `dir`, each a WAV, its log-mel frames and the events that sound in it: what `tool/rip-train` trains the rip's model on. |
+| `corpus` | `corpus <dir> [loops] [bars] [aug]` | Render `loops` (24) of `bars` (4) bars from the registered patterns into `dir`, each a WAV, its log-mel frames and the events that sound in it: what `tool/rip-train` trains the rip's model on; `aug` puts a room, a mix and voices of random genes behind each. |
 | `tune` | `tune [generations] [file]` | Search `rip`'s parameters over loops the engine renders from the registered patterns; a set that beats the current one is written (default the first root's `audio/rip.toml`) and listened with from then on. Eight generations take minutes. |
 | `ls`/`show` | `ls sound\|pattern\|voice\|song [glob]`, `show <name>[.path]` | List entries (`*` marks dirty); dump TOML shape, or print leaf value. |
 | `where`/`stat` | `stat` | Transport position and slot patterns, a muted slot marked; backend, play stats, dirty entries. |

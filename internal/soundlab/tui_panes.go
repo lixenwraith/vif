@@ -14,6 +14,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
@@ -24,9 +26,10 @@ import (
 // --- log capture ---
 
 // LogBuffer captures what a session says for the log pane, the last max lines.
-// Event-loop confined: every Execute call and every render runs there, so no
-// lock. A partial line (no trailing newline) is held until completed.
+// A long verb writes it from its own goroutine while the screen reads it, so a
+// lock guards it. A partial line (no trailing newline) is held until completed.
 type LogBuffer struct {
+	mu    sync.Mutex
 	lines []string
 	part  string
 	max   int
@@ -35,9 +38,22 @@ type LogBuffer struct {
 func NewLogBuffer(max int) *LogBuffer { return &LogBuffer{max: max} }
 
 // Lines is what the buffer holds, for a host whose screen never opened
-func (l *LogBuffer) Lines() []string { return slices.Clone(l.lines) }
+func (l *LogBuffer) Lines() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.lines)
+}
+
+// tail is the last n lines, fewer when the buffer holds fewer
+func (l *LogBuffer) tail(n int) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.lines[max(len(l.lines)-n, 0):])
+}
 
 func (l *LogBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.part += string(p)
 	for {
 		i := strings.IndexByte(l.part, '\n')
@@ -318,6 +334,13 @@ func (a *tuiApp) render() {
 	}
 	if len(a.cells) != w*h {
 		a.cells = make([]terminal.Cell, w*h)
+	}
+	// While a verb runs on its goroutine the session is its, so the last frame
+	// stays and the working box goes over it
+	if a.busy != "" {
+		a.renderBusy(tui.NewRegion(a.cells, w, 0, 0, w, h))
+		a.term.Flush(a.cells, w, h)
+		return
 	}
 	a.sig = a.engineSig()
 	a.draw(w, h)
@@ -797,7 +820,7 @@ func velGlyph(v float64) rune { return meterGlyph(v, 1, 0) }
 // logLines wraps the log to width w, oldest first
 func (a *tuiApp) logLines(w int) []string {
 	var out []string
-	for _, l := range a.log.lines {
+	for _, l := range a.log.Lines() {
 		out = append(out, tui.WrapText(l, max(w, 1))...)
 	}
 	return out
@@ -819,9 +842,25 @@ func (a *tuiApp) renderLog(r tui.Region) {
 
 // renderMessage is the log's last line, for a view that shows no log
 func (a *tuiApp) renderMessage(r tui.Region) {
-	if n := len(a.log.lines); n > 0 {
-		l := a.log.lines[n-1]
-		r.Text(1, 0, tui.Truncate(l, r.W-2), a.logFg(l), a.theme.Bg, terminal.AttrNone)
+	if t := a.log.tail(1); len(t) > 0 {
+		r.Text(1, 0, tui.Truncate(t[0], r.W-2), a.logFg(t[0]), a.theme.Bg, terminal.AttrNone)
+	}
+}
+
+// renderBusy lays the working box over the last frame while a long verb runs on
+// its own goroutine: the line, how long it has run, the last lines it said
+func (a *tuiApp) renderBusy(root tui.Region) {
+	th := &a.theme
+	opts := tui.DefaultOverlayOpts("working — ^Q quits")
+	opts.Bg, opts.Fg, opts.TitleBg, opts.TitleFg = th.Bg, th.Warning, th.HeaderBg, th.HeaderFg
+	opts.Width, opts.Height = min(root.W-4, 90), 9
+	c := root.Overlay(opts).Content
+	if c.W < 10 || c.H < 3 {
+		return
+	}
+	c.Text(0, 0, tui.Truncate(fmt.Sprintf("> %s   %ds", a.busy, int(time.Since(a.busySince).Seconds())), c.W), th.HintFg, th.Bg, terminal.AttrBold)
+	for i, l := range a.log.tail(c.H - 2) {
+		c.Text(0, 2+i, tui.Truncate(l, c.W), a.logFg(l), th.Bg, terminal.AttrNone)
 	}
 }
 
