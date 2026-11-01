@@ -465,10 +465,19 @@ starts a few frames after the attack the beats sit on. The melody register is tr
 the second path runs with the first's notes and their partials cancelled, and
 its notes are kept where they reach `second_voice` of the first's strength, so a
 slow line under a pluck is heard too, in the bar's own `Under` steps, a track
-of its own in the pattern and a voice of its own (`Rip.UnderVoice`).
+of its own in the pattern and a voice of its own (`Rip.UnderVoice`); the two
+lines do not cross, so where the second pass's note sounds over a lower note
+of the first the two change lines, and a held dyad whose louder note changes
+hands is not heard as a trill between two instruments. The song a rip
+compresses into carries the recording's tuning (`SongDef.Tuning`), and the
+engine plays or renders it there (`AudioEngine.SetTuning`), as the voice fit
+renders its candidate notes there (`RenderNoteAt`), so a render stands beside
+the recording at its own pitch.
 
 `RipParams` holds every threshold, each with a range (`RipGeneRanges`) and a
-place in a gene vector (`Genes`, `RipParamsFromGenes`); a `[rip]` table in a TOML
+place in a gene vector (`Genes`, `RipParamsFromGenes`), among them `compress`,
+the power the harmonic spectrum is raised to before the salience, under one to
+flatten the partials a saturated mix piles on every note; a `[rip]` table in a TOML
 document carries a set (`LoadRipParams`, `MarshalRipParams`), and soundlab
 listens with the first root's `audio/rip.toml` when one is there. `DefaultRipParams`
 is the hand-set start. The engine grades a set itself: `RenderMusic` plays

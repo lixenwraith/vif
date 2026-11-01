@@ -307,6 +307,48 @@ func (s *Session) songJudge(d *audio.SongDef, rp *ripped) (audio.RipFidelity, er
 	return audio.Fidelity(got, want), nil
 }
 
+// songJudgeBars is the fidelity of the song's bars given, each rendered on its
+// own against the recording's same bar and averaged: what a move in a one-bar
+// pattern can change, at a bar's cost rather than the song's. A bar's render
+// starts its patterns afresh, so a pattern longer than a bar is judged whole.
+func (s *Session) songJudgeBars(d *audio.SongDef, rp *ripped, bars []int) (float64, error) {
+	want, err := s.soundOf(rp)
+	if err != nil {
+		return 0, err
+	}
+	tl, err := s.songTimeline(d)
+	if err != nil {
+		return 0, err
+	}
+	r := s.ripper()
+	r.Grid = &audio.RipGrid{BPM: d.BPM}
+	var sum float64
+	n := 0
+	for _, b := range bars {
+		lo := audio.BeatsPerBar * b
+		if b < 0 || b >= len(tl) || lo+audio.BeatsPerBar+1 > len(want.Beats) {
+			continue
+		}
+		buf, err := s.renderBars(d, tl[b:b+1])
+		if err != nil {
+			return 0, err
+		}
+		got, err := r.Sound(buf, audio.AudioSampleRate, nil)
+		if err != nil {
+			return 0, err
+		}
+		bar := *want
+		bar.Beats = want.Beats[lo : lo+audio.BeatsPerBar+1]
+		sum += audio.Fidelity(got, &bar).Total
+		n++
+	}
+	if n == 0 {
+		fid, err := s.songJudge(d, rp)
+		return fid.Total, err
+	}
+	return sum / float64(n), nil
+}
+
 // soundOf is the recording as Fidelity hears it, heard once per rip
 func (s *Session) soundOf(rp *ripped) (*audio.RipSound, error) {
 	if rp.sound == nil {
@@ -325,6 +367,14 @@ func (s *Session) renderSong(d *audio.SongDef) ([]float64, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.renderBars(d, tl)
+}
+
+// renderBars renders bars of a song's timeline at the song's tuning, the
+// transport's put back after
+func (s *Session) renderBars(d *audio.SongDef, tl [][audio.MusicSlots]audio.PatternID) ([]float64, error) {
+	s.eng.SetTuning(d.Tuning)
+	defer s.eng.SetTuning(s.tuning)
 	return s.eng.RenderTimeline(tl, d.BPM, d.Root, d.ScaleID(), d.Chords, 1)
 }
 
@@ -434,6 +484,8 @@ func (s *Session) playSong(d *audio.SongDef) error {
 		s.prog = slices.Clone(d.Chords)
 	}
 	s.eng.SetHarmony(d.Root, d.ScaleID(), d.Chords)
+	s.tuning = d.Tuning // the song's pitch stays the transport's after, as its tempo and key do
+	s.eng.SetTuning(d.Tuning)
 	s.eng.StopMusic()
 	s.eng.ResetMusic()
 	for slot, id := range tl[0] {
@@ -646,10 +698,12 @@ func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base f
 }
 
 // refineSteps sweeps the song's tonal steps: each is tried a semitone and an
-// octave either way and silent against the whole song's fidelity, and the best
-// move is kept when it gains; a step left silent is dropped at the end. One
-// sweep is a round's share. A move touches one note's frames in a thousand,
-// which a search over every step's genes at once could not see in its budget.
+// octave either way, a step earlier and later, a step longer and shorter, and
+// silent, judged on the bars that play its pattern, and the best move is kept
+// when it gains; a step left silent is dropped at the end, and a sweep that
+// does not carry to the whole song is undone. One sweep is a round's share. A
+// move touches one note's frames in a thousand, which a search over every
+// step's genes at once could not see in its budget.
 func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64) (float64, error) {
 	type step struct {
 		pat     string
@@ -657,18 +711,25 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64) (float
 	}
 	var steps []step
 	var names []string
-	seen := map[string]bool{}
-	for _, bar := range d.Bars {
+	originals := map[string]*audio.PatternDef{}
+	uses := map[string][]int{} // the bars each pattern plays in
+	local := true              // every pattern a bar long, so a bar's render plays it whole
+	for b, bar := range d.Bars {
 		for slot, n := range bar {
-			if slot == 0 || n == "" || seen[n] {
+			if slot == 0 || n == "" {
 				continue
 			}
 			pd, ok := s.pats.get(n)
 			if !ok {
 				continue
 			}
-			seen[n] = true
+			uses[n] = append(uses[n], b)
+			if originals[n] != nil {
+				continue
+			}
+			originals[n] = clonePatternDef(pd)
 			names = append(names, n)
+			local = local && pd.Steps <= audio.StepsPerBar
 			for ti := range pd.Track {
 				if instr, _ := audio.InstrumentByName(pd.Track[ti].Instr); instr.IsDrum() {
 					continue
@@ -694,42 +755,73 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64) (float
 		s.pats.clearDirty(n)
 		return nil
 	}
+	judge := func(pat string) (float64, error) {
+		if local {
+			return s.songJudgeBars(d, rp, uses[pat])
+		}
+		fid, err := s.songJudge(d, rp)
+		return fid.Total, err
+	}
 	root, scale := d.Root, d.ScaleID()
-	total, moved := base, 0
+	moved, current, judged := 0, 0.0, ""
 	for _, st := range steps {
 		pd, _ := s.pats.get(st.pat)
-		ev := &pd.Track[st.trk].Event[st.ev]
-		was := *ev
-		midi := audio.StepPitch(root, scale, was.Deg, was.Oct, was.Acc)
-		best, bestEv := total, was
-		for _, try := range [...]int{midi - 1, midi + 1, midi - 12, midi + 12, 0} {
-			*ev = was
-			if try == 0 {
-				ev.Vel = 0 // silent, dropped at the end if it stays so
-			} else if try < audio.RipMinMIDI || try >= audio.RipMaxMIDI {
-				continue
-			} else {
-				ev.Deg, ev.Oct, ev.Acc = audio.PitchStep(root, scale, try)
-			}
-			if err := register(st.pat); err != nil {
-				return base, err
-			}
-			fid, err := s.songJudge(d, rp)
+		if judged != st.pat {
+			score, err := judge(st.pat)
 			if err != nil {
 				return base, err
 			}
-			if fid.Total > best+1e-4 {
-				best, bestEv = fid.Total, *ev
+			current, judged = score, st.pat
+		}
+		ev := &pd.Track[st.trk].Event[st.ev]
+		was := *ev
+		midi := audio.StepPitch(root, scale, was.Deg, was.Oct, was.Acc)
+		taken := func(pos int) bool {
+			return slices.ContainsFunc(pd.Track[st.trk].Event, func(e audio.StepDef) bool { return e.Pos == pos && e != was })
+		}
+		pitch := func(m int) func(*audio.StepDef) {
+			return func(e *audio.StepDef) { e.Deg, e.Oct, e.Acc = audio.PitchStep(root, scale, m) }
+		}
+		var moves []func(*audio.StepDef)
+		for _, m := range [...]int{midi - 1, midi + 1, midi - 12, midi + 12} {
+			if m >= audio.RipMinMIDI && m < audio.RipMaxMIDI {
+				moves = append(moves, pitch(m))
+			}
+		}
+		for _, pos := range [...]int{was.Pos - 1, was.Pos + 1} {
+			if pos >= 0 && pos < pd.Steps && !taken(pos) {
+				moves = append(moves, func(e *audio.StepDef) { e.Pos = pos })
+			}
+		}
+		for _, dur := range [...]int{max(was.Dur, 1) - 1, max(was.Dur, 1) + 1} {
+			if dur >= 1 && dur <= audio.MaxPatternLen {
+				moves = append(moves, func(e *audio.StepDef) { e.Dur = dur })
+			}
+		}
+		moves = append(moves, func(e *audio.StepDef) { e.Vel = 0 }) // silent, dropped at the end if it stays so
+		best, bestEv := current, was
+		for _, move := range moves {
+			*ev = was
+			move(ev)
+			if err := register(st.pat); err != nil {
+				return base, err
+			}
+			score, err := judge(st.pat)
+			if err != nil {
+				return base, err
+			}
+			if score > best+1e-4 {
+				best, bestEv = score, *ev
 			}
 		}
 		*ev = bestEv
 		if err := register(st.pat); err != nil {
 			return base, err
 		}
-		if best > total {
+		if best > current {
 			moved++
-			fmt.Fprintf(s.out, "%s track %d step %d: %s -> %s, %.3f -> %.3f\n", st.pat, st.trk, was.Pos, noteName(midi), stepName(root, scale, bestEv), total, best)
-			total = best
+			fmt.Fprintf(s.out, "%s track %d step %d: %s -> %s, %.3f -> %.3f\n", st.pat, st.trk, was.Pos, stepName(root, scale, was), stepName(root, scale, bestEv), current, best)
+			current = best
 		}
 	}
 	dropped := 0
@@ -743,18 +835,34 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64) (float
 		if err := register(n); err != nil {
 			return base, err
 		}
+	}
+	fid, err := s.songJudge(d, rp)
+	if err != nil {
+		return base, err
+	}
+	if fid.Total < base {
+		for _, pd := range originals {
+			s.pats.put(pd, false)
+			if err := register(pd.Name); err != nil {
+				return base, err
+			}
+		}
+		fmt.Fprintf(s.out, "%d step(s) moved on their bars, but the song sounds less like the recording (%.3f against %.3f): undone\n", moved, fid.Total, base)
+		return base, nil
+	}
+	for _, n := range names {
 		if moved > 0 {
 			s.pats.markDirty(n) // the document moved; a save keeps it, apply already did
 		}
 	}
 	fmt.Fprintf(s.out, "%d step(s) moved, %d dropped\n", moved, dropped)
-	return total, nil
+	return fid.Total, nil
 }
 
-// stepName is a step's pitch as a note name, or silence
+// stepName is a step's pitch as a note name with its step and length, or silence
 func stepName(root int, scale audio.ScaleID, e audio.StepDef) string {
 	if e.Vel == 0 {
 		return "silence"
 	}
-	return noteName(audio.StepPitch(root, scale, e.Deg, e.Oct, e.Acc))
+	return fmt.Sprintf("%s at %d for %d", noteName(audio.StepPitch(root, scale, e.Deg, e.Oct, e.Acc)), e.Pos, max(e.Dur, 1))
 }

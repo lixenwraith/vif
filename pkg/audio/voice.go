@@ -83,7 +83,13 @@ func (v *DrumVoice) Reset() {
 // TonalVoice sounds it: what a candidate voice is compared with a recording's
 // note by.
 func RenderNote(v *VoiceDef, midi int, vel float64, dur, tail float64) []float64 {
-	k := &kit{voices: make([]*VoiceDef, InstrLead+1)}
+	return RenderNoteAt(v, midi, 0, vel, dur, tail)
+}
+
+// RenderNoteAt is RenderNote with the note cents off A440, as a voice fitted to
+// a recording at that tuning is compared with it.
+func RenderNoteAt(v *VoiceDef, midi int, cents, vel float64, dur, tail float64) []float64 {
+	k := &kit{voices: make([]*VoiceDef, InstrLead+1), tuning: math.Pow(2, min(max(cents, -MaxTuningCents), MaxTuningCents)/1200)}
 	k.voices[InstrLead] = v
 	tv := NewTonalVoice(k)
 	tv.Trigger(VoiceParams{Note: midi, Velocity: vel, Duration: max(int(dur*AudioSampleRate), 1), Instrument: InstrLead})

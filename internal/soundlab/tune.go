@@ -292,18 +292,24 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 }
 
 // degrade puts a room and a mix between a render and the frames a model hears:
-// a gain, a low-pass, a short reverb and a noise floor, each drawn from rng, so
-// the model does not learn the synthesizer's clean output
+// a gain, a low-pass, for a third of the loops a drive into a soft clip (the
+// saturation a mix is thickened with, harmonics on every note and sum and
+// difference tones between notes), a short reverb and a noise floor, each drawn
+// from rng, so the model does not learn the synthesizer's clean output
 func degrade(x []float64, rng *rand.Rand) []float64 {
 	sr := float64(audio.AudioSampleRate)
 	out := make([]float64, len(x))
 	gain := math.Pow(10, (rng.Float64()*9-6)/20)
 	cutoff := 2500 + rng.Float64()*7500
 	a := 1 - math.Exp(-2*math.Pi*cutoff/sr)
+	drive := 1.0
+	if rng.Float64() < 1.0/3 {
+		drive = 2 + rng.Float64()*4
+	}
 	var lp float64
 	for i, v := range x {
 		lp += a * (v*gain - lp)
-		out[i] = lp
+		out[i] = math.Tanh(drive*lp) / math.Tanh(drive)
 	}
 	// a Schroeder reverb: four combs in parallel into two allpasses, at a decay
 	// and a mix of the draw's

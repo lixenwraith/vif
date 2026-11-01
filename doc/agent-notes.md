@@ -299,6 +299,22 @@ that proves wrong or that a document now states, and link the document instead.
   stand against that, not against the third run's table. The model's corpus
   is rendered at A440, so nothing it saw was detuned; a recording off the
   standard is a recording it was never shown, whatever its held-out loss.
+- A render at A440 beside a recording forty cents flat is heard as the same
+  notes sharpened, "a stretched string", before any note is judged: the ear
+  reads a tuning offset as timbre. Render, play and fit at the recording's
+  tuning (`SongDef.Tuning`, `SetTuning`, `RenderNoteAt`); the rip reads it.
+- Two transcripts of one piece are a check no single rip gives: the sample and
+  its origin (three semitones apart, one stretched, on different metrical
+  levels) agree on 41 of 49 melody notes, 27 of 29 under notes and all the
+  bass after transposition and a fitted time map (a scratch comparison over
+  two `notes` listings), so the pitch content is mostly consistent and what
+  the ear misses is elsewhere: the two lines swapping a held dyad between them,
+  and durations. Ask for the melody as notes and for a solo take of the lead;
+  they are the ground truth the numbers lack.
+- The first and second pitch paths swap roles on a held dyad: the louder note
+  changes hands from frame to frame, so each line hears a trill where the
+  music holds a chord, and two fitted voices play it as two instruments
+  alternating. Assign concurrent notes to lines by pitch order (`uncross`).
 - A search over every step's genes at once (312 genes, six generations of
   twelve) kept no move on the sample: one note's move changes one frame in a
   thousand of the fidelity, under the noise of a dozen genes moving with it.

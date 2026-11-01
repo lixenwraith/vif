@@ -38,6 +38,7 @@ type RipParams struct {
 	Retrigger     float64 `toml:"retrigger"`      // the fraction of a note's peak salience it dips under before a rise is a new note
 	MinNote       float64 `toml:"min_note"`       // seconds a note lasts at least
 	SecondVoice   float64 `toml:"second_voice"`   // the strength, against the melody's, a second voice in its register is kept from; 0 hears one
+	Compress      float64 `toml:"compress"`       // the power the harmonic spectrum is raised to before the salience, under one to flatten the partials saturation piles on a note; one leaves it
 }
 
 func DefaultRipParams() RipParams {
@@ -45,7 +46,7 @@ func DefaultRipParams() RipParams {
 		TempoPrior: 120, TempoWidth: 1, Tightness: 100,
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
-		SecondVoice: 0.5,
+		SecondVoice: 0.5, Compress: 1,
 	}
 }
 
@@ -77,6 +78,7 @@ var ripGenes = []ripGene{
 	{"retrigger", 0.2, 0.7, func(p *RipParams) *float64 { return &p.Retrigger }},
 	{"min_note", 0.03, 0.15, func(p *RipParams) *float64 { return &p.MinNote }},
 	{"second_voice", 0, 0.9, func(p *RipParams) *float64 { return &p.SecondVoice }},
+	{"compress", 0.3, 1, func(p *RipParams) *float64 { return &p.Compress }},
 }
 
 func (g *ripGene) get(p *RipParams) float64 {
@@ -335,6 +337,7 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	hits := f.drumHits(p)
 	root, scale := f.key()
 	melody := f.notes(RipMelodyLow, RipMaxMIDI, p)
+	uncross(melody)
 	bass := f.notes(RipMinMIDI, RipBassTop, p)
 	var bpm float64
 	var g ripGrid
@@ -663,6 +666,16 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 	// lobe spans two and the pitch path wobbles between them; its harmonic part
 	// is split by the same medians over the bins the register's partials reach
 	hLong, longHz := f.bassRows(x)
+	// under one, the harmonic spectrum is flattened before the salience, so the
+	// partials saturation piles on a note do not outweigh its fundamental
+	gamma := p.Compress
+	if gamma <= 0 || gamma > 1 {
+		gamma = 1
+	}
+	var longC []float64
+	if len(hLong) > 0 {
+		longC = make([]float64, len(hLong[0]))
+	}
 
 	finish := func(c int) {
 		row := ring[c%ripKernel]
@@ -685,6 +698,9 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 			h2, p2 := hrow[k]*hrow[k], prow[k]*prow[k]
 			mask := h2 / (h2 + p2 + 1e-12)
 			hm[k], pm[k] = row[k]*mask, row[k]*(1-mask)
+			if gamma < 1 {
+				hm[k] = math.Pow(hm[k], gamma)
+			}
 			lp[k] = math.Log1p(100 * pm[k])
 			d := max(lp[k]-prevLP[k], 0)
 			r := max(pm[k]-prevPM[k], 0)
@@ -716,6 +732,12 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 		var longRow []float64
 		if c < len(hLong) {
 			longRow = hLong[c]
+			if gamma < 1 {
+				for k, v := range longRow {
+					longC[k] = math.Pow(v, gamma)
+				}
+				longRow = longC
+			}
 		}
 		for i := 0; i < RipBassTop-RipMinMIDI; i++ {
 			// the short window says when the register sounds, the long one which
@@ -1484,6 +1506,29 @@ func (f *RipFrames) path(lo, hi int, p RipParams, mask []bool) []ripNote {
 		flush(ripNote{start: open.start, end: f.frames(), midi: open.midi}, sum)
 	}
 	return notes
+}
+
+// uncross keeps the melody register's two lines from crossing: where a note of
+// the second line sounds over a lower note of the first for most of the shorter
+// of the two, they change lines, so the upper voice stays the upper and a held
+// dyad whose louder note changes hands is not heard as a trill between two
+// instruments.
+func uncross(notes []ripNote) {
+	for i := range notes {
+		if notes[i].second {
+			continue
+		}
+		for j := range notes {
+			if !notes[j].second || notes[j].midi <= notes[i].midi {
+				continue
+			}
+			overlap := min(notes[i].end, notes[j].end) - max(notes[i].start, notes[j].start)
+			if 2*overlap > min(notes[i].end-notes[i].start, notes[j].end-notes[j].start) {
+				notes[i].second, notes[j].second = true, false
+				break
+			}
+		}
+	}
 }
 
 // voiceOver is the wave and voice genes a front end heard over frames a to b,
