@@ -537,11 +537,11 @@ func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, 
 		}
 		fmt.Fprintf(s.out, "round %d: voices %.2f -> %.2f\n", round, total, voiced)
 		total = voiced
-		stepped, err := s.refinePatterns(rp, d, total, o)
+		stepped, err := s.refineSteps(rp, d, total)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(s.out, "round %d: patterns %.2f -> %.2f\n", round, total, stepped)
+		fmt.Fprintf(s.out, "round %d: steps %.2f -> %.2f\n", round, total, stepped)
 		total = stepped
 		if total-start < 0.005 {
 			fmt.Fprintf(s.out, "converged after %d round(s)\n", round)
@@ -645,33 +645,36 @@ func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base f
 	return base, nil
 }
 
-// refinePatterns searches the song's tonal steps, each one's velocity, length
-// and pitch, a semitone or an octave either way, for the render the recording's
-// frames like best; a step whose velocity falls to silence is dropped at the end.
-func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o refineOptions) (float64, error) {
+// refineSteps sweeps the song's tonal steps: each is tried a semitone and an
+// octave either way and silent against the whole song's fidelity, and the best
+// move is kept when it gains; a step left silent is dropped at the end. One
+// sweep is a round's share. A move touches one note's frames in a thousand,
+// which a search over every step's genes at once could not see in its budget.
+func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64) (float64, error) {
 	type step struct {
 		pat     string
 		trk, ev int
-		drum    bool
 	}
 	var steps []step
 	var names []string
-	originals := map[string]*audio.PatternDef{}
+	seen := map[string]bool{}
 	for _, bar := range d.Bars {
 		for slot, n := range bar {
-			if slot == 0 || n == "" || originals[n] != nil {
+			if slot == 0 || n == "" || seen[n] {
 				continue
 			}
 			pd, ok := s.pats.get(n)
 			if !ok {
 				continue
 			}
-			originals[n] = clonePatternDef(pd)
+			seen[n] = true
 			names = append(names, n)
 			for ti := range pd.Track {
-				instr, _ := audio.InstrumentByName(pd.Track[ti].Instr)
+				if instr, _ := audio.InstrumentByName(pd.Track[ti].Instr); instr.IsDrum() {
+					continue
+				}
 				for ei := range pd.Track[ti].Event {
-					steps = append(steps, step{n, ti, ei, instr.IsDrum()})
+					steps = append(steps, step{n, ti, ei})
 				}
 			}
 		}
@@ -679,114 +682,79 @@ func (s *Session) refinePatterns(rp *ripped, d *audio.SongDef, base float64, o r
 	if len(steps) == 0 {
 		return base, nil
 	}
-	register := func() error {
-		for _, n := range names {
-			pd, _ := s.pats.get(n)
-			p, err := pd.Pattern()
-			if err == nil {
-				_, err = s.eng.DefinePattern(p)
-			}
-			if err != nil {
-				return fmt.Errorf("pattern %q: %w", n, err)
-			}
-			s.pats.clearDirty(n)
+	register := func(n string) error {
+		pd, _ := s.pats.get(n)
+		p, err := pd.Pattern()
+		if err == nil {
+			_, err = s.eng.DefinePattern(p)
 		}
+		if err != nil {
+			return fmt.Errorf("pattern %q: %w", n, err)
+		}
+		s.pats.clearDirty(n)
 		return nil
 	}
-	const genes = 4 // a step's velocity, length, semitones and octaves off
 	root, scale := d.Root, d.ScaleID()
-	apply := func(g []float64) error {
-		for i, st := range steps {
-			pd, _ := s.pats.get(st.pat)
-			was := originals[st.pat].Track[st.trk].Event[st.ev]
-			ev := &pd.Track[st.trk].Event[st.ev]
-			ev.Vel, ev.Dur = g[genes*i], int(g[genes*i+1])
-			if st.drum {
+	total, moved := base, 0
+	for _, st := range steps {
+		pd, _ := s.pats.get(st.pat)
+		ev := &pd.Track[st.trk].Event[st.ev]
+		was := *ev
+		midi := audio.StepPitch(root, scale, was.Deg, was.Oct, was.Acc)
+		best, bestEv := total, was
+		for _, try := range [...]int{midi - 1, midi + 1, midi - 12, midi + 12, 0} {
+			*ev = was
+			if try == 0 {
+				ev.Vel = 0 // silent, dropped at the end if it stays so
+			} else if try < audio.RipMinMIDI || try >= audio.RipMaxMIDI {
 				continue
+			} else {
+				ev.Deg, ev.Oct, ev.Acc = audio.PitchStep(root, scale, try)
 			}
-			midi := audio.StepPitch(root, scale, was.Deg, was.Oct, was.Acc) + int(math.Round(g[genes*i+2])) + 12*int(math.Round(g[genes*i+3]))
-			ev.Deg, ev.Oct, ev.Acc = audio.PitchStep(root, scale, min(max(midi, audio.RipMinMIDI), audio.RipMaxMIDI-1))
+			if err := register(st.pat); err != nil {
+				return base, err
+			}
+			fid, err := s.songJudge(d, rp)
+			if err != nil {
+				return base, err
+			}
+			if fid.Total > best+1e-4 {
+				best, bestEv = fid.Total, *ev
+			}
 		}
-		return register()
-	}
-	seed := make([]float64, genes*len(steps))
-	bounds := make([]genetic.ParameterBounds, len(seed))
-	for i, st := range steps {
-		ev := originals[st.pat].Track[st.trk].Event[st.ev]
-		seed[genes*i], seed[genes*i+1] = min(max(ev.Vel, 0.1), 1), float64(max(ev.Dur, 1))+0.5
-		bounds[genes*i], bounds[genes*i+1] = genetic.ParameterBounds{Min: 0, Max: 1}, genetic.ParameterBounds{Min: 1, Max: 4.999}
-		bounds[genes*i+2], bounds[genes*i+3] = genetic.ParameterBounds{Min: -2.5, Max: 2.499}, genetic.ParameterBounds{Min: -1.5, Max: 1.499}
-	}
-	var failure error
-	eval := genetic.Memoize(func(g []float64) string {
-		var b strings.Builder
-		for _, v := range g {
-			fmt.Fprintf(&b, "%.2f,", v)
+		*ev = bestEv
+		if err := register(st.pat); err != nil {
+			return base, err
 		}
-		return b.String()
-	}, func(g []float64) float64 {
-		if err := apply(g); err != nil {
-			failure = err
-			return math.Inf(-1)
+		if best > total {
+			moved++
+			fmt.Fprintf(s.out, "%s track %d step %d: %s -> %s, %.3f -> %.3f\n", st.pat, st.trk, was.Pos, noteName(midi), stepName(root, scale, bestEv), total, best)
+			total = best
 		}
-		fid, err := s.songJudge(d, rp)
-		if err != nil {
-			failure = err
-			return math.Inf(-1)
-		}
-		return fid.Total
-	})
-	cfg := genetic.DefaultConfig()
-	cfg.PoolSize, cfg.EliteCount, cfg.MaxIterations = max(o.pool, 4), max(o.pool/4, 1), o.generations
-	cfg.Parallelism, cfg.Seed = 1, o.seed
-	cfg.PerturbationRate, cfg.PerturbationStrength = 2/float64(len(seed)), 0.15
-	e := genetic.NewEngine[[]float64, float64](eval, func(rng *rand.Rand) []float64 {
-		g := slices.Clone(seed) // the current steps, a few moved
-		for range 1 + rng.IntN(3) {
-			i := rng.IntN(len(g))
-			g[i] = bounds[i].Min + rng.Float64()*(bounds[i].Max-bounds[i].Min)
-		}
-		return g
-	}, &genetic.TournamentSelector[[]float64, float64]{TournamentSize: 3},
-		&genetic.UniformCombiner[[]float64, float64, float64]{MixProbability: 0.9},
-		&genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect}, cfg)
-	e.SetSeeds([][]float64{slices.Clone(seed)})
-	e.SetSchedule(genetic.AdaptiveStrength[float64](cfg.PerturbationRate, 0.15, 0.02, 0.4, 1.5))
-	e.SetTerminator(func(p *genetic.Pool[[]float64, float64], gen int) bool {
-		fmt.Fprintf(s.out, "generation %d: steps %.3f\n", gen, p.Stats.BestScore)
-		return failure != nil
-	})
-	pool, err := e.Run(context.Background())
-	if err == nil {
-		err = failure
-	}
-	if err != nil || len(pool.Members) == 0 || pool.Members[0].Score <= base {
-		for _, pd := range originals {
-			s.pats.put(pd, false)
-		}
-		if rerr := register(); err == nil {
-			err = rerr
-		}
-		return base, err
-	}
-	if err := apply(pool.Members[0].Data); err != nil {
-		return base, err
 	}
 	dropped := 0
 	for _, n := range names {
 		pd, _ := s.pats.get(n)
 		for ti := range pd.Track {
 			before := len(pd.Track[ti].Event)
-			pd.Track[ti].Event = slices.DeleteFunc(pd.Track[ti].Event, func(e audio.StepDef) bool { return e.Vel < 0.05 })
+			pd.Track[ti].Event = slices.DeleteFunc(pd.Track[ti].Event, func(e audio.StepDef) bool { return e.Vel == 0 })
 			dropped += before - len(pd.Track[ti].Event)
 		}
-		s.pats.markDirty(n) // the document moved; a save keeps it, apply already did
+		if err := register(n); err != nil {
+			return base, err
+		}
+		if moved > 0 {
+			s.pats.markDirty(n) // the document moved; a save keeps it, apply already did
+		}
 	}
-	if err := register(); err != nil {
-		return base, err
+	fmt.Fprintf(s.out, "%d step(s) moved, %d dropped\n", moved, dropped)
+	return total, nil
+}
+
+// stepName is a step's pitch as a note name, or silence
+func stepName(root int, scale audio.ScaleID, e audio.StepDef) string {
+	if e.Vel == 0 {
+		return "silence"
 	}
-	if dropped > 0 {
-		fmt.Fprintf(s.out, "%d step(s) fell silent and were dropped\n", dropped)
-	}
-	return pool.Members[0].Score, nil
+	return noteName(audio.StepPitch(root, scale, e.Deg, e.Oct, e.Acc))
 }

@@ -299,6 +299,11 @@ that proves wrong or that a document now states, and link the document instead.
   stand against that, not against the third run's table. The model's corpus
   is rendered at A440, so nothing it saw was detuned; a recording off the
   standard is a recording it was never shown, whatever its held-out loss.
+- A search over every step's genes at once (312 genes, six generations of
+  twelve) kept no move on the sample: one note's move changes one frame in a
+  thousand of the fidelity, under the noise of a dozen genes moving with it.
+  A sweep that tries each step's five moves alone and keeps a gain sees it;
+  five renders a step is the price, minutes a round on a four-bar song.
 - A training run shares the cores with everything else the session does: the
   fourth run slowed from 0.4 to 4 seconds a step under a rip and a test run,
   and the two-hour waiter on it timed out twice. Size a waiter by the run

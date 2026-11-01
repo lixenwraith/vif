@@ -466,7 +466,7 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 		v.level = 1
 	}
 	v.note = params.Note
-	v.freq = NoteFreq(params.Note)
+	v.freq = NoteFreq(params.Note) * v.kit.ratio()
 	v.velocity = params.Velocity
 	// Unison spreads symmetrically about the note; phases stagger so the stack
 	// does not start as one in-phase saw

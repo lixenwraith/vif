@@ -11,6 +11,7 @@ const (
 	cmdPlay cmdOp = iota
 	cmdBPM
 	cmdSwing
+	cmdTuning
 	cmdMusicVol
 	cmdPattern
 	cmdMask

@@ -8,6 +8,16 @@ type kit struct {
 	ids      [InstrumentCount]SoundID
 	variants [InstrumentCount][]floatBuffer
 	voices   []*VoiceDef // by InstrumentType; a drum's and an unset voice's nil
+	tuning   float64     // the ratio every tonal note's frequency is scaled by; zero reads as one, A440
+}
+
+// ratio is the tuning's frequency ratio, one when unset and for the nil kit
+// tests play on
+func (k *kit) ratio() float64 {
+	if k == nil || k.tuning <= 0 {
+		return 1
+	}
+	return k.tuning
 }
 
 var drumSoundNames = [InstrumentCount]string{
