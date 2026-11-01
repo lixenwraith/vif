@@ -439,6 +439,23 @@ func TestRipReadsADetunedRecording(t *testing.T) {
 	if b.Melody < a.Melody-0.1 || b.Bass < a.Bass-0.1 {
 		t.Errorf("detuned melody %.2f bass %.2f against %.2f and %.2f in tune", b.Melody, b.Bass, a.Melody, a.Bass)
 	}
+	// the engine's own tuning: the loop rendered forty cents flat, as a corpus
+	// loop standing in for such a recording is, reads so and keeps its notes
+	ae.SetTuning(-40)
+	low, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	ae.SetTuning(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lowRip, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(low, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := CompareRips(lowRip, want)
+	t.Logf("rendered flat %+.1f cents %+v", lowRip.Tuning, c)
+	if lowRip.Tuning < -48 || lowRip.Tuning > -32 || c.Melody < a.Melody-0.1 || c.Bass < a.Bass-0.1 || ae.Tuning() != 0 {
+		t.Errorf("rendered flat: tuning %+.1f, melody %.2f bass %.2f, engine back at %+.0f", lowRip.Tuning, c.Melody, c.Bass, ae.Tuning())
+	}
 }
 
 // TestRipOpensAPickupBar: a recording that begins inside a bar, notes leading

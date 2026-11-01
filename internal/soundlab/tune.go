@@ -44,6 +44,7 @@ type tuneLoop struct {
 	root   int
 	scale  audio.ScaleID
 	voices map[string]*audio.VoiceDef
+	tuning float64 // cents off A440 the loop was rendered at
 }
 
 // tempos spread the corpus over the sequencer's range
@@ -125,7 +126,13 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 		}
 		arng := rand.New(rand.NewPCG(o.seed^0xa5a5a5a5, uint64(i)+1))
 		voices, restore := s.loopVoices(slots, o.aug, arng)
+		cents := 0.0
+		if o.aug {
+			cents = arng.Float64()*100 - 50 // a recording's pitch standard, within a quarter tone of A440
+		}
+		s.eng.SetTuning(cents)
 		buf, err := s.eng.RenderMusic(slots, bpm, o.bars, root, scale, nil, int64(i+1))
+		s.eng.SetTuning(0)
 		restore()
 		if err != nil {
 			return err
@@ -133,7 +140,7 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 		if o.aug {
 			buf = degrade(buf, arng)
 		}
-		if err := visit(i, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale, voices: voices}); err != nil {
+		if err := visit(i, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale, voices: voices, tuning: cents}); err != nil {
 			return err
 		}
 	}
@@ -360,6 +367,7 @@ type corpusLoop struct {
 	Scale  int           `json:"scale"`
 	Bars   int           `json:"bars"`
 	Frames int           `json:"frames"`
+	Tuning float64       `json:"tuning"` // cents off A440 the loop sounds at
 	Events []corpusEvent `json:"events"`
 }
 
@@ -435,7 +443,7 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 		if err := writeMel(base+".mel", mel); err != nil {
 			return err
 		}
-		lab := corpusLoop{BPM: l.bpm, Root: l.root, Scale: int(l.scale), Bars: o.bars, Frames: len(mel)}
+		lab := corpusLoop{BPM: l.bpm, Root: l.root, Scale: int(l.scale), Bars: o.bars, Frames: len(mel), Tuning: l.tuning}
 		stepSec := float64(audio.SamplesPerStep(l.bpm)) / audio.AudioSampleRate
 		for _, e := range audio.ExpectedEvents(l.slots, o.bars, l.root, l.scale, nil) {
 			start := float64(e.Bar*audio.StepsPerBar+e.Step) * stepSec
@@ -469,7 +477,7 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	}
 	how := "as rendered"
 	if o.aug {
-		how = "through a room, a mix and voices of random genes"
+		how = "through a room, a mix, voices of random genes and a tuning off A440"
 	}
 	if o.gen {
 		how += ", with generated beats, melodies and bass lines"
