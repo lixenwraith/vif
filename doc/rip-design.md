@@ -302,6 +302,20 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   moving from 0.73: with hundreds of loops of random voices and rooms there is
   too little to generalise from, so the next run takes thousands of loops,
   each seen a few times.
+- The third run, 3000 loops with generated parts and the room and mix, sixty
+  held out, 6000 steps of batch 8 in forty minutes on four CPU cores, each
+  loop seen sixteen times: the held-out decoders' loss falls the whole way,
+  1.79 at step 1000 to 1.48 at 6000, the pitch head's 0.61 to 0.51, and the
+  last step is the one exported. `bench 12 4`: the analysis 0.47 on clean
+  loops (tempo 0.75, bars 0.75, drums 0.52, melody 0.17, bass 0.39), the model
+  0.44 (0.67, 0.75, 0.59, 0.11, 0.25); augmented, the analysis 0.46 (0.83,
+  0.81, 0.50, 0.16, 0.27), the model 0.45 (0.75, 0.77, 0.65, 0.11, 0.08). The
+  model is within three hundredths of the analysis overall, ahead on drums,
+  behind on pitch, and still improving when the run ended: more loops and more
+  steps are the next lever, not another head. The sample through it: 115 bpm,
+  F major, five bars from 0.79 s, 38 melody and 15 bass notes; the song rips
+  back at 0.36 and 0.57 after two rounds of `refine`, against the analysis
+  path's 0.59 and 0.88. The analysis path stays the sample's better transcript.
 - The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
   where the analysis heard 86, F major where it heard A# harmonic minor (its
   fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips
