@@ -290,6 +290,16 @@ that proves wrong or that a document now states, and link the document instead.
   frame and the tempo prior degenerate. `Samples` and `Hear` take the defaults
   for the zero value now; a scratch tool that forgot `DefaultRipParams` ran
   for ten minutes on a twelve-second clip.
+- `bench` grades the analysis as it is today, so a run's numbers compare only
+  with the analysis benched beside them: the seventh pass moved the analysis
+  from 0.47 to 0.49 on clean loops, and the fourth model run's 0.45 and 0.51
+  stand against that, not against the third run's table. The model's corpus
+  is rendered at A440, so nothing it saw was detuned; a recording off the
+  standard is a recording it was never shown, whatever its held-out loss.
+- A training run shares the cores with everything else the session does: the
+  fourth run slowed from 0.4 to 4 seconds a step under a rip and a test run,
+  and the two-hour waiter on it timed out twice. Size a waiter by the run
+  alone and expect to re-arm it, or follow the run by a reminder instead.
 
 ## Locks
 

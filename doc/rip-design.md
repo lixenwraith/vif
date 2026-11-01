@@ -221,11 +221,14 @@ and the checkpoint earn their keep.
    upstream of everything: the recording's tuning read first, a pickup bar,
    the notes' lag, accidentals on steps, and `refine` judged by `Fidelity`
    with the steps' pitches among its moves.
-2. Next: a longer training run, on more loops and more patterns than the shipped
-   bank, measured by `bench` and by ear on the sample until the model front end
-   beats the analysis on clean and augmented renders; the matching scored by
-   reconstruction; several voices in a register, clustered by their genes; the
-   false drums gated by a harmonic check or by the model.
+2. Next: the model's pitch, where four runs have left it behind the analysis
+   while its drums pulled ahead: a detuned corpus (the loops rendered at
+   random offsets from A440, as recordings are) so the front end learns what
+   the analysis now measures, and more loops and steps, the held-out loss
+   still falling at 20000; the step search's moves and budget in `refine`,
+   which kept nothing on the sample; the matching scored by reconstruction;
+   several voices in a register, clustered by their genes; the false drums
+   gated by a harmonic check or by the model.
 3. Then: real recordings in the corpus, tuned parameters and weights shipped as
    data, and the rip on Android under the mobile budget.
 
@@ -344,6 +347,21 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   `refine`, against the analysis path's 0.66 and 0.88. The model's transcript
   is the weaker one today, as `bench` said it would be; the loop lifts either.
 
+- The fourth run, 20000 loops with generated parts, the room and the mix,
+  frames and labels only (`nowav`), 200 held out, 20000 steps of batch 8 in
+  two hours and three quarters on four CPU cores shared with the day's other
+  work, each loop seen eight times: the held-out decoders' loss falls from
+  1.74 at step 1000 to 1.04 at 20000 (the pitch head's 0.60 to 0.40) and is
+  still the best at the last step, so the run was not long. `bench 12 4`
+  through the seventh pass's analysis: the analysis 0.49 on clean loops
+  (tempo 0.75, bars 0.85, drums 0.50, melody 0.20, bass 0.40), the model
+  0.45 (0.58, 0.81, 0.54, 0.17, 0.34); augmented, the analysis 0.48 (0.83,
+  0.88, 0.50, 0.17, 0.28), the model 0.51 (0.83, 0.88, 0.73, 0.11, 0.20).
+  The model passes the analysis for the first time, on the loops with a room
+  and a mix, on the strength of its drums; it loses the clean loops on tempo
+  and both on pitch, and the analysis itself gained two hundredths from the
+  seventh pass. The weights stay out of the tree: a front end that wins on
+  drums and loses on pitch is not yet the rip's better ear.
 - The seventh pass, the sample heard on its own tuning: the transcript's note
   list (soundlab's `notes`) showed A#2 taking turns with A2 in sixteenths, G2
   with G#2 at the chord change, C5 with C#5 in the lead, ten melody notes

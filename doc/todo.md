@@ -1264,12 +1264,15 @@ front-end seam. What remains, in the design's order:
    optional rather than as misses, and a small set of real recordings with
    hand-checked notes held out for validation, so neither a model nor a tuned
    set learns the synthesizer.
-2. A longer training run of `ripnet.Spec` on tens of thousands of loops: on
-   3000 the held-out decoders' loss was still falling at 6000 steps and the
-   model came within three hundredths of the analysis on `bench`, ahead on
-   drums and behind on pitch, while 300 loops overfitted in 12000 steps.
-   Measure by the trainer's held-out loss, with `bench` against the analysis
-   on clean and augmented loops and by ear on the held-out recordings
+2. The model's pitch: on 20000 loops over 20000 steps the held-out decoders'
+   loss was still falling (1.04) and the model passed the analysis on
+   augmented loops (0.51 against 0.48) on its drums while losing clean loops
+   on tempo and both on pitch (melody 0.11 against 0.17); 300 loops
+   overfitted in 12000 steps. The corpus is rendered at A440 and the sample is
+   forty cents flat, which the analysis now reads and the model cannot: render
+   the loops at random offsets from A440 (`corpus ... aug`), then more loops
+   and steps. Measure by the trainer's held-out loss, with `bench` against the
+   analysis on clean and augmented loops and by ear on the held-out recordings
    (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then the weights
    and a tuned parameter set shipped as data, `DefaultRipParams` kept for a
    recording nothing tuned for. [Rip design §8](rip-design.md#8-measured-on-the-sample-recording)
