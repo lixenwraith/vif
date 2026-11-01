@@ -148,7 +148,10 @@ that proves wrong or that a document now states, and link the document instead.
   one a regression, run it alone in fresh processes, alternating main's binary and
   the branch's under the same load.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
-  several processes at once; load exposes it, quiet runs do not.
+  several processes at once; load exposes it, quiet runs do not. Keep it near twice
+  the CPU count: at five times, a socket join's catch-up is refused ("behind the
+  session ... retry in a moment"), the harness's host ticking every 10 ms faster
+  than the loaded joiner closes the gap, a refusal a production seat retries.
 - A race between a test's write and another goroutine's read reproduces at will:
   sleep that goroutine before its read and move the write ahead of the sleep. Print
   from neither side, as two writes to `os.Stderr` order them and hide the race.
