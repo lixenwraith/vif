@@ -285,6 +285,17 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   sample's 36 notes is longer than three steps where the violin holds six to
   twelve: the path flips between the semitone bins a vibrato crosses, the next
   decoder item ([todo](todo.md#tune-the-rip)).
+- The second training run, 300 loops with generated parts and the room and
+  mix, 12000 steps of batch 8 in an hour and a half on four CPU cores, the
+  training loss down to 0.31 and the pitch head's to 0.15: worse on fresh
+  loops than the first run and than the analysis. `bench 12 4`, whose loops
+  now carry generated parts: the analysis 0.47 on clean loops (tempo 0.75,
+  bars 0.75, drums 0.52, melody 0.17, bass 0.39) and 0.46 augmented; the
+  model 0.40 (0.67, 0.71, 0.50, 0.11, 0.18) and 0.38 (0.58, 0.73, 0.53, 0.07,
+  0.13). Each loop was seen about three hundred times: the model learned the
+  corpus, not the music. The trainer now holds loops out, scores them as it
+  goes and exports the step that scored best on them; the number that
+  matters is the held-out loss, not the training loss, and `bench` after it.
 - The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
   where the analysis heard 86, F major where it heard A# harmonic minor (its
   fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips

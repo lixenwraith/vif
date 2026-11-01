@@ -66,6 +66,14 @@ file when it exists; `--dim`, `--layers`, `--heads`, `--ffn` and
 `--attention-window` reshape the model, and the weight file carries the shape, so
 `ripnet` loads any of them as long as the inputs and heads are its.
 
+A tenth of the loops are held out (`--holdout` sets how many, 0 none) and
+scored every `--every` steps in fixed windows; the step that scores best on them
+is what `--out` gets, whatever the last step's training loss says. The training
+loss keeps falling long after the held-out loss turns: a run of 12000 steps on
+300 loops reached a training loss of 0.31 and scored worse on fresh loops than
+a run of 3000, having seen each loop three hundred times. Read the held-out
+line, not the training one, and `bench` the file after.
+
 ## Measure
 
 ```bash

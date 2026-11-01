@@ -1264,12 +1264,14 @@ front-end seam. What remains, in the design's order:
    optional rather than as misses, and a small set of real recordings with
    hand-checked notes held out for validation, so neither a model nor a tuned
    set learns the synthesizer.
-2. A longer training run of `ripnet.Spec` on that corpus, measured with `bench`
-   against the analysis on clean and augmented loops and by ear on the held-out
-   recordings (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then
-   the weights and a tuned parameter set shipped as data, `DefaultRipParams`
-   kept for a recording nothing tuned for. [Rip design §8](rip-design.md#8-measured-on-the-sample-recording)
-   has the first run's numbers.
+2. A training run of `ripnet.Spec` on a corpus of thousands of loops rather
+   than hundreds, since the second run overfitted 300 in 12000 steps, measured
+   by the trainer's held-out loss, with `bench` against the analysis on clean
+   and augmented loops and by ear on the held-out recordings
+   (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then the weights
+   and a tuned parameter set shipped as data, `DefaultRipParams` kept for a
+   recording nothing tuned for. [Rip design §8](rip-design.md#8-measured-on-the-sample-recording)
+   has the runs' numbers.
 3. A bass attack reads as a kick and a chord's attack as a snare in the analysis:
    a harmonic check on the hit (a percussive rise with a pitched tail is a note)
    until the model takes the front end.

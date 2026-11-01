@@ -243,6 +243,12 @@ that proves wrong or that a document now states, and link the document instead.
   short one keeps the timing and the long one the pitch; and give a pinned
   grid the two-frame lead the beat tracker already has, or a note on the beat
   lands on the step before.
+- A training loss that keeps falling says nothing about fresh loops: 12000
+  steps on 300 loops reached 0.31 and benched worse than 3000 steps on 120,
+  each loop seen three hundred times. `train.py` holds a tenth of the loops
+  out, scores them every `--every` steps and exports the best step; judge a run
+  by its held-out line and by `bench` on the file, never by the last training
+  loss, and prefer more loops to more steps.
 - A bass that wobbles between two semitones leaks its octave into the melody
   register on the frames the cancellation picks the other bin: cancel the
   partials of the strongest bass pitch and of a neighbour within two semitones
