@@ -105,9 +105,12 @@ flowchart LR
    recording is misheard the same way in the render), but by `Fidelity`: the
    render and the recording heard through one front end (`Ripper.Sound`), their
    pitch salience, log-mel bands and onset strength compared bar by bar on each
-   one's own beats; the steps' pitches move a semitone or an octave either way
-   and a step may fall silent, until a round gains nothing, and a move that
-   does not improve it is undone. Next, the model hearing the render too, so
+   one's own beats. The voices are searched by the genetic engine; the steps
+   are swept, each tried a semitone and an octave either way and silent, the
+   best move kept when it gains, since a move touches one note's frames in a
+   thousand and a search over every step's genes at once saw nothing of it in
+   its budget; a round is one search and one sweep, until a round gains
+   nothing. Next, the model hearing the render too, so
    its voice estimate of the render against its estimate of the recording is a
    second, cheaper distance for the voice search.
 
@@ -131,8 +134,10 @@ offline (`song <name> <file.wav>`).
   learns the synthesizer.
 - **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop, a
   gain, a one-pole low-pass, a Schroeder reverb and a noise floor drawn per
-  loop, and redraws each tonal track's voice near the registered one, a third
-  of the time on another wave, labelled as played; `gen` draws beats, melodies
+  loop, redraws each tonal track's voice near the registered one, a third of
+  the time on another wave, labelled as played, and renders the loop off A440
+  by up to a quarter tone either way (`SetTuning`), since recordings are and
+  the sample is forty cents flat; `gen` draws beats, melodies
   and bass lines from the key for three loops in five per part, since the bank
   alone repeats its few melodies and a model trained on it learns them, not
   pitch. Both draw from streams of their own, so a loop's bank patterns and key
@@ -225,8 +230,8 @@ and the checkpoint earn their keep.
    while its drums pulled ahead: a detuned corpus (the loops rendered at
    random offsets from A440, as recordings are) so the front end learns what
    the analysis now measures, and more loops and steps, the held-out loss
-   still falling at 20000; the step search's moves and budget in `refine`,
-   which kept nothing on the sample; the matching scored by reconstruction;
+   still falling at 20000; the step sweep's cost, five renders a step, once
+   songs grow past a few bars; the matching scored by reconstruction;
    several voices in a register, clustered by their genes; the false drums
    gated by a harmonic check or by the model.
 3. Then: real recordings in the corpus, tuned parameters and weights shipped as

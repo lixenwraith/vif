@@ -1066,7 +1066,7 @@ save pattern %s
 	// sounds more like the recording, judged on the recording's own frames with
 	// the rip-back reported beside it, and the song still valid after
 	runOrFatal(t, s, &out, "! refine nothing\nrefine loop 1\nvalidate all\n")
-	if !strings.Contains(out.String(), "like the recording (pitch") || !strings.Contains(out.String(), "before refining") || !strings.Contains(out.String(), "round 1: patterns") {
+	if !strings.Contains(out.String(), "like the recording (pitch") || !strings.Contains(out.String(), "before refining") || !strings.Contains(out.String(), "round 1: steps") {
 		t.Errorf("refine reported no round:\n%s", out.String())
 	}
 	if err := audio.ValidateSong(d); err != nil {
@@ -1236,11 +1236,24 @@ func TestCorpusAugmentsAndLabelsTheVoices(t *testing.T) {
 	if changed == 0 || differs != len(aug) {
 		t.Errorf("%d voice(s) changed, %d of %d loop(s) differ from the clean render", changed, differs, len(aug))
 	}
+	// an augmented loop sounds off A440 by up to a quarter tone, a clean one at it
+	tuned := 0
+	for i := range aug {
+		if aug[i].tuning < -50 || aug[i].tuning > 50 || clean[i].tuning != 0 {
+			t.Errorf("loop %d tuned %+.1f cents augmented, %+.1f clean", i, aug[i].tuning, clean[i].tuning)
+		}
+		if aug[i].tuning != 0 {
+			tuned++
+		}
+	}
+	if tuned == 0 || s.eng.Tuning() != 0 {
+		t.Errorf("%d loop(s) tuned off A440, the engine left at %+.0f", tuned, s.eng.Tuning())
+	}
 	dir := t.TempDir()
 	runOrFatal(t, s, &out, "corpus "+dir+" 1 1 aug\n")
 	data, err := os.ReadFile(filepath.Join(dir, "loop_000.json"))
-	if err != nil || !strings.Contains(string(data), "\"voice\":[") {
-		t.Errorf("the labels carry no voice genes: %v\n%s", err, data)
+	if err != nil || !strings.Contains(string(data), "\"voice\":[") || !strings.Contains(string(data), "\"tuning\":") {
+		t.Errorf("the labels carry no voice genes or tuning: %v\n%s", err, data)
 	}
 	if !strings.Contains(out.String(), "random genes") {
 		t.Errorf("corpus did not say it augmented:\n%s", out.String())

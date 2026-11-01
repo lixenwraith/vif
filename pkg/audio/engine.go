@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
@@ -88,6 +89,7 @@ type AudioEngine struct {
 	sfxMuted   atomic.Bool
 	musicMuted atomic.Bool
 	silentMode atomic.Bool
+	tuning     atomic.Uint64 // float64 bits of the cents every tonal note sounds off A440
 	slotMuted  [MusicSlots]atomic.Bool
 
 	// rejected counts Play rejections by reason. The pre-mixer gates leave no
@@ -552,6 +554,18 @@ func (ae *AudioEngine) SetMusicSeed(seed int64) { ae.send(audioCmd{op: cmdSeed, 
 
 func (ae *AudioEngine) SetMusicSwing(a float64) { ae.send(audioCmd{op: cmdSwing, f1: a}) }
 
+// SetTuning moves every tonal note cents off A440, the live mixer's and the
+// offline renders', within a semitone either way: the pitch standard of a
+// recording a render stands in for.
+func (ae *AudioEngine) SetTuning(cents float64) {
+	cents = min(max(cents, -100), 100)
+	ae.tuning.Store(math.Float64bits(cents))
+	ae.send(audioCmd{op: cmdTuning, f1: math.Pow(2, cents/1200)})
+}
+
+// Tuning is the cents every tonal note sounds off A440
+func (ae *AudioEngine) Tuning() float64 { return math.Float64frombits(ae.tuning.Load()) }
+
 func (ae *AudioEngine) SetMusicVolume(vol float64) { ae.send(audioCmd{op: cmdMusicVol, f1: vol}) }
 
 // SetPattern targets a sequencer slot: 0 rhythm, 1 melody, 2 fill, 3 bass
@@ -719,7 +733,7 @@ func (ae *AudioEngine) RenderTimeline(timeline [][MusicSlots]PatternID, bpm, roo
 	ae.mu.RLock()
 	shapes := ae.config.SoundShapes
 	ae.mu.RUnlock()
-	k := &kit{voices: voiceTable()}
+	k := &kit{voices: voiceTable(), tuning: math.Pow(2, ae.Tuning()/1200)}
 	for i := InstrumentType(0); i <= InstrClap; i++ {
 		if d := SoundDefByName(drumSoundNames[i]); d != nil {
 			k.ids[i] = SoundIDByName(d.Name)

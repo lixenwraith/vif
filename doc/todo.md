@@ -1300,11 +1300,12 @@ front-end seam. What remains, in the design's order:
 dictionary and the song (`compress`, `song`) and the song's score against the
 rip are in place; what remains:
 
-1. The refinement loop (`refine`) moves the voices and the tonal steps'
-   velocities, lengths and pitches, judged by `Fidelity` against the
-   recording's own frames; what it does not yet move is a step's position or
-   the drum part, and a note the front end never heard it cannot add. Measure
-   its convergence on rendered loops whose truth is known.
+1. The refinement loop (`refine`) searches the voices and sweeps the tonal
+   steps, a semitone or an octave either way or silence per step, judged by
+   `Fidelity` against the recording's own frames; what it does not yet move is
+   a step's position or length or the drum part, and a note the front end
+   never heard it cannot add. Measure its convergence on rendered loops whose
+   truth is known.
 2. Matching by reconstruction: a bar's distance to a member as the rip of the
    member's render against the bar, in place of `BarDistance`, with `Memoize`
    paying for each render once; measure it against the mechanical grouping.
