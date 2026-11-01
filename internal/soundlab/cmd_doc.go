@@ -117,9 +117,12 @@ func cmdExport(s *Session, a []string) error {
 // cmdRip reads a recording into the pattern document: a beat, a melody and a
 // bass pattern per window of bars, dirty, under the names the rip gives them, and
 // sets the transport's tempo and key to what it heard, so a slot plays the
-// estimate at once. Notes off the key sit on its nearest degree.
+// estimate at once. A register the front end heard no voice for gets one fitted
+// by the engine's own renders of its notes. Notes off the key sit on its nearest
+// degree. The rip is kept under its name for fit, compress and song.
 func cmdRip(s *Session, a []string) error {
-	if err := badName(a[1]); err != nil {
+	name := a[1]
+	if err := badName(name); err != nil {
 		return err
 	}
 	bars := audio.MaxPatternLen / audio.StepsPerBar
@@ -135,27 +138,33 @@ func cmdRip(s *Session, a []string) error {
 		return err
 	}
 	defer f.Close()
-	r, err := s.ripper().WAV(f)
+	x, rate, err := audio.ReadWAV(f)
 	if err != nil {
 		return err
 	}
-	defs := r.Patterns(a[1], bars)
-	if len(defs) == 0 {
+	r, err := s.ripper().Samples(x, rate)
+	if err != nil {
+		return err
+	}
+	if len(r.Patterns(name, bars)) == 0 {
 		return fmt.Errorf("%s: nothing heard to write", a[0])
 	}
-	voices := r.Voices(a[1])
-	for _, d := range defs {
+	// The names first, so a taken one costs no fit
+	for _, d := range r.Patterns(name, bars) {
 		if s.has(d.Name) {
 			return fmt.Errorf("%q: already exists", d.Name)
 		}
 	}
-	for _, v := range voices {
-		if s.has(v.Name) {
-			return fmt.Errorf("%q: already exists", v.Name)
+	for _, vn := range []string{name + "_melody_voice", name + "_bass_voice"} {
+		if s.has(vn) {
+			return fmt.Errorf("%q: already exists", vn)
 		}
 	}
-	// The voices heard register at once, so the patterns naming them play; the
-	// patterns stay dirty until a slot or an apply takes them
+	rp := &ripped{rip: r, x: x, rate: rate, file: a[0]}
+	s.fitVoices(rp, s.fit, false)
+	defs, voices := r.Patterns(name, bars), r.Voices(name)
+	// The voices register at once, so the patterns naming them play; the patterns
+	// stay dirty until a slot or an apply takes them
 	for _, v := range voices {
 		if _, err := s.eng.DefineVoice(v.Clone()); err != nil {
 			return fmt.Errorf("voice %q: %w", v.Name, err)
@@ -165,6 +174,7 @@ func cmdRip(s *Session, a []string) error {
 	for _, d := range defs {
 		s.pats.put(d, true)
 	}
+	s.rips[name] = rp
 	s.bpm = r.BPM
 	s.eng.SetMusicBPM(r.BPM)
 	s.eng.SetHarmony(r.Root, r.Scale, r.Progression)
@@ -185,8 +195,9 @@ func cmdRip(s *Session, a []string) error {
 	}
 	fmt.Fprintf(s.out, "%d pattern(s) added: %s; tempo and key set, slot them to hear the estimate\n", len(defs), strings.Join(names, " "))
 	for _, v := range voices {
-		fmt.Fprintf(s.out, "voice %s heard: %s, registered\n", v.Name, cmp.Or(v.Wave, "sine"))
+		fmt.Fprintf(s.out, "voice %s: %s, registered\n", v.Name, cmp.Or(v.Wave, "sine"))
 	}
+	fmt.Fprintf(s.out, "compress %s matches its bars to a dictionary and makes the song %s; fit %s refines the voices\n", name, name, name)
 	return nil
 }
 

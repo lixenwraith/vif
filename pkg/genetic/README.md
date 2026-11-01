@@ -298,6 +298,31 @@ offspring, so a terminator or a caller between runs copies what it keeps. A
 steady generation allocates nothing. Its `SetDiversity` takes the same
 `DiversityFunc`, evaluated once per generation into `PoolStats.Diversity`.
 
+Four hooks serve a search that a render or a model sits inside:
+
+```go
+e.SetSeeds(seeds)                      // candidates that open the first generation
+e.SetSchedule(genetic.AdaptiveStrength[float64](0.15, 0.1, 0.01, 0.4, 1.5))
+eval := genetic.Memoize(key, slowEval) // scores a genome once
+st, err := e.Checkpoint()              // after a Run; e.Restore(st) continues it
+```
+
+`SetSeeds` places the given candidates ahead of the initializer's, as many as
+the pool holds, so a model's proposals or the shipped set all enter the search;
+the engine owns them from then on. A `ScheduleFunc` chooses the next
+generation's mutation rate and strength from the pool's stats before each step;
+`AdaptiveStrength` is the one-fifth rule, the strength multiplied by `factor`
+after a generation that bettered the best score and divided by it after one
+that did not, held between `lo` and `hi`. `Memoize` wraps an evaluator with a
+cache by a genome key, safe under `Parallelism > 1`, holding every key it
+scored. `Checkpoint` is the engine after a `Run`: its configuration, members,
+generation, history, the knobs in force and the random stream's position
+(`EngineState`); `Restore` into an engine built the same way makes the next
+`Run` pick up at that generation, so a run stopped and restored ends where an
+unbroken one ends. `Members` alias engine memory, so copy them before running
+the source engine on. A state of another layout, configuration or pool size is
+refused with `ErrInvalidEngineState`.
+
 ---
 
 ## Operators
@@ -334,6 +359,7 @@ reuse `dst[i]` capacity when shape-compatible.
 | `NPointCombiner` | `Points` crossover sites, alternating segments. Keeps a cut-point scratch buffer |
 | `BoundedPerturbator` | Gaussian noise sigma = `strength × (Max-Min)` per gene, returned to `ParameterBounds` by `Boundary`: clamp (default), reflect, or wrap. Genes past `len(Bounds)` are left alone, a NaN result (from a non-finite range) leaves the gene untouched, and zero `strength` is a no-op |
 | `GaussianPerturbator` | Unbounded noise for numeric slices |
+| `CategoricalPerturbator` | For `[]int` assignments: each element moves, with probability `rate`, to another of its categories drawn uniformly, `Categories` for all or `Per[i]` for one; `strength` is unused |
 | `SliceCloner` | Capacity-reusing copy for `~[]T` |
 | `GeneSpread` | `DiversityFunc` for bounded `[]float64`: mean normalized per-gene standard deviation |
 
@@ -354,7 +380,11 @@ A genome that is not a real vector brings its own perturbator and, if wanted,
 diversity metric, and reuses the rest: `[]bool` patterns run under
 `TournamentSelector`, `UniformCombiner[[]bool, bool, float64]` and
 `SliceCloner[[]bool, bool]` with a ten-line perturbator that flips each bit
-with probability `rate` and ignores `strength`.
+with probability `rate` and ignores `strength`; an assignment of items to
+representatives, such as a song's bars to a dictionary's patterns, is a `[]int`
+under `CategoricalPerturbator` and `UniformCombiner[[]int, int, float64]`,
+scored by how well each item matches its representative less a term for the
+representatives in use.
 
 ---
 

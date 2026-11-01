@@ -78,6 +78,25 @@ func (v *DrumVoice) Reset() {
 
 // --- TonalVoice: Pitched instrument with ADSR ---
 
+// RenderNote plays one note of a voice offline, midi at velocity vel, held for
+// dur seconds and let ring for tail more or until it has died away, as a
+// TonalVoice sounds it: what a candidate voice is compared with a recording's
+// note by.
+func RenderNote(v *VoiceDef, midi int, vel float64, dur, tail float64) []float64 {
+	k := &kit{voices: make([]*VoiceDef, InstrLead+1)}
+	k.voices[InstrLead] = v
+	tv := NewTonalVoice(k)
+	tv.Trigger(VoiceParams{Note: midi, Velocity: vel, Duration: max(int(dur*AudioSampleRate), 1), Instrument: InstrLead})
+	out := make([]float64, max(int((dur+tail)*AudioSampleRate), 1))
+	for i := range out {
+		if !tv.Active() {
+			return out[:i]
+		}
+		out[i] = tv.Sample()
+	}
+	return out
+}
+
 // ADSRState tracks envelope phase
 type ADSRState int
 

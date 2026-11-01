@@ -1275,29 +1275,39 @@ front-end seam. What remains, in the design's order:
    are outside the model: a second pass with the first estimate cancelled, and a
    key per phrase.
 
-### Fit the rip's voices and patterns by the engine's own renders
+### Close the rip's loop
 
 - Priority: P1
-- Affected files: `pkg/genetic`, `pkg/audio/rip.go`, `internal/soundlab`
+- Affected files: `pkg/audio/rip.go`, `pkg/audio/song.go`, `internal/soundlab`
 
-The next iteration, [Rip design](rip-design.md) §2 stages 4 to 7 and §6: the
-`pkg/genetic` additions the searches need (assignment genomes and their
-operators, a scalarized fitness with a size term, an adaptive step for the
-continuous searches, evaluation caching, a checkpoint for the batch engine,
-seeding from several candidates); the voice fit by analysis-by-synthesis, the
-engine rendering a candidate voice at a note's pitch and the mel frames compared;
-the pattern dictionary, the matching of bars to its members and the compression
-of members within a threshold; the refinement loop over render, compare and
-refine, its convergence measured; and the timeline document, which bar plays
-which patterns, the one form the engine lacks for a ripped song.
+[Rip design](rip-design.md) §2 stage 7. The voice fit (`rip`, `fit`), the
+dictionary and the song (`compress`, `song`) and the song's score against the
+rip are in place; what remains:
+
+1. The refinement loop: voices and patterns refined in turn against the song's
+   score, a step that does not improve it undone, convergence measured on the
+   sample recording and on rendered loops.
+2. Matching by reconstruction: a bar's distance to a member as the rip of the
+   member's render against the bar, in place of `BarDistance`, with `Memoize`
+   paying for each render once; measure it against the mechanical grouping.
+3. Several voices in a register: notes clustered by their genes before the fit,
+   the second pluck apart from the first on the sample recording.
+4. The fit's sample notes are the mix around them: subtract the other register's
+   estimate from the recording before the mel frames, or fit on the frames a
+   trained front end attributes to the note.
+5. A song in the game: the conductor plays tiers, not bars; a `SongDef` played
+   by the sequencer as soundlab conducts it, when a level wants a fixed piece.
 
 ### Render a conductor timeline offline
 
 - Priority: P3
 - Affected files: `internal/soundlab`, `cmd/vif-log`
 
-The offline conductor render that compared bass voicings for the music-smoothing
-review, an APM timeline through the sequencer with no device, is a test-only
+`RenderTimeline` plays a timeline of slot patterns offline and `song` writes a
+`SongDef` through it; the conductor's own timeline, patterns by tier from an APM
+trace, is what still lacks a path to it. The offline conductor render that
+compared bass voicings for the music-smoothing review, an APM timeline through
+the sequencer with no device, is a test-only
 harness in a scratch repository. `AudioEngine.RenderMusic` now renders placed
 patterns offline; the verb would drive an APM timeline through the conductor's
 tier and tempo policy over it and write the WAV.

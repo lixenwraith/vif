@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -73,11 +75,76 @@ func TestRipHearsTheLoop(t *testing.T) {
 	}
 	score := CompareRips(r, want)
 	t.Logf("bpm %d bars %d downbeat %.2fs; score %+v", r.BPM, len(r.Bars), r.Downbeat, score)
+	// on a pinned grid the decoders of tempo and bar line are skipped and the
+	// rest reads the same
+	pinned, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ps := CompareRips(pinned, want); pinned.BPM != bpm || pinned.Downbeat != 0 || len(pinned.Bars) != bars || ps.Total < score.Total-0.01 {
+		t.Errorf("pinned: bpm %d downbeat %.2f bars %d score %+v", pinned.BPM, pinned.Downbeat, len(pinned.Bars), ps)
+	}
 	if score.Tempo < 1 || score.Bars < 0.85 || score.Drums < 0.9 || score.Melody < 0.8 || score.Bass < 0.8 {
 		t.Errorf("score %+v", score)
 	}
 	if n := len(r.Patterns("loop", 4)); n < 3 {
 		t.Errorf("%d patterns written, want a beat, a melody and a bass at least", n)
+	}
+	if len(r.Notes) < 16 || r.Notes[0].Start > r.Notes[len(r.Notes)-1].Start {
+		t.Errorf("%d notes in the transcript, in order %v", len(r.Notes), len(r.Notes) > 1)
+	}
+	// a timeline that empties every slot after the first bar falls near silent
+	// there, and plays on when the third bar fills them again
+	timeline := [][MusicSlots]PatternID{slots, {}, slots}
+	tl, err := ae.RenderTimeline(timeline, bpm, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := SamplesPerBar(bpm)
+	full, empty, again := energy(tl[:n]), energy(tl[n:2*n]), energy(tl[2*n:])
+	if empty > full/10 || again < full/2 {
+		t.Errorf("timeline bars carry %g, %g and %g", full, empty, again)
+	}
+}
+
+func energy(x []float64) float64 {
+	var e float64
+	for _, v := range x {
+		e += v * v
+	}
+	return e / float64(max(len(x), 1))
+}
+
+// TestNoteRenderAndDistances: a rendered note sounds and dies, mel frames of the
+// same note are no distance apart and of another voice some, and bars are as far
+// apart as the steps they do not share.
+func TestNoteRenderAndDistances(t *testing.T) {
+	saw := &VoiceDef{Name: "a", Wave: "saw", Cutoff: 2000, Q: 0.5, Attack: 0.005, Decay: 0.1, Sustain: 0.7, Release: 0.1}
+	sine := &VoiceDef{Name: "b", Wave: "sine", Attack: 0.005, Decay: 0.1, Sustain: 0.7, Release: 0.1}
+	note := RenderNote(saw, 60, 0.8, 0.3, 0.5)
+	if len(note) < int(0.3*AudioSampleRate) || len(note) > int(0.8*AudioSampleRate) || energy(note[:1000]) == 0 {
+		t.Fatalf("note of %d samples, head energy %g", len(note), energy(note[:1000]))
+	}
+	if tail := note[len(note)-100:]; energy(tail) > energy(note[:4410])/100 {
+		t.Errorf("the note did not die away: %g vs %g", energy(tail), energy(note[:4410]))
+	}
+	a := MelFrames(note, AudioSampleRate)
+	b := MelFrames(RenderNote(sine, 60, 0.8, 0.3, 0.5), AudioSampleRate)
+	if MelDistance(a, a) != 0 || MelDistance(a, b) <= 0 {
+		t.Errorf("distances %g and %g", MelDistance(a, a), MelDistance(a, b))
+	}
+	x := RipBar{Melody: []Step{{Pos: 0, Deg: 0, Oct: 2}, {Pos: 4, Deg: 2, Oct: 2}}}
+	x.Drums[InstrKick] = []Step{{Pos: 0}, {Pos: 8}}
+	y := x
+	y.Melody = []Step{{Pos: 0, Deg: 0, Oct: 2}, {Pos: 4, Deg: 3, Oct: 2}}
+	if d := BarDistance(&x, &x); d != 0 {
+		t.Errorf("a bar is %g from itself", d)
+	}
+	if d := BarDistance(&x, &y); math.Abs(d-0.4) > 1e-9 {
+		t.Errorf("one note of four changed is %g apart, want 0.4", d)
+	}
+	if d := BarDistance(&x, &RipBar{}); d != 1 {
+		t.Errorf("a bar is %g from an empty one", d)
 	}
 }
 
@@ -134,6 +201,76 @@ func TestRipPatternsWindowTheBars(t *testing.T) {
 		if _, err := p.Pattern(); err != nil {
 			t.Errorf("%s: %v", p.Name, err)
 		}
+	}
+}
+
+// TestRipSongIsADictionaryAndATimeline: bars within the threshold of one another
+// share a pattern, each group's medoid standing for it, the song plays them in
+// the rip's order at its tempo and key, and the document carries it with the
+// patterns, validated, resolvable to a timeline and back to the same song.
+func TestRipSongIsADictionaryAndATimeline(t *testing.T) {
+	r := &Rip{BPM: 120, Root: 40, Scale: ScaleMinor, Progression: []int{0, 5}, Bars: make([]RipBar, 6)}
+	for b := range r.Bars {
+		r.Bars[b].Drums[InstrKick] = []Step{{Pos: 0, Vel: 1}, {Pos: 8, Vel: 1}}
+		if b%3 == 2 { // every third bar a snare joins: one hit in three differs
+			r.Bars[b].Drums[InstrSnare] = []Step{{Pos: 4, Vel: 0.9}}
+		}
+		if b < 4 {
+			r.Bars[b].Melody = []Step{{Pos: 0, Vel: 0.8, Deg: b % 2, Oct: 2, Dur: 4}}
+		}
+	}
+	// four items a tenth apart: the pairs join at 0.1 and the pairs at 0.2 by
+	// their mean, so a threshold between keeps two groups and one above makes one
+	assign, medoids := Cluster(4, func(i, j int) float64 { return math.Abs(float64(i-j)) / 10 }, 0.15)
+	if !slices.Equal(assign, []int{0, 0, 1, 1}) || len(medoids) != 2 {
+		t.Errorf("items a tenth apart clustered %v with medoids %v under 0.15", assign, medoids)
+	}
+	if assign, medoids = Cluster(4, func(i, j int) float64 { return math.Abs(float64(i-j)) / 10 }, 0.25); !slices.Equal(assign, []int{0, 0, 0, 0}) || (medoids[0] != 1 && medoids[0] != 2) {
+		t.Errorf("items a tenth apart clustered %v with medoids %v under 0.25", assign, medoids)
+	}
+	beat := r.Cluster(RipBeat, 0.05)
+	if !slices.Equal(beat, []int{0, 0, 2, 0, 0, 2}) {
+		t.Errorf("beat groups %v, want the snare bars apart", beat)
+	}
+	if loose := r.Cluster(RipBeat, 0.5); !slices.Equal(loose, []int{0, 0, 0, 0, 0, 0}) {
+		t.Errorf("within a half every bar is one group: %v", loose)
+	}
+	melody := r.Cluster(RipMelody, 0.05)
+	if !slices.Equal(melody, []int{0, 1, 0, 1, -1, -1}) {
+		t.Errorf("melody groups %v, want two alternating and the silent bars out", melody)
+	}
+	pats, song := r.Song("x", [RipParts][]int{beat, melody, r.Cluster(RipBass, 0.05)})
+	if len(pats) != 4 || pats[0].Name != "x_beat_a" || pats[1].Name != "x_beat_b" || pats[2].Name != "x_melody_a" || pats[3].Name != "x_melody_b" {
+		names := make([]string, len(pats))
+		for i, p := range pats {
+			names[i] = p.Name
+		}
+		t.Fatalf("dictionary %v", names)
+	}
+	if song.BPM != 120 || song.Scale != "minor" || len(song.Bars) != 6 || song.Bars[2][0] != "x_beat_b" || song.Bars[4][1] != "" || song.Bars[3][1] != "x_melody_b" {
+		t.Errorf("song %+v", song)
+	}
+	if err := ValidateSong(song); err != nil {
+		t.Fatal(err)
+	}
+	data, err := MarshalPatternFile(&PatternSpecFile{Pattern: pats, Song: []*SongDef{song}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := LoadPatternFile(data)
+	if err != nil || len(f.Pattern) != 4 || len(f.Song) != 1 || !reflect.DeepEqual(f.Song[0], song) {
+		t.Fatalf("the document came back as %v, %+v", err, f)
+	}
+	ids := map[string]PatternID{"x_beat_a": 3, "x_beat_b": 4, "x_melody_a": 5, "x_melody_b": 6}
+	tl, err := song.Timeline(func(n string) PatternID { return ids[n] })
+	if err != nil || len(tl) != 6 || tl[2][0] != 4 || tl[1][1] != 6 || tl[5][1] != PatternSilence {
+		t.Errorf("timeline %v: %v", tl, err)
+	}
+	if _, err := song.Timeline(func(string) PatternID { return PatternSilence }); err == nil {
+		t.Error("an unregistered name resolved")
+	}
+	if letters(0) != "a" || letters(25) != "z" || letters(26) != "aa" || letters(27) != "ab" {
+		t.Errorf("letters %s %s %s %s", letters(0), letters(25), letters(26), letters(27))
 	}
 }
 

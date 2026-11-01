@@ -696,11 +696,25 @@ func (ae *AudioEngine) DefinePattern(p *Pattern) (PatternID, error) {
 // drums again rather than share the mixer's cache, and leaves the live sequencer
 // alone.
 func (ae *AudioEngine) RenderMusic(slots [MusicSlots]PatternID, bpm, bars, root int, scale ScaleID, prog []int, seed int64) ([]float64, error) {
+	if bars < 1 {
+		return nil, fmt.Errorf("render: %d bars", bars)
+	}
+	timeline := make([][MusicSlots]PatternID, bars)
+	for i := range timeline {
+		timeline[i] = slots
+	}
+	return ae.RenderTimeline(timeline, bpm, root, scale, prog, seed)
+}
+
+// RenderTimeline is RenderMusic over a timeline, the patterns each bar's slots
+// hold, changed at the bar line: what a song is once its bars are matched to a
+// dictionary of patterns.
+func (ae *AudioEngine) RenderTimeline(timeline [][MusicSlots]PatternID, bpm, root int, scale ScaleID, prog []int, seed int64) ([]float64, error) {
 	if !ae.running.Load() {
 		return nil, errors.New("render needs a started engine")
 	}
-	if bpm < MinBPM || bpm > MaxBPM || bars < 1 {
-		return nil, fmt.Errorf("render: %d bpm or %d bars out of range", bpm, bars)
+	if bpm < MinBPM || bpm > MaxBPM || len(timeline) < 1 {
+		return nil, fmt.Errorf("render: %d bpm or %d bars out of range", bpm, len(timeline))
 	}
 	ae.mu.RLock()
 	shapes := ae.config.SoundShapes
@@ -716,15 +730,26 @@ func (ae *AudioEngine) RenderMusic(slots [MusicSlots]PatternID, bpm, bars, root 
 	s.autoFill = false
 	s.Reseed(seed)
 	s.SetHarmonyCfg(root, scale, prog)
-	for slot, id := range slots {
-		if id != PatternSilence {
-			s.SetPattern(slot, id, 0, false)
+	var held [MusicSlots]PatternID
+	place := func(bar int) {
+		for slot, id := range timeline[bar] {
+			if id != held[slot] {
+				s.SetPattern(slot, id, 0, false)
+				held[slot] = id
+			}
 		}
 	}
+	place(0)
 	s.Start()
 	s.startGain, s.startInc = 1, 0
-	buf := make([]float64, SamplesPerBar(bpm)*bars)
-	s.Generate(buf)
+	n := SamplesPerBar(bpm)
+	buf := make([]float64, n*len(timeline))
+	for bar := range timeline {
+		if bar > 0 {
+			place(bar)
+		}
+		s.Generate(buf[bar*n : (bar+1)*n])
+	}
 	return buf, nil
 }
 

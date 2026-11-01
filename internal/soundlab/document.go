@@ -58,6 +58,16 @@ func newPatternDoc() *doc[*audio.PatternDef] {
 	}
 }
 
+func newSongDoc() *doc[*audio.SongDef] {
+	return &doc[*audio.SongDef]{
+		byName:  map[string]*audio.SongDef{},
+		dirty:   map[string]bool{},
+		nameOf:  func(d *audio.SongDef) string { return d.Name },
+		setName: func(d *audio.SongDef, n string) { d.Name = n },
+		clone:   func(d *audio.SongDef) *audio.SongDef { return d.Clone() },
+	}
+}
+
 // clonePatternDef is the deep copy PatternDef lacks. StepDef is a value
 // struct, so cloning the slices is sufficient.
 func clonePatternDef(d *audio.PatternDef) *audio.PatternDef {

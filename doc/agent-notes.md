@@ -205,6 +205,22 @@ that proves wrong or that a document now states, and link the document instead.
   cores and reached 0.59; a set tuned on renders alone pushes `tightness` and
   `kick_share` to their range's ends, which a recording with tempo drift would
   pay for, so the defaults stay hand-set until the corpus has real material.
+- A song plays through the live sequencer by scheduling each bar's patterns
+  quantized while the bar before plays (`conduct`), never by setting them on the
+  tick that sees the bar line, which lands them a tick late and loses the
+  downbeat's hits. The melody slot's boundary is its pattern's cycle, so a
+  four-bar pattern there holds the change for up to four bars; the dictionary's
+  one-bar patterns change every bar. A front end that ticks sets `Session.ticked`
+  and calls `conduct`; without one `song play` conducts itself until the song
+  ends, with a deadline past its length in case the transport never moves.
+- The searches soundlab runs are sized by fields a test shrinks
+  (`Session.fit`, `Session.compressOpt`), not by constants: the rip test fits two
+  notes over one generation of four and still walks every path. Seeds past the
+  pool size are dropped by the engine without a word, so a pool smaller than the
+  registered voices fits from the first few only.
+- A command line splits on blanks (`splitArgs`); a path with a space travels in
+  double quotes, which the files overlay adds. Quotes at an argument's start are
+  grammar now, so a `set` value in quotes loses them.
 
 ## Locks
 
@@ -390,6 +406,15 @@ that proves wrong or that a document now states, and link the document instead.
 - An elitist archive under a noisy objective selects for luck. Score a
   genotype by the mean of several evaluations and re-evaluate archived members
   (`sandbox/genetic`'s trials and refreshes) before touching the operators.
+- `Engine.Checkpoint`'s members alias the engine's buffers, which the next
+  generation writes over: copy them before running the source engine on, as its
+  test does. `Restore` into an engine of another configuration or pool size is
+  refused rather than reshaped.
+- An assignment genome under `CategoricalPerturbator` wants a rate of one over
+  its length and a `MixProbability` near one, so most children differ from a
+  parent by one move; under a Jaccard distance the search rarely beats the
+  greedy grouping it is seeded with, which is expected, not a bug: the size
+  term and the greedy pass apply the same pressure.
 
 ## Branches
 

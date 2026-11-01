@@ -91,7 +91,13 @@ checks (`RenderMusic`, `ExpectedRip`, `CompareRips`). The front end is a seam:
 a `Ripper` hears through the package's analysis or through any `RipFrontEnd`
 that fills `RipFrames` from `MelFrames`, as the `ripnet` subpackage does with a
 transformer, which also hears the voices the notes are played with
-(`VoiceDef.Genes`). `ReadWAV` reads any PCM or float width to mono.
+(`VoiceDef.Genes`). `ReadWAV` reads any PCM or float width to mono. The
+primitives a search fits a rip with are here and the searches are not:
+`RenderNote` plays a voice at a note offline and `MelDistance` compares mel
+frames, `Rip.Notes` is the transcript they fit to; `BarDistance`, `Cluster` and
+`Rip.Cluster` group a rip's bars within a threshold and `Rip.Song` writes the
+groups as one-bar patterns and a `SongDef`, the `[[song]]` of a pattern document
+that `RenderTimeline` plays offline, the patterns changed at the bar lines.
 
 ## Determinism
 

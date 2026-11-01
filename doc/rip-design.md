@@ -48,35 +48,59 @@ flowchart LR
    holds their thresholds as data a search tunes (`tune`).
 4. **Voices.** Each note carries the genes the front end heard it played with
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
-   wave class). Today a register's notes average into one voice; next, notes
-   cluster by their genes into as many voices as the recording has, and each
-   voice is fitted by analysis-by-synthesis: the engine renders the voice at the
-   note's pitch and loudness, the render's mel frames are compared with the
-   note's, and a search over the genes closes the distance. The model proposes;
-   the engine disposes.
-5. **Patterns and the dictionary.** Notes and hits fall into bars; bars of up to
-   four form patterns. The dictionary is the set of patterns the song is made
-   of, and matching assigns each bar of the recording to a member. Its score is
-   reconstruction (the rip of the arrangement's render against the rip of the
-   recording, `CompareRips`) less a cost per dictionary member, which is what
-   makes a repeated bar one pattern rather than many.
-6. **Compression.** Two patterns within a threshold of each other, a few per cent
-   of their steps and pitches, merge into one, their bars reassigned. A
-   mechanical pass, agglomerative merging under the threshold, is the first
-   implementation; the dictionary-size term of the matching search applies the
-   same pressure, so whether a separate search does better is a measurement to
-   make, not a decision to take now.
-7. **The loop.** The arrangement is rendered (`RenderMusic`), compared with the
-   recording, and voices and patterns are refined in turn until the score stops
-   improving. The model hears the render too, so its voice estimate of the
-   render against its estimate of the recording is a second, cheaper distance
-   for the voice search. Convergence is measured, and a step that does not
-   improve the score is undone.
+   wave class); a register's notes average into one voice. A register the front
+   end heard no voice for, every register under the built-in analysis, gets one
+   fitted by analysis-by-synthesis (soundlab's `rip`, and `fit` again with more
+   generations): the rip's transcript (`Rip.Notes`) gives the register's longest
+   and loudest notes, the engine renders a candidate voice at each note's pitch,
+   loudness and length (`RenderNote`), the render's mel frames are compared with
+   the recording's around the note (`MelDistance`), and a search over the
+   thirty-two genes and the wave, seeded with every registered voice and run
+   under an adaptive step with its evaluations cached, closes the distance. The
+   recording around a note holds the other voices too, so the fit is to the mix
+   there; a trained front end narrows that. Next, notes cluster by their genes
+   into as many voices as a register has. The model proposes; the engine
+   disposes.
+5. **Patterns and the dictionary.** Notes and hits fall into bars. `rip` writes
+   windows of up to four bars as patterns, the estimate heard first; `compress`
+   writes the dictionary: per part (beat, melody, bass) the bars that stand for
+   the others, each a pattern of one bar (`<name>_<part>_a`, `_b`, ...), and the
+   song, which bar plays which (`SongDef`, a `[[song]]` in the pattern
+   document). Matching assigns each bar to a member: today by `BarDistance`, the
+   steps two bars do not share over the steps either has, a hit by drum and step
+   and a note by step, degree and octave; next by reconstruction, the rip of the
+   member's render against the bar's.
+6. **Compression.** Bars within a threshold of one another, a few per cent of
+   their steps, merge into one member. The mechanical pass runs first
+   (`Cluster`: each bar its own group, the two nearest groups merged by their
+   mean distance while it holds within the threshold, the medoid standing for
+   each), then a search over the assignment refines it: a genome of each bar's
+   representative under `CategoricalPerturbator`, scored by the representatives
+   in use, heavily by any bar farther from its own than the threshold and
+   lightly by the mean distance, seeded with the mechanical answer and taken only
+   when better. On the sample recording the search rarely beats the greedy pass
+   under this distance; it earns its place when the distance is reconstruction,
+   which is why it is there.
+7. **The loop.** The song is rendered (`RenderTimeline`) and ripped back on its
+   own grid (`Ripper.Grid`: the tempo and the downbeat pinned, the decoders of
+   both skipped), since the tempo decoder hears a clean render of
+   sixteenth-dense patterns a metrical level away as readily as the recording
+   (the sample's 86 bpm came back as 115) and the bar-line decoder a beat late
+   when the render's downbeat carries no kick; that rip is compared with the
+   recording's (`CompareRips`), and the score `compress` prints is how much of
+   the rip survives as the song, drums, melody and bass apart: a grade of the
+   fitted voices and the dictionary, with those decoders graded by `tune`. Next, voices and patterns are refined in turn against it
+   until it stops improving, the model hearing the render too, so its voice
+   estimate of the render against its estimate of the recording is a second,
+   cheaper distance for the voice search; a step that does not improve the
+   score is undone.
 
-The output is a sound document of voices, a music document of patterns, the key,
-the tempo and a timeline, which bar plays which patterns. The timeline is a form
-the engine has not: the conductor places patterns by tier, not by bar. It is the
-one new document the rip needs and is designed with the dictionary.
+The output is a sound document of voices, a pattern document of patterns and the
+song, which bar plays which at what tempo and in what key. The song is the form
+the engine lacked, the conductor placing patterns by tier, not by bar; soundlab
+plays one through the live sequencer (`song <name> play`), each bar's patterns
+scheduled to land on its bar line while the one before plays, and renders one
+offline (`song <name> <file.wav>`).
 
 ## 3. Learning
 
@@ -107,15 +131,20 @@ one new document the rip needs and is designed with the dictionary.
 
 - `pkg/audio`: the rip, its parameters, the decoders, the built-in analysis,
   the features, the truth (`ExpectedRip`, `ExpectedEvents`) and the score
-  (`CompareRips`), the offline render (`RenderMusic`). Imports only `toml`.
+  (`CompareRips`), the offline renders (`RenderMusic`, `RenderTimeline`,
+  `RenderNote`), the distances (`MelDistance`, `BarDistance`), the mechanical
+  clustering (`Cluster`) and the song (`SongDef`). Imports only `toml`. The
+  searches stay out of it, so it stands alone.
 - `pkg/audio/ripnet`: the learned front end, `Spec` and `Hear`. Imports `audio`
   and `transformer`, and goes with `audio` to its module.
 - `pkg/transformer`: inference over frames and the weight file. Standard
   library only, its own module when the time comes.
-- `pkg/genetic`: the searches, over `RipParams` today, over voice genes and
-  bar-to-pattern assignments next. Standard library only.
-- `internal/soundlab`: the verbs that drive it all (`rip`, `render`, `corpus`,
-  `tune`) and the documents the results land in.
+- `pkg/genetic`: the searches, over `RipParams`, over voice genes and over
+  bar-to-pattern assignments, with seeds, a schedule, a checkpoint, a cache and
+  a categorical operator for them. Standard library only.
+- `internal/soundlab`: the verbs that drive it all (`rip`, `fit`, `compress`,
+  `song`, `render`, `corpus`, `tune`), the documents the results land in, and
+  the files overlay (`^O`) that loads, rips and saves them.
 - `tool/rip-train`: the trainer, Python, outside the module.
 
 ## 5. Budgets and determinism
@@ -127,39 +156,75 @@ seeded, the searches run on fixed streams, and the model is float32 arithmetic i
 a fixed order, so a rip of one recording with one weight file and one parameter
 set is the same rip on every host.
 
-## 6. What `pkg/genetic` needs next
+## 6. What `pkg/genetic` gave the searches
 
-The voice fit and the dictionary matching ask for what the parameter search did
-not:
+The voice fit and the dictionary matching asked for what the parameter search
+did not, and the generational engine now has it:
 
-- genomes that are assignments and sets, bars to patterns, with operators that
-  move a bar, swap two, split a member or merge two; today's operators are for
-  real vectors and bit patterns;
-- a fitness with a size term and a constraint, or a scalarization that takes
-  them, over `fitness`'s metric bundles;
-- an adaptive step for the continuous searches (a sigma that follows success, as
-  CMA-ES does), since thirty-two voice genes under a fixed sigma converge slowly;
-- evaluation caching by genome, since a render is the expensive step and a
-  generation repeats candidates;
-- a long run's checkpoint and resume for the batch engine, which the streaming
-  engine has and the batch engine lacks;
-- seeding a pool from several given candidates, not one, so a model's proposals
-  all enter the search.
+- assignment genomes: a `[]int` of each bar's representative under
+  `CategoricalPerturbator`, which moves an element to another of its categories,
+  and `UniformCombiner` over ints; a move, a swap, a split and a merge are all
+  reachable by it, and the size term in the score does the merging, so the
+  dedicated operators waited and were not missed;
+- the fitness with a size term and a constraint is a scalarization in soundlab's
+  `compress`, not a `fitness` bundle: three terms, one line, and a search that
+  changes its distance changes that line;
+- an adaptive step: `SetSchedule` with `AdaptiveStrength`, the one-fifth rule,
+  so the voice fit widens its step while it improves and narrows while it stalls;
+- evaluation caching: `Memoize` wraps an evaluator with a cache by genome key,
+  safe under parallel scoring, so a render is paid once per candidate;
+- a checkpoint for the batch engine: `Checkpoint` and `Restore` carry the pool,
+  the history, the knobs in force and the random stream's position, and a
+  restored run ends where an unbroken one ends;
+- seeding from several candidates: `SetSeeds` opens the first generation with
+  them, every registered voice for the fit, the mechanical grouping for the
+  matching.
+
+What it does not have and may yet need: a covariance step (CMA-ES) if the voice
+fit stalls on correlated genes once its distance is the model's, and a
+reconstruction-scored matching that renders per candidate, where `Memoize`
+and the checkpoint earn their keep.
 
 ## 7. Plan
 
 1. Done: the analysis and the decoders; parameters as data and their search; the
    offline render, the truth and the score; the transformer, `ripnet`, the corpus
-   and the trainer.
+   and the trainer; the genetic additions; the voice fit by analysis-by-synthesis;
+   the dictionary, matching and compression; the song document, rendered offline
+   and conducted live; the song's score against the rip.
 2. Next: train on a corpus with a room and a mix, and measure the model front end
-   against the analysis on rendered and on real material; the `pkg/genetic`
-   additions above; the voice fit by analysis-by-synthesis; the dictionary,
-   matching and compression; the timeline document.
-3. Then: real recordings in the corpus, the refinement loop's convergence
-   measured, tuned parameters and weights shipped as data, and the rip on
-   Android under the mobile budget.
+   against the analysis on rendered and on real material; the refinement loop,
+   voices and patterns refined in turn against the song's score, its convergence
+   measured; the matching scored by reconstruction; several voices in a register,
+   clustered by their genes.
+3. Then: real recordings in the corpus, tuned parameters and weights shipped as
+   data, and the rip on Android under the mobile budget.
 
-## 8. Decisions
+## 8. Measured on the sample recording
+
+`lixenwraith/scratch`'s `one_more_bite_intro.wav` through the built-in analysis,
+the voice fit, the dictionary and the song, nine seconds on four cores:
+
+- The rip: 86 bpm, A# harmonic minor, three full bars from 2.52 s, 25 notes a
+  register, and 19 kicks, 36 snares and 2 hats in a clip with no drums, the
+  bass's and the plucks' attacks ([todo](todo.md#tune-the-rip)).
+- The fit: six notes a register, twelve generations of twenty-four seeded with
+  the shipped five; the melody's voice modal at mel distance 0.107 against the
+  best seed's 0.127, the bass's modal at 0.102 against 0.142.
+- The dictionary: three bars into eight one-bar patterns, the same under a
+  threshold of 5 and of 25 per cent; three bars have nothing to compress, and
+  the assignment search never beat the greedy grouping under `BarDistance`.
+- The score, the rip of a render on its own grid against the recording's rip:
+  the windows through the shipped voices melody 0.64, bass 0.89; through the
+  fitted voices 0.75 and 0.58; the song with its drums 0.60, 0.39, drums 0.56;
+  without them 0.78 and 0.58. The fitted melody voice rips back better than the
+  shipped lead, the fitted bass worse than the shipped bass, fitted as it was to
+  the mix around the low notes; the false drums, played, mask the bass.
+- Before the grid was pinned every render ripped back at 115 bpm, a dotted
+  eighth for the beat, and a beat late: two decoder faults the score of the
+  compression must not carry, and two faults a real recording still pays for.
+
+## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved
   problems with cheap, inspectable solutions; a model earns its place at the
@@ -178,3 +243,12 @@ not:
   file in the root upgrades the hearing without a build.
 - **Pure Go inference.** No CGO, no runtime to ship, the same path on the
   desktop, the browser and the phone.
+- **The searches live in soundlab.** `pkg/audio` holds the primitives, a render,
+  a distance, a mechanical grouping, and `pkg/genetic` the engine; soundlab
+  joins them, so `audio` goes to its own module without `genetic`.
+- **The song is a document.** `[[song]]` beside the patterns, names not ids, a
+  tempo and a key of its own, so a ripped song is edited, saved and played like
+  anything else authored, and the conductor's tiers stay the game's.
+- **The score is the rip of the render.** A song is as good as the rip it rips
+  back to; the same `CompareRips` grades a parameter set, a model and a
+  compression, so their numbers compare.

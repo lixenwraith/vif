@@ -3,6 +3,7 @@ package genetic
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"slices"
 	"sync"
@@ -27,9 +28,16 @@ type Engine[S Solution, F Numeric] struct {
 	perturbator Perturbator[S]
 	terminator  TerminationFunc[S, F]
 	diversity   DiversityFunc[S, F]
+	schedule    ScheduleFunc[F]
+	seeds       []S
 
-	cfg EngineConfig
-	rng *rand.Rand
+	cfg     EngineConfig
+	pcg     *rand.PCG
+	rng     *rand.Rand
+	started bool
+	// rate and strength are the mutation knobs in force, the config's until a
+	// schedule moves them
+	rate, strength float64
 
 	pool    Pool[S, F]
 	version uint64
@@ -49,6 +57,7 @@ func NewEngine[S Solution, F Numeric](
 	config EngineConfig,
 ) *Engine[S, F] {
 	cfg := config.Normalize()
+	pcg := rand.NewPCG(cfg.Seed, cfg.Seed^defaultSeed)
 
 	e := &Engine[S, F]{
 		evaluator:   evaluator,
@@ -57,7 +66,10 @@ func NewEngine[S Solution, F Numeric](
 		combiner:    combiner,
 		perturbator: perturbator,
 		cfg:         cfg,
-		rng:         rand.New(rand.NewPCG(cfg.Seed, cfg.Seed^defaultSeed)),
+		pcg:         pcg,
+		rng:         rand.New(pcg),
+		rate:        cfg.PerturbationRate,
+		strength:    cfg.PerturbationStrength,
 		parents:     make([]Candidate[S, F], 2),
 		buf:         make([]S, 2),
 		next:        make([]Candidate[S, F], 0, cfg.PoolSize),
@@ -70,24 +82,142 @@ func NewEngine[S Solution, F Numeric](
 func (e *Engine[S, F]) SetTerminator(fn TerminationFunc[S, F]) { e.terminator = fn }
 func (e *Engine[S, F]) SetDiversity(fn DiversityFunc[S, F])    { e.diversity = fn }
 
+// ScheduleFunc chooses the next generation's mutation rate and strength from the
+// pool as it stands, called before each step; AdaptiveStrength is one.
+type ScheduleFunc[F Numeric] func(generation int, stats PoolStats[F]) (rate, strength float64)
+
+func (e *Engine[S, F]) SetSchedule(fn ScheduleFunc[F]) { e.schedule = fn }
+
+// SetSeeds places candidates in the first generation ahead of the initializer's,
+// as many as the pool holds; the engine owns them from here, as it owns every
+// member, so pass copies of what is kept.
+func (e *Engine[S, F]) SetSeeds(seeds []S) { e.seeds = seeds }
+
+// AdaptiveStrength is a schedule after the one-fifth rule: the strength rises
+// by factor on a generation that bettered the best score and falls by it on one
+// that did not, held within lo and hi, from start; the rate stays.
+func AdaptiveStrength[F Numeric](rate, start, lo, hi, factor float64) ScheduleFunc[F] {
+	strength := start
+	var best F
+	primed := false
+	return func(_ int, stats PoolStats[F]) (float64, float64) {
+		switch {
+		case !primed:
+			primed, best = true, stats.BestScore
+		case stats.BestScore > best:
+			best, strength = stats.BestScore, min(strength*factor, hi)
+		default:
+			strength = max(strength/factor, lo)
+		}
+		return rate, strength
+	}
+}
+
+// Memoize wraps an evaluator with a cache by genome key, for a search whose
+// candidates repeat and whose evaluation is dear; it holds every key it scored,
+// and two workers may score one key at once.
+func Memoize[S Solution, F Numeric](key func(S) string, eval EvaluatorFunc[S, F]) EvaluatorFunc[S, F] {
+	var mu sync.Mutex
+	seen := make(map[string]F)
+	return func(s S) F {
+		k := key(s)
+		mu.Lock()
+		v, ok := seen[k]
+		mu.Unlock()
+		if ok {
+			return v
+		}
+		v = eval(s)
+		mu.Lock()
+		seen[k] = v
+		mu.Unlock()
+		return v
+	}
+}
+
 // Run evolves until MaxIterations, the terminator, or context cancellation.
 // The pool it returns is engine memory, rewritten by the next Run
 func (e *Engine[S, F]) Run(ctx context.Context) (*Pool[S, F], error) {
-	e.initialize()
+	if !e.started {
+		e.initialize()
+		e.started = true
+	}
 
-	for i := range e.cfg.MaxIterations {
+	for e.pool.Generation < e.cfg.MaxIterations {
 		select {
 		case <-ctx.Done():
 			return &e.pool, ctx.Err()
 		default:
 		}
-		if e.terminator != nil && e.terminator(&e.pool, i) {
+		if e.terminator != nil && e.terminator(&e.pool, e.pool.Generation) {
 			break
+		}
+		if e.schedule != nil {
+			e.rate, e.strength = e.schedule(e.pool.Generation, e.pool.Stats)
 		}
 		e.step()
 		e.history = append(e.history, e.pool.Stats)
 	}
 	return &e.pool, nil
+}
+
+// EngineState is a generational engine's continuation point: its pool, its
+// history, the mutation knobs in force and the random stream's position.
+// Members alias the engine's memory, so a caller that goes on running the
+// engine copies them first; Restore takes ownership of what it is given.
+type EngineState[S Solution, F Numeric] struct {
+	Version        int
+	Config         EngineConfig
+	Members        []Candidate[S, F]
+	Generation     int
+	History        []PoolStats[F]
+	Rate, Strength float64
+	RNG            []byte
+}
+
+// EngineStateVersion names the layout of EngineState
+const EngineStateVersion = 1
+
+// ErrInvalidEngineState is Restore's refusal of a state another layout, shape
+// or engine made
+var ErrInvalidEngineState = errors.New("genetic: invalid engine state")
+
+// Checkpoint is the engine as it stands after a Run, to Restore into one built
+// the same way, so a long search continues where it stopped.
+func (e *Engine[S, F]) Checkpoint() (EngineState[S, F], error) {
+	if !e.started {
+		return EngineState[S, F]{}, fmt.Errorf("%w: nothing run yet", ErrInvalidEngineState)
+	}
+	rng, err := e.pcg.MarshalBinary()
+	if err != nil {
+		return EngineState[S, F]{}, err
+	}
+	return EngineState[S, F]{Version: EngineStateVersion, Config: e.cfg, Members: e.pool.Members,
+		Generation: e.pool.Generation, History: e.history, Rate: e.rate, Strength: e.strength, RNG: rng}, nil
+}
+
+// Restore continues from a Checkpoint of an engine of this one's configuration;
+// the next Run picks up at its generation.
+func (e *Engine[S, F]) Restore(st EngineState[S, F]) error {
+	switch {
+	case st.Version != EngineStateVersion:
+		return fmt.Errorf("%w: version %d, want %d", ErrInvalidEngineState, st.Version, EngineStateVersion)
+	case st.Config != e.cfg:
+		return fmt.Errorf("%w: another configuration", ErrInvalidEngineState)
+	case len(st.Members) != e.cfg.PoolSize:
+		return fmt.Errorf("%w: %d members, want %d", ErrInvalidEngineState, len(st.Members), e.cfg.PoolSize)
+	}
+	if err := e.pcg.UnmarshalBinary(st.RNG); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidEngineState, err)
+	}
+	e.pool.Members = append(e.pool.Members[:0], st.Members...)
+	e.pool.Generation = st.Generation
+	e.history = append(e.history[:0], st.History...)
+	e.rate, e.strength = st.Rate, st.Strength
+	e.started = true
+	e.free.clear()
+	e.finish()
+	return nil
 }
 
 // Best returns the top-scoring candidate, aliasing engine memory
@@ -106,6 +236,10 @@ func (e *Engine[S, F]) History() []PoolStats[F] { return e.history }
 func (e *Engine[S, F]) initialize() {
 	members := make([]Candidate[S, F], e.cfg.PoolSize)
 	for i := range members {
+		if i < len(e.seeds) {
+			members[i].Data = e.seeds[i]
+			continue
+		}
 		members[i].Data = e.initializer(e.rng)
 	}
 	e.evaluate(members)
@@ -128,8 +262,7 @@ func (e *Engine[S, F]) step() {
 			break
 		}
 		for j := range n {
-			e.perturbator.Perturb(&e.buf[j],
-				e.cfg.PerturbationRate, e.cfg.PerturbationStrength, e.rng)
+			e.perturbator.Perturb(&e.buf[j], e.rate, e.strength, e.rng)
 			e.next = append(e.next, Candidate[S, F]{Data: e.buf[j]})
 			e.buf[j] = e.free.take() // Ownership moved into next
 			if len(e.next) == e.cfg.PoolSize {

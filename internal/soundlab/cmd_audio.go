@@ -131,8 +131,10 @@ func cmdMusic(s *Session, a []string) error {
 		s.eng.StartMusic()
 	case "stop":
 		s.eng.StopMusic()
+		s.song = nil // a song being conducted ends with the transport
 	case "reset":
 		s.eng.ResetMusic()
+		s.song = nil
 	default:
 		return fmt.Errorf("want start|stop|reset, got %q", a[0])
 	}
@@ -177,21 +179,9 @@ func cmdFill(s *Session, a []string) error {
 }
 
 // scaleNames are the scales `key` takes, by ScaleID
-var scaleNames = [audio.ScaleCount]string{
-	audio.ScalePhrygian:      "phrygian",
-	audio.ScaleMinor:         "minor",
-	audio.ScaleHarmonicMinor: "harmonic_minor",
-	audio.ScaleDorian:        "dorian",
-	audio.ScaleMinorPent:     "minor_pent",
-	audio.ScaleMajor:         "major",
-}
+var scaleNames = audio.ScaleNames
 
-func scaleName(id audio.ScaleID) string {
-	if id >= 0 && id < audio.ScaleCount {
-		return scaleNames[id]
-	}
-	return "unknown"
-}
+func scaleName(id audio.ScaleID) string { return audio.ScaleName(id) }
 
 func cmdKey(s *Session, a []string) error {
 	root, err := strconv.Atoi(a[0])
