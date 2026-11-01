@@ -401,6 +401,29 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   pass's 0.88, which a voice could game with attacks the analysis heard the
   same notes from; the judge and the self-grade agree on this clip.
 
+- The ninth pass, the song at the recording's tuning and the lines uncrossed:
+  the user heard the refined tonals as slightly sharp, a stretched string,
+  which was the render at A440 against the clip's 41 cents flat; and a second
+  recording of the piece, `one_more_bite_intro_origin.wav`, in tune (+2 cents),
+  three semitones lower, a second longer and ripped on another metrical level
+  (148 bpm, G minor, eight bars), agrees with the first's transcript on 41 of
+  49 melody notes, 27 of 29 under notes and all 10 bass notes after
+  transposition and a fitted time map, while both listings show the two lines
+  swapping a held dyad. With the song rendered at the recording's tuning and
+  concurrent notes assigned to the lines by pitch order, the intro sounds 0.76
+  like the recording before `refine` (pitch 0.82, timbre 0.75 where it was
+  0.69, onset 0.72) and rips back at 0.90 (melody 0.74 where it was 0.63); the
+  origin 0.71 (0.71, 0.70, 0.71) and 0.86. Saturation, which the augmentation
+  now puts on a third of the loops, costs the analysis on the bench: 0.475 to
+  0.429 on augmented loops, the melody 0.17 to 0.08. `compress`, the harmonic
+  spectrum raised to a power before the salience, at 0.6 gains a hundredth on
+  clean loops (0.499 against 0.487), loses one on augmented (0.420 against
+  0.429) and loses on both recordings (0.74 against 0.76, 0.67 against 0.71);
+  at 0.45 the bench loses more (0.481, 0.410) while the intro gains in pitch
+  (0.86, ripping back at 0.94) and the origin loses (0.68, 0.79). No setting
+  wins on all four, so the default stays at one and the knob is the search's;
+  what saturation breaks is not the fundamental's weight alone.
+
 ## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved
