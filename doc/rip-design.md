@@ -240,6 +240,24 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   well is one the analysis hears the same notes from and no drums in, which is
   not the same as the one nearest the recording's spectrum; the ear decides
   between `bite_fit.wav` (the mel fit) and `bite_refined.wav` (the score fit).
+- The first training run: 120 augmented loops of four bars from the shipped
+  bank, `ripnet.Spec` at 818 thousand weights, 3000 steps of batch 8 in twenty
+  minutes on four CPU cores, the loss from 4.8 to 0.44 and the pitch head's
+  still falling. `bench 12 4` on fresh loops, total then tempo, bars, drums,
+  melody, bass: the analysis on clean loops 0.49 (0.75, 0.79, 0.51, 0.18,
+  0.50), the model 0.48 (0.83, 0.85, 0.63, 0.06, 0.27); on augmented loops the
+  analysis 0.45 (0.75, 0.75, 0.54, 0.11, 0.31), the model 0.47 (0.83, 0.88,
+  0.67, 0.05, 0.16). The model already hears onsets and drums better than the
+  analysis and holds up under the room and the mix where the analysis drops;
+  its pitches are far behind, which is the head with the most classes and the
+  least training. The shipped bank's few melodies cap what a corpus can teach:
+  more patterns and more steps before the model is trusted with a melody.
+- The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
+  where the analysis heard 86, F major where it heard A# harmonic minor (its
+  fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips
+  back at 0.45 through the mel-fitted voices and 0.63 after two rounds of
+  `refine`, against the analysis path's 0.66 and 0.88. The model's transcript
+  is the weaker one today, as `bench` said it would be; the loop lifts either.
 
 ## 9. Decisions
 
