@@ -266,6 +266,43 @@ that proves wrong or that a document now states, and link the document instead.
   and nineteenth, a semitone either side) before the path runs again; masking
   the fundamental alone finds the octave ghost. The gate is relative to the first
   path's mean note strength, so a clean render's second pass yields nothing.
+- A recording need not sit at A440: the sample is forty cents flat, which put
+  every pitch between two salience rows and read as semitone wobble (A#2 and
+  A2 taking turns), chopped sustains and a wrong scale. Measure the tuning (a
+  histogram of spectral peaks' offsets from the nearest semitone, what
+  `tuning` does) before blaming the tracker; the front end reads it first now,
+  and since a render is in tune, `bench` cannot see this failure.
+- The first full bar is not where the music starts: the grid dropped the
+  sample's opening phrase, two and a half seconds before its first bar line.
+  A pickup bar is extrapolated when a note or a hit leads in by more than half
+  a step; a render's silence before bar 0 opens none, so the corpus reads the
+  same. `Downbeat` is negative then, `progression` reads no frame before zero,
+  and `CompareRips` skips the pickup bar against a truth without one.
+- The pitch paths start late against the onsets the beats sit on, a sixth of a
+  step on the sample: the median phase of the notes is taken out before
+  quantizing, which lifted the test loop's melody from 0.95 to 0.98 and a cut
+  recording's from 0.93 to 0.98. Under that sharper grid the second pass's
+  fragments cost the pad test's melody two hundredths against the solo pass,
+  so that guard allows five.
+- The rip-back cannot judge the rip's own errors: a note misheard in the
+  recording is misheard the same way in the render, so a search on it polishes
+  the wrong transcript. `Fidelity` compares the render's frames with the
+  recording's through one front end; a render a semitone sharp scores 0.56 in
+  pitch against 1.0 for itself, with its onsets still at 1.0.
+- A `Ripper` of zero parameters hangs: zero costs let the pitch path jump every
+  frame and the tempo prior degenerate. `Samples` and `Hear` take the defaults
+  for the zero value now; a scratch tool that forgot `DefaultRipParams` ran
+  for ten minutes on a twelve-second clip.
+- `bench` grades the analysis as it is today, so a run's numbers compare only
+  with the analysis benched beside them: the seventh pass moved the analysis
+  from 0.47 to 0.49 on clean loops, and the fourth model run's 0.45 and 0.51
+  stand against that, not against the third run's table. The model's corpus
+  is rendered at A440, so nothing it saw was detuned; a recording off the
+  standard is a recording it was never shown, whatever its held-out loss.
+- A training run shares the cores with everything else the session does: the
+  fourth run slowed from 0.4 to 4 seconds a step under a rip and a test run,
+  and the two-hour waiter on it timed out twice. Size a waiter by the run
+  alone and expect to re-arm it, or follow the run by a reminder instead.
 
 ## Locks
 

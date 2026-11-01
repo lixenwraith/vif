@@ -165,7 +165,7 @@ func cmdRip(s *Session, a []string) error {
 			return fmt.Errorf("%q: already exists", d.Name)
 		}
 	}
-	for _, vn := range []string{name + "_melody_voice", name + "_bass_voice"} {
+	for _, vn := range []string{name + "_melody_voice", name + "_under_voice", name + "_bass_voice"} {
 		if s.has(vn) {
 			return fmt.Errorf("%q: already exists", vn)
 		}
@@ -190,15 +190,23 @@ func cmdRip(s *Session, a []string) error {
 	s.eng.SetHarmony(r.Root, r.Scale, r.Progression)
 	s.root, s.scale, s.prog = r.Root, r.Scale, r.Progression
 	var hits [audio.InstrClap]int
-	notes, low := 0, 0
+	notes, under, low := 0, 0, 0
 	for _, b := range r.Bars {
 		for d := range b.Drums {
 			hits[d] += len(b.Drums[d])
 		}
-		notes, low = notes+len(b.Melody), low+len(b.Bass)
+		notes, under, low = notes+len(b.Melody), under+len(b.Under), low+len(b.Bass)
 	}
-	fmt.Fprintf(s.out, "ripped %s: %d bpm, %s, %d bar(s) from %.2fs; kicks %d snares %d hats %d, melody notes %d, bass notes %d\n",
-		a[0], r.BPM, s.keyName(), len(r.Bars), r.Downbeat, hits[audio.InstrKick], hits[audio.InstrSnare], hits[audio.InstrHihat], notes, low)
+	from := fmt.Sprintf("from %.2fs", r.Downbeat)
+	if r.Downbeat < 0 {
+		from = fmt.Sprintf("the first a pickup bar from %.2fs before the recording", -r.Downbeat)
+	}
+	tuned := ""
+	if r.Tuning <= -5 || r.Tuning >= 5 {
+		tuned = fmt.Sprintf(" tuned %+.0f cents", r.Tuning)
+	}
+	fmt.Fprintf(s.out, "ripped %s: %d bpm, %s%s, %d bar(s) %s; kicks %d snares %d hats %d, melody notes %d and %d under, bass notes %d\n",
+		a[0], r.BPM, s.keyName(), tuned, len(r.Bars), from, hits[audio.InstrKick], hits[audio.InstrSnare], hits[audio.InstrHihat], notes, under, low)
 	names := make([]string, 0, len(defs))
 	for _, d := range defs {
 		names = append(names, d.Name)

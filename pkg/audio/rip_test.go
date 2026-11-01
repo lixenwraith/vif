@@ -183,8 +183,8 @@ func TestRipHearsASecondVoice(t *testing.T) {
 	padNotes := func(r *Rip) int {
 		n := 0
 		for _, bar := range r.Bars {
-			for _, st := range bar.Melody {
-				midi := r.Root + 12*st.Oct + scaleTable[r.Scale][st.Deg]
+			for _, st := range append(slices.Clone(bar.Melody), bar.Under...) {
+				midi := StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc)
 				if st.Pos == 0 && midi == DefaultRootNote+15 || st.Pos == 8 && midi == DefaultRootNote+19 {
 					n++
 				}
@@ -193,8 +193,23 @@ func TestRipHearsASecondVoice(t *testing.T) {
 		return n
 	}
 	t.Logf("one voice %+v, %d pad notes; two voices %+v, %d pad notes of %d", a, padNotes(solo), b, padNotes(both), 2*bars)
-	if padNotes(both) <= padNotes(solo) || b.Melody <= a.Melody {
+	// the second line's fragments may cost the melody a little, not more
+	if padNotes(both) <= padNotes(solo) || b.Melody < a.Melody-0.05 {
 		t.Errorf("the second pass found %d pad notes against %d, melody %.2f against %.2f", padNotes(both), padNotes(solo), b.Melody, a.Melody)
+	}
+	// the second line is a track of its own, through the lead until a voice is fitted
+	under := 0
+	for _, bar := range both.Bars {
+		under += len(bar.Under)
+	}
+	pats := both.Patterns("x", 8)
+	i := slices.IndexFunc(pats, func(p *PatternDef) bool { return p.Name == "x_melody_1" })
+	if under == 0 || i < 0 || len(pats[i].Track) != 2 || pats[i].Track[1].Instr != "lead" {
+		t.Fatalf("%d under notes; melody pattern tracks %v", under, pats)
+	}
+	both.UnderVoice = &VoiceDef{Name: "u", Wave: "sine"}
+	if vs := both.Voices("x"); len(vs) != 1 || vs[0].Name != "x_under_voice" || both.Patterns("x", 8)[i].Track[1].Instr != "x_under_voice" {
+		t.Errorf("the under voice names %v", vs)
 	}
 }
 
@@ -367,5 +382,162 @@ func TestReadWAVReadsWhatWriteWAVWrote(t *testing.T) {
 	got, rate, err = ReadWAV(&w)
 	if err != nil || rate != 48000 || len(got) != 2 || got[0] != 0.5 || got[1] != -0.5 {
 		t.Fatalf("24-bit: %v, %d Hz, %v", err, rate, got)
+	}
+}
+
+// TestStepAccidentalKeepsAPitchOffTheKey: a step's accidental is the semitones
+// its pitch sits off the nearest degree, so every pitch reads back as itself
+// through a key, a document carries it, and a rip tells it from the degree alone.
+func TestStepAccidentalKeepsAPitchOffTheKey(t *testing.T) {
+	for midi := RipMinMIDI; midi < RipMaxMIDI; midi++ {
+		deg, oct, acc := PitchStep(40, ScalePhrygian, midi)
+		if back := StepPitch(40, ScalePhrygian, deg, oct, acc); back != midi || acc < -1 || acc > 1 {
+			t.Fatalf("midi %d reads as degree %d octave %d accidental %d, back %d", midi, deg, oct, acc, back)
+		}
+	}
+	pats, err := LoadPatternsTOML([]byte("[[pattern]]\nname = \"sharp\"\nsteps = 16\n[[pattern.track]]\ninstr = \"lead\"\nevent = [{pos = 0, vel = 0.9, deg = 1, oct = 1, acc = 1}]\n"))
+	if err != nil || len(pats) != 1 || len(pats[0].Tracks) != 1 || pats[0].Tracks[0].Events[0].Acc != 1 {
+		t.Fatalf("a document's acc: %v %+v", err, pats)
+	}
+	plain := &RipBar{Melody: []Step{{Pos: 0, Vel: 0.9, Deg: 1, Oct: 1}}}
+	sharp := &RipBar{Melody: []Step{{Pos: 0, Vel: 0.9, Deg: 1, Oct: 1, Acc: 1}}}
+	a := &Rip{BPM: 120, Root: 40, Scale: ScalePhrygian, Bars: []RipBar{*plain}}
+	b := &Rip{BPM: 120, Root: 40, Scale: ScalePhrygian, Bars: []RipBar{*sharp}}
+	if d := BarDistance(plain, sharp); d <= 0 || CompareRips(a, b).Melody >= 1 || CompareRips(b, b).Melody != 1 {
+		t.Errorf("a sharp is another note: distance %.2f, melody %.2f", d, CompareRips(a, b).Melody)
+	}
+}
+
+// TestRipReadsADetunedRecording: a recording tuned forty cents flat of A440 is
+// heard on its own tuning, so its notes read as they do in tune rather than
+// wobbling between the two semitones each sits between.
+func TestRipReadsADetunedRecording(t *testing.T) {
+	const bpm, bars = 140, 8
+	ae, slots := startLoopEngine(t)
+	buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ExpectedRip(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil)
+	inTune, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the same render read as if sampled slower: every pitch forty cents flat,
+	// the tempo slower by the same ratio
+	flat := math.Pow(2, -40.0/1200)
+	rate := int(math.Round(AudioSampleRate * flat))
+	detuned, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: int(math.Round(bpm * flat))}}.Samples(buf, rate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := CompareRips(inTune, want), CompareRips(detuned, want)
+	t.Logf("in tune %+.1f cents %+v; detuned %+.1f cents %+v", inTune.Tuning, a, detuned.Tuning, b)
+	if inTune.Tuning < -8 || inTune.Tuning > 8 || detuned.Tuning < -48 || detuned.Tuning > -32 {
+		t.Errorf("tuning heard %+.1f and %+.1f cents, want about 0 and -40", inTune.Tuning, detuned.Tuning)
+	}
+	if b.Melody < a.Melody-0.1 || b.Bass < a.Bass-0.1 {
+		t.Errorf("detuned melody %.2f bass %.2f against %.2f and %.2f in tune", b.Melody, b.Bass, a.Melody, a.Bass)
+	}
+}
+
+// TestRipOpensAPickupBar: a recording that begins inside a bar, notes leading
+// into the first full one, gets a bar before it holding them, opening before
+// the recording starts; the comparison skips it against a truth without one,
+// and the notes' lag against the beats is taken out before they are quantized.
+func TestRipOpensAPickupBar(t *testing.T) {
+	const bpm, bars = 140, 8
+	ae, slots := startLoopEngine(t)
+	buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ExpectedRip(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil)
+	cut := 10 * SamplesPerBar(bpm) / StepsPerBar // the recording starts on the tenth step
+	r, err := RipSamples(buf[cut:], AudioSampleRate, DefaultRipParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+	score := CompareRips(r, want)
+	t.Logf("downbeat %.2fs bars %d score %+v, pickup melody %v", r.Downbeat, len(r.Bars), score, r.Bars[0].Melody)
+	if r.Downbeat >= 0 || len(r.Bars) != bars || len(r.Bars[0].Melody) < 2 {
+		t.Fatalf("downbeat %.2fs, %d bars, pickup melody %v", r.Downbeat, len(r.Bars), r.Bars[0].Melody)
+	}
+	for _, st := range r.Bars[0].Melody {
+		if st.Pos < 8 {
+			t.Errorf("a note at step %d of the pickup bar, before the recording starts", st.Pos)
+		}
+	}
+	if score.Melody < 0.7 || score.Bass < 0.7 {
+		t.Errorf("score %+v", score)
+	}
+	// a truth with the same pickup bar grades itself perfect
+	with := &Rip{BPM: bpm, Root: want.Root, Scale: want.Scale, Downbeat: -float64(BeatsPerBar*60) / bpm, Bars: append([]RipBar{{}}, want.Bars...)}
+	if s := CompareRips(with, want); s.Total != 1 {
+		t.Errorf("a pickup bar against none grades %+v", s)
+	}
+	g := ripGrid{beats: []int{0, 16, 32, 48, 64}, bars: 1}
+	if lag := g.lag([]ripNote{{start: 1}, {start: 17}, {start: 33}, {start: 49}}); lag != 0.25 {
+		t.Errorf("lag %.2f steps, want 0.25", lag)
+	}
+	if _, ok := g.phase(70); ok {
+		t.Error("a frame past the last beat has no phase")
+	}
+}
+
+// TestFidelityHearsTheDifference: a render heard beside itself is wholly alike;
+// the same bars with every melody note a semitone sharp are less alike in pitch
+// while their onsets still are; a sound on a rip's beats reads as one on a grid;
+// a sound needs one or the other; a Ripper of zero parameters rips with the
+// defaults.
+func TestFidelityHearsTheDifference(t *testing.T) {
+	const bpm, bars = 140, 4
+	ae, slots := startLoopEngine(t)
+	same, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sharp, err := ae.DefinePattern(&Pattern{Name: "tune_sharp", Steps: 16, Tracks: []Track{{Instr: InstrLead, Events: []Step{
+		{Pos: 0, Vel: 0.9, Deg: 0, Oct: 2, Acc: 1, Dur: 2}, {Pos: 2, Vel: 0.8, Deg: 1, Oct: 2, Acc: 1, Dur: 2}, {Pos: 4, Vel: 0.8, Deg: 2, Oct: 2, Acc: 1, Dur: 2}, {Pos: 6, Vel: 0.8, Deg: 3, Oct: 2, Acc: 1, Dur: 2},
+		{Pos: 8, Vel: 0.9, Deg: 4, Oct: 2, Acc: 1, Dur: 2}, {Pos: 10, Vel: 0.8, Deg: 5, Oct: 2, Acc: 1, Dur: 2}, {Pos: 12, Vel: 0.8, Deg: 6, Oct: 2, Acc: 1, Dur: 2}, {Pos: 14, Vel: 0.9, Deg: 0, Oct: 3, Acc: 1, Dur: 2}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := slots
+	moved[1] = sharp
+	other, err := ae.RenderMusic(moved, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rp := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}
+	a, err := rp.Sound(same, AudioSampleRate, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := rp.Sound(other, AudioSampleRate, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	self, diff := Fidelity(a, a), Fidelity(b, a)
+	t.Logf("itself %+v; a semitone sharp %+v", self, diff)
+	if self.Total < 0.99 || diff.Pitch > self.Pitch-0.1 || diff.Onset < 0.8 {
+		t.Errorf("itself %+v, a semitone sharp %+v", self, diff)
+	}
+	r, err := rp.Samples(same, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := Ripper{Params: DefaultRipParams()}.Sound(same, AudioSampleRate, r.Beats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := Fidelity(c, a); f.Total < 0.99 {
+		t.Errorf("on the rip's beats %+v", f)
+	}
+	if _, err := (Ripper{}).Sound(same, AudioSampleRate, nil); err == nil {
+		t.Error("a sound with neither beats nor a grid was heard")
+	}
+	if z, err := (Ripper{Grid: &RipGrid{BPM: bpm}}).Samples(same, AudioSampleRate); err != nil || len(z.Bars) != bars || len(z.Notes) == 0 {
+		t.Errorf("zero parameters: %v, %d bars", err, len(z.Bars))
 	}
 }

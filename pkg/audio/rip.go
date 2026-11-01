@@ -170,15 +170,18 @@ func MarshalRipParams(p RipParams) ([]byte, error) {
 // patterns the sequencer plays.
 type Rip struct {
 	BPM         int
-	Root        int // MIDI, in the bass octave as the engine's harmony root is
+	Tuning      float64 // cents the recording sits off A440; its pitches were read on it
+	Root        int     // MIDI, in the bass octave as the engine's harmony root is
 	Scale       ScaleID
-	Progression []int   // chord root degree per bar, as SetHarmony takes it
-	Downbeat    float64 // seconds into the recording the first full bar starts
+	Progression []int     // chord root degree per bar, as SetHarmony takes it
+	Downbeat    float64   // seconds into the recording the first full bar starts
+	Beats       []float64 // seconds of each beat, the first bar's downbeat through the last bar's end
 	Bars        []RipBar
 	Params      RipParams
-	// MelodyVoice and BassVoice are the voices a front end with a voice head heard
-	// each register played with, nil otherwise
-	MelodyVoice, BassVoice *VoiceDef
+	// MelodyVoice, UnderVoice and BassVoice are the voices a front end with a
+	// voice head heard the melody, the line under it and the bass played with,
+	// nil otherwise; soundlab fits them when none was heard
+	MelodyVoice, UnderVoice, BassVoice *VoiceDef
 	// Notes is the transcript before the grid: every note heard, in time
 	Notes []RipNote
 }
@@ -190,6 +193,7 @@ type RipNote struct {
 	MIDI       int
 	Vel        float64
 	Bass       bool // under E3, the bass register
+	Second     bool // the melody register's second line, heard under the louder
 }
 
 // RipBar is one bar: each drum's hits, kick, snare and hihat in instrument order,
@@ -197,6 +201,7 @@ type RipNote struct {
 type RipBar struct {
 	Drums  [InstrClap][]Step
 	Melody []Step
+	Under  []Step // the melody register's second line, a voice of its own
 	Bass   []Step
 }
 
@@ -234,6 +239,7 @@ const (
 // also say per frame which wave and voice genes a note is played with.
 type RipFrames struct {
 	Hop                float64
+	Tuning             float64 // cents the recording's pitches sit off A440, as the front end heard them
 	Flux               []float64
 	Onset              [InstrClap][]float64
 	Salience           []float32 // frames × RipPitches, MIDI RipMinMIDI up
@@ -308,9 +314,9 @@ func (rp Ripper) WAV(r io.Reader) (*Rip, error) {
 
 // Samples rips a mono recording at rate: tempo and bars first, then the key, the
 // drums on a sixteenth grid between the beats, and the melody and bass as pitch
-// tracks cut into notes on that grid. Notes off the key move to its nearest
-// degree, which is all a pattern can say. A front end that names voices leaves
-// the registers' voices on the rip.
+// tracks cut into notes on that grid. A note off the key lands on its nearest
+// degree with the semitones left as an accidental. A front end that names
+// voices leaves the registers' voices on the rip.
 func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	if rate <= 0 || len(x) < 4*rate {
 		return nil, errors.New("rip: the recording is shorter than four seconds")
@@ -318,12 +324,8 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	if len(x) > ripMaxSec*rate {
 		x = x[:ripMaxSec*rate]
 	}
-	p := rp.Params
-	fe := rp.FrontEnd
-	if fe == nil {
-		fe = analysis{}
-	}
-	f, err := fe.Hear(x, rate, p)
+	p := rp.params()
+	f, err := rp.Hear(x, rate)
 	if err != nil {
 		return nil, err
 	}
@@ -332,6 +334,8 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	}
 	hits := f.drumHits(p)
 	root, scale := f.key()
+	melody := f.notes(RipMelodyLow, RipMaxMIDI, p)
+	bass := f.notes(RipMinMIDI, RipBassTop, p)
 	var bpm float64
 	var g ripGrid
 	if rp.Grid != nil {
@@ -344,26 +348,42 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 		if len(beats) < BeatsPerBar+1 {
 			return nil, errors.New("rip: no full bar found")
 		}
-		g = f.grid(beats, hits, root%12)
+		g = f.grid(beats, hits, root%12).pickup(period, slices.Concat(melody, bass), hits)
 	}
 	if g.bars < 1 {
 		return nil, errors.New("rip: no full bar found")
 	}
-	r := &Rip{BPM: int(math.Round(bpm)), Root: root, Scale: scale, Downbeat: float64(g.beats[g.first]) * f.Hop, Bars: make([]RipBar, g.bars), Params: p}
+	r := &Rip{BPM: int(math.Round(bpm)), Tuning: f.Tuning, Root: root, Scale: scale, Downbeat: float64(g.beats[g.first]) * f.Hop, Bars: make([]RipBar, g.bars), Params: p}
 	r.Progression = f.progression(g, r.Root, r.Scale)
+	r.Beats = make([]float64, BeatsPerBar*g.bars+1)
+	for i := range r.Beats {
+		r.Beats[i] = float64(g.beats[g.first+i]) * f.Hop
+	}
 	g.drums(r, hits)
-	melody := f.notes(RipMelodyLow, RipMaxMIDI, p)
-	bass := f.notes(RipMinMIDI, RipBassTop, p)
+	// the pitch paths start late against the onsets the beats were set by: the
+	// notes' median lag comes out before they are quantized
+	shift := int(math.Round(g.lag(slices.Concat(melody, bass)) * g.stepFrames()))
+	early := func(n ripNote) ripNote {
+		n.start, n.end = n.start-shift, n.end-shift
+		return n
+	}
+	var firsts, seconds []ripNote
 	for _, n := range melody {
-		f.place(g, r, n, func(b *RipBar) *[]Step { return &b.Melody })
+		if n.second {
+			seconds = append(seconds, n)
+			f.place(g, r, early(n), func(b *RipBar) *[]Step { return &b.Under })
+			continue
+		}
+		firsts = append(firsts, n)
+		f.place(g, r, early(n), func(b *RipBar) *[]Step { return &b.Melody })
 	}
 	for _, n := range bass {
-		f.place(g, r, n, func(b *RipBar) *[]Step { return &b.Bass })
+		f.place(g, r, early(n), func(b *RipBar) *[]Step { return &b.Bass })
 	}
-	r.MelodyVoice, r.BassVoice = voiceOf(melody), voiceOf(bass)
+	r.MelodyVoice, r.UnderVoice, r.BassVoice = voiceOf(firsts), voiceOf(seconds), voiceOf(bass)
 	for i, ns := range [2][]ripNote{melody, bass} {
 		for _, n := range ns {
-			r.Notes = append(r.Notes, RipNote{Start: float64(n.start) * f.Hop, End: float64(n.end) * f.Hop, MIDI: n.midi, Vel: n.vel, Bass: i == 1})
+			r.Notes = append(r.Notes, RipNote{Start: float64(n.start) * f.Hop, End: float64(n.end) * f.Hop, MIDI: n.midi, Vel: n.vel, Bass: i == 1, Second: n.second})
 		}
 	}
 	slices.SortFunc(r.Notes, func(a, b RipNote) int { return cmp.Compare(a.Start, b.Start) })
@@ -406,20 +426,23 @@ func MelDistance(a, b [][]float32) float64 {
 
 // BarDistance is how far two bars are apart, the steps one has and the other
 // lacks over the steps either has, a hit by its drum and step and a note by its
-// step, degree and octave: zero for the same bar, one for bars sharing nothing.
+// step and pitch: zero for the same bar, one for bars sharing nothing.
 func BarDistance(a, b *RipBar) float64 {
-	keys := func(bar *RipBar) map[[4]int]bool {
-		m := map[[4]int]bool{}
+	keys := func(bar *RipBar) map[[5]int]bool {
+		m := map[[5]int]bool{}
 		for d := range bar.Drums {
 			for _, s := range bar.Drums[d] {
-				m[[4]int{d, s.Pos, 0, 0}] = true
+				m[[5]int{d, s.Pos, 0, 0, 0}] = true
 			}
 		}
 		for _, s := range bar.Melody {
-			m[[4]int{10, s.Pos, s.Deg, s.Oct}] = true
+			m[[5]int{10, s.Pos, s.Deg, s.Oct, s.Acc}] = true
+		}
+		for _, s := range bar.Under {
+			m[[5]int{10, s.Pos, s.Deg, s.Oct, s.Acc}] = true
 		}
 		for _, s := range bar.Bass {
-			m[[4]int{11, s.Pos, s.Deg, s.Oct}] = true
+			m[[5]int{11, s.Pos, s.Deg, s.Oct, s.Acc}] = true
 		}
 		return m
 	}
@@ -485,6 +508,11 @@ func (r *Rip) Voices(name string) []*VoiceDef {
 	if r.MelodyVoice != nil {
 		v := r.MelodyVoice.Clone()
 		v.Name = name + "_melody_voice"
+		out = append(out, v)
+	}
+	if r.UnderVoice != nil {
+		v := r.UnderVoice.Clone()
+		v.Name = name + "_under_voice"
 		out = append(out, v)
 	}
 	if r.BassVoice != nil {
@@ -581,7 +609,7 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 	x = resample(x, rate, RipRate)
 	const bins, half = RipN/2 + 1, ripKernel / 2
 	binHz := float64(RipRate) / RipN
-	f := &RipFrames{Hop: RipFrameSec}
+	f := &RipFrames{Hop: RipFrameSec, Tuning: tuning(x)}
 	var lo, mid, hi, rSub, rLo, rMid, rHi []float64 // per band: log flux and linear rise
 	ring := make([][]float64, ripKernel)
 	for i := range ring {
@@ -598,9 +626,9 @@ func (analysis) Hear(x []float64, rate int, p RipParams) (*RipFrames, error) {
 	for h := range weights {
 		weights[h] = math.Pow(p.HarmonicDecay, float64(h))
 	}
-	pitchHz := make([]float64, RipPitches)
+	pitchHz := make([]float64, RipPitches) // the pitches where the recording's tuning puts them
 	for i := range pitchHz {
-		pitchHz[i] = NoteFreq(RipMinMIDI + i)
+		pitchHz[i] = NoteFreq(RipMinMIDI+i) * math.Pow(2, f.Tuning/1200)
 	}
 	subBin, loBin, midBin, hatBin := int(ripSubHz/binHz), int(ripKickHz/binHz), int(ripSnareHz/binHz), int(ripHatHz/binHz)
 	// partialIn reads the magnitude at a frequency between the bins of a
@@ -842,6 +870,39 @@ func MelFrames(x []float64, rate int) [][]float32 {
 	return out
 }
 
+// tuning is the cents a recording's pitches sit off equal temperament at A440:
+// over windows four times the frame, whose bins resolve it, every spectral peak
+// from 55 Hz to 2.5 kHz votes its offset from the nearest semitone with its
+// height, around the circle of a semitone; the mean's angle, zero when the
+// votes agree on no offset, as noise and drums do not.
+func tuning(x []float64) float64 {
+	const n = 4 * RipN
+	binHz := float64(RipRate) / n
+	var re, im, sum float64
+	spectrogram(x, n, n/2, func(_ int, mag []float64) {
+		var top float64
+		for _, v := range mag {
+			top = max(top, v)
+		}
+		for k := max(int(55/binHz), 1); k <= int(2500/binHz) && k+1 < len(mag); k++ {
+			if mag[k] <= mag[k-1] || mag[k] < mag[k+1] || mag[k] < 0.05*top {
+				continue
+			}
+			a, b, c := math.Log(mag[k-1]+1e-12), math.Log(mag[k]+1e-12), math.Log(mag[k+1]+1e-12)
+			peak := float64(k)
+			if d := a - 2*b + c; d != 0 {
+				peak += 0.5 * (a - c) / d
+			}
+			angle := 2 * math.Pi * 12 * math.Log2(peak*binHz/440)
+			re, im, sum = re+mag[k]*math.Cos(angle), im+mag[k]*math.Sin(angle), sum+mag[k]
+		}
+	})
+	if sum == 0 || math.Hypot(re, im)/sum < 0.3 {
+		return 0
+	}
+	return math.Atan2(im, re) / (2 * math.Pi) * 100
+}
+
 // tempo is the lag the onset strength repeats at, under a log-Gaussian prior on
 // the tempo and a comb that credits a lag with its double, folded into the
 // sequencer's range; the period is in frames.
@@ -1041,6 +1102,62 @@ func (g *ripGrid) stepFrames() float64 {
 	return float64(span) / float64(StepsPerBar*g.bars)
 }
 
+// pickup opens a bar before the first full one when a note or a hit sounds more
+// than half a step before its line, so a phrase that leads into the first bar
+// is kept: the beats before it are extrapolated a period apart, into the time
+// before the recording when it begins inside that bar.
+func (g ripGrid) pickup(period float64, notes []ripNote, hits [InstrClap][]ripHit) ripGrid {
+	line := float64(g.beats[g.first]) - g.stepFrames()/2
+	early := slices.ContainsFunc(notes, func(n ripNote) bool { return float64(n.start) < line })
+	for _, hs := range hits {
+		early = early || slices.ContainsFunc(hs, func(h ripHit) bool { return float64(h.frame) < line })
+	}
+	if !early {
+		return g
+	}
+	if need := BeatsPerBar - g.first; need > 0 {
+		gap := int(math.Round(period))
+		if len(g.beats) > 1 {
+			gap = g.beats[1] - g.beats[0]
+		}
+		pre := make([]int, need)
+		for i := range pre {
+			pre[i] = g.beats[0] - (need-i)*gap
+		}
+		g.beats = slices.Concat(pre, g.beats)
+		g.first += need
+	}
+	g.first -= BeatsPerBar
+	g.bars++
+	return g
+}
+
+// phase is how far a frame sits from its nearest step, in steps, in [-0.5, 0.5)
+func (g *ripGrid) phase(frame int) (float64, bool) {
+	i := sort.SearchInts(g.beats, frame+1) - 1
+	if i < 0 || i+1 >= len(g.beats) {
+		return 0, false
+	}
+	pos := float64(frame-g.beats[i]) / float64(g.beats[i+1]-g.beats[i]) * StepsPerBeat
+	return pos - math.Round(pos), true
+}
+
+// lag is the median of the notes' phases, in steps: what the pitch paths start
+// late by against the onsets the beats sit on, zero for too few notes to say
+func (g *ripGrid) lag(notes []ripNote) float64 {
+	var ph []float64
+	for _, n := range notes {
+		if p, ok := g.phase(n.start); ok {
+			ph = append(ph, p)
+		}
+	}
+	if len(ph) < 4 {
+		return 0
+	}
+	slices.Sort(ph)
+	return ph[len(ph)/2]
+}
+
 // frames of a bar: its first beat's frame to the next bar's
 func (g *ripGrid) span(bar int) (int, int) {
 	i := g.first + BeatsPerBar*bar
@@ -1105,7 +1222,7 @@ func (f *RipFrames) progression(g ripGrid, root int, scale ScaleID) []int {
 	for bar := range prog {
 		var c [12]float64
 		start, end := g.span(bar)
-		for t := start; t < end && t < f.frames(); t++ {
+		for t := max(start, 0); t < end && t < f.frames(); t++ {
 			for pc := range c {
 				c[pc] += f.Chroma[t][pc]
 			}
@@ -1397,22 +1514,19 @@ func (f *RipFrames) voiceOver(a, b int) (int, []float64) {
 	return wave, genes
 }
 
-// place quantizes a note onto the grid as a step of the key's nearest degree,
-// its length in sixteenths, the louder of two on one step kept.
+// place quantizes a note onto the grid as a step of the key's nearest degree
+// with an accidental for the semitones left, its length in sixteenths, the
+// louder of two on one step kept.
 func (f *RipFrames) place(g ripGrid, r *Rip, n ripNote, part func(*RipBar) *[]Step) {
 	bar, step, ok := g.at(n.start)
 	if !ok {
 		return
 	}
-	deg, oct := degreeIn(n.midi, r.Root, scaleTable[r.Scale])
+	deg, oct, acc := PitchStep(r.Root, r.Scale, n.midi)
 	dur := min(max(int(math.Round(float64(n.end-n.start)/g.stepFrames())), 1), MaxPatternLen)
-	s := Step{Pos: step, Vel: n.vel, Deg: deg, Oct: oct, Dur: dur}
-	// a second voice's note joins another pitch on its step; otherwise the
-	// louder of two on one step is kept
+	s := Step{Pos: step, Vel: n.vel, Deg: deg, Oct: oct, Acc: acc, Dur: dur}
 	evs := part(&r.Bars[bar])
-	if i := slices.IndexFunc(*evs, func(e Step) bool {
-		return e.Pos == step && (!n.second || e.Deg == deg && e.Oct == oct)
-	}); i >= 0 {
+	if i := slices.IndexFunc(*evs, func(e Step) bool { return e.Pos == step }); i >= 0 {
 		if (*evs)[i].Vel < s.Vel {
 			(*evs)[i] = s
 		}
@@ -1458,7 +1572,7 @@ func ExpectedEvents(slots [MusicSlots]PatternID, bars, root int, scale ScaleID, 
 					}
 					e := RipEvent{Bar: bar, Step: step, Dur: max(ev.Dur, 1), Instr: tr.Instr, Vel: ev.Vel}
 					if !tr.Instr.IsDrum() {
-						e.MIDI = h.resolve(ev.Deg, ev.Oct, tr.FollowChord)
+						e.MIDI = h.resolve(ev.Deg, ev.Oct, ev.Acc, tr.FollowChord)
 					}
 					out = append(out, e)
 				}
@@ -1483,8 +1597,8 @@ func ExpectedRip(slots [MusicSlots]PatternID, bpm, bars, root int, scale ScaleID
 			}
 			continue
 		}
-		deg, oct := degreeIn(e.MIDI, root, scaleTable[scale])
-		s := Step{Pos: e.Step, Vel: e.Vel, Deg: deg, Oct: oct, Dur: e.Dur}
+		deg, oct, acc := PitchStep(root, scale, e.MIDI)
+		s := Step{Pos: e.Step, Vel: e.Vel, Deg: deg, Oct: oct, Acc: acc, Dur: e.Dur}
 		if e.MIDI < RipBassTop {
 			b.Bass = append(b.Bass, s)
 		} else {
@@ -1503,7 +1617,8 @@ type RipScore struct {
 }
 
 // CompareRips grades got against want, the bars aligned by got's downbeat, so a
-// rip that missed the first bar is graded on the rest.
+// rip that missed the first bar is graded on the rest, and one that opened a
+// pickup bar before the recording on the bars after it.
 func CompareRips(got, want *Rip) RipScore {
 	var s RipScore
 	if d := got.BPM - want.BPM; d >= -2 && d <= 2 {
@@ -1513,7 +1628,8 @@ func CompareRips(got, want *Rip) RipScore {
 	if got.BPM > 0 {
 		offset = int(math.Round(got.Downbeat / (float64(BeatsPerBar*60) / float64(got.BPM))))
 	}
-	n := min(len(got.Bars), len(want.Bars)-offset)
+	skipGot, skipWant := max(-offset, 0), max(offset, 0)
+	n := min(len(got.Bars)-skipGot, len(want.Bars)-skipWant)
 	if len(want.Bars) > 0 {
 		s.Bars = float64(max(n, 0)) / float64(len(want.Bars))
 	}
@@ -1521,17 +1637,17 @@ func CompareRips(got, want *Rip) RipScore {
 		if !pitched {
 			return st.Pos
 		}
-		return st.Pos<<8 | r.Root + 12*st.Oct + scaleTable[r.Scale][st.Deg]
+		return st.Pos<<8 | StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc)
 	}
 	f := func(pick func(*RipBar) []Step, pitched bool) float64 {
 		var tp, fp, fn int
 		for i := 0; i < n; i++ {
 			have := map[int]bool{}
-			for _, st := range pick(&got.Bars[i]) {
+			for _, st := range pick(&got.Bars[i+skipGot]) {
 				have[key(got, st, pitched)] = true
 			}
 			wantKeys := map[int]bool{}
-			for _, st := range pick(&want.Bars[i+offset]) {
+			for _, st := range pick(&want.Bars[i+skipWant]) {
 				wantKeys[key(want, st, pitched)] = true
 			}
 			for k := range wantKeys {
@@ -1557,29 +1673,8 @@ func CompareRips(got, want *Rip) RipScore {
 		drums += f(func(b *RipBar) []Step { return b.Drums[d] }, false)
 	}
 	s.Drums = drums / float64(InstrClap)
-	s.Melody = f(func(b *RipBar) []Step { return b.Melody }, true)
+	s.Melody = f(func(b *RipBar) []Step { return append(slices.Clone(b.Melody), b.Under...) }, true)
 	s.Bass = f(func(b *RipBar) []Step { return b.Bass }, true)
 	s.Total = (s.Tempo + s.Bars + 2*s.Drums + 2*s.Melody + s.Bass) / 7
 	return s
-}
-
-// degreeIn is the degree and octave of the scale nearest midi over root, the
-// lower on a tie, as harmony.resolve reads them back.
-func degreeIn(midi, root int, scale []int) (deg, oct int) {
-	semis := midi - root
-	oct = semis / 12
-	if semis < 0 && semis%12 != 0 {
-		oct--
-	}
-	within := semis - 12*oct
-	best, bestD := 0, 12
-	for i, iv := range scale {
-		if d := max(within-iv, iv-within); d < bestD {
-			best, bestD = i, d
-		}
-	}
-	if 12-within < bestD {
-		return 0, oct + 1
-	}
-	return best, oct
 }

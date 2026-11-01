@@ -44,7 +44,10 @@ flowchart LR
    autocorrelation under a prior, beats by dynamic programming, the bar line by
    the kick, the snare on two and four, the key's root in the bass and the
    chroma's change, the key and chords by chroma, hits by peak picking, notes by a
-   Viterbi path through the salience, cut and quantized to the grid, the bass
+   Viterbi path through the salience, cut and quantized to the grid with the
+   notes' median lag against the beats taken out, the recording's tuning read
+   first so the pitch table sits where its notes do, a pickup bar opened before
+   the first full bar when sound leads into it, the bass
    register's salience from a window four times the rip's and the rip's own
    together (the long one's semitones at 110 Hz, the short one's onsets), the
    melody register twice, the second path with the first's notes and their partials
@@ -63,9 +66,11 @@ flowchart LR
    thirty-two genes and the wave, seeded with every registered voice and run
    under an adaptive step with its evaluations cached, closes the distance. The
    recording around a note holds the other voices too, so the fit is to the mix
-   there; a trained front end narrows that. Next, notes cluster by their genes
-   into as many voices as a register has. The model proposes; the engine
-   disposes.
+   there; a trained front end narrows that. The melody register's second line
+   gets a voice of its own (`Rip.UnderVoice`), fitted to its notes alone, so a
+   violin under a pluck is not played through the pluck's voice. Next, notes
+   cluster by their genes into as many voices as a line has. The model
+   proposes; the engine disposes.
 5. **Patterns and the dictionary.** Notes and hits fall into bars. `rip` writes
    windows of up to four bars as patterns, the estimate heard first; `compress`
    writes the dictionary: per part (beat, melody, bass) the bars that stand for
@@ -73,7 +78,7 @@ flowchart LR
    song, which bar plays which (`SongDef`, a `[[song]]` in the pattern
    document). Matching assigns each bar to a member: today by `BarDistance`, the
    steps two bars do not share over the steps either has, a hit by drum and step
-   and a note by step, degree and octave; next by reconstruction, the rip of the
+   and a note by step and pitch, an accidental keeping a note off the key; next by reconstruction, the rip of the
    member's render against the bar's.
 6. **Compression.** Bars within a threshold of one another, a few per cent of
    their steps, merge into one member. The mechanical pass runs first
@@ -94,11 +99,17 @@ flowchart LR
    when the render's downbeat carries no kick; that rip is compared with the
    recording's (`CompareRips`), and the score `compress` prints is how much of
    the rip survives as the song, drums, melody and bass apart: a grade of the
-   fitted voices and the dictionary, with those decoders graded by `tune`. Next, voices and patterns are refined in turn against it
-   until it stops improving, the model hearing the render too, so its voice
-   estimate of the render against its estimate of the recording is a second,
-   cheaper distance for the voice search; a step that does not improve the
-   score is undone.
+   fitted voices and the dictionary, with those decoders graded by `tune`.
+   `refine` then moves the voices and the steps in turn, judged not by that
+   rip-back, which cannot see the rip's own mistakes (a note misheard in the
+   recording is misheard the same way in the render), but by `Fidelity`: the
+   render and the recording heard through one front end (`Ripper.Sound`), their
+   pitch salience, log-mel bands and onset strength compared bar by bar on each
+   one's own beats; the steps' pitches move a semitone or an octave either way
+   and a step may fall silent, until a round gains nothing, and a move that
+   does not improve it is undone. Next, the model hearing the render too, so
+   its voice estimate of the render against its estimate of the recording is a
+   second, cheaper distance for the voice search.
 
 The output is a sound document of voices, a pattern document of patterns and the
 song, which bar plays which at what tempo and in what key. The song is the form
@@ -206,12 +217,18 @@ and the checkpoint earn their keep.
    the dictionary, matching and compression; the song document, rendered offline
    and conducted live; the song's score against the rip; the augmented corpus, a
    first training run and `bench`; the refinement loop (`refine`), voices and
-   steps refined in turn against the song's score.
-2. Next: a longer training run, on more loops and more patterns than the shipped
-   bank, measured by `bench` and by ear on the sample until the model front end
-   beats the analysis on clean and augmented renders; the matching scored by
-   reconstruction; several voices in a register, clustered by their genes; the
-   false drums gated by a harmonic check or by the model.
+   steps refined in turn; the seventh pass, where the sample was misheard
+   upstream of everything: the recording's tuning read first, a pickup bar,
+   the notes' lag, accidentals on steps, and `refine` judged by `Fidelity`
+   with the steps' pitches among its moves.
+2. Next: the model's pitch, where four runs have left it behind the analysis
+   while its drums pulled ahead: a detuned corpus (the loops rendered at
+   random offsets from A440, as recordings are) so the front end learns what
+   the analysis now measures, and more loops and steps, the held-out loss
+   still falling at 20000; the step search's moves and budget in `refine`,
+   which kept nothing on the sample; the matching scored by reconstruction;
+   several voices in a register, clustered by their genes; the false drums
+   gated by a harmonic check or by the model.
 3. Then: real recordings in the corpus, tuned parameters and weights shipped as
    data, and the rip on Android under the mobile budget.
 
@@ -316,12 +333,64 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   F major, five bars from 0.79 s, 38 melody and 15 bass notes; the song rips
   back at 0.36 and 0.57 after two rounds of `refine`, against the analysis
   path's 0.59 and 0.88. The analysis path stays the sample's better transcript.
+- The sixth pass, the second melody line with steps, a track and a voice of
+  its own: the sample's melody has 25 notes in its first line and 5 in the
+  second, the bass 14; the mel fit gives the lines a square, a modal voice and
+  a modal bass, the song rips back at 0.54 through them and 0.88 after two
+  rounds of `refine`, each of the three voices searched in turn. The line's
+  own voice is what a violin under a pluck needed; what the first line still
+  mixes is two instruments taking turns as the louder.
 - The sample through that model (`bite_model_*` on the scratch branch): 115 bpm
   where the analysis heard 86, F major where it heard A# harmonic minor (its
   fifth), four bars from 1.66 s, 19 melody and 21 bass notes; the song rips
   back at 0.45 through the mel-fitted voices and 0.63 after two rounds of
   `refine`, against the analysis path's 0.66 and 0.88. The model's transcript
   is the weaker one today, as `bench` said it would be; the loop lifts either.
+
+- The fourth run, 20000 loops with generated parts, the room and the mix,
+  frames and labels only (`nowav`), 200 held out, 20000 steps of batch 8 in
+  two hours and three quarters on four CPU cores shared with the day's other
+  work, each loop seen eight times: the held-out decoders' loss falls from
+  1.74 at step 1000 to 1.04 at 20000 (the pitch head's 0.60 to 0.40) and is
+  still the best at the last step, so the run was not long. `bench 12 4`
+  through the seventh pass's analysis: the analysis 0.49 on clean loops
+  (tempo 0.75, bars 0.85, drums 0.50, melody 0.20, bass 0.40), the model
+  0.45 (0.58, 0.81, 0.54, 0.17, 0.34); augmented, the analysis 0.48 (0.83,
+  0.88, 0.50, 0.17, 0.28), the model 0.51 (0.83, 0.88, 0.73, 0.11, 0.20).
+  The model passes the analysis for the first time, on the loops with a room
+  and a mix, on the strength of its drums; it loses the clean loops on tempo
+  and both on pitch, and the analysis itself gained two hundredths from the
+  seventh pass. The sample through it (`bite_model_*` on the scratch branch):
+  115 bpm, F major, six bars with a pickup bar from 1.94 s before the
+  recording, 21 melody notes with 27 under and 24 bass notes; the song sounds
+  0.57 like the recording before `refine` and 0.67 after two rounds (pitch
+  0.80, timbre 0.51, onset 0.71), ripping back at 0.66 and 0.71, against the
+  analysis path's 0.75 and 0.81 by fidelity and 0.87 and 0.89 by rip-back. The
+  weights stay out of the tree: a front end that wins on drums and loses on
+  pitch, and hears a clip forty cents flat at A440, is not yet the rip's
+  better ear.
+- The seventh pass, the sample heard on its own tuning: the transcript's note
+  list (soundlab's `notes`) showed A#2 taking turns with A2 in sixteenths, G2
+  with G#2 at the chord change, C5 with C#5 in the lead, ten melody notes
+  before the first bar line dropped, and harmonic minor for a scale only the
+  wobble's leakage voted for. A histogram of the spectral peaks' offsets from
+  the nearest semitone put the recording 41 cents flat of A440, three quarters
+  of the weight at one offset: every pitch sat between two salience rows, and
+  no decoder downstream could have repaired that. With the tuning read first,
+  a pickup bar from 0.45 s before the recording and the notes' lag taken out,
+  the rip is A# minor at 86 bpm, four bars, 88 notes, 42 steps in the melody's
+  first line, 27 in the second and 9 in the bass; the bass is a held A#2, C#3
+  and G#2 line where it was 25 wobbling fragments, the lead holds notes for
+  three and four steps, and 3 notes sit off the key where 10 did, kept as
+  accidentals. The song sounds 0.75 like the recording before `refine` (pitch
+  0.81, timbre 0.69, onset 0.73) and rips back at 0.87 without a kit on either
+  side; two rounds judged by fidelity lift it to 0.81 (0.83, 0.74, 0.86) and
+  the rip-back to 0.89 (melody 0.70, bass 0.80), all of it from the voices:
+  the step search, 312 genes over six generations of twelve, kept no move in
+  either round, so the moves or the budget are the next question there. The
+  rip-back is no longer what `refine` maximizes and still passes the sixth
+  pass's 0.88, which a voice could game with attacks the analysis heard the
+  same notes from; the judge and the self-grade agree on this clip.
 
 ## 9. Decisions
 
@@ -351,3 +420,14 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
 - **The score is the rip of the render.** A song is as good as the rip it rips
   back to; the same `CompareRips` grades a parameter set, a model and a
   compression, so their numbers compare.
+- **The judge is the recording itself.** The rip-back is blind to the rip's
+  own errors, so a search on it polishes a wrong transcript; `refine` judges a
+  render by `Fidelity`, its frames against the recording's through one front
+  end, so a wrong note costs what the ear hears, and the rip-back stays the
+  number that compares across passes.
+- **Accidentals, not a chromatic scale.** A step keeps its degree in the key
+  and carries the semitones left as `acc`, so the harmony, the chord following
+  and the editor's rows keep their meaning while a transcript loses no note.
+- **The front end reads the tuning.** A440 is an assumption a recording need
+  not share: forty cents off put every pitch of the sample between two salience
+  rows, and no decoder downstream could have repaired the wobble that made.
