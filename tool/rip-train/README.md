@@ -35,8 +35,12 @@ hundred loops of four bars are about fifteen minutes of music, 300 MB of WAV and
 60 MB of frames; the trainer reads the frames and the events alone.
 
 More variety is more patterns and voices applied before `corpus`: `new voice`,
-`set`, `apply` make an instrument the loops draw. A room, a mix and a codec
-between the render and the frames are on the plan, not here yet.
+`set`, `apply` make an instrument the loops draw. `corpus corpus/ 200 4 aug`
+puts a room, a mix and voices of random genes behind each loop: a gain, a
+low-pass, a short reverb and a noise floor between the render and the frames,
+and each tonal track's voice redrawn near the registered one, a third of the
+time on another wave, labelled as played. Train on an augmented corpus; measure
+on a clean one too (`bench`).
 
 ## Train
 
@@ -56,6 +60,18 @@ note sounds in. `--checkpoint` saves every `--every` steps and resumes from the
 file when it exists; `--dim`, `--layers`, `--heads`, `--ffn` and
 `--attention-window` reshape the model, and the weight file carries the shape, so
 `ripnet` loads any of them as long as the inputs and heads are its.
+
+## Measure
+
+```bash
+printf 'bench 16 4\nquit\n' > bench.slab
+go run ./cmd/soundlab -headless -config-dir root -s bench.slab
+```
+
+with `ripnet.bin` at `root/audio/ripnet.bin`: the analysis and the model are
+graded on the same fresh loops, clean and augmented, by the mean of each rip's
+score against the loop's expected rip. A model that scores under the analysis
+on clean loops is not ready for a recording.
 
 ## Deploy
 

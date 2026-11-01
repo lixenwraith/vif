@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 )
@@ -40,12 +41,15 @@ func init() {
 		"save":     {"save sound|pattern [file]", "write document; bare = provenance path (the sound document carries the voices)", 1, 2, cmdSave},
 		"write":    {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
 		"export":   {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
-		"rip":      {"rip <file.wav> <name> [bars]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key", 2, 3, cmdRip},
+		"rip":      {"rip <file.wav> <name> [bars] [nodrums]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key; nodrums leaves the drum part out", 2, 4, cmdRip},
 		"render":   {"render <file.wav> [bars]", "write what the slots hold, bars (4) bars at the transport's tempo and key, to a WAV through the engine's offline render", 1, 2, cmdRender},
-		"corpus":   {"corpus <dir> [loops] [bars]", "render loops (24) of bars (4) bars from the registered patterns into dir, each a WAV, its log-mel frames and the events that sound in it: what tool/rip-train trains the rip's model on", 1, 3, cmdCorpus},
+		"corpus":   {"corpus <dir> [loops] [bars] [aug]", "render loops (24) of bars (4) bars from the registered patterns into dir, each a WAV, its log-mel frames and the events that sound in it: what tool/rip-train trains the rip's model on; aug puts a room, a mix and voices of random genes behind each", 1, 4, cmdCorpus},
 		"tune":     {"tune [generations] [file]", "search rip's parameters over loops the engine renders from the registered patterns; the best write to file (the first root's audio/rip.toml) and listen from now on; 8 generations take minutes", 0, 2, cmdTune},
 		"fit":      {"fit <name> [generations]", "fit the voices of a recording ripped as <name> again, over generations (12) of candidates the engine plays at its notes; they replace <name>_melody_voice and <name>_bass_voice", 1, 2, cmdFit},
 		"compress": {"compress <name> [percent]", "match the bars of a recording ripped as <name> to as few one-bar patterns as a difference of percent (5) allows: the dictionary <name>_<part>_a..., and the song <name> that plays them in order, rendered and ripped back for a score", 1, 2, cmdCompress},
+		"refine":   {"refine <name> [rounds]", "close the loop over a song compress made of a recording ripped as <name>: each round (3) fits the voices again and searches the tonal steps' velocities and lengths, a step kept when the song rips back nearer the recording's rip; minutes a round", 1, 2, cmdRefine},
+		"bench":    {"bench [loops] [bars]", "grade the analysis, and the model when one loaded, on fresh loops (8) of bars (4) bars the engine renders, clean and augmented: the mean score of each rip against the loop's expected rip", 0, 2, cmdBench},
+		"run":      {"run <file.slab>", "run a script's lines in this session, strict as -s is: a line that fails stops it with its number; quit in it ends the script, not the session", 1, 1, cmdRun},
 		"song":     {"song <name> [file.wav|play]", "show a song's bars; render it to a WAV; or play it through the sequencer, the slots changed at the bar lines (music stop ends it)", 1, 2, cmdSong},
 
 		"ls":    {"ls sound|pattern|voice|song [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
@@ -81,6 +85,17 @@ func init() {
 		"vol":   {"vol <f>", "sfx volume 0..1; music keeps its own level", 1, 1, cmdVol},
 		"wait":  {"wait <ms>", "sleep (scripted audition pacing)", 1, 1, cmdWait},
 	}
+}
+
+// cmdRun runs a script in the session in hand, as -s does from the start, so a
+// recipe of verbs is one word in the REPL or the TUI's command line
+func cmdRun(s *Session, a []string) error {
+	f, err := os.Open(a[0])
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return RunScript(s, f)
 }
 
 // Execute runs one line. '#' starts a comment; a leading '-' tolerates

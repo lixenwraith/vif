@@ -139,6 +139,13 @@ type tuiApp struct {
 	// that closes
 	fresh string
 
+	// busy is the long verb running on its own goroutine, "" for none, with when
+	// it started and the channel its error comes back on; keys wait while it runs
+	busy      string
+	busySince time.Time
+	busyDone  chan error
+	busyTold  bool
+
 	quitArmed  bool   // one warning issued for unsaved-on-quit
 	delArmed   string // browser 'd' pressed once for this name; second press deletes
 	hintedFill bool   // slot-2 auto-fill hint shown once
@@ -223,10 +230,24 @@ func (a *tuiApp) exec(line string) error {
 	return a.execQ(line)
 }
 
+// longVerbs take seconds or minutes: a search, a render, a rip, a script. They
+// run on a goroutine of their own behind a working box, so the screen stays
+// alive and a key other than quit waits for them.
+var longVerbs = map[string]bool{"rip": true, "fit": true, "compress": true, "refine": true, "tune": true,
+	"bench": true, "corpus": true, "render": true, "song": true, "run": true}
+
 // execQ runs without echoing the command — the keys would otherwise flood
-// the log with one line per note. Errors still surface.
+// the log with one line per note. Errors still surface. A long verb starts
+// behind the screen and returns nil at once; its error reaches the log when it
+// ends.
 func (a *tuiApp) execQ(line string) error {
 	a.logScroll = 0 // new output re-sticks the log to its tail
+	if f := splitArgs(line); len(f) > 0 && longVerbs[f[0]] && a.busy == "" {
+		a.busy, a.busySince, a.busyDone, a.busyTold = line, time.Now(), make(chan error, 1), false
+		done := a.busyDone
+		go func() { done <- Execute(a.s, line) }()
+		return nil
+	}
 	err := Execute(a.s, line)
 	switch {
 	case errors.Is(err, ErrQuit):
@@ -240,6 +261,11 @@ func (a *tuiApp) execQ(line string) error {
 // requestQuit guards unsaved work once, then quits. Applies to Ctrl+Q and
 // :quit alike.
 func (a *tuiApp) requestQuit() {
+	if a.busy != "" && !a.quitArmed {
+		a.quitArmed = true
+		fmt.Fprintf(a.log, "%s is still running; quit again to leave it\n", splitArgs(a.busy)[0])
+		return
+	}
 	if (a.s.soundsModified() || a.s.patsModified()) && !a.quitArmed {
 		a.quitArmed = true
 		fmt.Fprintln(a.log, "unsaved changes — ^S saves to provenance (:save sound|pattern <file> picks a path); quit again to discard")
@@ -321,6 +347,13 @@ func (a *tuiApp) handle(ev terminal.Event) {
 	if ev.Key == terminal.KeyCtrlQ || ev.Key == terminal.KeyCtrlC {
 		a.requestQuit()
 		a.dirty = true
+		return
+	}
+	if a.busy != "" {
+		if !a.busyTold {
+			a.busyTold = true
+			fmt.Fprintf(a.log, "%s is running; keys wait for it (^Q quits)\n", splitArgs(a.busy)[0])
+		}
 		return
 	}
 	if a.tooSmall() {
@@ -424,6 +457,15 @@ func (a *tuiApp) cycleFocus(next bool) {
 // tick decays the keys' highlights and redraws only when the engine moved, so an
 // idle screen, or one too small to show anything, is left alone
 func (a *tuiApp) tick() {
+	if a.busy != "" {
+		select {
+		case err := <-a.busyDone:
+			a.finishBusy(err)
+		default:
+		}
+		a.dirty = true // the box counts the seconds
+		return
+	}
 	a.s.conduct()
 	if a.tooSmall() {
 		return
@@ -441,6 +483,26 @@ func (a *tuiApp) engineSig() engineSig {
 		g.slots[i], g.muted[i] = e.SlotPattern(i), e.IsSlotMuted(i)
 	}
 	return g
+}
+
+// finishBusy takes a long verb's end: its error to the log, and after a rip the
+// browser on what it heard
+func (a *tuiApp) finishBusy(err error) {
+	line := a.busy
+	a.busy = ""
+	switch {
+	case errors.Is(err, ErrQuit):
+		a.requestQuit()
+	case err != nil:
+		fmt.Fprintf(a.log, "error: %v\n", err)
+	}
+	if f := splitArgs(line); len(f) > 2 && f[0] == "rip" && err == nil {
+		a.kind = kindPattern
+		if !a.cursorTo(f[2] + "_melody_1") {
+			a.cursorTo(f[2] + "_beat_1")
+		}
+		fmt.Fprintf(a.log, "%s's patterns are in the document: space plays, ^S saves them, ^O then s saves into a directory\n", f[2])
+	}
 }
 
 // openCommand opens the command line in any view; Enter runs it there
