@@ -52,8 +52,10 @@ flowchart LR
    together (the long one's semitones at 110 Hz, the short one's onsets), the
    melody register twice, the second path with the first's notes and their partials
    cancelled and its notes kept above a share of the first's strength, so two
-   voices in one register are heard where one path heard the louder. `RipParams`
-   holds their thresholds as data a search tunes (`tune`).
+   voices in one register are heard where one path heard the louder, the two
+   lines kept from crossing by pitch order, so a held dyad is not a trill
+   between them. `RipParams` holds their thresholds as data a search tunes
+   (`tune`).
 4. **Voices.** Each note carries the genes the front end heard it played with
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
    wave class); a register's notes average into one voice. A register the front
@@ -61,8 +63,8 @@ flowchart LR
    fitted by analysis-by-synthesis (soundlab's `rip`, and `fit` again with more
    generations): the rip's transcript (`Rip.Notes`) gives the register's longest
    and loudest notes, the engine renders a candidate voice at each note's pitch,
-   loudness and length (`RenderNote`), the render's mel frames are compared with
-   the recording's around the note (`MelDistance`), and a search over the
+   loudness and length at the recording's tuning (`RenderNoteAt`), the render's
+   mel frames are compared with the recording's around the note (`MelDistance`), and a search over the
    thirty-two genes and the wave, seeded with every registered voice and run
    under an adaptive step with its evaluations cached, closes the distance. The
    recording around a note holds the other voices too, so the fit is to the mix
@@ -75,8 +77,8 @@ flowchart LR
    windows of up to four bars as patterns, the estimate heard first; `compress`
    writes the dictionary: per part (beat, melody, bass) the bars that stand for
    the others, each a pattern of one bar (`<name>_<part>_a`, `_b`, ...), and the
-   song, which bar plays which (`SongDef`, a `[[song]]` in the pattern
-   document). Matching assigns each bar to a member: today by `BarDistance`, the
+   song, which bar plays which at the recording's tempo, key and tuning
+   (`SongDef`, a `[[song]]` in the pattern document). Matching assigns each bar to a member: today by `BarDistance`, the
    steps two bars do not share over the steps either has, a hit by drum and step
    and a note by step and pitch, an accidental keeping a note off the key; next by reconstruction, the rip of the
    member's render against the bar's.
@@ -135,9 +137,11 @@ offline (`song <name> <file.wav>`).
 - **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop, a
   gain, a one-pole low-pass, a Schroeder reverb and a noise floor drawn per
   loop, redraws each tonal track's voice near the registered one, a third of
-  the time on another wave, labelled as played, and renders the loop off A440
-  by up to a quarter tone either way (`SetTuning`), since recordings are and
-  the sample is forty cents flat; `gen` draws beats, melodies
+  the time on another wave, labelled as played, drives a third of the loops
+  into a soft clip, the saturation a mix is thickened with, which piles
+  harmonics on every note and sum and difference tones between notes, and
+  renders the loop off A440 by up to a quarter tone either way (`SetTuning`),
+  since recordings are and the sample is forty cents flat; `gen` draws beats, melodies
   and bass lines from the key for three loops in five per part, since the bank
   alone repeats its few melodies and a model trained on it learns them, not
   pitch. Both draw from streams of their own, so a loop's bank patterns and key
@@ -436,3 +440,9 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
 - **The front end reads the tuning.** A440 is an assumption a recording need
   not share: forty cents off put every pitch of the sample between two salience
   rows, and no decoder downstream could have repaired the wobble that made.
+  And the engine renders at it: a song played at A440 beside a recording forty
+  cents flat sounds sharpened, a stretched string, before any note is judged.
+- **Voices do not cross.** The louder of two concurrent notes changes hands
+  from frame to frame, so the first and second paths swap a held dyad between
+  them; assigned by pitch order, the upper line stays the upper, which is how
+  the ear parts them.

@@ -40,8 +40,9 @@ More variety is more patterns and voices applied before `corpus`: `new voice`,
 puts a room, a mix and voices of random genes behind each loop (`aug`: a gain,
 a low-pass, a short reverb and a noise floor between the render and the frames,
 each tonal track's voice redrawn near the registered one, a third of the
-time on another wave, labelled as played, and the loop rendered off A440 by up
-to a quarter tone, its `tuning` in the label) and draws beats, melodies and bass
+time on another wave, labelled as played, a third of the loops driven into a
+soft clip, and the loop rendered off A440 by up to a quarter tone, its
+`tuning` in the label) and draws beats, melodies and bass
 lines the bank never had for three loops in five per part (`gen`: a walk over
 the key's degrees within two octaves, lengths of one to four steps, rests; the
 root and its neighbours in the bass; kicks, snares and hats with extras and
