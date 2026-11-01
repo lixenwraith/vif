@@ -791,12 +791,16 @@ func TestAJournalOpenedMidRunDoesNotPerturb(t *testing.T) {
 }
 
 // replayMatches replays rec on a fresh run, which must reproduce every digest rec
-// holds and, on each tick nothing was recorded on, the surface want holds for it.
+// holds and the surface want holds on each tick no between-tick group or written
+// world landed on: a step stands past those, which the live run read before. A
+// record in a tick's body, as a crossing is, leaves its tick comparable.
 func replayMatches(t *testing.T, rec *journal.Capture, want map[event.Stamp][]string, surface func(*App) []string) {
 	t.Helper()
 	busy := map[event.Stamp]bool{}
 	for _, r := range rec.Records() {
-		busy[event.Stamp{Run: r.Run, Tick: r.Tick}] = true
+		if r.Boundary > 0 {
+			busy[event.Stamp{Run: r.Run, Tick: r.Tick}] = true
+		}
 	}
 	for _, c := range rec.Captures() {
 		busy[event.Stamp{Run: c.Run, Tick: c.Tick}] = true
