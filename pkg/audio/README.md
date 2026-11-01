@@ -19,7 +19,8 @@ A **sound** is the synthesized one-shot both draw on, layers of sources through
 processor chains and buses, pre-rendered into variants; a **voice** is a tonal
 instrument, an oscillator stack through a filter and an ADSR, or a string as a
 delay line or as its partials; a **pattern** is steps of drum hits and notes on a
-sixteenth grid, its notes scale degrees the harmony resolves at play time.
+sixteenth grid, its notes scale degrees, an accidental for one off the key,
+the harmony resolves at play time.
 
 ## Embedding
 
@@ -87,7 +88,9 @@ key, each bar's chord root and, per bar, the kick, snare and hihat hits, the
 melody and the bass line as steps of the grid; `Rip.Patterns` writes them as
 patterns of up to four bars. `RipParams` holds every threshold and
 `DefaultRipParams` the hand-set start, which the engine's own rendered music
-checks (`RenderMusic`, `ExpectedRip`, `CompareRips`). The front end is a seam:
+checks (`RenderMusic`, `ExpectedRip`, `CompareRips`), and `Fidelity` grades a
+render against the recording itself, both heard into a `RipSound` by
+`Ripper.Sound`. The front end is a seam:
 a `Ripper` hears through the package's analysis or through any `RipFrontEnd`
 that fills `RipFrames` from `MelFrames`, as the `ripnet` subpackage does with a
 transformer, which also hears the voices the notes are played with

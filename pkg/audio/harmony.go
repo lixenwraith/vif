@@ -60,7 +60,7 @@ func (h *harmony) chordRoot() int { return h.prog[h.chordIdx] }
 // resolve maps a scale degree + octave offset to a clamped MIDI note
 // followChord offsets the degree by the current chord root, so degree sets
 // {0,2,4} become chord tones and Deg 0 tracks the progression
-func (h *harmony) resolve(deg, oct int, followChord bool) int {
+func (h *harmony) resolve(deg, oct, acc int, followChord bool) int {
 	if followChord {
 		deg += h.chordRoot()
 	}
@@ -71,7 +71,7 @@ func (h *harmony) resolve(deg, oct int, followChord bool) int {
 		idx += n
 		octShift--
 	}
-	midi := h.root + 12*(oct+octShift) + h.scale[idx]
+	midi := h.root + 12*(oct+octShift) + h.scale[idx] + acc
 	if midi < 0 {
 		midi = 0
 	} else if midi > 127 {
@@ -81,3 +81,47 @@ func (h *harmony) resolve(deg, oct int, followChord bool) int {
 }
 
 func (h *harmony) reset() { h.chordIdx = 0 }
+
+// StepPitch is the MIDI note a step's degree, octave and accidental sound over a
+// key with no chord to follow, as the harmony resolves them.
+func StepPitch(root int, scale ScaleID, deg, oct, acc int) int {
+	h := harmony{root: root, scale: intervals(scale)}
+	return h.resolve(deg, oct, acc, false)
+}
+
+// PitchStep is the step of a key that sounds midi: the nearest degree and its
+// octave, the lower on a tie, with the semitones left over as the accidental.
+func PitchStep(root int, scale ScaleID, midi int) (deg, oct, acc int) {
+	sc := intervals(scale)
+	deg, oct = degreeIn(midi, root, sc)
+	return deg, oct, midi - (root + 12*oct + sc[deg])
+}
+
+// intervals is a scale's table, the default's for one unknown
+func intervals(scale ScaleID) []int {
+	if scale < 0 || scale >= ScaleCount {
+		return scaleTable[ScalePhrygian]
+	}
+	return scaleTable[scale]
+}
+
+// degreeIn is the degree and octave of the scale nearest midi over root, the
+// lower on a tie, as harmony.resolve reads them back.
+func degreeIn(midi, root int, scale []int) (deg, oct int) {
+	semis := midi - root
+	oct = semis / 12
+	if semis < 0 && semis%12 != 0 {
+		oct--
+	}
+	within := semis - 12*oct
+	best, bestD := 0, 12
+	for i, iv := range scale {
+		if d := max(within-iv, iv-within); d < bestD {
+			best, bestD = i, d
+		}
+	}
+	if 12-within < bestD {
+		return 0, oct + 1
+	}
+	return best, oct
+}

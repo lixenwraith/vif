@@ -35,7 +35,8 @@ hundred loops of four bars are about fifteen minutes of music, 300 MB of WAV and
 60 MB of frames; the trainer reads the frames and the events alone.
 
 More variety is more patterns and voices applied before `corpus`: `new voice`,
-`set`, `apply` make an instrument the loops draw. `corpus corpus/ 300 4 aug gen`
+`set`, `apply` make an instrument the loops draw. `corpus corpus/ 20000 4 aug gen nowav`
+(`nowav` keeps the frames and the labels, all the trainer reads)
 puts a room, a mix and voices of random genes behind each loop (`aug`: a gain,
 a low-pass, a short reverb and a noise floor between the render and the frames,
 and each tonal track's voice redrawn near the registered one, a third of the

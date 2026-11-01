@@ -46,6 +46,7 @@ type StepDef struct {
 	Vel  float64 `toml:"vel"`
 	Deg  int     `toml:"deg,omitempty"`  // scale degree, tonal only
 	Oct  int     `toml:"oct,omitempty"`  // octave offset, tonal only
+	Acc  int     `toml:"acc,omitempty"`  // semitones off the degree, tonal only
 	Dur  int     `toml:"dur,omitempty"`  // steps; 0 = 1
 	Prob float64 `toml:"prob,omitempty"` // 0 or 1 = always
 }
@@ -88,7 +89,7 @@ func (d *PatternDef) Pattern() (*Pattern, error) {
 			tr.Events = make([]Step, n)
 			for j := range td.Event {
 				e := &td.Event[j]
-				tr.Events[j] = Step{Pos: e.Pos, Vel: e.Vel, Deg: e.Deg, Oct: e.Oct, Dur: e.Dur, Prob: e.Prob}
+				tr.Events[j] = Step{Pos: e.Pos, Vel: e.Vel, Deg: e.Deg, Oct: e.Oct, Acc: e.Acc, Dur: e.Dur, Prob: e.Prob}
 			}
 		}
 		p.Tracks = append(p.Tracks, tr)
@@ -123,7 +124,7 @@ func (p *Pattern) Def() *PatternDef {
 			td.Event = make([]StepDef, n)
 			for j := range tr.Events {
 				e := &tr.Events[j]
-				td.Event[j] = StepDef{Pos: e.Pos, Vel: e.Vel, Deg: e.Deg, Oct: e.Oct, Dur: e.Dur, Prob: e.Prob}
+				td.Event[j] = StepDef{Pos: e.Pos, Vel: e.Vel, Deg: e.Deg, Oct: e.Oct, Acc: e.Acc, Dur: e.Dur, Prob: e.Prob}
 			}
 		}
 		d.Track = append(d.Track, td)
@@ -196,6 +197,9 @@ func ValidatePattern(p *Pattern) error {
 			}
 			if ev.Oct < MinStepOctave || ev.Oct > MaxStepOctave {
 				return e("track %d event %d: oct %d outside [%d,%d]", i, j, ev.Oct, MinStepOctave, MaxStepOctave)
+			}
+			if ev.Acc < -MaxStepAccidental || ev.Acc > MaxStepAccidental {
+				return e("track %d event %d: acc %d outside [%d,%d]", i, j, ev.Acc, -MaxStepAccidental, MaxStepAccidental)
 			}
 		}
 	}

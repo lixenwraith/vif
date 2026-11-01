@@ -31,6 +31,7 @@ type tuneOptions struct {
 	loops, bars, generations, pool int
 	seed                           uint64
 	aug, gen                       bool
+	nowav                          bool // an export keeps the frames and the labels only
 }
 
 // tuneLoop is one rendered loop, what made it, the rip a perfect listener makes
@@ -378,19 +379,26 @@ type corpusManifest struct {
 
 func cmdCorpus(s *Session, a []string) error {
 	o := tuneOptions{loops: 24, bars: 4, seed: 1}
-	for n := len(a); n > 1 && (a[n-1] == "aug" || a[n-1] == "gen"); n = len(a) {
-		if a[n-1] == "aug" {
+	for n := len(a); n > 1 && (a[n-1] == "aug" || a[n-1] == "gen" || a[n-1] == "nowav"); n = len(a) {
+		switch a[n-1] {
+		case "aug":
 			o.aug = true
-		} else {
+		case "gen":
 			o.gen = true
+		default:
+			o.nowav = true
 		}
 		a = a[:n-1]
 	}
 	for i, p := range []*int{&o.loops, &o.bars} {
+		limit := 65536
+		if i == 1 {
+			limit = 64
+		}
 		if len(a) > i+1 {
 			n, err := strconv.Atoi(a[i+1])
-			if err != nil || n < 1 || n > 4096 {
-				return fmt.Errorf("%q: want 1 to 4096", a[i+1])
+			if err != nil || n < 1 || n > limit {
+				return fmt.Errorf("%q: want 1 to %d", a[i+1], limit)
 			}
 			*p = n
 		}
@@ -410,16 +418,18 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	err := s.eachLoop(o, func(i int, l tuneLoop) error {
 		written++
 		base := filepath.Join(dir, fmt.Sprintf("loop_%03d", i))
-		f, err := os.Create(base + ".wav")
-		if err != nil {
-			return err
-		}
-		werr := audio.WriteWAV(f, l.audio)
-		if cerr := f.Close(); werr == nil {
-			werr = cerr
-		}
-		if werr != nil {
-			return werr
+		if !o.nowav {
+			f, err := os.Create(base + ".wav")
+			if err != nil {
+				return err
+			}
+			werr := audio.WriteWAV(f, l.audio)
+			if cerr := f.Close(); werr == nil {
+				werr = cerr
+			}
+			if werr != nil {
+				return werr
+			}
 		}
 		mel := audio.MelFrames(l.audio, audio.AudioSampleRate)
 		if err := writeMel(base+".mel", mel); err != nil {

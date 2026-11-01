@@ -698,23 +698,8 @@ func (s *Session) pitch(deg, oct int) int {
 // degreeOf is the degree and octave nearest midi in the mirrored key, the lower
 // on a tie, and whether midi is exactly that degree
 func (s *Session) degreeOf(midi int) (deg, oct int, exact bool) {
-	sc := audio.ScaleIntervals(s.scale)
-	semis := midi - s.root
-	oct = semis / 12
-	if semis < 0 && semis%12 != 0 {
-		oct--
-	}
-	within := semis - 12*oct
-	best, bestD := 0, 12
-	for i, iv := range sc {
-		if d := max(within-iv, iv-within); d < bestD {
-			best, bestD = i, d
-		}
-	}
-	if 12-within < bestD { // the next octave's root is nearer
-		return 0, oct + 1, false
-	}
-	return best, oct, bestD == 0
+	deg, oct, acc := audio.PitchStep(s.root, s.scale, midi)
+	return deg, oct, acc == 0
 }
 
 // keyName is the mirrored key as the header shows it, "E2 phrygian"

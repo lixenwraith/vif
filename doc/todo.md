@@ -1264,12 +1264,15 @@ front-end seam. What remains, in the design's order:
    optional rather than as misses, and a small set of real recordings with
    hand-checked notes held out for validation, so neither a model nor a tuned
    set learns the synthesizer.
-2. A longer training run of `ripnet.Spec` on tens of thousands of loops: on
-   3000 the held-out decoders' loss was still falling at 6000 steps and the
-   model came within three hundredths of the analysis on `bench`, ahead on
-   drums and behind on pitch, while 300 loops overfitted in 12000 steps.
-   Measure by the trainer's held-out loss, with `bench` against the analysis
-   on clean and augmented loops and by ear on the held-out recordings
+2. The model's pitch: on 20000 loops over 20000 steps the held-out decoders'
+   loss was still falling (1.04) and the model passed the analysis on
+   augmented loops (0.51 against 0.48) on its drums while losing clean loops
+   on tempo and both on pitch (melody 0.11 against 0.17); 300 loops
+   overfitted in 12000 steps. The corpus is rendered at A440 and the sample is
+   forty cents flat, which the analysis now reads and the model cannot: render
+   the loops at random offsets from A440 (`corpus ... aug`), then more loops
+   and steps. Measure by the trainer's held-out loss, with `bench` against the
+   analysis on clean and augmented loops and by ear on the held-out recordings
    (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then the weights
    and a tuned parameter set shipped as data, `DefaultRipParams` kept for a
    recording nothing tuned for. [Rip design §8](rip-design.md#8-measured-on-the-sample-recording)
@@ -1277,16 +1280,16 @@ front-end seam. What remains, in the design's order:
 3. A bass attack reads as a kick and a chord's attack as a snare in the analysis:
    a harmonic check on the hit (a percussive rise with a pitched tail is a note)
    until the model takes the front end.
-4. Chromatic notes and key changes within a recording are outside the model: a
-   key per phrase. Two voices in one register have their second pass now; a
+4. Key changes within a recording are outside the model: a key per phrase (a
+   chromatic note is an accidental on its step now). Two voices in one register have their second pass now; a
    third, and a chord's inner notes, do not.
-5. A sustained note with vibrato reads as a flurry: the sample's violin holds
-   notes for six to twelve steps and the transcript has none longer than three,
-   the pitch path flipping between the two semitone bins the vibrato crosses.
-   A pitch prior that holds a semitone wobble (a higher cost for a one-semitone
-   move than per semitone of a leap, or the salience smoothed across the
-   neighbours before the path), measured on a rendered vibrato voice once the
-   voices have one, and on the sample by the count of long notes.
+5. A sustained note with a wide vibrato can still read as two: the sample's
+   wobble was its tuning, forty cents off A440, which the front end reads first
+   now, and its notes hold for four to eight steps; a vibrato wider than a
+   quarter tone would still cross rows. A pitch prior that holds a semitone
+   wobble (a higher cost for a one-semitone move than per semitone of a leap,
+   or the salience smoothed across the neighbours before the path), measured
+   on a rendered vibrato voice once the voices have one.
 
 ### Close the rip's loop
 
@@ -1297,17 +1300,19 @@ front-end seam. What remains, in the design's order:
 dictionary and the song (`compress`, `song`) and the song's score against the
 rip are in place; what remains:
 
-1. The refinement loop (`refine`) refines the voices and the tonal steps'
-   velocities and lengths; what it does not yet move is the notes themselves,
-   their pitch and their steps, which the front end sets, and the drum part.
-   Measure its convergence on rendered loops whose truth is known.
+1. The refinement loop (`refine`) moves the voices and the tonal steps'
+   velocities, lengths and pitches, judged by `Fidelity` against the
+   recording's own frames; what it does not yet move is a step's position or
+   the drum part, and a note the front end never heard it cannot add. Measure
+   its convergence on rendered loops whose truth is known.
 2. Matching by reconstruction: a bar's distance to a member as the rip of the
    member's render against the bar, in place of `BarDistance`, with `Memoize`
    paying for each render once; measure it against the mechanical grouping.
-3. Several voices in a register: the second path hears a second line now, but
-   both lines share the register's one fitted voice; cluster the notes by their
-   genes, or by their lengths and attacks until a model names them, and fit a
-   voice per cluster, so the violin and the pluck each get their own.
+3. Several voices in a register: the second line has its own fitted voice now;
+   what one line still mixes is two instruments taking turns as the louder,
+   which the first path hears as one. Cluster a line's notes by their genes,
+   or by their lengths and attacks until a model names them, and fit a voice
+   per cluster.
 4. The fit's sample notes are the mix around them: subtract the other register's
    estimate from the recording before the mel frames, or fit on the frames a
    trained front end attributes to the note.
