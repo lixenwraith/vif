@@ -219,7 +219,7 @@ func (r *Rip) PartBar(part RipPart, b int) *RipBar {
 	case RipBeat:
 		out.Drums = r.Bars[b].Drums
 	case RipMelody:
-		out.Melody = r.Bars[b].Melody
+		out.Melody, out.Under = r.Bars[b].Melody, r.Bars[b].Under
 	case RipBass:
 		out.Bass = r.Bars[b].Bass
 	}
@@ -229,7 +229,7 @@ func (r *Rip) PartBar(part RipPart, b int) *RipBar {
 // empty reports a part with nothing in a bar
 func (r *Rip) empty(part RipPart, b int) bool {
 	pb := r.PartBar(part, b)
-	n := len(pb.Melody) + len(pb.Bass)
+	n := len(pb.Melody) + len(pb.Under) + len(pb.Bass)
 	for d := range pb.Drums {
 		n += len(pb.Drums[d])
 	}
@@ -260,25 +260,31 @@ func (r *Rip) Pattern(name, group string, part RipPart, lo, hi int) *PatternDef 
 		}
 		return p
 	}
-	instr, pick := "lead", func(b *RipBar) []Step { return b.Melody }
+	// a line's track: its steps over the window through the voice heard or
+	// fitted for it, or the shipped one named
+	track := func(instr, own string, voice *VoiceDef, pick func(*RipBar) []Step) {
+		if voice != nil {
+			instr = group + own
+		}
+		var evs []StepDef
+		for b := lo; b < hi; b++ {
+			for _, s := range pick(&r.Bars[b]) {
+				evs = append(evs, StepDef{Pos: s.Pos + (b-lo)*StepsPerBar, Vel: s.Vel, Deg: s.Deg, Oct: s.Oct, Dur: min(s.Dur, MaxPatternLen)})
+			}
+		}
+		if len(evs) > 0 {
+			p.Track = append(p.Track, TrackDef{Instr: instr, Event: evs})
+		}
+	}
 	if part == RipBass {
-		instr, pick = "bass", func(b *RipBar) []Step { return b.Bass }
-		if r.BassVoice != nil {
-			instr = group + "_bass_voice"
-		}
-	} else if r.MelodyVoice != nil {
-		instr = group + "_melody_voice"
+		track("bass", "_bass_voice", r.BassVoice, func(b *RipBar) []Step { return b.Bass })
+	} else {
+		track("lead", "_melody_voice", r.MelodyVoice, func(b *RipBar) []Step { return b.Melody })
+		track("lead", "_under_voice", r.UnderVoice, func(b *RipBar) []Step { return b.Under })
 	}
-	var evs []StepDef
-	for b := lo; b < hi; b++ {
-		for _, s := range pick(&r.Bars[b]) {
-			evs = append(evs, StepDef{Pos: s.Pos + (b-lo)*StepsPerBar, Vel: s.Vel, Deg: s.Deg, Oct: s.Oct, Dur: min(s.Dur, MaxPatternLen)})
-		}
-	}
-	if len(evs) == 0 {
+	if len(p.Track) == 0 {
 		return nil
 	}
-	p.Track = []TrackDef{{Instr: instr, Event: evs}}
 	return p
 }
 

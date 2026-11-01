@@ -63,9 +63,11 @@ flowchart LR
    thirty-two genes and the wave, seeded with every registered voice and run
    under an adaptive step with its evaluations cached, closes the distance. The
    recording around a note holds the other voices too, so the fit is to the mix
-   there; a trained front end narrows that. Next, notes cluster by their genes
-   into as many voices as a register has. The model proposes; the engine
-   disposes.
+   there; a trained front end narrows that. The melody register's second line
+   gets a voice of its own (`Rip.UnderVoice`), fitted to its notes alone, so a
+   violin under a pluck is not played through the pluck's voice. Next, notes
+   cluster by their genes into as many voices as a line has. The model
+   proposes; the engine disposes.
 5. **Patterns and the dictionary.** Notes and hits fall into bars. `rip` writes
    windows of up to four bars as patterns, the estimate heard first; `compress`
    writes the dictionary: per part (beat, melody, bass) the bars that stand for

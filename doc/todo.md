@@ -1304,10 +1304,11 @@ rip are in place; what remains:
 2. Matching by reconstruction: a bar's distance to a member as the rip of the
    member's render against the bar, in place of `BarDistance`, with `Memoize`
    paying for each render once; measure it against the mechanical grouping.
-3. Several voices in a register: the second path hears a second line now, but
-   both lines share the register's one fitted voice; cluster the notes by their
-   genes, or by their lengths and attacks until a model names them, and fit a
-   voice per cluster, so the violin and the pluck each get their own.
+3. Several voices in a register: the second line has its own fitted voice now;
+   what one line still mixes is two instruments taking turns as the louder,
+   which the first path hears as one. Cluster a line's notes by their genes,
+   or by their lengths and attacks until a model names them, and fit a voice
+   per cluster.
 4. The fit's sample notes are the mix around them: subtract the other register's
    estimate from the recording before the mel frames, or fit on the frames a
    trained front end attributes to the note.

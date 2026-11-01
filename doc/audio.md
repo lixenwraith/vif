@@ -452,7 +452,8 @@ against the costs of moving and of starting or ending a note, is cut into notes,
 which land on the key's nearest degree. The melody register is tracked twice:
 the second path runs with the first's notes and their partials cancelled, and
 its notes are kept where they reach `second_voice` of the first's strength, so a
-slow line under a pluck is heard too and lands beside it on the step.
+slow line under a pluck is heard too, in the bar's own `Under` steps, a track
+of its own in the pattern and a voice of its own (`Rip.UnderVoice`).
 
 `RipParams` holds every threshold, each with a range (`RipGeneRanges`) and a
 place in a gene vector (`Genes`, `RipParamsFromGenes`); a `[rip]` table in a TOML

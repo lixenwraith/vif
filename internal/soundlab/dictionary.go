@@ -484,11 +484,11 @@ func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, 
 // render is ripped back; the voice that rips back nearest stays, the one in hand
 // when none beats it. The registry holds each candidate, so one worker.
 func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base float64, o refineOptions) (float64, error) {
-	for reg, at := range []**audio.VoiceDef{&rp.rip.MelodyVoice, &rp.rip.BassVoice} {
+	for reg, at := range lineVoices(rp.rip) {
 		if *at == nil {
 			continue
 		}
-		word := [2]string{"melody", "bass"}[reg]
+		word := ripLines[reg].word
 		vname := name + "_" + word + "_voice"
 		define := func(v *audio.VoiceDef) error {
 			c := v.Clone()

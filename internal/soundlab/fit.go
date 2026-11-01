@@ -68,23 +68,39 @@ func cmdFit(s *Session, a []string) error {
 	return nil
 }
 
-// fitVoices fits a voice to each register of a rip that lacks one, or to both
+// ripLines are a rip's three lines in the order their voices are fitted: the
+// melody, the line under it and the bass, each with the notes that are its
+var ripLines = [3]struct {
+	word string
+	of   func(audio.RipNote) bool
+}{
+	{"melody", func(n audio.RipNote) bool { return !n.Bass && !n.Second }},
+	{"under", func(n audio.RipNote) bool { return !n.Bass && n.Second }},
+	{"bass", func(n audio.RipNote) bool { return n.Bass }},
+}
+
+// lineVoices are the rip's voices in ripLines' order
+func lineVoices(r *audio.Rip) [3]**audio.VoiceDef {
+	return [3]**audio.VoiceDef{&r.MelodyVoice, &r.UnderVoice, &r.BassVoice}
+}
+
+// fitVoices fits a voice to each line of a rip that lacks one, or to each
 // again with the voice held as a seed, and says how far the fit came
 func (s *Session) fitVoices(rp *ripped, o fitOptions, again bool) {
-	for reg, at := range []**audio.VoiceDef{&rp.rip.MelodyVoice, &rp.rip.BassVoice} {
+	for reg, at := range lineVoices(rp.rip) {
 		if *at != nil && !again {
 			continue
 		}
 		var notes []audio.RipNote
 		for _, n := range rp.rip.Notes {
-			if n.Bass == (reg == 1) {
+			if ripLines[reg].of(n) {
 				notes = append(notes, n)
 			}
 		}
 		if len(notes) == 0 {
 			continue
 		}
-		word := [2]string{"melody", "bass"}[reg]
+		word := ripLines[reg].word
 		fmt.Fprintf(s.out, "fitting the %s voice over %d note(s), %d generation(s) of %d...\n", word, min(len(notes), o.notes), o.generations, o.pool)
 		v, from, to := s.fitVoice(rp.x, rp.rate, notes, *at, o)
 		if v == nil {

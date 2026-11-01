@@ -176,9 +176,10 @@ type Rip struct {
 	Downbeat    float64 // seconds into the recording the first full bar starts
 	Bars        []RipBar
 	Params      RipParams
-	// MelodyVoice and BassVoice are the voices a front end with a voice head heard
-	// each register played with, nil otherwise
-	MelodyVoice, BassVoice *VoiceDef
+	// MelodyVoice, UnderVoice and BassVoice are the voices a front end with a
+	// voice head heard the melody, the line under it and the bass played with,
+	// nil otherwise; soundlab fits them when none was heard
+	MelodyVoice, UnderVoice, BassVoice *VoiceDef
 	// Notes is the transcript before the grid: every note heard, in time
 	Notes []RipNote
 }
@@ -190,6 +191,7 @@ type RipNote struct {
 	MIDI       int
 	Vel        float64
 	Bass       bool // under E3, the bass register
+	Second     bool // the melody register's second line, heard under the louder
 }
 
 // RipBar is one bar: each drum's hits, kick, snare and hihat in instrument order,
@@ -197,6 +199,7 @@ type RipNote struct {
 type RipBar struct {
 	Drums  [InstrClap][]Step
 	Melody []Step
+	Under  []Step // the melody register's second line, a voice of its own
 	Bass   []Step
 }
 
@@ -354,16 +357,23 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	g.drums(r, hits)
 	melody := f.notes(RipMelodyLow, RipMaxMIDI, p)
 	bass := f.notes(RipMinMIDI, RipBassTop, p)
+	var firsts, seconds []ripNote
 	for _, n := range melody {
+		if n.second {
+			seconds = append(seconds, n)
+			f.place(g, r, n, func(b *RipBar) *[]Step { return &b.Under })
+			continue
+		}
+		firsts = append(firsts, n)
 		f.place(g, r, n, func(b *RipBar) *[]Step { return &b.Melody })
 	}
 	for _, n := range bass {
 		f.place(g, r, n, func(b *RipBar) *[]Step { return &b.Bass })
 	}
-	r.MelodyVoice, r.BassVoice = voiceOf(melody), voiceOf(bass)
+	r.MelodyVoice, r.UnderVoice, r.BassVoice = voiceOf(firsts), voiceOf(seconds), voiceOf(bass)
 	for i, ns := range [2][]ripNote{melody, bass} {
 		for _, n := range ns {
-			r.Notes = append(r.Notes, RipNote{Start: float64(n.start) * f.Hop, End: float64(n.end) * f.Hop, MIDI: n.midi, Vel: n.vel, Bass: i == 1})
+			r.Notes = append(r.Notes, RipNote{Start: float64(n.start) * f.Hop, End: float64(n.end) * f.Hop, MIDI: n.midi, Vel: n.vel, Bass: i == 1, Second: n.second})
 		}
 	}
 	slices.SortFunc(r.Notes, func(a, b RipNote) int { return cmp.Compare(a.Start, b.Start) })
@@ -416,6 +426,9 @@ func BarDistance(a, b *RipBar) float64 {
 			}
 		}
 		for _, s := range bar.Melody {
+			m[[4]int{10, s.Pos, s.Deg, s.Oct}] = true
+		}
+		for _, s := range bar.Under {
 			m[[4]int{10, s.Pos, s.Deg, s.Oct}] = true
 		}
 		for _, s := range bar.Bass {
@@ -485,6 +498,11 @@ func (r *Rip) Voices(name string) []*VoiceDef {
 	if r.MelodyVoice != nil {
 		v := r.MelodyVoice.Clone()
 		v.Name = name + "_melody_voice"
+		out = append(out, v)
+	}
+	if r.UnderVoice != nil {
+		v := r.UnderVoice.Clone()
+		v.Name = name + "_under_voice"
 		out = append(out, v)
 	}
 	if r.BassVoice != nil {
@@ -1407,12 +1425,8 @@ func (f *RipFrames) place(g ripGrid, r *Rip, n ripNote, part func(*RipBar) *[]St
 	deg, oct := degreeIn(n.midi, r.Root, scaleTable[r.Scale])
 	dur := min(max(int(math.Round(float64(n.end-n.start)/g.stepFrames())), 1), MaxPatternLen)
 	s := Step{Pos: step, Vel: n.vel, Deg: deg, Oct: oct, Dur: dur}
-	// a second voice's note joins another pitch on its step; otherwise the
-	// louder of two on one step is kept
 	evs := part(&r.Bars[bar])
-	if i := slices.IndexFunc(*evs, func(e Step) bool {
-		return e.Pos == step && (!n.second || e.Deg == deg && e.Oct == oct)
-	}); i >= 0 {
+	if i := slices.IndexFunc(*evs, func(e Step) bool { return e.Pos == step }); i >= 0 {
 		if (*evs)[i].Vel < s.Vel {
 			(*evs)[i] = s
 		}
@@ -1557,7 +1571,7 @@ func CompareRips(got, want *Rip) RipScore {
 		drums += f(func(b *RipBar) []Step { return b.Drums[d] }, false)
 	}
 	s.Drums = drums / float64(InstrClap)
-	s.Melody = f(func(b *RipBar) []Step { return b.Melody }, true)
+	s.Melody = f(func(b *RipBar) []Step { return append(slices.Clone(b.Melody), b.Under...) }, true)
 	s.Bass = f(func(b *RipBar) []Step { return b.Bass }, true)
 	s.Total = (s.Tempo + s.Bars + 2*s.Drums + 2*s.Melody + s.Bass) / 7
 	return s

@@ -183,7 +183,7 @@ func TestRipHearsASecondVoice(t *testing.T) {
 	padNotes := func(r *Rip) int {
 		n := 0
 		for _, bar := range r.Bars {
-			for _, st := range bar.Melody {
+			for _, st := range append(slices.Clone(bar.Melody), bar.Under...) {
 				midi := r.Root + 12*st.Oct + scaleTable[r.Scale][st.Deg]
 				if st.Pos == 0 && midi == DefaultRootNote+15 || st.Pos == 8 && midi == DefaultRootNote+19 {
 					n++
@@ -195,6 +195,20 @@ func TestRipHearsASecondVoice(t *testing.T) {
 	t.Logf("one voice %+v, %d pad notes; two voices %+v, %d pad notes of %d", a, padNotes(solo), b, padNotes(both), 2*bars)
 	if padNotes(both) <= padNotes(solo) || b.Melody <= a.Melody {
 		t.Errorf("the second pass found %d pad notes against %d, melody %.2f against %.2f", padNotes(both), padNotes(solo), b.Melody, a.Melody)
+	}
+	// the second line is a track of its own, through the lead until a voice is fitted
+	under := 0
+	for _, bar := range both.Bars {
+		under += len(bar.Under)
+	}
+	pats := both.Patterns("x", 8)
+	i := slices.IndexFunc(pats, func(p *PatternDef) bool { return p.Name == "x_melody_1" })
+	if under == 0 || i < 0 || len(pats[i].Track) != 2 || pats[i].Track[1].Instr != "lead" {
+		t.Fatalf("%d under notes; melody pattern tracks %v", under, pats)
+	}
+	both.UnderVoice = &VoiceDef{Name: "u", Wave: "sine"}
+	if vs := both.Voices("x"); len(vs) != 1 || vs[0].Name != "x_under_voice" || both.Patterns("x", 8)[i].Track[1].Instr != "x_under_voice" {
+		t.Errorf("the under voice names %v", vs)
 	}
 }
 
