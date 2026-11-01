@@ -29,7 +29,22 @@ func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
 	if s.startErr != nil {
 		t.Fatalf("null backend must start: %v", s.startErr)
 	}
+	// the searches sized for a test: enough to run every path, not to be good
+	s.fit = fitOptions{notes: 2, generations: 1, pool: 4, seed: 1}
+	s.compressOpt = compressOptions{generations: 3, pool: 6, seed: 1}
 	return s
+}
+
+func writeWAV(t *testing.T, file string, buf []float64) {
+	t.Helper()
+	f, err := os.Create(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := audio.WriteWAV(f, buf); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
 }
 
 func runOrFatal(t *testing.T, s *Session, out *bytes.Buffer, script string) {
@@ -846,8 +861,9 @@ func TestMixerMutesTheCursorsSlot(t *testing.T) {
 // TestRipMakesPatternsOfARecording is the verb's contract: a recording's beat and
 // melody come into the document as dirty patterns under the given name, and the
 // transport takes the tempo and key heard.
-func TestRipMakesPatternsOfARecording(t *testing.T) {
-	// Eight seconds at 120 bpm: a low thump on every beat and a tone on every bar
+// thumpLoop is eight seconds at 120 bpm: a low thump on every beat and a tone on
+// every bar, a recording a rip hears a tempo, a kick and a note in
+func thumpLoop() []float64 {
 	const rate, bpm = audio.AudioSampleRate, 120
 	beat := rate * 60 / bpm
 	buf := make([]float64, 16*beat)
@@ -860,15 +876,13 @@ func TestRipMakesPatternsOfARecording(t *testing.T) {
 			buf[i] += 0.3 * math.Sin(2*math.Pi*440*float64(i)/rate)
 		}
 	}
+	return buf
+}
+
+func TestRipMakesPatternsOfARecording(t *testing.T) {
+	const bpm = 120
 	wav := filepath.Join(t.TempDir(), "loop.wav")
-	f, err := os.Create(wav)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := audio.WriteWAV(f, buf); err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	writeWAV(t, wav, thumpLoop())
 	var out bytes.Buffer
 	s := newTestSession(t, &out)
 	defer teardown(t, s)
@@ -958,5 +972,190 @@ corpus %s 2 2
 	lab, err := os.ReadFile(filepath.Join(dir, "corpus", "loop_000.json"))
 	if err != nil || !strings.Contains(string(lab), "\"events\"") || !strings.Contains(string(lab), "\"voice\"") {
 		t.Errorf("loop_000.json: %v\n%.200s", err, lab)
+	}
+}
+
+// TestRipFitsVoicesAndCompressesToASong is the second stage's rule: a rip of the
+// engine's own render fits a voice to each register it heard, compress matches
+// its bars to a dictionary of one-bar patterns and a song that plays them,
+// scored by ripping the song back, the song renders, saves with the patterns and
+// loads back, and play conducts it through the live sequencer to its end.
+func TestRipFitsVoicesAndCompressesToASong(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	var slots [audio.MusicSlots]audio.PatternID
+	for _, p := range audio.RegisteredPatterns() {
+		switch p.Role {
+		case audio.RoleRhythm, audio.RoleMelody, audio.RoleBass:
+			if slots[p.Role-1] == audio.PatternSilence {
+				slots[p.Role-1] = p.ID
+			}
+		}
+	}
+	buf, err := s.eng.RenderMusic(slots, 120, 4, audio.DefaultRootNote, audio.ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	wav, song, file := filepath.Join(dir, "loop.wav"), filepath.Join(dir, "song.wav"), filepath.Join(dir, "patterns.toml")
+	writeWAV(t, wav, buf)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+rip %s loop
+! compress nothing                   # nothing ripped under that name
+compress loop 20
+ls song
+song loop
+! song loop_x                        # no such song
+song loop %s
+save pattern %s
+`, wav, song, file))
+	if names, _ := s.voices.names("loop_*"); len(names) == 0 || !strings.Contains(out.String(), "voice:") {
+		t.Fatalf("no voice fitted:\n%s", out.String())
+	}
+	d, ok := s.songs.get("loop")
+	if !ok || len(d.Bars) != 4 || d.BPM != s.bpm || !s.songs.isDirty("loop") {
+		t.Fatalf("song %+v after compress:\n%s", d, out.String())
+	}
+	if !strings.Contains(out.String(), "rips back at") {
+		t.Errorf("no score of the song against the rip:\n%s", out.String())
+	}
+	// a song's bars are edited by path like anything in a document
+	saved := d.Clone()
+	runOrFatal(t, s, &out, "unset loop.bars.0.0\nshow loop\n")
+	if d.Bars[0][0] != "" || !s.songs.isDirty("loop") {
+		t.Errorf("unset left bar 1's beat as %q", d.Bars[0][0])
+	}
+	dict := 0
+	for _, n := range s.pats.order {
+		if dictionaryName("loop", n) {
+			dict++
+		}
+	}
+	if dict == 0 || dict > 12 {
+		t.Errorf("%d dictionary pattern(s) for 4 bars of 3 parts:\n%s", dict, out.String())
+	}
+	if fi, err := os.Stat(song); err != nil || fi.Size() < 1000 {
+		t.Errorf("the song did not render: %v", err)
+	}
+	runOrFatal(t, s, &out, "fit loop 1\n")
+	if !strings.Contains(out.String(), "registered; the patterns naming it play it") {
+		t.Errorf("fit replaced no voice:\n%s", out.String())
+	}
+	// a short song conducted to its end, the way a ticking front end drives it
+	short := &audio.SongDef{Name: "short", BPM: 200, Root: audio.DefaultRootNote, Scale: "phrygian",
+		Bars: [][]string{{patName(slots[0]), "", "", ""}, {"", patName(slots[1]), "", ""}}}
+	s.songs.put(short, true)
+	s.ticked = true
+	runOrFatal(t, s, &out, "song short play\n")
+	if s.song == nil {
+		t.Fatalf("play returned with no song conducted:\n%s", out.String())
+	}
+	for deadline := time.Now().Add(15 * time.Second); s.song != nil; {
+		if time.Now().After(deadline) {
+			t.Fatalf("the song did not end:\n%s", out.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+		s.conduct()
+	}
+	// the second bar cleared the beat and placed the melody
+	if !strings.Contains(out.String(), "short done") || s.slots[1] != slots[1] || s.slots[0] != audio.PatternSilence {
+		t.Errorf("after the song: slots %v\n%s", s.slots, out.String())
+	}
+	teardown(t, s)
+
+	// the document carries the song to the next session
+	var out2 bytes.Buffer
+	s2 := newTestSession(t, &out2)
+	defer teardown(t, s2)
+	runOrFatal(t, s2, &out2, "load pattern "+file+"\nsong loop\nls song\n")
+	if d2, ok := s2.songs.get("loop"); !ok || !reflect.DeepEqual(d2.Bars, saved.Bars) || !strings.Contains(out2.String(), "song(s)") {
+		t.Fatalf("the song did not load back:\n%s", out2.String())
+	}
+}
+
+// TestSplitArgsKeepsAQuotedPath: a path with a space travels in quotes
+func TestSplitArgsKeepsAQuotedPath(t *testing.T) {
+	got := splitArgs(`load pattern "my songs/a b.toml"  x`)
+	if !slices.Equal(got, []string{"load", "pattern", "my songs/a b.toml", "x"}) {
+		t.Errorf("split %q", got)
+	}
+	if got := splitArgs("set a.desc it's \"fine\""); !slices.Equal(got, []string{"set", "a.desc", "it's", "fine"}) {
+		t.Errorf("split %q", got)
+	}
+}
+
+// TestFilesOverlayLoadsRipsAndSavesHere: ^O lists a directory, its directories
+// first and its files newest first; enter on a pattern document loads it by its
+// tables and closes the overlay on the patterns; enter on a recording asks what
+// to rip it as and rips it; s asks a name and saves the tab's document into the
+// directory, which then shows it first.
+func TestFilesOverlayLoadsRipsAndSavesHere(t *testing.T) {
+	dir := t.TempDir()
+	pat := "[[pattern]]\nname = \"from_file\"\nsteps = 16\n[[pattern.track]]\ninstr = \"kick\"\nevent = [{ pos = 0, vel = 1.0 }]\n"
+	if err := os.WriteFile(filepath.Join(dir, "pats.toml"), []byte(pat), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeWAV(t, filepath.Join(dir, "loop.wav"), thumpLoop())
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	a := newTUIApp(s, NewLogBuffer(100))
+	a.term, a.w, a.h = frameTerm{}, 100, 40
+	key := func(k terminal.Key, r rune) {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
+		a.render()
+	}
+	names := func() []string {
+		var ns []string
+		for _, r := range a.files.rows {
+			ns = append(ns, r.name)
+		}
+		return ns
+	}
+	a.files.dir = dir // opens where it last was, so here rather than the working directory
+	key(terminal.KeyCtrlO, 0)
+	if !a.files.open || a.files.dir != dir {
+		t.Fatalf("^O: open %v in %q", a.files.open, a.files.dir)
+	}
+	if ns := names(); len(ns) != 4 || ns[0] != ".." || ns[1] != "sub" {
+		t.Fatalf("rows %v, want the parent, the directory, then the files", ns)
+	}
+	a.files.cur = slices.Index(names(), "pats.toml")
+	key(terminal.KeyEnter, 0)
+	if a.files.open || !s.pats.has("from_file") || a.kind != kindPattern {
+		t.Fatalf("enter on a pattern document: open %v, loaded %v, tab %d", a.files.open, s.pats.has("from_file"), a.kind)
+	}
+	key(terminal.KeyCtrlO, 0)
+	a.files.cur = slices.Index(names(), "loop.wav")
+	key(terminal.KeyEnter, 0)
+	if a.mode != modePrompt || a.editField.Value() != "loop" {
+		t.Fatalf("enter on a recording: mode %d, name %q", a.mode, a.editField.Value())
+	}
+	key(terminal.KeyEnter, 0)
+	if a.files.open || !s.pats.has("loop_beat_1") {
+		t.Fatalf("the recording was not ripped: open %v\n%s", a.files.open, out.String())
+	}
+	key(terminal.KeyCtrlO, 0)
+	key(terminal.KeyRune, 's')
+	if a.mode != modePrompt {
+		t.Fatal("s asked no name")
+	}
+	a.editField.SetValue("saved.toml")
+	key(terminal.KeyEnter, 0)
+	if _, err := os.Stat(filepath.Join(dir, "saved.toml")); err != nil {
+		t.Fatalf("save here: %v\n%s", err, out.String())
+	}
+	if ns := names(); !a.files.open || ns[2] != "saved.toml" {
+		t.Errorf("after the save the overlay shows %v, want the saved file first", ns)
+	}
+	key(terminal.KeyEscape, 0)
+	if a.files.open {
+		t.Error("esc left the overlay open")
+	}
+	if kind, err := sniffDocument(filepath.Join(dir, "saved.toml")); kind != "pattern" || err != nil {
+		t.Errorf("the saved document sniffs as %q, %v", kind, err)
 	}
 }

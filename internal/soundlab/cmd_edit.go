@@ -62,7 +62,7 @@ func cmdDel(s *Session, a []string) error {
 	if len(segs) == 1 {
 		n := segs[0]
 		switch {
-		case s.sounds.del(n), s.voices.del(n), s.pats.del(n):
+		case s.sounds.del(n), s.voices.del(n), s.pats.del(n), s.songs.del(n):
 			// Registry deletion does not exist: IDs are table indices sized
 			// at Start. The registered entry, if any, keeps playing until a
 			// registry rebuild.
@@ -113,6 +113,14 @@ func cmdShow(s *Session, a []string) error {
 			s.out.Write(data)
 			return nil
 		}
+		if d, ok := s.songs.get(name); ok {
+			data, err := audio.MarshalSongs([]*audio.SongDef{d})
+			if err != nil {
+				return err
+			}
+			s.out.Write(data)
+			return nil
+		}
 		return fmt.Errorf("%q: not in any document", name)
 	}
 	root, _, err := s.docRoot(name)
@@ -128,13 +136,25 @@ func cmdShow(s *Session, a []string) error {
 }
 
 func cmdLs(s *Session, a []string) error {
-	k, err := kindArg(a[0])
-	if err != nil {
-		return err
-	}
 	glob := "*"
 	if len(a) > 1 {
 		glob = a[1]
+	}
+	if a[0] == "song" {
+		names, err := s.songs.names(glob)
+		if err != nil {
+			return err
+		}
+		for _, n := range names {
+			d, _ := s.songs.get(n)
+			fmt.Fprintf(s.out, "%s %-24s %3d bar(s) %3d bpm %s %s\n",
+				dirtyMark(s.songs.isDirty(n)), n, len(d.Bars), d.BPM, noteName(d.Root), d.Scale)
+		}
+		return nil
+	}
+	k, err := kindArg(a[0])
+	if err != nil {
+		return err
 	}
 	switch k {
 	case kindSound:
@@ -342,7 +362,7 @@ func cmdMix(s *Session, a []string) error {
 // has reports a name in any document; new, cp and mv refuse one, since the
 // command grammar addresses an entry by name alone
 func (s *Session) has(name string) bool {
-	return s.sounds.has(name) || s.voices.has(name) || s.pats.has(name)
+	return s.sounds.has(name) || s.voices.has(name) || s.pats.has(name) || s.songs.has(name)
 }
 
 // cmdTake adds a track of one tonal voice playing the notes of a take, each at its

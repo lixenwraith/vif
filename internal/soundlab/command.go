@@ -34,18 +34,21 @@ func init() {
 		"quit": {"quit", "stop the engine and exit", 0, 0,
 			func(*Session, []string) error { return ErrQuit }},
 
-		"load":    {"load sound|pattern <file>", "replace document from file (sound includes resolve within the file's dir; voices come with the sounds)", 2, 2, cmdLoad},
-		"merge":   {"merge sound|pattern <file>", "overlay file onto document by name", 2, 2, cmdMerge},
-		"builtin": {"builtin sound|pattern|voice", "seed document from built-ins (patterns: current registry snapshot; sound seeds the voices too)", 1, 1, cmdBuiltin},
-		"save":    {"save sound|pattern [file]", "write document; bare = provenance path (the sound document carries the voices)", 1, 2, cmdSave},
-		"write":   {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
-		"export":  {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
-		"rip":     {"rip <file.wav> <name> [bars]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key", 2, 3, cmdRip},
-		"render":  {"render <file.wav> [bars]", "write what the slots hold, bars (4) bars at the transport's tempo and key, to a WAV through the engine's offline render", 1, 2, cmdRender},
-		"corpus":  {"corpus <dir> [loops] [bars]", "render loops (24) of bars (4) bars from the registered patterns into dir, each a WAV, its log-mel frames and the events that sound in it: what tool/rip-train trains the rip's model on", 1, 3, cmdCorpus},
-		"tune":    {"tune [generations] [file]", "search rip's parameters over loops the engine renders from the registered patterns; the best write to file (the first root's audio/rip.toml) and listen from now on; 8 generations take minutes", 0, 2, cmdTune},
+		"load":     {"load sound|pattern <file>", "replace document from file (sound includes resolve within the file's dir; voices come with the sounds, songs with the patterns)", 2, 2, cmdLoad},
+		"merge":    {"merge sound|pattern <file>", "overlay file onto document by name", 2, 2, cmdMerge},
+		"builtin":  {"builtin sound|pattern|voice", "seed document from built-ins (patterns: current registry snapshot; sound seeds the voices too)", 1, 1, cmdBuiltin},
+		"save":     {"save sound|pattern [file]", "write document; bare = provenance path (the sound document carries the voices)", 1, 2, cmdSave},
+		"write":    {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
+		"export":   {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
+		"rip":      {"rip <file.wav> <name> [bars]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key", 2, 3, cmdRip},
+		"render":   {"render <file.wav> [bars]", "write what the slots hold, bars (4) bars at the transport's tempo and key, to a WAV through the engine's offline render", 1, 2, cmdRender},
+		"corpus":   {"corpus <dir> [loops] [bars]", "render loops (24) of bars (4) bars from the registered patterns into dir, each a WAV, its log-mel frames and the events that sound in it: what tool/rip-train trains the rip's model on", 1, 3, cmdCorpus},
+		"tune":     {"tune [generations] [file]", "search rip's parameters over loops the engine renders from the registered patterns; the best write to file (the first root's audio/rip.toml) and listen from now on; 8 generations take minutes", 0, 2, cmdTune},
+		"fit":      {"fit <name> [generations]", "fit the voices of a recording ripped as <name> again, over generations (12) of candidates the engine plays at its notes; they replace <name>_melody_voice and <name>_bass_voice", 1, 2, cmdFit},
+		"compress": {"compress <name> [percent]", "match the bars of a recording ripped as <name> to as few one-bar patterns as a difference of percent (5) allows: the dictionary <name>_<part>_a..., and the song <name> that plays them in order, rendered and ripped back for a score", 1, 2, cmdCompress},
+		"song":     {"song <name> [file.wav|play]", "show a song's bars; render it to a WAV; or play it through the sequencer, the slots changed at the bar lines (music stop ends it)", 1, 2, cmdSong},
 
-		"ls":    {"ls sound|pattern|voice [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
+		"ls":    {"ls sound|pattern|voice|song [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
 		"show":  {"show <name>[.path]", "bare name = full TOML; deeper = leaf value or keys", 1, 1, cmdShow},
 		"where": {"where", "transport bar:step and per-slot sounding pattern", 0, 0, cmdWhere},
 		"stat":  {"stat", "backend, silent mode, play stats, dirty entries", 0, 0, cmdStat},
@@ -139,7 +142,10 @@ func RunScript(s *Session, in io.Reader) error {
 }
 
 func dispatch(s *Session, line string) error {
-	fields := strings.Fields(line)
+	fields := splitArgs(line)
+	if len(fields) == 0 {
+		return nil
+	}
 	c, ok := commands[fields[0]]
 	if !ok {
 		return fmt.Errorf("unknown command %q (try help)", fields[0])
@@ -149,6 +155,33 @@ func dispatch(s *Session, line string) error {
 		return fmt.Errorf("usage: %s", c.usage)
 	}
 	return c.fn(s, args)
+}
+
+// splitArgs splits a line on blanks, an argument that opens with a double quote
+// running to the closing one, so a path with a space can be named; the quotes go
+func splitArgs(line string) []string {
+	var out []string
+	var cur strings.Builder
+	in, open := false, false
+	for _, r := range line {
+		switch {
+		case r == '"' && (in || !open):
+			in, open = !in, true
+		case !in && (r == ' ' || r == '\t' || r == '\r' || r == '\n'):
+			if open {
+				out = append(out, cur.String())
+				cur.Reset()
+				open = false
+			}
+		default:
+			cur.WriteRune(r)
+			open = true
+		}
+	}
+	if open {
+		out = append(out, cur.String())
+	}
+	return out
 }
 
 // keyHelp is one line of the TUI's key reference: the keys and what they do
@@ -217,13 +250,25 @@ var (
 		{"esc", "from the mixer or the log back to the view's own pane"},
 		{"< >", "tempo down, up by 5 bpm"},
 		{":", "command line; help lists the commands"},
+		{"^O", "files: load or merge a document, rip a recording, save the tab's document into a directory"},
 		{"? / ^S / ^Q", "these keys / save / quit"},
+	}}
+	helpFiles = helpSection{"files", []keyHelp{
+		{"j k PgUp PgDn", "move; g G the ends"},
+		{"enter l →", "open the directory; load the document (sounds or patterns by its tables); rip the recording under a name asked for"},
+		{"m", "merge the document onto the one in hand instead"},
+		{"s", "save the tab's document, patterns or sounds, into this directory under a name asked for"},
+		{"h ← ⌫", "up a directory"},
+		{"esc ^O", "close"},
 	}}
 )
 
 // helpFor is the key reference of where the keys are: the browser, or the editor
 // and the tab it shows
 func (a *tuiApp) helpFor() []helpSection {
+	if a.files.open {
+		return []helpSection{helpFiles}
+	}
 	if a.view != viewEdit || a.ed == nil {
 		return []helpSection{helpBrowse}
 	}
@@ -235,7 +280,7 @@ func (a *tuiApp) helpFor() []helpSection {
 
 func cmdHelp(s *Session, a []string) error {
 	if len(a) == 1 && a[0] == "keys" {
-		for _, sec := range []helpSection{helpBrowse, helpEditor, helpKeys, helpGrid, helpMixer, helpGlobal} {
+		for _, sec := range []helpSection{helpBrowse, helpEditor, helpKeys, helpGrid, helpMixer, helpFiles, helpGlobal} {
 			fmt.Fprintln(s.out, sec.title)
 			for _, l := range sec.lines {
 				fmt.Fprintf(s.out, "  %-14s %s\n", l.keys, l.what)
@@ -251,7 +296,7 @@ func cmdHelp(s *Session, a []string) error {
 		fmt.Fprintf(s.out, "%s\n  %s\n", c.usage, c.help)
 		return nil
 	}
-	fmt.Fprintln(s.out, "prefix '-' tolerates failure, '!' requires it; '#' comments; paths cannot contain spaces")
+	fmt.Fprintln(s.out, "prefix '-' tolerates failure, '!' requires it; '#' comments; quote a path with a space")
 	for _, k := range slices.Sorted(maps.Keys(commands)) {
 		fmt.Fprintf(s.out, "  %-40s %s\n", commands[k].usage, commands[k].help)
 	}

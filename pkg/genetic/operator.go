@@ -329,6 +329,36 @@ func (bp *BoundedPerturbator) Clamp(solution []float64) {
 	}
 }
 
+// CategoricalPerturbator reassigns each element of an integer genotype, with
+// probability rate, to another of its categories drawn uniformly: Categories for
+// every element, or Per's entry for each. An assignment of bars to patterns is
+// such a genotype. strength is unused.
+type CategoricalPerturbator struct {
+	Categories int
+	Per        []int
+}
+
+func (cp *CategoricalPerturbator) Perturb(solution *[]int, rate, _ float64, rng *rand.Rand) {
+	if solution == nil {
+		return
+	}
+	s := *solution
+	for i := range s {
+		n := cp.Categories
+		if i < len(cp.Per) {
+			n = cp.Per[i]
+		}
+		if n < 2 || rng.Float64() >= rate {
+			continue
+		}
+		v := rng.IntN(n - 1)
+		if v >= s[i] {
+			v++ // another category than the one held
+		}
+		s[i] = v
+	}
+}
+
 // GaussianPerturbator adds unbounded Gaussian noise to numeric genotypes
 type GaussianPerturbator[S ~[]F, F Numeric] struct{}
 

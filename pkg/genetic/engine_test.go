@@ -2,6 +2,7 @@ package genetic
 
 import (
 	"context"
+	"fmt"
 	"math/rand/v2"
 	"reflect"
 	"testing"
@@ -111,5 +112,122 @@ func BenchmarkEngine_Generation(b *testing.B) {
 				e.step()
 			}
 		})
+	}
+}
+
+// TestEngine_SeedsScheduleAndCheckpoint: seeds open the first generation, a
+// schedule moves the strength the perturbator sees, and a run stopped and
+// restored from its checkpoint ends where an unbroken run ends.
+func TestEngine_SeedsScheduleAndCheckpoint(t *testing.T) {
+	seed := []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6}
+	fresh := func() *Engine[[]float64, float64] {
+		e := newBatchEngine(1, 9)
+		e.SetSeeds([][]float64{append([]float64(nil), seed...)})
+		return e
+	}
+	e := fresh()
+	e.SetTerminator(func(p *Pool[[]float64, float64], gen int) bool {
+		if gen == 0 {
+			found := false
+			for _, m := range p.Members {
+				found = found || reflect.DeepEqual(m.Data, seed)
+			}
+			if !found {
+				t.Error("the seed is not in the first generation")
+			}
+		}
+		return gen == 3
+	})
+	var strengths []float64
+	e.SetSchedule(func(gen int, stats PoolStats[float64]) (float64, float64) {
+		strengths = append(strengths, 0.01*float64(gen+1))
+		return 0.2, strengths[len(strengths)-1]
+	})
+	if _, err := e.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(strengths) != 3 || strengths[2] != 0.03 {
+		t.Errorf("schedule ran %v", strengths)
+	}
+	st, err := e.Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Members = append([]Candidate[[]float64, float64](nil), st.Members...)
+	for i := range st.Members {
+		st.Members[i].Data = append([]float64(nil), st.Members[i].Data...)
+	}
+	rest := fresh()
+	if err := rest.Restore(st); err != nil {
+		t.Fatal(err)
+	}
+	rest.SetSchedule(func(gen int, _ PoolStats[float64]) (float64, float64) { return 0.2, 0.01 * float64(gen+1) })
+	e.SetTerminator(nil)
+	e.SetSchedule(func(gen int, _ PoolStats[float64]) (float64, float64) { return 0.2, 0.01 * float64(gen+1) })
+	a, _ := e.Run(context.Background())
+	b, _ := rest.Run(context.Background())
+	if a.Generation != b.Generation || !reflect.DeepEqual(a.Members, b.Members) {
+		t.Errorf("a restored run diverged: generation %d vs %d, best %g vs %g", a.Generation, b.Generation, a.Stats.BestScore, b.Stats.BestScore)
+	}
+	bad := st
+	bad.Version = 99
+	if err := fresh().Restore(bad); err == nil {
+		t.Error("another layout restored")
+	}
+}
+
+// TestAdaptiveStrengthFollowsSuccess rises after a better best and falls after
+// a stall, within its bounds.
+func TestAdaptiveStrengthFollowsSuccess(t *testing.T) {
+	s := AdaptiveStrength[float64](0.2, 0.1, 0.01, 0.5, 2)
+	_, a := s(0, PoolStats[float64]{BestScore: 1})
+	_, b := s(1, PoolStats[float64]{BestScore: 2})
+	_, c := s(2, PoolStats[float64]{BestScore: 2})
+	_, d := s(3, PoolStats[float64]{BestScore: 2})
+	if a != 0.1 || b != 0.2 || c != 0.1 || d != 0.05 {
+		t.Errorf("strengths %g %g %g %g", a, b, c, d)
+	}
+	for i := range 20 {
+		_, d = s(4+i, PoolStats[float64]{BestScore: 2})
+	}
+	if d != 0.01 {
+		t.Errorf("fell past the floor to %g", d)
+	}
+}
+
+// TestMemoizeScoresAKeyOnce counts evaluations under repeats.
+func TestMemoizeScoresAKeyOnce(t *testing.T) {
+	calls := 0
+	eval := Memoize(func(g []int) string { return fmt.Sprint(g) }, func(g []int) float64 {
+		calls++
+		return float64(len(g))
+	})
+	for range 3 {
+		eval([]int{1, 2})
+		eval([]int{2, 1})
+	}
+	if calls != 2 {
+		t.Errorf("%d evaluations for two keys", calls)
+	}
+}
+
+// TestCategoricalPerturbatorStaysInItsCategories moves elements only to other
+// categories of their own count, at the rate asked.
+func TestCategoricalPerturbatorStaysInItsCategories(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1, 2))
+	cp := &CategoricalPerturbator{Categories: 4, Per: []int{1, 2}}
+	moved := 0
+	for range 1000 {
+		g := []int{0, 1, 3, 2}
+		cp.Perturb(&g, 0.5, 0, rng)
+		if g[0] != 0 || g[1] < 0 || g[1] > 1 || g[2] < 0 || g[2] > 3 || g[3] < 0 || g[3] > 3 {
+			t.Fatalf("left its categories: %v", g)
+		}
+		if g[2] != 3 {
+			moved++
+		}
+	}
+	if moved < 400 || moved > 600 {
+		t.Errorf("moved %d of 1000 at rate 0.5", moved)
 	}
 }

@@ -353,6 +353,9 @@ func (a *tuiApp) draw(w, h int) {
 	if a.view == viewBrowse && a.focus == focusInspector {
 		a.renderInspector(root)
 	}
+	if a.files.open {
+		a.renderFiles(root)
+	}
 	if a.help {
 		a.renderHelp(root)
 	}
@@ -866,6 +869,8 @@ func (a *tuiApp) renderFooter(r tui.Region) {
 // footHint names the keys that matter where the keyboard is; ? has the rest
 func (a *tuiApp) footHint() string {
 	switch {
+	case a.files.open:
+		return "j/k move  enter open/load/rip  m merge  s save here  h up  esc close  ? keys"
 	case a.focus == focusMixer:
 		return "j/k track  space mute  e edit  n new  PgUp/PgDn page  g/G ends  tab next pane  esc back  ? keys"
 	case a.focus == focusKeys:
