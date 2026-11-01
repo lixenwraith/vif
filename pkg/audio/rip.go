@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -175,6 +176,17 @@ type Rip struct {
 	// MelodyVoice and BassVoice are the voices a front end with a voice head heard
 	// each register played with, nil otherwise
 	MelodyVoice, BassVoice *VoiceDef
+	// Notes is the transcript before the grid: every note heard, in time
+	Notes []RipNote
+}
+
+// RipNote is one note as heard, in seconds of the recording, before it was
+// quantized: the sample a voice is fitted to.
+type RipNote struct {
+	Start, End float64
+	MIDI       int
+	Vel        float64
+	Bass       bool // under E3, the bass register
 }
 
 // RipBar is one bar: each drum's hits, kick, snare and hihat in instrument order,
@@ -233,8 +245,39 @@ type RipFrontEnd interface {
 // Ripper rips with a front end of its choosing; a nil FrontEnd is the package's
 // own analysis.
 type Ripper struct {
+	// Grid is the tempo and downbeat to read the recording on, nil to decode them
+	Grid     *RipGrid
 	Params   RipParams
 	FrontEnd RipFrontEnd
+}
+
+// RipGrid pins the tempo and the downbeat a recording is read on, for one whose
+// grid is known, as the engine's own renders are: the tempo, beat and bar-line
+// decoders are skipped and the hits and notes fall on the given grid, so a rip of
+// a render grades the render, not those decoders.
+type RipGrid struct {
+	BPM      int
+	Downbeat float64 // seconds
+}
+
+// pinned is the grid a RipGrid describes: beats a tempo apart through the
+// recording, from before the downbeat to its end, the last beat allowed half a
+// beat past the end so a render of whole bars keeps its last
+func (f *RipFrames) pinned(gr *RipGrid) ripGrid {
+	beat := 60 / float64(max(gr.BPM, 1)) / f.Hop
+	start := max(gr.Downbeat, 0) / f.Hop
+	before := int(start / beat)
+	var beats []int
+	for i := -before; ; i++ {
+		fr := int(math.Round(start + float64(i)*beat))
+		if float64(fr) > float64(f.frames())+beat/2 {
+			break
+		}
+		beats = append(beats, fr)
+	}
+	g := ripGrid{beats: beats, first: before}
+	g.bars = max((len(beats)-1-g.first)/BeatsPerBar, 0)
+	return g
 }
 
 // RipWAV reads a WAV stream and rips it with the package's analysis.
@@ -280,14 +323,25 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	if f.frames() < 2 {
 		return nil, errors.New("rip: the front end heard nothing")
 	}
-	bpm, period := f.tempo(p)
-	beats := f.beats(period, p)
-	if len(beats) < BeatsPerBar+1 {
-		return nil, errors.New("rip: no full bar found")
-	}
 	hits := f.drumHits(p)
 	root, scale := f.key()
-	g := f.grid(beats, hits, root%12)
+	var bpm float64
+	var g ripGrid
+	if rp.Grid != nil {
+		bpm = float64(rp.Grid.BPM)
+		g = f.pinned(rp.Grid)
+	} else {
+		var period float64
+		bpm, period = f.tempo(p)
+		beats := f.beats(period, p)
+		if len(beats) < BeatsPerBar+1 {
+			return nil, errors.New("rip: no full bar found")
+		}
+		g = f.grid(beats, hits, root%12)
+	}
+	if g.bars < 1 {
+		return nil, errors.New("rip: no full bar found")
+	}
 	r := &Rip{BPM: int(math.Round(bpm)), Root: root, Scale: scale, Downbeat: float64(g.beats[g.first]) * f.Hop, Bars: make([]RipBar, g.bars), Params: p}
 	r.Progression = f.progression(g, r.Root, r.Scale)
 	g.drums(r, hits)
@@ -300,7 +354,86 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 		f.place(g, r, n, func(b *RipBar) *[]Step { return &b.Bass })
 	}
 	r.MelodyVoice, r.BassVoice = voiceOf(melody), voiceOf(bass)
+	for i, ns := range [2][]ripNote{melody, bass} {
+		for _, n := range ns {
+			r.Notes = append(r.Notes, RipNote{Start: float64(n.start) * f.Hop, End: float64(n.end) * f.Hop, MIDI: n.midi, Vel: n.vel, Bass: i == 1})
+		}
+	}
+	slices.SortFunc(r.Notes, func(a, b RipNote) int { return cmp.Compare(a.Start, b.Start) })
 	return r, nil
+}
+
+// MelDistance is how far two sets of mel frames are apart, the mean squared
+// band difference over the longer's frames, the shorter silent past its end, so
+// a note that rings on or dies early pays for it.
+func MelDistance(a, b [][]float32) float64 {
+	n := max(len(a), len(b))
+	if n == 0 {
+		return 0
+	}
+	var sum float64
+	var count int
+	for t := range n {
+		var fa, fb []float32
+		if t < len(a) {
+			fa = a[t]
+		}
+		if t < len(b) {
+			fb = b[t]
+		}
+		bands := max(len(fa), len(fb))
+		for k := range bands {
+			var x, y float64
+			if k < len(fa) {
+				x = float64(fa[k])
+			}
+			if k < len(fb) {
+				y = float64(fb[k])
+			}
+			sum += (x - y) * (x - y)
+			count++
+		}
+	}
+	return sum / float64(max(count, 1))
+}
+
+// BarDistance is how far two bars are apart, the steps one has and the other
+// lacks over the steps either has, a hit by its drum and step and a note by its
+// step, degree and octave: zero for the same bar, one for bars sharing nothing.
+func BarDistance(a, b *RipBar) float64 {
+	keys := func(bar *RipBar) map[[4]int]bool {
+		m := map[[4]int]bool{}
+		for d := range bar.Drums {
+			for _, s := range bar.Drums[d] {
+				m[[4]int{d, s.Pos, 0, 0}] = true
+			}
+		}
+		for _, s := range bar.Melody {
+			m[[4]int{10, s.Pos, s.Deg, s.Oct}] = true
+		}
+		for _, s := range bar.Bass {
+			m[[4]int{11, s.Pos, s.Deg, s.Oct}] = true
+		}
+		return m
+	}
+	ka, kb := keys(a), keys(b)
+	union, differ := len(ka), 0
+	for k := range kb {
+		if ka[k] {
+			continue
+		}
+		union++
+		differ++
+	}
+	for k := range ka {
+		if !kb[k] {
+			differ++
+		}
+	}
+	if union == 0 {
+		return 0
+	}
+	return float64(differ) / float64(union)
 }
 
 // voiceOf is the voice a register's notes were heard played with, each note's
@@ -365,44 +498,11 @@ func (r *Rip) Patterns(name string, bars int) []*PatternDef {
 	var out []*PatternDef
 	for w := 0; w*bars < len(r.Bars); w++ {
 		lo, hi := w*bars, min((w+1)*bars, len(r.Bars))
-		steps := (hi - lo) * StepsPerBar
-		suffix := fmt.Sprintf("_%d", w+1)
-		beat := &PatternDef{Name: name + "_beat" + suffix, Steps: steps, Role: "rhythm", Groups: []string{name}}
-		for d := InstrKick; d < InstrClap; d++ {
-			var evs []StepDef
-			for b := lo; b < hi; b++ {
-				for _, s := range r.Bars[b].Drums[d] {
-					evs = append(evs, StepDef{Pos: s.Pos + (b-lo)*StepsPerBar, Vel: s.Vel})
-				}
-			}
-			if len(evs) > 0 {
-				beat.Track = append(beat.Track, TrackDef{Instr: d.String(), Event: evs})
+		for part := range RipParts {
+			if p := r.Pattern(fmt.Sprintf("%s_%s_%d", name, RipPartNames[part], w+1), name, part, lo, hi); p != nil {
+				out = append(out, p)
 			}
 		}
-		if len(beat.Track) > 0 {
-			out = append(out, beat)
-		}
-		line := func(part string, instr string, role string, pick func(*RipBar) []Step) {
-			var evs []StepDef
-			for b := lo; b < hi; b++ {
-				for _, s := range pick(&r.Bars[b]) {
-					evs = append(evs, StepDef{Pos: s.Pos + (b-lo)*StepsPerBar, Vel: s.Vel, Deg: s.Deg, Oct: s.Oct, Dur: min(s.Dur, MaxPatternLen)})
-				}
-			}
-			if len(evs) > 0 {
-				out = append(out, &PatternDef{Name: name + "_" + part + suffix, Steps: steps, Role: role, Groups: []string{name},
-					Track: []TrackDef{{Instr: instr, Event: evs}}})
-			}
-		}
-		leadVoice, bassVoice := "lead", "bass"
-		if r.MelodyVoice != nil {
-			leadVoice = name + "_melody_voice"
-		}
-		if r.BassVoice != nil {
-			bassVoice = name + "_bass_voice"
-		}
-		line("melody", leadVoice, "melody", func(b *RipBar) []Step { return b.Melody })
-		line("bass", bassVoice, "bass", func(b *RipBar) []Step { return b.Bass })
 	}
 	return out
 }

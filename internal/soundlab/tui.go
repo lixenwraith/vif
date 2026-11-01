@@ -132,8 +132,9 @@ type tuiApp struct {
 	mixCur, mixTop mixRow
 	mixPageH       int
 
-	keys keysState
-	ed   *editState
+	keys  keysState
+	ed    *editState
+	files fileBrowser // the ^O overlay
 	// fresh is the entry n made, new to the editor or inspector that has it until
 	// that closes
 	fresh string
@@ -188,7 +189,9 @@ func RunTUI(s *Session, lb *LogBuffer, term terminal.Terminal) error {
 	a := newTUIApp(s, lb)
 	a.term = term
 	a.w, a.h = term.Size()
-	fmt.Fprintln(lb, "soundlab — n new pattern, e edit, : commands, ? keys, ^S save, ^Q quit")
+	s.ticked = true // the tick conducts a playing song
+	defer func() { s.ticked = false }()
+	fmt.Fprintln(lb, "soundlab — n new pattern, e edit, ^O files, : commands, ? keys, ^S save, ^Q quit")
 	// An empty session has nothing to browse; the TUI seeds builtins per
 	// empty document. REPL and scripts stay unseeded — they own their state.
 	if len(s.pats.order) == 0 {
@@ -237,7 +240,7 @@ func (a *tuiApp) execQ(line string) error {
 // requestQuit guards unsaved work once, then quits. Applies to Ctrl+Q and
 // :quit alike.
 func (a *tuiApp) requestQuit() {
-	if (a.s.soundsModified() || a.s.pats.modified) && !a.quitArmed {
+	if (a.s.soundsModified() || a.s.patsModified()) && !a.quitArmed {
 		a.quitArmed = true
 		fmt.Fprintln(a.log, "unsaved changes — ^S saves to provenance (:save sound|pattern <file> picks a path); quit again to discard")
 		return
@@ -249,11 +252,11 @@ func (a *tuiApp) requestQuit() {
 // path, or, the first time, to a path a prompt asks for, offering the file the
 // next vif run reads first.
 func (a *tuiApp) saveModified() {
-	if !a.s.soundsModified() && !a.s.pats.modified {
+	if !a.s.soundsModified() && !a.s.patsModified() {
 		fmt.Fprintln(a.log, "nothing to save — no document diverges from disk")
 		return
 	}
-	if a.s.pats.modified {
+	if a.s.patsModified() {
 		if a.s.pats.src == "" {
 			a.promptSavePath("pattern", a.s.files.musicTarget)
 			return // resumes from the commit
@@ -275,7 +278,7 @@ func (a *tuiApp) saveModified() {
 func (a *tuiApp) promptSavePath(kind, target string) {
 	a.openPrompt("save "+kind+" -> file: ", cmp.Or(target, kind+"s.toml"), func(file string) {
 		a.exec("save " + kind + " " + file)
-		if a.s.soundsModified() || a.s.pats.modified {
+		if a.s.soundsModified() || a.s.patsModified() {
 			a.saveModified()
 		}
 	})
@@ -343,6 +346,10 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		a.delArmed = ""
 	}
 
+	if a.files.open && a.mode == modeNormal {
+		a.filesKey(ev)
+		return
+	}
 	switch a.mode {
 	case modeCommand:
 		a.commandKey(ev)
@@ -374,6 +381,8 @@ func (a *tuiApp) globalKey(ev terminal.Event) bool {
 		a.focus = a.mainPane()
 	case ev.Key == terminal.KeyCtrlS:
 		a.saveModified()
+	case ev.Key == terminal.KeyCtrlO:
+		a.openFiles()
 	case ev.Key == terminal.KeyRune && ev.Rune == '?':
 		a.help = true
 	case ev.Key == terminal.KeyRune && ev.Rune == ':':
@@ -415,6 +424,7 @@ func (a *tuiApp) cycleFocus(next bool) {
 // tick decays the keys' highlights and redraws only when the engine moved, so an
 // idle screen, or one too small to show anything, is left alone
 func (a *tuiApp) tick() {
+	a.s.conduct()
 	if a.tooSmall() {
 		return
 	}

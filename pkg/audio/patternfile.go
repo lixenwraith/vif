@@ -15,6 +15,14 @@ import (
 // the decoder ignores them, which would turn "follow_chords" into a silent false.
 // checkKeys reflects over the struct tags, so there is no schema to keep in sync.
 func LoadPatternDefs(data []byte) ([]*PatternDef, error) {
+	f, err := loadPatternSpecFile(data)
+	if err != nil {
+		return nil, err
+	}
+	return f.Pattern, nil
+}
+
+func loadPatternSpecFile(data []byte) (*PatternSpecFile, error) {
 	raw, err := toml.NewParser(data).Parse()
 	if err != nil {
 		return nil, fmt.Errorf("pattern spec: %w", err)
@@ -29,7 +37,7 @@ func LoadPatternDefs(data []byte) ([]*PatternDef, error) {
 	if err := toml.Decode(raw, &f); err != nil {
 		return nil, fmt.Errorf("pattern spec: %w", err)
 	}
-	return f.Pattern, nil
+	return &f, nil
 }
 
 // LoadPatternsTOML parses user pattern definitions into the render form. The

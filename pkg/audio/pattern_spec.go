@@ -14,6 +14,7 @@ import (
 // for PatternID, which is process-local and assigned at registration.
 type PatternSpecFile struct {
 	Pattern []*PatternDef `toml:"pattern"`
+	Song    []*SongDef    `toml:"song,omitempty"`
 }
 
 // PatternDef is one authored pattern. Role, Groups and Tiers place it in the drawn

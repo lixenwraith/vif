@@ -56,6 +56,18 @@ type Session struct {
 	rip      audio.RipParams
 	ripSrc   string
 	frontEnd *ripnet.FrontEnd
+	// rips keeps what rip heard of each recording, by the name it was ripped as,
+	// with the samples, so fit and compress work on it without the file; songs
+	// are the timelines compress makes and the pattern document carries
+	rips  map[string]*ripped
+	songs *doc[*audio.SongDef]
+	// fit and compressOpt size the searches rip, fit and compress run
+	fit         fitOptions
+	compressOpt compressOptions
+	// song is the timeline being conducted through the live sequencer, nil when
+	// none; ticked says a front end drives conduct, so song play returns at once
+	song   *songPlay
+	ticked bool
 }
 
 // Files is where the game reads its audio overrides and where an untitled save
@@ -160,7 +172,11 @@ func NewSession(o Options) (*Session, error) {
 		scale:  audio.ScalePhrygian,
 		files:  files,
 		rip:    audio.DefaultRipParams(),
+		rips:   map[string]*ripped{},
+		songs:  newSongDoc(),
+		fit:    defaultFit,
 	}
+	s.compressOpt = defaultCompress
 	if f := files.rip; f != "" {
 		if data, err := os.ReadFile(f); err != nil {
 			fmt.Fprintf(out, "rip params %s: %v (built-in used)\n", f, err)
@@ -218,6 +234,7 @@ func (s *Session) adoptOverrides() {
 			s.files.musicTarget = ""
 		} else {
 			s.pats.replaceAll(s.pats.all(), s.files.musicTarget, false)
+			s.songs.replaceAll(s.songs.all(), s.files.musicTarget, false)
 		}
 	}
 }
@@ -309,17 +326,23 @@ func (s *Session) loadPatternFile(file string, replace bool) error {
 	// Authoring form on purpose: an invalid pattern stays editable in the
 	// document and fails at validate/apply with a specific error, instead of
 	// being dropped at load the way LoadPatternsTOML would.
-	defs, err := audio.LoadPatternDefs(data)
+	f, err := audio.LoadPatternFile(data)
 	if err != nil {
 		return err
 	}
 	if replace {
 		abs, _ := filepath.Abs(file)
-		s.pats.replaceAll(defs, abs, true)
+		s.pats.replaceAll(f.Pattern, abs, true)
+		s.songs.replaceAll(f.Song, abs, true)
 	} else {
-		s.pats.mergeAll(defs, true)
+		s.pats.mergeAll(f.Pattern, true)
+		s.songs.mergeAll(f.Song, true)
 	}
-	fmt.Fprintf(s.out, "%d pattern(s) loaded\n", len(defs))
+	fmt.Fprintf(s.out, "%d pattern(s) loaded", len(f.Pattern))
+	if len(f.Song) > 0 {
+		fmt.Fprintf(s.out, " and %d song(s)", len(f.Song))
+	}
+	fmt.Fprintln(s.out)
 	return nil
 }
 
@@ -349,6 +372,9 @@ func (s *Session) seedBuiltinVoices() error {
 
 // soundsModified reports the sound document, voices included, diverging from disk
 func (s *Session) soundsModified() bool { return s.sounds.modified || s.voices.modified }
+
+// patsModified reports the pattern document, songs included, diverging from disk
+func (s *Session) patsModified() bool { return s.pats.modified || s.songs.modified }
 
 // seedBuiltinPatterns snapshots the registry, which Start filled from the shipped
 // bank plus the code-owned melody_gen. Def() allocates, so live mixer pointers are
@@ -407,16 +433,20 @@ func (s *Session) savePatterns(named string) error {
 	if err != nil {
 		return err
 	}
-	data, err := audio.MarshalPatternDefs(s.pats.all())
+	data, err := audio.MarshalPatternFile(&audio.PatternSpecFile{Pattern: s.pats.all(), Song: s.songs.all()})
 	if err != nil {
 		return err
 	}
 	if err := os.WriteFile(file, data, 0o644); err != nil {
 		return err
 	}
-	s.pats.src = file
-	fmt.Fprintf(s.out, "wrote %s (%d patterns)\n", file, len(s.pats.order))
-	s.pats.modified = false
+	s.pats.src, s.songs.src = file, file
+	fmt.Fprintf(s.out, "wrote %s (%d patterns", file, len(s.pats.order))
+	if n := len(s.songs.order); n > 0 {
+		fmt.Fprintf(s.out, ", %d songs", n)
+	}
+	fmt.Fprintln(s.out, ")")
+	s.pats.modified, s.songs.modified = false, false
 	return nil
 }
 
@@ -616,6 +646,9 @@ func (s *Session) docRoot(name string) (root any, mark func(), err error) {
 	}
 	if d, ok := s.pats.get(name); ok {
 		return d, func() { s.pats.markDirty(name) }, nil
+	}
+	if d, ok := s.songs.get(name); ok {
+		return d, func() { s.songs.markDirty(name) }, nil
 	}
 	return nil, nil, fmt.Errorf("%q: not in document (new / load / builtin first)", name)
 }

@@ -471,9 +471,28 @@ voices its registers were played with (`Rip.Voices`). `tool/rip-train` trains it
 on loops soundlab exports (`corpus`), and soundlab hears with the first root's
 `audio/ripnet.bin` when there is one; `render` writes what the slots hold to a
 WAV through `RenderMusic`, so an estimate is heard without a device.
-[Rip design](rip-design.md) is where the rip is going: voices fitted by the
-engine's own renders, a pattern dictionary with matching and compression, and
-the loop that refines both.
+
+A rip also keeps its transcript, every note heard in seconds of the recording
+before the grid (`Rip.Notes`), which is what a voice is fitted to: `RenderNote`
+plays a voice at a note's pitch, loudness and length offline, `MelFrames` of the
+render and of the recording around the note meet in `MelDistance`, and soundlab's
+`rip` searches the voice's genes and wave for the nearest, seeded with every
+registered voice, for each register the front end heard no voice for (`fit`
+runs it again with more generations). The bars of a rip compress into a
+dictionary: `BarDistance` is the steps two bars do not share over the steps
+either has, `Cluster` groups items within a threshold by their mean distance,
+each group's medoid standing for it, `Rip.Cluster` does that for one part, and
+`Rip.Song` writes the result as one-bar patterns, `<name>_<part>_a`, `_b`, ...,
+and a `SongDef`: the patterns each slot plays bar by bar at a tempo and in a
+key, a `[[song]]` in the pattern document (`LoadPatternFile`,
+`MarshalPatternFile`, `ValidateSong`), resolved to a timeline of pattern IDs
+(`Timeline`) that `RenderTimeline` plays offline, the patterns changed at the
+bar lines. Soundlab's `compress` runs the grouping, refines the assignment with
+`pkg/genetic` under a term for the patterns in use, rips the song's render back
+on the song's own grid (`Ripper.Grid` pins a known tempo and downbeat and skips
+their decoders) and scores it against the rip; `song` shows, renders or
+conducts a song through the live sequencer. [Rip design](rip-design.md) is where the rip is going from
+here: the loop that refines voices and patterns against that score.
 
 What it does not yet tell apart: a bass note's attack from a kick, a plucked
 chord's attack from a snare, two voices in one register, and a note off the key
