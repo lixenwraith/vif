@@ -480,8 +480,11 @@ by what a line keeps, its pitch from note to note, the length of its notes,
 their strength and no two at once (`streams`), and the lead is the line a rule
 names (`Ripper.Lead`, soundlab's `rip ... lead`): the busier by default, the
 one with the most notes for its sounding time, or the higher, lower, louder or
-softer. The bass line is decoded up to A3, over the melody's lowest rows, and a
-note both hear is the bass's, so a bass line that climbs over E3 is not cut.
+softer. The bass line is decoded up to A3, over the melody's lowest rows: a
+reached note the bass line does not continue is not the bass's, and a note both
+registers hear goes to the line it continues, the one whose nearest other note
+is nearer in pitch, so a bass line that climbs over E3 is not cut and a melody
+that dips keeps its note.
 Two transcripts of one piece are compared by `MatchNotes` (soundlab's `agree`),
 each line's notes aligned in order under the transposition that matches most,
 and a transcript against notes given as text in the `notes` verb's own form

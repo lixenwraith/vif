@@ -229,7 +229,7 @@ const (
 	ripHatHz     = 5000.0
 	RipMinMIDI   = 28 // E1
 	RipBassTop   = 52 // the bass register's rows end under E3, where the long window stops
-	RipBassReach = 57 // the bass line is decoded up to A3, over the melody's lowest rows: a note both lines hear is the bass's
+	RipBassReach = 57 // the bass line is decoded up to A3, over the melody's lowest rows; settle gives a note both hear to the line it continues
 	RipMelodyLow = 53 // the melody from F3 up
 	RipMaxMIDI   = 97 // C7 exclusive
 	RipPitches   = RipMaxMIDI - RipMinMIDI
@@ -1402,8 +1402,9 @@ func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 // settle gives a note both registers heard, the same pitch at the same time
 // where the bass's reach and the melody's rows overlap, to the line it
 // continues: the one whose nearest other note in time is nearer in pitch, the
-// bass when they tie. A bass line that climbs keeps its notes, and a melody
-// that dips keeps its own.
+// bass when they tie. A reached note the bass line does not continue, its
+// nearest other bass note more than an octave away, is not the bass's at all.
+// A bass line that climbs keeps its notes, and a melody that dips keeps its own.
 func settle(bass, melody []ripNote) (b, m []ripNote) {
 	nearest := func(notes []ripNote, n ripNote) float64 { // semitones to the nearest other note within a second
 		best := math.Inf(1)
@@ -1417,6 +1418,13 @@ func settle(bass, melody []ripNote) (b, m []ripNote) {
 		}
 		return best
 	}
+	bass = slices.DeleteFunc(slices.Clone(bass), func(n ripNote) bool {
+		if n.midi < RipBassTop {
+			return false
+		}
+		near := nearest(bass, n)
+		return !math.IsInf(near, 1) && near > 12
+	})
 	dropB, dropM := map[int]bool{}, map[int]bool{}
 	for i, n := range melody {
 		for j, bn := range bass {

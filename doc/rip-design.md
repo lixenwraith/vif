@@ -61,7 +61,11 @@ flowchart LR
    what a line keeps, its pitch from note to note, the length of its notes,
    their strength and no two at once, and the lead is the line a rule names,
    the busier by default (`Ripper.Lead`). The bass is decoded up to A3, over
-   the melody's lowest rows, a note both hear being the bass's. `RipParams`
+   the melody's lowest rows, which count for three quarters against the bass
+   rows' own reference; a reached note the bass line does not continue, its
+   nearest other bass note more than an octave away, is not the bass's, and a
+   note both registers hear goes to the line it continues, the one whose
+   nearest other note is nearer in pitch, the bass when they tie. `RipParams`
    holds their thresholds as data a search tunes (`tune`).
 4. **Voices.** Each note carries the genes the front end heard it played with
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
