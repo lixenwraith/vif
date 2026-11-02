@@ -136,6 +136,14 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 					slots[g.slot] = id
 				}
 			}
+			// much of a recording's music has no drums or no bass, a solo piano
+			// neither, where the bank's loops always had both under the melody
+			if grng.Float64() < 0.3 {
+				slots[0] = audio.PatternSilence
+			}
+			if grng.Float64() < 0.15 {
+				slots[3] = audio.PatternSilence
+			}
 		}
 		arng := rand.New(rand.NewPCG(o.seed^0xa5a5a5a5, uint64(i)+1))
 		voices, restore := s.loopVoices(slots, o.aug, arng)
@@ -361,23 +369,25 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 
 // degrade puts a room and a mix between a render and the frames a model hears,
 // each drawn from rng so the model does not learn the synthesizer's clean
-// output: a gain swelling by up to 6 dB, a low-pass, two equaliser bands, for a
-// third of the loops a drive into a soft clip, for half a compressor, a reverb
-// from a booth's to, for a third, a hall's, and a noise floor
+// output: a gain swelling by up to 6 dB, for half the loops a low-pass, two
+// equaliser bands, for a third a drive into a soft clip, for half a compressor,
+// a reverb from a booth's to, for a third, a hall's further back, and a noise floor
 func degrade(x []float64, rng *rand.Rand) []float64 {
 	sr := float64(audio.AudioSampleRate)
 	out := make([]float64, len(x))
 	gain := math.Pow(10, (rng.Float64()*9-6)/20)
 	swell, period, phase := rng.Float64()*6, (0.5+rng.Float64()*1.5)*float64(len(x)), rng.Float64()*2*math.Pi
-	cutoff := 2500 + rng.Float64()*7500
-	a := 1 - math.Exp(-2*math.Pi*cutoff/sr)
+	a := 1.0
+	if rng.Float64() < 0.5 {
+		a = 1 - math.Exp(-2*math.Pi*(4000+rng.Float64()*7000)/sr)
+	}
 	drive := 1.0
 	if rng.Float64() < 1.0/3 {
 		drive = 2 + rng.Float64()*4
 	}
 	var bands [2]func(float64) float64
 	for k := range bands {
-		bands[k] = audio.Peaking(80*math.Pow(100, rng.Float64()), rng.Float64()*18-9, 0.5+rng.Float64()*1.5)
+		bands[k] = audio.Peaking(80*math.Pow(100, rng.Float64()), rng.Float64()*12-6, 0.5+rng.Float64()*1.5)
 	}
 	var lp float64
 	for i, v := range x {
@@ -390,11 +400,10 @@ func degrade(x []float64, rng *rand.Rand) []float64 {
 	}
 	// a Schroeder reverb: four combs in parallel into two allpasses, at a decay
 	// and a mix of the draw's
-	rt := 0.15 + rng.Float64()*0.55
+	rt, wet := 0.15+rng.Float64()*0.55, 0.05+rng.Float64()*0.25
 	if rng.Float64() < 1.0/3 {
-		rt = 0.7 + rng.Float64()*1.8
+		rt, wet = 0.7+rng.Float64()*1.8, 0.03+rng.Float64()*0.12
 	}
-	wet := 0.05 + rng.Float64()*0.3
 	combs := [4]int{int(0.0297 * sr), int(0.0371 * sr), int(0.0411 * sr), int(0.0437 * sr)}
 	var lines [4][]float64
 	var feedback [4]float64
