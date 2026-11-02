@@ -66,6 +66,7 @@ tool/rip-train/pipeline.sh install
 | `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
 | `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |
 | `STEPS`, `BATCH` | 20000, 8 | training steps and windows a step |
+| `DIM`, `HEADS`, `LAYERS`, `FFN` | 256, 8, 4, 1024 | the model's width, attention heads, layers and feed-forward width, `train.py`'s `--dim`, `--heads`, `--layers` and `--ffn`; a `CHECKPOINT` or `INIT` of another shape is refused |
 | `HOLDOUT`, `EVERY` | 200, 1000 | loops held out, and how often they are scored and a checkpoint written |
 | `OUT`, `CHECKPOINT` | `$CORPUS/ripnet.bin`, `$CORPUS/ripnet.pt` | the weight file, and the checkpoint a stopped run resumes from |
 | `ROOT` | `~/.config/vif` | the configuration root `install` copies the weights into |
@@ -80,11 +81,13 @@ A smoke test of the whole path, under ten minutes on a laptop:
 LOOPS=200 STEPS=300 HOLDOUT=20 EVERY=100 BENCH_LOOPS=4 CORPUS=/tmp/smoke tool/rip-train/pipeline.sh all
 ```
 
-What to expect at scale, on four CPU cores: 20000 loops of four bars export in
-about an hour (`nowav`; the frames and labels are 4.5 GB), 20000 steps of batch
-8 train in two and three quarter hours when the machine is otherwise idle,
-`bench 12 4` grades in a few minutes. The export and the training run one after
-the other and share the cores with anything else the machine does.
+What to expect at scale, on a 2017 laptop (an i7-7700HQ, four cores): the
+export renders on one core, about 2.5 loops a second, so 20000 loops of four
+bars take two and a quarter hours (`nowav`; the frames and labels are 5 GB);
+a step of batch 8 at the default shape takes 1.45 s on the four cores and
+0.11 s on its GTX 1060, so 20000 steps take eight hours or forty minutes (the
+first runs' width 128 took 0.65 s on the cores); `bench 12 4` grades in a few
+minutes. Each stage shares the cores with anything else the machine does.
 
 ## Reading a run
 
@@ -263,8 +266,9 @@ To write your own:
 - **The model's shape.** `--dim`, `--layers`, `--heads`, `--ffn` and
   `--attention-window` on `train.py` reshape it; the weight file carries the
   shape, so `ripnet` loads any of them as long as the inputs and heads are its.
-  Pass them through `pipeline.sh` by editing its `train` function, or run
-  `train.py` by hand with the flags below.
+  `pipeline.sh` passes `DIM`, `HEADS`, `LAYERS` and `FFN`; keep a head 32 wide
+  (`DIM=384 HEADS=12 FFN=1536`). A checkpoint records its shape, and `train.py`
+  refuses to resume or start from one of another, naming both.
 
 ## By hand
 
@@ -281,16 +285,17 @@ cp ripnet.bin ~/.config/vif/audio/ripnet.bin
 ```
 
 `train.py` trains on `--batch` windows of `--window` frames (512, six seconds)
-cropped at random from the loops; `--checkpoint` saves every `--every` steps
-and resumes from the file when it exists, `--init` starts from a `.pt`'s weights
-alone (no optimizer state, step 0), and `--shard-seed` moves the stream the
-windows are drawn from while `--seed` keeps the starting weights;
-`average.py --pt next.pt --out next.bin [--trim 0.1] a.pt b.pt ...` is the
-merge. The defaults are `ripnet.Spec`: eighty bands in, width 128, four heads,
-four layers, feed-forward 512, a window of 64 frames either side, about 800
-thousand weights. The losses: onsets, drums and pitches as weighted binary
-cross-entropy, voicing likewise, the wave as cross-entropy and the voice genes
-as squared error, the last two over frames a note sounds in.
+cropped at random from the loops; `--checkpoint` saves every `--every` steps,
+with the best held-out step's weights, and resumes from the file when it
+exists, `--init` starts from a `.pt`'s weights alone (no optimizer state, step
+0), and `--shard-seed` moves the stream the windows are drawn from while
+`--seed` keeps the starting weights; `average.py --pt next.pt --out next.bin
+[--trim 0.1] a.pt b.pt ...` is the merge. The defaults are `ripnet.Spec`:
+eighty bands in, width 256, eight heads, four layers, feed-forward 1024, a
+window of 64 frames either side, 3.2 million weights. The losses: onsets,
+drums and pitches as weighted binary cross-entropy, voicing likewise, the wave
+as cross-entropy and the voice genes as squared error, the last two over
+frames a note sounds in.
 
 ## Parity
 

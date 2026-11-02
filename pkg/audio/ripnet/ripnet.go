@@ -28,7 +28,7 @@ const (
 // inputs and heads; its width, depth and window may differ.
 func Spec() transformer.Config {
 	return transformer.Config{
-		Inputs: audio.RipMelBands, Dim: 128, Heads: 4, Layers: 4, FFN: 512, Window: 64,
+		Inputs: audio.RipMelBands, Dim: 256, Heads: 8, Layers: 4, FFN: 1024, Window: 64,
 		Outputs: []transformer.Head{
 			{Name: HeadOnset, Size: 1}, {Name: HeadDrums, Size: int(audio.InstrClap)}, {Name: HeadPitch, Size: audio.RipPitches},
 			{Name: HeadVoicing, Size: 1}, {Name: HeadWave, Size: len(audio.VoiceWaves)}, {Name: HeadVoice, Size: audio.VoiceGeneCount},

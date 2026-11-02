@@ -172,19 +172,21 @@ offline (`song <name> <file.wav>`).
   `merge`); `tool/rip-train/README.md` is the guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
   neither a gene, kept by the augmentation when it draws voices near a
   registered one.
-- **Model.** `ripnet.Spec`: eighty bands in, width 128, four heads, four layers,
-  feed-forward 512, a window of 64 frames either side, about 800 thousand
-  weights; heads for the onset, the three drums, the sixty-nine pitches, voicing,
+- **Model.** `ripnet.Spec`: eighty bands in, width 256, eight heads of 32,
+  four layers, feed-forward 1024, a window of 64 frames either side, 3.2
+  million weights (12.8 MB), four times the first five runs' width 128 and four
+  heads; heads for the onset, the three drums, the sixty-nine pitches, voicing,
   the five waves and the thirty-two genes. Attention carries ALiBi biases, a
   slope per head on the frame distance, so the model has no positions to learn
   and generalises past the training window. `tool/rip-train` is its PyTorch
   twin and writes the weight file `pkg/transformer` loads; the instructions are
   its README.
 - **Inference** is pure Go, float32, no CGO, the same on every host. A
-  three-minute song costs about a GFLOP per layer at the default width: seconds
-  on a desktop core, under a minute on a phone, and the width and depth are the
-  file's to choose. The analysis stays the default front end: soundlab hears
-  with the model when the first root holds `audio/ripnet.bin`.
+  three-minute song is 15500 frames, 26 GFLOP a layer at the default width:
+  70 seconds on one core of a 2017 laptop's i7-7700HQ, against 20 at width 128,
+  and the width and depth are the file's to choose. The analysis stays the
+  default front end: soundlab hears with the model when the first root holds
+  `audio/ripnet.bin`.
 
 ## 4. Layout
 
@@ -265,10 +267,11 @@ and the checkpoint earn their keep.
    enough recordings with truths say which; the pedal, a third line or the
    chord a line rings under, which two lines cannot hold; the decoder's and
    the parting's constants tuned against truths rather than rendered loops
-   (`tune` taking `truth` files as its score); the model's sixth run on the
-   accompaniment corpus, then a model four to ten times this one's size with
-   ten times the loops, measured by `bench` and by the truths, and shipped only
-   when it beats the analysis; real recordings with MIDI in the corpus.
+   (`tune` taking `truth` files as its score); the model's sixth run, four
+   times the first five's size, on 40000 loops of the accompaniment corpus,
+   then more loops and steps while its held-out line falls, measured by
+   `bench` and by the truths, and shipped only when it beats the analysis;
+   real recordings with MIDI in the corpus.
 3. Then: tuned parameters and weights shipped as data, and the rip on Android
    under the mobile budget.
 
