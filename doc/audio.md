@@ -534,7 +534,15 @@ on loops soundlab exports (`corpus`), and soundlab hears with the first root's
 WAV through `RenderMusic`, so an estimate is heard without a device.
 
 A rip also keeps its transcript, every note heard in seconds of the recording
-before the grid (`Rip.Notes`), which is what a voice is fitted to: `RenderNote`
+before the grid (`Rip.Notes`), each note of the melody register with its
+brightness (`RipNote.Bright`): its fundamental's share of its first six
+partials' magnitudes, each partial the peak within 3% of k times the note's
+frequency at the rip's tuning under a 4096-point window, averaged over the
+note's frames on which no partial of a concurrent note, melody or bass, falls
+within that 3%; one is a pure tone and a saw reads about a half, and a note whose
+fundamental a concurrent note covers throughout, as the bass's octave or
+double octave does, has none (zero). Soundlab's `notes` prints it; nothing
+decides on it yet. The transcript is what a voice is fitted to: `RenderNote`
 plays a voice at a note's pitch, loudness and length offline, `MelFrames` of the
 render and of the recording around the note meet in `MelDistance`, and soundlab's
 `rip` searches the voice's genes and wave for the nearest, seeded with every

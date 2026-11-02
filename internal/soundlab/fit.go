@@ -71,7 +71,8 @@ func cmdFit(s *Session, a []string) error {
 
 // cmdNotes lists a rip's transcript, the notes as heard before the grid, each
 // with the bar and step it fell on, its pitch as the key's degree with any
-// accidental, its length and loudness, so a listener checks the rip by eye.
+// accidental, its length, loudness and support, and a melody-register note's
+// brightness where it was measured, so a listener checks the rip by eye.
 func cmdNotes(s *Session, a []string) error {
 	rp, ok := s.rips[a[0]]
 	if !ok {
@@ -120,7 +121,11 @@ func cmdNotes(s *Session, a []string) error {
 			where = fmt.Sprintf("bar %d step %2d", i/audio.BeatsPerBar+1, audio.StepsPerBeat*(i%audio.BeatsPerBar)+int(math.Round((n.Start-r.Beats[i])/span)))
 		}
 		deg, oct, acc := audio.PitchStep(r.Root, r.Scale, n.MIDI)
-		fmt.Fprintf(s.out, "%-6s %7.3fs %-20s %-4s degree %d%s octave %d, %.1f step(s) at %.2f, support %.2f\n", line, n.Start, where, noteName(n.MIDI), deg, marks[acc+2], oct, (n.End-n.Start)/span, n.Vel, support(n))
+		bright := ""
+		if n.Bright > 0 {
+			bright = fmt.Sprintf(", bright %.2f", n.Bright)
+		}
+		fmt.Fprintf(s.out, "%-6s %7.3fs %-20s %-4s degree %d%s octave %d, %.1f step(s) at %.2f, support %.2f%s\n", line, n.Start, where, noteName(n.MIDI), deg, marks[acc+2], oct, (n.End-n.Start)/span, n.Vel, support(n), bright)
 	}
 	return nil
 }

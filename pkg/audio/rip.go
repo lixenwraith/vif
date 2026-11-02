@@ -198,6 +198,9 @@ type RipNote struct {
 	Vel        float64
 	Bass       bool // under E3, the bass register
 	Second     bool // the melody register's second line, heard under the louder
+	// Bright is a melody-register note's fundamental's share of its first six
+	// partials, 1 for a pure tone; 0 where none was measured
+	Bright float64
 }
 
 // RipBar is one bar: each drum's hits, kick, snare and hihat in instrument order,
@@ -234,6 +237,11 @@ const (
 	RipMaxMIDI   = 97 // C7 exclusive
 	RipPitches   = RipMaxMIDI - RipMinMIDI
 	ripMaxSec    = 20 * 60
+	// a note's Bright reads its first partials under a window twice the rip's,
+	// each the peak within a share of k times its frequency
+	ripBrightN        = 2 * RipN
+	ripBrightPartials = 6
+	ripBrightSpread   = 0.03
 )
 
 // RipFrames is a recording as the rip's decoders read it, one value per frame
@@ -335,7 +343,8 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 		x = x[:ripMaxSec*rate]
 	}
 	p := rp.params()
-	f, err := rp.Hear(x, rate)
+	x = resample(x, rate, RipRate) // once, for the front end and the notes' partials
+	f, err := rp.Hear(x, RipRate)
 	if err != nil {
 		return nil, err
 	}
@@ -398,13 +407,78 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 		f.place(g, r, early(n), func(b *RipBar) *[]Step { return &b.Bass })
 	}
 	r.MelodyVoice, r.UnderVoice, r.BassVoice = voiceOf(firsts), voiceOf(seconds), voiceOf(bass)
+	f.bright(x, melody, bass)
 	for i, ns := range [2][]ripNote{melody, bass} {
 		for _, n := range ns {
-			r.Notes = append(r.Notes, RipNote{Start: float64(n.start) * f.Hop, End: float64(n.end) * f.Hop, MIDI: n.midi, Vel: n.vel, Bass: i == 1, Second: n.second})
+			r.Notes = append(r.Notes, RipNote{Start: float64(n.start) * f.Hop, End: float64(n.end) * f.Hop, MIDI: n.midi, Vel: n.vel, Bass: i == 1, Second: n.second, Bright: n.bright})
 		}
 	}
 	slices.SortFunc(r.Notes, func(a, b RipNote) int { return cmp.Compare(a.Start, b.Start) })
 	return r, nil
+}
+
+// bright sets each melody-register note's share of its fundamental in its
+// first partials' magnitudes, each partial averaged over the note's frames of
+// the recording x (at RipRate) where no partial of a concurrent note, melody or
+// bass, falls within its spread; a note whose fundamental is covered on every
+// frame keeps none
+func (f *RipFrames) bright(x []float64, melody, bass []ripNote) {
+	all := slices.Concat(melody, bass)
+	on := make([][]int, f.frames()) // the notes sounding on each frame
+	for i, n := range all {
+		for t := max(n.start, 0); t < min(n.end, len(on)); t++ {
+			on[t] = append(on[t], i)
+		}
+	}
+	tune := math.Pow(2, f.Tuning/1200)
+	freq := func(i int) float64 { return NoteFreq(all[i].midi) * tune }
+	binHz := float64(RipRate) / ripBrightN
+	type partials struct{ sum, frames [ripBrightPartials]float64 }
+	acc := make([]partials, len(melody))
+	s := newSTFT(ripBrightN)
+	for t, ns := range on {
+		if !slices.ContainsFunc(ns, func(i int) bool { return i < len(melody) }) {
+			continue
+		}
+		mag := s.at(x, int(math.Round(float64(t)*f.Hop*RipRate)))
+		for _, i := range ns {
+			if i >= len(melody) {
+				continue
+			}
+		partial:
+			for k := range ripBrightPartials {
+				hz := float64(k+1) * freq(i)
+				hi := int(hz * (1 + ripBrightSpread) / binHz)
+				if hi >= len(mag) {
+					break
+				}
+				for _, j := range ns {
+					for h := 1; j != i && h <= ripBrightPartials; h++ {
+						if math.Abs(float64(h)*freq(j)-hz) <= ripBrightSpread*hz {
+							continue partial
+						}
+					}
+				}
+				lo := min(int(math.Ceil(hz*(1-ripBrightSpread)/binHz)), hi) // under 90 Hz the spread holds no bin
+				acc[i].sum[k] += slices.Max(mag[lo : hi+1])
+				acc[i].frames[k]++
+			}
+		}
+	}
+	for i, a := range acc {
+		if a.frames[0] == 0 {
+			continue
+		}
+		var total float64
+		for k, n := range a.frames {
+			if n > 0 {
+				total += a.sum[k] / n
+			}
+		}
+		if total > 0 {
+			melody[i].bright = a.sum[0] / a.frames[0] / total
+		}
+	}
 }
 
 // MelDistance is how far two sets of mel frames are apart, the mean squared
@@ -1365,6 +1439,7 @@ type ripNote struct {
 	vel              float64
 	strength         float64 // mean salience over the note, against the register's reference loudness
 	second           bool    // heard under another note of the register
+	bright           float64 // RipNote.Bright
 	wave             int
 	voice            []float64
 }

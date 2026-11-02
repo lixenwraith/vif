@@ -128,6 +128,45 @@ func energy(x []float64) float64 {
 	return e / float64(max(len(x), 1))
 }
 
+// TestRipNoteBrightIsTheFundamentalsShare: the loop's melody played on a sine
+// reads near one and brighter than on a saw, whose partials share the sum.
+func TestRipNoteBrightIsTheFundamentalsShare(t *testing.T) {
+	const bpm, bars = 140, 4
+	ae, slots := startLoopEngine(t)
+	bright := func(wave string) float64 {
+		if _, err := ae.DefineVoice(&VoiceDef{Name: "lead", Wave: wave, Cutoff: 2500, Q: 0.5, Attack: 0.005, Decay: 0.1, Sustain: 0.7, Release: 0.08}); err != nil {
+			t.Fatal(err)
+		}
+		buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sum float64
+		var heard, measured int
+		for _, n := range r.Notes {
+			if !n.Bass {
+				heard++
+				if n.Bright > 0 {
+					sum, measured = sum+n.Bright, measured+1
+				}
+			}
+		}
+		if 2*measured < heard {
+			t.Fatalf("%s: %d of %d melody-register notes measured", wave, measured, heard)
+		}
+		return sum / float64(measured)
+	}
+	saw, sine := bright("saw"), bright("sine")
+	t.Logf("mean bright: saw %.2f, sine %.2f", saw, sine)
+	if sine < 0.9 || saw > sine-0.2 {
+		t.Errorf("saw %.2f, sine %.2f", saw, sine)
+	}
+}
+
 // TestNoteRenderAndDistances: a rendered note sounds and dies, mel frames of the
 // same note are no distance apart and of another voice some, and bars are as far
 // apart as the steps they do not share.
