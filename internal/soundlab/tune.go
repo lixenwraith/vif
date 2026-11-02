@@ -89,6 +89,9 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 		if strings.HasPrefix(p.Name, "corpus_") {
 			continue // a generated part of an earlier loop, not the bank's
 		}
+		if p.ID == audio.PatternMelodyGen {
+			continue // the sequencer writes its lead bar by bar as it plays: no label reads it
+		}
 		switch p.Role {
 		case audio.RoleRhythm, audio.RoleMelody, audio.RoleBass:
 			byRole[p.Role-1] = append(byRole[p.Role-1], p.ID)
