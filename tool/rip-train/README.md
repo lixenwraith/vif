@@ -65,6 +65,7 @@ tool/rip-train/pipeline.sh install
 |---|---|---|
 | `CORPUS` | `corpus` | where the loops go |
 | `LOOPS`, `BARS` | 20000, 4 | loops rendered, bars a loop; 200 loops is a smoke test |
+| `PARTS` | 1 | exports at once, each rendering every `PARTS`-th loop on a core of its own; a last export renders any loop they left and writes `corpus.json` |
 | `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a third of the loops driven into a soft clip, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
 | `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; empty for the bank alone |
 | `WAV` | `nowav` | frames and labels only; empty keeps each loop's WAV too (300 MB per 200 loops) |
@@ -138,9 +139,10 @@ tool/rip-train/round.sh               # corpus, train, bench, logging to $CORPUS
 
 `round.sh` renders the corpus unless its `corpus.json`, which the export
 writes last, is there, then trains and benches, every line appended to
-`$CORPUS/round.log`. Run it again after a stop and it goes on from
-`CHECKPOINT`, which carries the best held-out step, so the export is the same
-as an unbroken run's. On the laptop above the corpus takes four and a half
+`$CORPUS/round.log`. Run it again after a stop and it goes on: the corpus from
+the loops on disk, whose randomness the export draws all the same, and the
+training from `CHECKPOINT`, which carries the best held-out step; either way
+the result is an unbroken run's. On the laptop above the corpus takes four and a half
 hours and the 40000 steps an hour and a quarter on its GPU, sixteen on its
 cores.
 
