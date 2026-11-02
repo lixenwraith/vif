@@ -7,6 +7,7 @@ set -euo pipefail
 
 CORPUS=${CORPUS:-corpus}             # where the loops go
 LOOPS=${LOOPS:-20000}                # loops to render; a smoke test is 200
+PARTS=${PARTS:-1}                    # exports at once, each rendering every PARTS-th loop: a core each
 BARS=${BARS:-4}                      # bars a loop
 AUG=${AUG:-aug}                      # aug: a room, a mix, random voices, saturation, a tuning off A440; empty for clean
 GEN=${GEN:-gen}                      # gen: beats, melodies and bass lines the bank never had; empty for the bank alone
@@ -38,15 +39,30 @@ stage=${1:-all}
 
 soundlab() { go run ./cmd/soundlab -headless "$@"; }
 
-corpus() {
-	mkdir -p "$CORPUS"
-	local slab="$CORPUS/corpus.slab"
+# corpus_slab writes the export's script to $1, its corpus line ending in $2
+corpus_slab() {
 	{
 		[ -n "$FOCUS" ] && printf 'run %s\n' "$(realpath "$FOCUS")"
-		printf 'corpus %s %s %s %s %s %s %s\n' "$(realpath "$CORPUS")" "$LOOPS" "$BARS" "$AUG" "$GEN" "$WAV" "${TEMPOS:+tempos $TEMPOS}"
-	} > "$slab"
-	echo "== corpus: $(cat "$slab")"
-	soundlab -s "$slab"
+		printf 'corpus %s %s %s %s %s %s %s %s\n' "$(realpath "$CORPUS")" "$LOOPS" "$BARS" "$AUG" "$GEN" "$WAV" "${TEMPOS:+tempos $TEMPOS}" "${2:-}"
+	} > "$1"
+}
+
+# The parts render at once; the last export, alone, renders any loop they left
+# and writes corpus.json. Every export keeps the loops on disk, so a stopped
+# corpus run again goes on where it stopped.
+corpus() {
+	mkdir -p "$CORPUS"
+	local k
+	corpus_slab "$CORPUS/corpus.slab"
+	echo "== corpus: $(cat "$CORPUS/corpus.slab"), in $PARTS part(s)"
+	if [ "$PARTS" -gt 1 ]; then
+		for ((k = 0; k < PARTS; k++)); do
+			corpus_slab "$CORPUS/corpus$k.slab" "part $k/$PARTS"
+			soundlab -s "$CORPUS/corpus$k.slab" &
+		done
+		wait
+	fi
+	soundlab -s "$CORPUS/corpus.slab"
 }
 
 train() {
