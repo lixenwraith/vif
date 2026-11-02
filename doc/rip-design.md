@@ -429,7 +429,11 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   (0.82, 0.79, 0.83), 70 and 46 steps. The rip-back holds at 0.89 and 0.86
   while its bass falls (0.80 to 0.67 on the intro): a move the recording's
   frames like is not always one the rip reads back the same, and fidelity is
-  the judge.
+  the judge. The user's ear: the origin's refined render is the first whose
+  melody is recognisably the piece's, with wrong notes here and there and
+  some misses and extras, where none of the earlier renders would have been
+  identified as it; the origin is the primary sample from here, and the
+  intro, shifted and stretched from it, a degraded second witness.
 
 ## 9. Decisions
 

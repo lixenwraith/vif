@@ -299,6 +299,11 @@ that proves wrong or that a document now states, and link the document instead.
   stand against that, not against the third run's table. The model's corpus
   is rendered at A440, so nothing it saw was detuned; a recording off the
   standard is a recording it was never shown, whatever its held-out loss.
+- A recipe's relative paths were the process's: `run /elsewhere/play.slab`
+  failed to find the documents beside it, and an installed soundlab has no
+  working directory worth the name. A running script's relative paths are
+  read from its own directory (`Session.base`, `RunScriptFile`), nested runs
+  from theirs, and the scratch recipes name their files from where they lie.
 - A render at A440 beside a recording forty cents flat is heard as the same
   notes sharpened, "a stretched string", before any note is judged: the ear
   reads a tuning offset as timbre. Render, play and fit at the recording's
