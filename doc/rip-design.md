@@ -246,26 +246,31 @@ and the checkpoint earn their keep.
 
 ## 7. Plan
 
-1. Done: the analysis and the decoders; parameters as data and their search; the
-   offline render, the truth and the score; the transformer, `ripnet`, the corpus
-   and the trainer; the genetic additions; the voice fit by analysis-by-synthesis;
-   the dictionary, matching and compression; the song document, rendered offline
-   and conducted live; the song's score against the rip; the augmented corpus, a
-   first training run and `bench`; the refinement loop (`refine`), voices and
-   steps refined in turn; the seventh pass, where the sample was misheard
-   upstream of everything: the recording's tuning read first, a pickup bar,
-   the notes' lag, accidentals on steps, and `refine` judged by `Fidelity`
-   with the steps' pitches among its moves.
-2. Next: the model's pitch, where four runs have left it behind the analysis
-   while its drums pulled ahead: a detuned corpus (the loops rendered at
-   random offsets from A440, as recordings are) so the front end learns what
-   the analysis now measures, and more loops and steps, the held-out loss
-   still falling at 20000; the step sweep's cost, five renders a step, once
-   songs grow past a few bars; the matching scored by reconstruction;
-   several voices in a register, clustered by their genes; the false drums
-   gated by a harmonic check or by the model.
-3. Then: real recordings in the corpus, tuned parameters and weights shipped as
-   data, and the rip on Android under the mobile budget.
+1. Done, through thirteen passes on the sample: the analysis and the decoders;
+   parameters as data and their search; the offline render, the truth and the
+   score; the transformer, `ripnet`, the corpus, the trainer and training in
+   rounds across machines; the voice fit by analysis-by-synthesis; the
+   dictionary, matching and compression; the song document, rendered offline,
+   a line at a time, and conducted live; the augmented, detuned, saturated
+   corpus with generated parts and the sample's texture, a lead over an
+   arpeggio; `bench`, loop by loop; the refinement loop judged by `Fidelity`
+   with the voices held to the fit; the recording's tuning, a pickup bar, the
+   notes' lag, accidentals; the two melody lines decoded together and parted
+   by their character under a lead rule; the bass decoded to A3; a note's
+   brightness; and the truths: transcripts corrected by hand, rhythms tapped
+   out, MIDI files, and two rips of one piece as witnesses.
+2. Next: the lead's eight missing and seven cut notes on the origin, chased
+   with the rhythm truth and a transcript corrected by hand, note by note; a
+   default lead rule, or the brightness as one more thing a line keeps, once
+   enough recordings with truths say which; the pedal, a third line or the
+   chord a line rings under, which two lines cannot hold; the decoder's and
+   the parting's constants tuned against truths rather than rendered loops
+   (`tune` taking `truth` files as its score); the model's sixth run on the
+   accompaniment corpus, then a model four to ten times this one's size with
+   ten times the loops, measured by `bench` and by the truths, and shipped only
+   when it beats the analysis; real recordings with MIDI in the corpus.
+3. Then: tuned parameters and weights shipped as data, and the rip on Android
+   under the mobile budget.
 
 ## 8. Measured on the sample recording
 

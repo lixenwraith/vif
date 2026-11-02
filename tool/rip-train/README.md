@@ -104,6 +104,61 @@ the other and share the cores with anything else the machine does.
   sounds against the recording's own frames and how it rips back. The ear is
   the verifier; the recordings in `lixenwraith/scratch` are the held-out set.
 
+## A round on a development machine
+
+What a training round needs, as a hand-off to whoever or whatever runs it,
+and what to bring back.
+
+**The machine.** A vif checkout at a main that has the accompaniment corpus
+(the thirteenth pass, [lixenwraith/vif#959](https://github.com/lixenwraith/vif/pull/959),
+or later); Go as vif builds with; Python 3.11 or later with PyTorch (the
+[setup](#setup) above; a CPU build trains the present model in a few hours, a
+GPU build in well under one); 5 GB of free disk for a corpus of 20000 loops of
+four bars (frames and labels, 4.5 GB; `WAV=` to keep each loop's audio adds
+about 30 GB) and 200 MB for the checkpoints; four cores or more. The run
+survives a stop: `train` resumes from `CHECKPOINT` when it is present, so the
+same command run again continues.
+
+**The run**, from the checkout's root, one corpus for the round and every
+knob at its default unless named:
+
+```bash
+export CORPUS=$HOME/ripcorpus6          # anywhere with the disk
+tool/rip-train/pipeline.sh corpus       # 20000 loops, aug gen: an hour or two on four cores
+tool/rip-train/pipeline.sh train        # 20000 steps of 8 windows; three hours on four cores, a GPU in twenty minutes
+tool/rip-train/pipeline.sh bench        # the model against the analysis on fresh loops, clean and augmented
+```
+
+`install` copies the weights into the configuration root the engine reads
+(`ROOT`); do it only when the bench says the model beats the analysis on both
+lines, which no run has yet. For a larger model pass the shape through
+`train.py`'s own flags (`--dim 256 --layers 6`, or `--dim 384 --layers 8`),
+with `LOOPS` and `STEPS` raised together, since the bigger model overfits a
+small corpus sooner; the held-out line every `EVERY` steps is the guide, and
+the run is done when it stops falling.
+
+**What to bring back.** `$CORPUS/ripnet.bin` (the weights), `$CORPUS/ripnet.pt`
+(the checkpoint, to resume or to start a round from), the training log with
+its held-out lines, the bench's two summary lines, and, if the recordings are
+to hand, `soundlab -headless -config-dir <root> -s <recipe>` for each recording
+in `lixenwraith/scratch` with the weights installed in `<root>/audio/ripnet.bin`,
+whose `truth` lines against the rhythm are the number that matters.
+
+**A wrapper.** The same as a script that logs and resumes, for a machine
+nobody watches:
+
+```bash
+#!/usr/bin/env bash
+# round.sh: one training round from a vif checkout; rerun it to resume
+set -euo pipefail
+cd "$(dirname "$0")"                      # the vif checkout
+export CORPUS=${CORPUS:-$HOME/ripcorpus6} LOOPS=${LOOPS:-20000} STEPS=${STEPS:-20000}
+mkdir -p "$CORPUS"
+[ -f "$CORPUS/loop_0.json" ] || tool/rip-train/pipeline.sh corpus 2>&1 | tee -a "$CORPUS/round.log"
+tool/rip-train/pipeline.sh train 2>&1 | tee -a "$CORPUS/round.log"
+tool/rip-train/pipeline.sh bench 2>&1 | tee -a "$CORPUS/round.log"
+```
+
 ## Training in parallel
 
 A run trains on one machine; a round spreads one over several. Every worker
