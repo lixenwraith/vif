@@ -493,6 +493,80 @@ func TestMatchNotesAlignsTwoTranscripts(t *testing.T) {
 	}
 }
 
+// TestMIDIRoundTrip: a transcript written as a MIDI file reads back note for
+// note within half a tick, each line from its named track, a note that ends as
+// the next of its pitch starts kept apart from it, and every note unmeasured.
+func TestMIDIRoundTrip(t *testing.T) {
+	in := []RipNote{
+		{Start: 0, End: 1.2, MIDI: 40, Vel: 1, Bass: true},
+		{Start: 0.1, End: 0.4, MIDI: 72, Vel: 0.8, Bright: 0.9},
+		{Start: 0.4, End: 0.73, MIDI: 72, Vel: 0.5},
+		{Start: 0.5, End: 1.1, MIDI: 67, Vel: 0.6, Second: true},
+		{Start: 0.77, End: 1.234, MIDI: 76, Vel: 0.3},
+	}
+	var file bytes.Buffer
+	if err := WriteMIDI(&file, in, 137); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ReadMIDI(&file)
+	if err != nil || len(out) != len(in) {
+		t.Fatalf("read %d note(s) of %d: %v", len(out), len(in), err)
+	}
+	half := 0.5 / (137.0 / 60 * midiDivision)
+	for i, n := range out {
+		w := in[i]
+		if n.MIDI != w.MIDI || n.Bass != w.Bass || n.Second != w.Second || n.Bright != RipUnmeasured ||
+			math.Abs(n.Start-w.Start) > half || math.Abs(n.End-w.End) > half || math.Abs(n.Vel-w.Vel) > 0.5/127 {
+			t.Errorf("note %d: read %+v, wrote %+v", i, n, w)
+		}
+	}
+}
+
+// TestReadMIDITempoMap: a type-1 file whose first track halves the tempo two
+// beats in reads in seconds under that map; of its unnamed tracks, the one
+// centred under E3 is the bass and the other the melody, and the drum channel
+// is left out. Its notes use running status and a note-on at velocity 0.
+func TestReadMIDITempoMap(t *testing.T) {
+	track := func(events ...byte) []byte {
+		return append(binary.BigEndian.AppendUint32([]byte("MTrk"), uint32(len(events))), events...)
+	}
+	file := []byte{'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 4, 0x01, 0xE0} // 480 ticks a quarter
+	file = append(file, track(
+		0x00, 0xFF, 0x51, 3, 0x07, 0xA1, 0x20, // 120 bpm
+		0x87, 0x40, 0xFF, 0x51, 3, 0x0F, 0x42, 0x40, // 960 ticks on, 60 bpm
+		0x00, 0xFF, 0x2F, 0)...)
+	file = append(file, track(
+		0x00, 0xFF, 0x03, 4, 'L', 'e', 'a', 'd',
+		0x00, 0x90, 72, 100, // C5 at 0s
+		0x83, 0x60, 72, 0, // its end at 480, 0.5s
+		0x00, 76, 90, // E5 at 0.5s
+		0x87, 0x40, 0x80, 76, 0, // its end at 1440, 2s
+		0x00, 0xFF, 0x2F, 0)...)
+	file = append(file, track(
+		0x87, 0x40, 0x91, 36, 80, // C2 at 960, 1s
+		0x87, 0x40, 0x81, 36, 0, // its end at 1920, 3s
+		0x00, 0xFF, 0x2F, 0)...)
+	file = append(file, track(
+		0x00, 0x99, 36, 100,
+		0x83, 0x60, 0x89, 36, 0,
+		0x00, 0xFF, 0x2F, 0)...)
+	notes, err := ReadMIDI(bytes.NewReader(file))
+	want := []RipNote{
+		{Start: 0, End: 0.5, MIDI: 72},
+		{Start: 0.5, End: 2, MIDI: 76},
+		{Start: 1, End: 3, MIDI: 36, Bass: true},
+	}
+	if err != nil || len(notes) != len(want) {
+		t.Fatalf("read %+v, %v", notes, err)
+	}
+	for i, n := range notes {
+		w := want[i]
+		if n.MIDI != w.MIDI || n.Bass != w.Bass || n.Second || math.Abs(n.Start-w.Start) > 1e-9 || math.Abs(n.End-w.End) > 1e-9 {
+			t.Errorf("note %d: %+v, want %+v", i, n, w)
+		}
+	}
+}
+
 // TestRenderLinesPlaysOnlyTheInstrumentsNamed: the loop rendered with only the
 // bass is quieter than with everything and not silent, and with no instrument
 // named it is silence.
