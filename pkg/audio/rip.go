@@ -344,8 +344,10 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	}
 	hits := f.drumHits(p)
 	root, scale := f.key()
-	bass := f.notes(RipMinMIDI, RipBassReach, p, rp.Lead, nil)
-	melody := f.notes(RipMelodyLow, RipMaxMIDI, p, rp.Lead, bass)
+	bass := f.notes(RipMinMIDI, RipBassReach, p)
+	melody := f.notes(RipMelodyLow, RipMaxMIDI, p)
+	bass, melody = settle(bass, melody)
+	melody = streams(melody, f.Hop, rp.Lead)
 	var bpm float64
 	var g ripGrid
 	if rp.Grid != nil && rp.Grid.Downbeat >= 0 {
@@ -1370,11 +1372,10 @@ type ripNote struct {
 // notes tracks a register's lines: the bass as one path, the melody register
 // as two decoded together where SecondVoice is set, the second decoded line's
 // notes kept where they reach SecondVoice of the register's mean strength and
-// last twice MinNote, which drops what a decaying partial leaves; a note the
-// bass line already has, where the registers overlap, is left to it; then the
-// notes are parted into the melody and the line under it by what each line
-// keeps (streams), the lead the one the rule names.
-func (f *RipFrames) notes(lo, hi int, p RipParams, lead LeadRule, bass []ripNote) []ripNote {
+// last twice MinNote, which drops what a decaying partial leaves. The melody
+// register's notes come back as one list, parted into its two lines by
+// streams once settle has given the bass what both registers heard.
+func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 	if p.SecondVoice <= 0 || lo < RipMelodyLow {
 		return f.path(lo, hi, p)
 	}
@@ -1395,15 +1396,51 @@ func (f *RipFrames) notes(lo, hi int, p RipParams, lead LeadRule, bass []ripNote
 			kept = append(kept, n)
 		}
 	}
-	kept = slices.DeleteFunc(kept, func(n ripNote) bool {
-		for _, b := range bass {
-			if b.midi == n.midi && 2*(min(b.end, n.end)-max(b.start, n.start)) > n.end-n.start {
-				return true
+	return kept
+}
+
+// settle gives a note both registers heard, the same pitch at the same time
+// where the bass's reach and the melody's rows overlap, to the line it
+// continues: the one whose nearest other note in time is nearer in pitch, the
+// bass when they tie. A bass line that climbs keeps its notes, and a melody
+// that dips keeps its own.
+func settle(bass, melody []ripNote) (b, m []ripNote) {
+	nearest := func(notes []ripNote, n ripNote) float64 { // semitones to the nearest other note within a second
+		best := math.Inf(1)
+		for _, o := range notes {
+			if o.start == n.start && o.midi == n.midi {
+				continue
+			}
+			if gap := max(o.start-n.end, n.start-o.end); gap < 200 { // frames, about a second
+				best = math.Min(best, math.Abs(float64(o.midi-n.midi)))
 			}
 		}
-		return false
-	})
-	return streams(kept, f.Hop, lead)
+		return best
+	}
+	dropB, dropM := map[int]bool{}, map[int]bool{}
+	for i, n := range melody {
+		for j, bn := range bass {
+			if bn.midi != n.midi || 2*(min(bn.end, n.end)-max(bn.start, n.start)) <= min(n.end-n.start, bn.end-bn.start) {
+				continue
+			}
+			if nearest(bass, bn) <= nearest(melody, n) {
+				dropM[i] = true
+			} else {
+				dropB[j] = true
+			}
+		}
+	}
+	for i, n := range bass {
+		if !dropB[i] {
+			b = append(b, n)
+		}
+	}
+	for i, n := range melody {
+		if !dropM[i] {
+			m = append(m, n)
+		}
+	}
+	return b, m
 }
 
 // register is a register of the salience as a decoder reads it: its states,

@@ -325,18 +325,43 @@ func TestRipTellsTheLeadByItsCharacter(t *testing.T) {
 }
 
 // TestRipKeepsABassLineThatClimbs: a bass line on F3 and G3, above the E3 the
-// bass register once ended at, stays the bass line, heard by the bass decoder
-// where the registers overlap and left to it by the melody's.
+// bass register's rows end at, stays the bass line, heard by the bass decoder
+// where it reaches over the melody's rows; and a melody that dips to G3 over a
+// low bass keeps its note, since the note continues the melody, not the bass.
 func TestRipKeepsABassLineThatClimbs(t *testing.T) {
 	const bpm, bars = 120, 4
+	f3, g3 := StepPitch(DefaultRootNote, ScalePhrygian, 1, 1, 0), StepPitch(DefaultRootNote, ScalePhrygian, 2, 1, 0)
+	count := func(r *Rip) (inBass, inMelody int) {
+		for _, bar := range r.Bars {
+			for _, st := range bar.Bass {
+				if m := StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc); m == f3 || m == g3 {
+					inBass++
+				}
+			}
+			for _, st := range append(slices.Clone(bar.Melody), bar.Under...) {
+				if m := StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc); m == f3 || m == g3 {
+					inMelody++
+				}
+			}
+		}
+		return
+	}
 	ae, slots := startLoopEngine(t)
 	high, err := ae.DefinePattern(&Pattern{Name: "high", Steps: 16, Role: RoleBass, Tracks: []Track{{Instr: InstrBass, Events: []Step{
 		{Pos: 0, Vel: 0.9, Deg: 1, Oct: 1, Dur: 4}, {Pos: 8, Vel: 0.9, Deg: 2, Oct: 1, Dur: 4}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	slots[3] = high
-	buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	// a melody that dips: the tune's run with its third note a G3, over the low bass
+	dip, err := ae.DefinePattern(&Pattern{Name: "dip", Steps: 16, Role: RoleMelody, Tracks: []Track{{Instr: InstrLead, Events: []Step{
+		{Pos: 0, Vel: 0.9, Deg: 4, Oct: 1, Dur: 2}, {Pos: 2, Vel: 0.8, Deg: 3, Oct: 1, Dur: 2}, {Pos: 4, Vel: 0.9, Deg: 2, Oct: 1, Dur: 2}, {Pos: 6, Vel: 0.8, Deg: 3, Oct: 1, Dur: 2},
+		{Pos: 8, Vel: 0.9, Deg: 4, Oct: 1, Dur: 2}, {Pos: 10, Vel: 0.8, Deg: 5, Oct: 1, Dur: 2}, {Pos: 12, Vel: 0.8, Deg: 6, Oct: 1, Dur: 2}, {Pos: 14, Vel: 0.9, Deg: 0, Oct: 2, Dur: 2}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	climb := slots
+	climb[3] = high
+	buf, err := ae.RenderMusic(climb, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,22 +369,21 @@ func TestRipKeepsABassLineThatClimbs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f3, g3 := StepPitch(DefaultRootNote, ScalePhrygian, 1, 1, 0), StepPitch(DefaultRootNote, ScalePhrygian, 2, 1, 0)
-	var inBass, inMelody int
-	for _, bar := range r.Bars {
-		for _, st := range bar.Bass {
-			if m := StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc); m == f3 || m == g3 {
-				inBass++
-			}
-		}
-		for _, st := range append(slices.Clone(bar.Melody), bar.Under...) {
-			if m := StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc); m == f3 || m == g3 {
-				inMelody++
-			}
-		}
+	if inBass, inMelody := count(r); inBass < bars || inMelody > 1 {
+		t.Errorf("the climbing bass line: %d notes in the bass line, %d in the melody register, of %d played", inBass, inMelody, 2*bars)
 	}
-	if inBass < bars || inMelody > 1 {
-		t.Errorf("the climbing bass line: %d notes in the bass line, %d in the melody register, of %d played (F3 %d, G3 %d)", inBass, inMelody, 2*bars, f3, g3)
+	dipped := slots
+	dipped[1] = dip
+	buf, err = ae.RenderMusic(dipped, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err = Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inBass, inMelody := count(r); inMelody < bars/2 || inBass > 1 {
+		t.Errorf("the dipping melody: %d G3 notes in the melody register, %d in the bass line, of %d played", inMelody, inBass, bars)
 	}
 }
 
