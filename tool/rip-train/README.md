@@ -36,9 +36,14 @@ to end, and how to turn a run toward the music you care about.
 ```bash
 cd tool/rip-train
 python3 -m venv .venv && . .venv/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu   # a CPU PyTorch, first, or requirements.txt pulls PyPI's
 pip install -r requirements.txt
-pip install torch --index-url https://download.pytorch.org/whl/cpu   # a CPU PyTorch; a GPU build trains ten to twenty times faster
 ```
+
+A GPU trains an order of magnitude faster (below): `whl/cu130` for a recent
+NVIDIA card, and `torch==2.14.* --index-url https://download.pytorch.org/whl/cu126`
+for a GTX 10-series (Pascal), whose last build that is; `train.py` picks the
+GPU by itself. The CUDA build is 6 GB installed.
 
 Everything below runs from the vif checkout.
 
@@ -66,6 +71,7 @@ tool/rip-train/pipeline.sh install
 | `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
 | `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |
 | `STEPS`, `BATCH` | 20000, 8 | training steps and windows a step |
+| `DIM`, `HEADS`, `LAYERS`, `FFN` | 256, 8, 4, 1024 | the model's width, attention heads, layers and feed-forward width, `train.py`'s `--dim`, `--heads`, `--layers` and `--ffn`; a `CHECKPOINT` or `INIT` of another shape is refused |
 | `HOLDOUT`, `EVERY` | 200, 1000 | loops held out, and how often they are scored and a checkpoint written |
 | `OUT`, `CHECKPOINT` | `$CORPUS/ripnet.bin`, `$CORPUS/ripnet.pt` | the weight file, and the checkpoint a stopped run resumes from |
 | `ROOT` | `~/.config/vif` | the configuration root `install` copies the weights into |
@@ -80,11 +86,13 @@ A smoke test of the whole path, under ten minutes on a laptop:
 LOOPS=200 STEPS=300 HOLDOUT=20 EVERY=100 BENCH_LOOPS=4 CORPUS=/tmp/smoke tool/rip-train/pipeline.sh all
 ```
 
-What to expect at scale, on four CPU cores: 20000 loops of four bars export in
-about an hour (`nowav`; the frames and labels are 4.5 GB), 20000 steps of batch
-8 train in two and three quarter hours when the machine is otherwise idle,
-`bench 12 4` grades in a few minutes. The export and the training run one after
-the other and share the cores with anything else the machine does.
+What to expect at scale, on a 2017 laptop (an i7-7700HQ, four cores): the
+export renders on one core, about 2.5 loops a second, so 20000 loops of four
+bars take two and a quarter hours (`nowav`; the frames and labels are 5 GB);
+a step of batch 8 at the default shape takes 1.45 s on the four cores and
+0.11 s on its GTX 1060, so 20000 steps take eight hours or forty minutes (the
+first runs' width 128 took 0.65 s on the cores); `bench 12 4` grades in a few
+minutes. Each stage shares the cores with anything else the machine does.
 
 ## Reading a run
 
@@ -112,30 +120,36 @@ and what to bring back.
 **The machine.** A vif checkout at a main that has the accompaniment corpus
 (the thirteenth pass, [lixenwraith/vif#959](https://github.com/lixenwraith/vif/pull/959),
 or later); Go as vif builds with; Python 3.11 or later with PyTorch (the
-[setup](#setup) above; a CPU build trains the present model in a few hours, a
-GPU build in well under one); 5 GB of free disk for a corpus of 20000 loops of
-four bars (frames and labels, 4.5 GB; `WAV=` to keep each loop's audio adds
-about 30 GB) and 200 MB for the checkpoints; four cores or more. The run
-survives a stop: `train` resumes from `CHECKPOINT` when it is present, so the
-same command run again continues.
+[setup](#setup) above); 10 GB of free disk for a corpus of 40000 loops of four
+bars (frames and labels; `WAV=` to keep each loop's audio adds about 60 GB)
+and 50 MB for the checkpoint; memory for the labels, 1.3 GB per 10000 loops,
+the frames being read from disk as the training draws them; four cores or
+more.
 
-**The run**, from the checkout's root, one corpus for the round and every
-knob at its default unless named:
+**The run**, from the checkout's root, in a corpus directory of its own (a
+checkpoint of another shape there is refused) and every knob at its default
+unless named:
 
 ```bash
-export CORPUS=$HOME/ripcorpus6          # anywhere with the disk
-tool/rip-train/pipeline.sh corpus       # 20000 loops, aug gen: an hour or two on four cores
-tool/rip-train/pipeline.sh train        # 20000 steps of 8 windows; three hours on four cores, a GPU in twenty minutes
-tool/rip-train/pipeline.sh bench        # the model against the analysis on fresh loops, clean and augmented
+. tool/rip-train/.venv/bin/activate   # the setup's PyTorch
+export CORPUS=$HOME/ripcorpus6 LOOPS=40000 STEPS=40000 HOLDOUT=400 EVERY=1000
+tool/rip-train/round.sh               # corpus, train, bench, logging to $CORPUS/round.log, resumable
 ```
+
+`round.sh` renders the corpus unless its `corpus.json`, which the export
+writes last, is there, then trains and benches, every line appended to
+`$CORPUS/round.log`. Run it again after a stop and it goes on from
+`CHECKPOINT`, which carries the best held-out step, so the export is the same
+as an unbroken run's. On the laptop above the corpus takes four and a half
+hours and the 40000 steps an hour and a quarter on its GPU, sixteen on its
+cores.
 
 `install` copies the weights into the configuration root the engine reads
 (`ROOT`); do it only when the bench says the model beats the analysis on both
-lines, which no run has yet. For a larger model pass the shape through
-`train.py`'s own flags (`--dim 256 --layers 6`, or `--dim 384 --layers 8`),
-with `LOOPS` and `STEPS` raised together, since the bigger model overfits a
-small corpus sooner; the held-out line every `EVERY` steps is the guide, and
-the run is done when it stops falling.
+lines, which no run has yet. For another shape set `DIM`, `HEADS`, `LAYERS`
+and `FFN`, with `LOOPS` and `STEPS` raised together, since a bigger model
+overfits a small corpus sooner; the held-out line every `EVERY` steps is the
+guide, and the run is done when it stops falling.
 
 **What to bring back.** `$CORPUS/ripnet.bin` (the weights), `$CORPUS/ripnet.pt`
 (the checkpoint, to resume or to start a round from), the training log with
@@ -143,21 +157,6 @@ its held-out lines, the bench's two summary lines, and, if the recordings are
 to hand, `soundlab -headless -config-dir <root> -s <recipe>` for each recording
 in `lixenwraith/scratch` with the weights installed in `<root>/audio/ripnet.bin`,
 whose `truth` lines against the rhythm are the number that matters.
-
-**A wrapper.** The same as a script that logs and resumes, for a machine
-nobody watches:
-
-```bash
-#!/usr/bin/env bash
-# round.sh: one training round from a vif checkout; rerun it to resume
-set -euo pipefail
-cd "$(dirname "$0")"                      # the vif checkout
-export CORPUS=${CORPUS:-$HOME/ripcorpus6} LOOPS=${LOOPS:-20000} STEPS=${STEPS:-20000}
-mkdir -p "$CORPUS"
-[ -f "$CORPUS/loop_0.json" ] || tool/rip-train/pipeline.sh corpus 2>&1 | tee -a "$CORPUS/round.log"
-tool/rip-train/pipeline.sh train 2>&1 | tee -a "$CORPUS/round.log"
-tool/rip-train/pipeline.sh bench 2>&1 | tee -a "$CORPUS/round.log"
-```
 
 ## Training in parallel
 
@@ -263,8 +262,9 @@ To write your own:
 - **The model's shape.** `--dim`, `--layers`, `--heads`, `--ffn` and
   `--attention-window` on `train.py` reshape it; the weight file carries the
   shape, so `ripnet` loads any of them as long as the inputs and heads are its.
-  Pass them through `pipeline.sh` by editing its `train` function, or run
-  `train.py` by hand with the flags below.
+  `pipeline.sh` passes `DIM`, `HEADS`, `LAYERS` and `FFN`; keep a head 32 wide
+  (`DIM=384 HEADS=12 FFN=1536`). A checkpoint records its shape, and `train.py`
+  refuses to resume or start from one of another, naming both.
 
 ## By hand
 
@@ -281,16 +281,17 @@ cp ripnet.bin ~/.config/vif/audio/ripnet.bin
 ```
 
 `train.py` trains on `--batch` windows of `--window` frames (512, six seconds)
-cropped at random from the loops; `--checkpoint` saves every `--every` steps
-and resumes from the file when it exists, `--init` starts from a `.pt`'s weights
-alone (no optimizer state, step 0), and `--shard-seed` moves the stream the
-windows are drawn from while `--seed` keeps the starting weights;
-`average.py --pt next.pt --out next.bin [--trim 0.1] a.pt b.pt ...` is the
-merge. The defaults are `ripnet.Spec`: eighty bands in, width 128, four heads,
-four layers, feed-forward 512, a window of 64 frames either side, about 800
-thousand weights. The losses: onsets, drums and pitches as weighted binary
-cross-entropy, voicing likewise, the wave as cross-entropy and the voice genes
-as squared error, the last two over frames a note sounds in.
+cropped at random from the loops; `--checkpoint` saves every `--every` steps,
+with the best held-out step's weights, and resumes from the file when it
+exists, `--init` starts from a `.pt`'s weights alone (no optimizer state, step
+0), and `--shard-seed` moves the stream the windows are drawn from while
+`--seed` keeps the starting weights; `average.py --pt next.pt --out next.bin
+[--trim 0.1] a.pt b.pt ...` is the merge. The defaults are `ripnet.Spec`:
+eighty bands in, width 256, eight heads, four layers, feed-forward 1024, a
+window of 64 frames either side, 3.2 million weights. The losses: onsets,
+drums and pitches as weighted binary cross-entropy, voicing likewise, the wave
+as cross-entropy and the voice genes as squared error, the last two over
+frames a note sounds in.
 
 ## Parity
 
