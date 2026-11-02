@@ -513,6 +513,10 @@ that proves wrong or that a document now states, and link the document instead.
   the quick test of an edit to `internal/asset/content/tutorial.toml`. A line wider
   than the map is cropped (`GlyphSystem.placeLine`), so the tutorial's stay under
   40 columns.
+- An edit to the embedded corpus moves every line a seeded test sees: lines land
+  at random rows, and `w` without a ping keeps to the cursor's row, which a third
+  of seeds leave empty for 160 ticks. A test that needs a glyph under the cursor
+  steps rows until one is reached, never counts on its seed.
 
 ## Words
 
