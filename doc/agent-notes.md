@@ -566,3 +566,25 @@ that proves wrong or that a document now states, and link the document instead.
   Where a part has a measure of its own, the fit's distance from the
   recording's notes, hold the part to it and let the whole's score choose
   among what passes.
+
+- **Weigh a cue on a scale you chose.** The first parting of the two lines
+  followed loudness alone, whatever the other weights said, because a note's
+  strength was the raw salience, a hundred times the other terms; against the
+  register's reference it took its intended share. Check the magnitude of each
+  term on real data before trusting a weighted sum.
+- **The louder line is not the lead.** On the origin recording the lead the
+  user hears is the softer line, short notes at a steady cadence, under a
+  counter line of held notes that the decoder followed as its first line and
+  that the harmonic profile could not tell apart from the lead. Which line is
+  the melody is a listener's call with a default, not a rule the signal
+  settles; make it a word the listener can give.
+- **A register boundary cuts a line that crosses it.** Transposed three
+  semitones, the origin's bass D#3 became the intro's F#3, above the bass
+  register's top, and surfaced as a low note of the melody with no bass note
+  under it, which the stream parting then had to place. Let a decoder reach
+  past its register's rows and settle the overlap by a rule.
+- **Measure the lines, not the register.** The two-witness script matched any
+  note of the same pitch within a window, whatever line held it, so it could
+  not see the lines change hands; the agreement per line was an illusion.
+  `MatchNotes` matches within a line and reports the register as one line
+  beside it, so the two numbers show the parting's own error.

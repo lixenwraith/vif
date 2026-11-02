@@ -825,7 +825,7 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 		f0, f1 := int(t0/want.Frames.Hop), int((t0+span)/want.Frames.Hop)
 		lo, hi := audio.RipMelodyLow, audio.RipMaxMIDI
 		if slotOf[pat] == 3 {
-			lo, hi = audio.RipMinMIDI, audio.RipBassTop
+			lo, hi = audio.RipMinMIDI, audio.RipBassReach
 		}
 		best, bestV := -1, 0.0
 		for m := lo; m < hi; m++ {

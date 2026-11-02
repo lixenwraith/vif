@@ -474,7 +474,19 @@ the quieter, so it is the line the ear follows and the second the one under it
 through a crossing or a short rest; the second line's notes are kept where they
 reach `second_voice` of the first's strength, so a slow line under a pluck is
 heard too, in the bar's own `Under` steps, a track of its own in the pattern
-and a voice of its own (`Rip.UnderVoice`). The song a rip
+and a voice of its own (`Rip.UnderVoice`). The decoder follows the louder line,
+and the lead is often the softer, so the two lines' notes are then parted again
+by what a line keeps, its pitch from note to note, the length of its notes,
+their strength and no two at once (`streams`), and the lead is the line a rule
+names (`Ripper.Lead`, soundlab's `rip ... lead`): the busier by default, the
+one with the most notes for its sounding time, or the higher, lower, louder or
+softer. The bass line is decoded up to A3, over the melody's lowest rows, and a
+note both hear is the bass's, so a bass line that climbs over E3 is not cut.
+Two transcripts of one piece are compared by `MatchNotes` (soundlab's `agree`),
+each line's notes aligned in order under the transposition that matches most,
+and a transcript against notes given as text in the `notes` verb's own form
+(`ParseTranscript`, soundlab's `truth`), which a listener corrects by hand: the
+ground truth the numbers above lack. The song a rip
 compresses into carries the recording's tuning (`SongDef.Tuning`), and the
 engine plays or renders it there (`AudioEngine.SetTuning`), as the voice fit
 renders its candidate notes there (`RenderNoteAt`), so a render stands beside
