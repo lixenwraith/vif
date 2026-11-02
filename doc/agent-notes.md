@@ -548,3 +548,21 @@ that proves wrong or that a document now states, and link the document instead.
   changes the model's voice head and every shipped weight file's shape, and the
   fit would search a space the recording rarely needs. Add a gene when a corpus
   with the trait has trained and the fit wants it, not before.
+
+- **Fix the cut, not the labels.** A stream assignment over the notes two
+  passes had already cut, by pitch, timbre and level, made the two recordings
+  of one piece agree less, not more: the first pass had cut the louder pitch
+  of each frame into notes that belonged to neither line, and no relabelling
+  mends a note cut across two lines. Decoding the two lines together, where
+  the cut is made, did. Try the change at the stage the error is made.
+- **A joint decoder is cheap when its transition cost is separable.** Pairs
+  of forty-five states are two thousand; a step over them is two sweeps of a
+  one-line distance transform, since the jump cost is linear in semitones, not
+  a product over pairs, and backpointers kept a block at a time from
+  checkpoints of the scores hold a twenty-minute recording in a few megabytes.
+- **A score of the mix drifts the parts.** Fidelity grades the whole render,
+  so a voice that fills the spectrum scores above the voice that sounds like
+  its line, and `refine` turned every voice electronic while the number rose.
+  Where a part has a measure of its own, the fit's distance from the
+  recording's notes, hold the part to it and let the whole's score choose
+  among what passes.

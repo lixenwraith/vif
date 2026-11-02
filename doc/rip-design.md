@@ -50,12 +50,14 @@ flowchart LR
    the first full bar when sound leads into it, the bass
    register's salience from a window four times the rip's and the rip's own
    together (the long one's semitones at 110 Hz, the short one's onsets), the
-   melody register twice, the second path with the first's notes and their partials
-   cancelled and its notes kept above a share of the first's strength, so two
-   voices in one register are heard where one path heard the louder, the two
-   lines kept from crossing by pitch order, so a held dyad is not a trill
-   between them. `RipParams` holds their thresholds as data a search tunes
-   (`tune`).
+   melody register as two lines at once, a hidden path over pairs of pitches
+   where each line pays its own costs of moving and of starting or ending, no
+   pair a unison, a semitone or a harmonic interval apart, and the first line
+   paying `cross` a frame to be the quieter, so it is the line the ear follows
+   and the second the one under it, through a crossing or a rest shorter than
+   changing places would cost; the second line's notes are kept above a share
+   of the first's strength. `RipParams` holds their thresholds as data a
+   search tunes (`tune`).
 4. **Voices.** Each note carries the genes the front end heard it played with
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
    wave class); a register's notes average into one voice. A register the front
@@ -499,7 +501,25 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   rows, and no decoder downstream could have repaired the wobble that made.
   And the engine renders at it: a song played at A440 beside a recording forty
   cents flat sounds sharpened, a stretched string, before any note is judged.
-- **Voices do not cross.** The louder of two concurrent notes changes hands
-  from frame to frame, so the first and second paths swap a held dyad between
-  them; assigned by pitch order, the upper line stays the upper, which is how
-  the ear parts them.
+- **Two lines are one decoder, not the louder and the rest.** The louder
+  pitch of each frame is not a line: a lead and a counter line a few notes
+  apart trade places wherever one is momentarily louder, and a second pass
+  over what the first left finds fragments; the ninth pass assigned concurrent
+  notes by pitch order, which only holds while the lead stays the upper.
+  Decoded together, each line keeps its own continuity, and which is the lead
+  is a cost, not a rule: the first line pays a little each frame to be the
+  quieter, so it follows the louder line through a crossing and gives it up
+  only over a rest or an inversion that lasts. A stream assignment after the
+  fact, by pitch, timbre and level over the notes both passes had cut, was
+  tried first and made the two recordings of the piece agree less: the notes
+  were already cut wrong.
+- **A refined voice stays near the fit.** The song's score is of the whole
+  mix, and a bright voice fills a mix better than the voice that sounds like
+  the line, so `refine` drifted every voice toward a driven saw while the
+  number rose: the renders sounded electronic where the fit's had sounded like
+  the recording. Each voice now has a tonal floor, its distance from the
+  recording's notes as the fit measures it, and the search hears no candidate
+  past the floor by more than a tenth; the score picks among voices that sound
+  like the notes. The sweep's proposals keep within a fifth of their track's
+  nearest note for the same reason: a pitch the mix is strongest at is not
+  thereby the line's.
