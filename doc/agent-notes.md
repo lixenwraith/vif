@@ -320,6 +320,11 @@ that proves wrong or that a document now states, and link the document instead.
   changes hands from frame to frame, so each line hears a trill where the
   music holds a chord, and two fitted voices play it as two instruments
   alternating. Assign concurrent notes to lines by pitch order (`uncross`).
+- The sequencer's range is 80 to 200 bpm and the tempo decoder folds into it,
+  so the origin recording, near 74 bpm, reads at 148 while the intro, sped up
+  to 86, reads at 86: the same piece on two metrical levels, a sixteenth 101
+  ms in one rip and 174 in the other. `rip ... bpm <n>` pins the tempo alone
+  (a grid with a negative downbeat), so the two rips can be put on one level.
 - The sweep's moves were all relative to the note the rip heard, so a note it
   missed had no way in and one wrong by a third no way out. The recording's
   own strongest pitch over a step (its salience rows, which the fidelity's

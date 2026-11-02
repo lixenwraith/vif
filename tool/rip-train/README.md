@@ -3,105 +3,178 @@
 The trainer of the rip's front-end model, `pkg/audio/ripnet`: PyTorch, outside
 the Go module, writing the weight file `pkg/transformer` loads. Where the model
 stands in the pipeline, and why its features are made in Go, is in
-[Rip design](../../doc/rip-design.md) §2 and §3.
+[Rip design](../../doc/rip-design.md) §2 and §3; the runs so far and their
+numbers are in its §8. This file is the hands-on guide: setup, the pipeline end
+to end, and how to turn a run toward the music you care about.
+
+## What a run is
+
+1. **A corpus.** Soundlab renders loops from the patterns and voices registered
+   in its session and labels every event in them exactly, because the engine
+   played them: the frames a model hears (`loop_NNN.mel`), the events
+   (`loop_NNN.json`: frame, end, drum or MIDI note, the wave and genes of the
+   voice), and `corpus.json` naming the layout. Nothing is hand-labelled; the
+   synthesizer is the ground truth, and the augmentation is what keeps the
+   model from learning the synthesizer.
+2. **A model.** `train.py` trains `ripnet.Spec` on random windows of the loops,
+   holds some loops out, scores them every so often and exports the step whose
+   onset, drum, pitch and voicing heads score best on them, the heads the rip's
+   decoders read.
+3. **A grade.** Soundlab's `bench` rips fresh loops, clean and augmented, through
+   the built-in analysis and through the model, and scores each rip against the
+   loop's expected rip. A model that scores under the analysis is not ready for
+   a recording; a recording is judged by ear, with `rip`, `notes` and `song score`.
+4. **Data.** The weight file goes to the configuration root as
+   `audio/ripnet.bin`; soundlab's `rip` hears with it when it is there and with
+   the analysis when it is not.
 
 ## Setup
 
+- Go, as for vif; a CPU is enough.
+- Python 3 with PyTorch:
+
 ```bash
+cd tool/rip-train
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
+pip install torch --index-url https://download.pytorch.org/whl/cpu   # a CPU PyTorch; a GPU build trains ten to twenty times faster
 ```
 
-A CPU-only PyTorch is enough to train the default model slowly and to check the
-path: `pip install torch --index-url https://download.pytorch.org/whl/cpu`.
+Everything below runs from the vif checkout.
 
-## Corpus
+## The pipeline
 
-Soundlab renders it, from the patterns and voices registered in its session: the
-shipped bank, plus anything applied before the verb runs. Write a script and run
-it headless:
+`pipeline.sh` runs the four stages with every knob an environment variable:
 
 ```bash
-printf 'corpus corpus/ 200 4\nquit\n' > corpus.slab
+tool/rip-train/pipeline.sh all            # corpus, train, bench, install, with the defaults below
+tool/rip-train/pipeline.sh corpus         # one stage at a time
+tool/rip-train/pipeline.sh train
+tool/rip-train/pipeline.sh bench
+tool/rip-train/pipeline.sh install
+```
+
+| Knob | Default | What it does |
+|---|---|---|
+| `CORPUS` | `corpus` | where the loops go |
+| `LOOPS`, `BARS` | 20000, 4 | loops rendered, bars a loop; 200 loops is a smoke test |
+| `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a third of the loops driven into a soft clip, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
+| `GEN` | `gen` | beats, melodies and bass lines the bank never had, three loops in five per part; empty for the bank alone |
+| `WAV` | `nowav` | frames and labels only; empty keeps each loop's WAV too (300 MB per 200 loops) |
+| `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
+| `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |
+| `STEPS`, `BATCH` | 20000, 8 | training steps and windows a step |
+| `HOLDOUT`, `EVERY` | 200, 1000 | loops held out, and how often they are scored and a checkpoint written |
+| `OUT`, `CHECKPOINT` | `$CORPUS/ripnet.bin`, `$CORPUS/ripnet.pt` | the weight file, and the checkpoint a stopped run resumes from |
+| `ROOT` | `~/.config/vif` | the configuration root `install` copies the weights into |
+| `BENCH_LOOPS`, `BENCH_BARS` | 12, 4 | the fresh loops `bench` grades on |
+
+A smoke test of the whole path, under ten minutes on a laptop:
+
+```bash
+LOOPS=200 STEPS=300 HOLDOUT=20 EVERY=100 BENCH_LOOPS=4 CORPUS=/tmp/smoke tool/rip-train/pipeline.sh all
+```
+
+What to expect at scale, on four CPU cores: 20000 loops of four bars export in
+about an hour (`nowav`; the frames and labels are 4.5 GB), 20000 steps of batch
+8 train in two and three quarter hours when the machine is otherwise idle,
+`bench 12 4` grades in a few minutes. The export and the training run one after
+the other and share the cores with anything else the machine does.
+
+## Reading a run
+
+- The training lines name each head's loss; the line that matters is the
+  held-out one every `EVERY` steps: `step N held-out X, decoders Y (onset ...
+  drums ... pitch ... voicing ...)`, with `(best)` on the step `OUT` will get.
+  A training loss that keeps falling after the held-out loss turns is the
+  model learning the corpus by heart; more loops, not more steps, is the cure.
+- `bench` prints four lines: the analysis and the model, on clean and on
+  augmented loops, each the mean score with its parts (tempo, bars, drums,
+  melody, bass). The fourth run, on 20000 loops rendered at A440, stood at
+  0.45 against the analysis's 0.49 clean and 0.51 against 0.48 augmented,
+  ahead on drums and behind on pitch; the fifth, on loops off A440 and
+  saturated, is measured in the design document's §8.
+- A recording: `rip`, then `notes <name>` for the transcript with each note's
+  support, `compress`, `refine`, and `song <name> score` for how the song
+  sounds against the recording's own frames and how it rips back. The ear is
+  the verifier; the recordings in `lixenwraith/scratch` are the held-out set.
+
+## Turning a run toward your music
+
+The corpus is whatever soundlab's session holds when `corpus` runs, so a focus
+is a script that loads and applies voices and patterns first, named by `FOCUS`
+and run by the pipeline before the export (and before `bench`, so the grade
+draws from the same bank). Two are in `focus/`:
+
+- **`focus/vocal.slab`: music with vocals.** A vocal is a line to the rip, pitch
+  and onsets per frame, never words; nothing here transcribes lyrics, and the
+  model has no notion of them. What the model needs is lines that sound like
+  voices among its loops, so the focus adds a sung-line voice and a choir pad
+  (`focus/vocal.toml`) beside the shipped lead and bass; the generated melodies
+  draw any tonal instrument, these among them, and the augmentation redraws
+  each voice's genes near the registered one, so the loops hold many voices
+  like them. The engine has no vibrato or formant stage yet, so these are the
+  nearest its oscillators come, a chorused saw under a low cutoff; a real
+  vocal recording in the held-out set is the check that matters, and vibrato
+  and formants in `VoiceDef` are the next step for this focus.
+- **`focus/plucked.slab`: guitars and keys.** Nylon and steel strings and a
+  plucked bass (`focus/plucked.toml`) beside the modal piano.
+
+To write your own:
+
+- **Instruments.** A `[[voice]]` is data (`doc/audio.md` §7): wave, oscillator
+  stack, filter, envelopes, or a string or modal bank. Write a sound document
+  with the voices and `merge sound file.toml` then `apply name` for each, or
+  make them in the REPL with `new voice`, `set` and `apply`; `fit` and `refine`
+  find voices for a recording's lines, and `write` exports any voice as a
+  document to start from. Every registered tonal voice is one the generated
+  melodies and bass lines are played with.
+- **Music.** The shipped pattern bank is the game's; `load pattern file.toml`
+  or `merge pattern` brings in yours, in the pattern document's form
+  (`[[pattern]]` with tracks of steps), and `gen` adds parts the bank never
+  had. A bank that is all one genre makes a corpus of that genre; `gen` keeps
+  it from being only that bank's few melodies. The rhythm patterns set the
+  drums the model learns.
+- **Tempos and keys.** `TEMPOS` sets the spread; the keys cycle the roots and
+  scales the engine knows. A piece whose tempo the sequencer's range does not
+  hold reads at a multiple: the origin recording near 74 bpm reads at 148.
+- **Rooms, mixes, saturation, tuning.** `AUG` is on by default and is what
+  stands between the synthesizer and a recording: leave it on for anything a
+  recording will be ripped with; turn it off only to measure the clean case.
+- **Real recordings.** They cannot be labelled by the engine, so they are not
+  trained on; they are the held-out set judged by ear and by the two-witness
+  check (two recordings of one piece, their transcripts compared, as
+  `doc/rip-design.md` §8 does). A melody as notes, a solo take of a line, and
+  the same piece on other instruments and tempos are the most useful such
+  material, in that order.
+- **The model's shape.** `--dim`, `--layers`, `--heads`, `--ffn` and
+  `--attention-window` on `train.py` reshape it; the weight file carries the
+  shape, so `ripnet` loads any of them as long as the inputs and heads are its.
+  Pass them through `pipeline.sh` by editing its `train` function, or run
+  `train.py` by hand with the flags below.
+
+## By hand
+
+The stages are three commands; the script only strings them together.
+
+```bash
+printf 'corpus corpus/ 20000 4 aug gen nowav\n' > corpus.slab
 go run ./cmd/soundlab -headless -s corpus.slab
-```
-
-Each loop is `loop_NNN.wav` as rendered, `loop_NNN.mel`, the log-mel frames the
-model hears (two little-endian `uint32`, frames and bands, then `float32` rows),
-and `loop_NNN.json`, the events that sound in it: a frame, an end frame, a drum
-(kick 0, snare 1, hihat 2, or -1 for a note), a MIDI note, and the wave index and
-voice genes of the voice it was played with. `corpus.json` names the layout. Two
-hundred loops of four bars are about fifteen minutes of music, 300 MB of WAV and
-60 MB of frames; the trainer reads the frames and the events alone.
-
-More variety is more patterns and voices applied before `corpus`: `new voice`,
-`set`, `apply` make an instrument the loops draw. `corpus corpus/ 20000 4 aug gen nowav`
-(`nowav` keeps the frames and the labels, all the trainer reads)
-puts a room, a mix and voices of random genes behind each loop (`aug`: a gain,
-a low-pass, a short reverb and a noise floor between the render and the frames,
-each tonal track's voice redrawn near the registered one, a third of the
-time on another wave, labelled as played, a third of the loops driven into a
-soft clip, and the loop rendered off A440 by up to a quarter tone, its
-`tuning` in the label) and draws beats, melodies and bass
-lines the bank never had for three loops in five per part (`gen`: a walk over
-the key's degrees within two octaves, lengths of one to four steps, rests; the
-root and its neighbours in the bass; kicks, snares and hats with extras and
-ghosts). The bank alone repeats its few melodies, and a model trained on it
-learns them, not pitch. Train on both; measure with `bench`, whose loops carry
-generated parts too.
-
-## Train
-
-```bash
-python3 train.py --corpus corpus/ --out ripnet.bin --steps 20000 --batch 16 --checkpoint ripnet.pt
-```
-
-The defaults are `ripnet.Spec`: eighty bands in, width 128, four heads, four
-layers, feed-forward 512, a window of 64 frames either side, about 800 thousand
-weights. Each step trains on `--batch` windows of `--window` frames (512, six
-seconds) cropped at random from the loops. On a laptop CPU a step takes about a
-second at batch 8; a GPU is ten to twenty times faster. Two thousand steps show
-whether the losses move; the lines name each head's loss, onsets, drums and
-pitches as weighted binary cross-entropy, voicing likewise, the wave as
-cross-entropy and the voice genes as squared error, the last two over frames a
-note sounds in. `--checkpoint` saves every `--every` steps and resumes from the
-file when it exists; `--dim`, `--layers`, `--heads`, `--ffn` and
-`--attention-window` reshape the model, and the weight file carries the shape, so
-`ripnet` loads any of them as long as the inputs and heads are its.
-
-A tenth of the loops are held out (`--holdout` sets how many, 0 none) and
-scored every `--every` steps in fixed windows; the step whose onset, drum,
-pitch and voicing heads score best on them, the heads the decoders read, is
-what `--out` gets, whatever the last step's training loss says (the wave and
-voice heads name a voice and learn the corpus's voices by heart, so they are
-reported and not followed). The training
-loss keeps falling long after the held-out loss turns: a run of 12000 steps on
-300 loops reached a training loss of 0.31 and scored worse on fresh loops than
-a run of 3000, having seen each loop three hundred times. Read the held-out
-line, not the training one, and `bench` the file after.
-
-## Measure
-
-```bash
-printf 'bench 16 4\nquit\n' > bench.slab
+python3 tool/rip-train/train.py --corpus corpus/ --out ripnet.bin --steps 20000 --batch 8 --every 1000 --holdout 200 --checkpoint ripnet.pt
+printf 'bench 12 4\n' > bench.slab
+mkdir -p root/audio && cp ripnet.bin root/audio/ripnet.bin
 go run ./cmd/soundlab -headless -config-dir root -s bench.slab
-```
-
-with `ripnet.bin` at `root/audio/ripnet.bin`: the analysis and the model are
-graded on the same fresh loops, clean and augmented, by the mean of each rip's
-score against the loop's expected rip. A model that scores under the analysis
-on clean loops is not ready for a recording.
-
-## Deploy
-
-```bash
 cp ripnet.bin ~/.config/vif/audio/ripnet.bin
 ```
 
-The first configuration root's `audio/ripnet.bin` is what soundlab's `rip` hears
-with; soundlab says `rip model ... weights` when it starts and `stat` names it.
-Remove the file to hear with the built-in analysis again. `-config-dir` points
-at another root, as for the game.
+`train.py` trains on `--batch` windows of `--window` frames (512, six seconds)
+cropped at random from the loops; `--checkpoint` saves every `--every` steps
+and resumes from the file when it exists. The defaults are `ripnet.Spec`:
+eighty bands in, width 128, four heads, four layers, feed-forward 512, a window
+of 64 frames either side, about 800 thousand weights. The losses: onsets, drums
+and pitches as weighted binary cross-entropy, voicing likewise, the wave as
+cross-entropy and the voice genes as squared error, the last two over frames a
+note sounds in.
 
 ## Parity
 
