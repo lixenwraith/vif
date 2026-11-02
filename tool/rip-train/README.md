@@ -110,7 +110,8 @@ cores with anything else the machine does.
   0.45 against the analysis's 0.49 clean and 0.51 against 0.48 augmented,
   ahead on drums and behind on pitch; the sixth, at 4× on 40000 loops, at
   0.51 against 0.47 and 0.460 against 0.458, the first to pass both lines,
-  and behind on every recording's truth: the design document's §8.
+  ahead on drums and behind on melodies on the recordings' truths: the
+  design document's §8.
 - A recording: `rip`, then `notes <name>` for the transcript with each note's
   support, `compress`, `refine`, and `song <name> score` for how the song
   sounds against the recording's own frames and how it rips back. The ear is
