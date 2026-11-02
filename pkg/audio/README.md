@@ -97,7 +97,8 @@ transformer, which also hears the voices the notes are played with
 (`VoiceDef.Genes`). `ReadWAV` reads any PCM or float width to mono. The
 primitives a search fits a rip with are here and the searches are not:
 `RenderNote` plays a voice at a note offline and `MelDistance` compares mel
-frames, `Rip.Notes` is the transcript they fit to; `BarDistance`, `Cluster` and
+frames, `Rip.Notes` is the transcript they fit to, which `WriteMIDI` and
+`ReadMIDI` carry to and from a Standard MIDI File; `BarDistance`, `Cluster` and
 `Rip.Cluster` group a rip's bars within a threshold and `Rip.Song` writes the
 groups as one-bar patterns and a `SongDef`, the `[[song]]` of a pattern document
 that `RenderTimeline` plays offline, the patterns changed at the bar lines.
