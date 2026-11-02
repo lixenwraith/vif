@@ -387,47 +387,6 @@ func TestRipKeepsABassLineThatClimbs(t *testing.T) {
 	}
 }
 
-// TestRipCutsARepeatedNote: a piano-like voice striking one pitch in eighths
-// never dips far between strikes, so the rip heard a bar of them as one held
-// note; a note that has fallen off its peak and rises again is two.
-func TestRipCutsARepeatedNote(t *testing.T) {
-	const bpm, bars = 120, 4
-	ae, slots := startLoopEngine(t)
-	if _, err := ae.DefineVoice(&VoiceDef{Name: "pno", Wave: "modal", Partials: 40, StrikePos: 0.12, Tilt: 1, Inharm: 0.0004, InharmTrack: 1.3,
-		DecayTime: 0.9, DecayTrack: 0.6, DampHz: 2600, Pair: 1.6, PairLevel: 0.28, PairSlow: 0.3, HammerHz: 2600, Attack: 0.002, Decay: 0.5, Sustain: 0.8, Release: 0.2, Level: 1}); err != nil {
-		t.Fatal(err)
-	}
-	pno, _ := InstrumentByName("pno")
-	var evs []Step
-	for i := range 8 {
-		evs = append(evs, Step{Pos: 2 * i, Vel: 0.9, Deg: 4, Oct: 2, Dur: 2})
-	}
-	rep, err := ae.DefinePattern(&Pattern{Name: "rep", Steps: 16, Role: RoleMelody, Tracks: []Track{{Instr: pno, Events: evs}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	slots[1] = rep
-	buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := StepPitch(DefaultRootNote, ScalePhrygian, 4, 2, 0)
-	heard := 0
-	for _, n := range r.Notes {
-		if !n.Bass && n.MIDI == want {
-			heard++
-		}
-	}
-	t.Logf("%d notes heard of %d struck", heard, 8*bars)
-	if heard < 6*bars {
-		t.Errorf("the repeated note was heard as %d notes of %d", heard, 8*bars)
-	}
-}
-
 // TestMatchNotesAlignsTwoTranscripts: a transcript against itself transposed,
 // stretched, one note dropped and one added matches every note but those,
 // finds the transposition and the time map, and parses back from the text

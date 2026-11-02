@@ -72,6 +72,12 @@ func MatchNotes(a, b []RipNote) Agreement {
 
 func align(a, b []RipNote, shift int) Agreement {
 	ag := Agreement{Shift: shift, Stretch: 1}
+	// a rhythm given has a unit and a start the listener guessed: its notes are
+	// placed on the map, a stretch and an offset within a tenth and a third of a
+	// second, that matches most of them to a's onsets
+	if slices.ContainsFunc(b, func(n RipNote) bool { return n.MIDI < 0 }) {
+		b = placed(a, b)
+	}
 	var xs, ys []float64
 	part := func(keep func(RipNote) bool) LineAgreement {
 		var la, lb []RipNote
@@ -152,6 +158,45 @@ func subsequence(a, b []RipNote, shift int) [][2]int {
 		}
 	}
 	return pairs
+}
+
+// placed stretches and shifts a rhythm's notes onto a's time, keeping the map
+// that matches most of them, line by line, to a's onsets
+func placed(a, b []RipNote) []RipNote {
+	best, bestStretch, bestOffset, bestAway := -1, 1.0, 0.0, math.Inf(1)
+	mapped := func(stretch, offset float64) []RipNote {
+		out := slices.Clone(b)
+		for i := range out {
+			out[i].Start, out[i].End = out[i].Start*stretch+offset, out[i].End*stretch+offset
+		}
+		return out
+	}
+	for stretch := 0.9; stretch <= 1.1001; stretch += 0.005 {
+		for offset := -0.3; offset <= 0.3001; offset += 0.02 {
+			m := mapped(stretch, offset)
+			n := 0
+			for line := range 3 {
+				var la, lb []RipNote
+				for _, x := range a {
+					if lineOf(x) == line {
+						la = append(la, x)
+					}
+				}
+				for _, x := range m {
+					if lineOf(x) == line && x.MIDI < 0 {
+						lb = append(lb, x)
+					}
+				}
+				n += len(onsets(la, lb))
+			}
+			// among maps that match as many, the one nearest the listener's own
+			away := math.Abs(stretch-1)*10 + math.Abs(offset)
+			if n > best || n == best && away < bestAway {
+				best, bestStretch, bestOffset, bestAway = n, stretch, offset, away
+			}
+		}
+	}
+	return mapped(bestStretch, bestOffset)
 }
 
 // onsets matches a's notes to b's by when they start, b's notes having no

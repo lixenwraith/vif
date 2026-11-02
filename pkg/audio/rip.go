@@ -1699,16 +1699,12 @@ func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
 	return r.cut(ta, p), r.cut(tb, p)
 }
 
-// restrike is the rise, from the low a note fell to after its peak, that cuts
-// it in two: a re-articulation on one pitch, a piano's repeated chord or a
-// plucked string struck again, climbs back by this share of the low without
-// ever dipping under Retrigger of the peak
-const restrike = 1.3
-
 // cut reads a line's track, a state a frame, into notes: a run of one pitch is
-// a note, two when it dips under Retrigger of its peak and rises again, or when
-// it has fallen off its peak and rises again by restrike to at least half the
-// peak, a note struck again, and none when shorter than MinNote
+// a note, two when it dips under Retrigger of its peak and rises again, and
+// none when shorter than MinNote. A rise without such a dip is not a new note:
+// a rule that cut a note where its salience rose again by a third after
+// falling off its peak split the plucked and the held notes of a recording
+// whose strings beat, so a repeated note is the Retrigger gene's to find.
 func (r register) cut(track []int, p RipParams) []ripNote {
 	var notes []ripNote
 	minFrames := max(int(p.MinNote/r.f.Hop), 1)
@@ -1721,25 +1717,18 @@ func (r register) cut(track []int, p RipParams) []ripNote {
 		}
 	}
 	open := ripNote{start: -1}
-	var sum, peak, low float64 // the note's salience summed, its peak, and its low since the peak
+	var sum, peak float64
 	dipped := false
 	for t, pitch := range track {
 		if open.start >= 0 && pitch == open.midi-r.lo {
 			v := r.sal(t, pitch)
-			struck := t-open.start >= minFrames && low < 0.75*peak && v > restrike*low && v >= 0.5*peak
 			if v < peak*p.Retrigger {
 				dipped = true
-			}
-			if dipped && v > 0.7*peak || struck {
+			} else if dipped && v > 0.7*peak {
 				flush(ripNote{start: open.start, end: t, midi: open.midi}, sum)
-				open, sum, peak, low, dipped = ripNote{start: t, midi: open.midi}, 0, 0, 0, false
+				open, sum, peak, dipped = ripNote{start: t, midi: open.midi}, 0, 0, false
 			}
-			sum += v
-			if v > peak {
-				peak, low = v, v
-			} else {
-				low = min(low, v)
-			}
+			sum, peak = sum+v, max(peak, v)
 			continue
 		}
 		if open.start >= 0 {
@@ -1747,8 +1736,7 @@ func (r register) cut(track []int, p RipParams) []ripNote {
 			open = ripNote{start: -1}
 		}
 		if pitch < r.states {
-			v := r.sal(t, pitch)
-			open, sum, peak, low, dipped = ripNote{start: t, midi: r.lo + pitch}, v, v, v, false
+			open, sum, peak, dipped = ripNote{start: t, midi: r.lo + pitch}, r.sal(t, pitch), r.sal(t, pitch), false
 		}
 	}
 	if open.start >= 0 {

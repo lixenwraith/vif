@@ -605,6 +605,14 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   `agree` holds two rips of one piece to each other the same way where no
   score is to hand, by line and with the melody register as one, since the
   two may part its lines differently.
+- **A rhythm tapped out is a truth.** The user could write the piece's
+  structure down by ear, the lead's note lengths and that the second line
+  runs in eighths, but not the pitches of a fast line under others. A truth
+  without pitches, `unit eighth` and `(1-2-3---4-56---)x3 a-a-a-a-a-a-a`,
+  is matched by when its notes start, and it answers the questions the
+  renders left open: which line is the lead, how many of its notes the rip
+  cuts or merges, and how far the lead rule's default is from the ear. It is
+  the number to chase while the pitches stay the ear's.
 - **A refined voice stays near the fit.** The song's score is of the whole
   mix, and a bright voice fills a mix better than the voice that sounds like
   the line, so `refine` drifted every voice toward a driven saw while the
