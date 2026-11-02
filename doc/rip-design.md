@@ -452,6 +452,8 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   first sweep moves 70 steps and adds 77 for 0.84 (from 0.75 after the
   voices), the second round reaches 0.87 (pitch 0.91, timbre 0.87, onset
   0.84), ripping back at 0.89: a note the rip missed had no other way in. The
+  same recipe with one melody line, the second pass off, reaches 0.84 (0.89,
+  0.83, 0.80), so the numbers keep the second line and the ear decides. The
   intro is left at the ninth pass's 0.85; the origin is the sample now.
 
 ## 9. Decisions
