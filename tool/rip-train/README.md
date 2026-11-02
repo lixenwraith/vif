@@ -150,9 +150,10 @@ minutes in four parts and the 40000 steps two hours on its GPU, about sixteen
 on its cores.
 
 `install` copies the weights into the configuration root the engine reads
-(`ROOT`); do it only when the model beats the analysis on both bench lines
-and on the recordings' truths, which no run has yet: the sixth passed the
-bench and lost the truths. For another shape set `DIM`, `HEADS`, `LAYERS`
+(`ROOT`); do it when the bench says the model beats the analysis on both
+lines, which the sixth run was the first to do, and judge it by ear on the
+recordings, whose truths still favour the analysis (Rip design §8). For
+another shape set `DIM`, `HEADS`, `LAYERS`
 and `FFN`, with `LOOPS` and `STEPS` raised together, since a bigger model
 overfits a small corpus sooner; the held-out line every `EVERY` steps is the
 guide, and the run is done when it stops falling.

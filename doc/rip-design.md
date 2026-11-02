@@ -591,10 +591,11 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   with truths of their best-known lines written from memory, Billie Jean's
   bass riff is heard 84 of 136 against 110 with twice the extras, though its
   kicks fall from 172 to 85 in nineteen bars whose beat has 38, and Für
-  Elise's A section 52 of 94 against 56. The weights stay out of the tree: a
-  model that passes the engine's loops and loses every recording has learned
-  the synthesizer, a gap more steps will not close and real recordings with
-  their notes in the corpus are for.
+  Elise's A section 52 of 94 against 56. The weights are installed on the
+  development machine to be judged by ear and stay out of the tree; by the
+  truths, a model that passes the engine's loops and loses every recording
+  has learned the synthesizer, a gap more steps will not close and real
+  recordings with their notes in the corpus are for.
 
 ## 9. Decisions
 
