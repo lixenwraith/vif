@@ -149,6 +149,11 @@ type TonalVoice struct {
 	subPhase float64
 	serial   uint64 // Trigger order; StealOldest ranks on this
 
+	// vibrato's phase and the note's age, and the vowel's formant bank
+	vibPhase float64
+	age      int
+	formants [3]biquad
+
 	// The plucked string: a delay line one period long, its loss per period
 	str     []float64
 	strLen  int
@@ -196,6 +201,15 @@ func (v *TonalVoice) Sample() float64 {
 	}
 	sp := v.spec
 	dt := v.freq / float64(AudioSampleRate)
+	if sp.VibratoHz > 0 && sp.VibratoCents > 0 {
+		depth := 1.0
+		if sp.VibratoDelay > 0 {
+			depth = min(float64(v.age)/(sp.VibratoDelay*AudioSampleRate), 1)
+		}
+		dt *= 1 + sp.VibratoCents*depth*math.Ln2/1200*math.Sin(2*math.Pi*v.vibPhase)
+		v.vibPhase = wrap(v.vibPhase + sp.VibratoHz/AudioSampleRate)
+	}
+	v.age++
 	n := max(min(sp.Unison, maxUnison), 1)
 	var raw float64
 	switch {
@@ -224,6 +238,9 @@ func (v *TonalVoice) Sample() float64 {
 			v.phase[i] = wrap(v.phase[i] + d)
 		}
 		raw /= float64(n)
+	}
+	if sp.Vowel != "" && v.wave != waveModal && v.wave != waveString {
+		raw = 1.2*v.formants[0].process(raw) + 0.7*v.formants[1].process(raw) + 0.4*v.formants[2].process(raw)
 	}
 	if sp.Q > 0 {
 		raw = v.filter(raw)
@@ -487,6 +504,12 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 		v.modPhase[i] = 0
 	}
 	v.subPhase = 0
+	v.vibPhase, v.age = 0, 0
+	if f, ok := vowels[sp.Vowel]; ok {
+		for i := range v.formants {
+			v.formants[i] = bandpass(f[i], f[i]/100)
+		}
+	}
 	v.ic1, v.ic2, v.coefLeft = 0, 0, 0
 	v.fenv, v.ienv = 1, 1
 	if sp.EnvDecay > 0 {
@@ -540,6 +563,27 @@ func (v *TonalVoice) Note() int {
 
 func (v *TonalVoice) EnvLevel() float64 {
 	return v.envLevel
+}
+
+// biquad is one second-order section with its state
+type biquad struct {
+	b0, b1, b2, a1, a2 float64
+	x1, x2, y1, y2     float64
+}
+
+// bandpass is a resonance at hz of width q, peaking at one (the cookbook's
+// constant-peak band-pass)
+func bandpass(hz, q float64) biquad {
+	w := 2 * math.Pi * min(hz, 0.45*AudioSampleRate) / AudioSampleRate
+	alpha := math.Sin(w) / (2 * q)
+	a0 := 1 + alpha
+	return biquad{b0: alpha / a0, b2: -alpha / a0, a1: -2 * math.Cos(w) / a0, a2: (1 - alpha) / a0}
+}
+
+func (b *biquad) process(x float64) float64 {
+	y := b.b0*x + b.b1*b.x1 + b.b2*b.x2 - b.a1*b.y1 - b.a2*b.y2
+	b.x2, b.x1, b.y2, b.y1 = b.x1, x, b.y1, y
+	return y
 }
 
 func wrap(p float64) float64 {

@@ -69,7 +69,9 @@ jobs:
       run: go vet ./... && go test ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
 
     - name: Run tests with race detector
-      run: go test -race ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
+      # Soundlab's suite renders and hears music; under the detector on a busy
+      # runner it nears go test's ten-minute default.
+      run: go test -race -timeout 20m ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
       env:
         # Halt on the first race; its report prints beside the failing package.
         GORACE: "halt_on_error=1"

@@ -148,12 +148,7 @@ func (s *Session) fitVoices(rp *ripped, o fitOptions, again bool) {
 		if *at != nil && !again {
 			continue
 		}
-		var notes []audio.RipNote
-		for _, n := range rp.rip.Notes {
-			if ripLines[reg].of(n) {
-				notes = append(notes, n)
-			}
-		}
+		notes := lineNotes(rp.rip, reg)
 		if len(notes) == 0 {
 			continue
 		}
@@ -220,6 +215,51 @@ func genomeKey(g []float64) string {
 	return b.String()
 }
 
+// lineNotes are a rip's notes of one of ripLines' registers
+func lineNotes(r *audio.Rip, reg int) []audio.RipNote {
+	var notes []audio.RipNote
+	for _, n := range r.Notes {
+		if ripLines[reg].of(n) {
+			notes = append(notes, n)
+		}
+	}
+	return notes
+}
+
+// fitTarget is one note of the recording a voice is fitted on: its seconds, the
+// mel frames of the recording around it and the note the voice plays to match
+type fitTarget struct {
+	start, end float64
+	mel        [][]float32
+	midi       int
+	vel, dur   float64
+}
+
+// fitTargets picks a register's sample notes, n of them, and hears the recording
+// around each
+func fitTargets(x []float64, rate int, notes []audio.RipNote, n int) []fitTarget {
+	samples := fitSamples(notes, max(n, 1))
+	targets := make([]fitTarget, len(samples))
+	for i, n := range samples {
+		lo := min(int(n.Start*float64(rate)), len(x))
+		hi := min(int((n.End+fitTail)*float64(rate)), len(x))
+		targets[i] = fitTarget{start: n.Start, end: n.End, mel: audio.MelFrames(x[lo:hi], rate), midi: n.MIDI, vel: n.Vel, dur: n.End - n.Start}
+	}
+	return targets
+}
+
+// fitDistance is how far a voice's renders of the targets' notes, at the
+// recording's tuning, sound from the recording around them: the fit's measure,
+// which the refinement holds a voice to
+func fitDistance(v *audio.VoiceDef, targets []fitTarget, cents float64) float64 {
+	var sum float64
+	for _, t := range targets {
+		note := audio.RenderNoteAt(v, t.midi, cents, t.vel, t.dur, fitTail)
+		sum += audio.MelDistance(audio.MelFrames(note, audio.AudioSampleRate), t.mel)
+	}
+	return sum / float64(max(len(targets), 1))
+}
+
 // fitVoice searches the voices for the one whose notes, rendered by the engine,
 // sound most like a register's notes in the recording: a genome of the voice's
 // genes and its wave, seeded with every registered voice and the one given,
@@ -227,20 +267,9 @@ func genomeKey(g []float64) string {
 // the voice playing that note. It returns the voice, the best seed's distance
 // and the fit's; nil when the register has no note long enough.
 func (s *Session) fitVoice(x []float64, rate int, cents float64, notes []audio.RipNote, prior *audio.VoiceDef, o fitOptions) (*audio.VoiceDef, float64, float64) {
-	samples := fitSamples(notes, max(o.notes, 1))
-	if len(samples) == 0 {
+	targets := fitTargets(x, rate, notes, o.notes)
+	if len(targets) == 0 {
 		return nil, 0, 0
-	}
-	type target struct {
-		mel      [][]float32
-		midi     int
-		vel, dur float64
-	}
-	targets := make([]target, len(samples))
-	for i, n := range samples {
-		lo := min(int(n.Start*float64(rate)), len(x))
-		hi := min(int((n.End+fitTail)*float64(rate)), len(x))
-		targets[i] = target{mel: audio.MelFrames(x[lo:hi], rate), midi: n.MIDI, vel: n.Vel, dur: n.End - n.Start}
 	}
 	genes := audio.VoiceGeneCount
 	decode, encode := voiceFromGenome, voiceGenome
@@ -249,12 +278,7 @@ func (s *Session) fitVoice(x []float64, rate int, cents float64, notes []audio.R
 		if audio.ValidateVoice(v) != nil {
 			return math.Inf(-1)
 		}
-		var sum float64
-		for _, t := range targets {
-			note := audio.RenderNoteAt(v, t.midi, cents, t.vel, t.dur, fitTail)
-			sum += audio.MelDistance(audio.MelFrames(note, audio.AudioSampleRate), t.mel)
-		}
-		return -sum / float64(len(targets))
+		return -fitDistance(v, targets, cents)
 	})
 	var seeds [][]float64
 	if prior != nil {
@@ -299,9 +323,8 @@ func (s *Session) fitVoice(x []float64, rate int, cents float64, notes []audio.R
 	// has around them
 	v := decode(pool.Members[0].Data)
 	var want, have float64
-	for i, t := range targets {
-		n := samples[i]
-		lo, hi := min(int(n.Start*float64(rate)), len(x)), min(int(n.End*float64(rate)), len(x))
+	for _, t := range targets {
+		lo, hi := min(int(t.start*float64(rate)), len(x)), min(int(t.end*float64(rate)), len(x))
 		want += rms(x[lo:hi])
 		have += rms(audio.RenderNoteAt(v, t.midi, cents, t.vel, t.dur, 0))
 	}

@@ -518,10 +518,11 @@ validate sa
 // the mixer's queue and take effect on its tick — asserting engine state
 // synchronously after an exec races that tick (reliably so under -race).
 // Registry state is the exception: RegisterPattern is mutex-synchronous and
-// may be asserted directly. A loaded run drops ticks, so the deadline is wide.
+// may be asserted directly. A loaded run drops ticks, and a verb under the race
+// detector on a busy runner takes many seconds, so the deadline is wide.
 func waitFor(t *testing.T, cond func() bool, msg string) {
 	t.Helper()
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if cond() {
 			return
 		}
@@ -1019,7 +1020,9 @@ func TestRipFitsVoicesAndCompressesToASong(t *testing.T) {
 			}
 		}
 	}
-	buf, err := s.eng.RenderMusic(slots, 120, 4, audio.DefaultRootNote, audio.ScalePhrygian, nil, 1)
+	// two bars at 100 bpm: the shortest loop the rip takes, since every judge
+	// of the refinement renders and hears the whole song
+	buf, err := s.eng.RenderMusic(slots, 100, 2, audio.DefaultRootNote, audio.ScalePhrygian, nil, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1040,7 +1043,7 @@ save pattern %s
 		t.Fatalf("no voice fitted:\n%s", out.String())
 	}
 	d, ok := s.songs.get("loop")
-	if !ok || len(d.Bars) != 4 || d.BPM != s.bpm || !s.songs.isDirty("loop") {
+	if !ok || len(d.Bars) != 2 || d.BPM != s.bpm || !s.songs.isDirty("loop") {
 		t.Fatalf("song %+v after compress:\n%s", d, out.String())
 	}
 	if !strings.Contains(out.String(), "rips back at") {
@@ -1059,7 +1062,7 @@ save pattern %s
 		}
 	}
 	if dict == 0 || dict > 12 {
-		t.Errorf("%d dictionary pattern(s) for 4 bars of 3 parts:\n%s", dict, out.String())
+		t.Errorf("%d dictionary pattern(s) for 2 bars of 3 parts:\n%s", dict, out.String())
 	}
 	if fi, err := os.Stat(song); err != nil || fi.Size() < 1000 {
 		t.Errorf("the song did not render: %v", err)
@@ -1067,6 +1070,11 @@ save pattern %s
 	runOrFatal(t, s, &out, "fit loop 1\n")
 	if !strings.Contains(out.String(), "registered; the patterns naming it play it") {
 		t.Errorf("fit replaced no voice:\n%s", out.String())
+	}
+	// one line of the song on its own: the instruments named after the file
+	runOrFatal(t, s, &out, fmt.Sprintf("! song loop %s nothing\nsong loop %s kick\n", song, song))
+	if fi, err := os.Stat(song); err != nil || fi.Size() < 1000 {
+		t.Errorf("the kick alone did not render: %v", err)
 	}
 	// a refinement round: the voices and the steps each kept only when the song
 	// sounds more like the recording, judged on the recording's own frames with
@@ -1077,6 +1085,21 @@ save pattern %s
 	}
 	if err := audio.ValidateSong(d); err != nil {
 		t.Error(err)
+	}
+	// a tonal floor no candidate can keep to leaves every voice in hand: the
+	// refinement picks among voices that sound like the recording's notes
+	rp := s.rips["loop"]
+	var floors [3]tonalFloor
+	for reg := range floors {
+		floors[reg].targets = fitTargets(rp.x, rp.rate, lineNotes(rp.rip, reg), 2)
+	}
+	before := fmt.Sprintf("%p %p %p", rp.rip.MelodyVoice, rp.rip.UnderVoice, rp.rip.BassVoice)
+	out.Reset()
+	if _, err := s.refineVoices("loop", rp, d, 0, s.refineOpt, floors); err != nil {
+		t.Fatal(err)
+	}
+	if after := fmt.Sprintf("%p %p %p", rp.rip.MelodyVoice, rp.rip.UnderVoice, rp.rip.BassVoice); after != before || !strings.Contains(out.String(), "voice stays") {
+		t.Errorf("a voice left its floor:\n%s", out.String())
 	}
 	// a short song conducted to its end, the way a ticking front end drives it
 	short := &audio.SongDef{Name: "short", BPM: 200, Root: audio.DefaultRootNote, Scale: "phrygian",

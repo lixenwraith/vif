@@ -28,6 +28,16 @@ type VoiceDef struct {
 	FMIndex float64 `toml:"fm_index,omitempty"`
 	FMDecay float64 `toml:"fm_decay,omitempty"` // the index's own decay; 0 rides the amplitude envelope
 
+	// vibrato: a sine on the pitch of the oscillator waves, cents either way at
+	// a rate, full after a delay from the note's start, as a voice or a bowed
+	// string has; a string and a modal bank hold their pitch
+	VibratoHz    float64 `toml:"vibrato_hz,omitempty"`
+	VibratoCents float64 `toml:"vibrato_cents,omitempty"`
+	VibratoDelay float64 `toml:"vibrato_delay,omitempty"`
+	// vowel passes the oscillator waves through a formant bank, three
+	// resonances at a vowel's frequencies: a, e, i, o or u; empty for none
+	Vowel string `toml:"vowel,omitempty"`
+
 	Bright float64 `toml:"bright,omitempty"` // string: 0 a dull string, 1 a wiry one
 	Ring   float64 `toml:"ring,omitempty"`   // string: seconds a plucked string takes to die away
 
@@ -232,10 +242,14 @@ func ValidateVoice(d *VoiceDef) error {
 		{"cutoff", d.Cutoff, nyquist}, {"key_track", d.KeyTrack, 20}, {"env_amount", d.EnvAmount, nyquist}, {"env_decay", d.EnvDecay, MaxSoundDuration}, {"q", d.Q, 64},
 		{"attack", d.Attack, MaxSoundDuration}, {"decay", d.Decay, MaxSoundDuration}, {"sustain", d.Sustain, 1}, {"release", d.Release, MaxSoundDuration},
 		{"drive", d.Drive, 64}, {"level", d.Level, 4},
+		{"vibrato_hz", d.VibratoHz, 15}, {"vibrato_cents", d.VibratoCents, 100}, {"vibrato_delay", d.VibratoDelay, MaxSoundDuration},
 	} {
 		if !finite(r.v) || r.v < 0 || r.v > r.max {
 			return e("%s %v outside [0,%v]", r.n, r.v, r.max)
 		}
+	}
+	if _, ok := vowels[d.Vowel]; d.Vowel != "" && !ok {
+		return e("unknown vowel %q, want a, e, i, o or u", d.Vowel)
 	}
 	return nil
 }
@@ -344,4 +358,14 @@ func resetVoiceRegistry() {
 	voiceDefs = make([]*VoiceDef, InstrumentCount)
 	voiceByName = fixedVoiceNames()
 	voiceMu.Unlock()
+}
+
+// vowels are the first three formants of a vowel, in Hz, a male voice's: what
+// a Vowel's formant bank resonates at
+var vowels = map[string][3]float64{
+	"a": {730, 1090, 2440},
+	"e": {530, 1840, 2480},
+	"i": {270, 2290, 3010},
+	"o": {570, 840, 2410},
+	"u": {300, 870, 2240},
 }

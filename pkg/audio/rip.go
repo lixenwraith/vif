@@ -39,6 +39,7 @@ type RipParams struct {
 	MinNote       float64 `toml:"min_note"`       // seconds a note lasts at least
 	SecondVoice   float64 `toml:"second_voice"`   // the strength, against the melody's, a second voice in its register is kept from; 0 hears one
 	Compress      float64 `toml:"compress"`       // the power the harmonic spectrum is raised to before the salience, under one to flatten the partials saturation piles on a note; one leaves it
+	Cross         float64 `toml:"cross"`          // what the first melody line pays a frame to be the quieter of the two; the lead changes hands over a longer rest or crossing
 }
 
 func DefaultRipParams() RipParams {
@@ -46,7 +47,7 @@ func DefaultRipParams() RipParams {
 		TempoPrior: 120, TempoWidth: 1, Tightness: 100,
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
-		SecondVoice: 0.5, Compress: 1,
+		SecondVoice: 0.5, Compress: 1, Cross: 0.003,
 	}
 }
 
@@ -79,6 +80,7 @@ var ripGenes = []ripGene{
 	{"min_note", 0.03, 0.15, func(p *RipParams) *float64 { return &p.MinNote }},
 	{"second_voice", 0, 0.9, func(p *RipParams) *float64 { return &p.SecondVoice }},
 	{"compress", 0.3, 1, func(p *RipParams) *float64 { return &p.Compress }},
+	{"cross", 0, 0.02, func(p *RipParams) *float64 { return &p.Cross }},
 }
 
 func (g *ripGene) get(p *RipParams) float64 {
@@ -339,7 +341,6 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	hits := f.drumHits(p)
 	root, scale := f.key()
 	melody := f.notes(RipMelodyLow, RipMaxMIDI, p)
-	uncross(melody)
 	bass := f.notes(RipMinMIDI, RipBassTop, p)
 	var bpm float64
 	var g ripGrid
@@ -1362,34 +1363,25 @@ type ripNote struct {
 	voice            []float64
 }
 
-// notes tracks the register's loudest line, and in the melody register a second
-// line with the first's notes and their partials cancelled, kept where its notes
-// reach SecondVoice of the first's strength: two voices in one register, a
-// violin under a pluck, where one path heard only the louder.
+// notes tracks a register's lines: the bass as one path, the melody register
+// as two decoded together where SecondVoice is set, the second line's notes
+// kept where they reach SecondVoice of the first's mean strength and last twice
+// MinNote, which drops what a decaying partial leaves.
 func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
-	first := f.path(lo, hi, p, nil)
-	if p.SecondVoice <= 0 || lo < RipMelodyLow || len(first) == 0 {
-		return first
+	if p.SecondVoice <= 0 || lo < RipMelodyLow {
+		return f.path(lo, hi, p)
 	}
-	mask := make([]bool, f.frames()*RipPitches)
+	first, second := f.pair(lo, hi, p)
+	if len(first) == 0 {
+		return nil
+	}
 	var strength float64
 	for _, n := range first {
 		strength += n.strength
-		for t := n.start; t < n.end; t++ {
-			for _, h := range [...]int{0, 12, 19, 24, 28, 31} {
-				for d := -1; d <= 1; d++ {
-					if m := n.midi + h + d; m >= RipMinMIDI && m < RipMaxMIDI {
-						mask[t*RipPitches+m-RipMinMIDI] = true
-					}
-				}
-			}
-		}
 	}
 	strength /= float64(len(first))
-	// a second line is the sustained one under the louder: its notes are kept
-	// from twice the shortest note, which drops the fragments the mask leaves
 	short := max(int(2*p.MinNote/f.Hop), 1)
-	for _, n := range f.path(lo, hi, p, mask) {
+	for _, n := range second {
 		if n.strength >= p.SecondVoice*strength && n.end-n.start >= short {
 			n.second = true
 			first = append(first, n)
@@ -1398,67 +1390,94 @@ func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 	return first
 }
 
-// notes tracks the pitch between lo and hi through every frame, a hidden path
-// scored by salience against the costs of moving and of starting or ending a
-// note, and cuts the track into notes, a note that dips and rises again being
-// two. A note shorter than MinNote is not one.
-// path is one line through a register: a hidden path through the salience,
-// masked where mask says, scored against the costs of moving and of starting
-// or ending a note, cut into notes; the reference loudness is the register's
-// own, masked or not.
-func (f *RipFrames) path(lo, hi int, p RipParams, mask []bool) []ripNote {
-	states := hi - lo // then the unvoiced state
-	raw := func(t, s int) float64 { return float64(f.Salience[t*RipPitches+lo+s-RipMinMIDI]) }
-	sal := raw
-	if mask != nil {
-		sal = func(t, s int) float64 {
-			if mask[t*RipPitches+lo+s-RipMinMIDI] {
-				return 0
-			}
-			return raw(t, s)
-		}
-	}
+// register is a register of the salience as a decoder reads it: its states,
+// the pitches from lo and then the unvoiced one, and the reference loudness
+// the register's own ninetieth-percentile peak sets
+type register struct {
+	f          *RipFrames
+	lo, states int
+	ref        float64
+}
+
+func (f *RipFrames) register(lo, hi int) (register, bool) {
+	r := register{f: f, lo: lo, states: hi - lo}
 	peaks := make([]float64, f.frames())
 	for t := range peaks {
-		for s := range states {
-			peaks[t] = max(peaks[t], raw(t, s))
+		for s := range r.states {
+			peaks[t] = max(peaks[t], r.sal(t, s))
 		}
 	}
-	sorted := slices.Clone(peaks)
-	slices.Sort(sorted)
-	ref := sorted[len(sorted)*9/10]
-	if ref <= 0 {
+	slices.Sort(peaks)
+	r.ref = peaks[len(peaks)*9/10]
+	return r, r.ref > 0
+}
+
+func (r register) sal(t, s int) float64 {
+	return float64(r.f.Salience[t*RipPitches+r.lo+s-RipMinMIDI])
+}
+
+// emit is a state's score at a frame: the salience against the reference, one
+// at most, or Voicing for the unvoiced state
+func (r register) emit(t, s int, p RipParams) float64 {
+	if s == r.states {
+		return p.Voicing
+	}
+	return min(r.sal(t, s)/r.ref, 1)
+}
+
+// relax is one line's step of a decoder: out[s] is the best in[q] less the cost
+// of moving from q to s, Jump a semitone between pitches, Switch between a
+// pitch and the unvoiced state, nothing to stay unvoiced; arg[s] is the q. The
+// moves between pitches are swept each way, so a step is linear in the states.
+func (r register) relax(in, out []float64, arg []uint8, p RipParams) {
+	n := r.states
+	best, from := math.Inf(-1), 0
+	for s := 0; s < n; s++ {
+		if best -= p.Jump; in[s] > best {
+			best, from = in[s], s
+		}
+		out[s], arg[s] = best, uint8(from)
+	}
+	best, from = math.Inf(-1), 0
+	for s := n - 1; s >= 0; s-- {
+		if best -= p.Jump; in[s] > best {
+			best, from = in[s], s
+		}
+		if best > out[s] {
+			out[s], arg[s] = best, uint8(from)
+		}
+	}
+	top, at := in[n], n
+	for s := 0; s < n; s++ {
+		if v := in[n] - p.Switch; v > out[s] {
+			out[s], arg[s] = v, uint8(n)
+		}
+		if v := in[s] - p.Switch; v > top {
+			top, at = v, s
+		}
+	}
+	out[n], arg[n] = top, uint8(at)
+}
+
+// path is one line through a register: a hidden path through the salience
+// scored against the costs of moving and of starting or ending a note, cut
+// into notes
+func (f *RipFrames) path(lo, hi int, p RipParams) []ripNote {
+	r, ok := f.register(lo, hi)
+	if !ok {
 		return nil
 	}
-	emit := func(t, s int) float64 {
-		if s == states {
-			return p.Voicing
-		}
-		return min(sal(t, s)/ref, 1)
-	}
-	prev, cur := make([]float64, states+1), make([]float64, states+1)
-	back := make([][]int32, f.frames())
+	n := r.states + 1
+	prev, cur := make([]float64, n), make([]float64, n)
+	back := make([][]uint8, f.frames())
 	for s := range prev {
-		prev[s] = emit(0, s)
+		prev[s] = r.emit(0, s, p)
 	}
 	for t := 1; t < f.frames(); t++ {
-		back[t] = make([]int32, states+1)
-		for s := 0; s <= states; s++ {
-			best, arg := math.Inf(-1), s
-			for q := 0; q <= states; q++ {
-				var cost float64
-				switch {
-				case q == states && s == states:
-				case q == states || s == states:
-					cost = p.Switch
-				default:
-					cost = p.Jump * math.Abs(float64(q-s))
-				}
-				if v := prev[q] - cost; v > best {
-					best, arg = v, q
-				}
-			}
-			cur[s], back[t][s] = best+emit(t, s), int32(arg)
+		back[t] = make([]uint8, n)
+		r.relax(prev, cur, back[t], p)
+		for s := range cur {
+			cur[s] += r.emit(t, s, p)
 		}
 		prev, cur = cur, prev
 	}
@@ -1475,23 +1494,157 @@ func (f *RipFrames) path(lo, hi int, p RipParams, mask []bool) []ripNote {
 			s = int(back[t][s])
 		}
 	}
+	return r.cut(track, p)
+}
+
+// pair decodes a register as two lines at once, a hidden path over pairs of
+// states where each line pays its own costs of moving and of starting or
+// ending: no pair a unison, a semitone or a harmonic interval apart, where the
+// higher would be the lower's partial, and line A paying Cross a frame to be
+// the quieter, so A is the line the ear follows and B the one under it, through
+// a crossing or a rest that costs less than changing places. A short recording
+// keeps every frame's backpointers; a long one keeps the scores at checkpoints
+// and the backpointers of a block at a time, so it costs little memory.
+func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
+	r, ok := f.register(lo, hi)
+	if !ok {
+		return nil, nil
+	}
+	S, T := r.states+1, f.frames()
+	// apart says two states may sound together: the unvoiced state with any,
+	// two pitches when neither a unison, a semitone nor a harmonic interval apart
+	apart := make([]bool, S*S)
+	for a := range S {
+		for b := range S {
+			switch max(a, b) - min(a, b) {
+			case 0, 1, 11, 12, 13, 18, 19, 20, 23, 24, 25, 27, 28, 29, 30, 31, 32:
+				apart[a*S+b] = a == r.states || b == r.states
+			default:
+				apart[a*S+b] = true
+			}
+		}
+	}
+	e := make([]float64, S) // a frame's emissions, one a state
+	emit := func(t int) {
+		for s := range S {
+			e[s] = r.emit(t, s, p)
+		}
+	}
+	score := func(a, b int) float64 {
+		if !apart[a*S+b] {
+			return math.Inf(-1)
+		}
+		if e[a] < e[b] {
+			return e[a] + e[b] - p.Cross
+		}
+		return e[a] + e[b]
+	}
+	mid, col, out := make([]float64, S*S), make([]float64, S), make([]float64, S)
+	argB, argA := make([]uint8, S*S), make([]uint8, S)
+	// step scores a frame's pairs from the last frame's: along B for each A,
+	// then along A for each B, a pair's move costing the two lines' moves
+	step := func(t int, prev, cur []float64, back []uint16) {
+		emit(t)
+		for qa := range S {
+			r.relax(prev[qa*S:qa*S+S], mid[qa*S:qa*S+S], argB[qa*S:qa*S+S], p)
+		}
+		for b := range S {
+			for qa := range S {
+				col[qa] = mid[qa*S+b]
+			}
+			r.relax(col, out, argA, p)
+			for a := range S {
+				cur[a*S+b] = out[a] + score(a, b)
+				if back != nil {
+					qa := int(argA[a])
+					back[a*S+b] = uint16(qa*S + int(argB[qa*S+b]))
+				}
+			}
+		}
+	}
+	const block = 256
+	prev, cur := make([]float64, S*S), make([]float64, S*S)
+	emit(0)
+	for a := range S {
+		for b := range S {
+			prev[a*S+b] = score(a, b)
+		}
+	}
+	ta, tb := make([]int, T), make([]int, T)
+	walk := func(state int, t0, t int, backs [][]uint16) int {
+		for u := t; u > t0; u-- {
+			ta[u], tb[u] = state/S, state%S
+			state = int(backs[u-t0-1][state])
+		}
+		return state
+	}
+	best := func() int {
+		state := 0
+		for s := range prev {
+			if prev[s] > prev[state] {
+				state = s
+			}
+		}
+		return state
+	}
+	if T <= 16*block {
+		backs := make([][]uint16, T)
+		for t := 1; t < T; t++ {
+			backs[t-1] = make([]uint16, S*S)
+			step(t, prev, cur, backs[t-1])
+			prev, cur = cur, prev
+		}
+		state := walk(best(), 0, T-1, backs)
+		ta[0], tb[0] = state/S, state%S
+		return r.cut(ta, p), r.cut(tb, p)
+	}
+	var marks [][]float64 // the scores every block frames
+	for t := 1; t < T; t++ {
+		if (t-1)%block == 0 {
+			marks = append(marks, slices.Clone(prev))
+		}
+		step(t, prev, cur, nil)
+		prev, cur = cur, prev
+	}
+	state := best()
+	backs := make([][]uint16, block)
+	for i := range backs {
+		backs[i] = make([]uint16, S*S)
+	}
+	for t := T - 1; t >= 1; {
+		t0 := (t - 1) / block * block
+		copy(prev, marks[t0/block])
+		for u := t0 + 1; u <= t; u++ {
+			step(u, prev, cur, backs[u-t0-1])
+			prev, cur = cur, prev
+		}
+		state = walk(state, t0, t, backs)
+		t = t0
+	}
+	ta[0], tb[0] = state/S, state%S
+	return r.cut(ta, p), r.cut(tb, p)
+}
+
+// cut reads a line's track, a state a frame, into notes: a run of one pitch is
+// a note, two when it dips under Retrigger of its peak and rises again, and
+// none when shorter than MinNote
+func (r register) cut(track []int, p RipParams) []ripNote {
 	var notes []ripNote
-	minFrames := max(int(p.MinNote/f.Hop), 1)
+	minFrames := max(int(p.MinNote/r.f.Hop), 1)
 	flush := func(n ripNote, sum float64) {
 		if n.end-n.start >= minFrames {
 			n.strength = sum / float64(n.end-n.start)
-			n.vel = min(max(0.3, n.strength/ref), 1)
-			n.wave, n.voice = f.voiceOver(n.start, n.end)
+			n.vel = min(max(0.3, n.strength/r.ref), 1)
+			n.wave, n.voice = r.f.voiceOver(n.start, n.end)
 			notes = append(notes, n)
 		}
 	}
 	open := ripNote{start: -1}
 	var sum, peak float64
 	dipped := false
-	for t := 0; t < f.frames(); t++ {
-		pitch := track[t]
-		if open.start >= 0 && pitch == open.midi-lo {
-			v := sal(t, pitch)
+	for t, pitch := range track {
+		if open.start >= 0 && pitch == open.midi-r.lo {
+			v := r.sal(t, pitch)
 			if v < peak*p.Retrigger {
 				dipped = true
 			} else if dipped && v > 0.7*peak {
@@ -1505,37 +1658,14 @@ func (f *RipFrames) path(lo, hi int, p RipParams, mask []bool) []ripNote {
 			flush(ripNote{start: open.start, end: t, midi: open.midi}, sum)
 			open = ripNote{start: -1}
 		}
-		if pitch < states {
-			open, sum, peak, dipped = ripNote{start: t, midi: lo + pitch}, sal(t, pitch), sal(t, pitch), false
+		if pitch < r.states {
+			open, sum, peak, dipped = ripNote{start: t, midi: r.lo + pitch}, r.sal(t, pitch), r.sal(t, pitch), false
 		}
 	}
 	if open.start >= 0 {
-		flush(ripNote{start: open.start, end: f.frames(), midi: open.midi}, sum)
+		flush(ripNote{start: open.start, end: len(track), midi: open.midi}, sum)
 	}
 	return notes
-}
-
-// uncross keeps the melody register's two lines from crossing: where a note of
-// the second line sounds over a lower note of the first for most of the shorter
-// of the two, they change lines, so the upper voice stays the upper and a held
-// dyad whose louder note changes hands is not heard as a trill between two
-// instruments.
-func uncross(notes []ripNote) {
-	for i := range notes {
-		if notes[i].second {
-			continue
-		}
-		for j := range notes {
-			if !notes[j].second || notes[j].midi <= notes[i].midi {
-				continue
-			}
-			overlap := min(notes[i].end, notes[j].end) - max(notes[i].start, notes[j].start)
-			if 2*overlap > min(notes[i].end-notes[i].start, notes[j].end-notes[j].start) {
-				notes[i].second, notes[j].second = true, false
-				break
-			}
-		}
-	}
 }
 
 // voiceOver is the wave and voice genes a front end heard over frames a to b,

@@ -226,6 +226,90 @@ func TestRipHearsASecondVoice(t *testing.T) {
 	}
 }
 
+// TestRipKeepsTheLeadThroughACrossing: two lines in the melody register on one
+// voice, a louder lead in quarter notes and a quieter counter line in eighths,
+// a fourth under the lead one bar and a fifth over it the next; the lead's
+// notes stay the melody line and the counter's the under line through the
+// crossing, where a line told by pitch order or by the louder frame changes
+// hands.
+func TestRipKeepsTheLeadThroughACrossing(t *testing.T) {
+	const bpm, bars = 120, 8
+	ae, slots := startLoopEngine(t)
+	var leadEvs, counterEvs []Step
+	for i, d := range [...]int{4, 5, 6, 5, 4, 5, 6, 5} {
+		leadEvs = append(leadEvs, Step{Pos: 4 * i, Vel: 1, Deg: d, Oct: 2, Dur: 4})
+	}
+	for i, d := range [...]int{1, 2, 3, 2, 1, 2, 3, 2, 1, 2, 3, 2, 1, 2, 3, 2} {
+		counterEvs = append(counterEvs, Step{Pos: 2 * i, Vel: 0.65, Deg: d, Oct: 2 + i/8, Dur: 2})
+	}
+	lead, err := ae.DefinePattern(&Pattern{Name: "lead", Steps: 32, Role: RoleMelody, Tracks: []Track{{Instr: InstrLead, Events: leadEvs}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counter, err := ae.DefinePattern(&Pattern{Name: "counter", Steps: 32, Role: RoleFill, Tracks: []Track{{Instr: InstrLead, Events: counterEvs}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slots[1], slots[2] = lead, counter
+	buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the two lines' pitch sets are disjoint, so a step tells its line by pitch
+	pitches := func(evs []Step) map[int]bool {
+		m := map[int]bool{}
+		for _, e := range evs {
+			m[StepPitch(DefaultRootNote, ScalePhrygian, e.Deg, e.Oct, 0)] = true
+		}
+		return m
+	}
+	leadSet, counterSet := pitches(leadEvs), pitches(counterEvs)
+	var leadIn, counterIn [2]int // the lead's and the counter's pitches heard in the melody line and the under line
+	for _, bar := range r.Bars {
+		for i, line := range [2][]Step{bar.Melody, bar.Under} {
+			for _, st := range line {
+				switch m := StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc); {
+				case leadSet[m]:
+					leadIn[i]++
+				case counterSet[m]:
+					counterIn[i]++
+				}
+			}
+		}
+	}
+	t.Logf("melody line: %d lead notes, %d counter notes; under line: %d lead, %d counter; %d lead and %d counter notes played", leadIn[0], counterIn[0], leadIn[1], counterIn[1], 4*bars, 8*bars)
+	if leadIn[0] < 3*bars || counterIn[0] > bars || counterIn[1] < 3*bars {
+		t.Errorf("the lead did not hold its line: melody %d lead %d counter, under %d lead %d counter", leadIn[0], counterIn[0], leadIn[1], counterIn[1])
+	}
+}
+
+// TestRenderLinesPlaysOnlyTheInstrumentsNamed: the loop rendered with only the
+// bass is quieter than with everything and not silent, and with no instrument
+// named it is silence.
+func TestRenderLinesPlaysOnlyTheInstrumentsNamed(t *testing.T) {
+	ae, slots := startLoopEngine(t)
+	tl := [][MusicSlots]PatternID{slots, slots}
+	render := func(only []InstrumentType) float64 {
+		buf, err := ae.RenderLines(tl, 120, DefaultRootNote, ScalePhrygian, nil, 1, only)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var e float64
+		for _, v := range buf {
+			e += v * v
+		}
+		return math.Sqrt(e / float64(len(buf)))
+	}
+	all, bass, none := render(nil), render([]InstrumentType{InstrBass}), render([]InstrumentType{})
+	if none != 0 || bass == 0 || bass >= all {
+		t.Errorf("rms all %.4f, bass alone %.4f, nothing %.4f", all, bass, none)
+	}
+}
+
 // TestRipParamsAreData is the rule the parameters live by: a [rip] document
 // round-trips, a key outside its range or unknown is refused, and the gene vector
 // is the parameters again.
