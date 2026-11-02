@@ -1271,10 +1271,11 @@ front-end seam. What remains, in the design's order:
    overfitted in 12000 steps. The corpus is rendered at A440 and the sample is
    forty cents flat, which the analysis now reads and the model cannot: render
    the loops at random offsets from A440 (`corpus ... aug`), then more loops
-   and steps. A vocal line is a line like any other to the rip, but the engine
-   has no vibrato or formant stage, so a corpus has no voice-like lines beyond
-   `tool/rip-train/focus/vocal.toml`'s chorused saws: vibrato and formants in
-   `VoiceDef`, then a focus that draws them. Measure by the trainer's held-out loss, with `bench` against the
+   and steps. A vocal line is a line like any other to the rip; a voice has a
+   vibrato and a vowel's formants now (`tool/rip-train/focus/vocal.toml` draws
+   them), neither a gene, so the fit and the model's voice head do not search
+   them: genes for both once a corpus with them has trained, and a real vocal
+   recording held out. Measure by the trainer's held-out loss, with `bench` against the
    analysis on clean and augmented loops and by ear on the held-out recordings
    (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then the weights
    and a tuned parameter set shipped as data, `DefaultRipParams` kept for a

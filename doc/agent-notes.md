@@ -541,3 +541,10 @@ that proves wrong or that a document now states, and link the document instead.
 - Take the next `snapshot.Schema`, `event.JournalSchema` or `manifest.SchemaVersion`
   past main's, and check again after merging main, where another PR may have taken
   it.
+
+- **A voice-like trait that is not a gene rides beside the genes, not in them.**
+  Vibrato and a vowel's formants went on `VoiceDef` as plain fields, kept by
+  the augmentation after `VoiceFromGenes`, rather than as new genes: a gene
+  changes the model's voice head and every shipped weight file's shape, and the
+  fit would search a space the recording rarely needs. Add a gene when a corpus
+  with the trait has trained and the fit wants it, not before.

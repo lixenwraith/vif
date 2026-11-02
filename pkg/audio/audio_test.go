@@ -1037,3 +1037,58 @@ func TestVoiceValidationRejects(t *testing.T) {
 		t.Errorf("a plain voice failed: %v", err)
 	}
 }
+
+// TestVoiceVibratoAndVowel: a vibrato moves the pitch of an oscillator voice,
+// so its periods vary where a plain one's do not; a vowel's formant bank
+// renders finite and changes the sound; a vowel the bank does not have and a
+// vibrato past a semitone are refused.
+func TestVoiceVibratoAndVowel(t *testing.T) {
+	plain := &VoiceDef{Name: "t", Wave: "sine", Attack: 0.001, Decay: 0.01, Sustain: 1, Release: 0.01, Level: 1}
+	wobble := *plain
+	wobble.VibratoHz, wobble.VibratoCents = 6, 60
+	periods := func(x []float64) (mean, spread float64) {
+		var last int
+		var ps []float64
+		for i := 1; i < len(x); i++ {
+			if x[i-1] < 0 && x[i] >= 0 {
+				if last > 0 {
+					ps = append(ps, float64(i-last))
+				}
+				last = i
+			}
+		}
+		for _, p := range ps {
+			mean += p
+		}
+		mean /= float64(max(len(ps), 1))
+		for _, p := range ps {
+			spread += (p - mean) * (p - mean)
+		}
+		return mean, math.Sqrt(spread / float64(max(len(ps), 1)))
+	}
+	_, flat := periods(RenderNote(plain, 60, 1, 0.5, 0))
+	mean, moved := periods(RenderNote(&wobble, 60, 1, 0.5, 0))
+	if flat > 0.6 || moved < 0.02*mean {
+		t.Errorf("period spread %.3f plain, %.3f with vibrato over a mean of %.1f samples", flat, moved, mean)
+	}
+	vowel := *plain
+	vowel.Wave, vowel.Vowel = "saw", "a"
+	a, b := RenderNote(plain, 60, 1, 0.3, 0), RenderNote(&vowel, 60, 1, 0.3, 0)
+	var diff float64
+	for i := range min(len(a), len(b)) {
+		if math.IsNaN(b[i]) || math.IsInf(b[i], 0) {
+			t.Fatalf("the vowel rendered %v at %d", b[i], i)
+		}
+		diff += math.Abs(a[i] - b[i])
+	}
+	if diff == 0 {
+		t.Error("the vowel changed nothing")
+	}
+	bad := *plain
+	bad.Vowel = "y"
+	wide := *plain
+	wide.VibratoCents = 200
+	if ValidateVoice(&bad) == nil || ValidateVoice(&wide) == nil || ValidateVoice(&vowel) != nil || ValidateVoice(&wobble) != nil {
+		t.Errorf("validation: vowel y %v, 200 cents %v, a vowel %v, a vibrato %v", ValidateVoice(&bad), ValidateVoice(&wide), ValidateVoice(&vowel), ValidateVoice(&wobble))
+	}
+}

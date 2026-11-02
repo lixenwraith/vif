@@ -276,6 +276,7 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 				wave = audio.VoiceWaves[rng.IntN(len(audio.VoiceWaves))]
 			}
 			r := audio.VoiceFromGenes(wave, genes)
+			r.VibratoHz, r.VibratoCents, r.VibratoDelay, r.Vowel = v.VibratoHz, v.VibratoCents, v.VibratoDelay, v.Vowel // not genes; kept from the registered voice
 			r.Name = name
 			if audio.ValidateVoice(r) != nil {
 				voices[name] = v

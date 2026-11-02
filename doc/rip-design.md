@@ -153,7 +153,9 @@ offline (`song <name> <file.wav>`).
   bench and the install with every knob an environment variable, and a focus
   script run before the corpus turns a run toward a kind of music (`focus/`:
   vocals as lines, plucked instruments); `tool/rip-train/README.md` is the
-  guide.
+  guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
+  neither a gene, kept by the augmentation when it draws voices near a
+  registered one.
 - **Model.** `ripnet.Spec`: eighty bands in, width 128, four heads, four layers,
   feed-forward 512, a window of 64 frames either side, about 800 thousand
   weights; heads for the onset, the three drums, the sixty-nine pitches, voicing,
