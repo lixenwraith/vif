@@ -232,7 +232,7 @@ that proves wrong or that a document now states, and link the document instead.
   a verb ticks (`KeyNone`) until `busy` clears.
 - `bench` and `tune` loops shorter than four seconds give no rip (a two-bar loop
   at 176 bpm is 2.7 s): size a test's loops by bars, not loops, and read the
-  count `bench` prints.
+  count `bench` prints; `bench ... verbose` names each loop that gave none.
 - An augmented corpus draws its room, mix and voices from a stream seeded apart
   from the loop's patterns and key, so `corpus` with and without `aug` renders
   the same music; a test comparing the two relies on it. Generated parts register
