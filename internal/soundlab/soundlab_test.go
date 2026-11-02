@@ -1004,6 +1004,48 @@ corpus %s 2 2
 	}
 }
 
+// TestACorpusGoesOnWhereItStopped: parts rendered apart and an export run again
+// over them keep every loop on disk and write the rest, byte for byte, as one
+// unbroken export does; only the last, whole export writes corpus.json.
+func TestACorpusGoesOnWhereItStopped(t *testing.T) {
+	dir := t.TempDir()
+	one, parts := filepath.Join(dir, "one"), filepath.Join(dir, "parts")
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+builtin pattern
+corpus %[1]s 5 1 aug gen nowav
+corpus %[2]s 5 1 aug gen nowav part 0/2
+corpus %[2]s 5 1 aug gen nowav part 1/2
+`, one, parts))
+	if _, err := os.Stat(filepath.Join(parts, "corpus.json")); err == nil {
+		t.Error("a part wrote corpus.json")
+	}
+	kept := filepath.Join(parts, "loop_001.json")
+	if err := os.WriteFile(kept, []byte("kept"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(parts, "loop_003.json")); err != nil { // stopped before its label
+		t.Fatal(err)
+	}
+	runOrFatal(t, s, &out, fmt.Sprintf("corpus %s 5 1 aug gen nowav\n", parts))
+	files, err := os.ReadDir(one)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		want, _ := os.ReadFile(filepath.Join(one, f.Name()))
+		got, _ := os.ReadFile(filepath.Join(parts, f.Name()))
+		if f.Name() == "loop_001.json" {
+			want = []byte("kept")
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s differs from one unbroken export's", f.Name())
+		}
+	}
+}
+
 // TestRipFitsVoicesAndCompressesToASong is the second stage's rule: a rip of the
 // engine's own render fits a voice to each register it heard, compress matches
 // its bars to a dictionary of one-bar patterns and a song that plays them,
