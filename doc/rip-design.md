@@ -147,7 +147,8 @@ offline (`song <name> <file.wav>`).
   convolution, noise, equalisation, a low-pass), voices beyond the shipped five
   (random genes), chance steps as optional targets, and real recordings with
   hand-checked notes held out for validation, so neither a model nor a tuned set
-  learns the synthesizer.
+  learns the synthesizer. The generative lead is left out: the sequencer writes
+  its notes bar by bar as it plays, so no label read off the pattern holds them.
 - **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop, a
   gain, a one-pole low-pass, a Schroeder reverb and a noise floor drawn per
   loop, redraws each tonal track's voice near the registered one, a third of
@@ -165,7 +166,8 @@ offline (`song <name> <file.wav>`).
   Both draw from streams of their own, so a loop's bank patterns and key are
   the same with and without them.
 - **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
-  bench and the install with every knob an environment variable, and a focus
+  bench and the install with every knob an environment variable, the corpus in
+  `PARTS` exports at once, each keeping the loops already on disk, and a focus
   script run before the corpus turns a run toward a kind of music (`focus/`:
   vocals as lines, plucked instruments); a training round spreads a run over
   several machines, shards from one start averaged into the next (`shard`,

@@ -133,7 +133,7 @@ unless named:
 
 ```bash
 . tool/rip-train/.venv/bin/activate   # the setup's PyTorch
-export CORPUS=$HOME/ripcorpus6 LOOPS=40000 STEPS=40000 HOLDOUT=400 EVERY=1000
+export CORPUS=$HOME/ripcorpus6 LOOPS=40000 STEPS=40000 HOLDOUT=400 EVERY=1000 PARTS=4
 tool/rip-train/round.sh               # corpus, train, bench, logging to $CORPUS/round.log, resumable
 ```
 

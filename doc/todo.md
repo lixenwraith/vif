@@ -1308,7 +1308,10 @@ front-end seam. What remains, in the design's order:
    melodies, bass lines and, in the free slot, a broken-chord accompaniment
    under a melody of longer notes; what it still lacks is a codec, chords as
    chords, a pedal's ringing, chance steps graded as optional rather than as
-   misses, and real recordings with their MIDI in the corpus and held out: a
+   misses, the generative lead (left out since an offline render plays its
+   first bar as the last render left it and labels every bar with its last:
+   regenerate it at bar 0 and label it as played), and real recordings with
+   their MIDI in the corpus and held out: a
    loader for a WAV beside a MIDI file (`ReadMIDI` reads the notes; the
    frames and labels a loop carries are what `corpus` writes) and a few
    recordings the user plays or owns with their scores, so neither a model
