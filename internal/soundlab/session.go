@@ -69,6 +69,7 @@ type Session struct {
 	// none; ticked says a front end drives conduct, so song play returns at once
 	song   *songPlay
 	tuning float64 // cents off A440 the transport plays at, a rip's or the tuning verb's
+	base   string  // the running script's directory, its relative paths read from there; empty outside one
 	ticked bool
 }
 
@@ -704,6 +705,15 @@ func (s *Session) degreeOf(midi int) (deg, oct int, exact bool) {
 }
 
 // keyName is the mirrored key as the header shows it, "E2 phrygian"
+// path is p as a running script names it: read from the script's own directory
+// when p is relative, so a recipe runs from anywhere; p as given otherwise
+func (s *Session) path(p string) string {
+	if s.base == "" || p == "" || filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(s.base, p)
+}
+
 func (s *Session) keyName() string { return noteName(s.root) + " " + scaleName(s.scale) }
 
 var pitchNames = [12]string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}

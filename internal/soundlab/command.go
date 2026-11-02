@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -50,7 +51,7 @@ func init() {
 		"compress": {"compress <name> [percent]", "match the bars of a recording ripped as <name> to as few one-bar patterns as a difference of percent (5) allows: the dictionary <name>_<part>_a..., and the song <name> that plays them in order, rendered and ripped back for a score", 1, 2, cmdCompress},
 		"refine":   {"refine <name> [rounds]", "close the loop over a song compress made of a recording ripped as <name>: each round (3) fits the voices again and sweeps the tonal steps, each tried a semitone and an octave either way and silent, every move kept when the song sounds more like the recording; minutes a round", 1, 2, cmdRefine},
 		"bench":    {"bench [loops] [bars]", "grade the analysis, and the model when one loaded, on fresh loops (8) of bars (4) bars the engine renders, clean and augmented: the mean score of each rip against the loop's expected rip", 0, 2, cmdBench},
-		"run":      {"run <file.slab>", "run a script's lines in this session, strict as -s is: a line that fails stops it with its number; quit in it ends the script, not the session", 1, 1, cmdRun},
+		"run":      {"run <file.slab>", "run a script's lines in this session, its relative paths read from its own directory, strict as -s is: a line that fails stops it with its number; quit in it ends the script, not the session", 1, 1, cmdRun},
 		"song":     {"song <name> [file.wav|play|score]", "show a song's bars; render it to a WAV; play it through the sequencer, the slots changed at the bar lines (music stop ends it); or score it, how it sounds against the recording ripped as <name> and how it rips back", 1, 2, cmdSong},
 
 		"ls":    {"ls sound|pattern|voice|song [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
@@ -92,11 +93,24 @@ func init() {
 // cmdRun runs a script in the session in hand, as -s does from the start, so a
 // recipe of verbs is one word in the REPL or the TUI's command line
 func cmdRun(s *Session, a []string) error {
-	f, err := os.Open(a[0])
+	return RunScriptFile(s, s.path(a[0]))
+}
+
+// RunScriptFile runs the script at path as RunScript does, the script's relative
+// paths read from its own directory while it runs, a nested run from its own.
+func RunScriptFile(s *Session, path string) error {
+	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	prev := s.base
+	s.base = filepath.Dir(abs)
+	defer func() { s.base = prev }()
 	return RunScript(s, f)
 }
 

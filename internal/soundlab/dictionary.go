@@ -437,7 +437,7 @@ func cmdSong(s *Session, a []string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(a[1])
+	f, err := os.Create(s.path(a[1]))
 	if err != nil {
 		return err
 	}
