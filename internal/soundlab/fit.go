@@ -78,6 +78,32 @@ func cmdNotes(s *Session, a []string) error {
 		return fmt.Errorf("%q: nothing ripped under that name this session (rip first)", a[0])
 	}
 	r := rp.rip
+	snd, err := s.soundOf(rp)
+	if err != nil {
+		return err
+	}
+	// support is how much of the recording's salience over a note's frames is
+	// its pitch's: one for a note alone in its frames, little for one heard
+	// beside a louder, a note to doubt
+	support := func(n audio.RipNote) float64 {
+		f := snd.Frames
+		var own, all float64
+		for t := int(n.Start / f.Hop); t < int(n.End/f.Hop) && (t+1)*audio.RipPitches <= len(f.Salience); t++ {
+			row := f.Salience[t*audio.RipPitches : (t+1)*audio.RipPitches]
+			if i := n.MIDI - audio.RipMinMIDI; i >= 0 && i < len(row) {
+				own += float64(row[i])
+			}
+			var peak float32
+			for _, v := range row {
+				peak = max(peak, v)
+			}
+			all += float64(peak)
+		}
+		if all == 0 {
+			return 0
+		}
+		return own / all
+	}
 	fmt.Fprintf(s.out, "%s: %d note(s) at %d bpm in %s %s, tuned %+.0f cents, the first bar from %.2fs\n", a[0], len(r.Notes), r.BPM, noteName(r.Root), scaleName(r.Scale), r.Tuning, r.Downbeat)
 	marks := [...]string{"bb", "b", "", "#", "x"}
 	for _, n := range r.Notes {
@@ -94,7 +120,7 @@ func cmdNotes(s *Session, a []string) error {
 			where = fmt.Sprintf("bar %d step %2d", i/audio.BeatsPerBar+1, audio.StepsPerBeat*(i%audio.BeatsPerBar)+int(math.Round((n.Start-r.Beats[i])/span)))
 		}
 		deg, oct, acc := audio.PitchStep(r.Root, r.Scale, n.MIDI)
-		fmt.Fprintf(s.out, "%-6s %7.3fs %-20s %-4s degree %d%s octave %d, %.1f step(s) at %.2f\n", line, n.Start, where, noteName(n.MIDI), deg, marks[acc+2], oct, (n.End-n.Start)/span, n.Vel)
+		fmt.Fprintf(s.out, "%-6s %7.3fs %-20s %-4s degree %d%s octave %d, %.1f step(s) at %.2f, support %.2f\n", line, n.Start, where, noteName(n.MIDI), deg, marks[acc+2], oct, (n.End-n.Start)/span, n.Vel, support(n))
 	}
 	return nil
 }

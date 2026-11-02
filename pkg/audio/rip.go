@@ -269,10 +269,12 @@ type Ripper struct {
 // RipGrid pins the tempo and the downbeat a recording is read on, for one whose
 // grid is known, as the engine's own renders are: the tempo, beat and bar-line
 // decoders are skipped and the hits and notes fall on the given grid, so a rip of
-// a render grades the render, not those decoders.
+// a render grades the render, not those decoders. A negative Downbeat pins the
+// tempo alone: the beats are tracked at it and the bar line decoded, for a
+// recording whose tempo the listener knows or wants on another metrical level.
 type RipGrid struct {
 	BPM      int
-	Downbeat float64 // seconds
+	Downbeat float64 // seconds; negative to decode the bar line at the tempo
 }
 
 // pinned is the grid a RipGrid describes: beats a tempo apart through the
@@ -341,12 +343,17 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	bass := f.notes(RipMinMIDI, RipBassTop, p)
 	var bpm float64
 	var g ripGrid
-	if rp.Grid != nil {
+	if rp.Grid != nil && rp.Grid.Downbeat >= 0 {
 		bpm = float64(rp.Grid.BPM)
 		g = f.pinned(rp.Grid)
 	} else {
 		var period float64
-		bpm, period = f.tempo(p)
+		if rp.Grid != nil { // the tempo given, the beats tracked at it and the bar line decoded
+			bpm = float64(min(max(rp.Grid.BPM, MinBPM), MaxBPM))
+			period = 60 / bpm / f.Hop
+		} else {
+			bpm, period = f.tempo(p)
+		}
 		beats := f.beats(period, p)
 		if len(beats) < BeatsPerBar+1 {
 			return nil, errors.New("rip: no full bar found")
