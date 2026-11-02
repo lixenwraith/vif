@@ -32,7 +32,7 @@ func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
 	// the searches sized for a test: enough to run every path, not to be good
 	s.fit = fitOptions{notes: 2, generations: 1, pool: 4, seed: 1}
 	s.compressOpt = compressOptions{generations: 3, pool: 6, seed: 1}
-	s.refineOpt = refineOptions{generations: 1, pool: 4, seed: 1}
+	s.refineOpt = refineOptions{generations: 1, pool: 4, seed: 1, steps: 2}
 	return s
 }
 

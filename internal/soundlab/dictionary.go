@@ -547,6 +547,7 @@ func (s *Session) conduct() {
 type refineOptions struct {
 	generations, pool int
 	seed              uint64
+	steps             int // the most steps a sweep visits, every one when zero; a test's budget
 }
 
 var defaultRefine = refineOptions{generations: 6, pool: 12, seed: 1}
@@ -589,7 +590,7 @@ func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, 
 		}
 		fmt.Fprintf(s.out, "round %d: voices %.2f -> %.2f\n", round, total, voiced)
 		total = voiced
-		stepped, err := s.refineSteps(rp, d, total)
+		stepped, err := s.refineSteps(rp, d, total, o)
 		if err != nil {
 			return err
 		}
@@ -704,7 +705,7 @@ func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base f
 // does not carry to the whole song is undone. One sweep is a round's share. A
 // move touches one note's frames in a thousand, which a search over every
 // step's genes at once could not see in its budget.
-func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64) (float64, error) {
+func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refineOptions) (float64, error) {
 	type step struct {
 		pat     string
 		trk, ev int
@@ -743,6 +744,9 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64) (float
 	if len(steps) == 0 {
 		return base, nil
 	}
+	if o.steps > 0 && len(steps) > o.steps {
+		steps = steps[:o.steps]
+	}
 	register := func(n string) error {
 		pd, _ := s.pats.get(n)
 		p, err := pd.Pattern()
@@ -756,8 +760,8 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64) (float
 		return nil
 	}
 	judge := func(pat string) (float64, error) {
-		if local {
-			return s.songJudgeBars(d, rp, uses[pat])
+		if local { // on the bars that play it, two at most: a bar stands for the pattern's others
+			return s.songJudgeBars(d, rp, uses[pat][:min(len(uses[pat]), 2)])
 		}
 		fid, err := s.songJudge(d, rp)
 		return fid.Total, err
