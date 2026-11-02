@@ -600,3 +600,12 @@ that proves wrong or that a document now states, and link the document instead.
   !wasm`; a new one without it is compiled alone by the no-audio and wasm
   builds CI runs, against a session that is not there. The local suites do
   not run those builds, so run the no-audio build before pushing a new file.
+
+- **A rule that fits a synthetic case can be refuted by one recording.** A
+  note cut where its salience rose again by a third after falling off its
+  peak heard thirty-two of thirty-two repeated piano strikes in a test and,
+  on the recording, cut eleven of the lead's twenty-five plucked notes in two
+  and the bass's held notes too, since those strings beat. The rhythm the
+  user tapped out showed it in one run; the bench and the suite had not.
+  Measure a decoder change against the recording's own truth before it
+  ships, and keep the test only when the rule stays.

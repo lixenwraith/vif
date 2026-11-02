@@ -3,6 +3,7 @@ package audio
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -22,10 +23,15 @@ type Agreement struct {
 }
 
 // LineAgreement is one line's count: the notes each side has, how many align,
-// and the notes only one side has
+// the notes only one side has, and for a line given as a rhythm alone, how many
+// of its notes a has cut in two or more (Split) and how many of a's notes span
+// two or more of them (Merged)
 type LineAgreement struct {
 	A, B, Matched int
 	OnlyA, OnlyB  []RipNote
+	Split, Merged int
+	Cut, Spanning []RipNote // the notes of b cut in two or more by a's, and the notes of a spanning two or more of b's
+	Rhythm        bool      // b's notes had no pitch: matched by onset, not by pitch in order
 }
 
 // lineOf is a note's line in ripLines' order: melody, under, bass
@@ -67,6 +73,12 @@ func MatchNotes(a, b []RipNote) Agreement {
 
 func align(a, b []RipNote, shift int) Agreement {
 	ag := Agreement{Shift: shift, Stretch: 1}
+	// a rhythm given has a unit and a start the listener guessed: its notes are
+	// placed on the map, a stretch and an offset within a tenth and a third of a
+	// second, that matches most of them to a's onsets
+	if slices.ContainsFunc(b, func(n RipNote) bool { return n.MIDI < 0 }) {
+		b = placed(a, b)
+	}
 	var xs, ys []float64
 	part := func(keep func(RipNote) bool) LineAgreement {
 		var la, lb []RipNote
@@ -80,8 +92,18 @@ func align(a, b []RipNote, shift int) Agreement {
 				lb = append(lb, n)
 			}
 		}
-		pairs := subsequence(la, lb, shift)
-		l := LineAgreement{A: len(la), B: len(lb), Matched: len(pairs)}
+		var pairs [][2]int
+		rhythm := slices.ContainsFunc(lb, func(n RipNote) bool { return n.MIDI < 0 })
+		if rhythm {
+			pairs = onsets(la, lb)
+		} else {
+			pairs = subsequence(la, lb, shift)
+		}
+		l := LineAgreement{A: len(la), B: len(lb), Matched: len(pairs), Rhythm: rhythm}
+		if rhythm {
+			l.Cut, l.Spanning = spans(la, lb)
+			l.Split, l.Merged = len(l.Cut), len(l.Spanning)
+		}
 		inA, inB := make([]bool, len(la)), make([]bool, len(lb))
 		for _, p := range pairs {
 			inA[p[0]], inB[p[1]] = true, true
@@ -140,6 +162,98 @@ func subsequence(a, b []RipNote, shift int) [][2]int {
 	return pairs
 }
 
+// placed stretches and shifts a rhythm's notes onto a's time, keeping the map
+// that matches most of them, line by line, to a's onsets
+func placed(a, b []RipNote) []RipNote {
+	best, bestStretch, bestOffset, bestAway := -1, 1.0, 0.0, math.Inf(1)
+	mapped := func(stretch, offset float64) []RipNote {
+		out := slices.Clone(b)
+		for i := range out {
+			out[i].Start, out[i].End = out[i].Start*stretch+offset, out[i].End*stretch+offset
+		}
+		return out
+	}
+	for stretch := 0.9; stretch <= 1.1001; stretch += 0.005 {
+		for offset := -0.3; offset <= 0.3001; offset += 0.02 {
+			m := mapped(stretch, offset)
+			n := 0
+			for line := range 3 {
+				var la, lb []RipNote
+				for _, x := range a {
+					if lineOf(x) == line {
+						la = append(la, x)
+					}
+				}
+				for _, x := range m {
+					if lineOf(x) == line && x.MIDI < 0 {
+						lb = append(lb, x)
+					}
+				}
+				n += len(onsets(la, lb))
+			}
+			// among maps that match as many, the one nearest the listener's own
+			away := math.Abs(stretch-1)*10 + math.Abs(offset)
+			if n > best || n == best && away < bestAway {
+				best, bestStretch, bestOffset, bestAway = n, stretch, offset, away
+			}
+		}
+	}
+	return mapped(bestStretch, bestOffset)
+}
+
+// onsets matches a's notes to b's by when they start, b's notes having no
+// pitch: in time order, each note of b takes the nearest note of a that starts
+// within half of b's shortest note, once
+func onsets(a, b []RipNote) [][2]int {
+	if len(a) == 0 || len(b) == 0 {
+		return nil
+	}
+	tol := math.Inf(1)
+	for _, n := range b {
+		tol = math.Min(tol, (n.End-n.Start)/2)
+	}
+	tol = math.Max(tol, 0.03)
+	var pairs [][2]int
+	i := 0
+	for j, n := range b {
+		for i < len(a) && a[i].Start < n.Start-tol {
+			i++
+		}
+		best := -1
+		for k := i; k < len(a) && a[k].Start <= n.Start+tol; k++ {
+			if best < 0 || math.Abs(a[k].Start-n.Start) < math.Abs(a[best].Start-n.Start) {
+				best = k
+			}
+		}
+		if best >= 0 {
+			pairs = append(pairs, [2]int{best, j})
+			i = best + 1
+		}
+	}
+	return pairs
+}
+
+// spans lists b's notes that two or more of a's start within (cut) and a's
+// notes that two or more of b's start within (spanning)
+func spans(a, b []RipNote) (cut, spanning []RipNote) {
+	within := func(outer, inner []RipNote) []RipNote {
+		var out []RipNote
+		for _, o := range outer {
+			k := 0
+			for _, x := range inner {
+				if x.Start >= o.Start-0.03 && x.Start < o.End-0.03 {
+					k++
+				}
+			}
+			if k >= 2 {
+				out = append(out, o)
+			}
+		}
+		return out
+	}
+	return within(b, a), within(a, b)
+}
+
 // fitLine is the least-squares line y ≈ stretch*x + offset, one and zero
 // without two points
 func fitLine(xs, ys []float64) (stretch, offset float64) {
@@ -177,22 +291,68 @@ var transcriptPitch = regexp.MustCompile(`\b([A-G][#b]?)(-?[0-9])\b`)
 var transcriptLength = regexp.MustCompile(`\b([0-9.]+)\s*(s\b|step)`)
 var transcriptTempo = regexp.MustCompile(`\bat ([0-9]+) bpm\b`)
 
+var transcriptUnit = regexp.MustCompile(`^\s*unit\s+([0-9.]+)\s*(ms|s)?\s*$|^\s*unit\s+(sixteenth|eighth|quarter|half)\s*$`)
+var transcriptStart = regexp.MustCompile(`^\s*start\s+([0-9.]+)\s*s?\s*$`)
+var transcriptTab = regexp.MustCompile(`^\s*(melody|under|bass)\s+(\S.*)$`)
+
 // ParseTranscript reads notes from text in the form the notes verb prints,
 // which a listener can correct by hand: a header "... at N bpm ..." sets the
-// tempo lengths in steps are read by, and each note is "<line> <start>s ...
-// <pitch> ... <length> step(s)" or "<line> <start>s <pitch> <length>s", the
-// rest of a line ignored. A note's line is melody, under or bass.
-func ParseTranscript(text string) ([]RipNote, error) {
+// tempo lengths in steps are read by (bpm when there is none), and each note
+// is "<line> <start>s ... <pitch> ... <length> step(s)" or "<line> <start>s
+// <pitch> <length>s", the rest of a line ignored. A line is melody, under or
+// bass. A line may also be a rhythm with no pitches, as a listener taps it
+// out: "unit eighth" (or quarter, sixteenth, half, or a length such as 203ms)
+// and "start 0.34s" (origin when none) set the grid, then "<line> <tab>" where
+// each character is a note a unit long, "-" lengthens the note before it by a
+// unit, "." is a unit of rest and "(...)x3" repeats; such notes have no pitch
+// (MIDI -1) and are matched by when they start.
+func ParseTranscript(text string, bpm int, origin float64) ([]RipNote, error) {
 	var notes []RipNote
-	step := 0.0
+	step, unit, start := 0.0, 0.0, origin
+	if bpm > 0 {
+		step = 60 / float64(bpm) / StepsPerBeat
+	}
 	sc := bufio.NewScanner(strings.NewReader(text))
 	for lineNo := 1; sc.Scan(); lineNo++ {
 		line := sc.Text()
-		if m := transcriptTempo.FindStringSubmatch(line); m != nil && step == 0 {
-			bpm, _ := strconv.Atoi(m[1])
-			if bpm > 0 {
-				step = 60 / float64(bpm) / StepsPerBeat
+		if m := transcriptTempo.FindStringSubmatch(line); m != nil {
+			if v, _ := strconv.Atoi(m[1]); v > 0 {
+				step = 60 / float64(v) / StepsPerBeat
 			}
+		}
+		if m := transcriptUnit.FindStringSubmatch(line); m != nil {
+			switch {
+			case m[3] != "":
+				if step == 0 {
+					return nil, fmt.Errorf("line %d: a unit named by a note needs a tempo (\"at N bpm\") first", lineNo)
+				}
+				unit = step * StepsPerBeat * map[string]float64{"sixteenth": 0.25, "eighth": 0.5, "quarter": 1, "half": 2}[m[3]]
+			default:
+				v, _ := strconv.ParseFloat(m[1], 64)
+				if m[2] == "ms" {
+					v /= 1000
+				}
+				unit = v
+			}
+			if unit <= 0 {
+				return nil, fmt.Errorf("line %d: unit %q", lineNo, strings.TrimSpace(line))
+			}
+			continue
+		}
+		if m := transcriptStart.FindStringSubmatch(line); m != nil {
+			start, _ = strconv.ParseFloat(m[1], 64)
+			continue
+		}
+		if m := transcriptTab.FindStringSubmatch(line); m != nil && !transcriptLine.MatchString(line) {
+			if unit <= 0 {
+				return nil, fmt.Errorf("line %d: a rhythm needs \"unit ...\" before it", lineNo)
+			}
+			tab, err := parseTab(m[2], unit, start, m[1])
+			if err != nil {
+				return nil, fmt.Errorf("line %d: %w", lineNo, err)
+			}
+			notes = append(notes, tab...)
+			continue
 		}
 		m := transcriptLine.FindStringSubmatch(line)
 		if m == nil {
@@ -225,6 +385,67 @@ func ParseTranscript(text string) ([]RipNote, error) {
 	}
 	if len(notes) == 0 {
 		return nil, fmt.Errorf("no notes: want lines like \"melody 1.25s G4 0.3s\"")
+	}
+	return notes, nil
+}
+
+// parseTab reads a rhythm tapped out as text into notes without a pitch, from
+// start, unit seconds a character: "-" lengthens the note before it, "." is a
+// rest, "(...)xN" repeats, spaces are nothing, and any other character is a note
+func parseTab(tab string, unit, start float64, line string) ([]RipNote, error) {
+	var notes []RipNote
+	at := start
+	var expand func(s string) (string, error)
+	expand = func(s string) (string, error) { // groups unrolled, innermost first
+		for {
+			close := strings.IndexByte(s, ')')
+			if close < 0 {
+				if strings.IndexByte(s, '(') >= 0 {
+					return "", fmt.Errorf("a \"(\" without its \")\"")
+				}
+				return s, nil
+			}
+			open := strings.LastIndexByte(s[:close], '(')
+			if open < 0 {
+				return "", fmt.Errorf("a \")\" without its \"(\"")
+			}
+			times, rest := 1, s[close+1:]
+			if strings.HasPrefix(rest, "x") {
+				i := 1
+				for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+					i++
+				}
+				times, _ = strconv.Atoi(rest[1:i])
+				if times < 1 || times > 64 {
+					return "", fmt.Errorf("repeat %q: want x1 to x64", rest[:i])
+				}
+				rest = rest[i:]
+			}
+			s = s[:open] + strings.Repeat(s[open+1:close], times) + rest
+		}
+	}
+	flat, err := expand(tab)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range flat {
+		switch {
+		case c == ' ' || c == '\t':
+		case c == '-':
+			if len(notes) == 0 || notes[len(notes)-1].End < at-1e-9 {
+				return nil, fmt.Errorf("a \"-\" with no note before it")
+			}
+			notes[len(notes)-1].End += unit
+			at += unit
+		case c == '.' || c == '_':
+			at += unit
+		default:
+			notes = append(notes, RipNote{Start: at, End: at + unit, MIDI: -1, Vel: 0.8, Bass: line == "bass", Second: line == "under"})
+			at += unit
+		}
+	}
+	if len(notes) == 0 {
+		return nil, fmt.Errorf("no notes in the rhythm")
 	}
 	return notes, nil
 }

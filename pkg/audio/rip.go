@@ -1701,7 +1701,10 @@ func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
 
 // cut reads a line's track, a state a frame, into notes: a run of one pitch is
 // a note, two when it dips under Retrigger of its peak and rises again, and
-// none when shorter than MinNote
+// none when shorter than MinNote. A rise without such a dip is not a new note:
+// a rule that cut a note where its salience rose again by a third after
+// falling off its peak split the plucked and the held notes of a recording
+// whose strings beat, so a repeated note is the Retrigger gene's to find.
 func (r register) cut(track []int, p RipParams) []ripNote {
 	var notes []ripNote
 	minFrames := max(int(p.MinNote/r.f.Hop), 1)

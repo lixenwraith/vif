@@ -59,7 +59,7 @@ tool/rip-train/pipeline.sh install
 | `CORPUS` | `corpus` | where the loops go |
 | `LOOPS`, `BARS` | 20000, 4 | loops rendered, bars a loop; 200 loops is a smoke test |
 | `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a third of the loops driven into a soft clip, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
-| `GEN` | `gen` | beats, melodies and bass lines the bank never had, three loops in five per part; empty for the bank alone |
+| `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; empty for the bank alone |
 | `WAV` | `nowav` | frames and labels only; empty keeps each loop's WAV too (300 MB per 200 loops) |
 | `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
 | `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |

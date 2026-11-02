@@ -9,7 +9,9 @@ import (
 // melody, once the notes are parted into lines: the busier line by default,
 // the one with the most notes for its sounding time, since the ear follows the
 // line that moves while a line of held notes accompanies it; or the higher,
-// lower, louder or softer when the listener knows the piece.
+// lower, louder, softer, longer or shorter in its notes when the listener
+// knows the piece, as when a melody of held notes sings over an accompaniment
+// of repeated eighths.
 type LeadRule int
 
 const (
@@ -18,9 +20,11 @@ const (
 	LeadLow
 	LeadLoud // the line whose notes are stronger on average
 	LeadSoft
+	LeadLong // the line whose notes last longer on average
+	LeadShort
 )
 
-var leadWords = [...]string{"busy", "high", "low", "loud", "soft"}
+var leadWords = [...]string{"busy", "high", "low", "loud", "soft", "long", "short"}
 
 func (l LeadRule) String() string {
 	if l < 0 || int(l) >= len(leadWords) {
@@ -174,6 +178,10 @@ func streams(notes []ripNote, hop float64, lead LeadRule) []ripNote {
 			return strength[s] / count[s]
 		case LeadSoft:
 			return -strength[s] / count[s]
+		case LeadLong:
+			return sounding[s] / count[s]
+		case LeadShort:
+			return -sounding[s] / count[s]
 		}
 		return count[s] / math.Max(sounding[s], hop)
 	}

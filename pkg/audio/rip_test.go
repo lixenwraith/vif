@@ -417,12 +417,35 @@ func TestMatchNotesAlignsTwoTranscripts(t *testing.T) {
 		t.Errorf("time map a = %.3f b %+.3f, want %.3f and %+.3f", ag.Stretch, ag.Offset, 1/1.15, -0.4/1.15)
 	}
 	text := "x: 16 note(s) at 120 bpm in G2 minor\nmelody   0.300s bar 1 step  3        A4   degree 1 octave 2, 1.6 step(s) at 0.70, support 1.00\nunder 0.9s F5 0.25s\nbass 0s G2 8 steps\n"
-	notes, err := ParseTranscript(text)
+	notes, err := ParseTranscript(text, 0, 0)
 	if err != nil || len(notes) != 3 || notes[0].MIDI != 69 || math.Abs(notes[0].End-0.5) > 0.01 || !notes[1].Second || notes[1].MIDI != 77 || !notes[2].Bass || math.Abs(notes[2].End-1) > 0.01 {
 		t.Errorf("parsed %+v, %v", notes, err)
 	}
-	if _, err := ParseTranscript("melody 0.1s 3 steps\n"); err == nil {
+	if _, err := ParseTranscript("melody 0.1s 3 steps\n", 0, 0); err == nil {
 		t.Error("a line without a pitch parsed")
+	}
+	// a rhythm tapped out: eighths at 120 bpm from one second, a group twice
+	tab, err := ParseTranscript("unit eighth\nstart 1s\nmelody (1-2)x2 3.4\nunder 11\n", 120, 0)
+	if err != nil || len(tab) != 8 || tab[0].MIDI != -1 || math.Abs(tab[0].Start-1) > 1e-9 || math.Abs(tab[0].End-1.5) > 1e-9 || math.Abs(tab[1].Start-1.5) > 1e-9 || math.Abs(tab[4].Start-2.5) > 1e-9 || math.Abs(tab[5].Start-3) > 1e-9 || !tab[6].Second || math.Abs(tab[7].Start-1.25) > 1e-9 {
+		t.Errorf("tab parsed %+v, %v", tab, err)
+	}
+	// heard against it by onset: every note found but one, and one cut in two
+	var heard []RipNote
+	for i, n := range tab[:5] {
+		if i == 3 {
+			continue
+		}
+		heard = append(heard, RipNote{Start: n.Start + 0.02, End: n.End, MIDI: 60 + i})
+		if i == 0 {
+			heard = append(heard, RipNote{Start: n.Start + 0.3, End: n.End, MIDI: 60})
+		}
+	}
+	rhythm := MatchNotes(heard, tab[:5])
+	if l := rhythm.Lines[0]; !l.Rhythm || l.Matched != 4 || len(l.OnlyB) != 1 || l.Split != 1 || len(l.OnlyA) != 1 {
+		t.Errorf("rhythm: matched %d of %d given, only given %d, only heard %d, split %d", l.Matched, l.B, len(l.OnlyB), len(l.OnlyA), l.Split)
+	}
+	if _, err := ParseTranscript("melody (1-2\n", 0, 0); err == nil {
+		t.Error("a rhythm without a unit parsed")
 	}
 }
 

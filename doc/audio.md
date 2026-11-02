@@ -488,8 +488,10 @@ that dips keeps its note.
 Two transcripts of one piece are compared by `MatchNotes` (soundlab's `agree`),
 each line's notes aligned in order under the transposition that matches most,
 and a transcript against notes given as text in the `notes` verb's own form
-(`ParseTranscript`, soundlab's `truth`), which a listener corrects by hand: the
-ground truth the numbers above lack. The song a rip
+(`ParseTranscript`, soundlab's `truth`), which a listener corrects by hand, or
+as a rhythm tapped out without pitches (`unit eighth`, `start 0.34s`, `melody
+(1-2-3---4-56---)x3 ...`), matched by when the notes start: the ground truth the
+numbers above lack. The song a rip
 compresses into carries the recording's tuning (`SongDef.Tuning`), and the
 engine plays or renders it there (`AudioEngine.SetTuning`), as the voice fit
 renders its candidate notes there (`RenderNoteAt`), so a render stands beside

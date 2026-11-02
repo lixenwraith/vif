@@ -118,7 +118,7 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 			for _, g := range []struct {
 				slot int
 				make func(*rand.Rand, int) *audio.Pattern
-			}{{0, genBeat}, {1, genMelody}, {3, genBass}} {
+			}{{0, genBeat}, {1, genMelody}, {2, genAccompaniment}, {3, genBass}} {
 				if grng.Float64() >= 0.6 {
 					continue
 				}
@@ -191,8 +191,9 @@ func genBeat(rng *rand.Rand, _ int) *audio.Pattern {
 }
 
 // genMelody is a melody the bank never had: a walk over the key's degrees within
-// two octaves, lengths of one to four steps with a rest now and then, on a tonal
-// instrument drawn from the registered ones
+// two octaves, lengths of one to four steps with a rest now and then, or in
+// half the loops a slow line of two to eight, on a tonal instrument drawn from
+// the registered ones
 func genMelody(rng *rand.Rand, degrees int) *audio.Pattern {
 	steps := 16 * (1 + rng.IntN(2))
 	tonal := audio.TonalInstruments()
@@ -200,10 +201,14 @@ func genMelody(rng *rand.Rand, degrees int) *audio.Pattern {
 	if instr == audio.InstrBass {
 		instr = audio.InstrLead
 	}
+	lengths := []int{1, 1, 2, 2, 3, 4}
+	if rng.Float64() < 0.5 {
+		lengths = []int{2, 2, 4, 4, 6, 8}
+	}
 	deg, oct := rng.IntN(degrees), 1+rng.IntN(2)
 	var evs []audio.Step
 	for pos := 0; pos < steps; {
-		dur := []int{1, 1, 2, 2, 3, 4}[rng.IntN(6)]
+		dur := lengths[rng.IntN(len(lengths))]
 		if rng.Float64() < 0.2 {
 			pos += dur
 			continue
@@ -223,6 +228,49 @@ func genMelody(rng *rand.Rand, degrees int) *audio.Pattern {
 		evs = []audio.Step{{Pos: 0, Vel: 0.8, Deg: 0, Oct: 1, Dur: 4}}
 	}
 	return &audio.Pattern{Name: "corpus_melody", Steps: steps, Role: audio.RoleMelody, Tracks: []audio.Track{{Instr: instr, Events: evs}}}
+}
+
+// genAccompaniment is an accompaniment the bank never had, for the free slot: a
+// broken chord, the key's first, third and fifth with the seventh now and then,
+// in eighths or sixteenths that change pitch from note to note, up, down or
+// alternating, softer than a lead, on a tonal instrument drawn from the
+// registered ones: the line that runs under a slow melody in much music, which
+// the rip has to part from it
+func genAccompaniment(rng *rand.Rand, degrees int) *audio.Pattern {
+	steps := 16 * (1 + rng.IntN(2))
+	tonal := audio.TonalInstruments()
+	instr := tonal[rng.IntN(len(tonal))]
+	if instr == audio.InstrBass {
+		instr = audio.InstrLead
+	}
+	chord := []int{0, 2, 4}
+	if rng.Float64() < 0.3 && degrees > 6 {
+		chord = append(chord, 6)
+	}
+	dur := 1 + rng.IntN(2) // sixteenths or eighths
+	base := 1 + rng.IntN(2)
+	order := rng.IntN(3) // up, down, alternating
+	var evs []audio.Step
+	for i, pos := 0, 0; pos < steps; i, pos = i+1, pos+dur {
+		k := i % len(chord)
+		switch order {
+		case 1:
+			k = len(chord) - 1 - k
+		case 2:
+			if i%2 == 1 {
+				k = len(chord) - 1 - i/2%len(chord)
+			} else {
+				k = i / 2 % len(chord)
+			}
+		}
+		oct := base + i/len(chord)%2 // the chord in one octave, then the next
+		deg := chord[k]
+		if deg >= degrees {
+			deg = 0
+		}
+		evs = append(evs, audio.Step{Pos: pos, Vel: 0.4 + rng.Float64()*0.3, Deg: deg, Oct: min(oct, 2), Dur: dur})
+	}
+	return &audio.Pattern{Name: "corpus_accompaniment", Steps: steps, Role: audio.RoleFill, Tracks: []audio.Track{{Instr: instr, Events: evs}}}
 }
 
 // genBass is a bass line the bank never had: the root and its neighbours below
