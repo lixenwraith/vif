@@ -1177,7 +1177,12 @@ func TestAReplayStandsWhereTheRunsWriteLeftIt(t *testing.T) {
 		if i == 40 {
 			t.Fatal("no glyph reached")
 		}
+		from, _ := localCell(a)
 		inject(t, a, intentMotion(input.MotionWordForward, 1))
+		// w keeps to the cursor's row, which the corpus may leave empty on this seed
+		if to, _ := localCell(a); to == from {
+			inject(t, a, intentMotion(input.MotionDown, 1), intentMotion(input.MotionLineStart, 1))
+		}
 		a.Tick(4)
 	}
 	inject(t, a, intentModeSwitch(input.ModeTargetInsert))
