@@ -102,30 +102,43 @@ func TestLayerNormAndGELU(t *testing.T) {
 }
 
 // TestWeightFileRoundTrips is the file's contract: what Save wrote, Load reads
-// into the same shape with the same outputs, and a damaged file is refused.
+// into the same shape with the same outputs, convolutions and towers too, and a
+// damaged file is refused.
 func TestWeightFileRoundTrips(t *testing.T) {
 	cfg := tiny()
+	staged := tiny()
+	staged.Convs = []Conv{{Out: 2, Time: 3, Freq: 3, Pool: 1}, {Out: 3, Time: 1, Freq: 3, Pool: 2}}
+	staged.Towers = []Tower{{Layers: 1, Outputs: 1}, {Layers: 2, Outputs: 1}}
+	for _, c := range []Config{staged, cfg} {
+		m, _ := NewRandom(c, 11)
+		var b bytes.Buffer
+		if err := m.Save(&b); err != nil {
+			t.Fatal(err)
+		}
+		back, err := Load(bytes.NewReader(b.Bytes()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if back.Parameters() != m.Parameters() || back.Config().OutputSize() != c.OutputSize() {
+			t.Fatalf("loaded %d parameters of %d", back.Parameters(), m.Parameters())
+		}
+		in := frames(7, c.Inputs, 5)
+		a, got := m.Forward(in), back.Forward(in)
+		for i := range a {
+			for j := range a[i] {
+				if a[i][j] != got[i][j] {
+					t.Fatalf("%+v: frame %d output %d differs after the round trip", c.Convs, i, j)
+				}
+			}
+		}
+	}
 	m, _ := NewRandom(cfg, 11)
 	var b bytes.Buffer
 	if err := m.Save(&b); err != nil {
 		t.Fatal(err)
 	}
-	back, err := Load(bytes.NewReader(b.Bytes()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if back.Parameters() != m.Parameters() || back.Config().OutputSize() != cfg.OutputSize() {
-		t.Fatalf("loaded %d parameters of %d", back.Parameters(), m.Parameters())
-	}
-	in := frames(7, cfg.Inputs, 5)
-	a, c := m.Forward(in), back.Forward(in)
-	for i := range a {
-		for j := range a[i] {
-			if a[i][j] != c[i][j] {
-				t.Fatalf("frame %d output %d differs after the round trip", i, j)
-			}
-		}
-	}
+	back, _ := Load(bytes.NewReader(b.Bytes()))
+	c := back.Forward(frames(7, cfg.Inputs, 5))
 	if sl := back.Slice(c[0], "b"); len(sl) != 2 || sl[0] != c[0][3] {
 		t.Errorf("head b slice %v of %v", sl, c[0])
 	}
@@ -136,6 +149,46 @@ func TestWeightFileRoundTrips(t *testing.T) {
 	}
 	if _, err := Load(bytes.NewReader(b.Bytes()[:len(b.Bytes())/2])); err == nil {
 		t.Error("a truncated file loaded")
+	}
+}
+
+// TestConvolutionMatchesItsDefinition: each output is the GELU of the bias and
+// the kernel over the frames and features around it, zero past the edges, and
+// the pool keeps the larger of each pair, the odd feature at the end dropped.
+func TestConvolutionMatchesItsDefinition(t *testing.T) {
+	const T, F = 6, 5
+	m, _ := NewRandom(Config{Inputs: F, Convs: []Conv{{Out: 2, Time: 3, Freq: 3, Pool: 2}}, Dim: 2, Heads: 1, FFN: 1, Outputs: []Head{{"x", 1}}}, 4)
+	c := m.convs[0]
+	for o := range c.B {
+		c.B[o] = 0.1 * float32(o+1)
+	}
+	in := frames(T, F, 8)
+	x := make([]float32, 0, T*F)
+	for _, f := range in {
+		x = append(x, f...)
+	}
+	got := c.apply(x, T, F)
+	for tt := range T {
+		for o := range c.Out {
+			var want [F]float32
+			for k := range F {
+				s := c.B[o]
+				for dt := -1; dt <= 1; dt++ {
+					for dk := -1; dk <= 1; dk++ {
+						if tt+dt >= 0 && tt+dt < T && k+dk >= 0 && k+dk < F {
+							s += c.W[o*9+(dt+1)*3+dk+1] * in[tt+dt][k+dk]
+						}
+					}
+				}
+				want[k] = gelu(s)
+			}
+			for k := range F / 2 {
+				w, g := max(want[2*k], want[2*k+1]), got[(tt*c.Out+o)*(F/2)+k]
+				if math.Abs(float64(w-g)) > 1e-6 {
+					t.Fatalf("frame %d channel %d feature %d: %g, want %g", tt, o, k, g, w)
+				}
+			}
+		}
 	}
 }
 
