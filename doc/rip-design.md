@@ -535,6 +535,30 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   numbers had matched across lines. `truth` is ready for the melody written
   out, the number the renders still lack.
 
+- The thirteenth pass, the rhythm from the user's ear: the lead plays
+  quarter, quarter, half, quarter, eighth, half three times and then seven
+  quarters, twenty-five notes on a plucked string; the second line is a piano
+  arpeggio in eighths throughout, fifty-eight notes of changing pitch under
+  pedal, which the user could not write down by pitch; the bass is free. That
+  rhythm, as `unit eighth` and `(1-2-3---4-56---)x3 a-a-a-a-a-a-a`, placed on
+  the time map that matches most (0.999 of the rip's), is the first truth the
+  rip has had: the origin's lead, named by `lead long` (the default, the
+  busier line, is the arpeggio here; soft and long part the same), has 17 of
+  the 25 given notes within half an eighth, 8 missed and 10 extra, 7 of the
+  given cut in two or more, the half notes among them; the second line has 30
+  of 58 eighths, 11 rip notes spanning two or more, the pedal's ringing notes
+  merged, which two lines cannot hold. The intro: 12 of 25 and 24 of 58. A
+  rule that cut a note where its salience rose again by a third after falling
+  off its peak, for a repeated note, heard 32 of 32 repeated piano strikes in
+  a test and on the recording cut 11 of the lead's 25 notes and the bass's
+  held notes, whose strings beat: withdrawn the same hour, the rhythm having
+  shown it in one run. The songs: the origin 0.86 after two rounds (pitch
+  0.90, timbre 0.85, onsets 0.82), the intro 0.84 (0.87, 0.84, 0.80), with
+  modal voices within their floors. The corpus draws the piece's texture for
+  the next run, a broken chord in the free slot under a melody of longer
+  notes; its loops bench at 0.476 clean and 0.457 augmented for the analysis,
+  a new baseline.
+
 ## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved
