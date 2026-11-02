@@ -588,3 +588,8 @@ that proves wrong or that a document now states, and link the document instead.
   not see the lines change hands; the agreement per line was an illusion.
   `MatchNotes` matches within a line and reports the register as one line
   beside it, so the two numbers show the parting's own error.
+- **A new soundlab file takes the package's build tags.** Every file of
+  `internal/soundlab` opens with `//go:build !vif_headless && !vif_noaudio &&
+  !wasm`; a new one without it is compiled alone by the no-audio and wasm
+  builds CI runs, against a session that is not there. The local suites do
+  not run those builds, so run the no-audio build before pushing a new file.
