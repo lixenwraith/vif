@@ -232,7 +232,7 @@ that proves wrong or that a document now states, and link the document instead.
   a verb ticks (`KeyNone`) until `busy` clears.
 - `bench` and `tune` loops shorter than four seconds give no rip (a two-bar loop
   at 176 bpm is 2.7 s): size a test's loops by bars, not loops, and read the
-  count `bench` prints.
+  count `bench` prints; `bench ... verbose` names each loop that gave none.
 - An augmented corpus draws its room, mix and voices from a stream seeded apart
   from the loop's patterns and key, so `corpus` with and without `aug` renders
   the same music; a test comparing the two relies on it. Generated parts register
@@ -335,6 +335,12 @@ that proves wrong or that a document now states, and link the document instead.
   thousand of the fidelity, under the noise of a dozen genes moving with it.
   A sweep that tries each step's five moves alone and keeps a gain sees it;
   five renders a step is the price, minutes a round on a four-bar song.
+- A `.pt`'s held-out loss, a merge's or any checkpoint's, is read without
+  training: `train.load_corpus`, `train.validation` over the last `--holdout`
+  loops and `train.evaluate` in a scratch script, the model built from the
+  file's `cfg`. `--steps 0` scores nothing, since the score runs in the loop. A
+  `pip install --user` torch is not seen under `python3 -I`, which drops the
+  user's site directory.
 - A training run shares the cores with everything else the session does: the
   fourth run slowed from 0.4 to 4 seconds a step under a rip and a test run,
   and the two-hour waiter on it timed out twice. Size a waiter by the run
@@ -521,6 +527,10 @@ that proves wrong or that a document now states, and link the document instead.
   the quick test of an edit to `internal/asset/content/tutorial.toml`. A line wider
   than the map is cropped (`GlyphSystem.placeLine`), so the tutorial's stay under
   40 columns.
+- An edit to the embedded corpus moves every line a seeded test sees: lines land
+  at random rows, and `w` without a ping keeps to the cursor's row, which a third
+  of seeds leave empty for 160 ticks. A test that needs a glyph under the cursor
+  steps rows until one is reached, never counts on its seed.
 
 ## Words
 

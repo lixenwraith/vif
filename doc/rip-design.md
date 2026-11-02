@@ -167,8 +167,9 @@ offline (`song <name> <file.wav>`).
 - **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
   bench and the install with every knob an environment variable, and a focus
   script run before the corpus turns a run toward a kind of music (`focus/`:
-  vocals as lines, plucked instruments); `tool/rip-train/README.md` is the
-  guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
+  vocals as lines, plucked instruments); a training round spreads a run over
+  several machines, shards from one start averaged into the next (`shard`,
+  `merge`); `tool/rip-train/README.md` is the guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
   neither a gene, kept by the augmentation when it draws voices near a
   registered one.
 - **Model.** `ripnet.Spec`: eighty bands in, width 128, four heads, four layers,
