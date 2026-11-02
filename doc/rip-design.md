@@ -500,6 +500,37 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   alone now (`song <name> <file> <voice>`), so the user can say which line
   the lead is and where it changes hands, which the numbers cannot.
 
+- The twelfth pass, the lines parted by their character: the user heard the
+  eleventh's lead render start right and then mix the lines where a loud held
+  F4 of the counter line took the lead's place, the lead being the softer
+  line in this piece, short notes at a steady cadence under held ones. The
+  two decoded lines' notes are parted again by what a line keeps, pitch from
+  note to note, length, strength against the register's reference and no two
+  at once, the lead named by a rule: on a synthetic pair, a softer lead in
+  eighths under a louder counter line in half notes that crosses it, 61 of 64
+  lead notes land in the melody line and none of the counter's; the first
+  parting, with the strength raw, followed loudness alone. On the origin the
+  busier line, the default, is the counter (33 notes against the lead's 27),
+  so the recipes name `lead soft`, and the lead reads G4 A4 A4 D5 D#5 D#5 A#4
+  D#5 D5 A5 D5 G4 A4 ..., the user's first three notes among them; a default
+  that holds for more music is open. The intro's bass, the origin's D#3 and
+  D3 three semitones up, had surfaced as F#3 and F3 in its melody register
+  with no bass under them, so the bass decoder reaches A3 over the melody's
+  rows, a reached row counting for three quarters, a reached note the bass
+  line does not continue dropped, and a note both registers hear going to the
+  line it continues; the intro's bass line reads as the origin's (15 of 17
+  notes heard by both, 10 of 10 before but with the F#3s missing), at a cost
+  of a hundredth on the clean bench (0.477 against 0.485; the parting itself
+  costs nothing). The origin sounds 0.86 after two rounds (pitch 0.90, timbre
+  0.85, onsets 0.82) from 0.71 before, the intro 0.84 (0.86, 0.84, 0.82) from
+  0.73, both with modal voices within their floors. `agree`, the two
+  transcripts line by line under the transposition that matches most: 14 of
+  the lead's notes and 14 of the counter's heard by both (of 25 and 27, 25 and
+  33), 39 of the melody register's as one line, so about seven notes in ten
+  are parted the same way in the two recordings; the earlier script's per-line
+  numbers had matched across lines. `truth` is ready for the melody written
+  out, the number the renders still lack.
+
 ## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved
