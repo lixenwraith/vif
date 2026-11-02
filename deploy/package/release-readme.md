@@ -65,13 +65,15 @@ screen.
 
 <!-- end -->
 <!-- if windows -->
-Unzip the archive, open a terminal such as Windows Terminal or Alacritty in its
-folder, and run `.\vif.exe`, which the commands below call `vif`.
+Unzip the archive, open Windows Terminal in its folder (the default terminal on
+Windows 11), and run `.\vif.exe`, which the commands below call `vif`.
 
-The Windows build is experimental. Played in Alacritty it runs, with three known
-issues: the mouse does nothing, there is no sound because this build leaves audio
-out, and some status bar cells flicker as the screen redraws. It has no logging
-and no replay journal either.
+The Windows build is experimental: there is no sound because this build leaves
+audio out, and no logging or replay journal. Played through Windows 10's own
+console host, as Alacritty does unless Windows Terminal's `conpty.dll` and
+`OpenConsole.exe` lie beside `alacritty.exe`, the mouse does nothing and some
+status bar cells flicker as the screen redraws; Windows Terminal has its own
+console host, which passes the mouse and the screen through.
 
 <!-- end -->
 <!-- if web -->
