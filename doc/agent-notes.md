@@ -354,6 +354,12 @@ that proves wrong or that a document now states, and link the document instead.
   only on its own frames, the edge frames read the fifth's fundamental through
   the bass's partial and gave it a value up to 20% low.
 
+- A MIDI note-off names no note: `ReadMIDI` ends the earliest sounding note of
+  its channel and pitch, so a note nested inside a longer one of its pitch reads
+  back with the two ends exchanged. A rip's line never holds such a pair; a file
+  from a sequencer can. `pip install --user mido` reads a written file for a
+  check from outside the package (`mido.MidiFile(path).tracks`).
+
 ## Locks
 
 - The order is the world lock (`engine.UpdateMutex`, taken by `RunSafe`, not

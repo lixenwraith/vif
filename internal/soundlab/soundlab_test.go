@@ -1073,16 +1073,17 @@ save pattern %s
 		t.Errorf("fit replaced no voice:\n%s", out.String())
 	}
 	// the two witnesses and a truth: a rip agrees with itself on every note,
-	// and read back from its own transcript hears every note given
+	// and read back from its own transcript, as text and as MIDI, hears every
+	// note given
 	out.Reset()
 	runOrFatal(t, s, &out, "notes loop\n")
-	truth := filepath.Join(dir, "truth.txt")
+	truth, mid := filepath.Join(dir, "truth.txt"), filepath.Join(dir, "truth.mid")
 	os.WriteFile(truth, out.Bytes(), 0o644)
 	out.Reset()
-	runOrFatal(t, s, &out, fmt.Sprintf("agree loop loop\n! agree loop nothing\ntruth loop %s\n! truth loop %s\n", truth, wav))
+	runOrFatal(t, s, &out, fmt.Sprintf("agree loop loop\n! agree loop nothing\ntruth loop %s\n! truth loop %s\n! notes loop %s\nnotes loop %s\ntruth loop %s\n", truth, wav, truth, mid, mid))
 	rp := s.rips["loop"]
 	n := len(rp.rip.Notes)
-	if !strings.Contains(out.String(), fmt.Sprintf("against %d note(s) given, transposed +0", n)) || strings.Contains(out.String(), "only loop:") || strings.Contains(out.String(), "only given:") {
+	if strings.Count(out.String(), fmt.Sprintf("against %d note(s) given, transposed +0", n)) != 2 || strings.Contains(out.String(), "only loop:") || strings.Contains(out.String(), "only given:") {
 		t.Errorf("the rip did not agree with itself:\n%s", out.String())
 	}
 	// one line of the song on its own: the instruments named after the file
