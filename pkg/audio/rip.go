@@ -1408,18 +1408,28 @@ func (f *RipFrames) notes(lo, hi int, p RipParams, lead LeadRule, bass []ripNote
 
 // register is a register of the salience as a decoder reads it: its states,
 // the pitches from lo and then the unvoiced one, and the reference loudness
-// the register's own ninetieth-percentile peak sets
+// the register's own ninetieth-percentile peak sets. A register may reach
+// past its own rows into the next register's, which are on another scale:
+// the reference is the own rows' and a reached row sounds at reachShare of
+// its strength, so a line takes one only where it is strong and continues.
 type register struct {
 	f          *RipFrames
 	lo, states int
+	reach      int // the first state in the next register's rows, states when none
 	ref        float64
 }
 
+// reachShare is what a reached row's salience counts for against the register's own
+const reachShare = 0.75
+
 func (f *RipFrames) register(lo, hi int) (register, bool) {
-	r := register{f: f, lo: lo, states: hi - lo}
+	r := register{f: f, lo: lo, states: hi - lo, reach: hi - lo}
+	if lo < RipBassTop && hi > RipBassTop {
+		r.reach = RipBassTop - lo
+	}
 	peaks := make([]float64, f.frames())
 	for t := range peaks {
-		for s := range r.states {
+		for s := range r.reach {
 			peaks[t] = max(peaks[t], r.sal(t, s))
 		}
 	}
@@ -1433,10 +1443,13 @@ func (r register) sal(t, s int) float64 {
 }
 
 // emit is a state's score at a frame: the salience against the reference, one
-// at most, or Voicing for the unvoiced state
+// at most, a reached row's at reachShare, or Voicing for the unvoiced state
 func (r register) emit(t, s int, p RipParams) float64 {
 	if s == r.states {
 		return p.Voicing
+	}
+	if s >= r.reach {
+		return reachShare * min(r.sal(t, s)/r.ref, 1)
 	}
 	return min(r.sal(t, s)/r.ref, 1)
 }
