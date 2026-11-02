@@ -156,6 +156,11 @@ def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
     return out
 
 
+def shape(cfg) -> str:
+    """a model's sizes for a message; the output heads are ripnet's, never a flag's"""
+    return ", ".join(f"{k} {v}" for k, v in cfg.items() if k != "outputs") if cfg else "an unrecorded shape"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", required=True, help="directory soundlab's corpus verb wrote")
@@ -180,6 +185,14 @@ def main() -> None:
 
     torch.manual_seed(args.seed)
     rng = random.Random(args.seed + (args.shard_seed << 32))  # a stream per seed and shard; shard 0 is the seed's own
+    cfg = ripnet.Config(dim=args.dim, layers=args.layers, heads=args.heads, ffn=args.ffn, window=args.attention_window)
+    resume = bool(args.checkpoint) and os.path.exists(args.checkpoint)
+    start = args.checkpoint if resume else args.init
+    ck = torch.load(start, map_location=args.device) if start else None
+    # refused before the corpus loads: load_state_dict names only a tensor's size,
+    # and takes another head count or window without a word
+    if ck is not None and ck.get("cfg") != asdict(cfg):
+        raise SystemExit(f"{start} holds a model of {shape(ck.get('cfg'))}, and this run builds {shape(asdict(cfg))}: pass its shape, or another file")
     manifest, loops = load_corpus(args.corpus)
     holdout = args.holdout if args.holdout >= 0 else (len(loops) // 10 if len(loops) >= 5 else 0)
     held = loops[len(loops) - holdout:] if holdout else []
@@ -187,22 +200,20 @@ def main() -> None:
     val_mels, val_tgs = validation(held, args.window) if held else ([], [])
     assert manifest["mel_bands"] == ripnet.MEL_BANDS and manifest["pitches"] == ripnet.PITCHES
     assert manifest["voice_genes"] == ripnet.VOICE_GENES and len(manifest["waves"]) == ripnet.WAVES
-    cfg = ripnet.Config(dim=args.dim, layers=args.layers, heads=args.heads, ffn=args.ffn, window=args.attention_window)
     model = ripnet.RipNet(cfg).to(args.device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
-    step = 0
-    if args.checkpoint and os.path.exists(args.checkpoint):
-        ck = torch.load(args.checkpoint, map_location=args.device)
+    step, best_loss, best_step, best_state = 0, float("inf"), 0, None
+    if resume:
         model.load_state_dict(ck["model"])
         opt.load_state_dict(ck["opt"])
         step = ck["step"]
+        best_loss, best_step, best_state = ck.get("best", (best_loss, best_step, best_state))
         print(f"resumed at step {step}")
-    elif args.init:
-        model.load_state_dict(torch.load(args.init, map_location=args.device)["model"])
+    elif ck is not None:
+        model.load_state_dict(ck["model"])
         print(f"started from {args.init}")
     print(f"{sum(p.numel() for p in model.parameters())} weights, {len(loops)} loops, {sum(len(m) for m, _ in loops)} frames, {len(held)} held out in {len(val_mels)} windows")
     t0 = time.time()
-    best_loss, best_step, best_state = float("inf"), step, None
 
     def score() -> None:
         nonlocal best_loss, best_step, best_state
@@ -239,8 +250,11 @@ def main() -> None:
         if step % args.every == 0 or step == args.steps:
             score()
             if args.checkpoint:
-                # the shape rides along for average.py: the heads and the window show in no tensor
-                torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "cfg": asdict(cfg)}, args.checkpoint)
+                # the shape rides along for average.py and the check above, the heads and
+                # the window showing in no tensor; the best step, so a resumed run, or one
+                # run again once done, still exports it
+                torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "cfg": asdict(cfg),
+                            "best": (best_loss, best_step, best_state)}, args.checkpoint)
     if best_state is not None:
         model.load_state_dict(best_state)
         print(f"best held-out decoders' loss {best_loss:.3f} at step {best_step}; exporting that")
