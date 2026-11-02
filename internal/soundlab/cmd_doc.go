@@ -4,11 +4,14 @@ package soundlab
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/pkg/audio"
 )
 
@@ -16,6 +19,9 @@ import (
 var errVoiceFile = fmt.Errorf("voices are part of the sound document: name sound")
 
 func cmdLoad(s *Session, a []string) error {
+	if len(a) == 1 {
+		return s.loadAny(a[0], true)
+	}
 	switch k, err := kindArg(a[0]); {
 	case err != nil:
 		return err
@@ -28,6 +34,9 @@ func cmdLoad(s *Session, a []string) error {
 }
 
 func cmdMerge(s *Session, a []string) error {
+	if len(a) == 1 {
+		return s.loadAny(a[0], false)
+	}
 	switch k, err := kindArg(a[0]); {
 	case err != nil:
 		return err
@@ -126,9 +135,22 @@ func cmdRip(s *Session, a []string) error {
 	if err := badName(name); err != nil {
 		return err
 	}
-	nodrums := false
-	if n := len(a); a[n-1] == "nodrums" {
-		nodrums, a = true, a[:n-1]
+	nodrums, tempo := false, 0
+	for {
+		n := len(a)
+		switch {
+		case n > 2 && a[n-1] == "nodrums":
+			nodrums, a = true, a[:n-1]
+			continue
+		case n > 3 && a[n-2] == "bpm":
+			v, err := strconv.Atoi(a[n-1])
+			if err != nil || v < audio.MinBPM || v > audio.MaxBPM {
+				return fmt.Errorf("bpm %q: want %d to %d", a[n-1], audio.MinBPM, audio.MaxBPM)
+			}
+			tempo, a = v, a[:n-2]
+			continue
+		}
+		break
 	}
 	bars := audio.MaxPatternLen / audio.StepsPerBar
 	if len(a) > 2 {
@@ -147,7 +169,11 @@ func cmdRip(s *Session, a []string) error {
 	if err != nil {
 		return err
 	}
-	r, err := s.ripper().Samples(x, rate)
+	ripper := s.ripper()
+	if tempo > 0 { // the tempo the listener knows; the bar line is still decoded
+		ripper.Grid = &audio.RipGrid{BPM: tempo, Downbeat: -1}
+	}
+	r, err := ripper.Samples(x, rate)
 	if err != nil {
 		return err
 	}
@@ -295,4 +321,53 @@ func cmdWrite(s *Session, a []string) error {
 		return nil
 	}
 	return fmt.Errorf("%q: not in any document", name)
+}
+
+// loadAny loads a file by what it is: a .slab runs as a script, a .wav is for
+// rip, and a .toml document goes to the sounds or the patterns by its tables,
+// replacing the document or merged into it.
+func (s *Session) loadAny(file string, replace bool) error {
+	switch strings.ToLower(filepath.Ext(file)) {
+	case ".slab":
+		return RunScriptFile(s, s.path(file))
+	case ".wav":
+		return fmt.Errorf("%s: a recording; rip <file.wav> <name> hears it", file)
+	}
+	kind, err := sniffDocument(s.path(file))
+	if err != nil {
+		return fmt.Errorf("%s: %w", file, err)
+	}
+	if kind == "sound" {
+		return s.loadSoundFile(s.path(file), replace)
+	}
+	return s.loadPatternFile(s.path(file), replace)
+}
+
+// sniffDocument says which document a TOML file is by its tables: patterns and
+// songs make a pattern document, sounds, voices and includes a sound document
+func sniffDocument(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var head struct {
+		Pattern []map[string]any `toml:"pattern"`
+		Song    []map[string]any `toml:"song"`
+		Sound   []map[string]any `toml:"sound"`
+		Voice   []map[string]any `toml:"voice"`
+		Include []string         `toml:"include"`
+	}
+	if err := toml.Unmarshal(data, &head); err != nil {
+		return "", err
+	}
+	sounds, pats := len(head.Sound)+len(head.Voice)+len(head.Include), len(head.Pattern)+len(head.Song)
+	switch {
+	case sounds > 0 && pats > 0:
+		return "", errors.New("holds sounds and patterns both")
+	case sounds > 0:
+		return "sound", nil
+	case pats > 0:
+		return "pattern", nil
+	}
+	return "", errors.New("no [[pattern]], [[song]], [[sound]] or [[voice]] table")
 }

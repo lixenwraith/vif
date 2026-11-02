@@ -36,17 +36,17 @@ func init() {
 		"quit": {"quit", "stop the engine and exit", 0, 0,
 			func(*Session, []string) error { return ErrQuit }},
 
-		"load":     {"load sound|pattern <file>", "replace document from file (sound includes resolve within the file's dir; voices come with the sounds, songs with the patterns)", 2, 2, cmdLoad},
-		"merge":    {"merge sound|pattern <file>", "overlay file onto document by name", 2, 2, cmdMerge},
+		"load":     {"load [sound|pattern] <file>", "replace document from file (sound includes resolve within the file's dir; voices come with the sounds, songs with the patterns); the kind alone names the file, which is read by its tables, a .slab run as a script", 1, 2, cmdLoad},
+		"merge":    {"merge [sound|pattern] <file>", "overlay file onto document by name; the kind alone names the file, which is read by its tables, a .slab run as a script", 1, 2, cmdMerge},
 		"builtin":  {"builtin sound|pattern|voice", "seed document from built-ins (patterns: current registry snapshot; sound seeds the voices too)", 1, 1, cmdBuiltin},
 		"save":     {"save sound|pattern [file]", "write document; bare = provenance path (the sound document carries the voices)", 1, 2, cmdSave},
 		"write":    {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
 		"export":   {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
-		"rip":      {"rip <file.wav> <name> [bars] [nodrums]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key; nodrums leaves the drum part out", 2, 4, cmdRip},
+		"rip":      {"rip <file.wav> <name> [bars] [nodrums] [bpm <n>]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key; nodrums leaves the drum part out; bpm <n> reads it at that tempo, the bar line still decoded", 2, 6, cmdRip},
 		"render":   {"render <file.wav> [bars]", "write what the slots hold, bars (4) bars at the transport's tempo and key, to a WAV through the engine's offline render", 1, 2, cmdRender},
-		"corpus":   {"corpus <dir> [loops] [bars] [aug] [gen] [nowav]", "render loops (24) of bars (4) bars from the registered patterns into dir, each a WAV, its log-mel frames and the events that sound in it: what tool/rip-train trains the rip's model on; aug puts a room, a mix and voices of random genes behind each; gen draws beats, melodies and bass lines the bank never had; nowav keeps the frames and the labels only, which is all the trainer reads", 1, 6, cmdCorpus},
+		"corpus":   {"corpus <dir> [loops] [bars] [aug] [gen] [nowav] [tempos lo-hi|a,b,c]", "render loops (24) of bars (4) bars from the registered patterns into dir, each a WAV, its log-mel frames and the events that sound in it: what tool/rip-train trains the rip's model on; aug puts a room, a mix and voices of random genes behind each; gen draws beats, melodies and bass lines the bank never had; nowav keeps the frames and the labels only, which is all the trainer reads; tempos lo-hi or a,b,c sets the tempos the loops cycle through", 1, 8, cmdCorpus},
 		"tune":     {"tune [generations] [file]", "search rip's parameters over loops the engine renders from the registered patterns; the best write to file (the first root's audio/rip.toml) and listen from now on; 8 generations take minutes", 0, 2, cmdTune},
-		"notes":    {"notes <name>", "list the transcript of a recording ripped as <name>: each note's time, bar and step, pitch as the key's degree with any accidental, length and loudness, by line, after the tuning and the first bar", 1, 1, cmdNotes},
+		"notes":    {"notes <name>", "list the transcript of a recording ripped as <name>: each note's time, bar and step, pitch as the key's degree with any accidental, length, loudness and support (how much of the recording's salience over its frames is its pitch's; a low one is a note to doubt), by line, after the tuning and the first bar", 1, 1, cmdNotes},
 		"fit":      {"fit <name> [generations]", "fit the voices of a recording ripped as <name> again, over generations (12) of candidates the engine plays at its notes; they replace <name>_melody_voice and <name>_bass_voice", 1, 2, cmdFit},
 		"compress": {"compress <name> [percent]", "match the bars of a recording ripped as <name> to as few one-bar patterns as a difference of percent (5) allows: the dictionary <name>_<part>_a..., and the song <name> that plays them in order, rendered and ripped back for a score", 1, 2, cmdCompress},
 		"refine":   {"refine <name> [rounds]", "close the loop over a song compress made of a recording ripped as <name>: each round (3) fits the voices again and sweeps the tonal steps, each tried a semitone and an octave either way, the recording's strongest pitch there, a step earlier or later, longer or shorter, and silent, then a step a line leaves empty tries that pitch; every move kept when the song sounds more like the recording; minutes a round", 1, 2, cmdRefine},
@@ -73,7 +73,7 @@ func init() {
 		"apply":    {"apply [name|all]", "register into the engine; bare/all = dirty entries only", 0, 1, cmdApply},
 		"revert":   {"revert [name|all]", "restore from registry; bare/all = dirty entries only", 0, 1, cmdRevert},
 
-		"play": {"play <name> [vol]", "audition document state (canonical take); falls back to registry", 1, 2, cmdPlay},
+		"play": {"play <name|file.wav> [vol]", "audition document state (canonical take), falling back to the registry; a .wav file plays as it is", 1, 2, cmdPlay},
 		"hit":  {"hit kick|snare|hihat|clap [vol]", "audition a drum", 1, 2, cmdHit},
 		"note": {"note <midi> [vel] [steps] [voice]", "tonal audition via the melody slot (needs music running); a dirty voice auto-applies", 1, 4, cmdNote},
 		"slot": {"slot <0|1|2|3> <pattern|-> [fade_ms] [q]", "assign a pattern (0 rhythm, 1 melody, 2 fill, 3 bass); dirty patterns auto-apply; - = silence", 2, 4, cmdSlot},
@@ -93,6 +93,12 @@ func init() {
 // cmdRun runs a script in the session in hand, as -s does from the start, so a
 // recipe of verbs is one word in the REPL or the TUI's command line
 func cmdRun(s *Session, a []string) error {
+	switch strings.ToLower(filepath.Ext(a[0])) {
+	case ".toml":
+		return fmt.Errorf("%s: a document; load or merge it", a[0])
+	case ".wav":
+		return fmt.Errorf("%s: a recording; rip <file.wav> <name> hears it", a[0])
+	}
 	return RunScriptFile(s, s.path(a[0]))
 }
 

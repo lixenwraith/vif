@@ -1,0 +1,42 @@
+# Voices for plucked and struck instruments: the shipped piano is modal; these
+# add a nylon string, a steel one and a plucked bass, so a corpus leans toward
+# guitars and keys. Edit or add with soundlab's `new voice` and `set`.
+
+[[voice]]
+name = "nylon"
+desc = "a nylon string: dull, dying in a second"
+wave = "string"
+bright = 0.25
+ring = 1.1
+cutoff = 2200
+q = 0.4
+attack = 0.002
+sustain = 1
+release = 0.12
+level = 0.8
+
+[[voice]]
+name = "steel"
+desc = "a steel string: wiry, ringing longer"
+wave = "string"
+bright = 0.7
+ring = 1.8
+cutoff = 4000
+q = 0.4
+attack = 0.002
+sustain = 1
+release = 0.15
+level = 0.75
+
+[[voice]]
+name = "plucked_bass"
+desc = "a plucked bass string, short and round"
+wave = "string"
+bright = 0.3
+ring = 0.6
+cutoff = 700
+q = 0.5
+attack = 0.003
+sustain = 1
+release = 0.1
+level = 0.9

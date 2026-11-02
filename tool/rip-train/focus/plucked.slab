@@ -1,0 +1,6 @@
+# Focus: plucked and struck instruments. Run before corpus
+# (pipeline.sh FOCUS=tool/rip-train/focus/plucked.slab).
+merge sound plucked.toml
+apply nylon
+apply steel
+apply plucked_bass
