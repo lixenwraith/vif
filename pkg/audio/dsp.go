@@ -111,6 +111,9 @@ func lowerBound(s []float64, v float64) int {
 // resample converts x from one rate to another by linear interpolation, through
 // a windowed-sinc low-pass first when the rate falls, so the top of the band does
 // not fold into it.
+// Resample is x at rate to from rate from, as the rip reads a recording
+func Resample(x []float64, from, to int) []float64 { return resample(x, from, to) }
+
 func resample(x []float64, from, to int) []float64 {
 	if from == to {
 		return x

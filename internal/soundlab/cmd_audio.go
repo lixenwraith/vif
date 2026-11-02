@@ -5,6 +5,8 @@ package soundlab
 import (
 	"cmp"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,10 +16,6 @@ import (
 )
 
 func cmdPlay(s *Session, a []string) error {
-	d, ok := s.resolveSoundDef(a[0])
-	if !ok {
-		return fmt.Errorf("%q: no such sound in document or registry", a[0])
-	}
 	vol := 1.0
 	if len(a) > 1 {
 		v, err := strconv.ParseFloat(a[1], 64)
@@ -25,6 +23,27 @@ func cmdPlay(s *Session, a []string) error {
 			return fmt.Errorf("vol %q: not a float", a[1])
 		}
 		vol = v
+	}
+	if strings.EqualFold(filepath.Ext(a[0]), ".wav") { // a recording, played as it is
+		f, err := os.Open(s.path(a[0]))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		x, rate, err := audio.ReadWAV(f)
+		if err != nil {
+			return err
+		}
+		buf := audio.Resample(x, rate, audio.AudioSampleRate)
+		if !s.eng.PlayBuffer(buf, vol) {
+			return fmt.Errorf("play %s: dropped (silent mode, muted, paused, or queue full)", a[0])
+		}
+		fmt.Fprintf(s.out, "playing %s (%.1fs)\n", a[0], float64(len(buf))/audio.AudioSampleRate)
+		return nil
+	}
+	d, ok := s.resolveSoundDef(a[0])
+	if !ok {
+		return fmt.Errorf("%q: no such sound in document or registry", a[0])
 	}
 	// RenderPreview is the per-keystroke path: one canonical take, validated
 	// first, so an in-editor mutation that would produce non-finite samples

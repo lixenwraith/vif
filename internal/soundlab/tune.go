@@ -31,7 +31,8 @@ type tuneOptions struct {
 	loops, bars, generations, pool int
 	seed                           uint64
 	aug, gen                       bool
-	nowav                          bool // an export keeps the frames and the labels only
+	nowav                          bool  // an export keeps the frames and the labels only
+	tempos                         []int // the tempos the loops cycle through; tuneTempos when nil
 }
 
 // tuneLoop is one rendered loop, what made it, the rip a perfect listener makes
@@ -102,7 +103,11 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 				slots[slot] = pool[rng.IntN(len(pool))]
 			}
 		}
-		bpm := tuneTempos[i%len(tuneTempos)]
+		tempos := tuneTempos
+		if len(o.tempos) > 0 {
+			tempos = o.tempos
+		}
+		bpm := tempos[i%len(tempos)]
 		root := audio.DefaultRootNote + rng.IntN(12) - 6
 		scale := audio.ScaleID(rng.IntN(int(audio.ScaleCount)))
 		// the augmentation and the generated parts draw from streams of their
@@ -393,16 +398,27 @@ type corpusManifest struct {
 
 func cmdCorpus(s *Session, a []string) error {
 	o := tuneOptions{loops: 24, bars: 4, seed: 1}
-	for n := len(a); n > 1 && (a[n-1] == "aug" || a[n-1] == "gen" || a[n-1] == "nowav"); n = len(a) {
-		switch a[n-1] {
-		case "aug":
+	for more := true; more && len(a) > 1; {
+		n := len(a)
+		switch {
+		case a[n-1] == "aug":
 			o.aug = true
-		case "gen":
+		case a[n-1] == "gen":
 			o.gen = true
-		default:
+		case a[n-1] == "nowav":
 			o.nowav = true
+		case n > 2 && a[n-2] == "tempos":
+			tempos, err := parseTempos(a[n-1])
+			if err != nil {
+				return err
+			}
+			o.tempos = tempos
+			a = a[:n-1]
+		default:
+			more = false
+			continue
 		}
-		a = a[:n-1]
+		a = a[:len(a)-1]
 	}
 	for i, p := range []*int{&o.loops, &o.bars} {
 		limit := 65536
@@ -418,6 +434,36 @@ func cmdCorpus(s *Session, a []string) error {
 		}
 	}
 	return s.exportCorpus(s.path(a[0]), o)
+}
+
+// parseTempos reads a range lo-hi, six tempos spread over it, or a list a,b,c,
+// each within the sequencer's range: the tempos a corpus cycles through.
+func parseTempos(arg string) ([]int, error) {
+	var tempos []int
+	if lo, hi, ok := strings.Cut(arg, "-"); ok {
+		a, err1 := strconv.Atoi(lo)
+		b, err2 := strconv.Atoi(hi)
+		if err1 != nil || err2 != nil || a > b {
+			return nil, fmt.Errorf("tempos %q: want lo-hi or a,b,c", arg)
+		}
+		for i := range 6 {
+			tempos = append(tempos, a+(b-a)*i/5)
+		}
+	} else {
+		for _, f := range strings.Split(arg, ",") {
+			n, err := strconv.Atoi(f)
+			if err != nil {
+				return nil, fmt.Errorf("tempos %q: want lo-hi or a,b,c", arg)
+			}
+			tempos = append(tempos, n)
+		}
+	}
+	for _, t := range tempos {
+		if t < audio.MinBPM || t > audio.MaxBPM {
+			return nil, fmt.Errorf("tempos %q: %d outside %d to %d", arg, t, audio.MinBPM, audio.MaxBPM)
+		}
+	}
+	return tempos, nil
 }
 
 // exportCorpus writes loops into dir: loop_NNN.wav as rendered, loop_NNN.mel as

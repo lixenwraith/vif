@@ -430,7 +430,11 @@ bass line as steps of the sixteenth grid (`Rip`). `Patterns` writes them as
 patterns of up to four bars, named `<name>_beat_<n>`, `<name>_melody_<n>` and
 `<name>_bass_<n>` in a group of their own and no tier; soundlab's `rip` adds
 them to the document, dirty, and sets the transport's tempo and key, so a slot
-plays the estimate at once. `ReadWAV` reads the file, any PCM or float width.
+plays the estimate at once. `ReadWAV` reads the file, any PCM or float width. A `Ripper` with a `Grid` pins
+the tempo and the downbeat, as a render's are known; a grid with a negative
+downbeat pins the tempo alone, the beats tracked at it and the bar line decoded,
+for a recording whose tempo the listener knows or wants on another metrical
+level (soundlab's `rip ... bpm <n>`).
 
 The analysis runs at 22.05 kHz over 93 ms frames every 11.6 ms, each split into
 a harmonic and a percussive part by the medians across time and across frequency

@@ -895,6 +895,8 @@ func TestRipMakesPatternsOfARecording(t *testing.T) {
 ! rip %s loop                        # not a recording
 rip %s loop
 ! rip %s loop                        # the names are taken
+rip %s fast 2 bpm 180 nodrums
+! rip %s slow 2 bpm 10
 rip %s quiet 4 nodrums
 ls pattern loop*
 ! notes nothing
@@ -902,9 +904,13 @@ notes loop
 compress quiet 5
 song quiet score
 validate all
-`, filepath.Join(t.TempDir(), "missing.wav"), wav, wav, wav))
-	if !strings.Contains(out.String(), "note(s) at") || !strings.Contains(out.String(), "bar 1 step") {
-		t.Errorf("notes listed no transcript:\n%s", out.String())
+`, filepath.Join(t.TempDir(), "missing.wav"), wav, wav, wav, wav, wav))
+	if !strings.Contains(out.String(), "note(s) at") || !strings.Contains(out.String(), "bar 1 step") || !strings.Contains(out.String(), "support 0.") {
+		t.Errorf("notes listed no transcript with support:\n%s", out.String())
+	}
+	// bpm <n> reads the recording at that tempo, the bar line decoded
+	if fast := s.rips["fast"]; fast == nil || fast.rip.BPM != 180 {
+		t.Errorf("rip at 180 bpm: %+v", fast)
 	}
 	// a rip without a kit is compared without one, so the render's attacks
 	// cannot grade the song on drums it has none of; score prints both grades
@@ -1159,6 +1165,20 @@ func TestFilesOverlayLoadsRipsAndSavesHere(t *testing.T) {
 	if a.files.open || !s.pats.has("from_file") || a.kind != kindPattern {
 		t.Fatalf("enter on a pattern document: open %v, loaded %v, tab %d", a.files.open, s.pats.has("from_file"), a.kind)
 	}
+	// enter on a script runs it behind the screen
+	if err := os.WriteFile(filepath.Join(dir, "make.slab"), []byte("new pattern from_script_file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	key(terminal.KeyCtrlO, 0)
+	a.files.cur = slices.Index(names(), "make.slab")
+	key(terminal.KeyEnter, 0)
+	for deadline := time.Now().Add(20 * time.Second); a.busy != "" && time.Now().Before(deadline); {
+		time.Sleep(20 * time.Millisecond)
+		key(terminal.KeyNone, 0)
+	}
+	if a.files.open || !s.pats.has("from_script_file") {
+		t.Fatalf("enter on a script: open %v, ran %v", a.files.open, s.pats.has("from_script_file"))
+	}
 	key(terminal.KeyCtrlO, 0)
 	a.files.cur = slices.Index(names(), "loop.wav")
 	key(terminal.KeyEnter, 0)
@@ -1249,8 +1269,19 @@ func TestCorpusAugmentsAndLabelsTheVoices(t *testing.T) {
 	if tuned == 0 || s.eng.Tuning() != 0 {
 		t.Errorf("%d loop(s) tuned off A440, the engine left at %+.0f", tuned, s.eng.Tuning())
 	}
+	// the tempos the loops cycle through are the verb's to set
+	if tempos, err := parseTempos("90-100"); err != nil || len(tempos) != 6 || tempos[0] != 90 || tempos[5] != 100 {
+		t.Errorf("tempos 90-100: %v %v", tempos, err)
+	}
+	if _, err := parseTempos("40,100"); err == nil {
+		t.Error("a tempo under the sequencer's range was accepted")
+	}
+	slow, err := s.corpus(tuneOptions{loops: 2, bars: 1, seed: 3, tempos: []int{80}})
+	if err != nil || len(slow) != 2 || slow[0].bpm != 80 || slow[1].bpm != 80 {
+		t.Errorf("a corpus at 80 bpm: %v, %d loop(s)", err, len(slow))
+	}
 	dir := t.TempDir()
-	runOrFatal(t, s, &out, "corpus "+dir+" 1 1 aug\n")
+	runOrFatal(t, s, &out, "corpus "+dir+" 1 1 aug tempos 100,120\n")
 	data, err := os.ReadFile(filepath.Join(dir, "loop_000.json"))
 	if err != nil || !strings.Contains(string(data), "\"voice\":[") || !strings.Contains(string(data), "\"tuning\":") {
 		t.Errorf("the labels carry no voice genes or tuning: %v\n%s", err, data)
@@ -1378,5 +1409,34 @@ func TestCorpusGeneratesPartsTheBankNeverHad(t *testing.T) {
 	runOrFatal(t, s, &out, "corpus "+t.TempDir()+" 1 1 gen aug\n")
 	if !strings.Contains(out.String(), "generated beats") {
 		t.Errorf("corpus did not say it generated:\n%s", out.String())
+	}
+}
+
+// TestLoadTellsAFileByWhatItIs: load and merge take a file alone and read it
+// by its tables, run a .slab, and send a .wav to rip; run refuses a document
+// with the same hint; play plays a .wav as it is.
+func TestLoadTellsAFileByWhatItIs(t *testing.T) {
+	dir := t.TempDir()
+	pat := filepath.Join(dir, "pats.toml")
+	os.WriteFile(pat, []byte("[[pattern]]\nname = \"by_tables\"\nsteps = 16\n[[pattern.track]]\ninstr = \"kick\"\nevent = [{ pos = 0, vel = 1.0 }]\n"), 0o644)
+	slab := filepath.Join(dir, "make.slab")
+	os.WriteFile(slab, []byte("new pattern by_script\n"), 0o644)
+	wav := filepath.Join(dir, "clip.wav")
+	writeWAV(t, wav, thumpLoop())
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "load "+pat+"\nmerge "+slab+"\n! load "+wav+"\n! run "+pat+"\nplay "+wav+" 0.5\n")
+	if !s.pats.has("by_tables") || !s.pats.has("by_script") {
+		t.Errorf("by tables %v, by script %v:\n%s", s.pats.has("by_tables"), s.pats.has("by_script"), out.String())
+	}
+	if err := Execute(s, "load "+wav); err == nil || !strings.Contains(err.Error(), "rip <file.wav>") {
+		t.Errorf("load of a recording: %v", err)
+	}
+	if err := Execute(s, "run "+pat); err == nil || !strings.Contains(err.Error(), "load or merge") {
+		t.Errorf("run of a document: %v", err)
+	}
+	if !strings.Contains(out.String(), "playing "+wav) {
+		t.Errorf("play of a recording:\n%s", out.String())
 	}
 }

@@ -54,7 +54,7 @@ load pattern bite_patterns.toml        # the patterns and the song that name the
 song bite play                         # or: song bite out.wav
 ```
 
-Put either in a `.slab` file and `run` it. Without the voices the tracks fall back to the shipped lead and bass. In the TUI, `^O` opens the files overlay: `Enter` on a `.toml` loads it, on a `.wav` rips it, and `s` saves into the directory shown.
+Put either in a `.slab` file and `run` it. Without the voices the tracks fall back to the shipped lead and bass. In the TUI, `^O` opens the files overlay: `Enter` on a `.toml` loads it, on a `.slab` runs it behind the screen, on a `.wav` rips it, and `s` saves into the directory shown.
 
 ### CLI Flags
 - `-tui`, `-T`: Full-screen Terminal User Interface. Empty documents are seeded from the built-ins; the REPL and scripts leave that to `builtin`.
@@ -83,12 +83,12 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 
 | Command | Usage | Description |
 |---|---|---|
-| `load`/`merge` | `load sound\|pattern <file>` | Replace the document from a file, or overlay a file onto it by name; voices come with the sounds, songs with the patterns. Quote a path with a space. |
+| `load`/`merge` | `load [sound\|pattern] <file>`, `merge [sound\|pattern] <file>` | Replace the document from a file, or overlay a file onto it by name; voices come with the sounds, songs with the patterns. Quote a path with a space. The kind alone names the file, which is read by its tables; a `.slab` runs as a script, a `.wav` is sent to `rip`. |
 | `builtin` | `builtin sound\|pattern\|voice` | Seed the document from the built-ins; `sound` seeds the voices too. |
 | `save`/`write` | `save sound\|pattern [file]` | Write the document (bare = provenance path); `write <name> <file>` saves one entry. |
 | `export` | `export <name> <out.wav> [variant]` | Render definition into a PCM WAV. |
-| `rip` | `rip <file.wav> <name> [bars] [nodrums]` | Hear a recording's beat, melody and bass as patterns of up to `bars` (4) bars each, named `<name>_beat_1`..., take its tempo and key, and fit a voice to each register the front end heard none for; `nodrums` leaves the drum part out. The recording's tuning is read first, and a phrase before the first bar line gets a pickup bar. |
-| `notes` | `notes <name>` | List the transcript of a recording ripped as `<name>`: each note's time, bar and step, pitch as the key's degree with any accidental, length and loudness, by line, after the tuning and where the first bar falls. |
+| `rip` | `rip <file.wav> <name> [bars] [nodrums] [bpm <n>]` | Hear a recording's beat, melody and bass as patterns of up to `bars` (4) bars each, named `<name>_beat_1`..., take its tempo and key, and fit a voice to each register the front end heard none for; `nodrums` leaves the drum part out. The recording's tuning is read first, and a phrase before the first bar line gets a pickup bar; `bpm <n>` reads it at that tempo, the bar line still decoded, for a recording whose tempo is known or wanted on another metrical level. |
+| `notes` | `notes <name>` | List the transcript of a recording ripped as `<name>`: each note's time, bar and step, pitch as the key's degree with any accidental, length, loudness and support (how much of the recording's salience over its frames is its pitch's; a low one is a note to doubt), by line, after the tuning and where the first bar falls. |
 | `fit` | `fit <name> [generations]` | Fit the voices of a recording ripped as `<name>` again, over `generations` (12) of candidates the engine plays at its notes; they replace `<name>_melody_voice` and `<name>_bass_voice`. |
 | `compress` | `compress <name> [percent]` | Match the bars of a recording ripped as `<name>` to as few one-bar patterns as a difference of `percent` (5) allows: the dictionary `<name>_<part>_a`..., and the song `<name>` that plays them in order, rendered and ripped back for a score. |
 | `song` | `song <name> [file.wav\|play\|score]` | Show a song's bars; render it to a WAV; play it through the sequencer, the slots changed at the bar lines (`music stop` ends it); or score it: how it sounds against the recording ripped as `<name>` (pitch, timbre, onsets) and how it rips back. |
@@ -96,7 +96,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 | `bench` | `bench [loops] [bars]` | Grade the analysis, and the model when one loaded, on fresh loops (8) of `bars` (4) bars with generated parts among the bank's, clean and augmented: the mean score of each rip against the loop's expected rip. |
 | `run` | `run <file.slab>` | Run a script's lines in this session, strict as `-s`: a failing line stops it with its number; `quit` in it ends the script alone. |
 | `render` | `render <file.wav> [bars]` | Write what the slots hold, `bars` (4) bars at the transport's tempo and key, to a WAV through the engine's offline render: a rip's estimate heard without a device. |
-| `corpus` | `corpus <dir> [loops] [bars] [aug] [gen] [nowav]` | Render `loops` (24) of `bars` (4) bars from the registered patterns into `dir`, each a WAV, its log-mel frames and the events that sound in it: what `tool/rip-train` trains the rip's model on; `aug` puts a room, a mix and voices of random genes behind each, drives a third of them into a soft clip and renders each off A440 by up to a quarter tone, `gen` draws beats, melodies and bass lines the bank never had, `nowav` keeps the frames and labels only. |
+| `corpus` | `corpus <dir> [loops] [bars] [aug] [gen] [nowav] [tempos lo-hi\|a,b,c]` | Render `loops` (24) of `bars` (4) bars from the registered patterns into `dir`, each a WAV, its log-mel frames and the events that sound in it: what `tool/rip-train` trains the rip's model on; `aug` puts a room, a mix and voices of random genes behind each, drives a third of them into a soft clip and renders each off A440 by up to a quarter tone, `gen` draws beats, melodies and bass lines the bank never had, `nowav` keeps the frames and labels only, `tempos` sets the tempos the loops cycle through (`tool/rip-train/README.md` is the training guide). |
 | `tune` | `tune [generations] [file]` | Search `rip`'s parameters over loops the engine renders from the registered patterns; a set that beats the current one is written (default the first root's `audio/rip.toml`) and listened with from then on. Eight generations take minutes. |
 | `ls`/`show` | `ls sound\|pattern\|voice\|song [glob]`, `show <name>[.path]` | List entries (`*` marks dirty); dump TOML shape, or print leaf value. |
 | `where`/`stat` | `stat` | Transport position and slot patterns, a muted slot marked; backend, play stats, dirty entries. |
@@ -106,7 +106,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
 | `set`/`unset` | `set <name.path> <val>` | Mutate a leaf field via reflection, or reset it to its zero value. |
 | `add` | `add <name.path>` | Append a zero-element to a slice field. |
 | `validate`/`apply`/`revert` | `apply [name\|all]` | Run domain validations, push into the live registry, or restore from it; bare or `all` = every entry for `validate`, dirty entries for `apply`/`revert`. |
-| `play`/`hit`/`note` | `play <name> [vol]`, `note <midi> [vel] [steps] [voice]` | Audition. `hit` plays a drum; `note` runs a voice through the melodic sequencer slot, applying it first when it is dirty. |
+| `play`/`hit`/`note` | `play <name\|file.wav> [vol]`, `note <midi> [vel] [steps] [voice]` | Audition. `hit` plays a drum; `note` runs a voice through the melodic sequencer slot, applying it first when it is dirty. `play` of a `.wav` plays the recording as it is. |
 | `slot` | `slot <0\|1\|2\|3> <pat\|-> [fade_ms] [q]` | Transport assignment; dirty patterns auto-apply. |
 | `music`/`bpm`/`swing`/`fill`/`key`/`tuning` | `music start\|stop\|reset` | Transport, tempo, shuffle, slot-2 auto-fill, harmony.; `tuning [cents]` shows or sets the cents the transport plays off A440, within a semitone: a rip sets the recording's, a song its own when played. |
 | `mute`/`vol`/`wait` | `mute music\|sfx\|all\|none`, `mute slot <0-3> on\|off` | Channel mute, or one slot's while its pattern plays on in time; sfx volume (music keeps its level); scripted pause. |

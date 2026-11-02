@@ -149,6 +149,11 @@ offline (`song <name> <file.wav>`).
   alone repeats its few melodies and a model trained on it learns them, not
   pitch. Both draw from streams of their own, so a loop's bank patterns and key
   are the same with and without them.
+- **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
+  bench and the install with every knob an environment variable, and a focus
+  script run before the corpus turns a run toward a kind of music (`focus/`:
+  vocals as lines, plucked instruments); `tool/rip-train/README.md` is the
+  guide.
 - **Model.** `ripnet.Spec`: eighty bands in, width 128, four heads, four layers,
   feed-forward 512, a window of 64 frames either side, about 800 thousand
   weights; heads for the onset, the three drums, the sixty-nine pitches, voicing,
@@ -437,6 +442,19 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   some misses and extras, where none of the earlier renders would have been
   identified as it; the origin is the primary sample from here, and the
   intro, shifted and stretched from it, a degraded second witness.
+
+- The tenth pass, the recording's own pitch among the sweep's moves: the
+  origin recording, judged by the user as the first render whose melody is
+  the piece's, with wrong notes here and there and some misses and extras.
+  Four rounds of the sweep as it was converge after three at 0.81, so more
+  rounds were not the lever. With the recording's strongest pitch over a step
+  tried on a step's note and inserted where a line leaves a step empty, the
+  first sweep moves 70 steps and adds 77 for 0.84 (from 0.75 after the
+  voices), the second round reaches 0.87 (pitch 0.91, timbre 0.87, onset
+  0.84), ripping back at 0.89: a note the rip missed had no other way in. The
+  same recipe with one melody line, the second pass off, reaches 0.84 (0.89,
+  0.83, 0.80), so the numbers keep the second line and the ear decides. The
+  intro is left at the ninth pass's 0.85; the origin is the sample now.
 
 ## 9. Decisions
 

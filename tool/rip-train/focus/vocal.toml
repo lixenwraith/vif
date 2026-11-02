@@ -1,0 +1,36 @@
+# Voices a corpus draws from when the music has vocals: a voice is a line like
+# any other to the rip, pitch and onsets per frame, never words. The engine has
+# no vibrato or formant stage yet, so these are the nearest its oscillators
+# come: a soft, slightly chorused saw through a low cutoff for a sung line, a
+# wider one for a choir pad, kept beside the shipped lead and bass. Edit, add,
+# or make your own with soundlab's `new voice` and `set`, then `apply`.
+
+[[voice]]
+name = "vocal"
+desc = "a sung line: a soft chorused saw under a low cutoff, slow to speak, held"
+wave = "saw"
+unison = 2
+detune = 1.004
+cutoff = 1400
+key_track = 4
+q = 0.4
+attack = 0.03
+decay = 0.2
+sustain = 0.85
+release = 0.15
+level = 0.7
+
+[[voice]]
+name = "choir"
+desc = "voices in unison: a wide chorused saw, slower still, as a pad behind a lead"
+wave = "saw"
+unison = 3
+detune = 1.007
+cutoff = 1100
+key_track = 3
+q = 0.3
+attack = 0.08
+decay = 0.3
+sustain = 0.9
+release = 0.3
+level = 0.6

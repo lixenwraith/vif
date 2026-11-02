@@ -1,0 +1,7 @@
+# Focus: music with vocals. Run before corpus (pipeline.sh FOCUS=tool/rip-train/focus/vocal.slab):
+# the voices load beside the shipped bank and the loops draw from all of them,
+# the generated melodies on any tonal instrument, these two among them. A vocal
+# is a line to the rip, never words.
+merge sound vocal.toml
+apply vocal
+apply choir

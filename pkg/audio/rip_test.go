@@ -84,6 +84,19 @@ func TestRipHearsTheLoop(t *testing.T) {
 	if ps := CompareRips(pinned, want); pinned.BPM != bpm || pinned.Downbeat != 0 || len(pinned.Bars) != bars || ps.Total < score.Total-0.01 {
 		t.Errorf("pinned: bpm %d downbeat %.2f bars %d score %+v", pinned.BPM, pinned.Downbeat, len(pinned.Bars), ps)
 	}
+	// the tempo alone pinned: the beats tracked at it and the bar line decoded,
+	// so the loop reads as it does free; at another tempo it reads on that grid
+	tempoed, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm, Downbeat: -1}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: 100, Downbeat: -1}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ts := CompareRips(tempoed, want); tempoed.BPM != bpm || ts.Total < score.Total-0.05 || other.BPM != 100 || len(other.Bars) < bars*100/bpm-1 || len(other.Bars) > bars*100/bpm+1 {
+		t.Errorf("tempo pinned: bpm %d score %+v; at 100: bpm %d bars %d", tempoed.BPM, ts, other.BPM, len(other.Bars))
+	}
 	if score.Tempo < 1 || score.Bars < 0.85 || score.Drums < 0.9 || score.Melody < 0.8 || score.Bass < 0.8 {
 		t.Errorf("score %+v", score)
 	}

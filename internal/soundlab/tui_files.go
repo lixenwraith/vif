@@ -8,7 +8,6 @@ package soundlab
 // a space quoted.
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +17,6 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/toml"
 )
 
 // fileRow is one entry of the files overlay
@@ -177,8 +175,12 @@ func (a *tuiApp) filesEnter(merge bool) {
 			a.kind = kindSound
 		}
 		a.brCursor[a.kind] = 0
+	case ".slab":
+		if a.exec("run "+quotePath(path)) == nil { // runs behind the screen; its loads land in the browser
+			a.files.open = false
+		}
 	default:
-		fmt.Fprintf(a.log, "%s: not a .toml document or a .wav recording\n", row.name)
+		fmt.Fprintf(a.log, "%s: not a .toml document, a .wav recording or a .slab script\n", row.name)
 	}
 }
 
@@ -232,35 +234,6 @@ func quotePath(p string) string {
 		return `"` + p + `"`
 	}
 	return p
-}
-
-// sniffDocument says which document a TOML file is by its tables: patterns and
-// songs make a pattern document, sounds, voices and includes a sound document
-func sniffDocument(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	var head struct {
-		Pattern []map[string]any `toml:"pattern"`
-		Song    []map[string]any `toml:"song"`
-		Sound   []map[string]any `toml:"sound"`
-		Voice   []map[string]any `toml:"voice"`
-		Include []string         `toml:"include"`
-	}
-	if err := toml.Unmarshal(data, &head); err != nil {
-		return "", err
-	}
-	sounds, pats := len(head.Sound)+len(head.Voice)+len(head.Include), len(head.Pattern)+len(head.Song)
-	switch {
-	case sounds > 0 && pats > 0:
-		return "", errors.New("holds sounds and patterns both")
-	case sounds > 0:
-		return "sound", nil
-	case pats > 0:
-		return "pattern", nil
-	}
-	return "", errors.New("no [[pattern]], [[song]], [[sound]] or [[voice]] table")
 }
 
 // renderFiles lays the directory over the panes: a row an entry, directories
