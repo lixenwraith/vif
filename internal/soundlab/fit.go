@@ -87,13 +87,14 @@ func cmdNotes(s *Session, a []string) error {
 			return fmt.Errorf("%s: want a .mid file", a[1])
 		}
 		var b bytes.Buffer
-		if err := audio.WriteMIDI(&b, r.Notes, r.BPM); err != nil {
+		hits := r.Hits()
+		if err := audio.WriteMIDI(&b, r.Notes, hits, r.BPM); err != nil {
 			return err
 		}
 		if err := os.WriteFile(s.path(a[1]), b.Bytes(), 0o644); err != nil {
 			return err
 		}
-		fmt.Fprintf(s.out, "%s: %d note(s) at %d bpm written to %s, a track each for melody, under and bass\n", a[0], len(r.Notes), r.BPM, a[1])
+		fmt.Fprintf(s.out, "%s: %d note(s) and %d hit(s) at %d bpm written to %s, a track each for melody, under, bass and drums\n", a[0], len(r.Notes), len(hits), r.BPM, a[1])
 		return nil
 	}
 	snd, err := s.soundOf(rp)

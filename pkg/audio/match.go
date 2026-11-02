@@ -286,6 +286,102 @@ func cmpFloat(a, b float64) int {
 	return 0
 }
 
+// HitsAgreement is how two drum parts of one piece agree, drum by drum, under
+// the map that matches most: a's time of a hit ≈ Stretch*b's + Offset
+type HitsAgreement struct {
+	Drums           [InstrClap]HitLine
+	Stretch, Offset float64
+}
+
+// HitLine is one drum's count: the hits each side has, how many align, and the
+// hits only one side has, b's at their place on a's time
+type HitLine struct {
+	A, B, Matched int
+	OnlyA, OnlyB  []RipHit
+}
+
+// MatchHits aligns b's hits to a's drum by drum under the stretch within a
+// tenth of one, and the offset putting one of b's first hits on one of a's, that
+// match most, nearer to none when two tie: each hit of b takes the nearest
+// unmatched hit of a's drum within tol of it, in time order
+func MatchHits(a, b []RipHit, tol float64) HitsAgreement {
+	var la, lb [InstrClap][]RipHit
+	for _, h := range a {
+		if h.Drum >= 0 && h.Drum < InstrClap {
+			la[h.Drum] = append(la[h.Drum], h)
+		}
+	}
+	for _, h := range b {
+		if h.Drum >= 0 && h.Drum < InstrClap {
+			lb[h.Drum] = append(lb[h.Drum], h)
+		}
+	}
+	byStart := func(x, y RipHit) int { return cmpFloat(x.Start, y.Start) }
+	for d := range la {
+		slices.SortStableFunc(la[d], byStart)
+		slices.SortStableFunc(lb[d], byStart)
+	}
+	best, bestStretch, bestOffset, bestAway := -1, 1.0, 0.0, math.Inf(1)
+	for stretch := 0.9; stretch <= 1.1001; stretch += 0.005 {
+		seen := map[int64]bool{}
+		for _, h := range b[:min(len(b), 4)] {
+			for _, g := range a {
+				offset := g.Start - stretch*h.Start
+				if g.Drum != h.Drum || seen[int64(math.Round(offset*200))] {
+					continue
+				}
+				seen[int64(math.Round(offset*200))] = true
+				n := 0
+				for d := range la {
+					n += pairHits(la[d], lb[d], stretch, offset, tol, nil)
+				}
+				away := math.Abs(stretch-1)*10 + math.Abs(offset)
+				if n > best || n == best && away < bestAway {
+					best, bestStretch, bestOffset, bestAway = n, stretch, offset, away
+				}
+			}
+		}
+	}
+	ag := HitsAgreement{Stretch: bestStretch, Offset: bestOffset}
+	for d := range la {
+		pairHits(la[d], lb[d], bestStretch, bestOffset, tol, &ag.Drums[d])
+	}
+	return ag
+}
+
+// pairHits counts the hits of b, mapped onto a's time, that take one of a's,
+// and fills line when it is given
+func pairHits(a, b []RipHit, stretch, offset, tol float64, line *HitLine) int {
+	used := make([]bool, len(a))
+	n, i := 0, 0
+	for _, h := range b {
+		h.Start = h.Start*stretch + offset
+		for i < len(a) && a[i].Start < h.Start-tol {
+			i++
+		}
+		k := -1
+		for j := i; j < len(a) && a[j].Start <= h.Start+tol; j++ {
+			if !used[j] && (k < 0 || math.Abs(a[j].Start-h.Start) < math.Abs(a[k].Start-h.Start)) {
+				k = j
+			}
+		}
+		if k >= 0 {
+			used[k], n = true, n+1
+		} else if line != nil {
+			line.OnlyB = append(line.OnlyB, h)
+		}
+	}
+	if line != nil {
+		line.A, line.B, line.Matched = len(a), len(b), n
+		for j, h := range a {
+			if !used[j] {
+				line.OnlyA = append(line.OnlyA, h)
+			}
+		}
+	}
+	return n
+}
+
 // transcriptLine reads one note of a transcript as the notes verb prints it, or
 // in short: the line, the start in seconds, then anywhere after, the pitch as a
 // note name and a length in seconds or in steps
