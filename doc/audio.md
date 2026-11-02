@@ -490,8 +490,15 @@ each line's notes aligned in order under the transposition that matches most,
 and a transcript against notes given as text in the `notes` verb's own form
 (`ParseTranscript`, soundlab's `truth`), which a listener corrects by hand, or
 as a rhythm tapped out without pitches (`unit eighth`, `start 0.34s`, `melody
-(1-2-3---4-56---)x3 ...`), matched by when the notes start: the ground truth the
-numbers above lack. The song a rip
+(1-2-3---4-56---)x3 ...`), matched by when the notes start, or as a Standard MIDI
+File (`ReadMIDI`, `truth <name> <file.mid>`): the ground truth the numbers above
+lack. `ReadMIDI` reads type 0 or 1 under its tempo map; a track named melody,
+under or bass is that line, and of the other parts (a track's notes on one
+channel) the lowest is the bass when its notes centre under E3, kept whole as
+the bass decoder settles a line that climbs over it, the rest the melody then
+the under in file order, the drum channel and any further part left out.
+`WriteMIDI` writes a transcript the other way, a track a line at the rip's
+tempo (`notes <name> <file.mid>`), to correct in a sequencer. The song a rip
 compresses into carries the recording's tuning (`SongDef.Tuning`), and the
 engine plays or renders it there (`AudioEngine.SetTuning`), as the voice fit
 renders its candidate notes there (`RenderNoteAt`), so a render stands beside
@@ -601,7 +608,8 @@ events and keep the sequencer unaware of gameplay concepts.
 
 - The package's own README, the module's at the spin-off: `pkg/audio/README.md`
 - Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
-- Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`; its learned front
+- Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`; its transcripts
+  compared and read or written: `match.go`, `midi.go`; its learned front
   end `pkg/audio/ripnet`, over `pkg/transformer`, trained by `tool/rip-train`;
   the design: `doc/rip-design.md`
 - Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `kit.go`,

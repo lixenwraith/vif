@@ -8,11 +8,13 @@ package soundlab
 // voice's genes and wave, seeded with every registered voice, keeps the nearest.
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"os"
 	"runtime"
 	"slices"
 	"sort"
@@ -73,13 +75,27 @@ func cmdFit(s *Session, a []string) error {
 // with the bar and step it fell on, its pitch as the key's degree with any
 // accidental, its length, loudness and support, and a melody-register note's
 // brightness where it was measured, the header counting where it was not, so a
-// listener checks the rip by eye.
+// listener checks the rip by eye; or writes it to a MIDI file at the rip's tempo.
 func cmdNotes(s *Session, a []string) error {
 	rp, ok := s.rips[a[0]]
 	if !ok {
 		return fmt.Errorf("%q: nothing ripped under that name this session (rip first)", a[0])
 	}
 	r := rp.rip
+	if len(a) > 1 {
+		if !isMIDI(a[1]) {
+			return fmt.Errorf("%s: want a .mid file", a[1])
+		}
+		var b bytes.Buffer
+		if err := audio.WriteMIDI(&b, r.Notes, r.BPM); err != nil {
+			return err
+		}
+		if err := os.WriteFile(s.path(a[1]), b.Bytes(), 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintf(s.out, "%s: %d note(s) at %d bpm written to %s, a track each for melody, under and bass\n", a[0], len(r.Notes), r.BPM, a[1])
+		return nil
+	}
 	snd, err := s.soundOf(rp)
 	if err != nil {
 		return err

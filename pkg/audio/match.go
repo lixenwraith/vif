@@ -34,6 +34,9 @@ type LineAgreement struct {
 	Rhythm        bool      // b's notes had no pitch: matched by onset, not by pitch in order
 }
 
+// ripLineNames are a transcript's lines by name, in lineOf's order
+var ripLineNames = [3]string{"melody", "under", "bass"}
+
 // lineOf is a note's line in ripLines' order: melody, under, bass
 func lineOf(n RipNote) int {
 	switch {

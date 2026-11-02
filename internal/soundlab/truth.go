@@ -3,10 +3,12 @@
 package soundlab
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lixenwraith/vif/pkg/audio"
@@ -31,8 +33,8 @@ func cmdAgree(s *Session, a []string) error {
 }
 
 // cmdTruth scores a rip's transcript against one given as text in the notes
-// verb's own form, corrected by hand or written out: how many of the notes
-// given the rip heard, and how many it heard that were not given
+// verb's own form, corrected by hand or written out, or as a MIDI file: how
+// many of the notes given the rip heard, and how many it heard that were not given
 func cmdTruth(s *Session, a []string) error {
 	rp, ok := s.rips[a[0]]
 	if !ok {
@@ -42,18 +44,23 @@ func cmdTruth(s *Session, a []string) error {
 	if err != nil {
 		return err
 	}
-	// a rhythm tapped out without a start begins where the rip's melody
-	// register first sounds
-	origin := math.Inf(1)
-	for _, n := range rp.rip.Notes {
-		if !n.Bass {
-			origin = math.Min(origin, n.Start)
+	var truth []audio.RipNote
+	if isMIDI(a[1]) {
+		truth, err = audio.ReadMIDI(bytes.NewReader(data))
+	} else {
+		// a rhythm tapped out without a start begins where the rip's melody
+		// register first sounds
+		origin := math.Inf(1)
+		for _, n := range rp.rip.Notes {
+			if !n.Bass {
+				origin = math.Min(origin, n.Start)
+			}
 		}
+		if math.IsInf(origin, 1) {
+			origin = 0
+		}
+		truth, err = audio.ParseTranscript(string(data), rp.rip.BPM, origin)
 	}
-	if math.IsInf(origin, 1) {
-		origin = 0
-	}
-	truth, err := audio.ParseTranscript(string(data), rp.rip.BPM, origin)
 	if err != nil {
 		return fmt.Errorf("%s: %w", a[1], err)
 	}
@@ -61,6 +68,12 @@ func cmdTruth(s *Session, a []string) error {
 	fmt.Fprintf(s.out, "%s against %d note(s) given, transposed %+d: the rip's seconds = %.3f × the given %+.2f\n", a[0], len(truth), ag.Shift, ag.Stretch, ag.Offset)
 	reportAgreement(s.out, ag, a[0], "given", "heard as given")
 	return nil
+}
+
+// isMIDI is whether a file names a Standard MIDI File by its extension
+func isMIDI(file string) bool {
+	ext := strings.ToLower(filepath.Ext(file))
+	return ext == ".mid" || ext == ".midi"
 }
 
 // reportAgreement prints each line's counts and the notes only one side has
