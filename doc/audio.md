@@ -250,7 +250,8 @@ velocity, scale degree, octave, an accidental (`acc`, the semitones off the
 degree, so a note outside the key is written exactly), duration, and
 probability. The tonal voices are
 data: a `[[voice]]` of the sound document names an instrument and its synthesis,
-an oscillator stage (sine, saw or square) through a resonant low-pass under a
+an oscillator stage (sine, saw or square), with a vibrato and a vowel's
+formants if a voice has them, through a resonant low-pass under a
 filter envelope into an ADSR, or a string, as a delay line or as its partials
 (`VoiceDef`). The shipped five are `voices.toml`; a document's voice of a shipped
 name retunes that instrument in place and a new name adds an instrument, which

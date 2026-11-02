@@ -112,11 +112,12 @@ draws from the same bank). Two are in `focus/`:
   voices among its loops, so the focus adds a sung-line voice and a choir pad
   (`focus/vocal.toml`) beside the shipped lead and bass; the generated melodies
   draw any tonal instrument, these among them, and the augmentation redraws
-  each voice's genes near the registered one, so the loops hold many voices
-  like them. The engine has no vibrato or formant stage yet, so these are the
-  nearest its oscillators come, a chorused saw under a low cutoff; a real
-  vocal recording in the held-out set is the check that matters, and vibrato
-  and formants in `VoiceDef` are the next step for this focus.
+  each voice's genes near the registered one, keeping its vowel and vibrato,
+  so the loops hold many voices like them. A voice has a `vowel` (a, e, i, o
+  or u: three formants the oscillator passes through) and a vibrato (a rate,
+  a depth in cents, a delay before it is full); neither is a gene, so the
+  model's voice head and the fit do not search them, and a real vocal
+  recording in the held-out set is the check that matters.
 - **`focus/plucked.slab`: guitars and keys.** Nylon and steel strings and a
   plucked bass (`focus/plucked.toml`) beside the modal piano.
 
