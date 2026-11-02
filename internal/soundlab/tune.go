@@ -620,6 +620,13 @@ func writeJSON(file string, v any) error {
 
 func cmdBench(s *Session, a []string) error {
 	o := tuneOptions{loops: 8, bars: 4, seed: 7, gen: true}
+	verbose := len(a) > 0 && a[len(a)-1] == "verbose"
+	if verbose {
+		a = a[:len(a)-1]
+	}
+	if len(a) > 2 {
+		return fmt.Errorf("%q: want verbose", a[2])
+	}
 	for i, p := range []*int{&o.loops, &o.bars} {
 		if len(a) > i {
 			n, err := strconv.Atoi(a[i])
@@ -629,15 +636,22 @@ func cmdBench(s *Session, a []string) error {
 			*p = n
 		}
 	}
-	return s.bench(o)
+	return s.bench(o, verbose)
+}
+
+// benchRow is one loop as one front end ripped it, for bench's verbose listing
+type benchRow struct {
+	what string // index, tempo, key, kind, generated parts and front end, in columns
+	sc   audio.RipScore
+	err  error
 }
 
 // bench grades the front ends the session has, the analysis and the model when
 // one loaded, on fresh loops the engine renders with generated parts among the
 // bank's, clean and augmented: the mean of each rip's score against the loop's
 // expected rip, so a trained model is measured against the analysis before it
-// is trusted with a recording
-func (s *Session) bench(o tuneOptions) error {
+// is trusted with a recording; verbose then lists every loop and the worst three
+func (s *Session) bench(o tuneOptions, verbose bool) error {
 	type front struct {
 		name string
 		fe   audio.RipFrontEnd
@@ -646,6 +660,7 @@ func (s *Session) bench(o tuneOptions) error {
 	if s.frontEnd != nil {
 		fronts = append(fronts, front{"model", s.frontEnd})
 	}
+	var rows []benchRow
 	for _, aug := range []bool{false, true} {
 		o.aug = aug
 		loops, err := s.corpus(o)
@@ -659,26 +674,64 @@ func (s *Session) bench(o tuneOptions) error {
 		for _, f := range fronts {
 			var sum audio.RipScore
 			n := 0
-			for _, l := range loops {
+			for i, l := range loops {
 				r, err := audio.Ripper{Params: s.rip, FrontEnd: f.fe}.Samples(l.audio, audio.AudioSampleRate)
-				if err != nil {
-					continue
+				var sc audio.RipScore
+				if err == nil {
+					sc = audio.CompareRips(r, l.want)
+					sum.Tempo, sum.Bars, sum.Drums = sum.Tempo+sc.Tempo, sum.Bars+sc.Bars, sum.Drums+sc.Drums
+					sum.Melody, sum.Bass, sum.Total = sum.Melody+sc.Melody, sum.Bass+sc.Bass, sum.Total+sc.Total
+					n++
 				}
-				sc := audio.CompareRips(r, l.want)
-				sum.Tempo, sum.Bars, sum.Drums = sum.Tempo+sc.Tempo, sum.Bars+sc.Bars, sum.Drums+sc.Drums
-				sum.Melody, sum.Bass, sum.Total = sum.Melody+sc.Melody, sum.Bass+sc.Bass, sum.Total+sc.Total
-				n++
+				if verbose {
+					what := fmt.Sprintf("%3d %3d bpm %-3s %-14s %-9s %-23s %-8s", i, l.bpm, noteName(l.root), scaleName(l.scale), kind, generatedParts(l.slots), f.name)
+					rows = append(rows, benchRow{what: what, sc: sc, err: err})
+				}
 			}
 			if n == 0 {
 				fmt.Fprintf(s.out, "%s on %s loops: no rip\n", f.name, kind)
 				continue
 			}
 			d := float64(n)
-			fmt.Fprintf(s.out, "%s on %d %s loop(s): %.3f (tempo %.2f bars %.2f drums %.2f melody %.2f bass %.2f)\n",
-				f.name, n, kind, sum.Total/d, sum.Tempo/d, sum.Bars/d, sum.Drums/d, sum.Melody/d, sum.Bass/d)
+			mean := audio.RipScore{Tempo: sum.Tempo / d, Bars: sum.Bars / d, Drums: sum.Drums / d, Melody: sum.Melody / d, Bass: sum.Bass / d, Total: sum.Total / d}
+			fmt.Fprintf(s.out, "%s on %d %s loop(s): %s\n", f.name, n, kind, benchScore(mean))
 		}
 	}
+	if !verbose {
+		return nil
+	}
+	var ripped []benchRow
+	for _, r := range rows {
+		if r.err != nil {
+			fmt.Fprintf(s.out, "loop  %s no rip (%v)\n", r.what, r.err)
+			continue
+		}
+		fmt.Fprintf(s.out, "loop  %s %s\n", r.what, benchScore(r.sc))
+		ripped = append(ripped, r)
+	}
+	slices.SortStableFunc(ripped, func(a, b benchRow) int { return cmp.Compare(a.sc.Total, b.sc.Total) })
+	for _, r := range ripped[:min(3, len(ripped))] {
+		fmt.Fprintf(s.out, "worst %s %s\n", r.what, benchScore(r.sc))
+	}
 	return nil
+}
+
+func benchScore(sc audio.RipScore) string {
+	return fmt.Sprintf("%.3f (tempo %.2f bars %.2f drums %.2f melody %.2f bass %.2f)", sc.Total, sc.Tempo, sc.Bars, sc.Drums, sc.Melody, sc.Bass)
+}
+
+// generatedParts names the slots a loop's generated patterns fill, bank for none
+func generatedParts(slots [audio.MusicSlots]audio.PatternID) string {
+	var parts []string
+	for k, id := range slots {
+		if p := audio.GetPattern(id); p != nil && strings.HasPrefix(p.Name, "corpus_") {
+			parts = append(parts, slotRoles[k])
+		}
+	}
+	if len(parts) == 0 {
+		return "bank"
+	}
+	return strings.Join(parts, "+")
 }
 
 // tune searches the rip's parameters: the current ones seed a pool the rest of

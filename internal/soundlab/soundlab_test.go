@@ -1339,6 +1339,28 @@ func TestBenchGradesTheFrontEnds(t *testing.T) {
 	}
 }
 
+// TestBenchVerboseListsEveryLoop: bench ... verbose lists a line per loop it
+// rendered, clean and augmented, and then the three worst by total
+func TestBenchVerboseListsEveryLoop(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	const loops = 2
+	runOrFatal(t, s, &out, fmt.Sprintf("bench %d 2 verbose\n", loops))
+	var listed, worst int
+	for _, l := range strings.Split(out.String(), "\n") {
+		switch {
+		case strings.HasPrefix(l, "loop "):
+			listed++
+		case strings.HasPrefix(l, "worst "):
+			worst++
+		}
+	}
+	if listed != 2*loops || worst != 3 {
+		t.Errorf("%d loop(s) listed and %d worst, want %d and 3:\n%s", listed, worst, 2*loops, out.String())
+	}
+}
+
 // TestRunScriptVerb: run executes a script's lines in the session in hand, stops
 // at a failing line with its number, and a quit in it ends the script alone
 func TestRunScriptVerb(t *testing.T) {
