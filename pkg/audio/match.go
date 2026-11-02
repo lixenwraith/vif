@@ -30,7 +30,8 @@ type LineAgreement struct {
 	A, B, Matched int
 	OnlyA, OnlyB  []RipNote
 	Split, Merged int
-	Rhythm        bool // b's notes had no pitch: matched by onset, not by pitch in order
+	Cut, Spanning []RipNote // the notes of b cut in two or more by a's, and the notes of a spanning two or more of b's
+	Rhythm        bool      // b's notes had no pitch: matched by onset, not by pitch in order
 }
 
 // lineOf is a note's line in ripLines' order: melody, under, bass
@@ -100,7 +101,8 @@ func align(a, b []RipNote, shift int) Agreement {
 		}
 		l := LineAgreement{A: len(la), B: len(lb), Matched: len(pairs), Rhythm: rhythm}
 		if rhythm {
-			l.Split, l.Merged = spans(la, lb)
+			l.Cut, l.Spanning = spans(la, lb)
+			l.Split, l.Merged = len(l.Cut), len(l.Spanning)
 		}
 		inA, inB := make([]bool, len(la)), make([]bool, len(lb))
 		for _, p := range pairs {
@@ -231,11 +233,11 @@ func onsets(a, b []RipNote) [][2]int {
 	return pairs
 }
 
-// spans counts b's notes that two or more of a's start within (split) and a's
-// notes that two or more of b's start within (merged)
-func spans(a, b []RipNote) (split, merged int) {
-	within := func(outer, inner []RipNote) int {
-		n := 0
+// spans lists b's notes that two or more of a's start within (cut) and a's
+// notes that two or more of b's start within (spanning)
+func spans(a, b []RipNote) (cut, spanning []RipNote) {
+	within := func(outer, inner []RipNote) []RipNote {
+		var out []RipNote
 		for _, o := range outer {
 			k := 0
 			for _, x := range inner {
@@ -244,10 +246,10 @@ func spans(a, b []RipNote) (split, merged int) {
 				}
 			}
 			if k >= 2 {
-				n++
+				out = append(out, o)
 			}
 		}
-		return n
+		return out
 	}
 	return within(b, a), within(a, b)
 }

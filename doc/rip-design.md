@@ -158,8 +158,12 @@ offline (`song <name> <file.wav>`).
   since recordings are and the sample is forty cents flat; `gen` draws beats, melodies
   and bass lines from the key for three loops in five per part, since the bank
   alone repeats its few melodies and a model trained on it learns them, not
-  pitch. Both draw from streams of their own, so a loop's bank patterns and key
-  are the same with and without them.
+  pitch, and for three loops in five an accompaniment in the free slot, a
+  broken chord in eighths or sixteenths changing pitch from note to note under
+  a melody that is a slow line of longer notes in half the loops: the texture
+  of the sample recording, a lead over an arpeggio, which the rip has to part.
+  Both draw from streams of their own, so a loop's bank patterns and key are
+  the same with and without them.
 - **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
   bench and the install with every knob an environment variable, and a focus
   script run before the corpus turns a run toward a kind of music (`focus/`:

@@ -86,16 +86,27 @@ func reportAgreement(w io.Writer, ag audio.Agreement, nameA, nameB, both string)
 		if len(l.OnlyB) > 0 {
 			fmt.Fprintf(w, "  %s only %s: %s\n", words[i], nameB, notesInBrief(l.OnlyB))
 		}
+		if len(l.Cut) > 0 {
+			fmt.Fprintf(w, "  %s %s cut in two or more: %s\n", words[i], nameB, notesInBrief(l.Cut))
+		}
+		if len(l.Spanning) > 0 {
+			fmt.Fprintf(w, "  %s %s spanning two or more: %s\n", words[i], nameA, notesInBrief(l.Spanning))
+		}
 	}
 }
 
+// notesInBrief names notes by pitch and second, a rhythm's by second alone
 func notesInBrief(notes []audio.RipNote) string {
 	var b strings.Builder
 	for i, n := range notes {
 		if i > 0 {
 			b.WriteString(" ")
 		}
-		fmt.Fprintf(&b, "%s@%.2f", noteName(n.MIDI), n.Start)
+		if n.MIDI < 0 {
+			fmt.Fprintf(&b, "%.2f", n.Start)
+		} else {
+			fmt.Fprintf(&b, "%s@%.2f", noteName(n.MIDI), n.Start)
+		}
 	}
 	return b.String()
 }
