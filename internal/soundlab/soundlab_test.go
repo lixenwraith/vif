@@ -1068,6 +1068,11 @@ save pattern %s
 	if !strings.Contains(out.String(), "registered; the patterns naming it play it") {
 		t.Errorf("fit replaced no voice:\n%s", out.String())
 	}
+	// one line of the song on its own: the instruments named after the file
+	runOrFatal(t, s, &out, fmt.Sprintf("! song loop %s nothing\nsong loop %s kick\n", song, song))
+	if fi, err := os.Stat(song); err != nil || fi.Size() < 1000 {
+		t.Errorf("the kick alone did not render: %v", err)
+	}
 	// a refinement round: the voices and the steps each kept only when the song
 	// sounds more like the recording, judged on the recording's own frames with
 	// the rip-back reported beside it, and the song still valid after
@@ -1077,6 +1082,21 @@ save pattern %s
 	}
 	if err := audio.ValidateSong(d); err != nil {
 		t.Error(err)
+	}
+	// a tonal floor no candidate can keep to leaves every voice in hand: the
+	// refinement picks among voices that sound like the recording's notes
+	rp := s.rips["loop"]
+	var floors [3]tonalFloor
+	for reg := range floors {
+		floors[reg].targets = fitTargets(rp.x, rp.rate, lineNotes(rp.rip, reg), 2)
+	}
+	before := fmt.Sprintf("%p %p %p", rp.rip.MelodyVoice, rp.rip.UnderVoice, rp.rip.BassVoice)
+	out.Reset()
+	if _, err := s.refineVoices("loop", rp, d, 0, s.refineOpt, floors); err != nil {
+		t.Fatal(err)
+	}
+	if after := fmt.Sprintf("%p %p %p", rp.rip.MelodyVoice, rp.rip.UnderVoice, rp.rip.BassVoice); after != before || !strings.Contains(out.String(), "voice stays") {
+		t.Errorf("a voice left its floor:\n%s", out.String())
 	}
 	// a short song conducted to its end, the way a ticking front end drives it
 	short := &audio.SongDef{Name: "short", BPM: 200, Root: audio.DefaultRootNote, Scale: "phrygian",

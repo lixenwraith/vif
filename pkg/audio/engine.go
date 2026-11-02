@@ -724,6 +724,12 @@ func (ae *AudioEngine) RenderMusic(slots [MusicSlots]PatternID, bpm, bars, root 
 // hold, changed at the bar line: what a song is once its bars are matched to a
 // dictionary of patterns.
 func (ae *AudioEngine) RenderTimeline(timeline [][MusicSlots]PatternID, bpm, root int, scale ScaleID, prog []int, seed int64) ([]float64, error) {
+	return ae.RenderLines(timeline, bpm, root, scale, prog, seed, nil)
+}
+
+// RenderLines is RenderTimeline with only the instruments named sounding, one
+// line of a song heard on its own; nil is every instrument, an empty list none.
+func (ae *AudioEngine) RenderLines(timeline [][MusicSlots]PatternID, bpm, root int, scale ScaleID, prog []int, seed int64, only []InstrumentType) ([]float64, error) {
 	if !ae.running.Load() {
 		return nil, errors.New("render needs a started engine")
 	}
@@ -734,6 +740,14 @@ func (ae *AudioEngine) RenderTimeline(timeline [][MusicSlots]PatternID, bpm, roo
 	shapes := ae.config.SoundShapes
 	ae.mu.RUnlock()
 	k := &kit{voices: voiceTable(), tuning: math.Pow(2, ae.Tuning()/1200)}
+	if only != nil {
+		k.only = make([]bool, max(len(k.voices), int(InstrClap)+1))
+		for _, i := range only {
+			if i >= 0 && int(i) < len(k.only) {
+				k.only[i] = true
+			}
+		}
+	}
 	for i := InstrumentType(0); i <= InstrClap; i++ {
 		if d := SoundDefByName(drumSoundNames[i]); d != nil {
 			k.ids[i] = SoundIDByName(d.Name)

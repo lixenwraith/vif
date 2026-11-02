@@ -32,10 +32,11 @@ type PatternPlayer struct {
 	// fixed-size micro-timing scheduler; allocation-free
 	pend  [MaxPendingTrigs]pendingTrig
 	pendN int
+	kit   *kit // the instruments the player sounds through, and which of them sound
 }
 
 func NewPatternPlayer(k *kit) *PatternPlayer {
-	p := &PatternPlayer{mask: ^uint32(0), stealStrategy: StealLowest}
+	p := &PatternPlayer{mask: ^uint32(0), stealStrategy: StealLowest, kit: k}
 	for i := InstrumentType(0); i <= InstrClap; i++ {
 		p.drums[i][0] = NewDrumVoice(k, i)
 		p.drums[i][1] = NewDrumVoice(k, i)
@@ -59,6 +60,9 @@ func (p *PatternPlayer) TriggerStep(step, samplesPerStep int, h *harmony, rng *r
 			continue
 		}
 		tr := &pat.Tracks[ti]
+		if !p.kit.sounds(tr.Instr) {
+			continue
+		}
 		for _, ev := range tr.Events {
 			if ev.Pos != local {
 				continue

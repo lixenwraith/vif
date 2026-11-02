@@ -238,7 +238,7 @@ func refineAssignment(r *audio.Rip, part audio.RipPart, greedy []int, threshold 
 // is of the hits and the notes and not of the tempo and bar-line decoders, and
 // compares that rip with want: how much of a rip survives as the song
 func (s *Session) songScore(d *audio.SongDef, want *audio.Rip) (audio.RipScore, error) {
-	buf, err := s.renderSong(d)
+	buf, err := s.renderSong(d, nil)
 	if err != nil {
 		return audio.RipScore{}, err
 	}
@@ -294,7 +294,7 @@ func (s *Session) songJudge(d *audio.SongDef, rp *ripped) (audio.RipFidelity, er
 	if err != nil {
 		return audio.RipFidelity{}, err
 	}
-	buf, err := s.renderSong(d)
+	buf, err := s.renderSong(d, nil)
 	if err != nil {
 		return audio.RipFidelity{}, err
 	}
@@ -329,7 +329,7 @@ func (s *Session) songJudgeBars(d *audio.SongDef, rp *ripped, bars []int) (float
 		if b < 0 || b >= len(tl) || lo+audio.BeatsPerBar+1 > len(want.Beats) {
 			continue
 		}
-		buf, err := s.renderBars(d, tl[b:b+1])
+		buf, err := s.renderBars(d, tl[b:b+1], nil)
 		if err != nil {
 			return 0, err
 		}
@@ -361,21 +361,22 @@ func (s *Session) soundOf(rp *ripped) (*audio.RipSound, error) {
 	return rp.sound, nil
 }
 
-// renderSong plays a song offline, the dirty patterns it names applied first
-func (s *Session) renderSong(d *audio.SongDef) ([]float64, error) {
+// renderSong plays a song offline, the dirty patterns it names applied first;
+// only the instruments listed sound when only is not nil
+func (s *Session) renderSong(d *audio.SongDef, only []audio.InstrumentType) ([]float64, error) {
 	tl, err := s.songTimeline(d)
 	if err != nil {
 		return nil, err
 	}
-	return s.renderBars(d, tl)
+	return s.renderBars(d, tl, only)
 }
 
 // renderBars renders bars of a song's timeline at the song's tuning, the
 // transport's put back after
-func (s *Session) renderBars(d *audio.SongDef, tl [][audio.MusicSlots]audio.PatternID) ([]float64, error) {
+func (s *Session) renderBars(d *audio.SongDef, tl [][audio.MusicSlots]audio.PatternID, only []audio.InstrumentType) ([]float64, error) {
 	s.eng.SetTuning(d.Tuning)
 	defer s.eng.SetTuning(s.tuning)
-	return s.eng.RenderTimeline(tl, d.BPM, d.Root, d.ScaleID(), d.Chords, 1)
+	return s.eng.RenderLines(tl, d.BPM, d.Root, d.ScaleID(), d.Chords, 1, only)
 }
 
 // songTimeline resolves a song's bars, applying the dirty patterns it names so
@@ -433,7 +434,17 @@ func cmdSong(s *Session, a []string) error {
 		_, err := s.reportSong(a[0], d, rp, "")
 		return err
 	}
-	buf, err := s.renderSong(d)
+	// the instruments named after the file are the only ones that sound: a
+	// line of the song on its own, to hear it against the recording
+	var only []audio.InstrumentType
+	for _, name := range a[2:] {
+		i, ok := audio.InstrumentByName(name)
+		if !ok {
+			return fmt.Errorf("%q: no such instrument (a drum or a registered voice; ls voice names them)", name)
+		}
+		only = append(only, i)
+	}
+	buf, err := s.renderSong(d, only)
 	if err != nil {
 		return err
 	}
@@ -552,6 +563,11 @@ type refineOptions struct {
 
 var defaultRefine = refineOptions{generations: 6, pool: 12, seed: 1}
 
+// refineDrift is how far past its floor a refined voice may sound from the
+// recording's notes as the fit measures it, a tenth: the song's score picks
+// among voices that sound like the notes, not one that fills the mix
+const refineDrift = 0.1
+
 func cmdRefine(s *Session, a []string) error {
 	rp, ok := s.rips[a[0]]
 	if !ok {
@@ -582,9 +598,17 @@ func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, 
 	if err != nil {
 		return err
 	}
+	// each voice's tonal floor, taken once so the rounds do not compound it
+	var floors [3]tonalFloor
+	for reg, at := range lineVoices(rp.rip) {
+		if *at != nil {
+			floors[reg].targets = fitTargets(rp.x, rp.rate, lineNotes(rp.rip, reg), s.fit.notes)
+			floors[reg].distance = fitDistance(*at, floors[reg].targets, rp.rip.Tuning)
+		}
+	}
 	for round := 1; round <= rounds; round++ {
 		start := total
-		voiced, err := s.refineVoices(name, rp, d, total, o)
+		voiced, err := s.refineVoices(name, rp, d, total, o, floors)
 		if err != nil {
 			return err
 		}
@@ -605,12 +629,22 @@ func (s *Session) refine(name string, rp *ripped, d *audio.SongDef, rounds int, 
 	return err
 }
 
+// tonalFloor is a voice's distance from the recording's notes when a refinement
+// starts, on the notes the fit would sample, which the refined voice holds to
+type tonalFloor struct {
+	targets  []fitTarget
+	distance float64
+}
+
 // refineVoices searches each register's voice by the song's score: a genome of
 // the voice's genes and wave, seeded with the voice in hand and every registered
 // one, each candidate registered under the register's name while the song's
-// render is ripped back; the voice that rips back nearest stays, the one in hand
-// when none beats it. The registry holds each candidate, so one worker.
-func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base float64, o refineOptions) (float64, error) {
+// render is heard beside the recording; the voice that sounds nearest stays,
+// the one in hand when none beats it. A candidate that sounds further from the
+// recording's notes than the floor by more than refineDrift is not heard: the
+// score of the whole mix would otherwise favour a voice that fills it over one
+// that sounds like the line. The registry holds each candidate, so one worker.
+func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base float64, o refineOptions, floors [3]tonalFloor) (float64, error) {
 	for reg, at := range lineVoices(rp.rip) {
 		if *at == nil {
 			continue
@@ -627,6 +661,9 @@ func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base f
 		eval := genetic.Memoize(genomeKey, func(g []float64) float64 {
 			v := voiceFromGenome(g)
 			if audio.ValidateVoice(v) != nil {
+				return math.Inf(-1)
+			}
+			if fl := floors[reg]; len(fl.targets) > 0 && fitDistance(v, fl.targets, rp.rip.Tuning) > fl.distance*(1+refineDrift) {
 				return math.Inf(-1)
 			}
 			if err := define(v); err != nil {
@@ -692,7 +729,7 @@ func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base f
 		named := v.Clone()
 		named.Name = vname
 		s.voices.put(named, false)
-		fmt.Fprintf(s.out, "%s voice: %s, %.2f -> %.2f\n", word, cmp.Or(v.Wave, "sine"), base, pool.Members[0].Score)
+		fmt.Fprintf(s.out, "%s voice: %s, %.2f -> %.2f, %.3f from the notes against a floor of %.3f\n", word, cmp.Or(v.Wave, "sine"), base, pool.Members[0].Score, fitDistance(v, floors[reg].targets, rp.rip.Tuning), floors[reg].distance)
 		base = pool.Members[0].Score
 	}
 	return base, nil
@@ -802,6 +839,22 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 		}
 		return best, best >= 0
 	}
+	// near says a proposed pitch keeps to its track: within a fifth of the
+	// nearest other note by step, a line moving by steps and leaps rather than
+	// across the register for one note; a track with no other note takes any
+	near := func(evs []audio.StepDef, pos, m int) bool {
+		at := -1
+		for i, e := range evs {
+			if e.Pos != pos && (at < 0 || max(e.Pos-pos, pos-e.Pos) < max(evs[at].Pos-pos, pos-evs[at].Pos)) {
+				at = i
+			}
+		}
+		if at < 0 {
+			return true
+		}
+		n := audio.StepPitch(root, scale, evs[at].Deg, evs[at].Oct, evs[at].Acc)
+		return max(n-m, m-n) <= 7
+	}
 	moved, current, judged := 0, 0.0, ""
 	for _, st := range steps {
 		pd, _ := s.pats.get(st.pat)
@@ -827,7 +880,7 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 				moves = append(moves, pitch(m))
 			}
 		}
-		if m, ok := proposal(st.pat, was.Pos); ok && m != midi {
+		if m, ok := proposal(st.pat, was.Pos); ok && m != midi && near(pd.Track[st.trk].Event, was.Pos, m) {
 			moves = append(moves, pitch(m))
 		}
 		for _, pos := range [...]int{was.Pos - 1, was.Pos + 1} {
@@ -903,7 +956,7 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 					break
 				}
 				m, ok := proposal(n, pos)
-				if !ok || slices.ContainsFunc(tr.Event, func(e audio.StepDef) bool { return e.Pos == pos }) || sounding(pos, m) {
+				if !ok || slices.ContainsFunc(tr.Event, func(e audio.StepDef) bool { return e.Pos == pos }) || sounding(pos, m) || !near(tr.Event, pos, m) {
 					continue
 				}
 				tries++
