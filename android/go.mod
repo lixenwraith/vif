@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/lixenwraith/color v0.1.3 // indirect
+	github.com/lixenwraith/color v0.1.4 // indirect
 	github.com/lixenwraith/log v0.1.13 // indirect
 	github.com/lixenwraith/toml v0.5.0 // indirect
 	golang.org/x/mobile v0.0.0-20261011034528-197770444867 // indirect
