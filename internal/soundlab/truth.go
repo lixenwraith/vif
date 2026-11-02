@@ -5,6 +5,7 @@ package soundlab
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 
@@ -41,7 +42,18 @@ func cmdTruth(s *Session, a []string) error {
 	if err != nil {
 		return err
 	}
-	truth, err := audio.ParseTranscript(string(data))
+	// a rhythm tapped out without a start begins where the rip's melody
+	// register first sounds
+	origin := math.Inf(1)
+	for _, n := range rp.rip.Notes {
+		if !n.Bass {
+			origin = math.Min(origin, n.Start)
+		}
+	}
+	if math.IsInf(origin, 1) {
+		origin = 0
+	}
+	truth, err := audio.ParseTranscript(string(data), rp.rip.BPM, origin)
 	if err != nil {
 		return fmt.Errorf("%s: %w", a[1], err)
 	}
@@ -58,7 +70,11 @@ func reportAgreement(w io.Writer, ag audio.Agreement, nameA, nameB, both string)
 		if l.A == 0 && l.B == 0 {
 			continue
 		}
-		fmt.Fprintf(w, "%-6s %s %d, %s %d, %d %s, only %s %d, only %s %d\n", words[i], nameA, l.A, nameB, l.B, l.Matched, both, nameA, len(l.OnlyA), nameB, len(l.OnlyB))
+		fmt.Fprintf(w, "%-6s %s %d, %s %d, %d %s, only %s %d, only %s %d", words[i], nameA, l.A, nameB, l.B, l.Matched, both, nameA, len(l.OnlyA), nameB, len(l.OnlyB))
+		if l.Rhythm {
+			fmt.Fprintf(w, "; by onset: %d of the given cut in two or more, %d of %s's span two or more", l.Split, l.Merged, nameA)
+		}
+		fmt.Fprintln(w)
 	}
 	if r, apart := ag.Register, ag.Lines[0].Matched+ag.Lines[1].Matched; r.Matched > apart {
 		fmt.Fprintf(w, "melody register as one line: %d %s, %d more than the lines apart, so the two part the lines differently\n", r.Matched, both, r.Matched-apart)
