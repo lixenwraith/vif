@@ -22,3 +22,4 @@ journal/**/*.jsonl
 tool/vif-router/vif-router
 *.exe
 /soundlab
+__pycache__/
