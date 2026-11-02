@@ -460,6 +460,37 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   0.83, 0.80), so the numbers keep the second line and the ear decides. The
   intro is left at the ninth pass's 0.85; the origin is the sample now.
 
+- The eleventh pass, the two lines decoded together and the voices held to
+  the fit: the first line was the loudest pitch of each frame and the second
+  what a pass over the rest found, so the lead and a counter line a few notes
+  away traded places wherever one was momentarily louder, which the user
+  heard as a lead render that was the lead in places and the other line in
+  others; and `refine` had drifted every voice toward a driven saw, which the
+  user heard as renders turning electronic where the fit's had sounded like
+  the recording. A stream assignment over the notes already cut, by pitch, a
+  masked harmonic profile and level, made the two recordings' transcripts
+  agree less (the intro's first-line notes with a match in the origin 32 of 36
+  against 41 of 49, the origin's 24 of 44 against 33 of 55), so the change
+  went into the decoder: a hidden path over pairs of pitches, each line its
+  own costs, no pair a unison, a semitone or a harmonic interval apart, the
+  first line paying `cross` (0.003 a frame; 0 and 0.01 agree within a note or
+  two) to be the quieter. On a synthetic pair, a louder lead in quarter notes
+  under and then over a counter line in eighths on the same voice, 31 of 32
+  lead notes land in the first line and none of the counter's, 63 of 64
+  counter notes in the second. The bench is unchanged (analysis 0.485 clean
+  and 0.425 augmented against 0.487 and 0.429). The origin's transcript has
+  77 notes where it had 104 and the intro's 65 where it had 88, the fragments
+  of a line hopping between two gone, and the two agree at the same rate on
+  fewer notes (the origin's first line 23 of 38 against 33 of 55, its second
+  17 of 22 against 23 of 32). The fit picks modal voices for every line of
+  both; `refine` keeps them within a tenth of their floors (the origin's
+  0.115, 0.118 and 0.103 against 0.112, 0.117 and 0.100), and the origin
+  sounds 0.86 (pitch 0.89, timbre 0.86, onsets 0.81) after two rounds from
+  0.69 before, where the tenth pass's drifted voices reached 0.87; the intro
+  0.84 (0.85, 0.84, 0.84) from 0.66, the ninth's 0.85. Each line renders
+  alone now (`song <name> <file> <voice>`), so the user can say which line
+  the lead is and where it changes hands, which the numbers cannot.
+
 ## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved
