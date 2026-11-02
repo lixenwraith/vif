@@ -907,7 +907,7 @@ compress quiet 5
 song quiet score
 validate all
 `, filepath.Join(t.TempDir(), "missing.wav"), wav, wav, wav, wav, wav, wav))
-	if !strings.Contains(out.String(), "note(s) at") || !strings.Contains(out.String(), "bar 1 step") || !strings.Contains(out.String(), "support 0.") || !strings.Contains(out.String(), ", bright ") {
+	if !strings.Contains(out.String(), "note(s) at") || !strings.Contains(out.String(), "bar 1 step") || !strings.Contains(out.String(), "support 0.") || !strings.Contains(out.String(), ", bright ") || !strings.Contains(out.String(), "brightness unmeasured on ") {
 		t.Errorf("notes listed no transcript with support and brightness:\n%s", out.String())
 	}
 	// bpm <n> reads the recording at that tempo, the bar line decoded

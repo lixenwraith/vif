@@ -199,9 +199,13 @@ type RipNote struct {
 	Bass       bool // under E3, the bass register
 	Second     bool // the melody register's second line, heard under the louder
 	// Bright is a melody-register note's fundamental's share of its first six
-	// partials, 1 for a pure tone; 0 where none was measured
+	// partials, 1 for a pure tone; RipUnmeasured for a bass note, a note given
+	// as text, and one whose fundamental a concurrent note covered throughout
 	Bright float64
 }
+
+// RipUnmeasured is a RipNote's Bright where none was measured, never a share
+const RipUnmeasured = -1.0
 
 // RipBar is one bar: each drum's hits, kick, snare and hihat in instrument order,
 // and the melody and bass notes, whose degrees are relative to the Rip's key.
@@ -410,6 +414,9 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	f.bright(x, melody, bass)
 	for i, ns := range [2][]ripNote{melody, bass} {
 		for _, n := range ns {
+			if i == 1 {
+				n.bright = RipUnmeasured
+			}
 			r.Notes = append(r.Notes, RipNote{Start: float64(n.start) * f.Hop, End: float64(n.end) * f.Hop, MIDI: n.midi, Vel: n.vel, Bass: i == 1, Second: n.second, Bright: n.bright})
 		}
 	}
@@ -419,15 +426,16 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 
 // bright sets each melody-register note's share of its fundamental in its
 // first partials' magnitudes, each partial averaged over the note's frames of
-// the recording x (at RipRate) where no partial of a concurrent note, melody or
-// bass, falls within its spread; a note whose fundamental is covered on every
-// frame keeps none
+// the recording x (at RipRate) on which no partial of a note under the frame's
+// window, melody or bass, falls within its spread; a note whose fundamental is
+// covered on every frame is RipUnmeasured
 func (f *RipFrames) bright(x []float64, melody, bass []ripNote) {
 	all := slices.Concat(melody, bass)
-	on := make([][]int, f.frames()) // the notes sounding on each frame
+	reach := int(float64(ripBrightN/2) / RipRate / f.Hop) // frames a window spans either side
+	near := make([][]int, f.frames())                     // the notes under each frame's window
 	for i, n := range all {
-		for t := max(n.start, 0); t < min(n.end, len(on)); t++ {
-			on[t] = append(on[t], i)
+		for t := max(n.start-reach, 0); t < min(n.end+reach, len(near)); t++ {
+			near[t] = append(near[t], i)
 		}
 	}
 	tune := math.Pow(2, f.Tuning/1200)
@@ -436,13 +444,14 @@ func (f *RipFrames) bright(x []float64, melody, bass []ripNote) {
 	type partials struct{ sum, frames [ripBrightPartials]float64 }
 	acc := make([]partials, len(melody))
 	s := newSTFT(ripBrightN)
-	for t, ns := range on {
-		if !slices.ContainsFunc(ns, func(i int) bool { return i < len(melody) }) {
+	for t, ns := range near {
+		measured := func(i int) bool { return i < len(melody) && all[i].start <= t && t < all[i].end }
+		if !slices.ContainsFunc(ns, measured) {
 			continue
 		}
 		mag := s.at(x, int(math.Round(float64(t)*f.Hop*RipRate)))
 		for _, i := range ns {
-			if i >= len(melody) {
+			if !measured(i) {
 				continue
 			}
 		partial:
@@ -466,6 +475,7 @@ func (f *RipFrames) bright(x []float64, melody, bass []ripNote) {
 		}
 	}
 	for i, a := range acc {
+		melody[i].bright = RipUnmeasured
 		if a.frames[0] == 0 {
 			continue
 		}

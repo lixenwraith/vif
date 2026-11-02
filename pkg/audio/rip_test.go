@@ -129,10 +129,14 @@ func energy(x []float64) float64 {
 }
 
 // TestRipNoteBrightIsTheFundamentalsShare: the loop's melody played on a sine
-// reads near one and brighter than on a saw, whose partials share the sum.
+// reads near one and brighter than on a saw, whose partials share the sum. Its
+// root and fifth sound two octaves over the bass's, the bass's fourth partial
+// covering their fundamentals, and are unmeasured rather than read through it;
+// every other melody-register note is measured, and no bass note.
 func TestRipNoteBrightIsTheFundamentalsShare(t *testing.T) {
 	const bpm, bars = 140, 4
 	ae, slots := startLoopEngine(t)
+	covered := map[int]bool{DefaultRootNote + 24: true, StepPitch(DefaultRootNote, ScalePhrygian, 4, 0, 0) + 24: true}
 	bright := func(wave string) float64 {
 		if _, err := ae.DefineVoice(&VoiceDef{Name: "lead", Wave: wave, Cutoff: 2500, Q: 0.5, Attack: 0.005, Decay: 0.1, Sustain: 0.7, Release: 0.08}); err != nil {
 			t.Fatal(err)
@@ -146,17 +150,18 @@ func TestRipNoteBrightIsTheFundamentalsShare(t *testing.T) {
 			t.Fatal(err)
 		}
 		var sum float64
-		var heard, measured int
+		var measured int
 		for _, n := range r.Notes {
-			if !n.Bass {
-				heard++
-				if n.Bright > 0 {
-					sum, measured = sum+n.Bright, measured+1
-				}
+			unmeasured := n.Bright == RipUnmeasured
+			if unmeasured != (n.Bass || covered[n.MIDI]) {
+				t.Errorf("%s: MIDI %d at %.2fs, bass %v, reads %.2f", wave, n.MIDI, n.Start, n.Bass, n.Bright)
+			}
+			if !unmeasured {
+				sum, measured = sum+n.Bright, measured+1
 			}
 		}
-		if 2*measured < heard {
-			t.Fatalf("%s: %d of %d melody-register notes measured", wave, measured, heard)
+		if measured == 0 {
+			t.Fatalf("%s: no note measured", wave)
 		}
 		return sum / float64(measured)
 	}
