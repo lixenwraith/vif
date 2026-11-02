@@ -1303,29 +1303,39 @@ The search over the parameters is in place (`tune`), as are the corpus the
 engine exports (`corpus`), the model, its trainer (`tool/rip-train`) and the
 front-end seam. What remains, in the design's order:
 
-1. A corpus beyond the shipped bank: `corpus ... aug gen` puts a room, a mix
-   and voices of random genes behind each loop and draws beats, melodies and
-   bass lines from the key; what it still lacks is a codec, chords and two
-   lines in one register among the generated parts, chance steps graded as
-   optional rather than as misses, and a small set of real recordings with
-   hand-checked notes held out for validation, so neither a model nor a tuned
-   set learns the synthesizer.
+1. A corpus beyond the shipped bank: `corpus ... aug gen` puts a room, a mix,
+   saturation and a tuning off A440 behind each loop and draws beats,
+   melodies, bass lines and, in the free slot, a broken-chord accompaniment
+   under a melody of longer notes; what it still lacks is a codec, chords as
+   chords, a pedal's ringing, chance steps graded as optional rather than as
+   misses, and real recordings with their MIDI in the corpus and held out: a
+   loader for a WAV beside a MIDI file (`ReadMIDI` reads the notes; the
+   frames and labels a loop carries are what `corpus` writes) and a few
+   recordings the user plays or owns with their scores, so neither a model
+   nor a tuned set learns the synthesizer. Public sets with aligned MIDI
+   (MAESTRO's piano, Slakh's rendered multitracks, GuitarSet, URMP) fit the
+   same loader.
 2. The model's pitch: on 20000 loops over 20000 steps the held-out decoders'
-   loss was still falling (1.04) and the model passed the analysis on
+   loss was still falling (1.04) and the fourth run passed the analysis on
    augmented loops (0.51 against 0.48) on its drums while losing clean loops
    on tempo and both on pitch (melody 0.11 against 0.17); 300 loops
-   overfitted in 12000 steps. The corpus is rendered at A440 and the sample is
-   forty cents flat, which the analysis now reads and the model cannot: render
-   the loops at random offsets from A440 (`corpus ... aug`), then more loops
-   and steps. A vocal line is a line like any other to the rip; a voice has a
-   vibrato and a vowel's formants now (`tool/rip-train/focus/vocal.toml` draws
-   them), neither a gene, so the fit and the model's voice head do not search
-   them: genes for both once a corpus with them has trained, and a real vocal
-   recording held out. Measure by the trainer's held-out loss, with `bench` against the
-   analysis on clean and augmented loops and by ear on the held-out recordings
-   (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then the weights
-   and a tuned parameter set shipped as data, `DefaultRipParams` kept for a
-   recording nothing tuned for. [Rip design §8](rip-design.md#8-measured-on-the-sample-recording)
+   overfitted in 12000 steps; the fifth run, on the detuned corpus, died at
+   step 6820 of 20000 under the cloud container's restarts and was not
+   finished. Next, on a development machine (`tool/rip-train/README.md`, "A
+   round on a development machine"): the sixth run on the accompaniment
+   corpus at the model's present size, then the model four to ten times
+   larger (`--dim 256..384 --layers 6..8`, 3 to 10 million weights) with ten
+   times the loops and 100000 or more steps, the held-out loss watched for
+   the plateau, each measured by `bench` on clean and augmented loops and by
+   the truths on the recordings, and shipped only when it beats the analysis
+   on both; a hundredfold or more needs a GPU to train and would not run in
+   the engine's budget. A vocal line is a line like any other to the rip; a
+   voice has a vibrato and a vowel's formants now
+   (`tool/rip-train/focus/vocal.toml` draws them), neither a gene, so the fit
+   and the model's voice head do not search them: genes for both once a
+   corpus with them has trained, and a real vocal recording held out. Then
+   the weights and a tuned parameter set shipped as data, `DefaultRipParams`
+   kept for a recording nothing tuned for. [Rip design §8](rip-design.md#8-measured-on-the-sample-recording)
    has the runs' numbers.
 3. A bass attack reads as a kick and a chord's attack as a snare in the analysis:
    a harmonic check on the hit (a percussive rise with a pitched tail is a note)
@@ -1339,7 +1349,27 @@ front-end seam. What remains, in the design's order:
    quarter tone would still cross rows. A pitch prior that holds a semitone
    wobble (a higher cost for a one-semitone move than per semitone of a leap,
    or the salience smoothed across the neighbours before the path), measured
-   on a rendered vibrato voice once the voices have one.
+   on a rendered vibrato voice, which the voices have now.
+6. The decoder's and the parting's constants tuned against truths: `tune`
+   searches `RipParams` over rendered loops whose truth is the render's; with
+   `truth` files (rhythms, corrected transcripts, MIDI) on real recordings,
+   the same search can take their agreement as its score, and the stream
+   costs (`streamJump`, `streamLength`, `streamLevel`, `streamSwitch`), the
+   lead rule's default and `cross` would be tuned on music rather than set by
+   hand. On the origin the rhythm truth has the lead at 17 of 25 notes, 8
+   missed, 10 extra and 7 cut in two, the half notes among them: the cut half
+   notes are the first thing to chase, note by note, with the `truth` listing
+   of which were cut.
+7. The pedal: a piano arpeggio under pedal rings three or four notes at once,
+   and two lines hold two; the second line's eighths read as held notes (30 of
+   58 heard, 11 spanning two). A third line in the joint decoder, states
+   cubed, or a chord read per beat as the set of ringing pitches, rendered as
+   a pad under the lines, is the arrangement's next step.
+8. The fit as it fits a real lead: the user hears the lead as a plucked string
+   (a harp or a santur) and the bass as a flute at times; the fit picks modal
+   voices for every line of both recordings. A plucked voice (`string`) with
+   a doubled, beating course, and the fit's samples cleared of the other
+   lines (item 4 of the loop below), measured by the floor the fit reaches.
 
 ### Close the rip's loop
 
@@ -1375,6 +1405,13 @@ rip are in place; what remains:
    trained front end attributes to the note.
 5. A song in the game: the conductor plays tiers, not bars; a `SongDef` played
    by the sequencer as soundlab conducts it, when a level wants a fixed piece.
+6. `refine` takes minutes a round, every judge a render and a hearing of the
+   song: candidates judged in parallel through private engines (the registry
+   is the one shared thing), and the sweep's bars rendered once a pattern.
+7. Listening as data: an A/B of two renders where the listener picks the
+   nearer, and a line named as the lead, kept as files beside the truths; a
+   few dozen such pairs would set the weights of `Fidelity`'s three terms and
+   the lead rule's default by what ears prefer rather than by hand.
 
 ### Render a conductor timeline offline
 
