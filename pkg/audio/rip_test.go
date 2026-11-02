@@ -493,9 +493,50 @@ func TestMatchNotesAlignsTwoTranscripts(t *testing.T) {
 	}
 }
 
+// TestMatchHitsPlacesARipsDrumsOnTheGivenOnes: a rip's drum steps, placed on its
+// beats at 117 bpm, match a beat given at 120 bpm two seconds later under the
+// map the search finds, drum by drum within half a step: a kick the rip missed
+// is only given, and a snare it added only the rip's.
+func TestMatchHitsPlacesARipsDrumsOnTheGivenOnes(t *testing.T) {
+	const bars, beat = 8, 60.0 / 117
+	r := &Rip{BPM: 117, Bars: make([]RipBar, bars)}
+	for i := range BeatsPerBar*bars + 1 {
+		r.Beats = append(r.Beats, 0.3+float64(i)*beat)
+	}
+	var given []RipHit
+	for b := range bars {
+		for s := 0; s < StepsPerBar; s += 2 {
+			drums := []InstrumentType{InstrHihat}
+			if s%8 == 0 {
+				drums = append(drums, InstrKick)
+			} else if s%4 == 0 {
+				drums = append(drums, InstrSnare)
+			}
+			for _, d := range drums {
+				given = append(given, RipHit{Start: 2 + float64(b*StepsPerBar+s)*0.125, Drum: d})
+				if d != InstrKick || b != 3 || s != 8 {
+					r.Bars[b].Drums[d] = append(r.Bars[b].Drums[d], Step{Pos: s})
+				}
+			}
+		}
+	}
+	r.Bars[5].Drums[InstrSnare] = append(r.Bars[5].Drums[InstrSnare], Step{Pos: 6})
+	ag := MatchHits(r.Hits(), given, beat/StepsPerBeat/2)
+	want := [InstrClap][3]int{InstrKick: {15, 0, 1}, InstrSnare: {16, 1, 0}, InstrHihat: {64, 0, 0}}
+	for d, l := range ag.Drums {
+		if got := [3]int{l.Matched, len(l.OnlyA), len(l.OnlyB)}; got != want[d] {
+			t.Errorf("drum %d: matched, only the rip's, only given %v, want %v", d, got, want[d])
+		}
+	}
+	if math.Abs(ag.Stretch-beat/0.5) > 0.005 || math.Abs(ag.Offset-(0.3-2*beat/0.5)) > 0.05 {
+		t.Errorf("map %.3f × given %+.3f, want %.3f × given %+.3f", ag.Stretch, ag.Offset, beat/0.5, 0.3-2*beat/0.5)
+	}
+}
+
 // TestMIDIRoundTrip: a transcript written as a MIDI file reads back note for
-// note within half a tick, each line from its named track, a note that ends as
-// the next of its pitch starts kept apart from it, and every note unmeasured.
+// note and hit for hit within half a tick, each line from its named track and
+// each drum from the drum channel, a note that ends as the next of its pitch
+// starts kept apart from it, and every note unmeasured.
 func TestMIDIRoundTrip(t *testing.T) {
 	in := []RipNote{
 		{Start: 0, End: 1.2, MIDI: 40, Vel: 1, Bass: true},
@@ -504,13 +545,14 @@ func TestMIDIRoundTrip(t *testing.T) {
 		{Start: 0.5, End: 1.1, MIDI: 67, Vel: 0.6, Second: true},
 		{Start: 0.77, End: 1.234, MIDI: 76, Vel: 0.3},
 	}
+	hits := []RipHit{{Start: 0, Drum: InstrKick, Vel: 1}, {Start: 0.22, Drum: InstrHihat, Vel: 0.5}, {Start: 0.44, Drum: InstrSnare, Vel: 0.8}}
 	var file bytes.Buffer
-	if err := WriteMIDI(&file, in, 137); err != nil {
+	if err := WriteMIDI(&file, in, hits, 137); err != nil {
 		t.Fatal(err)
 	}
-	out, err := ReadMIDI(&file)
-	if err != nil || len(out) != len(in) {
-		t.Fatalf("read %d note(s) of %d: %v", len(out), len(in), err)
+	out, outHits, err := ReadMIDI(&file)
+	if err != nil || len(out) != len(in) || len(outHits) != len(hits) {
+		t.Fatalf("read %d note(s) of %d, %d hit(s) of %d: %v", len(out), len(in), len(outHits), len(hits), err)
 	}
 	half := 0.5 / (137.0 / 60 * midiDivision)
 	for i, n := range out {
@@ -520,12 +562,17 @@ func TestMIDIRoundTrip(t *testing.T) {
 			t.Errorf("note %d: read %+v, wrote %+v", i, n, w)
 		}
 	}
+	for i, h := range outHits {
+		if w := hits[i]; h.Drum != w.Drum || math.Abs(h.Start-w.Start) > half || math.Abs(h.Vel-w.Vel) > 0.5/127 {
+			t.Errorf("hit %d: read %+v, wrote %+v", i, h, w)
+		}
+	}
 }
 
 // TestReadMIDITempoMap: a type-1 file whose first track halves the tempo two
 // beats in reads in seconds under that map; of its unnamed tracks, the one
-// centred under E3 is the bass and the other the melody, and the drum channel
-// is left out. Its notes use running status and a note-on at velocity 0.
+// centred under E3 is the bass and the other the melody, and the drum channel's
+// key 36 is a kick. Its notes use running status and a note-on at velocity 0.
 func TestReadMIDITempoMap(t *testing.T) {
 	track := func(events ...byte) []byte {
 		return append(binary.BigEndian.AppendUint32([]byte("MTrk"), uint32(len(events))), events...)
@@ -550,7 +597,10 @@ func TestReadMIDITempoMap(t *testing.T) {
 		0x00, 0x99, 36, 100,
 		0x83, 0x60, 0x89, 36, 0,
 		0x00, 0xFF, 0x2F, 0)...)
-	notes, err := ReadMIDI(bytes.NewReader(file))
+	notes, hits, err := ReadMIDI(bytes.NewReader(file))
+	if len(hits) != 1 || hits[0].Drum != InstrKick || hits[0].Start != 0 {
+		t.Errorf("drums read %+v, want a kick at 0s", hits)
+	}
 	want := []RipNote{
 		{Start: 0, End: 0.5, MIDI: 72},
 		{Start: 0.5, End: 2, MIDI: 76},

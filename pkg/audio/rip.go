@@ -207,6 +207,32 @@ type RipNote struct {
 // RipUnmeasured is a RipNote's Bright where none was measured, never a share
 const RipUnmeasured = -1.0
 
+// RipHit is a drum's hit in seconds of a recording
+type RipHit struct {
+	Start float64
+	Drum  InstrumentType // InstrKick, InstrSnare or InstrHihat
+	Vel   float64
+}
+
+// Hits are the drums' hits in seconds, each bar's steps placed on its beats
+func (r *Rip) Hits() []RipHit {
+	var out []RipHit
+	for b, bar := range r.Bars {
+		for d, steps := range bar.Drums {
+			for _, s := range steps {
+				i := BeatsPerBar*b + s.Pos/StepsPerBeat
+				if i+1 >= len(r.Beats) {
+					continue
+				}
+				span := (r.Beats[i+1] - r.Beats[i]) / StepsPerBeat
+				out = append(out, RipHit{Start: r.Beats[i] + span*float64(s.Pos%StepsPerBeat), Drum: InstrumentType(d), Vel: s.Vel})
+			}
+		}
+	}
+	slices.SortStableFunc(out, func(a, b RipHit) int { return cmpFloat(a.Start, b.Start) })
+	return out
+}
+
 // RipBar is one bar: each drum's hits, kick, snare and hihat in instrument order,
 // and the melody and bass notes, whose degrees are relative to the Rip's key.
 type RipBar struct {

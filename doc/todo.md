@@ -1330,8 +1330,10 @@ front-end seam. What remains, in the design's order:
    (`tool/rip-train/README.md`, "A round on a development machine",
    `round.sh`), passed the analysis on both bench lines (0.51 against 0.47
    clean, 0.460 against 0.458 augmented, on its drums; melody 0.08 against
-   0.13), its held-out loss flat from step 33000, and lost every recording's
-   truth (the origin's melody register 34 of 83 tapped notes against 50).
+   0.13), its held-out loss flat from step 33000, and on recordings beat
+   the analysis on drums (Billie Jean's false kicks a third) and lost on
+   melodies (the origin's register 34 of 83 tapped notes against 50, Für
+   Elise's 266 of 869 against 444).
    Next: real recordings with their notes in the corpus (item 1), then more
    loops, or width 384 (`DIM=384 HEADS=12 FFN=1536`, 7 million weights),
    each measured by `bench` on clean and augmented loops and by the truths on
