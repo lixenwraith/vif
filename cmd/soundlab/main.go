@@ -62,12 +62,7 @@ func run() error {
 	}
 
 	if *flagScript != "" {
-		f, err := os.Open(*flagScript)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		return soundlab.RunScript(s, f)
+		return soundlab.RunScriptFile(s, *flagScript)
 	}
 	if tui {
 		return runTUI(s, lb)

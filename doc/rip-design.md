@@ -108,11 +108,14 @@ flowchart LR
    render and the recording heard through one front end (`Ripper.Sound`), their
    pitch salience, log-mel bands and onset strength compared bar by bar on each
    one's own beats. The voices are searched by the genetic engine; the steps
-   are swept, each tried a semitone and an octave either way and silent, the
-   best move kept when it gains, since a move touches one note's frames in a
-   thousand and a search over every step's genes at once saw nothing of it in
-   its budget; a round is one search and one sweep, until a round gains
-   nothing. Next, the model hearing the render too, so
+   are swept, each tried a semitone and an octave either way, the recording's
+   strongest pitch at its step, a step earlier and later, longer and shorter,
+   and silent, judged on the bars that play its pattern, the best move kept
+   when it gains, since a move touches one note's frames in a thousand and a
+   search over every step's genes at once saw nothing of it in its budget;
+   then a step a line leaves empty tries that strongest pitch, the one way in
+   for a note the rip missed; a round is one search and one sweep, until a
+   round gains nothing. Next, the model hearing the render too, so
    its voice estimate of the render against its estimate of the recording is a
    second, cheaper distance for the voice search.
 
@@ -429,7 +432,11 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   (0.82, 0.79, 0.83), 70 and 46 steps. The rip-back holds at 0.89 and 0.86
   while its bass falls (0.80 to 0.67 on the intro): a move the recording's
   frames like is not always one the rip reads back the same, and fidelity is
-  the judge.
+  the judge. The user's ear: the origin's refined render is the first whose
+  melody is recognisably the piece's, with wrong notes here and there and
+  some misses and extras, where none of the earlier renders would have been
+  identified as it; the origin is the primary sample from here, and the
+  intro, shifted and stretched from it, a degraded second witness.
 
 ## 9. Decisions
 

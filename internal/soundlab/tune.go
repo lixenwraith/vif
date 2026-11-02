@@ -61,7 +61,7 @@ func cmdTune(s *Session, a []string) error {
 	}
 	file := ""
 	if len(a) > 1 {
-		file = a[1]
+		file = s.path(a[1])
 	}
 	return s.tune(o, file)
 }
@@ -417,7 +417,7 @@ func cmdCorpus(s *Session, a []string) error {
 			*p = n
 		}
 	}
-	return s.exportCorpus(a[0], o)
+	return s.exportCorpus(s.path(a[0]), o)
 }
 
 // exportCorpus writes loops into dir: loop_NNN.wav as rendered, loop_NNN.mel as
