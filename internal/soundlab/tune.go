@@ -373,7 +373,7 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 // each drawn from rng so the model does not learn the synthesizer's clean
 // output: a swell of up to 6 dB, for half the loops a low-pass, two equaliser
 // bands, for a third a soft clip, for half a compressor, a booth's reverb or for
-// a third a hall's further back, and a noise floor 40 to 65 dB down
+// a third a hall's further back, and for half a noise floor 40 to 65 dB down
 func degrade(x []float64, rng *rand.Rand) []float64 {
 	sr := float64(audio.AudioSampleRate)
 	out := make([]float64, len(x))
@@ -439,7 +439,12 @@ func degrade(x []float64, rng *rand.Rand) []float64 {
 		rms += out[i] * out[i]
 	}
 	rms = math.Sqrt(rms / float64(max(len(out), 1)))
-	noise := rms * math.Pow(10, (rng.Float64()*25-65)/20)
+	// a recording's hiss, which a studio's Billie Jean carries 39 dB under its
+	// median frame, sits bare over a synthesizer's empty treble: half the loops have none
+	noise := 0.0
+	if rng.Float64() < 0.5 {
+		noise = rms * math.Pow(10, (rng.Float64()*25-65)/20)
+	}
 	for i := range out {
 		out[i] = min(max(out[i]+rng.NormFloat64()*noise, -1), 1)
 	}
