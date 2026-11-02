@@ -308,9 +308,9 @@ func genBass(rng *rand.Rand, degrees int) *audio.Pattern {
 
 // loopVoices is the voice each tonal instrument the slotted patterns name plays
 // with: the registered one, or under aug one of random genes near it, a third of
-// the time on another wave, and in a third of the loops every release three to
-// ten times as long, as under a piano's pedal; registered for the render and put
-// back by restore, so a corpus hears voices beyond the shipped ones
+// the time on another wave, and in a third of the loops every release but the
+// bass's three to ten times as long, as under a piano's pedal; registered for the
+// render and put back by restore, so a corpus hears voices beyond the shipped ones
 func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, rng *rand.Rand) (map[string]*audio.VoiceDef, func()) {
 	voices := map[string]*audio.VoiceDef{}
 	var originals []*audio.VoiceDef
@@ -345,7 +345,9 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 				wave = audio.VoiceWaves[rng.IntN(len(audio.VoiceWaves))]
 			}
 			r := audio.VoiceFromGenes(wave, genes)
-			r.Release = min(r.Release*pedal, 3)
+			if tr.Instr != audio.InstrBass {
+				r.Release = min(r.Release*pedal, 3)
+			}
 			r.VibratoHz, r.VibratoCents, r.VibratoDelay, r.Vowel = v.VibratoHz, v.VibratoCents, v.VibratoDelay, v.Vowel // not genes; kept from the registered voice
 			r.Name = name
 			if audio.ValidateVoice(r) != nil {
@@ -369,9 +371,9 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 
 // degrade puts a room and a mix between a render and the frames a model hears,
 // each drawn from rng so the model does not learn the synthesizer's clean
-// output: a gain swelling by up to 6 dB, for half the loops a low-pass, two
-// equaliser bands, for a third a drive into a soft clip, for half a compressor,
-// a reverb from a booth's to, for a third, a hall's further back, and a noise floor
+// output: a swell of up to 6 dB, for half the loops a low-pass, two equaliser
+// bands, for a third a soft clip, for half a compressor, a booth's reverb or for
+// a third a hall's further back, and a noise floor 40 to 65 dB down
 func degrade(x []float64, rng *rand.Rand) []float64 {
 	sr := float64(audio.AudioSampleRate)
 	out := make([]float64, len(x))
@@ -437,7 +439,7 @@ func degrade(x []float64, rng *rand.Rand) []float64 {
 		rms += out[i] * out[i]
 	}
 	rms = math.Sqrt(rms / float64(max(len(out), 1)))
-	noise := rms * math.Pow(10, (rng.Float64()*15-40)/20)
+	noise := rms * math.Pow(10, (rng.Float64()*25-65)/20)
 	for i := range out {
 		out[i] = min(max(out[i]+rng.NormFloat64()*noise, -1), 1)
 	}
