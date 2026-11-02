@@ -108,11 +108,14 @@ flowchart LR
    render and the recording heard through one front end (`Ripper.Sound`), their
    pitch salience, log-mel bands and onset strength compared bar by bar on each
    one's own beats. The voices are searched by the genetic engine; the steps
-   are swept, each tried a semitone and an octave either way and silent, the
-   best move kept when it gains, since a move touches one note's frames in a
-   thousand and a search over every step's genes at once saw nothing of it in
-   its budget; a round is one search and one sweep, until a round gains
-   nothing. Next, the model hearing the render too, so
+   are swept, each tried a semitone and an octave either way, the recording's
+   strongest pitch at its step, a step earlier and later, longer and shorter,
+   and silent, judged on the bars that play its pattern, the best move kept
+   when it gains, since a move touches one note's frames in a thousand and a
+   search over every step's genes at once saw nothing of it in its budget;
+   then a step a line leaves empty tries that strongest pitch, the one way in
+   for a note the rip missed; a round is one search and one sweep, until a
+   round gains nothing. Next, the model hearing the render too, so
    its voice estimate of the render against its estimate of the recording is a
    second, cheaper distance for the voice search.
 

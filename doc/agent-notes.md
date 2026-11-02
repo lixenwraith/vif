@@ -320,6 +320,11 @@ that proves wrong or that a document now states, and link the document instead.
   changes hands from frame to frame, so each line hears a trill where the
   music holds a chord, and two fitted voices play it as two instruments
   alternating. Assign concurrent notes to lines by pitch order (`uncross`).
+- The sweep's moves were all relative to the note the rip heard, so a note it
+  missed had no way in and one wrong by a third no way out. The recording's
+  own strongest pitch over a step (its salience rows, which the fidelity's
+  sound already holds) is the proposal: tried as a move on a step that has a
+  note and as an insertion on one that has none, kept when the bar gains.
 - A search over every step's genes at once (312 genes, six generations of
   twelve) kept no move on the sample: one note's move changes one frame in a
   thousand of the fidelity, under the noise of a dozen genes moving with it.
