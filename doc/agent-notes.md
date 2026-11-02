@@ -335,6 +335,12 @@ that proves wrong or that a document now states, and link the document instead.
   thousand of the fidelity, under the noise of a dozen genes moving with it.
   A sweep that tries each step's five moves alone and keeps a gain sees it;
   five renders a step is the price, minutes a round on a four-bar song.
+- A `.pt`'s held-out loss, a merge's or any checkpoint's, is read without
+  training: `train.load_corpus`, `train.validation` over the last `--holdout`
+  loops and `train.evaluate` in a scratch script, the model built from the
+  file's `cfg`. `--steps 0` scores nothing, since the score runs in the loop. A
+  `pip install --user` torch is not seen under `python3 -I`, which drops the
+  user's site directory.
 - A training run shares the cores with everything else the session does: the
   fourth run slowed from 0.4 to 4 seconds a step under a rip and a test run,
   and the two-hour waiter on it timed out twice. Size a waiter by the run

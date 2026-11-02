@@ -44,7 +44,9 @@ Everything below runs from the vif checkout.
 
 ## The pipeline
 
-`pipeline.sh` runs the four stages with every knob an environment variable:
+`pipeline.sh` runs the four stages with every knob an environment variable,
+and two more, `shard` and `merge`, that spread a run over several machines
+([Training in parallel](#training-in-parallel)):
 
 ```bash
 tool/rip-train/pipeline.sh all            # corpus, train, bench, install, with the defaults below
@@ -68,6 +70,9 @@ tool/rip-train/pipeline.sh install
 | `OUT`, `CHECKPOINT` | `$CORPUS/ripnet.bin`, `$CORPUS/ripnet.pt` | the weight file, and the checkpoint a stopped run resumes from |
 | `ROOT` | `~/.config/vif` | the configuration root `install` copies the weights into |
 | `BENCH_LOOPS`, `BENCH_BARS` | 12, 4 | the fresh loops `bench` grades on |
+| `INIT`, `SHARD` | none, 0 | `shard`: the `.pt` the round starts from, and the worker's stream of windows; it writes `$CORPUS/shard$SHARD.pt` and `.bin` |
+| `MERGE_FILES`, `TRIM` | none, 0 | `merge`: the round's shard checkpoints, blank-separated or a glob, and the share of them dropped at each end of each weight before the mean |
+| `MERGED` | `$CORPUS/merged.pt` | `merge`: the mean as a `.pt`, the next round's `INIT`; its weight file goes to `OUT` |
 
 A smoke test of the whole path, under ten minutes on a laptop:
 
@@ -98,6 +103,58 @@ the other and share the cores with anything else the machine does.
   support, `compress`, `refine`, and `song <name> score` for how the song
   sounds against the recording's own frames and how it rips back. The ear is
   the verifier; the recordings in `lixenwraith/scratch` are the held-out set.
+
+## Training in parallel
+
+A run trains on one machine; a round spreads one over several. Every worker
+starts from the same weights, trains on a stream of windows of its own, and the
+round's checkpoints are averaged into the next round's start:
+
+1. **The start.** The first round's `INIT` is an ordinary run's checkpoint, a
+   few hundred steps on one machine, so the workers part from weights past the
+   first steps, which move them most; each later round's is the last merge.
+2. **The shards.** Each worker runs `shard` from `INIT` with a `SHARD` no worker
+   has had in this round or an earlier one (worker k of W in round r takes
+   r·W + k), so no two draw the same windows and no round resumes an earlier
+   one's checkpoint. A shard writes `$CORPUS/shard$SHARD.pt`, the checkpoint the
+   merge reads and a stopped shard resumes from, and `shard$SHARD.bin`, its best
+   held-out step.
+3. **The merge.** On one machine, with the shards' `.pt` files gathered, `merge`
+   averages them weight by weight into `MERGED`, the next round's `INIT`, and
+   writes the mean's weight file to `OUT`, which `bench` and `install` take as
+   they take a run's.
+
+A smoke round on one machine, two shards from one start, in a minute or two:
+
+```bash
+export CORPUS=/tmp/round HOLDOUT=4 EVERY=20
+LOOPS=24 tool/rip-train/pipeline.sh corpus
+STEPS=20 CHECKPOINT=/tmp/round/start.pt tool/rip-train/pipeline.sh train
+INIT=/tmp/round/start.pt SHARD=0 STEPS=40 tool/rip-train/pipeline.sh shard
+INIT=/tmp/round/start.pt SHARD=1 STEPS=40 tool/rip-train/pipeline.sh shard
+MERGE_FILES='/tmp/round/shard*.pt' tool/rip-train/pipeline.sh merge   # /tmp/round/merged.pt, the next INIT
+```
+
+Every worker trains on the same corpus and holds out the same loops, so their
+held-out lines compare: copy it, or render it on each from the same checkout
+with the same knobs, since `corpus` draws from a fixed seed. A shard starts with
+a fresh optimizer and a cosine schedule of its own, so each round is a warm
+restart, and the merge takes each shard's last step, not its best held-out one.
+`TRIM=0.1` drops each weight's highest and lowest tenth of the files before the
+mean, so a worker that diverged does not drag the rest; it counts whole files,
+rounded down, so under ten files it drops none.
+
+**Why independent seeds cannot be averaged.** A network's hidden units can be
+permuted, with the weights that read them, without changing what it computes,
+and two runs from different random starts settle on different orders: what one
+run's unit 7 does, the other's unit 31 does. Their mean, weight by weight,
+blends units that mean different things and lands on the ridge of the loss
+between the two, worse than either. Runs from one start, trained apart for a
+while, keep its order and stay in one basin, where the mean of their weights is
+about as good as each: hence one `INIT` a round, and rounds short enough that
+the shards stay close. `average.py` refuses files of different shapes, but two
+runs of one shape from different starts look alike to it; only the protocol
+keeps them apart.
 
 ## Turning a run toward your music
 
@@ -170,12 +227,15 @@ cp ripnet.bin ~/.config/vif/audio/ripnet.bin
 
 `train.py` trains on `--batch` windows of `--window` frames (512, six seconds)
 cropped at random from the loops; `--checkpoint` saves every `--every` steps
-and resumes from the file when it exists. The defaults are `ripnet.Spec`:
-eighty bands in, width 128, four heads, four layers, feed-forward 512, a window
-of 64 frames either side, about 800 thousand weights. The losses: onsets, drums
-and pitches as weighted binary cross-entropy, voicing likewise, the wave as
-cross-entropy and the voice genes as squared error, the last two over frames a
-note sounds in.
+and resumes from the file when it exists, `--init` starts from a `.pt`'s weights
+alone (no optimizer state, step 0), and `--shard-seed` moves the stream the
+windows are drawn from while `--seed` keeps the starting weights;
+`average.py --pt next.pt --out next.bin [--trim 0.1] a.pt b.pt ...` is the
+merge. The defaults are `ripnet.Spec`: eighty bands in, width 128, four heads,
+four layers, feed-forward 512, a window of 64 frames either side, about 800
+thousand weights. The losses: onsets, drums and pitches as weighted binary
+cross-entropy, voicing likewise, the wave as cross-entropy and the voice genes
+as squared error, the last two over frames a note sounds in.
 
 ## Parity
 

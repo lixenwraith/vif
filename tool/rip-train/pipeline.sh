@@ -1,16 +1,8 @@
 #!/usr/bin/env bash
-# The rip model's training pipeline, end to end: a corpus rendered by soundlab,
-# a model trained on it, benched against the built-in analysis, installed as
-# data. Run from the vif checkout; every knob is an environment variable.
-#
-#   tool/rip-train/pipeline.sh corpus   # render LOOPS loops into CORPUS
-#   tool/rip-train/pipeline.sh train    # train STEPS steps, weights to OUT
-#   tool/rip-train/pipeline.sh bench    # grade OUT against the analysis
-#   tool/rip-train/pipeline.sh install  # copy OUT into ROOT/audio/ripnet.bin
-#   tool/rip-train/pipeline.sh all      # the four in order
-#
-# A FOCUS script runs in soundlab before the corpus renders: it registers the
-# voices and patterns the loops draw from (see focus/ and the README).
+# The rip model's training pipeline: corpus, train, bench and install, or all four
+# in order; shard and merge run a training round over several workers. Run from
+# the vif checkout; every knob is an environment variable, and the README is the
+# guide.
 set -euo pipefail
 
 CORPUS=${CORPUS:-corpus}             # where the loops go
@@ -30,6 +22,11 @@ CHECKPOINT=${CHECKPOINT:-$CORPUS/ripnet.pt}
 ROOT=${ROOT:-${XDG_CONFIG_HOME:-$HOME/.config}/vif}   # the configuration root rip hears with
 BENCH_LOOPS=${BENCH_LOOPS:-12}
 BENCH_BARS=${BENCH_BARS:-4}
+INIT=${INIT:-}                       # shard: the .pt the round starts from, the last merge's
+SHARD=${SHARD:-0}                    # shard: this worker's stream of windows, its own in every round
+MERGE_FILES=${MERGE_FILES:-}         # merge: the round's shard checkpoints, blank-separated, globs too
+TRIM=${TRIM:-0}                      # merge: share of the files dropped at each end of each weight
+MERGED=${MERGED:-$CORPUS/merged.pt}  # merge: the mean as a .pt, the next round's INIT; OUT gets its weights
 PYTHON=${PYTHON:-python3}
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -50,7 +47,21 @@ corpus() {
 
 train() {
 	echo "== train: $STEPS steps of batch $BATCH on $CORPUS, $HOLDOUT loops held out"
-	(cd "$here" && "$PYTHON" train.py --corpus "$(realpath "$CORPUS")" --out "$(realpath -m "$OUT")" --steps "$STEPS" --batch "$BATCH" --every "$EVERY" --holdout "$HOLDOUT" --checkpoint "$(realpath -m "$CHECKPOINT")")
+	(cd "$here" && "$PYTHON" train.py --corpus "$(realpath "$CORPUS")" --out "$(realpath -m "$OUT")" --steps "$STEPS" --batch "$BATCH" --every "$EVERY" --holdout "$HOLDOUT" --checkpoint "$(realpath -m "$CHECKPOINT")" "$@")
+}
+
+# A shard's files are named by SHARD, so a round never resumes an earlier one's checkpoint.
+shard() {
+	[ -f "$INIT" ] || { echo "shard: INIT names the .pt the round starts from; '$INIT' is no file" >&2; exit 2; }
+	echo "== shard $SHARD from $INIT"
+	OUT=$CORPUS/shard$SHARD.bin CHECKPOINT=$CORPUS/shard$SHARD.pt train --init "$(realpath "$INIT")" --shard-seed "$SHARD"
+}
+
+merge() {
+	[ -n "$MERGE_FILES" ] || { echo "merge: MERGE_FILES names the round's shard checkpoints" >&2; exit 2; }
+	echo "== merge: $MERGE_FILES into $MERGED and $OUT"
+	# shellcheck disable=SC2086 # blank-separated, and a glob expands
+	"$PYTHON" "$here/average.py" --pt "$MERGED" --out "$OUT" --trim "$TRIM" $MERGE_FILES
 }
 
 bench() {
@@ -75,7 +86,7 @@ install() {
 }
 
 case "$stage" in
-corpus | train | bench | install) "$stage" ;;
+corpus | train | shard | merge | bench | install) "$stage" ;;
 all) corpus; train; bench; install ;;
-*) echo "usage: $0 corpus|train|bench|install|all" >&2; exit 2 ;;
+*) echo "usage: $0 corpus|train|shard|merge|bench|install|all" >&2; exit 2 ;;
 esac

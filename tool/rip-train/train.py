@@ -18,6 +18,7 @@ import os
 import random
 import struct
 import time
+from dataclasses import asdict
 
 import numpy as np
 import torch
@@ -169,14 +170,16 @@ def main() -> None:
     ap.add_argument("--ffn", type=int, default=512)
     ap.add_argument("--attention-window", type=int, default=64, help="frames attended either side")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--shard-seed", type=int, default=0, help="offsets the stream the windows are drawn from, so a round's workers see different loops; the starting weights stay --seed's")
     ap.add_argument("--checkpoint", default="", help="write a .pt every --every steps, and resume from it when present")
+    ap.add_argument("--init", default="", help="start from this .pt's model weights, without its optimizer state or step: a training round's common start; a --checkpoint present wins")
     ap.add_argument("--every", type=int, default=200, help="steps between checkpoints and held-out scores")
     ap.add_argument("--holdout", type=int, default=-1, help="loops held out of training and scored every --every steps; the step that scores best is what --out gets (default a tenth, none under five loops)")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
-    rng = random.Random(args.seed)
+    rng = random.Random(args.seed + (args.shard_seed << 32))  # a stream per seed and shard; shard 0 is the seed's own
     manifest, loops = load_corpus(args.corpus)
     holdout = args.holdout if args.holdout >= 0 else (len(loops) // 10 if len(loops) >= 5 else 0)
     held = loops[len(loops) - holdout:] if holdout else []
@@ -194,6 +197,9 @@ def main() -> None:
         opt.load_state_dict(ck["opt"])
         step = ck["step"]
         print(f"resumed at step {step}")
+    elif args.init:
+        model.load_state_dict(torch.load(args.init, map_location=args.device)["model"])
+        print(f"started from {args.init}")
     print(f"{sum(p.numel() for p in model.parameters())} weights, {len(loops)} loops, {sum(len(m) for m, _ in loops)} frames, {len(held)} held out in {len(val_mels)} windows")
     t0 = time.time()
     best_loss, best_step, best_state = float("inf"), step, None
@@ -233,7 +239,8 @@ def main() -> None:
         if step % args.every == 0 or step == args.steps:
             score()
             if args.checkpoint:
-                torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step}, args.checkpoint)
+                # the shape rides along for average.py: the heads and the window show in no tensor
+                torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "cfg": asdict(cfg)}, args.checkpoint)
     if best_state is not None:
         model.load_state_dict(best_state)
         print(f"best held-out decoders' loss {best_loss:.3f} at step {best_step}; exporting that")
