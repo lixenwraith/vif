@@ -378,7 +378,7 @@ func ParseTranscript(text string, bpm int, origin float64) ([]RipNote, error) {
 			}
 			dur = max(v, 0.01)
 		}
-		notes = append(notes, RipNote{Start: start, End: start + dur, MIDI: midi, Vel: 0.8, Bass: m[1] == "bass", Second: m[1] == "under"})
+		notes = append(notes, RipNote{Start: start, End: start + dur, MIDI: midi, Vel: 0.8, Bass: m[1] == "bass", Second: m[1] == "under", Bright: RipUnmeasured})
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
@@ -440,7 +440,7 @@ func parseTab(tab string, unit, start float64, line string) ([]RipNote, error) {
 		case c == '.' || c == '_':
 			at += unit
 		default:
-			notes = append(notes, RipNote{Start: at, End: at + unit, MIDI: -1, Vel: 0.8, Bass: line == "bass", Second: line == "under"})
+			notes = append(notes, RipNote{Start: at, End: at + unit, MIDI: -1, Vel: 0.8, Bass: line == "bass", Second: line == "under", Bright: RipUnmeasured})
 			at += unit
 		}
 	}

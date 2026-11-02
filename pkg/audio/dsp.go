@@ -39,28 +39,41 @@ func fft(re, im []float64) {
 // Hann window of n samples every hop; frames are centred, so frame t is the
 // signal at sample t*hop and the first frame starts at zero.
 func spectrogram(x []float64, n, hop int, visit func(frame int, mag []float64)) {
-	window := make([]float64, n)
-	for i := range window {
-		window[i] = 0.5 - 0.5*math.Cos(2*math.Pi*float64(i)/float64(n))
-	}
-	re, im := make([]float64, n), make([]float64, n)
-	mag := make([]float64, n/2+1)
+	s := newSTFT(n)
 	for t := 0; t*hop < len(x); t++ {
-		start := t*hop - n/2
-		for i := range n {
-			if j := start + i; j >= 0 && j < len(x) {
-				re[i] = x[j] * window[i]
-			} else {
-				re[i] = 0
-			}
-			im[i] = 0
-		}
-		fft(re, im)
-		for k := range mag {
-			mag[k] = math.Hypot(re[k], im[k])
-		}
-		visit(t, mag)
+		visit(t, s.at(x, t*hop))
 	}
+}
+
+// stft is one frame's transform under a Hann window of n samples, its buffers
+// kept from frame to frame
+type stft struct{ window, re, im, mag []float64 }
+
+func newSTFT(n int) *stft {
+	s := &stft{window: make([]float64, n), re: make([]float64, n), im: make([]float64, n), mag: make([]float64, n/2+1)}
+	for i := range s.window {
+		s.window[i] = 0.5 - 0.5*math.Cos(2*math.Pi*float64(i)/float64(n))
+	}
+	return s
+}
+
+// at is the magnitude spectrum of x under the window centred on sample c, the
+// samples past either end silent; the slice is reused by the next call
+func (s *stft) at(x []float64, c int) []float64 {
+	start := c - len(s.window)/2
+	for i, w := range s.window {
+		if j := start + i; j >= 0 && j < len(x) {
+			s.re[i] = x[j] * w
+		} else {
+			s.re[i] = 0
+		}
+		s.im[i] = 0
+	}
+	fft(s.re, s.im)
+	for k := range s.mag {
+		s.mag[k] = math.Hypot(s.re[k], s.im[k])
+	}
+	return s.mag
 }
 
 // slidingMedian is the median of the last size values pushed, the values kept

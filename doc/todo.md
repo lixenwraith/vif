@@ -1361,10 +1361,12 @@ rip are in place; what remains:
    paying for each render once; measure it against the mechanical grouping.
 3. Several voices in a register: the two lines are decoded together now and
    parted again by pitch, length and strength, the lead the busier line or
-   the one the listener names (`rip ... lead`); a colour per note, the
-   brightness of its harmonic series, as one more thing a line keeps, once a
-   colour survives the other lines' partials falling on its own (a masked
-   profile left most notes of the origin without one); a third line, and a
+   the one the listener names (`rip ... lead`); a colour per note as one more
+   thing a line keeps in `streams`, from `RipNote.Bright`, an unmeasured note
+   (`RipUnmeasured`, its fundamental under a concurrent note's partial
+   throughout) costing a neutral amount; if the unmeasured share matters
+   there, subtract the covering partial, estimated from its own note's
+   spectrum, and measure it against the rhythm truth; a third line, and a
    chord's inner notes, are not heard. The bass register's rows end at E3 and
    the bass decoder reaches A3 over the melody's rows; a line that lives
    around the join is still heard on two scales.
