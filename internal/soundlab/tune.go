@@ -385,7 +385,7 @@ func degrade(x []float64, rng *rand.Rand) []float64 {
 	}
 	drive := 1.0
 	if rng.Float64() < 1.0/3 {
-		drive = 2 + rng.Float64()*4
+		drive = 1.5 + rng.Float64()*2
 	}
 	var bands [2]func(float64) float64
 	for k := range bands {
