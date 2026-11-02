@@ -1271,10 +1271,11 @@ front-end seam. What remains, in the design's order:
    overfitted in 12000 steps. The corpus is rendered at A440 and the sample is
    forty cents flat, which the analysis now reads and the model cannot: render
    the loops at random offsets from A440 (`corpus ... aug`), then more loops
-   and steps. A vocal line is a line like any other to the rip, but the engine
-   has no vibrato or formant stage, so a corpus has no voice-like lines beyond
-   `tool/rip-train/focus/vocal.toml`'s chorused saws: vibrato and formants in
-   `VoiceDef`, then a focus that draws them. Measure by the trainer's held-out loss, with `bench` against the
+   and steps. A vocal line is a line like any other to the rip; a voice has a
+   vibrato and a vowel's formants now (`tool/rip-train/focus/vocal.toml` draws
+   them), neither a gene, so the fit and the model's voice head do not search
+   them: genes for both once a corpus with them has trained, and a real vocal
+   recording held out. Measure by the trainer's held-out loss, with `bench` against the
    analysis on clean and augmented loops and by ear on the held-out recordings
    (`lixenwraith/scratch`'s `one_more_bite_intro.wav` first), then the weights
    and a tuned parameter set shipped as data, `DefaultRipParams` kept for a
@@ -1284,8 +1285,8 @@ front-end seam. What remains, in the design's order:
    a harmonic check on the hit (a percussive rise with a pitched tail is a note)
    until the model takes the front end.
 4. Key changes within a recording are outside the model: a key per phrase (a
-   chromatic note is an accidental on its step now). Two voices in one register have their second pass now; a
-   third, and a chord's inner notes, do not.
+   chromatic note is an accidental on its step now). Two voices in one register are decoded together now; a
+   third, and a chord's inner notes, are not.
 5. A sustained note with a wide vibrato can still read as two: the sample's
    wobble was its tuning, forty cents off A440, which the front end reads first
    now, and its notes hold for four to eight steps; a vibrato wider than a
@@ -1312,11 +1313,12 @@ rip are in place; what remains:
 2. Matching by reconstruction: a bar's distance to a member as the rip of the
    member's render against the bar, in place of `BarDistance`, with `Memoize`
    paying for each render once; measure it against the mechanical grouping.
-3. Several voices in a register: the second line has its own fitted voice now;
-   what one line still mixes is two instruments taking turns as the louder,
-   which the first path hears as one. Cluster a line's notes by their genes,
-   or by their lengths and attacks until a model names them, and fit a voice
-   per cluster.
+3. Several voices in a register: the two lines are decoded together now, each
+   its own continuity, the first the louder by a cost; which is the lead is
+   still told by loudness, not timbre, so a quiet lead under a loud counter
+   line changes hands over a long rest. A colour per pitch and frame, the
+   brightness of the harmonic series, as a continuity term of each line; a
+   third line, and a chord's inner notes, are not heard.
 4. The fit's sample notes are the mix around them: subtract the other register's
    estimate from the recording before the mel frames, or fit on the frames a
    trained front end attributes to the note.

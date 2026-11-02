@@ -9,6 +9,13 @@ type kit struct {
 	variants [InstrumentCount][]floatBuffer
 	voices   []*VoiceDef // by InstrumentType; a drum's and an unset voice's nil
 	tuning   float64     // the ratio every tonal note's frequency is scaled by; zero reads as one, A440
+	only     []bool      // by InstrumentType, the instruments that sound; nil for all
+}
+
+// sounds says whether an instrument plays on this kit: every one unless only
+// names some, as a render of one line of a song does
+func (k *kit) sounds(i InstrumentType) bool {
+	return k == nil || k.only == nil || (i >= 0 && int(i) < len(k.only) && k.only[i])
 }
 
 // ratio is the tuning's frequency ratio, one when unset and for the nil kit

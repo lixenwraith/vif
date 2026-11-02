@@ -50,12 +50,14 @@ flowchart LR
    the first full bar when sound leads into it, the bass
    register's salience from a window four times the rip's and the rip's own
    together (the long one's semitones at 110 Hz, the short one's onsets), the
-   melody register twice, the second path with the first's notes and their partials
-   cancelled and its notes kept above a share of the first's strength, so two
-   voices in one register are heard where one path heard the louder, the two
-   lines kept from crossing by pitch order, so a held dyad is not a trill
-   between them. `RipParams` holds their thresholds as data a search tunes
-   (`tune`).
+   melody register as two lines at once, a hidden path over pairs of pitches
+   where each line pays its own costs of moving and of starting or ending, no
+   pair a unison, a semitone or a harmonic interval apart, and the first line
+   paying `cross` a frame to be the quieter, so it is the line the ear follows
+   and the second the one under it, through a crossing or a rest shorter than
+   changing places would cost; the second line's notes are kept above a share
+   of the first's strength. `RipParams` holds their thresholds as data a
+   search tunes (`tune`).
 4. **Voices.** Each note carries the genes the front end heard it played with
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
    wave class); a register's notes average into one voice. A register the front
@@ -153,7 +155,9 @@ offline (`song <name> <file.wav>`).
   bench and the install with every knob an environment variable, and a focus
   script run before the corpus turns a run toward a kind of music (`focus/`:
   vocals as lines, plucked instruments); `tool/rip-train/README.md` is the
-  guide.
+  guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
+  neither a gene, kept by the augmentation when it draws voices near a
+  registered one.
 - **Model.** `ripnet.Spec`: eighty bands in, width 128, four heads, four layers,
   feed-forward 512, a window of 64 frames either side, about 800 thousand
   weights; heads for the onset, the three drums, the sixty-nine pitches, voicing,
@@ -456,6 +460,37 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   0.83, 0.80), so the numbers keep the second line and the ear decides. The
   intro is left at the ninth pass's 0.85; the origin is the sample now.
 
+- The eleventh pass, the two lines decoded together and the voices held to
+  the fit: the first line was the loudest pitch of each frame and the second
+  what a pass over the rest found, so the lead and a counter line a few notes
+  away traded places wherever one was momentarily louder, which the user
+  heard as a lead render that was the lead in places and the other line in
+  others; and `refine` had drifted every voice toward a driven saw, which the
+  user heard as renders turning electronic where the fit's had sounded like
+  the recording. A stream assignment over the notes already cut, by pitch, a
+  masked harmonic profile and level, made the two recordings' transcripts
+  agree less (the intro's first-line notes with a match in the origin 32 of 36
+  against 41 of 49, the origin's 24 of 44 against 33 of 55), so the change
+  went into the decoder: a hidden path over pairs of pitches, each line its
+  own costs, no pair a unison, a semitone or a harmonic interval apart, the
+  first line paying `cross` (0.003 a frame; 0 and 0.01 agree within a note or
+  two) to be the quieter. On a synthetic pair, a louder lead in quarter notes
+  under and then over a counter line in eighths on the same voice, 31 of 32
+  lead notes land in the first line and none of the counter's, 63 of 64
+  counter notes in the second. The bench is unchanged (analysis 0.485 clean
+  and 0.425 augmented against 0.487 and 0.429). The origin's transcript has
+  77 notes where it had 104 and the intro's 65 where it had 88, the fragments
+  of a line hopping between two gone, and the two agree at the same rate on
+  fewer notes (the origin's first line 23 of 38 against 33 of 55, its second
+  17 of 22 against 23 of 32). The fit picks modal voices for every line of
+  both; `refine` keeps them within a tenth of their floors (the origin's
+  0.115, 0.118 and 0.103 against 0.112, 0.117 and 0.100), and the origin
+  sounds 0.86 (pitch 0.89, timbre 0.86, onsets 0.81) after two rounds from
+  0.69 before, where the tenth pass's drifted voices reached 0.87; the intro
+  0.84 (0.85, 0.84, 0.84) from 0.66, the ninth's 0.85. Each line renders
+  alone now (`song <name> <file> <voice>`), so the user can say which line
+  the lead is and where it changes hands, which the numbers cannot.
+
 ## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved
@@ -497,7 +532,25 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   rows, and no decoder downstream could have repaired the wobble that made.
   And the engine renders at it: a song played at A440 beside a recording forty
   cents flat sounds sharpened, a stretched string, before any note is judged.
-- **Voices do not cross.** The louder of two concurrent notes changes hands
-  from frame to frame, so the first and second paths swap a held dyad between
-  them; assigned by pitch order, the upper line stays the upper, which is how
-  the ear parts them.
+- **Two lines are one decoder, not the louder and the rest.** The louder
+  pitch of each frame is not a line: a lead and a counter line a few notes
+  apart trade places wherever one is momentarily louder, and a second pass
+  over what the first left finds fragments; the ninth pass assigned concurrent
+  notes by pitch order, which only holds while the lead stays the upper.
+  Decoded together, each line keeps its own continuity, and which is the lead
+  is a cost, not a rule: the first line pays a little each frame to be the
+  quieter, so it follows the louder line through a crossing and gives it up
+  only over a rest or an inversion that lasts. A stream assignment after the
+  fact, by pitch, timbre and level over the notes both passes had cut, was
+  tried first and made the two recordings of the piece agree less: the notes
+  were already cut wrong.
+- **A refined voice stays near the fit.** The song's score is of the whole
+  mix, and a bright voice fills a mix better than the voice that sounds like
+  the line, so `refine` drifted every voice toward a driven saw while the
+  number rose: the renders sounded electronic where the fit's had sounded like
+  the recording. Each voice now has a tonal floor, its distance from the
+  recording's notes as the fit measures it, and the search hears no candidate
+  past the floor by more than a tenth; the score picks among voices that sound
+  like the notes. The sweep's proposals keep within a fifth of their track's
+  nearest note for the same reason: a pitch the mix is strongest at is not
+  thereby the line's.

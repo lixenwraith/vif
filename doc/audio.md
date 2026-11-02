@@ -250,7 +250,8 @@ velocity, scale degree, octave, an accidental (`acc`, the semitones off the
 degree, so a note outside the key is written exactly), duration, and
 probability. The tonal voices are
 data: a `[[voice]]` of the sound document names an instrument and its synthesis,
-an oscillator stage (sine, saw or square) through a resonant low-pass under a
+an oscillator stage (sine, saw or square), with a vibrato and a vowel's
+formants if a voice has them, through a resonant low-pass under a
 filter envelope into an ADSR, or a string, as a delay line or as its partials
 (`VoiceDef`). The shipped five are `voices.toml`; a document's voice of a shipped
 name retunes that instrument in place and a new name adds an instrument, which
@@ -465,14 +466,15 @@ other bin of a wobble, so a bass's octave does not read as a melody note; a hidd
 against the costs of moving and of starting or ending a note, is cut into notes,
 which land on the key's nearest degree with the semitones left as an accidental,
 the notes' median lag against the beats taken out first, since a pitch path
-starts a few frames after the attack the beats sit on. The melody register is tracked twice:
-the second path runs with the first's notes and their partials cancelled, and
-its notes are kept where they reach `second_voice` of the first's strength, so a
-slow line under a pluck is heard too, in the bar's own `Under` steps, a track
-of its own in the pattern and a voice of its own (`Rip.UnderVoice`); the two
-lines do not cross, so where the second pass's note sounds over a lower note
-of the first the two change lines, and a held dyad whose louder note changes
-hands is not heard as a trill between two instruments. The song a rip
+starts a few frames after the attack the beats sit on. The melody register is
+decoded as two lines at once, a path over pairs of pitches where each line pays
+its own costs of moving and of starting or ending, no pair a unison, a semitone
+or a harmonic interval apart, and the first line paying `cross` a frame to be
+the quieter, so it is the line the ear follows and the second the one under it
+through a crossing or a short rest; the second line's notes are kept where they
+reach `second_voice` of the first's strength, so a slow line under a pluck is
+heard too, in the bar's own `Under` steps, a track of its own in the pattern
+and a voice of its own (`Rip.UnderVoice`). The song a rip
 compresses into carries the recording's tuning (`SongDef.Tuning`), and the
 engine plays or renders it there (`AudioEngine.SetTuning`), as the voice fit
 renders its candidate notes there (`RenderNoteAt`), so a render stands beside
@@ -494,7 +496,10 @@ heard through one front end into a `RipSound` (`Ripper.Sound`: the frames, the
 log-mel bands and the beats, a rip's or a pinned grid's), paired bar by bar on
 each one's own beats, and the cosine of their pitch salience, of their mel bands
 and of their onset strength over each beat is averaged, each one where they
-sound alike; soundlab's `refine` judges the voices and the steps by it. Soundlab's `tune` searches the parameters over
+sound alike; soundlab's `refine` judges the voices and the steps by it, each
+voice held within a tenth of its tonal floor, the fit's own distance from the
+recording's notes, so the score of the mix does not drift a voice into one
+that fills the mix. Soundlab's `tune` searches the parameters over
 loops rendered from the registered patterns across tempos and keys with
 `pkg/genetic`'s generational engine, the current set seeding the pool, and writes
 a set that beats it ([TODO](todo.md#tune-the-rip) for what the corpus still
@@ -530,7 +535,8 @@ bar lines. Soundlab's `compress` runs the grouping, refines the assignment with
 `pkg/genetic` under a term for the patterns in use, rips the song's render back
 on the song's own grid (`Ripper.Grid` pins a known tempo and downbeat and skips
 their decoders) and scores it against the rip; `song` shows, renders or
-conducts a song through the live sequencer; `refine` closes the loop, the
+conducts a song through the live sequencer, or renders one line of it alone,
+the instruments named after the file; `refine` closes the loop, the
 voices fitted again and the tonal steps' velocities and lengths searched with
 that score as the fitness, a step kept only when it rises; `bench` grades the
 analysis and a loaded model on fresh renders, clean and augmented (`corpus ...

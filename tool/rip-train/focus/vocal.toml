@@ -1,17 +1,22 @@
 # Voices a corpus draws from when the music has vocals: a voice is a line like
-# any other to the rip, pitch and onsets per frame, never words. The engine has
-# no vibrato or formant stage yet, so these are the nearest its oscillators
-# come: a soft, slightly chorused saw through a low cutoff for a sung line, a
-# wider one for a choir pad, kept beside the shipped lead and bass. Edit, add,
-# or make your own with soundlab's `new voice` and `set`, then `apply`.
+# any other to the rip, pitch and onsets per frame, never words. A sung line
+# is a slightly chorused saw through the formants of a vowel with a vibrato
+# that comes in after the onset; a choir pad is wider, slower and on another
+# vowel; both beside the shipped lead and bass. Edit, add, or make your own
+# with soundlab's `new voice` and `set`, then `apply`; the vowel is a, e, i, o
+# or u and the vibrato a rate, a depth in cents and a delay.
 
 [[voice]]
 name = "vocal"
-desc = "a sung line: a soft chorused saw under a low cutoff, slow to speak, held"
+desc = "a sung line: a chorused saw through an 'a' with a vibrato coming in, held"
 wave = "saw"
 unison = 2
 detune = 1.004
-cutoff = 1400
+vowel = "a"
+vibrato_hz = 5.5
+vibrato_cents = 35
+vibrato_delay = 0.25
+cutoff = 2400
 key_track = 4
 q = 0.4
 attack = 0.03
@@ -22,11 +27,15 @@ level = 0.7
 
 [[voice]]
 name = "choir"
-desc = "voices in unison: a wide chorused saw, slower still, as a pad behind a lead"
+desc = "voices in unison: a wide chorused saw on an 'o', slower still, as a pad behind a lead"
 wave = "saw"
 unison = 3
 detune = 1.007
-cutoff = 1100
+vowel = "o"
+vibrato_hz = 4.5
+vibrato_cents = 25
+vibrato_delay = 0.4
+cutoff = 2000
 key_track = 3
 q = 0.3
 attack = 0.08
