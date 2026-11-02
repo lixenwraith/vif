@@ -27,10 +27,10 @@ HEADS = [("onset", 1), ("drums", DRUMS), ("pitch", PITCHES), ("voicing", 1), ("w
 @dataclass
 class Config:
     inputs: int = MEL_BANDS
-    dim: int = 128
-    heads: int = 4
+    dim: int = 256
+    heads: int = 8
     layers: int = 4
-    ffn: int = 512
+    ffn: int = 1024
     window: int = 64
     outputs: list = field(default_factory=lambda: list(HEADS))
 

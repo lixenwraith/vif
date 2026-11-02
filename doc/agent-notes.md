@@ -191,8 +191,9 @@ that proves wrong or that a document now states, and link the document instead.
   makes and the rip they give, as `ripnet`'s test does with an untrained model.
 - `pkg/transformer` and `tool/rip-train` agree to float32 rounding, checked by
   exporting a random `ripnet` model from Python, running both on a corpus loop's
-  `.mel` frames (`train.read_mel` and a scratch Go module with a `replace` to the
-  checkout) and comparing the first outputs; redo that check before trusting a
+  `.mel` frames (`train.MelFile(path)[:]` and a scratch Go module with a
+  `replace` to the checkout, which needs the checkout's `go.sum`) and comparing
+  the first outputs; redo that check before trusting a
   trained file after any change to either side. A CPU PyTorch installs in this
   container in about three minutes (`pip install --user torch --index-url
   https://download.pytorch.org/whl/cpu`); `corpus 8 4` plus sixty training steps
@@ -341,6 +342,11 @@ that proves wrong or that a document now states, and link the document instead.
   file's `cfg`. `--steps 0` scores nothing, since the score runs in the loop. A
   `pip install --user` torch is not seen under `python3 -I`, which drops the
   user's site directory.
+- `train.py` reads each window's frames from its `.mel` as it draws it
+  (`MelFile`) and holds the yes-or-no labels as bytes: 207 bytes a frame where
+  floats for both took 755, 19.4 GB for 40000 loops, past a desktop's free
+  memory. A `np.memmap` a loop would keep a file descriptor open each, 40000 of
+  them, past a 1024 limit or macOS's 256.
 - A training run shares the cores with everything else the session does: the
   fourth run slowed from 0.4 to 4 seconds a step under a rip and a test run,
   and the two-hour waiter on it timed out twice. Size a waiter by the run

@@ -1322,14 +1322,15 @@ front-end seam. What remains, in the design's order:
    overfitted in 12000 steps; the fifth run, on the detuned corpus, died at
    step 6820 of 20000 under the cloud container's restarts and was not
    finished. Next, on a development machine (`tool/rip-train/README.md`, "A
-   round on a development machine"): the sixth run on the accompaniment
-   corpus at the model's present size, then the model four to ten times
-   larger (`--dim 256..384 --layers 6..8`, 3 to 10 million weights) with ten
-   times the loops and 100000 or more steps, the held-out loss watched for
-   the plateau, each measured by `bench` on clean and augmented loops and by
-   the truths on the recordings, and shipped only when it beats the analysis
-   on both; a hundredfold or more needs a GPU to train and would not run in
-   the engine's budget. A vocal line is a line like any other to the rip; a
+   round on a development machine", `round.sh`): the sixth run, at the new
+   default four times the size (width 256, eight heads, 3.2 million weights),
+   on 40000 loops of the accompaniment corpus over 40000 steps; then more
+   loops and 100000 or more steps, or width 384 (`DIM=384 HEADS=12
+   FFN=1536`, 7 million weights), the held-out loss watched for the plateau,
+   each measured by `bench` on clean and augmented loops and by the truths on
+   the recordings, and shipped only when it beats the analysis on both; a
+   hundredfold or more needs a GPU to train and would not run in the engine's
+   budget. A vocal line is a line like any other to the rip; a
    voice has a vibrato and a vowel's formants now
    (`tool/rip-train/focus/vocal.toml` draws them), neither a gene, so the fit
    and the model's voice head do not search them: genes for both once a

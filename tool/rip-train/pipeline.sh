@@ -15,6 +15,10 @@ TEMPOS=${TEMPOS:-}                   # e.g. 80-120 or 96,128,160; empty for the 
 FOCUS=${FOCUS:-}                     # a .slab run before corpus: voices and patterns to draw from
 STEPS=${STEPS:-20000}                # training steps
 BATCH=${BATCH:-8}                    # windows a step
+DIM=${DIM:-256}                      # the model's width, attention heads, layers and feed-forward width
+HEADS=${HEADS:-8}
+LAYERS=${LAYERS:-4}
+FFN=${FFN:-1024}
 HOLDOUT=${HOLDOUT:-200}              # loops held out, scored every EVERY steps
 EVERY=${EVERY:-1000}
 OUT=${OUT:-$CORPUS/ripnet.bin}       # the weight file
@@ -46,8 +50,9 @@ corpus() {
 }
 
 train() {
-	echo "== train: $STEPS steps of batch $BATCH on $CORPUS, $HOLDOUT loops held out"
-	(cd "$here" && "$PYTHON" train.py --corpus "$(realpath "$CORPUS")" --out "$(realpath -m "$OUT")" --steps "$STEPS" --batch "$BATCH" --every "$EVERY" --holdout "$HOLDOUT" --checkpoint "$(realpath -m "$CHECKPOINT")" "$@")
+	echo "== train: $STEPS steps of batch $BATCH on $CORPUS, $HOLDOUT loops held out, width $DIM, $HEADS heads, $LAYERS layers, feed-forward $FFN"
+	(cd "$here" && "$PYTHON" train.py --corpus "$(realpath "$CORPUS")" --out "$(realpath -m "$OUT")" --steps "$STEPS" --batch "$BATCH" --every "$EVERY" --holdout "$HOLDOUT" --checkpoint "$(realpath -m "$CHECKPOINT")" \
+		--dim "$DIM" --heads "$HEADS" --layers "$LAYERS" --ffn "$FFN" "$@")
 }
 
 # A shard's files are named by SHARD, so a round never resumes an earlier one's checkpoint.
