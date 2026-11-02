@@ -186,6 +186,9 @@ that proves wrong or that a document now states, and link the document instead.
   bar replays the last render's last bar and a label read off the pattern after
   the render gives every bar the last one's notes. A corpus exported whole and in
   `part`s must match byte for byte; that comparison found it, 43 loops in 9468.
+- Write a truth from a score or a MIDI file, never from memory: a remembered
+  Billie Jean riff had its first note an octave low, the synthesizer's doubling
+  the analysis hears, and turned a 96-to-94 tie into a 110-to-84 loss.
 - Weights installed in the user root (`~/.config/vif/audio/ripnet.bin`) win over
   `-config-dir`: soundlab resolves the model file across the roots, so a run that
   must hear with the analysis points `XDG_CONFIG_HOME` at an empty directory.

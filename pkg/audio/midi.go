@@ -21,6 +21,10 @@ const (
 	midiDefaultTempo = 500000 // microseconds a quarter note before a file's first tempo, 120 bpm
 )
 
+// midiDrumKeys are the General MIDI keys each drum the rip hears is read from,
+// the first the one written
+var midiDrumKeys = [InstrClap][]byte{InstrKick: {36, 35}, InstrSnare: {38, 40}, InstrHihat: {42, 44, 46}}
+
 // midiNote is a note of a track in ticks, before the tempo map
 type midiNote struct {
 	on, off      int64
@@ -40,30 +44,30 @@ type midiTempo struct {
 	sec, perTick float64
 }
 
-// ReadMIDI reads a Standard MIDI File of type 0 or 1 as a transcript, in
-// seconds under its tempo map. A track named melody, under or bass is that
-// line; of the other parts (a track's notes on one channel), the lowest is the
-// bass, whole, when its median is under E3, and the rest are the melody, then
-// the under, in file order. The drum channel and parts past those are left out.
-func ReadMIDI(r io.Reader) ([]RipNote, error) {
+// ReadMIDI reads a Standard MIDI File of type 0 or 1 as a transcript in seconds
+// under its tempo map, the drum channel's keys midiDrumKeys names as hits. A
+// track named melody, under or bass is that line; of the other parts (a track's
+// notes on one channel), the lowest is the bass, whole, when its median is under
+// E3, and the rest the melody, then the under; parts past those are left out.
+func ReadMIDI(r io.Reader) ([]RipNote, []RipHit, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	be := binary.BigEndian
 	if len(data) < 14 || string(data[:4]) != "MThd" {
-		return nil, errors.New("midi: not a Standard MIDI File")
+		return nil, nil, errors.New("midi: not a Standard MIDI File")
 	}
 	size := int(be.Uint32(data[4:]))
 	if size < 6 || size > len(data)-8 {
-		return nil, errors.New("midi: short header")
+		return nil, nil, errors.New("midi: short header")
 	}
 	format, tracks, division := be.Uint16(data[8:]), int(be.Uint16(data[10:])), int(be.Uint16(data[12:]))
 	switch {
 	case format > 1:
-		return nil, fmt.Errorf("midi: type %d, want 0 or 1", format)
+		return nil, nil, fmt.Errorf("midi: type %d, want 0 or 1", format)
 	case division&0x8000 != 0 || division == 0:
-		return nil, errors.New("midi: SMPTE time division unsupported, want ticks per quarter note")
+		return nil, nil, errors.New("midi: SMPTE time division unsupported, want ticks per quarter note")
 	}
 	var parts []midiPart
 	var changes [][2]int64 // tick, microseconds a quarter note
@@ -77,7 +81,7 @@ func ReadMIDI(r io.Reader) ([]RipNote, error) {
 		}
 		ps, cs, err := readMIDITrack(body[:length])
 		if err != nil {
-			return nil, fmt.Errorf("midi: track %d: %w", read+1, err)
+			return nil, nil, fmt.Errorf("midi: track %d: %w", read+1, err)
 		}
 		parts, changes = append(parts, ps...), append(changes, cs...)
 		read++
@@ -93,19 +97,33 @@ func ReadMIDI(r io.Reader) ([]RipNote, error) {
 		return t.sec + float64(tick-t.tick)*t.perTick
 	}
 	var notes []RipNote
-	for i, line := range midiLinesOf(parts) {
+	var hits []RipHit
+	var tonal []midiPart
+	for _, p := range parts {
+		if p.notes[0].ch != midiDrums {
+			tonal = append(tonal, p)
+			continue
+		}
+		for _, n := range p.notes {
+			if d := slices.IndexFunc(midiDrumKeys[:], func(keys []byte) bool { return slices.Contains(keys, n.key) }); d >= 0 {
+				hits = append(hits, RipHit{Start: seconds(n.on), Drum: InstrumentType(d), Vel: float64(n.vel) / 127})
+			}
+		}
+	}
+	for i, line := range midiLinesOf(tonal) {
 		if line < 0 {
 			continue
 		}
-		for _, n := range parts[i].notes {
+		for _, n := range tonal[i].notes {
 			notes = append(notes, RipNote{Start: seconds(n.on), End: seconds(n.off), MIDI: int(n.key), Vel: float64(n.vel) / 127, Bass: line == 2, Second: line == 1, Bright: RipUnmeasured})
 		}
 	}
-	if len(notes) == 0 {
-		return nil, errors.New("midi: no notes off the drum channel")
+	if len(notes) == 0 && len(hits) == 0 {
+		return nil, nil, errors.New("midi: no notes, and no drums of the keys General MIDI names")
 	}
 	slices.SortStableFunc(notes, func(a, b RipNote) int { return cmpFloat(a.Start, b.Start) })
-	return notes, nil
+	slices.SortStableFunc(hits, func(a, b RipHit) int { return cmpFloat(a.Start, b.Start) })
+	return notes, hits, nil
 }
 
 // midiLinesOf gives each part its line in lineOf's order, -1 for one left out
@@ -144,10 +162,10 @@ func midiLinesOf(parts []midiPart) []int {
 	return lines
 }
 
-// readMIDITrack reads one track chunk: its notes by channel, the drum
-// channel's left out, each named by the track, and the tempo changes in it. A
-// note-off ends the earliest note of its channel and pitch still sounding; a
-// note still sounding when the track ends ends with it.
+// readMIDITrack reads one track chunk: its notes by channel, each named by the
+// track, and the tempo changes in it. A note-off ends the earliest note of its
+// channel and pitch still sounding; a note still sounding when the track ends
+// ends with it.
 func readMIDITrack(b []byte) ([]midiPart, [][2]int64, error) {
 	var name string
 	var notes []midiNote
@@ -227,9 +245,6 @@ func readMIDITrack(b []byte) ([]midiPart, [][2]int64, error) {
 	var parts []midiPart
 	of := map[byte]int{}
 	for _, n := range notes {
-		if n.ch == midiDrums {
-			continue
-		}
 		if n.off < 0 {
 			n.off = tick
 		}
@@ -270,9 +285,10 @@ func appendVLQ(b []byte, v int64) []byte {
 
 // WriteMIDI writes a transcript as a Standard MIDI File of type 1 at bpm: its
 // lines as three tracks named melody, under and bass on channels 1 to 3, the
-// tempo on the first, each note at least a tick long. ReadMIDI reads it back
-// within half a tick.
-func WriteMIDI(w io.Writer, notes []RipNote, bpm int) error {
+// tempo on the first, and its hits, when it has any, as a track named drums on
+// the drum channel, a sixteenth each; every note is at least a tick long.
+// ReadMIDI reads it back within half a tick.
+func WriteMIDI(w io.Writer, notes []RipNote, hits []RipHit, bpm int) error {
 	if bpm <= 0 {
 		return fmt.Errorf("midi: tempo %d bpm", bpm)
 	}
@@ -281,7 +297,7 @@ func WriteMIDI(w io.Writer, notes []RipNote, bpm int) error {
 		off      bool
 		key, vel byte
 	}
-	var lines [3][]event
+	var lines [4][]event // melody, under, bass, drums
 	perSec := float64(bpm) / 60 * midiDivision
 	for _, n := range notes {
 		if n.MIDI < 0 || n.MIDI > 127 || n.Start < 0 {
@@ -293,10 +309,19 @@ func WriteMIDI(w io.Writer, notes []RipNote, bpm int) error {
 		l := lineOf(n)
 		lines[l] = append(lines[l], event{tick: on, key: byte(n.MIDI), vel: vel}, event{tick: off, off: true, key: byte(n.MIDI)})
 	}
+	for _, h := range hits {
+		if h.Drum < 0 || h.Drum >= InstrClap || h.Start < 0 {
+			return fmt.Errorf("midi: a hit at %.3fs of drum %d: want a kick, snare or hihat at or after 0s", h.Start, h.Drum)
+		}
+		on, key := int64(math.Round(h.Start*perSec)), midiDrumKeys[h.Drum][0]
+		vel := byte(min(max(math.Round(h.Vel*127), 1), 127))
+		lines[3] = append(lines[3], event{tick: on, key: key, vel: vel}, event{tick: on + midiDivision/StepsPerBeat, off: true, key: key})
+	}
+	tracks := lines[:3+min(len(hits), 1)]
 	be := binary.BigEndian
-	out := append([]byte("MThd"), 0, 0, 0, 6, 0, 1, 0, byte(len(lines)))
+	out := append([]byte("MThd"), 0, 0, 0, 6, 0, 1, 0, byte(len(tracks)))
 	out = be.AppendUint16(out, midiDivision)
-	for l, events := range lines {
+	for l, events := range tracks {
 		// a note-off first where one note ends as the next of its pitch starts
 		slices.SortStableFunc(events, func(a, b event) int {
 			if c := cmp.Compare(a.tick, b.tick); c != 0 || a.off == b.off {
@@ -307,7 +332,11 @@ func WriteMIDI(w io.Writer, notes []RipNote, bpm int) error {
 			}
 			return 1
 		})
-		trk := append([]byte{0, 0xFF, 0x03, byte(len(ripLineNames[l]))}, ripLineNames[l]...)
+		name, ch := "drums", byte(midiDrums)
+		if l < len(ripLineNames) {
+			name, ch = ripLineNames[l], byte(l)
+		}
+		trk := append([]byte{0, 0xFF, 0x03, byte(len(name))}, name...)
 		if l == 0 {
 			us := int(math.Round(60e6 / float64(bpm)))
 			trk = append(trk, 0, 0xFF, 0x51, 3, byte(us>>16), byte(us>>8), byte(us))
@@ -320,7 +349,7 @@ func WriteMIDI(w io.Writer, notes []RipNote, bpm int) error {
 			if e.off {
 				status = 0x80
 			}
-			trk = append(trk, status|byte(l), e.key, e.vel)
+			trk = append(trk, status|ch, e.key, e.vel)
 		}
 		trk = append(trk, 0, 0xFF, 0x2F, 0)
 		out = be.AppendUint32(append(out, "MTrk"...), uint32(len(trk)))

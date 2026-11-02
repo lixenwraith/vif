@@ -496,9 +496,12 @@ lack. `ReadMIDI` reads type 0 or 1 under its tempo map; a track named melody,
 under or bass is that line, and of the other parts (a track's notes on one
 channel) the lowest is the bass when its notes centre under E3, kept whole as
 the bass decoder settles a line that climbs over it, the rest the melody then
-the under in file order, the drum channel and any further part left out.
-`WriteMIDI` writes a transcript the other way, a track a line at the rip's
-tempo (`notes <name> <file.mid>`), to correct in a sequencer. The song a rip
+the under in file order, any further part left out; the drum channel's kicks,
+snares and hats are hits (`RipHit`), which `MatchHits` lays on the rip's own
+(`Rip.Hits`, each step placed on its beats) under the stretch and offset that
+match most, each within half a step. `WriteMIDI` writes a transcript the other
+way, a track a line and the drums on the drum channel at the rip's tempo
+(`notes <name> <file.mid>`), to correct in a sequencer. The song a rip
 compresses into carries the recording's tuning (`SongDef.Tuning`), and the
 engine plays or renders it there (`AudioEngine.SetTuning`), as the voice fit
 renders its candidate notes there (`RenderNoteAt`), so a render stands beside

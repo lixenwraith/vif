@@ -587,15 +587,19 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   reverse it: through the model the origin's melody register hears 34 of the
   83 notes the user tapped where the analysis hears 50 (the lead 10 of 25
   against 17), at 99 bpm where the user's eighth gives the analysis's 148;
-  the intro 34 against 37, at 115 bpm against 86. On two studio recordings,
-  with truths of their best-known lines written from memory, Billie Jean's
-  bass riff is heard 84 of 136 against 110 with twice the extras, though its
-  kicks fall from 172 to 85 in nineteen bars whose beat has 38, and Für
-  Elise's A section 52 of 94 against 56. The weights are installed on the
-  development machine to be judged by ear and stay out of the tree; by the
-  truths, a model that passes the engine's loops and loses every recording
-  has learned the synthesizer, a gap more steps will not close and real
-  recordings with their notes in the corpus are for.
+  the intro 34 against 37, at 115 bpm against 86. Two studio recordings
+  scored against MIDI files of their pieces: the whole of Für Elise, 1051
+  notes, has 266 of the 869 above E3 heard through the model against 444
+  through the analysis; Billie Jean's first forty seconds, its drum channel
+  scored hit by hit (`MatchHits`), have 38 of 39 kicks heard with 47 false
+  against 37 with 135, 37 of 39 snares with 18 false against 25, 149 of 155
+  hats against 146, and the bass riff 96 of 138 notes against 94. A truth of
+  that riff written from memory had its first note an octave low, the
+  synthesizer's doubling, and favoured the analysis 110 to 84: a truth is a
+  score, not a recollection. The weights are installed on the development
+  machine to be judged by ear and stay out of the tree; the model hears drums
+  better and melodies worse, a synthesizer's domain more steps will not
+  leave, which real recordings with their notes in the corpus are for.
 
 ## 9. Decisions
 

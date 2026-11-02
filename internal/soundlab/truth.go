@@ -33,8 +33,9 @@ func cmdAgree(s *Session, a []string) error {
 }
 
 // cmdTruth scores a rip's transcript against one given as text in the notes
-// verb's own form, corrected by hand or written out, or as a MIDI file: how
-// many of the notes given the rip heard, and how many it heard that were not given
+// verb's own form, corrected by hand or written out, or as a MIDI file, whose
+// drum channel scores the drums: how many of the notes and hits given the rip
+// heard, and how many it heard that were not given
 func cmdTruth(s *Session, a []string) error {
 	rp, ok := s.rips[a[0]]
 	if !ok {
@@ -45,8 +46,9 @@ func cmdTruth(s *Session, a []string) error {
 		return err
 	}
 	var truth []audio.RipNote
+	var hits []audio.RipHit
 	if isMIDI(a[1]) {
-		truth, err = audio.ReadMIDI(bytes.NewReader(data))
+		truth, hits, err = audio.ReadMIDI(bytes.NewReader(data))
 	} else {
 		// a rhythm tapped out without a start begins where the rip's melody
 		// register first sounds
@@ -64,10 +66,42 @@ func cmdTruth(s *Session, a []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", a[1], err)
 	}
-	ag := audio.MatchNotes(rp.rip.Notes, truth)
-	fmt.Fprintf(s.out, "%s against %d note(s) given, transposed %+d: the rip's seconds = %.3f × the given %+.2f\n", a[0], len(truth), ag.Shift, ag.Stretch, ag.Offset)
-	reportAgreement(s.out, ag, a[0], "given", "heard as given")
+	if len(truth) > 0 {
+		ag := audio.MatchNotes(rp.rip.Notes, truth)
+		fmt.Fprintf(s.out, "%s against %d note(s) given, transposed %+d: the rip's seconds = %.3f × the given %+.2f\n", a[0], len(truth), ag.Shift, ag.Stretch, ag.Offset)
+		reportAgreement(s.out, ag, a[0], "given", "heard as given")
+	}
+	if len(hits) > 0 {
+		reportHits(s.out, a[0], rp.rip, hits)
+	}
 	return nil
+}
+
+// reportHits prints each drum's count of a rip's hits against the hits given,
+// matched within half a step, and the hits only one side has
+func reportHits(w io.Writer, name string, r *audio.Rip, given []audio.RipHit) {
+	hg := audio.MatchHits(r.Hits(), given, 30/float64(r.BPM)/audio.StepsPerBeat)
+	fmt.Fprintf(w, "%s against %d hit(s) given: the rip's seconds = %.3f × the given %+.2f\n", name, len(given), hg.Stretch, hg.Offset)
+	brief := func(hits []audio.RipHit) string {
+		notes := make([]audio.RipNote, len(hits))
+		for i, h := range hits {
+			notes[i] = audio.RipNote{Start: h.Start, MIDI: -1}
+		}
+		return notesInBrief(notes)
+	}
+	for d, l := range hg.Drums {
+		if l.A > 0 || l.B > 0 {
+			fmt.Fprintf(w, "%-6s %s %d, given %d, %d heard as given, only %s %d, only given %d\n", audio.InstrumentName(audio.InstrumentType(d)), name, l.A, l.B, l.Matched, name, len(l.OnlyA), len(l.OnlyB))
+		}
+	}
+	for d, l := range hg.Drums {
+		if len(l.OnlyA) > 0 {
+			fmt.Fprintf(w, "  %s only %s: %s\n", audio.InstrumentName(audio.InstrumentType(d)), name, brief(l.OnlyA))
+		}
+		if len(l.OnlyB) > 0 {
+			fmt.Fprintf(w, "  %s only given: %s\n", audio.InstrumentName(audio.InstrumentType(d)), brief(l.OnlyB))
+		}
+	}
 }
 
 // isMIDI is whether a file names a Standard MIDI File by its extension
