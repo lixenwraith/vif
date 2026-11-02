@@ -65,6 +65,7 @@ tool/rip-train/pipeline.sh install
 |---|---|---|
 | `CORPUS` | `corpus` | where the loops go |
 | `LOOPS`, `BARS` | 20000, 4 | loops rendered, bars a loop; 200 loops is a smoke test |
+| `PARTS` | 1 | exports at once, each rendering every `PARTS`-th loop on a core of its own; a last export renders any loop they left and writes `corpus.json` |
 | `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a third of the loops driven into a soft clip, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
 | `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; empty for the bank alone |
 | `WAV` | `nowav` | frames and labels only; empty keeps each loop's WAV too (300 MB per 200 loops) |
@@ -86,13 +87,15 @@ A smoke test of the whole path, under ten minutes on a laptop:
 LOOPS=200 STEPS=300 HOLDOUT=20 EVERY=100 BENCH_LOOPS=4 CORPUS=/tmp/smoke tool/rip-train/pipeline.sh all
 ```
 
-What to expect at scale, on a 2017 laptop (an i7-7700HQ, four cores): the
-export renders on one core, about 2.5 loops a second, so 20000 loops of four
-bars take two and a quarter hours (`nowav`; the frames and labels are 5 GB);
-a step of batch 8 at the default shape takes 1.45 s on the four cores and
-0.11 s on its GTX 1060, so 20000 steps take eight hours or forty minutes (the
-first runs' width 128 took 0.65 s on the cores); `bench 12 4` grades in a few
-minutes. Each stage shares the cores with anything else the machine does.
+What to expect at scale, on a 2017 laptop (an i7-7700HQ, four cores): an
+export renders about 2.5 loops a second on one core and `PARTS=4` 7.0 on the
+four, so 40000 loops of four bars take four and a half hours or 95 minutes
+(`nowav`; the frames and labels are 9.5 GB); a step of batch 8 at the default
+shape takes 1.45 s on the four cores and 0.11 s on its GTX 1060, 0.19 s in a
+whole run, which reads the frames from disk and scores the held-out loops, so
+40000 steps take two hours on the GPU (the first runs' width 128 took 0.65 s
+on the cores); `bench 12 4` grades in a few minutes. Each stage shares the
+cores with anything else the machine does.
 
 ## Reading a run
 
@@ -105,8 +108,9 @@ minutes. Each stage shares the cores with anything else the machine does.
   augmented loops, each the mean score with its parts (tempo, bars, drums,
   melody, bass). The fourth run, on 20000 loops rendered at A440, stood at
   0.45 against the analysis's 0.49 clean and 0.51 against 0.48 augmented,
-  ahead on drums and behind on pitch; the fifth, on loops off A440 and
-  saturated, is measured in the design document's §8.
+  ahead on drums and behind on pitch; the sixth, at 4× on 40000 loops, at
+  0.51 against 0.47 and 0.460 against 0.458, the first to pass both lines,
+  and behind on every recording's truth: the design document's §8.
 - A recording: `rip`, then `notes <name>` for the transcript with each note's
   support, `compress`, `refine`, and `song <name> score` for how the song
   sounds against the recording's own frames and how it rips back. The ear is
@@ -132,21 +136,24 @@ unless named:
 
 ```bash
 . tool/rip-train/.venv/bin/activate   # the setup's PyTorch
-export CORPUS=$HOME/ripcorpus6 LOOPS=40000 STEPS=40000 HOLDOUT=400 EVERY=1000
+export CORPUS=$HOME/ripcorpus6 LOOPS=40000 STEPS=40000 HOLDOUT=400 EVERY=1000 PARTS=4
 tool/rip-train/round.sh               # corpus, train, bench, logging to $CORPUS/round.log, resumable
 ```
 
 `round.sh` renders the corpus unless its `corpus.json`, which the export
 writes last, is there, then trains and benches, every line appended to
-`$CORPUS/round.log`. Run it again after a stop and it goes on from
-`CHECKPOINT`, which carries the best held-out step, so the export is the same
-as an unbroken run's. On the laptop above the corpus takes four and a half
-hours and the 40000 steps an hour and a quarter on its GPU, sixteen on its
-cores.
+`$CORPUS/round.log`. Run it again after a stop and it goes on: the corpus from
+the loops on disk, whose randomness the export draws all the same, and the
+training from `CHECKPOINT`, which carries the best held-out step; either way
+the result is an unbroken run's. On the laptop above the corpus takes 95
+minutes in four parts and the 40000 steps two hours on its GPU, about sixteen
+on its cores.
 
 `install` copies the weights into the configuration root the engine reads
-(`ROOT`); do it only when the bench says the model beats the analysis on both
-lines, which no run has yet. For another shape set `DIM`, `HEADS`, `LAYERS`
+(`ROOT`); do it when the bench says the model beats the analysis on both
+lines, which the sixth run was the first to do, and judge it by ear on the
+recordings, whose truths still favour the analysis (Rip design §8). For
+another shape set `DIM`, `HEADS`, `LAYERS`
 and `FFN`, with `LOOPS` and `STEPS` raised together, since a bigger model
 overfits a small corpus sooner; the held-out line every `EVERY` steps is the
 guide, and the run is done when it stops falling.

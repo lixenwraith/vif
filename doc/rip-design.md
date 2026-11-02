@@ -147,7 +147,8 @@ offline (`song <name> <file.wav>`).
   convolution, noise, equalisation, a low-pass), voices beyond the shipped five
   (random genes), chance steps as optional targets, and real recordings with
   hand-checked notes held out for validation, so neither a model nor a tuned set
-  learns the synthesizer.
+  learns the synthesizer. The generative lead is left out: the sequencer writes
+  its notes bar by bar as it plays, so no label read off the pattern holds them.
 - **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop, a
   gain, a one-pole low-pass, a Schroeder reverb and a noise floor drawn per
   loop, redraws each tonal track's voice near the registered one, a third of
@@ -165,7 +166,8 @@ offline (`song <name> <file.wav>`).
   Both draw from streams of their own, so a loop's bank patterns and key are
   the same with and without them.
 - **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
-  bench and the install with every knob an environment variable, and a focus
+  bench and the install with every knob an environment variable, the corpus in
+  `PARTS` exports at once, each keeping the loops already on disk, and a focus
   script run before the corpus turns a run toward a kind of music (`focus/`:
   vocals as lines, plucked instruments); a training round spreads a run over
   several machines, shards from one start averaged into the next (`shard`,
@@ -259,19 +261,21 @@ and the checkpoint earn their keep.
    with the voices held to the fit; the recording's tuning, a pickup bar, the
    notes' lag, accidentals; the two melody lines decoded together and parted
    by their character under a lead rule; the bass decoded to A3; a note's
-   brightness; and the truths: transcripts corrected by hand, rhythms tapped
-   out, MIDI files, and two rips of one piece as witnesses.
+   brightness; the truths: transcripts corrected by hand, rhythms tapped
+   out, MIDI files, and two rips of one piece as witnesses; and the model at
+   four times the size, its sixth run passing the engine's loops and losing
+   the recordings.
 2. Next: the lead's eight missing and seven cut notes on the origin, chased
    with the rhythm truth and a transcript corrected by hand, note by note; a
    default lead rule, or the brightness as one more thing a line keeps, once
    enough recordings with truths say which; the pedal, a third line or the
    chord a line rings under, which two lines cannot hold; the decoder's and
    the parting's constants tuned against truths rather than rendered loops
-   (`tune` taking `truth` files as its score); the model's sixth run, four
-   times the first five's size, on 40000 loops of the accompaniment corpus,
-   then more loops and steps while its held-out line falls, measured by
-   `bench` and by the truths, and shipped only when it beats the analysis;
-   real recordings with MIDI in the corpus.
+   (`tune` taking `truth` files as its score); real recordings with their
+   notes in the corpus, since the sixth run's held-out line was flat while
+   the recordings' truths favoured the analysis, and the model's next run on
+   them, measured by `bench` and by the truths and shipped only when it beats
+   the analysis on both.
 3. Then: tuned parameters and weights shipped as data, and the rip on Android
    under the mobile budget.
 
@@ -567,6 +571,31 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   the next run, a broken chord in the free slot under a melody of longer
   notes; its loops bench at 0.476 clean and 0.457 augmented for the analysis,
   a new baseline.
+
+- The sixth training run, the first at four times the size (width 256, eight
+  heads of 32, 3.2 million weights), on 40000 loops of the accompaniment
+  corpus without the generative lead (rendered in 95 minutes in four parts on
+  the laptop's four cores), 400 held out, 40000 steps of batch 8 in two hours
+  on its GTX 1060, each loop seen eight times: the held-out decoders' loss
+  falls from 1.82 at step 1000 to 0.99 at 37000 (the pitch head's 0.66 to
+  0.46) and is flat from step 33000. `bench 12 4`, its loops drawn without the
+  generative lead: the analysis 0.470 on clean loops (tempo 0.75, bars 0.88,
+  drums 0.51, melody 0.13, bass 0.38), the model 0.510 (0.75, 0.85, 0.71,
+  0.08, 0.38); augmented, the analysis 0.458 (0.83, 0.90, 0.51, 0.06, 0.33),
+  the model 0.460 (0.75, 0.81, 0.63, 0.07, 0.27): the first run to pass the
+  analysis on both lines, on its drums, still behind on melody. The truths
+  reverse it: through the model the origin's melody register hears 34 of the
+  83 notes the user tapped where the analysis hears 50 (the lead 10 of 25
+  against 17), at 99 bpm where the user's eighth gives the analysis's 148;
+  the intro 34 against 37, at 115 bpm against 86. On two studio recordings,
+  with truths of their best-known lines written from memory, Billie Jean's
+  bass riff is heard 84 of 136 against 110 with twice the extras, though its
+  kicks fall from 172 to 85 in nineteen bars whose beat has 38, and Für
+  Elise's A section 52 of 94 against 56. The weights are installed on the
+  development machine to be judged by ear and stay out of the tree; by the
+  truths, a model that passes the engine's loops and loses every recording
+  has learned the synthesizer, a gap more steps will not close and real
+  recordings with their notes in the corpus are for.
 
 ## 9. Decisions
 

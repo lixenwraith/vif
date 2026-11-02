@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # One training round for a machine nobody watches: the corpus, then train and
-# bench, every line kept in $CORPUS/round.log. Run it again to resume: a corpus
-# whose corpus.json is written is kept, and train goes on from CHECKPOINT. The
-# knobs are pipeline.sh's; the README's "A round on a development machine" is the guide.
+# bench, every line kept in $CORPUS/round.log. Run it again to resume: the corpus
+# goes on from the loops it has and train from CHECKPOINT. The knobs are
+# pipeline.sh's; the README's "A round on a development machine" is the guide.
 set -euo pipefail
 CORPUS=$(realpath -m "${CORPUS:-corpus}")
 export CORPUS

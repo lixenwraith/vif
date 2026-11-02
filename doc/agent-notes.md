@@ -59,6 +59,9 @@ that proves wrong or that a document now states, and link the document instead.
   the current pin first, which must match. Docker Hub answers a shared egress 429
   at times: retry after a pause.
 - Every shipped target is 64-bit, and `internal/core/arch32.go` refuses the rest.
+- A session's scratchpad can sit on a `/tmp` that a reboot empties (a tmpfs on a
+  development machine): keep a long task's notes and working files in the
+  checkout's `tmp/`, which `.gitignore` holds.
 - `bindGo` strips the Android library (`-s -w`), so `go tool nm` reads nothing in
   it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
   component structs compiles once per component, and each copy's name spells the
@@ -178,6 +181,14 @@ that proves wrong or that a document now states, and link the document instead.
   `NewSequencer(bpm, kit)` with patterns placed in its slots, then `Generate` over
   whole bars (`rip_test.go`'s `renderLoop`). The music fades in over
   `MusicStartFadeIn`, so the first bar is quiet and a recall test skips it.
+- `melody_gen` is no fixed pattern: every sequencer that plays it rewrites the
+  registered lead in place from its second bar on, so an offline render's first
+  bar replays the last render's last bar and a label read off the pattern after
+  the render gives every bar the last one's notes. A corpus exported whole and in
+  `part`s must match byte for byte; that comparison found it, 43 loops in 9468.
+- Weights installed in the user root (`~/.config/vif/audio/ripnet.bin`) win over
+  `-config-dir`: soundlab resolves the model file across the roots, so a run that
+  must hear with the analysis points `XDG_CONFIG_HOME` at an empty directory.
 - The rip's spectrogram frames are centred, so every onset reads about two frames
   (23 ms) early in every band alike; the beat grid and the events share the bias,
   and the sixteenth quantization cancels it. Do not correct one without the other.

@@ -31,8 +31,10 @@ type tuneOptions struct {
 	loops, bars, generations, pool int
 	seed                           uint64
 	aug, gen                       bool
-	nowav                          bool  // an export keeps the frames and the labels only
-	tempos                         []int // the tempos the loops cycle through; tuneTempos when nil
+	nowav                          bool           // an export keeps the frames and the labels only
+	tempos                         []int          // the tempos the loops cycle through; tuneTempos when nil
+	part, parts                    int            // an export renders the loops i%parts == part; all when parts is 0
+	skip                           func(int) bool // the loops drawn but not rendered
 }
 
 // tuneLoop is one rendered loop, what made it, the rip a perfect listener makes
@@ -87,6 +89,9 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 		if strings.HasPrefix(p.Name, "corpus_") {
 			continue // a generated part of an earlier loop, not the bank's
 		}
+		if p.ID == audio.PatternMelodyGen {
+			continue // the sequencer writes its lead bar by bar as it plays: no label reads it
+		}
 		switch p.Role {
 		case audio.RoleRhythm, audio.RoleMelody, audio.RoleBass:
 			byRole[p.Role-1] = append(byRole[p.Role-1], p.ID)
@@ -110,6 +115,9 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 		bpm := tempos[i%len(tempos)]
 		root := audio.DefaultRootNote + rng.IntN(12) - 6
 		scale := audio.ScaleID(rng.IntN(int(audio.ScaleCount)))
+		if o.skip != nil && o.skip(i) {
+			continue // drawn all the same, so the loops after it are an unbroken run's
+		}
 		// the augmentation and the generated parts draw from streams of their
 		// own, so a loop's drawn patterns and key are the same with and without
 		if o.gen {
@@ -463,6 +471,15 @@ func cmdCorpus(s *Session, a []string) error {
 			}
 			o.tempos = tempos
 			a = a[:n-1]
+		case n > 2 && a[n-2] == "part":
+			k, of, _ := strings.Cut(a[n-1], "/")
+			part, err1 := strconv.Atoi(k)
+			parts, err2 := strconv.Atoi(of)
+			if err1 != nil || err2 != nil || part < 0 || part >= parts {
+				return fmt.Errorf("part %q: want k/n, k from 0 below n", a[n-1])
+			}
+			o.part, o.parts = part, parts
+			a = a[:n-1]
 		default:
 			more = false
 			continue
@@ -518,15 +535,27 @@ func parseTempos(arg string) ([]int, error) {
 // exportCorpus writes loops into dir: loop_NNN.wav as rendered, loop_NNN.mel as
 // the log-mel frames a front-end model hears (frames, bands, then float32 rows,
 // little-endian), loop_NNN.json as the events that sound in it with their frames
-// and voices, and corpus.json naming the layout.
+// and voices, and corpus.json naming the layout. A loop whose label is on disk is
+// kept, so an export run again goes on where it stopped; a part writes no layout.
 func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	written := 0
+	loopFile := func(i int) string { return filepath.Join(dir, fmt.Sprintf("loop_%03d", i)) }
+	written, kept := 0, 0
+	o.skip = func(i int) bool {
+		if o.parts > 0 && i%o.parts != o.part {
+			return true
+		}
+		_, err := os.Stat(loopFile(i) + ".json") // written last, so its loop is whole
+		if err == nil {
+			kept++
+		}
+		return err == nil
+	}
 	err := s.eachLoop(o, func(i int, l tuneLoop) error {
 		written++
-		base := filepath.Join(dir, fmt.Sprintf("loop_%03d", i))
+		base := loopFile(i)
 		if !o.nowav {
 			f, err := os.Create(base + ".wav")
 			if err != nil {
@@ -571,10 +600,12 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	if err != nil {
 		return err
 	}
-	m := corpusManifest{Version: 1, Loops: written, Rate: audio.RipRate, Hop: audio.RipHop, MelBands: audio.RipMelBands,
-		MinMIDI: audio.RipMinMIDI, Pitches: audio.RipPitches, Drums: []string{"kick", "snare", "hihat"}, Waves: audio.VoiceWaves[:], VoiceGenes: audio.VoiceGeneCount}
-	if err := writeJSON(filepath.Join(dir, "corpus.json"), m); err != nil {
-		return err
+	if o.parts == 0 {
+		m := corpusManifest{Version: 1, Loops: o.loops, Rate: audio.RipRate, Hop: audio.RipHop, MelBands: audio.RipMelBands,
+			MinMIDI: audio.RipMinMIDI, Pitches: audio.RipPitches, Drums: []string{"kick", "snare", "hihat"}, Waves: audio.VoiceWaves[:], VoiceGenes: audio.VoiceGeneCount}
+		if err := writeJSON(filepath.Join(dir, "corpus.json"), m); err != nil {
+			return err
+		}
 	}
 	how := "as rendered"
 	if o.aug {
@@ -582,6 +613,12 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	}
 	if o.gen {
 		how += ", with generated beats, melodies and bass lines"
+	}
+	if kept > 0 {
+		how += fmt.Sprintf("; %d were there", kept)
+	}
+	if o.parts > 0 {
+		how += fmt.Sprintf("; part %d of %d, so no corpus.json", o.part, o.parts)
 	}
 	fmt.Fprintf(s.out, "wrote %d loop(s) of %d bar(s) to %s, %s\n", written, o.bars, dir, how)
 	return nil
