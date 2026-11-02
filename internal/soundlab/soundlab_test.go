@@ -1290,6 +1290,16 @@ func TestRunScriptVerb(t *testing.T) {
 	if err := Execute(s, "run "+bad); err == nil || !strings.Contains(err.Error(), "line 2") {
 		t.Errorf("a failing line gave %v", err)
 	}
+	// a script's relative paths are its directory's, wherever soundlab runs:
+	// the recipe writes a document beside itself and a nested run loads it
+	beside := filepath.Join(dir, "beside.slab")
+	nested := filepath.Join(dir, "nested.slab")
+	os.WriteFile(beside, []byte("new pattern kept\nsave pattern kept.toml\nrun nested.slab\n"), 0o644)
+	os.WriteFile(nested, []byte("load pattern kept.toml\n"), 0o644)
+	runOrFatal(t, s, &out, "run "+beside+"\n")
+	if _, err := os.Stat(filepath.Join(dir, "kept.toml")); err != nil || !s.pats.has("kept") || s.base != "" {
+		t.Errorf("the recipe's file %v, pattern kept %v, base %q after", err, s.pats.has("kept"), s.base)
+	}
 }
 
 // TestLongVerbsRunBehindTheScreen: a long verb typed in the TUI runs on its own

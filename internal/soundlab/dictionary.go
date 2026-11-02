@@ -437,7 +437,7 @@ func cmdSong(s *Session, a []string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(a[1])
+	f, err := os.Create(s.path(a[1]))
 	if err != nil {
 		return err
 	}
@@ -699,12 +699,14 @@ func (s *Session) refineVoices(name string, rp *ripped, d *audio.SongDef, base f
 }
 
 // refineSteps sweeps the song's tonal steps: each is tried a semitone and an
-// octave either way, a step earlier and later, a step longer and shorter, and
-// silent, judged on the bars that play its pattern, and the best move is kept
-// when it gains; a step left silent is dropped at the end, and a sweep that
-// does not carry to the whole song is undone. One sweep is a round's share. A
-// move touches one note's frames in a thousand, which a search over every
-// step's genes at once could not see in its budget.
+// octave either way, the recording's strongest pitch at its step, a step
+// earlier and later, a step longer and shorter, and silent, judged on the bars
+// that play its pattern, and the best move is kept when it gains; then a step a
+// line leaves empty tries that strongest pitch, the one way in for a note the
+// rip missed. A step left silent is dropped at the end, and a sweep that does
+// not carry to the whole song is undone. One sweep is a round's share. A move
+// touches one note's frames in a thousand, which a search over every step's
+// genes at once could not see in its budget.
 func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refineOptions) (float64, error) {
 	type step struct {
 		pat     string
@@ -714,6 +716,7 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 	var names []string
 	originals := map[string]*audio.PatternDef{}
 	uses := map[string][]int{} // the bars each pattern plays in
+	slotOf := map[string]int{} // the slot it plays in, the bass's register or the melody's
 	local := true              // every pattern a bar long, so a bar's render plays it whole
 	for b, bar := range d.Bars {
 		for slot, n := range bar {
@@ -729,6 +732,7 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 				continue
 			}
 			originals[n] = clonePatternDef(pd)
+			slotOf[n] = slot
 			names = append(names, n)
 			local = local && pd.Steps <= audio.StepsPerBar
 			for ti := range pd.Track {
@@ -767,6 +771,37 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 		return fid.Total, err
 	}
 	root, scale := d.Root, d.ScaleID()
+	want, err := s.soundOf(rp)
+	if err != nil {
+		return base, err
+	}
+	// proposal is the recording's strongest pitch over a step of the bar a
+	// pattern first plays in, in the register of the pattern's slot
+	proposal := func(pat string, pos int) (int, bool) {
+		bar := uses[pat][0] + pos/audio.StepsPerBar
+		i := audio.BeatsPerBar*bar + pos%audio.StepsPerBar/audio.StepsPerBeat
+		if i < 0 || i+1 >= len(rp.rip.Beats) {
+			return 0, false
+		}
+		span := (rp.rip.Beats[i+1] - rp.rip.Beats[i]) / audio.StepsPerBeat
+		t0 := rp.rip.Beats[i] + span*float64(pos%audio.StepsPerBeat)
+		f0, f1 := int(t0/want.Frames.Hop), int((t0+span)/want.Frames.Hop)
+		lo, hi := audio.RipMelodyLow, audio.RipMaxMIDI
+		if slotOf[pat] == 3 {
+			lo, hi = audio.RipMinMIDI, audio.RipBassTop
+		}
+		best, bestV := -1, 0.0
+		for m := lo; m < hi; m++ {
+			var v float64
+			for t := max(f0, 0); t < f1 && (t+1)*audio.RipPitches <= len(want.Frames.Salience); t++ {
+				v += float64(want.Frames.Salience[t*audio.RipPitches+m-audio.RipMinMIDI])
+			}
+			if v > bestV {
+				best, bestV = m, v
+			}
+		}
+		return best, best >= 0
+	}
 	moved, current, judged := 0, 0.0, ""
 	for _, st := range steps {
 		pd, _ := s.pats.get(st.pat)
@@ -791,6 +826,9 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 			if m >= audio.RipMinMIDI && m < audio.RipMaxMIDI {
 				moves = append(moves, pitch(m))
 			}
+		}
+		if m, ok := proposal(st.pat, was.Pos); ok && m != midi {
+			moves = append(moves, pitch(m))
 		}
 		for _, pos := range [...]int{was.Pos - 1, was.Pos + 1} {
 			if pos >= 0 && pos < pd.Steps && !taken(pos) {
@@ -828,6 +866,70 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 			current = best
 		}
 	}
+	// a step a line leaves empty tries the recording's strongest pitch there,
+	// at the line's loudness, kept when the bar sounds more like the recording
+	added, tries := 0, 0
+	for _, n := range names {
+		pd, _ := s.pats.get(n)
+		if !local || len(uses[n]) == 0 {
+			continue
+		}
+		score, err := judge(n)
+		if err != nil {
+			return base, err
+		}
+		for ti := range pd.Track {
+			tr := &pd.Track[ti]
+			if instr, _ := audio.InstrumentByName(tr.Instr); instr.IsDrum() || len(tr.Event) == 0 {
+				continue
+			}
+			var vel float64
+			for _, e := range tr.Event {
+				vel += e.Vel
+			}
+			vel /= float64(len(tr.Event))
+			sounding := func(pos, m int) bool {
+				for _, t := range pd.Track {
+					if slices.ContainsFunc(t.Event, func(e audio.StepDef) bool {
+						return e.Pos == pos && e.Vel > 0 && audio.StepPitch(root, scale, e.Deg, e.Oct, e.Acc) == m
+					}) {
+						return true
+					}
+				}
+				return false
+			}
+			for pos := 0; pos < pd.Steps; pos++ {
+				if o.steps > 0 && tries >= o.steps {
+					break
+				}
+				m, ok := proposal(n, pos)
+				if !ok || slices.ContainsFunc(tr.Event, func(e audio.StepDef) bool { return e.Pos == pos }) || sounding(pos, m) {
+					continue
+				}
+				tries++
+				deg, oct, acc := audio.PitchStep(root, scale, m)
+				tr.Event = append(tr.Event, audio.StepDef{Pos: pos, Vel: vel, Deg: deg, Oct: oct, Acc: acc, Dur: 1})
+				if err := register(n); err != nil {
+					return base, err
+				}
+				sc, err := judge(n)
+				if err != nil {
+					return base, err
+				}
+				if sc > score+1e-4 {
+					added++
+					fmt.Fprintf(s.out, "%s track %d: %s added at %d, %.3f -> %.3f\n", n, ti, noteName(m), pos, score, sc)
+					score = sc
+					continue
+				}
+				tr.Event = tr.Event[:len(tr.Event)-1]
+				if err := register(n); err != nil {
+					return base, err
+				}
+			}
+			slices.SortFunc(tr.Event, func(a, b audio.StepDef) int { return a.Pos - b.Pos })
+		}
+	}
 	dropped := 0
 	for _, n := range names {
 		pd, _ := s.pats.get(n)
@@ -851,15 +953,15 @@ func (s *Session) refineSteps(rp *ripped, d *audio.SongDef, base float64, o refi
 				return base, err
 			}
 		}
-		fmt.Fprintf(s.out, "%d step(s) moved on their bars, but the song sounds less like the recording (%.3f against %.3f): undone\n", moved, fid.Total, base)
+		fmt.Fprintf(s.out, "%d step(s) moved and %d added on their bars, but the song sounds less like the recording (%.3f against %.3f): undone\n", moved, added, fid.Total, base)
 		return base, nil
 	}
 	for _, n := range names {
-		if moved > 0 {
+		if moved+added > 0 {
 			s.pats.markDirty(n) // the document moved; a save keeps it, apply already did
 		}
 	}
-	fmt.Fprintf(s.out, "%d step(s) moved, %d dropped\n", moved, dropped)
+	fmt.Fprintf(s.out, "%d step(s) moved, %d added, %d dropped\n", moved, added, dropped)
 	return fid.Total, nil
 }
 

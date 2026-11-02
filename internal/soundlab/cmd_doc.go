@@ -20,9 +20,9 @@ func cmdLoad(s *Session, a []string) error {
 	case err != nil:
 		return err
 	case k == kindSound:
-		return s.loadSoundFile(a[1], true)
+		return s.loadSoundFile(s.path(a[1]), true)
 	case k == kindPattern:
-		return s.loadPatternFile(a[1], true)
+		return s.loadPatternFile(s.path(a[1]), true)
 	}
 	return errVoiceFile
 }
@@ -32,9 +32,9 @@ func cmdMerge(s *Session, a []string) error {
 	case err != nil:
 		return err
 	case k == kindSound:
-		return s.loadSoundFile(a[1], false)
+		return s.loadSoundFile(s.path(a[1]), false)
 	case k == kindPattern:
-		return s.loadPatternFile(a[1], false)
+		return s.loadPatternFile(s.path(a[1]), false)
 	}
 	return errVoiceFile
 }
@@ -58,7 +58,7 @@ func cmdSave(s *Session, a []string) error {
 	}
 	file := ""
 	if len(a) > 1 {
-		file = a[1]
+		file = s.path(a[1])
 	}
 	switch k {
 	case kindSound:
@@ -97,7 +97,7 @@ func cmdExport(s *Session, a []string) error {
 			return err
 		}
 	}
-	f, err := os.Create(a[1])
+	f, err := os.Create(s.path(a[1]))
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func cmdRip(s *Session, a []string) error {
 		}
 		bars = n
 	}
-	f, err := os.Open(a[0])
+	f, err := os.Open(s.path(a[0]))
 	if err != nil {
 		return err
 	}
@@ -240,7 +240,7 @@ func cmdRender(s *Session, a []string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(a[0])
+	f, err := os.Create(s.path(a[0]))
 	if err != nil {
 		return err
 	}
@@ -260,7 +260,7 @@ func cmdRender(s *Session, a []string) error {
 // see doc[T]). It reads the document alone, as show does, a sound shadowing a
 // pattern of its name as in docRoot.
 func cmdWrite(s *Session, a []string) error {
-	name, file := a[0], a[1]
+	name, file := a[0], s.path(a[1])
 	if d, ok := s.sounds.get(name); ok {
 		data, err := audio.MarshalSounds([]*audio.SoundDef{d})
 		if err != nil {
