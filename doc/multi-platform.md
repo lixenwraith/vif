@@ -130,24 +130,29 @@ It should produce no output. The container is one static binary in
 |---|---|---|
 | Linux | Developed and tested | Full audio backend discovery, Unix terminal/crash handling, TCP sessions, dedicated image |
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
-| Windows amd64 | Experimental; plays in Alacritty, with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
+| Windows amd64 | Experimental; plays in Windows Terminal, and in Alacritty with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
 | Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer and `AudioTrack` (§8); the wad as the system root |
 | `js/wasm` | Solo play and session join; a hidden tab leaves after five minutes and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets, each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `pkg/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
-Played on Windows in Alacritty, the zip runs, with three known issues:
+The zip plays in Windows Terminal, Windows 11's default terminal, whose console
+host forwards the game's request for mouse reports and, from 1.22, passes its
+output through as written. Windows 10's own console host, the ConPTY Alacritty
+uses unless a `conpty.dll` and `OpenConsole.exe` from Windows Terminal lie beside
+`alacritty.exe` (Alacritty 0.13+), causes the first two known issues; Windows 10
+is past its end of support, so they leave with it:
 
-- **The mouse does nothing.** The terminal module's Windows backend reads the
-  console as VT input, so a click reaches the game only if the console host passes
-  the terminal's SGR mouse reports through; that is the first thing to check.
+- **The mouse does nothing.** The console is read as VT input, where a click
+  arrives only if the console host forwards the request for mouse reports to
+  the terminal; Windows 10's does not, as played there.
+- **Status bar cells flicker on redraw.** Windows 10's console host repaints its
+  own copy of the screen on its own schedule, the likely cause; the terminal
+  module sends each frame as one synchronized update (DEC mode 2026) with the
+  cursor hidden again, which a host passing output through delivers whole.
 - **No audio.** The build leaves the engine out. The engine compiles for Windows,
   and ffplay, one of its pipe players, has a Windows build, so audio there is
   untried rather than impossible.
-- **Status bar cells flicker on redraw.** The terminal module writes a frame
-  without synchronized output (DEC mode 2026), and the Windows console host
-  repaints what a program writes on its own schedule; neither is confirmed as the
-  cause.
 
 The simulation uses `float64` and live sessions include concurrent scheduling.
 Different targets are not promised bit-exact lockstep even when their manifest

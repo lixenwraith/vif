@@ -4,9 +4,9 @@ go 1.27.3
 
 require (
 	github.com/ebitengine/purego v0.11.2
-	github.com/lixenwraith/color v0.1.3
+	github.com/lixenwraith/color v0.1.4
 	github.com/lixenwraith/log v0.1.13
-	github.com/lixenwraith/terminal v0.6.1
+	github.com/lixenwraith/terminal v0.6.3
 	github.com/lixenwraith/toml v0.5.0
 	golang.org/x/sys v0.49.0
 )
