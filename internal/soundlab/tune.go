@@ -300,11 +300,16 @@ func genBass(rng *rand.Rand, degrees int) *audio.Pattern {
 
 // loopVoices is the voice each tonal instrument the slotted patterns name plays
 // with: the registered one, or under aug one of random genes near it, a third of
-// the time on another wave, registered for the render and put back by restore,
-// so a corpus hears voices beyond the shipped ones and labels them as played
+// the time on another wave, and in a third of the loops every release three to
+// ten times as long, as under a piano's pedal; registered for the render and put
+// back by restore, so a corpus hears voices beyond the shipped ones
 func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, rng *rand.Rand) (map[string]*audio.VoiceDef, func()) {
 	voices := map[string]*audio.VoiceDef{}
 	var originals []*audio.VoiceDef
+	pedal := 1.0 // the labels stay the notes as played, however long they ring
+	if aug && rng.Float64() < 1.0/3 {
+		pedal = 3 + rng.Float64()*7
+	}
 	for _, id := range slots {
 		p := audio.GetPattern(id)
 		if p == nil {
@@ -332,6 +337,7 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 				wave = audio.VoiceWaves[rng.IntN(len(audio.VoiceWaves))]
 			}
 			r := audio.VoiceFromGenes(wave, genes)
+			r.Release = min(r.Release*pedal, 3)
 			r.VibratoHz, r.VibratoCents, r.VibratoDelay, r.Vowel = v.VibratoHz, v.VibratoCents, v.VibratoDelay, v.Vowel // not genes; kept from the registered voice
 			r.Name = name
 			if audio.ValidateVoice(r) != nil {
@@ -353,30 +359,42 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 	}
 }
 
-// degrade puts a room and a mix between a render and the frames a model hears:
-// a gain, a low-pass, for a third of the loops a drive into a soft clip (the
-// saturation a mix is thickened with, harmonics on every note and sum and
-// difference tones between notes), a short reverb and a noise floor, each drawn
-// from rng, so the model does not learn the synthesizer's clean output
+// degrade puts a room and a mix between a render and the frames a model hears,
+// each drawn from rng so the model does not learn the synthesizer's clean
+// output: a gain swelling by up to 6 dB, a low-pass, two equaliser bands, for a
+// third of the loops a drive into a soft clip, for half a compressor, a reverb
+// from a booth's to, for a third, a hall's, and a noise floor
 func degrade(x []float64, rng *rand.Rand) []float64 {
 	sr := float64(audio.AudioSampleRate)
 	out := make([]float64, len(x))
 	gain := math.Pow(10, (rng.Float64()*9-6)/20)
+	swell, period, phase := rng.Float64()*6, (0.5+rng.Float64()*1.5)*float64(len(x)), rng.Float64()*2*math.Pi
 	cutoff := 2500 + rng.Float64()*7500
 	a := 1 - math.Exp(-2*math.Pi*cutoff/sr)
 	drive := 1.0
 	if rng.Float64() < 1.0/3 {
 		drive = 2 + rng.Float64()*4
 	}
+	var bands [2]func(float64) float64
+	for k := range bands {
+		bands[k] = audio.Peaking(80*math.Pow(100, rng.Float64()), rng.Float64()*18-9, 0.5+rng.Float64()*1.5)
+	}
 	var lp float64
 	for i, v := range x {
-		lp += a * (v*gain - lp)
-		out[i] = math.Tanh(drive*lp) / math.Tanh(drive)
+		g := gain * math.Pow(10, swell*math.Sin(2*math.Pi*float64(i)/period+phase)/20)
+		lp += a * (v*g - lp)
+		out[i] = math.Tanh(drive*bands[1](bands[0](lp))) / math.Tanh(drive)
+	}
+	if rng.Float64() < 0.5 {
+		compress(out, 2+rng.Float64()*4, 3+rng.Float64()*9, sr)
 	}
 	// a Schroeder reverb: four combs in parallel into two allpasses, at a decay
 	// and a mix of the draw's
 	rt := 0.15 + rng.Float64()*0.55
-	wet := 0.05 + rng.Float64()*0.25
+	if rng.Float64() < 1.0/3 {
+		rt = 0.7 + rng.Float64()*1.8
+	}
+	wet := 0.05 + rng.Float64()*0.3
 	combs := [4]int{int(0.0297 * sr), int(0.0371 * sr), int(0.0411 * sr), int(0.0437 * sr)}
 	var lines [4][]float64
 	var feedback [4]float64
@@ -415,6 +433,28 @@ func degrade(x []float64, rng *rand.Rand) []float64 {
 		out[i] = min(max(out[i]+rng.NormFloat64()*noise, -1), 1)
 	}
 	return out
+}
+
+// compress turns down what rises over the loop's peak less under dB by ratio,
+// on an envelope that rises in 5 ms and falls in 120 ms
+func compress(x []float64, ratio, under, sr float64) {
+	var peak float64
+	for _, v := range x {
+		peak = max(peak, math.Abs(v))
+	}
+	threshold := peak * math.Pow(10, -under/20)
+	rise, fall := 1-math.Exp(-1/(0.005*sr)), 1-math.Exp(-1/(0.12*sr))
+	var env float64
+	for i, v := range x {
+		if a := math.Abs(v); a > env {
+			env += rise * (a - env)
+		} else {
+			env += fall * (a - env)
+		}
+		if env > threshold {
+			x[i] = v * math.Pow(env/threshold, 1/ratio-1)
+		}
+	}
 }
 
 // corpusEvent is one labelled event of an exported loop, in frames of the rip's
