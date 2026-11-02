@@ -1324,12 +1324,16 @@ front-end seam. What remains, in the design's order:
    on tempo and both on pitch (melody 0.11 against 0.17); 300 loops
    overfitted in 12000 steps; the fifth run, on the detuned corpus, died at
    step 6820 of 20000 under the cloud container's restarts and was not
-   finished. Next, on a development machine (`tool/rip-train/README.md`, "A
-   round on a development machine", `round.sh`): the sixth run, at the new
-   default four times the size (width 256, eight heads, 3.2 million weights),
-   on 40000 loops of the accompaniment corpus over 40000 steps; then more
-   loops and 100000 or more steps, or width 384 (`DIM=384 HEADS=12
-   FFN=1536`, 7 million weights), the held-out loss watched for the plateau,
+   finished. The sixth, at the new default four times the size (width 256,
+   eight heads, 3.2 million weights), on 40000 loops of the accompaniment
+   corpus over 40000 steps on a development machine's GPU
+   (`tool/rip-train/README.md`, "A round on a development machine",
+   `round.sh`), passed the analysis on both bench lines (0.51 against 0.47
+   clean, 0.460 against 0.458 augmented, on its drums; melody 0.08 against
+   0.13), its held-out loss flat from step 33000, and lost every recording's
+   truth (the origin's melody register 34 of 83 tapped notes against 50).
+   Next: real recordings with their notes in the corpus (item 1), then more
+   loops, or width 384 (`DIM=384 HEADS=12 FFN=1536`, 7 million weights),
    each measured by `bench` on clean and augmented loops and by the truths on
    the recordings, and shipped only when it beats the analysis on both; a
    hundredfold or more needs a GPU to train and would not run in the engine's
