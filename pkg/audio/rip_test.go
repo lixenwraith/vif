@@ -226,40 +226,31 @@ func TestRipHearsASecondVoice(t *testing.T) {
 	}
 }
 
-// TestRipKeepsTheLeadThroughACrossing: two lines in the melody register on one
-// voice, a louder lead in quarter notes and a quieter counter line in eighths,
-// a fourth under the lead one bar and a fifth over it the next; the lead's
-// notes stay the melody line and the counter's the under line through the
-// crossing, where a line told by pitch order or by the louder frame changes
-// hands.
-func TestRipKeepsTheLeadThroughACrossing(t *testing.T) {
+// twoLines renders two lines in the melody register on one voice, the lead's
+// events in the melody slot and the counter's in the free slot, and rips the
+// render with the lead rule given; it returns the rip and the two pitch sets,
+// which are disjoint, so a step tells its line by pitch.
+func twoLines(t *testing.T, leadEvs, counterEvs []Step, lead LeadRule) (*Rip, map[int]bool, map[int]bool) {
+	t.Helper()
 	const bpm, bars = 120, 8
 	ae, slots := startLoopEngine(t)
-	var leadEvs, counterEvs []Step
-	for i, d := range [...]int{4, 5, 6, 5, 4, 5, 6, 5} {
-		leadEvs = append(leadEvs, Step{Pos: 4 * i, Vel: 1, Deg: d, Oct: 2, Dur: 4})
-	}
-	for i, d := range [...]int{1, 2, 3, 2, 1, 2, 3, 2, 1, 2, 3, 2, 1, 2, 3, 2} {
-		counterEvs = append(counterEvs, Step{Pos: 2 * i, Vel: 0.65, Deg: d, Oct: 2 + i/8, Dur: 2})
-	}
-	lead, err := ae.DefinePattern(&Pattern{Name: "lead", Steps: 32, Role: RoleMelody, Tracks: []Track{{Instr: InstrLead, Events: leadEvs}}})
+	l, err := ae.DefinePattern(&Pattern{Name: "lead", Steps: 32, Role: RoleMelody, Tracks: []Track{{Instr: InstrLead, Events: leadEvs}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	counter, err := ae.DefinePattern(&Pattern{Name: "counter", Steps: 32, Role: RoleFill, Tracks: []Track{{Instr: InstrLead, Events: counterEvs}}})
+	c, err := ae.DefinePattern(&Pattern{Name: "counter", Steps: 32, Role: RoleFill, Tracks: []Track{{Instr: InstrLead, Events: counterEvs}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	slots[1], slots[2] = lead, counter
+	slots[1], slots[2] = l, c
 	buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	r, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}, Lead: lead}.Samples(buf, AudioSampleRate)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// the two lines' pitch sets are disjoint, so a step tells its line by pitch
 	pitches := func(evs []Step) map[int]bool {
 		m := map[int]bool{}
 		for _, e := range evs {
@@ -267,8 +258,12 @@ func TestRipKeepsTheLeadThroughACrossing(t *testing.T) {
 		}
 		return m
 	}
-	leadSet, counterSet := pitches(leadEvs), pitches(counterEvs)
-	var leadIn, counterIn [2]int // the lead's and the counter's pitches heard in the melody line and the under line
+	return r, pitches(leadEvs), pitches(counterEvs)
+}
+
+// linesHeard counts the lead's and the counter's pitches in the melody line
+// and in the under line of a rip
+func linesHeard(r *Rip, leadSet, counterSet map[int]bool) (leadIn, counterIn [2]int) {
 	for _, bar := range r.Bars {
 		for i, line := range [2][]Step{bar.Melody, bar.Under} {
 			for _, st := range line {
@@ -281,9 +276,153 @@ func TestRipKeepsTheLeadThroughACrossing(t *testing.T) {
 			}
 		}
 	}
+	return
+}
+
+// TestRipKeepsTheLeadThroughACrossing: two lines in the melody register on one
+// voice, a louder lead in quarter notes and a quieter counter line in eighths,
+// a fourth under the lead one bar and a fifth over it the next; told the lead
+// is the louder, the rip keeps the lead's notes in the melody line and the
+// counter's in the under line through the crossing, where a line told by pitch
+// order or by the louder frame changes hands.
+func TestRipKeepsTheLeadThroughACrossing(t *testing.T) {
+	const bars = 8
+	var leadEvs, counterEvs []Step
+	for i, d := range [...]int{4, 5, 6, 5, 4, 5, 6, 5} {
+		leadEvs = append(leadEvs, Step{Pos: 4 * i, Vel: 1, Deg: d, Oct: 2, Dur: 4})
+	}
+	for i, d := range [...]int{1, 2, 3, 2, 1, 2, 3, 2, 1, 2, 3, 2, 1, 2, 3, 2} {
+		counterEvs = append(counterEvs, Step{Pos: 2 * i, Vel: 0.65, Deg: d, Oct: 2 + i/8, Dur: 2})
+	}
+	r, leadSet, counterSet := twoLines(t, leadEvs, counterEvs, LeadLoud)
+	leadIn, counterIn := linesHeard(r, leadSet, counterSet)
 	t.Logf("melody line: %d lead notes, %d counter notes; under line: %d lead, %d counter; %d lead and %d counter notes played", leadIn[0], counterIn[0], leadIn[1], counterIn[1], 4*bars, 8*bars)
 	if leadIn[0] < 3*bars || counterIn[0] > bars || counterIn[1] < 3*bars {
 		t.Errorf("the lead did not hold its line: melody %d lead %d counter, under %d lead %d counter", leadIn[0], counterIn[0], leadIn[1], counterIn[1])
+	}
+}
+
+// TestRipTellsTheLeadByItsCharacter: a softer lead in eighths under a louder
+// counter line in half notes, a fourth under the lead one bar and a fifth over
+// it the next, on one voice. The decoder follows the louder line, which is the
+// counter here, so the notes are parted into lines by what each keeps, its
+// pitch, its lengths and its strength, and the busier line is the melody.
+func TestRipTellsTheLeadByItsCharacter(t *testing.T) {
+	const bars = 8
+	var leadEvs, counterEvs []Step
+	for i, d := range [...]int{4, 5, 6, 5, 4, 5, 6, 5, 4, 5, 6, 5, 4, 5, 6, 5} {
+		leadEvs = append(leadEvs, Step{Pos: 2 * i, Vel: 0.6, Deg: d, Oct: 2, Dur: 2})
+	}
+	for i, d := range [...]int{1, 2, 1, 2} {
+		counterEvs = append(counterEvs, Step{Pos: 8 * i, Vel: 1, Deg: d, Oct: 2 + i/2, Dur: 8})
+	}
+	r, leadSet, counterSet := twoLines(t, leadEvs, counterEvs, LeadBusy)
+	leadIn, counterIn := linesHeard(r, leadSet, counterSet)
+	t.Logf("melody line: %d lead notes, %d counter notes; under line: %d lead, %d counter; %d lead and %d counter notes played", leadIn[0], counterIn[0], leadIn[1], counterIn[1], 8*bars, 2*bars)
+	if leadIn[0] < 6*bars || counterIn[0] > bars || counterIn[1] < bars {
+		t.Errorf("the softer lead did not hold its line: melody %d lead %d counter, under %d lead %d counter", leadIn[0], counterIn[0], leadIn[1], counterIn[1])
+	}
+}
+
+// TestRipKeepsABassLineThatClimbs: a bass line on F3 and G3, above the E3 the
+// bass register's rows end at, stays the bass line, heard by the bass decoder
+// where it reaches over the melody's rows; and a melody that dips to G3 over a
+// low bass keeps its note, since the note continues the melody, not the bass.
+func TestRipKeepsABassLineThatClimbs(t *testing.T) {
+	const bpm, bars = 120, 4
+	f3, g3 := StepPitch(DefaultRootNote, ScalePhrygian, 1, 1, 0), StepPitch(DefaultRootNote, ScalePhrygian, 2, 1, 0)
+	count := func(r *Rip) (inBass, inMelody int) {
+		for _, bar := range r.Bars {
+			for _, st := range bar.Bass {
+				if m := StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc); m == f3 || m == g3 {
+					inBass++
+				}
+			}
+			for _, st := range append(slices.Clone(bar.Melody), bar.Under...) {
+				if m := StepPitch(r.Root, r.Scale, st.Deg, st.Oct, st.Acc); m == f3 || m == g3 {
+					inMelody++
+				}
+			}
+		}
+		return
+	}
+	ae, slots := startLoopEngine(t)
+	high, err := ae.DefinePattern(&Pattern{Name: "high", Steps: 16, Role: RoleBass, Tracks: []Track{{Instr: InstrBass, Events: []Step{
+		{Pos: 0, Vel: 0.9, Deg: 1, Oct: 1, Dur: 4}, {Pos: 8, Vel: 0.9, Deg: 2, Oct: 1, Dur: 4}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a melody that dips: the tune's run with its third note a G3, over the low bass
+	dip, err := ae.DefinePattern(&Pattern{Name: "dip", Steps: 16, Role: RoleMelody, Tracks: []Track{{Instr: InstrLead, Events: []Step{
+		{Pos: 0, Vel: 0.9, Deg: 4, Oct: 1, Dur: 2}, {Pos: 2, Vel: 0.8, Deg: 3, Oct: 1, Dur: 2}, {Pos: 4, Vel: 0.9, Deg: 2, Oct: 1, Dur: 2}, {Pos: 6, Vel: 0.8, Deg: 3, Oct: 1, Dur: 2},
+		{Pos: 8, Vel: 0.9, Deg: 4, Oct: 1, Dur: 2}, {Pos: 10, Vel: 0.8, Deg: 5, Oct: 1, Dur: 2}, {Pos: 12, Vel: 0.8, Deg: 6, Oct: 1, Dur: 2}, {Pos: 14, Vel: 0.9, Deg: 0, Oct: 2, Dur: 2}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	climb := slots
+	climb[3] = high
+	buf, err := ae.RenderMusic(climb, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inBass, inMelody := count(r); inBass < bars || inMelody > 1 {
+		t.Errorf("the climbing bass line: %d notes in the bass line, %d in the melody register, of %d played", inBass, inMelody, 2*bars)
+	}
+	dipped := slots
+	dipped[1] = dip
+	buf, err = ae.RenderMusic(dipped, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err = Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inBass, inMelody := count(r); inMelody < bars/2 || inBass > 1 {
+		t.Errorf("the dipping melody: %d G3 notes in the melody register, %d in the bass line, of %d played", inMelody, inBass, bars)
+	}
+}
+
+// TestMatchNotesAlignsTwoTranscripts: a transcript against itself transposed,
+// stretched, one note dropped and one added matches every note but those,
+// finds the transposition and the time map, and parses back from the text
+// form a listener corrects.
+func TestMatchNotesAlignsTwoTranscripts(t *testing.T) {
+	var a []RipNote
+	for i, m := range [...]int{67, 69, 69, 74, 75, 70, 72, 75, 74, 81, 74, 67} {
+		a = append(a, RipNote{Start: 0.3 * float64(i), End: 0.3*float64(i) + 0.2, MIDI: m, Vel: 0.7, Second: i%4 == 3})
+	}
+	for i, m := range [...]int{43, 41, 43, 46} {
+		a = append(a, RipNote{Start: 1.2 * float64(i), End: 1.2*float64(i) + 1, MIDI: m, Vel: 0.9, Bass: true})
+	}
+	var b []RipNote
+	for i, n := range a {
+		if i == 5 { // one note the second witness lacks
+			continue
+		}
+		n.Start, n.End, n.MIDI = 1.15*n.Start+0.4, 1.15*n.End+0.4, n.MIDI+3
+		b = append(b, n)
+	}
+	b = append(b, RipNote{Start: 2.05, End: 2.2, MIDI: 72, Vel: 0.5}) // and one it alone hears
+	ag := MatchNotes(a, b)
+	m, u, bass := ag.Lines[0], ag.Lines[1], ag.Lines[2]
+	if ag.Shift != -3 || m.Matched != 8 || len(m.OnlyA) != 1 || len(m.OnlyB) != 1 || u.Matched != 3 || bass.Matched != 4 || ag.Register.Matched != 11 {
+		t.Errorf("shift %d, melody %d matched of %d and %d (only a %d, only b %d), under %d, bass %d, register %d", ag.Shift, m.Matched, m.A, m.B, len(m.OnlyA), len(m.OnlyB), u.Matched, bass.Matched, ag.Register.Matched)
+	}
+	if math.Abs(ag.Stretch-1/1.15) > 0.02 || math.Abs(ag.Offset+0.4/1.15) > 0.05 {
+		t.Errorf("time map a = %.3f b %+.3f, want %.3f and %+.3f", ag.Stretch, ag.Offset, 1/1.15, -0.4/1.15)
+	}
+	text := "x: 16 note(s) at 120 bpm in G2 minor\nmelody   0.300s bar 1 step  3        A4   degree 1 octave 2, 1.6 step(s) at 0.70, support 1.00\nunder 0.9s F5 0.25s\nbass 0s G2 8 steps\n"
+	notes, err := ParseTranscript(text)
+	if err != nil || len(notes) != 3 || notes[0].MIDI != 69 || math.Abs(notes[0].End-0.5) > 0.01 || !notes[1].Second || notes[1].MIDI != 77 || !notes[2].Bass || math.Abs(notes[2].End-1) > 0.01 {
+		t.Errorf("parsed %+v, %v", notes, err)
+	}
+	if _, err := ParseTranscript("melody 0.1s 3 steps\n"); err == nil {
+		t.Error("a line without a pitch parsed")
 	}
 }
 
