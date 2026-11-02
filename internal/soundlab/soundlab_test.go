@@ -1421,7 +1421,11 @@ func TestCorpusGeneratesPartsTheBankNeverHad(t *testing.T) {
 		t.Fatal(err)
 	}
 	changed, notes := 0, 0
+	accompanied := 0
 	for i := range gen {
+		if gen[i].slots[2] != audio.PatternSilence {
+			accompanied++
+		}
 		if gen[i].slots != plain[i].slots {
 			changed++
 		}
@@ -1434,6 +1438,9 @@ func TestCorpusGeneratesPartsTheBankNeverHad(t *testing.T) {
 	}
 	if changed == 0 || notes == 0 {
 		t.Errorf("%d loop(s) changed by gen, %d note(s) labelled", changed, notes)
+	}
+	if accompanied == 0 {
+		t.Errorf("no loop got an accompaniment in the free slot")
 	}
 	for _, n := range []string{"corpus_beat", "corpus_melody", "corpus_bass"} {
 		if id := audio.PatternIDByName(n); id != audio.PatternSilence {

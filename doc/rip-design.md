@@ -158,8 +158,12 @@ offline (`song <name> <file.wav>`).
   since recordings are and the sample is forty cents flat; `gen` draws beats, melodies
   and bass lines from the key for three loops in five per part, since the bank
   alone repeats its few melodies and a model trained on it learns them, not
-  pitch. Both draw from streams of their own, so a loop's bank patterns and key
-  are the same with and without them.
+  pitch, and for three loops in five an accompaniment in the free slot, a
+  broken chord in eighths or sixteenths changing pitch from note to note under
+  a melody that is a slow line of longer notes in half the loops: the texture
+  of the sample recording, a lead over an arpeggio, which the rip has to part.
+  Both draw from streams of their own, so a loop's bank patterns and key are
+  the same with and without them.
 - **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
   bench and the install with every knob an environment variable, and a focus
   script run before the corpus turns a run toward a kind of music (`focus/`:
@@ -531,6 +535,30 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   numbers had matched across lines. `truth` is ready for the melody written
   out, the number the renders still lack.
 
+- The thirteenth pass, the rhythm from the user's ear: the lead plays
+  quarter, quarter, half, quarter, eighth, half three times and then seven
+  quarters, twenty-five notes on a plucked string; the second line is a piano
+  arpeggio in eighths throughout, fifty-eight notes of changing pitch under
+  pedal, which the user could not write down by pitch; the bass is free. That
+  rhythm, as `unit eighth` and `(1-2-3---4-56---)x3 a-a-a-a-a-a-a`, placed on
+  the time map that matches most (0.999 of the rip's), is the first truth the
+  rip has had: the origin's lead, named by `lead long` (the default, the
+  busier line, is the arpeggio here; soft and long part the same), has 17 of
+  the 25 given notes within half an eighth, 8 missed and 10 extra, 7 of the
+  given cut in two or more, the half notes among them; the second line has 30
+  of 58 eighths, 11 rip notes spanning two or more, the pedal's ringing notes
+  merged, which two lines cannot hold. The intro: 12 of 25 and 24 of 58. A
+  rule that cut a note where its salience rose again by a third after falling
+  off its peak, for a repeated note, heard 32 of 32 repeated piano strikes in
+  a test and on the recording cut 11 of the lead's 25 notes and the bass's
+  held notes, whose strings beat: withdrawn the same hour, the rhythm having
+  shown it in one run. The songs: the origin 0.86 after two rounds (pitch
+  0.90, timbre 0.85, onsets 0.82), the intro 0.84 (0.87, 0.84, 0.80), with
+  modal voices within their floors. The corpus draws the piece's texture for
+  the next run, a broken chord in the free slot under a melody of longer
+  notes; its loops bench at 0.476 clean and 0.457 augmented for the analysis,
+  a new baseline.
+
 ## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved
@@ -605,6 +633,14 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   `agree` holds two rips of one piece to each other the same way where no
   score is to hand, by line and with the melody register as one, since the
   two may part its lines differently.
+- **A rhythm tapped out is a truth.** The user could write the piece's
+  structure down by ear, the lead's note lengths and that the second line
+  runs in eighths, but not the pitches of a fast line under others. A truth
+  without pitches, `unit eighth` and `(1-2-3---4-56---)x3 a-a-a-a-a-a-a`,
+  is matched by when its notes start, and it answers the questions the
+  renders left open: which line is the lead, how many of its notes the rip
+  cuts or merges, and how far the lead rule's default is from the ear. It is
+  the number to chase while the pitches stay the ear's.
 - **A refined voice stays near the fit.** The song's score is of the whole
   mix, and a bright voice fills a mix better than the voice that sounds like
   the line, so `refine` drifted every voice toward a driven saw while the
