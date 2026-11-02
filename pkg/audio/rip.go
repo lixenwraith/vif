@@ -250,7 +250,7 @@ const (
 	RipN        = 2048
 	RipHop      = 256
 	RipFrameSec = float64(RipHop) / RipRate
-	RipMelBands = 80
+	RipMelBands = 229
 	ripKernel   = 17 // frames and bins a median spans in the harmonic-percussive split
 	// ripOnsetLead is the frames an event reads early under the centred window;
 	// the beat tracker shares it, and a pinned grid takes it on so a note on the

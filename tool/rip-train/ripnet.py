@@ -15,7 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # pkg/audio/ripnet.Spec, which a corpus manifest restates
-MEL_BANDS = 80
+MEL_BANDS = 229
 PITCHES = 69
 DRUMS = 3
 WAVES = 5
