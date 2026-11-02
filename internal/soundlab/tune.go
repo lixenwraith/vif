@@ -445,8 +445,15 @@ func degrade(x []float64, rng *rand.Rand) []float64 {
 	if rng.Float64() < 0.5 {
 		noise = rms * math.Pow(10, (rng.Float64()*25-65)/20)
 	}
+	var peak float64
 	for i := range out {
-		out[i] = min(max(out[i]+rng.NormFloat64()*noise, -1), 1)
+		out[i] += rng.NormFloat64() * noise
+		peak = max(peak, math.Abs(out[i]))
+	}
+	if peak > 1 { // the room on top of the clip can pass full scale: turned down, not clipped hard
+		for i := range out {
+			out[i] /= peak
+		}
 	}
 	return out
 }
