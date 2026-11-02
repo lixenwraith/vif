@@ -27,20 +27,32 @@ import torch.nn.functional as F
 import ripnet
 
 
-def read_mel(path: str) -> np.ndarray:
-    with open(path, "rb") as f:
-        frames, bands = struct.unpack("<II", f.read(8))
-        data = np.frombuffer(f.read(4 * frames * bands), dtype="<f4")
-    return data.reshape(frames, bands).astype(np.float32)
+class MelFile:
+    """A loop's log-mel frames, read from its file as sliced: the frames of 40000
+    loops are 8 GB, which the page cache holds rather than the process."""
+
+    def __init__(self, path: str):
+        self.path = path
+        with open(path, "rb") as f:
+            self.frames, self.bands = struct.unpack("<II", f.read(8))
+
+    def __len__(self) -> int:
+        return self.frames
+
+    def __getitem__(self, sl: slice) -> np.ndarray:
+        start, stop, _ = sl.indices(self.frames)
+        n = max(stop - start, 0)
+        return np.fromfile(self.path, dtype="<f4", count=n * self.bands, offset=8 + 4 * start * self.bands).reshape(n, self.bands)
 
 
 def targets(label: dict, frames: int, manifest: dict) -> dict:
-    """Per-frame targets from a loop's events; masks say where a target counts."""
+    """Per-frame targets from a loop's events; masks say where a target counts.
+    The yes-or-no ones are bytes, a quarter of a float's memory, until batch."""
     pitches, min_midi = manifest["pitches"], manifest["min_midi"]
     genes, waves = manifest["voice_genes"], len(manifest["waves"])
-    onset = np.zeros(frames, np.float32)
-    drums = np.zeros((frames, 3), np.float32)
-    pitch = np.zeros((frames, pitches), np.float32)
+    onset = np.zeros(frames, np.uint8)
+    drums = np.zeros((frames, 3), np.uint8)
+    pitch = np.zeros((frames, pitches), np.uint8)
     wave = np.full(frames, -1, np.int64)
     voice = np.zeros((frames, genes), np.float32)
     top = np.full(frames, -1, np.int64)  # the highest midi sounding, whose voice the frame reports
@@ -61,9 +73,9 @@ def targets(label: dict, frames: int, manifest: dict) -> dict:
                 if e["midi"] > top[u]:
                     top[u], wave[u] = e["midi"], e["wave"]
                     voice[u] = e["voice"]
-    voicing = (pitch.sum(1) > 0).astype(np.float32)
+    voicing = (pitch.sum(1) > 0).astype(np.uint8)
     return {"onset": onset, "drums": drums, "pitch": pitch, "voicing": voicing,
-            "wave": wave, "voice": voice, "voiced": (top >= 0).astype(np.float32)}
+            "wave": wave, "voice": voice, "voiced": (top >= 0).astype(np.uint8)}
 
 
 def load_corpus(d: str):
@@ -72,7 +84,7 @@ def load_corpus(d: str):
     loops = []
     for i in range(manifest["loops"]):
         base = os.path.join(d, f"loop_{i:03d}")
-        mel = read_mel(base + ".mel")
+        mel = MelFile(base + ".mel")
         with open(base + ".json") as f:
             label = json.load(f)
         loops.append((mel, targets(label, len(mel), manifest)))
@@ -100,7 +112,7 @@ def batch(loops, window: int, size: int, rng: random.Random):
         tg["wave"].append(take(t["wave"], -1))
         tg["valid"].append(np.concatenate([np.ones(window - pad, np.float32), np.zeros(pad, np.float32)]))
     out = {k: torch.from_numpy(np.stack(v)) for k, v in tg.items()}
-    return torch.from_numpy(np.stack(mels)), out
+    return torch.from_numpy(np.stack(mels)), {k: v if k == "wave" else v.float() for k, v in out.items()}
 
 
 def validation(loops, window: int):
