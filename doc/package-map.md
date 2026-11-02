@@ -248,3 +248,4 @@ duplicating version strings that would become stale.
 | `web/` | The page and worker the WASM build runs in: a WebGL canvas drawn from the host's cell frames, a hidden text field for keys, the key strip for touch screens. |
 | `deploy/` | The session image, K3s objects, node units, updaters and runbook, the LogWisp pipeline, the site's log-viewer page, and the packaging files in `deploy/package/` ([deploy/README.md](../deploy/README.md)). |
 | `sandbox/*` | Isolated prototypes, visual/interaction experiments, and the random and render benchmarks; not part of application assembly. |
+| `sandbox/termbench` | The terminal module against tcell v2: frame encoding headless, each on its own backend in a live terminal, and the raw input a console delivers; a module of its own, so tcell stays out of the game's `go.mod`. |

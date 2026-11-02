@@ -505,10 +505,16 @@ and its three SHA-256s together.
 - Guide: [Build profiles](multi-platform.md) §4
 
 Played in Alacritty, the zip ignores the mouse, has no sound and flickers status
-bar cells on redraw. Try the mouse in Windows Terminal, whose console host is newer
-than the system's, to tell a console-host gap from a backend one; try a build
-without `vif_noaudio` with ffplay on `PATH`; and try the flicker with the frame
-wrapped in synchronized output.
+bar cells on redraw. Windows 10's own ConPTY is reported not to forward a request
+for mouse reports, and repaints its copy of the screen on its own schedule;
+Alacritty 0.13+ uses a `conpty.dll` and `OpenConsole.exe` from Windows Terminal
+placed beside it, whose console host passes output through from 1.22. tcell's
+Windows path reads the same VT input, so it inherits the host's gaps.
+`sandbox/termbench` tells the hosts apart: `rawin` prints the records a mouse
+report arrives as, `live -lib terminal|tcell` plays a scene on each library's
+own backend. Try both with that console host and with the terminal module's
+synchronized-output frames (v0.6.2), and a build without `vif_noaudio` with
+ffplay on `PATH`.
 
 ### Cache a received scenario to the user root
 
