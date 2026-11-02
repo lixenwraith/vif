@@ -1502,40 +1502,49 @@ func (f *RipFrames) path(lo, hi int, p RipParams) []ripNote {
 // ending: no pair a unison, a semitone or a harmonic interval apart, where the
 // higher would be the lower's partial, and line A paying Cross a frame to be
 // the quieter, so A is the line the ear follows and B the one under it, through
-// a crossing or a rest that costs less than changing places. The scores are
-// kept at checkpoints and the backpointers of a block at a time, so a long
-// recording costs little memory.
+// a crossing or a rest that costs less than changing places. A short recording
+// keeps every frame's backpointers; a long one keeps the scores at checkpoints
+// and the backpointers of a block at a time, so it costs little memory.
 func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
 	r, ok := f.register(lo, hi)
 	if !ok {
 		return nil, nil
 	}
 	S, T := r.states+1, f.frames()
-	apart := func(a, b int) bool {
-		if a == r.states || b == r.states {
-			return true
+	// apart says two states may sound together: the unvoiced state with any,
+	// two pitches when neither a unison, a semitone nor a harmonic interval apart
+	apart := make([]bool, S*S)
+	for a := range S {
+		for b := range S {
+			switch max(a, b) - min(a, b) {
+			case 0, 1, 11, 12, 13, 18, 19, 20, 23, 24, 25, 27, 28, 29, 30, 31, 32:
+				apart[a*S+b] = a == r.states || b == r.states
+			default:
+				apart[a*S+b] = true
+			}
 		}
-		switch max(a, b) - min(a, b) {
-		case 0, 1, 11, 12, 13, 18, 19, 20, 23, 24, 25, 27, 28, 29, 30, 31, 32:
-			return false
-		}
-		return true
 	}
-	emit := func(t, a, b int) float64 {
-		if !apart(a, b) {
+	e := make([]float64, S) // a frame's emissions, one a state
+	emit := func(t int) {
+		for s := range S {
+			e[s] = r.emit(t, s, p)
+		}
+	}
+	score := func(a, b int) float64 {
+		if !apart[a*S+b] {
 			return math.Inf(-1)
 		}
-		ea, eb := r.emit(t, a, p), r.emit(t, b, p)
-		if ea < eb {
-			return ea + eb - p.Cross
+		if e[a] < e[b] {
+			return e[a] + e[b] - p.Cross
 		}
-		return ea + eb
+		return e[a] + e[b]
 	}
 	mid, col, out := make([]float64, S*S), make([]float64, S), make([]float64, S)
 	argB, argA := make([]uint8, S*S), make([]uint8, S)
 	// step scores a frame's pairs from the last frame's: along B for each A,
 	// then along A for each B, a pair's move costing the two lines' moves
 	step := func(t int, prev, cur []float64, back []uint16) {
+		emit(t)
 		for qa := range S {
 			r.relax(prev[qa*S:qa*S+S], mid[qa*S:qa*S+S], argB[qa*S:qa*S+S], p)
 		}
@@ -1545,7 +1554,7 @@ func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
 			}
 			r.relax(col, out, argA, p)
 			for a := range S {
-				cur[a*S+b] = out[a] + emit(t, a, b)
+				cur[a*S+b] = out[a] + score(a, b)
 				if back != nil {
 					qa := int(argA[a])
 					back[a*S+b] = uint16(qa*S + int(argB[qa*S+b]))
@@ -1555,10 +1564,39 @@ func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
 	}
 	const block = 256
 	prev, cur := make([]float64, S*S), make([]float64, S*S)
+	emit(0)
 	for a := range S {
 		for b := range S {
-			prev[a*S+b] = emit(0, a, b)
+			prev[a*S+b] = score(a, b)
 		}
+	}
+	ta, tb := make([]int, T), make([]int, T)
+	walk := func(state int, t0, t int, backs [][]uint16) int {
+		for u := t; u > t0; u-- {
+			ta[u], tb[u] = state/S, state%S
+			state = int(backs[u-t0-1][state])
+		}
+		return state
+	}
+	best := func() int {
+		state := 0
+		for s := range prev {
+			if prev[s] > prev[state] {
+				state = s
+			}
+		}
+		return state
+	}
+	if T <= 16*block {
+		backs := make([][]uint16, T)
+		for t := 1; t < T; t++ {
+			backs[t-1] = make([]uint16, S*S)
+			step(t, prev, cur, backs[t-1])
+			prev, cur = cur, prev
+		}
+		state := walk(best(), 0, T-1, backs)
+		ta[0], tb[0] = state/S, state%S
+		return r.cut(ta, p), r.cut(tb, p)
 	}
 	var marks [][]float64 // the scores every block frames
 	for t := 1; t < T; t++ {
@@ -1568,17 +1606,11 @@ func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
 		step(t, prev, cur, nil)
 		prev, cur = cur, prev
 	}
-	state := 0
-	for s := range prev {
-		if prev[s] > prev[state] {
-			state = s
-		}
-	}
+	state := best()
 	backs := make([][]uint16, block)
 	for i := range backs {
 		backs[i] = make([]uint16, S*S)
 	}
-	ta, tb := make([]int, T), make([]int, T)
 	for t := T - 1; t >= 1; {
 		t0 := (t - 1) / block * block
 		copy(prev, marks[t0/block])
@@ -1586,10 +1618,7 @@ func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
 			step(u, prev, cur, backs[u-t0-1])
 			prev, cur = cur, prev
 		}
-		for u := t; u > t0; u-- {
-			ta[u], tb[u] = state/S, state%S
-			state = int(backs[u-t0-1][state])
-		}
+		state = walk(state, t0, t, backs)
 		t = t0
 	}
 	ta[0], tb[0] = state/S, state%S

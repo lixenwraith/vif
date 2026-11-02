@@ -518,10 +518,11 @@ validate sa
 // the mixer's queue and take effect on its tick — asserting engine state
 // synchronously after an exec races that tick (reliably so under -race).
 // Registry state is the exception: RegisterPattern is mutex-synchronous and
-// may be asserted directly. A loaded run drops ticks, so the deadline is wide.
+// may be asserted directly. A loaded run drops ticks, and a verb under the race
+// detector on a busy runner takes many seconds, so the deadline is wide.
 func waitFor(t *testing.T, cond func() bool, msg string) {
 	t.Helper()
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if cond() {
 			return
 		}
@@ -1019,7 +1020,9 @@ func TestRipFitsVoicesAndCompressesToASong(t *testing.T) {
 			}
 		}
 	}
-	buf, err := s.eng.RenderMusic(slots, 120, 4, audio.DefaultRootNote, audio.ScalePhrygian, nil, 1)
+	// two bars at 100 bpm: the shortest loop the rip takes, since every judge
+	// of the refinement renders and hears the whole song
+	buf, err := s.eng.RenderMusic(slots, 100, 2, audio.DefaultRootNote, audio.ScalePhrygian, nil, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1040,7 +1043,7 @@ save pattern %s
 		t.Fatalf("no voice fitted:\n%s", out.String())
 	}
 	d, ok := s.songs.get("loop")
-	if !ok || len(d.Bars) != 4 || d.BPM != s.bpm || !s.songs.isDirty("loop") {
+	if !ok || len(d.Bars) != 2 || d.BPM != s.bpm || !s.songs.isDirty("loop") {
 		t.Fatalf("song %+v after compress:\n%s", d, out.String())
 	}
 	if !strings.Contains(out.String(), "rips back at") {
@@ -1059,7 +1062,7 @@ save pattern %s
 		}
 	}
 	if dict == 0 || dict > 12 {
-		t.Errorf("%d dictionary pattern(s) for 4 bars of 3 parts:\n%s", dict, out.String())
+		t.Errorf("%d dictionary pattern(s) for 2 bars of 3 parts:\n%s", dict, out.String())
 	}
 	if fi, err := os.Stat(song); err != nil || fi.Size() < 1000 {
 		t.Errorf("the song did not render: %v", err)
