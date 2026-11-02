@@ -56,8 +56,17 @@ flowchart LR
    paying `cross` a frame to be the quieter, so it is the line the ear follows
    and the second the one under it, through a crossing or a rest shorter than
    changing places would cost; the second line's notes are kept above a share
-   of the first's strength. `RipParams` holds their thresholds as data a
-   search tunes (`tune`).
+   of the register's strength. The decoder follows the louder line, and the
+   lead is often the softer, so the notes are parted again into two lines by
+   what a line keeps, its pitch from note to note, the length of its notes,
+   their strength and no two at once, and the lead is the line a rule names,
+   the busier by default (`Ripper.Lead`). The bass is decoded up to A3, over
+   the melody's lowest rows, which count for three quarters against the bass
+   rows' own reference; a reached note the bass line does not continue, its
+   nearest other bass note more than an octave away, is not the bass's, and a
+   note both registers hear goes to the line it continues, the one whose
+   nearest other note is nearer in pitch, the bass when they tie. `RipParams`
+   holds their thresholds as data a search tunes (`tune`).
 4. **Voices.** Each note carries the genes the front end heard it played with
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
    wave class); a register's notes average into one voice. A register the front
@@ -544,6 +553,27 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   fact, by pitch, timbre and level over the notes both passes had cut, was
   tried first and made the two recordings of the piece agree less: the notes
   were already cut wrong.
+- **The lead is a line's character, named by a rule.** Decoded together, the
+  two lines are continuous, but the decoder's first line is the louder, and
+  on the origin recording the lead the user hears is the softer: a steady
+  line of short notes under a counter line of held notes. So the notes are
+  parted again by what each line keeps, pitch, length, strength and no two at
+  once, which the decoder's loudness tie-break cannot see, and which line is
+  the melody is a rule the listener can set, the busier by default, since no
+  one cue holds for all music: loudness failed here, pitch order failed in
+  the ninth pass. A note's strength is weighed against the register's
+  reference, not raw: raw, it outweighed every other cue by a hundred times
+  and the first parting followed loudness alone.
+- **Ground truth is a transcript corrected by hand; two rips are two
+  witnesses.** The numbers so far grade the mix, not the melody; what the
+  user hears as the lead has no number. `truth` scores a rip against notes
+  given in the `notes` verb's own text, which a listener corrects by hand, by
+  the longest common subsequence of each line's pitches in time order under
+  the transposition that matches most, so a tempo that drifts or a phrase
+  played freer, a live take against a studio one, does not break the match;
+  `agree` holds two rips of one piece to each other the same way where no
+  score is to hand, by line and with the melody register as one, since the
+  two may part its lines differently.
 - **A refined voice stays near the fit.** The song's score is of the whole
   mix, and a bright voice fills a mix better than the voice that sounds like
   the line, so `refine` drifted every voice toward a driven saw while the

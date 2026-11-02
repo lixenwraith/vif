@@ -228,7 +228,8 @@ const (
 	ripSnareHz   = 4000.0
 	ripHatHz     = 5000.0
 	RipMinMIDI   = 28 // E1
-	RipBassTop   = 52 // the bass line lives under E3
+	RipBassTop   = 52 // the bass register's rows end under E3, where the long window stops
+	RipBassReach = 57 // the bass line is decoded up to A3, over the melody's lowest rows; settle gives a note both hear to the line it continues
 	RipMelodyLow = 53 // the melody from F3 up
 	RipMaxMIDI   = 97 // C7 exclusive
 	RipPitches   = RipMaxMIDI - RipMinMIDI
@@ -266,6 +267,9 @@ type Ripper struct {
 	Grid     *RipGrid
 	Params   RipParams
 	FrontEnd RipFrontEnd
+	// Lead is which of the melody register's two lines is the melody, the
+	// busier by default
+	Lead LeadRule
 }
 
 // RipGrid pins the tempo and the downbeat a recording is read on, for one whose
@@ -340,8 +344,10 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	}
 	hits := f.drumHits(p)
 	root, scale := f.key()
+	bass := f.notes(RipMinMIDI, RipBassReach, p)
 	melody := f.notes(RipMelodyLow, RipMaxMIDI, p)
-	bass := f.notes(RipMinMIDI, RipBassTop, p)
+	bass, melody = settle(bass, melody)
+	melody = streams(melody, f.Hop, rp.Lead)
 	var bpm float64
 	var g ripGrid
 	if rp.Grid != nil && rp.Grid.Downbeat >= 0 {
@@ -1357,53 +1363,118 @@ func (g *ripGrid) drums(r *Rip, hits [InstrClap][]ripHit) {
 type ripNote struct {
 	start, end, midi int
 	vel              float64
-	strength         float64 // mean salience over the note
+	strength         float64 // mean salience over the note, against the register's reference loudness
 	second           bool    // heard under another note of the register
 	wave             int
 	voice            []float64
 }
 
 // notes tracks a register's lines: the bass as one path, the melody register
-// as two decoded together where SecondVoice is set, the second line's notes
-// kept where they reach SecondVoice of the first's mean strength and last twice
-// MinNote, which drops what a decaying partial leaves.
+// as two decoded together where SecondVoice is set, the second decoded line's
+// notes kept where they reach SecondVoice of the register's mean strength and
+// last twice MinNote, which drops what a decaying partial leaves. The melody
+// register's notes come back as one list, parted into its two lines by
+// streams once settle has given the bass what both registers heard.
 func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 	if p.SecondVoice <= 0 || lo < RipMelodyLow {
 		return f.path(lo, hi, p)
 	}
 	first, second := f.pair(lo, hi, p)
-	if len(first) == 0 {
+	all := slices.Concat(first, second)
+	if len(all) == 0 {
 		return nil
 	}
 	var strength float64
-	for _, n := range first {
+	for _, n := range all {
 		strength += n.strength
 	}
-	strength /= float64(len(first))
+	strength /= float64(len(all))
 	short := max(int(2*p.MinNote/f.Hop), 1)
+	kept := slices.Clone(first)
 	for _, n := range second {
 		if n.strength >= p.SecondVoice*strength && n.end-n.start >= short {
-			n.second = true
-			first = append(first, n)
+			kept = append(kept, n)
 		}
 	}
-	return first
+	return kept
+}
+
+// settle gives a note both registers heard, the same pitch at the same time
+// where the bass's reach and the melody's rows overlap, to the line it
+// continues: the one whose nearest other note in time is nearer in pitch, the
+// bass when they tie. A reached note the bass line does not continue, its
+// nearest other bass note more than an octave away, is not the bass's at all.
+// A bass line that climbs keeps its notes, and a melody that dips keeps its own.
+func settle(bass, melody []ripNote) (b, m []ripNote) {
+	nearest := func(notes []ripNote, n ripNote) float64 { // semitones to the nearest other note within a second
+		best := math.Inf(1)
+		for _, o := range notes {
+			if o.start == n.start && o.midi == n.midi {
+				continue
+			}
+			if gap := max(o.start-n.end, n.start-o.end); gap < 200 { // frames, about a second
+				best = math.Min(best, math.Abs(float64(o.midi-n.midi)))
+			}
+		}
+		return best
+	}
+	bass = slices.DeleteFunc(slices.Clone(bass), func(n ripNote) bool {
+		if n.midi < RipBassTop {
+			return false
+		}
+		near := nearest(bass, n)
+		return !math.IsInf(near, 1) && near > 12
+	})
+	dropB, dropM := map[int]bool{}, map[int]bool{}
+	for i, n := range melody {
+		for j, bn := range bass {
+			if bn.midi != n.midi || 2*(min(bn.end, n.end)-max(bn.start, n.start)) <= min(n.end-n.start, bn.end-bn.start) {
+				continue
+			}
+			if nearest(bass, bn) <= nearest(melody, n) {
+				dropM[i] = true
+			} else {
+				dropB[j] = true
+			}
+		}
+	}
+	for i, n := range bass {
+		if !dropB[i] {
+			b = append(b, n)
+		}
+	}
+	for i, n := range melody {
+		if !dropM[i] {
+			m = append(m, n)
+		}
+	}
+	return b, m
 }
 
 // register is a register of the salience as a decoder reads it: its states,
 // the pitches from lo and then the unvoiced one, and the reference loudness
-// the register's own ninetieth-percentile peak sets
+// the register's own ninetieth-percentile peak sets. A register may reach
+// past its own rows into the next register's, which are on another scale:
+// the reference is the own rows' and a reached row sounds at reachShare of
+// its strength, so a line takes one only where it is strong and continues.
 type register struct {
 	f          *RipFrames
 	lo, states int
+	reach      int // the first state in the next register's rows, states when none
 	ref        float64
 }
 
+// reachShare is what a reached row's salience counts for against the register's own
+const reachShare = 0.75
+
 func (f *RipFrames) register(lo, hi int) (register, bool) {
-	r := register{f: f, lo: lo, states: hi - lo}
+	r := register{f: f, lo: lo, states: hi - lo, reach: hi - lo}
+	if lo < RipBassTop && hi > RipBassTop {
+		r.reach = RipBassTop - lo
+	}
 	peaks := make([]float64, f.frames())
 	for t := range peaks {
-		for s := range r.states {
+		for s := range r.reach {
 			peaks[t] = max(peaks[t], r.sal(t, s))
 		}
 	}
@@ -1417,10 +1488,13 @@ func (r register) sal(t, s int) float64 {
 }
 
 // emit is a state's score at a frame: the salience against the reference, one
-// at most, or Voicing for the unvoiced state
+// at most, a reached row's at reachShare, or Voicing for the unvoiced state
 func (r register) emit(t, s int, p RipParams) float64 {
 	if s == r.states {
 		return p.Voicing
+	}
+	if s >= r.reach {
+		return reachShare * min(r.sal(t, s)/r.ref, 1)
 	}
 	return min(r.sal(t, s)/r.ref, 1)
 }
@@ -1633,8 +1707,8 @@ func (r register) cut(track []int, p RipParams) []ripNote {
 	minFrames := max(int(p.MinNote/r.f.Hop), 1)
 	flush := func(n ripNote, sum float64) {
 		if n.end-n.start >= minFrames {
-			n.strength = sum / float64(n.end-n.start)
-			n.vel = min(max(0.3, n.strength/r.ref), 1)
+			n.strength = sum / float64(n.end-n.start) / r.ref // the mean salience against the register's reference
+			n.vel = min(max(0.3, n.strength), 1)
 			n.wave, n.voice = r.f.voiceOver(n.start, n.end)
 			notes = append(notes, n)
 		}

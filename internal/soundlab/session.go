@@ -65,6 +65,7 @@ type Session struct {
 	fit         fitOptions
 	compressOpt compressOptions
 	refineOpt   refineOptions
+	lead        audio.LeadRule // which of the melody register's lines rip calls the melody
 	// song is the timeline being conducted through the live sequencer, nil when
 	// none; ticked says a front end drives conduct, so song play returns at once
 	song   *songPlay
@@ -266,7 +267,7 @@ func (s *Session) loadModel(file string) error {
 
 // ripper is what rip listens with: the parameters, and the model when one loaded
 func (s *Session) ripper() audio.Ripper {
-	r := audio.Ripper{Params: s.rip}
+	r := audio.Ripper{Params: s.rip, Lead: s.lead}
 	if s.frontEnd != nil {
 		r.FrontEnd = s.frontEnd
 	}

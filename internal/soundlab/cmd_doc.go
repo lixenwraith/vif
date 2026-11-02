@@ -142,6 +142,13 @@ func cmdRip(s *Session, a []string) error {
 		case n > 2 && a[n-1] == "nodrums":
 			nodrums, a = true, a[:n-1]
 			continue
+		case n > 3 && a[n-2] == "lead":
+			rule, ok := audio.ParseLeadRule(a[n-1])
+			if !ok {
+				return fmt.Errorf("lead %q: want busy, high, low, loud or soft", a[n-1])
+			}
+			s.lead, a = rule, a[:n-2]
+			continue
 		case n > 3 && a[n-2] == "bpm":
 			v, err := strconv.Atoi(a[n-1])
 			if err != nil || v < audio.MinBPM || v > audio.MaxBPM {

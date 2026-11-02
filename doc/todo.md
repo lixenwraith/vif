@@ -1313,12 +1313,15 @@ rip are in place; what remains:
 2. Matching by reconstruction: a bar's distance to a member as the rip of the
    member's render against the bar, in place of `BarDistance`, with `Memoize`
    paying for each render once; measure it against the mechanical grouping.
-3. Several voices in a register: the two lines are decoded together now, each
-   its own continuity, the first the louder by a cost; which is the lead is
-   still told by loudness, not timbre, so a quiet lead under a loud counter
-   line changes hands over a long rest. A colour per pitch and frame, the
-   brightness of the harmonic series, as a continuity term of each line; a
-   third line, and a chord's inner notes, are not heard.
+3. Several voices in a register: the two lines are decoded together now and
+   parted again by pitch, length and strength, the lead the busier line or
+   the one the listener names (`rip ... lead`); a colour per note, the
+   brightness of its harmonic series, as one more thing a line keeps, once a
+   colour survives the other lines' partials falling on its own (a masked
+   profile left most notes of the origin without one); a third line, and a
+   chord's inner notes, are not heard. The bass register's rows end at E3 and
+   the bass decoder reaches A3 over the melody's rows; a line that lives
+   around the join is still heard on two scales.
 4. The fit's sample notes are the mix around them: subtract the other register's
    estimate from the recording before the mel frames, or fit on the frames a
    trained front end attributes to the note.

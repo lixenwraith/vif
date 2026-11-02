@@ -896,8 +896,9 @@ func TestRipMakesPatternsOfARecording(t *testing.T) {
 ! rip %s loop                        # not a recording
 rip %s loop
 ! rip %s loop                        # the names are taken
-rip %s fast 2 bpm 180 nodrums
+rip %s fast 2 bpm 180 nodrums lead soft
 ! rip %s slow 2 bpm 10
+! rip %s slow 2 lead sideways           # not a lead rule
 rip %s quiet 4 nodrums
 ls pattern loop*
 ! notes nothing
@@ -905,7 +906,7 @@ notes loop
 compress quiet 5
 song quiet score
 validate all
-`, filepath.Join(t.TempDir(), "missing.wav"), wav, wav, wav, wav, wav))
+`, filepath.Join(t.TempDir(), "missing.wav"), wav, wav, wav, wav, wav, wav))
 	if !strings.Contains(out.String(), "note(s) at") || !strings.Contains(out.String(), "bar 1 step") || !strings.Contains(out.String(), "support 0.") {
 		t.Errorf("notes listed no transcript with support:\n%s", out.String())
 	}
@@ -1071,6 +1072,19 @@ save pattern %s
 	if !strings.Contains(out.String(), "registered; the patterns naming it play it") {
 		t.Errorf("fit replaced no voice:\n%s", out.String())
 	}
+	// the two witnesses and a truth: a rip agrees with itself on every note,
+	// and read back from its own transcript hears every note given
+	out.Reset()
+	runOrFatal(t, s, &out, "notes loop\n")
+	truth := filepath.Join(dir, "truth.txt")
+	os.WriteFile(truth, out.Bytes(), 0o644)
+	out.Reset()
+	runOrFatal(t, s, &out, fmt.Sprintf("agree loop loop\n! agree loop nothing\ntruth loop %s\n! truth loop %s\n", truth, wav))
+	rp := s.rips["loop"]
+	n := len(rp.rip.Notes)
+	if !strings.Contains(out.String(), fmt.Sprintf("against %d note(s) given, transposed +0", n)) || strings.Contains(out.String(), "only loop:") || strings.Contains(out.String(), "only given:") {
+		t.Errorf("the rip did not agree with itself:\n%s", out.String())
+	}
 	// one line of the song on its own: the instruments named after the file
 	runOrFatal(t, s, &out, fmt.Sprintf("! song loop %s nothing\nsong loop %s kick\n", song, song))
 	if fi, err := os.Stat(song); err != nil || fi.Size() < 1000 {
@@ -1088,7 +1102,6 @@ save pattern %s
 	}
 	// a tonal floor no candidate can keep to leaves every voice in hand: the
 	// refinement picks among voices that sound like the recording's notes
-	rp := s.rips["loop"]
 	var floors [3]tonalFloor
 	for reg := range floors {
 		floors[reg].targets = fitTargets(rp.x, rp.rate, lineNotes(rp.rip, reg), 2)
