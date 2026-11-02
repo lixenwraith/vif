@@ -128,6 +128,50 @@ func energy(x []float64) float64 {
 	return e / float64(max(len(x), 1))
 }
 
+// TestRipNoteBrightIsTheFundamentalsShare: the loop's melody played on a sine
+// reads near one and brighter than on a saw, whose partials share the sum. Its
+// root and fifth sound two octaves over the bass's, the bass's fourth partial
+// covering their fundamentals, and are unmeasured rather than read through it;
+// every other melody-register note is measured, and no bass note.
+func TestRipNoteBrightIsTheFundamentalsShare(t *testing.T) {
+	const bpm, bars = 140, 4
+	ae, slots := startLoopEngine(t)
+	covered := map[int]bool{DefaultRootNote + 24: true, StepPitch(DefaultRootNote, ScalePhrygian, 4, 0, 0) + 24: true}
+	bright := func(wave string) float64 {
+		if _, err := ae.DefineVoice(&VoiceDef{Name: "lead", Wave: wave, Cutoff: 2500, Q: 0.5, Attack: 0.005, Decay: 0.1, Sustain: 0.7, Release: 0.08}); err != nil {
+			t.Fatal(err)
+		}
+		buf, err := ae.RenderMusic(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := Ripper{Params: DefaultRipParams(), Grid: &RipGrid{BPM: bpm}}.Samples(buf, AudioSampleRate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sum float64
+		var measured int
+		for _, n := range r.Notes {
+			unmeasured := n.Bright == RipUnmeasured
+			if unmeasured != (n.Bass || covered[n.MIDI]) {
+				t.Errorf("%s: MIDI %d at %.2fs, bass %v, reads %.2f", wave, n.MIDI, n.Start, n.Bass, n.Bright)
+			}
+			if !unmeasured {
+				sum, measured = sum+n.Bright, measured+1
+			}
+		}
+		if measured == 0 {
+			t.Fatalf("%s: no note measured", wave)
+		}
+		return sum / float64(measured)
+	}
+	saw, sine := bright("saw"), bright("sine")
+	t.Logf("mean bright: saw %.2f, sine %.2f", saw, sine)
+	if sine < 0.9 || saw > sine-0.2 {
+		t.Errorf("saw %.2f, sine %.2f", saw, sine)
+	}
+}
+
 // TestNoteRenderAndDistances: a rendered note sounds and dies, mel frames of the
 // same note are no distance apart and of another voice some, and bars are as far
 // apart as the steps they do not share.

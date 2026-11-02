@@ -345,6 +345,14 @@ that proves wrong or that a document now states, and link the document instead.
   fourth run slowed from 0.4 to 4 seconds a step under a rip and a test run,
   and the two-hour waiter on it timed out twice. Size a waiter by the run
   alone and expect to re-arm it, or follow the run by a reminder instead.
+- `RipNote.Bright` on the test loop's lead through its 2.5 kHz low-pass reads
+  0.97 on a sine, 0.73 on a square and 0.49 on a saw (an unfiltered saw's six
+  partials give 0.41). A melody note at the bass's octave, twelfth or double
+  octave is `RipUnmeasured`: the loop's root and fifth over the bass's leave a
+  quarter of its melody-register notes so. A concurrent note counts on a frame
+  while it sounds anywhere under the window (eight frames either side); counted
+  only on its own frames, the edge frames read the fifth's fundamental through
+  the bass's partial and gave it a value up to 20% low.
 
 ## Locks
 
