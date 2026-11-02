@@ -422,7 +422,14 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   at 0.45 the bench loses more (0.481, 0.410) while the intro gains in pitch
   (0.86, ripping back at 0.94) and the origin loses (0.68, 0.79). No setting
   wins on all four, so the default stays at one and the knob is the search's;
-  what saturation breaks is not the fundamental's weight alone.
+  what saturation breaks is not the fundamental's weight alone. The sweep
+  judged on a step's own bars, with the rhythm and length moves: two rounds
+  take the intro from 0.76 to 0.85 (pitch 0.85, timbre 0.84, onset 0.85),
+  55 and 37 steps moved, the voices 0.04 of it; the origin from 0.71 to 0.81
+  (0.82, 0.79, 0.83), 70 and 46 steps. The rip-back holds at 0.89 and 0.86
+  while its bass falls (0.80 to 0.67 on the intro): a move the recording's
+  frames like is not always one the rip reads back the same, and fidelity is
+  the judge.
 
 ## 9. Decisions
 
