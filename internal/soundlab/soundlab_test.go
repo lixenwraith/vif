@@ -169,6 +169,67 @@ func TestPathDiagnostics(t *testing.T) {
 	}
 }
 
+// TestListElementsInsertCopyAndMove: over any list a path reaches, add inserts
+// a zero element at an index, dup a copy sharing nothing with its original, and
+// mv moves an element, the rest shifting; a song's bars are listed after each,
+// numbered as the paths that address them.
+func TestListElementsInsertCopyAndMove(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	s.songs.put(&audio.SongDef{Name: "tune", BPM: 120, Scale: "major", Bars: [][]string{{"a"}, {"b"}, {"c"}}}, true)
+	runOrFatal(t, s, &out, `
+add tune.bars 1
+dup tune.bars.3 0
+mv tune.bars.1 3
+set tune.bars.0.0 d
+new pattern p
+take p lead 0:60
+dup p.track.1
+set p.track.2.instr pad
+set p.track.2.event.0.pos 8
+mv p.track.2 0
+! add tune.bars 6
+! mv tune.bars.0 5
+! dup tune.bars.5
+! mv tune.bars.0 x
+`)
+	d, _ := s.songs.get("tune")
+	if got := fmt.Sprint(d.Bars); got != "[[d] [] [b] [a] [c]]" || !strings.Contains(out.String(), "  3: a  -  -  -") {
+		t.Fatalf("add at 1, dup of bar 3 at 0, mv of bar 1 to 3, then the copy's slot set: got %s\n%s", got, out.String())
+	}
+	p, _ := s.pats.get("p")
+	var got []string
+	for _, tr := range p.Track {
+		got = append(got, fmt.Sprintf("%s@%d", tr.Instr, tr.Event[0].Pos))
+	}
+	if strings.Join(got, " ") != "pad@8 kick@0 lead@0" {
+		t.Fatalf("dup of the lead edited as a pad and moved to 0: want pad@8 kick@0 lead@0, got %v", got)
+	}
+}
+
+// TestGridJKMoveTheTrack: J and K move the cursor's track down and up through
+// mv, the cursor with it, and stop at the ends.
+func TestGridJKMoveTheTrack(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "new pattern g\ntake g lead 0:60\ntake g pad 0:48")
+	a := newTUIApp(s, NewLogBuffer(50))
+	a.openEditor("g", focusGrid)
+	for _, r := range "JJJK" {
+		a.editorKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	}
+	d, _ := s.pats.get("g")
+	var got []string
+	for _, tr := range d.Track {
+		got = append(got, tr.Instr)
+	}
+	if strings.Join(got, " ") != "lead kick pad" || a.ed.trk != 1 {
+		t.Fatalf("J J J K from the kick: want lead kick pad, the cursor on the kick at 1; got %v at %d:\n%s", got, a.ed.trk, strings.Join(a.log.lines, "\n"))
+	}
+}
+
 func TestUnset(t *testing.T) {
 	var out bytes.Buffer
 	s := newTestSession(t, &out)

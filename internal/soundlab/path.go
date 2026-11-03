@@ -175,10 +175,11 @@ func formatLeaf(v reflect.Value) string {
 	return v.Kind().String()
 }
 
-// addAt appends a zero element to the addressed slice. The zero value is what
-// the loader produces for an empty table: immediately settable, and immediately
-// invalid to render — the correct state for a half-authored layer.
-func addAt(root any, path []string) (int, error) {
+// addAt inserts a zero element at index at of the addressed list, appending
+// when at is negative. The zero value is what the loader produces for an empty
+// table: immediately settable, and immediately invalid to render — the correct
+// state for a half-authored layer.
+func addAt(root any, path []string, at int) (int, error) {
 	v, err := resolve(reflect.ValueOf(root), path, true)
 	if err != nil {
 		return 0, err
@@ -186,8 +187,91 @@ func addAt(root any, path []string) (int, error) {
 	if v.Kind() != reflect.Slice {
 		return 0, fmt.Errorf("%s: %s is not a list", pathOr(strings.Join(path, ".")), v.Kind())
 	}
-	v.Set(reflect.Append(v, reflect.Zero(v.Type().Elem())))
-	return v.Len() - 1, nil
+	if at < 0 {
+		at = v.Len()
+	}
+	if at > v.Len() {
+		return 0, fmt.Errorf("%s: index %d out of range, 0 to %d", pathOr(strings.Join(path, ".")), at, v.Len())
+	}
+	insertElem(v, at, reflect.Zero(v.Type().Elem()))
+	return at, nil
+}
+
+// dupAt inserts a copy of the addressed element at index at of its list, right
+// after it when at is negative; the copy shares no storage with it, so an edit
+// of one leaves the other
+func dupAt(root any, path []string, at int) (int, error) {
+	v, n, err := elemAt(root, path)
+	if err != nil {
+		return 0, err
+	}
+	if at < 0 {
+		at = n + 1
+	}
+	if at > v.Len() {
+		return 0, fmt.Errorf("%s: index %d out of range, 0 to %d", pathOr(strings.Join(path[:len(path)-1], ".")), at, v.Len())
+	}
+	insertElem(v, at, deepCopy(v.Index(n)))
+	return at, nil
+}
+
+// moveAt moves the addressed element to index to of its list, the elements
+// between shifting one place toward where it was
+func moveAt(root any, path []string, to int) error {
+	v, n, err := elemAt(root, path)
+	if err != nil {
+		return err
+	}
+	if to < 0 || to >= v.Len() {
+		return fmt.Errorf("%s: index %d out of range, 0 to %d", pathOr(strings.Join(path[:len(path)-1], ".")), to, v.Len()-1)
+	}
+	e := reflect.New(v.Type().Elem()).Elem()
+	e.Set(v.Index(n))
+	if n < to {
+		reflect.Copy(v.Slice(n, to), v.Slice(n+1, to+1))
+	} else {
+		reflect.Copy(v.Slice(to+1, n+1), v.Slice(to, n))
+	}
+	v.Index(to).Set(e)
+	return nil
+}
+
+func insertElem(v reflect.Value, at int, e reflect.Value) {
+	v.Set(reflect.Append(v, e))
+	reflect.Copy(v.Slice(at+1, v.Len()), v.Slice(at, v.Len()-1))
+	v.Index(at).Set(e)
+}
+
+// deepCopy copies through pointers, structs and slices, the shapes a spec is
+// built of
+func deepCopy(v reflect.Value) reflect.Value {
+	n := reflect.New(v.Type()).Elem()
+	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return v
+		}
+		n = reflect.New(v.Type().Elem())
+		n.Elem().Set(deepCopy(v.Elem()))
+	case reflect.Struct:
+		n.Set(v)
+		for i := range v.NumField() {
+			if n.Field(i).CanSet() {
+				n.Field(i).Set(deepCopy(v.Field(i)))
+			}
+		}
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		n = reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := range v.Len() {
+			n.Index(i).Set(deepCopy(v.Index(i)))
+		}
+	default:
+		n.Set(v)
+	}
+	return n
 }
 
 // delAt removes one element; the final segment must be an index.
@@ -203,11 +287,11 @@ func delAt(root any, path []string) error {
 // elemAt resolves a path to a list element: the list and the element's index
 func elemAt(root any, path []string) (reflect.Value, int, error) {
 	if len(path) == 0 {
-		return reflect.Value{}, 0, fmt.Errorf("del: empty path")
+		return reflect.Value{}, 0, fmt.Errorf("path must address a list element")
 	}
 	n, err := strconv.Atoi(path[len(path)-1])
 	if err != nil {
-		return reflect.Value{}, 0, fmt.Errorf("del: %q is not an index", path[len(path)-1])
+		return reflect.Value{}, 0, fmt.Errorf("%q is not an index", path[len(path)-1])
 	}
 	v, err := resolve(reflect.ValueOf(root), path[:len(path)-1], false)
 	if err != nil {

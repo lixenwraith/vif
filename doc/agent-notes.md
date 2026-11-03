@@ -660,6 +660,11 @@ that proves wrong or that a document now states, and link the document instead.
   !wasm`; a new one without it is compiled alone by the no-audio and wasm
   builds CI runs, against a session that is not there. The local suites do
   not run those builds, so run the no-audio build before pushing a new file.
+- **A soundlab word is a path by its dot, never by its digits.** `badName`
+  refuses dots, so a dotted word is always a path; a bare number is a valid
+  entry name (`cp p.track.0 5` makes the pattern `5`). An index argument goes
+  only where no name can stand: `mv`'s second word after a dotted first, `add`'s
+  and `dup`'s optional second, never a last word `cp` reads as a new name.
 - **A soundlab document changes only through its methods.** `put`, `del`,
   `rename`, `markDirty` and `replaceAll` record an entry for undo from the
   document's shadow before they change it, since a command mutates an entry in

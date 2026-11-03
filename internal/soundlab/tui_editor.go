@@ -300,6 +300,14 @@ func (a *tuiApp) gridKey(ev terminal.Event, d *audio.PatternDef, r rune) {
 			a.exec(fmt.Sprintf("set %s.track.%d.instr %s", b.name, ti, instr))
 			b.trk = ti
 		}
+	case r == 'J' || r == 'K':
+		to := b.trk + 1
+		if r == 'K' {
+			to = b.trk - 1
+		}
+		if to >= 0 && to < len(d.Track) && a.exec(fmt.Sprintf("mv %s.track.%d %d", b.name, b.trk, to)) == nil {
+			b.trk = to
+		}
 	case r == 'y' || r == 'Y':
 		if len(d.Track) == 0 {
 			break
@@ -561,7 +569,7 @@ func (a *tuiApp) gridHint() string {
 	if a.ed != nil && a.ed.roll {
 		return "←→ step  ↑↓ pitch  space note  1-0 vel  [ ] length  , . degree  c chance  r grid  enter play  tab mixer  ⇧tab keys  esc close  ? keys"
 	}
-	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  y/p yank/paste  r roll  s steps  enter play  tab mixer  ⇧tab keys  esc close  ? keys"
+	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x J/K track  y/p yank/paste  r roll  s steps  enter play  tab mixer  ⇧tab keys  esc close  ? keys"
 }
 
 // gridFit is how a pattern's steps lie across a width: cw cells a step and a

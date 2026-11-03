@@ -45,17 +45,67 @@ func cmdAdd(s *Session, a []string) error {
 	if len(segs) < 2 {
 		return fmt.Errorf("add: path must address a list field")
 	}
+	at := -1
+	if len(a) > 1 {
+		var err error
+		if at, err = listIndex(a[1]); err != nil {
+			return err
+		}
+	}
 	root, mark, err := s.docRoot(segs[0])
 	if err != nil {
 		return err
 	}
-	idx, err := addAt(root, segs[1:])
+	idx, err := addAt(root, segs[1:], at)
 	if err != nil {
 		return fmt.Errorf("%s: %w", segs[0], err)
 	}
 	mark()
 	fmt.Fprintf(s.out, "added %s.%d\n", a[0], idx)
-	return nil
+	return s.showSong(segs[0], root)
+}
+
+func cmdDup(s *Session, a []string) error {
+	segs := strings.Split(a[0], ".")
+	if len(segs) < 3 {
+		return fmt.Errorf("dup: path must address a list element, <name.path.i>")
+	}
+	at := -1
+	if len(a) > 1 {
+		var err error
+		if at, err = listIndex(a[1]); err != nil {
+			return err
+		}
+	}
+	root, mark, err := s.docRoot(segs[0])
+	if err != nil {
+		return err
+	}
+	idx, err := dupAt(root, segs[1:], at)
+	if err != nil {
+		return fmt.Errorf("%s: %w", segs[0], err)
+	}
+	mark()
+	fmt.Fprintf(s.out, "copied %s to %s.%d\n", a[0], strings.Join(segs[:len(segs)-1], "."), idx)
+	return s.showSong(segs[0], root)
+}
+
+// listIndex reads the index an element goes to
+func listIndex(w string) (int, error) {
+	n, err := strconv.Atoi(w)
+	if err != nil || n < 0 {
+		return 0, fmt.Errorf("%q: want an index in the list, 0 or more", w)
+	}
+	return n, nil
+}
+
+// showSong lists a song's bars after an edit of its lists, numbered as the
+// paths that address them
+func (s *Session) showSong(name string, root any) error {
+	if _, ok := root.(*audio.SongDef); !ok {
+		return nil
+	}
+	return cmdSong(s, []string{name})
 }
 
 func cmdDel(s *Session, a []string) error {
@@ -572,6 +622,23 @@ func cmdCp(s *Session, a []string) error {
 
 func cmdMv(s *Session, a []string) error {
 	src, dst := a[0], a[1]
+	// a dotted source is a list element, since a name holds no dot
+	if segs := strings.Split(src, "."); len(segs) > 1 {
+		to, err := listIndex(dst)
+		if err != nil {
+			return err
+		}
+		root, mark, err := s.docRoot(segs[0])
+		if err != nil {
+			return err
+		}
+		if err := moveAt(root, segs[1:], to); err != nil {
+			return fmt.Errorf("%s: %w", segs[0], err)
+		}
+		mark()
+		fmt.Fprintf(s.out, "moved %s to %s.%d\n", src, strings.Join(segs[:len(segs)-1], "."), to)
+		return s.showSong(segs[0], root)
+	}
 	if err := badName(src); err != nil {
 		return err
 	}

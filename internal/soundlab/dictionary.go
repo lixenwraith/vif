@@ -422,7 +422,7 @@ func cmdSong(s *Session, a []string) error {
 					names[slot] = bar[slot]
 				}
 			}
-			fmt.Fprintf(s.out, "%3d: %s\n", i+1, strings.Join(names, "  "))
+			fmt.Fprintf(s.out, "%3d: %s\n", i, strings.Join(names, "  "))
 		}
 		return nil
 	}
