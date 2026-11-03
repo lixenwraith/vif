@@ -408,6 +408,7 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		return // nothing it would act on is on screen, and nothing redraws
 	}
 	a.dirty = true
+	a.s.hist.press++ // the commands one key runs undo as one edit
 	if a.help {
 		switch {
 		case ev.Key == terminal.KeyDown || ev.Key == terminal.KeyRune && ev.Rune == 'j':
@@ -653,6 +654,8 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 		a.nameCmd("validate")
 	case r == 'r':
 		a.nameCmd("revert")
+	case r == 'u':
+		a.exec("undo")
 	}
 	ns = a.browserNames()
 	*c = min(max(*c, 0), max(len(ns)-1, 0))
@@ -668,7 +671,7 @@ func (a *tuiApp) deleteSel() {
 	}
 	if a.delArmed != n {
 		a.delArmed = n
-		where := "unapplied and unsaved — this discard is final"
+		where := "unapplied and unsaved — u undoes the discard"
 		if (a.kind == kindSound && audio.SoundDefByName(n) != nil) ||
 			(a.kind == kindVoice && audio.VoiceDefByName(n) != nil) ||
 			(a.kind == kindPattern && audio.PatternIDByName(n) != audio.PatternSilence) {

@@ -74,6 +74,7 @@ func init() {
 		"validate": {"validate [name|all]", "check one entry or all (all fails if any is invalid)", 0, 1, cmdValidate},
 		"apply":    {"apply [name|all]", "register into the engine; bare/all = dirty entries only", 0, 1, cmdApply},
 		"revert":   {"revert [name|all]", "restore from registry; bare/all = dirty entries only", 0, 1, cmdRevert},
+		"undo":     {"undo [n]", "step back over the last n (1) edits, a command that changed a document each (a TUI key's commands one): the entries it changed as they were, their marks and order; not the registry or the transport", 0, 1, cmdUndo},
 
 		"play": {"play <name|file.wav> [vol]", "audition document state (canonical take), falling back to the registry; a .wav file plays as it is", 1, 2, cmdPlay},
 		"hit":  {"hit kick|snare|hihat|clap [vol]", "audition a drum", 1, 2, cmdHit},
@@ -145,7 +146,9 @@ func Execute(s *Session, raw string) error {
 		return nil
 	}
 
+	s.beginLine(strings.Fields(line)[0])
 	err := dispatch(s, line)
+	s.endLine()
 	switch {
 	case errors.Is(err, ErrQuit):
 		return err
@@ -244,6 +247,7 @@ var (
 		{"e", "edit: a pattern in the editor's grid, a sound in the inspector"},
 		{"enter", "inspect: j k move, h l fold, H L all, enter edit, a add, x delete"},
 		{"a v r", "apply, validate, revert"},
+		{"u", "undo the last edit"},
 		{"c w", "clone, write one to a file"},
 		{"+ / d d", "mix into another / delete"},
 		{"p", "a new pattern of the tracks yanked in the editor"},
@@ -280,6 +284,7 @@ var (
 		{"a / x x", "add a track of the voice in hand / delete the track"},
 		{"y Y / p", "yank the track, add it to the yank or take it out / paste the yank into this pattern"},
 		{"s", "steps: the pattern's length"},
+		{"u", "undo the last edit"},
 		{"r", "piano roll of a tonal track, and back"},
 	}}
 	helpMixer = helpSection{"mixer", []keyHelp{

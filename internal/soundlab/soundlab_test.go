@@ -516,6 +516,125 @@ validate sa
 	}
 }
 
+// TestUndoStepsBackOverEdits: undo [n] steps back over the last n commands that
+// changed a document, whatever their verb; a command that changed none is no
+// edit, and a script run inside one line undoes with it.
+func TestUndoStepsBackOverEdits(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "two.slab"), []byte("new pattern r1\nnew pattern r2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+new pattern a
+set a.steps 32
+take a lead 0:60
+apply a
+validate a
+ls pattern
+undo 2
+run %s
+undo
+! undo 0
+`, filepath.Join(dir, "two.slab")))
+	if got := patternSteps(s, "a"); got != "16: kick 0" || s.has("r1") || s.has("r2") {
+		t.Fatalf("want a as new, r1 and r2 gone, got %q:\n%s", got, out.String())
+	}
+	for _, want := range []string{"undid take: a back to 1 track", "undid set: a back to 1 track", "undid run: r1 removed, r2 removed"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("want %q said:\n%s", want, out.String())
+		}
+	}
+	runOrFatal(t, s, &out, "undo 5\n! undo")
+	if s.has("a") || !strings.Contains(out.String(), "the history held 1 edit") {
+		t.Fatalf("undo 5 over one edit: want a gone and the shortfall said:\n%s", out.String())
+	}
+}
+
+// TestUndoRestoresWhatTheEditChanged: an undo puts back the entries one edit
+// changed as they were, a new one removed and a deleted one back, with their
+// marks and order, a mark an apply since made stale left dirty; a command that
+// wrote many entries undoes as one, and the registry stays as it is.
+func TestUndoRestoresWhatTheEditChanged(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	file := filepath.Join(t.TempDir(), "p.toml")
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+new pattern a
+new pattern src
+new pattern dst
+take src lead 0:60
+apply all
+mix src dst
+undo
+del src
+mv a z
+undo 2
+save pattern %s
+builtin pattern
+undo
+set a.steps 32
+apply a
+undo
+`, file))
+	if !strings.Contains(out.String(), "undid mix: dst back to 1 track") {
+		t.Fatalf("want the mix's undo said:\n%s", out.String())
+	}
+	if got := strings.Join(s.pats.order, " "); got != "a src dst" || s.pats.src != file || patternSteps(s, "src") != "16: kick 0 lead 0" {
+		t.Fatalf("want a, src and dst in order from %s, src whole, got %q from %s", file, got, s.pats.src)
+	}
+	if !strings.Contains(out.String(), "undid builtin: ") || !strings.Contains(out.String(), " patterns removed") {
+		t.Fatalf("want builtin undone at once, counted:\n%s", out.String())
+	}
+	if s.pats.isDirty("src") || s.pats.isDirty("dst") || !s.pats.isDirty("a") || patternSteps(s, "a") != "16: kick 0" {
+		t.Fatalf("want src and dst clean as applied, a at 16 steps and dirty: the registry holds its 32; dirty %v", s.pats.dirtyNames())
+	}
+	if p := audio.GetPattern(audio.PatternIDByName("a")); p == nil || p.Def().Steps != 32 {
+		t.Fatal("undo must leave the registry as the apply left it")
+	}
+	for range undoDepth + 1 {
+		runOrFatal(t, s, &out, "set a.steps 16")
+	}
+	out.Reset()
+	runOrFatal(t, s, &out, "undo 1000")
+	if !strings.Contains(out.String(), fmt.Sprintf("the history held %d edits", undoDepth)) {
+		t.Fatalf("want the history bounded at %d:\n%s", undoDepth, out.String())
+	}
+}
+
+// TestUndoKeyTakesBackAKeysEdit: u in the browser and in the editor's grid undoes
+// the last edit, every command one key ran at once
+func TestUndoKeyTakesBackAKeysEdit(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, "new pattern g")
+	a := newTUIApp(s, NewLogBuffer(50))
+	a.w, a.h = 100, 24
+	key := func(r rune) { a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}) }
+	a.openEditor("g", focusGrid)
+	a.ed.step = 4
+	key(' ')
+	if got := patternSteps(s, "g"); got != "16: kick 0,4" {
+		t.Fatalf("space: want a hit at step 4, got %q", got)
+	}
+	key('u')
+	if got := patternSteps(s, "g"); got != "16: kick 0" {
+		t.Fatalf("u in the grid: want the hit's add and sets undone at once, got %q:\n%s", got, strings.Join(a.log.lines, "\n"))
+	}
+	a.closeEditor()
+	a.cursorTo("g")
+	key('d')
+	key('d')
+	key('u')
+	if !s.pats.has("g") {
+		t.Fatalf("u in the browser: want g back:\n%s", strings.Join(a.log.lines, "\n"))
+	}
+}
+
 // waitFor polls an engine-side condition. Transport and slot commands travel
 // the mixer's queue and take effect on its tick — asserting engine state
 // synchronously after an exec races that tick (reliably so under -race).

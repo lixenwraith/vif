@@ -336,6 +336,8 @@ func (a *tuiApp) gridKey(ev terminal.Event, d *audio.PatternDef, r rune) {
 		a.exec(fmt.Sprintf("del %s.track.%d", b.name, b.trk))
 	case r == 's':
 		a.promptSteps(d)
+	case r == 'u':
+		a.exec("undo")
 	case r == 'm' && len(d.Track) > 0:
 		if id := audio.PatternIDByName(b.name); id != audio.PatternSilence && a.slotOf(id) >= 0 {
 			a.toggleTrack(a.slotOf(id), b.trk, false)

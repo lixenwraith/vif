@@ -655,6 +655,11 @@ that proves wrong or that a document now states, and link the document instead.
   !wasm`; a new one without it is compiled alone by the no-audio and wasm
   builds CI runs, against a session that is not there. The local suites do
   not run those builds, so run the no-audio build before pushing a new file.
+- **A soundlab document changes only through its methods.** `put`, `del`,
+  `rename`, `markDirty` and `replaceAll` record an entry for undo from the
+  document's shadow before they change it, since a command mutates an entry in
+  place and marks it after. A write to `byName` or `order` that skips them is
+  one undo cannot see, and it then restores a stale order.
 
 - **A rule that fits a synthetic case can be refuted by one recording.** A
   note cut where its salience rose again by a third after falling off its
