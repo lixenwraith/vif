@@ -223,8 +223,12 @@ and an unmute does not restart music the run stopped.
 
 A sequencer slot mutes alone (`SetSlotMuted`): its pattern plays on in time,
 silent, so it comes back on the step it has reached, and the mute outlasts a
-change of pattern. The game leaves every slot sounding; soundlab's mixer mutes
-them one by one.
+change of pattern. A track mask (`SetTrackMask`, a bit a track, which the reveal
+also drives) silences tracks of one pattern: the slot holds it for that pattern
+and sets it whenever the pattern begins there, so a mask set while the slot waits
+for its bar line lands with it, and another pattern begins whole. The game leaves
+every slot and track sounding; soundlab's mixer mutes slots and tracks and solos
+tracks.
 
 Disabling `audio` gates both channels; disabling `music` gates music alone.
 Mute keys still update the user's preference, but cannot open a disabled channel.
@@ -396,10 +400,11 @@ command, the flags and the REPL, and a host with its own screen and speakers
 runs the package in-process, handing `NewSession` the speakers. It offers:
 
 - a command REPL;
-- a full-screen TUI: a browser of patterns, sounds and voices beside a mixer that draws
-  every slot on one timeline and mutes a slot, a structural inspector, and the
-  pattern editor, new or on an existing pattern: a drawn keyboard that records
-  takes onto the key's degrees, and a step grid with a piano roll;
+- a full-screen TUI: a browser of patterns, sounds and voices beside a mixer that
+  draws every slot on one timeline, mutes a slot or a track and solos a track, a
+  structural inspector, and the pattern editor, new or on an existing pattern: a
+  drawn keyboard that records takes onto the key's degrees, and a step grid with a
+  piano roll;
 - headless `.slab` script execution;
 - validation, live registry apply/revert, audition, sequencer slot assignment,
   TOML save, and WAV export.
