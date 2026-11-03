@@ -29,7 +29,7 @@ const (
 // inputs and heads; its width, depth and window may differ.
 func Spec() transformer.Config {
 	return transformer.Config{
-		Inputs: audio.RipMelBands, Dim: 256, Heads: 8, Layers: 4, FFN: 1024, Window: 64,
+		Inputs: audio.RipMelBands + 1, Dim: 256, Heads: 8, Layers: 4, FFN: 1024, Window: 64,
 		Outputs: []transformer.Head{
 			{Name: HeadOnset, Size: 1}, {Name: HeadDrums, Size: int(audio.InstrClap)}, {Name: HeadPitch, Size: audio.RipPitches},
 			{Name: HeadVoicing, Size: 1}, {Name: HeadWave, Size: len(audio.VoiceWaves)}, {Name: HeadVoice, Size: audio.VoiceGeneCount},
@@ -58,7 +58,7 @@ func Load(r io.Reader) (*FrontEnd, error) {
 func New(m *transformer.Model) (*FrontEnd, error) {
 	want, got := Spec(), m.Config()
 	if got.Inputs != want.Inputs {
-		return nil, fmt.Errorf("ripnet: model hears %d bands, want %d", got.Inputs, want.Inputs)
+		return nil, fmt.Errorf("ripnet: model reads %d inputs, want %d, the bands in dB over the frame's level and the level", got.Inputs, want.Inputs)
 	}
 	if n := len(got.Outputs); n != len(want.Outputs) && n != len(want.Outputs)-1 {
 		return nil, fmt.Errorf("ripnet: model has %d heads, want %d", n, len(want.Outputs))
@@ -76,8 +76,7 @@ func New(m *transformer.Model) (*FrontEnd, error) {
 // salience, the chroma folded from them, the wave scores and voice genes as they
 // are, and the strike scores when the model has them.
 func (fe *FrontEnd) Hear(x []float64, rate int, _ audio.RipParams) (*audio.RipFrames, error) {
-	mel := audio.MelFrames(x, rate)
-	out := fe.Model.Forward(mel)
+	out := fe.Model.Forward(features(audio.MelFrames(x, rate)))
 	n := len(out)
 	f := &audio.RipFrames{Hop: audio.RipFrameSec, Flux: make([]float64, n),
 		Salience:   make([]float32, 0, n*audio.RipPitches),
@@ -120,6 +119,33 @@ func (fe *FrontEnd) Hear(x []float64, rate int, _ audio.RipParams) (*audio.RipFr
 		}
 	}
 	return f, nil
+}
+
+// melFloor is the energy 80 dB under a full-scale sine's, where the logarithm floors
+const melFloor = 1e-8
+
+// features is the model's input from MelFrames: each band's energy in dB over
+// melFloor less the frame's mean, and the mean itself, both over 80 dB, so a
+// frame's loudness is one input and the bands are level-free: a soft phrase
+// reaches the model as clearly as a loud one
+func features(mel [][]float32) [][]float32 {
+	out := make([][]float32, len(mel))
+	for t, row := range mel {
+		db := make([]float64, len(row))
+		var level float64
+		for b, v := range row {
+			db[b] = 10 * math.Log10(math.Expm1(float64(v))/100+melFloor)
+			level += db[b]
+		}
+		level /= float64(len(row))
+		f := make([]float32, len(row)+1)
+		for b, d := range db {
+			f[b] = float32((d - level) / 80)
+		}
+		f[len(row)] = float32((level + 80) / 80)
+		out[t] = f
+	}
+	return out
 }
 
 func sigmoid(v float32) float64 { return 1 / (1 + math.Exp(-float64(v))) }
