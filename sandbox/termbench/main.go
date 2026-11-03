@@ -1,6 +1,7 @@
 // Command termbench compares the terminal module with tcell v2 on what a game
-// pays per frame: encoding (CPU, bytes, allocations) headless, the loop's own
-// cost against a live terminal, and the raw input a console delivers.
+// pays per frame: encoding headless, the loop's cost in a live terminal, and the
+// raw input a console delivers. Its files split by platform, so run the package,
+// not main.go: `go run . encode`; with no command it prints examples.
 package main
 
 import (
@@ -23,9 +24,28 @@ import (
 	"github.com/lixenwraith/terminal"
 )
 
-const usage = `termbench encode [flags]   headless: CPU, bytes and allocations a frame
-termbench live -lib L [flags]  a real terminal: the loop's cost, events received
-termbench rawin [flags]    the bytes or console records input arrives as
+const usage = `usage: go run . <command> [flags]   (or go build -o termbench . and run that)
+
+  encode   headless: CPU, bytes and allocations a frame, terminal against tcell
+  live     a scene on one library's own backend in this terminal; q, Esc or Ctrl+C ends it
+  rawin    every read (Unix) or console record (Windows) as input arrives; q ends it
+
+Each command's flags: go run . <command> -h
+
+examples:
+  go run . encode                                       every scene, 120x40 and 240x66, tc and 256
+  go run . encode -scenes sparse,plasma -sizes 200x60 -modes tc -runs 3
+  go run . encode -libs terminal -procs 4               the terminal module alone, writer on its own core
+  go run . encode -capture frames.bin -libs terminal,tcell   frames dumped from the game
+  go run . live -lib terminal -scene sparse -fps 60 -dur 15s
+  go run . live -lib tcell -scene plasma -mode 256 -fps 0    as fast as the loop goes
+  go run . live -lib terminal -mouse=false
+  go run . rawin                                        mouse reports asked for; move and click
+  go run . rawin -mouseinput                            Windows: also ENABLE_MOUSE_INPUT
+  go run . rawin -win32 -dur 10s                        Windows: win32-input-mode, presses and releases
+
+  To try an unreleased terminal module:
+  go mod edit -replace github.com/lixenwraith/terminal=../../../terminal
 `
 
 func main() {
@@ -41,6 +61,9 @@ func main() {
 		err = runLive(os.Args[2:])
 	case "rawin":
 		err = runRawIn(os.Args[2:])
+	case "help", "-h", "-help", "--help":
+		fmt.Print(usage)
+		return
 	default:
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
