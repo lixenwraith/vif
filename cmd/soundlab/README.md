@@ -79,7 +79,7 @@ The engine is the ground truth of its own vocabulary, so a rip is good when its 
 
 ### 6. Checking: how good a rip is
 
-- `truth` scores a rip against notes given: a transcript corrected by hand, a rhythm tapped out, or a MIDI file, whose drum channel scores the kicks, snares and hihats hit by hit. Per line it counts the notes heard as given, those missed and those extra.
+- `truth` scores a rip against notes given: a transcript corrected by hand, a rhythm tapped out, or a MIDI file, whose drum channel scores the kicks, snares and hihats hit by hit. Per line it counts the notes heard as given, those missed and those extra, and, for notes with pitches, those heard by how loud the recording plays them, in 6 dB bands under its loudest tenth, alone or under other notes.
 - `agree` compares two rips of one piece where no score exists.
 - `bench` rips fresh loops the engine renders, whose answer is known, clean and through a room and a mix, and scores the analysis and the model side by side.
 - `tune` searches the decoders' thresholds over rendered loops.
@@ -91,7 +91,7 @@ What a rip does not tell apart yet: a bass note's attack from a kick, a plucked 
 The model learns from music the engine renders itself, since the engine knows exactly what it played.
 
 - **Generating.** `corpus` renders loops of `bars` (4) bars from the registered rhythm, melody and bass patterns across tempos and keys. With `gen`, three loops in five per part play a beat, a melody or a bass line drawn from the key instead, and an accompaniment in the free slot, a broken chord under a melody of longer notes; a generated loop leaves out its drums three times in ten and its bass once in seven, so a line is heard bare too.
-- **Labelling.** Each loop is kept as its log-mel frames and, per frame, what the engine played: the onsets, the drums, the pitches sounding, and the wave and 32 genes of each note's voice. The labels cost nothing and are exact.
+- **Labelling.** Each loop is kept as its log-mel frames and, per frame, what the engine played: the onsets, the drums, the pitches sounding, where each pitch is struck, and the wave and 32 genes of each note's voice. The labels cost nothing and are exact.
 - **Roughening.** With `aug`, each loop's voices are redrawn near the registered ones, a third of them on another wave, in a third of the loops with a pedal's long releases; the mix passes through a room drawn per loop (a gain and swell, a low-pass, two equaliser bands, a soft clip, a compressor, a booth's or a hall's reverb, a noise floor), and the loop plays off A440 by up to a quarter tone. The labels stay the notes as played.
 - **Training.** `tool/rip-train` holds the model's PyTorch twin. It trains on random six-second windows of the loops (512 frames, eight a step), scores the loops it holds out every thousand steps and keeps the best, and writes the weight file the Go model loads, the two agreeing to float32 rounding.
 - **A round.** `tool/rip-train/pipeline.sh` renders the corpus in parts at once, trains, benches and installs; 40000 loops and 40000 steps take about four hours on a laptop with a GTX 1060. Weights ship only when they beat the analysis on the bench and on real recordings' truths; [Rip design §8](../../doc/rip-design.md#8-measured-on-the-sample-recording) holds every round's numbers and [the trainer's README](../../tool/rip-train/README.md) the instructions.
