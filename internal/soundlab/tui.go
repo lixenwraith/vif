@@ -146,11 +146,12 @@ type tuiApp struct {
 	busyDone  chan error
 	busyTold  bool
 
-	quitArmed  bool   // one warning issued for unsaved-on-quit
-	delArmed   string // browser 'd' pressed once for this name; second press deletes
-	hintedFill bool   // slot-2 auto-fill hint shown once
-	help       bool   // the key overlay is up; any key but j/k takes it down
-	helpTop    int    // the overlay's first row shown
+	quitArmed  bool     // one warning issued for unsaved-on-quit
+	delArmed   string   // browser 'd' pressed once for this name; second press deletes
+	yank       []yanked // the tracks y and Y took in the pattern editor, which p pastes
+	hintedFill bool     // slot-2 auto-fill hint shown once
+	help       bool     // the key overlay is up; any key but j/k takes it down
+	helpTop    int      // the overlay's first row shown
 }
 
 func newTUIApp(s *Session, lb *LogBuffer) *tuiApp {
@@ -307,6 +308,52 @@ func (a *tuiApp) promptSavePath(kind, target string) {
 		if a.s.soundsModified() || a.s.patsModified() {
 			a.saveModified()
 		}
+	})
+}
+
+// yanked is a track y took: where it was, and a copy, so a paste refuses a path
+// whose track has changed or moved since
+type yanked struct {
+	pat   string
+	n     int
+	track audio.TrackDef
+}
+
+func (y yanked) path() string { return fmt.Sprintf("%s.track.%d", y.pat, y.n) }
+
+// yankPaths is the yank as a command's arguments; false, said in the log, when
+// it is empty or a track in it has changed or moved since it was taken
+func (a *tuiApp) yankPaths() (string, bool) {
+	if len(a.yank) == 0 {
+		fmt.Fprintln(a.log, "nothing yanked: y on a track in the pattern editor takes one, Y adds one")
+		return "", false
+	}
+	paths := make([]string, len(a.yank))
+	for i, y := range a.yank {
+		d, ok := a.s.pats.get(y.pat)
+		if !ok || y.n >= len(d.Track) || !sameTrack(d.Track[y.n], y.track) {
+			fmt.Fprintf(a.log, "%s changed since it was yanked: paste before deleting or editing it, or yank it again\n", y.path())
+			return "", false
+		}
+		paths[i] = y.path()
+	}
+	return strings.Join(paths, " "), true
+}
+
+func sameTrack(x, y audio.TrackDef) bool {
+	return x.Instr == y.Instr && x.Desc == y.Desc && x.FollowChord == y.FollowChord &&
+		x.Humanize == y.Humanize && slices.Equal(x.Event, y.Event)
+}
+
+// promptPasteNew makes a new pattern of the yanked tracks, under the name given
+func (a *tuiApp) promptPasteNew() {
+	src, ok := a.yankPaths()
+	if !ok {
+		return
+	}
+	a.openPrompt(fmt.Sprintf("new pattern of %d yanked track(s): ", len(a.yank)), "", func(dst string) {
+		a.exec("cp " + src + " " + dst)
+		a.cursorTo(dst)
 	})
 }
 
@@ -581,6 +628,8 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 		a.promptWrite()
 	case r == '+' || r == '=':
 		a.promptMix()
+	case r == 'p' && a.kind == kindPattern:
+		a.promptPasteNew()
 	case r == 'd':
 		a.deleteSel()
 	case ev.Key == terminal.KeyLeft || r == 'h':
