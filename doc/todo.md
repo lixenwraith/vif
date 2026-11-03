@@ -1263,6 +1263,36 @@ the run in the state directory, as a shell's does.
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
+### Draw in 256 colors where true color buys nothing
+
+- Priority: P2
+- Affected files: `internal/render/renderer/*`, `internal/render/buffer.go`
+  (`finalizeTrueColorOcclusion`), `internal/visual`
+
+A true color frame's bytes are what a terminal parses, and the browser and a
+remote session carry: bot play at 240x66 writes 9.4 KB a frame, 72% of it SGR
+that changes the background alone (423 a frame), the glow, trail and occlusion
+blends that step a background a few levels a cell; foregrounds are 88-93% exact
+palette colors already. Find the renderers whose gradients read the same quantized
+to the 256 palette or to fewer steps (a run of cells of one background then costs
+one SGR), and draw those as palette cells (`AttrBg256`), which lixenwraith/terminal
+writes as `48;5;N`. The 256 tier draws only indices below 16, which terminal
+v0.6.5 writes as `30-37`/`40-47` codes. Small color changes are acceptable;
+measure bytes a frame before and after with `sandbox/termbench` on a capture.
+
+### Move the browser and Android frame pipeline into terminal
+
+- Priority: P2
+- Affected files: `pkg/browser`, `pkg/glyph` (`Frames`, `Raster`, `Texture`),
+  `android/game/view.go`, `web/terminal.js`, `web/worker.js`, lixenwraith/terminal
+
+What turns a cell frame into what a page or an Android view draws (the frames a
+drawer takes, the texture, the raster fallback, the page's bridge and its key and
+pointer events) lives in vif. Move it into lixenwraith/terminal as backends of its
+own, so another program renders in a browser or on Android through the same
+pipeline without wrapping vif; vif then takes them from terminal. For its own
+session.
+
 ### Spare the overlay cards their per-frame titles
 
 - Priority: P3

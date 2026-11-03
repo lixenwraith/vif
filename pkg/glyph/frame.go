@@ -2,6 +2,7 @@ package glyph
 
 import (
 	"encoding/binary"
+	"math/bits"
 	"slices"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ type Frames struct {
 	whole  bool            // the next take is every cell
 	since  time.Time       // when the oldest frame not taken was flushed
 	out    []byte          // the encoded frame, reused between takes
+	diff   []uint64        // the cells next changes from shown, as terminal.ChangedCells marks them
 }
 
 // NewFrames takes frames for tex's drawer; raster makes Take hand over the pixels
@@ -89,8 +91,13 @@ func (f *Frames) Take() []byte {
 	}
 	whole := f.whole || len(f.shown) != len(f.next)
 	f.fresh, f.whole, f.since = false, false, time.Time{}
-	if !whole && slices.Equal(f.shown, f.next) {
-		return nil
+	var changed []uint64
+	if !whole {
+		f.diff = terminal.ChangedCells(f.diff, f.next, f.shown)
+		if !slices.ContainsFunc(f.diff, func(w uint64) bool { return w != 0 }) {
+			return nil
+		}
+		changed = f.diff
 	}
 	if f.raster != nil {
 		if whole {
@@ -100,29 +107,39 @@ func (f *Frames) Take() []byte {
 		f.out = appendWords(f.out[:0], uint32(f.fw), uint32(f.fh))
 		f.out = append(f.out, f.raster.Pix()...)
 	} else {
-		f.out = encode(f.out[:0], f.tex, f.fw, f.fh, f.next, f.shown, whole)
+		f.out = encode(f.out[:0], f.tex, f.fw, f.fh, f.next, changed)
 	}
 	f.shown = append(f.shown[:0], f.next...)
 	return f.out
 }
 
-// encode appends a cell frame as Take describes it: the cells that differ from
-// shown, or all of them
-func encode(dst []byte, tex *Texture, cols, rows int, cells, shown []terminal.Cell, whole bool) []byte {
-	whole = whole || len(shown) != len(cells)
+// encode appends a cell frame as Take describes it: the cells changed marks, as
+// terminal.ChangedCells does, or every cell for a nil changed
+func encode(dst []byte, tex *Texture, cols, rows int, cells []terminal.Cell, changed []uint64) []byte {
 	at := len(dst)
 	dst = appendWords(dst, uint32(cols), uint32(rows), 0)
 	n := 0
-	for i, c := range cells {
-		if !whole && shown[i] == c {
-			continue
+	if changed == nil {
+		for i, c := range cells {
+			dst = appendCell(dst, tex, i, c)
 		}
-		fg, bg := Colors(c)
-		dst = appendWords(dst, uint32(i), uint32(tex.Slot(c.Rune)), argb(fg), argb(bg))
-		n++
+		n = len(cells)
+	}
+	for w, word := range changed {
+		for ; word != 0; word &= word - 1 {
+			i := w<<6 | bits.TrailingZeros64(word)
+			dst = appendCell(dst, tex, i, cells[i])
+			n++
+		}
 	}
 	binary.LittleEndian.PutUint32(dst[at+8:], uint32(n))
 	return dst
+}
+
+// appendCell appends cell i's record: its index, slot and colors
+func appendCell(dst []byte, tex *Texture, i int, c terminal.Cell) []byte {
+	fg, bg := Colors(c)
+	return appendWords(dst, uint32(i), uint32(tex.Slot(c.Rune)), argb(fg), argb(bg))
 }
 
 func argb(c color.RGB) uint32 {
@@ -162,7 +179,7 @@ func (p *Probe) Cells() (cells []terminal.Cell, cols, rows int) { return p.cells
 
 // Frame is the probe as a whole cell frame, as Take encodes one
 func (p *Probe) Frame() []byte {
-	return encode(nil, p.tex, p.cols, p.rows, p.cells, nil, true)
+	return encode(nil, p.tex, p.cols, p.rows, p.cells, nil)
 }
 
 // Pixels is the frame as Raster draws it, RGBA rows top first

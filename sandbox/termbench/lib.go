@@ -38,6 +38,7 @@ type nullBackend struct {
 	w, h   int
 	n      atomic.Uint64
 	writes atomic.Uint64
+	wake   chan struct{}
 }
 
 func (b *nullBackend) Init() error                     { return nil }
@@ -49,9 +50,25 @@ func (b *nullBackend) Write(p []byte) error {
 	b.writes.Add(1)
 	return nil
 }
-func (b *nullBackend) Read(stop <-chan struct{}) ([]byte, error) {
-	<-stop
+func (b *nullBackend) Read(wait time.Duration) ([]byte, error) {
+	var passed <-chan time.Time
+	if wait >= 0 {
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		passed = t.C
+	}
+	select {
+	case <-b.wake:
+	case <-passed:
+	}
 	return nil, nil
+}
+
+func (b *nullBackend) Wake() {
+	select {
+	case b.wake <- struct{}{}:
+	default:
+	}
 }
 
 type termSink struct {
@@ -60,7 +77,7 @@ type termSink struct {
 }
 
 func newTermSink(w, h int, mode terminal.ColorMode) (*termSink, error) {
-	b := &nullBackend{w: w, h: h}
+	b := &nullBackend{w: w, h: h, wake: make(chan struct{}, 1)}
 	t := terminal.NewWithBackend(b, mode)
 	if err := t.Init(); err != nil {
 		return nil, err

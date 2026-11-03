@@ -56,6 +56,13 @@ SYSCONFDIR ?= $(SYSCONFDIR_DEFAULT)
 # FreeBSD packages each Go release under its own name: go.mod's 1.27 is go127.
 GO_DEFAULT != uname -s | grep -q FreeBSD && sed -n 's/^go \([0-9]*\)\.\([0-9]*\).*/go\1\2/p' go.mod 2>/dev/null | grep . || echo go
 GO ?= $(GO_DEFAULT)
+# SIMD builds the presentation with GOEXPERIMENT=simd, under which
+# lixenwraith/terminal's cell diff runs on AVX2, NEON or wasm SIMD128: auto where
+# the toolchain takes the experiment, 1 to insist on it, 0 to leave it out.
+SIMD ?= auto
+SIMD_TAKEN != GOEXPERIMENT=simd $(GO) env GOEXPERIMENT >/dev/null 2>&1 && echo yes || echo no
+comma := ,
+GOEXP = $(if $(or $(filter 1,$(SIMD)),$(and $(filter auto,$(SIMD)),$(filter yes,$(SIMD_TAKEN)))),GOEXPERIMENT=$(if $(GOEXPERIMENT),$(GOEXPERIMENT)$(comma))simd)
 # purego's FreeBSD port builds its fakecgo as std to link without cgo
 GUI_GCFLAGS != [ "$$($(GO) env GOOS 2>/dev/null)" = freebsd ] && echo '-gcflags=github.com/ebitengine/purego/internal/fakecgo=-std' || true
 # purego, which the desktop window links, builds with cgo off on fewer platforms
@@ -155,7 +162,7 @@ generate: check-go
 	$(GO) generate ./internal/manifest/...
 
 dev: generate $(BIN_DIR)
-	$(GO) build -race -tags "$(TAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	$(GOEXP) $(GO) build -race -tags "$(TAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 serve: wasm $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
@@ -163,7 +170,7 @@ serve: wasm $(BIN_DIR)
 
 release: check-go $(BIN_DIR)
 	@$(WINDOW_CHECK)
-	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	CGO_ENABLED=0 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # headless is a build profile, not merely -serve at runtime: renderer and audio
 # constructors are absent from the dependency graph.
@@ -176,16 +183,16 @@ headless: check-go $(BIN_DIR)
 # or none that purego builds for.
 gui: check-go $(BIN_DIR)
 	@$(WINDOW_CHECK)
-	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
+	CGO_ENABLED=0 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "vif_gui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-gui $(SRC)
 
 cli: check-go $(BIN_DIR)
-	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) -tags "vif_nogui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-cli $(SRC)
+	CGO_ENABLED=0 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "vif_nogui $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY)-cli $(SRC)
 
 # android is its own Go module and Gradle project: gomobile binds the Go host and
 # each APK, one per ABI, packages wad/ as its assets. toolchain.sh checks the JDK
 # and SDK before Gradle runs; only android-toolchain downloads them (android/README.md).
 android: check-go $(BIN_DIR)
-	android/toolchain.sh gradlew assembleDebug
+	$(GOEXP) android/toolchain.sh gradlew assembleDebug
 	install -m 0644 android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk $(BIN_DIR)/$(BINARY)-debug-arm64.apk
 	install -m 0644 android/app/build/outputs/apk/debug/app-x86_64-debug.apk $(BIN_DIR)/$(BINARY)-debug-x86_64.apk
 
@@ -201,18 +208,18 @@ android-toolchain: check-go
 # nolog strips logging: internal/vlog builds as a no-op stub and lixenwraith/log is not linked
 nolog: check-go $(BIN_DIR)
 	@$(WINDOW_CHECK)
-	CGO_ENABLED=0 $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	CGO_ENABLED=0 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) $(GUI_GCFLAGS) -tags "novlog $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go automatically; the mixer streams to the page's speakers.
 # wasm_exec.js is the loader of the Go that built the binary, so it is copied
 # from that toolchain on every build rather than kept as it was committed.
 wasm: check-go $(WEB_DIR)
-	GOOS=js GOARCH=wasm $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
+	GOOS=js GOARCH=wasm $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "$(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 	install -m 0644 "$$($(GO) env GOROOT)/lib/wasm/wasm_exec.js" $(WEB_DIR)/
 
 # windows is experimental; doc/multi-platform.md §4 lists its known issues
 windows: check-go $(BIN_DIR)
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
 tools: check-go $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
@@ -236,6 +243,8 @@ verify: generate test
 	cd android && $(GO) vet ./... && $(GO) test ./...
 	CGO_ENABLED=0 $(GO) test $(GUI_GCFLAGS) ./pkg/window
 	GOOS=js GOARCH=wasm $(GO) build ./...
+	GOEXPERIMENT=simd $(GO) build ./...
+	GOOS=js GOARCH=wasm GOEXPERIMENT=simd $(GO) build ./...
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build -tags "novlog vif_noaudio" ./...
 	@if $(GO) list -deps -tags vif_headless $(SRC) | grep -Eq '/internal/render($$|/)|/pkg/audio$$'; then \
 		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \

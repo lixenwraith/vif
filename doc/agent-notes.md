@@ -62,6 +62,14 @@ that proves wrong or that a document now states, and link the document instead.
 - A session's scratchpad can sit on a `/tmp` that a reboot empties (a tmpfs on a
   development machine): keep a long task's notes and working files in the
   checkout's `tmp/`, which `.gitignore` holds.
+- `qemu-user-static` from apt runs a test binary built for another architecture
+  (`GOARCH=arm64 go test -c`, then `qemu-aarch64-static ./x.test`): arm64's NEON
+  path under `GOEXPERIMENT=simd`, and a big-endian `s390x` build, run that way.
+- A bump to a dependency's untagged release builds through a `go.work` whose
+  `replace` names the checkout (a `use` still fetches the tag's `go.mod`). Its
+  `go.sum` lines come from `golang.org/x/mod`'s `zip.CreateFromVCS` and
+  `dirhash.HashZip` over the commit the tag will name, and verify once a squash
+  merge keeps that tree.
 - `bindGo` strips the Android library (`-s -w`), so `go tool nm` reads nothing in
   it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
   component structs compiles once per component, and each copy's name spells the

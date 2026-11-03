@@ -1,6 +1,8 @@
 package glyph
 
 import (
+	"math/bits"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
@@ -13,6 +15,7 @@ type Raster struct {
 	cols, rows int
 	pix        []byte          // RGBA, cols*Width by rows*Height
 	prev       []terminal.Cell // the frame drawn, so an unchanged cell is skipped
+	diff       []uint64        // the cells a frame changes from prev
 }
 
 // Default colors for a cell that asks for the terminal's own
@@ -50,11 +53,18 @@ func (r *Raster) Flush(cells []terminal.Cell, width, height int) {
 		r.prev = r.prev[:0]
 	}
 	cells = cells[:n]
-	for i, c := range cells {
-		if i < len(r.prev) && r.prev[i] == c {
-			continue
+	if len(r.prev) != n {
+		for i, c := range cells {
+			r.draw(i%width, i/width, c)
 		}
-		r.draw(i%width, i/width, c)
+	} else {
+		r.diff = terminal.ChangedCells(r.diff, cells, r.prev)
+		for w, word := range r.diff {
+			for ; word != 0; word &= word - 1 {
+				i := w<<6 | bits.TrailingZeros64(word)
+				r.draw(i%width, i/width, cells[i])
+			}
+		}
 	}
 	r.prev = append(r.prev[:0], cells...)
 }
@@ -105,32 +115,7 @@ func cellColor(c color.RGB, palette, own bool, def color.RGB) color.RGB {
 	case own:
 		return def
 	case palette:
-		return palette256(c.R)
+		return color.Xterm256(c.R)
 	}
 	return c
-}
-
-// palette256 is xterm's palette: the sixteen system colors as xterm draws them,
-// the 6x6x6 cube and the gray ramp
-func palette256(i uint8) color.RGB {
-	switch {
-	case i >= 232:
-		v := 8 + 10*(i-232)
-		return color.RGB{R: v, G: v, B: v}
-	case i >= 16:
-		levels := [6]uint8{0, 0x5f, 0x87, 0xaf, 0xd7, 0xff}
-		r, g, b := color.CubeRGB256(i)
-		return color.RGB{R: levels[r], G: levels[g], B: levels[b]}
-	}
-	lo, hi := uint8(0), uint8(0xaa)
-	if i >= 8 {
-		lo, hi = 0x55, 0xff
-	}
-	channel := func(bit uint8) uint8 {
-		if i&bit != 0 {
-			return hi
-		}
-		return lo
-	}
-	return color.RGB{R: channel(1), G: channel(2), B: channel(4)}
 }

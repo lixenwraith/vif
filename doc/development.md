@@ -50,7 +50,7 @@ make dev       # generated code + race-enabled debug build
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
-| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, and vet and test the `android` module (§5). |
+| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, the full and WASM ones also with `GOEXPERIMENT=simd`, and vet and test the `android` module (§5). |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `router` | Build the website-to-K3s session router as `bin/vif-router`. |
@@ -68,7 +68,13 @@ make dev       # generated code + race-enabled debug build
 | `clean` | Remove `bin/` and the Android build directories. |
 
 `TAGS` appends build tags to each `cmd/vif` build and `PORT` changes the WASM
-server port. `GO` names the toolchain command (on FreeBSD, the versioned package
+server port. `SIMD` (default `auto`) builds the presentation targets (`dev`,
+`release`, `gui`, `cli`, `nolog`, `wasm`, `windows`, `android`) with
+`GOEXPERIMENT=simd` where the toolchain takes it, so lixenwraith/terminal's cell
+diff runs on AVX2, NEON or WebAssembly SIMD128; `SIMD=1` insists and `SIMD=0`
+leaves it out. The experiment is Go's, outside the Go 1 promise, and on amd64 also
+moves the runtime's map hashing onto `simd/archsimd`; a SIMD browser build needs
+WebAssembly SIMD, which every current browser has. `GO` names the toolchain command (on FreeBSD, the versioned package
 `go.mod` asks for).
 `GO_BUILDFLAGS` (default `-trimpath`) and `GO_LDFLAGS` (default `-s -w`) are the
 release-style flags; they are not `GOFLAGS` and `LDFLAGS`, which the go command
