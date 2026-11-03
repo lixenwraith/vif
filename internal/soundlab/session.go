@@ -47,7 +47,9 @@ type Session struct {
 	prog  []int
 	// slots is what slot last asked of each sequencer slot; the engine reports
 	// what sounds a mixer tick later, which render cannot wait for
-	slots    [audio.MusicSlots]audio.PatternID
+	slots [audio.MusicSlots]audio.PatternID
+	// tracks are the tracks mute track and solo track hold in each slot's pattern
+	tracks   [audio.MusicSlots]trackMutes
 	startErr error
 	files    Files
 	// rip is what rip listens with, the root's audio/rip.toml when one holds it,
@@ -521,12 +523,18 @@ func (s *Session) applyName(name string) error {
 		if err != nil {
 			return err
 		}
+		old := audio.GetPattern(audio.PatternIDByName(name))
 		id, err := s.eng.DefinePattern(p)
 		if err != nil {
 			return err
 		}
 		s.pats.clearDirty(name)
 		fmt.Fprintf(s.out, "applied pattern %q (id %d)\n", name, id)
+		for slot := range audio.MusicSlots {
+			if s.slots[slot] == id && s.tracks[slot].moved(old, p) {
+				s.dropTracks(slot, "the apply moved its tracks")
+			}
+		}
 		return nil
 	}
 	return fmt.Errorf("%q: not in any document", name)
