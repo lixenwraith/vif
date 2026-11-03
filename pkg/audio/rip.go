@@ -48,7 +48,7 @@ func DefaultRipParams() RipParams {
 		TempoPrior: 120, TempoWidth: 1, Tightness: 100,
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
-		SecondVoice: 0.5, Compress: 1, Cross: 0.003, Strike: 0.5,
+		SecondVoice: 0.5, Compress: 1, Cross: 0.003, Strike: 0.9,
 	}
 }
 
@@ -82,7 +82,7 @@ var ripGenes = []ripGene{
 	{"second_voice", 0, 0.9, func(p *RipParams) *float64 { return &p.SecondVoice }},
 	{"compress", 0.3, 1, func(p *RipParams) *float64 { return &p.Compress }},
 	{"cross", 0, 0.02, func(p *RipParams) *float64 { return &p.Cross }},
-	{"strike", 0.2, 0.9, func(p *RipParams) *float64 { return &p.Strike }},
+	{"strike", 0.2, 0.99, func(p *RipParams) *float64 { return &p.Strike }},
 }
 
 func (g *ripGene) get(p *RipParams) float64 {
