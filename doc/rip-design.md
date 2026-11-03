@@ -31,10 +31,15 @@ flowchart LR
 1. **Features.** `MelFrames` makes the log-mel frames a model hears: the rip's own
    grid, 22.05 kHz, 93 ms windows every 11.6 ms, 229 bands from 30 Hz up, under a
    semitone apart from A3, the
-   recording's peak at one. The built-in analysis works from the same spectrogram,
-   split into a harmonic and a percussive part by medians. Features are computed
-   in Go on both sides of training, so the model sees in soundlab exactly what it
-   saw in the trainer.
+   recording's peak at one. The model reads each band on a true logarithm, in dB
+   over a floor 80 dB down less the frame's mean, and the mean as one more input:
+   a frame's loudness apart from a level-free shape, the cepstrum's amplitude
+   normalization, so a phrase 20 dB softer reaches it as clearly (`log1p(100 ×
+   energy)`, the frames' stored form, kept 0.3% of a loud note's contrast for
+   notes 18 dB down, the log 59%). The built-in analysis works from the same
+   spectrogram, split into a harmonic and a percussive part by medians. Features
+   are computed in Go on both sides of training, so the model sees in soundlab
+   exactly what it saw in the trainer.
 2. **Front end** (`RipFrontEnd`). It hears a recording into `RipFrames`: the
    strength of any onset, of each drum's, each pitch's salience, each register's
    chroma, and, from a model, the wave and voice genes the note under each frame
@@ -187,7 +192,7 @@ offline (`song <name> <file.wav>`).
   `merge`); `tool/rip-train/README.md` is the guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
   neither a gene, kept by the augmentation when it draws voices near a
   registered one.
-- **Model.** `ripnet.Spec`: 229 bands in, width 256, eight heads of 32,
+- **Model.** `ripnet.Spec`: 230 inputs (229 bands and the level), width 256, eight heads of 32,
   four layers, feed-forward 1024, a window of 64 frames either side, 3.2
   million weights (12.8 MB), four times the first five runs' width 128 and four
   heads; heads for the onset, the three drums, the sixty-nine pitches, voicing,
