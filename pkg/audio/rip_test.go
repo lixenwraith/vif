@@ -434,12 +434,17 @@ func TestRipKeepsABassLineThatClimbs(t *testing.T) {
 // TestStrikesStartNotesWhileOthersRing: a front end that hears each pitch struck
 // gives every note under a pedal, where a path through the salience stays on the
 // notes still ringing: three pitches struck in turn ring on together, and one
-// struck again while it rings is two notes.
+// struck again while it rings is two notes. A strike whose pitch never sounds, a
+// weaker one an octave over a note struck, and one again within StrikeGap are none.
 func TestStrikesStartNotesWhileOthersRing(t *testing.T) {
 	const frames = 300
 	f := &RipFrames{Hop: RipFrameSec, Flux: make([]float64, frames), Salience: make([]float32, frames*RipPitches), Strike: make([]float32, frames*RipPitches)}
-	for _, n := range []struct{ midi, at, end int }{{72, 0, 250}, {76, 40, 250}, {79, 80, 250}, {72, 150, 250}} {
-		f.Strike[n.at*RipPitches+n.midi-RipMinMIDI] = 0.99
+	for _, n := range []struct {
+		midi, at, end int
+		strike        float32
+	}{{72, 0, 250, 0.99}, {76, 40, 250, 0.99}, {79, 80, 250, 0.99}, {72, 150, 250, 0.99}, {84, 0, 100, 0.95}, {67, 200, 200, 0.99}, {76, 45, 45, 0.99},
+		{74, 260, 266, 0.99}, {74, 268, 290, 0.99}} {
+		f.Strike[n.at*RipPitches+n.midi-RipMinMIDI] = n.strike
 		for t := n.at; t < n.end; t++ {
 			f.Salience[t*RipPitches+n.midi-RipMinMIDI] = 0.9
 		}
@@ -448,7 +453,7 @@ func TestStrikesStartNotesWhileOthersRing(t *testing.T) {
 	for _, n := range f.notes(RipMelodyLow, RipMaxMIDI, DefaultRipParams()) {
 		got = append(got, [3]int{n.midi, n.start, n.end})
 	}
-	want := [][3]int{{72, 0, 150}, {76, 40, 250}, {79, 80, 250}, {72, 150, 250}}
+	want := [][3]int{{72, 0, 150}, {76, 40, 250}, {79, 80, 250}, {72, 150, 250}, {74, 260, 266}}
 	if !slices.Equal(got, want) {
 		t.Errorf("notes (midi, start, end) %v, want %v", got, want)
 	}

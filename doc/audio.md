@@ -554,7 +554,9 @@ and the wave and voice genes (`VoiceDef.Genes`) the note is played with, so a
 rip through it also names the voices its registers were played with
 (`Rip.Voices`). From strikes the melody register's notes start where a pitch is
 struck and last while it sounds, any number at once, in place of the two-line
-path, which stays on the notes a pedal leaves ringing. `tool/rip-train` trains it
+path, which stays on the notes a pedal leaves ringing; a strike starts none when
+its pitch never sounds, when it is a stronger strike's partial, or within
+`StrikeGap` of the pitch's last. `tool/rip-train` trains it
 on loops soundlab exports (`corpus`), and soundlab hears with the first root's
 `audio/ripnet.bin` when there is one; `render` writes what the slots hold to a
 WAV through `RenderMusic`, so an estimate is heard without a device.
