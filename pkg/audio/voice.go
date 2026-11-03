@@ -128,9 +128,11 @@ const (
 	maxPartials  = 48
 	pairPartials = 8
 	modalTopHz   = 9000.0
-	modalRefHz   = 261.63
-	ringCheck    = 1024 // samples between checks that a string or a bank has rung out
-	ringFloor    = 1e-10
+	// keyRefHz is middle C, where a voice's ring, decay and inharmonicity are
+	// given and from which they track the key
+	keyRefHz  = 261.63
+	ringCheck = 1024 // samples between checks that a string or a bank has rung out
+	ringFloor = 1e-10
 	// strikeAt is where along the string a pluck or hammer lands when the voice
 	// leaves strike_pos unset
 	strikeAt = 0.12
@@ -302,14 +304,17 @@ func (v *TonalVoice) pluck() float64 {
 }
 
 // strike tunes the string to the note and loads one period with the pluck.
-// bright sets the low-pass's stretch, lessened where its loss at the
-// fundamental alone would end the note before ring, its T60, at any pitch;
+// The fundamental's T60 is ring at middle C, shorter above it and longer below
+// by decay_track (none: ring at every pitch). bright sets the low-pass's
+// stretch, lessened where its loss at the fundamental alone would end the note
+// before that T60;
 // the period less the low-pass's phase delay is the delay line's whole
 // samples and the all-pass's fraction, kept in [0.1, 1.1) off its pole.
 func (v *TonalVoice) strike(sp *VoiceDef) {
 	sr := float64(AudioSampleRate)
 	w := 2 * math.Pi * v.freq / sr
-	g := math.Pow(0.001, 1/(max(sp.Ring, 0.05)*v.freq))
+	t60 := max(sp.Ring, 0.05) * math.Pow(keyRefHz/v.freq, sp.DecayTrack)
+	g := math.Pow(0.001, 1/(t60*v.freq))
 	s := (1 - sp.Bright) / 2
 	if 1-2*s*(1-s)*(1-math.Cos(w)) < g*g {
 		s = 0.5 - math.Sqrt(max(0.25-(1-g*g)/(2*(1-math.Cos(w))), 0))
@@ -442,8 +447,8 @@ func (v *TonalVoice) excite(sp *VoiceDef) {
 		tilt = 1
 	}
 	vel := max(v.velocity, 0.05)
-	b := sp.Inharm * math.Pow(v.freq/modalRefHz, sp.InharmTrack)
-	tau := max(sp.DecayTime, 0.05) * math.Pow(modalRefHz/v.freq, sp.DecayTrack)
+	b := sp.Inharm * math.Pow(v.freq/keyRefHz, sp.InharmTrack)
+	tau := max(sp.DecayTime, 0.05) * math.Pow(keyRefHz/v.freq, sp.DecayTrack)
 	fc := sp.HammerHz * (0.3 + 0.7*vel)
 	slow := sp.PairSlow
 	if slow <= 0 {

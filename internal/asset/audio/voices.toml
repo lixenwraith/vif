@@ -89,11 +89,12 @@ level = 1.1
 
 [[voice]]
 name = "pluck"
-desc = "a plucked string: a noise burst, plucked near the bridge and darker when soft, rings in a tuned delay line and fades over its ring at every pitch"
+desc = "a plucked string: a noise burst, plucked near the bridge and darker when soft, rings in a tuned delay line and fades over its ring, sooner up the keyboard as a guitar's strings do"
 wave = "string"
 unison = 1
 bright = 0.1
 ring = 2.0
+decay_track = 1.1
 strike_pos = 0.13
 hammer_hz = 4000
 attack = 0.001

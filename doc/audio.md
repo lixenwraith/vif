@@ -271,9 +271,11 @@ plucked (`strike_pos`) and a low-pass that darkens a soft note (`hammer_hz` at
 full velocity), with its mean taken out, rings in a line of the period's whole
 samples and a first-order all-pass for its fraction, so every note is in tune;
 the loop's two-point low-pass (`bright` its stretch) and a loss per period
-derived from `ring`, the fundamental's T60, keep that decay at every pitch,
-the low-pass lessened where its loss alone would cut a high note short. The
-bass and the piano are modal voices: a string as its partials, each
+derived from `ring`, the fundamental's T60 at middle C, set that decay, the
+low-pass lessened where its loss alone would cut a high note short. As in the
+modal voices, `decay_track` shortens it above middle C and lengthens it below
+(none keeps `ring` at every pitch); the pluck's 1.1 is a recorded guitar's
+slope, its T60 halving about every octave. The bass and the piano are modal voices: a string as its partials, each
 a decaying phasor at `k·f0` stretched by the string's inharmonicity, at the
 amplitude the strike position's comb, the spectral tilt (1/k struck, 1/k²
 plucked) and a velocity-dependent hammer low-pass leave it, decaying faster the
@@ -281,8 +283,8 @@ higher it sits; the lowest partials carry a second, slightly detuned string whos
 slower aftersound gives the double decay, and a few milliseconds of filtered
 noise are the hammer or finger contact. The piano has a grand's stretch and the
 soundboard's roll-off, its decay fitted to a recorded piano's levels (the
-University of Iowa samples, C1 to C7); the bass is finger-plucked into a pickup resonance and an amp, its note-off
-a 45 ms damper.
+University of Iowa samples, C1 to C7); the bass is finger-plucked into a
+pickup resonance and an amp, its note-off a 45 ms damper.
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming
