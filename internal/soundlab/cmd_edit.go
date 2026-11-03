@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/lixenwraith/vif/pkg/audio"
@@ -58,6 +59,9 @@ func cmdAdd(s *Session, a []string) error {
 }
 
 func cmdDel(s *Session, a []string) error {
+	if len(a) > 1 {
+		return delSeveral(s, a)
+	}
 	segs := strings.Split(a[0], ".")
 	if len(segs) == 1 {
 		n := segs[0]
@@ -80,6 +84,47 @@ func cmdDel(s *Session, a []string) error {
 	}
 	mark()
 	fmt.Fprintf(s.out, "deleted %s\n", a[0])
+	return nil
+}
+
+// delSeveral deletes what each path names before any delete: all are checked
+// first, then the deepest go first and, in one list, the highest index, so no
+// delete moves an element a later path names
+func delSeveral(s *Session, a []string) error {
+	type target struct {
+		path       string
+		depth, idx int
+	}
+	ts := make([]target, 0, len(a))
+	for _, p := range a {
+		if slices.ContainsFunc(ts, func(t target) bool { return t.path == p }) {
+			return fmt.Errorf("%s: named twice", p)
+		}
+		segs := strings.Split(p, ".")
+		t := target{path: p, depth: len(segs)}
+		if len(segs) == 1 {
+			if !s.has(p) {
+				return fmt.Errorf("%q: not in any document", p)
+			}
+		} else {
+			root, _, err := s.docRoot(segs[0])
+			if err != nil {
+				return err
+			}
+			if _, t.idx, err = elemAt(root, segs[1:]); err != nil {
+				return fmt.Errorf("%s: %w", segs[0], err)
+			}
+		}
+		ts = append(ts, t)
+	}
+	slices.SortStableFunc(ts, func(x, y target) int {
+		return cmp.Or(cmp.Compare(y.depth, x.depth), cmp.Compare(y.idx, x.idx))
+	})
+	for _, t := range ts {
+		if err := cmdDel(s, []string{t.path}); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -239,16 +284,155 @@ func cmdNew(s *Session, a []string) error {
 	return nil
 }
 
-func cmdCp(s *Session, a []string) error {
-	src, dst := a[0], a[1]
-	if err := badName(src); err != nil {
-		return err
+// trackRef is one track a command named by its path, <pattern>.track.<n>: a
+// copy of it, and the steps of the pattern it came from
+type trackRef struct {
+	path, pattern string
+	n, steps      int
+	track         audio.TrackDef
+}
+
+// tracksOf reads track paths, each named once; ok is false when the first is
+// not one, so the command reads its arguments as entries
+func (s *Session) tracksOf(paths []string) (refs []trackRef, ok bool, err error) {
+	for i, p := range paths {
+		segs := strings.Split(p, ".")
+		if len(segs) != 3 || segs[1] != "track" {
+			if i == 0 {
+				return nil, false, nil
+			}
+			return nil, true, fmt.Errorf("%q: want <pattern>.track.<n>, as the paths before it", p)
+		}
+		d, ok := s.pats.get(segs[0])
+		if !ok {
+			return nil, true, fmt.Errorf("%q: no such pattern in the document", segs[0])
+		}
+		n, err := strconv.Atoi(segs[2])
+		if err != nil || n < 0 || n >= len(d.Track) {
+			return nil, true, fmt.Errorf("%s: %q has tracks 0 to %d", p, segs[0], len(d.Track)-1)
+		}
+		if slices.ContainsFunc(refs, func(r trackRef) bool { return r.pattern == segs[0] && r.n == n }) {
+			return nil, true, fmt.Errorf("%s: named twice", p)
+		}
+		if err := badSteps(d); err != nil {
+			return nil, true, err
+		}
+		t := d.Track[n]
+		t.Event = slices.Clone(t.Event)
+		refs = append(refs, trackRef{path: p, pattern: segs[0], n: n, steps: d.Steps, track: t})
 	}
+	return refs, true, nil
+}
+
+func badSteps(d *audio.PatternDef) error {
+	if d.Steps < 1 || d.Steps > audio.MaxPatternLen {
+		return fmt.Errorf("%q has %d steps: set them, 1 to %d, first", d.Name, d.Steps, audio.MaxPatternLen)
+	}
+	return nil
+}
+
+// fitTracks appends the tracks to d at a length every one of them loops in,
+// the least common multiple of their steps and d's, d's own tracks and each
+// one repeated to fill it; past MaxPatternLen d keeps its steps, and a track
+// that does not fit is repeated as far as it goes and cut there. It says what
+// it changed beyond the appending, and refuses more tracks than a pattern holds.
+func fitTracks(d *audio.PatternDef, refs []trackRef) (string, error) {
+	if n := len(d.Track) + len(refs); n > audio.MaxPatternTracks {
+		return "", fmt.Errorf("%q would hold %d tracks, a pattern at most %d", d.Name, n, audio.MaxPatternTracks)
+	}
+	if err := badSteps(d); err != nil {
+		return "", err
+	}
+	steps := d.Steps
+	for _, r := range refs {
+		if l := steps / gcd(steps, r.steps) * r.steps; l <= audio.MaxPatternLen {
+			steps = l
+		}
+	}
+	var notes []string
+	if steps != d.Steps && len(d.Track) > 0 {
+		for i := range d.Track {
+			d.Track[i].Event = tile(d.Track[i].Event, d.Steps, steps)
+		}
+		notes = append(notes, fmt.Sprintf("%s's %d track(s) repeated from %d steps to %d", d.Name, len(d.Track), d.Steps, steps))
+	}
+	d.Steps = steps
+	for _, r := range refs {
+		t := r.track
+		t.Event = tile(t.Event, r.steps, steps)
+		if steps%r.steps != 0 {
+			notes = append(notes, fmt.Sprintf("%s's %d-step loop cut at step %d", r.path, r.steps, steps))
+		}
+		d.Track = append(d.Track, t)
+	}
+	return strings.Join(notes, "; "), nil
+}
+
+// tile is a loop of from steps played over to steps: its events repeated every
+// from steps, those past to dropped
+func tile(evs []audio.StepDef, from, to int) []audio.StepDef {
+	var out []audio.StepDef
+	for k := 0; k < to; k += from {
+		for _, e := range evs {
+			if e.Pos+k < to {
+				e.Pos += k
+				out = append(out, e)
+			}
+		}
+	}
+	return out
+}
+
+func gcd(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
+}
+
+// tracksInBrief names tracks by path, voice and events, and what fitting them did
+func tracksInBrief(refs []trackRef, notes string) string {
+	var b strings.Builder
+	for i, r := range refs {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "%s (%s, %d events)", r.path, r.track.Instr, len(r.track.Event))
+	}
+	if notes != "" {
+		b.WriteString("; " + notes)
+	}
+	return b.String()
+}
+
+func cmdCp(s *Session, a []string) error {
+	src, dst := a[0], a[len(a)-1]
 	if err := badName(dst); err != nil {
 		return err
 	}
 	if s.has(dst) {
 		return fmt.Errorf("%q: already exists", dst)
+	}
+	if refs, ok, err := s.tracksOf(a[:len(a)-1]); ok {
+		if err != nil {
+			return err
+		}
+		first, _ := s.pats.get(refs[0].pattern)
+		c := clonePatternDef(first) // its role, groups and tiers, the tracks fitted in afresh
+		c.Name, c.Track = dst, nil
+		notes, err := fitTracks(c, refs)
+		if err != nil {
+			return err
+		}
+		s.pats.put(c, true)
+		fmt.Fprintf(s.out, "copied into the new pattern %q of %d steps: %s\n", dst, c.Steps, tracksInBrief(refs, notes))
+		return nil
+	}
+	if len(a) > 2 {
+		return fmt.Errorf("cp: several sources must each be a track, <pattern>.track.<n>")
+	}
+	if err := badName(src); err != nil {
+		return err
 	}
 	if d, ok := s.sounds.get(src); ok {
 		c := d.Clone()
@@ -317,7 +501,26 @@ func cmdMv(s *Session, a []string) error {
 // validate, per house style — except sound bus name collisions, which would
 // silently reroute src layers into dst's bus instead of failing validation.
 func cmdMix(s *Session, a []string) error {
-	src, dst := a[0], a[1]
+	src, dst := a[0], a[len(a)-1]
+	if refs, ok, err := s.tracksOf(a[:len(a)-1]); ok {
+		if err != nil {
+			return err
+		}
+		dd, ok := s.pats.get(dst)
+		if !ok {
+			return fmt.Errorf("%q: not a pattern in the document", dst)
+		}
+		notes, err := fitTracks(dd, refs)
+		if err != nil {
+			return err
+		}
+		s.pats.markDirty(dst)
+		fmt.Fprintf(s.out, "mixed into %q, now %d track(s) of %d steps: %s\n", dst, len(dd.Track), dd.Steps, tracksInBrief(refs, notes))
+		return nil
+	}
+	if len(a) > 2 {
+		return fmt.Errorf("mix: several sources must each be a track, <pattern>.track.<n>")
+	}
 	if src == dst {
 		return fmt.Errorf("mix: src and dst are the same entry")
 	}

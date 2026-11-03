@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -832,6 +833,105 @@ func TestNewPatternPlaysAlongAndGoes(t *testing.T) {
 		t.Fatal("^D twice must delete new_1 and close the editor")
 	}
 	waitFor(t, func() bool { return s.eng.SlotPattern(1) == audio.PatternSilence }, "slot 1 must fall silent")
+}
+
+// TestATrackMovesBetweenPatterns: cp and mix take tracks by their paths into a
+// new pattern or onto another's tracks, and del of several deletes what each
+// path named before any delete; in the editor y and Y yank tracks, p pastes them
+// into the pattern open, the browser's p makes a new pattern of them, and a
+// paste refuses a yanked track that has moved since.
+func TestATrackMovesBetweenPatterns(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, `
+new pattern src
+set src.steps 32
+take src lead 0:60 4:64
+take src pad 0:48:8
+new pattern dst
+cp src.track.1 src.track.2 lead_pad
+mix src.track.1 src.track.2 dst
+! cp src.track.9 nine
+! mix src.track.1 nowhere
+! mix src.track.1 src.track.1 dst
+`)
+	instrs := func(name string) string {
+		d, _ := s.pats.get(name)
+		in := []string{strconv.Itoa(d.Steps)}
+		for _, t := range d.Track {
+			in = append(in, t.Instr)
+		}
+		return strings.Join(in, " ")
+	}
+	if got := instrs("lead_pad"); got != "32 lead pad" {
+		t.Fatalf("cp of two tracks: want a 32-step pattern of lead and pad, got %q", got)
+	}
+	if got := instrs("dst"); got != "32 kick lead pad" || instrs("src") != "32 kick lead pad" {
+		t.Fatalf("mix of two tracks: want dst's kick, then src's lead and pad, src untouched; got %q", got)
+	}
+	a := newTUIApp(s, NewLogBuffer(50))
+	key := func(r rune) { a.editorKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}) }
+	a.openEditor("src", focusGrid)
+	a.ed.trk = 1
+	key('y')
+	a.ed.trk = 2
+	key('Y')
+	a.openEditor("lead_pad", focusGrid)
+	key('p')
+	if got := instrs("lead_pad"); got != "32 lead pad lead pad" || a.ed.trk != 3 {
+		t.Fatalf("y, Y then p: want src's lead and pad pasted after lead_pad's, got %q:\n%s", got, strings.Join(a.log.lines, "\n"))
+	}
+	a.closeEditor()
+	a.w, a.h = 100, 24
+	a.handle(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'p'})
+	for _, r := range "two" {
+		a.promptKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	}
+	a.promptKey(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEnter})
+	if got := instrs("two"); got != "32 lead pad" {
+		t.Fatalf("the browser's p: want a new pattern of the yanked lead and pad, got %q", got)
+	}
+	runOrFatal(t, s, &out, "! del src.track.2 src.track.9\ndel src.track.1 src.track.2\n")
+	if got := instrs("src"); got != "32 kick" {
+		t.Fatalf("del src.track.1 src.track.2: want src's kick alone, got %q", got)
+	}
+	a.openEditor("dst", focusGrid)
+	key('p')
+	if got := instrs("dst"); got != "32 kick lead pad" || !strings.Contains(strings.Join(a.log.lines, "\n"), "changed since it was yanked") {
+		t.Fatalf("p after the yanked tracks were deleted: want a refusal and dst as it was, got %q", got)
+	}
+}
+
+// TestMixedTracksLoopAtOneLength: tracks of other lengths join a pattern at the
+// least common multiple of the lengths, each track repeated to fill it; past 64
+// steps the pattern keeps its length and a longer loop is cut, as the command
+// says.
+func TestMixedTracksLoopAtOneLength(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, `
+new pattern a
+new pattern b
+set b.steps 24
+new pattern c
+set c.steps 20
+mix b.track.0 a
+mix c.track.0 a
+`)
+	d, _ := s.pats.get("a")
+	var got []string
+	for _, tr := range d.Track {
+		var pos []string
+		for _, e := range tr.Event {
+			pos = append(pos, strconv.Itoa(e.Pos))
+		}
+		got = append(got, strings.Join(pos, ","))
+	}
+	if d.Steps != 48 || strings.Join(got, " ") != "0,16,32 0,24 0,20,40" || !strings.Contains(out.String(), "cut at step 48") {
+		t.Fatalf("want 48 steps, a's kick every 16, b's every 24, c's every 20 cut at 48; got %d steps, %v:\n%s", d.Steps, got, out.String())
+	}
 }
 
 // TestMixerMutesTheCursorsSlot: space and m on the mixer mute the slot under its
