@@ -401,7 +401,7 @@ func fitTracks(d *audio.PatternDef, refs []trackRef, into int) (string, error) {
 		return "", err
 	}
 	family := func(t audio.TrackDef) string {
-		if i, ok := audio.InstrumentByName(t.Instr); ok && i.IsDrum() {
+		if isDrumTrack(t) {
 			return "a drum track"
 		}
 		return "a tonal track"
@@ -739,6 +739,144 @@ func cmdTake(s *Session, a []string) error {
 	fmt.Fprintf(s.out, "take: %d note(s) into %s, track %d (%s)\n", len(tr.Event), a[0], len(d.Track)-1, tr.Instr)
 	if accidentals > 0 {
 		fmt.Fprintf(s.out, "%d note(s) outside %s carry an accidental\n", accidentals, s.keyName())
+	}
+	return nil
+}
+
+// cmdSplit parts a tonal track at a pitch: its notes from that pitch up stay, the
+// rest go to a new track of its voice right after it, for two lines heard as one
+func cmdSplit(s *Session, a []string) error {
+	refs, ok, err := s.tracksOf(a[:1])
+	switch {
+	case !ok:
+		return fmt.Errorf("%q: want <pattern>.track.<n>", a[0])
+	case err != nil:
+		return err
+	}
+	r := refs[0]
+	at, err := strconv.Atoi(a[1])
+	if err != nil || at < 0 || at > 127 {
+		return fmt.Errorf("%q: want a MIDI note, 0 to 127", a[1])
+	}
+	if isDrumTrack(r.track) {
+		return fmt.Errorf("%s: a drum track (%s) has no pitch to split at", r.path, r.track.Instr)
+	}
+	d, _ := s.pats.get(r.pattern)
+	if len(d.Track) >= audio.MaxPatternTracks {
+		return fmt.Errorf("%q holds %d tracks, a pattern at most %d", d.Name, len(d.Track), audio.MaxPatternTracks)
+	}
+	var high, low []audio.StepDef
+	for _, e := range r.track.Event {
+		if audio.StepPitch(s.root, s.scale, e.Deg, e.Oct, e.Acc) >= at {
+			high = append(high, e)
+		} else {
+			low = append(low, e)
+		}
+	}
+	if len(high) == 0 || len(low) == 0 {
+		return fmt.Errorf("%s: %d note(s) from %s up and %d under it under %s; a split leaves none empty",
+			r.path, len(high), noteName(at), len(low), s.keyName())
+	}
+	lower := r.track
+	lower.Event = low
+	d.Track[r.n].Event = high
+	d.Track = slices.Insert(d.Track, r.n+1, lower)
+	s.pats.markDirty(d.Name)
+	fmt.Fprintf(s.out, "split %s at %s: %d note(s) stay, %d under it to %s.track.%d (%s)\n",
+		r.path, noteName(at), len(high), len(low), d.Name, r.n+1, lower.Instr)
+	return nil
+}
+
+func isDrumTrack(t audio.TrackDef) bool {
+	i, ok := audio.InstrumentByName(t.Instr)
+	return ok && i.IsDrum()
+}
+
+// shiftBy moves a note: its octave, its degree along the key's n degrees carried
+// into the octave, its pitch spelt again on the key's nearest degree, or its step
+// rotated around the pattern's length
+type shiftBy func(s *Session, e *audio.StepDef, k, steps int)
+
+var shifts = map[string]shiftBy{
+	"oct": func(_ *Session, e *audio.StepDef, k, _ int) { e.Oct += k },
+	"deg": func(s *Session, e *audio.StepDef, k, _ int) {
+		n := len(audio.ScaleIntervals(s.scale))
+		q := floorDiv(e.Deg+k, n)
+		e.Deg, e.Oct = e.Deg+k-q*n, e.Oct+q
+	},
+	"semi": func(s *Session, e *audio.StepDef, k, _ int) {
+		e.Deg, e.Oct, e.Acc = audio.PitchStep(s.root, s.scale, audio.StepPitch(s.root, s.scale, e.Deg, e.Oct, e.Acc)+k)
+	},
+	"step": func(_ *Session, e *audio.StepDef, k, steps int) { e.Pos = e.Pos + k - floorDiv(e.Pos+k, steps)*steps },
+}
+
+func floorDiv(a, b int) int {
+	q := a / b
+	if a%b != 0 && (a < 0) != (b < 0) {
+		q--
+	}
+	return q
+}
+
+// cmdShift moves every note of the tracks named by octaves, degrees, semitones or
+// steps; a note it would take past a pattern's bounds refuses the whole shift
+// before any track changes
+func cmdShift(s *Session, a []string) error {
+	by, kArg := a[len(a)-2], a[len(a)-1]
+	move, ok := shifts[by]
+	if !ok {
+		return fmt.Errorf("%q: shift by oct, deg, semi or step", by)
+	}
+	k, err := strconv.Atoi(kArg)
+	if err != nil || k == 0 {
+		return fmt.Errorf("%q: want a nonzero count, as +2 or -1", kArg)
+	}
+	refs, ok, err := s.tracksOf(a[:len(a)-2])
+	switch {
+	case !ok:
+		return fmt.Errorf("%q: want <pattern>.track.<n>", a[0])
+	case err != nil:
+		return err
+	}
+	if by != "step" && len(audio.ScaleIntervals(s.scale)) == 0 {
+		return fmt.Errorf("the transport's scale %d is none soundlab knows", s.scale)
+	}
+	for i, r := range refs {
+		if by != "step" && isDrumTrack(r.track) {
+			return fmt.Errorf("%s: a drum track (%s) shifts only by step", r.path, r.track.Instr)
+		}
+		for j := range r.track.Event {
+			e := &r.track.Event[j]
+			was := audio.StepPitch(s.root, s.scale, e.Deg, e.Oct, e.Acc)
+			if p := was + k; by == "semi" && (p < 0 || p > 127) {
+				return fmt.Errorf("%s note %d (step %d, %s) would sound MIDI %d, outside 0 to 127", r.path, j, e.Pos, noteName(was), p)
+			}
+			move(s, e, k, r.steps)
+			if err := stepBounds(*e); by != "step" && err != nil {
+				return fmt.Errorf("%s note %d (step %d, %s) would leave the bounds: %w", r.path, j, e.Pos, noteName(was), err)
+			}
+		}
+		slices.SortStableFunc(refs[i].track.Event, func(x, y audio.StepDef) int { return cmp.Compare(x.Pos, y.Pos) })
+	}
+	for _, r := range refs {
+		d, _ := s.pats.get(r.pattern)
+		d.Track[r.n].Event = r.track.Event
+		s.pats.markDirty(r.pattern)
+	}
+	fmt.Fprintf(s.out, "shifted by %s %+d: %s\n", by, k, tracksInBrief(refs, ""))
+	return nil
+}
+
+// stepBounds is the degree, octave and accidental bounds audio.ValidatePattern
+// holds a note to
+func stepBounds(e audio.StepDef) error {
+	switch {
+	case e.Deg < -audio.MaxStepDegree || e.Deg > audio.MaxStepDegree:
+		return fmt.Errorf("deg %d outside [%d,%d]", e.Deg, -audio.MaxStepDegree, audio.MaxStepDegree)
+	case e.Oct < audio.MinStepOctave || e.Oct > audio.MaxStepOctave:
+		return fmt.Errorf("oct %d outside [%d,%d]", e.Oct, audio.MinStepOctave, audio.MaxStepOctave)
+	case e.Acc < -audio.MaxStepAccidental || e.Acc > audio.MaxStepAccidental:
+		return fmt.Errorf("acc %d outside [%d,%d]", e.Acc, -audio.MaxStepAccidental, audio.MaxStepAccidental)
 	}
 	return nil
 }
