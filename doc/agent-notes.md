@@ -200,6 +200,10 @@ that proves wrong or that a document now states, and link the document instead.
 - Weights installed in the user root (`~/.config/vif/audio/ripnet.bin`) win over
   `-config-dir`: soundlab resolves the model file across the roots, so a run that
   must hear with the analysis points `XDG_CONFIG_HOME` at an empty directory.
+- A head trained with a positive weight w (`bce(..., pos_weight)` in
+  `train.py`) scores a posterior p as wp/(wp + 1 - p): the strike head's
+  (w 20) half-sure is 0.95 and the pitch head's (w 12) 0.92. Sweep a
+  decoder's threshold on that scale against the truths; 0.5 floods.
 - A training round runs from its own copy of the tree: `pipeline.sh` runs
   soundlab through `go run` at every stage, so an edit to the checkout while a
   round trains changes the corpus or the bench under it. The bench draws its

@@ -1350,8 +1350,10 @@ front-end seam. What remains, in the design's order:
 1. A corpus beyond the shipped bank: `corpus ... aug gen` puts a room, a mix,
    saturation and a tuning off A440 behind each loop and draws beats,
    melodies, bass lines and, in the free slot, a broken-chord accompaniment
-   under a melody of longer notes; what it still lacks is a codec, chords as
-   chords, a pedal's ringing, chance steps graded as optional rather than as
+   under a melody of longer notes, and since round seven an equaliser, a
+   compressor, halls and a pedal's ringing; what it still lacks is a codec,
+   chords as chords, phrases far softer than the rest of their loop (the
+   soft notes below), chance steps graded as optional rather than as
    misses, the generative lead (left out since an offline render plays its
    first bar as the last render left it and labels every bar with its last:
    regenerate it at bar 0 and label it as played), and real recordings with
@@ -1377,8 +1379,18 @@ front-end seam. What remains, in the design's order:
    0.13), its held-out loss flat from step 33000, and on recordings beat
    the analysis on drums (Billie Jean's false kicks a third) and lost on
    melodies (the origin's register 34 of 83 tapped notes against 50, Für
-   Elise's 266 of 869 against 444).
-   Next: real recordings with their notes in the corpus (item 1), then more
+   Elise's 266 of 869 against 444). Round seven (229 bands, a corpus nearer
+   a real mix, convolutions) and round eight (a strike head per pitch, an
+   input in dB against the frame's own level) brought the model level with or
+   past the analysis on most of the recordings' lines and past it on the
+   bench; the eighth's strike decoder hears nearly every note at a low
+   threshold and five times too many, and at its best threshold (0.9) keeps a
+   fifth of the softest notes. Next for it: a decoder that tells a soft note
+   struck from a false strike (the pitch head's rise under the strike, a
+   strike at a stronger one's octave or twelfth dropped, the head's threshold
+   tuned by `tune` against the truths rather than swept by hand) and a corpus
+   whose phrases sit 20 to 30 dB apart, so the strike head learns soft strikes.
+   Then: real recordings with their notes in the corpus (item 1), then more
    loops, or width 384 (`DIM=384 HEADS=12 FFN=1536`, 7 million weights),
    each measured by `bench` on clean and augmented loops and by the truths on
    the recordings, and shipped only when it beats the analysis on both; a
@@ -1395,8 +1407,10 @@ front-end seam. What remains, in the design's order:
    a harmonic check on the hit (a percussive rise with a pitched tail is a note)
    until the model takes the front end.
 4. Key changes within a recording are outside the model: a key per phrase (a
-   chromatic note is an accidental on its step now). Two voices in one register are decoded together now; a
-   third, and a chord's inner notes, are not.
+   chromatic note is an accidental on its step now). Through the analysis two
+   voices in one register are decoded together; from a model's strikes any
+   number of notes sound at once, parted into two lines, so a chord's inner
+   notes land in the under line rather than a line of their own.
 5. A sustained note with a wide vibrato can still read as two: the sample's
    wobble was its tuning, forty cents off A440, which the front end reads first
    now, and its notes hold for four to eight steps; a vibrato wider than a
@@ -1415,10 +1429,11 @@ front-end seam. What remains, in the design's order:
    notes are the first thing to chase, note by note, with the `truth` listing
    of which were cut.
 7. The pedal: a piano arpeggio under pedal rings three or four notes at once,
-   and two lines hold two; the second line's eighths read as held notes (30 of
-   58 heard, 11 spanning two). A third line in the joint decoder, states
-   cubed, or a chord read per beat as the set of ringing pitches, rendered as
-   a pad under the lines, is the arrangement's next step.
+   and the analysis's two lines hold two; the second line's eighths read as
+   held notes (30 of 58 heard, 11 spanning two). A model's strikes start every
+   note struck however many ring (the intro's under line 55 of 58 at a
+   strike threshold of 0.5); what the arrangement still lacks is a chord read
+   per beat as the set of ringing pitches, rendered as a pad under the lines.
 8. The fit as it fits a real lead: the user hears the lead as a plucked string
    (a harp or a santur) and the bass as a flute at times; the fit picks modal
    voices for every line of both recordings. A plucked voice (`string`) with
