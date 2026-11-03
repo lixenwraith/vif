@@ -39,7 +39,7 @@ type VoiceDef struct {
 	Vowel string `toml:"vowel,omitempty"`
 
 	Bright float64 `toml:"bright,omitempty"` // string: 0 a dull string, 1 a wiry one
-	Ring   float64 `toml:"ring,omitempty"`   // string: the fundamental's T60 in seconds, at every pitch
+	Ring   float64 `toml:"ring,omitempty"`   // string: the fundamental's T60 in seconds at middle C, tracking the key by decay_track
 
 	// strike_pos is where along the string the hammer or finger lands, 0.12
 	// unset; modal: partials caps the bank, tilt is the spectral slope (1 struck,
@@ -51,7 +51,8 @@ type VoiceDef struct {
 	Inharm      float64 `toml:"inharm,omitempty"`
 	InharmTrack float64 `toml:"inharm_track,omitempty"`
 	// modal: decay_time is the prompt decay at middle C, growing toward the bass by
-	// decay_track; a partial at damp_hz decays twice as fast. The coupled pair is a
+	// decay_track, which tracks a string's ring the same way (0: ring at every
+	// pitch); a partial at damp_hz decays twice as fast. The coupled pair is a
 	// second string pair cents away, pair_level under the prompt sound and decaying
 	// pair_slow times as fast; knock is the level of the contact noise. hammer_hz
 	// low-passes a string's or a bank's strike at full velocity, lower when softer
