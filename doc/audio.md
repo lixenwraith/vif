@@ -262,16 +262,27 @@ name retunes that instrument in place and a new name adds an instrument, which
 patterns name as they name any. `DefineVoice` hot-swaps one: the next note plays
 the new voice while a sounding one finishes on its own, and an instrument no voice
 defines plays a plain sine. The drum kit plays cached sounds. Of the shipped
-voices, the pad and the lead are band-limited saws; the pluck a delay line a noise
-burst sets ringing. The bass and the piano are modal voices: a string as its partials, each
+voices, the pad and the lead are band-limited saws. A string is never held at a
+sustain: it fades as it rings, a held note ends on its own, and the note-off is
+its damper (`release`); the ADSR's decay and sustain shape the oscillators
+alone. The pluck is a delay line after Karplus and Strong with Jaffe and
+Smith's extensions: a seeded noise burst, through the comb of where it is
+plucked (`strike_pos`) and a low-pass that darkens a soft note (`hammer_hz` at
+full velocity), with its mean taken out, rings in a line of the period's whole
+samples and a first-order all-pass for its fraction, so every note is in tune;
+the loop's two-point low-pass (`bright` its stretch) and a loss per period
+derived from `ring`, the fundamental's T60, keep that decay at every pitch,
+the low-pass lessened where its loss alone would cut a high note short. The
+bass and the piano are modal voices: a string as its partials, each
 a decaying phasor at `k·f0` stretched by the string's inharmonicity, at the
 amplitude the strike position's comb, the spectral tilt (1/k struck, 1/k²
 plucked) and a velocity-dependent hammer low-pass leave it, decaying faster the
 higher it sits; the lowest partials carry a second, slightly detuned string whose
 slower aftersound gives the double decay, and a few milliseconds of filtered
 noise are the hammer or finger contact. The piano has a grand's stretch and the
-soundboard's roll-off; the bass is finger-plucked into a pickup resonance and an
-amp, its note-off a 45 ms damper.
+soundboard's roll-off, its decay fitted to a recorded piano's levels (the
+University of Iowa samples, C1 to C7); the bass is finger-plucked into a pickup resonance and an amp, its note-off
+a 45 ms damper.
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming

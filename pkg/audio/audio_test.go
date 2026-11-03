@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"math/cmplx"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1122,5 +1123,56 @@ func TestVoiceVibratoAndVowel(t *testing.T) {
 	wide.VibratoCents = 200
 	if ValidateVoice(&bad) == nil || ValidateVoice(&wide) == nil || ValidateVoice(&vowel) != nil || ValidateVoice(&wobble) != nil {
 		t.Errorf("validation: vowel y %v, 200 cents %v, a vowel %v, a vibrato %v", ValidateVoice(&bad), ValidateVoice(&wide), ValidateVoice(&vowel), ValidateVoice(&wobble))
+	}
+}
+
+// TestStringKeepsTuneAndRingAcrossTheKeyboard: the string wave's fundamental
+// sits within a cent of equal temperament from C2 to C7 and falls 60 dB in the
+// voice's ring at every pitch, read from its phase and magnitude in frames
+// 64 samples apart, then 0.4 s apart.
+func TestStringKeepsTuneAndRingAcrossTheKeyboard(t *testing.T) {
+	v := &VoiceDef{Name: "s", Wave: "string", Ring: 1, Bright: 0.2, Attack: 0.001, Release: 0.1}
+	const win, t1, near, far = 4096, AudioSampleRate / 5, 64, AudioSampleRate * 2 / 5
+	for _, m := range []int{36, 50, 60, 72, 84, 91, 96} {
+		f := NoteFreq(m)
+		x := RenderNote(v, m, 1, 1, 0)
+		if len(x) < t1+far+win {
+			t.Fatalf("midi %d: the note ended after %d samples", m, len(x))
+		}
+		frame := func(at int) complex128 {
+			var s complex128
+			for i := range win {
+				w := 0.5 - 0.5*math.Cos(2*math.Pi*float64(i)/win)
+				s += complex(x[at+i]*w, 0) * cmplx.Rect(1, -2*math.Pi*f*float64(at+i)/AudioSampleRate)
+			}
+			return s
+		}
+		turn := func(a, b complex128) float64 { return math.Remainder(cmplx.Phase(b)-cmplx.Phase(a), 2*math.Pi) }
+		a, b, c := frame(t1), frame(t1+near), frame(t1+far)
+		guess := turn(a, b) * far / near
+		hz := (guess + math.Remainder(turn(a, c)-guess, 2*math.Pi)) * AudioSampleRate / (2 * math.Pi * far)
+		cents := 1200 * math.Log2(1+hz/f)
+		t60 := 60 * far / AudioSampleRate / (20 * math.Log10(cmplx.Abs(a)/cmplx.Abs(c)))
+		if math.Abs(cents) > 1 || math.Abs(t60-v.Ring) > 0.05*v.Ring {
+			t.Errorf("midi %d: %+.2f cents off, T60 %.3f s for a ring of %.1f", m, cents, t60, v.Ring)
+		}
+	}
+}
+
+// TestPluckedAndStruckNotesFadeOnTheirOwn: a string's or a modal bank's note is
+// never held at a sustain: an ADSR that would hold an oscillator at half level
+// plays it as one with none, and a note held past its ring ends by itself.
+func TestPluckedAndStruckNotesFadeOnTheirOwn(t *testing.T) {
+	for _, wave := range []string{"string", "modal"} {
+		free := &VoiceDef{Name: "v", Wave: wave, Ring: 0.3, DecayTime: 0.05, Attack: 0.001, Release: 0.05}
+		held := *free
+		held.Decay, held.Sustain = 0.01, 0.5
+		a, b := RenderNote(free, 60, 1, 10, 0), RenderNote(&held, 60, 1, 10, 0)
+		if !slices.Equal(a, b) {
+			t.Errorf("%s: the ADSR's sustain shaped the note", wave)
+		}
+		if len(a) >= 10*AudioSampleRate {
+			t.Errorf("%s: held 10 s, the note sounded all of it rather than ringing out", wave)
+		}
 	}
 }

@@ -419,6 +419,21 @@ that proves wrong or that a document now states, and link the document instead.
   quarter in seconds read as eleven steps where the file holds eight.
   `MIDIScore.Rip` converts seconds back to ticks (`ticks`) for the grid and the
   beats to seconds after it.
+- A string or modal voice ignores the ADSR's decay and sustain, yet the shipped
+  ones keep `sustain = 1`: the augmented corpus swaps a voice's wave a third of
+  the time and keeps its genes, and an unset sustain reads as the gene's floor,
+  so the swapped oscillator would fall silent within 5 ms.
+- Real notes to measure a voice against reach a cloud container: the University
+  of Iowa's MIS samples (`theremin.music.uiowa.edu`, free for any use) hold one
+  piano note a file at pp, mf and ff, and runs of guitar and pizzicato double
+  bass; `ffmpeg -ac 1 -c:a pcm_f32le` makes the WAV `ReadWAV` takes. Their mf
+  piano falls 15 to 25 dB in a note's first second from C3 up.
+- Audacity's Pluck is Nyquist's `snd-pluck` (`tran/pluck.alg`, after M4C's
+  Pluck.t). GitHub outside the session's repositories is refused; the
+  SourceForge Nyquist tree and `sources.debian.org` serve it.
+- Read a decay after a high-pass: a delay line's burst holds a mean that rings
+  at the loop's loss alone, so the old string's RMS read a 1.45 s T60 at C7
+  where its fundamental fell 60 dB in 0.24 s.
 
 ## Locks
 

@@ -129,7 +129,11 @@ const (
 	pairPartials = 8
 	modalTopHz   = 9000.0
 	modalRefHz   = 261.63
-	modalCheck   = 1024 // samples between checks that a bank has rung out
+	ringCheck    = 1024 // samples between checks that a string or a bank has rung out
+	ringFloor    = 1e-10
+	// strikeAt is where along the string a pluck or hammer lands when the voice
+	// leaves strike_pos unset
+	strikeAt = 0.12
 )
 
 // TonalVoice generates pitched sounds with envelope; the voice it plays is the
@@ -154,19 +158,22 @@ type TonalVoice struct {
 	age      int
 	formants [3]biquad
 
-	// The plucked string: a delay line one period long, its loss per period
-	str     []float64
-	strLen  int
-	strPos  int
-	strGain float64
+	// The plucked string: a delay line of the period's whole samples, the loop's
+	// two-point low-pass (its stretch and last input), the all-pass that tunes
+	// the period's fraction (its coefficient and state) and the loss per period
+	str              []float64
+	strLen, strPos   int
+	strS, strLast    float64
+	apC, apIn, apOut float64
+	strLoss          float64
 
 	// The modal bank: a decaying phasor per partial (and per pair string), the
 	// sum's scale, and the contact noise through a one-pole
 	mre, mim, mcr, mci []float64
 	mscale             float64
-	mcheck             int
 	knockEnv, knockLP  float64
 	knockSeed          uint32
+	check              int // samples since a string or a bank was checked for ringing out
 
 	// ADSR envelope
 	envState ADSRState
@@ -268,35 +275,118 @@ func (v *TonalVoice) Sample() float64 {
 	return raw * env * v.velocity * v.level
 }
 
-// pluck reads the string and feeds back the average of its last two samples, which
-// loses the highs a little each period as a string does; bright keeps some of them
+// pluck is one sample of the extended Karplus-Strong loop (Jaffe and Smith
+// 1983): the delay line's sample through the two-point low-pass, the all-pass
+// and the loss, written back; the note ends once the string has rung out
 func (v *TonalVoice) pluck() float64 {
-	out := v.str[v.strPos]
-	next := v.str[(v.strPos+1)%v.strLen]
-	sp := v.spec
-	v.str[v.strPos] = v.strGain * ((1-sp.Bright)*(out+next)*0.5 + sp.Bright*out)
-	v.strPos = (v.strPos + 1) % v.strLen
-	return out
+	d := v.str[v.strPos]
+	s := (1-v.strS)*d + v.strS*v.strLast
+	a := v.apC*(s-v.apOut) + v.apIn
+	v.strLast, v.apIn, v.apOut = d, s, a
+	y := v.strLoss * a
+	v.str[v.strPos] = y
+	if v.strPos++; v.strPos == v.strLen {
+		v.strPos = 0
+	}
+	if v.check++; v.check >= ringCheck {
+		v.check = 0
+		var e float64
+		for _, x := range v.str[:v.strLen] {
+			e += x * x
+		}
+		if e < ringFloor*float64(v.strLen) {
+			v.Release()
+		}
+	}
+	return y
 }
 
-// strike fills the string with a noise burst from a small generator seeded by the
-// note and the voice's trigger order, so a replay plucks the same string
+// strike tunes the string to the note and loads one period with the pluck.
+// bright sets the low-pass's stretch, lessened where its loss at the
+// fundamental alone would end the note before ring, its T60, at any pitch;
+// the period less the low-pass's phase delay is the delay line's whole
+// samples and the all-pass's fraction, kept in [0.1, 1.1) off its pole.
 func (v *TonalVoice) strike(sp *VoiceDef) {
-	v.strLen = min(max(int(float64(AudioSampleRate)/v.freq+0.5), 2), stringMaxLen)
-	if cap(v.str) < stringMaxLen {
-		v.str = make([]float64, stringMaxLen)
+	sr := float64(AudioSampleRate)
+	w := 2 * math.Pi * v.freq / sr
+	g := math.Pow(0.001, 1/(max(sp.Ring, 0.05)*v.freq))
+	s := (1 - sp.Bright) / 2
+	if 1-2*s*(1-s)*(1-math.Cos(w)) < g*g {
+		s = 0.5 - math.Sqrt(max(0.25-(1-g*g)/(2*(1-math.Cos(w))), 0))
 	}
-	v.str = v.str[:v.strLen]
+	v.strS = s
+	v.strLoss = min(g/math.Sqrt(1-2*s*(1-s)*(1-math.Cos(w))), 1)
+	p := sr/v.freq - math.Atan2(s*math.Sin(w), 1-s+s*math.Cos(w))/w
+	n := min(max(int(p-0.1), 1), stringMaxLen)
+	x := min(max(p-float64(n), 0.1), 1.1)
+	v.apC = math.Sin((1-x)*w/2) / math.Sin((1+x)*w/2)
+	v.strLen, v.strPos, v.strLast, v.apIn, v.apOut, v.check = n, 0, 0, 0, 0, 0
+	v.pluckBurst(sp, p)
+}
+
+// pluckBurst loads the string with the pluck: a noise burst from a small
+// generator seeded by the note and the trigger order, so a replay plucks the
+// same string, through the comb a pluck strike_pos along the string leaves and
+// the velocity's low-pass, hammer_hz at full velocity; zero mean, peak one.
+func (v *TonalVoice) pluckBurst(sp *VoiceDef, period float64) {
+	if cap(v.str) < stringMaxLen*3/2 {
+		v.str = make([]float64, stringMaxLen*3/2)
+	}
+	n := v.strLen
+	h := sp.StrikePos
+	if h <= 0 {
+		h = strikeAt
+	}
+	m := min(int(h*period+0.5), n/2)
+	str := v.str[:n+m]
 	seed := uint32(v.note)*2654435761 + uint32(v.serial)*40503 + 1
-	for i := range v.str {
+	for i := range n {
 		seed ^= seed << 13
 		seed ^= seed >> 17
 		seed ^= seed << 5
-		v.str[i] = float64(seed)/float64(1<<32)*2 - 1
+		str[i] = float64(seed)/float64(1<<32)*2 - 1
 	}
-	v.strPos = 0
-	// the loss per period that takes the string to a thousandth over ring seconds
-	v.strGain = math.Pow(0.001, 1/(max(sp.Ring, 0.05)*v.freq))
+	// the burst is one period of a periodic signal, so the comb wraps round it
+	if m > 0 {
+		copy(str[n:], str[:m])
+		for i := range n {
+			str[i] -= str[i+m]
+		}
+	}
+	str = str[:n]
+	if sp.HammerHz > 0 {
+		a := 1 - math.Exp(-2*math.Pi*sp.HammerHz*(0.3+0.7*max(v.velocity, 0.05))/AudioSampleRate)
+		lowpassRound(str, a)
+		lowpassRound(str, a)
+	}
+	var mean, peak float64
+	for _, x := range str {
+		mean += x
+	}
+	mean /= float64(n)
+	for i := range str {
+		str[i] -= mean
+		peak = max(peak, math.Abs(str[i]))
+	}
+	if peak > 0 {
+		for i := range str {
+			str[i] /= peak
+		}
+	}
+}
+
+// lowpassRound runs a one-pole low-pass of coefficient a over one period of a
+// periodic signal in place, from the state the period returns to
+func lowpassRound(x []float64, a float64) {
+	var y float64
+	for _, s := range x {
+		y += a * (s - y)
+	}
+	y /= 1 - math.Pow(1-a, float64(len(x)))
+	for i, s := range x {
+		y += a * (s - y)
+		x[i] = y
+	}
 }
 
 // modal advances every partial's phasor and sums them, adds the contact noise
@@ -319,13 +409,13 @@ func (v *TonalVoice) modal() float64 {
 		s += v.knockLP * v.knockEnv
 		v.knockEnv *= 0.9943 // 4 ms
 	}
-	if v.mcheck++; v.mcheck >= modalCheck {
-		v.mcheck = 0
+	if v.check++; v.check >= ringCheck {
+		v.check = 0
 		var e float64
 		for i := range v.mre {
 			e += v.mre[i]*v.mre[i] + v.mim[i]*v.mim[i]
 		}
-		if e*v.mscale*v.mscale < 1e-10 {
+		if e*v.mscale*v.mscale < ringFloor {
 			v.Release()
 		}
 	}
@@ -345,7 +435,7 @@ func (v *TonalVoice) excite(sp *VoiceDef) {
 	v.mre, v.mim, v.mcr, v.mci = v.mre[:0], v.mim[:0], v.mcr[:0], v.mci[:0]
 	h := sp.StrikePos
 	if h <= 0 {
-		h = 0.12
+		h = strikeAt
 	}
 	tilt := sp.Tilt
 	if tilt <= 0 {
@@ -391,7 +481,7 @@ func (v *TonalVoice) excite(sp *VoiceDef) {
 		}
 	}
 	v.mscale = 1 / max(sum, 1e-9)
-	v.mcheck = 0
+	v.check = 0
 	v.knockEnv, v.knockLP = sp.Knock*vel, 0
 	v.knockSeed = uint32(v.note)*2654435761 + uint32(v.serial)*40503 + 1
 }
@@ -530,6 +620,10 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 	v.decay = int(sp.Decay * sr)
 	v.sustain = sp.Sustain
 	v.release = int(sp.Release * sr)
+	if v.wave == waveString || v.wave == waveModal {
+		// a string fades as it rings, never held at a sustain; release is its damper
+		v.decay, v.sustain = 0, 1
+	}
 
 	v.envState = ADSRAttack
 	v.envPos = 0

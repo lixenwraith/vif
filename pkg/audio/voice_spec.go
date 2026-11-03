@@ -39,11 +39,12 @@ type VoiceDef struct {
 	Vowel string `toml:"vowel,omitempty"`
 
 	Bright float64 `toml:"bright,omitempty"` // string: 0 a dull string, 1 a wiry one
-	Ring   float64 `toml:"ring,omitempty"`   // string: seconds a plucked string takes to die away
+	Ring   float64 `toml:"ring,omitempty"`   // string: the fundamental's T60 in seconds, at every pitch
 
-	// modal: partials caps the bank, strike_pos is where along the string the
-	// hammer or finger lands, tilt the spectral slope (1 struck, 2 plucked), and
-	// inharm the stretch B of a middle-C string, growing with pitch by inharm_track
+	// strike_pos is where along the string the hammer or finger lands, 0.12
+	// unset; modal: partials caps the bank, tilt is the spectral slope (1 struck,
+	// 2 plucked), and inharm the stretch B of a middle-C string, growing with
+	// pitch by inharm_track
 	Partials    int     `toml:"partials,omitempty"`
 	StrikePos   float64 `toml:"strike_pos,omitempty"`
 	Tilt        float64 `toml:"tilt,omitempty"`
@@ -52,8 +53,8 @@ type VoiceDef struct {
 	// modal: decay_time is the prompt decay at middle C, growing toward the bass by
 	// decay_track; a partial at damp_hz decays twice as fast. The coupled pair is a
 	// second string pair cents away, pair_level under the prompt sound and decaying
-	// pair_slow times as fast; hammer_hz low-passes the strike at full velocity and
-	// knock is the level of the contact noise
+	// pair_slow times as fast; knock is the level of the contact noise. hammer_hz
+	// low-passes a string's or a bank's strike at full velocity, lower when softer
 	DecayTime  float64 `toml:"decay_time,omitempty"`
 	DecayTrack float64 `toml:"decay_track,omitempty"`
 	DampHz     float64 `toml:"damp_hz,omitempty"`
@@ -69,6 +70,8 @@ type VoiceDef struct {
 	EnvDecay  float64 `toml:"env_decay,omitempty"`  // filter envelope decay; 0 rides the amplitude envelope
 	Q         float64 `toml:"q,omitempty"`          // resonance; 0 bypasses the filter
 
+	// the ADSR; a string or a modal bank fades as it rings, so decay and sustain
+	// shape the oscillators alone and its release is a damper
 	Attack  float64 `toml:"attack,omitempty"`
 	Decay   float64 `toml:"decay,omitempty"`
 	Sustain float64 `toml:"sustain,omitempty"`
