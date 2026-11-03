@@ -79,6 +79,7 @@ type engineSig struct {
 	running    bool
 	slots      [audio.MusicSlots]audio.PatternID
 	muted      [audio.MusicSlots]bool
+	tracks     [audio.MusicSlots]trackMutes
 	backend    string
 	silent     bool
 	musicMuted bool
@@ -527,7 +528,7 @@ func (a *tuiApp) engineSig() engineSig {
 	g := engineSig{backend: e.BackendName(), silent: e.IsSilent(), musicMuted: e.IsMusicMuted()}
 	g.bar, g.step, g.running = e.Transport()
 	for i := range g.slots {
-		g.slots[i], g.muted[i] = e.SlotPattern(i), e.IsSlotMuted(i)
+		g.slots[i], g.muted[i], g.tracks[i] = e.SlotPattern(i), e.IsSlotMuted(i), a.s.heldTracks(i)
 	}
 	return g
 }
@@ -952,6 +953,10 @@ func (a *tuiApp) mixerKey(ev terminal.Event, r rune) {
 		a.editSlot(a.mixCur.slot)
 	case r == 'n':
 		a.promptNew(a.mixCur.slot)
+	case (ev.Key == terminal.KeySpace || r == ' ' || r == 'm') && a.mixCur.trk >= 0:
+		a.toggleTrack(a.mixCur.slot, a.mixCur.trk, false)
+	case r == 's' && a.mixCur.trk >= 0:
+		a.toggleTrack(a.mixCur.slot, a.mixCur.trk, true)
 	case ev.Key == terminal.KeySpace || r == ' ' || r == 'm':
 		slot, mute := a.mixCur.slot, "on"
 		if a.s.eng.IsSlotMuted(slot) {
@@ -960,6 +965,23 @@ func (a *tuiApp) mixerKey(ev terminal.Event, r rune) {
 		a.exec(fmt.Sprintf("mute slot %d %s", slot, mute))
 	}
 	a.mixCur = rows[min(max(i, 0), len(rows)-1)]
+}
+
+// toggleTrack mutes or solos a track of what a slot plays, or lets it sound again;
+// a slot waiting for its bar line to change pattern has its tracks left alone
+func (a *tuiApp) toggleTrack(slot, trk int, solo bool) {
+	if a.s.eng.SlotPattern(slot) != a.s.slots[slot] {
+		fmt.Fprintf(a.log, "slot %d changes to %s on its bar line; mute its tracks once it plays\n", slot, patName(a.s.slots[slot]))
+		return
+	}
+	verb, bits, on := "mute", a.s.tracks[slot].muted, "on"
+	if solo {
+		verb, bits = "solo", a.s.tracks[slot].soloed
+	}
+	if bits&(1<<trk) != 0 {
+		on = "off"
+	}
+	a.exec(fmt.Sprintf("%s track %d %d %s", verb, slot, trk, on))
 }
 
 func (a *tuiApp) logKey(ev terminal.Event, r rune) {

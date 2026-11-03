@@ -500,8 +500,7 @@ func (s *Session) playSong(d *audio.SongDef) error {
 	s.eng.StopMusic()
 	s.eng.ResetMusic()
 	for slot, id := range tl[0] {
-		s.eng.SetPattern(slot, id, 0, false)
-		s.slots[slot] = id
+		s.setSlot(slot, id, 0, false)
 	}
 	length := float64(len(tl)*audio.SamplesPerBar(d.BPM)) / audio.AudioSampleRate
 	s.song = &songPlay{name: d.Name, bars: tl, next: 1, until: time.Now().Add(time.Duration(length*float64(time.Second)) + 3*time.Second)}
@@ -546,8 +545,7 @@ func (s *Session) conduct() {
 	for p.next <= at+1 && p.next < len(p.bars) {
 		for slot, id := range p.bars[p.next] {
 			if id != p.bars[p.next-1][slot] {
-				s.eng.SetPattern(slot, id, 0, p.next == at+1)
-				s.slots[slot] = id
+				s.setSlot(slot, id, 0, p.next == at+1)
 			}
 		}
 		p.next++
