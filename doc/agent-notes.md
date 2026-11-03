@@ -204,6 +204,13 @@ that proves wrong or that a document now states, and link the document instead.
   `train.py`) scores a posterior p as wp/(wp + 1 - p): the strike head's
   (w 20) half-sure is 0.95 and the pitch head's (w 12) 0.92. Sweep a
   decoder's threshold on that scale against the truths; 0.5 floods.
+- Under a pedal the model's pitch output sits at its ceiling for every ringing
+  note, and it rises a few frames before a strike: a "was it sounding" test on
+  the frames before a strike reads nearly every note as ringing. Ask the
+  decoder's own state (a note still open) instead, and print a window's strikes
+  and salience per pitch from a scratch test before moving a strike rule.
+- Score the three recordings pooled (every note once) beside their mean: the
+  origin and the intro have 83 notes each, where five notes move F1 by 0.06.
 - A training round runs from its own copy of the tree: `pipeline.sh` runs
   soundlab through `go run` at every stage, so an edit to the checkout while a
   round trains changes the corpus or the bench under it. The bench draws its
