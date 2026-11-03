@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -1216,7 +1217,7 @@ save pattern %s
 	}
 	// the two witnesses and a truth: a rip agrees with itself on every note,
 	// and read back from its own transcript, as text and as MIDI, hears every
-	// note given
+	// note given, at every level the recording plays them
 	out.Reset()
 	runOrFatal(t, s, &out, "notes loop\n")
 	truth, mid := filepath.Join(dir, "truth.txt"), filepath.Join(dir, "truth.mid")
@@ -1227,6 +1228,17 @@ save pattern %s
 	n := len(rp.rip.Notes)
 	if strings.Count(out.String(), fmt.Sprintf("against %d note(s) given, transposed +0", n)) != 2 || strings.Contains(out.String(), "only loop:") || strings.Contains(out.String(), "only given:") {
 		t.Errorf("the rip did not agree with itself:\n%s", out.String())
+	}
+	levels := regexp.MustCompile(`(?m)^register .*; alone .*$`).FindAllString(out.String(), -1)
+	if len(levels) != 2 {
+		t.Errorf("truth gave no count by level for the register:\n%s", out.String())
+	}
+	for _, l := range levels {
+		for _, m := range regexp.MustCompile(`(\d+)/(\d+)`).FindAllStringSubmatch(l, -1) {
+			if m[1] != m[2] {
+				t.Errorf("a note given went unheard by its level or company (%s): %s", m[0], l)
+			}
+		}
 	}
 	// one line of the song on its own: the instruments named after the file
 	runOrFatal(t, s, &out, fmt.Sprintf("! song loop %s nothing\nsong loop %s kick\n", song, song))
