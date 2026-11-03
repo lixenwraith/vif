@@ -934,6 +934,48 @@ mix c.track.0 a
 	}
 }
 
+// patternSteps is a pattern's steps, then each track's voice and event steps
+func patternSteps(s *Session, name string) string {
+	d, _ := s.pats.get(name)
+	parts := []string{strconv.Itoa(d.Steps) + ":"}
+	for _, tr := range d.Track {
+		var pos []string
+		for _, e := range tr.Event {
+			pos = append(pos, strconv.Itoa(e.Pos))
+		}
+		parts = append(parts, tr.Instr, strings.Join(pos, ","))
+	}
+	return strings.Join(parts, " ")
+}
+
+// TestTracksMergeIntoOne: mix into a track path joins the tracks' notes into
+// that track, which keeps its voice, at a length each loops in; a note already
+// at its step is kept once and counted, and a drum track merging into a tonal
+// one, the reverse, or into itself is refused before anything changes.
+func TestTracksMergeIntoOne(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, `
+new pattern m
+set m.steps 32
+take m lead 0:60 16:64
+take m pad 0:60 8:67
+new pattern u
+take u pad 0:60 4:62
+! mix m.track.0 u.track.1
+! mix m.track.1 u.track.0
+! mix u.track.1 u.track.1
+`)
+	if got := patternSteps(s, "u"); got != "16: kick 0 pad 0,4" {
+		t.Fatalf("refused merges must leave u as it was, got %q", got)
+	}
+	runOrFatal(t, s, &out, "mix m.track.1 m.track.2 u.track.1")
+	if got := patternSteps(s, "u"); got != "32: kick 0,16 pad 0,4,8,16,16,20" || !strings.Contains(out.String(), "2 note(s) already at their step kept once") {
+		t.Fatalf("want u at 32 steps, its kick repeated, its pad holding m's lead and pad, two notes kept once; got %q:\n%s", got, out.String())
+	}
+}
+
 // TestMixerMutesTheCursorsSlot: space and m on the mixer mute the slot under its
 // cursor and let it sound again, through the command a script runs, which where
 // reports.
