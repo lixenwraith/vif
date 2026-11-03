@@ -280,8 +280,8 @@ plucked) and a velocity-dependent hammer low-pass leave it, decaying faster the
 higher it sits; the lowest partials carry a second, slightly detuned string whose
 slower aftersound gives the double decay, and a few milliseconds of filtered
 noise are the hammer or finger contact. The piano has a grand's stretch and the
-soundboard's roll-off, its decay fitted to a recorded grand's levels from A0 to
-C7; the bass is finger-plucked into a pickup resonance and an amp, its note-off
+soundboard's roll-off, its decay fitted to a recorded piano's levels (the
+University of Iowa samples, C1 to C7); the bass is finger-plucked into a pickup resonance and an amp, its note-off
 a 45 ms damper.
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
