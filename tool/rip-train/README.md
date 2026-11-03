@@ -67,13 +67,14 @@ tool/rip-train/pipeline.sh install
 | `LOOPS`, `BARS` | 20000, 4 | loops rendered, bars a loop; 200 loops is a smoke test |
 | `PARTS` | 1 | exports at once, each rendering every `PARTS`-th loop on a core of its own; a last export renders any loop they left and writes `corpus.json` |
 | `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a pedal's ringing in a third of the loops, a soft clip in a third, a compressor and a noise floor in half, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
-| `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; three generated loops in ten without their drums and one in seven without its bass; empty for the bank alone |
+| `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; a third of the generated melodies and accompaniments half 20 to 30 dB softer; three generated loops in ten without their drums and one in seven without its bass; empty for the bank alone |
 | `WAV` | `nowav` | frames and labels only; empty keeps each loop's WAV too (300 MB per 200 loops) |
 | `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
 | `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |
 | `STEPS`, `BATCH` | 20000, 8 | training steps and windows a step |
 | `DIM`, `HEADS`, `LAYERS`, `FFN` | 256, 8, 4, 1024 | the model's width, attention heads, layers and feed-forward width, `train.py`'s `--dim`, `--heads`, `--layers` and `--ffn`; a `CHECKPOINT` or `INIT` of another shape is refused |
 | `CONVS`, `TOWERS` | none | convolutions before the input layer, and towers of layers over it, each computing a run of the heads, `train.py`'s `--convs` and `--towers` |
+| `MIX` | empty | another corpus and the share of windows drawn from it, `dir:share`, such as recordings with their MIDI files (`corpus <dir> from`) |
 | `HOLDOUT`, `EVERY` | 200, 1000 | loops held out, and how often they are scored and a checkpoint written |
 | `OUT`, `CHECKPOINT` | `$CORPUS/ripnet.bin`, `$CORPUS/ripnet.pt` | the weight file, and the checkpoint a stopped run resumes from |
 | `ROOT` | `~/.config/vif` | the configuration root `install` copies the weights into |
@@ -128,9 +129,9 @@ and what to bring back.
 or later); Go as vif builds with; Python 3.11 or later with PyTorch (the
 [setup](#setup) above); 10 GB of free disk for a corpus of 40000 loops of four
 bars (frames and labels; `WAV=` to keep each loop's audio adds about 60 GB)
-and 50 MB for the checkpoint; memory for the labels, 1.3 GB per 10000 loops,
-the frames being read from disk as the training draws them; four cores or
-more.
+and 50 MB for the checkpoint; memory for the labels' events, each window's
+frames and targets being read and built as the training draws them; four
+cores or more.
 
 **The run**, from the checkout's root, in a corpus directory of its own (a
 checkpoint of another shape there is refused) and every knob at its default
@@ -262,12 +263,15 @@ To write your own:
 - **Rooms, mixes, saturation, tuning.** `AUG` is on by default and is what
   stands between the synthesizer and a recording: leave it on for anything a
   recording will be ripped with; turn it off only to measure the clean case.
-- **Real recordings.** They cannot be labelled by the engine, so they are not
-  trained on; they are the held-out set judged by ear and by the two-witness
-  check (two recordings of one piece, their transcripts compared, as
-  `doc/rip-design.md` §8 does). A melody as notes, a solo take of a line, and
-  the same piece on other instruments and tempos are the most useful such
-  material, in that order.
+- **Real recordings.** One with the MIDI file it was played from is a loop of
+  its own: `corpus <dir> from <list.csv> [split <name>] [hours <h>]` reads a
+  CSV with `audio_filename` and `midi_filename` columns (and `split` and
+  `duration`, as MAESTRO's metadata has them), and `train.py --mix
+  <dir>:<share>` draws that share of the windows from it, labelled by the
+  MIDI's notes and velocities, the voices unknown. Weights trained on a corpus
+  carry its licence: MAESTRO's is CC BY-NC-SA 4.0. A recording without its MIDI
+  is held out, judged by ear and by the two-witness check (two recordings of
+  one piece, their transcripts compared, as `doc/rip-design.md` §8 does).
 - **The model's shape.** `--dim`, `--layers`, `--heads`, `--ffn` and
   `--attention-window` on `train.py` reshape it; the weight file carries the
   shape, so `ripnet` loads any of them as long as the inputs and heads are its.
@@ -290,7 +294,8 @@ cp ripnet.bin ~/.config/vif/audio/ripnet.bin
 ```
 
 `train.py` trains on `--batch` windows of `--window` frames (512, six seconds)
-cropped at random from the loops; `--checkpoint` saves every `--every` steps,
+cropped at random from the loops, the next batch built while the device
+trains on this one; `--checkpoint` saves every `--every` steps,
 with the best held-out step's weights, and resumes from the file when it
 exists, `--init` starts from a `.pt`'s weights alone (no optimizer state, step
 0), and `--shard-seed` moves the stream the windows are drawn from while

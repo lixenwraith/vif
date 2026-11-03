@@ -189,9 +189,12 @@ offline (`song <name> <file.wav>`).
   broken chord in eighths or sixteenths changing pitch from note to note under
   a melody that is a slow line of longer notes in half the loops: the texture
   of the sample recording, a lead over an arpeggio, which the rip has to part.
-  A generated loop leaves out its drums three times in ten and its bass once
-  in seven, so a line is heard bare too. Both draw from streams of their own,
-  so a loop's bank patterns and key are the same with and without them.
+  A third of the generated melodies and accompaniments play half their length
+  20 to 30 dB softer, as a phrase played softly, the levels at which Für
+  Elise's misses gathered. A generated loop leaves out its drums three times
+  in ten and its bass once in seven, so a line is heard bare too. Both draw
+  from streams of their own, so a loop's bank patterns and key are the same
+  with and without them.
 - **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
   bench and the install with every knob an environment variable, the corpus in
   `PARTS` exports at once, each keeping the loops already on disk, and a focus

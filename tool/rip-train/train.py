@@ -8,7 +8,8 @@ Each loop's log-mel frames (loop_NNN.mel) are the input; its events
 each drum's hits, the pitches sounding, whether any sounds, the wave and voice
 genes of the highest note sounding, each pitch within a frame of its strikes and
 of its releases, and how hard each was struck. Training crops random windows of
-frames, so memory is bounded by --window, not by the loops' length.
+frames and builds their targets a window at a time, so memory holds the events
+rather than a row per frame.
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ import os
 import random
 import struct
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 
 import numpy as np
@@ -46,46 +48,80 @@ class MelFile:
         return np.fromfile(self.path, dtype="<f4", count=n * self.bands, offset=8 + 4 * start * self.bands).reshape(n, self.bands)
 
 
-def targets(label: dict, frames: int, manifest: dict) -> dict:
-    """Per-frame targets from a loop's events; masks say where a target counts.
-    The yes-or-no ones are bytes, a quarter of a float's memory, until batch;
-    the strikes and releases stay lists of (frame, pitch), as sparse as they are,
-    each strike's velocity beside it, -1 where the corpus does not say."""
-    pitches, min_midi = manifest["pitches"], manifest["min_midi"]
-    genes, waves = manifest["voice_genes"], len(manifest["waves"])
-    onset = np.zeros(frames, np.uint8)
-    drums = np.zeros((frames, 3), np.uint8)
-    pitch = np.zeros((frames, pitches), np.uint8)
-    wave = np.full(frames, -1, np.int64)
-    voice = np.zeros((frames, genes), np.float32)
-    top = np.full(frames, -1, np.int64)  # the highest midi sounding, whose voice the frame reports
-    strikes, releases, vels = [], [], []
-    for e in label["events"]:
-        t = e["frame"]
-        if t < 0 or t >= frames:
-            continue
-        onset[max(t - 1, 0):min(t + 2, frames)] = 1
-        if e["drum"] >= 0:
-            drums[max(t - 1, 0):min(t + 2, frames), e["drum"]] = 1
-            continue
-        p = e["midi"] - min_midi
-        end = min(max(e["end"], t + 1), frames)
-        if 0 <= p < pitches:
-            pitch[t:end, p] = 1
-            strikes.append((t, p))
-            vels.append(e.get("vel", -1))
-            if e["end"] < frames:
-                releases.append((e["end"], p))
-        if e.get("wave", -1) >= 0 and e.get("voice"):
-            for u in range(t, end):
-                if e["midi"] > top[u]:
-                    top[u], wave[u] = e["midi"], e["wave"]
-                    voice[u] = e["voice"]
-    voicing = (pitch.sum(1) > 0).astype(np.uint8)
-    return {"onset": onset, "drums": drums, "pitch": pitch, "voicing": voicing,
-            "wave": wave, "voice": voice, "voiced": (top >= 0).astype(np.uint8),
-            "strikes": np.array(strikes, np.int32).reshape(-1, 2), "vels": np.array(vels, np.float32),
-            "releases": np.array(releases, np.int32).reshape(-1, 2)}
+class Label:
+    """A loop's events as arrays, its per-frame targets built a window at a time
+    (window), so memory holds the events and not a row per frame: a corpus of
+    recordings runs to tens of millions of frames."""
+
+    def __init__(self, label: dict, frames: int, manifest: dict):
+        ev = label["events"]
+        self.frames, self.manifest = frames, manifest
+        self.t = np.array([e["frame"] for e in ev], np.int32)
+        self.end = np.array([e["end"] for e in ev], np.int32)
+        self.drum = np.array([e["drum"] for e in ev], np.int8)
+        self.midi = np.array([e["midi"] for e in ev], np.int16)
+        self.vel = np.array([e.get("vel", -1) for e in ev], np.float32)
+        self.wave = np.array([e.get("wave", -1) if e.get("voice") else -1 for e in ev], np.int8)
+        voices, index = [], {}  # a loop's notes share a few voices
+        self.voice = np.full(len(ev), -1, np.int32)
+        for i, e in enumerate(ev):
+            if e.get("voice"):
+                self.voice[i] = index.setdefault(tuple(e["voice"]), len(index))
+                if self.voice[i] == len(voices):
+                    voices.append(e["voice"])
+        self.voices = np.array(voices, np.float32).reshape(-1, manifest["voice_genes"])
+        self.order = np.argsort(self.t, kind="stable")
+        self.sorted = self.t[self.order]
+        # how far past its frame an event's targets reach
+        self.reach = int((np.maximum(self.end, self.t + 2) - self.t).max()) + 1 if len(ev) else 0
+
+    def window(self, a: int, b: int) -> dict:
+        """Per-frame targets for frames a to b from the events; masks say where a
+        target counts. The yes-or-no ones are bytes until batch; the strikes and
+        releases are lists of (frame, pitch) from a, each strike's velocity beside
+        it, -1 where the corpus does not say."""
+        m, frames, w = self.manifest, self.frames, b - a
+        pitches, min_midi = m["pitches"], m["min_midi"]
+        onset = np.zeros(w, np.uint8)
+        drums = np.zeros((w, 3), np.uint8)
+        pitch = np.zeros((w, pitches), np.uint8)
+        wave = np.full(w, -1, np.int64)
+        voice = np.zeros((w, m["voice_genes"]), np.float32)
+        top = np.full(w, -1, np.int64)  # the highest midi sounding, whose voice the frame reports
+        who = np.full(w, -1, np.int64)  # the event that is
+        strikes, releases, vels = [], [], []
+
+        def span(x, y):  # frames x to y of the loop, in the window
+            x, y = max(x, a), min(y, b)
+            return slice(x - a, max(y, x) - a)
+
+        lo, hi = np.searchsorted(self.sorted, a - self.reach), np.searchsorted(self.sorted, b + 1, "right")
+        for i in np.sort(self.order[lo:hi]):  # in the label's order, which the voice a frame reports keeps
+            t = int(self.t[i])
+            if t < 0 or t >= frames:
+                continue
+            onset[span(max(t - 1, 0), min(t + 2, frames))] = 1
+            if self.drum[i] >= 0:
+                drums[span(max(t - 1, 0), min(t + 2, frames)), self.drum[i]] = 1
+                continue
+            p, midi = int(self.midi[i]) - min_midi, int(self.midi[i])
+            end = min(max(int(self.end[i]), t + 1), frames)
+            if 0 <= p < pitches:
+                pitch[span(t, end), p] = 1
+                strikes.append((t - a, p))
+                vels.append(self.vel[i])
+                if self.end[i] < frames:
+                    releases.append((int(self.end[i]) - a, p))
+            if self.wave[i] >= 0:
+                seg = span(t, end)
+                up = midi > top[seg]
+                top[seg][up], who[seg][up] = midi, i
+        heard = who >= 0
+        wave[heard], voice[heard] = self.wave[who[heard]], self.voices[self.voice[who[heard]]]
+        return {"onset": onset, "drums": drums, "pitch": pitch, "voicing": (pitch.sum(1) > 0).astype(np.uint8),
+                "wave": wave, "voice": voice, "voiced": (top >= 0).astype(np.uint8),
+                "strikes": np.array(strikes, np.int32).reshape(-1, 2), "vels": np.array(vels, np.float32),
+                "releases": np.array(releases, np.int32).reshape(-1, 2)}
 
 
 def load_corpus(d: str):
@@ -97,58 +133,55 @@ def load_corpus(d: str):
         mel = MelFile(base + ".mel")
         with open(base + ".json") as f:
             label = json.load(f)
-        loops.append((mel, targets(label, len(mel), manifest)))
+        loops.append((mel, Label(label, len(mel), manifest)))
     return manifest, loops
 
 
-def batch(loops, window: int, size: int, rng: random.Random):
-    """size random windows of `window` frames, shorter loops padded with zeros and masked out"""
-    mels, tg = [], {k: [] for k in ("onset", "drums", "pitch", "voicing", "wave", "voice", "voiced", "strike", "release", "velocity", "heard", "valid")}
-    for _ in range(size):
-        mel, t = rng.choice(loops)
-        n = len(mel)
-        start = rng.randrange(max(n - window, 0) + 1)
-        sl = slice(start, start + window)
-        pad = max(window - (n - start), 0)
-        def take(a, fill=0):
-            a = a[sl]
-            if pad:
-                shape = (pad,) + a.shape[1:]
-                a = np.concatenate([a, np.full(shape, fill, a.dtype)])
-            return a
-        mels.append(ripnet.features(take(mel)))
-        for k in ("onset", "drums", "pitch", "voicing", "voice", "voiced"):
-            tg[k].append(take(t[k]))
-        tg["wave"].append(take(t["wave"], -1))
-        shape = (window, t["pitch"].shape[1])
-        strike, release, velocity, heard = np.zeros(shape, np.uint8), np.zeros(shape, np.uint8), np.zeros(shape, np.float32), np.zeros(shape, np.uint8)
-        for (f, p), v in zip(t["strikes"], t["vels"]):
-            near = slice(max(f - 1 - start, 0), max(min(f + 2 - start, window), 0))
-            strike[near, p] = 1
-            if v >= 0:
-                velocity[near, p], heard[near, p] = v, 1
-        for f, p in t["releases"]:
-            release[max(f - 1 - start, 0):max(min(f + 2 - start, window), 0), p] = 1
-        tg["strike"].append(strike)
-        tg["release"].append(release)
-        tg["velocity"].append(velocity)
-        tg["heard"].append(heard)
-        tg["valid"].append(np.concatenate([np.ones(window - pad, np.float32), np.zeros(pad, np.float32)]))
-    out = {k: torch.from_numpy(np.stack(v)) for k, v in tg.items()}
+def sample(mel, lab: Label, start: int, window: int):
+    """the window of `window` frames from start: its features and targets, the
+    frames past the loop's end padded with zeros and masked out"""
+    b = min(start + window, len(mel))
+    t, pad = lab.window(start, b), window - (b - start)
+
+    def take(a, fill=0):
+        return np.concatenate([a, np.full((pad,) + a.shape[1:], fill, a.dtype)]) if pad else a
+    out = {k: take(t[k]) for k in ("onset", "drums", "pitch", "voicing", "voice", "voiced")}
+    out["wave"] = take(t["wave"], -1)
+    shape = (window, t["pitch"].shape[1])
+    strike, release, velocity, heard = np.zeros(shape, np.uint8), np.zeros(shape, np.uint8), np.zeros(shape, np.float32), np.zeros(shape, np.uint8)
+    for (f, p), v in zip(t["strikes"], t["vels"]):
+        near = slice(max(f - 1, 0), max(min(f + 2, window), 0))
+        strike[near, p] = 1
+        if v >= 0:
+            velocity[near, p], heard[near, p] = v, 1
+    for f, p in t["releases"]:
+        release[max(f - 1, 0):max(min(f + 2, window), 0), p] = 1
+    out.update(strike=strike, release=release, velocity=velocity, heard=heard)
+    out["valid"] = np.concatenate([np.ones(window - pad, np.float32), np.zeros(pad, np.float32)])
+    return ripnet.features(take(mel[start:b])), out
+
+
+def stack(samples):
+    mels, tgs = zip(*samples)
+    out = {k: torch.from_numpy(np.stack([t[k] for t in tgs])) for k in tgs[0]}
     return torch.from_numpy(np.stack(mels)), {k: v if k == "wave" else v.float() for k, v in out.items()}
+
+
+def batch(draw, window: int, size: int, rng: random.Random):
+    """size random windows of `window` frames from the loops draw() picks"""
+    samples = []
+    for _ in range(size):
+        mel, lab = draw()
+        samples.append(sample(mel, lab, rng.randrange(max(len(mel) - window, 0) + 1), window))
+    return stack(samples)
 
 
 def validation(loops, window: int):
     """every held-out loop cut into windows of `window` frames, fixed, so the held-out loss is comparable step to step"""
-    rng = random.Random(0)
     mels, tgs = [], []
-    for mel, t in loops:
+    for mel, lab in loops:
         for start in range(0, max(len(mel) - 1, 1), window):
-            cut = {k: v[start:start + window] for k, v in t.items() if k not in ("strikes", "vels", "releases")}
-            cut["strikes"], cut["vels"] = t["strikes"] - np.array([start, 0], np.int32), t["vels"]
-            cut["releases"] = t["releases"] - np.array([start, 0], np.int32)
-            sub = [(mel[start:start + window], cut)]
-            m, tg = batch(sub, window, 1, rng)
+            m, tg = stack([sample(mel, lab, start, window)])
             mels.append(m)
             tgs.append(tg)
     return mels, tgs
@@ -208,6 +241,7 @@ def shape(cfg) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", required=True, help="directory soundlab's corpus verb wrote")
+    ap.add_argument("--mix", default="", help="another corpus and the share of windows drawn from it, dir:share, such as recordings with their MIDI files (corpus <dir> from <list>)")
     ap.add_argument("--out", required=True, help="weight file to write, the root's audio/ripnet.bin for soundlab to hear with")
     ap.add_argument("--steps", type=int, default=2000)
     ap.add_argument("--batch", type=int, default=8)
@@ -252,6 +286,12 @@ def main() -> None:
     val_mels, val_tgs = validation(held, args.window) if held else ([], [])
     assert manifest["mel_bands"] == ripnet.MEL_BANDS and manifest["pitches"] == ripnet.PITCHES
     assert manifest["voice_genes"] == ripnet.VOICE_GENES and len(manifest["waves"]) == ripnet.WAVES
+    mixed, share = [], 0.0
+    if args.mix:
+        d, _, sh = args.mix.rpartition(":")
+        mixed_manifest, mixed = load_corpus(d)
+        share = float(sh)
+        assert mixed_manifest["mel_bands"] == ripnet.MEL_BANDS and mixed_manifest["pitches"] == ripnet.PITCHES
     model = ripnet.RipNet(cfg).to(args.device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     step, best_loss, best_step, best_state = 0, float("inf"), 0, None
@@ -265,6 +305,8 @@ def main() -> None:
         model.load_state_dict(ck["model"])
         print(f"started from {args.init}")
     print(f"{sum(p.numel() for p in model.parameters())} weights, {len(loops)} loops, {sum(len(m) for m, _ in loops)} frames, {len(held)} held out in {len(val_mels)} windows")
+    if mixed:
+        print(f"{len(mixed)} loops of {sum(len(m) for m, _ in mixed)} frames mixed in, {share:.0%} of the windows")
     t0 = time.time()
 
     def score() -> None:
@@ -284,8 +326,15 @@ def main() -> None:
             mark = " (best)"
         print(f"step {step} held-out {v['total']:.3f}, decoders {v['decoders']:.3f} ({parts}){mark}", flush=True)
 
+    def draw():
+        return rng.choice(mixed if mixed and rng.random() < share else loops)
+
+    # the next batch is built while the device works on this one; only that thread draws from rng
+    pool = ThreadPoolExecutor(1)
+    ahead = pool.submit(batch, draw, args.window, args.batch, rng)
     while step < args.steps:
-        mel, t = batch(loops, args.window, args.batch, rng)
+        mel, t = ahead.result()
+        ahead = pool.submit(batch, draw, args.window, args.batch, rng)
         mel, t = mel.to(args.device), {k: v.to(args.device) for k, v in t.items()}
         lr = args.lr * 0.5 * (1 + math.cos(math.pi * step / args.steps))  # cosine to zero
         for g in opt.param_groups:
