@@ -115,9 +115,10 @@ var levelBands = [...]float64{-6, -12, -18}
 
 // reportLevels prints per line, and for the melody register as one, how many of
 // the notes given the rip heard by how loud the recording plays them and whether
-// another note given sounds at their onset; a rhythm has no pitch to read at
+// another note given sounds at their onset; a rhythm has no pitch to read at,
+// and a score no recording to read it in
 func reportLevels(w io.Writer, rp *ripped, ag audio.Agreement, given []audio.RipNote) {
-	if slices.ContainsFunc(given, func(n audio.RipNote) bool { return n.MIDI < 0 }) {
+	if rp.x == nil || slices.ContainsFunc(given, func(n audio.RipNote) bool { return n.MIDI < 0 }) {
 		return
 	}
 	level := audio.NoteLevels(rp.x, rp.rate, given, ag.At, rp.rip.Tuning)

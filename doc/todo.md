@@ -1437,6 +1437,18 @@ rip are in place; what remains:
    few dozen such pairs would set the weights of `Fidelity`'s three terms and
    the lead rule's default by what ears prefer rather than by hand.
 
+### Play a score in its own meter and tempo
+
+- Priority: P3
+- Affected files: `pkg/audio/params.go`, `pkg/audio/song.go`, `pkg/audio/midi.go`
+
+A bar is sixteen steps everywhere (`StepsPerBar`), so a MIDI file read as a rip
+(`MIDIScore.Rip`) in 3/8 or 3/4 falls into bars of four beats from its first bar
+line: the score plays in time, but its bar numbers drift from the file's and
+`compress` finds fewer repeats. A tempo change after the start plays at the
+first tempo. A meter and a tempo per bar on `SongDef`, the sequencer's bar
+length following the song, would carry both.
+
 ### Render a conductor timeline offline
 
 - Priority: P3
