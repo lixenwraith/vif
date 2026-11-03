@@ -72,7 +72,11 @@ flowchart LR
    lasts while its salience holds or until it is struck again, any number at
    once, so the notes a pedal leaves ringing do not hide the next one struck,
    which a path through the salience, preferring what sounds strongest, stays
-   on; the lines are parted from them as before. The bass is decoded up to A3, over
+   on; the lines are parted from them as before. A strike starts no note when
+   its pitch never sounds strongly (`strike_hold` of the reference within the
+   shortest note), when a stronger strike within two frames sits an octave, a
+   twelfth or two octaves under it (a partial of that note), or when it
+   follows the pitch's last within `strike_gap`. The bass is decoded up to A3, over
    the melody's lowest rows, which count for three quarters against the bass
    rows' own reference; a reached note the bass line does not continue, its
    nearest other bass note more than an octave away, is not the bass's, and a
@@ -664,7 +668,16 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   7b's 11%, and at 0.95 only 5%. A head trained with a
   positive weight w scores a posterior p as wp/(wp + 1 - p), so the strike
   head's half-sure is 0.95, and a soft note struck scores as a false strike
-  does: telling them apart is the next decoder's work.
+  does. Three filters on the strikes (the pitch must sound at 0.9 of the
+  reference within the shortest note, a stronger strike's octave, twelfth or
+  double octave is its partial, and a strike within 0.12 s of the pitch's
+  last is none) took the mean F1 over the three to 0.616 at a threshold of
+  0.85 (0.600, 0.632, 0.617), against 0.587 at 0.9 without them and the
+  analysis's 0.629. Scored by note onsets instead of order, the F1 agrees
+  with truth's (0.590 against 0.585 for 8b at 0.9), so the extra notes are
+  extra, not chords out of order. On the bench they cost the model 0.007
+  clean and 0.004 augmented (its melody 0.15 to 0.13 and 0.11 to 0.09),
+  spread over the filters: none alone accounts for it.
 
 ## 9. Decisions
 
