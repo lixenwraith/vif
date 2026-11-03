@@ -74,6 +74,7 @@ type Session struct {
 	tuning float64 // cents off A440 the transport plays at, a rip's or the tuning verb's
 	base   string  // the running script's directory, its relative paths read from there; empty outside one
 	ticked bool
+	hist   history // what undo steps back over
 }
 
 // Files is where the game reads its audio overrides and where an untitled save
