@@ -306,6 +306,9 @@ func (s *Session) partOf(p, part string) (d *audio.PatternDef, n int, ok bool, e
 		return nil, 0, true, err
 	}
 	count := len(d.Track)
+	if part == "bar" {
+		count = barsOf(d.Steps)
+	}
 	if n, err = strconv.Atoi(segs[2]); err != nil || n < 0 || n >= count {
 		return nil, 0, true, fmt.Errorf("%s: %q has %ss 0 to %d", p, segs[0], part, count-1)
 	}
@@ -333,6 +336,49 @@ func (s *Session) tracksOf(paths []string) (refs []trackRef, ok bool, err error)
 		refs = append(refs, trackRef{path: p, pattern: d.Name, n: n, steps: d.Steps, track: t})
 	}
 	return refs, true, nil
+}
+
+// barsAt reads bar paths of one pattern, in the order named, a bar named twice
+// played twice; ok is false when the first is not one
+func (s *Session) barsAt(paths []string) (d *audio.PatternDef, bars []int, ok bool, err error) {
+	for i, p := range paths {
+		pd, k, isPath, err := s.partOf(p, "bar")
+		switch {
+		case !isPath && i == 0:
+			return nil, nil, false, nil
+		case !isPath:
+			return nil, nil, true, fmt.Errorf("%q: want <pattern>.bar.<k>, as the paths before it", p)
+		case err != nil:
+			return nil, nil, true, err
+		case d != nil && pd != d:
+			return nil, nil, true, fmt.Errorf("%s: bars come from one pattern, %q before it", p, d.Name)
+		}
+		d, bars = pd, append(bars, k)
+	}
+	return d, bars, true, nil
+}
+
+// cutBars is d's bars played in the order given, every track's notes sliced at
+// the bar lines; d's last bar may be short
+func cutBars(d *audio.PatternDef, bars []int) *audio.PatternDef {
+	c := clonePatternDef(d)
+	for i := range c.Track {
+		c.Track[i].Event = nil
+	}
+	c.Steps = 0
+	for _, k := range bars {
+		lo, hi := k*audio.StepsPerBar, min((k+1)*audio.StepsPerBar, d.Steps)
+		for i, t := range d.Track {
+			for _, e := range t.Event {
+				if e.Pos >= lo && e.Pos < hi {
+					e.Pos += c.Steps - lo
+					c.Track[i].Event = append(c.Track[i].Event, e)
+				}
+			}
+		}
+		c.Steps += hi - lo
+	}
+	return c
 }
 
 func badSteps(d *audio.PatternDef) error {
@@ -480,8 +526,22 @@ func cmdCp(s *Session, a []string) error {
 		fmt.Fprintf(s.out, "copied into the new pattern %q of %d steps: %s\n", dst, c.Steps, tracksInBrief(refs, notes))
 		return nil
 	}
+	if d, bars, ok, err := s.barsAt(a[:len(a)-1]); ok {
+		if err != nil {
+			return err
+		}
+		c := cutBars(d, bars)
+		if c.Steps > audio.MaxPatternLen {
+			return fmt.Errorf("%d bar(s) of %q make %d steps, a pattern at most %d", len(bars), d.Name, c.Steps, audio.MaxPatternLen)
+		}
+		c.Name = dst
+		s.pats.put(c, true)
+		fmt.Fprintf(s.out, "copied into the new pattern %q of %d steps: %q's bars %s, %d track(s)\n",
+			dst, c.Steps, d.Name, strings.Trim(fmt.Sprint(bars), "[]"), len(c.Track))
+		return nil
+	}
 	if len(a) > 2 {
-		return fmt.Errorf("cp: several sources must each be a track, <pattern>.track.<n>")
+		return fmt.Errorf("cp: several sources must each be a track, <pattern>.track.<n>, or a bar, <pattern>.bar.<k>")
 	}
 	if err := badName(src); err != nil {
 		return err

@@ -976,6 +976,32 @@ take u pad 0:60 4:62
 	}
 }
 
+// TestBarsMakeANewPattern: cp of bar paths makes a pattern of one pattern's bars
+// in the order named, every track sliced at the bar lines, a short last bar kept
+// short and a bar named twice played twice; past 64 steps, a bar past the end or
+// bars of two patterns are refused.
+func TestBarsMakeANewPattern(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, `
+new pattern b
+set b.steps 40
+take b lead 0:60 17:62 33:64 38:65
+new pattern other
+cp b.bar.2 b.bar.0 b.bar.2 loop
+! cp b.bar.0 b.bar.1 b.bar.0 b.bar.1 b.bar.2 long
+! cp b.bar.3 three
+! cp b.bar.0 other.bar.0 both
+`)
+	if got := patternSteps(s, "loop"); got != "32: kick 8 lead 1,6,8,25,30" {
+		t.Fatalf("want bar 2's 8 steps, bar 0's 16, then bar 2 again, got %q", got)
+	}
+	if s.has("long") || s.has("three") || s.has("both") {
+		t.Fatal("a refused cp must make no pattern")
+	}
+}
+
 // TestMixerMutesTheCursorsSlot: space and m on the mixer mute the slot under its
 // cursor and let it sound again, through the command a script runs, which where
 // reports.
