@@ -1,8 +1,8 @@
 """The rip's front-end model as PyTorch builds it, the twin of pkg/audio/ripnet
-and pkg/transformer: a linear input, pre-norm attention blocks with ALiBi biases
-over a window of frames, exact GELU feed-forwards, a final norm and one output
-layer whose slices are the heads. export() writes the weight file pkg/transformer
-loads; the tensor names and order are its.
+and pkg/transformer: convolutions over the frames as an image, a linear input,
+pre-norm attention blocks with ALiBi biases over a window of frames, exact GELU
+feed-forwards, a final norm and one output layer whose slices are the heads.
+export() writes the weight file pkg/transformer loads, its tensor names and order.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # pkg/audio/ripnet.Spec, which a corpus manifest restates
-MEL_BANDS = 80
+MEL_BANDS = 229
 PITCHES = 69
 DRUMS = 3
 WAVES = 5
@@ -27,12 +27,26 @@ HEADS = [("onset", 1), ("drums", DRUMS), ("pitch", PITCHES), ("voicing", 1), ("w
 @dataclass
 class Config:
     inputs: int = MEL_BANDS
+    # (channels, frames, features, pool) each: a kernel centred on each frame
+    # and feature, GELU, then the features max-pooled; none feeds the frames on
+    convs: list = field(default_factory=list)
     dim: int = 256
     heads: int = 8
     layers: int = 4
     ffn: int = 1024
     window: int = 64
+    # (layers, heads) each: a stack of its own over the shared input computing
+    # the next heads; none is one stack of `layers` computing all of them
+    towers: list = field(default_factory=list)
     outputs: list = field(default_factory=lambda: list(HEADS))
+
+    @property
+    def features(self) -> int:
+        """what the input layer takes a frame as"""
+        n, ch = self.inputs, 1
+        for out, _, _, pool in self.convs:
+            n, ch = n // pool, out
+        return n * ch
 
     @property
     def out_size(self) -> int:
@@ -83,18 +97,50 @@ class Block(nn.Module):
         return x + self.ff2(F.gelu(self.ff1(self.ln2(x))))
 
 
+class Tower(nn.Module):
+    def __init__(self, cfg: Config, layers: int, size: int):
+        super().__init__()
+        self.layers = nn.ModuleList(Block(cfg) for _ in range(layers))
+        self.ln = nn.LayerNorm(cfg.dim)
+        self.out = nn.Linear(cfg.dim, size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        for layer in self.layers:
+            x = layer(x)
+        return self.out(self.ln(x))
+
+
 class RipNet(nn.Module):
     def __init__(self, cfg: Config):
         super().__init__()
         self.cfg = cfg
-        self.input = nn.Linear(cfg.inputs, cfg.dim)
-        self.layers = nn.ModuleList(Block(cfg) for _ in range(cfg.layers))
-        self.ln = nn.LayerNorm(cfg.dim)
-        self.out = nn.Linear(cfg.dim, cfg.out_size)
+        chans = [1] + [c[0] for c in cfg.convs]
+        self.convs = nn.ModuleList(nn.Conv2d(chans[i], out, (t, f), padding=(t // 2, f // 2)) for i, (out, t, f, _) in enumerate(cfg.convs))
+        self.input = nn.Linear(cfg.features, cfg.dim)
+        if cfg.towers:
+            sizes, at = [], 0
+            for _, heads in cfg.towers:
+                sizes.append(sum(n for _, n in cfg.outputs[at:at + heads]))
+                at += heads
+            self.towers = nn.ModuleList(Tower(cfg, layers, size) for (layers, _), size in zip(cfg.towers, sizes))
+        else:
+            self.layers = nn.ModuleList(Block(cfg) for _ in range(cfg.layers))
+            self.ln = nn.LayerNorm(cfg.dim)
+            self.out = nn.Linear(cfg.dim, cfg.out_size)
 
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
         """mel: B T inputs → B T out_size, raw scores; the heads are slices."""
-        x = self.input(mel)
+        x = mel
+        if self.cfg.convs:
+            x = x[:, None]  # B 1 T F
+            for conv, (_, _, _, pool) in zip(self.convs, self.cfg.convs):
+                x = F.gelu(conv(x))
+                if pool > 1:
+                    x = F.max_pool2d(x, (1, pool))
+            x = x.permute(0, 2, 1, 3).flatten(2)  # B T channels*features, as Go lays a frame
+        x = self.input(x)
+        if self.cfg.towers:
+            return torch.cat([t(x) for t in self.towers], -1)
         for layer in self.layers:
             x = layer(x)
         return self.out(self.ln(x))
@@ -103,7 +149,7 @@ class RipNet(nn.Module):
 # --- the weight file pkg/transformer loads ---
 
 MAGIC = b"VIFT"
-VERSION = 1
+VERSION = 2
 
 
 def _fnv64a(data: bytes) -> int:
@@ -116,13 +162,18 @@ def _fnv64a(data: bytes) -> int:
 def tensors(model: RipNet):
     """Every weight by the name pkg/transformer gives it, in its order."""
     sd = model.state_dict()
-    out = [("in.weight", sd["input.weight"]), ("in.bias", sd["input.bias"])]
-    for i in range(model.cfg.layers):
-        p = f"layers.{i}."
-        for name in ("ln1", "q", "k", "v", "o", "ln2", "ff1", "ff2"):
-            out.append((p + name + ".weight", sd[p + name + ".weight"]))
-            out.append((p + name + ".bias", sd[p + name + ".bias"]))
-    out += [("ln.weight", sd["ln.weight"]), ("ln.bias", sd["ln.bias"]), ("out.weight", sd["out.weight"]), ("out.bias", sd["out.bias"])]
+    out = []
+    for i in range(len(model.cfg.convs)):
+        out += [(f"convs.{i}.weight", sd[f"convs.{i}.weight"]), (f"convs.{i}.bias", sd[f"convs.{i}.bias"])]
+    out += [("in.weight", sd["input.weight"]), ("in.bias", sd["input.bias"])]
+    stacks = [(f"towers.{t}.", layers) for t, (layers, _) in enumerate(model.cfg.towers)] or [("", model.cfg.layers)]
+    for pt, layers in stacks:
+        for i in range(layers):
+            p = f"{pt}layers.{i}."
+            for name in ("ln1", "q", "k", "v", "o", "ln2", "ff1", "ff2"):
+                out.append((p + name + ".weight", sd[p + name + ".weight"]))
+                out.append((p + name + ".bias", sd[p + name + ".bias"]))
+        out += [(pt + n, sd[pt + n]) for n in ("ln.weight", "ln.bias", "out.weight", "out.bias")]
     return out
 
 
@@ -131,6 +182,12 @@ def export(model: RipNet, path: str) -> None:
     body = bytearray(MAGIC)
     body += struct.pack("<I", VERSION)
     body += struct.pack("<6I", cfg.inputs, cfg.dim, cfg.heads, cfg.layers, cfg.ffn, cfg.window)
+    body += struct.pack("<I", len(cfg.convs))
+    for c in cfg.convs:
+        body += struct.pack("<4I", *c)
+    body += struct.pack("<I", len(cfg.towers))
+    for t in cfg.towers:
+        body += struct.pack("<2I", *t)
     body += struct.pack("<I", len(cfg.outputs))
     for name, size in cfg.outputs:
         b = name.encode()

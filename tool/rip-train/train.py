@@ -185,6 +185,8 @@ def main() -> None:
     ap.add_argument("--layers", type=int, default=4)
     ap.add_argument("--heads", type=int, default=8)
     ap.add_argument("--ffn", type=int, default=1024)
+    ap.add_argument("--towers", default="", help="stacks of their own after the shared input, layers:heads each in the heads' order, comma-separated: 2:2,4:4 gives onset and drums two layers and the rest four")
+    ap.add_argument("--convs", default="", help="convolutions before the input layer, channels x frames x features / pool each, comma-separated: 16x3x3/1,16x3x3/2,32x3x3/2")
     ap.add_argument("--attention-window", type=int, default=64, help="frames attended either side")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--shard-seed", type=int, default=0, help="offsets the stream the windows are drawn from, so a round's workers see different loops; the starting weights stay --seed's")
@@ -197,7 +199,13 @@ def main() -> None:
 
     torch.manual_seed(args.seed)
     rng = random.Random(args.seed + (args.shard_seed << 32))  # a stream per seed and shard; shard 0 is the seed's own
-    cfg = ripnet.Config(dim=args.dim, layers=args.layers, heads=args.heads, ffn=args.ffn, window=args.attention_window)
+    convs = [tuple(int(v) for v in c.replace("/", "x").split("x")) for c in args.convs.split(",") if c]
+    if any(len(c) != 4 for c in convs):
+        raise SystemExit(f"--convs {args.convs!r}: want channels x frames x features / pool, comma-separated")
+    towers = [tuple(int(v) for v in t.split(":")) for t in args.towers.split(",") if t]
+    if any(len(t) != 2 for t in towers) or towers and sum(h for _, h in towers) != len(ripnet.HEADS):
+        raise SystemExit(f"--towers {args.towers!r}: want layers:heads each, the heads adding up to {len(ripnet.HEADS)}")
+    cfg = ripnet.Config(convs=convs, dim=args.dim, layers=args.layers, heads=args.heads, ffn=args.ffn, window=args.attention_window, towers=towers)
     resume = bool(args.checkpoint) and os.path.exists(args.checkpoint)
     start = args.checkpoint if resume else args.init
     ck = torch.load(start, map_location=args.device) if start else None

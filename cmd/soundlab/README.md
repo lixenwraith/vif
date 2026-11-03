@@ -12,12 +12,98 @@ Supports interactive REPL, TUI, and headless script execution. The session, its 
 - **Validation Bounds**: The REPL bounds checks are purely structural (type width, float finiteness). Domain-specific validation (Nyquist bounds, envelope durations) happens synchronously at `validate` and `apply`.
 - **Slots**: 0 rhythm, 1 melody, 2 fill, 3 bass, as the game draws them; a melody pattern carries no bass, so slot 1 alone is the melody as authored. The engine's phrase auto-fill is off in soundlab so slots stay deterministic; `fill on` restores it to audition the fill bank.
 - **Audition**: `play`, `hit` and `export` render a spec as authored; vif's per-sound volume and shape table is not applied.
-- **Rip**: `rip <file.wav> <name> [bars]` hears a recording's beat, melody and bass as patterns of up to `bars` bars each (`<name>_beat_1`, `<name>_melody_1`, `<name>_bass_1`, ...), added to the document dirty, and sets the transport's tempo and key to what it heard; `slot` them to hear the estimate, `notes <name>` to read the transcript, then edit. A line the front end heard no voice for gets one fitted by the engine's own renders of its notes (`<name>_melody_voice`, `<name>_under_voice` for the second line the melody register carries under the louder, `<name>_bass_voice`, registered at once; `fit <name> [generations]` fits them again, longer); the melody pattern carries the second line as a track of its own. The recording's tuning is read first (a clip forty cents flat reads as in tune), a phrase leading into the first bar gets a pickup bar, a note off the key lands on its nearest degree with an accidental (`acc`), and a bass note's attack can read as a kick ([Audio §11](../doc/audio.md#11-ripping-a-recording)).
 - **Scripts**: `-s <file.slab>` runs a script and exits; `run <file.slab>` runs one in the session in hand, its relative paths read from the script's own directory, so a recipe beside its files runs from anywhere (a nested `run` from its own); from the REPL or the TUI's command line, so a recipe (rip, compress, save) is one word. A line that fails stops the script with its number; `quit` in it ends the script alone.
-- **Songs**: `compress <name> [percent]` matches a rip's bars to as few one-bar patterns as a difference of `percent` (5) of their steps allows, per part (`<name>_beat_a`, `_b`, ... `<name>_melody_a` ... `<name>_bass_a` ...), and writes the song `<name>`: which bar plays which, at the rip's tempo and key, a `[[song]]` the pattern document carries, listed by `ls song`, shown by `song <name>`, saved and loaded with the patterns. The song is rendered and ripped back on its own grid, tempo and downbeat pinned, and that rip scored against the recording's, so what the compression and the fitted voices lost is a number. `song <name> <file.wav>` renders it offline; `song <name> play` conducts it through the live sequencer, each bar's patterns landing on its bar line (`music stop` ends it). A rip is kept under its name for the session, so `fit`, `compress`, `refine` and `song` need no file ([Rip design](../doc/rip-design.md)). `refine <name> [rounds]` closes the loop: each round fits the voices again and searches the tonal steps' velocities and lengths, each step kept only when the song's render rips back nearer the recording's rip. `rip ... nodrums` leaves the drum part out of a recording the listener knows has none.
-- **Measuring**: `bench [loops] [bars]` grades the analysis, and the model when one loaded, on fresh loops the engine renders with generated parts among the bank's, clean and augmented, by the mean score of each rip against the loop's expected rip; `corpus ... aug gen` exports loops through a room, a mix and voices of random genes, a third of them saturated, each rendered off A440 by up to a quarter tone, with beats, melodies and bass lines drawn from the key beside the bank's, for the trainer.
-- **Two voices in a register**: the melody register is tracked twice, the second path with the first's notes and their partials cancelled, and the second path's notes kept where they reach `second_voice` (0.5) of the first's strength, so a slow line under a pluck is heard too, as a track of its own through its own fitted voice; `second_voice = 0` in `rip.toml` hears one.
 - **Voices**: the tonal instruments are `[[voice]]` entries of the sound document, listed by `ls voice`, made by `new voice`, edited by path like a sound and applied into the running mixer, where the next note takes the new voice; a new name is a new instrument a pattern's track names. They load and save with the sounds.
+
+## How rip works
+
+`rip` listens to a recording and writes what soundlab needs to play it back: the tempo and where the bars fall, the key and the chord each bar leans on, the drum hits, the melody and bass lines as patterns on the sixteenth grid, the voices that play them, and a song that plays the bars in order. All of it is the engine's own vocabulary, so the result plays at once in soundlab and in the game, and is checked by ear and by number against the recording.
+
+Two halves meet in the middle. Ripping turns a recording into patterns; training teaches a model to hear the recordings ripping starts from. Both run on the same engine, and either front end, the built-in analysis or the trained model, feeds the same decoders.
+
+```text
+  RIPPING                                         TRAINING
+  recording (WAV)                                 patterns: the bank's and generated ones
+      |                                               |
+  1 hear     spectrogram -> front end -> frames   engine renders loops; labels are exact
+      |      (the analysis, or the model) <---+       |
+  2 read     tempo, bars, key, drums, lines   |   room, mix and voices drawn per loop
+      |                                       |       |
+  3 write    patterns, voices, transcript     |   log-mel frames + labels -> trainer
+      |                                       |       |
+  4 compress a dictionary of bars, a song     +------ weights (ripnet.bin)
+      |
+  5 refine   render, compare with the recording, keep what sounds closer
+      |
+  6 check    truths, two rips as witnesses, the bench
+```
+
+### 1. Hearing: from sound to frames
+
+The recording is read at 22.05 kHz and cut into frames, a 93 ms window every 11.6 ms, about 86 frames a second. Its tuning is read first, the cents its notes sit off A440, so a recording forty cents flat reads as in tune and every later step works on its own pitch table.
+
+A front end hears the frames into the same fields per frame: how strongly something starts (the onset), each drum's strength (kick, snare, hihat), the salience of each of 69 pitches from E1 to C7, and each register's chroma. The decoders after it never know which front end heard.
+
+- **The analysis** is signal processing. Each frame is split into a harmonic and a percussive part by medians across time and across frequency; each drum's onsets are read in its own band; a pitch's salience is the sum of its partials, the bass register's also read from a window four times longer, which tells semitones apart at 110 Hz.
+- **The model** (`ripnet`) is a transformer over log-mel frames: 229 bands from 30 Hz up, under a semitone apart from A3, scaled to the recording's peak. Each frame attends to 64 frames on either side (0.74 s) through four layers of width 256 with eight heads, 3.2 million weights run in pure Go. Its heads give, per frame, the onset, the drums, the pitches and whether a note sounds, and also the wave and the 32 voice genes the note is played with, which the analysis cannot say. A weight file may also put convolutions before the layers, or split the layers into towers for groups of heads. Soundlab hears with the model when the first configuration root holds `audio/ripnet.bin`, and with the analysis otherwise.
+
+### 2. Reading: from frames to music
+
+The decoders are shared, classical and cheap. Every threshold lives in `RipParams`, which `tune` searches and a root's `audio/rip.toml` carries.
+
+- **Tempo** from the autocorrelation of the onsets under a prior centred on 120 bpm, within the sequencer's 80 to 200; `rip ... bpm <n>` pins it, the bar line still decoded.
+- **Beats** by dynamic programming that holds to the period.
+- **The bar line** at the phase whose downbeats carry a kick, no snare and the key's root in the bass, with the snare on two and four and the most change of chroma. A phrase that leads into the first bar gets a pickup bar.
+- **The key** as the root and scale whose tones hold the most chroma, the bass voting for the tonic, and a chord root per bar.
+- **Drums** by peak picking: a kick by its rise under 100 Hz, a hihat by its rise above 5 kHz, a snare in between with noise above 5 kHz, and a hit can be two drums at once. `rip ... nodrums` leaves the drums out of a recording that has none.
+- **Notes** by a Viterbi path through the pitch salience that pays to move and to start or end a note. The path is cut into notes, their lag behind the beats taken out, and each note lands on a sixteenth and on the key's nearest degree, a semitone left over kept as an accidental.
+- **Lines.** The melody register, from F3 up, is decoded as two lines at once, so a slow line under a pluck is heard too; a second-line note is kept where it reaches `second_voice` (0.5) of the first's strength. The notes are then parted again by what a line keeps: its pitch from note to note, the length and strength of its notes, never two at once. Which line is the melody is a rule, the busier by default (`rip ... lead`). The bass is decoded up to A3, and a note both registers hear goes to the line it continues.
+
+### 3. Writing: from music to soundlab
+
+- **Patterns** of up to `bars` (4) bars per part, `<name>_beat_1`, `<name>_melody_1` with the second line as a track of its own, `<name>_bass_1`, and on, added to the document and playable at once; the transport takes the tempo, key and tuning.
+- **Voices.** Each line gets one. Through the model, its voice head names the genes of every note, averaged over the line. A line no voice was heard for, every line under the analysis, gets one fitted by ear: the engine plays a candidate voice at the line's longest and loudest notes, at the recording's pitch, loudness and tuning, compares the render's mel frames with the recording around each note, and searches the 32 genes and the wave from every registered voice. They are `<name>_melody_voice`, `<name>_under_voice` and `<name>_bass_voice`; `fit` searches again, longer.
+- **The transcript** keeps every note in seconds before the grid, with how much of the recording's salience supports it and, for a melody note, how bright it is. `notes` lists it and writes it as a MIDI file to correct in a sequencer.
+
+A rip is kept under its name for the session, so `fit`, `compress`, `refine` and `song` need no file.
+
+### 4. Compressing: bars into a song
+
+`compress` turns the rip's bars into as few one-bar patterns as it can. Per part, two bars differ by the steps they do not share over the steps either has; bars within `percent` (5) of each other form a group whose middle bar stands for it (`<name>_<part>_a`, `_b`, ...), and a search refines which bar joins which. The song `<name>` lists the patterns each bar plays at the recording's tempo, key and tuning: `song <name>` shows it, `song <name> <file.wav>` renders it, `song <name> play` conducts it through the live sequencer. Its render is ripped back on its own grid and scored against the rip, so what compressing lost is a number.
+
+### 5. Refining: closing the loop
+
+The engine is the ground truth of its own vocabulary, so a rip is good when its render sounds like the recording. `refine` works in rounds: it fits the voices again, then tries each tonal step a semitone and an octave either way, at the recording's strongest pitch there, a step earlier or later, longer or shorter, and silent, and tries the strongest pitch where a line is silent. A move stays when the bars that play it sound closer to the recording, the render and the recording heard through one front end and their pitch salience, mel bands and onsets compared bar by bar. A voice may not drift more than a tenth from its fit to the notes.
+
+### 6. Checking: how good a rip is
+
+- `truth` scores a rip against notes given: a transcript corrected by hand, a rhythm tapped out, or a MIDI file, whose drum channel scores the kicks, snares and hihats hit by hit. Per line it counts the notes heard as given, those missed and those extra.
+- `agree` compares two rips of one piece where no score exists.
+- `bench` rips fresh loops the engine renders, whose answer is known, clean and through a room and a mix, and scores the analysis and the model side by side.
+- `tune` searches the decoders' thresholds over rendered loops.
+
+What a rip does not tell apart yet: a bass note's attack from a kick, a plucked chord's attack from a snare, a change of key from accidentals, and a third line or the chord a pedal rings, which two lines cannot hold. Soft notes are heard less often than loud ones.
+
+### 7. Learning: how the model is trained
+
+The model learns from music the engine renders itself, since the engine knows exactly what it played.
+
+- **Generating.** `corpus` renders loops of `bars` (4) bars from the registered rhythm, melody and bass patterns across tempos and keys. With `gen`, three loops in five per part play a beat, a melody or a bass line drawn from the key instead, and an accompaniment in the free slot, a broken chord under a melody of longer notes; a generated loop leaves out its drums three times in ten and its bass once in seven, so a line is heard bare too.
+- **Labelling.** Each loop is kept as its log-mel frames and, per frame, what the engine played: the onsets, the drums, the pitches sounding, and the wave and 32 genes of each note's voice. The labels cost nothing and are exact.
+- **Roughening.** With `aug`, each loop's voices are redrawn near the registered ones, a third of them on another wave, in a third of the loops with a pedal's long releases; the mix passes through a room drawn per loop (a gain and swell, a low-pass, two equaliser bands, a soft clip, a compressor, a booth's or a hall's reverb, a noise floor), and the loop plays off A440 by up to a quarter tone. The labels stay the notes as played.
+- **Training.** `tool/rip-train` holds the model's PyTorch twin. It trains on random six-second windows of the loops (512 frames, eight a step), scores the loops it holds out every thousand steps and keeps the best, and writes the weight file the Go model loads, the two agreeing to float32 rounding.
+- **A round.** `tool/rip-train/pipeline.sh` renders the corpus in parts at once, trains, benches and installs; 40000 loops and 40000 steps take about four hours on a laptop with a GTX 1060. Weights ship only when they beat the analysis on the bench and on real recordings' truths; [Rip design §8](../../doc/rip-design.md#8-measured-on-the-sample-recording) holds every round's numbers and [the trainer's README](../../tool/rip-train/README.md) the instructions.
+
+### 8. The process, end to end
+
+1. `rip song.wav name` writes the patterns, the voices and the transcript, and sets the transport.
+2. Listen: `slot` the patterns or `render` them to a WAV, and read `notes name`.
+3. Check: `truth name score.mid` against a score, or `agree` two rips of the piece.
+4. `compress name` writes the dictionary and the song, and `song name play` plays it.
+5. `refine name` closes the loop; `fit name` refits the voices alone.
+6. Save the patterns, the song and the voices to keep them, as Usage shows next.
+
+[Audio §11](../../doc/audio.md#11-ripping-a-recording) is the engine's side of each stage and [Rip design](../../doc/rip-design.md) the plan and the measurements.
 
 ## Usage
 
@@ -112,7 +198,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
   - `song <name> [file.wav [<instrument>...]|play|score]`: show a song's bars; render it to a WAV, only the instruments named sounding when any are (a line on its own, to hear against the recording); play it through the sequencer, the slots changed at the bar lines (`music stop` ends it); or score it: how it sounds against the recording ripped as `<name>` (pitch, timbre, onsets) and how it rips back.
   - `refine <name> [rounds]`: close the loop over a song `compress` made: each round (3) fits the voices again and sweeps the tonal steps, each tried a semitone and an octave either way, the recording's strongest pitch at its step, a step earlier or later, longer or shorter, and silent (a step left silent is dropped), then a step a line leaves empty tries that strongest pitch; every move kept when the bars that play its pattern sound more like the recording's own frames (pitch, timbre and onsets), the rip-back reported beside it. A voice may not leave its tonal floor, its distance from the recording's notes as `fit` measures it, by more than a tenth, and a proposed pitch keeps within a fifth of its track's nearest note. Minutes a round.
   - `bench [loops] [bars] [verbose]`: grade the analysis, and the model when one loaded, on fresh loops (8) of `bars` (4) bars with generated parts among the bank's, clean and augmented: the mean score of each rip against the loop's expected rip. `verbose` then lists each loop as each front end ripped it, its index, tempo, key, clean or augmented, the parts generated (`bank` for none) and its score's fields, and the three worst by total.
-  - `corpus <dir> [loops] [bars] [aug] [gen] [nowav] [tempos lo-hi|a,b,c] [part k/n]`: render `loops` (24) of `bars` (4) bars from the registered patterns into `dir`, each a WAV, its log-mel frames and the events that sound in it: what `tool/rip-train` trains the rip's model on; `aug` puts a room, a mix and voices of random genes behind each, drives a third of them into a soft clip and renders each off A440 by up to a quarter tone, `gen` draws beats, melodies and bass lines the bank never had, `nowav` keeps the frames and labels only, `tempos` sets the tempos the loops cycle through; a loop already in `dir` is kept, so a stopped export run again goes on where it stopped, and `part k/n` renders every `n`-th loop from the `k`-th for `n` exports at once, leaving `corpus.json` to a last run without it (`tool/rip-train/README.md` is the training guide).
+  - `corpus <dir> [loops] [bars] [aug] [gen] [nowav] [tempos lo-hi|a,b,c] [part k/n]`: render `loops` (24) of `bars` (4) bars from the registered patterns into `dir`, each a WAV, its log-mel frames and the events that sound in it: what `tool/rip-train` trains the rip's model on; `aug` puts a room, a mix and voices of random genes behind each (How rip works, 7, lists what it draws) and renders each off A440 by up to a quarter tone, `gen` draws beats, melodies, bass lines and accompaniments the bank never had and leaves the drums or the bass out of some, `nowav` keeps the frames and labels only, `tempos` sets the tempos the loops cycle through; a loop already in `dir` is kept, so a stopped export run again goes on where it stopped, and `part k/n` renders every `n`-th loop from the `k`-th for `n` exports at once, leaving `corpus.json` to a last run without it (`tool/rip-train/README.md` is the training guide).
   - `tune [generations] [file]`: search `rip`'s parameters over loops the engine renders from the registered patterns; a set that beats the current one is written (default the first root's `audio/rip.toml`) and listened with from then on. Eight generations take minutes.
 - **Scripts**
   - `run <file.slab>`: run a script's lines in this session, strict as `-s`: a failing line stops it with its number; `quit` in it ends the script alone, and outside a script ends the session.

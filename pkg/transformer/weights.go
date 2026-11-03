@@ -15,7 +15,7 @@ import (
 // with its shape and float32 data, little-endian, and the FNV-1a 64 of all of it.
 const (
 	fileMagic   = "VIFT"
-	fileVersion = 1
+	fileVersion = 2 // the convolutions and the towers after the window
 	maxName     = 64
 	maxTensor   = 1 << 28 // floats; a file past it is not one of ours
 )
@@ -34,21 +34,35 @@ func (m *Model) tensors() []tensor {
 	norm := func(name string, ln *LayerNorm) []tensor {
 		return []tensor{{name + ".weight", []int{len(ln.G)}, ln.G}, {name + ".bias", []int{len(ln.B)}, ln.B}}
 	}
-	ts := lin("in", &m.in)
-	for i := range m.layers {
-		l := &m.layers[i]
-		p := fmt.Sprintf("layers.%d.", i)
-		ts = append(ts, norm(p+"ln1", &l.ln1)...)
-		ts = append(ts, lin(p+"q", &l.q)...)
-		ts = append(ts, lin(p+"k", &l.k)...)
-		ts = append(ts, lin(p+"v", &l.v)...)
-		ts = append(ts, lin(p+"o", &l.o)...)
-		ts = append(ts, norm(p+"ln2", &l.ln2)...)
-		ts = append(ts, lin(p+"ff1", &l.ff1)...)
-		ts = append(ts, lin(p+"ff2", &l.ff2)...)
+	var ts []tensor
+	for i := range m.convs {
+		c := &m.convs[i]
+		p := fmt.Sprintf("convs.%d.", i)
+		ts = append(ts, tensor{p + "weight", []int{c.Out, c.in, c.Time, c.Freq}, c.W}, tensor{p + "bias", []int{c.Out}, c.B})
 	}
-	ts = append(ts, norm("ln", &m.ln)...)
-	return append(ts, lin("out", &m.out)...)
+	ts = append(ts, lin("in", &m.in)...)
+	for ti := range m.towers {
+		tw := &m.towers[ti]
+		pt := "" // a model of one tower keeps the names it had before towers
+		if len(m.cfg.Towers) > 0 {
+			pt = fmt.Sprintf("towers.%d.", ti)
+		}
+		for i := range tw.layers {
+			l := &tw.layers[i]
+			p := pt + fmt.Sprintf("layers.%d.", i)
+			ts = append(ts, norm(p+"ln1", &l.ln1)...)
+			ts = append(ts, lin(p+"q", &l.q)...)
+			ts = append(ts, lin(p+"k", &l.k)...)
+			ts = append(ts, lin(p+"v", &l.v)...)
+			ts = append(ts, lin(p+"o", &l.o)...)
+			ts = append(ts, norm(p+"ln2", &l.ln2)...)
+			ts = append(ts, lin(p+"ff1", &l.ff1)...)
+			ts = append(ts, lin(p+"ff2", &l.ff2)...)
+		}
+		ts = append(ts, norm(pt+"ln", &tw.ln)...)
+		ts = append(ts, lin(pt+"out", &tw.out)...)
+	}
+	return ts
 }
 
 // Save writes the model as a weight file.
@@ -68,6 +82,14 @@ func (m *Model) Save(w io.Writer) error {
 	put(uint32(cfg.Layers))
 	put(uint32(cfg.FFN))
 	put(uint32(cfg.Window))
+	put(uint32(len(cfg.Convs)))
+	for _, c := range cfg.Convs {
+		put([4]uint32{uint32(c.Out), uint32(c.Time), uint32(c.Freq), uint32(c.Pool)})
+	}
+	put(uint32(len(cfg.Towers)))
+	for _, t := range cfg.Towers {
+		put([2]uint32{uint32(t.Layers), uint32(t.Outputs)})
+	}
 	put(uint32(len(cfg.Outputs)))
 	for _, o := range cfg.Outputs {
 		put(uint16(len(o.Name)))
@@ -124,6 +146,26 @@ func Load(r io.Reader) (*Model, error) {
 			return nil, err
 		}
 		*p = int(u32)
+	}
+	if err := get(&u32); err != nil || u32 > 16 {
+		return nil, errors.New("transformer: convolutions")
+	}
+	for range u32 {
+		var c [4]uint32
+		if err := get(&c); err != nil {
+			return nil, err
+		}
+		cfg.Convs = append(cfg.Convs, Conv{Out: int(c[0]), Time: int(c[1]), Freq: int(c[2]), Pool: int(c[3])})
+	}
+	if err := get(&u32); err != nil || u32 > 16 {
+		return nil, errors.New("transformer: towers")
+	}
+	for range u32 {
+		var t [2]uint32
+		if err := get(&t); err != nil {
+			return nil, err
+		}
+		cfg.Towers = append(cfg.Towers, Tower{Layers: int(t[0]), Outputs: int(t[1])})
 	}
 	if err := get(&u32); err != nil || u32 > 64 {
 		return nil, errors.New("transformer: output heads")

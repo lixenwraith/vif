@@ -20,6 +20,8 @@ DIM=${DIM:-256}                      # the model's width, attention heads, layer
 HEADS=${HEADS:-8}
 LAYERS=${LAYERS:-4}
 FFN=${FFN:-1024}
+CONVS=${CONVS:-}                     # convolutions before the input layer, e.g. 16x3x3/1,16x3x3/2,32x3x3/2; empty for none
+TOWERS=${TOWERS:-}                   # stacks of their own, layers:heads each, e.g. 2:2,4:4; empty for one of LAYERS
 HOLDOUT=${HOLDOUT:-200}              # loops held out, scored every EVERY steps
 EVERY=${EVERY:-1000}
 OUT=${OUT:-$CORPUS/ripnet.bin}       # the weight file
@@ -68,7 +70,7 @@ corpus() {
 train() {
 	echo "== train: $STEPS steps of batch $BATCH on $CORPUS, $HOLDOUT loops held out, width $DIM, $HEADS heads, $LAYERS layers, feed-forward $FFN"
 	(cd "$here" && "$PYTHON" train.py --corpus "$(realpath "$CORPUS")" --out "$(realpath -m "$OUT")" --steps "$STEPS" --batch "$BATCH" --every "$EVERY" --holdout "$HOLDOUT" --checkpoint "$(realpath -m "$CHECKPOINT")" \
-		--dim "$DIM" --heads "$HEADS" --layers "$LAYERS" --ffn "$FFN" "$@")
+		--dim "$DIM" --heads "$HEADS" --layers "$LAYERS" --ffn "$FFN" --convs "$CONVS" --towers "$TOWERS" "$@")
 }
 
 # A shard's files are named by SHARD, so a round never resumes an earlier one's checkpoint.
