@@ -718,6 +718,38 @@ func TestMutedSlotPlaysOnInTime(t *testing.T) {
 	}
 }
 
+// TestTrackMaskHoldsForItsPattern is the rule of a slot's track mask: it masks the
+// pattern it names whenever that begins in the slot, on the bar line after it was
+// set too, and never the pattern playing until then or another after.
+func TestTrackMaskHoldsForItsPattern(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	two := []Track{{Instr: InstrBass}, {Instr: InstrBass}}
+	a := RegisterPattern(&Pattern{Name: "a", Steps: 16, Tracks: two})
+	b := RegisterPattern(&Pattern{Name: "b", Steps: 16, Tracks: two})
+	s := NewSequencer(MaxBPM, nil)
+	mask := func() uint32 { return s.slots[3].player().mask }
+	s.SetPattern(3, a, 0, false)
+	s.Start()
+	s.SetPattern(3, b, 0, true)
+	s.SetMask(3, b, 1<<1)
+	if mask() != ^uint32(0) {
+		t.Fatalf("a, playing to the bar line, took b's mask: %b", mask())
+	}
+	s.Generate(make([]float64, SamplesPerBar(MaxBPM)+1))
+	if s.slots[3].activeID() != b || mask() != 1<<1 {
+		t.Fatalf("b began on the bar line under mask %b", mask())
+	}
+	s.SetPattern(3, a, 0, false)
+	if mask() != ^uint32(0) {
+		t.Fatalf("a began under b's mask: %b", mask())
+	}
+	s.SetPattern(3, b, 0, false)
+	if mask() != 1<<1 {
+		t.Fatalf("b began again under mask %b", mask())
+	}
+}
+
 // TestTransitionKeepsIncomingWhole is the rule a tier change broke: the incoming
 // pattern's downbeat sounds at full level whatever the fade, and a build-up starts
 // from as many tracks as the outgoing pattern sounded.
