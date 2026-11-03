@@ -82,6 +82,8 @@ val bindGo = tasks.register<Exec>("bindGo") {
     inputs.files(fileTree(repoRoot) { include("go.mod", "go.sum", "internal/**", "pkg/**") })
     inputs.files(fileTree(goModule) { include("go.mod", "go.sum", "game/**") })
     outputs.file(boundAar)
+    // make android's SIMD sets the experiment, which changes the library built
+    inputs.property("goexperiment", providers.environmentVariable("GOEXPERIMENT").orElse(""))
     // Locals, not the script's values: the configuration cache cannot keep an action
     // that holds the script itself
     val bin = goBin.get().asFile.path
