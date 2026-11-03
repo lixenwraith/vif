@@ -1396,7 +1396,8 @@ front-end seam. What remains, in the design's order:
    strike head learns soft strikes; the constants tuned by `tune` against the
    truths rather than swept by hand. Towers (7d: no gain for 43% more
    weights) are tried again once those heads compete with the strike head.
-   Then: real recordings with their notes in the corpus (item 1), then more
+   Then: real recordings with their notes in the corpus (item 1: `corpus
+   <dir> from` writes MAESTRO's, `train.py --mix` mixes them in), then more
    loops, or width 384 (`DIM=384 HEADS=12 FFN=1536`, 7 million weights),
    each measured by `bench` on clean and augmented loops and by the truths on
    the recordings, and shipped only when it beats the analysis on both; a

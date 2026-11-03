@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/binary"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/lixenwraith/vif/pkg/audio"
 	"github.com/lixenwraith/vif/pkg/genetic"
@@ -243,7 +245,22 @@ func genMelody(rng *rand.Rand, degrees int) *audio.Pattern {
 	if len(evs) == 0 {
 		evs = []audio.Step{{Pos: 0, Vel: 0.8, Deg: 0, Oct: 1, Dur: 4}}
 	}
+	soften(rng, evs, steps)
 	return &audio.Pattern{Name: "corpus_melody", Steps: steps, Role: audio.RoleMelody, Tracks: []audio.Track{{Instr: instr, Events: evs}}}
+}
+
+// soften plays half of a third of the generated parts 20 to 30 dB softer, as a
+// pianist plays a phrase, so the model hears soft strikes beside loud ones
+func soften(rng *rand.Rand, evs []audio.Step, steps int) {
+	if rng.Float64() >= 1.0/3 {
+		return
+	}
+	gain, from := math.Pow(10, -(20+10*rng.Float64())/20), rng.IntN(steps/2+1)
+	for i := range evs {
+		if evs[i].Pos >= from && evs[i].Pos < from+steps/2 {
+			evs[i].Vel *= gain
+		}
+	}
 }
 
 // genAccompaniment is an accompaniment the bank never had, for the free slot: a
@@ -286,6 +303,7 @@ func genAccompaniment(rng *rand.Rand, degrees int) *audio.Pattern {
 		}
 		evs = append(evs, audio.Step{Pos: pos, Vel: 0.4 + rng.Float64()*0.3, Deg: deg, Oct: min(oct, 2), Dur: dur})
 	}
+	soften(rng, evs, steps)
 	return &audio.Pattern{Name: "corpus_accompaniment", Steps: steps, Role: audio.RoleFill, Tracks: []audio.Track{{Instr: instr, Events: evs}}}
 }
 
@@ -487,6 +505,7 @@ type corpusEvent struct {
 	End   int       `json:"end"`
 	Drum  int       `json:"drum"` // kick 0, snare 1, hihat 2; -1 for a note
 	MIDI  int       `json:"midi"`
+	Vel   float64   `json:"vel"`
 	Wave  int       `json:"wave"` // index into the waves of the manifest; -1 unknown
 	Voice []float64 `json:"voice,omitempty"`
 }
@@ -500,6 +519,7 @@ type corpusLoop struct {
 	Frames int           `json:"frames"`
 	Tuning float64       `json:"tuning"` // cents off A440 the loop sounds at
 	Events []corpusEvent `json:"events"`
+	Source string        `json:"source,omitempty"` // the recording a loop was heard from
 }
 
 // corpusManifest names the corpus's layout for the trainer
@@ -517,6 +537,9 @@ type corpusManifest struct {
 }
 
 func cmdCorpus(s *Session, a []string) error {
+	if len(a) > 2 && a[1] == "from" {
+		return s.corpusFrom(s.path(a[0]), s.path(a[2]), a[3:])
+	}
 	o := tuneOptions{loops: 24, bars: 4, seed: 1}
 	for more := true; more && len(a) > 1; {
 		n := len(a)
@@ -563,6 +586,162 @@ func cmdCorpus(s *Session, a []string) error {
 		}
 	}
 	return s.exportCorpus(s.path(a[0]), o)
+}
+
+// corpusFrom writes a corpus of recordings and the MIDI files they were played
+// from, one loop each, listed by a CSV with audio_filename and midi_filename
+// columns (split and duration when present, as MAESTRO's metadata has them): the
+// frames as heard, the notes as the MIDI plays them, the voices unknown. A loop
+// whose label is on disk is kept, so a run again goes on where it stopped.
+func (s *Session) corpusFrom(dir, list string, a []string) error {
+	split, hours := "", math.Inf(1)
+	for ; len(a) > 1; a = a[2:] {
+		switch a[0] {
+		case "split":
+			split = a[1]
+		case "hours":
+			h, err := strconv.ParseFloat(a[1], 64)
+			if err != nil || h <= 0 {
+				return fmt.Errorf("hours %q: want a positive number", a[1])
+			}
+			hours = h
+		default:
+			return fmt.Errorf("%q: want split <name> or hours <h>", a[0])
+		}
+	}
+	if len(a) > 0 {
+		return fmt.Errorf("%q: want split <name> or hours <h>", a[0])
+	}
+	f, err := os.Open(list)
+	if err != nil {
+		return err
+	}
+	rows, err := csv.NewReader(f).ReadAll()
+	f.Close()
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return fmt.Errorf("%s: no header", list)
+	}
+	col := map[string]int{}
+	for i, name := range rows[0] {
+		col[name] = i
+	}
+	wav, ok1 := col["audio_filename"]
+	mid, ok2 := col["midi_filename"]
+	if !ok1 || !ok2 {
+		return fmt.Errorf("%s: want audio_filename and midi_filename columns", list)
+	}
+	rows, at := rows[1:], func(name string) string { return filepath.Join(filepath.Dir(list), name) }
+	if c, ok := col["split"]; ok && split != "" {
+		rows = slices.DeleteFunc(rows, func(r []string) bool { return r[c] != split })
+	}
+	// a share of a large set may be all that is on disk
+	listed := len(rows)
+	rows = slices.DeleteFunc(rows, func(r []string) bool {
+		_, err1 := os.Stat(at(r[wav]))
+		_, err2 := os.Stat(at(r[mid]))
+		return err1 != nil || err2 != nil
+	})
+	// the same draw every run, so a share of the list spans its composers and years
+	rng := rand.New(rand.NewPCG(1, 2))
+	rng.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
+	if c, ok := col["duration"]; ok {
+		var sum float64
+		for i, r := range rows {
+			d, _ := strconv.ParseFloat(r[c], 64)
+			if sum += d; sum >= hours*3600 {
+				rows = rows[:i+1]
+				break
+			}
+		}
+	}
+	if len(rows) == 0 {
+		return fmt.Errorf("%s: no recordings listed for split %q", list, split)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	var (
+		mu     sync.Mutex
+		wg     sync.WaitGroup
+		frames int
+		first  error
+		jobs   = make(chan int)
+	)
+	for range min(4, runtime.NumCPU()) { // a recording's samples are hundreds of megabytes
+		wg.Go(func() {
+			for i := range jobs {
+				r := rows[i]
+				n, err := corpusRecording(filepath.Join(dir, fmt.Sprintf("loop_%03d", i)), at(r[wav]), at(r[mid]))
+				mu.Lock()
+				frames += n
+				first = cmp.Or(first, err)
+				mu.Unlock()
+			}
+		})
+	}
+	for i := range rows {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+	if first != nil {
+		return first
+	}
+	m := corpusManifest{Version: 1, Loops: len(rows), Rate: audio.RipRate, Hop: audio.RipHop, MelBands: audio.RipMelBands,
+		MinMIDI: audio.RipMinMIDI, Pitches: audio.RipPitches, Drums: []string{"kick", "snare", "hihat"}, Waves: audio.VoiceWaves[:], VoiceGenes: audio.VoiceGeneCount}
+	if err := writeJSON(filepath.Join(dir, "corpus.json"), m); err != nil {
+		return err
+	}
+	fmt.Fprintf(s.out, "wrote %d recording(s), %.1f hours, to %s from %s; %d listed were not on disk\n", len(rows), float64(frames)*audio.RipFrameSec/3600, dir, list, listed-len(rows))
+	return nil
+}
+
+// corpusRecording writes a recording's frames and its MIDI file's notes and hits
+// as one loop, the frames it holds returned; one on disk is kept.
+func corpusRecording(base, wav, mid string) (int, error) {
+	if data, err := os.ReadFile(base + ".json"); err == nil {
+		var l corpusLoop
+		if json.Unmarshal(data, &l) == nil {
+			return l.Frames, nil
+		}
+	}
+	f, err := os.Open(wav)
+	if err != nil {
+		return 0, err
+	}
+	x, rate, err := audio.ReadWAV(f)
+	f.Close()
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", wav, err)
+	}
+	g, err := os.Open(mid)
+	if err != nil {
+		return 0, err
+	}
+	score, err := audio.ReadMIDI(g)
+	g.Close()
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", mid, err)
+	}
+	mel := audio.MelFrames(x, rate)
+	if err := writeMel(base+".mel", mel); err != nil {
+		return 0, err
+	}
+	frame := func(sec float64) int { return int(sec/audio.RipFrameSec + 0.5) }
+	lab := corpusLoop{Frames: len(mel), Source: wav}
+	for _, n := range score.Notes {
+		lab.Events = append(lab.Events, corpusEvent{Frame: frame(n.Start), End: frame(n.End), Drum: -1, MIDI: n.MIDI, Vel: n.Vel, Wave: -1})
+	}
+	for _, h := range score.Hits {
+		if h.Drum < audio.InstrClap {
+			lab.Events = append(lab.Events, corpusEvent{Frame: frame(h.Start), End: frame(h.Start), Drum: int(h.Drum), Vel: h.Vel, Wave: -1})
+		}
+	}
+	lab.Events = slices.DeleteFunc(lab.Events, func(e corpusEvent) bool { return e.Frame >= len(mel) })
+	return len(mel), writeJSON(base+".json", lab)
 }
 
 // parseTempos reads a range lo-hi, six tempos spread over it, or a list a,b,c,
@@ -640,7 +819,7 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 		stepSec := float64(audio.SamplesPerStep(l.bpm)) / audio.AudioSampleRate
 		for _, e := range audio.ExpectedEvents(l.slots, o.bars, l.root, l.scale, nil) {
 			start := float64(e.Bar*audio.StepsPerBar+e.Step) * stepSec
-			ev := corpusEvent{Frame: int(start/audio.RipFrameSec + 0.5), Drum: -1, Wave: -1}
+			ev := corpusEvent{Frame: int(start/audio.RipFrameSec + 0.5), Drum: -1, Vel: e.Vel, Wave: -1}
 			if e.Instr.IsDrum() {
 				if e.Instr >= audio.InstrClap {
 					continue

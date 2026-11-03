@@ -392,10 +392,11 @@ that proves wrong or that a document now states, and link the document instead.
   `pip install --user` torch is not seen under `python3 -I`, which drops the
   user's site directory.
 - `train.py` reads each window's frames from its `.mel` as it draws it
-  (`MelFile`) and holds the yes-or-no labels as bytes: 207 bytes a frame where
-  floats for both took 755, 19.4 GB for 40000 loops, past a desktop's free
-  memory. A `np.memmap` a loop would keep a file descriptor open each, 40000 of
-  them, past a 1024 limit or macOS's 256.
+  (`MelFile`) and builds the window's targets from the loop's events then
+  (`Label.window`): rows per frame held up front came to 207 bytes a frame,
+  5.2 GB for 40000 loops, and MAESTRO's 159 training hours would add 10 GB. A
+  `np.memmap` a loop would keep a file descriptor open each, 40000 of them,
+  past a 1024 limit or macOS's 256.
 - A training run shares the cores with everything else the session does: the
   fourth run slowed from 0.4 to 4 seconds a step under a rip and a test run,
   and the two-hour waiter on it timed out twice. Size a waiter by the run

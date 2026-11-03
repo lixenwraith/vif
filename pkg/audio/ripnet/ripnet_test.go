@@ -12,7 +12,7 @@ import (
 // TestAnUntrainedModelHearsFramesTheRipReads is the contract between the model
 // and the decoders: a model of Spec's shape, however weighted, yields frames on
 // the rip's grid with every field the rip reads, and the rip runs on them; one
-// from before the strike head loads without strikes.
+// from before the strike, release or velocity head loads without them.
 func TestAnUntrainedModelHearsFramesTheRipReads(t *testing.T) {
 	cfg := Spec()
 	cfg.Dim, cfg.Heads, cfg.Layers, cfg.FFN, cfg.Window = 16, 2, 1, 32, 8 // a small one for the test's sake
@@ -37,19 +37,28 @@ func TestAnUntrainedModelHearsFramesTheRipReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	n := len(f.Flux)
-	if n < 400 || len(f.Salience) != n*audio.RipPitches || len(f.Strike) != n*audio.RipPitches || len(f.Voice) != n*audio.VoiceGeneCount || len(f.Wave) != n*len(audio.VoiceWaves) || len(f.Onset[2]) != n {
-		t.Fatalf("frames %d, salience %d, strikes %d, voice %d, wave %d", n, len(f.Salience), len(f.Strike), len(f.Voice), len(f.Wave))
+	per := n * audio.RipPitches
+	if n < 400 || len(f.Salience) != per || len(f.Strike) != per || len(f.Release) != per || len(f.Velocity) != per ||
+		len(f.Voice) != n*audio.VoiceGeneCount || len(f.Wave) != n*len(audio.VoiceWaves) || len(f.Onset[2]) != n {
+		t.Fatalf("frames %d, salience %d, strikes %d, releases %d, velocities %d, voice %d, wave %d",
+			n, len(f.Salience), len(f.Strike), len(f.Release), len(f.Velocity), len(f.Voice), len(f.Wave))
 	}
 	if _, err := (audio.Ripper{Params: audio.DefaultRipParams(), FrontEnd: fe}).Samples(x, audio.AudioSampleRate); err != nil {
 		t.Errorf("the rip refused the model's frames: %v", err)
 	}
-	older := cfg
-	older.Outputs = older.Outputs[:len(older.Outputs)-1]
-	o, _ := transformer.NewRandom(older, 1)
-	if ofe, err := New(o); err != nil {
-		t.Errorf("a model without the strike head: %v", err)
-	} else if of, err := ofe.Hear(x, audio.AudioSampleRate, audio.DefaultRipParams()); err != nil || of.Strike != nil {
-		t.Errorf("a model without the strike head heard strikes: %v", err)
+	for lack := 1; lack <= optionalHeads; lack++ {
+		older := cfg
+		older.Outputs = older.Outputs[:len(older.Outputs)-lack]
+		o, _ := transformer.NewRandom(older, 1)
+		ofe, err := New(o)
+		if err != nil {
+			t.Errorf("a model without its last %d heads: %v", lack, err)
+			continue
+		}
+		of, err := ofe.Hear(x, audio.AudioSampleRate, audio.DefaultRipParams())
+		if err != nil || of.Velocity != nil || (of.Release != nil) != (lack < 2) || (of.Strike != nil) != (lack < 3) {
+			t.Errorf("a model without its last %d heads heard strikes %v, releases %v, velocities %v: %v", lack, of.Strike != nil, of.Release != nil, of.Velocity != nil, err)
+		}
 	}
 	wrong := cfg
 	wrong.Outputs = wrong.Outputs[:3]

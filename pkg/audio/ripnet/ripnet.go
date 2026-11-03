@@ -16,13 +16,15 @@ import (
 
 // The heads, in the order the output vector lays them
 const (
-	HeadOnset   = "onset"   // anything struck or started at this frame
-	HeadDrums   = "drums"   // kick, snare, hihat
-	HeadPitch   = "pitch"   // each of the rip's pitches sounding
-	HeadVoicing = "voicing" // any note sounding
-	HeadWave    = "wave"    // the sounding note's wave, one score per VoiceWaves entry
-	HeadVoice   = "voice"   // its voice genes
-	HeadStrike  = "strike"  // each of the rip's pitches struck at this frame
+	HeadOnset    = "onset"    // anything struck or started at this frame
+	HeadDrums    = "drums"    // kick, snare, hihat
+	HeadPitch    = "pitch"    // each of the rip's pitches sounding
+	HeadVoicing  = "voicing"  // any note sounding
+	HeadWave     = "wave"     // the sounding note's wave, one score per VoiceWaves entry
+	HeadVoice    = "voice"    // its voice genes
+	HeadStrike   = "strike"   // each of the rip's pitches struck at this frame
+	HeadRelease  = "release"  // each of the rip's pitches let go at this frame
+	HeadVelocity = "velocity" // how hard each pitch struck at this frame was struck
 )
 
 // Spec is the model the trainer builds and a weight file must match in its
@@ -33,7 +35,7 @@ func Spec() transformer.Config {
 		Outputs: []transformer.Head{
 			{Name: HeadOnset, Size: 1}, {Name: HeadDrums, Size: int(audio.InstrClap)}, {Name: HeadPitch, Size: audio.RipPitches},
 			{Name: HeadVoicing, Size: 1}, {Name: HeadWave, Size: len(audio.VoiceWaves)}, {Name: HeadVoice, Size: audio.VoiceGeneCount},
-			{Name: HeadStrike, Size: audio.RipPitches},
+			{Name: HeadStrike, Size: audio.RipPitches}, {Name: HeadRelease, Size: audio.RipPitches}, {Name: HeadVelocity, Size: audio.RipPitches},
 		},
 	}
 }
@@ -52,15 +54,18 @@ func Load(r io.Reader) (*FrontEnd, error) {
 	return New(m)
 }
 
-// New wraps a model, refusing one whose inputs or heads are not Spec's; one
-// trained before the strike head loads without it, its notes read from the
-// pitches sounding alone.
+// optionalHeads is how many of Spec's last heads a model may lack: one trained
+// before the strike, release or velocity head loads without them, its notes read
+// from what it has
+const optionalHeads = 3
+
+// New wraps a model, refusing one whose inputs or heads are not a prefix of Spec's.
 func New(m *transformer.Model) (*FrontEnd, error) {
 	want, got := Spec(), m.Config()
 	if got.Inputs != want.Inputs {
 		return nil, fmt.Errorf("ripnet: model reads %d inputs, want %d, the bands in dB over the frame's level and the level", got.Inputs, want.Inputs)
 	}
-	if n := len(got.Outputs); n != len(want.Outputs) && n != len(want.Outputs)-1 {
+	if n := len(got.Outputs); n > len(want.Outputs) || n < len(want.Outputs)-optionalHeads {
 		return nil, fmt.Errorf("ripnet: model has %d heads, want %d", n, len(want.Outputs))
 	}
 	for i, h := range want.Outputs[:len(got.Outputs)] {
@@ -74,7 +79,7 @@ func New(m *transformer.Model) (*FrontEnd, error) {
 // Hear runs the recording's log-mel frames through the model and reads its heads
 // into frames: the onset and drum scores as strengths, the pitch scores as
 // salience, the chroma folded from them, the wave scores and voice genes as they
-// are, and the strike scores when the model has them.
+// are, and the strike, release and velocity scores when the model has them.
 func (fe *FrontEnd) Hear(x []float64, rate int, _ audio.RipParams) (*audio.RipFrames, error) {
 	out := fe.Model.Forward(features(audio.MelFrames(x, rate)))
 	n := len(out)
@@ -88,9 +93,13 @@ func (fe *FrontEnd) Hear(x []float64, rate int, _ audio.RipParams) (*audio.RipFr
 		f.Onset[d] = make([]float64, n)
 	}
 	m := fe.Model
-	strikes := len(m.Config().Outputs) == len(Spec().Outputs)
-	if strikes {
-		f.Strike = make([]float32, 0, n*audio.RipPitches)
+	heads := len(m.Config().Outputs)
+	per := []struct {
+		head string
+		into *[]float32
+	}{{HeadStrike, &f.Strike}, {HeadRelease, &f.Release}, {HeadVelocity, &f.Velocity}}[:heads-(len(Spec().Outputs)-optionalHeads)]
+	for _, h := range per {
+		*h.into = make([]float32, 0, n*audio.RipPitches)
 	}
 	for t, y := range out {
 		f.Flux[t] = sigmoid(m.Slice(y, HeadOnset)[0])
@@ -112,9 +121,9 @@ func (fe *FrontEnd) Hear(x []float64, rate int, _ audio.RipParams) (*audio.RipFr
 		for _, v := range m.Slice(y, HeadVoice) {
 			f.Voice = append(f.Voice, float32(sigmoid(v)))
 		}
-		if strikes {
-			for _, v := range m.Slice(y, HeadStrike) {
-				f.Strike = append(f.Strike, float32(sigmoid(v)))
+		for _, h := range per {
+			for _, v := range m.Slice(y, h.head) {
+				*h.into = append(*h.into, float32(sigmoid(v)))
 			}
 		}
 	}
