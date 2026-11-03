@@ -497,18 +497,32 @@ deprecated for `android sdk`, which ships in the same package. Switch `setup` to
 once its install, licence and SDK-root flags are settled, bumping the pinned build
 and its three SHA-256s together.
 
-### Fix the Windows zip's mouse, sound and status bar flicker
+### Give the Windows zip sound, and confirm it in Windows Terminal
 
 - Priority: P3
-- Affected files: `Makefile`, `.github/workflows/release.yml`, the terminal
-  module's Windows backend
+- Affected files: `Makefile`, `.github/workflows/release.yml`
 - Guide: [Build profiles](multi-platform.md) §4
 
-Played in Alacritty, the zip ignores the mouse, has no sound and flickers status
-bar cells on redraw. Try the mouse in Windows Terminal, whose console host is newer
-than the system's, to tell a console-host gap from a backend one; try a build
-without `vif_noaudio` with ffplay on `PATH`; and try the flicker with the frame
-wrapped in synchronized output.
+The zip has no sound: try a build without `vif_noaudio` with ffplay on `PATH`.
+Its mouse comes from Windows 10's own console host, and likely its flicker (§4);
+confirm that Windows Terminal has neither, with the terminal module's synchronized
+frames and re-hidden cursor. `sandbox/termbench` tells hosts apart: `rawin` prints the
+records a mouse report arrives as, `live -lib terminal|tcell` plays a scene on
+each library's own backend.
+
+### Report key releases on Windows
+
+- Priority: P3
+- Affected files: the terminal module's Windows backend and key protocol
+- Guide: [Input and modes](input-and-modes.md) §1
+
+A key on Windows is a tap: the console reads as VT input, which carries presses
+alone. A console host with win32-input-mode (Windows Terminal's) reports each
+key's press and release once asked with DECSET 9001, as `CSI Vk;Sc;Uc;Kd;Cs;Rc _`
+(tcell asks for it and drops the releases). A Windows key source would ask for it
+as the protocol source asks for the key protocol, answer presses where the host
+lacks it, and pair releases through `KeyHolds`. Decide first whether holds on
+Windows are worth it.
 
 ### Cache a received scenario to the user root
 
