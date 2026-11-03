@@ -217,7 +217,7 @@ Scripts drive the engine identically to the REPL. `#` starts a comment. Prependi
 
 **Note:** `new sound` immediately seeds a minimal valid struct (1 `osc` layer + 1 `ar` chain proc). The script below demonstrates modifying the pre-seeded defaults, applying them to the engine, and rendering directly to a `.wav`.
 
-```shell
+```text
 # Create blip.slab and run:
 #   go run ./cmd/soundlab -headless -s blip.slab
 
