@@ -1451,6 +1451,18 @@ harness in a scratch repository. `AudioEngine.RenderMusic` now renders placed
 patterns offline; the verb would drive an APM timeline through the conductor's
 tier and tempo policy over it and write the WAV.
 
+### Keep soundlab's slots through `music reset`
+
+- Priority: P2
+- Affected files: `internal/soundlab/cmd_audio.go`, `internal/soundlab/tui.go`
+
+`music reset`, which the browser's `m` runs to bring the music back to its first
+bar, resets the sequencer, and that empties every slot, while the session's
+`slots` keep what `slot` last asked: the music then plays nothing, `render` still
+renders the old slots, and a slot's track mutes wait for their pattern to be put
+back. The fix is reset slotting the session's patterns again, or a sequencer
+reset that keeps them.
+
 ### Spin off `pkg/audio` as its own module
 
 - Priority: P2

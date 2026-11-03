@@ -34,6 +34,9 @@ type slotState struct {
 
 	muted bool    // the slot plays on in time, silent
 	quiet float64 // how far the mute has faded the slot, 1 silent
+
+	maskID PatternID // the pattern mask is held for, set on it whenever it begins here
+	mask   uint32
 }
 
 func (ss *slotState) player() *PatternPlayer { return ss.players[ss.live] }
@@ -85,8 +88,7 @@ func (ss *slotState) level() float64 {
 // taken, the one cut this design accepts.
 func (ss *slotState) begin(id PatternID, fade int) bool {
 	if ss.players[ss.live].patternData == nil {
-		ss.players[ss.live].SetPattern(id)
-		ss.ids[ss.live] = id
+		ss.load(ss.live, id)
 		return false
 	}
 	nxt, low := -1, 2.0
@@ -100,11 +102,19 @@ func (ss *slotState) begin(id PatternID, fade int) bool {
 	}
 	ss.gain[ss.live] = 1
 	ss.step[ss.live] = 1 / float64(max(fade, MinCrossfadeSamples))
-	ss.players[nxt].SetPattern(id)
-	ss.ids[nxt] = id
+	ss.load(nxt, id)
 	ss.gain[nxt] = 0
 	ss.live = nxt
 	return true
+}
+
+// load starts player i on id, under the mask held for id
+func (ss *slotState) load(i int, id PatternID) {
+	ss.players[i].SetPattern(id)
+	ss.ids[i] = id
+	if id == ss.maskID {
+		ss.players[i].SetMask(ss.mask)
+	}
 }
 
 func (ss *slotState) reset() {
@@ -571,10 +581,17 @@ func (s *Sequencer) armReveal(ss *slotState, id PatternID, heard int) {
 	}
 }
 
-func (s *Sequencer) SetMask(slot int, mask uint32) {
-	if slot >= 0 && slot < MusicSlots {
-		s.slots[slot].revealN = 0 // external control overrides reveal automation
-		s.slots[slot].player().SetMask(mask)
+// SetMask sounds only the tracks mask sets of pattern id in a slot: at once when the
+// slot plays it, ending its reveal, and whenever it begins there, until the next mask
+func (s *Sequencer) SetMask(slot int, id PatternID, mask uint32) {
+	if slot < 0 || slot >= MusicSlots {
+		return
+	}
+	ss := &s.slots[slot]
+	ss.maskID, ss.mask = id, mask
+	if ss.activeID() == id {
+		ss.revealN = 0
+		ss.player().SetMask(mask)
 	}
 }
 

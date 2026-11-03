@@ -573,9 +573,11 @@ func (ae *AudioEngine) SetPattern(slot int, p PatternID, crossfadeSamples int, q
 	ae.send(audioCmd{op: cmdPattern, slot: int8(slot), pattern: p, i1: crossfadeSamples, b: quantize})
 }
 
-// SetTrackMask enables/disables tracks within a slot's pattern
-func (ae *AudioEngine) SetTrackMask(slot int, mask uint32) {
-	ae.send(audioCmd{op: cmdMask, slot: int8(slot), i2: int(mask)})
+// SetTrackMask sounds only the tracks mask sets, a bit a track, of pattern id in a
+// slot: the one it plays, or one it changes to on its bar line, whenever it begins
+// there until the next mask. Another pattern begins with every track.
+func (ae *AudioEngine) SetTrackMask(slot int, id PatternID, mask uint32) {
+	ae.send(audioCmd{op: cmdMask, slot: int8(slot), pattern: id, i2: int(mask)})
 }
 
 // SetSlotMuted silences a slot or lets it sound again. Its pattern plays on in

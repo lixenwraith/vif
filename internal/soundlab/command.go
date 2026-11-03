@@ -86,7 +86,8 @@ func init() {
 		"tuning": {"tuning [cents]", "the cents the transport plays off A440, a semitone either way: a rip sets the recording's, a song its own; bare shows it", 0, 1, cmdTuning},
 		"fill":   {"fill on|off", "slot-2 phrase auto-fill; soundlab starts with it off", 1, 1, cmdFill},
 		"key":    {"key <root> <scale> [deg...]", "harmony: MIDI root, scale name, chord degrees", 2, -1, cmdKey},
-		"mute":   {"mute music|sfx|all|none | mute slot <0-3> on|off", "absolute channel mute state, or one slot's (its pattern plays on in time)", 1, 3, cmdMute},
+		"mute":   {"mute music|sfx|all|none | mute slot <0-3> on|off | mute track <0-3> <n> on|off", "absolute channel mute state, or one slot's, or one track's of the pattern a slot plays, dropped when the slot changes pattern (it plays on in time)", 1, 4, cmdMute},
+		"solo":   {"solo track <0-3> <n> on|off", "sound a slot's soloed tracks alone, its pattern playing on in time; dropped when the slot changes pattern", 4, 4, cmdSolo},
 		"vol":    {"vol <f>", "sfx volume 0..1; music keeps its own level", 1, 1, cmdVol},
 		"wait":   {"wait <ms>", "sleep (scripted audition pacing)", 1, 1, cmdWait},
 	}
@@ -275,6 +276,7 @@ var (
 		{"[ ] , . { }", "length, degree, octave of a note"},
 		{"t T", "next voice of the family, the other family"},
 		{"f", "follow the chord"},
+		{"m", "mute the track in the slot the pattern plays in, or let it sound"},
 		{"a / x x", "add a track of the voice in hand / delete the track"},
 		{"y Y / p", "yank the track, add it to the yank or take it out / paste the yank into this pattern"},
 		{"s", "steps: the pattern's length"},
@@ -283,7 +285,8 @@ var (
 	helpMixer = helpSection{"mixer", []keyHelp{
 		{"j k ↑ ↓", "the slots' titles and tracks; PgUp PgDn a page, g G the ends"},
 		{"", "the rows stay where the cursor leaves them"},
-		{"space m", "mute the cursor's slot, or let it sound; it plays on in time"},
+		{"space m", "mute the cursor's slot or track, or let it sound; it plays on in time"},
+		{"s", "solo the cursor's track: the slot's soloed tracks sound alone"},
 		{"e / n", "edit what the cursor's slot plays / a new pattern in it"},
 	}}
 	helpGlobal = helpSection{"everywhere", []keyHelp{

@@ -777,7 +777,14 @@ func (a *tuiApp) drawMixRow(r tui.Region, row mixRow, tl timeline, cursor bool) 
 		return
 	}
 	tr := &pat.Tracks[row.trk]
-	r.Text(0, 0, tui.PadRight(tui.Truncate(audio.InstrumentName(tr.Instr), mixLabW-1), mixLabW-1), th.HintFg, labBg, terminal.AttrNone)
+	sounds, labFg := g.tracks[row.slot].sounds(row.trk), th.HintFg
+	switch {
+	case !sounds:
+		labFg = th.Unselected
+	case g.tracks[row.slot].soloed&(1<<row.trk) != 0:
+		labFg = th.Selected
+	}
+	r.Text(0, 0, tui.PadRight(tui.Truncate(audio.InstrumentName(tr.Instr), mixLabW-1), mixLabW-1), labFg, labBg, terminal.AttrNone)
 	span := tl.bars * audio.StepsPerBar
 	first := g.step - g.step%span // the window holding the playhead
 	for i := range span {
@@ -793,7 +800,7 @@ func (a *tuiApp) drawMixRow(r tui.Region, row mixRow, tl timeline, cursor bool) 
 		switch {
 		case vel == 0:
 			ch, fg = '·', th.Unselected
-		case g.muted[row.slot]:
+		case g.muted[row.slot] || !sounds:
 			fg = th.Unselected
 		}
 		bg := th.Bg
@@ -911,7 +918,7 @@ func (a *tuiApp) footHint() string {
 	case a.files.open:
 		return "j/k move  enter open/load/rip  m merge  s save here  h up  esc close  ? keys"
 	case a.focus == focusMixer:
-		return "j/k track  space mute  e edit  n new  PgUp/PgDn page  g/G ends  tab next pane  esc back  ? keys"
+		return "j/k track  space mute  s solo  e edit  n new  PgUp/PgDn page  g/G ends  tab next pane  esc back  ? keys"
 	case a.focus == focusKeys:
 		return a.keysHint()
 	case a.focus == focusGrid:

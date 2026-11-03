@@ -1032,6 +1032,107 @@ func TestMixerMutesTheCursorsSlot(t *testing.T) {
 	}
 }
 
+// trioScript puts a pattern of three tracks, a kick, a snare and a hihat, in slot 1
+const trioScript = `
+new pattern trio
+new pattern part
+set part.track.0.instr snare
+mix part trio
+set part.track.0.instr hihat
+mix part trio
+slot 1 trio
+`
+
+// TestMuteTrackAndSoloShapeTheSlotsMask: a slot's soloed tracks sound alone and its
+// muted ones never, and where and stat name them once the slot plays the pattern.
+func TestMuteTrackAndSoloShapeTheSlotsMask(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, trioScript+`
+mute track 1 2 on
+! mute track 1 3 on
+! mute track 2 0 on
+`)
+	if m := s.tracks[1].mask(); m != ^uint32(1<<2) {
+		t.Fatalf("muting track 2 left mask %b", m)
+	}
+	runOrFatal(t, s, &out, "solo track 1 0 on\nsolo track 1 2 on")
+	if m := s.tracks[1].mask(); m != 1 {
+		t.Fatalf("tracks 0 and 2 soloed, 2 muted, left mask %b", m)
+	}
+	waitFor(t, func() bool { return s.eng.SlotPattern(1) == audio.PatternIDByName("trio") }, "slot 1 never played trio")
+	out.Reset()
+	runOrFatal(t, s, &out, "where\nstat")
+	for _, want := range []string{"slot1=trio (track 2 muted, tracks 0 2 soloed)", "slot 1 trio: track 2 muted, tracks 0 2 soloed"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("want %q in:\n%s", want, out.String())
+		}
+	}
+}
+
+// TestTrackMutesGoWithTheSlotsPattern: the tracks muted in a slot sound again, as the
+// log says, when an apply moves them or another pattern comes, and a track added
+// after them moves none.
+func TestTrackMutesGoWithTheSlotsPattern(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, trioScript+`
+mute track 1 1 on
+add trio.track
+set trio.track.3.instr clap
+apply trio
+`)
+	if s.tracks[1].muted != 1<<1 {
+		t.Fatal("a track added after the muted one dropped its mute")
+	}
+	runOrFatal(t, s, &out, "del trio.track.0\napply trio")
+	if s.tracks[1] != (trackMutes{}) || !strings.Contains(out.String(), "as the apply moved its tracks") {
+		t.Fatalf("deleting a track before the muted one kept the mute:\n%s", out.String())
+	}
+	runOrFatal(t, s, &out, "mute track 1 0 on\nslot 1 part")
+	if s.tracks[1] != (trackMutes{}) || !strings.Contains(out.String(), "as the slot changes pattern") {
+		t.Fatalf("another pattern in the slot kept the mute:\n%s", out.String())
+	}
+}
+
+// TestMixerAndGridMuteTheCursorsTrack: on a track row the mixer's m and space mute
+// the track and s solos it, and the grid's m mutes its cursor's track, through the
+// commands a script runs.
+func TestMixerAndGridMuteTheCursorsTrack(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, trioScript)
+	waitFor(t, func() bool { return s.eng.SlotPattern(1) == audio.PatternIDByName("trio") }, "slot 1 never played trio")
+	a := newTUIApp(s, NewLogBuffer(50))
+	a.term, a.w, a.h = frameTerm{}, 100, 24
+	key := func(k terminal.Key, r rune) {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
+		a.render()
+	}
+	a.render()
+	key(terminal.KeyTab, 0)
+	for range 3 { // slot 0's title, slot 1's, its tracks 0 and 1
+		key(terminal.KeyDown, 0)
+	}
+	key(terminal.KeyRune, 'm')
+	key(terminal.KeyRune, 's')
+	if s.eng.IsSlotMuted(1) || s.tracks[1] != (trackMutes{muted: 1 << 1, soloed: 1 << 1}) {
+		t.Fatalf("m and s on track 1's row left %+v", s.tracks[1])
+	}
+	key(terminal.KeySpace, ' ')
+	if s.tracks[1].muted != 0 {
+		t.Fatal("space must let track 1 sound again")
+	}
+	key(terminal.KeyRune, 'e')
+	key(terminal.KeyRune, 'm')
+	if s.tracks[1].muted != 1 {
+		t.Fatalf("m in trio's grid left mutes %b", s.tracks[1].muted)
+	}
+}
+
 // TestRipMakesPatternsOfARecording is the verb's contract: a recording's beat and
 // melody come into the document as dirty patterns under the given name, and the
 // transport takes the tempo and key heard.

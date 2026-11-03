@@ -109,10 +109,19 @@ func cmdNote(s *Session, a []string) error {
 	return nil
 }
 
-func cmdSlot(s *Session, a []string) error {
-	slot, err := strconv.Atoi(a[0])
+// parseSlot reads a sequencer slot's number
+func parseSlot(arg string) (int, error) {
+	slot, err := strconv.Atoi(arg)
 	if err != nil || slot < 0 || slot >= audio.MusicSlots {
-		return fmt.Errorf("slot %q: want 0 to %d", a[0], audio.MusicSlots-1)
+		return 0, fmt.Errorf("slot %q: want 0 to %d", arg, audio.MusicSlots-1)
+	}
+	return slot, nil
+}
+
+func cmdSlot(s *Session, a []string) error {
+	slot, err := parseSlot(a[0])
+	if err != nil {
+		return err
 	}
 	fadeMS, quantize := 250, false // editor default, deliberately not game policy
 	if len(a) > 2 {
@@ -138,10 +147,19 @@ func cmdSlot(s *Session, a []string) error {
 			return fmt.Errorf("%q: not a registered pattern (apply it, or check spelling)", a[1])
 		}
 	}
-	s.eng.SetPattern(slot, id, fadeMS*audio.AudioSampleRate/1000, quantize)
-	s.slots[slot] = id
+	s.setSlot(slot, id, fadeMS*audio.AudioSampleRate/1000, quantize)
 	fmt.Fprintf(s.out, "slot %d <- %s\n", slot, patName(id))
 	return nil
+}
+
+// setSlot puts id in a slot. The tracks muted and soloed there go when another
+// pattern comes, whose tracks their indices do not name.
+func (s *Session) setSlot(slot int, id audio.PatternID, fade int, quantize bool) {
+	if id != s.slots[slot] {
+		s.dropTracks(slot, "the slot changes pattern")
+	}
+	s.eng.SetPattern(slot, id, fade, quantize)
+	s.slots[slot] = id
 }
 
 func cmdMusic(s *Session, a []string) error {
@@ -249,8 +267,11 @@ func cmdKey(s *Session, a []string) error {
 }
 
 func cmdMute(s *Session, a []string) error {
-	if a[0] == "slot" {
+	switch a[0] {
+	case "slot":
 		return muteSlot(s, a[1:])
+	case "track":
+		return muteTrack(s, a[1:], false)
 	}
 	if len(a) > 1 {
 		return fmt.Errorf("usage: %s", commands["mute"].usage)
@@ -277,9 +298,9 @@ func muteSlot(s *Session, a []string) error {
 	if len(a) != 2 {
 		return fmt.Errorf("usage: %s", commands["mute"].usage)
 	}
-	slot, err := strconv.Atoi(a[0])
-	if err != nil || slot < 0 || slot >= audio.MusicSlots {
-		return fmt.Errorf("slot %q: want 0 to %d", a[0], audio.MusicSlots-1)
+	slot, err := parseSlot(a[0])
+	if err != nil {
+		return err
 	}
 	switch a[1] {
 	case "on", "off":
@@ -287,6 +308,127 @@ func muteSlot(s *Session, a []string) error {
 		return nil
 	}
 	return fmt.Errorf("want on|off, got %q", a[1])
+}
+
+func cmdSolo(s *Session, a []string) error {
+	if a[0] != "track" {
+		return fmt.Errorf("usage: %s", commands["solo"].usage)
+	}
+	return muteTrack(s, a[1:], true)
+}
+
+// muteTrack mutes or solos one track of the pattern a slot plays, which plays on in
+// time
+func muteTrack(s *Session, a []string, solo bool) error {
+	verb := "mute"
+	if solo {
+		verb = "solo"
+	}
+	if len(a) != 3 {
+		return fmt.Errorf("usage: %s", commands[verb].usage)
+	}
+	slot, err := parseSlot(a[0])
+	if err != nil {
+		return err
+	}
+	pat := audio.GetPattern(s.slots[slot])
+	if pat == nil || len(pat.Tracks) == 0 {
+		return fmt.Errorf("slot %d plays no tracks", slot)
+	}
+	n, err := strconv.Atoi(a[1])
+	if err != nil || n < 0 || n >= len(pat.Tracks) {
+		return fmt.Errorf("track %q: %s plays tracks 0 to %d", a[1], pat.Name, len(pat.Tracks)-1)
+	}
+	t := &s.tracks[slot]
+	bits := &t.muted
+	if solo {
+		bits = &t.soloed
+	}
+	switch a[2] {
+	case "on":
+		*bits |= 1 << n
+	case "off":
+		*bits &^= 1 << n
+	default:
+		return fmt.Errorf("want on|off, got %q", a[2])
+	}
+	s.eng.SetTrackMask(slot, s.slots[slot], t.mask())
+	return nil
+}
+
+// trackMutes are a slot's muted and soloed tracks, a bit a track: its soloed tracks
+// sound alone, its muted ones never
+type trackMutes struct{ muted, soloed uint32 }
+
+func (t trackMutes) mask() uint32 {
+	if t.soloed != 0 {
+		return t.soloed &^ t.muted
+	}
+	return ^t.muted
+}
+
+func (t trackMutes) sounds(n int) bool { return t.mask()&(1<<n) != 0 }
+
+// moved reports whether a track muted or soloed in old is another track in p
+func (t trackMutes) moved(old, p *audio.Pattern) bool {
+	for n := range old.Tracks {
+		if (t.muted|t.soloed)&(1<<n) != 0 && (n >= len(p.Tracks) || p.Tracks[n].Instr != old.Tracks[n].Instr) {
+			return true
+		}
+	}
+	return false
+}
+
+// dropTracks lets every track of the slot's pattern sound again, saying why
+func (s *Session) dropTracks(slot int, why string) {
+	if s.tracks[slot] == (trackMutes{}) {
+		return
+	}
+	s.tracks[slot] = trackMutes{}
+	s.eng.SetTrackMask(slot, s.slots[slot], ^uint32(0))
+	fmt.Fprintf(s.out, "slot %d: the tracks muted and soloed in %s sound again, as %s\n", slot, patName(s.slots[slot]), why)
+}
+
+// heldTracks are the slot's track mutes once it plays the pattern they are for,
+// none while it waits for its bar line to change to it
+func (s *Session) heldTracks(slot int) trackMutes {
+	if s.eng.SlotPattern(slot) != s.slots[slot] {
+		return trackMutes{}
+	}
+	return s.tracks[slot]
+}
+
+// silenced says what of a slot is silent: the slot, tracks muted, tracks soloed
+func (s *Session) silenced(slot int) string {
+	var m []string
+	if s.eng.IsSlotMuted(slot) {
+		m = append(m, "muted")
+	}
+	t := s.heldTracks(slot)
+	if l := trackList(t.muted); l != "" {
+		m = append(m, l+" muted")
+	}
+	if l := trackList(t.soloed); l != "" {
+		m = append(m, l+" soloed")
+	}
+	return strings.Join(m, ", ")
+}
+
+// trackList names the tracks set in bits: "track 1", "tracks 0 2", or ""
+func trackList(bits uint32) string {
+	var ns []string
+	for n := range audio.MaxPatternTracks {
+		if bits&(1<<n) != 0 {
+			ns = append(ns, strconv.Itoa(n))
+		}
+	}
+	switch len(ns) {
+	case 0:
+		return ""
+	case 1:
+		return "track " + ns[0]
+	}
+	return "tracks " + strings.Join(ns, " ")
 }
 
 func cmdVol(s *Session, a []string) error {
@@ -307,8 +449,8 @@ func cmdWhere(s *Session, a []string) error {
 	fmt.Fprintf(s.out, "bar %d step %d (%s)", bar, step, state)
 	for i := range audio.MusicSlots {
 		fmt.Fprintf(s.out, "  slot%d=%s", i, patName(s.eng.SlotPattern(i)))
-		if s.eng.IsSlotMuted(i) {
-			fmt.Fprint(s.out, " (muted)")
+		if m := s.silenced(i); m != "" {
+			fmt.Fprintf(s.out, " (%s)", m)
 		}
 	}
 	fmt.Fprintln(s.out)
@@ -325,6 +467,11 @@ func cmdStat(s *Session, a []string) error {
 		be, s.eng.IsSilent(), played, dropped, s.bpm)
 	if s.startErr != nil {
 		fmt.Fprintf(s.out, "start error: %v\n", s.startErr)
+	}
+	for i := range audio.MusicSlots {
+		if m := s.silenced(i); m != "" {
+			fmt.Fprintf(s.out, "slot %d %s: %s\n", i, patName(s.eng.SlotPattern(i)), m)
+		}
 	}
 	if err := s.eng.SpecError(); err != nil {
 		fmt.Fprintf(s.out, "spec error: %v\n", err)

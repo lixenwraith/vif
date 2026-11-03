@@ -336,6 +336,12 @@ func (a *tuiApp) gridKey(ev terminal.Event, d *audio.PatternDef, r rune) {
 		a.exec(fmt.Sprintf("del %s.track.%d", b.name, b.trk))
 	case r == 's':
 		a.promptSteps(d)
+	case r == 'm' && len(d.Track) > 0:
+		if id := audio.PatternIDByName(b.name); id != audio.PatternSilence && a.slotOf(id) >= 0 {
+			a.toggleTrack(a.slotOf(id), b.trk, false)
+		} else {
+			fmt.Fprintf(a.log, "%s plays in no slot — enter plays it\n", b.name)
+		}
 	case r == 'r':
 		if !b.roll && !a.tonalTrack(d) {
 			fmt.Fprintln(a.log, "the piano roll shows a tonal track — t/T moves this one to a voice")
@@ -796,6 +802,10 @@ func (a *tuiApp) drawGrid(r tui.Region, d *audio.PatternDef, g gridFit, labW, pl
 	}
 	b.top = min(max(b.top, 0), max(len(d.Track)-vis, 0))
 	mid := rh / 2
+	var held trackMutes // of the slot the pattern plays in
+	if id := audio.PatternIDByName(b.name); id != audio.PatternSilence && a.slotOf(id) >= 0 {
+		held = a.sig.tracks[a.slotOf(id)]
+	}
 	for row := 0; row < vis && b.top+row < len(d.Track); row++ {
 		ti := b.top + row
 		y := row * rh
@@ -806,7 +816,10 @@ func (a *tuiApp) drawGrid(r tui.Region, d *audio.PatternDef, g gridFit, labW, pl
 			lab += "~"
 		}
 		labFg := th.HintFg
-		if ti == b.trk {
+		switch {
+		case !held.sounds(ti):
+			labFg = th.Unselected
+		case ti == b.trk:
 			labFg = th.HeaderFg
 		}
 		r.Text(0, y+mid, lab, labFg, th.Bg, terminal.AttrNone)
