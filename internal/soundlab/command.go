@@ -42,7 +42,7 @@ func init() {
 		"save":     {"save sound|pattern [file]", "write document; bare = provenance path (the sound document carries the voices)", 1, 2, cmdSave},
 		"write":    {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
 		"export":   {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
-		"rip":      {"rip <file.wav> <name> [bars] [nodrums] [bpm <n>] [lead busy|high|low|loud|soft|long|short]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key; nodrums leaves the drum part out; bpm <n> reads it at that tempo, the bar line still decoded; lead names which of the melody register's two lines is the melody, the busier by default, or the higher, lower, louder, softer, longer or shorter in its notes", 2, 8, cmdRip},
+		"rip":      {"rip <file.wav|file.mid> <name> [bars] [nodrums] [bpm <n>] [lead busy|high|low|loud|soft|long|short]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key; nodrums leaves the drum part out; bpm <n> reads it at that tempo, the bar line still decoded; lead names which of the melody register's two lines is the melody, the busier by default, or the higher, lower, louder, softer, longer or shorter in its notes; a .mid is read as a score, its notes the transcript, at its first tempo", 2, 8, cmdRip},
 		"render":   {"render <file.wav> [bars]", "write what the slots hold, bars (4) bars at the transport's tempo and key, to a WAV through the engine's offline render", 1, 2, cmdRender},
 		"corpus":   {"corpus <dir> [loops] [bars] [aug] [gen] [nowav] [tempos lo-hi|a,b,c] [part k/n]", "render loops (24) of bars (4) bars from the registered patterns into dir, each a WAV, its log-mel frames and the events that sound in it: what tool/rip-train trains the rip's model on; aug puts a room, a mix and voices of random genes behind each; gen draws beats, melodies and bass lines the bank never had; nowav keeps the frames and the labels only, which is all the trainer reads; tempos lo-hi or a,b,c sets the tempos the loops cycle through; a loop already in dir is kept, so a stopped export run again goes on where it stopped; part k/n renders every n-th loop from the k-th, for n exports at once, and leaves corpus.json to a last run without it", 1, 10, cmdCorpus},
 		"tune":     {"tune [generations] [file]", "search rip's parameters over loops the engine renders from the registered patterns; the best write to file (the first root's audio/rip.toml) and listen from now on; 8 generations take minutes", 0, 2, cmdTune},
@@ -102,6 +102,8 @@ func cmdRun(s *Session, a []string) error {
 		return fmt.Errorf("%s: a document; load or merge it", a[0])
 	case ".wav":
 		return fmt.Errorf("%s: a recording; rip <file.wav> <name> hears it", a[0])
+	case ".mid", ".midi":
+		return fmt.Errorf("%s: a score; rip <file.mid> <name> reads it", a[0])
 	}
 	return RunScriptFile(s, s.path(a[0]))
 }

@@ -427,14 +427,14 @@ func (rp Ripper) Samples(x []float64, rate int) (*Rip, error) {
 	for _, n := range melody {
 		if n.second {
 			seconds = append(seconds, n)
-			f.place(g, r, early(n), func(b *RipBar) *[]Step { return &b.Under })
+			g.place(r, early(n), func(b *RipBar) *[]Step { return &b.Under })
 			continue
 		}
 		firsts = append(firsts, n)
-		f.place(g, r, early(n), func(b *RipBar) *[]Step { return &b.Melody })
+		g.place(r, early(n), func(b *RipBar) *[]Step { return &b.Melody })
 	}
 	for _, n := range bass {
-		f.place(g, r, early(n), func(b *RipBar) *[]Step { return &b.Bass })
+		g.place(r, early(n), func(b *RipBar) *[]Step { return &b.Bass })
 	}
 	r.MelodyVoice, r.UnderVoice, r.BassVoice = voiceOf(firsts), voiceOf(seconds), voiceOf(bass)
 	f.bright(x, melody, bass)
@@ -1310,10 +1310,7 @@ func (g *ripGrid) span(bar int) (int, int) {
 	return g.beats[i], g.beats[i+BeatsPerBar]
 }
 
-// key sums the chroma over the recording and takes the root and scale whose
-// tones hold the most of it and whose other tones the least, the tonic and fifth
-// weighing extra and the bass register voting for the tonic; the root lands in
-// the octave the engine's harmony root lives in.
+// key sums the chroma over the recording and takes keyOf it
 func (f *RipFrames) key() (int, ScaleID) {
 	var c, b [12]float64
 	for t := range f.frames() {
@@ -1322,6 +1319,14 @@ func (f *RipFrames) key() (int, ScaleID) {
 			b[pc] += f.BassChroma[t][pc]
 		}
 	}
+	return keyOf(c, b)
+}
+
+// keyOf is the root and scale whose tones hold the most of a chroma c and whose
+// other tones the least, the tonic and fifth weighing extra and the bass
+// register's chroma b voting for the tonic; the root lands in the octave the
+// engine's harmony root lives in.
+func keyOf(c, b [12]float64) (int, ScaleID) {
 	normalize(&c)
 	normalize(&b)
 	root, scale, best := 0, ScalePhrygian, math.Inf(-1)
@@ -1360,10 +1365,8 @@ func normalize(c *[12]float64) {
 	}
 }
 
-// progression names each bar's chord as the degree whose triad the bar's
-// chroma favours.
+// progression names each bar's chord by chordOf the bar's chroma
 func (f *RipFrames) progression(g ripGrid, root int, scale ScaleID) []int {
-	iv := scaleTable[scale]
 	prog := make([]int, g.bars)
 	for bar := range prog {
 		var c [12]float64
@@ -1373,15 +1376,22 @@ func (f *RipFrames) progression(g ripGrid, root int, scale ScaleID) []int {
 				c[pc] += f.Chroma[t][pc]
 			}
 		}
-		best := math.Inf(-1)
-		for d := range iv {
-			pc := func(k int) int { return (root + iv[(d+k)%len(iv)]) % 12 }
-			if s := c[pc(0)] + 0.6*c[pc(2)] + 0.8*c[pc(4)]; s > best {
-				prog[bar], best = d, s
-			}
-		}
+		prog[bar] = chordOf(c, root, scale)
 	}
 	return prog
+}
+
+// chordOf is the degree whose triad a chroma favours
+func chordOf(c [12]float64, root int, scale ScaleID) int {
+	iv := scaleTable[scale]
+	deg, best := 0, math.Inf(-1)
+	for d := range iv {
+		pc := func(k int) int { return (root + iv[(d+k)%len(iv)]) % 12 }
+		if s := c[pc(0)] + 0.6*c[pc(2)] + 0.8*c[pc(4)]; s > best {
+			deg, best = d, s
+		}
+	}
+	return deg
 }
 
 // ripHit is one onset of a band's strength
@@ -1445,7 +1455,7 @@ func (f *RipFrames) drumHits(p RipParams) [InstrClap][]ripHit {
 }
 
 // drums quantizes the hits to the grid, a hit's velocity its strength against
-// the drum's loudest, the louder of two on one step kept.
+// the drum's loudest
 func (g *ripGrid) drums(r *Rip, hits [InstrClap][]ripHit) {
 	for d := range hits {
 		var loudest float64
@@ -1453,19 +1463,23 @@ func (g *ripGrid) drums(r *Rip, hits [InstrClap][]ripHit) {
 			loudest = max(loudest, h.strength)
 		}
 		for _, h := range hits[d] {
-			bar, step, ok := g.at(h.frame)
-			if !ok {
-				continue
-			}
-			vel := 0.4 + 0.6*h.strength/loudest
-			evs := &r.Bars[bar].Drums[d]
-			if i := slices.IndexFunc(*evs, func(s Step) bool { return s.Pos == step }); i >= 0 {
-				(*evs)[i].Vel = max((*evs)[i].Vel, vel)
-				continue
-			}
-			*evs = append(*evs, Step{Pos: step, Vel: vel})
+			g.hit(r, InstrumentType(d), h.frame, 0.4+0.6*h.strength/loudest)
 		}
 	}
+}
+
+// hit quantizes a drum's hit to the grid, the louder of two on one step kept
+func (g *ripGrid) hit(r *Rip, d InstrumentType, frame int, vel float64) {
+	bar, step, ok := g.at(frame)
+	if !ok {
+		return
+	}
+	evs := &r.Bars[bar].Drums[d]
+	if i := slices.IndexFunc(*evs, func(s Step) bool { return s.Pos == step }); i >= 0 {
+		(*evs)[i].Vel = max((*evs)[i].Vel, vel)
+		return
+	}
+	*evs = append(*evs, Step{Pos: step, Vel: vel})
 }
 
 // ripNote is a stretch of frames the pitch track held one pitch over, with the
@@ -1887,7 +1901,7 @@ func (f *RipFrames) voiceOver(a, b int) (int, []float64) {
 // place quantizes a note onto the grid as a step of the key's nearest degree
 // with an accidental for the semitones left, its length in sixteenths, the
 // louder of two on one step kept.
-func (f *RipFrames) place(g ripGrid, r *Rip, n ripNote, part func(*RipBar) *[]Step) {
+func (g *ripGrid) place(r *Rip, n ripNote, part func(*RipBar) *[]Step) {
 	bar, step, ok := g.at(n.start)
 	if !ok {
 		return

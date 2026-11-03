@@ -150,9 +150,9 @@ func (a *tuiApp) filesEnter(merge bool) {
 		return
 	}
 	switch strings.ToLower(filepath.Ext(row.name)) {
-	case ".wav":
+	case ".wav", ".mid", ".midi":
 		if merge {
-			fmt.Fprintln(a.log, "a recording is ripped, not merged — enter rips it")
+			fmt.Fprintln(a.log, "a recording or a score is ripped, not merged — enter rips it")
 			return
 		}
 		a.promptRip(path)
@@ -184,8 +184,8 @@ func (a *tuiApp) filesEnter(merge bool) {
 	}
 }
 
-// promptRip asks what to rip a recording as, the file's name made a pattern
-// name, and lands the browser on the melody it heard
+// promptRip asks what to rip a recording or a score as, the file's name made
+// a pattern name, and lands the browser on the melody it heard
 func (a *tuiApp) promptRip(path string) {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	name := strings.Map(func(r rune) rune {

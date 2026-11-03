@@ -351,6 +351,9 @@ func (s *Session) songJudgeBars(d *audio.SongDef, rp *ripped, bars []int) (float
 
 // soundOf is the recording as Fidelity hears it, heard once per rip
 func (s *Session) soundOf(rp *ripped) (*audio.RipSound, error) {
+	if rp.x == nil {
+		return nil, errScore(rp)
+	}
 	if rp.sound == nil {
 		snd, err := s.ripper().Sound(rp.x, rp.rate, rp.rip.Beats)
 		if err != nil {

@@ -1322,6 +1322,65 @@ validate all
 	}
 }
 
+// TestRipReadsAMIDIFileAsAScore: a .mid given to rip is its transcript, nothing
+// heard: patterns, the shipped voices under the rip's names and the tempo, and
+// compress, song, notes, agree and truth work from it as from a recording's
+// rip, while what hears a recording refuses a score, which has none.
+func TestRipReadsAMIDIFileAsAScore(t *testing.T) {
+	const bpm = 100
+	step := 60.0 / bpm / audio.StepsPerBeat
+	var notes []audio.RipNote
+	var hits []audio.RipHit
+	for i := range 2 * audio.StepsPerBar / 4 {
+		at := float64(4*i) * step
+		hits = append(hits, audio.RipHit{Start: at, Drum: audio.InstrKick, Vel: 1})
+		notes = append(notes, audio.RipNote{Start: at, End: at + 2*step, MIDI: 64 + 2*(i%4), Vel: 0.8})
+		if i%2 == 0 {
+			notes = append(notes, audio.RipNote{Start: at, End: at + 6*step, MIDI: 40, Vel: 0.9, Bass: true})
+		}
+	}
+	notes = append(notes, audio.RipNote{Start: 0, End: step, MIDI: 110, Vel: 0.5}) // over the rip's range
+	var b bytes.Buffer
+	if err := audio.WriteMIDI(&b, notes, hits, bpm); err != nil {
+		t.Fatal(err)
+	}
+	mid := filepath.Join(t.TempDir(), "score.mid")
+	os.WriteFile(mid, b.Bytes(), 0o644)
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+! rip %s other bpm 120                 # a score's tempo is its own
+rip %s score
+! load %s                              # a score is ripped, not loaded
+notes score
+compress score 5
+song score
+! fit score                            # no recording to fit to
+! song score score
+agree score score
+truth score %s
+validate all
+`, mid, mid, mid, mid))
+	rp := s.rips["score"]
+	if rp == nil || rp.x != nil || s.bpm != bpm || !strings.Contains(out.String(), "1 note(s) outside E1 to C7 dropped") {
+		t.Fatalf("the score as a rip at %d bpm:\n%s", s.bpm, out.String())
+	}
+	for _, v := range []string{"score_melody_voice", "score_bass_voice"} {
+		if !s.voices.has(v) {
+			t.Errorf("no voice %s:\n%s", v, out.String())
+		}
+	}
+	if !s.pats.has("score_beat_1") || !s.songs.has("score") || !strings.Contains(out.String(), "rips back at") || strings.Contains(out.String(), "support") || strings.Contains(out.String(), "heard by level") {
+		t.Errorf("patterns, the song, its score, and nothing read in a recording:\n%s", out.String())
+	}
+	// the file's own notes are all heard but the one dropped
+	if n := len(rp.rip.Notes); n != len(notes)-1 || !strings.Contains(out.String(), fmt.Sprintf("against %d note(s) given, transposed +0", n+1)) ||
+		strings.Count(out.String(), "only given 0") != 2 || !strings.Contains(out.String(), "melody only given: D8@0.00\n") {
+		t.Errorf("the score did not agree with its file:\n%s", out.String())
+	}
+}
+
 // TestTuneSearchesTheRipParameters is the verb's contract on a search too small
 // to be good: it renders a corpus from the registered patterns, scores the
 // current parameters, runs the generations asked, and leaves the session with
