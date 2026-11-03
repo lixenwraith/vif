@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lixenwraith/vif/pkg/audio"
@@ -70,6 +71,7 @@ func cmdTruth(s *Session, a []string) error {
 		ag := audio.MatchNotes(rp.rip.Notes, truth)
 		fmt.Fprintf(s.out, "%s against %d note(s) given, transposed %+d: the rip's seconds = %.3f × the given %+.2f\n", a[0], len(truth), ag.Shift, ag.Stretch, ag.Offset)
 		reportAgreement(s.out, ag, a[0], "given", "heard as given")
+		reportLevels(s.out, rp, ag, truth)
 	}
 	if len(hits) > 0 {
 		reportHits(s.out, a[0], rp.rip, hits)
@@ -102,6 +104,67 @@ func reportHits(w io.Writer, name string, r *audio.Rip, given []audio.RipHit) {
 			fmt.Fprintf(w, "  %s only given: %s\n", audio.InstrumentName(audio.InstrumentType(d)), brief(l.OnlyB))
 		}
 	}
+}
+
+// levelBands part the notes given by how far, in dB, the recording plays each
+// under the loudest tenth of them
+var levelBands = [...]float64{-6, -12, -18}
+
+// reportLevels prints per line, and for the melody register as one, how many of
+// the notes given the rip heard by how loud the recording plays them and whether
+// another note given sounds at their onset; a rhythm has no pitch to read at
+func reportLevels(w io.Writer, rp *ripped, ag audio.Agreement, given []audio.RipNote) {
+	if slices.ContainsFunc(given, func(n audio.RipNote) bool { return n.MIDI < 0 }) {
+		return
+	}
+	level := audio.NoteLevels(rp.x, rp.rate, given, ag.At, rp.rip.Tuning)
+	sorted := slices.Sorted(slices.Values(level))
+	top := sorted[len(sorted)*9/10]
+	type key struct {
+		start float64
+		midi  int
+	}
+	fmt.Fprintf(w, "heard by level under the loudest tenth given: from %g dB, %g to %g, %g to %g, under %g; alone or under others\n",
+		levelBands[0], levelBands[0], levelBands[1], levelBands[1], levelBands[2], levelBands[2])
+	row := func(name string, keep func(audio.RipNote) bool, missed []audio.RipNote) {
+		miss := map[key]bool{}
+		for _, n := range missed {
+			miss[key{n.Start, n.MIDI}] = true
+		}
+		var heard, total [len(levelBands) + 1]int
+		var alone, under [2]int // heard, given
+		for i, n := range given {
+			if !keep(n) {
+				continue
+			}
+			band := 0
+			for band < len(levelBands) && level[i]-top < levelBands[band] {
+				band++
+			}
+			h := 0
+			if !miss[key{n.Start, n.MIDI}] {
+				h = 1
+			}
+			heard[band], total[band] = heard[band]+h, total[band]+1
+			by := &alone
+			if slices.ContainsFunc(given, func(o audio.RipNote) bool { return o != n && o.Start <= n.Start+0.03 && o.End > n.Start }) {
+				by = &under
+			}
+			by[0], by[1] = by[0]+h, by[1]+1
+		}
+		if alone[1]+under[1] == 0 {
+			return
+		}
+		fmt.Fprintf(w, "%-8s", name)
+		for b := range total {
+			fmt.Fprintf(w, " %d/%d", heard[b], total[b])
+		}
+		fmt.Fprintf(w, "; alone %d/%d, under others %d/%d\n", alone[0], alone[1], under[0], under[1])
+	}
+	row("melody", func(n audio.RipNote) bool { return !n.Bass && !n.Second }, ag.Lines[0].OnlyB)
+	row("under", func(n audio.RipNote) bool { return n.Second }, ag.Lines[1].OnlyB)
+	row("bass", func(n audio.RipNote) bool { return n.Bass }, ag.Lines[2].OnlyB)
+	row("register", func(n audio.RipNote) bool { return !n.Bass }, ag.Register.OnlyB)
 }
 
 // isMIDI is whether a file names a Standard MIDI File by its extension

@@ -20,6 +20,29 @@ type Agreement struct {
 	Lines           [3]LineAgreement
 	Register        LineAgreement // the melody register, both lines as one
 	Stretch, Offset float64       // a's time of a matched note ≈ Stretch*b's + Offset
+	// paired are the seconds of b and of a of each note the register matched, in
+	// order, the map At follows
+	paired [][2]float64
+}
+
+// At places a second of b on a: between notes the register matched, on the
+// line through the two either side, so a tempo b's player bends is followed;
+// past them, and with fewer than two, on Stretch from the nearest
+func (ag Agreement) At(s float64) float64 {
+	p := ag.paired
+	if len(p) < 2 {
+		return ag.Stretch*s + ag.Offset
+	}
+	i, _ := slices.BinarySearchFunc(p, s, func(q [2]float64, s float64) int { return cmpFloat(q[0], s) })
+	switch {
+	case i == 0:
+		return p[0][1] + (s-p[0][0])*ag.Stretch
+	case i == len(p):
+		return p[i-1][1] + (s-p[i-1][0])*ag.Stretch
+	case p[i][0] == p[i-1][0]:
+		return p[i-1][1]
+	}
+	return p[i-1][1] + (s-p[i-1][0])*(p[i][1]-p[i-1][1])/(p[i][0]-p[i-1][0])
 }
 
 // LineAgreement is one line's count: the notes each side has, how many align,
@@ -128,7 +151,11 @@ func align(a, b []RipNote, shift int) Agreement {
 		ag.Lines[line] = part(func(n RipNote) bool { return lineOf(n) == line })
 	}
 	ag.Stretch, ag.Offset = fitLine(xs, ys)
+	n := len(xs)
 	ag.Register = part(func(n RipNote) bool { return !n.Bass })
+	for k := n; k < len(xs); k++ {
+		ag.paired = append(ag.paired, [2]float64{xs[k], ys[k]})
+	}
 	return ag
 }
 
@@ -255,6 +282,36 @@ func spans(a, b []RipNote) (cut, spanning []RipNote) {
 		return out
 	}
 	return within(b, a), within(a, b)
+}
+
+// NoteLevels is the level in dB a recording plays each note at: the strongest
+// bin of its first three harmonics from 60 ms before its onset to 120 ms after,
+// the slack for a map that places it a little early or late, its seconds placed
+// on the recording by at (a truth's Agreement.At), its pitch at the recording's
+// tuning in cents
+func NoteLevels(x []float64, rate int, notes []RipNote, at func(float64) float64, cents float64) []float64 {
+	n := 2
+	for n < rate/6 { // about 170 ms, a bin under a semitone from E2 up
+		n *= 2
+	}
+	s, hop, before, after := newSTFT(n), max(rate/100, 1), int(0.06*float64(rate)), int(0.12*float64(rate))
+	out := make([]float64, len(notes))
+	for i, note := range notes {
+		f0 := NoteFreq(note.MIDI) * math.Pow(2, cents/1200)
+		start := int(at(note.Start) * float64(rate))
+		var peak float64
+		for c := start + n/2 - before; c <= start+n/2+after; c += hop {
+			mag := s.at(x, c)
+			for h := 1.0; h <= 3; h++ {
+				k := int(math.Round(h * f0 * float64(n) / float64(rate)))
+				for j := max(k-2, 0); j <= k+2 && j < len(mag); j++ {
+					peak = max(peak, mag[j])
+				}
+			}
+		}
+		out[i] = 20 * math.Log10(peak+1e-12)
+	}
+	return out
 }
 
 // fitLine is the least-squares line y ≈ stretch*x + offset, one and zero

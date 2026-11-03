@@ -533,6 +533,26 @@ func TestMatchHitsPlacesARipsDrumsOnTheGivenOnes(t *testing.T) {
 	}
 }
 
+// TestNoteLevelsReadARecordingsLoudness: of two notes a recording plays 20 dB
+// apart, under a map that places the given seconds on it, the softer reads
+// 20 dB lower, and a note it does not play, two octaves up, reads far under both.
+func TestNoteLevelsReadARecordingsLoudness(t *testing.T) {
+	const rate = 22050
+	x := make([]float64, 3*rate)
+	for i := range rate / 2 {
+		ph := 2 * math.Pi * NoteFreq(69) * float64(i) / rate
+		x[rate/2+i], x[2*rate+i] = 0.5*math.Sin(ph), 0.05*math.Sin(ph)
+	}
+	notes := []RipNote{{Start: 0, MIDI: 69}, {Start: 1.5, MIDI: 69}, {Start: 1.5, MIDI: 93}}
+	lv := NoteLevels(x, rate, notes, func(s float64) float64 { return s + 0.5 }, 0)
+	if d := lv[0] - lv[1]; math.Abs(d-20) > 1 {
+		t.Errorf("the softer note reads %.1f dB under the louder, want 20", d)
+	}
+	if lv[2] > lv[1]-40 {
+		t.Errorf("A6 over a recording of A4 reads %.1f dB against A4's %.1f", lv[2], lv[1])
+	}
+}
+
 // TestMIDIRoundTrip: a transcript written as a MIDI file reads back note for
 // note and hit for hit within half a tick, each line from its named track and
 // each drum from the drum channel, a note that ends as the next of its pitch
