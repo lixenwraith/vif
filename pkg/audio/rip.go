@@ -44,6 +44,7 @@ type RipParams struct {
 	StrikeHold    float64 `toml:"strike_hold"`    // the share of the register's reference a struck pitch's salience reaches within MinNote, or the strike is no note
 	StrikeGap     float64 `toml:"strike_gap"`     // seconds within which a pitch struck again is the same strike
 	StrikeAgain   float64 `toml:"strike_again"`   // how sure a strike of a pitch still sounding must be to end its note and start another
+	Release       float64 `toml:"release"`        // how sure a front end that hears each pitch let go must be before the release ends its note
 }
 
 func DefaultRipParams() RipParams {
@@ -51,7 +52,7 @@ func DefaultRipParams() RipParams {
 		TempoPrior: 120, TempoWidth: 1, Tightness: 100,
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
-		SecondVoice: 0.5, Compress: 1, Cross: 0.003, Strike: 0.8, StrikeHold: 0.9, StrikeGap: 0.12, StrikeAgain: 0.95,
+		SecondVoice: 0.5, Compress: 1, Cross: 0.003, Strike: 0.8, StrikeHold: 0.9, StrikeGap: 0.12, StrikeAgain: 0.95, Release: 0.8,
 	}
 }
 
@@ -89,6 +90,7 @@ var ripGenes = []ripGene{
 	{"strike_hold", 0.3, 1, func(p *RipParams) *float64 { return &p.StrikeHold }},
 	{"strike_gap", 0.03, 0.3, func(p *RipParams) *float64 { return &p.StrikeGap }},
 	{"strike_again", 0.5, 0.99, func(p *RipParams) *float64 { return &p.StrikeAgain }},
+	{"release", 0.2, 0.99, func(p *RipParams) *float64 { return &p.Release }},
 }
 
 func (g *ripGene) get(p *RipParams) float64 {
@@ -298,6 +300,8 @@ type RipFrames struct {
 	Wave               []float32 // frames × len(VoiceWaves), or nil
 	Voice              []float32 // frames × VoiceGeneCount, or nil
 	Strike             []float32 // frames × RipPitches, how surely each pitch is struck there, or nil
+	Release            []float32 // frames × RipPitches, how surely each pitch is let go there, or nil
+	Velocity           []float32 // frames × RipPitches, how hard a pitch struck there was struck, or nil
 }
 
 func (f *RipFrames) frames() int { return len(f.Flux) }
@@ -1537,31 +1541,33 @@ func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 }
 
 // strikes reads a register's notes from a front end that hears each pitch struck:
-// a note starts where a strike peaks over Strike and lasts, any number at once,
-// while its salience holds over Voicing of the reference and no strike renews it,
-// one over StrikeAgain and the surest a tone either side. None starts where the pitch
-// never sounds (StrikeHold within MinNote), at a stronger strike's partial, or within StrikeGap.
+// a note starts where a strike peaks over Strike, as hard as the front end heard,
+// and lasts, any number at once, until its salience falls under Voicing of the
+// reference, its release peaks over Release or a sure strike renews it. None starts
+// where the pitch never sounds, at a stronger strike's partial, or within StrikeGap.
 func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 	r, ok := f.register(lo, hi)
 	if !ok {
 		return nil
 	}
 	T, short, gap := f.frames(), max(int(p.MinNote/f.Hop), 1), int(p.StrikeGap/f.Hop)
-	strike := func(t, midi int) float32 {
-		if t < 0 || t >= T || midi < RipMinMIDI || midi >= RipMaxMIDI {
+	at := func(h []float32, t, midi int) float32 {
+		if h == nil || t < 0 || t >= T || midi < RipMinMIDI || midi >= RipMaxMIDI {
 			return 0
 		}
-		return f.Strike[t*RipPitches+midi-RipMinMIDI]
+		return h[t*RipPitches+midi-RipMinMIDI]
 	}
-	struck := func(t, s int) bool {
-		v := strike(t, lo+s)
-		return float64(v) >= p.Strike && v >= strike(t-1, lo+s) && v > strike(t+1, lo+s)
+	// peak: a head's score for midi peaks at t, at least over
+	peak := func(h []float32, t, midi int, over float64) bool {
+		v := at(h, t, midi)
+		return h != nil && float64(v) >= over && v >= at(h, t-1, midi) && v > at(h, t+1, midi)
 	}
+	struck := func(t, s int) bool { return peak(f.Strike, t, lo+s, p.Strike) }
 	// stronger: a stronger strike within two frames at one of the intervals ds from midi, at or over from
 	stronger := func(t, midi, from int, ds ...int) bool {
 		for _, d := range ds {
 			for u := t - 2; u <= t+2 && midi+d >= from; u++ {
-				if strike(u, midi+d) > strike(t, midi) {
+				if at(f.Strike, u, midi+d) > at(f.Strike, t, midi) {
 					return true
 				}
 			}
@@ -1570,7 +1576,7 @@ func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 	}
 	// another note's attack sets off strikes on the pitches ringing, a tone either side as sure as its own
 	renews := func(t, s int) bool {
-		return struck(t, s) && float64(strike(t, lo+s)) >= p.StrikeAgain && !stronger(t, lo+s, RipMinMIDI, -2, -1, 1, 2)
+		return struck(t, s) && float64(at(f.Strike, t, lo+s)) >= p.StrikeAgain && !stronger(t, lo+s, RipMinMIDI, -2, -1, 1, 2)
 	}
 	sounds := func(t, s int) bool {
 		for u := t; u < min(t+short, T); u++ {
@@ -1591,11 +1597,16 @@ func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 			}
 			last = t
 			end := t + 1
-			for end < T && !(renews(end, s) && (end-t < short || end-t >= gap)) && (end < t+short || r.sal(end, s) >= p.Voicing*r.ref) {
+			for end < T && !(renews(end, s) && (end-t < short || end-t >= gap)) &&
+				(end < t+short || r.sal(end, s) >= p.Voicing*r.ref && !peak(f.Release, end, lo+s, p.Release)) {
 				end++
 			}
 			if end-t >= short {
-				notes = append(notes, r.note(t, end, s))
+				n := r.note(t, end, s)
+				if f.Velocity != nil {
+					n.vel = min(max(float64(at(f.Velocity, t, lo+s)), 0.1), 1)
+				}
+				notes = append(notes, n)
 			}
 			t = end
 		}

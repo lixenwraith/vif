@@ -23,7 +23,8 @@ DRUMS = 3
 WAVES = 5
 VOICE_GENES = 32
 
-HEADS = [("onset", 1), ("drums", DRUMS), ("pitch", PITCHES), ("voicing", 1), ("wave", WAVES), ("voice", VOICE_GENES), ("strike", PITCHES)]
+HEADS = [("onset", 1), ("drums", DRUMS), ("pitch", PITCHES), ("voicing", 1), ("wave", WAVES), ("voice", VOICE_GENES), ("strike", PITCHES),
+         ("release", PITCHES), ("velocity", PITCHES)]
 
 
 # the energy 80 dB under a full-scale sine's, where the model's logarithm floors

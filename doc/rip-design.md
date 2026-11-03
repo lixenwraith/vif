@@ -68,8 +68,9 @@ flowchart LR
    their strength and no two at once, and the lead is the line a rule names,
    the busier by default (`Ripper.Lead`). From a front end that hears
    each pitch struck, the melody register's notes are read from the strikes
-   instead: a note starts where its pitch's strike peaks over `strike` and
-   lasts while its salience holds or until it is struck again over
+   instead: a note starts where its pitch's strike peaks over `strike`, as hard
+   as the model heard it struck, and lasts while its salience holds, until the
+   model hears it let go over `release` or until it is struck again over
    `strike_again`, any number at once, so the notes a pedal leaves ringing do
    not hide the next one struck, which a path through the salience, preferring
    what sounds strongest, stays on; the lines are parted from them as before.
@@ -188,9 +189,12 @@ offline (`song <name> <file.wav>`).
   broken chord in eighths or sixteenths changing pitch from note to note under
   a melody that is a slow line of longer notes in half the loops: the texture
   of the sample recording, a lead over an arpeggio, which the rip has to part.
-  A generated loop leaves out its drums three times in ten and its bass once
-  in seven, so a line is heard bare too. Both draw from streams of their own,
-  so a loop's bank patterns and key are the same with and without them.
+  A third of the generated melodies and accompaniments play half their length
+  20 to 30 dB softer, as a phrase played softly, the levels at which Für
+  Elise's misses gathered. A generated loop leaves out its drums three times
+  in ten and its bass once in seven, so a line is heard bare too. Both draw
+  from streams of their own, so a loop's bank patterns and key are the same
+  with and without them.
 - **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
   bench and the install with every knob an environment variable, the corpus in
   `PARTS` exports at once, each keeping the loops already on disk, and a focus
@@ -204,7 +208,8 @@ offline (`song <name> <file.wav>`).
   four layers, feed-forward 1024, a window of 64 frames either side, 3.2
   million weights (12.8 MB), four times the first five runs' width 128 and four
   heads; heads for the onset, the three drums, the sixty-nine pitches, voicing,
-  the five waves, the thirty-two genes and the sixty-nine pitches struck. Attention carries ALiBi biases, a
+  the five waves, the thirty-two genes, and the sixty-nine pitches struck, let
+  go, and how hard each was struck. Attention carries ALiBi biases, a
   slope per head on the frame distance, so the model has no positions to learn
   and generalises past the training window. A file may put convolutions over
   frames and bands before the input layer, each pooled over the bands
