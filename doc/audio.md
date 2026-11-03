@@ -560,11 +560,13 @@ The front end is a seam (`RipFrontEnd`): whatever hears the recording into
 `RipFrames`, the onset strengths, the pitch salience and the chroma per frame,
 feeds the same decoders. The analysis above is one front end; `ripnet` is the
 other, a transformer over the log-mel frames `MelFrames` makes, whose heads say
-per frame what struck, what sounds, which pitch is struck (`RipFrames.Strike`),
+per frame what struck, what sounds, which pitch is struck or let go and how hard
+(`RipFrames.Strike`, `Release`, `Velocity`),
 and the wave and voice genes (`VoiceDef.Genes`) the note is played with, so a
 rip through it also names the voices its registers were played with
 (`Rip.Voices`). From strikes the melody register's notes start where a pitch is
-struck and last while it sounds, any number at once, in place of the two-line
+struck, as hard as it was, and last while it sounds or until it is let go
+(`Release`), any number at once, in place of the two-line
 path, which stays on the notes a pedal leaves ringing; a strike starts none when
 its pitch never sounds, when it is a stronger strike's partial in the register,
 or within `StrikeGap` of the pitch's last, and one under `StrikeAgain`, or under a

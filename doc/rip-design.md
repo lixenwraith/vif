@@ -68,8 +68,9 @@ flowchart LR
    their strength and no two at once, and the lead is the line a rule names,
    the busier by default (`Ripper.Lead`). From a front end that hears
    each pitch struck, the melody register's notes are read from the strikes
-   instead: a note starts where its pitch's strike peaks over `strike` and
-   lasts while its salience holds or until it is struck again over
+   instead: a note starts where its pitch's strike peaks over `strike`, as hard
+   as the model heard it struck, and lasts while its salience holds, until the
+   model hears it let go over `release` or until it is struck again over
    `strike_again`, any number at once, so the notes a pedal leaves ringing do
    not hide the next one struck, which a path through the salience, preferring
    what sounds strongest, stays on; the lines are parted from them as before.
@@ -204,7 +205,8 @@ offline (`song <name> <file.wav>`).
   four layers, feed-forward 1024, a window of 64 frames either side, 3.2
   million weights (12.8 MB), four times the first five runs' width 128 and four
   heads; heads for the onset, the three drums, the sixty-nine pitches, voicing,
-  the five waves, the thirty-two genes and the sixty-nine pitches struck. Attention carries ALiBi biases, a
+  the five waves, the thirty-two genes, and the sixty-nine pitches struck, let
+  go, and how hard each was struck. Attention carries ALiBi biases, a
   slope per head on the frame distance, so the model has no positions to learn
   and generalises past the training window. A file may put convolutions over
   frames and bands before the input layer, each pooled over the bands

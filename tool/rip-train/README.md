@@ -301,14 +301,15 @@ itself (`ripnet.features`, derived from the stored frames), width 256, eight
 heads, four layers, feed-forward 1024, a
 window of 64 frames either side, 3.2 million weights. `--convs
 16x3x3/1,32x3x3/2` puts convolutions before the input layer, each its
-channels, frames by bands kernel and the pooling over bands; `--towers 2:2,4:5`
+channels, frames by bands kernel and the pooling over bands; `--towers 2:2,4:7`
 splits the layers into towers over the shared input layer, each its layers and
 the run of heads it computes in `ripnet.HEADS` order: the onset and the drums
 on two layers, the rest on four. The losses: onsets,
-drums, pitches and each pitch's strikes (within a frame of a note's start) as
-weighted binary cross-entropy, voicing likewise, the wave
-as cross-entropy and the voice genes as squared error, the last two over
-frames a note sounds in.
+drums, pitches and each pitch's strikes and releases (within a frame of a
+note's start and end) as weighted binary cross-entropy, voicing likewise, the
+wave as cross-entropy and the voice genes as squared error over frames a note
+sounds in, and each strike's velocity as squared error where the corpus gives
+one.
 
 ## Parity
 

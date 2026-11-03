@@ -487,6 +487,7 @@ type corpusEvent struct {
 	End   int       `json:"end"`
 	Drum  int       `json:"drum"` // kick 0, snare 1, hihat 2; -1 for a note
 	MIDI  int       `json:"midi"`
+	Vel   float64   `json:"vel"`
 	Wave  int       `json:"wave"` // index into the waves of the manifest; -1 unknown
 	Voice []float64 `json:"voice,omitempty"`
 }
@@ -640,7 +641,7 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 		stepSec := float64(audio.SamplesPerStep(l.bpm)) / audio.AudioSampleRate
 		for _, e := range audio.ExpectedEvents(l.slots, o.bars, l.root, l.scale, nil) {
 			start := float64(e.Bar*audio.StepsPerBar+e.Step) * stepSec
-			ev := corpusEvent{Frame: int(start/audio.RipFrameSec + 0.5), Drum: -1, Wave: -1}
+			ev := corpusEvent{Frame: int(start/audio.RipFrameSec + 0.5), Drum: -1, Vel: e.Vel, Wave: -1}
 			if e.Instr.IsDrum() {
 				if e.Instr >= audio.InstrClap {
 					continue

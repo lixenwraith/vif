@@ -6,8 +6,9 @@ export the weights pkg/transformer loads:
 Each loop's log-mel frames (loop_NNN.mel) are the input; its events
 (loop_NNN.json) become per-frame targets: an onset within a frame of any event,
 each drum's hits, the pitches sounding, whether any sounds, the wave and voice
-genes of the highest note sounding, and each pitch within a frame of its strikes. Training crops random windows of frames, so
-memory is bounded by --window, not by the loops' length.
+genes of the highest note sounding, each pitch within a frame of its strikes and
+of its releases, and how hard each was struck. Training crops random windows of
+frames, so memory is bounded by --window, not by the loops' length.
 """
 from __future__ import annotations
 
@@ -48,7 +49,8 @@ class MelFile:
 def targets(label: dict, frames: int, manifest: dict) -> dict:
     """Per-frame targets from a loop's events; masks say where a target counts.
     The yes-or-no ones are bytes, a quarter of a float's memory, until batch;
-    the strikes stay a list of (frame, pitch), as sparse as they are."""
+    the strikes and releases stay lists of (frame, pitch), as sparse as they are,
+    each strike's velocity beside it, -1 where the corpus does not say."""
     pitches, min_midi = manifest["pitches"], manifest["min_midi"]
     genes, waves = manifest["voice_genes"], len(manifest["waves"])
     onset = np.zeros(frames, np.uint8)
@@ -57,7 +59,7 @@ def targets(label: dict, frames: int, manifest: dict) -> dict:
     wave = np.full(frames, -1, np.int64)
     voice = np.zeros((frames, genes), np.float32)
     top = np.full(frames, -1, np.int64)  # the highest midi sounding, whose voice the frame reports
-    strikes = []
+    strikes, releases, vels = [], [], []
     for e in label["events"]:
         t = e["frame"]
         if t < 0 or t >= frames:
@@ -71,6 +73,9 @@ def targets(label: dict, frames: int, manifest: dict) -> dict:
         if 0 <= p < pitches:
             pitch[t:end, p] = 1
             strikes.append((t, p))
+            vels.append(e.get("vel", -1))
+            if e["end"] < frames:
+                releases.append((e["end"], p))
         if e.get("wave", -1) >= 0 and e.get("voice"):
             for u in range(t, end):
                 if e["midi"] > top[u]:
@@ -79,7 +84,8 @@ def targets(label: dict, frames: int, manifest: dict) -> dict:
     voicing = (pitch.sum(1) > 0).astype(np.uint8)
     return {"onset": onset, "drums": drums, "pitch": pitch, "voicing": voicing,
             "wave": wave, "voice": voice, "voiced": (top >= 0).astype(np.uint8),
-            "strikes": np.array(strikes, np.int32).reshape(-1, 2)}
+            "strikes": np.array(strikes, np.int32).reshape(-1, 2), "vels": np.array(vels, np.float32),
+            "releases": np.array(releases, np.int32).reshape(-1, 2)}
 
 
 def load_corpus(d: str):
@@ -97,7 +103,7 @@ def load_corpus(d: str):
 
 def batch(loops, window: int, size: int, rng: random.Random):
     """size random windows of `window` frames, shorter loops padded with zeros and masked out"""
-    mels, tg = [], {k: [] for k in ("onset", "drums", "pitch", "voicing", "wave", "voice", "voiced", "strike", "valid")}
+    mels, tg = [], {k: [] for k in ("onset", "drums", "pitch", "voicing", "wave", "voice", "voiced", "strike", "release", "velocity", "heard", "valid")}
     for _ in range(size):
         mel, t = rng.choice(loops)
         n = len(mel)
@@ -114,10 +120,19 @@ def batch(loops, window: int, size: int, rng: random.Random):
         for k in ("onset", "drums", "pitch", "voicing", "voice", "voiced"):
             tg[k].append(take(t[k]))
         tg["wave"].append(take(t["wave"], -1))
-        strike = np.zeros((window, t["pitch"].shape[1]), np.uint8)
-        for f, p in t["strikes"]:
-            strike[max(f - 1 - start, 0):max(min(f + 2 - start, window), 0), p] = 1
+        shape = (window, t["pitch"].shape[1])
+        strike, release, velocity, heard = np.zeros(shape, np.uint8), np.zeros(shape, np.uint8), np.zeros(shape, np.float32), np.zeros(shape, np.uint8)
+        for (f, p), v in zip(t["strikes"], t["vels"]):
+            near = slice(max(f - 1 - start, 0), max(min(f + 2 - start, window), 0))
+            strike[near, p] = 1
+            if v >= 0:
+                velocity[near, p], heard[near, p] = v, 1
+        for f, p in t["releases"]:
+            release[max(f - 1 - start, 0):max(min(f + 2 - start, window), 0), p] = 1
         tg["strike"].append(strike)
+        tg["release"].append(release)
+        tg["velocity"].append(velocity)
+        tg["heard"].append(heard)
         tg["valid"].append(np.concatenate([np.ones(window - pad, np.float32), np.zeros(pad, np.float32)]))
     out = {k: torch.from_numpy(np.stack(v)) for k, v in tg.items()}
     return torch.from_numpy(np.stack(mels)), {k: v if k == "wave" else v.float() for k, v in out.items()}
@@ -129,8 +144,9 @@ def validation(loops, window: int):
     mels, tgs = [], []
     for mel, t in loops:
         for start in range(0, max(len(mel) - 1, 1), window):
-            cut = {k: v[start:start + window] for k, v in t.items() if k != "strikes"}
-            cut["strikes"] = t["strikes"] - np.array([start, 0], np.int32)
+            cut = {k: v[start:start + window] for k, v in t.items() if k not in ("strikes", "vels", "releases")}
+            cut["strikes"], cut["vels"] = t["strikes"] - np.array([start, 0], np.int32), t["vels"]
+            cut["releases"] = t["releases"] - np.array([start, 0], np.int32)
             sub = [(mel[start:start + window], cut)]
             m, tg = batch(sub, window, 1, rng)
             mels.append(m)
@@ -166,7 +182,11 @@ def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
         "pitch": bce("pitch", t["pitch"], 12.0),
         "voicing": bce("voicing", t["voicing"], 2.0),
         "strike": bce("strike", t["strike"], 20.0),
+        "release": bce("release", t["release"], 20.0),
     }
+    heard = t["heard"] * valid[..., None]
+    velocity = torch.sigmoid(y[..., cfg.slice("velocity")])
+    out["velocity"] = ((velocity - t["velocity"]) ** 2 * heard).sum() / heard.sum().clamp(min=1)
     voiced = t["voiced"] * valid
     n = voiced.sum().clamp(min=1)
     wave_logits = y[..., cfg.slice("wave")].reshape(-1, ripnet.WAVES)
@@ -175,7 +195,8 @@ def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
     out["wave"] = (ce * voiced).sum() / n
     voice = torch.sigmoid(y[..., cfg.slice("voice")])
     out["voice"] = ((voice - t["voice"]) ** 2).mean(-1).mul(voiced).sum() / n
-    out["total"] = out["onset"] + out["drums"] + out["pitch"] + 0.5 * out["voicing"] + out["strike"] + 0.5 * out["wave"] + 2.0 * out["voice"]
+    out["total"] = (out["onset"] + out["drums"] + out["pitch"] + 0.5 * out["voicing"] + out["strike"] + out["release"]
+                    + 2.0 * out["velocity"] + 0.5 * out["wave"] + 2.0 * out["voice"])
     return out
 
 
@@ -196,7 +217,7 @@ def main() -> None:
     ap.add_argument("--layers", type=int, default=4)
     ap.add_argument("--heads", type=int, default=8)
     ap.add_argument("--ffn", type=int, default=1024)
-    ap.add_argument("--towers", default="", help="stacks of their own after the shared input, layers:heads each in the heads' order, comma-separated: 2:2,4:5 gives onset and drums two layers and the rest four")
+    ap.add_argument("--towers", default="", help="stacks of their own after the shared input, layers:heads each in the heads' order, comma-separated: 2:2,4:7 gives onset and drums two layers and the rest four")
     ap.add_argument("--convs", default="", help="convolutions before the input layer, channels x frames x features / pool each, comma-separated: 16x3x3/1,16x3x3/2,32x3x3/2")
     ap.add_argument("--attention-window", type=int, default=64, help="frames attended either side")
     ap.add_argument("--seed", type=int, default=1)
@@ -251,10 +272,10 @@ def main() -> None:
         if not val_mels:
             return
         v = evaluate(model, val_mels, val_tgs, args.device)
-        # the decoders read the onset, drum, pitch and voicing heads; the wave and
-        # voice heads name a voice and memorize the corpus's, so they do not pick
-        # the step exported
-        v["decoders"] = v["onset"] + v["drums"] + v["pitch"] + 0.5 * v["voicing"] + v["strike"]
+        # the decoders read the onset, drum, pitch, voicing, strike and release
+        # heads; the wave, voice and velocity heads say how a note is played and
+        # memorize the corpus's, so they do not pick the step exported
+        v["decoders"] = v["onset"] + v["drums"] + v["pitch"] + 0.5 * v["voicing"] + v["strike"] + v["release"]
         parts = " ".join(f"{k} {x:.3f}" for k, x in v.items() if k not in ("total", "decoders"))
         mark = ""
         if v["decoders"] < best_loss:
