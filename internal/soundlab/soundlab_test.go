@@ -1023,6 +1023,73 @@ mix src.track.1 src.track.2 dst
 	}
 }
 
+// trackNotes is a track's notes as step:midi under the session's key
+func trackNotes(s *Session, name string, n int) string {
+	d, _ := s.pats.get(name)
+	var notes []string
+	for _, e := range d.Track[n].Event {
+		notes = append(notes, fmt.Sprintf("%d:%d", e.Pos, audio.StepPitch(s.root, s.scale, e.Deg, e.Oct, e.Acc)))
+	}
+	return strings.Join(notes, " ")
+}
+
+// TestSplitPartsATrackAtAPitch: split keeps a tonal track's notes from the pitch
+// up and moves the rest to a new track of its voice right after it; a drum track,
+// or a split leaving a side empty, is refused.
+func TestSplitPartsATrackAtAPitch(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, `
+key 60 major
+new pattern p
+take p lead 0:72 4:60 8:76 12:55
+take p pad 0:48
+split p.track.1 64
+! split p.track.0 60
+! split p.track.1 80
+! split p.track.1 40
+`)
+	if got := patternSteps(s, "p"); got != "16: kick 0 lead 0,8 lead 4,12 pad 0" {
+		t.Fatalf("split at E4: want lead's high notes kept and the low after it, before pad; got %q", got)
+	}
+	if got := trackNotes(s, "p", 2); got != "4:60 12:55" {
+		t.Fatalf("the lower line: want 4:60 12:55, got %q", got)
+	}
+}
+
+// TestShiftMovesEveryNoteOrNone: shift moves the tracks' notes by octave, by
+// degree carried into the octave, by semitone spelt on the key, or by step rotated
+// around the pattern; a drum track takes only step, and a note past a step's
+// bounds refuses the whole shift.
+func TestShiftMovesEveryNoteOrNone(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, `
+key 60 major
+new pattern p
+take p lead 0:60 4:64 15:71
+shift p.track.1 oct +1
+shift p.track.1 deg +3
+shift p.track.1 semi -1
+shift p.track.0 p.track.1 step 2
+! shift p.track.0 oct 1
+`)
+	// C5 E5 B5 up three degrees, F5 A5 E6, a semitone down E5 G#5 D#6, two steps on
+	if got := trackNotes(s, "p", 1); got != "1:87 2:76 6:80" {
+		t.Fatalf("lead after oct, deg, semi and step: want 1:87 2:76 6:80, got %q", got)
+	}
+	d, _ := s.pats.get("p")
+	if d.Track[0].Event[0].Pos != 2 || d.Track[1].Event[2].Acc != 1 {
+		t.Fatalf("want the kick moved to step 2 and G#5 spelt G with a sharp, got %+v", d.Track)
+	}
+	runOrFatal(t, s, &out, "new pattern q\ntake q lead 0:60\n! shift q.track.1 p.track.1 oct +7\n")
+	if got := trackNotes(s, "q", 1) + " " + trackNotes(s, "p", 1); got != "0:60 1:87 2:76 6:80" {
+		t.Fatalf("a shift one note cannot take: want both tracks as they were, got %q", got)
+	}
+}
+
 // TestMixedTracksLoopAtOneLength: tracks of other lengths join a pattern at the
 // least common multiple of the lengths, each track repeated to fill it; past 64
 // steps the pattern keeps its length and a longer loop is cut, as the command
