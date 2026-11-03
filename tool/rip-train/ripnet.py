@@ -10,12 +10,14 @@ import math
 import struct
 from dataclasses import dataclass, field
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 # pkg/audio/ripnet.Spec, which a corpus manifest restates
 MEL_BANDS = 229
+INPUTS = MEL_BANDS + 1  # the bands over the frame's level, and the level
 PITCHES = 69
 DRUMS = 3
 WAVES = 5
@@ -24,9 +26,23 @@ VOICE_GENES = 32
 HEADS = [("onset", 1), ("drums", DRUMS), ("pitch", PITCHES), ("voicing", 1), ("wave", WAVES), ("voice", VOICE_GENES), ("strike", PITCHES)]
 
 
+# the energy 80 dB under a full-scale sine's, where the model's logarithm floors
+FLOOR = 1e-8
+
+
+def features(mel: np.ndarray) -> np.ndarray:
+    """The model's input from log-mel frames as the corpus stores them, log1p(100 e):
+    each band's energy in dB over FLOOR less the frame's mean, and the mean itself,
+    both over 80 dB, so a frame's loudness is one input and the bands are level-free,
+    as pkg/audio/ripnet's features computes them"""
+    db = 10 * np.log10(np.expm1(mel.astype(np.float64)) / 100 + FLOOR)
+    level = db.mean(axis=-1, keepdims=True)
+    return np.concatenate([(db - level) / 80, (level + 80) / 80], axis=-1).astype(np.float32)
+
+
 @dataclass
 class Config:
-    inputs: int = MEL_BANDS
+    inputs: int = INPUTS
     # (channels, frames, features, pool) each: a kernel centred on each frame
     # and feature, GELU, then the features max-pooled; none feeds the frames on
     convs: list = field(default_factory=list)

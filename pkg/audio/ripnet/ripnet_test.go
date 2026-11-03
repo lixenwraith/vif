@@ -58,3 +58,23 @@ func TestAnUntrainedModelHearsFramesTheRipReads(t *testing.T) {
 		t.Error("a model without the voice heads passed")
 	}
 }
+
+// TestAGainMovesOnlyTheLevel: the model's input keeps a frame's bands level-free,
+// so the same sound 20 dB softer differs only in the level input, by 20 dB, while
+// it stays well over the floor.
+func TestAGainMovesOnlyTheLevel(t *testing.T) {
+	loud, soft := make([]float32, audio.RipMelBands), make([]float32, audio.RipMelBands)
+	for b := range loud {
+		e := math.Pow(10, -float64(b%5)) // bands from full scale to 40 dB down
+		loud[b], soft[b] = float32(math.Log1p(100*e)), float32(math.Log1p(100*e/100))
+	}
+	f := features([][]float32{loud, soft})
+	for b := range audio.RipMelBands {
+		if d := math.Abs(float64(f[0][b] - f[1][b])); d > 2e-3 {
+			t.Fatalf("band %d moved by %.4f with the gain", b, d)
+		}
+	}
+	if d := float64(f[0][audio.RipMelBands]-f[1][audio.RipMelBands]) * 80; math.Abs(d-20) > 0.1 {
+		t.Errorf("the level input moved %.2f dB for a 20 dB gain", d)
+	}
+}

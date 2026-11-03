@@ -110,7 +110,7 @@ def batch(loops, window: int, size: int, rng: random.Random):
                 shape = (pad,) + a.shape[1:]
                 a = np.concatenate([a, np.full(shape, fill, a.dtype)])
             return a
-        mels.append(take(mel))
+        mels.append(ripnet.features(take(mel)))
         for k in ("onset", "drums", "pitch", "voicing", "voice", "voiced"):
             tg[k].append(take(t[k]))
         tg["wave"].append(take(t["wave"], -1))

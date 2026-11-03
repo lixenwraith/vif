@@ -296,7 +296,9 @@ exists, `--init` starts from a `.pt`'s weights alone (no optimizer state, step
 0), and `--shard-seed` moves the stream the windows are drawn from while
 `--seed` keeps the starting weights; `average.py --pt next.pt --out next.bin
 [--trim 0.1] a.pt b.pt ...` is the merge. The defaults are `ripnet.Spec`:
-229 bands in, width 256, eight heads, four layers, feed-forward 1024, a
+230 inputs, the corpus's 229 bands in dB over the frame's mean and the mean
+itself (`ripnet.features`, derived from the stored frames), width 256, eight
+heads, four layers, feed-forward 1024, a
 window of 64 frames either side, 3.2 million weights. `--convs
 16x3x3/1,32x3x3/2` puts convolutions before the input layer, each its
 channels, frames by bands kernel and the pooling over bands; `--towers 2:2,4:5`
