@@ -192,6 +192,17 @@ that proves wrong or that a document now states, and link the document instead.
 - Weights installed in the user root (`~/.config/vif/audio/ripnet.bin`) win over
   `-config-dir`: soundlab resolves the model file across the roots, so a run that
   must hear with the analysis points `XDG_CONFIG_HOME` at an empty directory.
+- A training round runs from its own copy of the tree: `pipeline.sh` runs
+  soundlab through `go run` at every stage, so an edit to the checkout while a
+  round trains changes the corpus or the bench under it. The bench draws its
+  loops from the tree's code too, so rounds whose `aug` or `gen` differ bench on
+  different loops: bench one round's weights through the other's soundlab.
+- The user judges the corpus by ear, as music: measure what they hear before
+  changing the generator. The bank's drums and bass put 82 to 89% of a loop's
+  energy under 250 Hz (Für Elise and the sample 7 to 14%, Billie Jean 76%), a
+  white floor a recording's mix would cover sits bare over a synthesizer's empty
+  treble (a recording's hiss is about 39 dB under its median frame), and a
+  reverb after the clip passes full scale.
 - The rip's spectrogram frames are centred, so every onset reads about two frames
   (23 ms) early in every band alike; the beat grid and the events share the bias,
   and the sixteenth quantization cancels it. Do not correct one without the other.

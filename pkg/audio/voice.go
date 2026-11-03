@@ -580,6 +580,17 @@ func bandpass(hz, q float64) biquad {
 	return biquad{b0: alpha / a0, b2: -alpha / a0, a1: -2 * math.Cos(w) / a0, a2: (1 - alpha) / a0}
 }
 
+// Peaking is the cookbook's peaking filter, db at hz over a width of q, as the
+// function of the next sample a mix's equaliser band is
+func Peaking(hz, db, q float64) func(float64) float64 {
+	gain := math.Pow(10, db/40)
+	w := 2 * math.Pi * min(hz, 0.45*AudioSampleRate) / AudioSampleRate
+	alpha := math.Sin(w) / (2 * q)
+	a0 := 1 + alpha/gain
+	b := biquad{b0: (1 + alpha*gain) / a0, b1: -2 * math.Cos(w) / a0, b2: (1 - alpha*gain) / a0, a1: -2 * math.Cos(w) / a0, a2: (1 - alpha/gain) / a0}
+	return b.process
+}
+
 func (b *biquad) process(x float64) float64 {
 	y := b.b0*x + b.b1*b.x1 + b.b2*b.x2 - b.a1*b.y1 - b.a2*b.y2
 	b.x2, b.x1, b.y2, b.y1 = b.x1, x, b.y1, y

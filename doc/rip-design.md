@@ -29,7 +29,8 @@ flowchart LR
 ```
 
 1. **Features.** `MelFrames` makes the log-mel frames a model hears: the rip's own
-   grid, 22.05 kHz, 93 ms windows every 11.6 ms, eighty bands from 30 Hz up, the
+   grid, 22.05 kHz, 93 ms windows every 11.6 ms, 229 bands from 30 Hz up, under a
+   semitone apart from A3, the
    recording's peak at one. The built-in analysis works from the same spectrogram,
    split into a harmonic and a percussive part by medians. Features are computed
    in Go on both sides of training, so the model sees in soundlab exactly what it
@@ -149,22 +150,28 @@ offline (`song <name> <file.wav>`).
   hand-checked notes held out for validation, so neither a model nor a tuned set
   learns the synthesizer. The generative lead is left out: the sequencer writes
   its notes bar by bar as it plays, so no label read off the pattern holds them.
-- **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop, a
-  gain, a one-pole low-pass, a Schroeder reverb and a noise floor drawn per
-  loop, redraws each tonal track's voice near the registered one, a third of
-  the time on another wave, labelled as played, drives a third of the loops
-  into a soft clip, the saturation a mix is thickened with, which piles
-  harmonics on every note and sum and difference tones between notes, and
-  renders the loop off A440 by up to a quarter tone either way (`SetTuning`),
-  since recordings are and the sample is forty cents flat; `gen` draws beats, melodies
+- **Augmentation.** `corpus ... aug` puts a room and a mix behind each loop,
+  drawn per loop: a gain and a swell of up to 6 dB, for half the loops a
+  one-pole low-pass at 4 to 11 kHz, two equaliser bands within 6 dB from 80 Hz
+  to 8 kHz, for a third a soft clip (drive 1.5 to 3.5), the saturation a mix is
+  thickened with, which piles harmonics on every note and sum and difference
+  tones between notes, for half a compressor, a booth's Schroeder reverb or for
+  a third a hall's, and for half a noise floor 40 to 65 dB down, a loop past
+  full scale turned down rather than clipped. It redraws each tonal track's
+  voice near the registered one, a third of the time on another wave, in a
+  third of the loops with every release but the bass's three to ten times as
+  long, a pedal's ringing, all labelled as played, and renders the loop off
+  A440 by up to a quarter tone either way (`SetTuning`), since recordings are
+  and the sample is forty cents flat; `gen` draws beats, melodies
   and bass lines from the key for three loops in five per part, since the bank
   alone repeats its few melodies and a model trained on it learns them, not
   pitch, and for three loops in five an accompaniment in the free slot, a
   broken chord in eighths or sixteenths changing pitch from note to note under
   a melody that is a slow line of longer notes in half the loops: the texture
   of the sample recording, a lead over an arpeggio, which the rip has to part.
-  Both draw from streams of their own, so a loop's bank patterns and key are
-  the same with and without them.
+  A generated loop leaves out its drums three times in ten and its bass once
+  in seven, so a line is heard bare too. Both draw from streams of their own,
+  so a loop's bank patterns and key are the same with and without them.
 - **Harness.** `tool/rip-train/pipeline.sh` runs the corpus, the training, the
   bench and the install with every knob an environment variable, the corpus in
   `PARTS` exports at once, each keeping the loops already on disk, and a focus
@@ -174,13 +181,17 @@ offline (`song <name> <file.wav>`).
   `merge`); `tool/rip-train/README.md` is the guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
   neither a gene, kept by the augmentation when it draws voices near a
   registered one.
-- **Model.** `ripnet.Spec`: eighty bands in, width 256, eight heads of 32,
+- **Model.** `ripnet.Spec`: 229 bands in, width 256, eight heads of 32,
   four layers, feed-forward 1024, a window of 64 frames either side, 3.2
   million weights (12.8 MB), four times the first five runs' width 128 and four
   heads; heads for the onset, the three drums, the sixty-nine pitches, voicing,
   the five waves and the thirty-two genes. Attention carries ALiBi biases, a
   slope per head on the frame distance, so the model has no positions to learn
-  and generalises past the training window. `tool/rip-train` is its PyTorch
+  and generalises past the training window. A file may put convolutions over
+  frames and bands before the input layer, each pooled over the bands
+  (`transformer.Conv`), and split the layers into towers over the shared input
+  layer, each computing a run of the heads (`transformer.Tower`), so the drums
+  need not share the pitch's layers. `tool/rip-train` is its PyTorch
   twin and writes the weight file `pkg/transformer` loads; the instructions are
   its README.
 - **Inference** is pure Go, float32, no CGO, the same on every host. A

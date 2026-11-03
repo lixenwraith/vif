@@ -66,13 +66,14 @@ tool/rip-train/pipeline.sh install
 | `CORPUS` | `corpus` | where the loops go |
 | `LOOPS`, `BARS` | 20000, 4 | loops rendered, bars a loop; 200 loops is a smoke test |
 | `PARTS` | 1 | exports at once, each rendering every `PARTS`-th loop on a core of its own; a last export renders any loop they left and writes `corpus.json` |
-| `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a third of the loops driven into a soft clip, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
-| `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; empty for the bank alone |
+| `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a pedal's ringing in a third of the loops, a soft clip in a third, a compressor and a noise floor in half, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
+| `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; three generated loops in ten without their drums and one in seven without its bass; empty for the bank alone |
 | `WAV` | `nowav` | frames and labels only; empty keeps each loop's WAV too (300 MB per 200 loops) |
 | `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
 | `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |
 | `STEPS`, `BATCH` | 20000, 8 | training steps and windows a step |
 | `DIM`, `HEADS`, `LAYERS`, `FFN` | 256, 8, 4, 1024 | the model's width, attention heads, layers and feed-forward width, `train.py`'s `--dim`, `--heads`, `--layers` and `--ffn`; a `CHECKPOINT` or `INIT` of another shape is refused |
+| `CONVS`, `TOWERS` | none | convolutions before the input layer, and towers of layers over it, each computing a run of the heads, `train.py`'s `--convs` and `--towers` |
 | `HOLDOUT`, `EVERY` | 200, 1000 | loops held out, and how often they are scored and a checkpoint written |
 | `OUT`, `CHECKPOINT` | `$CORPUS/ripnet.bin`, `$CORPUS/ripnet.pt` | the weight file, and the checkpoint a stopped run resumes from |
 | `ROOT` | `~/.config/vif` | the configuration root `install` copies the weights into |
@@ -295,8 +296,13 @@ exists, `--init` starts from a `.pt`'s weights alone (no optimizer state, step
 0), and `--shard-seed` moves the stream the windows are drawn from while
 `--seed` keeps the starting weights; `average.py --pt next.pt --out next.bin
 [--trim 0.1] a.pt b.pt ...` is the merge. The defaults are `ripnet.Spec`:
-eighty bands in, width 256, eight heads, four layers, feed-forward 1024, a
-window of 64 frames either side, 3.2 million weights. The losses: onsets,
+229 bands in, width 256, eight heads, four layers, feed-forward 1024, a
+window of 64 frames either side, 3.2 million weights. `--convs
+16x3x3/1,32x3x3/2` puts convolutions before the input layer, each its
+channels, frames by bands kernel and the pooling over bands; `--towers 2:2,4:4`
+splits the layers into towers over the shared input layer, each its layers and
+the run of heads it computes in `ripnet.HEADS` order: the onset and the drums
+on two layers, the rest on four. The losses: onsets,
 drums and pitches as weighted binary cross-entropy, voicing likewise, the wave
 as cross-entropy and the voice genes as squared error, the last two over
 frames a note sounds in.

@@ -1,8 +1,8 @@
 // Package transformer runs small transformer models over sequences of frames in
-// pure Go, for inference alone: a linear input, pre-norm attention blocks with
-// relative-position biases over a window of frames, a feed-forward, and named
-// output heads. A weight file written by the trainer (tool/rip-train) loads into
-// the same Config, and the arithmetic is float32 throughout, as the trainer's.
+// pure Go, for inference alone: convolutions over the frames as an image, a
+// linear input, pre-norm attention blocks with relative-position biases over a
+// window of frames, a feed-forward, and named output heads. A weight file the
+// trainer (tool/rip-train) writes loads into the same Config, in float32 as it.
 package transformer
 
 import (
@@ -18,16 +18,42 @@ type Head struct {
 	Size int
 }
 
-// Config is a model's shape: features in, the width, the heads and layers, the
-// feed-forward width, the frames attended to either side, and the heads out.
+// Conv is one convolution over the frames as an image, frames by features: Out
+// channels from the last's (one at the first), a kernel of Time frames by Freq
+// features centred on each, the edges zero, GELU, then the features max-pooled
+// by Pool, a remainder dropped
+type Conv struct {
+	Out, Time, Freq, Pool int
+}
+
+// Tower is a stack of Layers attention blocks of its own over the shared input,
+// with its own final norm and output layer, computing the next Outputs heads
+type Tower struct {
+	Layers, Outputs int
+}
+
+// Config is a model's shape: features in, the convolutions before the input
+// layer, the width, the heads and layers, the feed-forward width, the frames
+// attended to either side, the towers (none: one of Layers computing every
+// head), and the heads out.
 type Config struct {
 	Inputs  int
+	Convs   []Conv
 	Dim     int
 	Heads   int
 	Layers  int
 	FFN     int
 	Window  int
+	Towers  []Tower
 	Outputs []Head
+}
+
+// towers is the Towers, or the one tower of Layers a Config without them has
+func (c Config) towers() []Tower {
+	if len(c.Towers) > 0 {
+		return c.Towers
+	}
+	return []Tower{{Layers: c.Layers, Outputs: len(c.Outputs)}}
 }
 
 // OutputSize is the output vector's length, the heads laid end to end
@@ -39,9 +65,33 @@ func (c Config) OutputSize() int {
 	return n
 }
 
+// features is what the input layer takes a frame as: the inputs, or the last
+// convolution's channels by the features its pooling leaves
+func (c Config) features() int {
+	n, ch := c.Inputs, 1
+	for _, cv := range c.Convs {
+		n, ch = n/max(cv.Pool, 1), cv.Out
+	}
+	return n * ch
+}
+
 func (c Config) Validate() error {
+	for i, cv := range c.Convs {
+		if cv.Out < 1 || cv.Time < 1 || cv.Time%2 == 0 || cv.Freq < 1 || cv.Freq%2 == 0 || cv.Pool < 1 {
+			return fmt.Errorf("transformer: convolution %d is %+v, want channels, odd kernels and a pool of one or more", i, cv)
+		}
+	}
+	heads := 0
+	for _, t := range c.Towers {
+		if t.Layers < 0 || t.Outputs < 1 {
+			return fmt.Errorf("transformer: tower %+v", t)
+		}
+		heads += t.Outputs
+	}
 	switch {
-	case c.Inputs < 1 || c.Dim < 1 || c.Heads < 1 || c.Layers < 0 || c.FFN < 1 || c.Window < 0:
+	case len(c.Towers) > 0 && heads != len(c.Outputs):
+		return fmt.Errorf("transformer: the towers compute %d heads of %d", heads, len(c.Outputs))
+	case c.Inputs < 1 || c.features() < 1 || c.Dim < 1 || c.Heads < 1 || c.Layers < 0 || c.FFN < 1 || c.Window < 0:
 		return errors.New("transformer: a size is not positive")
 	case c.Dim%c.Heads != 0:
 		return fmt.Errorf("transformer: width %d is not a multiple of %d heads", c.Dim, c.Heads)
@@ -131,13 +181,73 @@ type layer struct {
 	ff1, ff2   Linear
 }
 
-// Model is one transformer with its weights
-type Model struct {
-	cfg    Config
-	in     Linear
+// conv is a Conv's weights, out by in channels by Time by Freq, and its biases
+type conv struct {
+	Conv
+	in   int
+	W, B []float32
+}
+
+// apply convolves x, frames by in channels by f features, into frames by Out by
+// f/Pool, the GELU taken before the pool
+func (c *conv) apply(x []float32, frames, f int) []float32 {
+	y := make([]float32, frames*c.Out*f)
+	for t := range frames {
+		for o := range c.Out {
+			yo := y[(t*c.Out+o)*f : (t*c.Out+o+1)*f]
+			for k := range yo {
+				yo[k] = c.B[o]
+			}
+			for i := range c.in {
+				for dt := range c.Time {
+					tt := t + dt - c.Time/2
+					if tt < 0 || tt >= frames {
+						continue
+					}
+					xi := x[(tt*c.in+i)*f : (tt*c.in+i+1)*f]
+					for dk := range c.Freq {
+						w, d := c.W[((o*c.in+i)*c.Time+dt)*c.Freq+dk], dk-c.Freq/2
+						for k := max(-d, 0); k < min(f, f-d); k++ {
+							yo[k] += w * xi[k+d]
+						}
+					}
+				}
+			}
+			for k := range yo {
+				yo[k] = gelu(yo[k])
+			}
+		}
+	}
+	if c.Pool == 1 {
+		return y
+	}
+	g := f / c.Pool
+	z := make([]float32, frames*c.Out*g)
+	for r := range frames * c.Out {
+		for k := range g {
+			m := y[r*f+k*c.Pool]
+			for j := 1; j < c.Pool; j++ {
+				m = max(m, y[r*f+k*c.Pool+j])
+			}
+			z[r*g+k] = m
+		}
+	}
+	return z
+}
+
+// tower is a Tower's blocks, final norm and output layer
+type tower struct {
 	layers []layer
 	ln     LayerNorm
 	out    Linear
+}
+
+// Model is one transformer with its weights
+type Model struct {
+	cfg    Config
+	convs  []conv
+	in     Linear
+	towers []tower
 	slopes []float32 // one relative-position slope per head
 }
 
@@ -146,13 +256,28 @@ func New(cfg Config) (*Model, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	m := &Model{cfg: cfg, in: newLinear(cfg.Inputs, cfg.Dim), ln: newLayerNorm(cfg.Dim), out: newLinear(cfg.Dim, cfg.OutputSize())}
-	for range cfg.Layers {
-		m.layers = append(m.layers, layer{
-			ln1: newLayerNorm(cfg.Dim), ln2: newLayerNorm(cfg.Dim),
-			q: newLinear(cfg.Dim, cfg.Dim), k: newLinear(cfg.Dim, cfg.Dim), v: newLinear(cfg.Dim, cfg.Dim), o: newLinear(cfg.Dim, cfg.Dim),
-			ff1: newLinear(cfg.Dim, cfg.FFN), ff2: newLinear(cfg.FFN, cfg.Dim),
-		})
+	m := &Model{cfg: cfg, in: newLinear(cfg.features(), cfg.Dim)}
+	ch := 1
+	for _, cv := range cfg.Convs {
+		m.convs = append(m.convs, conv{Conv: cv, in: ch, W: make([]float32, cv.Out*ch*cv.Time*cv.Freq), B: make([]float32, cv.Out)})
+		ch = cv.Out
+	}
+	head := 0
+	for _, t := range cfg.towers() {
+		size := 0
+		for _, h := range cfg.Outputs[head : head+t.Outputs] {
+			size += h.Size
+		}
+		head += t.Outputs
+		tw := tower{ln: newLayerNorm(cfg.Dim), out: newLinear(cfg.Dim, size)}
+		for range t.Layers {
+			tw.layers = append(tw.layers, layer{
+				ln1: newLayerNorm(cfg.Dim), ln2: newLayerNorm(cfg.Dim),
+				q: newLinear(cfg.Dim, cfg.Dim), k: newLinear(cfg.Dim, cfg.Dim), v: newLinear(cfg.Dim, cfg.Dim), o: newLinear(cfg.Dim, cfg.Dim),
+				ff1: newLinear(cfg.Dim, cfg.FFN), ff2: newLinear(cfg.FFN, cfg.Dim),
+			})
+		}
+		m.towers = append(m.towers, tw)
 	}
 	// ALiBi: head h leans on nearer frames by 2^(-8h/H) per frame of distance
 	m.slopes = make([]float32, cfg.Heads)
@@ -176,6 +301,12 @@ func NewRandom(cfg Config, seed uint64) (*Model, error) {
 			l.W[i] = float32(rng.NormFloat64()) * scale
 		}
 	}
+	for _, c := range m.convs {
+		scale := float32(1 / math.Sqrt(float64(c.in*c.Time*c.Freq)))
+		for i := range c.W {
+			c.W[i] = float32(rng.NormFloat64()) * scale
+		}
+	}
 	return m, nil
 }
 
@@ -192,11 +323,15 @@ func (m *Model) Parameters() int {
 
 func (m *Model) linears() []*Linear {
 	ls := []*Linear{&m.in}
-	for i := range m.layers {
-		l := &m.layers[i]
-		ls = append(ls, &l.q, &l.k, &l.v, &l.o, &l.ff1, &l.ff2)
+	for ti := range m.towers {
+		tw := &m.towers[ti]
+		for i := range tw.layers {
+			l := &tw.layers[i]
+			ls = append(ls, &l.q, &l.k, &l.v, &l.o, &l.ff1, &l.ff2)
+		}
+		ls = append(ls, &tw.out)
 	}
-	return append(ls, &m.out)
+	return ls
 }
 
 // Forward runs frames, each of Inputs features, through the model and returns
@@ -210,39 +345,53 @@ func (m *Model) Forward(frames [][]float32) [][]float32 {
 	for t, f := range frames {
 		copy(x[t*cfg.Inputs:], f)
 	}
-	h := make([]float32, T*cfg.Dim)
-	m.in.apply(x, T, h)
-	n := make([]float32, T*cfg.Dim)
+	for i, f := 0, cfg.Inputs; i < len(m.convs); i, f = i+1, f/m.convs[i].Pool {
+		x = m.convs[i].apply(x, T, f)
+	}
+	in := make([]float32, T*cfg.Dim)
+	m.in.apply(x, T, in)
+	h, n := make([]float32, T*cfg.Dim), make([]float32, T*cfg.Dim)
 	q, k, v, att := make([]float32, T*cfg.Dim), make([]float32, T*cfg.Dim), make([]float32, T*cfg.Dim), make([]float32, T*cfg.Dim)
 	o := make([]float32, T*cfg.Dim)
 	ff := make([]float32, T*cfg.FFN)
-	for i := range m.layers {
-		l := &m.layers[i]
-		l.ln1.apply(h, T, n)
-		l.q.apply(n, T, q)
-		l.k.apply(n, T, k)
-		l.v.apply(n, T, v)
-		m.attend(q, k, v, T, att)
-		l.o.apply(att, T, o)
-		for j := range h {
-			h[j] += o[j]
+	size := cfg.OutputSize()
+	y := make([]float32, T*size)
+	at := 0 // where this tower's heads begin in a frame's output
+	for ti := range m.towers {
+		tw := &m.towers[ti]
+		copy(h, in)
+		for i := range tw.layers {
+			l := &tw.layers[i]
+			l.ln1.apply(h, T, n)
+			l.q.apply(n, T, q)
+			l.k.apply(n, T, k)
+			l.v.apply(n, T, v)
+			m.attend(q, k, v, T, att)
+			l.o.apply(att, T, o)
+			for j := range h {
+				h[j] += o[j]
+			}
+			l.ln2.apply(h, T, n)
+			l.ff1.apply(n, T, ff)
+			for j := range ff {
+				ff[j] = gelu(ff[j])
+			}
+			l.ff2.apply(ff, T, o)
+			for j := range h {
+				h[j] += o[j]
+			}
 		}
-		l.ln2.apply(h, T, n)
-		l.ff1.apply(n, T, ff)
-		for j := range ff {
-			ff[j] = gelu(ff[j])
+		tw.ln.apply(h, T, n)
+		yt := make([]float32, T*tw.out.Out)
+		tw.out.apply(n, T, yt)
+		for t := range T {
+			copy(y[t*size+at:], yt[t*tw.out.Out:(t+1)*tw.out.Out])
 		}
-		l.ff2.apply(ff, T, o)
-		for j := range h {
-			h[j] += o[j]
-		}
+		at += tw.out.Out
 	}
-	m.ln.apply(h, T, n)
-	y := make([]float32, T*cfg.OutputSize())
-	m.out.apply(n, T, y)
 	out := make([][]float32, T)
 	for t := range out {
-		out[t] = y[t*cfg.OutputSize() : (t+1)*cfg.OutputSize()]
+		out[t] = y[t*size : (t+1)*size]
 	}
 	return out
 }
