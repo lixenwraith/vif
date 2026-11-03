@@ -1,6 +1,6 @@
 // Package ripnet is the rip's learned front end: a transformer over log-mel
 // frames whose heads say, per frame, whether anything and which drum struck,
-// which pitches sound, and which wave and voice genes the note is played with.
+// which pitches sound and which are struck, and the note's wave and voice genes.
 // tool/rip-train trains it on loops the engine renders; Spec is the shape both
 // sides build, and a weight file loads into a FrontEnd the Ripper hears with.
 package ripnet
@@ -22,6 +22,7 @@ const (
 	HeadVoicing = "voicing" // any note sounding
 	HeadWave    = "wave"    // the sounding note's wave, one score per VoiceWaves entry
 	HeadVoice   = "voice"   // its voice genes
+	HeadStrike  = "strike"  // each of the rip's pitches struck at this frame
 )
 
 // Spec is the model the trainer builds and a weight file must match in its
@@ -32,6 +33,7 @@ func Spec() transformer.Config {
 		Outputs: []transformer.Head{
 			{Name: HeadOnset, Size: 1}, {Name: HeadDrums, Size: int(audio.InstrClap)}, {Name: HeadPitch, Size: audio.RipPitches},
 			{Name: HeadVoicing, Size: 1}, {Name: HeadWave, Size: len(audio.VoiceWaves)}, {Name: HeadVoice, Size: audio.VoiceGeneCount},
+			{Name: HeadStrike, Size: audio.RipPitches},
 		},
 	}
 }
@@ -50,16 +52,18 @@ func Load(r io.Reader) (*FrontEnd, error) {
 	return New(m)
 }
 
-// New wraps a model, refusing one whose inputs or heads are not Spec's.
+// New wraps a model, refusing one whose inputs or heads are not Spec's; one
+// trained before the strike head loads without it, its notes read from the
+// pitches sounding alone.
 func New(m *transformer.Model) (*FrontEnd, error) {
 	want, got := Spec(), m.Config()
 	if got.Inputs != want.Inputs {
 		return nil, fmt.Errorf("ripnet: model hears %d bands, want %d", got.Inputs, want.Inputs)
 	}
-	if len(got.Outputs) != len(want.Outputs) {
-		return nil, fmt.Errorf("ripnet: model has %d heads, want %d", len(got.Outputs), len(want.Outputs))
+	if n := len(got.Outputs); n != len(want.Outputs) && n != len(want.Outputs)-1 {
+		return nil, fmt.Errorf("ripnet: model has %d heads, want %d", n, len(want.Outputs))
 	}
-	for i, h := range want.Outputs {
+	for i, h := range want.Outputs[:len(got.Outputs)] {
 		if got.Outputs[i] != h {
 			return nil, fmt.Errorf("ripnet: head %d is %q of %d, want %q of %d", i, got.Outputs[i].Name, got.Outputs[i].Size, h.Name, h.Size)
 		}
@@ -69,8 +73,8 @@ func New(m *transformer.Model) (*FrontEnd, error) {
 
 // Hear runs the recording's log-mel frames through the model and reads its heads
 // into frames: the onset and drum scores as strengths, the pitch scores as
-// salience, the chroma folded from them, and the wave scores and voice genes as
-// they are.
+// salience, the chroma folded from them, the wave scores and voice genes as they
+// are, and the strike scores when the model has them.
 func (fe *FrontEnd) Hear(x []float64, rate int, _ audio.RipParams) (*audio.RipFrames, error) {
 	mel := audio.MelFrames(x, rate)
 	out := fe.Model.Forward(mel)
@@ -85,6 +89,10 @@ func (fe *FrontEnd) Hear(x []float64, rate int, _ audio.RipParams) (*audio.RipFr
 		f.Onset[d] = make([]float64, n)
 	}
 	m := fe.Model
+	strikes := len(m.Config().Outputs) == len(Spec().Outputs)
+	if strikes {
+		f.Strike = make([]float32, 0, n*audio.RipPitches)
+	}
 	for t, y := range out {
 		f.Flux[t] = sigmoid(m.Slice(y, HeadOnset)[0])
 		for d, v := range m.Slice(y, HeadDrums) {
@@ -104,6 +112,11 @@ func (fe *FrontEnd) Hear(x []float64, rate int, _ audio.RipParams) (*audio.RipFr
 		}
 		for _, v := range m.Slice(y, HeadVoice) {
 			f.Voice = append(f.Voice, float32(sigmoid(v)))
+		}
+		if strikes {
+			for _, v := range m.Slice(y, HeadStrike) {
+				f.Strike = append(f.Strike, float32(sigmoid(v)))
+			}
 		}
 	}
 	return f, nil

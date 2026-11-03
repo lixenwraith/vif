@@ -299,11 +299,12 @@ exists, `--init` starts from a `.pt`'s weights alone (no optimizer state, step
 229 bands in, width 256, eight heads, four layers, feed-forward 1024, a
 window of 64 frames either side, 3.2 million weights. `--convs
 16x3x3/1,32x3x3/2` puts convolutions before the input layer, each its
-channels, frames by bands kernel and the pooling over bands; `--towers 2:2,4:4`
+channels, frames by bands kernel and the pooling over bands; `--towers 2:2,4:5`
 splits the layers into towers over the shared input layer, each its layers and
 the run of heads it computes in `ripnet.HEADS` order: the onset and the drums
 on two layers, the rest on four. The losses: onsets,
-drums and pitches as weighted binary cross-entropy, voicing likewise, the wave
+drums, pitches and each pitch's strikes (within a frame of a note's start) as
+weighted binary cross-entropy, voicing likewise, the wave
 as cross-entropy and the voice genes as squared error, the last two over
 frames a note sounds in.
 

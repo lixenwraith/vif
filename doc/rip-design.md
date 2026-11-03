@@ -38,7 +38,7 @@ flowchart LR
 2. **Front end** (`RipFrontEnd`). It hears a recording into `RipFrames`: the
    strength of any onset, of each drum's, each pitch's salience, each register's
    chroma, and, from a model, the wave and voice genes the note under each frame
-   is played with. Two front ends fill it: `analysis`, the package's signal
+   is played with and how surely each pitch is struck there. Two front ends fill it: `analysis`, the package's signal
    processing, and `ripnet`, a transformer over the mel frames whose heads are
    those fields. The seam is the frames, so the decoders never know which heard.
 3. **Decoders.** Classical, shared, cheap and explainable: tempo by
@@ -61,7 +61,13 @@ flowchart LR
    lead is often the softer, so the notes are parted again into two lines by
    what a line keeps, its pitch from note to note, the length of its notes,
    their strength and no two at once, and the lead is the line a rule names,
-   the busier by default (`Ripper.Lead`). The bass is decoded up to A3, over
+   the busier by default (`Ripper.Lead`). From a front end that hears
+   each pitch struck, the melody register's notes are read from the strikes
+   instead: a note starts where its pitch's strike peaks over `strike` and
+   lasts while its salience holds or until it is struck again, any number at
+   once, so the notes a pedal leaves ringing do not hide the next one struck,
+   which a path through the salience, preferring what sounds strongest, stays
+   on; the lines are parted from them as before. The bass is decoded up to A3, over
    the melody's lowest rows, which count for three quarters against the bass
    rows' own reference; a reached note the bass line does not continue, its
    nearest other bass note more than an octave away, is not the bass's, and a
@@ -185,7 +191,7 @@ offline (`song <name> <file.wav>`).
   four layers, feed-forward 1024, a window of 64 frames either side, 3.2
   million weights (12.8 MB), four times the first five runs' width 128 and four
   heads; heads for the onset, the three drums, the sixty-nine pitches, voicing,
-  the five waves and the thirty-two genes. Attention carries ALiBi biases, a
+  the five waves, the thirty-two genes and the sixty-nine pitches struck. Attention carries ALiBi biases, a
   slope per head on the frame distance, so the model has no positions to learn
   and generalises past the training window. A file may put convolutions over
   frames and bands before the input layer, each pooled over the bands

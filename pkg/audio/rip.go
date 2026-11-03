@@ -40,6 +40,7 @@ type RipParams struct {
 	SecondVoice   float64 `toml:"second_voice"`   // the strength, against the melody's, a second voice in its register is kept from; 0 hears one
 	Compress      float64 `toml:"compress"`       // the power the harmonic spectrum is raised to before the salience, under one to flatten the partials saturation piles on a note; one leaves it
 	Cross         float64 `toml:"cross"`          // what the first melody line pays a frame to be the quieter of the two; the lead changes hands over a longer rest or crossing
+	Strike        float64 `toml:"strike"`         // how sure a front end that hears each pitch struck must be before the strike starts a note
 }
 
 func DefaultRipParams() RipParams {
@@ -47,7 +48,7 @@ func DefaultRipParams() RipParams {
 		TempoPrior: 120, TempoWidth: 1, Tightness: 100,
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
-		SecondVoice: 0.5, Compress: 1, Cross: 0.003,
+		SecondVoice: 0.5, Compress: 1, Cross: 0.003, Strike: 0.5,
 	}
 }
 
@@ -81,6 +82,7 @@ var ripGenes = []ripGene{
 	{"second_voice", 0, 0.9, func(p *RipParams) *float64 { return &p.SecondVoice }},
 	{"compress", 0.3, 1, func(p *RipParams) *float64 { return &p.Compress }},
 	{"cross", 0, 0.02, func(p *RipParams) *float64 { return &p.Cross }},
+	{"strike", 0.2, 0.9, func(p *RipParams) *float64 { return &p.Strike }},
 }
 
 func (g *ripGene) get(p *RipParams) float64 {
@@ -289,6 +291,7 @@ type RipFrames struct {
 	Chroma, BassChroma [][12]float64
 	Wave               []float32 // frames × len(VoiceWaves), or nil
 	Voice              []float32 // frames × VoiceGeneCount, or nil
+	Strike             []float32 // frames × RipPitches, how surely each pitch is struck there, or nil
 }
 
 func (f *RipFrames) frames() int { return len(f.Flux) }
@@ -1501,6 +1504,9 @@ type ripNote struct {
 // register's notes come back as one list, parted into its two lines by
 // streams once settle has given the bass what both registers heard.
 func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
+	if f.Strike != nil && lo >= RipMelodyLow {
+		return f.strikes(lo, hi, p)
+	}
 	if p.SecondVoice <= 0 || lo < RipMelodyLow {
 		return f.path(lo, hi, p)
 	}
@@ -1522,6 +1528,43 @@ func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 		}
 	}
 	return kept
+}
+
+// strikes reads a register's notes from a front end that hears each pitch
+// struck: a note starts where its pitch's strike peaks over Strike and lasts
+// while its salience holds over Voicing of the register's reference, until the
+// pitch is struck again. Any number sound at once, as under a pedal, where a
+// path through the salience stays on the notes still ringing.
+func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
+	r, ok := f.register(lo, hi)
+	if !ok {
+		return nil
+	}
+	T, short := f.frames(), max(int(p.MinNote/f.Hop), 1)
+	strike := func(t, s int) float32 { return f.Strike[t*RipPitches+lo+s-RipMinMIDI] }
+	struck := func(t, s int) bool {
+		v := strike(t, s)
+		return float64(v) >= p.Strike && (t == 0 || v >= strike(t-1, s)) && (t == T-1 || v > strike(t+1, s))
+	}
+	var notes []ripNote
+	for s := range r.reach {
+		for t := 0; t < T; {
+			if !struck(t, s) {
+				t++
+				continue
+			}
+			end := t + 1
+			for end < T && !struck(end, s) && (end < t+short || r.sal(end, s) >= p.Voicing*r.ref) {
+				end++
+			}
+			if end-t >= short {
+				notes = append(notes, r.note(t, end, s))
+			}
+			t = end
+		}
+	}
+	slices.SortFunc(notes, func(a, b ripNote) int { return cmp.Or(a.start-b.start, a.midi-b.midi) })
+	return notes
 }
 
 // settle gives a note both registers heard, the same pitch at the same time
@@ -1833,16 +1876,13 @@ func (f *RipFrames) pair(lo, hi int, p RipParams) (a, b []ripNote) {
 func (r register) cut(track []int, p RipParams) []ripNote {
 	var notes []ripNote
 	minFrames := max(int(p.MinNote/r.f.Hop), 1)
-	flush := func(n ripNote, sum float64) {
+	flush := func(n ripNote) {
 		if n.end-n.start >= minFrames {
-			n.strength = sum / float64(n.end-n.start) / r.ref // the mean salience against the register's reference
-			n.vel = min(max(0.3, n.strength), 1)
-			n.wave, n.voice = r.f.voiceOver(n.start, n.end)
-			notes = append(notes, n)
+			notes = append(notes, r.note(n.start, n.end, n.midi-r.lo))
 		}
 	}
 	open := ripNote{start: -1}
-	var sum, peak float64
+	var peak float64
 	dipped := false
 	for t, pitch := range track {
 		if open.start >= 0 && pitch == open.midi-r.lo {
@@ -1850,24 +1890,38 @@ func (r register) cut(track []int, p RipParams) []ripNote {
 			if v < peak*p.Retrigger {
 				dipped = true
 			} else if dipped && v > 0.7*peak {
-				flush(ripNote{start: open.start, end: t, midi: open.midi}, sum)
-				open, sum, peak, dipped = ripNote{start: t, midi: open.midi}, 0, 0, false
+				flush(ripNote{start: open.start, end: t, midi: open.midi})
+				open, peak, dipped = ripNote{start: t, midi: open.midi}, 0, false
 			}
-			sum, peak = sum+v, max(peak, v)
+			peak = max(peak, v)
 			continue
 		}
 		if open.start >= 0 {
-			flush(ripNote{start: open.start, end: t, midi: open.midi}, sum)
+			flush(ripNote{start: open.start, end: t, midi: open.midi})
 			open = ripNote{start: -1}
 		}
 		if pitch < r.states {
-			open, sum, peak, dipped = ripNote{start: t, midi: r.lo + pitch}, r.sal(t, pitch), r.sal(t, pitch), false
+			open, peak, dipped = ripNote{start: t, midi: r.lo + pitch}, r.sal(t, pitch), false
 		}
 	}
 	if open.start >= 0 {
-		flush(ripNote{start: open.start, end: len(track), midi: open.midi}, sum)
+		flush(ripNote{start: open.start, end: len(track), midi: open.midi})
 	}
 	return notes
+}
+
+// note is the register's note on row s over frames start to end: its strength
+// the mean salience against the register's reference, a velocity from it, and
+// the voice a front end heard there
+func (r register) note(start, end, s int) ripNote {
+	var sum float64
+	for t := start; t < end; t++ {
+		sum += r.sal(t, s)
+	}
+	n := ripNote{start: start, end: end, midi: r.lo + s, strength: sum / float64(end-start) / r.ref}
+	n.vel = min(max(0.3, n.strength), 1)
+	n.wave, n.voice = r.f.voiceOver(start, end)
+	return n
 }
 
 // voiceOver is the wave and voice genes a front end heard over frames a to b,
