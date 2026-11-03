@@ -919,7 +919,7 @@ func cmdShift(s *Session, a []string) error {
 				return fmt.Errorf("%s note %d (step %d, %s) would sound MIDI %d, outside 0 to 127", r.path, j, e.Pos, noteName(was), p)
 			}
 			move(s, e, k, r.steps)
-			if err := stepBounds(*e); by != "step" && err != nil {
+			if err := audio.StepPitchBounds(e.Deg, e.Oct, e.Acc); by != "step" && err != nil {
 				return fmt.Errorf("%s note %d (step %d, %s) would leave the bounds: %w", r.path, j, e.Pos, noteName(was), err)
 			}
 		}
@@ -931,20 +931,6 @@ func cmdShift(s *Session, a []string) error {
 		s.pats.markDirty(r.pattern)
 	}
 	fmt.Fprintf(s.out, "shifted by %s %+d: %s\n", by, k, tracksInBrief(refs, ""))
-	return nil
-}
-
-// stepBounds is the degree, octave and accidental bounds audio.ValidatePattern
-// holds a note to
-func stepBounds(e audio.StepDef) error {
-	switch {
-	case e.Deg < -audio.MaxStepDegree || e.Deg > audio.MaxStepDegree:
-		return fmt.Errorf("deg %d outside [%d,%d]", e.Deg, -audio.MaxStepDegree, audio.MaxStepDegree)
-	case e.Oct < audio.MinStepOctave || e.Oct > audio.MaxStepOctave:
-		return fmt.Errorf("oct %d outside [%d,%d]", e.Oct, audio.MinStepOctave, audio.MaxStepOctave)
-	case e.Acc < -audio.MaxStepAccidental || e.Acc > audio.MaxStepAccidental:
-		return fmt.Errorf("acc %d outside [%d,%d]", e.Acc, -audio.MaxStepAccidental, audio.MaxStepAccidental)
-	}
 	return nil
 }
 
