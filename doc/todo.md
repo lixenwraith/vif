@@ -1387,8 +1387,9 @@ front-end seam. What remains, in the design's order:
    threshold and five times too many, and at its best threshold (0.9) keeps a
    fifth of the softest notes. Filtering the strikes (a pitch that never
    sounds, a stronger strike's partial in the register, a repeat within
-   0.12 s, a ringing pitch restarted only over 0.95) brought the three
-   recordings' pooled F1 to 0.674 at 0.8 (the analysis 0.633). Next for it:
+   0.12 s, a ringing pitch restarted only over 0.95 and by the surest strike
+   within a tone) brought the three recordings' pooled F1 to 0.678 at 0.8
+   (the analysis 0.633). Next for it:
    an offset head, so a note ends where its key lifts rather than where the
    pedal lets it fade; a velocity head, so the render plays soft notes soft;
    the corpus's pedal varied by the bar; phrases 20 to 30 dB apart, so the

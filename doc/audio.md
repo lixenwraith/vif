@@ -556,8 +556,8 @@ rip through it also names the voices its registers were played with
 struck and last while it sounds, any number at once, in place of the two-line
 path, which stays on the notes a pedal leaves ringing; a strike starts none when
 its pitch never sounds, when it is a stronger strike's partial in the register,
-or within `StrikeGap` of the pitch's last, and one under `StrikeAgain` leaves the
-pitch's sounding note ringing. `tool/rip-train` trains it
+or within `StrikeGap` of the pitch's last, and one under `StrikeAgain`, or under a
+strike a tone either side, leaves the pitch's sounding note ringing. `tool/rip-train` trains it
 on loops soundlab exports (`corpus`), and soundlab hears with the first root's
 `audio/ripnet.bin` when there is one; `render` writes what the slots hold to a
 WAV through `RenderMusic`, so an estimate is heard without a device.

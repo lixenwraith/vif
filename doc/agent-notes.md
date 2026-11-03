@@ -211,6 +211,11 @@ that proves wrong or that a document now states, and link the document instead.
   and salience per pitch from a scratch test before moving a strike rule.
 - Score the three recordings pooled (every note once) beside their mean: the
   origin and the intro have 83 notes each, where five notes move F1 by 0.06.
+- Towers (`transformer.Tower`, `TOWERS=` in `tool/rip-train`) are in no shipped
+  weight file, yet are not dead code: round 7d found no gain for 43% more
+  weights, and they are to be tried again once new heads (offset, velocity,
+  pedal) compete with the strike head for the shared layers. Keep them, their
+  loader and their round-trip test.
 - A training round runs from its own copy of the tree: `pipeline.sh` runs
   soundlab through `go run` at every stage, so an edit to the checkout while a
   round trains changes the corpus or the bench under it. The bench draws its
