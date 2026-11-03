@@ -192,16 +192,24 @@ func ValidatePattern(p *Pattern) error {
 			if ev.Dur < 0 || ev.Dur > MaxPatternLen {
 				return e("track %d event %d: dur %d outside [0,%d]", i, j, ev.Dur, MaxPatternLen)
 			}
-			if ev.Deg < -MaxStepDegree || ev.Deg > MaxStepDegree {
-				return e("track %d event %d: deg %d outside [%d,%d]", i, j, ev.Deg, -MaxStepDegree, MaxStepDegree)
-			}
-			if ev.Oct < MinStepOctave || ev.Oct > MaxStepOctave {
-				return e("track %d event %d: oct %d outside [%d,%d]", i, j, ev.Oct, MinStepOctave, MaxStepOctave)
-			}
-			if ev.Acc < -MaxStepAccidental || ev.Acc > MaxStepAccidental {
-				return e("track %d event %d: acc %d outside [%d,%d]", i, j, ev.Acc, -MaxStepAccidental, MaxStepAccidental)
+			if err := StepPitchBounds(ev.Deg, ev.Oct, ev.Acc); err != nil {
+				return e("track %d event %d: %v", i, j, err)
 			}
 		}
+	}
+	return nil
+}
+
+// StepPitchBounds holds a step's degree, octave and accidental to the ranges a
+// pattern allows
+func StepPitchBounds(deg, oct, acc int) error {
+	switch {
+	case deg < -MaxStepDegree || deg > MaxStepDegree:
+		return fmt.Errorf("deg %d outside [%d,%d]", deg, -MaxStepDegree, MaxStepDegree)
+	case oct < MinStepOctave || oct > MaxStepOctave:
+		return fmt.Errorf("oct %d outside [%d,%d]", oct, MinStepOctave, MaxStepOctave)
+	case acc < -MaxStepAccidental || acc > MaxStepAccidental:
+		return fmt.Errorf("acc %d outside [%d,%d]", acc, -MaxStepAccidental, MaxStepAccidental)
 	}
 	return nil
 }
