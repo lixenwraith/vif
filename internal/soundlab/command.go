@@ -62,13 +62,13 @@ func init() {
 		"stat":  {"stat", "backend, silent mode, play stats, dirty entries", 0, 0, cmdStat},
 
 		"new":   {"new sound|pattern|voice <name>", "create an entry seeded with a minimal valid spec", 2, 2, cmdNew},
-		"cp":    {"cp <src> <dst>", "duplicate an entry", 2, 2, cmdCp},
+		"cp":    {"cp <src> <dst> | cp <pattern>.track.<n>... <dst>", "duplicate an entry, or make a new pattern of the tracks named, from one pattern or several, the first's role kept: a length every one loops in, each repeated to fill it", 2, -1, cmdCp},
 		"mv":    {"mv <src> <dst>", "rename (sound noise variants re-roll: rng seeds from name)", 2, 2, cmdMv},
-		"mix":   {"mix <src> <dst>", "append src's tracks/layers into dst (same kind; src unchanged; validate dst after)", 2, 2, cmdMix},
+		"mix":   {"mix <src> <dst> | mix <pattern>.track.<n>... <dst>", "append src's tracks/layers into dst (same kind; src unchanged; validate dst after), or the tracks named into the pattern dst, at a length every one loops in, dst's own tracks and each repeated to fill it (a cut beyond 64 steps is said); with del, a track moves", 2, -1, cmdMix},
 		"take":  {"take <pattern> <voice> <pos>:<midi>[:<steps>[:<vel>]]...", "add a track of a tonal voice playing the notes at their steps, each on the key's nearest degree", 3, -1, cmdTake},
 		"set":   {"set <name.path> <value...>", "set a leaf field; value may contain spaces", 2, -1, cmdSet},
 		"add":   {"add <name.path>", "append a zero element to a list field", 1, 1, cmdAdd},
-		"del":   {"del <name>|<name.path.idx>", "delete a document entry or a list element", 1, 1, cmdDel},
+		"del":   {"del <name>|<name.path.idx>...", "delete document entries or list elements, each as the path reads before any is deleted", 1, -1, cmdDel},
 		"unset": {"unset <name.path>", "reset a field to its zero value (nil for optional tables/lists)", 1, 1, cmdUnset},
 
 		"validate": {"validate [name|all]", "check one entry or all (all fails if any is invalid)", 0, 1, cmdValidate},
@@ -245,6 +245,7 @@ var (
 		{"a v r", "apply, validate, revert"},
 		{"c w", "clone, write one to a file"},
 		{"+ / d d", "mix into another / delete"},
+		{"p", "a new pattern of the tracks yanked in the editor"},
 		{"m", "the music back to its first bar"},
 	}}
 	helpEditor = helpSection{"editor", []keyHelp{
@@ -275,6 +276,7 @@ var (
 		{"t T", "next voice of the family, the other family"},
 		{"f", "follow the chord"},
 		{"a / x x", "add a track of the voice in hand / delete the track"},
+		{"y Y / p", "yank the track, add it to the yank or take it out / paste the yank into this pattern"},
 		{"s", "steps: the pattern's length"},
 		{"r", "piano roll of a tonal track, and back"},
 	}}

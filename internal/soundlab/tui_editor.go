@@ -300,6 +300,29 @@ func (a *tuiApp) gridKey(ev terminal.Event, d *audio.PatternDef, r rune) {
 			a.exec(fmt.Sprintf("set %s.track.%d.instr %s", b.name, ti, instr))
 			b.trk = ti
 		}
+	case r == 'y' || r == 'Y':
+		if len(d.Track) == 0 {
+			break
+		}
+		at := slices.IndexFunc(a.yank, func(y yanked) bool { return y.pat == b.name && y.n == b.trk })
+		if r == 'Y' && at >= 0 {
+			a.yank = slices.Delete(a.yank, at, at+1)
+		} else {
+			if r == 'y' {
+				a.yank = nil
+			}
+			t := d.Track[b.trk]
+			t.Event = slices.Clone(t.Event)
+			a.yank = append(a.yank, yanked{b.name, b.trk, t})
+		}
+		fmt.Fprintf(a.log, "the yank holds %d track(s): p pastes them into a pattern open here, p in the browser makes a new one of them\n", len(a.yank))
+	case r == 'p':
+		if src, ok := a.yankPaths(); ok {
+			a.exec(fmt.Sprintf("mix %s %s", src, b.name))
+			if d2 := a.edPat(); d2 != nil {
+				b.trk = len(d2.Track) - 1
+			}
+		}
 	case r == 'x':
 		if len(d.Track) == 0 {
 			break
@@ -530,7 +553,7 @@ func (a *tuiApp) gridHint() string {
 	if a.ed != nil && a.ed.roll {
 		return "←→ step  ↑↓ pitch  space note  1-0 vel  [ ] length  , . degree  c chance  r grid  enter play  tab mixer  ⇧tab keys  esc close  ? keys"
 	}
-	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  r roll  s steps  enter play  tab mixer  ⇧tab keys  esc close  ? keys"
+	return "hjkl move  space hit  1-0 vel  [ ] length  , . degree  t/T voice  a/x track  y/p yank/paste  r roll  s steps  enter play  tab mixer  ⇧tab keys  esc close  ? keys"
 }
 
 // gridFit is how a pattern's steps lie across a width: cw cells a step and a

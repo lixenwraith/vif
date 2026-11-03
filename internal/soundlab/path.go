@@ -192,26 +192,35 @@ func addAt(root any, path []string) (int, error) {
 
 // delAt removes one element; the final segment must be an index.
 func delAt(root any, path []string) error {
-	if len(path) == 0 {
-		return fmt.Errorf("del: empty path")
-	}
-	n, err := strconv.Atoi(path[len(path)-1])
-	if err != nil {
-		return fmt.Errorf("del: %q is not an index", path[len(path)-1])
-	}
-	v, err := resolve(reflect.ValueOf(root), path[:len(path)-1], false)
+	v, n, err := elemAt(root, path)
 	if err != nil {
 		return err
 	}
-	if v.Kind() != reflect.Slice {
-		return fmt.Errorf("%s: %s is not a list", pathOr(strings.Join(path[:len(path)-1], ".")), v.Kind())
-	}
-	if n < 0 || n >= v.Len() {
-		return fmt.Errorf("%s: index %d out of range, len %d",
-			pathOr(strings.Join(path[:len(path)-1], ".")), n, v.Len())
-	}
 	v.Set(reflect.AppendSlice(v.Slice(0, n), v.Slice(n+1, v.Len())))
 	return nil
+}
+
+// elemAt resolves a path to a list element: the list and the element's index
+func elemAt(root any, path []string) (reflect.Value, int, error) {
+	if len(path) == 0 {
+		return reflect.Value{}, 0, fmt.Errorf("del: empty path")
+	}
+	n, err := strconv.Atoi(path[len(path)-1])
+	if err != nil {
+		return reflect.Value{}, 0, fmt.Errorf("del: %q is not an index", path[len(path)-1])
+	}
+	v, err := resolve(reflect.ValueOf(root), path[:len(path)-1], false)
+	if err != nil {
+		return reflect.Value{}, 0, err
+	}
+	if v.Kind() != reflect.Slice {
+		return reflect.Value{}, 0, fmt.Errorf("%s: %s is not a list", pathOr(strings.Join(path[:len(path)-1], ".")), v.Kind())
+	}
+	if n < 0 || n >= v.Len() {
+		return reflect.Value{}, 0, fmt.Errorf("%s: index %d out of range, len %d",
+			pathOr(strings.Join(path[:len(path)-1], ".")), n, v.Len())
+	}
+	return v, n, nil
 }
 
 func pathOr(s string) string {
