@@ -1385,12 +1385,16 @@ front-end seam. What remains, in the design's order:
    past the analysis on most of the recordings' lines and past it on the
    bench; the eighth's strike decoder hears nearly every note at a low
    threshold and five times too many, and at its best threshold (0.9) keeps a
-   fifth of the softest notes. Dropping a strike whose pitch never sounds, a
-   stronger strike's partial and a strike within 0.12 s of the pitch's last
-   brought the three recordings' mean F1 to 0.616 at 0.85 (the analysis
-   0.629). Next for it: the strike and its filters' constants tuned by `tune`
-   against the truths rather than swept by hand, and a corpus whose phrases
-   sit 20 to 30 dB apart, so the strike head learns soft strikes.
+   fifth of the softest notes. Filtering the strikes (a pitch that never
+   sounds, a stronger strike's partial in the register, a repeat within
+   0.12 s, a ringing pitch restarted only over 0.95) brought the three
+   recordings' pooled F1 to 0.674 at 0.8 (the analysis 0.633). Next for it:
+   an offset head, so a note ends where its key lifts rather than where the
+   pedal lets it fade; a velocity head, so the render plays soft notes soft;
+   the corpus's pedal varied by the bar; phrases 20 to 30 dB apart, so the
+   strike head learns soft strikes; the constants tuned by `tune` against the
+   truths rather than swept by hand. Towers (7d: no gain for 43% more
+   weights) are tried again once those heads compete with the strike head.
    Then: real recordings with their notes in the corpus (item 1), then more
    loops, or width 384 (`DIM=384 HEADS=12 FFN=1536`, 7 million weights),
    each measured by `bench` on clean and augmented loops and by the truths on
