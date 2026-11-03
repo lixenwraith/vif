@@ -21,7 +21,7 @@ DRUMS = 3
 WAVES = 5
 VOICE_GENES = 32
 
-HEADS = [("onset", 1), ("drums", DRUMS), ("pitch", PITCHES), ("voicing", 1), ("wave", WAVES), ("voice", VOICE_GENES)]
+HEADS = [("onset", 1), ("drums", DRUMS), ("pitch", PITCHES), ("voicing", 1), ("wave", WAVES), ("voice", VOICE_GENES), ("strike", PITCHES)]
 
 
 @dataclass

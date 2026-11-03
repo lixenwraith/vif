@@ -5,8 +5,8 @@ export the weights pkg/transformer loads:
 
 Each loop's log-mel frames (loop_NNN.mel) are the input; its events
 (loop_NNN.json) become per-frame targets: an onset within a frame of any event,
-each drum's hits, the pitches sounding, whether any sounds, and the wave and voice
-genes of the highest note sounding. Training crops random windows of frames, so
+each drum's hits, the pitches sounding, whether any sounds, the wave and voice
+genes of the highest note sounding, and each pitch within a frame of its strikes. Training crops random windows of frames, so
 memory is bounded by --window, not by the loops' length.
 """
 from __future__ import annotations
@@ -47,7 +47,8 @@ class MelFile:
 
 def targets(label: dict, frames: int, manifest: dict) -> dict:
     """Per-frame targets from a loop's events; masks say where a target counts.
-    The yes-or-no ones are bytes, a quarter of a float's memory, until batch."""
+    The yes-or-no ones are bytes, a quarter of a float's memory, until batch;
+    the strikes stay a list of (frame, pitch), as sparse as they are."""
     pitches, min_midi = manifest["pitches"], manifest["min_midi"]
     genes, waves = manifest["voice_genes"], len(manifest["waves"])
     onset = np.zeros(frames, np.uint8)
@@ -56,6 +57,7 @@ def targets(label: dict, frames: int, manifest: dict) -> dict:
     wave = np.full(frames, -1, np.int64)
     voice = np.zeros((frames, genes), np.float32)
     top = np.full(frames, -1, np.int64)  # the highest midi sounding, whose voice the frame reports
+    strikes = []
     for e in label["events"]:
         t = e["frame"]
         if t < 0 or t >= frames:
@@ -68,6 +70,7 @@ def targets(label: dict, frames: int, manifest: dict) -> dict:
         end = min(max(e["end"], t + 1), frames)
         if 0 <= p < pitches:
             pitch[t:end, p] = 1
+            strikes.append((t, p))
         if e.get("wave", -1) >= 0 and e.get("voice"):
             for u in range(t, end):
                 if e["midi"] > top[u]:
@@ -75,7 +78,8 @@ def targets(label: dict, frames: int, manifest: dict) -> dict:
                     voice[u] = e["voice"]
     voicing = (pitch.sum(1) > 0).astype(np.uint8)
     return {"onset": onset, "drums": drums, "pitch": pitch, "voicing": voicing,
-            "wave": wave, "voice": voice, "voiced": (top >= 0).astype(np.uint8)}
+            "wave": wave, "voice": voice, "voiced": (top >= 0).astype(np.uint8),
+            "strikes": np.array(strikes, np.int32).reshape(-1, 2)}
 
 
 def load_corpus(d: str):
@@ -93,7 +97,7 @@ def load_corpus(d: str):
 
 def batch(loops, window: int, size: int, rng: random.Random):
     """size random windows of `window` frames, shorter loops padded with zeros and masked out"""
-    mels, tg = [], {k: [] for k in ("onset", "drums", "pitch", "voicing", "wave", "voice", "voiced", "valid")}
+    mels, tg = [], {k: [] for k in ("onset", "drums", "pitch", "voicing", "wave", "voice", "voiced", "strike", "valid")}
     for _ in range(size):
         mel, t = rng.choice(loops)
         n = len(mel)
@@ -110,6 +114,10 @@ def batch(loops, window: int, size: int, rng: random.Random):
         for k in ("onset", "drums", "pitch", "voicing", "voice", "voiced"):
             tg[k].append(take(t[k]))
         tg["wave"].append(take(t["wave"], -1))
+        strike = np.zeros((window, t["pitch"].shape[1]), np.uint8)
+        for f, p in t["strikes"]:
+            strike[max(f - 1 - start, 0):max(min(f + 2 - start, window), 0), p] = 1
+        tg["strike"].append(strike)
         tg["valid"].append(np.concatenate([np.ones(window - pad, np.float32), np.zeros(pad, np.float32)]))
     out = {k: torch.from_numpy(np.stack(v)) for k, v in tg.items()}
     return torch.from_numpy(np.stack(mels)), {k: v if k == "wave" else v.float() for k, v in out.items()}
@@ -121,7 +129,9 @@ def validation(loops, window: int):
     mels, tgs = [], []
     for mel, t in loops:
         for start in range(0, max(len(mel) - 1, 1), window):
-            sub = [(mel[start:start + window], {k: v[start:start + window] for k, v in t.items()})]
+            cut = {k: v[start:start + window] for k, v in t.items() if k != "strikes"}
+            cut["strikes"] = t["strikes"] - np.array([start, 0], np.int32)
+            sub = [(mel[start:start + window], cut)]
             m, tg = batch(sub, window, 1, rng)
             mels.append(m)
             tgs.append(tg)
@@ -155,6 +165,7 @@ def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
         "drums": bce("drums", t["drums"], 8.0),
         "pitch": bce("pitch", t["pitch"], 12.0),
         "voicing": bce("voicing", t["voicing"], 2.0),
+        "strike": bce("strike", t["strike"], 20.0),
     }
     voiced = t["voiced"] * valid
     n = voiced.sum().clamp(min=1)
@@ -164,7 +175,7 @@ def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
     out["wave"] = (ce * voiced).sum() / n
     voice = torch.sigmoid(y[..., cfg.slice("voice")])
     out["voice"] = ((voice - t["voice"]) ** 2).mean(-1).mul(voiced).sum() / n
-    out["total"] = out["onset"] + out["drums"] + out["pitch"] + 0.5 * out["voicing"] + 0.5 * out["wave"] + 2.0 * out["voice"]
+    out["total"] = out["onset"] + out["drums"] + out["pitch"] + 0.5 * out["voicing"] + out["strike"] + 0.5 * out["wave"] + 2.0 * out["voice"]
     return out
 
 
@@ -185,7 +196,7 @@ def main() -> None:
     ap.add_argument("--layers", type=int, default=4)
     ap.add_argument("--heads", type=int, default=8)
     ap.add_argument("--ffn", type=int, default=1024)
-    ap.add_argument("--towers", default="", help="stacks of their own after the shared input, layers:heads each in the heads' order, comma-separated: 2:2,4:4 gives onset and drums two layers and the rest four")
+    ap.add_argument("--towers", default="", help="stacks of their own after the shared input, layers:heads each in the heads' order, comma-separated: 2:2,4:5 gives onset and drums two layers and the rest four")
     ap.add_argument("--convs", default="", help="convolutions before the input layer, channels x frames x features / pool each, comma-separated: 16x3x3/1,16x3x3/2,32x3x3/2")
     ap.add_argument("--attention-window", type=int, default=64, help="frames attended either side")
     ap.add_argument("--seed", type=int, default=1)
@@ -243,7 +254,7 @@ def main() -> None:
         # the decoders read the onset, drum, pitch and voicing heads; the wave and
         # voice heads name a voice and memorize the corpus's, so they do not pick
         # the step exported
-        v["decoders"] = v["onset"] + v["drums"] + v["pitch"] + 0.5 * v["voicing"]
+        v["decoders"] = v["onset"] + v["drums"] + v["pitch"] + 0.5 * v["voicing"] + v["strike"]
         parts = " ".join(f"{k} {x:.3f}" for k, x in v.items() if k not in ("total", "decoders"))
         mark = ""
         if v["decoders"] < best_loss:
