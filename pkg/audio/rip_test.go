@@ -570,9 +570,13 @@ func TestMIDIRoundTrip(t *testing.T) {
 	if err := WriteMIDI(&file, in, hits, 137); err != nil {
 		t.Fatal(err)
 	}
-	out, outHits, err := ReadMIDI(&file)
-	if err != nil || len(out) != len(in) || len(outHits) != len(hits) {
-		t.Fatalf("read %d note(s) of %d, %d hit(s) of %d: %v", len(out), len(in), len(outHits), len(hits), err)
+	m, err := ReadMIDI(&file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, outHits := m.Notes, m.Hits
+	if len(out) != len(in) || len(outHits) != len(hits) {
+		t.Fatalf("read %d note(s) of %d, %d hit(s) of %d", len(out), len(in), len(outHits), len(hits))
 	}
 	half := 0.5 / (137.0 / 60 * midiDivision)
 	for i, n := range out {
@@ -589,15 +593,22 @@ func TestMIDIRoundTrip(t *testing.T) {
 	}
 }
 
+// smf is a type-1 file's header for tracks tracks, 480 ticks a quarter
+func smf(tracks byte) []byte {
+	return []byte{'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, tracks, 0x01, 0xE0}
+}
+
+// track is a track chunk of the events given
+func track(events ...byte) []byte {
+	return append(binary.BigEndian.AppendUint32([]byte("MTrk"), uint32(len(events))), events...)
+}
+
 // TestReadMIDITempoMap: a type-1 file whose first track halves the tempo two
 // beats in reads in seconds under that map; of its unnamed tracks, the one
 // centred under E3 is the bass and the other the melody, and the drum channel's
 // key 36 is a kick. Its notes use running status and a note-on at velocity 0.
 func TestReadMIDITempoMap(t *testing.T) {
-	track := func(events ...byte) []byte {
-		return append(binary.BigEndian.AppendUint32([]byte("MTrk"), uint32(len(events))), events...)
-	}
-	file := []byte{'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 4, 0x01, 0xE0} // 480 ticks a quarter
+	file := smf(4)
 	file = append(file, track(
 		0x00, 0xFF, 0x51, 3, 0x07, 0xA1, 0x20, // 120 bpm
 		0x87, 0x40, 0xFF, 0x51, 3, 0x0F, 0x42, 0x40, // 960 ticks on, 60 bpm
@@ -617,7 +628,11 @@ func TestReadMIDITempoMap(t *testing.T) {
 		0x00, 0x99, 36, 100,
 		0x83, 0x60, 0x89, 36, 0,
 		0x00, 0xFF, 0x2F, 0)...)
-	notes, hits, err := ReadMIDI(bytes.NewReader(file))
+	m, err := ReadMIDI(bytes.NewReader(file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes, hits := m.Notes, m.Hits
 	if len(hits) != 1 || hits[0].Drum != InstrKick || hits[0].Start != 0 {
 		t.Errorf("drums read %+v, want a kick at 0s", hits)
 	}
@@ -626,14 +641,141 @@ func TestReadMIDITempoMap(t *testing.T) {
 		{Start: 0.5, End: 2, MIDI: 76},
 		{Start: 1, End: 3, MIDI: 36, Bass: true},
 	}
-	if err != nil || len(notes) != len(want) {
-		t.Fatalf("read %+v, %v", notes, err)
+	if len(notes) != len(want) {
+		t.Fatalf("read %+v", notes)
 	}
 	for i, n := range notes {
 		w := want[i]
 		if n.MIDI != w.MIDI || n.Bass != w.Bass || n.Second || math.Abs(n.Start-w.Start) > 1e-9 || math.Abs(n.End-w.End) > 1e-9 {
 			t.Errorf("note %d: %+v, want %+v", i, n, w)
 		}
+	}
+}
+
+// TestMIDIScoreRipsAsTheLoop: the events a rendered loop plays, written as a
+// MIDI file and read back as a rip, give the loop's own patterns, in its key,
+// at its tempo, its first bar from the file's start.
+func TestMIDIScoreRipsAsTheLoop(t *testing.T) {
+	const bpm, bars = 140, 8
+	_, slots := startLoopEngine(t)
+	step := 60.0 / bpm / StepsPerBeat
+	var notes []RipNote
+	var hits []RipHit
+	for _, e := range ExpectedEvents(slots, bars, DefaultRootNote, ScalePhrygian, nil) {
+		at := float64(e.Bar*StepsPerBar+e.Step) * step
+		if e.Instr.IsDrum() {
+			hits = append(hits, RipHit{Start: at, Drum: e.Instr, Vel: e.Vel})
+			continue
+		}
+		notes = append(notes, RipNote{Start: at, End: at + float64(e.Dur)*step, MIDI: e.MIDI, Vel: e.Vel, Bass: e.MIDI < RipBassTop})
+	}
+	var file bytes.Buffer
+	if err := WriteMIDI(&file, notes, hits, bpm); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ReadMIDI(&file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, dropped := m.Rip()
+	if r.BPM != bpm || r.Downbeat != 0 || len(r.Bars) != bars || r.Root != DefaultRootNote || r.Scale != ScalePhrygian || dropped != 0 {
+		t.Fatalf("%d bpm from %.2fs, %d bars, root %d scale %d, %d dropped", r.BPM, r.Downbeat, len(r.Bars), r.Root, r.Scale, dropped)
+	}
+	// a velocity travels as one of 127 steps
+	rounded := func(pats []*PatternDef) []*PatternDef {
+		for _, p := range pats {
+			for _, tr := range p.Track {
+				for i := range tr.Event {
+					tr.Event[i].Vel = math.Round(tr.Event[i].Vel*127) / 127
+				}
+			}
+		}
+		return pats
+	}
+	want := ExpectedRip(slots, bpm, bars, DefaultRootNote, ScalePhrygian, nil)
+	if got, want := rounded(r.Patterns("loop", 4)), rounded(want.Patterns("loop", 4)); !reflect.DeepEqual(got, want) {
+		t.Errorf("patterns\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+// TestMIDIScoreKeepsItsFirstTempo: a score that starts at 60 bpm and speeds to
+// 120 two quarters in rips at its first tempo, an octave up into the
+// sequencer's range, so a beat is an eighth; its beats and its notes follow its
+// ticks under the tempo map, the change counted.
+func TestMIDIScoreKeepsItsFirstTempo(t *testing.T) {
+	file := append(smf(2), track(
+		0x00, 0xFF, 0x51, 3, 0x0F, 0x42, 0x40, // 60 bpm
+		0x87, 0x40, 0xFF, 0x51, 3, 0x07, 0xA1, 0x20, // 960 ticks on, 120 bpm
+		0x00, 0xFF, 0x2F, 0)...)
+	file = append(file, track(
+		0x00, 0x90, 72, 100, // C5 for a quarter, 1s
+		0x83, 0x60, 0x80, 72, 0,
+		0x87, 0x40, 0x90, 74, 100, // D5 at 1440, 2.5s, for a quarter, 0.5s
+		0x83, 0x60, 0x80, 74, 0,
+		0x00, 0xFF, 0x2F, 0)...)
+	m, err := ReadMIDI(bytes.NewReader(file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := m.Rip()
+	if m.BPM != 60 || m.Changes != 1 || r.BPM != 120 || len(r.Bars) != 2 {
+		t.Fatalf("file at %.1f bpm with %d change(s); rip at %d bpm, %d bar(s)", m.BPM, m.Changes, r.BPM, len(r.Bars))
+	}
+	for i, want := range []float64{0, 0.5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3} {
+		if math.Abs(r.Beats[i]-want) > 1e-6 {
+			t.Errorf("beat %d at %.3fs, want %.3fs", i, r.Beats[i], want)
+		}
+	}
+	// a crotchet is two beats before the change and after it
+	if mel := r.Bars[1].Melody; len(mel) != 1 || mel[0].Pos != 8 || mel[0].Dur != 8 || r.Bars[0].Melody[0].Dur != 8 {
+		t.Errorf("melody %+v then %+v", r.Bars[0].Melody, mel)
+	}
+}
+
+// TestMIDIScoreBarsFromItsTimeSignature: a file that names no time signature is
+// in 4/4 from its start; one whose first bar is shorter than its signature's,
+// a pickup, rips with its first bar line where the full bars begin and a bar
+// before it holding the pickup.
+func TestMIDIScoreBarsFromItsTimeSignature(t *testing.T) {
+	notes := []byte{
+		0x00, 0x90, 72, 100, // C5 at 0 for a quarter
+		0x83, 0x60, 0x80, 72, 0,
+		0x00, 0x90, 74, 100, // D5 at 480 for a whole bar
+		0x8F, 0x00, 0x80, 74, 0,
+		0x00, 0xFF, 0x2F, 0}
+	plain, err := ReadMIDI(bytes.NewReader(append(smf(1), track(notes...)...)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := plain.Rip()
+	if plain.Meter != [2]int{4, 4} || r.Downbeat != 0 || len(r.Bars) != 2 || r.Bars[0].Melody[1].Pos != 4 {
+		t.Errorf("no signature: %v, first bar from %.2fs, %d bar(s), melody %+v", plain.Meter, r.Downbeat, len(r.Bars), r.Bars[0].Melody)
+	}
+	meters := []byte{
+		0x00, 0xFF, 0x58, 4, 1, 2, 24, 8, // 1/4 at 0
+		0x83, 0x60, 0xFF, 0x58, 4, 3, 2, 24, 8, // 3/4 at 480
+		0x00, 0xFF, 0x2F, 0}
+	picked, err := ReadMIDI(bytes.NewReader(append(append(smf(2), track(meters...)...), track(notes...)...)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ = picked.Rip()
+	if picked.Meter != [2]int{3, 4} || math.Abs(r.Downbeat+1.5) > 1e-6 || len(r.Bars) != 2 {
+		t.Fatalf("a pickup: %v, first bar from %.2fs, %d bar(s)", picked.Meter, r.Downbeat, len(r.Bars))
+	}
+	if mel := r.Bars[0].Melody; len(mel) != 1 || mel[0].Pos != 12 || len(r.Bars[1].Melody) != 1 || r.Bars[1].Melody[0].Pos != 0 {
+		t.Errorf("pickup bar %+v, first full bar %+v", mel, r.Bars[1].Melody)
+	}
+}
+
+// TestMIDIScoreDropsNotesOutOfRange: a note under E1 or over C7 is no note a
+// rip holds, so a score's is dropped and counted, the rest kept.
+func TestMIDIScoreDropsNotesOutOfRange(t *testing.T) {
+	m := &MIDIScore{BPM: 120, division: 480, end: 1920, clock: []midiTempo{{perTick: 0.5 / 480}}, Notes: []RipNote{
+		{Start: 0, End: 0.5, MIDI: RipMinMIDI - 1}, {Start: 0.5, End: 1, MIDI: 60, Vel: 1}, {Start: 1, End: 1.5, MIDI: RipMaxMIDI}}}
+	r, dropped := m.Rip()
+	if dropped != 2 || len(r.Notes) != 1 || r.Notes[0].MIDI != 60 || len(r.Bars[0].Melody) != 1 {
+		t.Errorf("%d dropped, transcript %+v, melody %+v", dropped, r.Notes, r.Bars[0].Melody)
 	}
 }
 

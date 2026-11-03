@@ -49,7 +49,10 @@ func cmdTruth(s *Session, a []string) error {
 	var truth []audio.RipNote
 	var hits []audio.RipHit
 	if isMIDI(a[1]) {
-		truth, hits, err = audio.ReadMIDI(bytes.NewReader(data))
+		var m *audio.MIDIScore
+		if m, err = audio.ReadMIDI(bytes.NewReader(data)); err == nil {
+			truth, hits = m.Notes, m.Hits
+		}
 	} else {
 		// a rhythm tapped out without a start begins where the rip's melody
 		// register first sounds
