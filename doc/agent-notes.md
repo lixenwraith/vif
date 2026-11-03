@@ -390,6 +390,11 @@ that proves wrong or that a document now states, and link the document instead.
   back with the two ends exchanged. A rip's line never holds such a pair; a file
   from a sequencer can. `pip install --user mido` reads a written file for a
   check from outside the package (`mido.MidiFile(path).tracks`).
+- A score's notes quantize on its ticks, not its seconds: the grid's `place`
+  sizes a note by the mean step over every bar, so under a tempo change a
+  quarter in seconds read as eleven steps where the file holds eight.
+  `MIDIScore.Rip` converts seconds back to ticks (`ticks`) for the grid and the
+  beats to seconds after it.
 
 ## Locks
 

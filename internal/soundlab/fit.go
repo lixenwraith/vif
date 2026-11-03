@@ -38,13 +38,19 @@ var defaultFit = fitOptions{notes: 6, generations: 8, pool: 16, seed: 1}
 const fitTail = 0.25
 
 // ripped is a recording ripped this session: what was heard, and the samples it
-// was heard in, so fit and compress work on it without the file
+// was heard in, so fit and compress work on it without the file; a score read
+// from a MIDI file has no samples
 type ripped struct {
 	rip   *audio.Rip
 	x     []float64
 	rate  int
 	file  string
 	sound *audio.RipSound // the recording as Fidelity hears it, heard on first use
+}
+
+// errScore refuses a verb that hears the recording a score lacks
+func errScore(rp *ripped) error {
+	return fmt.Errorf("%s is a score, with no recording to hear or fit to", rp.file)
 }
 
 func cmdFit(s *Session, a []string) error {
@@ -59,6 +65,9 @@ func cmdFit(s *Session, a []string) error {
 			return fmt.Errorf("generations %q: want 1 to 500", a[1])
 		}
 		o.generations = n
+	}
+	if rp.x == nil {
+		return errScore(rp)
 	}
 	s.fitVoices(rp, o, true)
 	for _, v := range rp.rip.Voices(a[0]) {
@@ -97,14 +106,20 @@ func cmdNotes(s *Session, a []string) error {
 		fmt.Fprintf(s.out, "%s: %d note(s) and %d hit(s) at %d bpm written to %s, a track each for melody, under, bass and drums\n", a[0], len(r.Notes), len(hits), r.BPM, a[1])
 		return nil
 	}
-	snd, err := s.soundOf(rp)
-	if err != nil {
-		return err
-	}
 	// support is how much of the recording's salience over a note's frames is
 	// its pitch's: one for a note alone in its frames, little for one heard
-	// beside a louder, a note to doubt
-	support := func(n audio.RipNote) float64 {
+	// beside a louder, a note to doubt; a score's notes are given, not heard
+	var snd *audio.RipSound
+	if rp.x != nil {
+		var err error
+		if snd, err = s.soundOf(rp); err != nil {
+			return err
+		}
+	}
+	support := func(n audio.RipNote) string {
+		if snd == nil {
+			return ""
+		}
 		f := snd.Frames
 		var own, all float64
 		for t := int(n.Start / f.Hop); t < int(n.End/f.Hop) && (t+1)*audio.RipPitches <= len(f.Salience); t++ {
@@ -118,10 +133,10 @@ func cmdNotes(s *Session, a []string) error {
 			}
 			all += float64(peak)
 		}
-		if all == 0 {
-			return 0
+		if all > 0 {
+			own /= all
 		}
-		return own / all
+		return fmt.Sprintf(", support %.2f", own)
 	}
 	var upper, unmeasured int
 	for _, n := range r.Notes {
@@ -152,7 +167,7 @@ func cmdNotes(s *Session, a []string) error {
 		if n.Bright != audio.RipUnmeasured {
 			bright = fmt.Sprintf(", bright %.2f", n.Bright)
 		}
-		fmt.Fprintf(s.out, "%-6s %7.3fs %-20s %-4s degree %d%s octave %d, %.1f step(s) at %.2f, support %.2f%s\n", line, n.Start, where, noteName(n.MIDI), deg, marks[acc+2], oct, (n.End-n.Start)/span, n.Vel, support(n), bright)
+		fmt.Fprintf(s.out, "%-6s %7.3fs %-20s %-4s degree %d%s octave %d, %.1f step(s) at %.2f%s%s\n", line, n.Start, where, noteName(n.MIDI), deg, marks[acc+2], oct, (n.End-n.Start)/span, n.Vel, support(n), bright)
 	}
 	return nil
 }

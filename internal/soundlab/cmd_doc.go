@@ -3,9 +3,11 @@
 package soundlab
 
 import (
+	"bytes"
 	"cmp"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -127,9 +129,10 @@ func cmdExport(s *Session, a []string) error {
 // bass pattern per window of bars, dirty, under the names the rip gives them, and
 // sets the transport's tempo and key to what it heard, so a slot plays the
 // estimate at once. A register the front end heard no voice for gets one fitted
-// by the engine's own renders of its notes. Notes off the key sit on its nearest
-// degree. The rip is kept under its name for fit, compress and song. nodrums
-// leaves the drum part out, for a recording the listener knows has none.
+// by the engine's own renders of its notes. A MIDI file is a rip already, its
+// notes the transcript, its lines given the shipped voices. Notes off the key
+// sit on its nearest degree. The rip is kept under its name for fit, compress
+// and song. nodrums leaves the drum part out.
 func cmdRip(s *Session, a []string) error {
 	name := a[1]
 	if err := badName(name); err != nil {
@@ -142,6 +145,8 @@ func cmdRip(s *Session, a []string) error {
 		case n > 2 && a[n-1] == "nodrums":
 			nodrums, a = true, a[:n-1]
 			continue
+		case n > 3 && (a[n-2] == "lead" || a[n-2] == "bpm") && isMIDI(a[0]):
+			return fmt.Errorf("%s: a MIDI file's lines and tempo are its own; %s is for a recording", a[0], a[n-2])
 		case n > 3 && a[n-2] == "lead":
 			rule, ok := audio.ParseLeadRule(a[n-1])
 			if !ok {
@@ -167,23 +172,17 @@ func cmdRip(s *Session, a []string) error {
 		}
 		bars = n
 	}
-	f, err := os.Open(s.path(a[0]))
+	var rp *ripped
+	var err error
+	if isMIDI(a[0]) {
+		rp, err = s.readScore(a[0])
+	} else {
+		rp, err = s.hear(a[0], tempo)
+	}
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	x, rate, err := audio.ReadWAV(f)
-	if err != nil {
-		return err
-	}
-	ripper := s.ripper()
-	if tempo > 0 { // the tempo the listener knows; the bar line is still decoded
-		ripper.Grid = &audio.RipGrid{BPM: tempo, Downbeat: -1}
-	}
-	r, err := ripper.Samples(x, rate)
-	if err != nil {
-		return err
-	}
+	r := rp.rip
 	if nodrums {
 		for b := range r.Bars {
 			r.Bars[b].Drums = [audio.InstrClap][]audio.Step{}
@@ -203,8 +202,9 @@ func cmdRip(s *Session, a []string) error {
 			return fmt.Errorf("%q: already exists", vn)
 		}
 	}
-	rp := &ripped{rip: r, x: x, rate: rate, file: a[0]}
-	s.fitVoices(rp, s.fit, false)
+	if rp.x != nil {
+		s.fitVoices(rp, s.fit, false)
+	}
 	defs, voices := r.Patterns(name, bars), r.Voices(name)
 	// The voices register at once, so the patterns naming them play; the patterns
 	// stay dirty until a slot or an apply takes them
@@ -250,8 +250,76 @@ func cmdRip(s *Session, a []string) error {
 	for _, v := range voices {
 		fmt.Fprintf(s.out, "voice %s: %s, registered\n", v.Name, cmp.Or(v.Wave, "sine"))
 	}
+	if rp.x == nil {
+		fmt.Fprintf(s.out, "compress %s matches its bars to a dictionary and makes the song %s\n", name, name)
+		return nil
+	}
 	fmt.Fprintf(s.out, "compress %s matches its bars to a dictionary and makes the song %s; fit %s refines the voices\n", name, name, name)
 	return nil
+}
+
+// hear rips a recording, at tempo when one is given
+func (s *Session) hear(file string, tempo int) (*ripped, error) {
+	f, err := os.Open(s.path(file))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	x, rate, err := audio.ReadWAV(f)
+	if err != nil {
+		return nil, err
+	}
+	ripper := s.ripper()
+	if tempo > 0 { // the tempo the listener knows; the bar line is still decoded
+		ripper.Grid = &audio.RipGrid{BPM: tempo, Downbeat: -1}
+	}
+	r, err := ripper.Samples(x, rate)
+	if err != nil {
+		return nil, err
+	}
+	return &ripped{rip: r, x: x, rate: rate, file: file}, nil
+}
+
+// readScore reads a MIDI file as a rip with no recording behind it, its lines
+// played by copies of the shipped lead and bass, and says what of the file the
+// rip could not keep: a meter, tempo changes, notes out of range, parts
+func (s *Session) readScore(file string) (*ripped, error) {
+	data, err := os.ReadFile(s.path(file))
+	if err != nil {
+		return nil, err
+	}
+	m, err := audio.ReadMIDI(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", file, err)
+	}
+	r, dropped := m.Rip()
+	voices := map[string]*audio.VoiceDef{}
+	for _, v := range audio.RegisteredVoices() {
+		voices[v.Name] = v
+	}
+	for reg, at := range lineVoices(r) {
+		if v := voices[[3]string{"lead", "lead", "bass"}[reg]]; v != nil && len(lineNotes(r, reg)) > 0 {
+			*at = v.Clone()
+		}
+	}
+	said := []string{fmt.Sprintf("%d note(s) and %d hit(s) in %d/%d", len(m.Notes), len(m.Hits), m.Meter[0], m.Meter[1])}
+	if m.Meter != [2]int{4, 4} {
+		said[0] += ", read in bars of four beats from its first bar line"
+	}
+	if beat := math.Round(math.Log2(m.BPM / float64(r.BPM))); beat != 0 {
+		said = append(said, fmt.Sprintf("its %.0f bpm read at %d, a beat %s", m.BPM, r.BPM, [...]string{"its sixteenth", "its eighth", "its quarter", "its half note", "its whole note"}[min(max(int(beat)+2, 0), 4)]))
+	}
+	if m.Changes > 0 {
+		said = append(said, fmt.Sprintf("%d tempo change(s) after the start, played at the first tempo throughout", m.Changes))
+	}
+	if dropped > 0 {
+		said = append(said, fmt.Sprintf("%d note(s) outside %s to %s dropped", dropped, noteName(audio.RipMinMIDI), noteName(audio.RipMaxMIDI-1)))
+	}
+	if m.Left > 0 {
+		said = append(said, fmt.Sprintf("%d part(s) past the melody, under and bass left out", m.Left))
+	}
+	fmt.Fprintf(s.out, "read %s as a score: %s\n", file, strings.Join(said, "; "))
+	return &ripped{rip: r, file: file}, nil
 }
 
 // cmdRender writes what the slots hold, played for bars bars at the transport's
@@ -330,8 +398,8 @@ func cmdWrite(s *Session, a []string) error {
 	return fmt.Errorf("%q: not in any document", name)
 }
 
-// loadAny loads a file by what it is: a .slab runs as a script, a .wav is for
-// rip, and a .toml document goes to the sounds or the patterns by its tables,
+// loadAny loads a file by what it is: a .slab runs as a script, a .wav or a
+// .mid is for rip, and a .toml document goes to the sounds or the patterns by its tables,
 // replacing the document or merged into it.
 func (s *Session) loadAny(file string, replace bool) error {
 	switch strings.ToLower(filepath.Ext(file)) {
@@ -339,6 +407,8 @@ func (s *Session) loadAny(file string, replace bool) error {
 		return RunScriptFile(s, s.path(file))
 	case ".wav":
 		return fmt.Errorf("%s: a recording; rip <file.wav> <name> hears it", file)
+	case ".mid", ".midi":
+		return fmt.Errorf("%s: a score; rip <file.mid> <name> reads it", file)
 	}
 	kind, err := sniffDocument(s.path(file))
 	if err != nil {

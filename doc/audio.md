@@ -507,9 +507,14 @@ snares and hats are hits (`RipHit`), which `MatchHits` lays on the rip's own
 match most, each within half a step. `NoteLevels` reads how loud the recording
 plays each note given, its first harmonics' peak around its onset placed by
 the agreement's map (`Agreement.At`, through the notes the register matched),
-so `truth` counts the notes heard by level as well. `WriteMIDI` writes a transcript the other
-way, a track a line and the drums on the drum channel at the rip's tempo
-(`notes <name> <file.mid>`), to correct in a sequencer. The song a rip
+so `truth` counts the notes heard by level as well. A file read is a rip of its
+own too (`MIDIScore.Rip`, soundlab's `rip <file.mid> <name>`): its notes
+quantized on its ticks, its first tempo folded by octaves into the sequencer's
+range, four-beat bars from where its time signature starts, the key `keyOf` its
+notes' pitch classes as the analysis takes it of the chroma, and a note outside
+E1 to C7 dropped. `WriteMIDI` writes a transcript the other way, a track a line
+and the drums on the drum channel at the rip's tempo (`notes <name>
+<file.mid>`), to correct in a sequencer. The song a rip
 compresses into carries the recording's tuning (`SongDef.Tuning`), and the
 engine plays or renders it there (`AudioEngine.SetTuning`), as the voice fit
 renders its candidate notes there (`RenderNoteAt`), so a render stands beside
