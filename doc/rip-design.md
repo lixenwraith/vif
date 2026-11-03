@@ -623,6 +623,49 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   better and melodies worse, a synthesizer's domain more steps will not
   leave, which real recordings with their notes in the corpus are for.
 
+- The seventh round changed one thing a run on the sixth's recipe, each run
+  40000 loops (400 held out) over 40000 steps on the same GPU. 7a heard 229
+  bands in place of eighty: held-out decoders 0.92 against 0.99, the bench
+  under the sixth (0.452 clean, 0.451 augmented), and on the recordings Für
+  Elise's register 363 of 869 against 266 (the analysis 444) and Billie
+  Jean's riff 127 of 138 against 96. 7b trained the same model on a corpus
+  nearer a real mix (a swell, two equaliser bands, a compressor, halls, a
+  pedal's releases, a noise floor in half the loops, generated loops without
+  their drums or bass at times): level with the sixth on its loops (0.508,
+  0.458), and on the recordings the best model then, Für Elise's register 425
+  and its melody line 240 of 611 against the analysis's 205, Billie Jean's
+  riff 127 with 67 extra and its kicks 47 false against the analysis's 135,
+  the intro's register 42 against 37, the origin's 32 against 50. 7c put
+  three convolutions before the input layer: held-out 0.86 against 7b's
+  1.13, the bench past the analysis on 7b's rougher loops (0.436 against
+  0.418 clean, 0.448 against 0.400 augmented), the recordings level with
+  7b but Billie Jean's snare 39 false against 5. 7d split the layers into
+  towers over 7c's convolutions, onset and drums on two layers and the rest
+  on four: held-out 0.86, no better on the bench or the recordings.
+- The eighth round followed Für Elise's soft notes. Counted by the
+  recording's level (`truth`), 7b heard 67% of the register's loudest notes
+  and 11% of those 18 dB or more down, the analysis 76% and none. Of 7b's
+  misses its own pitch output cleared the decoder's floor for 100 of 104
+  loud ones and 122 of 135 at 6 to 12 dB down, which the two-line path
+  dropped where a pedal leaves earlier notes ringing as strongly as the new
+  one; below 18 dB the model itself faded, its input (log1p of a hundred
+  times the energy) keeping 0.3% of a loud note's contrast there, a true
+  logarithm 59%. The model gained a strike head for each pitch, the melody
+  register's notes read from its strikes any number at once, and an input of
+  each band in dB against the frame's own level, the level an input of its
+  own. 8b, on 7c's convolutions and 7b's corpus: the bench 0.501 clean, its
+  melody 0.16 the first past the analysis's 0.13, and 0.409 augmented. At a
+  strike threshold of 0.5 it heard 739 of Für Elise's 869 register notes and
+  73% of those 18 dB down, with five times too many notes (the register's F1
+  0.26). Swept on Für Elise, the origin and the intro, the F1 is best at 0.9
+  on the three together (0.585, 0.546 and 0.630), the default since, past
+  7b's 0.554, 0.520 and 0.627 on each and under the analysis's 0.633 and
+  0.699 on the first two; there the notes 18 dB down are 19% heard against
+  7b's 11%, and at 0.95 only 5%. A head trained with a
+  positive weight w scores a posterior p as wp/(wp + 1 - p), so the strike
+  head's half-sure is 0.95, and a soft note struck scores as a false strike
+  does: telling them apart is the next decoder's work.
+
 ## 9. Decisions
 
 - **The decoders stay classical.** Tempo, beats and note cutting are solved

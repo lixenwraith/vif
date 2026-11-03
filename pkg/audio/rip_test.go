@@ -439,7 +439,7 @@ func TestStrikesStartNotesWhileOthersRing(t *testing.T) {
 	const frames = 300
 	f := &RipFrames{Hop: RipFrameSec, Flux: make([]float64, frames), Salience: make([]float32, frames*RipPitches), Strike: make([]float32, frames*RipPitches)}
 	for _, n := range []struct{ midi, at, end int }{{72, 0, 250}, {76, 40, 250}, {79, 80, 250}, {72, 150, 250}} {
-		f.Strike[n.at*RipPitches+n.midi-RipMinMIDI] = 0.9
+		f.Strike[n.at*RipPitches+n.midi-RipMinMIDI] = 0.99
 		for t := n.at; t < n.end; t++ {
 			f.Salience[t*RipPitches+n.midi-RipMinMIDI] = 0.9
 		}
