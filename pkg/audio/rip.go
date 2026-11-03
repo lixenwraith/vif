@@ -1538,9 +1538,9 @@ func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 
 // strikes reads a register's notes from a front end that hears each pitch struck:
 // a note starts where a strike peaks over Strike and lasts, any number at once,
-// while its salience holds over Voicing of the reference and no strike over
-// StrikeAgain renews it; none starts where the pitch never sounds (StrikeHold within
-// MinNote), at a stronger strike's partial in the register, or within StrikeGap of its last.
+// while its salience holds over Voicing of the reference and no strike renews it,
+// one over StrikeAgain and the surest a tone either side. None starts where the pitch
+// never sounds (StrikeHold within MinNote), at a stronger strike's partial, or within StrikeGap.
 func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 	r, ok := f.register(lo, hi)
 	if !ok {
@@ -1557,18 +1557,20 @@ func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 		v := strike(t, lo+s)
 		return float64(v) >= p.Strike && v >= strike(t-1, lo+s) && v > strike(t+1, lo+s)
 	}
-	// a strike of a pitch still sounding is an echo of another note's attack unless surer
-	renews := func(t, s int) bool { return struck(t, s) && float64(strike(t, lo+s)) >= p.StrikeAgain }
-	// a partial: a stronger strike in the register an octave, a twelfth or two octaves under, within two frames
-	partial := func(t, midi int) bool {
-		for _, d := range [...]int{12, 19, 24} {
-			for u := t - 2; u <= t+2 && midi-d >= lo; u++ {
-				if strike(u, midi-d) > strike(t, midi) {
+	// stronger: a stronger strike within two frames at one of the intervals ds from midi, at or over from
+	stronger := func(t, midi, from int, ds ...int) bool {
+		for _, d := range ds {
+			for u := t - 2; u <= t+2 && midi+d >= from; u++ {
+				if strike(u, midi+d) > strike(t, midi) {
 					return true
 				}
 			}
 		}
 		return false
+	}
+	// another note's attack sets off strikes on the pitches ringing, a tone either side as sure as its own
+	renews := func(t, s int) bool {
+		return struck(t, s) && float64(strike(t, lo+s)) >= p.StrikeAgain && !stronger(t, lo+s, RipMinMIDI, -2, -1, 1, 2)
 	}
 	sounds := func(t, s int) bool {
 		for u := t; u < min(t+short, T); u++ {
@@ -1582,7 +1584,8 @@ func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 	for s := range r.reach {
 		last := -gap
 		for t := 0; t < T; {
-			if !struck(t, s) || t-last < gap || partial(t, lo+s) || !sounds(t, s) {
+			// partials of the register's own strikes only, as a bass note often doubles a melody note
+			if !struck(t, s) || t-last < gap || stronger(t, lo+s, lo, -12, -19, -24) || !sounds(t, s) {
 				t++
 				continue
 			}

@@ -73,8 +73,10 @@ flowchart LR
    `strike_again`, any number at once, so the notes a pedal leaves ringing do
    not hide the next one struck, which a path through the salience, preferring
    what sounds strongest, stays on; the lines are parted from them as before.
-   A new note's attack sets off weaker strikes on the pitches still ringing,
-   which the higher bar leaves ringing. A strike starts no note when its pitch
+   A new note's attack sets off strikes on the pitches still ringing, weaker
+   ones across the register and as sure as its own a semitone or a tone away,
+   so a ringing pitch is renewed only over the higher bar and by the surest
+   strike within a tone. A strike starts no note when its pitch
    never sounds strongly (`strike_hold` of the reference within the shortest
    note), when a stronger strike in the register within two frames sits an
    octave, a twelfth or two octaves under it (a partial of that note), or when
@@ -690,7 +692,11 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   against 0.548, recall 0.613 against 0.672) and the analysis's 0.633, the
   model past it for the first time; Für Elise alone 0.680. The bench stays
   0.491 clean, its augmented melody falling from 0.09 to 0.06; a bar of 0.90
-  keeps the bench whole (0.498, 0.403) at 0.646 pooled.
+  keeps the bench whole (0.498, 0.403) at 0.646 pooled. Listening to that
+  clip found a ringing B4 renewed by the attack of a C5 a semitone up (0.98
+  against 0.99) and of an A4 a tone down (0.95 against 0.99), each a false B4
+  on a downbeat; with a renewing strike also the surest within a tone, pooled
+  F1 0.678 (precision 0.765, recall 0.610) and the bench unchanged.
 
 ## 9. Decisions
 
