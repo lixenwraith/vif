@@ -69,14 +69,16 @@ flowchart LR
    the busier by default (`Ripper.Lead`). From a front end that hears
    each pitch struck, the melody register's notes are read from the strikes
    instead: a note starts where its pitch's strike peaks over `strike` and
-   lasts while its salience holds or until it is struck again, any number at
-   once, so the notes a pedal leaves ringing do not hide the next one struck,
-   which a path through the salience, preferring what sounds strongest, stays
-   on; the lines are parted from them as before. A strike starts no note when
-   its pitch never sounds strongly (`strike_hold` of the reference within the
-   shortest note), when a stronger strike within two frames sits an octave, a
-   twelfth or two octaves under it (a partial of that note), or when it
-   follows the pitch's last within `strike_gap`. The bass is decoded up to A3, over
+   lasts while its salience holds or until it is struck again over
+   `strike_again`, any number at once, so the notes a pedal leaves ringing do
+   not hide the next one struck, which a path through the salience, preferring
+   what sounds strongest, stays on; the lines are parted from them as before.
+   A new note's attack sets off weaker strikes on the pitches still ringing,
+   which the higher bar leaves ringing. A strike starts no note when its pitch
+   never sounds strongly (`strike_hold` of the reference within the shortest
+   note), when a stronger strike in the register within two frames sits an
+   octave, a twelfth or two octaves under it (a partial of that note), or when
+   it follows the pitch's last within `strike_gap`. The bass is decoded up to A3, over
    the melody's lowest rows, which count for three quarters against the bass
    rows' own reference; a reached note the bass line does not continue, its
    nearest other bass note more than an octave away, is not the bass's, and a
@@ -677,7 +679,18 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   with truth's (0.590 against 0.585 for 8b at 0.9), so the extra notes are
   extra, not chords out of order. On the bench they cost the model 0.007
   clean and 0.004 augmented (its melody 0.15 to 0.13 and 0.11 to 0.09),
-  spread over the filters: none alone accounts for it.
+  spread over the filters: none alone accounts for it. Listening to that
+  Für Elise found two of its mistakes in the decoder: the partial filter
+  dropped an A4 struck with the bass A2 two octaves under, and a new note's
+  attack set off strikes of 0.85 to 0.96 on the pitches still ringing under
+  the pedal, where a real strike again read 0.97 or more. With partials
+  compared only inside the melody register and a ringing pitch restarted only
+  over 0.95 (`strike_again`), the threshold came down to 0.8: pooled over the
+  three recordings, F1 0.674 against round nine's 0.604 (precision 0.749
+  against 0.548, recall 0.613 against 0.672) and the analysis's 0.633, the
+  model past it for the first time; Für Elise alone 0.680. The bench stays
+  0.491 clean, its augmented melody falling from 0.09 to 0.06; a bar of 0.90
+  keeps the bench whole (0.498, 0.403) at 0.646 pooled.
 
 ## 9. Decisions
 

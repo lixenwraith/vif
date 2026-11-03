@@ -43,6 +43,7 @@ type RipParams struct {
 	Strike        float64 `toml:"strike"`         // how sure a front end that hears each pitch struck must be before the strike starts a note
 	StrikeHold    float64 `toml:"strike_hold"`    // the share of the register's reference a struck pitch's salience reaches within MinNote, or the strike is no note
 	StrikeGap     float64 `toml:"strike_gap"`     // seconds within which a pitch struck again is the same strike
+	StrikeAgain   float64 `toml:"strike_again"`   // how sure a strike of a pitch still sounding must be to end its note and start another
 }
 
 func DefaultRipParams() RipParams {
@@ -50,7 +51,7 @@ func DefaultRipParams() RipParams {
 		TempoPrior: 120, TempoWidth: 1, Tightness: 100,
 		OnsetFloor: 2.0, OnsetMin: 0.1, OnsetGap: 0.06, KickShare: 0.06, SnareShare: 0.45, SnareNoise: 0.1, HatShare: 0.3,
 		Harmonics: 6, HarmonicDecay: 0.8, Voicing: 0.3, Jump: 0.06, Switch: 0.35, Retrigger: 0.4, MinNote: 0.06,
-		SecondVoice: 0.5, Compress: 1, Cross: 0.003, Strike: 0.85, StrikeHold: 0.9, StrikeGap: 0.12,
+		SecondVoice: 0.5, Compress: 1, Cross: 0.003, Strike: 0.8, StrikeHold: 0.9, StrikeGap: 0.12, StrikeAgain: 0.95,
 	}
 }
 
@@ -87,6 +88,7 @@ var ripGenes = []ripGene{
 	{"strike", 0.2, 0.99, func(p *RipParams) *float64 { return &p.Strike }},
 	{"strike_hold", 0.3, 1, func(p *RipParams) *float64 { return &p.StrikeHold }},
 	{"strike_gap", 0.03, 0.3, func(p *RipParams) *float64 { return &p.StrikeGap }},
+	{"strike_again", 0.5, 0.99, func(p *RipParams) *float64 { return &p.StrikeAgain }},
 }
 
 func (g *ripGene) get(p *RipParams) float64 {
@@ -1534,11 +1536,11 @@ func (f *RipFrames) notes(lo, hi int, p RipParams) []ripNote {
 	return kept
 }
 
-// strikes reads a register's notes from a front end that hears each pitch
-// struck: a note starts where a strike peaks over Strike and lasts while its
-// salience holds over Voicing of the reference, any number at once. No note starts
-// at a strike whose pitch never sounds (StrikeHold within MinNote), at a stronger
-// one's partial, within StrikeGap of the pitch's last, or struck again within MinNote.
+// strikes reads a register's notes from a front end that hears each pitch struck:
+// a note starts where a strike peaks over Strike and lasts, any number at once,
+// while its salience holds over Voicing of the reference and no strike over
+// StrikeAgain renews it; none starts where the pitch never sounds (StrikeHold within
+// MinNote), at a stronger strike's partial in the register, or within StrikeGap of its last.
 func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 	r, ok := f.register(lo, hi)
 	if !ok {
@@ -1555,10 +1557,12 @@ func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 		v := strike(t, lo+s)
 		return float64(v) >= p.Strike && v >= strike(t-1, lo+s) && v > strike(t+1, lo+s)
 	}
-	// a partial: a stronger strike within two frames an octave, a twelfth or two octaves under
+	// a strike of a pitch still sounding is an echo of another note's attack unless surer
+	renews := func(t, s int) bool { return struck(t, s) && float64(strike(t, lo+s)) >= p.StrikeAgain }
+	// a partial: a stronger strike in the register an octave, a twelfth or two octaves under, within two frames
 	partial := func(t, midi int) bool {
 		for _, d := range [...]int{12, 19, 24} {
-			for u := t - 2; u <= t+2; u++ {
+			for u := t - 2; u <= t+2 && midi-d >= lo; u++ {
 				if strike(u, midi-d) > strike(t, midi) {
 					return true
 				}
@@ -1584,7 +1588,7 @@ func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 			}
 			last = t
 			end := t + 1
-			for end < T && !(struck(end, s) && (end-t < short || end-t >= gap)) && (end < t+short || r.sal(end, s) >= p.Voicing*r.ref) {
+			for end < T && !(renews(end, s) && (end-t < short || end-t >= gap)) && (end < t+short || r.sal(end, s) >= p.Voicing*r.ref) {
 				end++
 			}
 			if end-t >= short {
