@@ -22,7 +22,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/pkg/audio"
-	"github.com/lixenwraith/vif/pkg/audio/ripnet"
+	"github.com/lixenwraith/vif/pkg/audio/ripmodel"
 )
 
 // Session owns the engine and the working documents: the sounds and the voices,
@@ -54,10 +54,10 @@ type Session struct {
 	files    Files
 	// rip is what rip listens with, the root's audio/rip.toml when one holds it,
 	// and ripSrc that file, where tune writes; frontEnd is the model the root's
-	// audio/ripnet.bin holds, nil for the package's own analysis
+	// audio/ripmodel.bin holds, nil for the package's own analysis
 	rip      audio.RipParams
 	ripSrc   string
-	frontEnd *ripnet.FrontEnd
+	frontEnd *ripmodel.FrontEnd
 	// rips keeps what rip heard of each recording, by the name it was ripped as,
 	// with the samples, so fit and compress work on it without the file; songs
 	// are the timelines compress makes and the pattern document carries
@@ -260,7 +260,7 @@ func (s *Session) loadModel(file string) error {
 		return err
 	}
 	defer f.Close()
-	fe, err := ripnet.Load(f)
+	fe, err := ripmodel.Load(f)
 	if err != nil {
 		return err
 	}

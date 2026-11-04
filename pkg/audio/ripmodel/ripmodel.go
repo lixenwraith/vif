@@ -1,9 +1,9 @@
-// Package ripnet is the rip's learned front end: a transformer over log-mel
+// Package ripmodel is the rip's learned front end: a transformer over log-mel
 // frames whose heads say, per frame, whether anything and which drum struck,
-// which pitches sound and which are struck, and the note's wave and voice genes.
-// tool/rip-train trains it on loops the engine renders; Spec is the shape both
-// sides build, and a weight file loads into a FrontEnd the Ripper hears with.
-package ripnet
+// which pitches sound, are struck or let go and how hard, and the note's wave and
+// genes. tool/rip-train trains it on loops the engine renders; Spec is the shape
+// both sides build, and a weight file loads into a FrontEnd the Ripper hears with.
+package ripmodel
 
 import (
 	"fmt"
@@ -63,14 +63,14 @@ const optionalHeads = 3
 func New(m *transformer.Model) (*FrontEnd, error) {
 	want, got := Spec(), m.Config()
 	if got.Inputs != want.Inputs {
-		return nil, fmt.Errorf("ripnet: model reads %d inputs, want %d, the bands in dB over the frame's level and the level", got.Inputs, want.Inputs)
+		return nil, fmt.Errorf("ripmodel: model reads %d inputs, want %d, the bands in dB over the frame's level and the level", got.Inputs, want.Inputs)
 	}
 	if n := len(got.Outputs); n > len(want.Outputs) || n < len(want.Outputs)-optionalHeads {
-		return nil, fmt.Errorf("ripnet: model has %d heads, want %d", n, len(want.Outputs))
+		return nil, fmt.Errorf("ripmodel: model has %d heads, want %d", n, len(want.Outputs))
 	}
 	for i, h := range want.Outputs[:len(got.Outputs)] {
 		if got.Outputs[i] != h {
-			return nil, fmt.Errorf("ripnet: head %d is %q of %d, want %q of %d", i, got.Outputs[i].Name, got.Outputs[i].Size, h.Name, h.Size)
+			return nil, fmt.Errorf("ripmodel: head %d is %q of %d, want %q of %d", i, got.Outputs[i].Name, got.Outputs[i].Size, h.Name, h.Size)
 		}
 	}
 	return &FrontEnd{Model: m}, nil

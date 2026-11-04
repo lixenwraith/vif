@@ -197,7 +197,7 @@ that proves wrong or that a document now states, and link the document instead.
 - Write a truth from a score or a MIDI file, never from memory: a remembered
   Billie Jean riff had its first note an octave low, the synthesizer's doubling
   the analysis hears, and turned a 96-to-94 tie into a 110-to-84 loss.
-- Weights installed in the user root (`~/.config/vif/audio/ripnet.bin`) win over
+- Weights installed in the user root (`~/.config/vif/audio/ripmodel.bin`) win over
   `-config-dir`: soundlab resolves the model file across the roots, so a run that
   must hear with the analysis points `XDG_CONFIG_HOME` at an empty directory.
 - A head trained with a positive weight w (`bce(..., pos_weight)` in
@@ -235,11 +235,11 @@ that proves wrong or that a document now states, and link the document instead.
   rise, a hat's above 5 kHz 0.45, a snare's noise above 5 kHz 0.15 to 0.21):
   print them again before moving a threshold, and expect a bass note's attack to
   read as a kick.
-- The rip's front end is a seam: `analysis` and `ripnet` both fill `RipFrames`,
+- The rip's front end is a seam: `analysis` and `ripmodel` both fill `RipFrames`,
   and the decoders read nothing else, so a front end is checked by the frames it
-  makes and the rip they give, as `ripnet`'s test does with an untrained model.
+  makes and the rip they give, as `ripmodel`'s test does with an untrained model.
 - `pkg/transformer` and `tool/rip-train` agree to float32 rounding, checked by
-  exporting a random `ripnet` model from Python, running both on a corpus loop's
+  exporting a random `ripmodel` model from Python, running both on a corpus loop's
   `.mel` frames (`train.MelFile(path)[:]` and a scratch Go module with a
   `replace` to the checkout, which needs the checkout's `go.sum`) and comparing
   the first outputs; redo that check before trusting a

@@ -125,7 +125,7 @@ flowchart TD
     Game --> Browser["pkg/browser"]
     Game --> HostKey["pkg/hostkey"]
     Game --> Socket["pkg/websocket"]
-    Audio --> Net["pkg/audio/ripnet over pkg/transformer"]
+    Audio --> Net["pkg/audio/ripmodel over pkg/transformer"]
 ```
 
 | Package | Public purpose | Important coupling |
@@ -138,7 +138,7 @@ flowchart TD
 | `pkg/hostkey` | The key report of a host that reads its platform's own key events: presses until a run asks for releases, then each key's press, repeats and release paired by the host's code for the physical key, taps for keys with no release, every hold ended when focus leaves. The window, the page and Android share it. | External terminal module only (its `KeyHolds` pairs the releases). |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink, the rip and its transcripts as MIDI files. | Game policy *and the banks* are injected; the package ships no specs, and beside the standard library imports only `lixenwraith/toml` and its `macro` expander, so it can leave the module whole. |
 | `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
-| `pkg/audio/ripnet` | The rip's learned front end: the model's shape (`Spec`), a weight file loaded into a `RipFrontEnd` that hears log-mel frames into the frames the rip's decoders read, voices included ([Rip design](rip-design.md)). | `pkg/audio` and `pkg/transformer`; goes with `audio` to its module. |
+| `pkg/audio/ripmodel` | The rip's learned front end: the model's shape (`Spec`), a weight file loaded into a `RipFrontEnd` that hears log-mel frames into the frames the rip's decoders read, voices included ([Rip design](rip-design.md)). | `pkg/audio` and `pkg/transformer`; goes with `audio` to its module. |
 | `pkg/transformer` | Inference over sequences of frames in pure Go: a linear input, pre-norm attention blocks with ALiBi biases over a window, exact-GELU feed-forwards, named output heads, and the versioned weight file a trainer writes. | Standard library only; `tool/rip-train` is the PyTorch twin that writes its files. |
 | `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | The package and its subpackages use the standard library only; its default seed restates `vmath.Golden64` rather than importing it. |
 | `pkg/genetic/fitness` | Convert lifetime metric bundles to scalar fitness. | Depends on tracking types. |
