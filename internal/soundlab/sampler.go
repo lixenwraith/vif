@@ -4,6 +4,7 @@ package soundlab
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
@@ -23,7 +24,8 @@ const (
 	nsynthHold    = 3.0   // seconds a recorded note is held before its release
 	sampledReach  = 3     // semitones a recorded pitch is shifted at most
 	sampledDraws  = 8     // instruments drawn for a slot before its engine voice plays it
-	sampledFade   = 0.010 // seconds a cut note crossfades into its sample's release
+	sampledFade   = 0.060 // seconds a cut note crossfades into its sample's release, near a damper's fall
+	sampledFloor  = -50   // dBFS a note's loudest held window must pass, or its noise would play as the note
 	sampledTop    = 7500  // Hz, the shift's low-pass, under the recordings' 8 kHz
 	sampledHalf   = 29    // the low-pass's half width in source samples: 60 dB by 8 kHz
 	sampledPhases = 512   // the low-pass's table steps a source sample
@@ -151,10 +153,15 @@ func (in *sampleInstr) layer(pitch int, vel float64) sampleNote {
 	})
 }
 
+// errUnusable is a recorded note too quiet or malformed to play: its instrument
+// is passed over for the slot
+var errUnusable = errors.New("unusable note")
+
 // draw picks which of a loop's tonal slots play on recorded notes and on what,
 // each with its share's chance, and renders their lines: the slots the engine
 // renders come back with those silenced. A slot whose pattern holds a drum
-// track, or which no instrument drawn covers, keeps its engine voice.
+// track, or for which no instrument drawn covers the notes and plays them all,
+// keeps its engine voice.
 func (set *sampleSet) draw(slots [audio.MusicSlots]audio.PatternID, bars, bpm, root int, scale audio.ScaleID, cents float64, rng *rand.Rand) ([audio.MusicSlots]audio.PatternID, [audio.MusicSlots]*sampledLine, error) {
 	var lines [audio.MusicSlots]*sampledLine
 	pedal := rng.Float64() < 1.0/3
@@ -176,21 +183,25 @@ func (set *sampleSet) draw(slots [audio.MusicSlots]audio.PatternID, bars, bpm, r
 		if len(notes) == 0 || len(pool) == 0 {
 			continue
 		}
-		var in *sampleInstr
+		var line *sampledLine
 		for range sampledDraws {
-			if c := pool[rng.IntN(len(pool))]; c.covers(notes) {
-				in = c
-				break
+			in := pool[rng.IntN(len(pool))]
+			if !in.covers(notes) {
+				continue
 			}
+			l, err := set.line(in, notes, bars, bpm, cents, pedal && k != audio.MusicSlots-1, cache)
+			if errors.Is(err, errUnusable) {
+				continue
+			}
+			if err != nil {
+				return slots, lines, err
+			}
+			line = l
+			break
 		}
-		if in == nil {
-			continue
+		if line != nil {
+			lines[k], played[k] = line, audio.PatternSilence
 		}
-		line, err := set.line(in, notes, bars, bpm, cents, pedal && k != audio.MusicSlots-1, cache)
-		if err != nil {
-			return slots, lines, err
-		}
-		lines[k], played[k] = line, audio.PatternSilence
 	}
 	return played, lines, nil
 }
@@ -225,10 +236,14 @@ func (set *sampleSet) line(in *sampleInstr, notes []audio.RipEvent, bars, bpm in
 		x, ok := cache[key]
 		if !ok {
 			var err error
-			if x, err = recorded(key.file, ratio); err != nil {
+			x, err = recorded(key.file, ratio)
+			if err != nil && !errors.Is(err, errUnusable) {
 				return nil, err
 			}
-			cache[key] = x
+			cache[key] = x // nil for an unusable note, so it is read once
+		}
+		if x == nil {
+			return nil, errUnusable
 		}
 		start := float64(e.Bar*audio.StepsPerBar+e.Step) * stepSec
 		hold := min(int(nsynthHold/ratio*sr), len(x))
@@ -263,7 +278,8 @@ func (set *sampleSet) line(in *sampleInstr, notes []audio.RipEvent, bars, bpm in
 }
 
 // recorded is a recorded note at the engine's rate sped up by ratio, divided
-// by its loudest held window's RMS
+// by its loudest held window's RMS; errUnusable when it does not decode as
+// NSynth's or that window is under the floor
 func recorded(file string, ratio float64) ([]float64, error) {
 	f, err := os.Open(file)
 	if err != nil {
@@ -271,11 +287,8 @@ func recorded(file string, ratio float64) ([]float64, error) {
 	}
 	x, rate, err := audio.ReadWAV(f)
 	f.Close()
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", file, err)
-	}
-	if rate != nsynthRate {
-		return nil, fmt.Errorf("%s: %d Hz, want NSynth's %d", file, rate, nsynthRate)
+	if err != nil || rate != nsynthRate {
+		return nil, fmt.Errorf("%s: %w", file, errUnusable)
 	}
 	n, held := int(sampledWindow*nsynthRate), min(len(x), int(nsynthHold*nsynthRate))
 	var level float64
@@ -286,8 +299,8 @@ func recorded(file string, ratio float64) ([]float64, error) {
 		}
 		level = max(level, math.Sqrt(e/float64(n)))
 	}
-	if level == 0 {
-		return nil, fmt.Errorf("%s: silent", file)
+	if level <= math.Pow(10, sampledFloor/20.0) {
+		return nil, fmt.Errorf("%s: %w", file, errUnusable)
 	}
 	y := shiftNote(x, ratio)
 	for i := range y {
