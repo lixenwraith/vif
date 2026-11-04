@@ -22,6 +22,8 @@ require (
 
 replace github.com/lixenwraith/vif => ../
 
+replace github.com/lixenwraith/transformer => ../pkg/transformer
+
 tool (
 	golang.org/x/mobile/cmd/gobind
 	golang.org/x/mobile/cmd/gomobile
