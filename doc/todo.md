@@ -1311,7 +1311,7 @@ nothing.
 
 The audio library's own items are in [its todo](https://github.com/lixenwraith/audio/blob/main/doc/todo.md),
 and those of stapes (formerly soundlab), the rip's among them, in [its
-own](../pkg/stapes/doc/todo.md).
+own](https://github.com/lixenwraith/stapes/blob/main/doc/todo.md).
 
 ### Bring stapes to Android (stapes mobile)
 

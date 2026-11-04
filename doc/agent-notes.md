@@ -182,9 +182,10 @@ that proves wrong or that a document now states, and link the document instead.
 
 - The library is `github.com/lixenwraith/audio`: a change to it lands there,
   under its own `AGENTS.md` and `doc/agent-notes.md`, and vif takes its tag.
-- Stapes (formerly soundlab), the authoring tool over the same engine, keeps
-  its own notes on its verbs, the rip and the model's training in
-  [its agent notes](../pkg/stapes/doc/agent-notes.md).
+- Stapes (formerly soundlab), the authoring tool over the same engine, is
+  `github.com/lixenwraith/stapes`: a change to it lands there, under its own
+  `AGENTS.md` and [agent notes](https://github.com/lixenwraith/stapes/blob/main/doc/agent-notes.md), which keep its verbs, the rip and
+  the model's training.
 
 ## Locks
 

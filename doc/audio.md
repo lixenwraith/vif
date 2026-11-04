@@ -176,14 +176,13 @@ to update a playing registry.
 ## 4. Stapes
 
 Stapes is the authoring environment over the same engine and banks: a module of
-its own, `lixenwraith/stapes`, nested in `pkg/stapes` until it moves to its
-repository, which vif does not import and which imports nothing of vif. It
-registers the banks the game plays and opens the user root's `audio/` overrides
-(§3) as its documents, so what it saves there the game plays next run; its
-settings and the rip's parameters and model live in a root of its own.
-[Its design](../pkg/stapes/doc/stapes.md) covers its verbs and files, [its
-README](../pkg/stapes/README.md) its commands and keys, and [Rip
-design](../pkg/stapes/doc/rip-design.md) where the rip is going.
+its own, `lixenwraith/stapes`, which vif does not import and which imports
+nothing of vif. It registers the banks the game plays and opens the user root's
+`audio/` overrides (§3) as its documents, so what it saves there the game plays
+next run; its settings and the rip's parameters and model live in a root of its
+own. [Its design](https://github.com/lixenwraith/stapes/blob/main/doc/stapes.md) covers its verbs and files, [its
+README](https://github.com/lixenwraith/stapes) its commands and keys, and [Rip
+design](https://github.com/lixenwraith/stapes/blob/main/doc/rip-design.md) where the rip is going.
 
 ## 5. Extension checklist
 
@@ -218,5 +217,5 @@ events and keep the sequencer unaware of gameplay concepts.
   `audio.go`, `audio_none.go`, `play.go`
 - Game policy: `internal/parameter/audio.go`, `music.go`, `sfx.go`,
   `sfx_audio.go`
-- Authoring tool: the stapes module in `pkg/stapes` (§4), with its command
+- Authoring tool: the `lixenwraith/stapes` module (§4), with its command
   `cmd/stapes`, the rip's trainer `tool/rip-train` and its documents in `doc/`

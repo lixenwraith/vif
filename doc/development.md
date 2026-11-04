@@ -54,7 +54,7 @@ make dev       # generated code + race-enabled debug build
 | `test` | Generate and run `go test -race ./...`. |
 | `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, the full and WASM ones also with `GOEXPERIMENT=simd`, and vet and test the `android` module (§5). |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
-| `tools` | Build `cmd/ascimage`, every `tool/*` command, and `bin/stapes` from the stapes module nested in `pkg/stapes`: stapes (formerly soundlab), the audio authoring tool, which vif does not import. |
+| `tools` | Build `cmd/ascimage` and every `tool/*` command. |
 | `router` | Build the website-to-K3s session router as `bin/vif-router`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root, the last two only when absent; `CLEAN=1` (here and for `install`) removes the previous install first. |
@@ -593,13 +593,11 @@ on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profi
 and targets, the window and Android module tests, the browser build's tests under
 Node (`pkg/browser` and the `Browser` tests of `pkg/network`, through
 `go_js_wasm_exec`), and `go test -race ./...` with `GORACE` halting on the first
-race, then vets and race-tests the stapes module in `pkg/stapes`, which the root's
-`./...` leaves out, under a 20-minute timeout. The test steps print failures
-alone, a race's report beside its package.
+race. The test steps print failures alone, a race's report beside its package.
 
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
 regenerates the registries and, on a tag, fails if that changed the tree, vets
-and tests the root and the stapes module, then builds CGO-free archives for `linux-amd64`, `linux-arm64`,
+and tests, then builds CGO-free archives for `linux-amd64`, `linux-arm64`,
 `linux-amd64-headless`, `freebsd-amd64`, `windows-amd64` (`novlog vif_noaudio`)
 and `web`, the wad archive through `make wad-archive`, a source archive on a tag,
 the Android APK through `android/toolchain.sh gradlew` on a second runner, and

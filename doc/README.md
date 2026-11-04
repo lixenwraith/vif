@@ -66,10 +66,10 @@ Focused references:
   sequencing and rip engine with its shipped banks, a module of its own, and
   [its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md): the stream contract, backends,
   sounds, the mixer, the sequencer, MIDI and the rip.
-- [Stapes](../pkg/stapes/README.md), the audio authoring tool, a module of its
-  own nested in `pkg/stapes`, covers its commands and keys; [its
-  design](../pkg/stapes/doc/stapes.md) covers its verbs and files, and [Rip
-  design](../pkg/stapes/doc/rip-design.md) where the rip is going.
+- [Stapes](https://github.com/lixenwraith/stapes), the audio authoring tool, a module of its
+  own, covers its commands and keys; [its
+  design](https://github.com/lixenwraith/stapes/blob/main/doc/stapes.md) covers its verbs and files, and [Rip
+  design](https://github.com/lixenwraith/stapes/blob/main/doc/rip-design.md) where the rip is going.
 - [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image
   conversion and viewing.
 - [vif-router](../tool/vif-router/README.md) covers the website-to-K3s
