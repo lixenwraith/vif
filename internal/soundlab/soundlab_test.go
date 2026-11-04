@@ -1480,7 +1480,6 @@ func TestRipReadsAMIDIFileAsAScore(t *testing.T) {
 	runOrFatal(t, s, &out, fmt.Sprintf(`
 ! rip %s other bpm 120                 # a score's tempo is its own
 rip %s score
-! load %s                              # a score is ripped, not loaded
 notes score
 compress score 5
 song score
@@ -1489,7 +1488,7 @@ song score
 agree score score
 truth score %s
 validate all
-`, mid, mid, mid, mid))
+`, mid, mid, mid))
 	rp := s.rips["score"]
 	if rp == nil || rp.x != nil || s.bpm != bpm || !strings.Contains(out.String(), "1 note(s) outside E1 to C7 dropped") {
 		t.Fatalf("the score as a rip at %d bpm:\n%s", s.bpm, out.String())
@@ -1506,6 +1505,149 @@ validate all
 	if n := len(rp.rip.Notes); n != len(notes)-1 || !strings.Contains(out.String(), fmt.Sprintf("against %d note(s) given, transposed +0", n+1)) ||
 		strings.Count(out.String(), "only given 0") != 2 || !strings.Contains(out.String(), "melody only given: D8@0.00\n") {
 		t.Errorf("the score did not agree with its file:\n%s", out.String())
+	}
+}
+
+// midiDoc is a pattern document of a song of a pluck over a bass, a bar of
+// 3/4 in the bass's own pattern
+const midiDoc = `
+[[pattern]]
+name = "hook"
+steps = 16
+role = "melody"
+[[pattern.track]]
+instr = "pluck"
+event = [{pos = 0, vel = 0.8, deg = 2, oct = 1, dur = 4}, {pos = 8, vel = 0.5, deg = 4, oct = 1, dur = 2}]
+[[pattern.track]]
+instr = "kick"
+event = [{pos = 0, vel = 1}, {pos = 8, vel = 0.9}]
+[[pattern]]
+name = "low"
+steps = 16
+role = "bass"
+[[pattern.track]]
+instr = "bass"
+event = [{pos = 0, vel = 1, oct = -1, dur = 6}, {pos = 8, vel = 0.7, deg = 4, oct = -1, dur = 6}]
+[[pattern]]
+name = "waltz"
+steps = 12
+role = "bass"
+[[pattern.track]]
+instr = "bass"
+event = [{pos = 0, vel = 1, oct = -1, dur = 4}]
+[[song]]
+name = "ditty"
+bpm = 90
+root = 43
+scale = "minor"
+bars = [["", "hook", "", "low"], ["", "hook", "", "low"]]
+`
+
+// TestWriteAndLoadSpeakMIDI: write puts a pattern or a song in a .mid, as song
+// does a song; load reads one back as patterns and a song under a name, the
+// transport on its tempo and key, and merge into the document, in place of an
+// earlier load of the name; save, render, export and a sound's load refuse one
+func TestWriteAndLoadSpeakMIDI(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "doc.toml")
+	if err := os.WriteFile(doc, []byte(midiDoc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, fmt.Sprintf(`
+load %[2]s
+bpm 100
+key 38 major
+write hook %[1]s/hook.mid
+write waltz %[1]s/Waltz.mid
+write ditty %[1]s/ditty.mid
+song ditty %[1]s/song.mid
+write ditty %[1]s/ditty.toml
+! save pattern %[1]s/all.mid
+! render %[1]s/all.mid
+! export kick %[1]s/kick.mid
+! load sound %[1]s/ditty.mid
+! song ditty %[1]s/song.mid kick
+load %[1]s/ditty.mid back
+merge %[1]s/hook.mid
+merge pattern %[1]s/Waltz.mid back
+`, dir, doc))
+	for _, f := range []string{"hook.mid", "Waltz.mid", "ditty.mid", "song.mid"} {
+		if data, err := os.ReadFile(filepath.Join(dir, f)); err != nil || !bytes.HasPrefix(data, []byte("MThd")) {
+			t.Errorf("%s: %v, not a MIDI file", f, err)
+		}
+	}
+	if !strings.Contains(out.String(), `(song "ditty", its patterns not with it)`) {
+		t.Errorf("no song written as TOML:\n%s", out.String())
+	}
+	// the ditty's load replaced the document; the hook's merge joined it under its
+	// file's name, the waltz's replaced the ditty's under back, and set the transport
+	if !strings.Contains(out.String(), "song back plays them in 2 bar(s) at 90 bpm, G2 minor") || s.bpm != 100 || s.root != 38 ||
+		!slices.Equal(s.pats.order, []string{"back_bass_a", "hook_beat_a", "hook_melody_a"}) {
+		t.Fatalf("%d bpm, root %d, patterns %v:\n%s", s.bpm, s.root, s.pats.order, out.String())
+	}
+	if p, ok := s.pats.get("back_bass_a"); !ok || p.Steps != 12 || !s.songs.has("back") || !s.songs.has("hook") || !s.pats.isDirty("back_bass_a") {
+		t.Errorf("the waltz loaded as %+v, songs %v:\n%s", p, s.songs.order, out.String())
+	}
+	if song, _ := s.songs.get("back"); len(song.Bars) != 1 || song.Bars[0][audio.RipPartSlots[audio.RipBass]] != "back_bass_a" {
+		t.Errorf("the waltz's song %+v", song)
+	}
+}
+
+// TestRipPlaysAScoreOnItsProgramsVoices: a MIDI file's lines rip onto copies of
+// the shipped voices their programs play on, not the lead
+func TestRipPlaysAScoreOnItsProgramsVoices(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "doc.toml")
+	if err := os.WriteFile(doc, []byte(midiDoc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, fmt.Sprintf("load %s\nwrite ditty %s/ditty.mid\nrip %[2]s/ditty.mid r\n", doc, dir))
+	if !strings.Contains(out.String(), "melody on the pluck, bass on the bass") {
+		t.Errorf("not said which voices play the lines:\n%s", out.String())
+	}
+	for v, from := range map[string]string{"r_melody_voice": "pluck", "r_bass_voice": "bass"} {
+		got, ok := s.voices.get(v)
+		want := audio.VoiceDefByName(from)
+		if !ok || want == nil || got.Wave != want.Wave || !slices.Equal(got.Genes(), want.Genes()) {
+			t.Errorf("%s: %+v, want a copy of the %s", v, got, from)
+		}
+	}
+}
+
+// TestFilesOverlayMergesAMIDIFile: m on a .mid asks a name, its file's offered,
+// merges its patterns and song under it and lands the browser on them
+func TestFilesOverlayMergesAMIDIFile(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "doc.toml")
+	if err := os.WriteFile(doc, []byte(midiDoc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, fmt.Sprintf("load %s\nwrite ditty %s/My-Song.mid\n", doc, dir))
+	a := newTUIApp(s, NewLogBuffer(100))
+	a.term, a.w, a.h = frameTerm{}, 100, 40
+	key := func(k terminal.Key, r rune) {
+		a.handle(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r})
+		a.render()
+	}
+	a.files.dir = dir
+	key(terminal.KeyCtrlO, 0)
+	a.files.cur = slices.IndexFunc(a.files.rows, func(r fileRow) bool { return r.name == "My-Song.mid" })
+	key(terminal.KeyRune, 'm')
+	if a.mode != modePrompt || a.editField.Value() != "my_song" {
+		t.Fatalf("m on a MIDI file: mode %d, name %q", a.mode, a.editField.Value())
+	}
+	key(terminal.KeyEnter, 0)
+	if a.files.open || !s.songs.has("my_song") || !s.pats.has("hook") || a.kind != kindPattern || a.selName() != "my_song_beat_a" && a.selName() != "my_song_melody_a" {
+		t.Fatalf("merged: open %v, song %v, kept %v, on %q:\n%s", a.files.open, s.songs.has("my_song"), s.pats.has("hook"), a.selName(), out.String())
 	}
 }
 

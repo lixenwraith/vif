@@ -420,6 +420,19 @@ that proves wrong or that a document now states, and link the document instead.
   quarter in seconds read as eleven steps where the file holds eight.
   `MIDIScore.Rip` converts seconds back to ticks (`ticks`) for the grid and the
   beats to seconds after it.
+- The MIDI writers cut a note where its key sounds again in the same track
+  (`WriteSongMIDI`'s `held`), since the reader pairs a note-off with the earliest
+  note: a long pattern note under a short one of its pitch would read back with
+  the lengths exchanged. Changing the reader to pair the latest instead would
+  move the transcripts `truth` and `corpus <dir> from` read.
+- `ReadMIDI`'s hits are the kick, snare and hihat only (`midiDrum(key,
+  InstrClap)`); `MIDIScore.Song` reads the clap too (`InstrClap+1`). A clap in a
+  test file is a hit for a song, not for `truth`. `firstBar` reads a signature
+  that holds exactly one bar before the next as a pickup, so a 3/4 bar ahead of
+  6/8 gives `Meter` 6/8.
+- A test that needs the shipped voices in `pkg/audio` registers stand-ins:
+  the package's tests run with an empty voice registry (`VoiceDefByName` is nil
+  until soundlab or the game loads the bank). `ResetRegistries` in a cleanup.
 - A string or modal voice ignores the ADSR's decay and sustain, yet the shipped
   ones keep `sustain = 1`: the augmented corpus swaps a voice's wave a third of
   the time and keeps its genes, and an unset sustain reads as the gene's floor,

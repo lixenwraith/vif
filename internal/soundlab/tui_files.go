@@ -17,6 +17,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
+	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // fileRow is one entry of the files overlay
@@ -150,9 +151,15 @@ func (a *tuiApp) filesEnter(merge bool) {
 		return
 	}
 	switch strings.ToLower(filepath.Ext(row.name)) {
-	case ".wav", ".mid", ".midi":
+	case ".wav":
 		if merge {
-			fmt.Fprintln(a.log, "a recording or a score is ripped, not merged — enter rips it")
+			fmt.Fprintln(a.log, "a recording is ripped, not merged — enter rips it")
+			return
+		}
+		a.promptRip(path)
+	case ".mid", ".midi":
+		if merge {
+			a.promptMergeMIDI(path)
 			return
 		}
 		a.promptRip(path)
@@ -180,32 +187,35 @@ func (a *tuiApp) filesEnter(merge bool) {
 			a.files.open = false
 		}
 	default:
-		fmt.Fprintf(a.log, "%s: not a .toml document, a .wav recording or a .slab script\n", row.name)
+		fmt.Fprintf(a.log, "%s: not a .toml document, a .wav recording, a .mid score or a .slab script\n", row.name)
 	}
 }
 
 // promptRip asks what to rip a recording or a score as, the file's name made
 // a pattern name, and lands the browser on the melody it heard
 func (a *tuiApp) promptRip(path string) {
-	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	name := strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
-			return r
-		case r >= 'A' && r <= 'Z':
-			return r + 'a' - 'A'
-		}
-		return '_'
-	}, base)
-	name = strings.Trim(name, "_")
-	if name == "" {
-		name = "rip"
-	}
-	a.openPrompt("rip "+filepath.Base(path)+" as: ", name, func(name string) {
+	a.openPrompt("rip "+filepath.Base(path)+" as: ", wordOf(path), func(name string) {
 		if a.exec("rip "+quotePath(path)+" "+name) != nil {
 			return
 		}
 		a.files.open = false // the rip runs behind the screen; its end lands the browser on it
+	})
+}
+
+// promptMergeMIDI asks the name a MIDI file's patterns and song join the
+// document under, the file's own offered, and lands the browser on them
+func (a *tuiApp) promptMergeMIDI(path string) {
+	a.openPrompt("merge "+filepath.Base(path)+" as: ", wordOf(path), func(name string) {
+		if a.exec("merge "+quotePath(path)+" "+name) != nil {
+			return
+		}
+		a.files.open = false
+		a.kind = kindPattern
+		for _, part := range audio.RipPartNames {
+			if a.cursorTo(name + "_" + part + "_a") {
+				break
+			}
+		}
 	})
 }
 

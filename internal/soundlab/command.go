@@ -36,13 +36,13 @@ func init() {
 		"quit": {"quit", "stop the engine and exit", 0, 0,
 			func(*Session, []string) error { return ErrQuit }},
 
-		"load":     {"load [sound|pattern] <file>", "replace document from file (sound includes resolve within the file's dir; voices come with the sounds, songs with the patterns); the kind alone names the file, which is read by its tables, a .slab run as a script", 1, 2, cmdLoad},
-		"merge":    {"merge [sound|pattern] <file>", "overlay file onto document by name; the kind alone names the file, which is read by its tables, a .slab run as a script", 1, 2, cmdMerge},
+		"load":     {"load [sound|pattern] <file> [name]", "replace document from file (sound includes resolve within the file's dir; voices come with the sounds, songs with the patterns); the kind alone names the file, which is read by its tables, a .slab run as a script; a .mid is read as patterns, a bar of a part each in its meter's steps, and the song <name> (the file's name) that plays them, the transport set to its tempo and key, with what it could not keep said", 1, 3, cmdLoad},
+		"merge":    {"merge [sound|pattern] <file> [name]", "overlay file onto document by name; the kind alone names the file, which is read by its tables, a .slab run as a script; a .mid's patterns and song join the document, in place of an earlier load's of the name", 1, 3, cmdMerge},
 		"builtin":  {"builtin sound|pattern|voice", "seed document from built-ins (patterns: current registry snapshot; sound seeds the voices too)", 1, 1, cmdBuiltin},
-		"save":     {"save sound|pattern [file]", "write document; bare = provenance path (the sound document carries the voices)", 1, 2, cmdSave},
-		"write":    {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
+		"save":     {"save sound|pattern [file]", "write document; bare = provenance path (the sound document carries the voices); a document is TOML, write <pattern|song> <file.mid> writes one as MIDI", 1, 2, cmdSave},
+		"write":    {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched); to a .mid, a pattern or song as a Standard MIDI File: a track a pattern track on its voice's General MIDI program, the drums on channel 10, a pattern once through at the transport's tempo and key, a song at its own", 2, 2, cmdWrite},
 		"export":   {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
-		"rip":      {"rip <file.wav|file.mid> <name> [bars] [nodrums] [bpm <n>] [lead busy|high|low|loud|soft|long|short]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key; nodrums leaves the drum part out; bpm <n> reads it at that tempo, the bar line still decoded; lead names which of the melody register's two lines is the melody, the busier by default, or the higher, lower, louder, softer, longer or shorter in its notes; a .mid is read as a score, its notes the transcript, at its first tempo", 2, 8, cmdRip},
+		"rip":      {"rip <file.wav|file.mid> <name> [bars] [nodrums] [bpm <n>] [lead busy|high|low|loud|soft|long|short]", "hear a recording's beat, melody and bass as patterns of up to bars (4) bars each, <name>_beat_1 ..., and take its tempo and key; nodrums leaves the drum part out; bpm <n> reads it at that tempo, the bar line still decoded; lead names which of the melody register's two lines is the melody, the busier by default, or the higher, lower, louder, softer, longer or shorter in its notes; a .mid is read as a score, its notes the transcript, at its first tempo, each line on the shipped voice its program plays on", 2, 8, cmdRip},
 		"render":   {"render <file.wav> [bars]", "write what the slots hold, bars (4) bars at the transport's tempo and key, to a WAV through the engine's offline render", 1, 2, cmdRender},
 		"corpus":   {"corpus <dir> [loops] [bars] [aug] [gen] [nowav] [tempos lo-hi|a,b,c] [part k/n]", "render loops (24) of bars (4) bars from the registered patterns into dir, each a WAV, its log-mel frames and the events that sound in it: what tool/rip-train trains the rip's model on; aug puts a room, a mix and voices of random genes behind each; gen draws beats, melodies and bass lines the bank never had; nowav keeps the frames and the labels only, which is all the trainer reads; tempos lo-hi or a,b,c sets the tempos the loops cycle through; a loop already in dir is kept, so a stopped export run again goes on where it stopped; part k/n renders every n-th loop from the k-th, for n exports at once, and leaves corpus.json to a last run without it", 1, 10, cmdCorpus},
 		"tune":     {"tune [generations] [file]", "search rip's parameters over loops the engine renders from the registered patterns; the best write to file (the first root's audio/rip.toml) and listen from now on; 8 generations take minutes", 0, 2, cmdTune},
@@ -54,7 +54,7 @@ func init() {
 		"refine":   {"refine <name> [rounds]", "close the loop over a song compress made of a recording ripped as <name>: each round (3) fits the voices again and sweeps the tonal steps, each tried a semitone and an octave either way, the recording's strongest pitch there, a step earlier or later, longer or shorter, and silent, then a step a line leaves empty tries that pitch; every move kept when the song sounds more like the recording; minutes a round", 1, 2, cmdRefine},
 		"bench":    {"bench [loops] [bars] [verbose]", "grade the analysis, and the model when one loaded, on fresh loops (8) of bars (4) bars the engine renders, clean and augmented: the mean score of each rip against the loop's expected rip; verbose then lists each loop, its tempo, key, kind, generated parts and score, and the three worst by total", 0, 3, cmdBench},
 		"run":      {"run <file.slab>", "run a script's lines in this session, its relative paths read from its own directory, strict as -s is: a line that fails stops it with its number; quit in it ends the script, not the session", 1, 1, cmdRun},
-		"song":     {"song <name> [file.wav [<instrument>...]|play|score]", "show a song's bars; render it to a WAV, only the instruments named sounding when any are, a line on its own; play it through the sequencer, the slots changed at the bar lines (music stop ends it); or score it, how it sounds against the recording ripped as <name> and how it rips back", 1, 8, cmdSong},
+		"song":     {"song <name> [file.wav [<instrument>...]|file.mid|play|score]", "show a song's bars; render it to a WAV, only the instruments named sounding when any are, a line on its own; write it to a .mid as write does; play it through the sequencer, the slots changed at the bar lines (music stop ends it); or score it, how it sounds against the recording ripped as <name> and how it rips back", 1, 8, cmdSong},
 
 		"ls":    {"ls sound|pattern|voice|song [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
 		"show":  {"show <name>[.path]", "bare name = full TOML; deeper = leaf value or keys", 1, 1, cmdShow},
@@ -106,7 +106,7 @@ func cmdRun(s *Session, a []string) error {
 	case ".wav":
 		return fmt.Errorf("%s: a recording; rip <file.wav> <name> hears it", a[0])
 	case ".mid", ".midi":
-		return fmt.Errorf("%s: a score; rip <file.mid> <name> reads it", a[0])
+		return fmt.Errorf("%s: a score; load <file.mid> [name] reads it as patterns and a song, rip <file.mid> <name> as a rip", a[0])
 	}
 	return RunScriptFile(s, s.path(a[0]))
 }
@@ -305,13 +305,13 @@ var (
 		{"esc", "from the mixer or the log back to the view's own pane"},
 		{"< >", "tempo down, up by 5 bpm"},
 		{":", "command line; help lists the commands"},
-		{"^O", "files: load or merge a document, rip a recording, save the tab's document into a directory"},
+		{"^O", "files: load or merge a document or a MIDI file, rip a recording or a score, save the tab's document into a directory"},
 		{"? / ^S / ^Q", "these keys / save / quit"},
 	}}
 	helpFiles = helpSection{"files", []keyHelp{
 		{"j k PgUp PgDn", "move; g G the ends"},
-		{"enter l →", "open the directory; load the document (sounds or patterns by its tables); rip the recording under a name asked for"},
-		{"m", "merge the document onto the one in hand instead"},
+		{"enter l →", "open the directory; load the document (sounds or patterns by its tables); rip the recording or the MIDI file under a name asked for"},
+		{"m", "merge the document onto the one in hand instead; a MIDI file's patterns and song, under a name asked for"},
 		{"s", "save the tab's document, patterns or sounds, into this directory under a name asked for"},
 		{"h ← ⌫", "up a directory"},
 		{"esc ^O", "close"},

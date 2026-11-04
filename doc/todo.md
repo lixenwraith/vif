@@ -1334,6 +1334,10 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
    the system keyboard serves `:` and the prompts, as in the game.
 3. Size: the views need 60×16 cells. A phone held landscape fits at the default
    cell; portrait needs the pinch zoom out, or a keyboard of fewer keys.
+4. Files: the verbs name paths, which reach the user root in the app's storage;
+   a `.mid` or a `.wav` another app holds comes through the system's picker,
+   copied into the user root first, and a written file goes back out through
+   it ([Multi-platform §8](multi-platform.md#soundlabs-files)).
 
 ### Tune the rip
 
@@ -1557,6 +1561,13 @@ plays with gaps, so the bar itself has to carry the meter:
 
 A tempo change after the start still plays at the first tempo (`MIDIScore.Rip`
 says so); a tempo per bar on `SongDef` is the follow-up if a score needs it.
+
+MIDI is ready for the meter: `load <file.mid>` already writes each bar in its
+signature's steps (`MIDIScore.Song`: 3/4 and 6/8 twelve, 3/8 six) and says the
+sequencer plays the song out of time meanwhile, and `write` writes a pattern of
+twelve steps as a bar of 3/4 (`barSteps`, `timeSignature`). Once `SongDef` and
+`PatternDef` carry a meter, `Song` sets it from the signature and the writer
+writes it in place of the steps' meter.
 
 ### Render a conductor timeline offline
 
