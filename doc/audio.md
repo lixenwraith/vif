@@ -155,8 +155,9 @@ The categorized locations are `audio/sounds.toml` and `audio/music.toml`.
 
 An invalid user definition leaves the shipped one in place; a document that does
 not parse or names an unknown key is ignored whole. A user `sounds.toml` may
-`include` files inside its own directory, which the game, `-check` and soundlab
-resolve alike, so a file soundlab saves with its includes is what play loads.
+`include` files inside its own directory, which the game, `-check` and stapes
+(formerly soundlab) resolve alike, so a file stapes saves with its includes is
+what play loads.
 Play reports the first line of the engine's combined specification error on the
 status bar; `vif -check` checks music, then sounds, before startup and stops at
 the first document that fails, listing every invalid definition in it.
@@ -172,98 +173,17 @@ its last track. Group pools are fixed at `Start`. Later same-name registrations
 replace a definition while preserving its runtime ID, which allows live tooling
 to update a playing registry.
 
-## 4. Soundlab
+## 4. Stapes
 
-Soundlab is the supported authoring environment built on the same engine.
-`internal/soundlab` holds the session, its documents, the verb table and the
-TUI, which runs over any `terminal.Terminal`; `cmd/soundlab` is its terminal
-command, the flags and the REPL, and a host with its own screen and speakers
-runs the package in-process, handing `NewSession` the speakers. It offers:
-
-- a command REPL;
-- a full-screen TUI: a browser of patterns, sounds and voices beside a mixer that
-  draws every slot on one timeline, mutes a slot or a track and solos a track, a
-  structural inspector, and the pattern editor, new or on an existing pattern: a
-  drawn keyboard that records takes onto the key's degrees, and a step grid with a
-  piano roll;
-- headless `.slab` script execution;
-- validation, live registry apply/revert, audition, sequencer slot assignment,
-  TOML save, WAV export, and MIDI both ways: a pattern or a song written as a
-  Standard MIDI File, and a MIDI file loaded as patterns and a song.
-
-Soundlab registers the same sound and pattern banks the game does, from the audio
-module's `bank`, and takes vif's `-config-dir`, `-config-music` and
-`-config-sounds`. It resolves both overrides through `internal/paths` exactly as
-the game does, registers them, and opens them as its documents, so its registry
-and the game's hold identical specs. Of `vif.toml` it reads only `[paths] root`
-and `[audio] buffer_ms`, so a key another vif build wrote is named and skipped,
-never dropped from the file as a game run drops it. A save writes where the next run reads
-first: the `-config-music`/`-config-sounds` file when given, else
-`audio/<file>` under `-config-dir` or else the user root, shadowing any copy in
-a lower root. It does not apply the game's sfx levels and sound shapes, so its
-auditions and exports play a spec as authored.
-
-The working document and live registry are separate: edits do not affect audio
-until `apply`; `revert` restores the document from the canonical registry. Its
-dotted path grammar follows TOML tags and Go types, while domain validation
-runs at `validate`/`apply`. See `cmd/soundlab/README.md` for the command/TUI
-reference.
-
-MIDI goes through the library's one table, `midiInstruments` (library
-[§8](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#8-midi-files)): `write <pattern|song> <file.mid>`
-writes a pattern or a song (`WriteSongMIDI`, `WritePatternMIDI`), and `load` and
-`merge <file.mid> [name]` read a file as patterns and a song (`MIDIScore.Song`),
-whose bars play out of time where the file is not in 4/4 until songs carry a
-meter ([todo](todo.md#give-songs-and-patterns-a-meter)). `truth` and `corpus
-<dir> from` read `ReadMIDI`'s transcript. Soundlab turns the phrase fill off
-(`SetAutoFill(false)`), and its mixer mutes slots and tracks and solos tracks
-(library [§6](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#6-mixer-buses-mute-and-pause)).
-
-Over the library's rip (library
-[§9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording)), soundlab's verbs:
-
-- `rip` adds a rip's patterns to the document, dirty, and sets the transport's
-  tempo and key, so a slot plays the estimate at once; `rip ... bpm <n>` pins
-  the tempo alone, `rip ... lead` names the rule that picks the melody
-  (`Ripper.Lead`), and `rip <file.mid> <name>` reads a MIDI file as a rip
-  (`MIDIScore.Rip`). For each register the front end heard no voice for, `rip`
-  searches the voice's genes and wave for the nearest (`RenderNote`,
-  `MelDistance`), seeded with every registered voice; `fit` runs it again with
-  more generations.
-- `agree` compares two rips of one piece (`MatchNotes`); `truth` scores a rip
-  against notes given as text or a tapped rhythm (`ParseTranscript`) or a MIDI
-  file (`truth <name> <file.mid>`), counting the notes heard by level as well
-  (`NoteLevels`); `notes` lists a transcript, each note's brightness with the
-  unmeasured counted, and `notes <name> <file.mid>` writes one (`WriteMIDI`) to
-  correct in a sequencer. `corpus <dir> from` labels a file's other drum strikes
-  (`MIDIScore.Struck`) as onsets alone.
-- Soundlab listens with the first root's `audio/rip.toml` when one is there, and
-  hears with the first root's `audio/ripmodel.bin`, which `tool/rip-train` trains
-  on loops soundlab exports (`corpus`); `render` writes what the slots hold to a
-  WAV through `RenderMusic`, so an estimate is heard without a device.
-- `tune` searches the rip's parameters over loops rendered from the registered
-  patterns across tempos and keys with `lixenwraith/genetic`'s generational
-  engine, the current set seeding the pool, and writes a set that beats it
-  ([TODO](todo.md#tune-the-rip) for what the corpus still lacks).
-- `compress` runs the grouping (`Rip.Cluster`), refines the assignment with
-  `lixenwraith/genetic` under a term for the patterns in use, rips the song's
-  render back on the song's own grid (`Ripper.Grid`) and scores it against the
-  rip; `song` shows, renders or conducts a song through the live sequencer, or
-  renders one line of it alone, the instruments named after the file.
-- `refine` closes the loop: the voices fitted again and the tonal steps'
-  velocities and lengths searched with `Fidelity` as the fitness, a step kept
-  only when it rises, each voice held within a tenth of its tonal floor, the
-  fit's own distance from the recording's notes, so the score of the mix does not
-  drift a voice into one that fills the mix.
-- `bench` grades the analysis and a loaded model on fresh renders, clean and
-  augmented (`corpus ... aug`). With `sampled <dir>`, both play half of a loop's
-  tonal lines on NSynth's recorded notes in place of the voices: an instrument
-  whose pitches reach the line's notes within three semitones, each note shifted
-  from the nearest, cut into its recording's release at the note-off, mixed
-  against the rest of the loop, and labelled with no voice.
-
-[Rip design](rip-design.md) is where the rip is going from here: the loop that
-refines voices and patterns against that score.
+Stapes is the authoring environment over the same engine and banks: a module of
+its own, `lixenwraith/stapes`, nested in `pkg/stapes` until it moves to its
+repository, which vif does not import and which imports nothing of vif. It
+registers the banks the game plays and opens the user root's `audio/` overrides
+(§3) as its documents, so what it saves there the game plays next run; its
+settings and the rip's parameters and model live in a root of its own.
+[Its design](../pkg/stapes/doc/stapes.md) covers its verbs and files, [its
+README](../pkg/stapes/README.md) its commands and keys, and [Rip
+design](../pkg/stapes/doc/rip-design.md) where the rip is going.
 
 ## 5. Extension checklist
 
@@ -280,7 +200,7 @@ For a new sound effect:
    from arbitrary systems.
 
 For a new instrument, author a `[[voice]]` in the bank's `voices.toml` or in a
-user `sounds.toml` and name it in a pattern's track; soundlab auditions it with
+user `sounds.toml` and name it in a pattern's track; stapes auditions it with
 `note` and its keys.
 
 For music, keep new APM/campaign decisions in `MusicSystem` or configuration
@@ -298,6 +218,5 @@ events and keep the sequencer unaware of gameplay concepts.
   `audio.go`, `audio_none.go`, `play.go`
 - Game policy: `internal/parameter/audio.go`, `music.go`, `sfx.go`,
   `sfx_audio.go`
-- Authoring tool: `internal/soundlab`, its command `cmd/soundlab`,
-  `cmd/soundlab/README.md`; the rip's trainer `tool/rip-train`, and the rip's
-  design `doc/rip-design.md`
+- Authoring tool: the stapes module in `pkg/stapes` (§4), with its command
+  `cmd/stapes`, the rip's trainer `tool/rip-train` and its documents in `doc/`

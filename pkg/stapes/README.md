@@ -1,8 +1,21 @@
-# soundlab
+# stapes
 
-`soundlab` is the terminal-based audio authoring environment and sequencer for `vif`. It runs entirely on the `lixenwraith/audio` engine ([its README](https://github.com/lixenwraith/audio)) and provides a reflective, command-driven interface over the TOML audio specifications.
+`stapes` is a terminal-based audio authoring environment and sequencer. It runs entirely on the [`lixenwraith/audio`](https://github.com/lixenwraith/audio) engine and the banks it ships, the ones [vif](https://github.com/lixenwraith/vif) plays, and provides a reflective, command-driven interface over the TOML audio specifications, with the rip, which hears a recording into them, and the trainer of the rip's model. It was soundlab inside vif until it left with its command and its trainer; the stapes is the ear bone that carries sound inward.
 
-Supports interactive REPL, TUI, and headless script execution. The session, its documents, the verb table and the TUI are `internal/soundlab`, which runs over any `terminal.Terminal` and takes a host's own speakers as its sink; this command adds the flags, the REPL and the process's terminal and signals.
+Supports interactive REPL, TUI, and headless script execution. [Stapes](doc/stapes.md) is its design: what it offers, its files, MIDI and the rip's verbs.
+
+## The package
+
+The package `stapes`, at the module root, holds the session, its documents, the verb table and the TUI, which runs over any `terminal.Terminal` and takes a host's own speakers as its sink; `cmd/stapes` adds the flags, the REPL and the process's terminal and signals. It is a package to import, not an `internal/` one, so that a host with its own screen and speakers, Android's to come, runs it in-process: `ResolveFiles` fills the `Files` a session reads, `NewSession` opens one from `Options` (the backend or the host's sink, the volume, the log's writer and those files), and `RunTUI` draws it on a terminal. `RunScriptFile` runs a `.slab` script in it.
+
+## Build
+
+Go as `go.mod` names it; the release is built with cgo off:
+
+- `make release`: a stripped, trimmed `bin/stapes`; `make dev` one with the race detector.
+- `make install`, `make uninstall`: the binary, the licence and the docs under `PREFIX` (`/usr/local`, or `~/.local` for a user who cannot write `/usr/local/bin`); uninstall keeps the root.
+- `make test`, `make verify`: the race suite, which renders and hears music, then vet, `gofmt` and the FreeBSD and Android builds.
+- `make venv`, `make smoke`: the trainer's Python with a CPU PyTorch, and the training path end to end at smoke scale in a temporary folder ([rip-train](tool/rip-train/README.md)).
 
 ## Architecture & Concepts
 
@@ -10,14 +23,14 @@ Supports interactive REPL, TUI, and headless script execution. The session, its 
 - **Dotted Path Addressing**: The command grammar interacts directly with Go reflection over `toml` tags. Paths like `blip.layer.0.source.freq` are type-checked and routed to exactly what the TOML deserializer sees.
 - **Zero-Value Masking**: Pointer chains and zero values indicate "unset" or "package default", preserving minimal explicit TOML generation via `omitempty`.
 - **Validation Bounds**: The REPL bounds checks are purely structural (type width, float finiteness). Domain-specific validation (Nyquist bounds, envelope durations) happens synchronously at `validate` and `apply`.
-- **Slots**: 0 rhythm, 1 melody, 2 fill, 3 bass, as the game draws them; a melody pattern carries no bass, so slot 1 alone is the melody as authored. The engine's phrase auto-fill is off in soundlab so slots stay deterministic; `fill on` restores it to audition the fill bank.
+- **Slots**: 0 rhythm, 1 melody, 2 fill, 3 bass, as vif draws them; a melody pattern carries no bass, so slot 1 alone is the melody as authored. The engine's phrase auto-fill is off in stapes so slots stay deterministic; `fill on` restores it to audition the fill bank.
 - **Audition**: `play`, `hit` and `export` render a spec as authored; vif's per-sound volume and shape table is not applied.
 - **Scripts**: `-s <file.slab>` runs a script and exits; `run <file.slab>` runs one in the session in hand, its relative paths read from the script's own directory, so a recipe beside its files runs from anywhere (a nested `run` from its own); from the REPL or the TUI's command line, so a recipe (rip, compress, save) is one word. A line that fails stops the script with its number; `quit` in it ends the script alone.
 - **Voices**: the tonal instruments are `[[voice]]` entries of the sound document, listed by `ls voice`, made by `new voice`, edited by path like a sound and applied into the running mixer, where the next note takes the new voice; a new name is a new instrument a pattern's track names. They load and save with the sounds.
 
 ## How rip works
 
-`rip` listens to a recording and writes what soundlab needs to play it back: the tempo and where the bars fall, the key and the chord each bar leans on, the drum hits, the melody and bass lines as patterns on the sixteenth grid, the voices that play them, and a song that plays the bars in order. All of it is the engine's own vocabulary, so the result plays at once in soundlab and in the game, and is checked by ear and by number against the recording.
+`rip` listens to a recording and writes what stapes needs to play it back: the tempo and where the bars fall, the key and the chord each bar leans on, the drum hits, the melody and bass lines as patterns on the sixteenth grid, the voices that play them, and a song that plays the bars in order. All of it is the engine's own vocabulary, so the result plays at once in stapes and in a game on the same engine, and is checked by ear and by number against the recording.
 
 Two halves meet in the middle. Ripping turns a recording into patterns; training teaches a model to hear the recordings ripping starts from. Both run on the same engine, and either front end, the built-in analysis or the trained model, feeds the same decoders.
 
@@ -45,11 +58,11 @@ The recording is read at 22.05 kHz and cut into frames, a 93 ms window every 11.
 A front end hears the frames into the same fields per frame: how strongly something starts (the onset), each drum's strength (kick, snare, hihat), the salience of each of 69 pitches from E1 to C7, and each register's chroma. The decoders after it never know which front end heard.
 
 - **The analysis** is signal processing. Each frame is split into a harmonic and a percussive part by medians across time and across frequency; each drum's onsets are read in its own band; a pitch's salience is the sum of its partials, the bass register's also read from a window four times longer, which tells semitones apart at 110 Hz.
-- **RipModel** (`ripmodel`) is the model, a transformer over log-mel frames: 229 bands from 30 Hz up, under a semitone apart from A3, each read in dB against the frame's own level, which it reads apart, so a soft phrase reaches it as clearly as a loud one. Each frame attends to 64 frames on either side (0.74 s) through four layers of width 256 with eight heads, 3.2 million weights run in pure Go. Its heads give, per frame, the onset, the drums, the pitches and whether a note sounds, which pitches are struck or let go and how hard, and the wave and the 32 voice genes the note is played with, which the analysis cannot say. A weight file may also put convolutions before the layers, or split the layers into towers for groups of heads. Soundlab hears with the model when the first configuration root holds `audio/ripmodel.bin`, and with the analysis otherwise.
+- **RipModel** (`ripmodel`) is the model, a transformer over log-mel frames: 229 bands from 30 Hz up, under a semitone apart from A3, each read in dB against the frame's own level, which it reads apart, so a soft phrase reaches it as clearly as a loud one. Each frame attends to 64 frames on either side (0.74 s) through four layers of width 256 with eight heads, 3.2 million weights run in pure Go. Its heads give, per frame, the onset, the drums, the pitches and whether a note sounds, which pitches are struck or let go and how hard, and the wave and the 32 voice genes the note is played with, which the analysis cannot say. A weight file may also put convolutions before the layers, or split the layers into towers for groups of heads. Stapes hears with the model when its root holds `ripmodel.bin`, and with the analysis otherwise.
 
 ### 2. Reading: from frames to music
 
-The decoders are shared, classical and cheap. Every threshold lives in `RipParams`, which `tune` searches and a root's `audio/rip.toml` carries.
+The decoders are shared, classical and cheap. Every threshold lives in `RipParams`, which `tune` searches and the root's `rip.toml` carries.
 
 - **Tempo** from the autocorrelation of the onsets under a prior centred on 120 bpm, within the sequencer's 80 to 200; `rip ... bpm <n>` pins it, the bar line still decoded.
 - **Beats** by dynamic programming that holds to the period.
@@ -59,7 +72,7 @@ The decoders are shared, classical and cheap. Every threshold lives in `RipParam
 - **Notes** by a Viterbi path through the pitch salience that pays to move and to start or end a note. The path is cut into notes, their lag behind the beats taken out, and each note lands on a sixteenth and on the key's nearest degree, a semitone left over kept as an accidental. When the model hears strikes, the melody register's notes start where a pitch is struck instead, as hard as it heard, and last while it sounds or until it hears the key let go (`release`, 0.8), any number at once, the pitch ringing on after that as far as a new strike goes, so a note struck under a pedal's ringing is not lost to the notes still sounding; a strike whose pitch never sounds, that is a stronger melody strike's overtone an octave, a twelfth or two octaves up, or that repeats within `strike_gap` (0.12 s) starts none, and a pitch still sounding starts again only over `strike_again` (0.95) and as the surest strike within a tone, since a new note's attack sets off strikes on the notes ringing, as sure as its own a semitone or a tone away.
 - **Lines.** The melody register, from F3 up, is decoded as two lines at once, so a slow line under a pluck is heard too; a second-line note is kept where it reaches `second_voice` (0.5) of the first's strength. The notes are then parted again by what a line keeps: its pitch from note to note, the length and strength of its notes, never two at once. Which line is the melody is a rule, the busier by default (`rip ... lead`). The bass is decoded up to A3, and a note both registers hear goes to the line it continues.
 
-### 3. Writing: from music to soundlab
+### 3. Writing: from music to patterns
 
 - **Patterns** of up to `bars` (4) bars per part, `<name>_beat_1`, `<name>_melody_1` with the second line as a track of its own, `<name>_bass_1`, and on, added to the document and playable at once; the transport takes the tempo, key and tuning.
 - **Voices.** Each line gets one. Through the model, its voice head names the genes of every note, averaged over the line. A line no voice was heard for, every line under the analysis, gets one fitted by ear: the engine plays a candidate voice at the line's longest and loudest notes, at the recording's pitch, loudness and tuning, compares the render's mel frames with the recording around each note, and searches the 32 genes and the wave from every registered voice. They are `<name>_melody_voice`, `<name>_under_voice` and `<name>_bass_voice`; `fit` searches again, longer.
@@ -94,7 +107,7 @@ The model learns from music the engine renders itself, since the engine knows ex
 - **Labelling.** Each loop is kept as its log-mel frames and, per frame, what the engine played: the onsets, the drums, the pitches sounding, where each pitch is struck and let go and how hard, and the wave and 32 genes of each note's voice. The labels cost nothing and are exact.
 - **Roughening.** With `aug`, each loop's voices are redrawn near the registered ones, a third of them on another wave, in a third of the loops with a pedal's long releases; the mix passes through a room drawn per loop (a gain and swell, a low-pass, two equaliser bands, a soft clip, a compressor, a booth's or a hall's reverb, a noise floor), and the loop plays off A440 by up to a quarter tone. The labels stay the notes as played.
 - **Training.** `tool/rip-train` holds the model's PyTorch twin. It trains on random six-second windows of the loops (512 frames, eight a step), scores the loops it holds out every thousand steps and keeps the best, and writes the weight file the Go model loads, the two agreeing to float32 rounding.
-- **A round.** `tool/rip-train/pipeline.sh` renders the corpus in parts at once, trains, benches and installs; 40000 loops and 40000 steps take about four hours on a laptop with a GTX 1060. Weights ship only when they beat the analysis on the bench and on real recordings' truths; [Rip design §8](../../doc/rip-design.md#8-measured-on-the-sample-recording) holds every round's numbers and [the trainer's README](../../tool/rip-train/README.md) the instructions.
+- **A round.** `tool/rip-train/pipeline.sh` renders the corpus in parts at once, trains, benches and installs; 40000 loops and 40000 steps take about four hours on a laptop with a GTX 1060. Weights ship only when they beat the analysis on the bench and on real recordings' truths; [Rip design §8](doc/rip-design.md#8-measured-on-the-sample-recording) holds every round's numbers and [the trainer's README](tool/rip-train/README.md) the instructions.
 
 ### 8. The process, end to end
 
@@ -105,19 +118,19 @@ The model learns from music the engine renders itself, since the engine knows ex
 5. `refine name` closes the loop; `fit name` refits the voices alone.
 6. Save the patterns, the song and the voices to keep them, as Usage shows next.
 
-[Audio library §9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording) is the engine's side of each stage and [Rip design](../../doc/rip-design.md) the plan and the measurements.
+[Audio library §9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording) is the engine's side of each stage and [Rip design](doc/rip-design.md) the plan and the measurements.
 
 ## Usage
 
 ```bash
 # TUI mode
-go run ./cmd/soundlab -tui
+go run ./cmd/stapes -tui
 
 # REPL mode
-go run ./cmd/soundlab
+go run ./cmd/stapes
 
 # Headless batch processing
-go run ./cmd/soundlab -headless -s script.slab
+go run ./cmd/stapes -headless -s script.slab
 ```
 
 To rip a recording to a document and hear it, in the REPL or the TUI's command line:
@@ -148,13 +161,15 @@ Put either in a `.slab` file and `run` it. Without the voices the tracks fall ba
 - `-tui`, `-T`: Full-screen Terminal User Interface. Empty documents are seeded from the built-ins; the REPL and scripts leave that to `builtin`.
 - `-headless`: Discard audio output (`-ab null`).
 - `-s <file>`: Execute a `.slab` script file line-by-line and exit.
-- `-config-dir <dir>`, `-config-music <file>`, `-config-sounds <file>`: vif's flags, resolved the same way, with `vif.toml`'s `[paths] root` and `[audio] buffer_ms` read as vif reads them; any key this build does not know is named and skipped. The overrides vif would load are registered and opened as the working documents; `save` writes where the next vif run reads first. The first root's `audio/rip.toml`, when there is one, is what `rip` listens with and where `tune` writes, and its `audio/ripmodel.bin` the model `rip` hears with in place of the built-in analysis ([rip-train](../../tool/rip-train/README.md)).
+- `-config-dir <dir>`: the root, else `os.UserConfigDir()` plus `stapes` (`~/.config/stapes` on Linux and FreeBSD). It holds, flat, `stapes.toml`, the settings (`[audio] buffer_ms`, the mixer period, 50 ms when unset; a key it has no field for is refused by name), `rip.toml`, what `rip` listens with when it is there and where `tune` writes, and `ripmodel.bin`, the model `rip` hears with in place of the built-in analysis ([rip-train](tool/rip-train/README.md)).
+- The documents, `music.toml` and `sounds.toml`, are found along the search path, vif's audio folder (`os.UserConfigDir()` plus `vif/audio`) whatever `-config-dir` names: the overrides vif loads are registered and opened as the working documents, each saves back to the file it came from, and an untitled save lands in the search path's first folder, where vif reads it next run. The working directory is never searched.
+- `-config-music <file>`, `-config-sounds <file>`: name a document's file outright, read and saved there.
 - `-ab <name>`: Force audio backend (`pacat`, `aplay`, `null`, `wav:out.wav`).
 - `-vol <f>`: Sound effect volume 0..1 (default 0.7); music keeps its own level.
 
 ## TUI
 
-The TUI is a shell over the exact same dispatch table used by the REPL and scripts. Its keys build and execute standard command strings, a recorded take included (`take`), so a script can reproduce everything it does. `Tab`/`Shift-Tab` move the keys between the panes on screen, the same in every view, the pane that has them framed in green, and `Esc` brings them back from the mixer or the log to the view's own pane. `<`/`>` slow the tempo down or speed it up by 5 bpm, `?` shows the keys of the view in hand, `:` opens the command line, `^O` opens the files overlay, `^S` saves modified documents (a first save offers the file the next vif run reads), and `^Q`/`^C` quits, warning once about unsaved changes.
+The TUI is a shell over the exact same dispatch table used by the REPL and scripts. Its keys build and execute standard command strings, a recorded take included (`take`), so a script can reproduce everything it does. `Tab`/`Shift-Tab` move the keys between the panes on screen, the same in every view, the pane that has them framed in green, and `Esc` brings them back from the mixer or the log to the view's own pane. `<`/`>` slow the tempo down or speed it up by 5 bpm, `?` shows the keys of the view in hand, `:` opens the command line, `^O` opens the files overlay, `^S` saves modified documents (a first save offers the search path's first folder, where vif reads it next run), and `^Q`/`^C` quits, warning once about unsaved changes.
 
 - **Browse**: the browser beside the mixer, over the log. The browser's tabs are patterns, sounds and voices (`h/l`); a sound's role says whether it is an sfx or a piece of the drum kit. `j/k`, `PgUp/PgDn` and `g/G` move, `/` finds the next name containing a term, `space` plays a sound, a voice's middle C, or puts a pattern in its role's slot (again pauses), `0-3` puts the pattern in a slot or takes it out, on the next bar while the transport runs. `n` makes a new entry and `e` edits the selected one: a pattern in the pattern editor, a sound or a voice in the inspector, which say whether what they hold is new or edited. `Enter` opens the inspector on either (`l/h` fold, `L/H` all, `Enter` edits a leaf, `a` adds, `x` deletes, `Esc` closes). `a/v/r` apply/validate/revert, `u` undoes the last edit, `c/w` clone/write, `+` mixes into another, `p` makes a new pattern of the tracks the editor yanked, `d` twice deletes, `m` resets the transport.
 - **Mixer**: every slot on one timeline, as many bars of the sequencer's four-bar cycle as fit, under a shared playhead, beside the browser or beneath the editor. `j/k`, `PgUp/PgDn` and `g/G` move a cursor over the slots' titles and tracks, and rows it cannot show scroll under the cursor and stay where it leaves them. `space` or `m` mutes the cursor's slot or lets it sound again: its pattern plays on in time, so it comes back in step. On a track row they mute that track, and `s` solos it: the slot's soloed tracks sound alone. A silent track is drawn dimmed, a soloed one lit; the mutes go when the slot changes pattern, as the log says. `e` edits what the slot plays, and `n` makes a new pattern in it.
@@ -217,7 +232,7 @@ The TUI is a shell over the exact same dispatch table used by the REPL and scrip
   - `refine <name> [rounds]`: close the loop over a song `compress` made: each round (3) fits the voices again and sweeps the tonal steps, each tried a semitone and an octave either way, the recording's strongest pitch at its step, a step earlier or later, longer or shorter, and silent (a step left silent is dropped), then a step a line leaves empty tries that strongest pitch; every move kept when the bars that play its pattern sound more like the recording's own frames (pitch, timbre and onsets), the rip-back reported beside it. A voice may not leave its tonal floor, its distance from the recording's notes as `fit` measures it, by more than a tenth, and a proposed pitch keeps within a fifth of its track's nearest note. Minutes a round.
   - `bench [loops] [bars] [verbose]`: grade the analysis, and the model when one loaded, on fresh loops (8) of `bars` (4) bars with generated parts among the bank's, clean and augmented: the mean score of each rip against the loop's expected rip. `verbose` then lists each loop as each front end ripped it, its index, tempo, key, clean or augmented, the parts generated (`bank` for none) and its score's fields, and the three worst by total.
   - `corpus <dir> [loops] [bars] [aug] [gen] [codec] [nowav] [tempos lo-hi|a,b,c] [part k/n]`: render `loops` (24) of `bars` (4) bars from the registered patterns into `dir`, each a WAV, its log-mel frames and the events that sound in it: what `tool/rip-train` trains the rip's model on; `aug` puts a room, a mix and voices of random genes behind each (How rip works, 7, lists what it draws) and renders each off A440 by up to a quarter tone, `gen` draws beats, melodies, bass lines and accompaniments the bank never had and leaves the drums or the bass out of some, `codec` sends a third of the loops through Opus, MP3 or AAC at 64 to 192 kbps and back by ffmpeg, as recordings are stored, `nowav` keeps the frames and labels only, `tempos` sets the tempos the loops cycle through, and `corpus <dir> from <list.csv> [split <name>] [hours <h>] [codec]` writes recordings and the MIDI files they were played from instead, one loop each, as a CSV lists them (`audio_filename`, `midi_filename`, and `split` and `duration` when present, as E-GMD's metadata has them), those not on disk skipped, and those whose MIDI has no notes and no kick, snare or hihat skipped with a note; a tom's or a cymbal's hit is an onset of no drum (a ride, tambourine or shaker reads as the hihat); a loop already in `dir` is kept, so a stopped export run again goes on where it stopped, and a `from` run over a new batch numbers its loops after those on disk, which it knows by their recordings, and `part k/n` renders every `n`-th loop from the `k`-th for `n` exports at once, leaving `corpus.json` to a last run without it (`tool/rip-train/README.md` is the training guide).
-  - `tune [generations] [file]`: search `rip`'s parameters over loops the engine renders from the registered patterns; a set that beats the current one is written (default the first root's `audio/rip.toml`) and listened with from then on. Eight generations take minutes.
+  - `tune [generations] [file]`: search `rip`'s parameters over loops the engine renders from the registered patterns; a set that beats the current one is written (default the root's `rip.toml`) and listened with from then on. Eight generations take minutes.
 - **Scripts**
   - `run <file.slab>`: run a script's lines in this session, strict as `-s`: a failing line stops it with its number; `quit` in it ends the script alone, and outside a script ends the session.
 
@@ -229,7 +244,7 @@ Scripts drive the engine identically to the REPL. `#` starts a comment. Prependi
 
 ```text
 # Create blip.slab and run:
-#   go run ./cmd/soundlab -headless -s blip.slab
+#   go run ./cmd/stapes -headless -s blip.slab
 
 new sound blip
 set blip.duration 0.2

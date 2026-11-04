@@ -1,7 +1,11 @@
 # rip-train
 
-The trainer of the rip's front-end model, `lixenwraith/audio/ripmodel`: PyTorch,
-outside the Go module, writing the weight file `lixenwraith/transformer` loads
+The trainer of the rip's front-end model: PyTorch, outside the Go module, the
+twin of the two Go modules that run the model. The audio module's `ripmodel`
+([`lixenwraith/audio/ripmodel`](https://github.com/lixenwraith/audio/tree/main/ripmodel))
+is the model's shape, the features it hears and the heads the rip's decoders
+read; [`lixenwraith/transformer`](https://github.com/lixenwraith/transformer) is
+the forward pass it runs on and the weight file this writes
 ([format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md)).
 Where the model stands in the pipeline, and why its features are made in Go, is
 in [Rip design](../../doc/rip-design.md) §2 and §3; the runs so far and their
@@ -10,7 +14,7 @@ to end, and how to turn a run toward the music you care about.
 
 ## What a run is
 
-1. **A corpus.** Soundlab renders loops from the patterns and voices registered
+1. **A corpus.** Stapes renders loops from the patterns and voices registered
    in its session and labels every event in them exactly, because the engine
    played them: the frames a model hears (`loop_NNN.mel`), the events
    (`loop_NNN.json`: frame, end, drum or MIDI note, the wave and genes of the
@@ -21,17 +25,17 @@ to end, and how to turn a run toward the music you care about.
    holds some loops out, scores them every so often and exports the step whose
    onset, drum, pitch and voicing heads score best on them, the heads the rip's
    decoders read.
-3. **A grade.** Soundlab's `bench` rips fresh loops, clean and augmented, through
+3. **A grade.** Stapes' `bench` rips fresh loops, clean and augmented, through
    the built-in analysis and through the model, and scores each rip against the
    loop's expected rip. A model that scores under the analysis is not ready for
    a recording; a recording is judged by ear, with `rip`, `notes` and `song score`.
-4. **Data.** The weight file goes to the configuration root as
-   `audio/ripmodel.bin`; soundlab's `rip` hears with it when it is there and with
-   the analysis when it is not.
+4. **Data.** The weight file goes to the stapes root as `ripmodel.bin`, beside
+   `rip.toml`; `rip` hears with it when it is there and with the analysis when
+   it is not.
 
 ## Setup
 
-- Go, as for vif; a CPU is enough.
+- Go, as `go.mod` names it; a CPU is enough.
 - Python 3 with PyTorch:
 
 ```bash
@@ -41,12 +45,15 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu   # a CPU PyT
 pip install -r requirements.txt
 ```
 
+`make venv` makes the same `.venv` from the checkout's root, and `PYTHON=` names
+another interpreter to `pipeline.sh` and `make smoke`.
+
 A GPU trains an order of magnitude faster (below): `whl/cu130` for a recent
 NVIDIA card, and `torch==2.14.* --index-url https://download.pytorch.org/whl/cu126`
 for a GTX 10-series (Pascal), whose last build that is; `train.py` picks the
 GPU by itself. The CUDA build is 6 GB installed.
 
-Everything below runs from the vif checkout.
+Everything below runs from the stapes checkout's root.
 
 ## The pipeline
 
@@ -64,7 +71,7 @@ tool/rip-train/pipeline.sh install
 
 | Knob | Default | What it does |
 |---|---|---|
-| `CORPUS` | `corpus` | where the loops go |
+| `CORPUS` | `~/.local/state/stapes/corpus` | where the loops go, under `$XDG_STATE_HOME` when that is set |
 | `LOOPS`, `BARS` | 20000, 4 | loops rendered, bars a loop; 200 loops is a smoke test |
 | `PARTS` | 1 | exports at once, each rendering every `PARTS`-th loop on a core of its own; a last export renders any loop they left and writes `corpus.json` |
 | `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a pedal's ringing in a third of the loops, a soft clip in a third, a compressor and a noise floor in half, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
@@ -73,24 +80,27 @@ tool/rip-train/pipeline.sh install
 | `CODEC` | empty | `codec`: a third of the loops through Opus, MP3 or AAC at 64 to 192 kbps and back, by ffmpeg, which the export then needs |
 | `SAMPLED` | empty | a directory of NSynth notes (`family_source_NNN-pitch-velocity.wav`, a partial set too): each tonal line plays on one of its instruments in half the loops, labelled with no voice; empty for the engine's voices alone |
 | `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
-| `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |
+| `FOCUS` | none | a stapes script run before the corpus renders: the voices and patterns the loops draw from, see below |
 | `STEPS`, `BATCH` | 20000, 8 | training steps and windows a step |
 | `DIM`, `HEADS`, `LAYERS`, `FFN` | 256, 8, 4, 1024 | the model's width, attention heads, layers and feed-forward width, `train.py`'s `--dim`, `--heads`, `--layers` and `--ffn`; a `CHECKPOINT` or `INIT` of another shape is refused |
 | `CONVS`, `TOWERS` | none | convolutions before the input layer, and towers of layers over it, each computing a run of the heads, `train.py`'s `--convs` and `--towers` |
 | `MIX` | empty | another corpus and the share of windows drawn from it, `dir:share`, such as recordings with their MIDI files (`corpus <dir> from`) |
 | `HOLDOUT`, `EVERY` | 200, 1000 | loops held out, and how often they are scored and a checkpoint written |
 | `OUT`, `CHECKPOINT` | `$CORPUS/ripmodel.bin`, `$CORPUS/ripmodel.pt` | the weight file, and the checkpoint a stopped run resumes from |
-| `ROOT` | `~/.config/vif` | the configuration root `install` copies the weights into |
+| `ROOT` | `~/.config/stapes` | the stapes root, under `$XDG_CONFIG_HOME` when that is set: `install` copies the weights into it as `ripmodel.bin`, and `bench` hears with its `rip.toml` |
 | `BENCH_LOOPS`, `BENCH_BARS` | 12, 4 | the fresh loops `bench` grades on |
 | `INIT`, `SHARD` | none, 0 | `shard`: the `.pt` the round starts from, and the worker's stream of windows; it writes `$CORPUS/shard$SHARD.pt` and `.bin` |
 | `MERGE_FILES`, `TRIM` | none, 0 | `merge`: the round's shard checkpoints, blank-separated or a glob, and the share of them dropped at each end of each weight before the mean |
 | `MERGED` | `$CORPUS/merged.pt` | `merge`: the mean as a `.pt`, the next round's `INIT`; its weight file goes to `OUT` |
 
-A smoke test of the whole path, under ten minutes on a laptop:
+A smoke test of the whole path, under ten minutes on a laptop, with a root of
+its own so that the weights stapes hears with stay as they are:
 
 ```bash
-LOOPS=200 STEPS=300 HOLDOUT=20 EVERY=100 BENCH_LOOPS=4 CORPUS=/tmp/smoke tool/rip-train/pipeline.sh all
+LOOPS=200 STEPS=300 HOLDOUT=20 EVERY=100 BENCH_LOOPS=4 CORPUS=/tmp/smoke ROOT=/tmp/smoke/root tool/rip-train/pipeline.sh all
 ```
+
+`make smoke` runs the same in a fresh temporary folder, which it names and keeps.
 
 What to expect at scale, on a 2017 laptop (an i7-7700HQ, four cores): an
 export renders about 2.5 loops a second on one core and `PARTS=4` 7.0 on the
@@ -127,9 +137,8 @@ cores with anything else the machine does.
 What a training round needs, as a hand-off to whoever or whatever runs it,
 and what to bring back.
 
-**The machine.** A vif checkout at a main that has the accompaniment corpus
-(the thirteenth pass, [lixenwraith/vif#959](https://github.com/lixenwraith/vif/pull/959),
-or later); Go as vif builds with; Python 3.11 or later with PyTorch (the
+**The machine.** A stapes checkout; Go as `go.mod` names it; Python 3.11 or
+later with PyTorch (the
 [setup](#setup) above); 10 GB of free disk for a corpus of 40000 loops of four
 bars (frames and labels; `WAV=` to keep each loop's audio adds about 60 GB)
 and 50 MB for the checkpoint; memory for the labels' events, each window's
@@ -155,8 +164,8 @@ the result is an unbroken run's. On the laptop above the corpus takes 95
 minutes in four parts and the 40000 steps two hours on its GPU, about sixteen
 on its cores.
 
-`install` copies the weights into the configuration root the engine reads
-(`ROOT`); do it when the bench says the model beats the analysis on both
+`install` copies the weights into the stapes root (`ROOT`) as `ripmodel.bin`;
+do it when the bench says the model beats the analysis on both
 lines, which the sixth run was the first to do, and judge it by ear on the
 recordings, whose truths still favour the analysis (Rip design §8). For
 another shape set `DIM`, `HEADS`, `LAYERS`
@@ -167,8 +176,8 @@ guide, and the run is done when it stops falling.
 **What to bring back.** `$CORPUS/ripmodel.bin` (the weights), `$CORPUS/ripmodel.pt`
 (the checkpoint, to resume or to start a round from), the training log with
 its held-out lines, the bench's two summary lines, and, if the recordings are
-to hand, `soundlab -headless -config-dir <root> -s <recipe>` for each recording
-in `lixenwraith/scratch` with the weights installed in `<root>/audio/ripmodel.bin`,
+to hand, `stapes -headless -config-dir <root> -s <recipe>` for each recording
+in `lixenwraith/scratch` with the weights installed in `<root>/ripmodel.bin`,
 whose `truth` lines against the rhythm are the number that matters.
 
 ## Training in parallel
@@ -225,7 +234,7 @@ keeps them apart.
 
 ## Turning a run toward your music
 
-The corpus is whatever soundlab's session holds when `corpus` runs, so a focus
+The corpus is whatever stapes' session holds when `corpus` runs, so a focus
 is a script that loads and applies voices and patterns first, named by `FOCUS`
 and run by the pipeline before the export (and before `bench`, so the grade
 draws from the same bank). Two are in `focus/`:
@@ -254,7 +263,7 @@ To write your own:
   find voices for a recording's lines, and `write` exports any voice as a
   document to start from. Every registered tonal voice is one the generated
   melodies and bass lines are played with.
-- **Music.** The shipped pattern bank is the game's; `load pattern file.toml`
+- **Music.** The shipped pattern bank is `audio/bank`'s; `load pattern file.toml`
   or `merge pattern` brings in yours, in the pattern document's form
   (`[[pattern]]` with tracks of steps), and `gen` adds parts the bank never
   had. A bank that is all one genre makes a corpus of that genre; `gen` keeps
@@ -290,13 +299,15 @@ To write your own:
 The stages are three commands; the script only strings them together.
 
 ```bash
-printf 'corpus corpus/ 20000 4 aug gen nowav\n' > corpus.slab
-go run ./cmd/soundlab -headless -s corpus.slab
-python3 tool/rip-train/train.py --corpus corpus/ --out ripmodel.bin --steps 20000 --batch 8 --every 1000 --holdout 200 --checkpoint ripmodel.pt
-printf 'bench 12 4\n' > bench.slab
-mkdir -p root/audio && cp ripmodel.bin root/audio/ripmodel.bin
-go run ./cmd/soundlab -headless -config-dir root -s bench.slab
-cp ripmodel.bin ~/.config/vif/audio/ripmodel.bin
+dir=$HOME/.local/state/stapes/byhand   # outside the checkout: the corpus, the weights, a root to bench in
+mkdir -p "$dir/root"
+printf 'corpus corpus 20000 4 aug gen nowav\n' > "$dir/corpus.slab"   # read from the script's folder
+go run ./cmd/stapes -headless -s "$dir/corpus.slab"
+python3 tool/rip-train/train.py --corpus "$dir/corpus" --out "$dir/ripmodel.bin" --steps 20000 --batch 8 --every 1000 --holdout 200 --checkpoint "$dir/ripmodel.pt"
+printf 'bench 12 4\n' > "$dir/bench.slab"
+cp "$dir/ripmodel.bin" "$dir/root/ripmodel.bin"
+go run ./cmd/stapes -headless -config-dir "$dir/root" -s "$dir/bench.slab"
+mkdir -p ~/.config/stapes && cp "$dir/ripmodel.bin" ~/.config/stapes/ripmodel.bin
 ```
 
 `train.py` trains on `--batch` windows of `--window` frames (512, six seconds)

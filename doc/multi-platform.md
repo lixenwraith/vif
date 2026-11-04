@@ -622,26 +622,11 @@ Build tags should remain orthogonal capabilities. Avoid an accumulating
 the host API forces it, and a capability tag where multiple platforms can share
 the same omission or adapter.
 
-### Soundlab's files
+### Stapes' files
 
-Soundlab names its files by path on every host, each verb alike: `load`, `merge`
-and `save` of a document, `write` of an entry (TOML, or a `.mid` for a pattern or
-a song), `rip` and `truth` of a `.wav` or a `.mid`, and `render`, `export` and
-`song` to a WAV or a `.mid`. A relative path reads from the working directory, or
-from a running script's own, and a bare `save` writes where `internal/paths`
-resolves the next run's override, so a terminal, over ssh too, needs no dialog;
-the files overlay (`^O`) browses the same paths. The browser build leaves
-soundlab out (`!wasm`), though the audio library writes and reads MIDI there too,
-from any reader or writer.
-
-On Android ([todo](todo.md#bring-soundlab-to-android-soundlab-mobile)) the
-user root is the app's own storage, which these paths reach as they are. A MIDI
-file or a recording another app holds, a download or a shared file, is a content
-URI behind the Storage Access Framework, with no path. There the host opens the
-system's picker (`ACTION_OPEN_DOCUMENT`), copies what was picked into the user
-root's `audio/` and runs the verb on the copy; a file to hand back is written
-into the user root and offered through `ACTION_CREATE_DOCUMENT` or a share. The
-verbs stay as they are, and so does every other host.
+Stapes (formerly soundlab), the audio authoring tool, names its files by path on
+every host, Android's to come ([todo](todo.md#bring-stapes-to-android-stapes-mobile))
+included, as [its design](../pkg/stapes/doc/stapes.md#paths-on-every-host) describes.
 
 ## 9. Verification and release concerns
 

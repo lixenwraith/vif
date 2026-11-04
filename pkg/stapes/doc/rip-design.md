@@ -8,7 +8,7 @@ this document is where it is going and why.
 
 ## 1. Purpose
 
-A recording comes in; what comes out is what soundlab could have authored: the
+A recording comes in; what comes out is what stapes could have authored: the
 tonal voices the notes were played with, the drum hits and the notes as patterns
 on the sixteenth grid, the key, the chord each bar leans on, and the tempo. The
 engine is the ground truth of its own vocabulary, so a rip is good when the engine
@@ -16,6 +16,11 @@ playing its output sounds like the recording, and that is the loop everything
 below closes.
 
 ## 2. Stages
+
+Stages 1 to 3, and the renders, distances and grouping the later stages call,
+are the audio library's ([library §9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording)); stapes
+joins them in its searches: the voice fit, the dictionary's matching and the
+refinement.
 
 ```mermaid
 flowchart LR
@@ -29,7 +34,7 @@ flowchart LR
     H --> E
 ```
 
-1. **Features.** `MelFrames` makes the log-mel frames a model hears: the rip's own
+1. **Features** ([library §9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording)). `MelFrames` makes the log-mel frames a model hears: the rip's own
    grid, 22.05 kHz, 93 ms windows every 11.6 ms, 229 bands from 30 Hz up, under a
    semitone apart from A3, the
    recording's peak at one. The model reads each band on a true logarithm, in dB
@@ -39,15 +44,15 @@ flowchart LR
    energy)`, the frames' stored form, kept 0.3% of a loud note's contrast for
    notes 18 dB down, the log 59%). The built-in analysis works from the same
    spectrogram, split into a harmonic and a percussive part by medians. Features
-   are computed in Go on both sides of training, so the model sees in soundlab
+   are computed in Go on both sides of training, so the model sees in stapes
    exactly what it saw in the trainer.
-2. **Front end** (`RipFrontEnd`). It hears a recording into `RipFrames`: the
+2. **Front end** (`RipFrontEnd`, [library §9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording)). It hears a recording into `RipFrames`: the
    strength of any onset, of each drum's, each pitch's salience, each register's
    chroma, and, from a model, the wave and voice genes the note under each frame
    is played with and how surely each pitch is struck there. Two front ends fill it: `analysis`, the package's signal
    processing, and `ripmodel`, a transformer over the mel frames whose heads are
    those fields. The seam is the frames, so the decoders never know which heard.
-3. **Decoders.** Classical, shared, cheap and explainable: tempo by
+3. **Decoders** ([library §9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording)). Classical, shared, cheap and explainable: tempo by
    autocorrelation under a prior, beats by dynamic programming, the bar line by
    the kick, the snare on two and four, the key's root in the bass and the
    chroma's change, the key and chords by chroma, hits by peak picking, notes by a
@@ -95,7 +100,7 @@ flowchart LR
    (`VoiceDef.Genes`, thirty-two parameters in [0, 1] on perceptual scales, and a
    wave class); a register's notes average into one voice. A register the front
    end heard no voice for, every register under the built-in analysis, gets one
-   fitted by analysis-by-synthesis (soundlab's `rip`, and `fit` again with more
+   fitted by analysis-by-synthesis (stapes' `rip`, and `fit` again with more
    generations): the rip's transcript (`Rip.Notes`) gives the register's longest
    and loudest notes, the engine renders a candidate voice at each note's pitch,
    loudness and length at the recording's tuning (`RenderNoteAt`), the render's
@@ -156,7 +161,7 @@ flowchart LR
 
 The output is a sound document of voices, a pattern document of patterns and the
 song, which bar plays which at what tempo and in what key. The song is the form
-the engine lacked, the conductor placing patterns by tier, not by bar; soundlab
+the engine lacked, the conductor placing patterns by tier, not by bar; stapes
 plays one through the live sequencer (`song <name> play`), each bar's patterns
 scheduled to land on its bar line while the one before plays, and renders one
 offline (`song <name> <file.wav>`).
@@ -208,7 +213,7 @@ offline (`song <name> <file.wav>`).
   `merge`); `tool/rip-train/README.md` is the guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
   neither a gene, kept by the augmentation when it draws voices near a
   registered one.
-- **Model.** `ripmodel.Spec`: 230 inputs (229 bands and the level), width 256, eight heads of 32,
+- **Model** ([library §9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording)). `ripmodel.Spec`: 230 inputs (229 bands and the level), width 256, eight heads of 32,
   four layers, feed-forward 1024, a window of 64 frames either side, 3.2
   million weights (12.8 MB), four times the first five runs' width 128 and four
   heads; heads for the onset, the three drums, the sixty-nine pitches, voicing,
@@ -227,8 +232,8 @@ offline (`song <name> <file.wav>`).
   rounding. A three-minute song is 15500 frames, 26 GFLOP a layer at the
   default width: 70 seconds on one core of a 2017 laptop's i7-7700HQ, against
   20 at width 128, and the width and depth are the file's to choose. The analysis stays the
-  default front end: soundlab hears with the model when the first root holds
-  `audio/ripmodel.bin`.
+  default front end: stapes hears with the model when its root holds
+  `ripmodel.bin`.
 
 ## 4. Layout
 
@@ -245,10 +250,10 @@ offline (`song <name> <file.wav>`).
 - `lixenwraith/genetic`: the searches, over `RipParams`, over voice genes and
   over bar-to-pattern assignments, with seeds, a schedule, a checkpoint, a
   cache and a categorical operator for them. Standard library only.
-- `internal/soundlab`: the verbs that drive it all (`rip`, `fit`, `compress`,
-  `song`, `render`, `corpus`, `tune`), the documents the results land in, and
-  the files overlay (`^O`) that loads, rips and saves them.
-- `tool/rip-train`: the trainer, Python, outside the module.
+- `lixenwraith/stapes`, this module: the verbs that drive it all (`rip`, `fit`,
+  `compress`, `song`, `render`, `corpus`, `tune`), the documents the results
+  land in, and the files overlay (`^O`) that loads, rips and saves them.
+- `tool/rip-train`: the trainer, Python, beside the Go module.
 
 ## 5. Budgets and determinism
 
@@ -269,7 +274,7 @@ did not, and the generational engine now has it:
   and `UniformCombiner` over ints; a move, a swap, a split and a merge are all
   reachable by it, and the size term in the score does the merging, so the
   dedicated operators waited and were not missed;
-- the fitness with a size term and a constraint is a scalarization in soundlab's
+- the fitness with a size term and a constraint is a scalarization in stapes'
   `compress`, not a `fitness` bundle: three terms, one line, and a search that
   changes its distance changes that line;
 - an adaptive step: `SetSchedule` with `AdaptiveStrength`, the one-fifth rule,
@@ -457,7 +462,7 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   pitch, and hears a clip forty cents flat at A440, is not yet the rip's
   better ear.
 - The seventh pass, the sample heard on its own tuning: the transcript's note
-  list (soundlab's `notes`) showed A#2 taking turns with A2 in sixteenths, G2
+  list (stapes' `notes`) showed A#2 taking turns with A2 in sixteenths, G2
   with G#2 at the chord change, C5 with C#5 in the lead, ten melody notes
   before the first bar line dropped, and harmonic minor for a scale only the
   wobble's leakage voted for. A histogram of the spectral peaks' offsets from
@@ -742,9 +747,9 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   file in the root upgrades the hearing without a build.
 - **Pure Go inference.** No CGO, no runtime to ship, the same path on the
   desktop, the browser and the phone.
-- **The searches live in soundlab.** `lixenwraith/audio` holds the primitives,
+- **The searches live in stapes.** `lixenwraith/audio` holds the primitives,
   a render, a distance, a mechanical grouping, and `lixenwraith/genetic` the
-  engine; soundlab joins them, so `audio` is a module of its own without
+  engine; stapes joins them, so `audio` is a module of its own without
   `genetic`.
 - **The song is a document.** `[[song]]` beside the patterns, names not ids, a
   tempo and a key of its own, so a ripped song is edited, saved and played like

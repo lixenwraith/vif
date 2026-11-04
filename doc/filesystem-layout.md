@@ -54,7 +54,7 @@ vif/
 │   ├── main/    optional default override
 │   └── vanguard/behavior/  behavior programs its scenario.toml lists
 ├── input/       keymap.toml
-├── audio/       music.toml, sounds.toml (optional overrides), rip.toml (soundlab's rip parameters)
+├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
 ├── image/       .vifimg wall assets
 └── bot/         bot graphs, one <name>.toml each
@@ -65,8 +65,11 @@ under `scenario/` are selected by name (`-s td`) or explicit path. A scenario's
 region, macro and behavior program files sit beside its `scenario.toml` or below
 it; `behavior/` is where the shipped `vanguard` keeps its raiders' programs
 ([FSM reference](fsm-reference.md#behavior-programs)).
-`audio/` is empty until a user or `soundlab` writes an override. `image/` is the
-discovery category for `.vifimg` assets named by a `WallPatternSpawnRequest`.
+`audio/` is empty until a user or stapes (formerly soundlab), the audio authoring
+tool, writes an override: stapes reads and writes the user root's `audio/`
+documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-stapes)).
+`image/` is the discovery category for `.vifimg` assets named by a
+`WallPatternSpawnRequest`.
 
 ## 3. Resolution policy
 
@@ -94,8 +97,6 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Keymap | `input/keymap.toml` | embedded keymap |
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
-| Rip parameters | `audio/rip.toml` | soundlab alone reads it; `DefaultRipParams` |
-| Rip model | `audio/ripmodel.bin` | soundlab alone reads it; the built-in analysis |
 | Content | `content/` | embedded tutorial corpus |
 | Wall image | `image/<name>.vifimg` | none; failure is reported in the game status |
 | Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |
