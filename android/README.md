@@ -93,7 +93,8 @@ and max of take, paint and post.
 Controls: a tap is a left press and release on the cell under it, a finger moved
 while down drags the cursor, and one held on the status bar opens the
 configuration menu, which the app draws with its own widgets from the run's
-snapshot ([Menu: Android](../doc/config-menu.md#android)): pages that expand in
+snapshot ([Menu: Android and the
+browser](../doc/config-menu.md#android-and-the-browser)): pages that expand in
 place, switches, radio lists, − and + steppers, radio rows, buttons that confirm
 a destructive action, fields with the keyboard each takes, a search field, and
 the status line at the foot; Back closes the innermost window, clears a search,

@@ -504,6 +504,14 @@ that proves wrong or that a document now states, and link the document instead.
   of seeds leave empty for 160 ticks. A test that needs a glyph under the cursor
   steps rows until one is reached, never counts on its seed.
 
+## Docs
+
+- Nothing checks a doc link's file or anchor, so a broken one outlives sweeps.
+  After editing links or headings, run a short script that slugs each heading as
+  GitHub does (lowercase, punctuation and `§` dropped, spaces to hyphens) over
+  every `*.md`; its only false hits are `machine-design.md`'s `New[S, C](observe)`
+  and `Decode[A](raw)`.
+
 ## Words
 
 - Materialize names the materialize effect alone; a teleport's or a charge's line is
