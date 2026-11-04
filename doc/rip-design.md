@@ -220,11 +220,12 @@ offline (`song <name> <file.wav>`).
   layer, each computing a run of the heads (`transformer.Tower`), so the drums
   need not share the pitch's layers. `tool/rip-train` is its PyTorch
   twin and writes the weight file `lixenwraith/transformer` loads
-  ([format](../pkg/transformer/doc/format.md)); the instructions are its README.
-- **Inference** is pure Go, float32, no CGO, the same on every host. A
-  three-minute song is 15500 frames, 26 GFLOP a layer at the default width:
-  70 seconds on one core of a 2017 laptop's i7-7700HQ, against 20 at width 128,
-  and the width and depth are the file's to choose. The analysis stays the
+  ([format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md));
+  the instructions are its README.
+- **Inference** is pure Go, float32, no CGO, the same on every host to float32
+  rounding. A three-minute song is 15500 frames, 26 GFLOP a layer at the
+  default width: 70 seconds on one core of a 2017 laptop's i7-7700HQ, against
+  20 at width 128, and the width and depth are the file's to choose. The analysis stays the
   default front end: soundlab hears with the model when the first root holds
   `audio/ripmodel.bin`.
 
@@ -239,7 +240,7 @@ offline (`song <name> <file.wav>`).
 - `pkg/audio/ripmodel`: the learned front end, `Spec` and `Hear`. Imports `audio`
   and `transformer`, and goes with `audio` to its module.
 - `lixenwraith/transformer`: inference over frames and the weight file, a
-  module of its own in `pkg/transformer` until it moves. Standard library only.
+  module of its own. Standard library only.
 - `lixenwraith/genetic`: the searches, over `RipParams`, over voice genes and
   over bar-to-pattern assignments, with seeds, a schedule, a checkpoint, a
   cache and a categorical operator for them. Standard library only.

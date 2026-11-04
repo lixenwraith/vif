@@ -2,9 +2,9 @@
 
 The trainer of the rip's front-end model, `pkg/audio/ripmodel`: PyTorch, outside
 the Go module, writing the weight file `lixenwraith/transformer` loads
-([format](../../pkg/transformer/doc/format.md)). Where the model stands in the
-pipeline, and why its features are made in Go, is in
-[Rip design](../../doc/rip-design.md) §2 and §3; the runs so far and their
+([format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md)).
+Where the model stands in the pipeline, and why its features are made in Go, is
+in [Rip design](../../doc/rip-design.md) §2 and §3; the runs so far and their
 numbers are in its §8. This file is the hands-on guide: setup, the pipeline end
 to end, and how to turn a run toward the music you care about.
 
@@ -329,7 +329,8 @@ layer norm with eps 1e-5, ALiBi slopes of 2^(-8h/H) per head on the frame
 distance, attention banded to the window, and the output layer's slices as the
 heads, in `ripmodel.HEADS` order. `export` writes the tensors by the names and in
 the order `lixenwraith/transformer` reads them, with an FNV-1a 64 trailer the
-loader checks ([format](../../pkg/transformer/doc/format.md)). A change to either
-side is a change to both: check a random model's outputs on a corpus loop from
-the two before trusting a trained file, as the module's
-[agent notes](../../pkg/transformer/doc/agent-notes.md) describe.
+loader checks ([format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md)).
+A change to either side is a change to both: check a random model's outputs on
+a corpus loop from the two before trusting a trained file, as the module's
+[agent notes](https://github.com/lixenwraith/transformer/blob/main/doc/agent-notes.md)
+describe.

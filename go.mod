@@ -9,10 +9,8 @@ require (
 	github.com/lixenwraith/log v0.1.13
 	github.com/lixenwraith/terminal v0.6.5
 	github.com/lixenwraith/toml v0.5.0
-	github.com/lixenwraith/transformer v0.0.0
+	github.com/lixenwraith/transformer v0.1.0
 	golang.org/x/sys v0.49.0
 )
 
 require golang.org/x/term v0.47.0 // indirect
-
-replace github.com/lixenwraith/transformer => ./pkg/transformer

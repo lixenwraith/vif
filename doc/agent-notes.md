@@ -675,13 +675,12 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Transformer
 
-- `pkg/transformer` is a module of its own, `github.com/lixenwraith/transformer`,
-  which the root and `android` take through a `replace`: `./...` skips it, so
-  its gates run inside it (`go -C pkg/transformer test ./...`), under its own
-  `AGENTS.md`. Notes about the library itself are in its `doc/agent-notes.md`.
-- The library and `tool/rip-train` agree to float32 rounding: redo the check its
-  [agent notes](../pkg/transformer/doc/agent-notes.md#the-float32-check) give
-  before trusting a trained file after any change to either side. A corpus
+- The library is `github.com/lixenwraith/transformer`: a change to it lands
+  there, under its own `AGENTS.md` and `doc/agent-notes.md`, and vif takes its
+  tag.
+- The library and `tool/rip-train` agree to float32 rounding: redo the check
+  its [agent notes](https://github.com/lixenwraith/transformer/blob/main/doc/agent-notes.md#the-float32-check)
+  give before trusting a trained file after any change to either side. A corpus
   loop's frames come from `soundlab -s` over a script of `corpus <dir> 2 4`,
   about a minute; `corpus 8 4` plus sixty training steps of a width-32 model
   also take under a minute, enough to exercise the whole training path.
