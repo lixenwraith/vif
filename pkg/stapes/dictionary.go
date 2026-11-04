@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 // The song: a rip's bars matched to a dictionary of one-bar patterns and the
 // timeline that plays them (compress), the timeline shown, rendered or conducted

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The rip model's training pipeline: corpus, train, bench and install, or all four
 # in order; shard and merge run a training round over several workers. Run from
-# the vif checkout; every knob is an environment variable, and the README is the
+# the stapes checkout; every knob is an environment variable, and the README is the
 # guide.
 set -euo pipefail
 
@@ -42,7 +42,7 @@ PYTHON=${PYTHON:-python3}
 here=$(cd "$(dirname "$0")" && pwd)
 stage=${1:-all}
 
-soundlab() { go run ./cmd/soundlab -headless "$@"; }
+stapes() { go run ./cmd/stapes -headless "$@"; }
 
 # corpus_slab writes the export's script to $1, its corpus line ending in $2
 corpus_slab() {
@@ -63,11 +63,11 @@ corpus() {
 	if [ "$PARTS" -gt 1 ]; then
 		for ((k = 0; k < PARTS; k++)); do
 			corpus_slab "$CORPUS/corpus$k.slab" "part $k/$PARTS"
-			soundlab -s "$CORPUS/corpus$k.slab" &
+			stapes -s "$CORPUS/corpus$k.slab" &
 		done
 		wait
 	fi
-	soundlab -s "$CORPUS/corpus.slab"
+	stapes -s "$CORPUS/corpus.slab"
 }
 
 train() {
@@ -101,14 +101,14 @@ bench() {
 		printf 'bench %s %s\n' "$BENCH_LOOPS" "$BENCH_BARS"
 	} > "$slab"
 	echo "== bench: the analysis and $OUT on $BENCH_LOOPS fresh loops, clean and augmented"
-	soundlab -config-dir "$root" -s "$slab"
+	stapes -config-dir "$root" -s "$slab"
 	rm -rf "$root"
 }
 
 install() {
 	mkdir -p "$ROOT/audio"
 	cp "$OUT" "$ROOT/audio/ripmodel.bin"
-	echo "== installed $OUT as $ROOT/audio/ripmodel.bin; soundlab's rip hears with it, remove the file to hear with the analysis"
+	echo "== installed $OUT as $ROOT/audio/ripmodel.bin; stapes' rip hears with it, remove the file to hear with the analysis"
 }
 
 case "$stage" in

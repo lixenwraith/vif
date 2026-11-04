@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 // The files overlay (^O): a directory's entries, newest first, to load or merge
 // a document, rip a recording, or save the tab's document into it under a name.

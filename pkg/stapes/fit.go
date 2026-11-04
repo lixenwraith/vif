@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 // The voice fit: analysis by synthesis. A recording's register is heard as notes;
 // the engine plays a candidate voice at those notes and the mel frames of its

@@ -1,11 +1,11 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-// Package soundlab is the audio authoring environment over lixenwraith/audio: a
+// Package stapes is the audio authoring environment over lixenwraith/audio: a
 // session holding the engine and the working documents, the verb table every front
 // end dispatches through (Execute), the script runner and the full-screen TUI over
-// any terminal.Terminal. cmd/soundlab is its terminal command; a host with its own
+// any terminal.Terminal. cmd/stapes is its terminal command; a host with its own
 // screen and speakers runs it in-process, handing NewSession the speakers.
-package soundlab
+package stapes
 
 import (
 	"bytes"
@@ -210,7 +210,7 @@ func NewSession(o Options) (*Session, error) {
 	// off here; :fill on restores it for auditioning the fill bank.
 	s.eng.SetAutoFill(false)
 	if files.skipped != nil {
-		fmt.Fprintf(out, "%v: skipped, soundlab reads only [paths] root and [audio] buffer_ms\n", files.skipped)
+		fmt.Fprintf(out, "%v: skipped, stapes reads only [paths] root and [audio] buffer_ms\n", files.skipped)
 	}
 	if err := eng.SpecError(); err != nil {
 		fmt.Fprintf(out, "override errors, the game falls back the same way:\n%v\n", err)

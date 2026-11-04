@@ -222,7 +222,7 @@ windows: check-go $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
 tools: check-go $(BIN_DIR)
-	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
+	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./pkg/stapes/cmd/stapes ./tool/...
 
 router: check-go $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/vif-router ./tool/vif-router

@@ -1,4 +1,4 @@
-"""Train the rip's front end on a corpus soundlab exported (`corpus <dir>`), and
+"""Train the rip's front end on a corpus stapes exported (`corpus <dir>`), and
 export the weights lixenwraith/transformer loads:
 
     python3 train.py --corpus corpus/ --out ripmodel.bin --steps 2000
@@ -240,9 +240,9 @@ def shape(cfg) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--corpus", required=True, help="directory soundlab's corpus verb wrote")
+    ap.add_argument("--corpus", required=True, help="directory stapes' corpus verb wrote")
     ap.add_argument("--mix", default="", help="another corpus and the share of windows drawn from it, dir:share, such as recordings with their MIDI files (corpus <dir> from <list>)")
-    ap.add_argument("--out", required=True, help="weight file to write, the root's audio/ripmodel.bin for soundlab to hear with")
+    ap.add_argument("--out", required=True, help="weight file to write, the root's audio/ripmodel.bin for stapes to hear with")
     ap.add_argument("--steps", type=int, default=2000)
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--window", type=int, default=512, help="frames per training window (11.6 ms each)")

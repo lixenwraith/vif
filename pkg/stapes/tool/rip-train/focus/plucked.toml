@@ -1,6 +1,6 @@
 # Voices for plucked and struck instruments: the shipped piano is modal; these
 # add a nylon string, a steel one and a plucked bass, so a corpus leans toward
-# guitars and keys. Edit or add with soundlab's `new voice` and `set`.
+# guitars and keys. Edit or add with stapes' `new voice` and `set`.
 
 [[voice]]
 name = "nylon"

@@ -11,7 +11,7 @@ import (
 	"syscall"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/internal/soundlab"
+	"github.com/lixenwraith/vif/pkg/stapes"
 )
 
 // CLI flags, matching the game binary's house style; the -config flags are vif's.
@@ -40,7 +40,7 @@ func run() error {
 	if *flagHeadless {
 		backend = "null"
 	}
-	files, err := soundlab.ResolveFiles(*flagConfigDir, *flagMusic, *flagSounds)
+	files, err := stapes.ResolveFiles(*flagConfigDir, *flagMusic, *flagSounds)
 	if err != nil {
 		return err
 	}
@@ -48,11 +48,11 @@ func run() error {
 	// show only after the full screen closes
 	tui := *flagTUI && *flagScript == ""
 	var out io.Writer = os.Stdout
-	lb := soundlab.NewLogBuffer(500)
+	lb := stapes.NewLogBuffer(500)
 	if tui {
 		out = lb
 	}
-	s, err := soundlab.NewSession(soundlab.Options{Backend: backend, SfxVolume: *flagVol, Out: out, Files: files})
+	s, err := stapes.NewSession(stapes.Options{Backend: backend, SfxVolume: *flagVol, Out: out, Files: files})
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func run() error {
 	}
 
 	if *flagScript != "" {
-		return soundlab.RunScriptFile(s, *flagScript)
+		return stapes.RunScriptFile(s, *flagScript)
 	}
 	if tui {
 		return runTUI(s, lb)
@@ -77,7 +77,7 @@ func run() error {
 // runTUI runs the TUI on this process's terminal. A signal becomes a clean loop
 // exit rather than os.Exit, so the terminal is never left raw on the alternate
 // screen, and Close's warning reaches stdout once the screen is gone.
-func runTUI(s *soundlab.Session, lb *soundlab.LogBuffer) error {
+func runTUI(s *stapes.Session, lb *stapes.LogBuffer) error {
 	defer s.SetOut(os.Stdout)
 	term := terminal.New()
 	sig := make(chan os.Signal, 1)
@@ -92,7 +92,7 @@ func runTUI(s *soundlab.Session, lb *soundlab.LogBuffer) error {
 		case <-done:
 		}
 	}()
-	err := soundlab.RunTUI(s, lb, term)
+	err := stapes.RunTUI(s, lb, term)
 	if err != nil {
 		for _, l := range lb.Lines() { // what the session said before the screen failed to open
 			fmt.Println(l)

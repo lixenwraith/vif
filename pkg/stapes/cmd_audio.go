@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 import (
 	"cmp"

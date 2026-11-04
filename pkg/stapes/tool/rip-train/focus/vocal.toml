@@ -3,7 +3,7 @@
 # is a slightly chorused saw through the formants of a vowel with a vibrato
 # that comes in after the onset; a choir pad is wider, slower and on another
 # vowel; both beside the shipped lead and bass. Edit, add, or make your own
-# with soundlab's `new voice` and `set`, then `apply`; the vowel is a, e, i, o
+# with stapes' `new voice` and `set`, then `apply`; the vowel is a, e, i, o
 # or u and the vibrato a rate, a depth in cents and a delay.
 
 [[voice]]

@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 import (
 	"bufio"
@@ -88,7 +88,7 @@ func init() {
 		"bpm":    {"bpm <n>", "tempo, beat-quantized", 1, 1, cmdBPM},
 		"swing":  {"swing <f>", "shuffle 0..0.5", 1, 1, cmdSwing},
 		"tuning": {"tuning [cents]", "the cents the transport plays off A440, a semitone either way: a rip sets the recording's, a song its own; bare shows it", 0, 1, cmdTuning},
-		"fill":   {"fill on|off", "slot-2 phrase auto-fill; soundlab starts with it off", 1, 1, cmdFill},
+		"fill":   {"fill on|off", "slot-2 phrase auto-fill; stapes starts with it off", 1, 1, cmdFill},
 		"key":    {"key <root> <scale> [deg...]", "harmony: MIDI root, scale name, chord degrees", 2, -1, cmdKey},
 		"mute":   {"mute music|sfx|all|none | mute slot <0-3> on|off | mute track <0-3> <n> on|off", "absolute channel mute state, or one slot's, or one track's of the pattern a slot plays, dropped when the slot changes pattern (it plays on in time)", 1, 4, cmdMute},
 		"solo":   {"solo track <0-3> <n> on|off", "sound a slot's soloed tracks alone, its pattern playing on in time; dropped when the slot changes pattern", 4, 4, cmdSolo},

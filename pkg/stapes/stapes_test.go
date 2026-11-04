@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 import (
 	"bytes"
@@ -841,7 +841,7 @@ func TestRollPlacesANoteOnItsPitch(t *testing.T) {
 }
 
 // TestUnknownSettingsAreSkipped: a vif.toml another vif build wrote, with a table
-// this one does not know, still gives soundlab its mixer period.
+// this one does not know, still gives stapes its mixer period.
 func TestUnknownSettingsAreSkipped(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -856,7 +856,7 @@ func TestUnknownSettingsAreSkipped(t *testing.T) {
 	}
 }
 
-// TestAudioFilesFollowVif is the rule that soundlab reads the override vif reads, and
+// TestAudioFilesFollowVif is the rule that stapes reads the override vif reads, and
 // that an untitled save lands where the next vif run reads first: an installed system
 // root is shadowed from the user root, never written.
 func TestAudioFilesFollowVif(t *testing.T) {
@@ -882,7 +882,7 @@ func TestAudioFilesFollowVif(t *testing.T) {
 		}
 		vif, err := resource.Audio(resource.Options{Dir: root})
 		if err != nil || f.music != vif.MusicPath || f.sounds != vif.SoundPath {
-			t.Fatalf("root %q: soundlab reads %+v, vif %+v (%v)", root, f, vif, err)
+			t.Fatalf("root %q: stapes reads %+v, vif %+v (%v)", root, f, vif, err)
 		}
 	}
 
@@ -2356,7 +2356,7 @@ func TestRunScriptVerb(t *testing.T) {
 	if err := Execute(s, "run "+bad); err == nil || !strings.Contains(err.Error(), "line 2") {
 		t.Errorf("a failing line gave %v", err)
 	}
-	// a script's relative paths are its directory's, wherever soundlab runs:
+	// a script's relative paths are its directory's, wherever stapes runs:
 	// the recipe writes a document beside itself and a nested run loads it
 	beside := filepath.Join(dir, "beside.slab")
 	nested := filepath.Join(dir, "nested.slab")

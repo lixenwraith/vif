@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 import (
 	"cmp"
@@ -200,7 +200,7 @@ func RunTUI(s *Session, lb *LogBuffer, term terminal.Terminal) error {
 	a.w, a.h = term.Size()
 	s.ticked = true // the tick conducts a playing song
 	defer func() { s.ticked = false }()
-	fmt.Fprintln(lb, "soundlab — n new pattern, e edit, ^O files, : commands, ? keys, ^S save, ^Q quit")
+	fmt.Fprintln(lb, "stapes — n new pattern, e edit, ^O files, : commands, ? keys, ^S save, ^Q quit")
 	// An empty session has nothing to browse; the TUI seeds builtins per
 	// empty document. REPL and scripts stay unseeded — they own their state.
 	if len(s.pats.order) == 0 {

@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 import (
 	"cmp"
@@ -906,7 +906,7 @@ func cmdShift(s *Session, a []string) error {
 		return err
 	}
 	if by != "step" && len(audio.ScaleIntervals(s.scale)) == 0 {
-		return fmt.Errorf("the transport's scale %d is none soundlab knows", s.scale)
+		return fmt.Errorf("the transport's scale %d is none stapes knows", s.scale)
 	}
 	for i, r := range refs {
 		if by != "step" && isDrumTrack(r.track) {

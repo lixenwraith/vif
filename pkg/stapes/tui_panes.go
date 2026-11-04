@@ -1,6 +1,6 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-package soundlab
+package stapes
 
 // Data and render side of the TUI: log capture, browser lists, the
 // reflection-built inspector tree, header/footer. The inspector walks the
@@ -399,7 +399,7 @@ func (a *tuiApp) renderTooSmall(r tui.Region) {
 			ls = append(ls, line{w, fg})
 		}
 	}
-	add(fmt.Sprintf("soundlab needs a terminal of at least %d×%d", minW, minH), a.theme.Warning)
+	add(fmt.Sprintf("stapes needs a terminal of at least %d×%d", minW, minH), a.theme.Warning)
 	add(fmt.Sprintf("this one is %d×%d", a.w, a.h), a.theme.Fg)
 	if a.quitArmed {
 		add("unsaved changes: ^Q again discards them", a.theme.Warning)
@@ -416,11 +416,11 @@ func (a *tuiApp) renderTooSmall(r tui.Region) {
 // on the right, dropping the least important sections first when narrow
 func (a *tuiApp) renderHeader(r tui.Region) {
 	r.Fill(a.theme.HeaderBg)
-	title, fg := " soundlab", a.theme.HeaderFg
+	title, fg := " stapes", a.theme.HeaderFg
 	if a.ed != nil {
 		title += " › edit " + a.ed.name
 		if a.fresh == a.ed.name {
-			title, fg = " soundlab › new "+a.ed.name, a.theme.Warning
+			title, fg = " stapes › new "+a.ed.name, a.theme.Warning
 		}
 	}
 	r.Text(0, 0, title, fg, a.theme.HeaderBg, terminal.AttrBold)
