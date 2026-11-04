@@ -367,7 +367,9 @@ These boundaries belong to separately maintained modules.
 | `github.com/lixenwraith/toml` | Parsing, reflection-based decoding, and encoding used by scenarios, bot graphs, `vif.toml`, content, keymaps, authored scripts, audio specs and commands. |
 | `github.com/lixenwraith/color` | RGB values, interpolation, blend operations, grayscale, and palette-related color manipulation. |
 | `github.com/lixenwraith/log` | Buffered asynchronous structured-log sink, rotation, retention, and transport below `internal/vlog`. |
+| `github.com/lixenwraith/genetic` | Generational and streaming steady-state engines, their selection, crossover and mutation operators, the multi-population registry with its scout sampling, and the exact-continuation state a capture carries. |
 | `github.com/lixenwraith/audio` | Synthesis, sound caches, the PCM mixer and its backends, voices, patterns and the sequencer, MIDI files, the rip and its learned front end, and the shipped sound and music banks. |
+| `github.com/lixenwraith/transformer` | Float32 inference for small transformers over frame sequences, and the weight file they load; reached only through the audio module's `ripmodel`, the rip's learned front end. |
 | `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window (`pkg/window`), with cgo off. |
 
 `golang.org/x/sys` serves the window's Unix calls, and `golang.org/x/term` is an
