@@ -221,7 +221,7 @@ func (p *Peer) writeLoop() {
 		if p.writeTimeout > 0 {
 			_ = p.conn.SetWriteDeadline(time.Now().Add(p.writeTimeout))
 		}
-		// One flush per burst: a tick queues its epoch, syncs and digests together,
+		// One flush per burst: a tick queues its epoch, syncs and manifests together,
 		// and the linger lets the rest of them join the first in one write.
 		linger.Reset(p.linger)
 	batch:

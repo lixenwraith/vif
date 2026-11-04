@@ -58,7 +58,7 @@ const (
 	// whole capture or a delta against the last keyframe. It is chunked as
 	// MsgStateSnapshot but is its own kind: a capture is part of a handshake on a
 	// stream nothing else owns yet, a correction arrives mid-session beside epochs,
-	// syncs and digests.
+	// syncs and manifests.
 	MsgStateCorrection link.MessageType = 0x27 // Live: one chunk of an authoritative correction
 
 	// The selective-correction exchange: a manifest indexes the capture a correction

@@ -35,8 +35,8 @@ Four streams carry what a receiver cannot re-derive:
   JSON, a keyframe's or a delta's stores in columns (§4), keyframes and shard sets
   deflated by the snapshot codec at level 6. Per peer every 2–60 ticks; a whole
   world or a hash-only proof within each 60-tick floor.
-- **Control**: link probe and echo at 5 Hz, the state digest every 6 ticks, roster
-  and succession records. Small, per link.
+- **Control**: link probe and echo at 5 Hz, roster and succession records. Small,
+  per link.
 
 Each link is one TCP or WebSocket stream per direction, deflated at level 7
 (`NetworkStreamLevel`) against its own history, so a broadcast is deflated once per

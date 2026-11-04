@@ -561,7 +561,8 @@ background. A tap held on the status bar opens the configuration menu, the hold
 every host shares (`MenuHoldDuration`); the app draws it with its own widgets from
 the run's snapshot, a `Dialog` the view's `menuPresentation` hands each change to and
 whose taps come back as ops on a node's id ([Native menu](native-menu.md), [Menu:
-Android](config-menu.md#android)), while the `tui` overlay stays undrawn under it.
+Android and the browser](config-menu.md#android-and-the-browser)), while the `tui`
+overlay stays undrawn under it.
 With mouse input off a press on the bar's rows still reaches the run, and an open
 `tui` overlay (help, telemetry) takes the pointer: a tap picks a card or moves the
 scrollbar's thumb, a finger drags the thumb, and a tap outside the window is Escape. The page does each of these
