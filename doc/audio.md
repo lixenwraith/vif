@@ -463,7 +463,8 @@ runs the package in-process, handing `NewSession` the speakers. It offers:
   piano roll;
 - headless `.slab` script execution;
 - validation, live registry apply/revert, audition, sequencer slot assignment,
-  TOML save, and WAV export.
+  TOML save, WAV export, and MIDI both ways: a pattern or a song written as a
+  Standard MIDI File, and a MIDI file loaded as patterns and a song.
 
 Soundlab registers the same sound and pattern banks the game does, from the same
 embedded assets, and takes vif's `-config-dir`, `-config-music` and
@@ -482,6 +483,43 @@ until `apply`; `revert` restores the document from the canonical registry. Its
 dotted path grammar follows TOML tags and Go types, while domain validation
 runs at `validate`/`apply`. See `cmd/soundlab/README.md` for the command/TUI
 reference.
+
+MIDI goes through one table, `midiInstruments` in `pkg/audio/midi.go`, a row a
+shipped instrument: a kit piece's General MIDI keys on the drum channel, the
+first the one written, and a voice's program with the families of eight
+programs read back as it (pianos, chromatic and pitched percussion the piano,
+basses the bass, guitars and plucked strings the pluck, organs, strings,
+ensembles, pads and effects the pad, brass, reeds, pipes and synth leads the
+lead), so a program no row writes plays on its family's voice. A voice a
+document added is written on the program of the shipped voice nearest it, its
+wave first, then its genes (`midiProgram`).
+
+- Writing (`WriteSongMIDI`, `WritePatternMIDI`; soundlab's `write <pattern|song>
+  <file.mid>`): a type-1 file whose first track holds the tempo, the key
+  signature and a time signature wherever the bar changes, then a track a
+  pattern track by slot, instrument and order, each note its steps long at its
+  velocity, resolved through the song's harmony as the sequencer resolves it; a
+  drum a sixteenth on channel 10. A pattern is a song that plays it once through.
+  A bar is 16 steps, else 12 (3/4) where the pattern's length divides by 12,
+  else the pattern whole (`barSteps`, `timeSignature`). Probability, humanize
+  and tuning are not written.
+- Reading (`MIDIScore.Song`; soundlab's `load` and `merge <file.mid> [name]`):
+  the file's parts quantized on its ticks, a step its sixteenth at its first
+  tempo folded by octaves into the sequencer's range, as `MIDIScore.Rip`
+  folds; a pattern a part a bar, named and shared between bars as `compress`
+  names them, the drum channel the beat, a part on a bass program the bass and
+  the rest the melody, a track a line, each note at its velocity and length;
+  and the song that plays them, in the key signed or the key the notes hold. A
+  bar is its signature's steps (3/4 and 6/8 twelve, 3/8 six); one no pattern
+  holds in whole steps is read in sixteen. It returns what it could not keep, a
+  line each: a tempo change and its bar, a meter, a program played on its
+  family's voice, a key the kit lacks, notes merged, cut or left out.
+- The sequencer counts every bar 16 steps until songs carry a meter
+  ([todo](todo.md#give-songs-and-patterns-a-meter)), so a song read from 3/4
+  plays its bars out of time while each pattern loops right on its own.
+- `ReadMIDI`'s transcript, which `truth` and `corpus <dir> from` read, is the
+  same with or without the programs, keys and signatures the reader takes for
+  a song (`TestReadMIDIReadsTheSameTranscript`).
 
 ## 11. Ripping a recording
 
@@ -568,9 +606,10 @@ own too (`MIDIScore.Rip`, soundlab's `rip <file.mid> <name>`): its notes
 quantized on its ticks, its first tempo folded by octaves into the sequencer's
 range, four-beat bars from where its time signature starts, the key `keyOf` its
 notes' pitch classes as the analysis takes it of the chroma, and a note outside
-E1 to C7 dropped. `WriteMIDI` writes a transcript the other way, a track a line
-and the drums on the drum channel at the rip's tempo (`notes <name>
-<file.mid>`), to correct in a sequencer. The song a rip
+E1 to C7 dropped; each line plays on the shipped voice its program plays on
+(`MIDIScore.Voices`, through §10's table). `WriteMIDI` writes a transcript the
+other way, a track a line and the drums on the drum channel at the rip's tempo
+(`notes <name> <file.mid>`), to correct in a sequencer. The song a rip
 compresses into carries the recording's tuning (`SongDef.Tuning`), and the
 engine plays or renders it there (`AudioEngine.SetTuning`), as the voice fit
 renders its candidate notes there (`RenderNoteAt`), so a render stands beside
@@ -689,7 +728,8 @@ events and keep the sequencer unaware of gameplay concepts.
 - The package's own README, the module's at the spin-off: `pkg/audio/README.md`
 - Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
 - Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`; its transcripts
-  compared and read or written: `match.go`, `midi.go`; its learned front
+  compared and read or written, and patterns and songs as MIDI files:
+  `match.go`, `midi.go`; its learned front
   end `pkg/audio/ripmodel`, over `pkg/transformer`, trained by `tool/rip-train`;
   the design: `doc/rip-design.md`
 - Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `kit.go`,
