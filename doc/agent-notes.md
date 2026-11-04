@@ -435,6 +435,25 @@ that proves wrong or that a document now states, and link the document instead.
 - Read a decay after a high-pass: a delay line's burst holds a mean that rings
   at the loop's loss alone, so the old string's RMS read a 1.45 s T60 at C7
   where its fundamental fell 60 dB in 0.24 s.
+- Iowa's pizzicato double bass comes as runs, one string a file, edited to
+  digital silence between notes: cut a note at an onset whose peak is within
+  22 dB of the run's (fainter ones are the string's buzz) and end it at its
+  first 50 ms under an RMS of 1e-5, or its level reads -240 dB at 3 s.
+- Levels re a note's peak and a mel distance are both blind to how loud a voice
+  is: a bass fit went to a 50 Hz cutoff at Q 0.1, its notes 20 dB down, and
+  scored best. Hold a fit's first half second RMS to main's (`RenderNote` over
+  a few notes and velocities) before shipping it.
+- A modal voice's two strings cancel a partial when the beat leaves them half a
+  cycle apart where the slower overtakes the faster: with the piano's genes
+  that took the fundamental out of B4 to E5 within half a second, and a refit
+  moved the band (D5 to A5) rather than closing it. `excite` now holds the
+  hand-over to a quarter cycle. Iowa's notes have such dips (C5 -29 dB at 0.5
+  s), one note at a time, never a band.
+- The soundlab bench's loops play no piano: a piano change moves no bench
+  number, a bass change does.
+- `PatternPlayer.TriggerNoteMIDI` stamps a voice's serial after `Trigger`, so a
+  note seeded by its serial in `Trigger` reads the slot's previous note's:
+  still a replay's same, and different for two notes of one pitch.
 
 ## Locks
 

@@ -262,9 +262,15 @@ name retunes that instrument in place and a new name adds an instrument, which
 patterns name as they name any. `DefineVoice` hot-swaps one: the next note plays
 the new voice while a sounding one finishes on its own, and an instrument no voice
 defines plays a plain sine. The drum kit plays cached sounds. Of the shipped
-voices, the pad and the lead are band-limited saws. A string is never held at a
-sustain: it fades as it rings, a held note ends on its own, and the note-off is
-its damper (`release`); the ADSR's decay and sustain shape the oscillators
+voices, the pad and the lead are band-limited saws. An oscillator voice's unison
+runs free: each oscillator of a stack starts at its own phase (a lone one at 0),
+seeded by the note and its trigger order so a replay plays the same, and a
+detuned one wanders about its place in the spread by up to three tenths of the
+detune, over 3 to 14 s; the filter envelope (`env_amount` at full velocity)
+opens as far as the velocity takes it, and `drive` rounds the pad's edge as it
+does the lead's. A string is never held at a sustain: it fades as it rings, a
+held note ends on its own, and the note-off is its damper (`release`); the
+ADSR's decay and sustain shape the oscillators
 alone. The pluck is a delay line after Karplus and Strong with Jaffe and
 Smith's extensions: a seeded noise burst, through the comb of where it is
 plucked (`strike_pos`) and a low-pass that darkens a soft note (`hammer_hz` at
@@ -278,13 +284,20 @@ modal voices, `decay_track` shortens it above middle C and lengthens it below
 slope, its T60 halving about every octave. The bass and the piano are modal voices: a string as its partials, each
 a decaying phasor at `k·f0` stretched by the string's inharmonicity, at the
 amplitude the strike position's comb, the spectral tilt (1/k struck, 1/k²
-plucked) and a velocity-dependent hammer low-pass leave it, decaying faster the
-higher it sits; the lowest partials carry a second, slightly detuned string whose
-slower aftersound gives the double decay, and a few milliseconds of filtered
-noise are the hammer or finger contact. The piano has a grand's stretch and the
-soundboard's roll-off, its decay fitted to a recorded piano's levels (the
-University of Iowa samples, C1 to C7); the bass is finger-plucked into a
-pickup resonance and an amp, its note-off a 45 ms damper.
+plucked), the body and the hammer leave it, decaying faster the higher it sits.
+The body is a third-order high-pass at `bright` kHz: a soundboard radiates the
+partials under it weakly, as a piano does its bass fundamentals. The hammer is
+a low-pass at `hammer_hz` times the velocity to the 1.5, so a soft note is
+darker as well as quieter, a recorded piano's pp a third of an octave darker
+than its mf. The lowest partials the body sounds carry a second, slightly
+detuned string whose slower aftersound gives the double decay; both start in
+phase, and a beat that would leave them over a quarter cycle apart where the
+second overtakes the first moves to a quarter, so the hand-over never cancels
+the partial. A few milliseconds of filtered noise are the hammer or finger
+contact. The piano has a grand's stretch, its decay, brightness and dynamics
+fitted to a recorded piano's notes at pp, mf and ff (the University of Iowa
+samples, C1 to C7); the bass is a pizzicato double bass fitted the same way to
+Iowa's, a thump that falls away within a second, its note-off a 45 ms damper.
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming

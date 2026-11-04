@@ -136,6 +136,18 @@ const (
 	// strikeAt is where along the string a pluck or hammer lands when the voice
 	// leaves strike_pos unset
 	strikeAt = 0.12
+	// bodyHz is a modal voice's bright 1: its soundboard or body radiates the
+	// partials under bright·bodyHz weakly, as a piano's does its bass fundamentals
+	bodyHz = 1000.0
+	// driftShare is how far a unison oscillator wanders in pitch, as a share of
+	// the detune between neighbours, over a period of driftMinHz to driftMaxHz
+	driftShare = 0.3
+	driftMinHz = 0.07
+	driftMaxHz = 0.3
+	// hammerVelExp is how a bank's strike low-pass follows velocity, hammer_hz
+	// times velocity to it: a soft hammer stays on the string longer, so a
+	// recorded piano's pp is a third of an octave darker than its mf
+	hammerVelExp = 1.5
 )
 
 // TonalVoice generates pitched sounds with envelope; the voice it plays is the
@@ -153,7 +165,11 @@ type TonalVoice struct {
 	modPhase [maxUnison]float64 // FM modulator phases
 	ratio    [maxUnison]float64 // unison detune ratios
 	subPhase float64
-	serial   uint64 // Trigger order; StealOldest ranks on this
+	// each unison oscillator's slow pitch wander: its phase 0-1, rate in Hz and
+	// the ratio it plays at now; depth is the wander's share of the note
+	drift, driftHz, wander [maxUnison]float64
+	depth                  float64
+	serial                 uint64 // Trigger order; StealOldest ranks on this
 
 	// vibrato's phase and the note's age, and the vowel's formant bank
 	vibPhase float64
@@ -218,8 +234,14 @@ func (v *TonalVoice) Sample() float64 {
 		dt *= 1 + sp.VibratoCents*depth*math.Ln2/1200*math.Sin(2*math.Pi*v.vibPhase)
 		v.vibPhase = wrap(v.vibPhase + sp.VibratoHz/AudioSampleRate)
 	}
-	v.age++
 	n := max(min(sp.Unison, maxUnison), 1)
+	if v.depth > 0 && v.age%filterCoefHold == 0 {
+		for i := range n {
+			v.wander[i] = v.ratio[i] * (1 + v.depth*math.Sin(2*math.Pi*v.drift[i]))
+			v.drift[i] = wrap(v.drift[i] + v.driftHz[i]*filterCoefHold/AudioSampleRate)
+		}
+	}
+	v.age++
 	var raw float64
 	switch {
 	case v.wave == waveModal:
@@ -233,7 +255,7 @@ func (v *TonalVoice) Sample() float64 {
 			idx = sp.FMIndex * v.ienv
 		}
 		for i := range n {
-			d := dt * v.ratio[i]
+			d := dt * v.wander[i]
 			mod := math.Sin(2 * math.Pi * v.modPhase[i])
 			raw += math.Sin(2*math.Pi*v.phase[i] + idx*mod)
 			v.phase[i] = wrap(v.phase[i] + d)
@@ -242,7 +264,7 @@ func (v *TonalVoice) Sample() float64 {
 		raw /= float64(n)
 	default:
 		for i := range n {
-			d := dt * v.ratio[i]
+			d := dt * v.wander[i]
 			raw += blepWave(v.wave, v.phase[i], d)
 			v.phase[i] = wrap(v.phase[i] + d)
 		}
@@ -344,11 +366,9 @@ func (v *TonalVoice) pluckBurst(sp *VoiceDef, period float64) {
 	}
 	m := min(int(h*period+0.5), n/2)
 	str := v.str[:n+m]
-	seed := uint32(v.note)*2654435761 + uint32(v.serial)*40503 + 1
+	seed := v.noteSeed()
 	for i := range n {
-		seed ^= seed << 13
-		seed ^= seed >> 17
-		seed ^= seed << 5
+		seed = xorshift(seed)
 		str[i] = float64(seed)/float64(1<<32)*2 - 1
 	}
 	// the burst is one period of a periodic signal, so the comb wraps round it
@@ -406,9 +426,7 @@ func (v *TonalVoice) modal() float64 {
 	}
 	s *= v.mscale
 	if v.knockEnv > 1e-4 {
-		v.knockSeed ^= v.knockSeed << 13
-		v.knockSeed ^= v.knockSeed >> 17
-		v.knockSeed ^= v.knockSeed << 5
+		v.knockSeed = xorshift(v.knockSeed)
 		n := float64(v.knockSeed)/float64(1<<32)*2 - 1
 		v.knockLP += 0.25 * (n - v.knockLP) // a 2 kHz one-pole
 		s += v.knockLP * v.knockEnv
@@ -429,8 +447,9 @@ func (v *TonalVoice) modal() float64 {
 
 // excite builds the modal bank for the note: partial k sits at k·f0 stretched by
 // the inharmonicity, at the amplitude the strike position's comb, the spectral
-// tilt and the hammer's low-pass leave it, decaying faster the higher it is; the
-// lowest partials get the coupled pair's slower, slightly detuned second string
+// tilt, the body's high-pass and the hammer's velocity-led low-pass leave it,
+// decaying faster the higher it is; the lowest partials the body sounds get the
+// coupled pair's slower, slightly detuned second string, beating against the first
 func (v *TonalVoice) excite(sp *VoiceDef) {
 	n := max(min(sp.Partials, maxPartials, int(modalTopHz/v.freq)), 4)
 	if cap(v.mre) < maxPartials+pairPartials {
@@ -449,7 +468,9 @@ func (v *TonalVoice) excite(sp *VoiceDef) {
 	vel := max(v.velocity, 0.05)
 	b := sp.Inharm * math.Pow(v.freq/keyRefHz, sp.InharmTrack)
 	tau := max(sp.DecayTime, 0.05) * math.Pow(keyRefHz/v.freq, sp.DecayTrack)
-	fc := sp.HammerHz * (0.3 + 0.7*vel)
+	fc := sp.HammerHz * math.Pow(vel, hammerVelExp)
+	body := sp.Bright * bodyHz
+	pair0 := max(int(math.Round(body/v.freq)), 1)
 	slow := sp.PairSlow
 	if slow <= 0 {
 		slow = 0.35
@@ -471,6 +492,10 @@ func (v *TonalVoice) excite(sp *VoiceDef) {
 		fk := float64(k)
 		f := fk * v.freq * math.Sqrt(1+b*fk*fk)
 		a := math.Abs(math.Sin(math.Pi*fk*h)) / comb0 / math.Pow(fk, tilt)
+		if body > 0 {
+			r := (f / body) * (f / body) * (f / body)
+			a *= r / math.Sqrt(1+r*r)
+		}
 		if fc > 0 {
 			a /= 1 + (f/fc)*(f/fc)
 		}
@@ -478,9 +503,23 @@ func (v *TonalVoice) excite(sp *VoiceDef) {
 		if sp.DampHz > 0 {
 			sigma *= 1 + (f/sp.DampHz)*(f/sp.DampHz)
 		}
-		if k <= pairPartials && sp.PairLevel > 0 {
+		if k >= pair0 && k < pair0+pairPartials && sp.PairLevel > 0 {
+			// both strings start in phase; where the second overtakes the
+			// first, at cross, a beat that would leave them over a quarter
+			// cycle apart moves to a quarter, so the hand-over never cancels
+			f2 := f * detune
+			if slow < 1 && detune != 1 {
+				if cross := math.Log(1/sp.PairLevel) / (sigma * (1 - slow)); cross > 0 {
+					beats := math.Abs(f2-f) * cross
+					whole, part := math.Modf(beats)
+					if part > 0.25 && part < 0.75 {
+						part = 0.25 + 0.5*math.Round(part-0.25)
+						f2 = f + math.Copysign((whole+part)/cross, detune-1)
+					}
+				}
+			}
 			add(f, a/(1+sp.PairLevel), sigma)
-			add(f*detune, a*sp.PairLevel/(1+sp.PairLevel), sigma*slow)
+			add(f2, a*sp.PairLevel/(1+sp.PairLevel), sigma*slow)
 		} else {
 			add(f, a, sigma)
 		}
@@ -488,11 +527,12 @@ func (v *TonalVoice) excite(sp *VoiceDef) {
 	v.mscale = 1 / max(sum, 1e-9)
 	v.check = 0
 	v.knockEnv, v.knockLP = sp.Knock*vel, 0
-	v.knockSeed = uint32(v.note)*2654435761 + uint32(v.serial)*40503 + 1
+	v.knockSeed = v.noteSeed()
 }
 
 // filter is a trapezoidal state-variable low-pass whose cutoff follows the key and
-// the filter envelope; coefficients refresh every filterCoefHold samples
+// the filter envelope, which opens as far as the velocity takes it; coefficients
+// refresh every filterCoefHold samples
 func (v *TonalVoice) filter(x float64) float64 {
 	sp := v.spec
 	if sp.EnvDecay > 0 {
@@ -502,7 +542,7 @@ func (v *TonalVoice) filter(x float64) float64 {
 	}
 	if v.coefLeft--; v.coefLeft <= 0 {
 		v.coefLeft = filterCoefHold
-		fc := sp.Cutoff + sp.KeyTrack*v.freq + sp.EnvAmount*v.fenv
+		fc := sp.Cutoff + sp.KeyTrack*v.freq + sp.EnvAmount*v.fenv*v.velocity
 		fc = min(max(fc, 20), 0.45*AudioSampleRate)
 		g := math.Tan(math.Pi * fc / AudioSampleRate)
 		k := 1 / sp.Q
@@ -586,16 +626,30 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 	v.note = params.Note
 	v.freq = NoteFreq(params.Note) * v.kit.ratio()
 	v.velocity = params.Velocity
-	// Unison spreads symmetrically about the note; phases stagger so the stack
-	// does not start as one in-phase saw
+	// Unison spreads symmetrically about the note; a stack's oscillators start
+	// at their own phases, as free-running ones do, and wander in pitch when
+	// detuned. A lone one starts at 0: its start phase is inaudible, and the
+	// rip's analysis of two lines on one instrument hears it
 	n := max(min(sp.Unison, maxUnison), 1)
 	detune := sp.Detune
 	if detune <= 0 {
 		detune = 1
 	}
+	v.depth = 0
+	if n > 1 {
+		v.depth = driftShare * math.Abs(detune-1)
+	}
+	seed := v.noteSeed()
+	unit := func() float64 { seed = xorshift(seed); return float64(seed) / (1 << 32) }
 	for i := range n {
 		v.ratio[i] = math.Pow(detune, float64(i)-float64(n-1)/2)
-		v.phase[i] = float64(i) / float64(n)
+		v.wander[i] = v.ratio[i]
+		v.phase[i] = 0
+		if n > 1 {
+			v.phase[i] = unit()
+		}
+		v.drift[i] = unit()
+		v.driftHz[i] = driftMinHz + (driftMaxHz-driftMinHz)*unit()
 		v.modPhase[i] = 0
 	}
 	v.subPhase = 0
@@ -694,6 +748,18 @@ func (b *biquad) process(x float64) float64 {
 	y := b.b0*x + b.b1*b.x1 + b.b2*b.x2 - b.a1*b.y1 - b.a2*b.y2
 	b.x2, b.x1, b.y2, b.y1 = b.x1, x, b.y1, y
 	return y
+}
+
+// noteSeed seeds a note's noise and phases by its pitch and trigger order, so a
+// replay plays the same note
+func (v *TonalVoice) noteSeed() uint32 {
+	return uint32(v.note)*2654435761 + uint32(v.serial)*40503 + 1
+}
+
+func xorshift(s uint32) uint32 {
+	s ^= s << 13
+	s ^= s >> 17
+	return s ^ s<<5
 }
 
 func wrap(p float64) float64 {

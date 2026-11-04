@@ -1183,3 +1183,127 @@ func TestPluckedAndStruckNotesFadeOnTheirOwn(t *testing.T) {
 		}
 	}
 }
+
+// TestOscillatorsRunFree: an oscillator voice's unison starts each note at
+// phases drawn from the note and its trigger order, so a replay is the same
+// note and the next trigger is not; a detuned stack wanders in pitch within
+// its share of the detune, and an undetuned one holds it.
+func TestOscillatorsRunFree(t *testing.T) {
+	k := &kit{voices: make([]*VoiceDef, InstrLead+1), tuning: 1}
+	tv := NewTonalVoice(k)
+	play := func(v *VoiceDef, serial uint64) (out []float64, lo, hi float64) {
+		k.voices[InstrLead] = v
+		tv.serial = serial
+		tv.Trigger(VoiceParams{Note: 60, Velocity: 1, Duration: 4 * AudioSampleRate, Instrument: InstrLead})
+		lo, hi = math.Inf(1), math.Inf(-1)
+		for range 4 * AudioSampleRate {
+			out = append(out, tv.Sample())
+			lo, hi = min(lo, tv.wander[0]/tv.ratio[0]), max(hi, tv.wander[0]/tv.ratio[0])
+		}
+		return out, lo, hi
+	}
+	saw := &VoiceDef{Name: "v", Wave: "saw", Unison: 3, Detune: 1.01, Attack: 0.01, Sustain: 1, Release: 0.1}
+	a, lo, hi := play(saw, 1)
+	b, _, _ := play(saw, 1)
+	c, _, _ := play(saw, 2)
+	if !slices.Equal(a, b) || slices.Equal(a, c) {
+		t.Errorf("a replay differs (%v) or the next trigger repeats it (%v)", !slices.Equal(a, b), slices.Equal(a, c))
+	}
+	if d := driftShare * 0.01; hi-1 > d || 1-lo > d || hi-lo < d/4 {
+		t.Errorf("the wander spans %.5f to %.5f of the pitch, want within ±%.4f and moving", lo, hi, d)
+	}
+	plain := *saw
+	plain.Detune = 1
+	if _, lo, hi := play(&plain, 1); lo != 1 || hi != 1 {
+		t.Errorf("an undetuned stack wandered from %.5f to %.5f", lo, hi)
+	}
+}
+
+// TestFilterEnvelopeFollowsVelocity: a softer note opens the filter less, so it
+// is darker as well as quieter; a voice with no envelope sweep plays every
+// velocity as one sound scaled.
+func TestFilterEnvelopeFollowsVelocity(t *testing.T) {
+	hiShare := func(x []float64) float64 {
+		var all, hp, prev float64
+		for _, s := range x {
+			all += s * s
+			hp += (s - prev) * (s - prev)
+			prev = s
+		}
+		return hp / all
+	}
+	swept := &VoiceDef{Name: "v", Wave: "saw", Cutoff: 300, EnvAmount: 3000, EnvDecay: 0.2, Q: 0.7, Attack: 0.005, Sustain: 1, Release: 0.1}
+	soft, loud := RenderNote(swept, 60, 0.3, 0.3, 0), RenderNote(swept, 60, 0.9, 0.3, 0)
+	if hiShare(soft) > 0.7*hiShare(loud) {
+		t.Errorf("the soft note's edge share %.4f is not under the loud one's %.4f", hiShare(soft), hiShare(loud))
+	}
+	still := *swept
+	still.EnvAmount = 0
+	soft, loud = RenderNote(&still, 60, 0.3, 0.3, 0), RenderNote(&still, 60, 0.9, 0.3, 0)
+	for i := range soft {
+		if math.Abs(soft[i]*3-loud[i]) > 1e-12 {
+			t.Fatalf("with no sweep, velocity changed the sound at sample %d", i)
+		}
+	}
+}
+
+// TestBankBodyAndStrikeShapeItsPartials: a modal voice's body sounds the
+// partials under bright·bodyHz weakly, as a piano's soundboard does its bass
+// fundamentals, and a softer strike leaves the upper partials weaker.
+func TestBankBodyAndStrikeShapeItsPartials(t *testing.T) {
+	k := &kit{voices: make([]*VoiceDef, InstrLead+1), tuning: 1}
+	tv := NewTonalVoice(k)
+	partials := func(v *VoiceDef, vel float64) []float64 {
+		k.voices[InstrLead] = v
+		tv.Trigger(VoiceParams{Note: 36, Velocity: vel, Instrument: InstrLead})
+		return slices.Clone(tv.mre)
+	}
+	db := func(a, b float64) float64 { return 20 * math.Log10(a/b) }
+	bare := &VoiceDef{Name: "v", Wave: "modal", Partials: 24, HammerHz: 2000, DecayTime: 1, Release: 0.1}
+	body := *bare
+	body.Bright = 0.3
+	p, q := partials(bare, 1), partials(&body, 1)
+	if drop := db(p[0], p[5]) - db(q[0], q[5]); drop < 25 {
+		t.Errorf("the body took %.1f dB off C2's fundamental against its sixth partial, want 25", drop)
+	}
+	soft, hard := partials(bare, 0.3), partials(bare, 0.9)
+	if lift := db(hard[15], hard[0]) - db(soft[15], soft[0]); lift < 12 {
+		t.Errorf("a hard strike lifts the sixteenth partial %.1f dB over a soft one, want 12", lift)
+	}
+}
+
+// TestPairNeverCancelsAPartial: a modal bank's two strings start in phase and are
+// a quarter cycle apart where the slower one overtakes the faster, across the
+// keyboard, so no note loses a paired partial to the beat at the hand-over
+func TestPairNeverCancelsAPartial(t *testing.T) {
+	k := &kit{voices: make([]*VoiceDef, InstrLead+1), tuning: 1}
+	tv := NewTonalVoice(k)
+	k.voices[InstrLead] = &VoiceDef{Name: "v", Wave: "modal", Partials: 24, Bright: 0.19, HammerHz: 1670,
+		DecayTime: 0.4, DecayTrack: 0.67, Pair: 3, PairLevel: 0.2, PairSlow: 0.17, Release: 0.1}
+	var pairs int
+	for note := 36; note <= 96; note++ {
+		tv.Trigger(VoiceParams{Note: note, Velocity: 0.6, Instrument: InstrLead})
+		for i := 0; i+1 < len(tv.mre); i++ {
+			w1, w2 := math.Atan2(tv.mci[i], tv.mcr[i]), math.Atan2(tv.mci[i+1], tv.mcr[i+1])
+			if math.Abs(w2-w1) > 0.01*w1 {
+				continue
+			}
+			pairs++
+			d1, d2 := math.Hypot(tv.mcr[i], tv.mci[i]), math.Hypot(tv.mcr[i+1], tv.mci[i+1])
+			a1, a2 := tv.mre[i], tv.mre[i+1]
+			if tv.mim[i] != 0 || tv.mim[i+1] != 0 || a2 >= a1 || d2 <= d1 {
+				t.Fatalf("note %d: the strings start at %v and %v, decaying %v and %v", note, a1, a2, d1, d2)
+			}
+			n := math.Log(a1/a2) / math.Log(d2/d1) // samples to the hand-over
+			x, y := a1*math.Pow(d1, n), a2*math.Pow(d2, n)
+			sum := math.Hypot(x+y*math.Cos((w2-w1)*n), y*math.Sin((w2-w1)*n))
+			if sum < 1.35*x {
+				t.Errorf("note %d: partial at %.1f Hz falls to %.2f of one string at the hand-over, want a quarter cycle's 1.41",
+					note, w1*AudioSampleRate/(2*math.Pi), sum/x)
+			}
+		}
+	}
+	if pairs < 61 {
+		t.Errorf("found %d paired partials over 61 notes, want one a note at least", pairs)
+	}
+}
