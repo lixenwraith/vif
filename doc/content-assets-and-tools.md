@@ -281,7 +281,7 @@ transparent is stored transparent in dual output, so it creates no wall entity. 
 
 | Tool | Purpose |
 |---|---|
-| `pkg/stapes` | Stapes (formerly soundlab), a module of its own: edit, validate, audition, sequence, script, and export audio definitions, and rip recordings into them. See [Audio §4](audio.md#4-stapes). |
+| `lixenwraith/stapes` | Stapes (formerly soundlab), in a repository of its own: edit, validate, audition, sequence, script, and export audio definitions, and rip recordings into them. See [Audio §4](audio.md#4-stapes). |
 | `tool/font-editor` | Edit the compiled 12-row splash font. |
 | `tool/font-atlas` | Render the font atlas a graphical host draws with from a monospace TrueType (Python, Pillow). See its README. |
 | `tool/blend-tester` | Inspect compositing operations, masks, effects, truecolor, and palette interactions. |

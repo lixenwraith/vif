@@ -214,8 +214,8 @@ The practical dependency rules are:
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
 
-Stapes (formerly soundlab), the audio authoring tool, is a sibling module nested
-in `pkg/stapes` until it moves to `lixenwraith/stapes`. It stands on
+Stapes (formerly soundlab), the audio authoring tool, is a sibling module,
+[`lixenwraith/stapes`](https://github.com/lixenwraith/stapes). It stands on
 `lixenwraith/audio` and `lixenwraith/genetic` as vif does, and it alone loads
 the rip's learned front end, the audio module's `ripmodel` over
 `lixenwraith/transformer`, so vif's `go.mod` names no transformer. vif imports
