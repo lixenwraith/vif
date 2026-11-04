@@ -1,6 +1,6 @@
 package parameter
 
-import "github.com/lixenwraith/vif/pkg/genetic"
+import "github.com/lixenwraith/genetic"
 
 // Genetic Algorithm - Population
 const (

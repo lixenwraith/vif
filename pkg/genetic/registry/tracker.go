@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lixenwraith/vif/pkg/genetic"
-	"github.com/lixenwraith/vif/pkg/genetic/fitness"
-	"github.com/lixenwraith/vif/pkg/genetic/tracking"
+	"github.com/lixenwraith/genetic"
+	"github.com/lixenwraith/genetic/fitness"
+	"github.com/lixenwraith/genetic/tracking"
 )
 
 // TrackedSpecies owns the engine and optional metric pipeline for one species

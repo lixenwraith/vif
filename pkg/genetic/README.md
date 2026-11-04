@@ -25,7 +25,7 @@ Two engines share one operator set:
 | `genetic/persistence` | `genetic` | Population save/load, atomic writes, JSON by default |
 
 `genetic` never imports its own subpackages. Using `StreamingEngine` directly
-requires nothing else. `sandbox/genetic` is a runnable example: two streams of
+requires nothing else. `examples/lander` is a runnable example: two streams of
 lander controllers, a population each, released in step from opposite corners
 toward one pad, where two landers of different streams that meet are both
 destroyed. Each population's best answer depends on the other's, so the example
@@ -652,7 +652,7 @@ Implement `Store` directly for non-file backends — the registry only needs
 
 ## Worked example
 
-Maximize `f(x, y) = -(x-3)² - (y+1)²` with asynchronous scoring. `sandbox/genetic`
+Maximize `f(x, y) = -(x-3)² - (y+1)²` with asynchronous scoring. `examples/lander`
 is the full-size version of this loop, with evaluations that take hundreds of
 ticks and finish out of order.
 
@@ -664,7 +664,7 @@ import (
     "math/rand/v2"
     "slices"
 
-    "github.com/lixenwraith/vif/pkg/genetic"
+    "github.com/lixenwraith/genetic"
 )
 
 func main() {

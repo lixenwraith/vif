@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vif/pkg/genetic"
-	"github.com/lixenwraith/vif/pkg/genetic/fitness"
-	"github.com/lixenwraith/vif/pkg/genetic/persistence"
-	"github.com/lixenwraith/vif/pkg/genetic/tracking"
+	"github.com/lixenwraith/genetic"
+	"github.com/lixenwraith/genetic/fitness"
+	"github.com/lixenwraith/genetic/persistence"
+	"github.com/lixenwraith/genetic/tracking"
 )
 
 func TestRegistry_RegisterAndSample(t *testing.T) {
