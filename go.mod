@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/ebitengine/purego v0.11.2
-	github.com/lixenwraith/audio v0.0.0
+	github.com/lixenwraith/audio v0.1.0
 	github.com/lixenwraith/color v0.1.5
 	github.com/lixenwraith/genetic v0.1.0
 	github.com/lixenwraith/log v0.1.13
@@ -17,5 +17,3 @@ require (
 	github.com/lixenwraith/transformer v0.1.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 )
-
-replace github.com/lixenwraith/audio => ./pkg/audio

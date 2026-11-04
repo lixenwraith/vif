@@ -646,17 +646,15 @@ verbs stay as they are, and so does every other host.
 
 `make verify` compiles the full (also with cgo off), `novlog`, audio-free,
 dedicated, `vif_nogui`, browser and Windows variants, tests the audio-free and
-dedicated profiles, the `android` module and `pkg/window`, vets, tests and
-cross-builds the nested audio module, and runs the §3 dependency check in
-addition to the normal test and vet gates. A release should also run:
+dedicated profiles, the `android` module and `pkg/window`, and runs the §3
+dependency check in addition to the normal test and vet gates. A release should
+also run:
 
 ```bash
 go generate ./internal/manifest
 go build ./...
 go test ./...
 go vet ./...
-go -C pkg/audio test ./...
-go -C pkg/audio vet ./...
 ./script/test.sh all
 node --check web/terminal.js web/worker.js web/audio-worklet.js
 ```

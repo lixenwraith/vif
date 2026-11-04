@@ -1309,7 +1309,7 @@ nothing.
 
 ## Audio
 
-The audio library's own items are in [its todo](../pkg/audio/doc/todo.md);
+The audio library's own items are in [its todo](https://github.com/lixenwraith/audio/blob/main/doc/todo.md);
 these also change soundlab.
 
 ### Bring soundlab to Android (soundlab mobile)
@@ -1350,7 +1350,7 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
   `internal/soundlab`
 
 `RipSamples` ([Audio library
-§9](../pkg/audio/doc/audio.md#9-ripping-a-recording)) reads tempo, bars, key,
+§9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording)) reads tempo, bars, key,
 drums, melody and bass off a recording under `RipParams`, through the built-in
 analysis or `ripmodel`; [Rip design](rip-design.md) is the whole plan.
 The search over the parameters is in place (`tune`), as are the corpus the

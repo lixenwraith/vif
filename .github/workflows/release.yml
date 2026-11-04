@@ -49,10 +49,6 @@ jobs:
       - name: Vet and test
         run: go vet ./... && go test ./...
 
-      - name: Vet and test the audio module
-        working-directory: pkg/audio
-        run: go vet ./... && go test ./...
-
       - name: Build archives
         shell: bash
         run: |

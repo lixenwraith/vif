@@ -66,9 +66,9 @@ Focused references:
 - [Transformer library](https://github.com/lixenwraith/transformer) documents the
   inference library the rip's model runs on, a module of its own, and its weight
   file.
-- [Audio library](../pkg/audio/README.md) documents the synthesis, mixing,
+- [Audio library](https://github.com/lixenwraith/audio) documents the synthesis, mixing,
   sequencing and rip engine with its shipped banks, a module of its own, and
-  [its design](../pkg/audio/doc/audio.md): the stream contract, backends,
+  [its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md): the stream contract, backends,
   sounds, the mixer, the sequencer, MIDI and the rip.
 - [Soundlab reference](../cmd/soundlab/README.md) covers the audio authoring
   environment.
@@ -99,7 +99,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Alternate scenarios | `wad/scenario/*` | selected by name or path with `-s` |
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
-| Built-in sound and music banks | the audio module's `bank/*.toml` (`pkg/audio/bank`) | `bank.Sounds`/`bank.Patterns`, `AudioConfig.BaseSounds`/`BaseVoices`/`BasePatterns` |
+| Built-in sound and music banks | the audio module's `bank/*.toml` ([`lixenwraith/audio/bank`](https://github.com/lixenwraith/audio/tree/main/bank)) | `bank.Sounds`/`bank.Patterns`, `AudioConfig.BaseSounds`/`BaseVoices`/`BasePatterns` |
 | CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go`, and the manual's prose in its `writeManual` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
 | Release archive READMEs | `deploy/package/release-readme.md` | `make release-readme`, the `README.md` in each release archive |
 | External package versions | `go.mod` | Go module resolver |

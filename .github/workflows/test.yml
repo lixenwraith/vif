@@ -28,7 +28,6 @@ jobs:
         cache-dependency-path: |
           go.sum
           android/go.sum
-          pkg/audio/go.sum
 
     - name: Download dependencies
       run: go mod download
@@ -68,19 +67,6 @@ jobs:
     - name: Vet and test the Android host module
       working-directory: android
       run: go vet ./... && go test ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
-
-    # A nested module, which ./... skips, built for the targets its own CI builds.
-    - name: Vet, race-test and cross-build the audio module
-      working-directory: pkg/audio
-      run: |
-        go vet ./...
-        go test -race ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
-        GOOS=js GOARCH=wasm go build ./...
-        GOOS=freebsd GOARCH=amd64 go build ./...
-        GOOS=android GOARCH=arm64 go build ./...
-        GOARCH=386 go build ./...
-      env:
-        GORACE: "halt_on_error=1"
 
     - name: Run tests with race detector
       # Soundlab's suite renders and hears music; under the detector on a busy

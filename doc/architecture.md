@@ -297,7 +297,7 @@ See [Rendering](rendering.md).
 
 ## 9. Audio boundary
 
-The audio library, `lixenwraith/audio` ([its design](../pkg/audio/doc/audio.md)),
+The audio library, `lixenwraith/audio` ([its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md)),
 owns synthesis, pre-rendered sound caches, mixing, voices, harmony, patterns, a
 three-slot sequencer and the shipped banks. It has no gameplay or APM concept.
 `internal/system.MusicSystem` maps the game's five-second APM signal to tempo
@@ -367,7 +367,7 @@ These boundaries belong to separately maintained modules.
 | `github.com/lixenwraith/toml` | Parsing, reflection-based decoding, and encoding used by scenarios, bot graphs, `vif.toml`, content, keymaps, authored scripts, audio specs and commands. |
 | `github.com/lixenwraith/color` | RGB values, interpolation, blend operations, grayscale, and palette-related color manipulation. |
 | `github.com/lixenwraith/log` | Buffered asynchronous structured-log sink, rotation, retention, and transport below `internal/vlog`. |
-| `github.com/lixenwraith/audio` | Synthesis, sound caches, the PCM mixer and its backends, voices, patterns and the sequencer, MIDI files, the rip and its learned front end, and the shipped sound and music banks; held in `pkg/audio` by a `replace` until it has a repository. |
+| `github.com/lixenwraith/audio` | Synthesis, sound caches, the PCM mixer and its backends, voices, patterns and the sequencer, MIDI files, the rip and its learned front end, and the shipped sound and music banks. |
 | `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window (`pkg/window`), with cgo off. |
 
 `golang.org/x/sys` serves the window's Unix calls, and `golang.org/x/term` is an

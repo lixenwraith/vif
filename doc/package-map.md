@@ -211,15 +211,13 @@ The practical dependency rules are:
 | `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, soundlab, the router; its `macro` package expands the macros scenarios, bot graphs and audio documents define ([TOML macros](toml-macros.md)) | Schemas, validation policy, semantic models, and application resolution. |
 | `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/genetic` | `GeneticSystem` and `engine.GeneticResource`, which evolve eye types through the registry, the genetic tunables in `parameter`, and stapes' searches in `internal/soundlab`: the voice fit, the dictionary and `tune` ([AI and evolution §3](ai-physics-and-evolution.md#3-genetic-library)) | The game adapter: species declarations, probe bins, eye fitness, and the capture's genetic carrier (D-19). |
-| `lixenwraith/audio` | `internal/service`'s audio adapter, which runs the engine over the `bank` package's sounds and music and the overrides; the engine's audio resource, the audio systems' requests, the events' audio values (`model`) and the audio tuning in `parameter`; `-check`'s audio documents in `resource`; and soundlab, over the rip and its learned front end (`ripmodel`) too ([its design](../pkg/audio/doc/audio.md)) | Game policy: the adaptive conductor, sfx levels and sound shapes, the overrides' resolution, the speakers' host and telemetry ([Audio](audio.md)). |
+| `lixenwraith/audio` | `internal/service`'s audio adapter, which runs the engine over the `bank` package's sounds and music and the overrides; the engine's audio resource, the audio systems' requests, the events' audio values (`model`) and the audio tuning in `parameter`; `-check`'s audio documents in `resource`; and soundlab, over the rip and its learned front end (`ripmodel`) too ([its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md)) | Game policy: the adaptive conductor, sfx levels and sound shapes, the overrides' resolution, the speakers' host and telemetry ([Audio](audio.md)). |
 | `lixenwraith/transformer` | The audio module's `ripmodel` only, the rip's learned front end, which loads its weight file and runs it over log-mel frames; `tool/rip-train` is the PyTorch twin that writes the file ([its format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md)) | Nothing: the model's shape (`ripmodel.Spec`), the features it hears and how its heads become the rip's frames are the audio module's. |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
 
 The pinned revisions are in `go.mod`; this document intentionally avoids
-duplicating version strings that would become stale. `lixenwraith/audio` sits in
-`pkg/audio`, a module of its own that `go.mod` and `android/go.mod` take through
-a `replace`, so `./...` skips it ([its README](../pkg/audio/README.md)).
+duplicating version strings that would become stale.
 
 ## 9. Commands, tools, and sandboxes
 
