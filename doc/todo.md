@@ -193,18 +193,20 @@ reach late joiners, and a trust decision, since each peer would choose its own.
 ### Train bot graphs offline
 
 - Priority: P3
-- Affected files: `internal/bot`, `pkg/genetic`, `internal/system/nugget.go`
+- Affected files: `internal/bot`, `lixenwraith/genetic`,
+  `internal/system/nugget.go`
 - Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
 First decide how a graph declares bounded tunable numbers: a `[bot.params]` table,
 or bounded macro parameters shared with the editor's macro metadata. A genome is
-those numbers as a bounded vector; `pkg/genetic`'s `Engine` evaluates whole
-headless runs over a matrix of scenarios and seeds, and `pkg/genetic/fitness`
-scalarises the result. A solo run depends only on its seed, so evaluation needs no
-mesh. Decide where trained values ship. Bot genomes never enter the in-game
-genetic registry, which captures carry. Fitness weighs no nugget, since nothing
-pushes `EventNuggetCollected`: push it in `NuggetSystem.collectNugget` and drop
-that function's own `statCollected` increment, which the event's handler repeats.
+those numbers as a bounded vector; `lixenwraith/genetic`'s `Engine` evaluates
+whole headless runs over a matrix of scenarios and seeds, and
+`lixenwraith/genetic/fitness` scalarises the result. A solo run depends only on
+its seed, so evaluation needs no mesh. Decide where trained values ship. Bot
+genomes never enter the in-game genetic registry, which captures carry. Fitness
+weighs no nugget, since nothing pushes `EventNuggetCollected`: push it in
+`NuggetSystem.collectNugget` and drop that function's own `statCollected`
+increment, which the event's handler repeats.
 
 ### Adapt bots to the session's players
 
@@ -1646,29 +1648,6 @@ package at its root and `model` under it, the package README as its README with
 import paths rewritten, the repository LICENSE and a `go.mod` at this module's
 Go version; then this module's importers take the new path and `go.mod` requires
 it.
-
-## Genetic library
-
-### Spin off `pkg/genetic` as its own module
-
-- Priority: P2
-- Affected files: `pkg/genetic`, `pkg/genetic/registry`, `pkg/genetic/fitness`,
-  `pkg/genetic/tracking`, `pkg/genetic/persistence`, `sandbox/genetic`,
-  `internal/system/genetic.go`, `internal/engine/resource.go`,
-  `internal/parameter/genetic.go`, `go.mod`
-
-The audit's items have landed: the pending table probes a window, selectors
-cache by archive version, the batch engine runs a worker set over recycled
-buffers, `registry.Stats` and `PerturbationStdDev` are gone, the game's metric
-and context keys left `fitness` and `tracking`, and `persistence` defaults to
-JSON, so nothing under `pkg/genetic` imports anything outside the standard
-library. What remains is the move itself: a `lixenwraith/genetic` repository
-with the five packages at its root (`genetic`, `genetic/registry`, ...), the
-lander sandbox as its `examples/`, the package README as its README with import
-paths rewritten, the repository LICENSE, and a `go.mod` at the Go version this
-module builds with; then this module's four importers take the new path and
-`go.mod` requires it. The sandbox's `-headless` table and `go test ./...` are
-the check on both sides.
 
 ## Engine
 

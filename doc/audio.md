@@ -638,9 +638,9 @@ voice held within a tenth of its tonal floor, the fit's own distance from the
 recording's notes, so the score of the mix does not drift a voice into one
 that fills the mix. Soundlab's `tune` searches the parameters over
 loops rendered from the registered patterns across tempos and keys with
-`pkg/genetic`'s generational engine, the current set seeding the pool, and writes
-a set that beats it ([TODO](todo.md#tune-the-rip) for what the corpus still
-lacks).
+`lixenwraith/genetic`'s generational engine, the current set seeding the pool,
+and writes a set that beats it ([TODO](todo.md#tune-the-rip) for what the
+corpus still lacks).
 
 The front end is a seam (`RipFrontEnd`): whatever hears the recording into
 `RipFrames`, the onset strengths, the pitch salience and the chroma per frame,
@@ -687,7 +687,7 @@ key, a `[[song]]` in the pattern document (`LoadPatternFile`,
 `MarshalPatternFile`, `ValidateSong`), resolved to a timeline of pattern IDs
 (`Timeline`) that `RenderTimeline` plays offline, the patterns changed at the
 bar lines. Soundlab's `compress` runs the grouping, refines the assignment with
-`pkg/genetic` under a term for the patterns in use, rips the song's render back
+`lixenwraith/genetic` under a term for the patterns in use, rips the song's render back
 on the song's own grid (`Ripper.Grid` pins a known tempo and downbeat and skips
 their decoders) and scores it against the rip; `song` shows, renders or
 conducts a song through the live sequencer, or renders one line of it alone,
