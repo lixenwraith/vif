@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 func TestAudioAvailabilityGatesMuteResetAndMusicWithoutLosingPreferences(t *testing.T) {

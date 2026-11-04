@@ -3,9 +3,7 @@
 A pure-Go synthesis, sound effect and music engine. It streams 16-bit stereo PCM
 at 44.1 kHz to a player process it finds on the host, an OSS device, a WAV file,
 or a writer the host supplies, and it reads what it plays from TOML documents.
-Beside the standard library it imports only `github.com/lixenwraith/toml` and
-that module's `macro` expander. It ships no sounds, voices or patterns of its
-own: the embedder's banks are data it is handed.
+Its design is [doc/audio.md](doc/audio.md).
 
 Three words name what it plays:
 
@@ -22,15 +20,35 @@ delay line or as its partials; a **pattern** is steps of drum hits and notes on 
 sixteenth grid, its notes scale degrees, an accidental for one off the key,
 the harmony resolves at play time.
 
+## Packages
+
+- `audio`, the engine, imports the standard library, `github.com/lixenwraith/toml`
+  and that module's `macro` expander alone. It ships no sounds, voices or
+  patterns of its own: the embedder's banks are data it is handed.
+- `audio/model` holds the identifiers an embedder's protocol carries, sound,
+  instrument, pattern, scale and tier, with no mixer, backend or synthesis
+  dependency, for builds that leave the engine out.
+- `audio/ripmodel` is the rip's learned front end, a transformer
+  (`github.com/lixenwraith/transformer`) over mel frames.
+- `audio/bank` is the set vif and stapes ship, embedded: the sound effects, the
+  drum kit, the tonal voices and the music patterns. Any other embedder may
+  ignore it and hand the engine its own; the high-quality tonal voices are the
+  part meant to be shared.
+- [doc/audio.md](doc/audio.md): the design; [doc/term-index.md](doc/term-index.md):
+  its terms; [doc/todo.md](doc/todo.md): where it may grow;
+  [doc/agent-notes.md](doc/agent-notes.md): what earlier work learned.
+
+stapes, the authoring tool, runs over this engine alone.
+
 ## Embedding
 
 ```go
-bank, err := audio.LoadSoundsFS(assets, "sfx.toml", "drums.toml", "voices.toml")
-patterns, err := audio.LoadPatternsTOML(musicTOML)
+sounds, err := bank.Sounds()     // or audio.LoadSoundsFS(own, "sfx.toml", "voices.toml")
+patterns, err := bank.Patterns() // or audio.LoadPatternsTOML(ownMusic)
 
 cfg := audio.DefaultAudioConfig()
 cfg.Enabled = true
-cfg.BaseSounds, cfg.BaseVoices, cfg.BasePatterns = bank.Sound, bank.Voice, patterns
+cfg.BaseSounds, cfg.BaseVoices, cfg.BasePatterns = sounds.Sound, sounds.Voice, patterns
 cfg.SfxLevels, cfg.SoundShapes = levels, shapes      // the embedder's mix, by sound name
 cfg.SoundFS, cfg.SoundFile = os.DirFS(userDir), "sounds.toml" // overrides by name
 cfg.PatternTOML = userMusic
@@ -110,11 +128,3 @@ variant index, so one bank member cannot perturb another; the sequencer's pool
 draws and its step chances on separate streams of one seed, so a bar of timing
 skew between two runs moves no later draw. With the same seed and the same
 bar-aligned commands the music is the same.
-
-## Layout
-
-`model` holds the identifiers an embedder's protocol carries, sound, instrument,
-pattern, scale and tier, with no mixer, backend or synthesis dependency, for
-builds that leave the engine out. The package's design and the game that embeds
-it are described in [vif's audio document](../../doc/audio.md); its authoring
-tool, soundlab, is `internal/soundlab` there and runs over this engine alone.

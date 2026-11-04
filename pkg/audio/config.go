@@ -22,7 +22,7 @@ type AudioConfig struct {
 	SoundShapes  map[string]SoundShape
 	ForceBackend string
 	// Sink is the host's speakers: a writer that takes the stream in place of any
-	// backend found by name, closed with the engine.
+	// backend found by name, never closed by the engine: the speakers outlive a run.
 	Sink io.WriteCloser
 	// BaseSounds, BaseVoices and BasePatterns are the banks registered at Start.
 	// The package ships no specs, voices or authored patterns of its own: the

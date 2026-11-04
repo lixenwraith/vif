@@ -1,4 +1,4 @@
-"""The rip's front-end model as PyTorch builds it, the twin of pkg/audio/ripmodel
+"""The rip's front-end model as PyTorch builds it, the twin of lixenwraith/audio/ripmodel
 and lixenwraith/transformer: convolutions over the frames as an image, a linear input,
 pre-norm attention blocks with ALiBi biases over a window of frames, exact GELU
 feed-forwards, a final norm and one output layer whose slices are the heads.
@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# pkg/audio/ripmodel.Spec, which a corpus manifest restates
+# lixenwraith/audio/ripmodel.Spec, which a corpus manifest restates
 MEL_BANDS = 229
 INPUTS = MEL_BANDS + 1  # the bands over the frame's level, and the level
 PITCHES = 69
@@ -35,7 +35,7 @@ def features(mel: np.ndarray) -> np.ndarray:
     """The model's input from log-mel frames as the corpus stores them, log1p(100 e):
     each band's energy in dB over FLOOR less the frame's mean, and the mean itself,
     both over 80 dB, so a frame's loudness is one input and the bands are level-free,
-    as pkg/audio/ripmodel's features computes them"""
+    as lixenwraith/audio/ripmodel's features computes them"""
     db = 10 * np.log10(np.expm1(mel.astype(np.float64)) / 100 + FLOOR)
     level = db.mean(axis=-1, keepdims=True)
     return np.concatenate([(db - level) / 80, (level + 80) / 80], axis=-1).astype(np.float32)

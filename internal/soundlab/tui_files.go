@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // fileRow is one entry of the files overlay
