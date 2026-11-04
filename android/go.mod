@@ -9,7 +9,7 @@ require (
 
 require (
 	github.com/lixenwraith/color v0.1.5 // indirect
-	github.com/lixenwraith/genetic v0.0.0 // indirect
+	github.com/lixenwraith/genetic v0.1.0 // indirect
 	github.com/lixenwraith/log v0.1.13 // indirect
 	github.com/lixenwraith/toml v0.5.0 // indirect
 	golang.org/x/mobile v0.0.0-20261011034528-197770444867 // indirect
@@ -21,8 +21,6 @@ require (
 )
 
 replace github.com/lixenwraith/vif => ../
-
-replace github.com/lixenwraith/genetic => ../pkg/genetic
 
 tool (
 	golang.org/x/mobile/cmd/gobind
