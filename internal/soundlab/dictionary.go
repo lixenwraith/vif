@@ -429,6 +429,12 @@ func cmdSong(s *Session, a []string) error {
 	if a[1] == "play" {
 		return s.playSong(d)
 	}
+	if isMIDI(a[1]) && len(a) > 2 {
+		return fmt.Errorf("%s: a MIDI file holds every line, a track each", a[1])
+	}
+	if isMIDI(a[1]) {
+		return s.writeSongMIDI(d, s.path(a[1]))
+	}
 	if a[1] == "score" {
 		rp, ok := s.rips[a[0]]
 		if !ok {
