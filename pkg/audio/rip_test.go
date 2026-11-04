@@ -432,8 +432,8 @@ func TestRipKeepsABassLineThatClimbs(t *testing.T) {
 }
 
 // TestAReleaseEndsANoteStillSounding: a front end that hears each pitch let go
-// ends a note there though a pedal keeps it sounding, and the note is as hard as
-// the front end heard it struck.
+// ends a note there though a pedal keeps it sounding, the note as hard as the front
+// end heard it struck; while it rings on, only a strike over StrikeAgain starts another.
 func TestAReleaseEndsANoteStillSounding(t *testing.T) {
 	const frames = 200
 	f := &RipFrames{Hop: RipFrameSec, Flux: make([]float64, frames), Salience: make([]float32, frames*RipPitches),
@@ -443,9 +443,10 @@ func TestAReleaseEndsANoteStillSounding(t *testing.T) {
 		f.Salience[at(t, 72)] = 0.9
 	}
 	f.Strike[at(10, 72)], f.Velocity[at(10, 72)], f.Release[at(120, 72)] = 0.99, 0.4, 0.95
+	f.Strike[at(150, 72)], f.Strike[at(170, 72)] = 0.9, 0.99
 	got := f.notes(RipMelodyLow, RipMaxMIDI, DefaultRipParams())
-	if len(got) != 1 || got[0].start != 10 || got[0].end != 120 || got[0].vel != float64(float32(0.4)) {
-		t.Errorf("notes %+v, want one from 10 to 120 at velocity 0.4", got)
+	if len(got) != 2 || got[0].start != 10 || got[0].end != 120 || got[0].vel != float64(float32(0.4)) || got[1].start != 170 {
+		t.Errorf("notes %+v, want one from 10 to 120 at velocity 0.4 and one from 170", got)
 	}
 }
 
