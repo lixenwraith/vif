@@ -1408,7 +1408,9 @@ front-end seam. What remains, in the design's order:
    corpus (item 1: `corpus <dir> from` writes E-GMD's, `train.py --mix` mixes
    them in; still lacking a held-out score for a `from` corpus, E-GMD's ET
    split being the clean one, drum velocity in the labels, a check that drops
-   a render whose hits draw no onset, and an NSynth sampler voice), then more
+   a render whose hits draw no onset; NSynth's notes play in `corpus ...
+   sampled`, lacking the tempo-synced and multiphonic filters `examples.json`
+   allows and a pipeline bench on the 53 held-out instruments), then more
    loops, or width 384 (`DIM=384 HEADS=12 FFN=1536`, 7 million weights),
    each measured by `bench` on clean and augmented loops and by the truths on
    the recordings, and shipped only when it beats the analysis on both; a

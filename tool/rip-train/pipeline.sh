@@ -14,6 +14,7 @@ GEN=${GEN:-gen}                      # gen: beats, melodies and bass lines the b
 WAV=${WAV:-nowav}                    # nowav: frames and labels only; empty to keep each loop's WAV
 CODEC=${CODEC:-}                     # codec: a third of the loops through a lossy codec and back, by ffmpeg; empty for none
 TEMPOS=${TEMPOS:-}                   # e.g. 80-120 or 96,128,160; empty for the default spread
+SAMPLED=${SAMPLED:-}                 # a directory of NSynth notes half the tonal lines play on; empty for the engine's voices
 FOCUS=${FOCUS:-}                     # a .slab run before corpus: voices and patterns to draw from
 STEPS=${STEPS:-20000}                # training steps
 BATCH=${BATCH:-8}                    # windows a step
@@ -47,7 +48,7 @@ soundlab() { go run ./cmd/soundlab -headless "$@"; }
 corpus_slab() {
 	{
 		[ -n "$FOCUS" ] && printf 'run %s\n' "$(realpath "$FOCUS")"
-		printf 'corpus %s %s %s %s %s %s %s %s %s\n' "$(realpath "$CORPUS")" "$LOOPS" "$BARS" "$AUG" "$GEN" "$WAV" "$CODEC" "${TEMPOS:+tempos $TEMPOS}" "${2:-}"
+		printf 'corpus %s %s %s %s %s %s %s %s %s %s\n' "$(realpath "$CORPUS")" "$LOOPS" "$BARS" "$AUG" "$GEN" "$WAV" "$CODEC" "${TEMPOS:+tempos $TEMPOS}" "${SAMPLED:+sampled $(realpath "$SAMPLED")}" "${2:-}"
 	} > "$1"
 }
 

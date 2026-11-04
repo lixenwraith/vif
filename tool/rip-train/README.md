@@ -70,6 +70,7 @@ tool/rip-train/pipeline.sh install
 | `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; a third of the generated melodies and accompaniments half 6 to 18 dB softer; three generated loops in ten without their drums and one in seven without its bass; empty for the bank alone |
 | `WAV` | `nowav` | frames and labels only; empty keeps each loop's WAV too (300 MB per 200 loops) |
 | `CODEC` | empty | `codec`: a third of the loops through Opus, MP3 or AAC at 64 to 192 kbps and back, by ffmpeg, which the export then needs |
+| `SAMPLED` | empty | a directory of NSynth notes (`family_source_NNN-pitch-velocity.wav`, a partial set too): each tonal line plays on one of its instruments in half the loops, labelled with no voice; empty for the engine's voices alone |
 | `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
 | `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |
 | `STEPS`, `BATCH` | 20000, 8 | training steps and windows a step |
