@@ -25,8 +25,8 @@ TOWERS=${TOWERS:-}                   # stacks of their own, layers:heads each, e
 MIX=${MIX:-}                         # another corpus and the share of windows drawn from it, dir:share; empty for none
 HOLDOUT=${HOLDOUT:-200}              # loops held out, scored every EVERY steps
 EVERY=${EVERY:-1000}
-OUT=${OUT:-$CORPUS/ripnet.bin}       # the weight file
-CHECKPOINT=${CHECKPOINT:-$CORPUS/ripnet.pt}
+OUT=${OUT:-$CORPUS/ripmodel.bin}       # the weight file
+CHECKPOINT=${CHECKPOINT:-$CORPUS/ripmodel.pt}
 ROOT=${ROOT:-${XDG_CONFIG_HOME:-$HOME/.config}/vif}   # the configuration root rip hears with
 BENCH_LOOPS=${BENCH_LOOPS:-12}
 BENCH_BARS=${BENCH_BARS:-4}
@@ -92,7 +92,7 @@ bench() {
 	local root
 	root=$(mktemp -d)
 	mkdir -p "$root/audio"
-	cp "$OUT" "$root/audio/ripnet.bin"
+	cp "$OUT" "$root/audio/ripmodel.bin"
 	local slab="$root/bench.slab"
 	{
 		[ -n "$FOCUS" ] && printf 'run %s\n' "$(realpath "$FOCUS")"
@@ -105,8 +105,8 @@ bench() {
 
 install() {
 	mkdir -p "$ROOT/audio"
-	cp "$OUT" "$ROOT/audio/ripnet.bin"
-	echo "== installed $OUT as $ROOT/audio/ripnet.bin; soundlab's rip hears with it, remove the file to hear with the analysis"
+	cp "$OUT" "$ROOT/audio/ripmodel.bin"
+	echo "== installed $OUT as $ROOT/audio/ripmodel.bin; soundlab's rip hears with it, remove the file to hear with the analysis"
 }
 
 case "$stage" in

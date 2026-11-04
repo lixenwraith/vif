@@ -1,6 +1,6 @@
 # rip-train
 
-The trainer of the rip's front-end model, `pkg/audio/ripnet`: PyTorch, outside
+The trainer of the rip's front-end model, `pkg/audio/ripmodel`: PyTorch, outside
 the Go module, writing the weight file `pkg/transformer` loads. Where the model
 stands in the pipeline, and why its features are made in Go, is in
 [Rip design](../../doc/rip-design.md) §2 and §3; the runs so far and their
@@ -16,7 +16,7 @@ to end, and how to turn a run toward the music you care about.
    voice), and `corpus.json` naming the layout. Nothing is hand-labelled; the
    synthesizer is the ground truth, and the augmentation is what keeps the
    model from learning the synthesizer.
-2. **A model.** `train.py` trains `ripnet.Spec` on random windows of the loops,
+2. **A model.** `train.py` trains `ripmodel.Spec` on random windows of the loops,
    holds some loops out, scores them every so often and exports the step whose
    onset, drum, pitch and voicing heads score best on them, the heads the rip's
    decoders read.
@@ -25,7 +25,7 @@ to end, and how to turn a run toward the music you care about.
    loop's expected rip. A model that scores under the analysis is not ready for
    a recording; a recording is judged by ear, with `rip`, `notes` and `song score`.
 4. **Data.** The weight file goes to the configuration root as
-   `audio/ripnet.bin`; soundlab's `rip` hears with it when it is there and with
+   `audio/ripmodel.bin`; soundlab's `rip` hears with it when it is there and with
    the analysis when it is not.
 
 ## Setup
@@ -76,7 +76,7 @@ tool/rip-train/pipeline.sh install
 | `CONVS`, `TOWERS` | none | convolutions before the input layer, and towers of layers over it, each computing a run of the heads, `train.py`'s `--convs` and `--towers` |
 | `MIX` | empty | another corpus and the share of windows drawn from it, `dir:share`, such as recordings with their MIDI files (`corpus <dir> from`) |
 | `HOLDOUT`, `EVERY` | 200, 1000 | loops held out, and how often they are scored and a checkpoint written |
-| `OUT`, `CHECKPOINT` | `$CORPUS/ripnet.bin`, `$CORPUS/ripnet.pt` | the weight file, and the checkpoint a stopped run resumes from |
+| `OUT`, `CHECKPOINT` | `$CORPUS/ripmodel.bin`, `$CORPUS/ripmodel.pt` | the weight file, and the checkpoint a stopped run resumes from |
 | `ROOT` | `~/.config/vif` | the configuration root `install` copies the weights into |
 | `BENCH_LOOPS`, `BENCH_BARS` | 12, 4 | the fresh loops `bench` grades on |
 | `INIT`, `SHARD` | none, 0 | `shard`: the `.pt` the round starts from, and the worker's stream of windows; it writes `$CORPUS/shard$SHARD.pt` and `.bin` |
@@ -161,11 +161,11 @@ and `FFN`, with `LOOPS` and `STEPS` raised together, since a bigger model
 overfits a small corpus sooner; the held-out line every `EVERY` steps is the
 guide, and the run is done when it stops falling.
 
-**What to bring back.** `$CORPUS/ripnet.bin` (the weights), `$CORPUS/ripnet.pt`
+**What to bring back.** `$CORPUS/ripmodel.bin` (the weights), `$CORPUS/ripmodel.pt`
 (the checkpoint, to resume or to start a round from), the training log with
 its held-out lines, the bench's two summary lines, and, if the recordings are
 to hand, `soundlab -headless -config-dir <root> -s <recipe>` for each recording
-in `lixenwraith/scratch` with the weights installed in `<root>/audio/ripnet.bin`,
+in `lixenwraith/scratch` with the weights installed in `<root>/audio/ripmodel.bin`,
 whose `truth` lines against the rhythm are the number that matters.
 
 ## Training in parallel
@@ -274,7 +274,7 @@ To write your own:
   one piece, their transcripts compared, as `doc/rip-design.md` §8 does).
 - **The model's shape.** `--dim`, `--layers`, `--heads`, `--ffn` and
   `--attention-window` on `train.py` reshape it; the weight file carries the
-  shape, so `ripnet` loads any of them as long as the inputs and heads are its.
+  shape, so `ripmodel` loads any of them as long as the inputs and heads are its.
   `pipeline.sh` passes `DIM`, `HEADS`, `LAYERS` and `FFN`; keep a head 32 wide
   (`DIM=384 HEADS=12 FFN=1536`). A checkpoint records its shape, and `train.py`
   refuses to resume or start from one of another, naming both.
@@ -286,11 +286,11 @@ The stages are three commands; the script only strings them together.
 ```bash
 printf 'corpus corpus/ 20000 4 aug gen nowav\n' > corpus.slab
 go run ./cmd/soundlab -headless -s corpus.slab
-python3 tool/rip-train/train.py --corpus corpus/ --out ripnet.bin --steps 20000 --batch 8 --every 1000 --holdout 200 --checkpoint ripnet.pt
+python3 tool/rip-train/train.py --corpus corpus/ --out ripmodel.bin --steps 20000 --batch 8 --every 1000 --holdout 200 --checkpoint ripmodel.pt
 printf 'bench 12 4\n' > bench.slab
-mkdir -p root/audio && cp ripnet.bin root/audio/ripnet.bin
+mkdir -p root/audio && cp ripmodel.bin root/audio/ripmodel.bin
 go run ./cmd/soundlab -headless -config-dir root -s bench.slab
-cp ripnet.bin ~/.config/vif/audio/ripnet.bin
+cp ripmodel.bin ~/.config/vif/audio/ripmodel.bin
 ```
 
 `train.py` trains on `--batch` windows of `--window` frames (512, six seconds)
@@ -300,15 +300,15 @@ with the best held-out step's weights, and resumes from the file when it
 exists, `--init` starts from a `.pt`'s weights alone (no optimizer state, step
 0), and `--shard-seed` moves the stream the windows are drawn from while
 `--seed` keeps the starting weights; `average.py --pt next.pt --out next.bin
-[--trim 0.1] a.pt b.pt ...` is the merge. The defaults are `ripnet.Spec`:
+[--trim 0.1] a.pt b.pt ...` is the merge. The defaults are `ripmodel.Spec`:
 230 inputs, the corpus's 229 bands in dB over the frame's mean and the mean
-itself (`ripnet.features`, derived from the stored frames), width 256, eight
+itself (`ripmodel.features`, derived from the stored frames), width 256, eight
 heads, four layers, feed-forward 1024, a
 window of 64 frames either side, 3.2 million weights. `--convs
 16x3x3/1,32x3x3/2` puts convolutions before the input layer, each its
 channels, frames by bands kernel and the pooling over bands; `--towers 2:2,4:7`
 splits the layers into towers over the shared input layer, each its layers and
-the run of heads it computes in `ripnet.HEADS` order: the onset and the drums
+the run of heads it computes in `ripmodel.HEADS` order: the onset and the drums
 on two layers, the rest on four. The losses: onsets,
 drums, pitches and each pitch's strikes and releases (within a frame of a
 note's start and end) as weighted binary cross-entropy, voicing likewise, the
@@ -321,7 +321,7 @@ one.
 The Go forward pass and this model agree to `float32` rounding: exact GELU,
 layer norm with eps 1e-5, ALiBi slopes of 2^(-8h/H) per head on the frame
 distance, attention banded to the window, and the output layer's slices as the
-heads, in `ripnet.HEADS` order. `export` writes the tensors by the names and in
+heads, in `ripmodel.HEADS` order. `export` writes the tensors by the names and in
 the order `pkg/transformer` reads them, with an FNV-1a 64 trailer the loader
 checks. A change to either side is a change to both: check a random model's
 outputs on a corpus loop from the two before trusting a trained file.
