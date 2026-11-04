@@ -247,7 +247,7 @@ draws from the same bank). Two are in `focus/`:
 
 To write your own:
 
-- **Instruments.** A `[[voice]]` is data (`pkg/audio/doc/audio.md` §7): wave, oscillator
+- **Instruments.** A `[[voice]]` is data ([audio §7](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#7-music-sequencer)): wave, oscillator
   stack, filter, envelopes, or a string or modal bank. Write a sound document
   with the voices and `merge sound file.toml` then `apply name` for each, or
   make them in the REPL with `new voice`, `set` and `apply`; `fit` and `refine`

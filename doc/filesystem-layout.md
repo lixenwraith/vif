@@ -223,7 +223,7 @@ roots and nothing else; systems do not open host paths directly.
 
 `internal/asset` owns every embedded group of this module and is its only
 package with an `embed` directive for shipped data. The sound and music banks are
-the audio module's (`pkg/audio/bank/`), whose root package carries no specs or
+the audio module's `bank` package, and its root package carries no specs or
 patterns of its own: in an audio-capable build the audio service parses them with
 `bank.Sounds` and `bank.Patterns` and hands them to the engine as
 `AudioConfig.BaseSounds`, `BaseVoices` and `BasePatterns`. Audio-free builds omit

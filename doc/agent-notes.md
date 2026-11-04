@@ -174,7 +174,7 @@ that proves wrong or that a document now states, and link the document instead.
   save the whole log and search it. For a hang, find `panic: test timed out` and
   match the goroutines blocked in `sync.Mutex.Lock` against what each holds.
 - A soundlab test waiting on mixer state gives it seconds, since the mixer drops
-  ticks under load ([audio notes](../pkg/audio/doc/agent-notes.md#tests)): load
+  ticks under load ([audio notes](https://github.com/lixenwraith/audio/blob/main/doc/agent-notes.md#tests)): load
   `internal/soundlab` with ~24 race processes pinned to one CPU (`taskset -c 0`)
   to see one time out.
 - A closed listener's port is no refusing address: under `go test ./...` another
@@ -184,14 +184,8 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Audio
 
-- The library is `github.com/lixenwraith/audio`, nested at `pkg/audio` until
-  it has a repository: a change to it follows that folder's `AGENTS.md` and
-  `doc/agent-notes.md`. A nested module is outside `./...`, so the root's
-  `go build`, `go vet` and `go test` skip it: run them with `go -C pkg/audio`,
-  as CI, `make test` and `make verify` do. `android/go.mod` needs its own
-  `replace github.com/lixenwraith/audio => ../pkg/audio`, since a dependency's
-  `replace` never reaches it; without it the Android build stops on a missing
-  `go.sum` entry for the module.
+- The library is `github.com/lixenwraith/audio`: a change to it lands there,
+  under its own `AGENTS.md` and `doc/agent-notes.md`, and vif takes its tag.
 - Write a truth from a score or a MIDI file, never from memory: a remembered
   Billie Jean riff had its first note an octave low, the synthesizer's doubling
   the analysis hears, and turned a 96-to-94 tie into a 110-to-84 loss.

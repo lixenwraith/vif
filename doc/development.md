@@ -16,12 +16,12 @@ The modules it requires:
 | `github.com/lixenwraith/color` | RGB/palette values and blend functions. |
 | `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing. |
 | `github.com/lixenwraith/log` | Asynchronous structured file logger behind `internal/vlog`. |
-| `github.com/lixenwraith/audio` | Synthesis, mixing, the sequencer, MIDI, the rip and the shipped banks; nested in `pkg/audio` and taken through a `replace` until it has a repository. |
+| `github.com/lixenwraith/audio` | Synthesis, mixing, the sequencer, MIDI, the rip and the shipped banks. |
 | `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window, with cgo off. |
 | `golang.org/x/sys`; `x/term` (indirect) | The desktop window's Unix calls; terminal support for the terminal module. |
 
 Audio sends PCM to optional host commands; see the audio library's
-[§3](../pkg/audio/doc/audio.md#3-backend-detection-and-failover) for runtime
+[§3](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#3-backend-detection-and-failover) for runtime
 backend choices. A compiler, module download access, and a terminal are enough
 to build the normal binary. When the `GO` command is missing, a target that
 compiles proposes the Arch, Debian (snap) or FreeBSD package install and runs it
@@ -51,8 +51,8 @@ make dev       # generated code + race-enabled debug build
 | `wasm` | Build log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
-| `test` | Generate and run `go test -race ./...`, then the nested audio module's. |
-| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, the full and WASM ones also with `GOEXPERIMENT=simd`, and vet and test the `android` module (§5); vet and cross-build the nested audio module. |
+| `test` | Generate and run `go test -race ./...`. |
+| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, the full and WASM ones also with `GOEXPERIMENT=simd`, and vet and test the `android` module (§5). |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `router` | Build the website-to-K3s session router as `bin/vif-router`. |
@@ -507,15 +507,13 @@ A change behind a build constraint also builds that target:
 
 `make verify`, `go test ./...`, `go vet ./...` and `script/test.sh all` are sweeps
 the project owner runs, not per-change steps. `make verify` regenerates, runs
-`go test -race ./...` and the nested audio module's, builds `./...` plain, with
-cgo off and under `novlog`, `vif_noaudio`, `vif_headless` and `vif_nogui`, tests
-`./internal/...` under `vif_noaudio` and the manifest and system suites under
-`vif_headless`, `cmd/vif` under both, vets and tests the `android` module, tests
-`pkg/window` with cgo off, cross-builds `js/wasm` and `windows/amd64` (`novlog
-vif_noaudio`), fails if the headless command imports the renderer or audio
-implementation, vets the audio module and builds it for `js/wasm`, FreeBSD,
-Android arm64 and 386, and runs `go vet ./...` and the `vif_gui` vet of
-`pkg/window` and `cmd/vif`. It does not
+`go test -race ./...`, builds `./...` plain, with cgo off and under `novlog`,
+`vif_noaudio`, `vif_headless` and `vif_nogui`, tests `./internal/...` under
+`vif_noaudio` and the manifest and system suites under `vif_headless`, `cmd/vif`
+under both, vets and tests the `android` module, tests `pkg/window` with cgo off,
+cross-builds `js/wasm` and `windows/amd64` (`novlog vif_noaudio`), fails if the
+headless command imports the renderer or audio implementation, and runs
+`go vet ./...` and the `vif_gui` vet of `pkg/window` and `cmd/vif`. It does not
 execute a Windows artifact or a real terminal/audio backend; Windows is played by
 hand, not a supported release target, and its known issues are in [Build profiles
 §4](multi-platform.md#4-platform-matrix).

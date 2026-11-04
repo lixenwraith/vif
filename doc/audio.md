@@ -1,10 +1,9 @@
 # Audio Architecture
 
-vif's audio is `lixenwraith/audio`, a pure-Go synthesis, sound effect, mixing and
-music-sequencing engine with no CGO dependency, nested at `pkg/audio` and taken
-through a `replace`. Game policy is layered over it by the audio service and the
+vif's audio is [`lixenwraith/audio`](https://github.com/lixenwraith/audio), a pure-Go synthesis, sound effect,
+mixing and music-sequencing engine with no CGO dependency. Game policy is layered over it by the audio service and the
 `AudioSystem`/`MusicSystem` pair. The engine's own design, from its stream
-contract to the rip, is the [audio library's document](../pkg/audio/doc/audio.md)
+contract to the rip, is the [audio library's document](https://github.com/lixenwraith/audio/blob/main/doc/audio.md)
 (cited below as "library §n"); this one is how vif drives it.
 
 Three words name what it plays, in code and documents alike:
@@ -18,8 +17,8 @@ Three words name what it plays, in code and documents alike:
 
 A **sound** is the synthesized one-shot both draw on: an sfx plays one, and so
 does each drum of the music's kit (library
-[§5](../pkg/audio/doc/audio.md#5-sounds-and-sound-effects),
-[§7](../pkg/audio/doc/audio.md#7-music-sequencer)).
+[§5](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#5-sounds-and-sound-effects),
+[§7](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#7-music-sequencer)).
 
 ## 1. Layered design
 
@@ -67,11 +66,11 @@ What vif sets of the engine:
 
 - **Buffer.** `vif.toml` `[audio] buffer_ms`, 10–200 in steps of 10, is the
   mixer period (`AudioConfig.Buffer`), 50 ms when unset (library
-  [§2](../pkg/audio/doc/audio.md#2-stream-contract)).
+  [§2](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#2-stream-contract)).
 - **Backend.** `-ab <name>`, long form `-audio-backend <name>`, restricts
   selection to one backend (`ForceBackend`), `null` and `wav:path/to/out.wav`
   among them (library
-  [§3](../pkg/audio/doc/audio.md#3-backend-detection-and-failover)). `-mw[=DIR]`
+  [§3](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#3-backend-detection-and-failover)). `-mw[=DIR]`
   (`-music-wav`, `paths.music`) records the music bus (`RecordMusic`) to
   `vif-mus-<stamp>.wav` in the state root's `music/` directory, a sibling of
   `log/` ([layout §5](filesystem-layout.md#5-logs-journals-and-runtime-output));
@@ -98,7 +97,7 @@ What vif sets of the engine:
   the configuration menu, and `EventAudioMuteChanged` announces the mask
   applied. The game leaves every slot and track sounding.
 - **Pause.** The game's pause is the engine's (library
-  [§6](../pkg/audio/doc/audio.md#6-mixer-buses-mute-and-pause)), applied even if
+  [§6](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#6-mixer-buses-mute-and-pause)), applied even if
   `AudioSystem` is disabled, and a run that ends fades the same way before the
   engine stops. Muted, `MusicSystem` sends only what outlasts the mute
   (patterns, tempo): a start or a note waits for the unmute, and an unmute does
@@ -130,7 +129,7 @@ tier's floor for five seconds. A burst reaches its tier in one or two swaps
 instead of one a bar, and a lull steps down over a phrase or two instead of
 collapsing inside the five-second window. A tier change draws from the current
 group under quantization/crossfade/reveal policy (library
-[§7](../pkg/audio/doc/audio.md#7-music-sequencer)), and a slot already sounding
+[§7](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#7-music-sequencer)), and a slot already sounding
 its draw keeps playing. The conductor seeds the sequencer from the run's own
 music stream, so each run draws its own pools. The `music.*` status group (the
 telemetry HUD's music card, and the periodic stat log) names the group, tier,
@@ -211,17 +210,17 @@ runs at `validate`/`apply`. See `cmd/soundlab/README.md` for the command/TUI
 reference.
 
 MIDI goes through the library's one table, `midiInstruments` (library
-[§8](../pkg/audio/doc/audio.md#8-midi-files)): `write <pattern|song> <file.mid>`
+[§8](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#8-midi-files)): `write <pattern|song> <file.mid>`
 writes a pattern or a song (`WriteSongMIDI`, `WritePatternMIDI`), and `load` and
 `merge <file.mid> [name]` read a file as patterns and a song (`MIDIScore.Song`),
 whose bars play out of time where the file is not in 4/4 until songs carry a
 meter ([todo](todo.md#give-songs-and-patterns-a-meter)). `truth` and `corpus
 <dir> from` read `ReadMIDI`'s transcript. Soundlab turns the phrase fill off
 (`SetAutoFill(false)`), and its mixer mutes slots and tracks and solos tracks
-(library [§6](../pkg/audio/doc/audio.md#6-mixer-buses-mute-and-pause)).
+(library [§6](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#6-mixer-buses-mute-and-pause)).
 
 Over the library's rip (library
-[§9](../pkg/audio/doc/audio.md#9-ripping-a-recording)), soundlab's verbs:
+[§9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording)), soundlab's verbs:
 
 - `rip` adds a rip's patterns to the document, dirty, and sets the transport's
   tempo and key, so a slot plays the estimate at once; `rip ... bpm <n>` pins
@@ -271,7 +270,7 @@ refines voices and patterns against that score.
 For a new sound effect:
 
 1. author and validate it as the [library's
-   checklist](../pkg/audio/doc/audio.md#10-extension-checklist) says, in the
+   checklist](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#10-extension-checklist) says, in the
    audio module's `bank` or a tested override document;
 2. for an sfx Go emits, add its sound's name to the game's sfx table
    (`parameter.SfxSet`, `sfxTable`) with its level and shape, and run startup
@@ -289,9 +288,9 @@ events and keep the sequencer unaware of gameplay concepts.
 
 ## 6. Source map
 
-- The engine and its banks: the `lixenwraith/audio` module at `pkg/audio`, its
+- The engine and its banks: the `lixenwraith/audio` module, its
   README and its own source map (library
-  [§11](../pkg/audio/doc/audio.md#11-source-map))
+  [§11](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#11-source-map))
 - Game service: `internal/service/adapter_audio.go`
 - Game event adapters: `internal/system/audio.go`, `music.go`; `speakers.go`
   holds the mask both publish and the handover; `audio_none.go` the null systems

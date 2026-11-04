@@ -3,7 +3,7 @@
 Decision record and working design for the rip: the engine's estimate of a
 recording in its own vocabulary, voices, patterns, a key and a tempo, that a
 player can edit and the sequencer can play. [Audio library
-§9](../pkg/audio/doc/audio.md#9-ripping-a-recording) describes what runs today;
+§9](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#9-ripping-a-recording) describes what runs today;
 this document is where it is going and why.
 
 ## 1. Purpose
