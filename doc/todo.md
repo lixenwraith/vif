@@ -1591,9 +1591,9 @@ reset that keeps them.
 
 Round two ([Audio §7](audio.md#7-music-sequencer)) fitted the piano and the bass
 to Iowa's notes at pp, mf and ff by their level at 0.25 to 3 s, mel distance and
-brightness. What is left: the piano's level by velocity follows the old law (pp
-4 dB under mf, ff 2 dB over) where the recordings' spread is 14 and 12 dB, a
-decision on whether the hammer's darkening takes level with it; its lowest
+brightness. The piano's level by velocity stays the old law by the owner's
+choice (pp 4 dB under mf, ff 2 dB over, where the recordings' spread is 14 and
+12 dB): brightness carries the dynamic. What is left: the piano's lowest
 octave still falls 4 to 6 dB faster than recorded by 3 s; its fundamental gains
 the slow second string only from about C3 up (`bright`'s body rounds the first
 paired partial), so f0's T60 steps from 5 s to 23 s across that semitone; the
