@@ -46,6 +46,9 @@ type SoundDef struct {
 	// set; 0 = SoundPitchWalk / SoundLengthWalk.
 	PitchWalk  float64 `toml:"pitch_walk,omitempty"`
 	LengthWalk float64 `toml:"length_walk,omitempty"`
+	// Velocities, ascending in (0,1], render a drum's variants once a velocity:
+	// a hit plays the layer nearest its own. Empty renders full velocity alone.
+	Velocities []float64 `toml:"velocities,omitempty"`
 
 	Chain []Proc  `toml:"chain,omitempty"` // master chain, pre-normalization
 	Bus   []Bus   `toml:"bus,omitempty"`
@@ -59,8 +62,12 @@ type Layer struct {
 	Gain   float64 `toml:"gain,omitempty"`   // 0 = 1.0
 	Offset float64 `toml:"offset,omitempty"` // seconds into the target buffer
 	Length float64 `toml:"length,omitempty"` // 0 = duration - offset
-	Source Source  `toml:"source"`
-	Chain  []Proc  `toml:"chain,omitempty"`
+	// VelGain scales the gain by velocity to this power; Stroke by 1+stroke·u,
+	// u in [-1,1] where a variant's stroke lands
+	VelGain float64 `toml:"vel_gain,omitempty"`
+	Stroke  float64 `toml:"stroke,omitempty"`
+	Source  Source  `toml:"source"`
+	Chain   []Proc  `toml:"chain,omitempty"`
 }
 
 // Bus is an intermediate sum with its own chain. Buses form a tree rooted at
@@ -84,6 +91,8 @@ type Source struct {
 	FreqEnd float64 `toml:"freq_end,omitempty"` // sweep; 0 = Freq
 	Curve   string  `toml:"curve,omitempty"`    // lin (default) | exp
 	CurveK  float64 `toml:"curve_k,omitempty"`  // exp decay rate; 0 = 8
+
+	VelTrack float64 `toml:"vel_track,omitempty"` // osc, sweep: the start frequency scales by velocity to this power
 
 	Ratio      float64 `toml:"ratio,omitempty"`    // fm: modulator = Freq*Ratio
 	ModFreq    float64 `toml:"mod_freq,omitempty"` // fm: absolute, overrides Ratio
@@ -136,6 +145,11 @@ type Proc struct {
 
 	Drive  float64 `toml:"drive,omitempty"`
 	Amount float64 `toml:"amount,omitempty"` // gain; 0 = 1.0
+
+	// VelTrack scales a filter's frequency, a decay's tau or a shaper's drive by
+	// velocity to this power; Stroke scales it by 1+stroke·u, as Layer.Stroke
+	VelTrack float64 `toml:"vel_track,omitempty"`
+	Stroke   float64 `toml:"stroke,omitempty"`
 }
 
 // Spec bounds. A spec is untrusted input from disk: these cap load-time
@@ -146,6 +160,7 @@ const (
 	MaxSoundBuses    = 8
 	MaxSoundChain    = 16
 	MaxSoundVariants = 8
+	MaxSoundVelocity = 4 // velocity layers
 	MaxSoundNameLen  = 64
 	MaxSoundIncludes = 32
 	MaxIncludeDepth  = 8
@@ -190,6 +205,7 @@ func (d *SoundDef) Clone() *SoundDef {
 		return nil
 	}
 	c := *d
+	c.Velocities = slices.Clone(d.Velocities)
 	c.Chain = slices.Clone(d.Chain)
 	c.Bus = slices.Clone(d.Bus)
 	for i := range c.Bus {

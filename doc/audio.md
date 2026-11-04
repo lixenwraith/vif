@@ -176,6 +176,14 @@ envelopes/decay, modulation, shaping, clipping, and gain. Validation bounds
 duration, frequencies/Nyquist behavior, topology, operation count, and authored
 structure before rendering.
 
+A sound may be rendered once a velocity (`velocities`, up to four), its variant
+set a layer. A layer's gain follows the velocity to its `vel_gain` power; an
+oscillator's or a sweep's start frequency, a filter's frequency, a decay's tau
+and a shaper's drive to their `vel_track` power. Each variant is a stroke landing
+at its own place in [-1, 1], spread over the set in a seeded order and the same
+in every velocity layer, and `stroke` scales a gain or a parameter by it. A
+sound that sets none of these renders once at full velocity, as every sfx does.
+
 At startup the engine:
 
 1. registers `AudioConfig.BaseSounds` and `BaseVoices`, which the game fills
@@ -184,7 +192,7 @@ At startup the engine:
    replacing same-name definitions and a new voice name adding an instrument;
 3. freezes the name-to-ID registry of sounds;
 4. pre-renders the variant cache, under the game's sound shapes
-   (`SoundShapes`), and the kit: the drums' variants and the tonal voices;
+   (`SoundShapes`), and the kit: the drums' velocity layers and the tonal voices;
 5. resolves the game's sfx levels (`SfxLevels`) by stable sound name;
 6. registers `melody_gen`, `BasePatterns` and a resolved `audio/music.toml`
    (same name replaces), and builds the group arrangement before probing
@@ -261,7 +269,7 @@ filter envelope into an ADSR, or a string, as a delay line or as its partials
 name retunes that instrument in place and a new name adds an instrument, which
 patterns name as they name any. `DefineVoice` hot-swaps one: the next note plays
 the new voice while a sounding one finishes on its own, and an instrument no voice
-defines plays a plain sine. The drum kit plays cached sounds. Of the shipped
+defines plays a plain sine. Of the shipped
 voices, the pad and the lead are band-limited saws. An oscillator voice's unison
 runs free: each oscillator of a stack starts at its own phase (a lone one at 0),
 seeded by the note and its trigger order so a replay plays the same, and a
@@ -298,6 +306,28 @@ contact. The piano has a grand's stretch, its decay, brightness and dynamics
 fitted to a recorded piano's notes at pp, mf and ff (the University of Iowa
 samples, C1 to C7); the bass is a pizzicato double bass fitted the same way to
 Iowa's, a thump that falls away within a second, its note-off a 45 ms damper.
+
+The drum kit plays cached sounds: a hit takes the next stroke of the velocity
+layer nearest its velocity and plays it at that velocity, so a harder hit is
+brighter as well as louder. The shipped pieces follow published methods. The
+kick's fundamental falls from 92 to 52 Hz as the head's tension settles, from
+higher the harder it is struck, with two upper modes, the beater's pulse and its
+felt. The snare is its (0,1) mode split in two by the coupled heads and three
+upper modes under the stick's crack and the wires, a soft stroke ringing
+shorter. The hihat is the TR-808's six square partials and noise through the
+plates' band, choked as they close, the clap four noise bursts a few
+milliseconds apart and then the room. Strokes differ where they land (centre or
+edge, a hat's tip or shoulder), not in pitch. Against recordings free for any
+use (Freesound CC0 kits, Iowa's hihat), levels re peak at 50/100/250 ms and the
+centroid of the first 100 ms, soft to hard:
+
+```
+        kit                                   recordings
+kick    -10/-20/-36 .. -9/-17/-35   80..337   Sonor p1..p6 -10/-10/-25 .. -8/-19/-27   86..311
+snare   -14/-25/-45 .. -7/-14/-35  430..417   Pearl light, hard -14/-23/-41, -6/-15/-35 301, 318
+hihat   -12/-22/-41 .. -10/-20/-40 6250..7540 Iowa mf, ff -10/-26/-38, -9/-24/-26      7855, 7813
+clap     -6/-16/-46               2280..2530  four players' claps -1..-14/-14..-31     1480..2650
+```
 
 Tempo is clamped to 80–200 BPM. Tempo changes can wait for the next beat;
 patterns can transition immediately or quantized to the bar. The incoming

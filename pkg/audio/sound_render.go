@@ -29,7 +29,22 @@ const (
 	SoundLengthWalk = 0.24
 )
 
-type variance struct{ pitch, length float64 }
+// variance is one take's deviation: its pitch and length walk, the velocity it is
+// struck at and where its stroke lands
+type variance struct{ pitch, length, vel, stroke float64 }
+
+// respond is a parameter's scale under velocity and stroke: vel to the power
+// k, times 1+s·stroke; exactly one for a sound that sets neither
+func (v variance) respond(k, s float64) float64 {
+	r := 1.0
+	if k != 0 {
+		r = math.Pow(v.vel, k)
+	}
+	if s != 0 {
+		r *= 1 + s*v.stroke
+	}
+	return r
+}
 
 // Shaping bounds. ValidateSound bounds the spec; it cannot see a SoundShape,
 // which arrives from the embedder at render time. Clamping the composed value
@@ -39,6 +54,8 @@ const (
 	minPitchScale  = 0.5
 	minLengthScale = 0.05
 	maxLengthScale = 4.0
+	// maxRespondHz holds a filter that velocity or a stroke moves under Nyquist
+	maxRespondHz = 0.45 * AudioSampleRate
 )
 
 func clampScale(v, lo, hi float64) float64 {
@@ -53,11 +70,36 @@ func clampScale(v, lo, hi float64) float64 {
 	return v
 }
 
-// RenderVariants renders a spec's variant set under embedder shaping.
-// Each render draws from an rng seeded by (name, variant index), so noise
-// realizations are stable regardless of registration order: overriding or
+// RenderVariants renders a spec's variant set under embedder shaping, at full
+// velocity. Each render draws from an rng seeded by (name, variant index), so
+// noise realizations are stable regardless of registration order: overriding or
 // inserting a sound cannot perturb any other sound's timbre.
 func RenderVariants(d *SoundDef, p SoundShape) []floatBuffer {
+	return renderSet(d, p, 1)
+}
+
+// renderTakes renders a drum's velocity layers; full, the set at full velocity
+// when the caller holds it already, is the top layer it shares
+func renderTakes(d *SoundDef, p SoundShape, full []floatBuffer) drumTakes {
+	vels := d.Velocities
+	if len(vels) == 0 {
+		vels = []float64{1}
+	}
+	t := drumTakes{vel: vels, layers: make([][]floatBuffer, len(vels))}
+	for i, v := range vels {
+		if v == 1 && full != nil {
+			t.layers[i] = full
+		} else {
+			t.layers[i] = renderSet(d, p, v)
+		}
+	}
+	return t
+}
+
+// renderSet renders the variants at one velocity. A variant's stroke lands at
+// its own place in [-1,1], the places spread evenly over the set and drawn in a
+// seeded order, so one velocity layer's variant n is another's stroke n.
+func renderSet(d *SoundDef, p SoundShape, vel float64) []floatBuffer {
 	n := d.Variants
 	if n < 1 {
 		n = SoundVariants
@@ -74,12 +116,16 @@ func RenderVariants(d *SoundDef, p SoundShape) []floatBuffer {
 		bl, lw = 1.0, 0
 	}
 	seed := fnv64a(d.Name)
+	sr := rand.New(rand.NewPCG(seed, 0))
+	at := sr.Perm(n)
 	out := make([]floatBuffer, 0, n)
 	for i := range n {
 		f := float64(i)/float64(n) - 0.5
 		v := variance{
 			pitch:  clampScale(bp*(1+pw*f), minPitchScale, maxPitchScale),
 			length: clampScale(bl*(1+lw*f), minLengthScale, maxLengthScale),
+			vel:    vel,
+			stroke: 2*(float64(at[i])+sr.Float64())/float64(n) - 1,
 		}
 		out = append(out, renderSound(d, v, rand.New(rand.NewPCG(seed, uint64(i)+1))))
 	}
@@ -102,6 +148,7 @@ func RenderPreview(d *SoundDef, p SoundShape) ([]float64, error) {
 	v := variance{
 		pitch:  clampScale(bp, minPitchScale, maxPitchScale),
 		length: clampScale(bl, minLengthScale, maxLengthScale),
+		vel:    1,
 	}
 	return renderSound(d, v, rand.New(rand.NewPCG(fnv64a(d.Name), 1))), nil
 }
@@ -134,7 +181,7 @@ func renderSound(d *SoundDef, v variance, rng *rand.Rand) floatBuffer {
 		if l.Name != "" {
 			named[l.Name] = buf // aliased read-only by mixAt and later refs
 		}
-		mixAt(busOf(master, buses, l.Bus), buf, off, gainOf(l.Gain))
+		mixAt(busOf(master, buses, l.Bus), buf, off, gainOf(l.Gain)*v.respond(l.VelGain, l.Stroke))
 	}
 
 	for _, bi := range busOrder(d) {
@@ -186,13 +233,14 @@ func renderSource(s *Source, n int, v variance, ts float64, rng *rand.Rand, name
 	buf := make(floatBuffer, n)
 	switch s.Kind {
 	case "osc":
-		renderOsc(buf, waveOf(s.Wave), s.Freq*v.pitch, s.Freq*v.pitch, "", 0, s.Vibrato, rng)
+		f := s.Freq * v.pitch * v.respond(s.VelTrack, 0)
+		renderOsc(buf, waveOf(s.Wave), f, f, "", 0, s.Vibrato, rng)
 	case "sweep":
 		end := s.FreqEnd
 		if end <= 0 {
 			end = s.Freq
 		}
-		renderOsc(buf, waveOf(s.Wave), s.Freq*v.pitch, end*v.pitch, s.Curve, s.CurveK, s.Vibrato, rng)
+		renderOsc(buf, waveOf(s.Wave), s.Freq*v.pitch*v.respond(s.VelTrack, 0), end*v.pitch, s.Curve, s.CurveK, s.Vibrato, rng)
 	case "fm":
 		mod := s.ModFreq
 		if mod <= 0 {
@@ -319,7 +367,8 @@ func renderBurst(buf floatBuffer, b *Burst, ts float64, rng *rand.Rand) {
 // applyChain runs processors in order, in place. Time parameters scale with
 // the length variance; frequencies scale with pitch only where track_pitch
 // says so; modulation rates never scale, matching the fixed buzz rates the
-// hand-written presets used.
+// hand-written presets used. Velocity and stroke move a filter's frequency,
+// a decay's tau and a shaper's drive where the processor asks.
 func applyChain(buf floatBuffer, chain []Proc, v variance, ts float64) {
 	sr := float64(AudioSampleRate)
 	for i := range chain {
@@ -327,6 +376,11 @@ func applyChain(buf floatBuffer, chain []Proc, v variance, ts float64) {
 		pf := 1.0
 		if p.TrackPitch {
 			pf = v.pitch
+		}
+		r := 1.0
+		if p.VelTrack != 0 || p.Stroke != 0 {
+			r = v.respond(p.VelTrack, p.Stroke)
+			pf = min(pf*r, maxRespondHz/max(p.Freq, p.FreqEnd, 1))
 		}
 		q := p.Q
 		if q <= 0 {
@@ -348,15 +402,15 @@ func applyChain(buf floatBuffer, chain []Proc, v variance, ts float64) {
 		case "ar":
 			applyEnvelope(buf, p.Attack*ts, p.Release*ts)
 		case "decay":
-			applyDecayEnvelope(buf, p.Attack*ts, p.Tau*ts*sr)
+			applyDecayEnvelope(buf, p.Attack*ts, p.Tau*ts*sr*r)
 		case "am":
 			applyAM(buf, p.Rate, p.Depth, p.Phase)
 		case "ringmod":
 			applyRingMod(buf, p.Rate, p.Phase)
 		case "shape":
-			applyWaveshaper(buf, p.Drive)
+			applyWaveshaper(buf, p.Drive*r)
 		case "clip":
-			applyOverdrive(buf, p.Drive)
+			applyOverdrive(buf, p.Drive*r)
 		case "gain":
 			g := gainOf(p.Amount)
 			for j := range buf {

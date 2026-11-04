@@ -454,6 +454,23 @@ that proves wrong or that a document now states, and link the document instead.
 - `PatternPlayer.TriggerNoteMIDI` stamps a voice's serial after `Trigger`, so a
   note seeded by its serial in `Trigger` reads the slot's previous note's:
   still a replay's same, and different for two notes of one pitch.
+- Recorded drum one-shots free for any use reach a cloud container: Freesound's
+  sound pages serve an HQ MP3 preview without a login (`cdn.freesound.org/previews/
+  .../<id>_<user>-hq.mp3`), each page naming its licence by its "Go to the full
+  license text" link (filter searches with `f=license:"Creative Commons 0"`); the
+  CC0 Sonor kick set holds one head at six pressures, and Iowa's MIS has a hihat
+  at pp, mf and ff by tip and shoulder. Previews stop near 16 kHz: read every
+  figure under it, the kit's too.
+- A spectrum of a one-shot under a Hann window reads its attack at nothing: the
+  window is near zero where the hit starts, so a click or a stick vanished from
+  the band shares. Start the segment a millisecond before the onset and taper
+  only its end. Weigh a stroke-to-stroke spread by each band's energy, or a short
+  noise's quiet bands differ by 10 dB between two takes alike to the ear.
+- A drum change is benched piece by piece without editing the tree:
+  `soundlab -config-sounds piece.toml -s bench.slab` overrides one sound of the
+  built-in kit. The analysis hears a kick still ringing at 50 to 60 Hz as the bass
+  line, and a snare's fixed modes move the melody's key: the bench's clean bass
+  rests on three loops of twelve, which a kick of the old 42 Hz glide restored.
 
 ## Locks
 
