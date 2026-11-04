@@ -1404,10 +1404,11 @@ front-end seam. What remains, in the design's order:
    loops through a phone mic, a room and crowd noise at 20 to 0 dB, the same
    chain in the corpus, PCEN in place of the static logarithm, and a rip over a
    moving window. Also: the fit gave Für Elise's bass a non-piano voice, with
-   #989's drive trap under it, and the General MIDI table drops a shaker's hits
-   (Billie Jean's key 82, 1108 of them) that the hihat's row could take.
-   Then: real recordings with their notes in the corpus (item 1: `corpus
-   <dir> from` writes MAESTRO's, `train.py --mix` mixes them in), then more
+   #989's drive trap under it. Then: real recordings with their notes in the
+   corpus (item 1: `corpus <dir> from` writes E-GMD's, `train.py --mix` mixes
+   them in; still lacking a held-out score for a `from` corpus, E-GMD's ET
+   split being the clean one, drum velocity in the labels, a check that drops
+   a render whose hits draw no onset, and an NSynth sampler voice), then more
    loops, or width 384 (`DIM=384 HEADS=12 FFN=1536`, 7 million weights),
    each measured by `bench` on clean and augmented loops and by the truths on
    the recordings, and shipped only when it beats the analysis on both; a

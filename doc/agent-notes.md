@@ -432,8 +432,10 @@ that proves wrong or that a document now states, and link the document instead.
   the lengths exchanged. Changing the reader to pair the latest instead would
   move the transcripts `truth` and `corpus <dir> from` read.
 - `ReadMIDI`'s hits are the kick, snare and hihat only (`midiDrum(key,
-  InstrClap)`); `MIDIScore.Song` reads the clap too (`InstrClap+1`). A clap in a
-  test file is a hit for a song, not for `truth`. `firstBar` reads a signature
+  InstrClap)`), the drum channel's other keys `Struck`; `MIDIScore.Song` reads
+  the clap too (`InstrClap+1`). A clap in a test file is a hit for a song, not
+  for `truth`. A `corpus <dir> from` loop is known by its `source`, the CSV's
+  `audio_filename`: the set may move, but an entry renamed joins as new. `firstBar` reads a signature
   that holds exactly one bar before the next as a pickup, so a 3/4 bar ahead of
   6/8 gives `Meter` 6/8.
 - A test that needs the shipped voices in `pkg/audio` registers stand-ins:
