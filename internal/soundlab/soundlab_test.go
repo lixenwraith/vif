@@ -2198,11 +2198,15 @@ func TestCorpusAugmentsAndLabelsTheVoices(t *testing.T) {
 
 // TestSampledLinesPlayAsLabelled: a line on recorded notes sounds at each note's
 // labelled pitch after the shift and the loop's tuning, from its labelled frame,
-// and every sampled note's label carries no wave and no voice
+// every sampled note's label carries no wave and no voice, and an instrument
+// with a silent note is passed over for the engine's voice
 func TestSampledLinesPlayAsLabelled(t *testing.T) {
-	dir := t.TempDir()
+	dir, quiet := t.TempDir(), t.TempDir()
 	const cents = 30
-	for _, name := range []string{"bass_synthetic_000", "synth_lead_synthetic_001"} {
+	for _, in := range []struct {
+		dir, name string
+		amp       float64
+	}{{dir, "bass_synthetic_000", 0.5}, {dir, "synth_lead_synthetic_001", 0.5}, {quiet, "keyboard_acoustic_002", 0}} {
 		for p := 21; p <= 108; p += 4 { // a partial set, as a train slice holds
 			pcm := make([]byte, 44+2*4*nsynthRate)
 			copy(pcm, "RIFF\x00\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00")
@@ -2215,10 +2219,10 @@ func TestSampledLinesPlayAsLabelled(t *testing.T) {
 			le.PutUint32(pcm[40:], 2*4*nsynthRate)
 			for i := range 4 * nsynthRate {
 				env := min(1, 4-float64(i)/nsynthRate) // held 3 s, released over the last
-				v := 0.5 * env * math.Sin(2*math.Pi*audio.NoteFreq(p)*float64(i)/nsynthRate)
+				v := in.amp * env * math.Sin(2*math.Pi*audio.NoteFreq(p)*float64(i)/nsynthRate)
 				le.PutUint16(pcm[44+2*i:], uint16(int16(v*32767)))
 			}
-			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%s-%03d-100.wav", name, p)), pcm, 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(in.dir, fmt.Sprintf("%s-%03d-100.wav", in.name, p)), pcm, 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2282,6 +2286,20 @@ func TestSampledLinesPlayAsLabelled(t *testing.T) {
 			if e.Drum == -1 && (e.Wave != -1 || e.Voice != nil) {
 				t.Errorf("loop %d: sampled midi %d labelled wave %d, voice %v", i, e.MIDI, e.Wave, e.Voice)
 			}
+		}
+	}
+	silent, err := loadSampleSet(quiet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set.other, set.share = silent.other, 1
+	loops, err := s.corpus(tuneOptions{loops: 3, bars: 2, seed: 2, gen: true, samples: set})
+	if err != nil {
+		t.Fatalf("a silent note ended the corpus: %v", err)
+	}
+	for i, l := range loops {
+		if l.sampled[1] != nil || l.sampled[2] != nil {
+			t.Errorf("loop %d played a line on the silent instrument", i)
 		}
 	}
 }
