@@ -470,6 +470,10 @@ that proves wrong or that a document now states, and link the document instead.
   moved the band (D5 to A5) rather than closing it. `excite` now holds the
   hand-over to a quarter cycle. Iowa's notes have such dips (C5 -29 dB at 0.5
   s), one note at a time, never a band.
+- NSynth's notes are each normalised: on the test set a pitch's velocity layer
+  peaks a median 0.1 to 0.6 dB from its 127's, nine in ten within -1 to +4 dB,
+  so a layer is timbre, not loudness. `corpus ... sampled` takes each note's level
+  out and plays it at its step's velocity, as the engine's voices do.
 - The soundlab bench's loops play no piano: a piano change moves no bench
   number, a bass change does.
 - `PatternPlayer.TriggerNoteMIDI` stamps a voice's serial after `Trigger`, so a

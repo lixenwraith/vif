@@ -695,7 +695,11 @@ the instruments named after the file; `refine` closes the loop, the
 voices fitted again and the tonal steps' velocities and lengths searched with
 that score as the fitness, a step kept only when it rises; `bench` grades the
 analysis and a loaded model on fresh renders, clean and augmented (`corpus ...
-aug`). [Rip design](rip-design.md) is where the rip is going from
+aug`). With `sampled <dir>`, both play half of a loop's tonal lines on NSynth's
+recorded notes in place of the voices: an instrument whose pitches reach the
+line's notes within three semitones, each note shifted from the nearest, cut
+into its recording's release at the note-off, mixed against the rest of the
+loop, and labelled with no voice. [Rip design](rip-design.md) is where the rip is going from
 here: the loop that refines voices and patterns against that score.
 
 What it does not yet tell apart: a bass note's attack from a kick, a plucked

@@ -4,6 +4,7 @@ package soundlab
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -2192,6 +2193,96 @@ func TestCorpusAugmentsAndLabelsTheVoices(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "random genes") {
 		t.Errorf("corpus did not say it augmented:\n%s", out.String())
+	}
+}
+
+// TestSampledLinesPlayAsLabelled: a line on recorded notes sounds at each note's
+// labelled pitch after the shift and the loop's tuning, from its labelled frame,
+// and every sampled note's label carries no wave and no voice
+func TestSampledLinesPlayAsLabelled(t *testing.T) {
+	dir := t.TempDir()
+	const cents = 30
+	for _, name := range []string{"bass_synthetic_000", "synth_lead_synthetic_001"} {
+		for p := 21; p <= 108; p += 4 { // a partial set, as a train slice holds
+			pcm := make([]byte, 44+2*4*nsynthRate)
+			copy(pcm, "RIFF\x00\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00")
+			le := binary.LittleEndian
+			le.PutUint32(pcm[24:], nsynthRate)
+			le.PutUint32(pcm[28:], 2*nsynthRate)
+			le.PutUint16(pcm[32:], 2)
+			le.PutUint16(pcm[34:], 16)
+			copy(pcm[36:], "data")
+			le.PutUint32(pcm[40:], 2*4*nsynthRate)
+			for i := range 4 * nsynthRate {
+				env := min(1, 4-float64(i)/nsynthRate) // held 3 s, released over the last
+				v := 0.5 * env * math.Sin(2*math.Pi*audio.NoteFreq(p)*float64(i)/nsynthRate)
+				le.PutUint16(pcm[44+2*i:], uint16(int16(v*32767)))
+			}
+			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%s-%03d-100.wav", name, p)), pcm, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	set, err := loadSampleSet(dir)
+	if err != nil || len(set.bass) != 1 || len(set.other) != 1 {
+		t.Fatalf("index: %v, %d bass and %d other instrument(s)", err, len(set.bass), len(set.other))
+	}
+	notes := []audio.RipEvent{{Step: 2, Dur: 2, MIDI: 62, Vel: 0.8}, {Step: 14, Dur: 2, MIDI: 58, Vel: 0.5}, {Bar: 1, Step: 10, Dur: 2, MIDI: 71, Vel: 1}}
+	line, err := set.line(set.other[0], notes, 2, 120, cents, false, map[sampleKey][]float64{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sr, frame := float64(audio.AudioSampleRate), audio.RipFrameSec*audio.AudioSampleRate
+	power := func(x []float64, f float64) float64 { // Goertzel
+		var s1, s2 float64
+		c := 2 * math.Cos(2*math.Pi*f/sr)
+		for _, v := range x {
+			s1, s2 = v+c*s1-s2, s1
+		}
+		return s1*s1 + s2*s2 - c*s1*s2
+	}
+	for _, e := range notes {
+		at := int(float64(e.Bar*audio.StepsPerBar+e.Step) * float64(audio.SamplesPerStep(120)))
+		onset := at - int(frame)
+		for math.Abs(line.audio[onset]) < 0.05 {
+			onset++
+		}
+		if d := float64(onset - at); d < -frame || d > frame {
+			t.Errorf("midi %d sounds %.0f samples from its label, past a frame", e.MIDI, d)
+		}
+		win, heard := line.audio[at+1000:at+5000], 0
+		for m := 40; m < 90; m++ {
+			if power(win, audio.NoteFreq(m)*math.Exp2(cents/1200.0)) > power(win, audio.NoteFreq(heard)*math.Exp2(cents/1200.0)) {
+				heard = m
+			}
+		}
+		if heard != e.MIDI {
+			t.Errorf("midi %d labelled sounds as %d", e.MIDI, heard)
+		}
+	}
+	set.share = 1
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	corpus := filepath.Join(dir, "corpus")
+	if err := s.exportCorpus(corpus, tuneOptions{loops: 3, bars: 2, seed: 2, gen: true, aug: true, samples: set}); err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(\d+) of (\d+) tonal line\(s\)`).FindStringSubmatch(out.String())
+	if m == nil || m[1] != m[2] || m[1] == "0" {
+		t.Fatalf("not every tonal line played on the recorded notes:\n%s", out.String())
+	}
+	for i := range 3 {
+		var lab corpusLoop
+		data, _ := os.ReadFile(filepath.Join(corpus, fmt.Sprintf("loop_%03d.json", i)))
+		if err := json.Unmarshal(data, &lab); err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range lab.Events {
+			if e.Drum == -1 && (e.Wave != -1 || e.Voice != nil) {
+				t.Errorf("loop %d: sampled midi %d labelled wave %d, voice %v", i, e.MIDI, e.Wave, e.Voice)
+			}
+		}
 	}
 }
 
