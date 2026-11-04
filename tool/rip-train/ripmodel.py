@@ -1,8 +1,8 @@
 """The rip's front-end model as PyTorch builds it, the twin of pkg/audio/ripmodel
-and pkg/transformer: convolutions over the frames as an image, a linear input,
+and lixenwraith/transformer: convolutions over the frames as an image, a linear input,
 pre-norm attention blocks with ALiBi biases over a window of frames, exact GELU
 feed-forwards, a final norm and one output layer whose slices are the heads.
-export() writes the weight file pkg/transformer loads, its tensor names and order.
+export() writes the weight file lixenwraith/transformer loads, its tensor names and order.
 """
 from __future__ import annotations
 
@@ -163,7 +163,7 @@ class RipModel(nn.Module):
         return self.out(self.ln(x))
 
 
-# --- the weight file pkg/transformer loads ---
+# --- the weight file lixenwraith/transformer loads ---
 
 MAGIC = b"VIFT"
 VERSION = 2
@@ -177,7 +177,7 @@ def _fnv64a(data: bytes) -> int:
 
 
 def tensors(model: RipModel):
-    """Every weight by the name pkg/transformer gives it, in its order."""
+    """Every weight by the name lixenwraith/transformer gives it, in its order."""
     sd = model.state_dict()
     out = []
     for i in range(len(model.cfg.convs)):
