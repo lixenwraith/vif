@@ -96,7 +96,7 @@ var DefaultPlay = sync.OnceValue(func() Play {
 
 // UnknownKeys names the keys a settings document holds that this build has no
 // field for, every key it does know read by the time this is returned. A run drops
-// them from the document it writes back to (DropUnknown); soundlab only names them.
+// them from the document it writes back to (DropUnknown).
 type UnknownKeys = toml.UnknownKeys
 
 // LoadSettings reads the first vif.toml the roots of override hold, over the

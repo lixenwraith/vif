@@ -32,8 +32,6 @@ const (
 	KeymapConfigFile = "keymap.toml"
 	MusicConfigFile  = "music.toml"
 	SoundConfigFile  = "sounds.toml"
-	RipConfigFile    = "rip.toml"
-	RipModelFile     = "ripmodel.bin"
 )
 
 // ExternalFiles reports whether this target has a host filesystem available

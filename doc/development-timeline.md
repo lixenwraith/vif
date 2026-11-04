@@ -108,7 +108,7 @@ until its rename to vif in September 2026.
 - A large tower-defense map
 - App split into bootstrap and composition; generated events
 - Audio as its own package, with external sound effects
-- Soundlab: REPL, TUI and piano
+- Stapes (formerly soundlab): REPL, TUI and piano
 - Fewer mutexes; a reset deadlock fixed
 - Persistent mouse and auto-fire defaults; content service
 

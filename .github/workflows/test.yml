@@ -28,6 +28,7 @@ jobs:
         cache-dependency-path: |
           go.sum
           android/go.sum
+          pkg/stapes/go.sum
 
     - name: Download dependencies
       run: go mod download
@@ -69,9 +70,17 @@ jobs:
       run: go vet ./... && go test ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
 
     - name: Run tests with race detector
-      # Soundlab's suite renders and hears music; under the detector on a busy
-      # runner it nears go test's ten-minute default.
-      run: go test -race -timeout 20m ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
+      run: go test -race ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
       env:
         # Halt on the first race; its report prints beside the failing package.
+        GORACE: "halt_on_error=1"
+
+    # stapes is a module of its own, nested here until it moves to its repository;
+    # vif imports none of it, so the root's ./... leaves it out.
+    - name: Vet and test the stapes module
+      working-directory: pkg/stapes
+      # Stapes' suite renders and hears music; under the detector on a busy
+      # runner it nears go test's ten-minute default.
+      run: go vet ./... && go test -race -timeout 20m ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
+      env:
         GORACE: "halt_on_error=1"

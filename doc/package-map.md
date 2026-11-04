@@ -101,7 +101,6 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, text-console palette detection and the quantizer that maps a 256-color frame to its sixteen colors, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for categorized files, terminal, content, audio, and network transport. |
-| `internal/soundlab` | The audio authoring environment over `lixenwraith/audio`: a session holding the engine and the working documents, the verb table every front end dispatches through, the script runner, and the TUI over any `terminal.Terminal`, so a host with its own screen and speakers runs it in-process ([Audio §4](audio.md#4-soundlab)). The rip's searches run here over `lixenwraith/genetic`: the voice fit (`rip`, `fit`), the dictionary and the song (`compress`, `song`) and the parameter search (`tune`), so the audio module keeps only their primitives ([Rip design](rip-design.md)). |
 | `internal/snapshot` | Shared-capture wire model: the capture and its header, the compressed JSON envelope, the correction manifest with its pages and section hashes, and the selective shard set — none of which reads a world. Also the comparison surface: the key filters, the line format and diff, the per-store digest, the assembled shared and whole-instance line sets, and the capture/correction telemetry cells. The surface readers take the caller's world lock and never acquire one. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, per-slot player metrics and the bare key that mirrors this instance's own slot, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order; `behavior.go` runs every species a scenario's behavior programs define. |
@@ -208,13 +207,19 @@ The practical dependency rules are:
 | External module | Used by | What remains in vif |
 |---|---|---|
 | `lixenwraith/terminal` | app, service, input, mode (`tui` forms), render and renderers, ascimage, cmds and tools; core's crash reset and a few attribute and color-mode types in component, engine, pattern and system | Game-specific input semantics, compositor, renderers, and layout. |
-| `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, soundlab, the router; its `macro` package expands the macros scenarios, bot graphs and audio documents define ([TOML macros](toml-macros.md)) | Schemas, validation policy, semantic models, and application resolution. |
+| `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, the router; its `macro` package expands the macros scenarios, bot graphs and audio documents define ([TOML macros](toml-macros.md)) | Schemas, validation policy, semantic models, and application resolution. |
 | `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
-| `lixenwraith/genetic` | `GeneticSystem` and `engine.GeneticResource`, which evolve eye types through the registry, the genetic tunables in `parameter`, and stapes' searches in `internal/soundlab`: the voice fit, the dictionary and `tune` ([AI and evolution §3](ai-physics-and-evolution.md#3-genetic-library)) | The game adapter: species declarations, probe bins, eye fitness, and the capture's genetic carrier (D-19). |
-| `lixenwraith/audio` | `internal/service`'s audio adapter, which runs the engine over the `bank` package's sounds and music and the overrides; the engine's audio resource, the audio systems' requests, the events' audio values (`model`) and the audio tuning in `parameter`; `-check`'s audio documents in `resource`; and soundlab, over the rip and its learned front end (`ripmodel`) too ([its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md)) | Game policy: the adaptive conductor, sfx levels and sound shapes, the overrides' resolution, the speakers' host and telemetry ([Audio](audio.md)). |
-| `lixenwraith/transformer` | The audio module's `ripmodel` only, the rip's learned front end, which loads its weight file and runs it over log-mel frames; `tool/rip-train` is the PyTorch twin that writes the file ([its format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md)) | Nothing: the model's shape (`ripmodel.Spec`), the features it hears and how its heads become the rip's frames are the audio module's. |
+| `lixenwraith/genetic` | `GeneticSystem` and `engine.GeneticResource`, which evolve eye types through the registry, and the genetic tunables in `parameter` ([AI and evolution §3](ai-physics-and-evolution.md#3-genetic-library)) | The game adapter: species declarations, probe bins, eye fitness, and the capture's genetic carrier (D-19). |
+| `lixenwraith/audio` | `internal/service`'s audio adapter, which runs the engine over the `bank` package's sounds and music and the overrides; the engine's audio resource, the audio systems' requests, the events' audio values (`model`) and the audio tuning in `parameter`; and `-check`'s audio documents in `resource` ([its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md)) | Game policy: the adaptive conductor, sfx levels and sound shapes, the overrides' resolution, the speakers' host and telemetry ([Audio](audio.md)). |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
+
+Stapes (formerly soundlab), the audio authoring tool, is a sibling module nested
+in `pkg/stapes` until it moves to `lixenwraith/stapes`. It stands on
+`lixenwraith/audio` and `lixenwraith/genetic` as vif does, and it alone loads
+the rip's learned front end, the audio module's `ripmodel` over
+`lixenwraith/transformer`, so vif's `go.mod` names no transformer. vif imports
+none of it, and it imports nothing of vif ([Audio §4](audio.md#4-stapes)).
 
 The pinned revisions are in `go.mod`; this document intentionally avoids
 duplicating version strings that would become stale.
@@ -225,8 +230,6 @@ duplicating version strings that would become stale.
 |---|---|
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (the view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
 | `cmd/ascimage` | Supported image converter/viewer command. |
-| `cmd/soundlab` | The audio document editor's terminal command: its flags and the REPL over `internal/soundlab`. |
-| `tool/rip-train` | Train the rip's front-end model on a corpus soundlab exports, on one machine or in rounds over several whose runs it averages, and write the weight file `ripmodel` loads through `lixenwraith/transformer`; Python, outside the module ([README](../tool/rip-train/README.md)). |
 | `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |
