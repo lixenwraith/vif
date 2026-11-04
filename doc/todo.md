@@ -1307,8 +1307,10 @@ layout is already cached, removes them. The menu and form overlays allocate
 likewise but show while `PauseForInput` holds the simulation, so they cost play
 nothing.
 
-
 ## Audio
+
+The audio library's own items are in [its todo](../pkg/audio/doc/todo.md);
+these also change soundlab.
 
 ### Bring soundlab to Android (soundlab mobile)
 
@@ -1344,11 +1346,13 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
 ### Tune the rip
 
 - Priority: P1
-- Affected files: `pkg/audio/rip.go`, `pkg/audio/rip_test.go`, `internal/soundlab`
+- Affected files: `lixenwraith/audio` (`rip.go`, `rip_test.go`),
+  `internal/soundlab`
 
-`RipSamples` ([Audio §11](audio.md#11-ripping-a-recording)) reads tempo, bars,
-key, drums, melody and bass off a recording under `RipParams`, through the
-built-in analysis or `ripmodel`; [Rip design](rip-design.md) is the whole plan.
+`RipSamples` ([Audio library
+§9](../pkg/audio/doc/audio.md#9-ripping-a-recording)) reads tempo, bars, key,
+drums, melody and bass off a recording under `RipParams`, through the built-in
+analysis or `ripmodel`; [Rip design](rip-design.md) is the whole plan.
 The search over the parameters is in place (`tune`), as are the corpus the
 engine exports (`corpus`), the model, its trainer (`tool/rip-train`) and the
 front-end seam. What remains, in the design's order:
@@ -1472,7 +1476,7 @@ front-end seam. What remains, in the design's order:
 ### Close the rip's loop
 
 - Priority: P1
-- Affected files: `pkg/audio/rip.go`, `pkg/audio/song.go`, `internal/soundlab`
+- Affected files: `lixenwraith/audio` (`rip.go`, `song.go`), `internal/soundlab`
 
 [Rip design](rip-design.md) §2 stage 7. The voice fit (`rip`, `fit`), the
 dictionary and the song (`compress`, `song`) and the song's score against the
@@ -1514,10 +1518,9 @@ rip are in place; what remains:
 ### Give songs and patterns a meter
 
 - Priority: P2
-- Affected files: `pkg/audio/params.go`, `pkg/audio/sequencer.go`,
-  `pkg/audio/track.go`, `pkg/audio/engine.go`, `pkg/audio/song.go`,
-  `pkg/audio/pattern_spec.go`, `pkg/audio/rip.go`, `pkg/audio/midi.go`,
-  `pkg/audio/fidelity.go`, `internal/soundlab`
+- Affected files: `lixenwraith/audio` (`params.go`, `sequencer.go`, `track.go`,
+  `engine.go`, `song.go`, `pattern_spec.go`, `rip.go`, `midi.go`,
+  `fidelity.go`), `internal/soundlab`
 
 A bar is sixteen steps everywhere (`StepsPerBar`, `BeatsPerBar`), so a piece in
 three falls into bars of four beats that cut its own bars mid-bar, and
@@ -1605,51 +1608,6 @@ bar, resets the sequencer, and that empties every slot, while the session's
 renders the old slots, and a slot's track mutes wait for their pattern to be put
 back. The fix is reset slotting the session's patterns again, or a sequencer
 reset that keeps them.
-
-### Bring the tonal voices nearer their recordings
-
-- Priority: P2
-- Affected files: `pkg/audio/voice.go`, `internal/asset/audio/voices.toml`
-
-Round two ([Audio §7](audio.md#7-music-sequencer)) fitted the piano and the bass
-to Iowa's notes at pp, mf and ff by their level at 0.25 to 3 s, mel distance and
-brightness. The piano's level by velocity stays the old law by the owner's
-choice (pp 4 dB under mf, ff 2 dB over, where the recordings' spread is 14 and
-12 dB): brightness carries the dynamic. What is left: the piano's lowest
-octave still falls 4 to 6 dB faster than recorded by 3 s; its fundamental gains
-the slow second string only from about C3 up (`bright`'s body rounds the first
-paired partial), so f0's T60 steps from 5 s to 23 s across that semitone; the
-bass's level error is 7 to 8 dB, against Iowa runs whose notes differ by as much;
-and the pad and the lead are measured against main only, by their energy above
-4·f0 and how alike two notes are, never against an instrument.
-
-### Bring the drum kit nearer its recordings
-
-- Priority: P2
-- Affected files: `internal/asset/audio/drums.toml`, `pkg/audio/kit.go`, `pkg/audio/rip.go`
-
-The kit ([Audio §7](audio.md#7-music-sequencer)) was measured against CC0 MP3
-previews and Iowa's hihat, at three velocities each. What is left: an open hihat,
-which the MIDI drum map's 46 reads as the closed one; a kick recorded several
-times at one pressure, to set its strokes' spread (the Sonor set has one take a
-pressure); and the analysis's bass and melody under the natural kit (`bench 12 4`
-clean 0.15 to 0.03 and 0.17 to 0.11, augmented 0.04 to 0.08 and 0.13 to 0.13), a
-kick ringing at 52 Hz read as bass, which a model trained on the new corpus is
-to be benched against.
-
-### Spin off `pkg/audio` as its own module
-
-- Priority: P2
-- Affected files: `pkg/audio`, `pkg/audio/model`, `internal/parameter`,
-  `internal/service`, `internal/resource`, `internal/soundlab`, `go.mod`
-
-No in-repository import remains: beside the standard library the package imports
-only `lixenwraith/toml` and its `macro` expander, which moved there for this.
-What remains is the move itself: a `lixenwraith/audio` repository with the
-package at its root and `model` under it, the package README as its README with
-import paths rewritten, the repository LICENSE and a `go.mod` at this module's
-Go version; then this module's importers take the new path and `go.mod` requires
-it.
 
 ## Engine
 
