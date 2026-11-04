@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/lixenwraith/transformer"
 	"github.com/lixenwraith/vif/pkg/audio"
-	"github.com/lixenwraith/vif/pkg/transformer"
 )
 
 // TestAnUntrainedModelHearsFramesTheRipReads is the contract between the model

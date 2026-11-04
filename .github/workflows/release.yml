@@ -49,6 +49,10 @@ jobs:
       - name: Vet and test
         run: go vet ./... && go test ./...
 
+      - name: Vet and test the transformer module
+        working-directory: pkg/transformer
+        run: go vet ./... && go test ./...
+
       - name: Build archives
         shell: bash
         run: |

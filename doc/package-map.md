@@ -124,7 +124,7 @@ flowchart TD
     Game --> Browser["pkg/browser"]
     Game --> HostKey["pkg/hostkey"]
     Game --> Socket["pkg/websocket"]
-    Audio --> Net["pkg/audio/ripmodel over pkg/transformer"]
+    Audio --> Net["pkg/audio/ripmodel over lixenwraith/transformer"]
 ```
 
 | Package | Public purpose | Important coupling |
@@ -137,8 +137,7 @@ flowchart TD
 | `pkg/hostkey` | The key report of a host that reads its platform's own key events: presses until a run asks for releases, then each key's press, repeats and release paired by the host's code for the physical key, taps for keys with no release, every hold ended when focus leaves. The window, the page and Android share it. | External terminal module only (its `KeyHolds` pairs the releases). |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink, the rip and its transcripts as MIDI files. | Game policy *and the banks* are injected; the package ships no specs, and beside the standard library imports only `lixenwraith/toml` and its `macro` expander, so it can leave the module whole. |
 | `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
-| `pkg/audio/ripmodel` | The rip's learned front end: the model's shape (`Spec`), a weight file loaded into a `RipFrontEnd` that hears log-mel frames into the frames the rip's decoders read, voices included ([Rip design](rip-design.md)). | `pkg/audio` and `pkg/transformer`; goes with `audio` to its module. |
-| `pkg/transformer` | Inference over sequences of frames in pure Go: a linear input, pre-norm attention blocks with ALiBi biases over a window, exact-GELU feed-forwards, named output heads, and the versioned weight file a trainer writes. | Standard library only; `tool/rip-train` is the PyTorch twin that writes its files. |
+| `pkg/audio/ripmodel` | The rip's learned front end: the model's shape (`Spec`), a weight file loaded into a `RipFrontEnd` that hears log-mel frames into the frames the rip's decoders read, voices included ([Rip design](rip-design.md)). | `pkg/audio` and `lixenwraith/transformer`; goes with `audio` to its module. |
 | `pkg/network` | Framed messages over TCP or WebSocket (the browser's own socket on `js/wasm`), deflated per link once a handshake opens the stream; the accept and dial transport with its handshake budget and the hooks a session's handshakes plug into; the port's tick-drained inbound queue, bundled sends and the link probe it answers itself; an in-process mesh with shaped links; chunked bodies; crossing fences; session addresses and TLS. | Standard library, `pkg/linkpace` and `pkg/websocket`. It knows no kinds and no game: `Kinds` is the session layer's table over the kind byte, and the handshakes, the timing and the kinds come from its caller's `Config`. |
 | `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
 | `pkg/machine` | Per-entity state machines: an `Instance` a component carries (a state, its elapsed time, its entry's duration), and an immutable `Graph` built and validated once from typed hooks and stepped in fixed phases. | Standard library only: hooks reach the world through their host, by the context it passes or as its methods, and the host writes the state's flags to its components; `SwarmSystem`, `QuasarSystem`, `StormSystem` and `BehaviorSystem` are its hosts ([Behavior machines §2](machine-design.md#2-runtime)). |
@@ -217,11 +216,15 @@ The practical dependency rules are:
 | `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, soundlab, the router; its `macro` package expands the macros scenarios, bot graphs and audio documents define ([TOML macros](toml-macros.md)) | Schemas, validation policy, semantic models, and application resolution. |
 | `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/genetic` | `GeneticSystem` and `engine.GeneticResource`, which evolve eye types through the registry, the genetic tunables in `parameter`, and stapes' searches in `internal/soundlab`: the voice fit, the dictionary and `tune` ([AI and evolution §3](ai-physics-and-evolution.md#3-genetic-library)) | The game adapter: species declarations, probe bins, eye fitness, and the capture's genetic carrier (D-19). |
+| `lixenwraith/transformer` | `pkg/audio/ripmodel` only, the rip's learned front end, which loads its weight file and runs it over log-mel frames; `tool/rip-train` is the PyTorch twin that writes the file ([its format](../pkg/transformer/doc/format.md)) | The model's shape (`ripmodel.Spec`), the features it hears and how its heads become the rip's frames. |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
 
 The pinned revisions are in `go.mod`; this document intentionally avoids
-duplicating version strings that would become stale.
+duplicating version strings that would become stale. `lixenwraith/transformer`
+sits in `pkg/transformer`, a module of its own that `go.mod` and
+`android/go.mod` take through a `replace`, so `./...` skips it
+([its README](../pkg/transformer/README.md)).
 
 ## 9. Commands, tools, and sandboxes
 
@@ -230,7 +233,7 @@ duplicating version strings that would become stale.
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (the view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
 | `cmd/ascimage` | Supported image converter/viewer command. |
 | `cmd/soundlab` | The audio document editor's terminal command: its flags and the REPL over `internal/soundlab`. |
-| `tool/rip-train` | Train the rip's front-end model on a corpus soundlab exports, on one machine or in rounds over several whose runs it averages, and write the weight file `pkg/transformer` loads; Python, outside the module ([README](../tool/rip-train/README.md)). |
+| `tool/rip-train` | Train the rip's front-end model on a corpus soundlab exports, on one machine or in rounds over several whose runs it averages, and write the weight file `lixenwraith/transformer` loads; Python, outside the module ([README](../tool/rip-train/README.md)). |
 | `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |

@@ -119,7 +119,7 @@ func TestWeightFileRoundTrips(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if back.Parameters() != m.Parameters() || back.Config().OutputSize() != c.OutputSize() {
+		if back.Parameters() != m.Parameters() || back.Config().outputSize() != c.outputSize() {
 			t.Fatalf("loaded %d parameters of %d", back.Parameters(), m.Parameters())
 		}
 		in := frames(7, c.Inputs, 5)
@@ -212,7 +212,24 @@ func TestForwardShapesAndDeterminism(t *testing.T) {
 	if m.Forward(nil) != nil {
 		t.Error("no frames gave frames")
 	}
-	if _, err := New(Config{Inputs: 1, Dim: 6, Heads: 4, FFN: 1, Outputs: []Head{{"x", 1}}}); err == nil {
+	if _, err := newModel(Config{Inputs: 1, Dim: 6, Heads: 4, FFN: 1, Outputs: []Head{{"x", 1}}}); err == nil {
 		t.Error("a width no multiple of its heads passed")
 	}
+}
+
+// BenchmarkForward is the baseline for performance work: 3.3 million weights,
+// width 256 in eight heads, four layers, a feed-forward of 1024 and a window of
+// 64 frames either side, run over 512 frames of 230 inputs into 318 outputs.
+func BenchmarkForward(b *testing.B) {
+	const T = 512
+	m, err := NewRandom(Config{Inputs: 230, Dim: 256, Heads: 8, Layers: 4, FFN: 1024, Window: 64, Outputs: []Head{{"y", 318}}}, 1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	in := frames(T, m.cfg.Inputs, 2)
+	b.ReportAllocs()
+	for b.Loop() {
+		m.Forward(in)
+	}
+	b.ReportMetric(float64(T*b.N)/b.Elapsed().Seconds(), "frames/s")
 }

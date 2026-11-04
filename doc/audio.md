@@ -735,9 +735,9 @@ events and keep the sequencer unaware of gameplay concepts.
 - Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
 - Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`; its transcripts
   compared and read or written, and patterns and songs as MIDI files:
-  `match.go`, `midi.go`; its learned front
-  end `pkg/audio/ripmodel`, over `pkg/transformer`, trained by `tool/rip-train`;
-  the design: `doc/rip-design.md`
+  `match.go`, `midi.go`; its learned front end `pkg/audio/ripmodel`, over
+  `lixenwraith/transformer`, trained by `tool/rip-train`; the design:
+  `doc/rip-design.md`
 - Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `kit.go`,
   `sound_render.go`
 - Sound and voice schema, loading and registries: `pkg/audio/sound_spec.go`,

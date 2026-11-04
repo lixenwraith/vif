@@ -10,8 +10,8 @@ import (
 	"io"
 	"math"
 
+	"github.com/lixenwraith/transformer"
 	"github.com/lixenwraith/vif/pkg/audio"
-	"github.com/lixenwraith/vif/pkg/transformer"
 )
 
 // The heads, in the order the output vector lays them

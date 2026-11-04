@@ -13,11 +13,12 @@ import (
 
 // The weight file: a magic and version, the Config, then every tensor by name
 // with its shape and float32 data, little-endian, and the FNV-1a 64 of all of it.
+// doc/format.md is its contract; a change to the bytes bumps fileVersion there.
 const (
 	fileMagic   = "VIFT"
-	fileVersion = 2 // the convolutions and the towers after the window
+	fileVersion = 2
 	maxName     = 64
-	maxTensor   = 1 << 28 // floats; a file past it is not one of ours
+	maxTensor   = 1 << 28 // floats in one tensor
 )
 
 type tensor struct {
@@ -26,12 +27,12 @@ type tensor struct {
 	data []float32
 }
 
-// tensors names every weight in a fixed order, the trainer's export matching it
+// tensors names every weight in the order the file holds them
 func (m *Model) tensors() []tensor {
-	lin := func(name string, l *Linear) []tensor {
+	lin := func(name string, l *linear) []tensor {
 		return []tensor{{name + ".weight", []int{l.Out, l.In}, l.W}, {name + ".bias", []int{l.Out}, l.B}}
 	}
-	norm := func(name string, ln *LayerNorm) []tensor {
+	norm := func(name string, ln *layerNorm) []tensor {
 		return []tensor{{name + ".weight", []int{len(ln.G)}, ln.G}, {name + ".bias", []int{len(ln.B)}, ln.B}}
 	}
 	var ts []tensor
@@ -43,7 +44,7 @@ func (m *Model) tensors() []tensor {
 	ts = append(ts, lin("in", &m.in)...)
 	for ti := range m.towers {
 		tw := &m.towers[ti]
-		pt := "" // a model of one tower keeps the names it had before towers
+		pt := "" // a model without Towers names its one stack unprefixed
 		if len(m.cfg.Towers) > 0 {
 			pt = fmt.Sprintf("towers.%d.", ti)
 		}
@@ -190,7 +191,7 @@ func Load(r io.Reader) (*Model, error) {
 		}
 		cfg.Outputs = append(cfg.Outputs, Head{Name: name, Size: int(size)})
 	}
-	m, err := New(cfg)
+	m, err := newModel(cfg)
 	if err != nil {
 		return nil, err
 	}

@@ -31,7 +31,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+", help="the round's checkpoints, each train.py's --checkpoint")
     ap.add_argument("--pt", required=True, help="the mean as a .pt, the next round's --init")
-    ap.add_argument("--out", required=True, help="the mean as the weight file pkg/transformer loads, as train.py's --out")
+    ap.add_argument("--out", required=True, help="the mean as the weight file lixenwraith/transformer loads, as train.py's --out")
     ap.add_argument("--trim", type=float, default=0.0, help="share of the files whose highest and lowest values of each weight are dropped before the mean, under a half")
     args = ap.parse_args()
     if not 0 <= args.trim < 0.5:

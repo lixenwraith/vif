@@ -1,5 +1,5 @@
 """Train the rip's front end on a corpus soundlab exported (`corpus <dir>`), and
-export the weights pkg/transformer loads:
+export the weights lixenwraith/transformer loads:
 
     python3 train.py --corpus corpus/ --out ripmodel.bin --steps 2000
 

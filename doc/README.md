@@ -61,8 +61,10 @@ Focused references:
 - [Agent notes](agent-notes.md) holds what agents learned working on the
   repository that no rule or design document states.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
-- [Genetic library](https://github.com/lixenwraith/genetic) documents the reusable optimization library, a
-  module of its own.
+- [Genetic library](https://github.com/lixenwraith/genetic) documents the
+  reusable optimization library, a module of its own.
+- [Transformer library](../pkg/transformer/README.md) documents the inference
+  library the rip's model runs on, a module of its own, and its weight file.
 - [Soundlab reference](../cmd/soundlab/README.md) covers the audio authoring
   environment.
 - [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image
