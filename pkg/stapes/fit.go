@@ -1,0 +1,388 @@
+package stapes
+
+// The voice fit: analysis by synthesis. A recording's register is heard as notes;
+// the engine plays a candidate voice at those notes and the mel frames of its
+// render are compared with the recording's around them, and a search over the
+// voice's genes and wave, seeded with every registered voice, keeps the nearest.
+
+import (
+	"bytes"
+	"cmp"
+	"context"
+	"fmt"
+	"math"
+	"math/rand/v2"
+	"os"
+	"runtime"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/lixenwraith/audio"
+	"github.com/lixenwraith/genetic"
+)
+
+// fitOptions sizes a voice fit: the notes of a register it listens to, the
+// generations run over a pool of candidate voices, and the seed every draw follows
+type fitOptions struct {
+	notes, generations, pool int
+	seed                     uint64
+}
+
+var defaultFit = fitOptions{notes: 6, generations: 8, pool: 16, seed: 1}
+
+// fitTail is how long past a note's end its sample runs, for the release
+const fitTail = 0.25
+
+// ripped is a recording ripped this session: what was heard, and the samples it
+// was heard in, so fit and compress work on it without the file; a score read
+// from a MIDI file has no samples
+type ripped struct {
+	rip   *audio.Rip
+	x     []float64
+	rate  int
+	file  string
+	sound *audio.RipSound // the recording as Fidelity hears it, heard on first use
+}
+
+// errScore refuses a verb that hears the recording a score lacks
+func errScore(rp *ripped) error {
+	return fmt.Errorf("%s is a score, with no recording to hear or fit to", rp.file)
+}
+
+func cmdFit(s *Session, a []string) error {
+	rp, ok := s.rips[a[0]]
+	if !ok {
+		return fmt.Errorf("%q: nothing ripped under that name this session (rip first)", a[0])
+	}
+	o := s.fit
+	if len(a) > 1 {
+		n, err := strconv.Atoi(a[1])
+		if err != nil || n < 1 || n > 500 {
+			return fmt.Errorf("generations %q: want 1 to 500", a[1])
+		}
+		o.generations = n
+	}
+	if rp.x == nil {
+		return errScore(rp)
+	}
+	s.fitVoices(rp, o, true)
+	for _, v := range rp.rip.Voices(a[0]) {
+		if _, err := s.eng.DefineVoice(v.Clone()); err != nil {
+			return fmt.Errorf("voice %q: %w", v.Name, err)
+		}
+		s.voices.put(v, false)
+		fmt.Fprintf(s.out, "voice %s: %s, registered; the patterns naming it play it\n", v.Name, cmp.Or(v.Wave, "sine"))
+	}
+	return nil
+}
+
+// cmdNotes lists a rip's transcript, the notes as heard before the grid, each
+// with the bar and step it fell on, its pitch as the key's degree with any
+// accidental, its length, loudness and support, and a melody-register note's
+// brightness where it was measured, the header counting where it was not, so a
+// listener checks the rip by eye; or writes it to a MIDI file at the rip's tempo.
+func cmdNotes(s *Session, a []string) error {
+	rp, ok := s.rips[a[0]]
+	if !ok {
+		return fmt.Errorf("%q: nothing ripped under that name this session (rip first)", a[0])
+	}
+	r := rp.rip
+	if len(a) > 1 {
+		if !isMIDI(a[1]) {
+			return fmt.Errorf("%s: want a .mid file", a[1])
+		}
+		var b bytes.Buffer
+		hits := r.Hits()
+		if err := audio.WriteMIDI(&b, r.Notes, hits, r.BPM); err != nil {
+			return err
+		}
+		if err := os.WriteFile(s.path(a[1]), b.Bytes(), 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintf(s.out, "%s: %d note(s) and %d hit(s) at %d bpm written to %s, a track each for melody, under, bass and drums\n", a[0], len(r.Notes), len(hits), r.BPM, a[1])
+		return nil
+	}
+	// support is how much of the recording's salience over a note's frames is
+	// its pitch's: one for a note alone in its frames, little for one heard
+	// beside a louder, a note to doubt; a score's notes are given, not heard
+	var snd *audio.RipSound
+	if rp.x != nil {
+		var err error
+		if snd, err = s.soundOf(rp); err != nil {
+			return err
+		}
+	}
+	support := func(n audio.RipNote) string {
+		if snd == nil {
+			return ""
+		}
+		f := snd.Frames
+		var own, all float64
+		for t := int(n.Start / f.Hop); t < int(n.End/f.Hop) && (t+1)*audio.RipPitches <= len(f.Salience); t++ {
+			row := f.Salience[t*audio.RipPitches : (t+1)*audio.RipPitches]
+			if i := n.MIDI - audio.RipMinMIDI; i >= 0 && i < len(row) {
+				own += float64(row[i])
+			}
+			var peak float32
+			for _, v := range row {
+				peak = max(peak, v)
+			}
+			all += float64(peak)
+		}
+		if all > 0 {
+			own /= all
+		}
+		return fmt.Sprintf(", support %.2f", own)
+	}
+	var upper, unmeasured int
+	for _, n := range r.Notes {
+		if !n.Bass {
+			upper++
+			if n.Bright == audio.RipUnmeasured {
+				unmeasured++
+			}
+		}
+	}
+	fmt.Fprintf(s.out, "%s: %d note(s) at %d bpm in %s %s, tuned %+.0f cents, the first bar from %.2fs, brightness unmeasured on %d of %d melody-register note(s)\n", a[0], len(r.Notes), r.BPM, noteName(r.Root), scaleName(r.Scale), r.Tuning, r.Downbeat, unmeasured, upper)
+	marks := [...]string{"bb", "b", "", "#", "x"}
+	for _, n := range r.Notes {
+		line := "melody"
+		switch {
+		case n.Bass:
+			line = "bass"
+		case n.Second:
+			line = "under"
+		}
+		where, span := "before the first bar", 60/float64(max(r.BPM, 1))/audio.StepsPerBeat
+		if i := sort.SearchFloat64s(r.Beats, n.Start+1e-9) - 1; i >= 0 && i+1 < len(r.Beats) {
+			span = (r.Beats[i+1] - r.Beats[i]) / audio.StepsPerBeat
+			where = fmt.Sprintf("bar %d step %2d", i/audio.BeatsPerBar+1, audio.StepsPerBeat*(i%audio.BeatsPerBar)+int(math.Round((n.Start-r.Beats[i])/span)))
+		}
+		deg, oct, acc := audio.PitchStep(r.Root, r.Scale, n.MIDI)
+		bright := ""
+		if n.Bright != audio.RipUnmeasured {
+			bright = fmt.Sprintf(", bright %.2f", n.Bright)
+		}
+		fmt.Fprintf(s.out, "%-6s %7.3fs %-20s %-4s degree %d%s octave %d, %.1f step(s) at %.2f%s%s\n", line, n.Start, where, noteName(n.MIDI), deg, marks[acc+2], oct, (n.End-n.Start)/span, n.Vel, support(n), bright)
+	}
+	return nil
+}
+
+// ripLines are a rip's three lines in the order their voices are fitted: the
+// melody, the line under it and the bass, each with the notes that are its
+var ripLines = [3]struct {
+	word string
+	of   func(audio.RipNote) bool
+}{
+	{"melody", func(n audio.RipNote) bool { return !n.Bass && !n.Second }},
+	{"under", func(n audio.RipNote) bool { return !n.Bass && n.Second }},
+	{"bass", func(n audio.RipNote) bool { return n.Bass }},
+}
+
+// lineVoices are the rip's voices in ripLines' order
+func lineVoices(r *audio.Rip) [3]**audio.VoiceDef {
+	return [3]**audio.VoiceDef{&r.MelodyVoice, &r.UnderVoice, &r.BassVoice}
+}
+
+// fitVoices fits a voice to each line of a rip that lacks one, or to each
+// again with the voice held as a seed, and says how far the fit came
+func (s *Session) fitVoices(rp *ripped, o fitOptions, again bool) {
+	for reg, at := range lineVoices(rp.rip) {
+		if *at != nil && !again {
+			continue
+		}
+		notes := lineNotes(rp.rip, reg)
+		if len(notes) == 0 {
+			continue
+		}
+		word := ripLines[reg].word
+		fmt.Fprintf(s.out, "fitting the %s voice over %d note(s), %d generation(s) of %d...\n", word, min(len(notes), o.notes), o.generations, o.pool)
+		v, from, to := s.fitVoice(rp.x, rp.rate, rp.rip.Tuning, notes, *at, o)
+		if v == nil {
+			continue
+		}
+		*at = v
+		fmt.Fprintf(s.out, "%s voice: %s, distance %.3f from the best seed's %.3f\n", word, cmp.Or(v.Wave, "sine"), to, from)
+	}
+}
+
+// fitSamples picks the notes a register is fitted on: the longest and loudest
+// first, no pitch twice until every pitch has a note, each at least 80 ms
+func fitSamples(notes []audio.RipNote, n int) []audio.RipNote {
+	var cands []audio.RipNote
+	for _, note := range notes {
+		if note.End-note.Start >= 0.08 {
+			cands = append(cands, note)
+		}
+	}
+	sort.SliceStable(cands, func(i, j int) bool {
+		return (cands[i].End-cands[i].Start)*cands[i].Vel > (cands[j].End-cands[j].Start)*cands[j].Vel
+	})
+	var out []audio.RipNote
+	seen := map[int]bool{}
+	for pass := range 2 {
+		for _, c := range cands {
+			if len(out) >= n {
+				return out
+			}
+			if (pass == 0 && !seen[c.MIDI]) || (pass == 1 && !slices.Contains(out, c)) {
+				out = append(out, c)
+				seen[c.MIDI] = true
+			}
+		}
+	}
+	return out
+}
+
+// voiceGenome is a voice as a search sees it: its genes and, last, its wave as a
+// fraction of the wave table; voiceFromGenome reads one back
+func voiceGenome(v *audio.VoiceDef) []float64 {
+	w := max(slices.Index(audio.VoiceWaves[:], cmp.Or(v.Wave, "sine")), 0)
+	return append(v.Genes(), (float64(w)+0.5)/float64(len(audio.VoiceWaves)))
+}
+
+func voiceFromGenome(g []float64) *audio.VoiceDef {
+	genes := audio.VoiceGeneCount
+	w := min(max(int(g[genes]*float64(len(audio.VoiceWaves))), 0), len(audio.VoiceWaves)-1)
+	v := audio.VoiceFromGenes(audio.VoiceWaves[w], g[:genes])
+	v.Name = "fitted"
+	return v
+}
+
+// genomeKey names a genome to three decimals, for a cache of its score
+func genomeKey(g []float64) string {
+	var b strings.Builder
+	for _, v := range g {
+		fmt.Fprintf(&b, "%.3f,", v)
+	}
+	return b.String()
+}
+
+// lineNotes are a rip's notes of one of ripLines' registers
+func lineNotes(r *audio.Rip, reg int) []audio.RipNote {
+	var notes []audio.RipNote
+	for _, n := range r.Notes {
+		if ripLines[reg].of(n) {
+			notes = append(notes, n)
+		}
+	}
+	return notes
+}
+
+// fitTarget is one note of the recording a voice is fitted on: its seconds, the
+// mel frames of the recording around it and the note the voice plays to match
+type fitTarget struct {
+	start, end float64
+	mel        [][]float32
+	midi       int
+	vel, dur   float64
+}
+
+// fitTargets picks a register's sample notes, n of them, and hears the recording
+// around each
+func fitTargets(x []float64, rate int, notes []audio.RipNote, n int) []fitTarget {
+	samples := fitSamples(notes, max(n, 1))
+	targets := make([]fitTarget, len(samples))
+	for i, n := range samples {
+		lo := min(int(n.Start*float64(rate)), len(x))
+		hi := min(int((n.End+fitTail)*float64(rate)), len(x))
+		targets[i] = fitTarget{start: n.Start, end: n.End, mel: audio.MelFrames(x[lo:hi], rate), midi: n.MIDI, vel: n.Vel, dur: n.End - n.Start}
+	}
+	return targets
+}
+
+// fitDistance is how far a voice's renders of the targets' notes, at the
+// recording's tuning, sound from the recording around them: the fit's measure,
+// which the refinement holds a voice to
+func fitDistance(v *audio.VoiceDef, targets []fitTarget, cents float64) float64 {
+	var sum float64
+	for _, t := range targets {
+		note := audio.RenderNoteAt(v, t.midi, cents, t.vel, t.dur, fitTail)
+		sum += audio.MelDistance(audio.MelFrames(note, audio.AudioSampleRate), t.mel)
+	}
+	return sum / float64(max(len(targets), 1))
+}
+
+// fitVoice searches the voices for the one whose notes, rendered by the engine,
+// sound most like a register's notes in the recording: a genome of the voice's
+// genes and its wave, seeded with every registered voice and the one given,
+// scored by the mel distance between the recording around each sample note and
+// the voice playing that note. It returns the voice, the best seed's distance
+// and the fit's; nil when the register has no note long enough.
+func (s *Session) fitVoice(x []float64, rate int, cents float64, notes []audio.RipNote, prior *audio.VoiceDef, o fitOptions) (*audio.VoiceDef, float64, float64) {
+	targets := fitTargets(x, rate, notes, o.notes)
+	if len(targets) == 0 {
+		return nil, 0, 0
+	}
+	genes := audio.VoiceGeneCount
+	decode, encode := voiceFromGenome, voiceGenome
+	eval := genetic.Memoize(genomeKey, func(g []float64) float64 {
+		v := decode(g)
+		if audio.ValidateVoice(v) != nil {
+			return math.Inf(-1)
+		}
+		return -fitDistance(v, targets, cents)
+	})
+	var seeds [][]float64
+	if prior != nil {
+		seeds = append(seeds, encode(prior))
+	}
+	for _, v := range audio.RegisteredVoices() {
+		seeds = append(seeds, encode(v))
+	}
+	best := math.Inf(-1)
+	for _, g := range seeds {
+		best = max(best, eval(g))
+	}
+	bounds := make([]genetic.ParameterBounds, genes+1)
+	for i := range bounds {
+		bounds[i] = genetic.ParameterBounds{Min: 0, Max: 1}
+	}
+	cfg := genetic.DefaultConfig()
+	cfg.PoolSize, cfg.EliteCount, cfg.MaxIterations = max(o.pool, 4), max(o.pool/8, 1), o.generations
+	cfg.Parallelism, cfg.Seed = runtime.NumCPU(), o.seed
+	cfg.PerturbationRate, cfg.PerturbationStrength = 0.15, 0.1
+	e := genetic.NewEngine[[]float64, float64](eval, func(rng *rand.Rand) []float64 {
+		g := make([]float64, genes+1)
+		for i := range g {
+			g[i] = rng.Float64()
+		}
+		return g
+	}, &genetic.TournamentSelector[[]float64, float64]{TournamentSize: 3},
+		&genetic.UniformCombiner[[]float64, float64, float64]{MixProbability: 0.5},
+		&genetic.BoundedPerturbator{Bounds: bounds, Boundary: genetic.BoundaryReflect}, cfg)
+	e.SetSeeds(seeds)
+	e.SetSchedule(genetic.AdaptiveStrength[float64](0.15, 0.1, 0.01, 0.4, 1.5))
+	e.SetTerminator(func(p *genetic.Pool[[]float64, float64], gen int) bool {
+		fmt.Fprintf(s.out, "generation %d: distance %.3f\n", gen, -p.Stats.BestScore)
+		return false
+	})
+	pool, err := e.Run(context.Background())
+	if err != nil || len(pool.Members) == 0 {
+		return nil, 0, 0
+	}
+	// MelFrames hears every sample at its peak, so the level is the search's
+	// blind spot: set it so the voice's notes carry the loudness the recording
+	// has around them
+	v := decode(pool.Members[0].Data)
+	var want, have float64
+	for _, t := range targets {
+		lo, hi := min(int(t.start*float64(rate)), len(x)), min(int(t.end*float64(rate)), len(x))
+		want += rms(x[lo:hi])
+		have += rms(audio.RenderNoteAt(v, t.midi, cents, t.vel, t.dur, 0))
+	}
+	if have > 0 && want > 0 {
+		v.Level = min(max(v.Level*want/have, 0.1), 4) // the level ValidateVoice allows
+	}
+	return v, -best, -pool.Members[0].Score
+}
+
+func rms(x []float64) float64 {
+	var e float64
+	for _, v := range x {
+		e += v * v
+	}
+	return math.Sqrt(e / float64(max(len(x), 1)))
+}

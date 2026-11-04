@@ -31,8 +31,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |
-| [Audio](audio.md) | Domain detail | How does vif drive the audio library: which systems and profiles carry it, how APM maps to arrangements, how authored banks override the shipped ones, and what soundlab is? |
-| [Rip design](rip-design.md) | Design | Where the rip is going: its front ends, the voices and patterns it fits by the engine's own renders, the dictionary and its compression, and what the searches need. |
+| [Audio](audio.md) | Domain detail | How does vif drive the audio library: which systems and profiles carry it, how APM maps to arrangements, how authored banks override the shipped ones, and what stapes (formerly soundlab) is? |
 | [Navigation](navigation-design.md) | Domain detail | How do flow fields, passability tiers, target groups, the snake lock, loot's pursuit and route graphs move species, and what does each cost? |
 | [Position](position-package.md) | Domain detail | What does `pkg/position` hold and how does `engine.Position` bind it: the cells, the blocks and surfaces as bit planes, the block log, the searches and the volume, and what did each choice cost? |
 | [AI, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do route learning, genetics, float64 geometry, and collision/steering work together? |
@@ -63,15 +62,14 @@ Focused references:
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic library](https://github.com/lixenwraith/genetic) documents the
   reusable optimization library, a module of its own.
-- [Transformer library](https://github.com/lixenwraith/transformer) documents the
-  inference library the rip's model runs on, a module of its own, and its weight
-  file.
 - [Audio library](https://github.com/lixenwraith/audio) documents the synthesis, mixing,
   sequencing and rip engine with its shipped banks, a module of its own, and
   [its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md): the stream contract, backends,
   sounds, the mixer, the sequencer, MIDI and the rip.
-- [Soundlab reference](../cmd/soundlab/README.md) covers the audio authoring
-  environment.
+- [Stapes](../pkg/stapes/README.md), the audio authoring tool, a module of its
+  own nested in `pkg/stapes`, covers its commands and keys; [its
+  design](../pkg/stapes/doc/stapes.md) covers its verbs and files, and [Rip
+  design](../pkg/stapes/doc/rip-design.md) where the rip is going.
 - [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image
   conversion and viewing.
 - [vif-router](../tool/vif-router/README.md) covers the website-to-K3s

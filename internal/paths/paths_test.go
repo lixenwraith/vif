@@ -100,8 +100,8 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 }
 
 // TestSettingsNameEveryUnknownKey: a file naming keys this build does not know
-// fails naming each one while the keys it knows read in full, so a run and soundlab
-// can go on with an older or newer vif.toml.
+// fails naming each one while the keys it knows read in full, so a run can go on
+// with an older or newer vif.toml.
 func TestSettingsNameEveryUnknownKey(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
