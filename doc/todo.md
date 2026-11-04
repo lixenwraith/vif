@@ -1393,13 +1393,19 @@ front-end seam. What remains, in the design's order:
    sounds, a stronger strike's partial in the register, a repeat within
    0.12 s, a ringing pitch restarted only over 0.95 and by the surest strike
    within a tone) brought the three recordings' pooled F1 to 0.678 at 0.8
-   (the analysis 0.633). Next for it:
-   an offset head, so a note ends where its key lifts rather than where the
-   pedal lets it fade; a velocity head, so the render plays soft notes soft;
-   the corpus's pedal varied by the bar; phrases 20 to 30 dB apart, so the
-   strike head learns soft strikes; the constants tuned by `tune` against the
-   truths rather than swept by hand. Towers (7d: no gain for 43% more
-   weights) are tried again once those heads compete with the strike head.
+   (the analysis 0.633). The release and velocity heads gained on the bench and
+   not on the recordings (0.650). Next for it: real recorded notes as voices of
+   the corpus (Iowa's samples carry no condition, NSynth's and E-GMD's only
+   credit; MAESTRO's non-commercial licence would bind the weights), since
+   better synthesis alone has not closed the gap; the corpus's pedal varied by
+   the bar; the constants tuned by `tune` against the truths rather than swept
+   by hand. Towers (7d: no gain for 43% more weights) are tried again once the
+   heads compete with the strike head. For a rip of live music: a bench of the
+   loops through a phone mic, a room and crowd noise at 20 to 0 dB, the same
+   chain in the corpus, PCEN in place of the static logarithm, and a rip over a
+   moving window. Also: the fit gave Für Elise's bass a non-piano voice, with
+   #989's drive trap under it, and the General MIDI table drops a shaker's hits
+   (Billie Jean's key 82, 1108 of them) that the hihat's row could take.
    Then: real recordings with their notes in the corpus (item 1: `corpus
    <dir> from` writes MAESTRO's, `train.py --mix` mixes them in), then more
    loops, or width 384 (`DIM=384 HEADS=12 FFN=1536`, 7 million weights),

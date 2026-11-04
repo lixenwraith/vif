@@ -74,7 +74,9 @@ flowchart LR
    `strike_again`, any number at once, so the notes a pedal leaves ringing do
    not hide the next one struck, which a path through the salience, preferring
    what sounds strongest, stays on; the lines are parted from them as before.
-   A new note's attack sets off strikes on the pitches still ringing, weaker
+   A pitch let go rings on as far as this goes: while its salience holds only
+   the higher bar starts it again. A new note's attack sets off strikes on the
+   pitches still ringing, weaker
    ones across the register and as sure as its own a semitone or a tone away,
    so a ringing pitch is renewed only over the higher bar and by the surest
    strike within a tone. A strike starts no note when its pitch
@@ -190,8 +192,9 @@ offline (`song <name> <file.wav>`).
   a melody that is a slow line of longer notes in half the loops: the texture
   of the sample recording, a lead over an arpeggio, which the rip has to part.
   A third of the generated melodies and accompaniments play half their length
-  20 to 30 dB softer, as a phrase played softly, the levels at which Für
-  Elise's misses gathered. A generated loop leaves out its drums three times
+  6 to 18 dB softer, as a phrase played softly, and `codec` sends a third of
+  the loops through Opus, MP3 or AAC and back. Some voices are driven hard, as a
+  guitar through an amp. A generated loop leaves out its drums three times
   in ten and its bass once in seven, so a line is heard bare too. Both draw
   from streams of their own, so a loop's bank patterns and key are the same
   with and without them.
@@ -702,6 +705,21 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   against 0.99) and of an A4 a tone down (0.95 against 0.99), each a false B4
   on a downbeat; with a renewing strike also the surest within a tone, pooled
   F1 0.678 (precision 0.765, recall 0.610) and the bench unchanged.
+- The tenth round (10a) gave the model release and velocity heads, on a corpus
+  of the string and modal voices that fade as they ring, with soft phrases 20
+  to 30 dB down. Over 8b on the same bench loops: 0.509 clean (melody 0.22
+  against 0.16) and 0.473 augmented (0.16 against 0.12), against 0.502 and
+  0.479. On the recordings it read 0.530 pooled at 8b's thresholds, because the
+  release head ended notes under the pedal and their echoes then restarted them
+  on the lower bar. With a released pitch restarted only over `strike_again` and
+  thresholds of its own (0.8, 0.94, `release` 0.9): 0.650 (precision 0.80, recall
+  0.55), under 8b's 0.678. Its strike peaks alone against the score reach F1 0.51
+  against 8b's 0.53. Better synthesis moved the engine's loops, not the
+  recordings, and a lone line 30 dB under the rest is labelled but inaudible,
+  which may have blurred the strike head. Through a codec, a clip's rip differs
+  from its rip uncoded: F1 between the two 0.93 at Opus 96 kbps and 0.82 at 32 on
+  lossless piano notes, 0.85 and 0.71 on Billie Jean, though the input moves only
+  about 1 dB; the recordings are themselves Opus at 133 to 141 kbps.
 
 ## 9. Decisions
 

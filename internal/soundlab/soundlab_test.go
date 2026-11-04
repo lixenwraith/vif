@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -1719,6 +1720,28 @@ corpus %s 2 2
 	lab, err := os.ReadFile(filepath.Join(dir, "corpus", "loop_000.json"))
 	if err != nil || !strings.Contains(string(lab), "\"events\"") || !strings.Contains(string(lab), "\"voice\"") {
 		t.Errorf("loop_000.json: %v\n%.200s", err, lab)
+	}
+}
+
+// TestCodecsKeepALoopInTime: a loop through any corpus codec comes back its own
+// length with its sound where it was, or its labels would be off by the codec's delay.
+func TestCodecsKeepALoopInTime(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("no ffmpeg")
+	}
+	x := make([]float64, 4*audio.AudioSampleRate)
+	for i := 2 * audio.AudioSampleRate; i < 2*audio.AudioSampleRate+audio.AudioSampleRate/5; i++ {
+		x[i] = 0.5 * math.Sin(2*math.Pi*440*float64(i)/audio.AudioSampleRate)
+	}
+	first := func(y []float64) int { return slices.IndexFunc(y, func(v float64) bool { return math.Abs(v) > 0.1 }) }
+	for _, c := range corpusCodecs {
+		y, err := codecPass(x, c.name, c.ext, c.kbps[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d := first(y) - first(x); len(y) != len(x) || d < -220 || d > 220 { // 5 ms, under half a frame
+			t.Errorf("%s: %d samples of %d, its sound %d samples off", c.name, len(y), len(x), d)
+		}
 	}
 }
 

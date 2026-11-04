@@ -211,6 +211,12 @@ that proves wrong or that a document now states, and link the document instead.
   and salience per pitch from a scratch test before moving a strike rule.
 - Score the three recordings pooled (every note once) beside their mean: the
   origin and the intro have 83 notes each, where five notes move F1 by 0.06.
+- A model's decoder thresholds belong to its weights: a new head's scale moves
+  them, so sweep `strike`, `strike_again` and `release` before judging a round
+  (10a read 0.530 pooled at 8b's, 0.650 at its own), and pin them in the root's
+  `audio/rip.toml` beside the weights. Compare rounds on one tree's bench loops.
+- A round that gains on the bench may still lose on the recordings (10a over 8b):
+  the bench's loops are the corpus's own kind. Judge by the recordings.
 - Towers (`transformer.Tower`, `TOWERS=` in `tool/rip-train`) are in no shipped
   weight file, yet are not dead code: round 7d found no gain for 43% more
   weights, and they are to be tried again once new heads (offset, velocity,

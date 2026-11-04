@@ -4,6 +4,7 @@ package soundlab
 
 import (
 	"bufio"
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/binary"
@@ -14,6 +15,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -34,6 +36,7 @@ type tuneOptions struct {
 	seed                           uint64
 	aug, gen                       bool
 	nowav                          bool           // an export keeps the frames and the labels only
+	codec                          bool           // an export sends a third of its loops through a lossy codec and back
 	tempos                         []int          // the tempos the loops cycle through; tuneTempos when nil
 	part, parts                    int            // an export renders the loops i%parts == part; all when parts is 0
 	skip                           func(int) bool // the loops drawn but not rendered
@@ -249,13 +252,13 @@ func genMelody(rng *rand.Rand, degrees int) *audio.Pattern {
 	return &audio.Pattern{Name: "corpus_melody", Steps: steps, Role: audio.RoleMelody, Tracks: []audio.Track{{Instr: instr, Events: evs}}}
 }
 
-// soften plays half of a third of the generated parts 20 to 30 dB softer, as a
+// soften plays half of a third of the generated parts 6 to 18 dB softer, as a
 // pianist plays a phrase, so the model hears soft strikes beside loud ones
 func soften(rng *rand.Rand, evs []audio.Step, steps int) {
 	if rng.Float64() >= 1.0/3 {
 		return
 	}
-	gain, from := math.Pow(10, -(20+10*rng.Float64())/20), rng.IntN(steps/2+1)
+	gain, from := math.Pow(10, -(6+12*rng.Float64())/20), rng.IntN(steps/2+1)
 	for i := range evs {
 		if evs[i].Pos >= from && evs[i].Pos < from+steps/2 {
 			evs[i].Vel *= gain
@@ -363,6 +366,9 @@ func (s *Session) loopVoices(slots [audio.MusicSlots]audio.PatternID, aug bool, 
 				wave = audio.VoiceWaves[rng.IntN(len(audio.VoiceWaves))]
 			}
 			r := audio.VoiceFromGenes(wave, genes)
+			if rng.Float64() < 0.15 { // distorted, as a guitar through an amp
+				r.Drive, r.Level = 2+rng.Float64()*14, r.Level*0.6
+			}
 			if tr.Instr != audio.InstrBass {
 				r.Release = min(r.Release*pedal, 3)
 			}
@@ -550,6 +556,8 @@ func cmdCorpus(s *Session, a []string) error {
 			o.gen = true
 		case a[n-1] == "nowav":
 			o.nowav = true
+		case a[n-1] == "codec":
+			o.codec = true
 		case n > 2 && a[n-2] == "tempos":
 			tempos, err := parseTempos(a[n-1])
 			if err != nil {
@@ -798,6 +806,13 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	err := s.eachLoop(o, func(i int, l tuneLoop) error {
 		written++
 		base := loopFile(i)
+		if o.codec {
+			coded, err := codecRoundTrip(l.audio, rand.New(rand.NewPCG(o.seed^0xc0dec, uint64(i)+1)))
+			if err != nil {
+				return err
+			}
+			l.audio = coded
+		}
 		if !o.nowav {
 			f, err := os.Create(base + ".wav")
 			if err != nil {
@@ -856,6 +871,9 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	if o.gen {
 		how += ", with generated beats, melodies and bass lines"
 	}
+	if o.codec {
+		how += ", a third through a lossy codec"
+	}
 	if kept > 0 {
 		how += fmt.Sprintf("; %d were there", kept)
 	}
@@ -864,6 +882,52 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	}
 	fmt.Fprintf(s.out, "wrote %d loop(s) of %d bar(s) to %s, %s\n", written, o.bars, dir, how)
 	return nil
+}
+
+// corpusCodecs are what recordings are stored in. A model that has only heard
+// lossless renders flips notes on the noise and smeared attacks they leave.
+var corpusCodecs = []struct {
+	name, ext string
+	kbps      []int
+}{{"libopus", "opus", []int{64, 96, 128, 160}}, {"libmp3lame", "mp3", []int{96, 128, 192}}, {"aac", "m4a", []int{96, 128, 192}}}
+
+// codecRoundTrip sends a third of the loops through a codec at a drawn rate and back
+func codecRoundTrip(x []float64, rng *rand.Rand) ([]float64, error) {
+	if rng.IntN(3) != 0 {
+		return x, nil
+	}
+	c := corpusCodecs[rng.IntN(len(corpusCodecs))]
+	return codecPass(x, c.name, c.ext, c.kbps[rng.IntN(len(c.kbps))])
+}
+
+// codecPass codes x and decodes it, the same length and in time, through a file
+// since a container read from a pipe loses the codec's delay. Only a corpus needs ffmpeg.
+func codecPass(x []float64, name, ext string, kbps int) ([]float64, error) {
+	tmp, err := os.CreateTemp("", "corpus-*."+ext)
+	if err != nil {
+		return nil, err
+	}
+	tmp.Close()
+	defer os.Remove(tmp.Name())
+	rate := strconv.Itoa(audio.AudioSampleRate)
+	raw := make([]byte, 8*len(x))
+	for i, v := range x {
+		binary.LittleEndian.PutUint64(raw[8*i:], math.Float64bits(v))
+	}
+	enc := exec.Command("ffmpeg", "-loglevel", "error", "-y", "-f", "f64le", "-ar", rate, "-ac", "1", "-i", "pipe:0", "-c:a", name, "-b:a", fmt.Sprintf("%dk", kbps), tmp.Name())
+	enc.Stdin = bytes.NewReader(raw)
+	if out, err := enc.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("codec %s needs ffmpeg: %w: %s", name, err, out)
+	}
+	out, err := exec.Command("ffmpeg", "-loglevel", "error", "-i", tmp.Name(), "-f", "f64le", "-ar", rate, "-ac", "1", "pipe:1").Output()
+	if err != nil {
+		return nil, fmt.Errorf("codec %s: %w", name, err)
+	}
+	y := make([]float64, len(x))
+	for i := range min(len(y), len(out)/8) {
+		y[i] = math.Float64frombits(binary.LittleEndian.Uint64(out[8*i:]))
+	}
+	return y, nil
 }
 
 func writeMel(file string, mel [][]float32) error {
