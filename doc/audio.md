@@ -596,9 +596,11 @@ under or bass is that line, and of the other parts (a track's notes on one
 channel) the lowest is the bass when its notes centre under E3, kept whole as
 the bass decoder settles a line that climbs over it, the rest the melody then
 the under in file order, any further part left out; the drum channel's kicks,
-snares and hats are hits (`RipHit`), which `MatchHits` lays on the rip's own
-(`Rip.Hits`, each step placed on its beats) under the stretch and offset that
-match most, each within half a step. `NoteLevels` reads how loud the recording
+snares and hats are hits (`RipHit`), a ride, tambourine or shaker a hat, and
+its other strikes (a tom, a crash) onsets of no line (`MIDIScore.Struck`),
+which `corpus <dir> from` labels as onsets alone. `MatchHits` lays the hits on
+the rip's own (`Rip.Hits`, each step placed on its beats) under the stretch and
+offset that match most, each within half a step. `NoteLevels` reads how loud the recording
 plays each note given, its first harmonics' peak around its onset placed by
 the agreement's map (`Agreement.At`, through the notes the register matched),
 so `truth` counts the notes heard by level as well. A file read is a rip of its

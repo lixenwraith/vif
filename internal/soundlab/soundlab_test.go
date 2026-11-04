@@ -4,6 +4,7 @@ package soundlab
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -1735,7 +1736,7 @@ func TestCodecsKeepALoopInTime(t *testing.T) {
 	}
 	first := func(y []float64) int { return slices.IndexFunc(y, func(v float64) bool { return math.Abs(v) > 0.1 }) }
 	for _, c := range corpusCodecs {
-		y, err := codecPass(x, c.name, c.ext, c.kbps[0])
+		y, err := codecPass(x, audio.AudioSampleRate, c.name, c.ext, c.kbps[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1784,6 +1785,78 @@ corpus %[2]s 5 1 aug gen nowav part 1/2
 		if !bytes.Equal(got, want) {
 			t.Errorf("%s differs from one unbroken export's", f.Name())
 		}
+	}
+}
+
+// TestACorpusFromTakesABatchAfterItsLoops: a batch joining a corpus of
+// recordings numbers its loops after those on disk, which stay as they are, so
+// no recording repeats or is lost; a MIDI file of toms alone is skipped, and a
+// tom beside a kick is an onset of no drum and no pitch.
+func TestACorpusFromTakesABatchAfterItsLoops(t *testing.T) {
+	dir := t.TempDir()
+	corpus, list := filepath.Join(dir, "corpus"), filepath.Join(dir, "list.csv")
+	drums := func(keys ...byte) []byte { // a type-0 file of the keys on the drum channel, one at each beat
+		var ev []byte
+		for _, k := range keys {
+			ev = append(ev, 0x00, 0x99, k, 100, 0x83, 0x60, 0x89, k, 0)
+		}
+		ev = append(ev, 0x00, 0xFF, 0x2F, 0)
+		head := []byte{'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 1, 0x01, 0xE0, 'M', 'T', 'r', 'k', 0, 0, 0, byte(len(ev))}
+		return append(head, ev...)
+	}
+	add := func(name string, keys ...byte) {
+		f, err := os.Create(filepath.Join(dir, name+".wav"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		audio.WriteWAV(f, make([]float64, 3*audio.AudioSampleRate))
+		f.Close()
+		if err := os.WriteFile(filepath.Join(dir, name+".mid"), drums(keys...), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	csv := "audio_filename,midi_filename\n"
+	for _, name := range []string{"a", "b", "c", "d"} {
+		csv += name + ".wav," + name + ".mid\n"
+	}
+	if err := os.WriteFile(list, []byte(csv), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	add("a", 36, 48)
+	add("c", 43, 45)
+	runOrFatal(t, s, &out, fmt.Sprintf("corpus %s from %s\n", corpus, list))
+	if !strings.Contains(out.String(), "skipped 1") {
+		t.Errorf("the toms alone were not skipped:\n%s", out.String())
+	}
+	first, _ := os.ReadFile(filepath.Join(corpus, "loop_000.json"))
+	add("b", 38)
+	add("d", 42)
+	runOrFatal(t, s, &out, fmt.Sprintf("corpus %s from %s\n", corpus, list))
+	var m corpusManifest
+	data, _ := os.ReadFile(filepath.Join(corpus, "corpus.json"))
+	if json.Unmarshal(data, &m) != nil || m.Loops != 3 {
+		t.Fatalf("corpus.json: %s, want 3 loops", data)
+	}
+	var sources []string
+	for i := range m.Loops {
+		data, _ := os.ReadFile(filepath.Join(corpus, fmt.Sprintf("loop_%03d.json", i)))
+		var l corpusLoop
+		if err := json.Unmarshal(data, &l); err != nil {
+			t.Fatal(err)
+		}
+		sources = append(sources, l.Source)
+		if l.Source == "a.wav" && (len(l.Events) != 2 || l.Events[1].Drum != -1 || l.Events[1].MIDI != 0) {
+			t.Errorf("a's kick and tom read %+v, want the tom an onset of drum -1, midi 0", l.Events)
+		}
+		if i == 0 && !bytes.Equal(data, first) {
+			t.Error("the loop on disk was written again")
+		}
+	}
+	if slices.Sort(sources); !slices.Equal(sources, []string{"a.wav", "b.wav", "d.wav"}) {
+		t.Errorf("loops of %v, want a, b and d once each", sources)
 	}
 }
 

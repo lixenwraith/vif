@@ -27,15 +27,16 @@ const (
 // midiInstruments is each shipped instrument as General MIDI writes and reads it:
 // a drum's keys on the drum channel, the first the one written; a voice's
 // program, written, and the families of eight programs read back as it, so a
-// program no row writes plays on the shipped voice of its family
+// program no row writes plays on the shipped voice of its family. A ride,
+// tambourine or shaker reads as the hihat, the line soundlab plays it on.
 var midiInstruments = [InstrumentCount]struct {
 	keys     []byte
 	program  byte
 	families []byte
 }{
 	InstrKick:  {keys: []byte{36, 35}},
-	InstrSnare: {keys: []byte{38, 40}},
-	InstrHihat: {keys: []byte{42, 44, 46}},
+	InstrSnare: {keys: []byte{38, 40, 37}},                             // head, rim, cross-stick
+	InstrHihat: {keys: []byte{42, 44, 46, 22, 26, 51, 59, 53, 54, 82}}, // closed, pedal, open, edges, ride, tambourine, shaker
 	InstrClap:  {keys: []byte{39}},
 	InstrBass:  {program: 32, families: []byte{4}},                   // acoustic bass: the basses
 	InstrPiano: {program: 0, families: []byte{0, 1, 14}},             // grand piano: pianos, chromatic and pitched percussion
@@ -161,6 +162,9 @@ type MIDIScore struct {
 	// Voices are the shipped voices the melody, under and bass parts' programs
 	// play on (midiVoice), General MIDI's piano where a file sets none
 	Voices [3]InstrumentType
+	// Struck are the drum channel's other strikes (a tom, a crash, a clap),
+	// Drum -1: onsets of no line
+	Struck []RipHit
 
 	clock     []midiTempo
 	division  int
@@ -182,6 +186,10 @@ func (m *MIDIScore) ticks(sec float64) float64 {
 	i := sort.Search(len(m.clock), func(i int) bool { return m.clock[i].sec > max(sec, 0) }) - 1
 	return float64(m.clock[i].tick) + (sec-m.clock[i].sec)/m.clock[i].perTick
 }
+
+// ErrMIDIUnlined is ReadMIDI's refusal of a file with no line to read: no
+// notes, and no kick, snare or hihat
+var ErrMIDIUnlined = errors.New("midi: no notes, and no kick, snare or hihat")
 
 // ReadMIDI reads a Standard MIDI File of type 0 or 1 as a transcript in seconds
 // under its tempo map, the drum channel's kicks, snares and hats as hits. A
@@ -268,8 +276,11 @@ func ReadMIDI(r io.Reader) (*MIDIScore, error) {
 			continue
 		}
 		for _, n := range p.notes {
-			if d := midiDrum(n.key, InstrClap); d >= 0 {
-				m.Hits = append(m.Hits, RipHit{Start: seconds(n.on), Drum: d, Vel: float64(n.vel) / 127})
+			h := RipHit{Start: seconds(n.on), Drum: midiDrum(n.key, InstrClap), Vel: float64(n.vel) / 127}
+			if h.Drum >= 0 {
+				m.Hits = append(m.Hits, h)
+			} else {
+				m.Struck = append(m.Struck, h)
 			}
 		}
 	}
@@ -285,10 +296,11 @@ func ReadMIDI(r io.Reader) (*MIDIScore, error) {
 		}
 	}
 	if len(m.Notes) == 0 && len(m.Hits) == 0 {
-		return nil, errors.New("midi: no notes, and no drums of the keys General MIDI names")
+		return nil, ErrMIDIUnlined
 	}
 	slices.SortStableFunc(m.Notes, func(a, b RipNote) int { return cmpFloat(a.Start, b.Start) })
 	slices.SortStableFunc(m.Hits, func(a, b RipHit) int { return cmpFloat(a.Start, b.Start) })
+	slices.SortStableFunc(m.Struck, func(a, b RipHit) int { return cmpFloat(a.Start, b.Start) })
 	return m, nil
 }
 
