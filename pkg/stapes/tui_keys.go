@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package stapes
 
 // The editor's keys tab: the tonal voices on a tracker keyboard, drawn as a piano

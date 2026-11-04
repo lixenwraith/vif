@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package stapes
 
 import (
@@ -277,8 +275,8 @@ func (a *tuiApp) requestQuit() {
 }
 
 // saveModified writes every document that diverges from disk: to its provenance
-// path, or, the first time, to a path a prompt asks for, offering the file the
-// next vif run reads first.
+// path, or, the first time, to a path a prompt asks for, offering the search path's
+// first folder, where vif reads it next run.
 func (a *tuiApp) saveModified() {
 	if !a.s.soundsModified() && !a.s.patsModified() {
 		fmt.Fprintln(a.log, "nothing to save — no document diverges from disk")

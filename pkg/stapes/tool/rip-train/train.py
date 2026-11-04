@@ -242,7 +242,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", required=True, help="directory stapes' corpus verb wrote")
     ap.add_argument("--mix", default="", help="another corpus and the share of windows drawn from it, dir:share, such as recordings with their MIDI files (corpus <dir> from <list>)")
-    ap.add_argument("--out", required=True, help="weight file to write, the root's audio/ripmodel.bin for stapes to hear with")
+    ap.add_argument("--out", required=True, help="weight file to write, the root's ripmodel.bin for stapes to hear with")
     ap.add_argument("--steps", type=int, default=2000)
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--window", type=int, default=512, help="frames per training window (11.6 ms each)")

@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package main
 
 import (
@@ -10,18 +8,18 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/lixenwraith/stapes"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/pkg/stapes"
 )
 
-// CLI flags, matching the game binary's house style; the -config flags are vif's.
+// CLI flags under vif's names; -config-dir names the stapes root, not vif's
 var (
 	flagBackend   = flag.String("ab", "", "Force audio backend by name (pacat, aplay, null, wav:out.wav, ...)")
 	flagHeadless  = flag.Bool("headless", false, "Discard audio output (equivalent to -ab null)")
 	flagScript    = flag.String("s", "", "Execute script file and exit")
-	flagConfigDir = flag.String("config-dir", "", "Configuration root holding audio/ (as vif)")
-	flagMusic     = flag.String("config-music", "", "Music pattern override TOML (as vif)")
-	flagSounds    = flag.String("config-sounds", "", "Sound definition override TOML (as vif)")
+	flagConfigDir = flag.String("config-dir", "", "The stapes root, holding stapes.toml, rip.toml and ripmodel.bin (default: the user config folder's stapes/)")
+	flagMusic     = flag.String("config-music", "", "Music pattern document TOML, in place of the search path's music.toml")
+	flagSounds    = flag.String("config-sounds", "", "Sound definition document TOML, in place of the search path's sounds.toml")
 	flagVol       = flag.Float64("vol", 0.7, "Sound effect volume 0..1; music keeps its own level")
 	flagTUI       = flag.Bool("tui", false, "Full-screen TUI (default: line REPL)")
 )

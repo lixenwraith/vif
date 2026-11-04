@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package stapes
 
 // The files overlay (^O): a directory's entries, newest first, to load or merge

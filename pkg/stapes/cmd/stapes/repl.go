@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package main
 
 import (
@@ -8,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lixenwraith/vif/pkg/stapes"
+	"github.com/lixenwraith/stapes"
 )
 
 func runREPL(s *stapes.Session, in io.Reader, out io.Writer) {

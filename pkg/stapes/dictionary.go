@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package stapes
 
 // The song: a rip's bars matched to a dictionary of one-bar patterns and the

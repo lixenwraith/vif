@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 // Package stapes is the audio authoring environment over lixenwraith/audio: a
 // session holding the engine and the working documents, the verb table every front
 // end dispatches through (Execute), the script runner and the full-screen TUI over
@@ -13,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,7 +21,6 @@ import (
 	"github.com/lixenwraith/audio/bank"
 	"github.com/lixenwraith/audio/ripmodel"
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vif/internal/paths"
 )
 
 // Session owns the engine and the working documents: the sounds and the voices,
@@ -52,9 +50,9 @@ type Session struct {
 	tracks   [audio.MusicSlots]trackMutes
 	startErr error
 	files    Files
-	// rip is what rip listens with, the root's audio/rip.toml when one holds it,
-	// and ripSrc that file, where tune writes; frontEnd is the model the root's
-	// audio/ripmodel.bin holds, nil for the package's own analysis
+	// rip is what rip listens with, the root's rip.toml when one holds it, and
+	// ripSrc that file, where tune writes; frontEnd is the model the root's
+	// ripmodel.bin holds, nil for the package's own analysis
 	rip      audio.RipParams
 	ripSrc   string
 	frontEnd *ripmodel.FrontEnd
@@ -77,57 +75,131 @@ type Session struct {
 	hist   history // what undo steps back over
 }
 
-// Files is where the game reads its audio overrides and where an untitled save
-// must land for the next run to read it first, resolved as vif resolves them by
-// ResolveFiles, with the mixer period vif.toml sets
+// The root's files, flat, and the documents a search path's folder holds
+const (
+	rootName     = "stapes" // the root's folder under os.UserConfigDir
+	settingsFile = "stapes.toml"
+	ripFile      = "rip.toml"
+	modelFile    = "ripmodel.bin"
+	musicFile    = "music.toml"
+	soundsFile   = "sounds.toml"
+	// vifAudio is the search path's default under os.UserConfigDir: vif's audio
+	// folder, which vif reads its overrides from
+	vifAudio = "vif/audio"
+)
+
+// Files is what a session reads and where an untitled save lands: the root's
+// settings, rip parameters and model, and the documents the search path holds,
+// resolved by ResolveFiles
 type Files struct {
-	music, sounds             string // "" = the embedded bank
+	music, sounds             string // "" = the bank
 	rip                       string // "" = the built-in parameters
 	model                     string // "" = no model: the analysis listens
-	musicTarget, soundsTarget string // "" = no configuration root
-	ripTarget                 string
+	musicTarget, soundsTarget string // "" = no search path
+	ripTarget                 string // "" = no root
 	buffer                    time.Duration
-	skipped                   error // vif.toml keys this build does not know
 }
 
-// ResolveFiles applies vif's -config-dir, -config-music and -config-sounds,
-// and vif.toml's [paths] root and [audio] buffer_ms as vif does. Those are all it
-// reads, so a key another vif build knows is skipped, never dropped as a run does.
+// settings is the root's stapes.toml
+type settings struct {
+	Audio struct {
+		BufferMs int `toml:"buffer_ms"` // the mixer period; 0 is the engine's 50
+	} `toml:"audio"`
+}
+
+// ResolveFiles finds the root, -config-dir or else os.UserConfigDir plus stapes,
+// and the documents along the search path, whose first folder an untitled save
+// lands in; -config-music and -config-sounds name a document outright. It reads
+// the root's stapes.toml, refusing a key it does not know, and never probes the
+// working directory.
 func ResolveFiles(dir, music, sounds string) (Files, error) {
-	if err := paths.CheckRoot(dir); err != nil {
-		return Files{}, err
-	}
-	settings, _, err := paths.LoadSettings(dir)
 	var f Files
-	if errors.As(err, new(paths.UnknownKeys)) {
-		f.skipped, err = err, nil
+	root, search := dir, []string(nil)
+	if base, err := os.UserConfigDir(); err == nil {
+		root, search = cmp.Or(dir, filepath.Join(base, rootName)), []string{filepath.Join(base, vifAudio)}
 	}
-	if err != nil {
-		return Files{}, err
+	if dir != "" {
+		if info, err := os.Stat(dir); err != nil {
+			return f, fmt.Errorf("-config-dir: %w", err)
+		} else if !info.IsDir() {
+			return f, fmt.Errorf("-config-dir %q is not a directory", dir)
+		}
 	}
-	roots := paths.ConfigRoots(cmp.Or(dir, settings.Paths.Root))
-	f.buffer = time.Duration(settings.Audio.BufferMs) * time.Millisecond
-	if f.music, err = paths.ConfigFile(roots, music, paths.AudioDirName, paths.MusicConfigFile); err != nil {
+	var err error
+	if f.music, f.musicTarget, err = findDocument(search, music, musicFile); err != nil {
 		return f, fmt.Errorf("music config: %w", err)
 	}
-	if f.sounds, err = paths.ConfigFile(roots, sounds, paths.AudioDirName, paths.SoundConfigFile); err != nil {
+	if f.sounds, f.soundsTarget, err = findDocument(search, sounds, soundsFile); err != nil {
 		return f, fmt.Errorf("sound config: %w", err)
 	}
-	if f.rip, err = paths.ConfigFile(roots, "", paths.AudioDirName, paths.RipConfigFile); err != nil {
-		return f, fmt.Errorf("rip config: %w", err)
+	if root == "" {
+		return f, nil
 	}
-	if f.model, err = paths.ConfigFile(roots, "", paths.AudioDirName, paths.RipModelFile); err != nil {
-		return f, fmt.Errorf("rip model: %w", err)
+	f.rip, f.model, f.ripTarget = regular(filepath.Join(root, ripFile)), regular(filepath.Join(root, modelFile)), filepath.Join(root, ripFile)
+	file := filepath.Join(root, settingsFile)
+	data, err := os.ReadFile(file)
+	if errors.Is(err, fs.ErrNotExist) {
+		return f, nil
 	}
-	f.musicTarget, _ = paths.ConfigTarget(roots, music, paths.AudioDirName, paths.MusicConfigFile)
-	f.soundsTarget, _ = paths.ConfigTarget(roots, sounds, paths.AudioDirName, paths.SoundConfigFile)
-	f.ripTarget, _ = paths.ConfigTarget(roots, "", paths.AudioDirName, paths.RipConfigFile)
+	var set settings
+	if err == nil {
+		err = decodeSettings(data, &set)
+	}
+	if err != nil {
+		return f, fmt.Errorf("%s: %w", file, err)
+	}
+	f.buffer = time.Duration(set.Audio.BufferMs) * time.Millisecond
 	return f, nil
+}
+
+// decodeSettings reads a stapes.toml, whose keys are stapes' own, so one it has
+// no field for is a mistake to name
+func decodeSettings(data []byte, s *settings) error {
+	doc, err := toml.ParseDocument(data)
+	if err != nil {
+		return err
+	}
+	if keys := doc.Unmapped(s); len(keys) > 0 {
+		return toml.UnknownKeys(keys)
+	}
+	return doc.Decode(s)
+}
+
+// findDocument is the first file the search path's folders hold under name, and
+// where an untitled save of it lands, the first folder; an explicit file is both
+func findDocument(search []string, explicit, name string) (file, target string, err error) {
+	if explicit != "" {
+		info, err := os.Stat(explicit)
+		if err != nil {
+			return "", "", err
+		}
+		if info.IsDir() {
+			return "", "", fmt.Errorf("%s is a directory", explicit)
+		}
+		return explicit, explicit, nil
+	}
+	if len(search) == 0 {
+		return "", "", nil
+	}
+	for _, dir := range search {
+		if file = regular(filepath.Join(dir, name)); file != "" {
+			break
+		}
+	}
+	return file, filepath.Join(search[0], name), nil
+}
+
+// regular is file when it names a regular file, else ""
+func regular(file string) string {
+	if info, err := os.Stat(file); err != nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	return file
 }
 
 // Options opens a session: the backend forced by name ("" detects, "null"
 // discards) or the host's own speakers in its place, the sfx volume, the writer
-// the session reports to, and the files vif would read (ResolveFiles)
+// the session reports to, and the files it reads (ResolveFiles)
 type Options struct {
 	Backend   string
 	Sink      io.WriteCloser
@@ -209,9 +281,6 @@ func NewSession(o Options) (*Session, error) {
 	// to a random fill once per phrase — game drama, editor confusion. Forced
 	// off here; :fill on restores it for auditioning the fill bank.
 	s.eng.SetAutoFill(false)
-	if files.skipped != nil {
-		fmt.Fprintf(out, "%v: skipped, stapes reads only [paths] root and [audio] buffer_ms\n", files.skipped)
-	}
 	if err := eng.SpecError(); err != nil {
 		fmt.Fprintf(out, "override errors, the game falls back the same way:\n%v\n", err)
 	}
@@ -220,28 +289,27 @@ func NewSession(o Options) (*Session, error) {
 }
 
 // adoptOverrides loads each override the engine registered as a clean document that
-// saves to its target, which differs from the source whenever a lower root supplied
-// it: the save then shadows it from the first root, as the game reads. One that
-// fails to load loses its target, so an untitled save cannot overwrite it.
+// saves back to the file it came from. One that fails to load loses its target, so
+// an untitled save cannot overwrite it.
 func (s *Session) adoptOverrides() {
 	if f := s.files.sounds; f != "" {
-		fmt.Fprintf(s.out, "sounds override %s, saving to %s\n", f, s.files.soundsTarget)
+		fmt.Fprintf(s.out, "sounds override %s\n", f)
 		if err := s.loadSoundFile(f, true); err != nil {
 			fmt.Fprintf(s.out, "not adopted: %v\n", err)
 			s.files.soundsTarget = ""
 		} else {
-			s.sounds.replaceAll(s.sounds.all(), s.files.soundsTarget, false)
-			s.voices.replaceAll(s.voices.all(), s.files.soundsTarget, false)
+			s.sounds.replaceAll(s.sounds.all(), s.sounds.src, false)
+			s.voices.replaceAll(s.voices.all(), s.voices.src, false)
 		}
 	}
 	if f := s.files.music; f != "" {
-		fmt.Fprintf(s.out, "music override %s, saving to %s\n", f, s.files.musicTarget)
+		fmt.Fprintf(s.out, "music override %s\n", f)
 		if err := s.loadPatternFile(f, true); err != nil {
 			fmt.Fprintf(s.out, "not adopted: %v\n", err)
 			s.files.musicTarget = ""
 		} else {
-			s.pats.replaceAll(s.pats.all(), s.files.musicTarget, false)
-			s.songs.replaceAll(s.songs.all(), s.files.musicTarget, false)
+			s.pats.replaceAll(s.pats.all(), s.pats.src, false)
+			s.songs.replaceAll(s.songs.all(), s.songs.src, false)
 		}
 	}
 }

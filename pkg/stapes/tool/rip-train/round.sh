@@ -4,7 +4,7 @@
 # goes on from the loops it has and train from CHECKPOINT. The knobs are
 # pipeline.sh's; the README's "A round on a development machine" is the guide.
 set -euo pipefail
-CORPUS=$(realpath -m "${CORPUS:-corpus}")
+CORPUS=$(realpath -m "${CORPUS:-${XDG_STATE_HOME:-$HOME/.local/state}/stapes/corpus}")
 export CORPUS
 cd "$(dirname "$0")/../.."
 mkdir -p "$CORPUS"

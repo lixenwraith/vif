@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package stapes
 
 // The voice fit: analysis by synthesis. A recording's register is heard as notes;

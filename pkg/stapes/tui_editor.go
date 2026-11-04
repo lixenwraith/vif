@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package stapes
 
 // The pattern editor: one pattern, new or edited, on two tabs. Keys plays the

@@ -72,7 +72,7 @@ func (s *AudioService) Init() error {
 		config.PatternTOML = data
 	}
 	if p := s.src.SoundPath; p != "" {
-		// Includes resolve inside the document's directory, as soundlab's do
+		// Includes resolve inside the document's directory, as stapes' do
 		config.SoundFS, config.SoundFile = os.DirFS(filepath.Dir(p)), filepath.Base(p)
 	}
 

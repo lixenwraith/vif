@@ -5,7 +5,7 @@
 # guide.
 set -euo pipefail
 
-CORPUS=${CORPUS:-corpus}             # where the loops go
+CORPUS=${CORPUS:-${XDG_STATE_HOME:-$HOME/.local/state}/stapes/corpus}   # where the loops go
 LOOPS=${LOOPS:-20000}                # loops to render; a smoke test is 200
 PARTS=${PARTS:-1}                    # exports at once, each rendering every PARTS-th loop: a core each
 BARS=${BARS:-4}                      # bars a loop
@@ -29,7 +29,7 @@ HOLDOUT=${HOLDOUT:-200}              # loops held out, scored every EVERY steps
 EVERY=${EVERY:-1000}
 OUT=${OUT:-$CORPUS/ripmodel.bin}       # the weight file
 CHECKPOINT=${CHECKPOINT:-$CORPUS/ripmodel.pt}
-ROOT=${ROOT:-${XDG_CONFIG_HOME:-$HOME/.config}/vif}   # the configuration root rip hears with
+ROOT=${ROOT:-${XDG_CONFIG_HOME:-$HOME/.config}/stapes}   # the stapes root rip hears with
 BENCH_LOOPS=${BENCH_LOOPS:-12}
 BENCH_BARS=${BENCH_BARS:-4}
 INIT=${INIT:-}                       # shard: the .pt the round starts from, the last merge's
@@ -90,11 +90,13 @@ merge() {
 	"$PYTHON" "$here/average.py" --pt "$MERGED" --out "$OUT" --trim "$TRIM" $MERGE_FILES
 }
 
+# The bench's own root holds the weights and ROOT's rip.toml, when it has one, the
+# thresholds rip hears with there
 bench() {
 	local root
 	root=$(mktemp -d)
-	mkdir -p "$root/audio"
-	cp "$OUT" "$root/audio/ripmodel.bin"
+	cp "$OUT" "$root/ripmodel.bin"
+	if [ -f "$ROOT/rip.toml" ]; then cp "$ROOT/rip.toml" "$root/rip.toml"; fi
 	local slab="$root/bench.slab"
 	{
 		[ -n "$FOCUS" ] && printf 'run %s\n' "$(realpath "$FOCUS")"
@@ -106,9 +108,9 @@ bench() {
 }
 
 install() {
-	mkdir -p "$ROOT/audio"
-	cp "$OUT" "$ROOT/audio/ripmodel.bin"
-	echo "== installed $OUT as $ROOT/audio/ripmodel.bin; stapes' rip hears with it, remove the file to hear with the analysis"
+	mkdir -p "$ROOT"
+	cp "$OUT" "$ROOT/ripmodel.bin"
+	echo "== installed $OUT as $ROOT/ripmodel.bin; stapes' rip hears with it, remove the file to hear with the analysis"
 }
 
 case "$stage" in

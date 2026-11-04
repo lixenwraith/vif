@@ -1,5 +1,3 @@
-//go:build !vif_headless && !vif_noaudio && !wasm
-
 package stapes
 
 import (
@@ -21,8 +19,6 @@ import (
 
 	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/internal/paths"
-	"github.com/lixenwraith/vif/internal/resource"
 )
 
 func newTestSession(t *testing.T, out *bytes.Buffer) *Session {
@@ -840,66 +836,72 @@ func TestRollPlacesANoteOnItsPitch(t *testing.T) {
 	}
 }
 
-// TestUnknownSettingsAreSkipped: a vif.toml another vif build wrote, with a table
-// this one does not know, still gives stapes its mixer period.
-func TestUnknownSettingsAreSkipped(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv(paths.SystemRootsEnv, t.TempDir())
-	doc := "[later]\nwindow = true\n[audio]\nbuffer_ms = 20\n"
-	if err := os.WriteFile(filepath.Join(dir, paths.SettingsFile), []byte(doc), 0o644); err != nil {
+// writeFile writes a file a test lays out, its folders made first
+func writeFile(t *testing.T, file, data string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	f, err := ResolveFiles(dir, "", "")
-	if err != nil || f.skipped == nil || f.buffer != 20*time.Millisecond {
-		t.Fatalf("resolve = %+v, %v; want buffer 20ms with the unknown table named", f, err)
+	if err := os.WriteFile(file, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
-// TestAudioFilesFollowVif is the rule that stapes reads the override vif reads, and
-// that an untitled save lands where the next vif run reads first: an installed system
-// root is shadowed from the user root, never written.
-func TestAudioFilesFollowVif(t *testing.T) {
+// TestTheRootHoldsSettingsAndTheRip: the stapes root, the user's or -config-dir's
+// alone, holds stapes.toml, rip.toml and ripmodel.bin, flat; nothing of vif's root
+// is read, and a key stapes.toml cannot hold is refused by name.
+func TestTheRootHoldsSettingsAndTheRip(t *testing.T) {
 	base := t.TempDir()
-	user, sys, dir := filepath.Join(base, "user"), filepath.Join(base, "sys"), filepath.Join(base, "dir")
-	t.Setenv("XDG_CONFIG_HOME", user)
-	t.Setenv(paths.SystemRootsEnv, sys)
-	installed := filepath.Join(sys, paths.AudioDirName, paths.MusicConfigFile)
-	for _, d := range []string{filepath.Dir(installed), dir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
+	t.Setenv("XDG_CONFIG_HOME", base)
+	user := filepath.Join(base, rootName)
+	writeFile(t, filepath.Join(user, settingsFile), "[audio]\nbuffer_ms = 20\n")
+	writeFile(t, filepath.Join(user, ripFile), "[rip]\n")
+	writeFile(t, filepath.Join(user, modelFile), "weights")
+	writeFile(t, filepath.Join(base, "vif", "vif.toml"), "[audio]\nbuffer_ms = 30\n")
+	writeFile(t, filepath.Join(base, vifAudio, ripFile), "[rip]\n")
+	f, err := ResolveFiles("", "", "")
+	if err != nil || f.buffer != 20*time.Millisecond || f.rip != filepath.Join(user, ripFile) || f.model != filepath.Join(user, modelFile) {
+		t.Fatalf("the user's root gave %+v, %v; want its buffer, rip.toml and ripmodel.bin", f, err)
 	}
-	pat := "[[pattern]]\nname = \"installed\"\nsteps = 16\n[[pattern.track]]\ninstr = \"kick\"\nevent = [{ pos = 0, vel = 1.0 }]\n"
-	if err := os.WriteFile(installed, []byte(pat), 0o644); err != nil {
-		t.Fatal(err)
+	dir := t.TempDir()
+	if f, err = ResolveFiles(dir, "", ""); err != nil || f.buffer != 0 || f.rip != "" || f.model != "" || f.ripTarget != filepath.Join(dir, ripFile) {
+		t.Fatalf("-config-dir gave %+v, %v; want that root alone", f, err)
 	}
+	writeFile(t, filepath.Join(dir, settingsFile), "[paths]\nroot = \"elsewhere\"\n")
+	if _, err = ResolveFiles(dir, "", ""); err == nil || !strings.Contains(err.Error(), `unknown key "paths"`) {
+		t.Fatalf("a key stapes.toml cannot hold gave %v; want it refused by name", err)
+	}
+}
 
-	for _, root := range []string{"", dir} {
-		f, err := ResolveFiles(root, "", "")
-		if err != nil {
-			t.Fatal(err)
-		}
-		vif, err := resource.Audio(resource.Options{Dir: root})
-		if err != nil || f.music != vif.MusicPath || f.sounds != vif.SoundPath {
-			t.Fatalf("root %q: stapes reads %+v, vif %+v (%v)", root, f, vif, err)
-		}
+// TestDocumentsFollowTheSearchPath: the documents are found in vif's audio folder,
+// whatever the root, and save back there, an untitled one included, where vif reads
+// it next run; -config-music and -config-sounds name a document outright.
+func TestDocumentsFollowTheSearchPath(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", base)
+	music := filepath.Join(base, vifAudio, musicFile)
+	writeFile(t, music, "[[pattern]]\nname = \"installed\"\nsteps = 16\n[[pattern.track]]\ninstr = \"kick\"\nevent = [{ pos = 0, vel = 1.0 }]\n")
+	named := filepath.Join(t.TempDir(), "mine.toml")
+	writeFile(t, named, "")
+	if f, err := ResolveFiles("", "", named); err != nil || f.sounds != named || f.soundsTarget != named || f.music != music {
+		t.Fatalf("a named sound document gave %+v, %v", f, err)
 	}
-
-	f, _ := ResolveFiles("", "", "")
+	f, err := ResolveFiles(t.TempDir(), "", "")
+	if err != nil || f.music != music || f.sounds != "" || f.soundsTarget != filepath.Join(base, vifAudio, soundsFile) {
+		t.Fatalf("got %+v, %v; want vif's music.toml, and its folder for sounds", f, err)
+	}
 	var out bytes.Buffer
 	s, err := NewSession(Options{Backend: "null", SfxVolume: 0.5, Out: &out, Files: f})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer teardown(t, s)
-	runOrFatal(t, s, &out, "save pattern\n")
-	vif, _ := resource.Audio(resource.Options{})
-	if want := filepath.Join(user, paths.AppDirName, paths.AudioDirName, paths.MusicConfigFile); vif.MusicPath != want {
-		t.Errorf("after save vif reads %q, want the user root's %q", vif.MusicPath, want)
+	runOrFatal(t, s, &out, "new pattern mine\nsave pattern\nsave sound\n")
+	if data, _ := os.ReadFile(music); !strings.Contains(string(data), `"installed"`) || !strings.Contains(string(data), `"mine"`) {
+		t.Errorf("music.toml did not take its document back:\n%s", data)
 	}
-	if data, _ := os.ReadFile(vif.MusicPath); !strings.Contains(string(data), "installed") {
-		t.Errorf("the saved override lost the installed pattern:\n%s", data)
+	if _, err := os.Stat(f.soundsTarget); err != nil {
+		t.Errorf("the untitled sound document did not land in vif's audio folder: %v", err)
 	}
 }
 
