@@ -21,8 +21,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/genetic"
 	"github.com/lixenwraith/vif/pkg/audio"
-	"github.com/lixenwraith/vif/pkg/genetic"
 )
 
 // fitOptions sizes a voice fit: the notes of a register it listens to, the

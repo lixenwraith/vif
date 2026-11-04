@@ -68,6 +68,11 @@ jobs:
       working-directory: android
       run: go vet ./... && go test ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
 
+    # A nested module, which ./... skips.
+    - name: Vet and race-test the genetic module
+      working-directory: pkg/genetic
+      run: go vet ./... && go test -race ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
+
     - name: Run tests with race detector
       # Soundlab's suite renders and hears music; under the detector on a busy
       # runner it nears go test's ten-minute default.

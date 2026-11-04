@@ -12,14 +12,14 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/lixenwraith/genetic"
+	"github.com/lixenwraith/genetic/registry"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/pkg/genetic"
-	"github.com/lixenwraith/vif/pkg/genetic/registry"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -467,7 +467,7 @@ type geneticTrackedState struct {
 }
 
 // SaveShared carries the complete genetic continuation point (D-19). The registry
-// sits behind a mutex and per-slot atomics in pkg/genetic, so it is exported whole,
+// keeps its state behind a mutex and per-slot atomics, so it is exported whole,
 // as one value with no store involved and no lock reaching here.
 func (s *GeneticSystem) SaveShared() ([]byte, error) {
 	s.mu.Lock()

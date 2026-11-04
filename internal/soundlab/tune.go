@@ -23,8 +23,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lixenwraith/genetic"
 	"github.com/lixenwraith/vif/pkg/audio"
-	"github.com/lixenwraith/vif/pkg/genetic"
 )
 
 // tuneOptions sizes a search: the loops rendered and their bars, the generations

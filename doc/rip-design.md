@@ -240,9 +240,9 @@ offline (`song <name> <file.wav>`).
   and `transformer`, and goes with `audio` to its module.
 - `pkg/transformer`: inference over frames and the weight file. Standard
   library only, its own module when the time comes.
-- `pkg/genetic`: the searches, over `RipParams`, over voice genes and over
-  bar-to-pattern assignments, with seeds, a schedule, a checkpoint, a cache and
-  a categorical operator for them. Standard library only.
+- `lixenwraith/genetic`: the searches, over `RipParams`, over voice genes and
+  over bar-to-pattern assignments, with seeds, a schedule, a checkpoint, a
+  cache and a categorical operator for them. Standard library only.
 - `internal/soundlab`: the verbs that drive it all (`rip`, `fit`, `compress`,
   `song`, `render`, `corpus`, `tune`), the documents the results land in, and
   the files overlay (`^O`) that loads, rips and saves them.
@@ -257,7 +257,7 @@ seeded, the searches run on fixed streams, and the model is float32 arithmetic i
 a fixed order, so a rip of one recording with one weight file and one parameter
 set is the same rip on every host.
 
-## 6. What `pkg/genetic` gave the searches
+## 6. What `lixenwraith/genetic` gave the searches
 
 The voice fit and the dictionary matching asked for what the parameter search
 did not, and the generational engine now has it:
@@ -740,9 +740,10 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   file in the root upgrades the hearing without a build.
 - **Pure Go inference.** No CGO, no runtime to ship, the same path on the
   desktop, the browser and the phone.
-- **The searches live in soundlab.** `pkg/audio` holds the primitives, a render,
-  a distance, a mechanical grouping, and `pkg/genetic` the engine; soundlab
-  joins them, so `audio` goes to its own module without `genetic`.
+- **The searches live in soundlab.** `pkg/audio` holds the primitives, a
+  render, a distance, a mechanical grouping, and `lixenwraith/genetic` the
+  engine; soundlab joins them, so `audio` goes to its own module without
+  `genetic`.
 - **The song is a document.** `[[song]]` beside the patterns, names not ids, a
   tempo and a key of its own, so a ripped song is edited, saved and played like
   anything else authored, and the conductor's tiers stay the game's.

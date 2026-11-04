@@ -12,7 +12,7 @@ is [Navigation](navigation-design.md).
 flowchart TD
     Systems["species and navigation systems"] --> Navigation["pkg/navigation"]
     Systems --> Physics["pkg/vmath/physics"]
-    Systems --> Genetic["pkg/genetic registry"]
+    Systems --> Genetic["lixenwraith/genetic registry"]
     Navigation --> VMath["pkg/vmath"]
     Physics --> VMath
     Adapt["AdaptationSystem"] --> Navigation
@@ -72,8 +72,8 @@ correction pops the same next route and scores the same deaths.
 
 ## 3. Genetic library
 
-`pkg/genetic` offers two engines over generic solution and numeric fitness
-types:
+[`lixenwraith/genetic`](../pkg/genetic/README.md), a module of its own, offers two
+engines over generic solution and numeric fitness types:
 
 | Engine | Model | Suitable use |
 |---|---|---|
@@ -115,7 +115,7 @@ bounded or Gaussian perturbation, capacity-reusing slice cloning, and a
 normalized gene-spread diversity metric. The optional fitness/tracking packages
 scalarize multi-metric lifetimes, and the optional persistence package provides
 an atomic file store, JSON by default, without coupling the core engine to disk.
-No package under `pkg/genetic` imports anything outside the standard library.
+No package of the module imports anything outside the standard library.
 
 ## 4. Game genetic adapter
 
@@ -299,8 +299,8 @@ caller's stream after it holds across eleven shapes and eight seeds.
 | Concern | Primary source |
 |---|---|
 | Route learning | `internal/system/adaptation.go`, `internal/engine/resource.go`, `adaptation_state.go` |
-| Genetic engines | `pkg/genetic/*.go`, `pkg/genetic/README.md` |
-| Registry/tracking/persistence | `pkg/genetic/{registry,tracking,fitness,persistence}` |
+| Genetic engines | `lixenwraith/genetic` (`pkg/genetic`): `*.go`, `README.md`, `examples/lander` |
+| Registry/tracking/persistence | `lixenwraith/genetic/{registry,tracking,fitness,persistence}` |
 | Game genetic adapter | `internal/system/genetic.go`, `gateway.go`, `eye.go`, `internal/parameter/genetic.go` |
 | Physics | `pkg/vmath/physics/*.go` |
 | Homing and collision profiles | `internal/profile/homing.go`, `collision.go` |

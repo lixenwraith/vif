@@ -5,7 +5,7 @@ import (
 	"math/rand/v2"
 	"sort"
 
-	"github.com/lixenwraith/vif/pkg/genetic"
+	"github.com/lixenwraith/genetic"
 )
 
 // SpeciesState is one registered species' complete continuation point. Species

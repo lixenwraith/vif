@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/genetic/registry"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -18,7 +19,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/prof"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/pkg/genetic/registry"
 	"github.com/lixenwraith/vif/pkg/linkpace"
 	"github.com/lixenwraith/vif/pkg/navigation"
 	link "github.com/lixenwraith/vif/pkg/network"

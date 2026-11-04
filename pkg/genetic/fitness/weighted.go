@@ -4,7 +4,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/lixenwraith/vif/pkg/genetic/tracking"
+	"github.com/lixenwraith/genetic/tracking"
 )
 
 // WeightedAggregator calculates fitness as a weighted sum of normalized metrics

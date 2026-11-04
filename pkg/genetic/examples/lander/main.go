@@ -1,4 +1,4 @@
-// Command genetic evolves lander controllers with genetic.StreamingEngine. Two
+// Command lander evolves lander controllers with genetic.StreamingEngine. Two
 // streams of landers, a population each, are released in step from opposite
 // corners toward one pad, and two landers of different streams that meet in
 // the air are both destroyed. Arrow keys or hjkl move the pad and re-score the
@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lixenwraith/vif/pkg/genetic"
+	"github.com/lixenwraith/genetic"
 )
 
 const (

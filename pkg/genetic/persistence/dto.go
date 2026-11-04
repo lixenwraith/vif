@@ -1,6 +1,6 @@
 package persistence
 
-import "github.com/lixenwraith/vif/pkg/genetic"
+import "github.com/lixenwraith/genetic"
 
 // SchemaVersion guards forward-incompatible layout changes
 const SchemaVersion = 1
