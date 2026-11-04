@@ -144,8 +144,8 @@ which creates games on request and routes each by name.
 Start with the [documentation index](doc/README.md): architecture, package and
 runtime maps, and references for gameplay, ECS and events, input, state
 machines, rendering, audio, navigation and evolution, content, networking,
-multiplayer, deployment and development. [Stapes](pkg/stapes/README.md)
-(formerly soundlab), a module of its own nested in `pkg/stapes`, and
+multiplayer, deployment and development. [Stapes](https://github.com/lixenwraith/stapes)
+(formerly soundlab), in a repository of its own, and
 `cmd/ascimage` author sounds and wall images, and [script/](script/README.md)
 holds the end-to-end checks Go tests cannot make.
 
