@@ -3,9 +3,9 @@
 package system
 
 import (
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // HandOverAudio moves the speakers from a presented world to a copy rebuilt to

@@ -7,12 +7,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/pkg/audio"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 

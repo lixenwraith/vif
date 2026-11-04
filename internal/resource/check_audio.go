@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
 
 func checkAudio(o Options, w io.Writer) error {

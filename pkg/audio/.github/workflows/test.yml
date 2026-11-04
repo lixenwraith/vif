@@ -1,0 +1,22 @@
+name: Test
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - name: gofmt -l
+        run: out=$(gofmt -l .); [ -z "$out" ] || { echo "$out"; exit 1; }
+      - run: go test -race ./...
+        env:
+          GORACE: halt_on_error=1
+      - run: GOOS=js GOARCH=wasm go build ./...
+      - run: GOOS=freebsd GOARCH=amd64 go build ./...
+      - run: GOOS=android GOARCH=arm64 go build ./...
+      - run: GOARCH=386 go build ./...

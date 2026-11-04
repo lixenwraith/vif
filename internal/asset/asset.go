@@ -1,8 +1,8 @@
 // Package asset holds every shipped file the binary must be able to play without a
 // host filesystem: the fallback scenario and typing corpus, the default keymap and
-// settings, the shipped bot graphs, the built-in sound and music banks, the version
-// a source archive carries, and the splash font. The directories served as fs.FS
-// are narrowed with fs.Sub, so each runtime root is its category.
+// settings, the shipped bot graphs, the version a source archive carries, and the
+// splash font. The directories served as fs.FS are narrowed with fs.Sub, so each
+// runtime root is its category; the audio banks are the audio module's bank package.
 package asset
 
 import (
@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed scenario/*.toml content/*.toml input/keymap.toml audio/*.toml vif.toml bot/*.toml
+//go:embed scenario/*.toml content/*.toml input/keymap.toml vif.toml bot/*.toml
 var assetFS embed.FS
 
 var (
@@ -21,22 +21,14 @@ var (
 	MainScenario fs.FS
 	// DefaultContent is the fallback typing corpus.
 	DefaultContent fs.FS
-	// DefaultSounds holds the built-in sound specs and voices; DefaultSoundFiles is
-	// their load order, a later file overriding an earlier one by name.
-	DefaultSounds fs.FS
 	// DefaultBots holds the shipped bot graphs, one <name>.toml each.
 	DefaultBots fs.FS
 )
 
 const MainScenarioEntry = "scenario.toml"
 
-var DefaultSoundFiles = []string{"sfx.toml", "drums.toml", "voices.toml"}
-
 // DefaultKeymap is the keymap TOML the binary falls back to.
 var DefaultKeymap []byte
-
-// DefaultMusic is the built-in pattern bank, which a user music.toml overrides by name.
-var DefaultMusic []byte
 
 // DefaultSettings is the vif.toml whose values stand when no root holds one.
 var DefaultSettings []byte
@@ -45,10 +37,8 @@ var DefaultSettings []byte
 func init() {
 	MainScenario = sub("scenario")
 	DefaultContent = sub("content")
-	DefaultSounds = sub("audio")
 	DefaultBots = sub("bot")
 	DefaultKeymap = read("input/keymap.toml")
-	DefaultMusic = read("audio/music.toml")
 	DefaultSettings = read("vif.toml")
 }
 

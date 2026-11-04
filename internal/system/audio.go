@@ -5,11 +5,11 @@ package system
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/status"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // AudioSystem plays requested sound effects, so no game system calls the engine,

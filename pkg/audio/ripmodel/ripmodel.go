@@ -1,7 +1,7 @@
 // Package ripmodel is the rip's learned front end: a transformer over log-mel
 // frames whose heads say, per frame, whether anything and which drum struck,
 // which pitches sound, are struck or let go and how hard, and the note's wave and
-// genes. tool/rip-train trains it on loops the engine renders; Spec is the shape
+// genes. stapes' rip-train trains it on loops the engine renders; Spec is the shape
 // both sides build, and a weight file loads into a FrontEnd the Ripper hears with.
 package ripmodel
 
@@ -10,8 +10,8 @@ import (
 	"io"
 	"math"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/transformer"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // The heads, in the order the output vector lays them

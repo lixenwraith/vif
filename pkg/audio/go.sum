@@ -1,0 +1,4 @@
+github.com/lixenwraith/toml v0.5.0 h1:2B2S7u45TSP6EUN3rLzcqbnFZeeREeS5V+OQ3jKuLJc=
+github.com/lixenwraith/toml v0.5.0/go.mod h1:itcT/Vt5mwmX9KVGCMsWZr6vbU/JgZ24wV/I0J5cMt0=
+github.com/lixenwraith/transformer v0.1.0 h1:nAr9ld1GhfVI0PxyTVbiib6KoN3N70t+zq633dsBFes=
+github.com/lixenwraith/transformer v0.1.0/go.mod h1:gcbU3y2ofjrR1uPFqOoFWXeySzMtZJ8HisH3rPb68wk=

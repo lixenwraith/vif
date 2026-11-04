@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
 
 // cmdAgree compares the transcripts of two rips of one piece, two witnesses

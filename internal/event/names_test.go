@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/audio/model"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
-	"github.com/lixenwraith/vif/pkg/audio/model"
 )
 
 // TestEveryEnumAPayloadHoldsTakesNames: a field of a defined integer type, at any
