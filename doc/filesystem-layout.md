@@ -24,8 +24,7 @@ wad/                            internal/asset/
 ├── scenario/   one directory    ├── scenario/  fallback scenario
 │               per scenario     ├── content/   fallback corpus
 ├── content/    typing corpus    ├── input/     default keymap
-└── image/      .vifimg assets   ├── audio/     sound and music banks
-                                 ├── bot/       shipped bot graphs
+└── image/      .vifimg assets   ├── bot/       shipped bot graphs
                                  ├── font/      cell font atlas
                                  ├── vif.toml   default settings
                                  ├── version.txt source-archive stamp
@@ -222,13 +221,13 @@ orders. Runtime categorized opens cross the generic `FileService` capability
 contributed to the world, which serves regular files under a category in the
 roots and nothing else; systems do not open host paths directly.
 
-`internal/asset` owns every embedded group and is the only package with an
-`embed` directive for shipped data. In an audio-capable build, `pkg/audio`
-carries no specs or patterns of its own: `internal/parameter.BuiltinSounds` and
-`BuiltinPatterns` parse the embedded banks and the audio service hands them to the
-engine as `AudioConfig.BaseSounds` and `BasePatterns`, which is what keeps `pkg/`
-free of `internal/` imports. Audio-free builds omit those loaders and the audio
-engine.
+`internal/asset` owns every embedded group of this module and is its only
+package with an `embed` directive for shipped data. The sound and music banks are
+the audio module's (`pkg/audio/bank/`), whose root package carries no specs or
+patterns of its own: in an audio-capable build the audio service parses them with
+`bank.Sounds` and `bank.Patterns` and hands them to the engine as
+`AudioConfig.BaseSounds`, `BaseVoices` and `BasePatterns`. Audio-free builds omit
+those loaders and the audio engine.
 
 A `js/wasm` build performs no host-directory discovery, so it remains playable
 from the embedded scenario, content, and keymap, and as a guest it is served the

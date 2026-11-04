@@ -63,7 +63,7 @@ The build split follows capabilities rather than operating-system names:
 | Capability | Build-specific seam | What stays common |
 |---|---|---|
 | Presentation | `internal/app/presentation_*`, generated `manifest/render_gen.go`, the host's `Presentation` or the terminal service | World, systems, semantic input, scheduler |
-| Audio | `internal/app/audio*`, `engine/resource_audio*`, audio service/systems, generated audio builder | Event payload identifiers in `pkg/audio/model` |
+| Audio | `internal/app/audio*`, `engine/resource_audio*`, audio service/systems, generated audio builder | Event payload identifiers in `lixenwraith/audio/model` |
 | Socket network | `internal/app/network_*` | Network protocol and simulation-facing `engine.NetworkPort` |
 | Logging | existing `internal/vlog` build variants | Call sites and status collection |
 | Resources | `engine.FileProvider` and `ContentProvider` | Parsed config/content models |
@@ -77,8 +77,8 @@ unused.
 
 Audio follows the same shape. Mixer, synthesis, backend, service, configuration,
 and full audio systems compile only when audio is available. Protocol and event
-payloads use `pkg/audio/model`, a small package containing stable identifiers but
-no mixer, backend, filesystem, or synthesis dependency. The audio-free generated
+payloads use `lixenwraith/audio/model`, a small package containing stable
+identifiers but no mixer, backend, filesystem, or synthesis dependency. The audio-free generated
 builder installs tiny event sinks under the same `audio` and `music` system names.
 They consume local audio events and publish the unavailable status without linking
 the engine, preserving event telemetry and runtime system controls.
@@ -118,11 +118,12 @@ that this command prints no renderer or audio-engine package:
 
 ```bash
 go list -deps -tags=vif_headless ./cmd/vif \
-  | grep -E 'internal/render|render/renderer|/pkg/audio$'
+  | grep -E 'internal/render|render/renderer|lixenwraith/audio$'
 ```
 
-It should produce no output. The container is one static binary in
-`scratch`; its exact layer size should be measured for each release.
+It should produce no output: the audio module's `model` package alone stays. The
+container is one static binary in `scratch`; its exact layer size should be
+measured for each release.
 
 ## 4. Platform matrix
 
@@ -629,8 +630,8 @@ a song), `rip` and `truth` of a `.wav` or a `.mid`, and `render`, `export` and
 from a running script's own, and a bare `save` writes where `internal/paths`
 resolves the next run's override, so a terminal, over ssh too, needs no dialog;
 the files overlay (`^O`) browses the same paths. The browser build leaves
-soundlab out (`!wasm`), though `pkg/audio` writes and reads MIDI there too, from
-any reader or writer.
+soundlab out (`!wasm`), though the audio library writes and reads MIDI there too,
+from any reader or writer.
 
 On Android ([todo](todo.md#bring-soundlab-to-android-soundlab-mobile)) the
 user root is the app's own storage, which these paths reach as they are. A MIDI
@@ -645,15 +646,17 @@ verbs stay as they are, and so does every other host.
 
 `make verify` compiles the full (also with cgo off), `novlog`, audio-free,
 dedicated, `vif_nogui`, browser and Windows variants, tests the audio-free and
-dedicated profiles, the `android` module and `pkg/window`, and runs the §3
-dependency check in addition to the normal test and vet gates. A release should
-also run:
+dedicated profiles, the `android` module and `pkg/window`, vets, tests and
+cross-builds the nested audio module, and runs the §3 dependency check in
+addition to the normal test and vet gates. A release should also run:
 
 ```bash
 go generate ./internal/manifest
 go build ./...
 go test ./...
 go vet ./...
+go -C pkg/audio test ./...
+go -C pkg/audio vet ./...
 ./script/test.sh all
 node --check web/terminal.js web/worker.js web/audio-worklet.js
 ```
