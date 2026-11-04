@@ -682,10 +682,8 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Genetic
 
-- `pkg/genetic` is a module of its own, `github.com/lixenwraith/genetic`, which
-  the root and `android` take through a `replace`: `./...` skips it, so its
-  gates run inside it (`go -C pkg/genetic test ./...`), under its own
-  `AGENTS.md`. Notes about the library itself are in its `doc/agent-notes.md`.
+- The library is `github.com/lixenwraith/genetic`: a change to it lands there,
+  under its own `AGENTS.md` and `doc/agent-notes.md`, and vif takes its tag.
 - The capture carries `registry.SpeciesState`, which embeds the streaming
   engine's checkpoint, so a change to `genetic.StreamingState`'s layout bumps
   `snapshot.Schema` beside `StreamingStateVersion`.

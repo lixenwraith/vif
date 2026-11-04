@@ -61,8 +61,8 @@ Focused references:
 - [Agent notes](agent-notes.md) holds what agents learned working on the
   repository that no rule or design document states.
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
-- [Genetic package reference](../pkg/genetic/README.md) documents the reusable
-  optimization library.
+- [Genetic library](https://github.com/lixenwraith/genetic) documents the reusable optimization library, a
+  module of its own.
 - [Soundlab reference](../cmd/soundlab/README.md) covers the audio authoring
   environment.
 - [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image
