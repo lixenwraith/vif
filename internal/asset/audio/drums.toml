@@ -1,91 +1,214 @@
-# Percussion. Names bind to InstrumentType in drumkit.go; overriding "kick" in
-# user TOML replaces the kit piece. Six variants with a tighter walk than SFX.
+# Percussion. Names bind to InstrumentType in kit.go; overriding "kick" in user
+# TOML replaces the kit piece. Each piece is rendered once per velocity layer
+# (velocities), six strokes a layer: a hit plays the stroke of the layer nearest
+# its velocity at its velocity's level, so a harder hit is brighter as well as
+# louder. vel_gain, vel_track and stroke say how a part follows the velocity and
+# where on the head a stroke lands. Figures against recordings: doc/audio.md §7.
 
 [[sound]]
 name = "kick"
-duration = 0.16
-raw = true          # the master tanh sets the level under unity; no peak normalization
+desc = "a damped kick: the head's fundamental falling as its tension settles, its upper modes, the beater's felt"
+duration = 0.5
+norm = 0.95
 variants = 6
-pitch_walk = 0.08
-length_walk = 0.20
-chain = [{ kind = "shape", drive = 1.8 }]
+velocities = [0.35, 0.65, 1.0]
+pitch_walk = 0.02
+length_walk = 0.06
+chain = [{ kind = "shape", drive = 1.2, vel_track = 0.8 }]
+# the (0,1) mode: a fast fall, then the shell's longer ring; a harder stroke starts higher
 [[sound.layer]]
-source = { kind = "sweep", wave = "sine", freq = 160, freq_end = 42, curve = "exp", curve_k = 8 }
-chain = [{ kind = "decay", tau = 0.034 }]
+length = 0.22
+source = { kind = "sweep", wave = "sine", freq = 92, freq_end = 52, curve = "exp", curve_k = 13.2, vel_track = 0.4 }
+chain = [{ kind = "decay", attack = 0.0015, tau = 0.028 }]
 [[sound.layer]]
-gain = 0.15
-length = 0.006
+gain = 0.14
+source = { kind = "sweep", wave = "sine", freq = 92, freq_end = 52, curve = "exp", curve_k = 30, vel_track = 0.4 }
+chain = [{ kind = "decay", attack = 0.0015, tau = 0.11 }]
+# the upper modes, louder for a harder stroke or one off the centre
+[[sound.layer]]
+gain = 0.5
+vel_gain = 0.6
+stroke = 0.08
+length = 0.32
+source = { kind = "sweep", wave = "sine", freq = 190, freq_end = 142, curve = "exp", curve_k = 19.2, vel_track = 0.3 }
+chain = [{ kind = "decay", attack = 0.001, tau = 0.045 }]
+[[sound.layer]]
+gain = 0.4
+vel_gain = 0.9
+stroke = 0.1
+length = 0.25
+source = { kind = "sweep", wave = "sine", freq = 300, freq_end = 228, curve = "exp", curve_k = 15, vel_track = 0.3 }
+chain = [{ kind = "decay", attack = 0.001, tau = 0.035 }]
+# the beater: a pulse that shortens, so brightens, as it lands harder, and the felt's slap
+[[sound.layer]]
+gain = 2.0
+vel_gain = 0.6
+length = 0.012
+source = { kind = "osc", wave = "sine", freq = 2000, vel_track = 0.8 }
+chain = [{ kind = "decay", attack = 0.0002, tau = 0.0009, vel_track = 0.4 }]
+[[sound.layer]]
+gain = 4.0
+vel_gain = 1.0
+length = 0.012
 source = { kind = "noise" }
 chain = [
-  { kind = "decay", tau = 0.0015 },
-  { kind = "hp", freq = 1500, q = 0.707 }
-]
-
-[[sound]]
-name = "hihat"
-duration = 0.08
-norm = 0.9
-variants = 6
-pitch_walk = 0.08
-length_walk = 0.20
-[[sound.layer]]
-source = { kind = "noise" }
-chain = [
-  { kind = "decay", tau = 0.0053333 },
-  { kind = "hp", freq = 7000, q = 0.707 }
+  { kind = "decay", tau = 0.002 },
+  { kind = "lp", freq = 9000, q = 0.707, vel_track = 1.0 },
+  { kind = "hp", freq = 2000, q = 0.707 }
 ]
 
 [[sound]]
 name = "snare"
-desc = "wood shell: two head modes under wires that bloom a few ms after the stick"
-duration = 0.26
+desc = "a wood snare: the heads' modes under the stick and the wires; a soft stroke rings shorter"
+duration = 0.4
 norm = 0.74
 variants = 6
-pitch_walk = 0.06
-length_walk = 0.20
-chain = [{ kind = "hp", freq = 130, q = 0.707 }]
+velocities = [0.3, 0.6, 1.0]
+pitch_walk = 0.015
+length_walk = 0.06
+chain = [{ kind = "hp", freq = 90, q = 0.707 }]
+# (0,1), split in two by the coupled heads; a stroke near the centre rings it louder
 [[sound.layer]]
-gain = 0.75
-source = { kind = "sweep", wave = "sine", freq = 196, freq_end = 176, curve = "exp", curve_k = 6 }
-chain = [{ kind = "decay", tau = 0.07 }]
+gain = 0.5
+stroke = -0.1
+length = 0.35
+source = { kind = "sweep", wave = "sine", freq = 150, freq_end = 140, curve = "exp", curve_k = 26.25 }
+chain = [{ kind = "decay", tau = 0.05, vel_track = 0.65 }]
 [[sound.layer]]
-gain = 0.35
-source = { kind = "osc", wave = "sine", freq = 334 }
-chain = [{ kind = "decay", tau = 0.04 }]
+gain = 0.8
+stroke = -0.08
+source = { kind = "sweep", wave = "sine", freq = 228, freq_end = 215, curve = "exp", curve_k = 30, vel_track = 0.1 }
+chain = [{ kind = "decay", tau = 0.065, vel_track = 0.65 }]
+# (1,1), (2,1) and (0,2), louder off the centre
 [[sound.layer]]
 gain = 0.4
-length = 0.005
-source = { kind = "noise" }
-chain = [{ kind = "decay", tau = 0.0012 }, { kind = "bp", freq = 4000, q = 0.7 }]
+stroke = 0.25
+length = 0.35
+source = { kind = "osc", wave = "sine", freq = 352 }
+chain = [{ kind = "decay", tau = 0.05, vel_track = 0.4 }]
 [[sound.layer]]
-gain = 0.6
+gain = 0.28
+stroke = 0.3
+length = 0.25
+source = { kind = "osc", wave = "sine", freq = 462 }
+chain = [{ kind = "decay", tau = 0.035, vel_track = 0.4 }]
+[[sound.layer]]
+gain = 0.2
+stroke = 0.2
+length = 0.21
+source = { kind = "osc", wave = "sine", freq = 540 }
+chain = [{ kind = "decay", tau = 0.03, vel_track = 0.4 }]
+# the stick's crack, brighter the harder it lands
+[[sound.layer]]
+gain = 0.45
+vel_gain = 0.8
+length = 0.008
+source = { kind = "noise" }
+chain = [{ kind = "decay", tau = 0.0012 }, { kind = "bp", freq = 4000, q = 0.7, vel_track = 0.7 }]
+# the wires: a buzz blooming a few ms after the stick, then their sizzle
+[[sound.layer]]
+gain = 0.45
+offset = 0.002
+stroke = 0.08
+source = { kind = "noise" }
+chain = [
+  { kind = "decay", attack = 0.004, tau = 0.06, vel_track = 0.3 },
+  { kind = "hp", freq = 1800, q = 0.707 },
+  { kind = "lp", freq = 6000, q = 0.707, vel_track = 0.3, stroke = 0.1 }
+]
+[[sound.layer]]
+gain = 0.25
+offset = 0.004
+source = { kind = "noise" }
+chain = [
+  { kind = "decay", attack = 0.01, tau = 0.08 },
+  { kind = "hp", freq = 2500, q = 0.707 },
+  { kind = "lp", freq = 7000, q = 0.707 }
+]
+
+[[sound]]
+name = "hihat"
+desc = "a closed hihat: the TR-808's six square partials and noise through the plates' band, choked as they close"
+duration = 0.3
+norm = 0.55
+variants = 6
+velocities = [0.3, 0.6, 1.0]
+pitch_walk = 0.005
+length_walk = 0.06
+bus = [{ name = "metal", chain = [
+  { kind = "decay", attack = 0.0005, tau = 0.045, vel_track = 0.15, stroke = 0.15 },
+  { kind = "hp", freq = 4000, q = 0.707 },
+  { kind = "bp", freq = 8500, q = 0.5, vel_track = 0.3, stroke = 0.05 }
+] }]
+[[sound.layer]]
+bus = "metal"
+gain = 0.15
+source = { kind = "osc", wave = "square", freq = 205.3 }
+[[sound.layer]]
+bus = "metal"
+gain = 0.15
+source = { kind = "osc", wave = "square", freq = 304.4 }
+[[sound.layer]]
+bus = "metal"
+gain = 0.15
+source = { kind = "osc", wave = "square", freq = 369.6 }
+[[sound.layer]]
+bus = "metal"
+gain = 0.15
+source = { kind = "osc", wave = "square", freq = 522.7 }
+[[sound.layer]]
+bus = "metal"
+gain = 0.15
+source = { kind = "osc", wave = "square", freq = 540 }
+[[sound.layer]]
+bus = "metal"
+gain = 0.15
+source = { kind = "osc", wave = "square", freq = 800 }
+[[sound.layer]]
+bus = "metal"
+gain = 0.5
+source = { kind = "noise" }
+# the plates' sizzle as they close, and the stick on the edge, more at its tip than its shoulder
+[[sound.layer]]
+gain = 0.12
 offset = 0.002
 source = { kind = "noise" }
 chain = [
-  { kind = "decay", attack = 0.004, tau = 0.12 },
-  { kind = "hp", freq = 1000, q = 0.707 },
-  { kind = "lp", freq = 7000, q = 0.707 }
+  { kind = "decay", attack = 0.004, tau = 0.085 },
+  { kind = "bp", freq = 7000, q = 0.9, vel_track = 0.3 }
 ]
 [[sound.layer]]
-gain = 0.3
-offset = 0.002
-source = { kind = "noise" }
-chain = [{ kind = "decay", attack = 0.003, tau = 0.08 }, { kind = "bp", freq = 1700, q = 1.0, track_pitch = true }]
-[[sound]]
-name = "clap"
-duration = 0.10
-norm = 0.9
-variants = 6
-pitch_walk = 0.08
-length_walk = 0.20
-chain = [{ kind = "bp", freq = 1500, q = 2.0 }]
-[[sound.layer]]
-length = 0.06
-source = { kind = "burst", burst = { count = 4, len = 0.01, gap = 0.005, tau = 0.002, decay = 0.15 } }
-[[sound.layer]]
-gain = 0.3
-offset = 0.06
+gain = 1.6
+stroke = 0.25
 length = 0.04
 source = { kind = "noise" }
-chain = [{ kind = "decay", tau = 0.005 }]
+chain = [{ kind = "decay", tau = 0.012 }, { kind = "bp", freq = 700, q = 1.0 }]
 
+[[sound]]
+name = "clap"
+desc = "hands clapping: four bursts a few ms apart, as a few players never land at once, then the room"
+duration = 0.35
+norm = 0.71
+variants = 6
+velocities = [0.3, 0.6, 1.0]
+pitch_walk = 0.03
+length_walk = 0.1
+bus = [{ name = "hands", chain = [
+  { kind = "bp", freq = 1400, q = 1.2, vel_track = 0.12, stroke = 0.15 },
+  { kind = "hp", freq = 400, q = 0.707 }
+] }]
+[[sound.layer]]
+bus = "hands"
+length = 0.05
+source = { kind = "burst", burst = { count = 4, len = 0.008, gap = 0.004, tau = 0.0025, decay = 0.1, jitter = 0.5, amp_jitter = 0.35 } }
+[[sound.layer]]
+bus = "hands"
+gain = 0.25
+offset = 0.03
+source = { kind = "noise" }
+chain = [{ kind = "decay", attack = 0.004, tau = 0.045 }]
+[[sound.layer]]
+gain = 0.12
+length = 0.05
+source = { kind = "burst", burst = { count = 4, len = 0.008, gap = 0.004, tau = 0.0015, decay = 0.1, jitter = 0.5, amp_jitter = 0.35 } }
+chain = [{ kind = "bp", freq = 4500, q = 0.8, vel_track = 0.3 }]
