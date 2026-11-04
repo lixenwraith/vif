@@ -247,7 +247,7 @@ func (m *Mixer) apply(c audioCmd) {
 	case cmdReloadSound:
 		m.growTables(c.sound)
 		m.cache.replace(c.sound, c.bufs)
-		m.kit.rebind(c.sound, c.bufs)
+		m.kit.rebind(c.sound, c.takes)
 	case cmdReloadPattern:
 		m.sequencer.ReloadPattern(c.pattern)
 	case cmdReloadVoice:
