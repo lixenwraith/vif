@@ -72,7 +72,7 @@ correction pops the same next route and scores the same deaths.
 
 ## 3. Genetic library
 
-[`lixenwraith/genetic`](../pkg/genetic/README.md), a module of its own, offers two
+[`lixenwraith/genetic`](https://github.com/lixenwraith/genetic), a module of its own, offers two
 engines over generic solution and numeric fitness types:
 
 | Engine | Model | Suitable use |
@@ -299,7 +299,7 @@ caller's stream after it holds across eleven shapes and eight seeds.
 | Concern | Primary source |
 |---|---|
 | Route learning | `internal/system/adaptation.go`, `internal/engine/resource.go`, `adaptation_state.go` |
-| Genetic engines | `lixenwraith/genetic` (`pkg/genetic`): `*.go`, `README.md`, `examples/lander` |
+| Genetic engines | [`lixenwraith/genetic`](https://github.com/lixenwraith/genetic): `*.go`, `README.md`, `examples/lander` |
 | Registry/tracking/persistence | `lixenwraith/genetic/{registry,tracking,fitness,persistence}` |
 | Game genetic adapter | `internal/system/genetic.go`, `gateway.go`, `eye.go`, `internal/parameter/genetic.go` |
 | Physics | `pkg/vmath/physics/*.go` |

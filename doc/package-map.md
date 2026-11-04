@@ -221,9 +221,7 @@ The practical dependency rules are:
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
 
 The pinned revisions are in `go.mod`; this document intentionally avoids
-duplicating version strings that would become stale. `lixenwraith/genetic` sits
-in `pkg/genetic`, a module of its own that `go.mod` and `android/go.mod` take
-through a `replace`, so `./...` skips it ([its README](../pkg/genetic/README.md)).
+duplicating version strings that would become stale.
 
 ## 9. Commands, tools, and sandboxes
 
