@@ -31,6 +31,14 @@ func ValidateSound(d *SoundDef) error {
 			return e("%s %v outside [0,2)", w.n, w.v)
 		}
 	}
+	if len(d.Velocities) > MaxSoundVelocity {
+		return e("%d velocities, want at most %d", len(d.Velocities), MaxSoundVelocity)
+	}
+	for i, v := range d.Velocities {
+		if !finite(v) || v <= 0 || v > 1 || (i > 0 && v <= d.Velocities[i-1]) {
+			return e("velocities %v: want ascending in (0,1]", d.Velocities)
+		}
+	}
 	if d.Raw && d.Norm != 0 {
 		return e("norm set together with raw")
 	}
@@ -116,6 +124,9 @@ func ValidateSound(d *SoundDef) error {
 		if !finite(l.Length) || l.Length < 0 || l.Length > dur {
 			return e("layer %d: length %v outside [0,%v]", i, l.Length, dur)
 		}
+		if err := checkResponse(l.VelGain, maxVelGain, l.Stroke, 1); err != nil {
+			return e("layer %d: %w", i, err)
+		}
 		if err := checkSource(&l.Source, named); err != nil {
 			return e("layer %d: %w", i, err)
 		}
@@ -136,6 +147,7 @@ func ValidateSound(d *SoundDef) error {
 	if n < 1 {
 		n = SoundVariants
 	}
+	n *= max(len(d.Velocities), 1)
 	ops = (ops + dur*float64(AudioSampleRate)*float64(1+len(d.Chain))) * float64(n)
 	if ops > maxRenderOps {
 		return e("render cost %.0f sample-ops exceeds %d", ops, maxRenderOps)
@@ -239,6 +251,12 @@ func checkSource(s *Source, named map[string]bool) error {
 		return fmt.Errorf("unknown source kind %q", s.Kind)
 	}
 
+	if s.VelTrack != 0 && s.Kind != "osc" && s.Kind != "sweep" {
+		return fmt.Errorf("vel_track set on %q source", s.Kind)
+	}
+	if err := checkResponse(s.VelTrack, maxVelTrack, 0, 0); err != nil {
+		return err
+	}
 	if s.Ref != "" && s.Kind != "ref" {
 		return fmt.Errorf("ref set on %q source", s.Kind)
 	}
@@ -269,6 +287,16 @@ func checkChain(c []Proc) error {
 }
 
 func checkProc(p *Proc) error {
+	if p.VelTrack != 0 || p.Stroke != 0 {
+		switch p.Kind {
+		case "lp", "hp", "bp", "sweepbp", "decay", "shape", "clip":
+		default:
+			return fmt.Errorf("vel_track or stroke set on %q", p.Kind)
+		}
+		if err := checkResponse(p.VelTrack, maxVelTrack, p.Stroke, maxProcStroke); err != nil {
+			return err
+		}
+	}
 	switch p.Kind {
 	case "lp", "hp", "bp", "sweepbp":
 		if err := checkFreq("freq", p.Freq); err != nil {
@@ -345,6 +373,17 @@ func checkWave(w string) error {
 
 // checkFreq keeps every frequency below Nyquist after the widest pitch walk,
 // so no biquad can be handed a cutoff that produces NaN.
+// checkResponse bounds a velocity exponent to [0,vmax] and a stroke to [-smax,smax]
+func checkResponse(vel, vmax, stroke, smax float64) error {
+	if !finite(vel) || vel < 0 || vel > vmax {
+		return fmt.Errorf("velocity response %v outside [0,%v]", vel, vmax)
+	}
+	if !finite(stroke) || math.Abs(stroke) > smax {
+		return fmt.Errorf("stroke %v outside [-%v,%v]", stroke, smax, smax)
+	}
+	return nil
+}
+
 func checkFreq(name string, f float64) error {
 	if !finite(f) || f <= 0 || f*maxPitchScale >= nyquist {
 		return fmt.Errorf("%s %v outside (0,%.0f) after pitch scaling", name, f, nyquist/maxPitchScale)
@@ -355,6 +394,12 @@ func checkFreq(name string, f float64) error {
 const (
 	nyquist       = float64(AudioSampleRate) / 2
 	maxPitchScale = 2.0
+	// a velocity response is a power of the velocity: a gain's up to the
+	// fourth, a frequency's, tau's or drive's to the second; a processor's
+	// stroke stays under one so the parameter keeps its sign
+	maxVelGain    = 4.0
+	maxVelTrack   = 2.0
+	maxProcStroke = 0.9
 )
 
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }

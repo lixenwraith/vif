@@ -84,6 +84,9 @@ type AudioEngine struct {
 	stderrTail *tailBuffer
 	musicWAV   *wavSink // RecordMusic's file, closed by Stop
 
+	kitMu   sync.Mutex
+	offline [InstrumentCount]offlineDrum // the drums RenderLines last played, by kitMu
+
 	running    atomic.Bool
 	paused     atomic.Bool
 	sfxMuted   atomic.Bool
@@ -170,7 +173,7 @@ func (ae *AudioEngine) Start() error {
 	freezeSounds()
 
 	ae.cache.preloadAll(ae.config.SoundShapes)
-	kit := buildKit(ae.cache)
+	kit := buildKit(ae.cache, ae.config.SoundShapes)
 	ae.resolveLevels()
 	registerMelodyGen()
 	for _, p := range ae.config.BasePatterns {
@@ -682,7 +685,7 @@ func (ae *AudioEngine) DefineSound(d *SoundDef) (SoundID, error) {
 	if ae.mixer == nil {
 		return id, nil // pre-Start: preloadAll renders from the registry
 	}
-	if !ae.mixer.Send(audioCmd{op: cmdReloadSound, sound: id, bufs: bufs}) {
+	if !ae.mixer.Send(audioCmd{op: cmdReloadSound, sound: id, bufs: bufs, takes: renderTakes(d, shape, bufs)}) {
 		return id, fmt.Errorf("sound %q: mixer queue full, reload dropped", d.Name)
 	}
 	return id, nil
@@ -753,7 +756,7 @@ func (ae *AudioEngine) RenderLines(timeline [][MusicSlots]PatternID, bpm, root i
 	for i := InstrumentType(0); i <= InstrClap; i++ {
 		if d := SoundDefByName(drumSoundNames[i]); d != nil {
 			k.ids[i] = SoundIDByName(d.Name)
-			k.variants[i] = RenderVariants(d, shapes[d.Name])
+			k.takes[i] = ae.offlineTakes(i, d, shapes[d.Name])
 		}
 	}
 	s := NewSequencer(bpm, k)

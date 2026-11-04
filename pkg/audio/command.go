@@ -50,6 +50,7 @@ type audioCmd struct {
 	reveal  bool      // per-bar track build-up on the incoming pattern
 	w       io.Writer
 	bufs    []floatBuffer // cmdReloadSound: rendered variant set, mixer-owned on receipt
+	takes   drumTakes     // cmdReloadSound: the velocity layers a drum plays, mixer-owned on receipt
 	buf     floatBuffer   // cmdPlayBuffer: single take, mixer-owned on receipt
 	voice   *VoiceDef     // cmdReloadVoice: the registered entry, read-only once sent
 }

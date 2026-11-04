@@ -42,11 +42,10 @@ func NewDrumVoice(k *kit, instr InstrumentType) *DrumVoice {
 func (v *DrumVoice) Trigger(params VoiceParams) {
 	// Read through the kit rather than caching the slice header: a cached
 	// header would pin the superseded set across a hot-reload.
-	vars := v.kit.variants[v.instr]
-	if len(vars) == 0 {
+	v.buffer = v.kit.take(v.instr, params.Velocity, v.nextVar)
+	if v.buffer == nil {
 		return
 	}
-	v.buffer = vars[v.nextVar%uint32(len(vars))]
 	v.nextVar++
 	v.velocity = params.Velocity
 	v.pos = 0

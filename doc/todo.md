@@ -1601,6 +1601,20 @@ bass's level error is 7 to 8 dB, against Iowa runs whose notes differ by as much
 and the pad and the lead are measured against main only, by their energy above
 4·f0 and how alike two notes are, never against an instrument.
 
+### Bring the drum kit nearer its recordings
+
+- Priority: P2
+- Affected files: `internal/asset/audio/drums.toml`, `pkg/audio/kit.go`, `pkg/audio/rip.go`
+
+The kit ([Audio §7](audio.md#7-music-sequencer)) was measured against CC0 MP3
+previews and Iowa's hihat, at three velocities each. What is left: an open hihat,
+which the MIDI drum map's 46 reads as the closed one; a kick recorded several
+times at one pressure, to set its strokes' spread (the Sonor set has one take a
+pressure); and the analysis's bass and melody under the natural kit (`bench 12 4`
+clean 0.15 to 0.03 and 0.17 to 0.11, augmented 0.04 to 0.08 and 0.13 to 0.13), a
+kick ringing at 52 Hz read as bass, which a model trained on the new corpus is
+to be benched against.
+
 ### Spin off `pkg/audio` as its own module
 
 - Priority: P2

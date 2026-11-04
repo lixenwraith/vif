@@ -534,7 +534,7 @@ func TestDefineSoundRebindsDrumKit(t *testing.T) {
 		t.Fatal("mix goroutine still running; kit inspection would race")
 	}
 
-	vars := ae.mixer.kit.variants[InstrKick]
+	vars := ae.mixer.kit.takes[InstrKick].layers[0]
 	if len(vars) == 0 {
 		t.Fatal("kit lost its kick variants")
 	}
@@ -542,6 +542,35 @@ func TestDefineSoundRebindsDrumKit(t *testing.T) {
 	// old 0.15s one, whatever the length walk does.
 	if len(vars[0]) <= samplesOf(0.15) {
 		t.Errorf("kit still holds the old take: %d samples", len(vars[0]))
+	}
+}
+
+// A harder hit plays a brighter take: the kit picks the velocity layer nearest
+// the hit, whose low-pass opens with the velocity.
+func TestDrumHitPlaysTheLayerNearestItsVelocity(t *testing.T) {
+	d := &SoundDef{Name: "kick", Duration: 0.05, Variants: 2, Velocities: []float64{0.3, 1},
+		Layer: []Layer{{Source: Source{Kind: "noise"}, Chain: []Proc{{Kind: "lp", Freq: 8000, VelTrack: 1}}}}}
+	if err := ValidateSound(d); err != nil {
+		t.Fatal(err)
+	}
+	k := &kit{}
+	k.takes[InstrKick] = renderTakes(d, SoundShape{}, nil)
+	layers := k.takes[InstrKick].layers
+	soft, hard := k.take(InstrKick, 0.6, 1), k.take(InstrKick, 0.7, 1)
+	if &soft[0] != &layers[0][1][0] || &hard[0] != &layers[1][1][0] {
+		t.Fatal("a hit did not play the layer nearest its velocity")
+	}
+	// the mean step between samples against the mean level: a darker take moves less
+	bright := func(x floatBuffer) float64 {
+		var dx, ax float64
+		for i := 1; i < len(x); i++ {
+			dx += math.Abs(x[i] - x[i-1])
+			ax += math.Abs(x[i])
+		}
+		return dx / ax
+	}
+	if bright(soft) >= bright(hard) {
+		t.Errorf("soft take %.3f as bright as the hard one %.3f", bright(soft), bright(hard))
 	}
 }
 
