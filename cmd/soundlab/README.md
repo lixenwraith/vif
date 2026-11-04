@@ -1,6 +1,6 @@
 # soundlab
 
-`soundlab` is the terminal-based audio authoring environment and sequencer for `vif`. It runs entirely on the `pkg/audio` engine and provides a reflective, command-driven interface over the TOML audio specifications.
+`soundlab` is the terminal-based audio authoring environment and sequencer for `vif`. It runs entirely on the `lixenwraith/audio` engine ([its README](../../pkg/audio/README.md)) and provides a reflective, command-driven interface over the TOML audio specifications.
 
 Supports interactive REPL, TUI, and headless script execution. The session, its documents, the verb table and the TUI are `internal/soundlab`, which runs over any `terminal.Terminal` and takes a host's own speakers as its sink; this command adds the flags, the REPL and the process's terminal and signals.
 
@@ -105,7 +105,7 @@ The model learns from music the engine renders itself, since the engine knows ex
 5. `refine name` closes the loop; `fit name` refits the voices alone.
 6. Save the patterns, the song and the voices to keep them, as Usage shows next.
 
-[Audio §11](../../doc/audio.md#11-ripping-a-recording) is the engine's side of each stage and [Rip design](../../doc/rip-design.md) the plan and the measurements.
+[Audio library §9](../../pkg/audio/doc/audio.md#9-ripping-a-recording) is the engine's side of each stage and [Rip design](../../doc/rip-design.md) the plan and the measurements.
 
 ## Usage
 

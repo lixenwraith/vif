@@ -18,8 +18,9 @@ browser.
 It is pure Go with cgo off and few dependencies. The terminal, TOML, color and
 logging primitives are modules of their own ([terminal](https://github.com/lixenwraith/terminal),
 [toml](https://github.com/lixenwraith/toml), [color](https://github.com/lixenwraith/color),
-[log](https://github.com/lixenwraith/log)); vif owns the ECS, gameplay, input,
-compositor, scenarios, renderers, audio and simulation libraries.
+[log](https://github.com/lixenwraith/log)), as is the [audio
+engine](pkg/audio/README.md); vif owns the ECS, gameplay, input, compositor,
+scenarios, renderers and simulation libraries.
 
 ## Highlights
 

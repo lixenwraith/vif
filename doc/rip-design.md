@@ -2,8 +2,9 @@
 
 Decision record and working design for the rip: the engine's estimate of a
 recording in its own vocabulary, voices, patterns, a key and a tempo, that a
-player can edit and the sequencer can play. [Audio §11](audio.md#11-ripping-a-recording)
-describes what runs today; this document is where it is going and why.
+player can edit and the sequencer can play. [Audio library
+§9](../pkg/audio/doc/audio.md#9-ripping-a-recording) describes what runs today;
+this document is where it is going and why.
 
 ## 1. Purpose
 
@@ -231,14 +232,14 @@ offline (`song <name> <file.wav>`).
 
 ## 4. Layout
 
-- `pkg/audio`: the rip, its parameters, the decoders, the built-in analysis,
-  the features, the truth (`ExpectedRip`, `ExpectedEvents`) and the score
-  (`CompareRips`), the offline renders (`RenderMusic`, `RenderTimeline`,
+- `lixenwraith/audio`: the rip, its parameters, the decoders, the built-in
+  analysis, the features, the truth (`ExpectedRip`, `ExpectedEvents`) and the
+  score (`CompareRips`), the offline renders (`RenderMusic`, `RenderTimeline`,
   `RenderNote`), the distances (`MelDistance`, `BarDistance`), the mechanical
   clustering (`Cluster`) and the song (`SongDef`). Imports only `toml`. The
-  searches stay out of it, so it stands alone.
-- `pkg/audio/ripmodel`: the learned front end, `Spec` and `Hear`. Imports `audio`
-  and `transformer`, and goes with `audio` to its module.
+  searches stay out of it, so it stands alone, a module of its own.
+- `lixenwraith/audio/ripmodel`: the learned front end, `Spec` and `Hear`.
+  Imports `audio` and `transformer`.
 - `lixenwraith/transformer`: inference over frames and the weight file, a
   module of its own. Standard library only.
 - `lixenwraith/genetic`: the searches, over `RipParams`, over voice genes and
@@ -741,9 +742,9 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   file in the root upgrades the hearing without a build.
 - **Pure Go inference.** No CGO, no runtime to ship, the same path on the
   desktop, the browser and the phone.
-- **The searches live in soundlab.** `pkg/audio` holds the primitives, a
-  render, a distance, a mechanical grouping, and `lixenwraith/genetic` the
-  engine; soundlab joins them, so `audio` goes to its own module without
+- **The searches live in soundlab.** `lixenwraith/audio` holds the primitives,
+  a render, a distance, a mechanical grouping, and `lixenwraith/genetic` the
+  engine; soundlab joins them, so `audio` is a module of its own without
   `genetic`.
 - **The song is a document.** `[[song]]` beside the patterns, names not ids, a
   tempo and a key of its own, so a ripped song is edited, saved and played like

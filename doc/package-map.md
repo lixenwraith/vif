@@ -34,7 +34,7 @@ flowchart TD
     Scheduler --> Events["internal/event"]
     Scheduler --> Systems["internal/system"]
     Systems --> ECS["engine, component, core"]
-    Systems --> Algorithms["pkg navigation, physics, audio; lixenwraith/genetic"]
+    Systems --> Algorithms["pkg navigation, physics; lixenwraith/audio, genetic"]
     ECS --> Position["pkg/position"]
 ```
 
@@ -72,7 +72,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
 | `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, seat bots and relay their links, drive frame/input/playback/script loops and replay checkpoints, capture and install the shared world, open a journal where a run stands, verify anchor/config identity, and run a dedicated host's lifetime and probe. A presenting run presents through the host's `Presentation` and speakers (`app.Host`), the terminal when the host supplies none. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements: the correction glue, `corrector`, over the world and the capture encoder, and the run's place in its session, `membership`, beside it. The journal and its replay are `scribe`'s. Each of the three reads the run through one interface, and `App` is what is left: construct the world, wire the services, run the loop. |
 | `internal/converge` | The authority protocol: which generation of the session this instance is part of and who is authoring it, the succession that moves authorship when the author goes, the adaptive per-link correction cadence a host publishes, the selective manifest/page exchange that makes a converged link cost hashes, the install a guest commits between two ticks, slow-participant eviction, the answers a relay serves the participants behind it, and the listening port and succession chain a survivor dials down. It holds no world: `converge.Instance` is the whole of what it asks the run for, and every method on it takes the world lock itself except `CaptureSharedLocked` and `IndexSharedLocked`, which `TickClosed` calls from inside a tick — which is also what lets its own criteria drive it against a stub world instead of a composition root. |
-| `internal/asset` | Every embedded shipped file — fallback scenario, tutorial corpus, default keymap and `vif.toml`, shipped bot graphs, built-in sound and music banks, the source-archive version stamp — plus the splash bitmap font and the cell font atlas the window, page and Android view draw with. The only package with an `embed` directive. |
+| `internal/asset` | Every embedded shipped file — fallback scenario, tutorial corpus, default keymap and `vif.toml`, shipped bot graphs, the source-archive version stamp — plus the splash bitmap font and the cell font atlas the window, page and Android view draw with. The module's only package with an `embed` directive; the shipped sound and music banks are the audio module's `bank`. |
 | `internal/component` | Pure ECS component data, enums/masks and per-kind tables; logic over them lives in the owning system (exceptions in [ECS](ecs-and-events.md#4-component-catalog)). `PositionComponent` is `position.Point`, vmath's flat cell coordinate, and `engine` stores it in the rows beside the spatial index. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver `service` orders its lifecycle with and `engine` checks the system graph with, crash and stderr-capture support. |
 | `internal/engine` | World, typed stores, the position binding (the rows, and `pkg/position`'s index with the wall entities as its blocks and the rock as its surfaces), resources, game context/state, pausable/manual clocks, time control, scheduler, locking, world copies, the shared-world state and paged delta a capture is built from, the shared-death prediction ledger, and the roster/control re-derivation an install performs over the cursor store. |
@@ -90,7 +90,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/manifest` | Authoritative component/system/renderer lists, the simulation fingerprint two participants must share, capability-split generated builders, the declared system dependency graph, game binding for the generic FSM, and the JSON schema `-schema` prints for authoring tools. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode and the configuration menu, undo/history. |
 | `internal/network` | The session layer over `pkg/network`: the join and peer-link handshakes with their previews, offers, rosters, claims and refusals, the relayed join a guest serves, the kinds a session exchanges and the table a link reads them by, the authority term, succession rule and chain, the build identity, the per-address admission budget, and the configuration a session fills from `parameter`: the link's defaults, timing and kinds, the mesh it tests on and the router request a site `-join` makes. |
-| `internal/parameter` | Gameplay tunables, timing, priorities, effect/audio tuning, the shipped sound and music banks' parse, and navigation/genetics settings. |
+| `internal/parameter` | Gameplay tunables, timing, priorities, effect/audio tuning, and navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
 | `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and the `vif.toml` settings, the one file it reads. |
 | `internal/resource` | Resolve the scenario, keymap, corpus, audio overrides and bot graphs against the config-root precedence rule; read a scenario whole into the digested canonical form a session serves a joiner; and validate what those paths resolve to, every bot graph in the roots and embedded included, for `-check`. |
@@ -101,7 +101,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, text-console palette detection and the quantizer that maps a 256-color frame to its sixteen colors, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for categorized files, terminal, content, audio, and network transport. |
-| `internal/soundlab` | The audio authoring environment over `pkg/audio`: a session holding the engine and the working documents, the verb table every front end dispatches through, the script runner, and the TUI over any `terminal.Terminal`, so a host with its own screen and speakers runs it in-process ([Audio §10](audio.md#10-soundlab)). The rip's searches run here over `lixenwraith/genetic`: the voice fit (`rip`, `fit`), the dictionary and the song (`compress`, `song`) and the parameter search (`tune`), so `pkg/audio` keeps only their primitives ([Rip design](rip-design.md)). |
+| `internal/soundlab` | The audio authoring environment over `lixenwraith/audio`: a session holding the engine and the working documents, the verb table every front end dispatches through, the script runner, and the TUI over any `terminal.Terminal`, so a host with its own screen and speakers runs it in-process ([Audio §4](audio.md#4-soundlab)). The rip's searches run here over `lixenwraith/genetic`: the voice fit (`rip`, `fit`), the dictionary and the song (`compress`, `song`) and the parameter search (`tune`), so the audio module keeps only their primitives ([Rip design](rip-design.md)). |
 | `internal/snapshot` | Shared-capture wire model: the capture and its header, the compressed JSON envelope, the correction manifest with its pages and section hashes, and the selective shard set — none of which reads a world. Also the comparison surface: the key filters, the line format and diff, the per-store digest, the assembled shared and whole-instance line sets, and the capture/correction telemetry cells. The surface readers take the caller's world lock and never acquire one. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, per-slot player metrics and the bare key that mirrors this instance's own slot, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order; `behavior.go` runs every species a scenario's behavior programs define. |
@@ -111,8 +111,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 
 ```mermaid
 flowchart TD
-    Game["internal systems and tools"] --> Audio["pkg/audio"]
-    Game --> Nav["pkg/navigation, maze and cave"]
+    Game["internal systems and tools"] --> Nav["pkg/navigation, maze and cave"]
     Game --> Position["pkg/position"]
     Game --> Physics["pkg/vmath and vmath/physics"]
     Game --> Link["pkg/linkpace"]
@@ -124,7 +123,6 @@ flowchart TD
     Game --> Browser["pkg/browser"]
     Game --> HostKey["pkg/hostkey"]
     Game --> Socket["pkg/websocket"]
-    Audio --> Net["pkg/audio/ripmodel over lixenwraith/transformer"]
 ```
 
 | Package | Public purpose | Important coupling |
@@ -135,9 +133,6 @@ flowchart TD
 | `pkg/window` | A desktop window that draws a cell grid: Xlib, EGL and GLES 2 loaded at run time with purego, keys and pointer posted as terminal events. Built on Linux and FreeBSD; `cmd/vif` links it unless `vif_nogui` or `vif_headless`, and `vif_gui` opens it by default. | `pkg/glyph` draws the frame; external terminal module and purego. |
 | `pkg/browser` | A web page as the screen and speakers on `js/wasm`: frames handed to the page one at a time as the cells changed since the one it holds, the mixer's PCM posted to the page (`Speaker`), keys, text, the pointer and resizes taken back as terminal events. | `pkg/glyph` encodes the frames; external terminal module and `syscall/js`. The page is `web/`. |
 | `pkg/hostkey` | The key report of a host that reads its platform's own key events: presses until a run asks for releases, then each key's press, repeats and release paired by the host's code for the physical key, taps for keys with no release, every hold ended when focus leaves. The window, the page and Android share it. | External terminal module only (its `KeyHolds` pairs the releases). |
-| `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink, the rip and its transcripts as MIDI files. | Game policy *and the banks* are injected; the package ships no specs, and beside the standard library imports only `lixenwraith/toml` and its `macro` expander, so it can leave the module whole. |
-| `pkg/audio/model` | Audio identifiers and arrangement values shared by events/configuration. | No mixer, backend, filesystem, or synthesis dependency; remains in audio-free profiles. |
-| `pkg/audio/ripmodel` | The rip's learned front end: the model's shape (`Spec`), a weight file loaded into a `RipFrontEnd` that hears log-mel frames into the frames the rip's decoders read, voices included ([Rip design](rip-design.md)). | `pkg/audio` and `lixenwraith/transformer`; goes with `audio` to its module. |
 | `pkg/network` | Framed messages over TCP or WebSocket (the browser's own socket on `js/wasm`), deflated per link once a handshake opens the stream; the accept and dial transport with its handshake budget and the hooks a session's handshakes plug into; the port's tick-drained inbound queue, bundled sends and the link probe it answers itself; an in-process mesh with shaped links; chunked bodies; crossing fences; session addresses and TLS. | Standard library, `pkg/linkpace` and `pkg/websocket`. It knows no kinds and no game: `Kinds` is the session layer's table over the kind byte, and the handshakes, the timing and the kinds come from its caller's `Config`. |
 | `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
 | `pkg/machine` | Per-entity state machines: an `Instance` a component carries (a state, its elapsed time, its entry's duration), and an immutable `Graph` built and validated once from typed hooks and stepped in fixed phases. | Standard library only: hooks reach the world through their host, by the context it passes or as its methods, and the host writes the state's flags to its components; `SwarmSystem`, `QuasarSystem`, `StormSystem` and `BehaviorSystem` are its hosts ([Behavior machines §2](machine-design.md#2-runtime)). |
@@ -149,12 +144,12 @@ flowchart TD
 | `pkg/websocket` | RFC 6455 as a byte stream: the version-13 upgrade as client and server, binary frames, ping, pong and close. | Standard library only. `pkg/network` dials and serves sessions with it and `tool/vif-router` terminates the browser route with it. |
 
 No package under `pkg` imports anything under `internal`; `make arch-check`
-enforces it. That is what lets a leaf take game data — the sound bank, wall
-callbacks, fitness policy — from its caller instead of reaching for it. The
+enforces it. That is what lets a leaf take game data — wall callbacks, a
+machine's hooks — from its caller instead of reaching for it. The
 numeric stack is one-way: `pkg/vmath` imports only the standard library and
-`pkg/vmath/physics` imports `pkg/vmath`. `pkg/audio`, `pkg/linkpace`,
-`pkg/machine`, `pkg/network` and the numeric stack have the clearest
-game-independent boundaries.
+`pkg/vmath/physics` imports `pkg/vmath`. `pkg/linkpace`, `pkg/machine`,
+`pkg/network` and the numeric stack have the clearest game-independent
+boundaries.
 
 ## 6. Generated assembly
 
@@ -216,12 +211,15 @@ The practical dependency rules are:
 | `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, soundlab, the router; its `macro` package expands the macros scenarios, bot graphs and audio documents define ([TOML macros](toml-macros.md)) | Schemas, validation policy, semantic models, and application resolution. |
 | `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/genetic` | `GeneticSystem` and `engine.GeneticResource`, which evolve eye types through the registry, the genetic tunables in `parameter`, and stapes' searches in `internal/soundlab`: the voice fit, the dictionary and `tune` ([AI and evolution §3](ai-physics-and-evolution.md#3-genetic-library)) | The game adapter: species declarations, probe bins, eye fitness, and the capture's genetic carrier (D-19). |
-| `lixenwraith/transformer` | `pkg/audio/ripmodel` only, the rip's learned front end, which loads its weight file and runs it over log-mel frames; `tool/rip-train` is the PyTorch twin that writes the file ([its format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md)) | The model's shape (`ripmodel.Spec`), the features it hears and how its heads become the rip's frames. |
+| `lixenwraith/audio` | `internal/service`'s audio adapter, which runs the engine over the `bank` package's sounds and music and the overrides; the engine's audio resource, the audio systems' requests, the events' audio values (`model`) and the audio tuning in `parameter`; `-check`'s audio documents in `resource`; and soundlab, over the rip and its learned front end (`ripmodel`) too ([its design](../pkg/audio/doc/audio.md)) | Game policy: the adaptive conductor, sfx levels and sound shapes, the overrides' resolution, the speakers' host and telemetry ([Audio](audio.md)). |
+| `lixenwraith/transformer` | The audio module's `ripmodel` only, the rip's learned front end, which loads its weight file and runs it over log-mel frames; `tool/rip-train` is the PyTorch twin that writes the file ([its format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md)) | Nothing: the model's shape (`ripmodel.Spec`), the features it hears and how its heads become the rip's frames are the audio module's. |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
 
 The pinned revisions are in `go.mod`; this document intentionally avoids
-duplicating version strings that would become stale.
+duplicating version strings that would become stale. `lixenwraith/audio` sits in
+`pkg/audio`, a module of its own that `go.mod` and `android/go.mod` take through
+a `replace`, so `./...` skips it ([its README](../pkg/audio/README.md)).
 
 ## 9. Commands, tools, and sandboxes
 
@@ -230,7 +228,7 @@ duplicating version strings that would become stale.
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (the view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
 | `cmd/ascimage` | Supported image converter/viewer command. |
 | `cmd/soundlab` | The audio document editor's terminal command: its flags and the REPL over `internal/soundlab`. |
-| `tool/rip-train` | Train the rip's front-end model on a corpus soundlab exports, on one machine or in rounds over several whose runs it averages, and write the weight file `lixenwraith/transformer` loads; Python, outside the module ([README](../tool/rip-train/README.md)). |
+| `tool/rip-train` | Train the rip's front-end model on a corpus soundlab exports, on one machine or in rounds over several whose runs it averages, and write the weight file `ripmodel` loads through `lixenwraith/transformer`; Python, outside the module ([README](../tool/rip-train/README.md)). |
 | `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |

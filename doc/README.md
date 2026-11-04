@@ -31,7 +31,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |
-| [Audio](audio.md) | Domain detail | How are sound effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
+| [Audio](audio.md) | Domain detail | How does vif drive the audio library: which systems and profiles carry it, how APM maps to arrangements, how authored banks override the shipped ones, and what soundlab is? |
 | [Rip design](rip-design.md) | Design | Where the rip is going: its front ends, the voices and patterns it fits by the engine's own renders, the dictionary and its compression, and what the searches need. |
 | [Navigation](navigation-design.md) | Domain detail | How do flow fields, passability tiers, target groups, the snake lock, loot's pursuit and route graphs move species, and what does each cost? |
 | [Position](position-package.md) | Domain detail | What does `pkg/position` hold and how does `engine.Position` bind it: the cells, the blocks and surfaces as bit planes, the block log, the searches and the volume, and what did each choice cost? |
@@ -66,6 +66,10 @@ Focused references:
 - [Transformer library](https://github.com/lixenwraith/transformer) documents the
   inference library the rip's model runs on, a module of its own, and its weight
   file.
+- [Audio library](../pkg/audio/README.md) documents the synthesis, mixing,
+  sequencing and rip engine with its shipped banks, a module of its own, and
+  [its design](../pkg/audio/doc/audio.md): the stream contract, backends,
+  sounds, the mixer, the sequencer, MIDI and the rip.
 - [Soundlab reference](../cmd/soundlab/README.md) covers the audio authoring
   environment.
 - [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image
@@ -95,7 +99,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Alternate scenarios | `wad/scenario/*` | selected by name or path with `-s` |
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
-| Built-in sound and music banks | `internal/asset/audio/*.toml` | `parameter.BuiltinSounds`/`BuiltinPatterns`, `AudioConfig.BaseSounds`/`BasePatterns` |
+| Built-in sound and music banks | the audio module's `bank/*.toml` (`pkg/audio/bank`) | `bank.Sounds`/`bank.Patterns`, `AudioConfig.BaseSounds`/`BaseVoices`/`BasePatterns` |
 | CLI flags, manual page, shell completions | `helpSections` in `cmd/vif/usage.go`, and the manual's prose in its `writeManual` | `-help`, `doc/vif.6`, `deploy/package/vif.bash`, `_vif`, `vif.fish` |
 | Release archive READMEs | `deploy/package/release-readme.md` | `make release-readme`, the `README.md` in each release archive |
 | External package versions | `go.mod` | Go module resolver |

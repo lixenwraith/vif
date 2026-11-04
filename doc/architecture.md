@@ -297,8 +297,9 @@ See [Rendering](rendering.md).
 
 ## 9. Audio boundary
 
-`pkg/audio` owns synthesis, pre-rendered sound caches, mixing, voices, harmony,
-patterns, and a three-slot sequencer. It has no gameplay or APM concept.
+The audio library, `lixenwraith/audio` ([its design](../pkg/audio/doc/audio.md)),
+owns synthesis, pre-rendered sound caches, mixing, voices, harmony, patterns, a
+three-slot sequencer and the shipped banks. It has no gameplay or APM concept.
 `internal/system.MusicSystem` maps the game's five-second APM signal to tempo
 and arrangement intensity; `AudioSystem` translates effect and mute/pause
 events.
@@ -313,7 +314,7 @@ Audio service assembly is both mode- and build-dependent: an audio-capable build
 registers it for play, replay, and presented scripts; headless and audio-free
 builds do not contain the service or full audio systems. Small null systems
 consume local audio events and publish the unavailable state so telemetry and
-system identity remain stable. Event IDs live in the lightweight `pkg/audio/model`
+system identity remain stable. Event IDs live in the library's lightweight `model`
 package, so omitting the engine does not change protocol types. Terminal playback
 of a journal takes its mute state, backend and buffer from the viewer's own flags,
 since the speakers a run played on are no part of the run.
@@ -366,6 +367,7 @@ These boundaries belong to separately maintained modules.
 | `github.com/lixenwraith/toml` | Parsing, reflection-based decoding, and encoding used by scenarios, bot graphs, `vif.toml`, content, keymaps, authored scripts, audio specs and commands. |
 | `github.com/lixenwraith/color` | RGB values, interpolation, blend operations, grayscale, and palette-related color manipulation. |
 | `github.com/lixenwraith/log` | Buffered asynchronous structured-log sink, rotation, retention, and transport below `internal/vlog`. |
+| `github.com/lixenwraith/audio` | Synthesis, sound caches, the PCM mixer and its backends, voices, patterns and the sequencer, MIDI files, the rip and its learned front end, and the shipped sound and music banks; held in `pkg/audio` by a `replace` until it has a repository. |
 | `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window (`pkg/window`), with cgo off. |
 
 `golang.org/x/sys` serves the window's Unix calls, and `golang.org/x/term` is an
