@@ -40,19 +40,21 @@ type tuneOptions struct {
 	tempos                         []int          // the tempos the loops cycle through; tuneTempos when nil
 	part, parts                    int            // an export renders the loops i%parts == part; all when parts is 0
 	skip                           func(int) bool // the loops drawn but not rendered
+	samples                        *sampleSet     // recorded notes some tonal slots play on; none when nil
 }
 
 // tuneLoop is one rendered loop, what made it, the rip a perfect listener makes
 // of it, and the voices its tonal tracks were played with
 type tuneLoop struct {
-	audio  []float64
-	want   *audio.Rip
-	slots  [audio.MusicSlots]audio.PatternID
-	bpm    int
-	root   int
-	scale  audio.ScaleID
-	voices map[string]*audio.VoiceDef
-	tuning float64 // cents off A440 the loop was rendered at
+	audio   []float64
+	want    *audio.Rip
+	slots   [audio.MusicSlots]audio.PatternID
+	bpm     int
+	root    int
+	scale   audio.ScaleID
+	voices  map[string]*audio.VoiceDef
+	tuning  float64                        // cents off A440 the loop was rendered at
+	sampled [audio.MusicSlots]*sampledLine // the slots played on recorded notes, nil for the engine's voice
 }
 
 // tempos spread the corpus over the sequencer's range
@@ -156,17 +158,30 @@ func (s *Session) eachLoop(o tuneOptions, visit func(int, tuneLoop) error) error
 		if o.aug {
 			cents = arng.Float64()*100 - 50 // a recording's pitch standard, within a quarter tone of A440
 		}
+		played, srng := slots, (*rand.Rand)(nil)
+		var sampled [audio.MusicSlots]*sampledLine
+		if o.samples != nil {
+			srng = rand.New(rand.NewPCG(o.seed^0x3c3c3c3c, uint64(i)+1))
+			var err error
+			if played, sampled, err = o.samples.draw(slots, o.bars, bpm, root, scale, cents, srng); err != nil {
+				restore()
+				return err
+			}
+		}
 		s.eng.SetTuning(cents)
-		buf, err := s.eng.RenderMusic(slots, bpm, o.bars, root, scale, nil, int64(i+1))
+		buf, err := s.eng.RenderMusic(played, bpm, o.bars, root, scale, nil, int64(i+1))
 		s.eng.SetTuning(0)
 		restore()
 		if err != nil {
 			return err
 		}
+		if o.samples != nil {
+			buf = mixSampled(buf, sampled, srng)
+		}
 		if o.aug {
 			buf = degrade(buf, arng)
 		}
-		if err := visit(i, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale, voices: voices, tuning: cents}); err != nil {
+		if err := visit(i, tuneLoop{audio: buf, want: audio.ExpectedRip(slots, bpm, o.bars, root, scale, nil), slots: slots, bpm: bpm, root: root, scale: scale, voices: voices, tuning: cents, sampled: sampled}); err != nil {
 			return err
 		}
 	}
@@ -558,6 +573,13 @@ func cmdCorpus(s *Session, a []string) error {
 			o.nowav = true
 		case a[n-1] == "codec":
 			o.codec = true
+		case n > 2 && a[n-2] == "sampled":
+			set, err := loadSampleSet(s.path(a[n-1]))
+			if err != nil {
+				return err
+			}
+			o.samples = set
+			a = a[:n-1]
 		case n > 2 && a[n-2] == "tempos":
 			tempos, err := parseTempos(a[n-1])
 			if err != nil {
@@ -850,9 +872,16 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 		}
 		return err == nil
 	}
+	sampledLines, tonalLines := 0, 0
 	err := s.eachLoop(o, func(i int, l tuneLoop) error {
 		written++
 		base := loopFile(i)
+		for k, line := range l.sampled[1:] {
+			tonalLines += min(len(slotEvents(l.slots, k+1, o.bars, l.root, l.scale)), 1)
+			if line != nil {
+				sampledLines++
+			}
+		}
 		if o.codec {
 			coded, err := codecRoundTrip(l.audio, audio.AudioSampleRate, rand.New(rand.NewPCG(o.seed^0xc0dec, uint64(i)+1)))
 			if err != nil {
@@ -879,7 +908,7 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 		}
 		lab := corpusLoop{BPM: l.bpm, Root: l.root, Scale: int(l.scale), Bars: o.bars, Frames: len(mel), Tuning: l.tuning}
 		stepSec := float64(audio.SamplesPerStep(l.bpm)) / audio.AudioSampleRate
-		for _, e := range audio.ExpectedEvents(l.slots, o.bars, l.root, l.scale, nil) {
+		for _, e := range loopEvents(l.slots, o.bars, l.root, l.scale) {
 			start := float64(e.Bar*audio.StepsPerBar+e.Step) * stepSec
 			ev := corpusEvent{Frame: int(start/audio.RipFrameSec + 0.5), Drum: -1, Vel: e.Vel, Wave: -1}
 			if e.Instr.IsDrum() {
@@ -890,7 +919,9 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 			} else {
 				ev.MIDI = e.MIDI
 				ev.End = int((start+float64(e.Dur)*stepSec)/audio.RipFrameSec + 0.5)
-				if v := l.voices[audio.InstrumentName(e.Instr)]; v != nil {
+				if line := l.sampled[e.slot]; line != nil {
+					ev.End = int(line.ends[e.n]/audio.RipFrameSec + 0.5) // where the recording let it go
+				} else if v := l.voices[audio.InstrumentName(e.Instr)]; v != nil {
 					ev.Wave = max(slices.Index(audio.VoiceWaves[:], cmp.Or(v.Wave, "sine")), 0)
 					ev.Voice = v.Genes()
 				}
@@ -921,6 +952,9 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	if o.codec {
 		how += ", a third through a lossy codec"
 	}
+	if o.samples != nil {
+		how += fmt.Sprintf(", %d of %d tonal line(s) on the recorded notes in %s", sampledLines, tonalLines, o.samples.dir)
+	}
 	if kept > 0 {
 		how += fmt.Sprintf("; %d were there", kept)
 	}
@@ -929,6 +963,30 @@ func (s *Session) exportCorpus(dir string, o tuneOptions) error {
 	}
 	fmt.Fprintf(s.out, "wrote %d loop(s) of %d bar(s) to %s, %s\n", written, o.bars, dir, how)
 	return nil
+}
+
+// slotEvent is an expected event with the slot it plays in and its place among that slot's
+type slotEvent struct {
+	audio.RipEvent
+	slot, n int
+}
+
+// loopEvents is ExpectedEvents in its order, each event knowing its slot
+func loopEvents(slots [audio.MusicSlots]audio.PatternID, bars, root int, scale audio.ScaleID) []slotEvent {
+	var per [audio.MusicSlots][]audio.RipEvent
+	for k := range slots {
+		per[k] = slotEvents(slots, k, bars, root, scale)
+	}
+	var out []slotEvent
+	var at [audio.MusicSlots]int
+	for bar := range bars {
+		for k, evs := range per {
+			for ; at[k] < len(evs) && evs[at[k]].Bar == bar; at[k]++ {
+				out = append(out, slotEvent{evs[at[k]], k, at[k]})
+			}
+		}
+	}
+	return out
 }
 
 // corpusCodecs are what recordings are stored in. A model that has only heard
@@ -1010,12 +1068,19 @@ func writeJSON(file string, v any) error {
 
 func cmdBench(s *Session, a []string) error {
 	o := tuneOptions{loops: 8, bars: 4, seed: 7, gen: true}
+	if n := len(a); n > 1 && a[n-2] == "sampled" {
+		set, err := loadSampleSet(s.path(a[n-1]))
+		if err != nil {
+			return err
+		}
+		o.samples, a = set, a[:n-2]
+	}
 	verbose := len(a) > 0 && a[len(a)-1] == "verbose"
 	if verbose {
 		a = a[:len(a)-1]
 	}
 	if len(a) > 2 {
-		return fmt.Errorf("%q: want verbose", a[2])
+		return fmt.Errorf("%q: want verbose or sampled <dir>", a[2])
 	}
 	for i, p := range []*int{&o.loops, &o.bars} {
 		if len(a) > i {
