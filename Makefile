@@ -221,8 +221,11 @@ wasm: check-go $(WEB_DIR)
 windows: check-go $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
+# stapes, the audio editor, is a module of its own nested in pkg/stapes until it
+# moves to its repository; vif imports none of it
 tools: check-go $(BIN_DIR)
-	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./pkg/stapes/cmd/stapes ./tool/...
+	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./tool/...
+	$(GO) -C pkg/stapes build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(CURDIR)/$(BIN_DIR)/stapes ./cmd/stapes
 
 router: check-go $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/vif-router ./tool/vif-router
