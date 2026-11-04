@@ -63,8 +63,9 @@ Focused references:
 - [Keymap example](../internal/input/README.md) shows sparse key overrides.
 - [Genetic library](https://github.com/lixenwraith/genetic) documents the
   reusable optimization library, a module of its own.
-- [Transformer library](../pkg/transformer/README.md) documents the inference
-  library the rip's model runs on, a module of its own, and its weight file.
+- [Transformer library](https://github.com/lixenwraith/transformer) documents the
+  inference library the rip's model runs on, a module of its own, and its weight
+  file.
 - [Soundlab reference](../cmd/soundlab/README.md) covers the audio authoring
   environment.
 - [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image

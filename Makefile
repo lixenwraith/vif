@@ -229,7 +229,6 @@ router: check-go $(BIN_DIR)
 
 test: generate
 	$(GO) test -race ./...
-	$(GO) -C pkg/transformer test -race ./...
 
 # verify covers the build-tag matrix a single-target build would miss
 verify: generate test
@@ -251,7 +250,6 @@ verify: generate test
 		echo "FAIL: vif_headless imports presentation or audio implementation"; exit 1; \
 	fi
 	$(GO) vet ./...
-	$(GO) -C pkg/transformer vet ./...
 	CGO_ENABLED=0 $(GO) vet $(GUI_GCFLAGS) -tags vif_gui ./pkg/window $(SRC)
 
 run: dev
