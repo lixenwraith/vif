@@ -1406,7 +1406,14 @@ front-end seam. What remains, in the design's order:
    voice has a vibrato and a vowel's formants now
    (`tool/rip-train/focus/vocal.toml` draws them), neither a gene, so the fit
    and the model's voice head do not search them: genes for both once a
-   corpus with them has trained, and a real vocal recording held out. Then
+   corpus with them has trained, and a real vocal recording held out. Tonal
+   round two's voices (a pizzicato bass whose thump the analysis takes for a
+   kick at times, drifting saws) cost the analysis a little on clean loops
+   (`bench 48 4` 0.455 to 0.432, drums 0.43 to 0.39) and gain it a little on
+   augmented ones (0.399 to 0.406); a corpus rendered with them trains the
+   model on them. The analysis also leans on a lone oscillator starting every
+   note at phase 0: at random phases two lines on one instrument stop parting
+   (`TestRipTellsTheLeadByItsCharacter`), as a recording's would. Then
    the weights and a tuned parameter set shipped as data, `DefaultRipParams`
    kept for a recording nothing tuned for. [Rip design §8](rip-design.md#8-measured-on-the-sample-recording)
    has the runs' numbers.
@@ -1576,6 +1583,23 @@ bar, resets the sequencer, and that empties every slot, while the session's
 renders the old slots, and a slot's track mutes wait for their pattern to be put
 back. The fix is reset slotting the session's patterns again, or a sequencer
 reset that keeps them.
+
+### Bring the tonal voices nearer their recordings
+
+- Priority: P2
+- Affected files: `pkg/audio/voice.go`, `internal/asset/audio/voices.toml`
+
+Round two ([Audio §7](audio.md#7-music-sequencer)) fitted the piano and the bass
+to Iowa's notes at pp, mf and ff by their level at 0.25 to 3 s, mel distance and
+brightness. What is left: the piano's level by velocity follows the old law (pp
+4 dB under mf, ff 2 dB over) where the recordings' spread is 14 and 12 dB, a
+decision on whether the hammer's darkening takes level with it; its lowest
+octave still falls 4 to 6 dB faster than recorded by 3 s; its fundamental gains
+the slow second string only from about C3 up (`bright`'s body rounds the first
+paired partial), so f0's T60 steps from 5 s to 23 s across that semitone; the
+bass's level error is 7 to 8 dB, against Iowa runs whose notes differ by as much;
+and the pad and the lead are measured against main only, by their energy above
+4·f0 and how alike two notes are, never against an instrument.
 
 ### Spin off `pkg/audio` as its own module
 
