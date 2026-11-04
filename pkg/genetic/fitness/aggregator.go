@@ -3,7 +3,7 @@
 // and a Context a host passes to reweigh terms at completion time.
 package fitness
 
-import "github.com/lixenwraith/vif/pkg/genetic/tracking"
+import "github.com/lixenwraith/genetic/tracking"
 
 // Aggregator calculates fitness score from collected metrics
 type Aggregator interface {

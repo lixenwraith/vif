@@ -5,6 +5,7 @@ go 1.27.3
 require (
 	github.com/ebitengine/purego v0.11.2
 	github.com/lixenwraith/color v0.1.5
+	github.com/lixenwraith/genetic v0.0.0
 	github.com/lixenwraith/log v0.1.13
 	github.com/lixenwraith/terminal v0.6.5
 	github.com/lixenwraith/toml v0.5.0
@@ -12,3 +13,5 @@ require (
 )
 
 require golang.org/x/term v0.47.0 // indirect
+
+replace github.com/lixenwraith/genetic => ./pkg/genetic

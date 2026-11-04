@@ -678,25 +678,17 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Genetic
 
+- `pkg/genetic` is a module of its own, `github.com/lixenwraith/genetic`, which
+  the root and `android` take through a `replace`: `./...` skips it, so its
+  gates run inside it (`go -C pkg/genetic test ./...`), under its own
+  `AGENTS.md`. Notes about the library itself are in its `doc/agent-notes.md`.
 - The capture carries `registry.SpeciesState`, which embeds the streaming
   engine's checkpoint, so a change to `genetic.StreamingState`'s layout bumps
   `snapshot.Schema` beside `StreamingStateVersion`.
-- A sandbox over `pkg/genetic` is tuned by its `-headless` table, several seeds
-  at once in the background with a `sed` variant per constant, not by watching
-  it: `sandbox/genetic`'s crash rate at one setting varies by half between
-  seeds, and its archive statistics read well long before its streams do.
-- An elitist archive under a noisy objective selects for luck. Score a
-  genotype by the mean of several evaluations and re-evaluate archived members
-  (`sandbox/genetic`'s trials and refreshes) before touching the operators.
-- `Engine.Checkpoint`'s members alias the engine's buffers, which the next
-  generation writes over: copy them before running the source engine on, as its
-  test does. `Restore` into an engine of another configuration or pool size is
-  refused rather than reshaped.
-- An assignment genome under `CategoricalPerturbator` wants a rate of one over
-  its length and a `MixProbability` near one, so most children differ from a
-  parent by one move; under a Jaccard distance the search rarely beats the
-  greedy grouping it is seeded with, which is expected, not a bug: the size
-  term and the greedy pass apply the same pressure.
+- Stapes' dictionary search (`internal/soundlab` `dictionary.go`) rarely beats
+  the greedy grouping it is seeded with under a Jaccard distance, which is
+  expected, not a bug: the size term and the greedy pass apply the same
+  pressure.
 
 ## Branches
 

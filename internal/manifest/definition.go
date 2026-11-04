@@ -210,7 +210,7 @@ var Systems = []SystemDef{
 	{Name: "adaptation", Constructor: "NewAdaptationSystem", Domain: "shared", Snapshot: "state",
 		Requires: []string{"navigation"}}, // EXP3 route weights, pre-sampled pool and consumer head decide a spawned eye's route    // shared stream and route state; scores navigation graphs
 	{Name: "genetic", Constructor: "NewGeneticSystem", Domain: "shared", Snapshot: "state",
-		Optional: []string{"death", "adaptation"}}, // per-species GA populations behind pkg/genetic's registry // shared genotype state; observes lifecycle and route outcomes
+		Optional: []string{"death", "adaptation"}}, // per-species GA populations behind the genetic registry // shared genotype state; observes lifecycle and route outcomes
 
 	// --- Audio ---
 	{Name: "audio", Constructor: "NewAudioSystem", Domain: "player", Capability: "audio"},                              // per-instance sound sink with no simulation writes

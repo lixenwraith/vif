@@ -7,7 +7,7 @@ package registry
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vif/pkg/genetic"
+	"github.com/lixenwraith/genetic"
 )
 
 // SpeciesID uniquely identifies a tracked species
