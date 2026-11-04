@@ -1,4 +1,4 @@
-package ripnet
+package ripmodel
 
 import (
 	"bytes"

@@ -1,7 +1,7 @@
 """Train the rip's front end on a corpus soundlab exported (`corpus <dir>`), and
 export the weights pkg/transformer loads:
 
-    python3 train.py --corpus corpus/ --out ripnet.bin --steps 2000
+    python3 train.py --corpus corpus/ --out ripmodel.bin --steps 2000
 
 Each loop's log-mel frames (loop_NNN.mel) are the input; its events
 (loop_NNN.json) become per-frame targets: an onset within a frame of any event,
@@ -27,7 +27,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-import ripnet
+import ripmodel
 
 
 class MelFile:
@@ -158,7 +158,7 @@ def sample(mel, lab: Label, start: int, window: int):
         release[max(f - 1, 0):max(min(f + 2, window), 0), p] = 1
     out.update(strike=strike, release=release, velocity=velocity, heard=heard)
     out["valid"] = np.concatenate([np.ones(window - pad, np.float32), np.zeros(pad, np.float32)])
-    return ripnet.features(take(mel[start:b])), out
+    return ripmodel.features(take(mel[start:b])), out
 
 
 def stack(samples):
@@ -187,7 +187,7 @@ def validation(loops, window: int):
     return mels, tgs
 
 
-def evaluate(model: ripnet.RipNet, mels, tgs, device: str) -> dict:
+def evaluate(model: ripmodel.RipModel, mels, tgs, device: str) -> dict:
     """the mean of the losses over the held-out windows, the model's weights untouched"""
     model.eval()
     sums: dict = {}
@@ -200,7 +200,7 @@ def evaluate(model: ripnet.RipNet, mels, tgs, device: str) -> dict:
     return {k: v / max(len(mels), 1) for k, v in sums.items()}
 
 
-def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
+def losses(model: ripmodel.RipModel, mel: torch.Tensor, t: dict) -> dict:
     y = model(mel)
     cfg = model.cfg
     valid = t["valid"]
@@ -222,7 +222,7 @@ def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
     out["velocity"] = ((velocity - t["velocity"]) ** 2 * heard).sum() / heard.sum().clamp(min=1)
     voiced = t["voiced"] * valid
     n = voiced.sum().clamp(min=1)
-    wave_logits = y[..., cfg.slice("wave")].reshape(-1, ripnet.WAVES)
+    wave_logits = y[..., cfg.slice("wave")].reshape(-1, ripmodel.WAVES)
     wave_target = t["wave"].reshape(-1).clamp(min=0)
     ce = F.cross_entropy(wave_logits, wave_target, reduction="none").reshape(voiced.shape)
     out["wave"] = (ce * voiced).sum() / n
@@ -234,7 +234,7 @@ def losses(model: ripnet.RipNet, mel: torch.Tensor, t: dict) -> dict:
 
 
 def shape(cfg) -> str:
-    """a model's sizes for a message; the output heads are ripnet's, never a flag's"""
+    """a model's sizes for a message; the output heads are ripmodel's, never a flag's"""
     return ", ".join(f"{k} {v}" for k, v in cfg.items() if k != "outputs") if cfg else "an unrecorded shape"
 
 
@@ -242,7 +242,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", required=True, help="directory soundlab's corpus verb wrote")
     ap.add_argument("--mix", default="", help="another corpus and the share of windows drawn from it, dir:share, such as recordings with their MIDI files (corpus <dir> from <list>)")
-    ap.add_argument("--out", required=True, help="weight file to write, the root's audio/ripnet.bin for soundlab to hear with")
+    ap.add_argument("--out", required=True, help="weight file to write, the root's audio/ripmodel.bin for soundlab to hear with")
     ap.add_argument("--steps", type=int, default=2000)
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--window", type=int, default=512, help="frames per training window (11.6 ms each)")
@@ -269,9 +269,9 @@ def main() -> None:
     if any(len(c) != 4 for c in convs):
         raise SystemExit(f"--convs {args.convs!r}: want channels x frames x features / pool, comma-separated")
     towers = [tuple(int(v) for v in t.split(":")) for t in args.towers.split(",") if t]
-    if any(len(t) != 2 for t in towers) or towers and sum(h for _, h in towers) != len(ripnet.HEADS):
-        raise SystemExit(f"--towers {args.towers!r}: want layers:heads each, the heads adding up to {len(ripnet.HEADS)}")
-    cfg = ripnet.Config(convs=convs, dim=args.dim, layers=args.layers, heads=args.heads, ffn=args.ffn, window=args.attention_window, towers=towers)
+    if any(len(t) != 2 for t in towers) or towers and sum(h for _, h in towers) != len(ripmodel.HEADS):
+        raise SystemExit(f"--towers {args.towers!r}: want layers:heads each, the heads adding up to {len(ripmodel.HEADS)}")
+    cfg = ripmodel.Config(convs=convs, dim=args.dim, layers=args.layers, heads=args.heads, ffn=args.ffn, window=args.attention_window, towers=towers)
     resume = bool(args.checkpoint) and os.path.exists(args.checkpoint)
     start = args.checkpoint if resume else args.init
     ck = torch.load(start, map_location=args.device) if start else None
@@ -284,15 +284,15 @@ def main() -> None:
     held = loops[len(loops) - holdout:] if holdout else []
     loops = loops[:len(loops) - holdout] if holdout else loops
     val_mels, val_tgs = validation(held, args.window) if held else ([], [])
-    assert manifest["mel_bands"] == ripnet.MEL_BANDS and manifest["pitches"] == ripnet.PITCHES
-    assert manifest["voice_genes"] == ripnet.VOICE_GENES and len(manifest["waves"]) == ripnet.WAVES
+    assert manifest["mel_bands"] == ripmodel.MEL_BANDS and manifest["pitches"] == ripmodel.PITCHES
+    assert manifest["voice_genes"] == ripmodel.VOICE_GENES and len(manifest["waves"]) == ripmodel.WAVES
     mixed, share = [], 0.0
     if args.mix:
         d, _, sh = args.mix.rpartition(":")
         mixed_manifest, mixed = load_corpus(d)
         share = float(sh)
-        assert mixed_manifest["mel_bands"] == ripnet.MEL_BANDS and mixed_manifest["pitches"] == ripnet.PITCHES
-    model = ripnet.RipNet(cfg).to(args.device)
+        assert mixed_manifest["mel_bands"] == ripmodel.MEL_BANDS and mixed_manifest["pitches"] == ripmodel.PITCHES
+    model = ripmodel.RipModel(cfg).to(args.device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     step, best_loss, best_step, best_state = 0, float("inf"), 0, None
     if resume:
@@ -360,7 +360,7 @@ def main() -> None:
         model.load_state_dict(best_state)
         print(f"best held-out decoders' loss {best_loss:.3f} at step {best_step}; exporting that")
     model.eval()
-    ripnet.export(model.cpu(), args.out)
+    ripmodel.export(model.cpu(), args.out)
     print(f"wrote {args.out}")
 
 

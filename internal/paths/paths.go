@@ -33,7 +33,7 @@ const (
 	MusicConfigFile  = "music.toml"
 	SoundConfigFile  = "sounds.toml"
 	RipConfigFile    = "rip.toml"
-	RipModelFile     = "ripnet.bin"
+	RipModelFile     = "ripmodel.bin"
 )
 
 // ExternalFiles reports whether this target has a host filesystem available

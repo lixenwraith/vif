@@ -92,7 +92,7 @@ checks (`RenderMusic`, `ExpectedRip`, `CompareRips`), and `Fidelity` grades a
 render against the recording itself, both heard into a `RipSound` by
 `Ripper.Sound`. The front end is a seam:
 a `Ripper` hears through the package's analysis or through any `RipFrontEnd`
-that fills `RipFrames` from `MelFrames`, as the `ripnet` subpackage does with a
+that fills `RipFrames` from `MelFrames`, as the `ripmodel` subpackage does with a
 transformer, which also hears the voices the notes are played with
 (`VoiceDef.Genes`). `ReadWAV` reads any PCM or float width to mono. The
 primitives a search fits a rip with are here and the searches are not:

@@ -31,7 +31,7 @@ Two halves meet in the middle. Ripping turns a recording into patterns; training
       |                                       |       |
   3 write    patterns, voices, transcript     |   log-mel frames + labels -> trainer
       |                                       |       |
-  4 compress a dictionary of bars, a song     +------ weights (ripnet.bin)
+  4 compress a dictionary of bars, a song     +------ weights (ripmodel.bin)
       |
   5 refine   render, compare with the recording, keep what sounds closer
       |
@@ -45,7 +45,7 @@ The recording is read at 22.05 kHz and cut into frames, a 93 ms window every 11.
 A front end hears the frames into the same fields per frame: how strongly something starts (the onset), each drum's strength (kick, snare, hihat), the salience of each of 69 pitches from E1 to C7, and each register's chroma. The decoders after it never know which front end heard.
 
 - **The analysis** is signal processing. Each frame is split into a harmonic and a percussive part by medians across time and across frequency; each drum's onsets are read in its own band; a pitch's salience is the sum of its partials, the bass register's also read from a window four times longer, which tells semitones apart at 110 Hz.
-- **The model** (`ripnet`) is a transformer over log-mel frames: 229 bands from 30 Hz up, under a semitone apart from A3, each read in dB against the frame's own level, which it reads apart, so a soft phrase reaches it as clearly as a loud one. Each frame attends to 64 frames on either side (0.74 s) through four layers of width 256 with eight heads, 3.2 million weights run in pure Go. Its heads give, per frame, the onset, the drums, the pitches and whether a note sounds, which pitches are struck or let go and how hard, and the wave and the 32 voice genes the note is played with, which the analysis cannot say. A weight file may also put convolutions before the layers, or split the layers into towers for groups of heads. Soundlab hears with the model when the first configuration root holds `audio/ripnet.bin`, and with the analysis otherwise.
+- **RipModel** (`ripmodel`) is the model, a transformer over log-mel frames: 229 bands from 30 Hz up, under a semitone apart from A3, each read in dB against the frame's own level, which it reads apart, so a soft phrase reaches it as clearly as a loud one. Each frame attends to 64 frames on either side (0.74 s) through four layers of width 256 with eight heads, 3.2 million weights run in pure Go. Its heads give, per frame, the onset, the drums, the pitches and whether a note sounds, which pitches are struck or let go and how hard, and the wave and the 32 voice genes the note is played with, which the analysis cannot say. A weight file may also put convolutions before the layers, or split the layers into towers for groups of heads. Soundlab hears with the model when the first configuration root holds `audio/ripmodel.bin`, and with the analysis otherwise.
 
 ### 2. Reading: from frames to music
 
@@ -148,7 +148,7 @@ Put either in a `.slab` file and `run` it. Without the voices the tracks fall ba
 - `-tui`, `-T`: Full-screen Terminal User Interface. Empty documents are seeded from the built-ins; the REPL and scripts leave that to `builtin`.
 - `-headless`: Discard audio output (`-ab null`).
 - `-s <file>`: Execute a `.slab` script file line-by-line and exit.
-- `-config-dir <dir>`, `-config-music <file>`, `-config-sounds <file>`: vif's flags, resolved the same way, with `vif.toml`'s `[paths] root` and `[audio] buffer_ms` read as vif reads them; any key this build does not know is named and skipped. The overrides vif would load are registered and opened as the working documents; `save` writes where the next vif run reads first. The first root's `audio/rip.toml`, when there is one, is what `rip` listens with and where `tune` writes, and its `audio/ripnet.bin` the model `rip` hears with in place of the built-in analysis ([rip-train](../../tool/rip-train/README.md)).
+- `-config-dir <dir>`, `-config-music <file>`, `-config-sounds <file>`: vif's flags, resolved the same way, with `vif.toml`'s `[paths] root` and `[audio] buffer_ms` read as vif reads them; any key this build does not know is named and skipped. The overrides vif would load are registered and opened as the working documents; `save` writes where the next vif run reads first. The first root's `audio/rip.toml`, when there is one, is what `rip` listens with and where `tune` writes, and its `audio/ripmodel.bin` the model `rip` hears with in place of the built-in analysis ([rip-train](../../tool/rip-train/README.md)).
 - `-ab <name>`: Force audio backend (`pacat`, `aplay`, `null`, `wav:out.wav`).
 - `-vol <f>`: Sound effect volume 0..1 (default 0.7); music keeps its own level.
 

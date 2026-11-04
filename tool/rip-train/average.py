@@ -9,7 +9,7 @@ import argparse
 
 import torch
 
-import ripnet
+import ripmodel
 
 
 def shape(ck: dict) -> dict:
@@ -49,11 +49,11 @@ def main() -> None:
             raise SystemExit(f"{f}: {diff[0]} is {got.get(diff[0])}, {args.files[0]}'s {want.get(diff[0])}; a round's files share one shape")
 
     cut = int(args.trim * len(cks))
-    model = ripnet.RipNet(ripnet.Config(**cks[0]["cfg"]))
+    model = ripmodel.RipModel(ripmodel.Config(**cks[0]["cfg"]))
     model.load_state_dict(mean([ck["model"] for ck in cks], cut))
     torch.save({"model": model.state_dict(), "cfg": cks[0]["cfg"]}, args.pt)
     model.eval()
-    ripnet.export(model, args.out)
+    ripmodel.export(model, args.out)
     print(f"averaged {len(cks)} files, {cut} dropped at each end of each weight; wrote {args.pt} and {args.out}")
 
 

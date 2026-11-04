@@ -1342,7 +1342,7 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
 
 `RipSamples` ([Audio §11](audio.md#11-ripping-a-recording)) reads tempo, bars,
 key, drums, melody and bass off a recording under `RipParams`, through the
-built-in analysis or `ripnet`; [Rip design](rip-design.md) is the whole plan.
+built-in analysis or `ripmodel`; [Rip design](rip-design.md) is the whole plan.
 The search over the parameters is in place (`tune`), as are the corpus the
 engine exports (`corpus`), the model, its trainer (`tool/rip-train`) and the
 front-end seam. What remains, in the design's order:

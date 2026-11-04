@@ -19,7 +19,7 @@ below closes.
 ```mermaid
 flowchart LR
     A["recording"] --> B["features: log-mel frames"]
-    B --> C["front end: analysis or ripnet"]
+    B --> C["front end: analysis or ripmodel"]
     C --> D["decoders: tempo, beats, bars, key, hits, notes"]
     D --> E["voices: genes per note, clustered, fitted"]
     E --> F["patterns: dictionary, matching, compression"]
@@ -44,7 +44,7 @@ flowchart LR
    strength of any onset, of each drum's, each pitch's salience, each register's
    chroma, and, from a model, the wave and voice genes the note under each frame
    is played with and how surely each pitch is struck there. Two front ends fill it: `analysis`, the package's signal
-   processing, and `ripnet`, a transformer over the mel frames whose heads are
+   processing, and `ripmodel`, a transformer over the mel frames whose heads are
    those fields. The seam is the frames, so the decoders never know which heard.
 3. **Decoders.** Classical, shared, cheap and explainable: tempo by
    autocorrelation under a prior, beats by dynamic programming, the bar line by
@@ -204,7 +204,7 @@ offline (`song <name> <file.wav>`).
   `merge`); `tool/rip-train/README.md` is the guide. A voice carries a vibrato and a vowel's formants for the vocal focus,
   neither a gene, kept by the augmentation when it draws voices near a
   registered one.
-- **Model.** `ripnet.Spec`: 230 inputs (229 bands and the level), width 256, eight heads of 32,
+- **Model.** `ripmodel.Spec`: 230 inputs (229 bands and the level), width 256, eight heads of 32,
   four layers, feed-forward 1024, a window of 64 frames either side, 3.2
   million weights (12.8 MB), four times the first five runs' width 128 and four
   heads; heads for the onset, the three drums, the sixty-nine pitches, voicing,
@@ -223,7 +223,7 @@ offline (`song <name> <file.wav>`).
   70 seconds on one core of a 2017 laptop's i7-7700HQ, against 20 at width 128,
   and the width and depth are the file's to choose. The analysis stays the
   default front end: soundlab hears with the model when the first root holds
-  `audio/ripnet.bin`.
+  `audio/ripmodel.bin`.
 
 ## 4. Layout
 
@@ -233,7 +233,7 @@ offline (`song <name> <file.wav>`).
   `RenderNote`), the distances (`MelDistance`, `BarDistance`), the mechanical
   clustering (`Cluster`) and the song (`SongDef`). Imports only `toml`. The
   searches stay out of it, so it stands alone.
-- `pkg/audio/ripnet`: the learned front end, `Spec` and `Hear`. Imports `audio`
+- `pkg/audio/ripmodel`: the learned front end, `Spec` and `Hear`. Imports `audio`
   and `transformer`, and goes with `audio` to its module.
 - `pkg/transformer`: inference over frames and the weight file. Standard
   library only, its own module when the time comes.
@@ -287,7 +287,7 @@ and the checkpoint earn their keep.
 
 1. Done, through thirteen passes on the sample: the analysis and the decoders;
    parameters as data and their search; the offline render, the truth and the
-   score; the transformer, `ripnet`, the corpus, the trainer and training in
+   score; the transformer, `ripmodel`, the corpus, the trainer and training in
    rounds across machines; the voice fit by analysis-by-synthesis; the
    dictionary, matching and compression; the song document, rendered offline,
    a line at a time, and conducted live; the augmented, detuned, saturated
@@ -348,7 +348,7 @@ the voice fit, the dictionary and the song, nine seconds on four cores:
   not the same as the one nearest the recording's spectrum; the ear decides
   between `bite_fit.wav` (the mel fit) and `bite_refined.wav` (the score fit).
 - The first training run: 120 augmented loops of four bars from the shipped
-  bank, `ripnet.Spec` at 818 thousand weights, 3000 steps of batch 8 in twenty
+  bank, `ripmodel.Spec` at 818 thousand weights, 3000 steps of batch 8 in twenty
   minutes on four CPU cores, the loss from 4.8 to 0.44 and the pitch head's
   still falling. `bench 12 4` on fresh loops, total then tempo, bars, drums,
   melody, bass: the analysis on clean loops 0.49 (0.75, 0.79, 0.51, 0.18,

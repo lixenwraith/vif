@@ -573,7 +573,7 @@ lacks).
 
 The front end is a seam (`RipFrontEnd`): whatever hears the recording into
 `RipFrames`, the onset strengths, the pitch salience and the chroma per frame,
-feeds the same decoders. The analysis above is one front end; `ripnet` is the
+feeds the same decoders. The analysis above is one front end; `ripmodel` is the
 other, a transformer over the log-mel frames `MelFrames` makes, whose heads say
 per frame what struck, what sounds, which pitch is struck or let go and how hard
 (`RipFrames.Strike`, `Release`, `Velocity`),
@@ -587,7 +587,7 @@ its pitch never sounds, when it is a stronger strike's partial in the register,
 or within `StrikeGap` of the pitch's last, and one under `StrikeAgain`, or under a
 strike a tone either side, leaves the pitch's sounding note ringing. `tool/rip-train` trains it
 on loops soundlab exports (`corpus`), and soundlab hears with the first root's
-`audio/ripnet.bin` when there is one; `render` writes what the slots hold to a
+`audio/ripmodel.bin` when there is one; `render` writes what the slots hold to a
 WAV through `RenderMusic`, so an estimate is heard without a device.
 
 A rip also keeps its transcript, every note heard in seconds of the recording
@@ -660,7 +660,7 @@ events and keep the sequencer unaware of gameplay concepts.
 - Engine and backend lifecycle: `pkg/audio/engine.go`, `detector.go`, `wav.go`
 - Ripping a recording: `pkg/audio/rip.go`, `dsp.go`, `wav.go`; its transcripts
   compared and read or written: `match.go`, `midi.go`; its learned front
-  end `pkg/audio/ripnet`, over `pkg/transformer`, trained by `tool/rip-train`;
+  end `pkg/audio/ripmodel`, over `pkg/transformer`, trained by `tool/rip-train`;
   the design: `doc/rip-design.md`
 - Mixer and sfx admission: `pkg/audio/mixer.go`, `cache.go`, `kit.go`,
   `sound_render.go`

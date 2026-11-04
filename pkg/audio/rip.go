@@ -288,7 +288,7 @@ const (
 // every Hop seconds: the strength of any onset, of each drum's (kick, snare,
 // hihat), each pitch's salience from E1 to C7, the bass register's by its first
 // partials and the melody's with the bass cancelled, and each register's chroma.
-// A front end fills it: this package's analysis, or a model (ripnet), which may
+// A front end fills it: this package's analysis, or a model (ripmodel), which may
 // also say per frame which wave and voice genes a note is played with.
 type RipFrames struct {
 	Hop                float64
