@@ -265,12 +265,15 @@ To write your own:
   stands between the synthesizer and a recording: leave it on for anything a
   recording will be ripped with; turn it off only to measure the clean case.
 - **Real recordings.** One with the MIDI file it was played from is a loop of
-  its own: `corpus <dir> from <list.csv> [split <name>] [hours <h>]` reads a
-  CSV with `audio_filename` and `midi_filename` columns (and `split` and
-  `duration`, as MAESTRO's metadata has them), and `train.py --mix
+  its own: `corpus <dir> from <list.csv> [split <name>] [hours <h>] [codec]`
+  reads a CSV with `audio_filename` and `midi_filename` columns (and `split`
+  and `duration`, as E-GMD's metadata has them), and `train.py --mix
   <dir>:<share>` draws that share of the windows from it, labelled by the
-  MIDI's notes and velocities, the voices unknown. Weights trained on a corpus
-  carry its licence: MAESTRO's is CC BY-NC-SA 4.0. A recording without its MIDI
+  MIDI's notes, velocities and hits, a tom's or a cymbal's an onset of no drum,
+  the voices unknown. A batch run into the same directory joins it, numbered
+  after the loops there, so a batch's recordings can be deleted once it is in.
+  Weights trained on a corpus carry its licence (E-GMD's CC BY 4.0 asks for
+  credit; MAESTRO's CC BY-NC-SA 4.0 binds them). A recording without its MIDI
   is held out, judged by ear and by the two-witness check (two recordings of
   one piece, their transcripts compared, as `doc/rip-design.md` §8 does).
 - **The model's shape.** `--dim`, `--layers`, `--heads`, `--ffn` and
