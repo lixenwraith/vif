@@ -3,11 +3,11 @@
 package event
 
 import (
+	"github.com/lixenwraith/audio/model"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
-	"github.com/lixenwraith/vif/pkg/audio/model"
 	"time"
 	"unsafe"
 )

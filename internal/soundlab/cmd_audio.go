@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
 
 func cmdPlay(s *Session, a []string) error {

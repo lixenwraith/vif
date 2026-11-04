@@ -6,14 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lixenwraith/vif/internal/asset"
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
-
-// BuiltinSounds parses the shipped sound bank: the sounds and the tonal voices.
-func BuiltinSounds() (*audio.SoundSpecFile, error) {
-	return audio.LoadSoundsFS(asset.DefaultSounds, asset.DefaultSoundFiles...)
-}
 
 // sfxSpec is one sound effect: the sound it plays, its level and its render shape
 type sfxSpec struct {

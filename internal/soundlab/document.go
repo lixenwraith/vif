@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
 
 // doc is an ordered, name-keyed working set in document order, which save emits

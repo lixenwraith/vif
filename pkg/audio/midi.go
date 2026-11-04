@@ -28,7 +28,7 @@ const (
 // a drum's keys on the drum channel, the first the one written; a voice's
 // program, written, and the families of eight programs read back as it, so a
 // program no row writes plays on the shipped voice of its family. A ride,
-// tambourine or shaker reads as the hihat, the line soundlab plays it on.
+// tambourine or shaker reads as the hihat, the line stapes plays it on.
 var midiInstruments = [InstrumentCount]struct {
 	keys     []byte
 	program  byte

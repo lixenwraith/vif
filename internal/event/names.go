@@ -5,11 +5,11 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/lixenwraith/audio/model"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
-	"github.com/lixenwraith/vif/pkg/audio/model"
 )
 
 // PayloadNames are the names a payload's enum fields take, each type's from its

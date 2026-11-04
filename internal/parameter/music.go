@@ -6,18 +6,11 @@ import (
 	"math"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/asset"
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
 
 // Conductor policy: APM → tempo and arrangement tier. Everything here is game
 // interpretation of the music engine; the engine carries no APM concept.
-
-// BuiltinPatterns parses the shipped music bank, whose roles, groups and tiers are the
-// drawn arrangement; any pattern it drops is a broken build.
-func BuiltinPatterns() ([]*audio.Pattern, error) {
-	return audio.LoadPatternsTOML(asset.DefaultMusic)
-}
 
 // APMToBPM maps burst APM to target tempo on a square root, RestBPM + k·√APM with k
 // placing audio.MaxBPM at the admission ceiling: the first actions move it most, and

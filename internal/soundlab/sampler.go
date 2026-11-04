@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
 
 // The sampler plays a corpus loop's tonal lines on NSynth's recorded notes: 4 s

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lixenwraith/vif/pkg/audio/model"
+	"github.com/lixenwraith/audio/model"
 )
 
 // VoiceDef is one tonal instrument as authored: an oscillator stack through a

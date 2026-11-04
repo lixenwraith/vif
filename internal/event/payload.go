@@ -5,11 +5,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/audio/model"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/pkg/audio/model"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 

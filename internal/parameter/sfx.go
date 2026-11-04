@@ -1,6 +1,6 @@
 package parameter
 
-import "github.com/lixenwraith/vif/pkg/audio/model"
+import "github.com/lixenwraith/audio/model"
 
 // SfxSet is the game's sfx table: the sound each effect Go emits plays. The zero
 // value is model.SoundNone, which Play counts as a bad-ID rejection, so

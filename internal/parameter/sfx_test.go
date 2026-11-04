@@ -3,25 +3,12 @@
 package parameter
 
 import (
-	"math"
 	"reflect"
-	"slices"
 	"testing"
 
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
+	"github.com/lixenwraith/audio/bank"
 )
-
-func loadBuiltins(t *testing.T) []*audio.SoundDef {
-	t.Helper()
-	bank, err := BuiltinSounds()
-	if err != nil {
-		t.Fatalf("builtin sounds: %v", err)
-	}
-	if len(bank.Sound) == 0 || len(bank.Voice) == 0 {
-		t.Fatal("shipped sound bank is missing its sounds or voices")
-	}
-	return bank.Sound
-}
 
 // A SfxSet field with no sfxTable row stays SoundNone forever, and
 // AudioEngine.Play discards it without touching played or dropped. That is the
@@ -53,47 +40,17 @@ func TestSfxTableCoversSfxSet(t *testing.T) {
 // overrides existing names against a frozen registry; it cannot introduce one,
 // so a name absent here fails ResolveSfx and aborts startup.
 func TestSfxTableNamesAreBuiltin(t *testing.T) {
-	defs := loadBuiltins(t)
-	known := make(map[string]bool, len(defs))
-	for _, d := range defs {
+	shipped, err := bank.Sounds()
+	if err != nil {
+		t.Fatalf("bank sounds: %v", err)
+	}
+	known := make(map[string]bool, len(shipped.Sound))
+	for _, d := range shipped.Sound {
 		known[d.Name] = true
 	}
 	for i := range sfxTable {
 		if !known[sfxTable[i].name] {
 			t.Errorf("sound %q has no built-in spec", sfxTable[i].name)
-		}
-	}
-}
-
-// A group draws both slots at every tier, with a second member each to vary to, so a
-// tier change or a group change never leaves a slot silent or stuck on one pattern.
-func TestShippedGroupsCoverEveryTier(t *testing.T) {
-	pats, err := BuiltinPatterns()
-	if err != nil {
-		t.Fatalf("builtin patterns: %v", err)
-	}
-	groups := map[string]bool{}
-	for _, p := range pats {
-		for _, g := range p.Groups {
-			groups[g] = true
-		}
-	}
-	if len(groups) < 2 {
-		t.Fatalf("shipped bank names %d groups, want several to move between", len(groups))
-	}
-	for g := range groups {
-		for tier := range audio.IntensityCount {
-			var n [2]int
-			for _, p := range pats {
-				in := len(p.Groups) == 0 || slices.Contains(p.Groups, g)
-				if in && p.Tiers&(1<<tier) != 0 && (p.Role == audio.RoleRhythm || p.Role == audio.RoleMelody) {
-					n[p.Role-audio.RoleRhythm]++
-				}
-			}
-			if n[0] < 2 || n[1] < 2 {
-				t.Errorf("group %s at %s draws from %d rhythms and %d melodies, want two of each",
-					g, tier, n[0], n[1])
-			}
 		}
 	}
 }
@@ -109,66 +66,5 @@ func TestSoundTableNamesUnique(t *testing.T) {
 			continue
 		}
 		seen[sfxTable[i].name] = i
-	}
-}
-
-func checkBuffer(t *testing.T, name string, buf []float64) float64 {
-	t.Helper()
-	var peak float64
-	for _, v := range buf {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			t.Fatalf("%s: non-finite sample", name)
-		}
-		if a := math.Abs(v); a > peak {
-			peak = a
-		}
-	}
-	return peak
-}
-
-func TestBuiltinSoundsRender(t *testing.T) {
-	for _, d := range loadBuiltins(t) {
-		buf, err := audio.RenderPreview(d, audio.SoundShape{})
-		if err != nil {
-			t.Fatalf("%s: %v", d.Name, err)
-		}
-		peak := checkBuffer(t, d.Name, buf)
-		if peak < 0.01 {
-			t.Errorf("%s: renders silent (peak %g)", d.Name, peak)
-		}
-		if peak > 1.0 {
-			t.Errorf("%s: peak %g exceeds unity", d.Name, peak)
-		}
-	}
-}
-
-// A failure here usually means the encoder lost float precision, not that the
-// spec model is wrong.
-func TestBuiltinSoundsRoundTrip(t *testing.T) {
-	defs := loadBuiltins(t)
-	data, err := audio.MarshalSounds(defs)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	bank, err := audio.LoadSoundsTOML(data)
-	if err != nil {
-		t.Fatalf("reload: %v\n%s", err, data)
-	}
-	back := bank.Sound
-	if len(back) != len(defs) {
-		t.Fatalf("round trip produced %d sounds, want %d", len(back), len(defs))
-	}
-	for i := range defs {
-		a, err := audio.RenderPreview(defs[i], audio.SoundShape{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		b, err := audio.RenderPreview(back[i], audio.SoundShape{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(a, b) {
-			t.Errorf("%s: audio differs after round trip", defs[i].Name)
-		}
 	}
 }

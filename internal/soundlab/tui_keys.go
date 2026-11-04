@@ -12,9 +12,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // keyCaps are the keycaps drawn on the keyboard, by semitone above its first C:

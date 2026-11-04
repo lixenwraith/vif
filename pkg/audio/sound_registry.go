@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lixenwraith/vif/pkg/audio/model"
+	"github.com/lixenwraith/audio/model"
 )
 
 // SoundID identifies a registered sound. IDs are process-local: assigned by

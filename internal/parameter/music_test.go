@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
 
 // TestTierTrackerHoldsAndSteps is the hysteresis rule: a burst waits out the rise

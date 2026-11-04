@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/genetic"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // compressOptions sizes the search over the assignment of bars to patterns

@@ -1,7 +1,7 @@
 # rip-train
 
-The trainer of the rip's front-end model, `pkg/audio/ripmodel`: PyTorch, outside
-the Go module, writing the weight file `lixenwraith/transformer` loads
+The trainer of the rip's front-end model, `lixenwraith/audio/ripmodel`: PyTorch,
+outside the Go module, writing the weight file `lixenwraith/transformer` loads
 ([format](https://github.com/lixenwraith/transformer/blob/main/doc/format.md)).
 Where the model stands in the pipeline, and why its features are made in Go, is
 in [Rip design](../../doc/rip-design.md) §2 and §3; the runs so far and their

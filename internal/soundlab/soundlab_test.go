@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 func newTestSession(t *testing.T, out *bytes.Buffer) *Session {

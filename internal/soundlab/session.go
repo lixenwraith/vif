@@ -1,9 +1,9 @@
 //go:build !vif_headless && !vif_noaudio && !wasm
 
-// Package soundlab is the audio authoring environment over pkg/audio: a session
-// holding the engine and the working documents, the verb table every front end
-// dispatches through (Execute), the script runner and the full-screen TUI over any
-// terminal.Terminal. cmd/soundlab is its terminal command; a host with its own
+// Package soundlab is the audio authoring environment over lixenwraith/audio: a
+// session holding the engine and the working documents, the verb table every front
+// end dispatches through (Execute), the script runner and the full-screen TUI over
+// any terminal.Terminal. cmd/soundlab is its terminal command; a host with its own
 // screen and speakers runs it in-process, handing NewSession the speakers.
 package soundlab
 
@@ -18,11 +18,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/lixenwraith/audio"
+	"github.com/lixenwraith/audio/bank"
+	"github.com/lixenwraith/audio/ripmodel"
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
-	"github.com/lixenwraith/vif/pkg/audio"
-	"github.com/lixenwraith/vif/pkg/audio/ripmodel"
 )
 
 // Session owns the engine and the working documents: the sounds and the voices,
@@ -147,12 +147,12 @@ func NewSession(o Options) (*Session, error) {
 	cfg.Sink = o.Sink
 	cfg.Buffer = files.buffer
 	// The same banks the game registers, from the same embedded assets.
-	bank, err := parameter.BuiltinSounds()
+	shipped, err := bank.Sounds()
 	if err != nil {
 		return nil, err
 	}
-	cfg.BaseSounds, cfg.BaseVoices = bank.Sound, bank.Voice
-	if cfg.BasePatterns, err = parameter.BuiltinPatterns(); err != nil {
+	cfg.BaseSounds, cfg.BaseVoices = shipped.Sound, shipped.Voice
+	if cfg.BasePatterns, err = bank.Patterns(); err != nil {
 		return nil, err
 	}
 	if files.music != "" {
@@ -356,24 +356,24 @@ func (s *Session) loadPatternFile(file string, replace bool) error {
 // seedBuiltinSounds seeds the sound document, voices included, from a fresh
 // parse of the shipped bank, so nothing aliases the registry.
 func (s *Session) seedBuiltinSounds() error {
-	bank, err := parameter.BuiltinSounds()
+	shipped, err := bank.Sounds()
 	if err != nil {
 		return err
 	}
-	s.sounds.replaceAll(bank.Sound, "", false) // registry holds identical content: clean
-	s.voices.replaceAll(bank.Voice, "", false)
+	s.sounds.replaceAll(shipped.Sound, "", false) // registry holds identical content: clean
+	s.voices.replaceAll(shipped.Voice, "", false)
 	s.sounds.include = nil
-	fmt.Fprintf(s.out, "%d built-in sound(s) and %d voice(s) seeded\n", len(bank.Sound), len(bank.Voice))
+	fmt.Fprintf(s.out, "%d built-in sound(s) and %d voice(s) seeded\n", len(shipped.Sound), len(shipped.Voice))
 	return nil
 }
 
 func (s *Session) seedBuiltinVoices() error {
-	bank, err := parameter.BuiltinSounds()
+	shipped, err := bank.Sounds()
 	if err != nil {
 		return err
 	}
-	s.voices.replaceAll(bank.Voice, s.sounds.src, false)
-	fmt.Fprintf(s.out, "%d built-in voice(s) seeded\n", len(bank.Voice))
+	s.voices.replaceAll(shipped.Voice, s.sounds.src, false)
+	fmt.Fprintf(s.out, "%d built-in voice(s) seeded\n", len(shipped.Voice))
 	return nil
 }
 

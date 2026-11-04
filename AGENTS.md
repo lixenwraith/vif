@@ -32,10 +32,12 @@ in the same PR.
 
 ## Data
 
-- Embedded files live in `internal/asset/`. External files live in `wad/`, laid
-  out exactly as they install. Distribution files installed outside a config
-  root (desktop entry, icons, shell completion) live in `deploy/package/`; the
-  manual is `doc/vif.6`. Nowhere else, and never beside the code that reads them.
+- Embedded files live in `internal/asset/`, except the shipped audio banks, which
+  live in the audio module's `bank` package (`lixenwraith/audio/bank`). External
+  files live in `wad/`, laid out exactly as they install. Distribution files
+  installed outside a config root (desktop entry, icons, shell completion) live
+  in `deploy/package/`; the manual is `doc/vif.6`. Nowhere else, and never beside
+  the code that reads them.
 - `pkg/` never imports `internal/`. A leaf package that needs game data takes it
   from its caller.
 - Resolution is flag, `-config-dir`, user root, the checkout `wad/` beside a

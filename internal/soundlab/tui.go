@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // focusArea is the pane the keys go to; Tab walks the panes on screen in this order

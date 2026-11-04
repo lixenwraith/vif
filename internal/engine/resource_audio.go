@@ -5,7 +5,7 @@ package engine
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vif/pkg/audio"
+	"github.com/lixenwraith/audio"
 )
 
 type audioResources struct {

@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/lixenwraith/audio"
+	"github.com/lixenwraith/audio/bank"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 type AudioService struct {
@@ -49,17 +50,17 @@ func (s *AudioService) Init() error {
 	config.Buffer = s.initBuffer
 	config.Sink = s.sink
 
-	// The game's sfx mix, injected so pkg/audio stays free of it
+	// The game's sfx mix, injected so the audio module stays free of it
 	config.SfxLevels = parameter.SfxLevels
 	config.SoundShapes = parameter.SfxShapes
 
-	// pkg/audio ships no specs, voices or authored patterns; the banks are embedder data.
-	bank, err := parameter.BuiltinSounds()
+	// The engine ships no specs, voices or authored patterns; its bank holds the ones vif ships.
+	shipped, err := bank.Sounds()
 	if err != nil {
 		return fmt.Errorf("built-in sounds: %w", err)
 	}
-	config.BaseSounds, config.BaseVoices = bank.Sound, bank.Voice
-	if config.BasePatterns, err = parameter.BuiltinPatterns(); err != nil {
+	config.BaseSounds, config.BaseVoices = shipped.Sound, shipped.Voice
+	if config.BasePatterns, err = bank.Patterns(); err != nil {
 		return fmt.Errorf("built-in patterns: %w", err)
 	}
 

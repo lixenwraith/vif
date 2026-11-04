@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vif/pkg/audio"
 )
 
 // errVoiceFile is the answer to a file verb on voices, which live in the sound document
