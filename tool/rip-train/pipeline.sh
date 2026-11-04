@@ -12,6 +12,7 @@ BARS=${BARS:-4}                      # bars a loop
 AUG=${AUG:-aug}                      # aug: a room, a mix, random voices, saturation, a tuning off A440; empty for clean
 GEN=${GEN:-gen}                      # gen: beats, melodies and bass lines the bank never had; empty for the bank alone
 WAV=${WAV:-nowav}                    # nowav: frames and labels only; empty to keep each loop's WAV
+CODEC=${CODEC:-}                     # codec: a third of the loops through a lossy codec and back, by ffmpeg; empty for none
 TEMPOS=${TEMPOS:-}                   # e.g. 80-120 or 96,128,160; empty for the default spread
 FOCUS=${FOCUS:-}                     # a .slab run before corpus: voices and patterns to draw from
 STEPS=${STEPS:-20000}                # training steps
@@ -46,7 +47,7 @@ soundlab() { go run ./cmd/soundlab -headless "$@"; }
 corpus_slab() {
 	{
 		[ -n "$FOCUS" ] && printf 'run %s\n' "$(realpath "$FOCUS")"
-		printf 'corpus %s %s %s %s %s %s %s %s\n' "$(realpath "$CORPUS")" "$LOOPS" "$BARS" "$AUG" "$GEN" "$WAV" "${TEMPOS:+tempos $TEMPOS}" "${2:-}"
+		printf 'corpus %s %s %s %s %s %s %s %s %s\n' "$(realpath "$CORPUS")" "$LOOPS" "$BARS" "$AUG" "$GEN" "$WAV" "$CODEC" "${TEMPOS:+tempos $TEMPOS}" "${2:-}"
 	} > "$1"
 }
 

@@ -67,8 +67,9 @@ tool/rip-train/pipeline.sh install
 | `LOOPS`, `BARS` | 20000, 4 | loops rendered, bars a loop; 200 loops is a smoke test |
 | `PARTS` | 1 | exports at once, each rendering every `PARTS`-th loop on a core of its own; a last export renders any loop they left and writes `corpus.json` |
 | `AUG` | `aug` | a room, a mix, voices of random genes near the registered ones, a pedal's ringing in a third of the loops, a soft clip in a third, a compressor and a noise floor in half, each loop rendered off A440 by up to a quarter tone; empty for clean renders |
-| `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; a third of the generated melodies and accompaniments half 20 to 30 dB softer; three generated loops in ten without their drums and one in seven without its bass; empty for the bank alone |
+| `GEN` | `gen` | beats, melodies, bass lines and accompaniments the bank never had, three loops in five per part: a broken chord in eighths or sixteenths in the free slot, and in half the loops a melody of longer notes over it; a third of the generated melodies and accompaniments half 6 to 18 dB softer; three generated loops in ten without their drums and one in seven without its bass; empty for the bank alone |
 | `WAV` | `nowav` | frames and labels only; empty keeps each loop's WAV too (300 MB per 200 loops) |
+| `CODEC` | empty | `codec`: a third of the loops through Opus, MP3 or AAC at 64 to 192 kbps and back, by ffmpeg, which the export then needs |
 | `TEMPOS` | the default spread | `80-120` for six tempos over a range, `96,128,160` for a list; the sequencer's range is 80 to 200 |
 | `FOCUS` | none | a soundlab script run before the corpus renders: the voices and patterns the loops draw from, see below |
 | `STEPS`, `BATCH` | 20000, 8 | training steps and windows a step |

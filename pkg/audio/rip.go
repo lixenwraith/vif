@@ -1609,6 +1609,10 @@ func (f *RipFrames) strikes(lo, hi int, p RipParams) []ripNote {
 				notes = append(notes, n)
 			}
 			t = end
+			// let go under a pedal it rings on, and only a sure strike starts it again
+			for t < T && r.sal(t, s) >= p.Voicing*r.ref && !renews(t, s) {
+				t++
+			}
 		}
 	}
 	slices.SortFunc(notes, func(a, b ripNote) int { return cmp.Or(a.start-b.start, a.midi-b.midi) })
