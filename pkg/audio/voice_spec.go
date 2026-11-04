@@ -22,7 +22,7 @@ type VoiceDef struct {
 	Wave string `toml:"wave,omitempty"` // sine (the default), saw, square, string or modal
 
 	Unison  int     `toml:"unison,omitempty"`   // oscillators, 1..3; 0 = 1
-	Detune  float64 `toml:"detune,omitempty"`   // frequency ratio between neighbouring oscillators; 0 = 1
+	Detune  float64 `toml:"detune,omitempty"`   // frequency ratio between neighbouring oscillators, which wander about it; 0 = 1
 	Sub     float64 `toml:"sub,omitempty"`      // level of a sine an octave below, added after the drive
 	FMRatio float64 `toml:"fm_ratio,omitempty"` // 2-operator FM when fm_index > 0
 	FMIndex float64 `toml:"fm_index,omitempty"`
@@ -38,8 +38,10 @@ type VoiceDef struct {
 	// resonances at a vowel's frequencies: a, e, i, o or u; empty for none
 	Vowel string `toml:"vowel,omitempty"`
 
-	Bright float64 `toml:"bright,omitempty"` // string: 0 a dull string, 1 a wiry one
-	Ring   float64 `toml:"ring,omitempty"`   // string: the fundamental's T60 in seconds at middle C, tracking the key by decay_track
+	// bright: a string's 0 is a dull string, 1 a wiry one; a modal bank's body
+	// sounds the partials under bright kHz weakly, as a soundboard its bass
+	Bright float64 `toml:"bright,omitempty"`
+	Ring   float64 `toml:"ring,omitempty"` // string: the fundamental's T60 in seconds at middle C, tracking the key by decay_track
 
 	// strike_pos is where along the string the hammer or finger lands, 0.12
 	// unset; modal: partials caps the bank, tilt is the spectral slope (1 struck,
@@ -67,7 +69,7 @@ type VoiceDef struct {
 
 	Cutoff    float64 `toml:"cutoff,omitempty"`     // Hz at rest
 	KeyTrack  float64 `toml:"key_track,omitempty"`  // Hz added per Hz of the note
-	EnvAmount float64 `toml:"env_amount,omitempty"` // Hz added at the filter envelope's peak
+	EnvAmount float64 `toml:"env_amount,omitempty"` // Hz added at the filter envelope's peak at full velocity
 	EnvDecay  float64 `toml:"env_decay,omitempty"`  // filter envelope decay; 0 rides the amplitude envelope
 	Q         float64 `toml:"q,omitempty"`          // resonance; 0 bypasses the filter
 
