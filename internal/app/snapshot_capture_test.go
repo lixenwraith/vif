@@ -99,10 +99,10 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 			receiver.cfg.Resources.Keymap = "local-keymap.toml"
 			receiver.cfg.Resources.Music = "local-music.toml"
 			receiver.cfg.Resources.Sounds = "local-sounds.toml"
-			receiver.cfg.SessionName = "local-session"
-			receiver.cfg.ListenAddress = "127.0.0.1:7777"
-			receiver.cfg.NoAdvertise = true
-			receiver.cfg.FixedAuthority = true
+			receiver.cfg.Membership.SessionName = "local-session"
+			receiver.cfg.Membership.ListenAddress = "127.0.0.1:7777"
+			receiver.cfg.Membership.NoAdvertise = true
+			receiver.cfg.Membership.FixedAuthority = true
 
 			staged, err := receiver.StageShared(cap)
 			if err != nil {
@@ -112,8 +112,8 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 			if stageCfg.ColorModeSet || stageCfg.AudioBackend != "" || stageCfg.Play != paths.DefaultPlay() ||
 				stageCfg.LogScope != "" || stageCfg.Resources.Keymap != "" ||
 				stageCfg.Resources.Music != "" || stageCfg.Resources.Sounds != "" ||
-				stageCfg.SessionName != "" || stageCfg.ListenAddress != "" ||
-				stageCfg.NoAdvertise || stageCfg.FixedAuthority {
+				stageCfg.Membership.SessionName != "" || stageCfg.Membership.ListenAddress != "" ||
+				stageCfg.Membership.NoAdvertise || stageCfg.Membership.FixedAuthority {
 				t.Fatalf("staging inherited local runtime options: %+v", stageCfg)
 			}
 			if stageCfg.Seed != receiver.cfg.Seed || stageCfg.Session != cap.Header.Session ||

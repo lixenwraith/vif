@@ -82,6 +82,9 @@ that proves wrong or that a document now states, and link the document instead.
   event stops the generator on the stale use of it ("type-check ...: has no field",
   "undefined"): delete those lines from `payload_gen.go` and `registry_gen.go`
   first, and the run writes them anew.
+- Go 1.27 takes a promoted field as a struct literal's key, though not through an
+  embedded pointer, so fields moved into an embedded struct keep every literal,
+  selector and method call compiling.
 
 ## Ticks and events
 

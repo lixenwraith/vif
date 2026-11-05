@@ -429,7 +429,7 @@ func TestVanguardABotSeatFliesTheShipsGunPath(t *testing.T) {
 	if _, err := resource.ScenarioPath(opts); err != nil {
 		t.Skip("vanguard scenario not present")
 	}
-	holder, _ := driveBot(t, Config{Bots: []string{"roam"}, Resources: opts}, "patrol", nil)
+	holder, _ := driveBot(t, Config{Membership: Membership{Bots: []string{"roam"}}, Resources: opts}, "patrol", nil)
 	waitForCursors(t, holder, 2)
 	// gun reads the gun on the cursor a run flies: whether it holds one, and its path
 	gun := func(a *App) (armed bool, levels int) {

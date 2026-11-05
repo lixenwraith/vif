@@ -1520,21 +1520,60 @@ another system may not call them directly.
 
 ## Structure
 
+### Give Config a package of its own
+
+- Priority: P3
+- Affected files: `internal/app/config.go`, `membership.go`, `presentation.go`,
+  `presentation_headless.go`, `audio.go`, `audio_none.go`, `loop.go`, `seat.go`,
+  `session.go`
+
+`Config` is the run's configuration, its session half the field `Membership`. It
+goes to `internal/app/internal/config`, a leaf package `app` aliases (`Config`,
+`Membership`, `Mode` and its constants), so `cmd/vif` and Android keep compiling
+and [the membership's package](#give-the-membership-a-package-of-its-own) can
+import it. What keeps it in `app` is that it carries the run as well as its
+configuration, so it goes in three steps, one PR each, the next after the last is
+merged and tested (Lixen, 2026-11-05):
+
+1. The run wiring out: `Config`'s unexported fields (`resumeHost`, `networkConfig`,
+   `dialled`, `startScreen`, `journalCarried`, `log`, `borrow`, `scriptedSession`,
+   `terminalGeometry`, `geometryDefaulted`) and `Membership`'s (`holder`, `relay`,
+   `claims`, `sessionPlayers`, `hostListeners`, `joinPress`) into an `app`-private
+   struct that `Run`, `restarted` and the seat builder hand on beside `Config`.
+   Three are `app` types: `joinDial`, `presentationState`, `claimKeeper`. `Validate`
+   reads `relay` and `scriptedSession`, so those rules take the struct too.
+2. `Host` out of `Config`, handed to the run beside it: it is build-tagged and holds
+   the `Presentation` interface. `Mode` moves with `Config`, taking `buildHasAudio`,
+   which only its `Audio` reads.
+3. `Config`, `Membership` and `ClaimStore` into the package. `Validate`'s
+   build-tagged rules (`validateBuildConfig`, `validateAudioBuildConfig`,
+   `buildHasSocketNetwork`, `scriptPacing`, `errBrowserHosting`) go with it or stay
+   as an `app` check after it. The methods that use `app` types (`restarted`,
+   `prepare`, `validateWith`, and `Membership`'s `joining`, `hostNetwork`,
+   `bindDoors`, `closeDoors`, `relayRouter`) become functions, since a package
+   cannot add methods to a type it only aliases.
+
 ### Give the membership a package of its own
 
 - Priority: P3
-- Affected files: `internal/app/config.go`, `membership.go`, `host.go`, `join.go`,
-  `seat.go`, `cmd/vif`, `android/game`
+- Affected files: `internal/app/membership.go`, `seat.go`, `session.go`, `host.go`,
+  `converge.go`, `loop.go`
 
 The corrector and the scribe have packages under `internal/app/internal`, each
 reading the run through one seam and resolving into a run only `App` builds (a
-`corrector.Staging`, a `scribe.Twin`). `membership` stays, because `Config` is its
-state too: it reads 24 of its fields, 9 unexported (`holder`, `relay`, `claims`,
-`joinPress`, `sessionPlayers`, `scriptedSession`, `geometryDefaulted`,
-`hostListeners`, `log`), copies it whole to dial a `:join` and a redial, and writes
-the session half back (`HostAddress`, `JoinAddress`, `SessionName`,
-`FixedAuthority`, `sessionPlayers`, `hostListeners`) for the run `App` builds next.
-A package for it needs that session half as a type of its own, which changes
-`Config`'s fields for `cmd/vif`, the Android binding and about a hundred test
-literals; one package for all three run types would have taken `Config`, the
-restart request, the join dial, the claims and the seats with it.
+`corrector.Staging`, a `scribe.Twin`). `membership` holds only `Config`'s session
+half, `Membership`, and reads the rest of the run through `membershipRun`, dialling
+a join against a copy of it (`joinBase`). It waits on
+[Config's package](#give-config-a-package-of-its-own), which takes `Membership`'s
+unexported fields out with the run wiring and `Mode` with `Config`. Three ties to
+`app` are left after it:
+
+- The seat runner: `seat.go` builds each bot's `Config` and runs its `App` through
+  `drive`, reading the slot, scribe and fork cell off it; the run has to start and
+  answer for a seat behind the seam.
+- The seam's `app` types: `restartRequest` (`replaceWith`, and the requests
+  `host.go` and `converge.go` build), `lobbyEvent`, `joinBase`.
+- What `app` shares: `forkCell`, `errBrowserHosting` (`Validate`),
+  `errSessionCanceled`, `errSessionSignalled` and `errSessionExpired` (the loops),
+  `buildHasSocketNetwork`, and `joinDial`, which `Config.dialled` carries and whose
+  `open`, like `session.go`'s constructors, builds the run.
