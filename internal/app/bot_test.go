@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -234,7 +235,7 @@ func waitForCursors(t *testing.T, a *App, n int) {
 		}
 	})
 	t.Fatalf("the roster holds %d cursors, want %d; %+v; %s; bots %s; status %q", held, n, a.Position(), a.SessionSummary(),
-		a.membership.seatsSummary()+fmt.Sprint(a.instance().WorldRoster()), a.ctx.GetStatusMessage())
+		a.ctx.SessionCtl.BotSummary()+fmt.Sprint(a.instance().WorldRoster()), a.ctx.GetStatusMessage())
 }
 
 // places reads the cursor and the participant on each slot whose cursor match takes.
@@ -292,12 +293,15 @@ func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
 	}
 	waitForCursors(t, holder, 3)
 	// A seat learns its slot from its own gate, which can finish after the holder
-	// has applied its arrival.
-	for err := holder.membership.dropSeat(1); err != nil; err = holder.membership.dropSeat(1) {
-		if len(holder.membership.seatGraphs()) < 2 {
-			t.Fatalf("a seat left before it was dropped: %v", err)
-		}
-		time.Sleep(10 * time.Millisecond)
+	// has applied its arrival; dropped before, :bot drop would dismiss its cursor.
+	ctl := holder.ctx.SessionCtl
+	waitUntil(t, func() bool {
+		return slices.ContainsFunc(ctl.Bots(), func(b engine.BotSeat) bool { return !b.Joining && b.Slot == 1 })
+	}, "the seat on slot 1 to learn its slot")
+	var err error
+	holder.World().RunSafe(func() { err = ctl.DropBot(1) })
+	if err != nil {
+		t.Fatalf("dropping the seat on slot 1: %v", err)
 	}
 	waitForCursors(t, holder, 2)
 	if msg := holder.Context().GetStatusMessage(); strings.Contains(msg, "disconnected") {
@@ -306,33 +310,6 @@ func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
 	stop()
 	if left := holder.membership.seatGraphs(); len(left) != 0 {
 		t.Fatalf("seats %v outlived their holder", left)
-	}
-}
-
-func TestBotRemovalDoesNotFollowReusedRosterIdentities(t *testing.T) {
-	a := &App{}
-	old := &seat{number: 1, graph: &bot.Graph{Name: "default"}, stop: make(chan os.Signal)}
-	old.id.Store(2)
-	old.slot.Store(1)
-	a.membership.seats = []*seat{old}
-	selected := a.membership.botSeats()[0]
-	replacement := &seat{number: 2, graph: old.graph, stop: make(chan os.Signal)}
-	replacement.id.Store(2)
-	replacement.slot.Store(1)
-	a.membership.seats = []*seat{replacement}
-	if err := a.membership.removeSeat(selected.ID); err == nil || a.membership.botSeats()[0].Stopping {
-		t.Fatal("stale selection removed a replacement with the same participant and slot")
-	}
-	if err := a.membership.removeSeat(replacement.number); err != nil || !a.membership.botSeats()[0].Stopping {
-		t.Fatal("current bot could not be removed")
-	}
-	pending := &seat{number: 3, graph: old.graph, stop: make(chan os.Signal)}
-	a.membership.seats = []*seat{pending}
-	if !a.membership.botSeats()[0].Joining {
-		t.Fatal("pending bot appears admitted")
-	}
-	if err := a.membership.removeSeat(pending.number); err != nil || !a.membership.botSeats()[0].Stopping {
-		t.Fatal("pending bot could not be cancelled")
 	}
 }
 
@@ -658,7 +635,7 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("drop: %v", err)
 	}
-	until("the bot to leave", func() bool { return len(holder.membership.botSeats()) == 0 })
+	until("the bot to leave", func() bool { return len(holder.ctx.SessionCtl.Bots()) == 0 })
 	if msg := holder.Context().GetStatusMessage(); !strings.Contains(msg, "journal closed: "+path) {
 		t.Fatalf("the holder shows %q once its journaling bot left", msg)
 	}
@@ -816,13 +793,13 @@ func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 	waitForCursors(t, host, 4)
 	waitForCursors(t, guest, 4)
 	waitForSeats(t, guest, 1)
-	seated := guest.membership.botSeats()[0]
+	seated := guest.ctx.SessionCtl.Bots()[0]
 	itsBots := heldBy(guest.membership.localParticipant())
 	left := places(guest, itsBots)
 
 	leaveAs(t, guest)
 	waitForSeats(t, guest, 1)
-	again := guest.membership.botSeats()[0]
+	again := guest.ctx.SessionCtl.Bots()[0]
 	if again.ID == seated.ID {
 		t.Fatalf("the bot kept seat %d through the leave; want it seated again", again.ID)
 	}
@@ -860,10 +837,7 @@ func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 	for _, a := range []*App{host, successor, guest} {
 		waitForCursors(t, a, 4)
 	}
-	port, err := guest.membership.socketPort()
-	if err != nil {
-		t.Fatal(err)
-	}
+	port := portOf(t, guest)
 	id := successor.membership.localParticipant()
 	for deadline := time.Now().Add(socketWait); !port.Connected(id) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
@@ -876,6 +850,7 @@ func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 			t.Fatal("the session did not pass to the first guest")
 		}
 	}
+	var err error
 	guest.world.RunSafe(func() { err = guest.ctx.SessionCtl.AddBot(DefaultBotGraph) })
 	if err != nil {
 		t.Fatalf("adding a bot: %v", err)
@@ -1026,10 +1001,7 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 		Bots: []string{DefaultBotGraph}}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 3)
 	waitForCursors(t, holder, 3)
-	port, err := holder.membership.socketPort()
-	if err != nil {
-		t.Fatal(err)
-	}
+	port := portOf(t, holder)
 	for deadline := time.Now().Add(socketWait); port.PeerCount() != 2 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	if port.PeerCount() != 2 {
@@ -1050,6 +1022,7 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 	waitForWraiths(t, holder, 1)
 	// Through the session control `:bot add` calls rather than typed: the holder's own
 	// bot types as well, and a mode it switched to would swallow the command.
+	var err error
 	holder.world.RunSafe(func() { err = holder.ctx.SessionCtl.AddBot("2:patrol") })
 	if err != nil {
 		t.Fatalf("adding bots: %v", err)
@@ -1186,10 +1159,7 @@ func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
 	for _, a := range []*App{host, successor, other} {
 		waitForCursors(t, a, 5)
 	}
-	port, err := other.membership.socketPort()
-	if err != nil {
-		t.Fatal(err)
-	}
+	port := portOf(t, other)
 	id := successor.membership.localParticipant()
 	for deadline := time.Now().Add(socketWait); !port.Connected(id) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}

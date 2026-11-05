@@ -39,9 +39,11 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 	if err := b.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
-	// The host runs the same level setup its guest adopted, so the two see one
-	// event sequence; a join that only moved the guest would be the divergence.
-	a.membership.adoptMapLatch(an.Anchor)
+	// The host takes the anchor it offers too, running the level setup its guest
+	// adopted, so the two see one event sequence.
+	if err := a.Join(an); err != nil {
+		t.Fatalf("host latch: %v", err)
+	}
 
 	// The geometry is settled before the link exists. SetupLevel carries a
 	// ClassShared payload, so inside a live session only the authority may produce

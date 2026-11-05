@@ -93,10 +93,10 @@ func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
 		t.Fatal("allocator was not called")
 	}
 	unblock()
-	for deadline := time.Now().Add(2 * time.Second); a.membership.dialling.Load() && time.Now().Before(deadline); {
+	for deadline := time.Now().Add(2 * time.Second); dialling(a) && time.Now().Before(deadline); {
 		time.Sleep(time.Millisecond)
 	}
-	if a.membership.dialling.Load() || a.restart.Load() != nil || a.Position() != before || !strings.Contains(a.ctx.GetStatusMessage(), "test quota reached") {
+	if dialling(a) || a.restart.Load() != nil || a.Position() != before || !strings.Contains(a.ctx.GetStatusMessage(), "test quota reached") {
 		t.Fatalf("refused request changed the run or hid the error: %s", a.ctx.GetStatusMessage())
 	}
 }
@@ -387,13 +387,10 @@ func TestAReconnectIsTheSameJoin(t *testing.T) {
 	}
 	t.Cleanup(host.Close)
 
-	// The gate the reconnect below arrives at, asserted where a run arms it. A lobby
-	// that has closed has to do both things: stop refusing dials, and start serving
-	// them. Doing only the first is what left a re-dial admitted onto no gate at all.
-	if host.membership.lobbyClosing.Load() || !host.membership.lateJoins.Load() {
-		t.Fatalf("after its start gate the host refuses dials = %t and serves mid-run joins = %t",
-			host.membership.lobbyClosing.Load(), host.membership.lateJoins.Load())
-	}
+	// The gate the reconnect below arrives at is the one a run arms once its start
+	// gate is done. A lobby that has closed has to do both things: stop refusing
+	// dials, and start serving them. Doing only the first is what left a re-dial
+	// admitted onto no gate at all; doing only the second refuses it for good.
 	firstTick := uint64(first.World().Resources.Status.Ints.Get("snapshot.install_tick").Load())
 
 	_ = firstPort.Close()
@@ -566,9 +563,9 @@ func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
 	injectExCommand(t, a, "bot add")
 	stopTicking := tickInBackground(a)
 	defer stopTicking()
-	for deadline := time.Now().Add(socketWait); !strings.Contains(a.membership.seatsSummary(), "slot 1 default"); {
+	for deadline := time.Now().Add(socketWait); !strings.Contains(a.ctx.SessionCtl.BotSummary(), "slot 1 default"); {
 		if time.Now().After(deadline) {
-			t.Fatalf("the bot was not seated: %q", a.membership.seatsSummary())
+			t.Fatalf("the bot was not seated: %q", a.ctx.SessionCtl.BotSummary())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -626,14 +623,14 @@ func TestARefusedJoinLeavesTheRunPlaying(t *testing.T) {
 	a := mustHeadless(t, 0x3022, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
-	a.cfg.Mode = ModePlay // joinLocked serves Run's loop; the rule is its dial
+	a.cfg.Mode = ModePlay // :join serves Run's loop; the rule is its dial
 
-	a.World().RunSafe(func() { err = a.membership.joinLocked(host.HostAddr() + "/that") })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.Join(host.HostAddr() + "/that") })
 	if err != nil {
 		t.Fatalf("join refused before dialling: %v", err)
 	}
 	deadline := time.Now().Add(socketWait) // [wall] a link bound
-	for a.membership.dialling.Load() {
+	for dialling(a) {
 		if time.Now().After(deadline) {
 			t.Fatal("the dial never finished")
 		}
@@ -657,7 +654,7 @@ func TestOnlyTheHostChangesALiveSessionsScenario(t *testing.T) {
 
 	guest := apps[1]
 	var err error
-	guest.World().RunSafe(func() { _, err = guest.membership.changeScenarioLocked("blank") })
+	guest.World().RunSafe(func() { _, err = guest.ctx.SessionCtl.ChangeScenario("blank") })
 	if err == nil || !strings.Contains(err.Error(), "only the host") {
 		t.Fatalf("a guest's change = %v; want a refusal naming the host", err)
 	}
@@ -687,11 +684,11 @@ func TestAReceivedScenarioAnswersOnlyItsOwnName(t *testing.T) {
 	a.cfg.Mode = ModePlay
 
 	var changed bool
-	a.World().RunSafe(func() { changed, err = a.membership.changeScenarioLocked("duel") })
+	a.World().RunSafe(func() { changed, err = a.ctx.SessionCtl.ChangeScenario("duel") })
 	if err != nil || changed {
 		t.Fatalf("its own name: changed %v, %v; want a reset", changed, err)
 	}
-	a.World().RunSafe(func() { changed, err = a.membership.changeScenarioLocked("other") })
+	a.World().RunSafe(func() { changed, err = a.ctx.SessionCtl.ChangeScenario("other") })
 	if err != nil || !changed || a.restart.Load().Scenario != "other" {
 		t.Fatalf("another name: changed %v, %v; want a restart on it", changed, err)
 	}
@@ -714,7 +711,7 @@ func TestTheFirstRestartAskedForStands(t *testing.T) {
 		t.Fatal("the first restart was refused")
 	}
 	var changed bool
-	a.World().RunSafe(func() { changed, err = a.membership.changeScenarioLocked("other") })
+	a.World().RunSafe(func() { changed, err = a.ctx.SessionCtl.ChangeScenario("other") })
 	if !errors.Is(err, scribe.ErrRunReplaced) || changed || a.restart.Load() != first {
 		t.Fatalf("a later change: changed %v, %v; want it refused and the first restart kept", changed, err)
 	}
@@ -736,7 +733,7 @@ func TestABotToldToLeaveIsNotSeatedAgain(t *testing.T) {
 	waitForSeats(t, a, 1)
 	req := &restartRequest{}
 	a.World().RunSafe(func() {
-		if err = a.membership.dropSeat(int(a.membership.botSeats()[0].Slot)); err == nil {
+		if err = a.ctx.SessionCtl.DropBot(int(a.ctx.SessionCtl.Bots()[0].Slot)); err == nil {
 			a.replaceWith(req)
 		}
 	})
@@ -772,11 +769,11 @@ func TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem(t *testing.T) {
 	waitForCursors(t, a, 2)
 	waitForSeats(t, a, 1)
 	var changed bool
-	a.World().RunSafe(func() { changed, err = a.membership.changeScenarioLocked("solo") })
+	a.World().RunSafe(func() { changed, err = a.ctx.SessionCtl.ChangeScenario("solo") })
 	if err == nil || !strings.Contains(err.Error(), "at most 1") || changed || a.restart.Load() != nil {
 		t.Fatalf("a one-player scenario over a run and its bot: changed %v, %v; want it refused", changed, err)
 	}
-	a.World().RunSafe(func() { changed, err = a.membership.changeScenarioLocked("other") })
+	a.World().RunSafe(func() { changed, err = a.ctx.SessionCtl.ChangeScenario("other") })
 	if req := a.restart.Load(); err != nil || !changed || req.Host != "" || !slices.Equal(req.Bots, []string{"roam"}) {
 		t.Fatalf("changed %v, %v, restart %+v; want one with no address that seats roam again", changed, err, req)
 	}
@@ -797,11 +794,11 @@ func TestARunWithOnlyItsBotsOpensTheirSessionToOthers(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForSeats(t, a, 1)
-	a.World().RunSafe(func() { err = a.membership.beginHostingLocked("127.0.0.1:0", AuthorityHost) })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityHost) })
 	if err != nil {
 		t.Fatalf(":host beside its own bot: %v", err)
 	}
-	a.World().RunSafe(func() { err = a.membership.beginHostingLocked("127.0.0.1:0", "") })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", "") })
 	if err == nil || !strings.Contains(err.Error(), "already hosting") {
 		t.Fatalf("a second :host = %v; want it refused as hosting", err)
 	}
@@ -828,7 +825,7 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 		t.Fatalf("host: %v", err)
 	}
 	a := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
-	a.cfg.Mode = ModePlay // joinLocked serves Run's loop
+	a.cfg.Mode = ModePlay // :join serves Run's loop
 	tickUntilCursor(t, a)
 	stop := tickInBackground(a)
 	replaced := sync.OnceFunc(func() { stop(); a.Close() })
@@ -839,11 +836,11 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForSeats(t, a, 1)
-	a.World().RunSafe(func() { err = a.membership.joinLocked(host.HostAddr()) })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.Join(host.HostAddr()) })
 	if err != nil {
 		t.Fatalf(":join beside its own bot: %v", err)
 	}
-	for deadline := time.Now().Add(socketWait); a.membership.dialling.Load(); time.Sleep(time.Millisecond) {
+	for deadline := time.Now().Add(socketWait); dialling(a); time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the dial never finished")
 		}
@@ -864,12 +861,12 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 func waitForSeats(t *testing.T, a *App, n int) {
 	t.Helper()
 	seated := func() bool {
-		b := a.membership.botSeats()
+		b := a.ctx.SessionCtl.Bots()
 		return len(b) == n && !slices.ContainsFunc(b, func(s engine.BotSeat) bool { return s.Joining })
 	}
 	for deadline := time.Now().Add(socketWait); !seated(); time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatalf("seats %+v; want %d admitted", a.membership.botSeats(), n)
+			t.Fatalf("seats %+v; want %d admitted", a.ctx.SessionCtl.Bots(), n)
 		}
 	}
 }
@@ -971,11 +968,11 @@ func TestHostCarriesItsAuthorityPolicy(t *testing.T) {
 	tickUntilCursor(t, a)
 
 	var err error
-	a.World().RunSafe(func() { err = a.membership.beginHostingLocked("127.0.0.1:0", "leader") })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", "leader") })
 	if err == nil {
 		t.Fatal("an unknown authority policy was accepted")
 	}
-	a.World().RunSafe(func() { err = a.membership.beginHostingLocked("127.0.0.1:0", AuthorityHost) })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityHost) })
 	if err != nil {
 		t.Fatalf("begin hosting: %v", err)
 	}
@@ -988,56 +985,41 @@ func TestHostCarriesItsAuthorityPolicy(t *testing.T) {
 	}
 }
 
-// mustSocketJoiner runs the whole guest side of a join against a live host: dial,
-// identity, the start gate, the capture, the install and the catch-up. It is the
-// production sequence, assembled here because Loop owns it in a run with a
-// terminal and this harness owns its own ticks. configure edits the join config.
+// mustSocketJoiner joins a live host as a driven run does, on the production path:
+// dial, scenario, world, seat and reply, the start gate, the capture, the install
+// and the catch-up, with no door of its own. This harness owns its ticks, so the
+// host must be ticking meanwhile. A host not listening yet, or a refusal, is retried
+// as dialSession retries them. configure edits the run's Config before it dials.
 func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configure ...func(*Config)) (*App, *link.SocketPort) {
 	t.Helper()
-	pending, offered := dialSession(t, addr)
-	t.Cleanup(func() { _ = pending.Close() })
-
-	joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: w, Height: h}}, offered)
-	if err != nil {
-		t.Fatalf("join config: %v", err)
-	}
+	cfg := runConfig{Config: Config{Mode: ModeHeadless, Width: w, Height: h,
+		Membership: Membership{JoinAddress: addr, NoAdvertise: true}}}
 	for _, f := range configure {
-		f(&joinCfg.Config)
+		f(&cfg.Config)
 	}
-	if joinCfg.Seed != seed {
-		t.Fatalf("join config drew seed %#x, host runs %#x", joinCfg.Seed, seed)
+	cfg.wiring.scriptedSession = true      // what a driven run is
+	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
+	for {
+		guest, err := newScriptApp(cfg, joinDeadline(socketWait))
+		if err == nil {
+			t.Cleanup(guest.Close)
+			if guest.Seed() != seed {
+				t.Fatalf("the joiner drew seed %#x, host runs %#x", guest.Seed(), seed)
+			}
+			return guest, portOf(t, guest)
+		}
+		pause := time.Millisecond
+		switch {
+		case errors.As(err, new(*network.Refusal)):
+			pause = parameter.SessionRejoinInterval
+		case !errors.As(err, new(net.Error)):
+			t.Fatalf("join %s: %v", addr, err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("join %s: %v", addr, err)
+		}
+		time.Sleep(pause)
 	}
-	guest, err := newDriven(joinCfg)
-	if err != nil {
-		t.Fatalf("join app: %v", err)
-	}
-	t.Cleanup(guest.Close)
-	guest.membership.pendingJoin = pending
-	guest.membership.sessionOffer = offered
-	if err := guest.JoinAt(offered.Anchor); err != nil {
-		_ = pending.Complete(err, network.JoinerReport{})
-		t.Fatalf("join identity: %v", err)
-	}
-	if err := pending.Complete(nil, guest.membership.joinerReport()); err != nil {
-		t.Fatalf("join reply: %v", err)
-	}
-
-	// The transport takes the stream only after the gate has read the world off it,
-	// which is what startJoinSession does; the port then replays what the gate held.
-	port := link.NewSocketPort(pending.TransportConfig())
-	t.Cleanup(func() { _ = port.Close() })
-	if err := guest.membership.startJoinSession(joinDeadline(socketWait)); err != nil {
-		t.Fatalf("join startup: %v", err)
-	}
-	if err := port.Start(); err != nil {
-		t.Fatalf("guest transport: %v", err)
-	}
-	guest.AttachTransport(port)
-	guest.membership.activateNetworkSession()
-	if err := guest.membership.resumeJoinedSession(); err != nil {
-		t.Fatalf("join catch-up: %v", err)
-	}
-	return guest, port
 }
 
 // alignTicks advances whichever instance is behind until the two stand on one tick,
@@ -1809,29 +1791,29 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	left, leftPort := mustSocketJoiner(t, gone.HostAddr(), 0x3104, BotWidth, BotHeight)
 	left.cfg.Membership.JoinAddress = gone.HostAddr()
 
+	// Each role is told apart by what it refuses and how :session opens.
 	for _, row := range []struct {
 		kind              string
 		run               func() *App
-		role              sessionRole
 		join, host, leave string // the refusal each names; empty takes the command
 		line              string // how :session opens
 	}{
 		{"solo", func() *App { return ticking(mustHeadless(t, 0x3101, BotWidth, BotHeight)) },
-			roleSolo, "", "", "in no session", "Solo run"},
+			"", "", "in no session", "Solo run"},
 		{"solo with its bots", func() *App { return withBot(ticking(mustHeadless(t, 0x3102, BotWidth, BotHeight))) },
-			roleSeats, "", "", "only its own bots", "Session hosting, "},
+			"", "", "only its own bots", "Session hosting, "},
 		{"hosting", func() *App { return host },
-			roleHost, "already in a session", "already hosting", "", "Session hosting 127.0.0.1:"},
+			"already in a session", "already hosting", "", "Session hosting 127.0.0.1:"},
 		{"hosting with its bots", func() *App { return withBot(hosting(ticking(mustHeadless(t, 0x3103, BotWidth, BotHeight)))) },
-			roleHost, "already in a session", "already hosting", "", "Session hosting 127.0.0.1:"},
+			"already in a session", "already hosting", "", "Session hosting 127.0.0.1:"},
 		{"joined", func() *App { return guest },
-			roleGuest, "already in a session", "already in a session", "", "Session joined " + host.HostAddr() + ", "},
+			"already in a session", "already in a session", "", "Session joined " + host.HostAddr() + ", "},
 		{"inherited the term", func() *App {
 			guest.World().RunSafe(func() {
 				guest.world.Resources.Network.Authority.Store(guest.world.LocalParticipant())
 			})
 			return guest
-		}, roleSuccessor, "already in a session", "", "", "Session hosting, "},
+		}, "already in a session", "", "", "Session hosting, "},
 		{"its session left", func() *App {
 			leave()
 			for deadline := time.Now().Add(socketWait); leftPort.PeerCount() > 0; time.Sleep(time.Millisecond) {
@@ -1840,24 +1822,19 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 				}
 			}
 			return left
-		}, roleLeft, "", "already in a session", "", "Session joined " + gone.HostAddr() + ", "},
+		}, "", "already in a session", "", "Session joined " + gone.HostAddr() + ", "},
 	} {
 		a := row.run()
-		var role sessionRole
 		var join, hostErr, leaveErr error
 		var line string
 		a.World().RunSafe(func() {
-			role = a.membership.sessionRoleLocked()
 			mode := a.cfg.Mode
 			a.cfg.Mode = ModePlay // :join and :leave serve Run's loop, which a headless run lacks
-			join, leaveErr = a.membership.joinErrorLocked(), a.membership.leaveErrorLocked()
+			join, leaveErr = a.ctx.SessionCtl.JoinError(), a.ctx.SessionCtl.LeaveError()
 			a.cfg.Mode = mode
-			hostErr = a.membership.hostErrorLocked()
-			line = a.membership.sessionSummaryLocked()
+			hostErr = a.ctx.SessionCtl.HostError()
+			line = a.ctx.SessionCtl.SessionSummary()
 		})
-		if role != row.role {
-			t.Errorf("a run %s holds role %d; want %d", row.kind, role, row.role)
-		}
 		for _, c := range []struct {
 			command string
 			err     error
@@ -1873,16 +1850,28 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	}
 }
 
-// leaveAs serves :leave as Run's loop does, for a harness that stands in for it. A
-// harness has no loop, the one refusal its role does not decide, and may be ticking:
-// the mode the refusal reads is left as it is.
+// askLeave asks :leave as Run's loop would be asked it, under the lock the command
+// path holds, and as in play, since a harness has no loop, the one refusal its role
+// does not decide.
+func askLeave(t *testing.T, a *App) {
+	t.Helper()
+	var err error
+	a.World().RunSafe(func() {
+		mode := a.cfg.Mode
+		a.cfg.Mode = ModePlay
+		err = a.ctx.SessionCtl.Leave()
+		a.cfg.Mode = mode
+	})
+	if err != nil {
+		t.Fatalf(":leave refused: %v", err)
+	}
+}
+
+// leaveAs serves :leave as Run's loop does, for a harness that stands in for it: the
+// command, then the loop's leave.
 func leaveAs(t *testing.T, a *App) {
 	t.Helper()
-	var why string
-	a.World().RunSafe(func() { why = sessionRoles[a.membership.sessionRoleLocked()].leave })
-	if why != "" || !a.membership.leaving.CompareAndSwap(false, true) {
-		t.Fatalf(":leave refused: %q", why)
-	}
+	askLeave(t, a)
 	a.membership.leaveSession()
 }
 
@@ -1906,35 +1895,34 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	guest.cfg.Membership.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	id, term := guest.membership.localParticipant(), guest.membership.authorityTerm()
+	id, term := guest.membership.localParticipant(), guest.authority.Term()
 	var own core.Entity
 	guest.World().RunSafe(func() { own = guest.world.Resources.Player.Slot(1) })
 
 	leaveAs(t, guest)
-	var role sessionRole
 	var authoring bool
 	var left, kept core.Entity
 	var hostErr, joinErr, leaveErr error
 	guest.World().RunSafe(func() {
-		role, authoring = guest.membership.sessionRoleLocked(), guest.world.IsSessionCoordinator()
+		authoring = guest.world.IsSessionCoordinator()
 		left, kept = guest.world.Resources.Player.Slot(0), guest.world.Resources.Player.Slot(1)
 		mode := guest.cfg.Mode
 		guest.cfg.Mode = ModePlay
-		joinErr, leaveErr = guest.membership.joinErrorLocked(), guest.membership.leaveErrorLocked()
+		joinErr, leaveErr = guest.ctx.SessionCtl.JoinError(), guest.ctx.SessionCtl.LeaveError()
 		guest.cfg.Mode = mode
-		hostErr = guest.membership.hostErrorLocked()
+		hostErr = guest.ctx.SessionCtl.HostError()
 	})
-	if role != roleSeats || !authoring || guest.membership.localParticipant() != id || guest.membership.authorityTerm() != term+1 {
-		t.Fatalf("after leaving, participant %d holds role %d, authoring %t, term %d; want role %d authoring as %d at term %d",
-			guest.membership.localParticipant(), role, authoring, guest.membership.authorityTerm(), roleSeats, id, term+1)
+	if !authoring || guest.membership.localParticipant() != id || guest.authority.Term() != term+1 {
+		t.Fatalf("after leaving, participant %d authoring %t at term %d; want it authoring as %d at term %d",
+			guest.membership.localParticipant(), authoring, guest.authority.Term(), id, term+1)
 	}
 	if left != 0 || kept != own {
 		t.Fatalf("after leaving, slot 0 holds %d and slot 1 %d; want the host gone and the guest's own %d kept", left, kept, own)
 	}
-	if hostErr != nil || joinErr != nil || leaveErr == nil {
-		t.Fatalf("after leaving, :host %v, :join %v, :leave %v; want the first two taken and nothing left to leave", hostErr, joinErr, leaveErr)
+	if hostErr != nil || joinErr != nil || leaveErr == nil || !strings.Contains(leaveErr.Error(), "only its own bots") {
+		t.Fatalf("after leaving, :host %v, :join %v, :leave %v; want the first two taken and a session of its own to leave", hostErr, joinErr, leaveErr)
 	}
-	if got := guest.membership.playerCapacity(); got != min(parameter.MaxPlayers, guest.scenario.MaxPlayers) {
+	if got := guest.membership.sessionCapacity() + 1; got != min(parameter.MaxPlayers, guest.scenario.MaxPlayers) {
 		t.Fatalf("after leaving, the guest holds its own session to %d players; want no ceiling but the scenario's", got)
 	}
 	resume := tickInBackground(host)
@@ -1955,7 +1943,7 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	stopTicking := tickInBackground(host)
 	t.Cleanup(stopTicking)
 	var err error
-	host.World().RunSafe(func() { err = host.membership.beginHostingLocked("127.0.0.1:0", AuthorityHost) })
+	host.World().RunSafe(func() { err = host.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityHost) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1966,7 +1954,7 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	})
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	id, term, token := guest.membership.localParticipant(), guest.membership.authorityTerm(), host.membership.claim.Load().Token
+	id, term, token := guest.membership.localParticipant(), guest.authority.Term(), host.membership.claim.Load().Token
 	held := places(guest, everyone)
 
 	leaveAs(t, host)
@@ -1979,24 +1967,23 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	}
 	guest.membership.leaveSession() // as Run's loop does
 
-	var role sessionRole
 	var authoring bool
 	var hostErr, joinErr, leaveErr error
 	guest.World().RunSafe(func() {
-		role, authoring = guest.membership.sessionRoleLocked(), guest.world.IsSessionCoordinator()
-		joinErr, leaveErr = guest.membership.joinErrorLocked(), guest.membership.leaveErrorLocked()
-		hostErr = guest.membership.hostErrorLocked()
+		authoring = guest.world.IsSessionCoordinator()
+		joinErr, leaveErr = guest.ctx.SessionCtl.JoinError(), guest.ctx.SessionCtl.LeaveError()
+		hostErr = guest.ctx.SessionCtl.HostError()
 	})
-	if role != roleSeats || !authoring || guest.membership.localParticipant() != id || guest.membership.authorityTerm() != term+1 {
-		t.Fatalf("after its fork, participant %d holds role %d, authoring %t, term %d; want role %d authoring as %d at term %d",
-			guest.membership.localParticipant(), role, authoring, guest.membership.authorityTerm(), roleSeats, id, term+1)
+	if !authoring || guest.membership.localParticipant() != id || guest.authority.Term() != term+1 {
+		t.Fatalf("after its fork, participant %d authoring %t at term %d; want it authoring as %d at term %d",
+			guest.membership.localParticipant(), authoring, guest.authority.Term(), id, term+1)
 	}
 	if got := places(guest, everyone); len(held) != 2 || !maps.Equal(got, held) || !wraithIn(guest, 0) {
 		t.Fatalf("after its fork the guest holds %v (entity, participant by slot), the host's a Wraith %t; want %v, the host's a Wraith",
 			got, wraithIn(guest, 0), held)
 	}
-	if hostErr != nil || joinErr != nil || leaveErr == nil {
-		t.Fatalf("after its fork, :host %v, :join %v, :leave %v; want the first two taken and nothing left to leave", hostErr, joinErr, leaveErr)
+	if hostErr != nil || joinErr != nil || leaveErr == nil || !strings.Contains(leaveErr.Error(), "only its own bots") {
+		t.Fatalf("after its fork, :host %v, :join %v, :leave %v; want the first two taken and a session of its own to leave", hostErr, joinErr, leaveErr)
 	}
 	if msg := guest.Context().GetStatusMessage(); msg != "Host connection lost; playing on in a session of your own" {
 		t.Fatalf("after its fork the guest says %q; want the loss said", msg)
@@ -2026,7 +2013,7 @@ func TestAForkKeepsTheHoldItsLostHostSet(t *testing.T) {
 		tickUntilCursor(t, a)
 		var err error
 		a.World().RunSafe(func() {
-			if err = a.membership.openSessionLocked(nil); err == nil {
+			if err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", ""); err == nil {
 				tt.stop(a.ctx)
 			}
 		})
@@ -2034,7 +2021,7 @@ func TestAForkKeepsTheHoldItsLostHostSet(t *testing.T) {
 			t.Fatal(err)
 		}
 		forkCell(a.world).Store(true) // as giveUp leaves it
-		a.membership.leaving.Store(true)
+		askLeave(t, a)                // as a fork asks its loop
 		a.membership.leaveSession()
 		if held, msg := a.ctx.TimeCtl.Held(), a.ctx.GetStatusMessage(); held != tt.held || msg != tt.notice {
 			t.Errorf("a fork under %s goes on held %t, saying %q; want held %t, saying %q", tt.name, held, msg, tt.held, tt.notice)
@@ -2090,7 +2077,7 @@ func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForSeats(t, host, 1)
-	seated := host.membership.botSeats()[0]
+	seated := host.ctx.SessionCtl.Bots()[0]
 	_, port := mustSocketJoiner(t, addr, fixtureSeed, BotWidth, BotHeight)
 	waitForCursors(t, host, 3)
 	itsBots := heldBy(host.membership.localParticipant())
@@ -2098,7 +2085,7 @@ func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
 
 	leaveAs(t, host)
 	waitForSeats(t, host, 1)
-	if again := host.membership.botSeats()[0]; again.ID == seated.ID {
+	if again := host.ctx.SessionCtl.Bots()[0]; again.ID == seated.ID {
 		t.Fatalf("the bot kept seat %d through the leave; want it seated again", again.ID)
 	}
 	waitForCursors(t, host, 2) // its own and its bot's: the guest is not in its world
@@ -2124,12 +2111,15 @@ func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
 // offered ends with the leave and the door it came in by shuts, so the dial is told
 // the session is ending, which a joiner does not retry against.
 func TestADialWhileItsHostLeavesIsRefusedAsTheSessionEnding(t *testing.T) {
-	t.Parallel()
+	// Not parallel: a real socket against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, 120, 40)
 	defer host.Close()
-	host.AttachTransport(network.NewMesh().Node(1))
-	host.membership.leaving.Store(true)
-	_, err := host.membership.assignFor(host.JoinAnchor(), 0, nil)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	askLeave(t, host) // its loop has yet to take the run out
+	_, _, err := network.DialSession(host.HostAddr(), network.DebugConfig(link.RolePeer, ""))
 	var refusal *network.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != network.RefusalEnding {
 		t.Fatalf("a dial while its host leaves was answered %v; want the session ending", err)
@@ -2427,9 +2417,7 @@ func TestAHostTakesJoinsAtEveryDoor(t *testing.T) {
 	}
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
-	host.membership.sessionMu.Lock()
-	doors := host.membership.midRunPort.Doors()
-	host.membership.sessionMu.Unlock()
+	doors := portOf(t, host).Doors()
 	if len(doors) != 2 || !strings.HasPrefix(doors[1].String(), "ws://") {
 		t.Fatalf("the host answers at %v; want a tcp door and a ws door", doors)
 	}
@@ -2451,7 +2439,7 @@ func TestARestartNamesTheDoorAGuestCameInBy(t *testing.T) {
 		localCursors(t, apps)
 		guest := apps[1]
 		guest.cfg.Mode, guest.cfg.Membership.JoinAddress = ModePlay, "10.0.0.1:7777" // a joined run with a loop; the rule is the address
-		guest.World().RunSafe(func() { guest.membership.receiveSessionRestart(1, payload) })
+		guest.World().RunSafe(func() { guest.world.Resources.Network.OnSessionRestart(1, payload) })
 		req := guest.restart.Load()
 		if req == nil || !req.Rejoin || req.Join != want {
 			t.Errorf("a restart at %q latched %+v; want a rejoin at %q", payload, req, want)

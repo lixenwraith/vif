@@ -128,10 +128,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 		t.Fatalf("server services: %v", err)
 	}
 	host.life.Start(time.Now())
-	port, err := host.membership.socketPort()
-	if err != nil {
-		t.Fatal(err)
-	}
+	port := portOf(t, host)
 	gate := make(chan error, 1)
 	go func() { gate <- host.membership.startHostSession(nil) }()
 

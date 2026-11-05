@@ -281,7 +281,9 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	if err := guest.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
-	host.membership.adoptMapLatch(an.Anchor)
+	if err := host.Join(an); err != nil {
+		t.Fatalf("host latch: %v", err)
+	}
 	apps := []*App{host, guest}
 	for _, a := range apps {
 		tickUntilCursor(t, a)

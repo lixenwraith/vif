@@ -26,7 +26,8 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatalf("begin hosting: %v", err)
 	}
-	addr := host.membership.midRunPort.Addr().String()
+	port := portOf(t, host)
+	addr := port.Addr().String()
 
 	// A guest that reports a different simulation, having done its own checks and
 	// passed them: the anchor it was sent is the anchor it holds.
@@ -43,7 +44,7 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 	_ = pending.Complete(nil, report)
 
 	select {
-	case err := <-host.membership.midRunPort.Errors():
+	case err := <-port.Errors():
 		if !errors.Is(err, &network.Refusal{Code: network.RefusalIdentity}) {
 			t.Fatalf("the host refused for %v, want an identity refusal", err)
 		}
@@ -54,9 +55,9 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 		t.Fatal("the host never refused a peer running a different simulation")
 	}
 
-	if host.membership.guestCount() != 0 || host.membership.midRunPort.PeerCount() != 0 {
+	if host.membership.guestCount() != 0 || port.PeerCount() != 0 {
 		t.Fatalf("the refused peer is still in the session: roster %d peers %d",
-			host.membership.guestCount(), host.membership.midRunPort.PeerCount())
+			host.membership.guestCount(), port.PeerCount())
 	}
 }
 

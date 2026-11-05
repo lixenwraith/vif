@@ -331,14 +331,12 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	}
 	id := link.PeerID(successor.membership.localParticipant())
 	door, _ := chain.Lookup(id)
-	if _, _, err := network.DialSession(door, network.DebugConfig(link.RolePeer, "")); !errors.Is(err, errNotHosting) ||
-		!strings.Contains(err.Error(), errNotHosting.Reason) {
-		t.Fatalf("a join at a guest's port while another participant hosts: %v; want %q", err, errNotHosting.Reason)
+	const notHosting = "this participant does not host its session"
+	if _, _, err := network.DialSession(door, network.DebugConfig(link.RolePeer, "")); !errors.As(err, new(*network.Refusal)) ||
+		!strings.Contains(err.Error(), notHosting) {
+		t.Fatalf("a join at a guest's port while another participant hosts: %v; want %q", err, notHosting)
 	}
-	port, err := guest.membership.socketPort()
-	if err != nil {
-		t.Fatal(err)
-	}
+	port := portOf(t, guest)
 	for deadline := time.Now().Add(socketWait); !port.Connected(uint32(id)) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 
@@ -355,7 +353,7 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	// reads the frozen world fails if the thaw lands mid-read.
 	for deadline := time.Now().Add(socketWait); successor.Context().TimeCtl.Held() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
-	if got := successor.membership.playerCapacity(); got != 5 {
+	if got := successor.membership.sessionCapacity() + 1; got != 5 {
 		t.Fatalf("the successor holds the session to %d players; want its first host's -players, 5", got)
 	}
 	if line, want := successor.SessionSummary(), "Session hosting "+successor.reach.DeclaredAddr()+","; !strings.HasPrefix(line, want) {
@@ -369,14 +367,13 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 
 	at := freeAddress(t)
 	var fixed, opened, again error
-	var role sessionRole
 	successor.World().RunSafe(func() {
-		fixed, opened = successor.membership.beginHostingLocked(at, AuthorityHost), successor.membership.beginHostingLocked(at, "")
-		again, role = successor.membership.hostErrorLocked(), successor.membership.sessionRoleLocked()
+		fixed, opened = successor.ctx.SessionCtl.BeginHosting(at, AuthorityHost), successor.ctx.SessionCtl.BeginHosting(at, "")
+		again = successor.ctx.SessionCtl.HostError()
 	})
-	if fixed == nil || opened != nil || role != roleHost || again == nil || !strings.Contains(again.Error(), "already hosting") {
-		t.Fatalf(":host on the successor: %v under the host policy, %v under its own, then role %d and %v; "+
-			"want refused, opened, a host, already hosting", fixed, opened, role, again)
+	if fixed == nil || opened != nil || again == nil || !strings.Contains(again.Error(), "already hosting") {
+		t.Fatalf(":host on the successor: %v under the host policy, %v under its own, then %v; "+
+			"want refused, opened, already hosting", fixed, opened, again)
 	}
 	if line, want := successor.SessionSummary(), "Session hosting "+at+","; !strings.HasPrefix(line, want) {
 		t.Fatalf(":session on the successor after :host reads %q; want it to open %q", line, want)
@@ -424,19 +421,18 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	stop()
 	for deadline := time.Now().Add(socketWait); (successor.authority.Holder() != id || successor.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
-	port, err := successor.membership.socketPort()
-	if err != nil || successor.authority.Holder() != id {
-		t.Fatalf("the guest did not take the session over on a port of its own: %v", err)
+	if successor.authority.Holder() != id {
+		t.Fatal("the guest did not take the session over")
 	}
+	port := portOf(t, successor)
 	own := port.ListenAddr()
-	var opened error
-	var role sessionRole
+	var opened, again error
 	successor.World().RunSafe(func() {
-		opened = successor.membership.beginHostingLocked(own, "")
-		role = successor.membership.sessionRoleLocked()
+		opened = successor.ctx.SessionCtl.BeginHosting(own, "")
+		again = successor.ctx.SessionCtl.HostError()
 	})
-	if opened != nil || role != roleHost {
-		t.Fatalf(":host %s on the successor: %v, then role %d; want it hosting there", own, opened, role)
+	if opened != nil || again == nil || !strings.Contains(again.Error(), "already hosting") {
+		t.Fatalf(":host %s on the successor: %v, then %v; want it hosting there", own, opened, again)
 	}
 	if line, want := successor.SessionSummary(), "Session hosting "+own+","; !strings.HasPrefix(line, want) {
 		t.Fatalf(":session on the successor reads %q; want it to open %q", line, want)
@@ -522,14 +518,17 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 // mid-run gate criteria pin.
 func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
-	const seed = 0x3017
-	host := mustHeadless(t, seed, 120, 40)
-	defer host.Close()
-	tickUntilCursor(t, host)
-	host.Tick(20)
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatalf("begin hosting: %v", err)
+	hosting := func(seed uint64) *App {
+		host := mustHeadless(t, seed, 120, 40)
+		t.Cleanup(host.Close)
+		tickUntilCursor(t, host)
+		host.Tick(20)
+		if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+			t.Fatalf("begin hosting: %v", err)
+		}
+		return host
 	}
+	host := hosting(0x3017)
 	addr := host.HostAddr()
 
 	// A session this instance follows rather than authors, and then the loss of
@@ -537,27 +536,47 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// instance's turn passes with nothing retained to author from, the walk open for
 	// its window. What is being tested is the admission gate, which reads "is a
 	// succession running" rather than "who went".
-	host.membership.openAuthority(network.SessionOffer{
+	follow := func(a *App, o network.SessionOffer) {
+		t.Helper()
+		a.authority.Open(o, o.Assigned)
+		a.World().RunSafe(func() { a.world.Resources.Network.OnPeerLost(uint32(o.Host)) })
+		a.ApplyPendingCorrections()
+		if !a.authority.Migrating() {
+			t.Fatal("losing the authority opened no succession")
+		}
+	}
+	handoff := &network.Refusal{Code: network.RefusalHandoff}
+	follow(host, network.SessionOffer{
 		Anchor: host.JoinAnchor(), Host: 2, Assigned: engine.CoordinatorParticipant,
 		Term:   network.FirstTerm,
 		Roster: []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
 		Chain:  network.SuccessionChain{{ID: engine.CoordinatorParticipant, Addr: addr}},
-	}, engine.CoordinatorParticipant)
-	host.membership.reportPeerLost(2)
-	host.ApplyPendingCorrections()
-	if !host.authority.Migrating() {
-		t.Fatal("losing the authority opened no succession")
-	}
-
+	})
 	_, _, err := network.DialSession(addr, network.DebugConfig(link.RolePeer, ""))
 	if err == nil {
 		t.Fatal("a dial that landed mid-succession was admitted")
 	}
-	if !errors.Is(err, ErrSessionHandoff) {
+	if !errors.Is(err, handoff) {
 		t.Fatalf("the refusal is not distinguishable: %v", err)
 	}
+
 	// A guest's own port, which takes joins once its guest hosts, refuses the same.
-	if err := host.membership.admitHosted(nil); !errors.Is(err, ErrSessionHandoff) {
+	// A guest retained what it installed, so the walk it is told of names its host
+	// as the one candidate, whose turn is the one that runs: the authority it lost
+	// was reached through a relay, so nothing is redialled first.
+	other := hosting(fixtureSeed)
+	t.Cleanup(tickInBackground(other))
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: other.HostAddr()}}, "patrol", nil)
+	joined := func() bool {
+		return guest.authority.Holder() == engine.CoordinatorParticipant && guest.authority.Local() != 0
+	}
+	waitUntil(t, joined, "the guest to join")
+	follow(guest, network.SessionOffer{
+		Anchor: guest.JoinAnchor(), Host: 9, Assigned: link.PeerID(guest.membership.localParticipant()), Relay: 8,
+		Term:  network.FirstTerm,
+		Chain: network.SuccessionChain{{ID: engine.CoordinatorParticipant, Addr: other.HostAddr()}},
+	})
+	if _, _, err := network.DialSession(portOf(t, guest).ListenAddr(), network.DebugConfig(link.RolePeer, "")); !errors.Is(err, handoff) {
 		t.Fatalf("a guest's port mid-succession refuses with %v; want the handoff refusal", err)
 	}
 }
