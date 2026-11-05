@@ -71,8 +71,9 @@ const (
 	// sequence or the last one completed, newest last, in a place no message takes.
 	StatusKeyWidth = 5
 
-	// StatusCursorBlinkDuration is the blink duration of the cursor when visible in status bar in search and command modes
-	StatusCursorBlinkDuration = 250 * time.Millisecond
+	// CursorBlinkDuration is each half of a typing cursor's blink: the command line's,
+	// search's and every overlay text field's
+	CursorBlinkDuration = 250 * time.Millisecond
 
 	// StatusNetworkHoldDuration is the shortest interval the session cell may
 	// change over. Its inputs move on the correction cadence and the cell's width
@@ -83,8 +84,9 @@ const (
 	// it leaves, as a notice does: the loss was read, and the run plays on alone
 	StatusNetworkDownDuration = 10 * time.Second
 
-	// StatusCursorChar is status bar cursor character that blinks
-	StatusCursorChar = '█'
+	// CursorChar is the typing cursor drawn on a line rather than in a field: the
+	// command line's, search's and an overlay filter's
+	CursorChar = '█'
 
 	// StatusNetLatencyWarn/StatusNetLatencyBad colour the session badge by round
 	// trip, the reading a player already has from every other networked game. Bad
@@ -188,8 +190,8 @@ const (
 	OverlayCardCols3 = 100
 	OverlayCardCols2 = 60
 
-	// OverlayPinMarker prefixes the title of a pinned card; console fonts lack it, so 256
-	// colors draw OverlayPinMarker256
+	// OverlayPinMarker prefixes the title of a pinned card; console fonts lack it, so a
+	// text console draws OverlayPinMarker256
 	OverlayPinMarker    = '●'
 	OverlayPinMarker256 = '•'
 )

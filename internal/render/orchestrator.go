@@ -67,8 +67,9 @@ func (o *RenderOrchestrator) Register(reg Registration) {
 	o.renderers[pos] = entry
 }
 
-// SetConsole finishes every frame on a text console's palette
-func (o *RenderOrchestrator) SetConsole(c *Console) { o.buffer.SetConsole(c) }
+// SetConsole finishes every frame on a text console's palette, or on an emulator's theme
+// drawing the same entries
+func (o *RenderOrchestrator) SetConsole(c *Console, emulator bool) { o.buffer.SetConsole(c, emulator) }
 
 // Size is the terminal the frame buffer is laid out for.
 func (o *RenderOrchestrator) Size() (int, int) { return o.buffer.width, o.buffer.height }

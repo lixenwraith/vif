@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
@@ -52,7 +53,10 @@ func TestConfigMenuViewFollowsTheSelectionAsItMoves(t *testing.T) {
 }
 
 func TestConfigFormKeepsCursorVisibleWithoutMutatingPublishedFields(t *testing.T) {
-	ctx := engine.NewGameContext(engine.NewWorld(), 100, 40)
+	ctx := engine.NewGameContextWithClock(engine.NewWorld(), 100, 40, engine.NewManualClock())
+	for !cursorShown(ctx) {
+		ctx.TimeCtl.Clock().(*engine.ManualClock).Step(parameter.CursorBlinkDuration)
+	}
 	form := &core.OverlayForm{Focus: 2, Fields: []core.OverlayFormField{
 		{Label: "Site", Value: "https://example.test"},
 		{Label: "Players", Value: "3"},
@@ -68,7 +72,7 @@ func TestConfigFormKeepsCursorVisibleWithoutMutatingPublishedFields(t *testing.T
 		cursor := false
 		for y := range g.ContentH {
 			for x := range g.ContentW {
-				cursor = cursor || buf.CellAt(g.X+g.ContentX+x, g.Y+g.ContentY+y).Bg == visual.RgbOverlaySelected
+				cursor = cursor || buf.CellAt(g.X+g.ContentX+x, g.Y+g.ContentY+y).Bg == visual.RgbCursor
 			}
 		}
 		if !cursor {

@@ -281,10 +281,13 @@ that proves wrong or that a document now states, and link the document instead.
   lines but no ▀ ▄ ▌ ▐, quadrants or ▓, and draw double lines single; the 256 tier
   uses only what they have.
 - The 256 tier's entries 0–15 take an emulator's theme, so no contrast between two
-  of them is promised; a colour, or 15, on entry 0 is safe.
+  of them is promised; a colour, or 15, on entry 0 is safe. UI that must read in an
+  emulator keeps its rectangle exact (`KeepExact`), as the overlay and status bar do.
 - On the Linux console the 256 tier shows sixteen colours: a pale tint over a rim
   falls to the rim's own, so a glow that must read there is near white, as the
   Wraith field's is.
+- A text console has eight backgrounds: a white one lands on the grey the overlay's
+  text box takes, so a cursor there needs a hue (the orange's yellow) to show.
 
 ## Widgets
 
@@ -296,7 +299,8 @@ that proves wrong or that a document now states, and link the document instead.
 - Run `bin/vif` in a tmux pane (`-nw` starts it without waiting for a key) and read
   it with `tmux capture-pane -p -e`, which keeps the SGR colours; turned into HTML
   spans and shot with Playwright, it shows real colours. `TERM=linux COLORTERM=`
-  gives the console tier.
+  gives the console tier. The capture carries SGR state from one line into the
+  next, so a converter that resets colours at each line paints wrong backgrounds.
 - Drive it with `tmux send-keys`: `:emit <Event> { ... }` raises any event, `:god`
   arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
   `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.

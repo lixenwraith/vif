@@ -54,7 +54,7 @@ func TestQuantizedTextStaysVisible(t *testing.T) {
 	for name, p := range testPalettes {
 		c := ConsoleFor(p)
 		b := NewRenderBuffer(terminal.ColorMode256, 4, 1)
-		b.SetConsole(c)
+		b.SetConsole(c, false)
 		b.SetWriteMask(visual.MaskGlyph)
 		b.Set(0, 0, 'a', yellow, yellow, BlendReplace, 1, terminal.AttrFg256|terminal.AttrBg256)
 		b.Set(1, 0, '█', yellow, yellow, BlendReplace, 1, terminal.AttrFg256|terminal.AttrBg256)
@@ -79,13 +79,53 @@ func TestQuantizedTextStaysVisible(t *testing.T) {
 	}
 }
 
+// TestEmulatorKeepsExactCellsAndBlack: a cell kept exact leaves with its RGB, and an emulator
+// gets the console's black as the theme background's RGB, exact or not; a console keeps its
+// black and quantizes everything.
+func TestEmulatorKeepsExactCellsAndBlack(t *testing.T) {
+	t.Parallel()
+	c := ConsoleFor(VGAPalette)
+	for _, emulator := range []bool{false, true} {
+		b := NewRenderBuffer(terminal.ColorMode256, 4, 2)
+		b.SetConsole(c, emulator)
+		b.SetWriteMask(visual.MaskUI)
+		b.SetWithBg(0, 0, 'h', visual.RgbOverlayHint, visual.RgbOverlayBg)
+		b.SetWithBg(1, 0, ' ', visual.RgbBackground, visual.RgbBackground)
+		b.SetBg256(1, 0, visual.ConBlack)
+		b.SetWithBg(0, 1, 'g', c.Color(visual.ConWhite), visual.RgbBackground)
+		if emulator {
+			b.KeepExact(RectWH(0, 0, 2, 1))
+		}
+		b.finalize()
+
+		hint, cap, game := b.CellAt(0, 0), b.CellAt(1, 0), b.CellAt(0, 1)
+		if !emulator {
+			for _, cell := range []terminal.Cell{hint, cap, game} {
+				if cell.Attrs != terminal.AttrFg256|terminal.AttrBg256 || cell.Bg.R != visual.ConBlack {
+					t.Errorf("console: %q left as %+v, want entries on black", cell.Rune, cell)
+				}
+			}
+			continue
+		}
+		if hint.Fg != visual.RgbOverlayHint || hint.Bg != visual.RgbOverlayBg || hint.Attrs != terminal.AttrNone {
+			t.Errorf("emulator: an exact cell left as %+v, want its own RGB", hint)
+		}
+		if cap.Bg != visual.RgbBackground || cap.Attrs&terminal.AttrBg256 != 0 {
+			t.Errorf("emulator: an exact cell's black left as %+v, want the theme background", cap)
+		}
+		if game.Fg != (color.RGB{R: visual.ConWhite}) || game.Attrs != terminal.AttrFg256 || game.Bg != visual.RgbBackground {
+			t.Errorf("emulator: a game cell left as %+v, want its entry on the theme background", game)
+		}
+	}
+}
+
 // TestQuantizeLeavesNoStyleToRecolor: the console recolors styled text (dim grays it, italic
 // greens it), so reverse is swapped in, dim takes a darker entry and no style is sent.
 func TestQuantizeLeavesNoStyleToRecolor(t *testing.T) {
 	t.Parallel()
 	c := ConsoleFor(VGAPalette)
 	b := NewRenderBuffer(terminal.ColorMode256, 2, 1)
-	b.SetConsole(c)
+	b.SetConsole(c, false)
 	b.Set(0, 0, 'r', c.Color(15), c.Color(4), BlendReplace, 1, terminal.AttrReverse|terminal.AttrBold)
 	b.Set(1, 0, 'd', c.Color(14), c.Color(0), BlendReplace, 1, terminal.AttrDim|terminal.AttrItalic)
 	b.finalize()

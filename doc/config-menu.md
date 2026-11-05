@@ -30,6 +30,9 @@ the same menu with their own widgets ([Android and the browser](#android-and-the
 | Anywhere | Ctrl-G or F10 | Close the menu and discard an unsubmitted form. |
 
 A form of one field is a text box on its row; a longer one opens its own window.
+A text box runs to the selection's right edge, as a section's rule does. While it
+is typed in, its row's fill gives way to the label in the same orange, and its cursor
+blinks orange in step with the command line's, as a form's and the `/` filter's do.
 Submitting a session action closes the menu and resumes play. Joining, router
 requests and bot admission complete asynchronously; the status bar reports
 progress or failure. Cancelling before submission starts no action. Replay

@@ -135,7 +135,7 @@ func (a *App) initPresentation() {
 	if cfg := a.world.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
 		cfg.ConsolePalette = render.DetectConsolePalette()
 		cfg.TextConsole = a.pres.Surface().ColorMode() == terminal.ColorMode16
-		a.orchestrator.SetConsole(render.ConsoleFor(cfg.ConsolePalette))
+		a.orchestrator.SetConsole(render.ConsoleFor(cfg.ConsolePalette), !cfg.TextConsole)
 	}
 	for _, reg := range manifest.BuildRenderers(a.ctx) {
 		a.orchestrator.Register(reg)

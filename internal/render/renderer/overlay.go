@@ -117,14 +117,20 @@ type OverlayRenderer struct {
 	logo    logoCells
 	aspect  vmath.Aspect
 	console *render.Console
+
+	exact bool // an emulator in 256 colors: the window keeps its own colors, see Render
 }
 
 // NewOverlayRenderer creates a new overlay renderer
 func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 	r := &OverlayRenderer{gameCtx: gameCtx, pinMarker: parameter.OverlayPinMarker}
-	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
+	switch cfg := gameCtx.World.Resources.Config; {
+	case cfg.ColorMode != terminal.ColorMode256:
+	case cfg.TextConsole:
 		r.pinMarker = parameter.OverlayPinMarker256
 		r.console = render.ConsoleFor(cfg.ConsolePalette)
+	default:
+		r.exact = true
 	}
 	return r
 }
@@ -174,6 +180,11 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	}
 
 	r.adapter.FlushTo(buf, g.X, g.Y, visual.MaskUI)
+	// An emulator's theme draws the console's entries as it likes, which can sink a hint
+	// into its background; xterm's cube it shows as it is, so the window goes out as drawn
+	if r.exact {
+		buf.KeepExact(render.RectWH(g.X, g.Y, g.W, g.H))
+	}
 }
 
 // renderContent dispatches on the content's layout and draws the chrome
@@ -257,9 +268,10 @@ func (r *OverlayRenderer) renderForm(body tui.Region, g engine.OverlayGeometry, 
 	scroll.Select(form.Focus)
 	state.Fields = state.Fields[scroll.Offset:min(scroll.Offset+listH, len(state.Fields))]
 	state.Focus = form.Focus - scroll.Offset
+	cursorFg, cursorBg := r.cursorColors(visual.RgbOverlayValue, visual.RgbOverlayScrollTrack)
 	body.Sub(0, 0, body.W, listH).Form(state, tui.FormOpts{LabelWidth: min(labelW, max(body.W/3, 1)), Style: tui.FormStyle{
 		LabelFg: visual.RgbOverlayTitle, FieldFg: visual.RgbOverlayValue, FieldBg: visual.RgbOverlayBg,
-		FocusBg: visual.RgbOverlayScrollTrack, CursorFg: visual.RgbOverlayBg, CursorBg: visual.RgbOverlaySelected, Bg: visual.RgbOverlayBg,
+		FocusBg: visual.RgbOverlayScrollTrack, CursorFg: cursorFg, CursorBg: cursorBg, Bg: visual.RgbOverlayBg,
 	}})
 	detail := form.Help
 	if form.Error != "" {
@@ -298,17 +310,23 @@ func (r *OverlayRenderer) renderMenu(root, body tui.Region, g engine.OverlayGeom
 			fg = visual.RgbOverlayHint
 		}
 		bg := visual.RgbOverlayBg
-		if i == selected && !row.Header {
+		switch {
+		case i != selected || row.Header:
+		case row.Typing:
+			fg = visual.RgbOverlaySelected // the fill gives way, so the cursor is the row's one orange block
+		default:
 			fg, bg = visual.RgbOverlayBg, visual.RgbOverlaySelected
 		}
 		var text string
+		var icon rune
 		switch {
 		case row.Header:
-			// A section's rule runs to the scrollbar's edge, its title set in it
-			fg, text = visual.RgbOverlayHeader, string(parameter.OverlayMenuRule)+" "+row.Label+" "
-			text += strings.Repeat(string(parameter.OverlayMenuRule), max(body.W-2-tui.RuneLen(text), 0))
+			// A section's rule spans the selection's width, the icon cell included,
+			// its title set in it where a label starts
+			fg, icon, text = visual.RgbOverlayHeader, parameter.OverlayMenuRule, string(parameter.OverlayMenuRule)+" "+row.Label+" "
+			text += strings.Repeat(string(parameter.OverlayMenuRule), max(body.W-1-tui.RuneLen(text), 0))
 		case row.Text:
-			labelW := max(1, body.W-boxW-3)
+			labelW := max(1, body.W-boxW-2)
 			text = tui.PadRight(tui.Truncate(row.Label, labelW), labelW)
 		default:
 			value := row.Value
@@ -319,15 +337,19 @@ func (r *OverlayRenderer) renderMenu(root, body tui.Region, g engine.OverlayGeom
 			labelW := max(1, body.W-valueW-3)
 			text = tui.PadRight(tui.Truncate(row.Label, labelW), labelW) + " " + tui.Truncate(value, valueW)
 		}
-		items[i] = tui.ListItem{Text: text, TextStyle: tui.Style{Fg: fg, Bg: bg}}
+		items[i] = tui.ListItem{Icon: icon, IconFg: fg, Text: text, TextStyle: tui.Style{Fg: fg, Bg: bg}}
+	}
+	filled := selected
+	if menu.Rows[selected].Typing {
+		filled = -1
 	}
 	list := body.Sub(0, 0, body.W, listH)
-	list.List(items, selected, scroll.Offset, tui.ListOpts{
+	list.List(items, filled, scroll.Offset, tui.ListOpts{
 		CursorBg: visual.RgbOverlaySelected, DefaultBg: visual.RgbOverlayBg, IconWidth: 1,
 	})
 	for y := range listH {
 		if i := scroll.Offset + y; i < len(menu.Rows) && menu.Rows[i].Text {
-			r.renderMenuTextBox(list.Sub(body.W-boxW-1, y, boxW, 1), menu.Rows[i])
+			r.renderMenuTextBox(list.Sub(body.W-boxW, y, boxW, 1), menu.Rows[i])
 		}
 	}
 	if g.ScrollW > 0 {
@@ -349,7 +371,8 @@ func (r *OverlayRenderer) renderMenu(root, body tui.Region, g engine.OverlayGeom
 	}
 }
 
-// renderMenuTextBox draws a text row's box, its cursor shown while it is typed in
+// renderMenuTextBox draws a text row's box to the selection's right edge, its cursor
+// shown while it is typed in
 func (r *OverlayRenderer) renderMenuTextBox(box tui.Region, row core.OverlayMenuRow) {
 	state := tui.NewTextFieldState(row.Value)
 	state.Cursor = row.Cursor
@@ -357,10 +380,20 @@ func (r *OverlayRenderer) renderMenuTextBox(box tui.Region, row core.OverlayMenu
 	if row.Disabled != "" {
 		placeholder = parameter.OverlayTextUnavailable
 	}
+	cursorFg, cursorBg := r.cursorColors(visual.RgbOverlayValue, visual.RgbOverlayScrollTrack)
 	box.TextField(state, tui.TextFieldOpts{Placeholder: placeholder, Focused: row.Typing, Border: tui.LineNone, Style: tui.TextFieldStyle{
-		TextFg: visual.RgbOverlayValue, TextBg: visual.RgbOverlayScrollTrack, CursorFg: visual.RgbOverlayBg,
-		CursorBg: visual.RgbOverlaySelected, PlaceholderFg: visual.RgbOverlayHint,
+		TextFg: visual.RgbOverlayValue, TextBg: visual.RgbOverlayScrollTrack, CursorFg: cursorFg,
+		CursorBg: cursorBg, PlaceholderFg: visual.RgbOverlayHint,
 	}})
+}
+
+// cursorColors are a typing cursor's colours in a field of fg on bg: the cursor's
+// in the shared blink's on half, the field's own in its off half
+func (r *OverlayRenderer) cursorColors(fg, bg color.RGB) (color.RGB, color.RGB) {
+	if cursorShown(r.gameCtx) {
+		return visual.RgbOverlayBg, visual.RgbCursor
+	}
+	return fg, bg
 }
 
 // buildCards computes the masonry layout and publishes the card index
@@ -587,14 +620,18 @@ func (r *OverlayRenderer) renderFilterHint(root tui.Region, g engine.OverlayGeom
 	}
 
 	avail := g.W - 4 // one cell of margin inside each border
-	prompt, tiers := "/"+query, kept
+	prompt, tiers, cursorW := "/"+query, kept, 0
 	if typing {
-		prompt, tiers = prompt+string(parameter.StatusCursorChar), editing
+		tiers, cursorW = editing, 1
 	}
-	prompt = tui.TruncateLeft(prompt, avail)
+	prompt = tui.TruncateLeft(prompt, avail-cursorW)
+	n := tui.RuneLen(prompt)
 	root.Text(2, g.HintY, prompt, visual.RgbSearchInputText, visual.RgbOverlayBg, terminal.AttrNone)
+	if typing && cursorShown(r.gameCtx) {
+		root.Cell(2+n, g.HintY, parameter.CursorChar, visual.RgbCursor, visual.RgbOverlayBg, terminal.AttrNone)
+	}
 
-	free := avail - tui.RuneLen(prompt) - 2 // gap between prompt and hints
+	free := avail - n - cursorW - 2 // gap between prompt and hints
 	for _, hint := range tiers {
 		if n := tui.RuneLen(hint); n <= free {
 			root.Text(2+avail-n, g.HintY, hint, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrDim)

@@ -13,7 +13,7 @@ import (
 )
 
 // startPalette is the start screen's colors: lixen.com's in truecolor, console entries in
-// 256 colors but for an emulator's button, which keeps the site's through xterm's cube
+// 256 colors but for an emulator's mark and button, which keep the site's through xterm's cube
 type startPalette struct {
 	bg, button, buttonText, ghost, ghostText color.RGB
 }
@@ -26,9 +26,10 @@ type startPalette struct {
 type StartScreenRenderer struct {
 	adapter *TUIAdapter
 	logo    logoCells
-	console *render.Console
+	console *render.Console // a text console's, in whose entries the mark is drawn
 	pal     startPalette
 	frame   bool // a console's fonts lack the half blocks that round the button
+	exact   bool // an emulator in 256 colors: the mark and the button keep the site's colors
 }
 
 // NewStartScreenRenderer creates the start screen renderer
@@ -39,10 +40,15 @@ func NewStartScreenRenderer(gameCtx *engine.GameContext) *StartScreenRenderer {
 	}
 	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
 		c := render.ConsoleFor(cfg.ConsolePalette)
-		r.console, r.frame = c, cfg.TextConsole
-		r.pal.bg, r.pal.ghost, r.pal.ghostText = c.Color(visual.Start256Bg), c.Color(visual.Start256Ghost), c.Color(visual.Start256GhostText)
+		r.frame, r.exact = cfg.TextConsole, !cfg.TextConsole
+		r.pal.ghost, r.pal.ghostText = c.Color(visual.Start256Ghost), c.Color(visual.Start256GhostText)
 		if r.frame {
-			r.pal.button, r.pal.buttonText = c.Color(visual.Start256Button), c.Color(visual.Start256ButtonText)
+			r.console = c
+			r.pal.bg, r.pal.button, r.pal.buttonText = c.Color(visual.Start256Bg), c.Color(visual.Start256Button), c.Color(visual.Start256ButtonText)
+		} else {
+			// The page is the console's black, which an emulator gets as the theme background:
+			// the mark and the button's caps blend into the same
+			r.pal.bg = visual.RgbBackground
 		}
 	}
 	return r
@@ -76,14 +82,15 @@ func (r *StartScreenRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	}
 	top := (h - lh) / 2
 	gap := 0
+	var mark tui.Region
 	if lh > 0 {
 		gap = parameter.StartPromptGap
 		top = min(top, h-lh-gap-bh)
 		lw := int(math.Round(float64(lh) / float64(ctx.CellAspect)))
-		region := root.Sub((w-lw)/2, top, lw, lh)
-		for i, c := range r.logo.layout(region.W, region.H, ctx.CellAspect, r.pal.bg, r.console) {
+		mark = root.Sub((w-lw)/2, top, lw, lh)
+		for i, c := range r.logo.layout(mark.W, mark.H, ctx.CellAspect, r.pal.bg, r.console) {
 			if c.Rune != 0 {
-				region.CellOpaque(i%region.W, i/region.W, c.Rune, c.Fg, c.Bg, terminal.AttrNone)
+				mark.CellOpaque(i%mark.W, i/mark.W, c.Rune, c.Fg, c.Bg, terminal.AttrNone)
 			}
 		}
 	} else {
@@ -103,13 +110,11 @@ func (r *StartScreenRenderer) Render(ctx render.RenderContext, buf *render.Rende
 
 	r.adapter.FlushTo(buf, 0, 0, visual.MaskUI)
 	// An emulator in 256 colors draws 0-15 in its theme but xterm's cube as it is
-	if r.console != nil && !r.frame && button.H > 0 {
-		x, y, bw, bh := button.Bounds()
-		buf.SetExact(render.RectWH(x, y, bw, bh))
-		// The caps' page halves stay the theme's black, which the cube lacks
-		for i := x; i < x+bw && bh >= 3; i++ {
-			buf.SetBg256(i, y, visual.Start256Bg)
-			buf.SetBg256(i, y+bh-1, visual.Start256Bg)
+	if r.exact {
+		for _, kept := range [...]tui.Region{mark, button} {
+			if x, y, kw, kh := kept.Bounds(); kw > 0 && kh > 0 {
+				buf.KeepExact(render.RectWH(x, y, kw, kh))
+			}
 		}
 	}
 }

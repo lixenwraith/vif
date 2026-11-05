@@ -315,10 +315,17 @@ and FreeBSD brightens bold.
 
 An emulator gets 256-color mode too, when nothing announces truecolor (ssh drops
 `COLORTERM`). It draws entries 0-15 in its theme, which can make a pair the console
-reads, such as bright white on blue, unreadable, but it shows xterm's cube exactly.
-`Config.TextConsole` tells the two apart (the terminal reports a console as 16
-colors), and a renderer that wants the cube keeps its cells out of the last pass
-with `RenderBuffer.SetExact`, which lasts the frame: the start screen's button.
+reads, such as bright white on blue or gray on black, unreadable, but it shows
+xterm's cube exactly. `Config.TextConsole` tells the two apart (the terminal reports
+a console as 16 colors), and a renderer that wants the cube keeps a rectangle out of
+the last pass with `RenderBuffer.KeepExact`, which lasts the frame. In an emulator
+the overlay window and the status bar draw as in truecolor and keep their whole
+rectangles, and the start screen keeps its mark and its button. The game keeps the theme's
+sixteen but for black: the console's black is the background every color was
+chosen against, and a theme's is most often a lighter neighbour of its own
+background, so on an emulator entry 0, kept rectangles included, leaves as the
+theme background's RGB. The pinned telemetry panel blends into the game and stays
+on the theme with it. A text console's frame is untouched by any of this.
 
 Finalization is immediately followed by the surface's full-buffer `Flush`.
 
@@ -535,16 +542,16 @@ messages to the left half the host repeats above the keyboard. A
 message is a notice or an alert (`parameter.StatusKinds`): the newest replaces the
 one shown, except that a notice does not displace an alert younger than its
 minimum, and each leaves after its kind's wall time. Its
-colors come from one palette per color mode: the theme's in truecolor, and on a
-text console fixed entries, each apart from the items beside it and with the text
-that reads best on it. The audio state is a letter: X muted, S sfx, M music,
+colors come from one palette per color mode: the theme's in truecolor, and in an
+emulator in 256 colors through xterm's cube, labelled 256; on a text console fixed
+entries, each apart from the items beside it and with the text that reads best on it. The audio state is a letter: X muted, S sfx, M music,
 O both; it is absent without an audio engine.
 
 The start screen (`StartScreenRenderer`) is the terminal's and the desktop
 window's: while `RenderContext.StartScreen` holds it covers every row above the
 status bar, the logo at the centre two fifths of the shorter side and the prompt
 under it on a button, the site's colors in truecolor and console entries in 256
-colors. An emulator's button keeps the site's blue and white through xterm's cube;
+colors. An emulator's mark and button keep the site's colors through xterm's cube;
 a console's fonts lack the half blocks that round it, so there it is the label in
 bright white framed in bright blue double lines, which fonts without them draw single. The status bar keeps its line under it and leaves its items' row clear;
 `RenderStatus` draws it too, for a join waiting for its press.
@@ -555,8 +562,9 @@ with the margin it borders rather than numbering cells no motion can reach.
 
 The overlay renderer adapts help/about/telemetry content into buffer cells. The
 about window draws the lixen mark from its shape (`logoCells`): in truecolor as
-quadrant glyphs fitted to anti-aliased samples (`ascimage.FitQuadrant`), on a
-console as whole blocks in the entry each cell mostly shows. Flow
+quadrant glyphs fitted to anti-aliased samples (`ascimage.FitQuadrant`), as an
+emulator in 256 colors does too, on a text console as whole blocks in the entry
+each cell mostly shows. Flow
 debug can show a target group's flow field or route graph and is controlled via
 `:flow [group]` and `:graph [group]`. Debug layers are part of the normal
 pipeline but are visibility-gated.
