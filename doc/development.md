@@ -808,5 +808,5 @@ across instances is the invariant the domain model rests on.
 | Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css`, `web/fonts/` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |
-| Journal, replay, fuzz, and authored scripts | `internal/event/journal*.go`, `origin.go`, `internal/journal`, `internal/app/replay.go`, `play.go`, `script.go` |
+| Journal, replay, fuzz, and authored scripts | `internal/event/journal*.go`, `origin.go`, `internal/journal`, `internal/app/replay.go`, `play.go`, `script.go`, `internal/app/internal/scribe` |
 | Crash/runtime capture | `internal/core/crash_handler*.go`, `dev.go`, `redirect_*.go` |

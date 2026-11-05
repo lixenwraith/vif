@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -114,8 +115,8 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 				t.Fatalf("replay to %+v: more %v, err %v", stamp, more, err)
 			}
 		}
-		var ck *checkpoint
-		src.world.RunSafe(func() { ck, err = src.scribe.checkpointLocked(d, reuse) })
+		var ck *scribe.Checkpoint
+		src.world.RunSafe(func() { ck, err = src.scribe.CheckpointLocked(d, reuse) })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,10 +128,10 @@ func continuesFromCheckpoints(t *testing.T, rec *journal.Capture, at []event.Sta
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := copied.scribe.restore(ck, cd); err != nil {
+		if err := copied.scribe.Restore(ck, cd); err != nil {
 			t.Fatal(err)
 		}
-		reuse = ck.world
+		reuse = ck.World
 		for i := range steps {
 			want, got := src.SnapshotSimulation(), copied.SnapshotSimulation()
 			if n, _, _, ok := snapshot.FirstDiff(want, got); ok {

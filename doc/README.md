@@ -88,10 +88,10 @@ changing a subsystem, update the source that actually owns its shape.
 | System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.InitSystems`, `World.AllowSystemDisable`, `resource.checkSystems` |
 | Event names, payload association, replication class | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go`, `serve.go` | `App`, `Scheduler`, services |
-| Replay journal format, recording/replay drivers, and authored scripts | `internal/event/journal.go`, `origin.go`, `internal/journal` | `internal/app/replay.go`, `play.go`, `script.go` |
+| Replay journal format, recording/replay drivers, and authored scripts | `internal/event/journal.go`, `origin.go`, `internal/journal` | `internal/app/replay.go`, `play.go`, `script.go`, `internal/app/internal/scribe` |
 | Correction cadence, selective repair, authority term and succession | `internal/converge` | `App.corrections`/`authority`/`reach` through `converge.Instance`; its criteria run against a stub world |
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
-| Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `snapshot_pages_gen.go`, `internal/app/snapshot_stage.go`, `pkg/network/snapshot.go` |
+| Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/internal/corrector/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `snapshot_pages_gen.go`, `internal/app/internal/corrector/snapshot_stage.go`, `pkg/network/snapshot.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
 | Main encounter progression | `internal/asset/scenario/*.toml`, embedded; a configuration root's `scenario/main/` overrides it | `internal/fsm`, `internal/engine.Scheduler` |
 | Alternate scenarios | `wad/scenario/*` | selected by name or path with `-s` |

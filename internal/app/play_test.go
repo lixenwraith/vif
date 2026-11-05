@@ -444,7 +444,7 @@ func TestACopyThatLeftTheRunIsNeverPresented(t *testing.T) {
 	const shown = parameter.ReplayCheckpointSteps + 40
 	for name, spoil := range map[string]func(p *player) int{
 		"digest": func(p *player) int {
-			p.rw.ring[(shown-1)%parameter.ReplayRing].digest.Positions ^= 1
+			p.rw.ring[(shown-1)%parameter.ReplayRing].Digest.Positions ^= 1
 			p.control(',')
 			return shown - 1
 		},

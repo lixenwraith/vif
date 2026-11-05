@@ -1,4 +1,4 @@
-package app
+package corrector
 
 import (
 	"errors"
@@ -18,25 +18,25 @@ import (
 // exactly what a session is asserted to agree on. Keys are reselected only after a
 // registration: SharedKey over every key would be most of a capture's cost.
 // Caller MUST hold updateMutex.
-func (c *corrector) captureStatusLocked() snapshot.StatusState {
+func (c *Corrector) captureStatusLocked() snapshot.StatusState {
 	if c.sharedStatus.gen != c.world.Resources.Status.Gen() {
-		c.sharedStatus = statusKeysLocked(c.world, snapshot.SharedKey)
+		c.sharedStatus = StatusKeysLocked(c.world, snapshot.SharedKey)
 	}
-	return statusCellsLocked(c.world, c.sharedStatus)
+	return StatusCellsLocked(c.world, c.sharedStatus)
 }
 
-// statusKeys is a selection of the registry's keys by kind, in key order so two
+// StatusKeys is a selection of the registry's keys by kind, in key order so two
 // instances holding equal state produce equal bytes, made at registration count gen.
-type statusKeys struct {
+type StatusKeys struct {
 	gen                          uint64
 	ints, bools, floats, strings []string
 }
 
-// statusKeysLocked selects the registry keys keep admits. Caller MUST hold updateMutex.
-func statusKeysLocked(w *engine.World, keep func(string) bool) statusKeys {
+// StatusKeysLocked selects the registry keys keep admits. Caller MUST hold updateMutex.
+func StatusKeysLocked(w *engine.World, keep func(string) bool) StatusKeys {
 	reg := w.Resources.Status
 	gen := reg.Gen() // before the keys, so a registration between reads as stale
-	return statusKeys{gen: gen, ints: keysWhere(reg.Ints.Keys(), keep), bools: keysWhere(reg.Bools.Keys(), keep),
+	return StatusKeys{gen: gen, ints: keysWhere(reg.Ints.Keys(), keep), bools: keysWhere(reg.Bools.Keys(), keep),
 		floats: keysWhere(reg.Floats.Keys(), keep), strings: keysWhere(reg.Strings.Keys(), keep)}
 }
 
@@ -50,8 +50,8 @@ func keysWhere(keys []string, keep func(string) bool) []string {
 	return out
 }
 
-// statusCellsLocked reads the registry cells k names. Caller MUST hold updateMutex.
-func statusCellsLocked(w *engine.World, k statusKeys) snapshot.StatusState {
+// StatusCellsLocked reads the registry cells k names. Caller MUST hold updateMutex.
+func StatusCellsLocked(w *engine.World, k StatusKeys) snapshot.StatusState {
 	reg := w.Resources.Status
 	return snapshot.StatusState{
 		Ints: cellsOf(k.ints, func(k string) snapshot.IntCell {
@@ -79,11 +79,11 @@ func cellsOf[C any](keys []string, cell func(string) C) []C {
 	return out
 }
 
-// installStatusLocked writes the captured surface back. An unknown key is skipped
+// InstallStatusLocked writes the captured surface back. An unknown key is skipped
 // rather than refused: the registry is frozen after construction, and a metric
 // added between builds is a telemetry difference rather than a simulation one.
 // Caller MUST hold updateMutex.
-func installStatusLocked(w *engine.World, state snapshot.StatusState) {
+func InstallStatusLocked(w *engine.World, state snapshot.StatusState) {
 	reg := w.Resources.Status
 	for _, c := range state.Ints {
 		if reg.Ints.Has(c.Key) {
@@ -110,12 +110,12 @@ func installStatusLocked(w *engine.World, state snapshot.StatusState) {
 // CaptureShared reads the shared world at the current tick. The whole capture is
 // taken inside one critical section: one assembled across two ticks would describe
 // a world that never existed.
-func (c *corrector) CaptureShared() (snapshot.SharedCapture, error) {
+func (c *Corrector) CaptureShared() (snapshot.SharedCapture, error) {
 	var (
 		cap snapshot.SharedCapture
 		err error
 	)
-	c.world.RunSafe(func() { cap, err = c.captureSharedLocked() })
+	c.world.RunSafe(func() { cap, err = c.CaptureSharedLocked() })
 	if err != nil {
 		return snapshot.SharedCapture{}, err
 	}
@@ -125,20 +125,21 @@ func (c *corrector) CaptureShared() (snapshot.SharedCapture, error) {
 	return cap, nil
 }
 
-// captureSharedLocked is the read itself. The header's tick and crossing fences are
-// read with the body, so nothing applied between them can fall outside what the
-// header says the body contains. Caller MUST hold updateMutex.
-func (c *corrector) captureSharedLocked() (snapshot.SharedCapture, error) {
-	cap, err := c.captureLightLocked()
+// CaptureSharedLocked is the read without its seal, for a comparison under the lock.
+// The header's tick and crossing fences are read with the body, so nothing applied
+// between them can fall outside what the header says the body contains.
+// Caller MUST hold updateMutex.
+func (c *Corrector) CaptureSharedLocked() (snapshot.SharedCapture, error) {
+	cap, err := c.CaptureLightLocked()
 	if err == nil {
 		cap.World = c.world.CaptureSharedWorld()
 	}
 	return cap, err
 }
 
-// captureLightLocked is a capture without its store rows: what an index built in
+// CaptureLightLocked is a capture without its store rows: what an index built in
 // place needs beside the rows it reads where they stand. Caller MUST hold updateMutex.
-func (c *corrector) captureLightLocked() (snapshot.SharedCapture, error) {
+func (c *Corrector) CaptureLightLocked() (snapshot.SharedCapture, error) {
 	var (
 		cap snapshot.SharedCapture
 		err error
@@ -147,7 +148,7 @@ func (c *corrector) captureLightLocked() (snapshot.SharedCapture, error) {
 	cap.Streams = c.world.Resources.Rand.SaveStreams(core.DomainShared)
 	cap.FSM = c.scheduler.ExportFSM()
 	cap.Status = c.captureStatusLocked()
-	cap.Systems, err = captureSystemStatesLocked(c.world)
+	cap.Systems, err = CaptureSystemStatesLocked(c.world)
 	if err != nil {
 		return snapshot.SharedCapture{}, err
 	}
@@ -162,7 +163,7 @@ func (c *corrector) captureLightLocked() (snapshot.SharedCapture, error) {
 	st := c.run.Position()
 	reg := c.world.Resources.Status
 	cfg := c.world.Resources.Config
-	term, holder := c.run.authorityStamp()
+	term, holder := c.run.AuthorityStamp()
 	crossings := cap.Header.Crossings
 	cap.Header = snapshot.CaptureHeader{
 		Term:           term,
@@ -188,16 +189,16 @@ func (c *corrector) captureLightLocked() (snapshot.SharedCapture, error) {
 }
 
 // sealCapture pins the corpus and hashes the capture, outside the world lock.
-func (c *corrector) sealCapture(cap *snapshot.SharedCapture) error {
+func (c *Corrector) sealCapture(cap *snapshot.SharedCapture) error {
 	cap.Header.ContentPin = c.content.Pin()
 	return c.encoder.Seal(cap)
 }
 
-// captureSystemStatesLocked collects every declared carrier's state, in system
+// CaptureSystemStatesLocked collects every declared carrier's state, in system
 // name order so two instances holding equal state produce equal bytes.
 //
 // Caller MUST hold updateMutex.
-func captureSystemStatesLocked(w *engine.World) ([]snapshot.SystemStateRecord, error) {
+func CaptureSystemStatesLocked(w *engine.World) ([]snapshot.SystemStateRecord, error) {
 	type carrier struct {
 		name  string
 		saver engine.SharedStateSaver
@@ -233,7 +234,7 @@ func captureSystemStatesLocked(w *engine.World) ([]snapshot.SystemStateRecord, e
 // then integrity, then every carrier's offer, and only then is anything written. A
 // half-installed world is a divergence that looks like a working session. This is
 // the direct form; a running instance takes StageShared instead.
-func (c *corrector) InstallShared(cap snapshot.SharedCapture) error {
+func (c *Corrector) InstallShared(cap snapshot.SharedCapture) error {
 	if err := c.VerifyCapture(cap); err != nil {
 		return err
 	}
@@ -247,33 +248,33 @@ func (c *corrector) InstallShared(cap snapshot.SharedCapture) error {
 // confirmPredictions settles the prediction ledger against the authority's world
 // as installed in authority, which is this world after a direct install and the
 // staging world before a projection re-derives this instance's own predictions.
-func (c *corrector) confirmPredictions(tick uint64, authority *engine.World) {
+func (c *Corrector) confirmPredictions(tick uint64, authority *engine.World) {
 	c.world.RunSafe(func() { c.confirmPredictionsLocked(tick, authority) })
 }
 
 // confirmPredictionsLocked is confirmPredictions under the caller's lock.
-func (c *corrector) confirmPredictionsLocked(tick uint64, authority *engine.World) {
+func (c *Corrector) confirmPredictionsLocked(tick uint64, authority *engine.World) {
 	c.world.ConfirmPredictedDeaths(tick, authority)
 }
 
 // installShared writes a capture whose identity has already been established, by
 // replacing the shared world wholesale.
-func (c *corrector) installShared(cap snapshot.SharedCapture, reconcileLocal bool) error {
+func (c *Corrector) installShared(cap snapshot.SharedCapture, reconcileLocal bool) error {
 	_, err := c.writeShared(cap, false, reconcileLocal)
 	return err
 }
 
-// reconcileShared writes a capture by moving the live world onto it rather than
+// ReconcileShared writes a capture by moving the live world onto it rather than
 // replacing it, and reports how far apart the two were. The difference is read
 // inside the same critical section as the write: it is a statement about one
 // instant, and a tick later it would describe a correction already applied.
-func (c *corrector) reconcileShared(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
+func (c *Corrector) ReconcileShared(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
 	return c.writeShared(cap, true, true)
 }
 
-// writeShared is writeSharedLocked under the world lock, reconciling against the
+// writeShared is WriteSharedLocked under the world lock, reconciling against the
 // world as it is read there or replacing it wholesale.
-func (c *corrector) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal bool) (engine.WorldDifference, error) {
+func (c *Corrector) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal bool) (engine.WorldDifference, error) {
 	var (
 		err  error
 		diff engine.WorldDifference
@@ -282,22 +283,22 @@ func (c *corrector) writeShared(cap snapshot.SharedCapture, reconcile, reconcile
 		var held *snapshot.SharedCapture
 		if reconcile {
 			var cur snapshot.SharedCapture
-			if cur, err = c.captureSharedLocked(); err != nil {
+			if cur, err = c.CaptureSharedLocked(); err != nil {
 				return
 			}
 			held = &cur
 		}
-		diff, err = c.writeSharedLocked(cap, held, reconcileLocal, false)
+		diff, err = c.WriteSharedLocked(cap, held, reconcileLocal, false)
 	})
 	return diff, err
 }
 
-// writeSharedLocked is the one install. With held, the live world as read under this
+// WriteSharedLocked is the one install. With held, the live world as read under this
 // lock, it moves the stores onto cap and reports how far they stood from it, and a
 // world already equal to cap takes clock and barrier alone, as a hash-only answer
 // does; without held it replaces them. own marks a world this instance wrote itself,
 // a journal's opening, whose cursor cells are its own already and none held back.
-func (c *corrector) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot.SharedCapture, reconcileLocal, own bool) (diff engine.WorldDifference, err error) {
+func (c *Corrector) WriteSharedLocked(cap snapshot.SharedCapture, held *snapshot.SharedCapture, reconcileLocal, own bool) (diff engine.WorldDifference, err error) {
 	if held != nil {
 		diff = engine.SharedWorldDifference(held.World.WithoutLocalCursorState(), cap.World.WithoutLocalCursorState())
 		if diff.Entries == 0 && snapshot.HoldsBesideWorld(*held, cap) {
@@ -310,7 +311,7 @@ func (c *corrector) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot
 		// Dry run first: a carrier that rejects its record must do so before the
 		// stores are touched. Only the live carrier can refuse because of state the
 		// live world holds, which a staging pass never has.
-		savers := sharedStateSaversLocked(c.world)
+		savers := SharedStateSaversLocked(c.world)
 		for _, rec := range cap.Systems {
 			saver, ok := savers[rec.System]
 			if !ok {
@@ -360,7 +361,7 @@ func (c *corrector) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot
 
 		// Last, so a carrier that publishes on load does not overwrite the
 		// captured surface with a value derived from this instance's own history.
-		installStatusLocked(c.world, cap.Status)
+		InstallStatusLocked(c.world, cap.Status)
 	}()
 	return diff, err
 }
@@ -369,7 +370,7 @@ func (c *corrector) writeSharedLocked(cap snapshot.SharedCapture, held *snapshot
 // what the scheduler publishes from the tick alone to the header's tick; a crossing
 // stamped from a stale position would be scheduled into a past the barrier refuses.
 // Anything derived from more than the tick is recomputed by the next tick.
-func (c *corrector) adoptClockLocked(h snapshot.CaptureHeader) {
+func (c *Corrector) adoptClockLocked(h snapshot.CaptureHeader) {
 	c.world.Resources.Game.State.SetGameTicks(h.Tick)
 	c.world.Resources.Event.Queue.RebaseStamp(h.Run, h.Tick)
 	c.log.SetRun(h.Run)
@@ -387,7 +388,7 @@ func (c *corrector) adoptClockLocked(h snapshot.CaptureHeader) {
 // adoptSnapshotBarrierLocked tells the crossing barrier which world it now holds:
 // the tick boundary for barrier-bound artifacts and each source's applied crossing
 // fence. Caller MUST hold updateMutex.
-func (c *corrector) adoptSnapshotBarrierLocked(header snapshot.CaptureHeader) {
+func (c *Corrector) adoptSnapshotBarrierLocked(header snapshot.CaptureHeader) {
 	for _, sys := range c.world.Systems() {
 		if b, ok := sys.(interface {
 			AdoptSnapshot(uint64, uint32, link.CrossingFences)
@@ -397,9 +398,9 @@ func (c *corrector) adoptSnapshotBarrierLocked(header snapshot.CaptureHeader) {
 	}
 }
 
-// sharedStateSaversLocked indexes this world's declared carriers by name.
+// SharedStateSaversLocked indexes this world's declared carriers by name.
 // Caller MUST hold updateMutex.
-func sharedStateSaversLocked(w *engine.World) map[string]engine.SharedStateSaver {
+func SharedStateSaversLocked(w *engine.World) map[string]engine.SharedStateSaver {
 	out := make(map[string]engine.SharedStateSaver, 8)
 	for _, sys := range w.Systems() {
 		if saver, ok := sys.(engine.SharedStateSaver); ok {
@@ -411,18 +412,18 @@ func sharedStateSaversLocked(w *engine.World) map[string]engine.SharedStateSaver
 
 // VerifyCaptureIdentity answers "is this header describing my session" without
 // requiring the body a full verification hashes.
-func (c *corrector) VerifyCaptureIdentity(h snapshot.CaptureHeader) error {
+func (c *Corrector) VerifyCaptureIdentity(h snapshot.CaptureHeader) error {
 	if h.Schema != snapshot.Schema {
 		return fmt.Errorf("capture schema %d, this build reads %d", h.Schema, snapshot.Schema)
 	}
-	return firstAnchorMismatch("manifest", c.run.sessionAnchorFields(snapshot.Anchor(h)))
+	return FirstAnchorMismatch("manifest", c.run.SessionAnchorFields(snapshot.Anchor(h)))
 }
 
 // VerifyCapture reports whether this instance can install a capture: whether it is
-// intact, and whether it describes the same session by sessionAnchorFields, the set
+// intact, and whether it describes the same session by SessionAnchorFields, the set
 // the join handshake uses, so the two cannot disagree about one peer. The corpus is
 // provenance, not a condition: a shared capture carries no player-domain glyphs.
-func (c *corrector) VerifyCapture(cap snapshot.SharedCapture) error {
+func (c *Corrector) VerifyCapture(cap snapshot.SharedCapture) error {
 	if cap.Header.Schema != snapshot.Schema {
 		return fmt.Errorf("capture schema %d, this build reads %d",
 			cap.Header.Schema, snapshot.Schema)
@@ -431,14 +432,5 @@ func (c *corrector) VerifyCapture(cap snapshot.SharedCapture) error {
 		return errors.New("capture integrity hash does not match its body")
 	}
 
-	return firstAnchorMismatch("capture", c.run.sessionAnchorFields(snapshot.Anchor(cap.Header)))
+	return FirstAnchorMismatch("capture", c.run.SessionAnchorFields(snapshot.Anchor(cap.Header)))
 }
-
-// CaptureShared, InstallShared, StageShared and VerifyCapture are the glue's read,
-// install and verdict as the run's own API, kept while anything reads them through it.
-func (a *App) CaptureShared() (snapshot.SharedCapture, error) { return a.glue.CaptureShared() }
-func (a *App) InstallShared(cap snapshot.SharedCapture) error { return a.glue.InstallShared(cap) }
-func (a *App) StageShared(cap snapshot.SharedCapture) (*StagedInstall, error) {
-	return a.glue.StageShared(cap)
-}
-func (a *App) VerifyCapture(cap snapshot.SharedCapture) error { return a.glue.VerifyCapture(cap) }

@@ -2,179 +2,19 @@ package app
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"slices"
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/content"
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/internal/service"
-	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
-
-// checkpoint is a replay copy's whole state where its driver stood: what a fresh
-// copy restores to continue from there instead of replaying the stream before it.
-type checkpoint struct {
-	steps     int                 // the driver steps it was read after
-	at        event.Stamp         // where the copy stood
-	digest    event.JournalDigest // its world, which a restore must reproduce
-	world     *engine.WorldCopy
-	queue     event.QueueCopy
-	scheduler engine.SchedulerCopy
-	systems   []snapshot.SystemStateRecord
-	local     map[string]any
-	toggles   map[string]bool
-	status    snapshot.StatusState
-	content   content.CursorState
-	clock     time.Duration
-	paused    bool
-	scale     engine.TimeScale
-	width     int
-	height    int
-	driver    journal.Cursor
-}
-
-// checkpointLocked reads a replay copy and where its driver stands, into reuse's
-// storage when one is given. Caller MUST hold updateMutex.
-func (sc *scribe) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy) (*checkpoint, error) {
-	systems, err := captureSystemStatesLocked(sc.world)
-	if err != nil {
-		return nil, err
-	}
-	local, toggles := map[string]any{}, map[string]bool{}
-	for _, sys := range sc.world.Systems() {
-		switch s := sys.(type) {
-		case engine.LocalStateSaver:
-			data, err := s.SaveLocal()
-			if err != nil {
-				return nil, fmt.Errorf("checkpoint %s: %w", sys.Name(), err)
-			}
-			local[sys.Name()] = data
-		case engine.StateCopier:
-			local[sys.Name()] = s.CopyState()
-		}
-		if t, ok := sys.(engine.Toggled); ok {
-			toggles[sys.Name()] = t.Enabled()
-		}
-	}
-	// A copier carries the whole of its system; LoadShared would re-derive it as a joiner.
-	systems = slices.DeleteFunc(systems, func(r snapshot.SystemStateRecord) bool {
-		_, copied := local[r.System]
-		return copied
-	})
-	c := &checkpoint{
-		world:     sc.world.CopyOut(reuse),
-		queue:     sc.world.Resources.Event.Queue.CopyOut(),
-		scheduler: sc.scheduler.CopyOut(),
-		systems:   systems,
-		status:    statusCellsLocked(sc.world, statusKeysLocked(sc.world, func(string) bool { return true })),
-		paused:    sc.ctx.TimeCtl.IsPaused(),
-		scale:     sc.ctx.TimeCtl.Scale(),
-		width:     sc.ctx.Width,
-		height:    sc.ctx.Height,
-		local:     local,
-		toggles:   toggles,
-		content:   service.MustGet[*service.ContentService](sc.hub, "content").CursorState(),
-		driver:    d.Cursor(),
-		at:        sc.run.Position(),
-		digest:    sc.journalDigestLocked(),
-	}
-	if mc, ok := sc.ctx.TimeCtl.Clock().(*engine.ManualClock); ok {
-		c.clock = mc.Elapsed()
-	}
-	return c, nil
-}
-
-// restore settles a fresh replay copy's boot and places it where c was read. A copy
-// that does not then stand where c's did, on the digested classes of its world, is
-// refused: a checkpoint that carried the run short is caught before anything plays.
-func (sc *scribe) restore(c *checkpoint, d *journal.ReplayDriver) (err error) {
-	sc.run.Settle()
-	sc.world.RunSafe(func() {
-		if err = sc.restoreLocked(c, d); err != nil {
-			return
-		}
-		if at, got := sc.run.Position(), sc.journalDigestLocked(); at != c.at || got != c.digest {
-			err = fmt.Errorf("restore at step %d: stands at %+v with digest %+v, the checkpoint at %+v with %+v",
-				c.steps, at, got, c.at, c.digest)
-		}
-	})
-	return err
-}
-
-// restoreLocked places a fresh replay copy, built from the same journal, where c
-// was read, and its driver with it. Caller MUST hold updateMutex.
-func (sc *scribe) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
-	sc.world.CopyIn(c.world)
-	if unknown := c.world.LoadStreams(sc.world.Resources.Rand); len(unknown) > 0 {
-		return fmt.Errorf("restore: RNG streams this copy does not issue: %v", unknown)
-	}
-	savers := sharedStateSaversLocked(sc.world)
-	for _, rec := range c.systems {
-		if err := savers[rec.System].LoadShared(rec.Data); err != nil {
-			return fmt.Errorf("restore %s: %w", rec.System, err)
-		}
-	}
-	for _, sys := range sc.world.Systems() {
-		if err := loadLocalState(sys, c.local[sys.Name()]); err != nil {
-			return fmt.Errorf("restore %s: %w", sys.Name(), err)
-		}
-	}
-	if err := sc.scheduler.CopyIn(c.scheduler); err != nil {
-		return err
-	}
-	if c.scheduler.ResetPending() {
-		select {
-		case sc.ctx.ResetChan <- struct{}{}:
-		default:
-		}
-	}
-	// After the FSM import, whose re-derived toggles are queued and dropped here
-	sc.world.Resources.Event.Queue.CopyIn(c.queue)
-	for _, sys := range sc.world.Systems() {
-		if t, ok := sys.(engine.Toggled); ok {
-			t.SetEnabled(c.toggles[sys.Name()])
-		}
-	}
-	if mc, ok := sc.ctx.TimeCtl.Clock().(*engine.ManualClock); ok {
-		mc.SetElapsed(c.clock)
-	}
-	sc.ctx.TimeCtl.SetPaused(c.paused)
-	sc.ctx.TimeCtl.SetScale(c.scale)
-	sc.ctx.Width, sc.ctx.Height = c.width, c.height
-	if err := service.MustGet[*service.ContentService](sc.hub, "content").SetCursorState(c.content); err != nil {
-		return err
-	}
-	installStatusLocked(sc.world, c.status)
-	d.Resume(c.driver)
-	return nil
-}
-
-// loadLocalState hands a system what a checkpoint carried of it whole: the bytes of
-// a LocalStateSaver, the value of a StateCopier.
-func loadLocalState(sys engine.System, v any) error {
-	switch s := sys.(type) {
-	case engine.LocalStateSaver:
-		data, ok := v.([]byte)
-		if !ok {
-			return errors.New("no state carried")
-		}
-		return s.LoadLocal(data)
-	case engine.StateCopier:
-		if v == nil {
-			return errors.New("no state carried")
-		}
-		return s.RestoreState(v)
-	}
-	return nil
-}
 
 // journalSource adapts a record stream to the presentation loop.
 type journalSource struct {
@@ -236,7 +76,7 @@ type batch struct {
 	stamps   []event.Stamp // where the copy stood after each step
 	diverged *journal.Divergence
 	at       int // the step that diverged, -1 none
-	saved    []*checkpoint
+	saved    []*scribe.Checkpoint
 	reached  bool
 	mismatch error               // a step left the run; stepping stopped before it counted
 	lost     error               // a checkpoint could not be taken
@@ -306,17 +146,17 @@ func (c *replayCopy) advance(p stepPlan) (b batch) {
 		if !ladder && !ring {
 			continue
 		}
-		var ck *checkpoint
+		var ck *scribe.Checkpoint
 		var reuse *engine.WorldCopy
 		if n := len(p.spare); n > 0 {
 			reuse, p.spare = p.spare[n-1], p.spare[:n-1]
 		}
-		c.a.world.RunSafe(func() { ck, err = c.a.scribe.checkpointLocked(c.src.d, reuse) })
+		c.a.world.RunSafe(func() { ck, err = c.a.scribe.CheckpointLocked(c.src.d, reuse) })
 		if err != nil {
 			b.lost, p.every = err, 0
 			continue
 		}
-		ck.steps = k
+		ck.Steps = k
 		b.saved = append(b.saved, ck)
 	}
 }
@@ -342,11 +182,11 @@ type rewinder struct {
 	fail       error // the stream failed after step failedAt, where it ends
 	failedAt   int
 
-	ring   [parameter.ReplayRing]*checkpoint // the last steps taken, at step % len
-	ladder []*checkpoint                     // every `every` steps, thinned past the cap
-	every  int                               // 0 once a checkpoint failed or left the run
-	held   *checkpoint                       // the one a running move restores from
-	spare  []*engine.WorldCopy               // worlds of ring checkpoints let go, for the next to take
+	ring   [parameter.ReplayRing]*scribe.Checkpoint // the last steps taken, at step % len
+	ladder []*scribe.Checkpoint                     // every `every` steps, thinned past the cap
+	every  int                                      // 0 once a checkpoint failed or left the run
+	held   *scribe.Checkpoint                       // the one a running move restores from
+	spare  []*engine.WorldCopy                      // worlds of ring checkpoints let go, for the next to take
 
 	idle, ready   *replayCopy // fresh for the next move; a move's copy, adopted next frame
 	want, running *move
@@ -378,7 +218,7 @@ func (rw *rewinder) plan(c *replayCopy) stepPlan {
 	for i, ck := range rw.ring {
 		p.have[i] = -1
 		if ck != nil {
-			p.have[i] = ck.steps
+			p.have[i] = ck.Steps
 		}
 	}
 	if p.every > 0 {
@@ -435,32 +275,32 @@ func (rw *rewinder) learn(from int, b batch) {
 
 // store keeps a checkpoint in the ring, and on the ladder at its cadence. Past the
 // cap, every other ladder entry is dropped and the spacing doubles.
-func (rw *rewinder) store(c *checkpoint) {
+func (rw *rewinder) store(c *scribe.Checkpoint) {
 	if rw.every == 0 {
 		return
 	}
-	slot := &rw.ring[c.steps%len(rw.ring)]
+	slot := &rw.ring[c.Steps%len(rw.ring)]
 	if old := *slot; old != nil && old != rw.held && !rw.onLadder(old) {
-		rw.spare = append(rw.spare, old.world)
+		rw.spare = append(rw.spare, old.World)
 	}
 	*slot = c
-	if c.steps%rw.every != 0 {
+	if c.Steps%rw.every != 0 {
 		return
 	}
-	i, found := slices.BinarySearchFunc(rw.ladder, c.steps, func(x *checkpoint, s int) int { return cmp.Compare(x.steps, s) })
+	i, found := slices.BinarySearchFunc(rw.ladder, c.Steps, func(x *scribe.Checkpoint, s int) int { return cmp.Compare(x.Steps, s) })
 	if found {
 		return
 	}
 	rw.ladder = slices.Insert(rw.ladder, i, c)
 	if len(rw.ladder) > parameter.ReplayCheckpoints {
 		rw.every *= 2
-		rw.ladder = slices.DeleteFunc(rw.ladder, func(x *checkpoint) bool { return x.steps%rw.every != 0 })
+		rw.ladder = slices.DeleteFunc(rw.ladder, func(x *scribe.Checkpoint) bool { return x.Steps%rw.every != 0 })
 	}
 }
 
 // onLadder reports whether the ladder keeps c itself.
-func (rw *rewinder) onLadder(c *checkpoint) bool {
-	i, found := slices.BinarySearchFunc(rw.ladder, c.steps, func(x *checkpoint, s int) int { return cmp.Compare(x.steps, s) })
+func (rw *rewinder) onLadder(c *scribe.Checkpoint) bool {
+	i, found := slices.BinarySearchFunc(rw.ladder, c.Steps, func(x *scribe.Checkpoint, s int) int { return cmp.Compare(x.Steps, s) })
 	return found && rw.ladder[i] == c
 }
 
@@ -471,19 +311,19 @@ func (rw *rewinder) drop(msg string, err error) {
 		return
 	}
 	rw.shown.a.log.Warn("journal", "msg", msg, "error", err.Error())
-	rw.every, rw.ladder, rw.ring = 0, nil, [parameter.ReplayRing]*checkpoint{}
+	rw.every, rw.ladder, rw.ring = 0, nil, [parameter.ReplayRing]*scribe.Checkpoint{}
 }
 
 // nearest is the latest checkpoint at or before step count m, nil when none.
-func (rw *rewinder) nearest(m int) *checkpoint {
-	var best *checkpoint
+func (rw *rewinder) nearest(m int) *scribe.Checkpoint {
+	var best *scribe.Checkpoint
 	for _, c := range rw.ring {
-		if c != nil && c.steps <= m && (best == nil || c.steps > best.steps) {
+		if c != nil && c.Steps <= m && (best == nil || c.Steps > best.Steps) {
 			best = c
 		}
 	}
-	i, _ := slices.BinarySearchFunc(rw.ladder, m+1, func(x *checkpoint, s int) int { return cmp.Compare(x.steps, s) })
-	if i > 0 && (best == nil || rw.ladder[i-1].steps > best.steps) {
+	i, _ := slices.BinarySearchFunc(rw.ladder, m+1, func(x *scribe.Checkpoint, s int) int { return cmp.Compare(x.Steps, s) })
+	if i > 0 && (best == nil || rw.ladder[i-1].Steps > best.Steps) {
 		best = rw.ladder[i-1]
 	}
 	return best
@@ -512,7 +352,7 @@ func (rw *rewinder) pump() {
 		c, ck := rw.idle, rw.nearest(at)
 		rw.want, rw.idle, rw.running, rw.busy, rw.held = nil, nil, mv, true, ck
 		if ck != nil {
-			c.steps = ck.steps
+			c.steps = ck.Steps
 		}
 		p := rw.plan(c)
 		p.step, p.to, p.cancel = mv.step, mv.to, &mv.cancel
@@ -523,7 +363,7 @@ func (rw *rewinder) pump() {
 				b   batch
 			)
 			if ck != nil {
-				err = c.a.scribe.restore(ck, c.src.d)
+				err = c.a.scribe.Restore(ck, c.src.d)
 			}
 			if err == nil {
 				b = c.advance(p)
@@ -563,11 +403,11 @@ func (rw *rewinder) built(a *App, src pacedSource, err error) {
 
 // moved takes a move's copy back: presented next frame, or replaced by a move from
 // the start when it could not be trusted.
-func (rw *rewinder) moved(c *replayCopy, mv *move, ck *checkpoint, err error, b batch) {
+func (rw *rewinder) moved(c *replayCopy, mv *move, ck *scribe.Checkpoint, err error, b batch) {
 	rw.busy, rw.running, rw.held = false, nil, nil
 	from := 0
 	if ck != nil {
-		from = ck.steps
+		from = ck.Steps
 	}
 	if err != nil {
 		rw.drop("replay checkpoint left the run", err)

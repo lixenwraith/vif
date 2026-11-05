@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -714,7 +715,7 @@ func TestTheFirstRestartAskedForStands(t *testing.T) {
 	}
 	var changed bool
 	a.World().RunSafe(func() { changed, err = a.membership.changeScenarioLocked("other") })
-	if !errors.Is(err, errRunReplaced) || changed || a.restart.Load() != first {
+	if !errors.Is(err, scribe.ErrRunReplaced) || changed || a.restart.Load() != first {
 		t.Fatalf("a later change: changed %v, %v; want it refused and the first restart kept", changed, err)
 	}
 }

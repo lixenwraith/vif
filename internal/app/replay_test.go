@@ -538,7 +538,7 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 		rec, want := journal.NewCapture(), map[event.Stamp][]string{}
 		a.cfg.JournalSink = rec
 		shared := a.SnapshotShared()
-		if _, err := a.scribe.openJournal(); err != nil {
+		if _, err := a.scribe.OpenJournal(); err != nil {
 			t.Fatalf("round %d: open: %v", round, err)
 		}
 		if i, _, _, ok := snapshot.FirstDiff(shared, a.SnapshotShared()); ok {
@@ -547,8 +547,8 @@ func TestAJournalStartedMidRunReplaysFromItsWorld(t *testing.T) {
 		}
 		drive(400, want)
 		var err error
-		a.World().RunSafe(func() { err = a.scribe.stopJournalLocked(-1) })
-		a.scribe.serveJournal()
+		a.World().RunSafe(func() { err = a.scribe.StopJournalLocked(-1) })
+		a.scribe.ServeJournal()
 		if err != nil {
 			t.Fatalf("round %d: stop: %v", round, err)
 		}
@@ -576,7 +576,7 @@ func TestAJournalOpenedOnAHoldReplaysItsEnd(t *testing.T) {
 	}
 	rec, want := journal.NewCapture(), map[event.Stamp][]string{}
 	a.cfg.JournalSink = rec
-	if _, err := a.scribe.openJournal(); err != nil {
+	if _, err := a.scribe.OpenJournal(); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	pause()
@@ -589,8 +589,8 @@ func TestAJournalOpenedOnAHoldReplaysItsEnd(t *testing.T) {
 		want[event.Stamp{Run: p.Run, Tick: p.Tick}] = a.SnapshotSimulation()
 	}
 	var err error
-	a.World().RunSafe(func() { err = a.scribe.stopJournalLocked(-1) })
-	a.scribe.serveJournal()
+	a.World().RunSafe(func() { err = a.scribe.StopJournalLocked(-1) })
+	a.scribe.ServeJournal()
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
@@ -637,8 +637,8 @@ func TestAJoinIntoAHeldSessionReplaysHeld(t *testing.T) {
 		guest.Tick(1)
 	}
 	var err error
-	guest.World().RunSafe(func() { err = guest.scribe.stopJournalLocked(-1) })
-	guest.scribe.serveJournal()
+	guest.World().RunSafe(func() { err = guest.scribe.StopJournalLocked(-1) })
+	guest.scribe.ServeJournal()
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
@@ -695,7 +695,7 @@ func TestANewGameThatWaitsReplaysItsStart(t *testing.T) {
 	a.Context().WaitStart.Store(true)
 	rec, want := journal.NewCapture(), map[event.Stamp][]string{}
 	a.cfg.JournalSink = rec
-	if _, err := a.scribe.openJournal(); err != nil {
+	if _, err := a.scribe.OpenJournal(); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	play := func(ticks int) {
@@ -721,8 +721,8 @@ func TestANewGameThatWaitsReplaysItsStart(t *testing.T) {
 	}
 	play(200)
 	var err error
-	a.World().RunSafe(func() { err = a.scribe.stopJournalLocked(-1) })
-	a.scribe.serveJournal()
+	a.World().RunSafe(func() { err = a.scribe.StopJournalLocked(-1) })
+	a.scribe.ServeJournal()
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
@@ -783,7 +783,7 @@ func TestAJournalOpenedMidRunDoesNotPerturb(t *testing.T) {
 	}
 	alike("before the opening")
 	journaled.cfg.JournalSink = journal.NewCapture()
-	if _, err := journaled.scribe.openJournal(); err != nil {
+	if _, err := journaled.scribe.OpenJournal(); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	alike("at the opening")
@@ -885,14 +885,14 @@ func TestASessionJournalsMidRunOnEitherSide(t *testing.T) {
 	hostRec, guestRec := journal.NewCapture(), journal.NewCapture()
 	host.cfg.JournalSink, guest.cfg.JournalSink = hostRec, guestRec
 	for _, a := range []*App{host, guest} {
-		if _, err := a.scribe.openJournal(); err != nil {
+		if _, err := a.scribe.OpenJournal(); err != nil {
 			t.Fatalf("open: %v", err)
 		}
 	}
 	play(400, true)
 	for _, a := range []*App{host, guest} {
-		a.World().RunSafe(func() { _ = a.scribe.stopJournalLocked(-1) })
-		a.scribe.serveJournal()
+		a.World().RunSafe(func() { _ = a.scribe.StopJournalLocked(-1) })
+		a.scribe.ServeJournal()
 	}
 	replayMatches(t, hostRec, hostWant, guestSurface)
 	replayMatches(t, guestRec, guestWant, guestSurface)
@@ -950,7 +950,7 @@ func TestAJournalReplaysAcrossALeave(t *testing.T) {
 			}
 			rec := journal.NewCapture()
 			leaver.cfg.JournalSink = rec
-			if _, err := leaver.scribe.openJournal(); err != nil {
+			if _, err := leaver.scribe.OpenJournal(); err != nil {
 				t.Fatalf("open: %v", err)
 			}
 			play(120)
@@ -959,8 +959,8 @@ func TestAJournalReplaysAcrossALeave(t *testing.T) {
 			waitForSeats(t, leaver, bots)
 			stop()
 			play(120)
-			leaver.World().RunSafe(func() { _ = leaver.scribe.stopJournalLocked(-1) })
-			leaver.scribe.serveJournal()
+			leaver.World().RunSafe(func() { _ = leaver.scribe.StopJournalLocked(-1) })
+			leaver.scribe.ServeJournal()
 			replayMatches(t, rec, want, guestSurface)
 		})
 	}
@@ -989,7 +989,7 @@ func TestAHeldSessionReplaysOnEitherSide(t *testing.T) {
 	hostRec, guestRec := journal.NewCapture(), journal.NewCapture()
 	host.cfg.JournalSink, guest.cfg.JournalSink = hostRec, guestRec
 	open := func(a *App) {
-		if _, err := a.scribe.openJournal(); err != nil {
+		if _, err := a.scribe.OpenJournal(); err != nil {
 			t.Fatalf("open: %v", err)
 		}
 	}
@@ -1045,8 +1045,8 @@ func TestAHeldSessionReplaysOnEitherSide(t *testing.T) {
 	held(false)
 	play(300)
 	for _, a := range []*App{host, guest} {
-		a.World().RunSafe(func() { _ = a.scribe.stopJournalLocked(-1) })
-		a.scribe.serveJournal()
+		a.World().RunSafe(func() { _ = a.scribe.StopJournalLocked(-1) })
+		a.scribe.ServeJournal()
 	}
 	if !slices.Equal(ends, []bool{true}) {
 		t.Fatalf("the guest's hold stood %v as each end dispatched, want [true]", ends)
@@ -1069,7 +1069,7 @@ func TestAFrozenSurvivorReplaysAsItRan(t *testing.T) {
 	for i, a := range quick {
 		recs[a], want[a] = journal.NewCapture(), map[event.Stamp][]string{}
 		a.cfg.JournalSink = recs[a]
-		if _, err := a.scribe.openJournal(); err != nil {
+		if _, err := a.scribe.OpenJournal(); err != nil {
 			t.Fatalf("participant %d: open: %v", i+2, err)
 		}
 	}
@@ -1103,8 +1103,8 @@ func TestAFrozenSurvivorReplaysAsItRan(t *testing.T) {
 	slow.ApplyPendingCorrections()
 	play(300, apps[1:])
 	for _, a := range quick {
-		a.World().RunSafe(func() { _ = a.scribe.stopJournalLocked(-1) })
-		a.scribe.serveJournal()
+		a.World().RunSafe(func() { _ = a.scribe.StopJournalLocked(-1) })
+		a.scribe.ServeJournal()
 		replayMatches(t, recs[a], want[a], guestSurface)
 	}
 }
@@ -1120,7 +1120,7 @@ func TestARunTakesItsSessionWriteAsAnInstall(t *testing.T) {
 	tickUntilCursor(t, a)
 	rec := journal.NewCapture()
 	a.cfg.JournalSink = rec
-	if _, err := a.scribe.openJournal(); err != nil {
+	if _, err := a.scribe.OpenJournal(); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	rng := vmath.NewFastRand(13)
@@ -1141,8 +1141,8 @@ func TestARunTakesItsSessionWriteAsAnInstall(t *testing.T) {
 		t.Fatalf("host: %v", err)
 	}
 	play(60)
-	a.World().RunSafe(func() { _ = a.scribe.stopJournalLocked(-1) })
-	a.scribe.serveJournal()
+	a.World().RunSafe(func() { _ = a.scribe.StopJournalLocked(-1) })
+	a.scribe.ServeJournal()
 	replayMatches(t, rec, want, guestSurface)
 }
 
@@ -1213,14 +1213,14 @@ func TestAReplayStandsWhereTheRunsWriteLeftIt(t *testing.T) {
 			inject(t, a, typed())
 			a.Tick(1)
 		}
-		a.World().RunSafe(func() { _ = a.scribe.stopJournalLocked(-1) })
-		a.scribe.serveJournal()
+		a.World().RunSafe(func() { _ = a.scribe.StopJournalLocked(-1) })
+		a.scribe.ServeJournal()
 	}
 	typeOn(150)
 
 	mid := journal.NewCapture()
 	a.cfg.JournalSink = mid
-	if _, err := a.scribe.openJournal(); err != nil {
+	if _, err := a.scribe.OpenJournal(); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	a.World().RunSafe(func() { opened = left{a.Position(), a.barrierLocked()} })
@@ -1287,15 +1287,15 @@ func TestAReplayShowsNoInputTheRunPausedFor(t *testing.T) {
 	inject(t, a, &input.Intent{Type: input.IntentOverlayScroll, Motion: input.MotionRight, Count: 1})
 	a.ctx.SetOverlaySelection("developer/#Recording/journal")
 	inject(t, a, &input.Intent{Type: input.IntentOverlayScroll, Motion: input.MotionRight, Count: 1})
-	a.scribe.serveJournal()
-	if a.scribe.recorder.Load() == nil || a.ctx.SessionCtl.Journaling() {
-		t.Fatalf("with the menu up after its stop, journal open %v, reported %v", a.scribe.recorder.Load() != nil, a.ctx.SessionCtl.Journaling())
+	a.scribe.ServeJournal()
+	if a.scribe.Recorder() == nil || a.ctx.SessionCtl.Journaling() {
+		t.Fatalf("with the menu up after its stop, journal open %v, reported %v", a.scribe.Recorder() != nil, a.ctx.SessionCtl.Journaling())
 	}
 	// Back to the menu's pages, then out of it
 	inject(t, a, &input.Intent{Type: input.IntentOverlayClose, Count: 1}, &input.Intent{Type: input.IntentOverlayClose, Count: 1})
-	a.scribe.serveJournal()
-	if a.scribe.recorder.Load() != nil || len(rec.Captures()) != 1 {
-		t.Fatalf("journal open %v once the menu closed, %d worlds written", a.scribe.recorder.Load() != nil, len(rec.Captures()))
+	a.scribe.ServeJournal()
+	if a.scribe.Recorder() != nil || len(rec.Captures()) != 1 {
+		t.Fatalf("journal open %v once the menu closed, %d worlds written", a.scribe.Recorder() != nil, len(rec.Captures()))
 	}
 
 	cfg, err := ConfigFromAnchor(rec.Anchors()[0])
@@ -1379,7 +1379,7 @@ func TestAnOpeningKeepsTheRunsOwnCursor(t *testing.T) {
 		recs[a] = journal.NewCapture()
 		a.cfg.JournalSink = recs[a]
 		before := read(a, own[i])
-		if _, err := a.scribe.openJournal(); err != nil {
+		if _, err := a.scribe.OpenJournal(); err != nil {
 			t.Fatalf("participant %d: open: %v", i+1, err)
 		}
 		if after := read(a, own[i]); after != before || before.drives != own[i] {
@@ -1388,8 +1388,8 @@ func TestAnOpeningKeepsTheRunsOwnCursor(t *testing.T) {
 	}
 	play(400, true)
 	for _, a := range apps {
-		a.World().RunSafe(func() { _ = a.scribe.stopJournalLocked(-1) })
-		a.scribe.serveJournal()
+		a.World().RunSafe(func() { _ = a.scribe.StopJournalLocked(-1) })
+		a.scribe.ServeJournal()
 		replayMatches(t, recs[a], want[a], guestSurface)
 	}
 }
@@ -1410,11 +1410,11 @@ func TestNoJournalOpensWhileANewGameStarts(t *testing.T) {
 		a.scheduler.SettleLocked()
 	})
 	a.cfg.JournalSink = journal.NewCapture()
-	if _, err := a.scribe.openJournal(); err == nil {
+	if _, err := a.scribe.OpenJournal(); err == nil {
 		t.Fatal("a journal opened while the new game was starting")
 	}
 	a.Tick(1)
-	if _, err := a.scribe.openJournal(); err != nil {
+	if _, err := a.scribe.OpenJournal(); err != nil {
 		t.Fatalf("open after the new game started: %v", err)
 	}
 	a.Tick(40)
@@ -1441,8 +1441,8 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	inject(t, a, &input.Intent{Type: input.IntentFireMain, Count: 1})
 
 	var stopErr error
-	a.World().RunSafe(func() { stopErr = a.scribe.stopJournalLocked(-1) })
-	a.scribe.serveJournal()
+	a.World().RunSafe(func() { stopErr = a.scribe.StopJournalLocked(-1) })
+	a.scribe.ServeJournal()
 	if stopErr != nil {
 		t.Fatalf("stop: %v", stopErr)
 	}
@@ -1458,7 +1458,7 @@ func TestAStoppedJournalEndsWhereTheRunStands(t *testing.T) {
 	if emitted, _ := a.JournalStats(); emitted != 0 || a.ctx.SessionCtl.Journaling() {
 		t.Fatal("a stopped journal is still reported")
 	}
-	a.World().RunSafe(func() { stopErr = a.scribe.stopJournalLocked(-1) })
+	a.World().RunSafe(func() { stopErr = a.scribe.StopJournalLocked(-1) })
 	if stopErr == nil {
 		t.Fatal("a second stop found a journal")
 	}
@@ -1473,7 +1473,7 @@ func TestJournalAsksApplyInTheOrderAsked(t *testing.T) {
 	defer a.Close()
 	a.cfg.JournalSink = journal.NewCapture()
 	a.Tick(5)
-	start, stop := a.scribe.startJournalLocked, a.scribe.stopJournalLocked
+	start, stop := a.scribe.StartJournalLocked, a.scribe.StopJournalLocked
 	ask := func(asks ...func(int) error) *journal.Recorder {
 		t.Helper()
 		var err error
@@ -1485,15 +1485,15 @@ func TestJournalAsksApplyInTheOrderAsked(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		a.scribe.serveJournal()
-		return a.scribe.recorder.Load()
+		a.scribe.ServeJournal()
+		return a.scribe.Recorder()
 	}
 	first := ask(start)
 	if r := ask(stop, start); r == nil || r == first {
 		t.Fatal("a start after a stop opened no other journal")
 	}
 	if ask(stop, start, stop) != nil || !strings.HasPrefix(a.ctx.GetStatusMessage(), "Journal closed") {
-		t.Fatalf("a stop after a start that followed a stop: journal open %v, status %q", a.scribe.recorder.Load() != nil, a.ctx.GetStatusMessage())
+		t.Fatalf("a stop after a start that followed a stop: journal open %v, status %q", a.scribe.Recorder() != nil, a.ctx.GetStatusMessage())
 	}
 	if ask(start, stop) != nil {
 		t.Fatal("a start the stop overtook opened a journal")
@@ -1509,21 +1509,21 @@ func TestAJournalMissingAWrittenWorldCloses(t *testing.T) {
 	a.cfg.JournalSink = journal.NewCapture()
 	a.Tick(5)
 	var err error
-	a.World().RunSafe(func() { err = a.scribe.startJournalLocked(-1) })
+	a.World().RunSafe(func() { err = a.scribe.StartJournalLocked(-1) })
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	a.scribe.serveJournal()
-	if a.scribe.recorder.Load() == nil {
+	a.scribe.ServeJournal()
+	if a.scribe.Recorder() == nil {
 		t.Fatal("no journal opened")
 	}
 	lost := errors.New("too large")
 	a.World().RunSafe(func() { a.journalLostLocked(event.NewJournal(journal.NewCapture()), lost) })
-	if a.scribe.recorder.Load() == nil {
+	if a.scribe.Recorder() == nil {
 		t.Fatal("a write missing another journal closed this one")
 	}
 	a.World().RunSafe(func() { a.journalLostLocked(a.world.Resources.Event.Queue.Journal(), lost) })
-	if a.scribe.recorder.Load() != nil {
+	if a.scribe.Recorder() != nil {
 		t.Fatal("the journal stayed open past a world it could not record")
 	}
 	if msg := a.Context().GetStatusMessage(); !strings.Contains(msg, "could not be recorded (too large)") {
@@ -1564,7 +1564,7 @@ func TestTheJournalHoldsNoOperatorState(t *testing.T) {
 	inject(intentModeSwitch(input.ModeTargetInsert), intentModeSwitch(input.ModeTargetCommand))
 	cap := journal.NewCapture()
 	a.cfg.JournalSink = cap
-	if _, err := a.scribe.openJournal(); err != nil {
+	if _, err := a.scribe.OpenJournal(); err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	inject(intentCommandBody("t")...)

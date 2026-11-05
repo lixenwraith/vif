@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -55,7 +56,7 @@ func (m *membership) JoinAt(j event.JoinAnchor) error { return m.join(j, true) }
 
 func (m *membership) join(j event.JoinAnchor, midRun bool) error {
 	an := j.Anchor
-	if err := firstAnchorMismatch("join", m.run.sessionAnchorFields(an)); err != nil {
+	if err := corrector.FirstAnchorMismatch("join", m.run.sessionAnchorFields(an)); err != nil {
 		return err
 	}
 	if an.MapWidth <= 0 || an.MapHeight <= 0 {

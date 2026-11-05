@@ -381,6 +381,14 @@ func (c Config) joining(target string) (Config, error) {
 	return c, nil
 }
 
+// joinNotice adds one line to what the next run's status line opens with.
+func joinNotice(notice, line string) string {
+	if notice == "" {
+		return line
+	}
+	return notice + "; " + line
+}
+
 // restarted is the run next asks for, built on this one's command line, and the
 // solo run a :join that fails after its dial plays on as. Hosting resumes after the
 // clock rather than before it: the next run is not waiting for a lobby, it is

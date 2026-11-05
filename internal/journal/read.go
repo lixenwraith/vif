@@ -8,6 +8,7 @@ package journal
 import (
 	"bufio"
 	"cmp"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -149,6 +150,19 @@ func Load(paths ...string) (Set, error) {
 	})
 	s.Digests = slices.Compact(s.Digests)
 	return s, nil
+}
+
+// LineHolds refuses a capture whose payloads one journal line could not hold, as no
+// reader would then take the journal.
+func LineHolds(payloads ...[]byte) error {
+	n := 0
+	for _, p := range payloads {
+		n += base64.StdEncoding.EncodedLen(len(p))
+	}
+	if n > parameter.JournalLineBytes-parameter.JournalLineHeadroom {
+		return fmt.Errorf("the world is %d MiB, more than a journal line holds", n>>20)
+	}
+	return nil
 }
 
 // readFile appends one file's anchors and records, skipping lines that are not ours
