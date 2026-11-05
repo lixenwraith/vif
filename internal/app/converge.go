@@ -31,7 +31,7 @@ type instance struct {
 func (a *App) instance() instance { return instance{&a.glue, &a.membership} }
 
 func (m *membership) Position() event.Stamp  { return m.run.Position() }
-func (m *membership) Driven() bool           { return m.cfg.Mode.Driven() }
+func (m *membership) Driven() bool           { return m.run.mode().Driven() }
 func (m *membership) Held() bool             { return m.ctx.TimeCtl.Held() }
 func (m *membership) Rate() engine.TimeScale { return m.ctx.TimeCtl.Scale() }
 
@@ -272,7 +272,7 @@ func (m *membership) reportPeerLost(id uint32) bool {
 		m.corrections.QueuePeerLost(id)
 	}
 	halted := m.seatHalted(id)
-	if m.cfg.Mode != ModePlay && forkCell(m.world).Load() {
+	if m.run.mode() != ModePlay && forkCell(m.world).Load() {
 		m.dropAbandonedLocked(m.worldRosterLocked(), nil, link.PeerID(m.world.LocalParticipant()))
 	}
 	return halted
@@ -391,7 +391,7 @@ func (m *membership) applyAuthorityChange(rec network.HandoffRecord, mine bool, 
 		m.corrections.BecomeAuthority(rec)
 		// Live scripts and bots advance their clock, but need the same publication
 		// pump as their original host; only harnesses publish corrections by hand.
-		if m.cfg.scriptedSession {
+		if m.run.scripted() {
 			m.corrections.StartPump()
 		}
 		m.crossPredecessorDeparture(rec)
@@ -445,7 +445,7 @@ func (m *membership) thaw() {
 // or it hosts no session, and nobody here can end it. Caller MUST hold updateMutex,
 // between two ticks.
 func (m *membership) thawLocked() (held bool) {
-	if m.ctx.TimeCtl.Holds(engine.HoldFreeze) || m.cfg.scriptedSession || !m.world.IsSessionCoordinator() {
+	if m.ctx.TimeCtl.Holds(engine.HoldFreeze) || m.run.scripted() || !m.world.IsSessionCoordinator() {
 		m.releaseHold("Resumed")
 		return false
 	}
@@ -458,7 +458,7 @@ func (m *membership) thawLocked() (held bool) {
 // session of its own (leaveSession), keeping every other player's place for
 // whoever hosts next; a run with no loop drops them and plays on as the fork.
 func (m *membership) forked(roster []network.RosterEntry, local link.PeerID) {
-	if m.cfg.Mode == ModePlay {
+	if m.run.mode() == ModePlay {
 		// Leaving before the claim goes, as a redial holds its claim again before it
 		// reads leaving: whichever of the two runs second lets the claim go.
 		m.leaving.Store(true)
@@ -479,11 +479,14 @@ var errRedialEnded = errors.New("the run went on without this host")
 // first is dialled; the first is at the door this run came in by. Only a person's run
 // redials. The claim is let go for the dial to name, its record as the drop left it.
 func (m *membership) redial(lost link.PeerID) bool {
-	var cfg Config
+	var (
+		cfg  Membership
+		base joinBase
+	)
 	door, relay := false, false
 	m.world.RunSafe(func() {
-		cfg = *m.cfg
-		door = cfg.Mode == ModePlay && cfg.holder == 0 && cfg.JoinAddress != "" &&
+		cfg, base = *m.cfg, m.run.joinBase()
+		door = m.run.mode() == ModePlay && cfg.holder == 0 && cfg.JoinAddress != "" &&
 			!m.leaving.Load() && !m.run.replacing()
 		relay = lost == m.joinedThrough
 	})
@@ -506,7 +509,7 @@ func (m *membership) redial(lost link.PeerID) bool {
 	} else {
 		m.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost), "dial", link.Shown(addr))
 	}
-	core.Go(func() { m.redialDoor(cfg, addr, lost, c, relay) })
+	core.Go(func() { m.redialDoor(cfg, base, addr, lost, c, relay) })
 	return true
 }
 
@@ -515,7 +518,7 @@ func (m *membership) redial(lost link.PeerID) bool {
 // refusal no retry helps, a door nothing answers at, or a place that is not this
 // run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
 // A run that stays in its session holds its claim again.
-func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *claim, relay bool) {
+func (m *membership) redialDoor(cfg Membership, base joinBase, addr string, lost link.PeerID, c *claim, relay bool) {
 	dial := cfg
 	dial.JoinAddress = addr
 	notice := "Host connection restored"
@@ -523,7 +526,7 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 		notice = "Relay connection restored"
 	}
 	for m.authority.Redialing(lost) {
-		d, err := dialJoin(dial)
+		d, err := dialJoin(dial, base)
 		if err == nil {
 			// Seated at once: which place the host offers is what the redial asks.
 			err = d.seat(cfg.holder != 0)
@@ -548,7 +551,7 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 			m.authority.RedialRefused(lost)
 		}
 	}
-	if !relay && m.rejoinThrough(cfg, lost, c) {
+	if !relay && m.rejoinThrough(cfg, base, lost, c) {
 		return
 	}
 	m.world.RunSafe(func() {
@@ -568,7 +571,7 @@ func (m *membership) redialDoor(cfg Config, addr string, lost link.PeerID, c *cl
 // door would: the host still runs, with this run's Wraith, and only this run's
 // link went. Reports whether one took it, the run then replaced by the one
 // admitted; one that refuses outright, or a host with no place, is not dialled again.
-func (m *membership) rejoinThrough(cfg Config, lost link.PeerID, c *claim) bool {
+func (m *membership) rejoinThrough(cfg Membership, base joinBase, lost link.PeerID, c *claim) bool {
 	dial := cfg
 	done := make(map[link.PeerID]bool)
 	for {
@@ -588,7 +591,7 @@ func (m *membership) rejoinThrough(cfg Config, lost link.PeerID, c *claim) bool 
 				continue
 			}
 			dial.JoinAddress = addr
-			d, err := dialJoin(dial)
+			d, err := dialJoin(dial, base)
 			if err == nil {
 				err = d.seat(cfg.holder != 0)
 			}

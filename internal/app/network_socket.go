@@ -10,7 +10,7 @@ const buildHasSocketNetwork = true
 func pageHidden() bool { return false }
 
 func (a *App) initNetworkService() error {
-	if a.cfg.Mode != ModePlay && a.cfg.HostAddress == "" && a.cfg.JoinAddress == "" {
+	if a.cfg.Mode != ModePlay && a.cfg.Membership.HostAddress == "" && a.cfg.Membership.JoinAddress == "" {
 		return nil
 	}
 	a.networkSvc = service.NewNetworkService(a.cfg.networkConfig)

@@ -924,7 +924,7 @@ func TestAJournalReplaysAcrossALeave(t *testing.T) {
 			}
 			waitForSeats(t, host, bots)
 			guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
-			guest.cfg.JoinAddress = host.HostAddr()
+			guest.cfg.Membership.JoinAddress = host.HostAddr()
 			stop()
 			waitForRosterPair(t, host, guest)
 			if side == "guest" {

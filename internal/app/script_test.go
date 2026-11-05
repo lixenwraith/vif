@@ -120,8 +120,8 @@ func TestScriptPacingSelectsTheWallRate(t *testing.T) {
 		wantErr bool
 	}{
 		{"solo runs flat out", Config{}, false, false},
-		{"a session is paced from tick zero", Config{HostAddress: ":0"}, true, false},
-		{"a joining session is paced too", Config{JoinAddress: "h:1"}, true, false},
+		{"a session is paced from tick zero", Config{Membership: Membership{HostAddress: ":0"}}, true, false},
+		{"a joining session is paced too", Config{Membership: Membership{JoinAddress: "h:1"}}, true, false},
 		{"an explicit rate paces a solo run", Config{TimeScaleSpec: "2"}, true, false},
 		{"max removes pacing", Config{TimeScaleSpec: ScriptPaceMax}, false, false},
 		{"an unknown token is refused", Config{TimeScaleSpec: "3/7"}, false, true},
@@ -141,7 +141,7 @@ func TestScriptPacingSelectsTheWallRate(t *testing.T) {
 	// delivers them, so the one combination that cannot mean anything is refused.
 	unpacedSession := Config{
 		Mode: ModeHeadless, Width: DefaultWidth, Height: DefaultHeight,
-		HostAddress: ":0", TimeScaleSpec: ScriptPaceMax, scriptedSession: true,
+		Membership: Membership{HostAddress: ":0"}, TimeScaleSpec: ScriptPaceMax, scriptedSession: true,
 	}
 	if err := unpacedSession.Validate(); err == nil {
 		t.Fatal("-speed max was accepted for a session")
@@ -255,13 +255,13 @@ func runScriptPair(t *testing.T, host Config, hostPath string, guest Config, gue
 	}
 
 	hostResult := make(chan scriptResult, 1)
-	host.HostAddress, host.Participants = address, 2
+	host.Membership.HostAddress, host.Membership.Participants = address, 2
 	go func() {
 		stats, err := RunScript(host, hostPath)
 		hostResult <- scriptResult{stats: stats, err: err}
 	}()
 
-	guest.JoinAddress = address
+	guest.Membership.JoinAddress = address
 	for deadline := time.Now().Add(socketWait); ; time.Sleep(10 * time.Millisecond) {
 		g, err = RunScript(guest, guestPath)
 		if err == nil {

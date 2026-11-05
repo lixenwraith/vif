@@ -138,34 +138,34 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 		cfg  Config
 		want string
 	}{
-		{name: "host", cfg: Config{HostAddress: ":7777"}},
-		{name: "join", cfg: Config{JoinAddress: "127.0.0.1:7777"}},
-		{name: "later host cap", cfg: Config{Participants: 4}},
+		{name: "host", cfg: Config{Membership: Membership{HostAddress: ":7777"}}},
+		{name: "join", cfg: Config{Membership: Membership{JoinAddress: "127.0.0.1:7777"}}},
+		{name: "later host cap", cfg: Config{Membership: Membership{Participants: 4}}},
 		{
 			name: "guest cannot set host cap",
-			cfg:  Config{JoinAddress: "127.0.0.1:7777", Participants: 4},
+			cfg:  Config{Membership: Membership{JoinAddress: "127.0.0.1:7777", Participants: 4}},
 			want: "not a joining guest",
 		},
 		{
 			name: "headless without script runner",
-			cfg:  Config{Mode: ModeHeadless, HostAddress: ":7777", Width: 80, Height: 24},
+			cfg:  Config{Mode: ModeHeadless, Membership: Membership{HostAddress: ":7777"}, Width: 80, Height: 24},
 			want: "RunScript",
 		},
 		{
 			name: "headless script host",
 			cfg: Config{
-				Mode: ModeHeadless, HostAddress: ":7777", Width: 80, Height: 24,
+				Mode: ModeHeadless, Membership: Membership{HostAddress: ":7777"}, Width: 80, Height: 24,
 				scriptedSession: true,
 			},
 		},
 		{
 			name: "exclusive",
-			cfg:  Config{HostAddress: ":7777", JoinAddress: "127.0.0.1:7777"},
+			cfg:  Config{Membership: Membership{HostAddress: ":7777", JoinAddress: "127.0.0.1:7777"}},
 			want: "mutually exclusive",
 		},
 		{
 			name: "replay cannot network",
-			cfg:  Config{Mode: ModeReplay, HostAddress: ":7777", Width: 80, Height: 24},
+			cfg:  Config{Mode: ModeReplay, Membership: Membership{HostAddress: ":7777"}, Width: 80, Height: 24},
 			want: "playback cannot join",
 		},
 	}
@@ -189,41 +189,48 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 // own, keeping the ceiling its session was opened with.
 func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
-	line := Config{Seed: 7, HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
-		Participants: 4, FixedAuthority: true, sessionPlayers: 3,
-		Resources: resource.Options{Scenario: "main", Embedded: true}}
+	line := Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
+		Membership: Membership{HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
+			Participants: 4, FixedAuthority: true, sessionPlayers: 3}}
 	dialled := &joinDial{}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
 		Join: "10.0.0.2:7777/abc", dialled: dialled, Bots: []string{"roam"}, Journal: true})
 	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.Notice != "n" ||
-		!slices.Equal(next.Bots, []string{"roam"}) || !next.Journal || !next.journalCarried {
+		!slices.Equal(next.Membership.Bots, []string{"roam"}) || !next.Journal || !next.journalCarried {
 		t.Fatalf("next run %+v; want the command line with what the restart named", next)
 	}
-	if next.HostAddress != "" || next.resumeHost != "127.0.0.1:7001" {
-		t.Fatalf("hosting opens %q before the clock and %q after it; want only after", next.HostAddress, next.resumeHost)
+	if next.Membership.HostAddress != "" || next.resumeHost != "127.0.0.1:7001" {
+		t.Fatalf("hosting opens %q before the clock and %q after it; want only after",
+			next.Membership.HostAddress, next.resumeHost)
 	}
-	if next.JoinAddress != "10.0.0.2:7777" || next.SessionName != "abc" || next.dialled != dialled {
-		t.Fatalf("a :join builds %q/%q on %p; want the target on its own dial", next.JoinAddress, next.SessionName, next.dialled)
+	if next.Membership.JoinAddress != "10.0.0.2:7777" || next.Membership.SessionName != "abc" ||
+		next.dialled != dialled {
+		t.Fatalf("a :join builds %q/%q on %p; want the target on its own dial",
+			next.Membership.JoinAddress, next.Membership.SessionName, next.dialled)
 	}
-	if next.Participants != 0 || next.FixedAuthority {
+	if next.Membership.Participants != 0 || next.Membership.FixedAuthority {
 		t.Fatalf("a :join keeps -players %d and a pinned authority %t; want neither, its session's coming with its offer",
-			next.Participants, next.FixedAuthority)
+			next.Membership.Participants, next.Membership.FixedAuthority)
 	}
-	if solo == nil || solo.Seed != 7 || solo.JoinAddress != "" || solo.SessionName != "" || solo.sessionPlayers != 0 || solo.dialled != nil {
+	if solo == nil || solo.Seed != 7 || solo.Membership.JoinAddress != "" || solo.Membership.SessionName != "" ||
+		solo.Membership.sessionPlayers != 0 || solo.dialled != nil {
 		t.Fatalf("a :join falls back to %+v; want the same run on its own", solo)
 	}
-	if moved, _ := line.restarted(&restartRequest{Rejoin: true, Join: "10.0.0.3:7777"}); moved.JoinAddress != "10.0.0.3:7777" || moved.SessionName != "old" {
-		t.Fatalf("a rejoin dials %q/%q; want the session's moved door", moved.JoinAddress, moved.SessionName)
+	moved, _ := line.restarted(&restartRequest{Rejoin: true, Join: "10.0.0.3:7777"})
+	if moved.Membership.JoinAddress != "10.0.0.3:7777" || moved.Membership.SessionName != "old" {
+		t.Fatalf("a rejoin dials %q/%q; want the session's moved door",
+			moved.Membership.JoinAddress, moved.Membership.SessionName)
 	}
-	if alone, solo := line.restarted(&restartRequest{}); alone.JoinAddress != "" || solo != nil || alone.sessionPlayers != 3 {
+	if alone, solo := line.restarted(&restartRequest{}); alone.Membership.JoinAddress != "" || solo != nil ||
+		alone.Membership.sessionPlayers != 3 {
 		t.Fatalf("a run following nobody dials %q under a ceiling of %d; want nothing dialled, the session's 3 kept",
-			alone.JoinAddress, alone.sessionPlayers)
+			alone.Membership.JoinAddress, alone.Membership.sessionPlayers)
 	}
 }
 
 func TestHeadlessSessionRequiresTheScriptGate(t *testing.T) {
 	t.Parallel()
-	_, err := NewHeadless(Config{HostAddress: ":7777"})
+	_, err := NewHeadless(Config{Membership: Membership{HostAddress: ":7777"}})
 	if err == nil || !strings.Contains(err.Error(), "RunScript") {
 		t.Fatalf("NewHeadless() error = %v, want RunScript gate", err)
 	}

@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
+	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -21,13 +24,14 @@ import (
 // membership is the run's place in its session: hosting and joining, the roster and
 // the offer, the seats it holds, the claims it comes back with, the relay desk and
 // the authority it follows or holds. It is the half of converge.Instance the
-// protocol moves. It reads the run through membershipRun and nothing else.
+// protocol moves. It holds the session half of the run's Config (cfg) and reads the
+// rest of the run through membershipRun alone.
 type membership struct {
 	run membershipRun
 
 	world      *engine.World
 	ctx        *engine.GameContext
-	cfg        *Config
+	cfg        *Membership
 	log        *vlog.Log
 	scheduler  *engine.Scheduler // wired when the run builds its own, after the world
 	scenario   *resource.Scenario
@@ -136,11 +140,17 @@ type membership struct {
 	joinedThrough link.PeerID
 }
 
-// membershipRun is what the membership reads of the run beyond its world: where the
-// run stands and how it is paced, the lobby it shows on, the journal and identity it
-// writes a session into, the vacancy a dedicated host resumes from, and the run that
-// replaces this one.
+// membershipRun is what the membership reads of the run beyond its world and its
+// session half: its mode, script and geometry and the files it may load, where it
+// stands and how it is paced, the lobby it shows on, the journal and identity it
+// writes a session into, the Config a join builds on, the vacancy a dedicated host
+// resumes from, and the run that replaces this one.
 type membershipRun interface {
+	mode() Mode
+	scripted() bool
+	geometryDefaulted() bool
+	resources() resource.Options
+	joinBase() joinBase
 	Position() event.Stamp
 	Settle()
 	Resize(width, height int)
@@ -156,10 +166,167 @@ type membershipRun interface {
 	replacing() bool
 }
 
+// joinBase is the run's Config as a join dialled from it builds on, copied where the
+// dial starts so the dial reads nothing of the run's own: a session half is checked
+// against it (validateWith) and a session's scenario prepared on it (prepare).
+type joinBase interface {
+	validateWith(s Membership) error
+	prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error)
+}
+
+// Membership is the session half of Config: the session this run hosts or joins and
+// the rules it opens one with, how the run is reached and relays for others, the bots
+// it seats and the claims it comes back with. It is all of Config the membership holds.
+type Membership struct {
+	// HostAddress is the address this run hosts a session on. An interactive run
+	// opens it once its clock runs, as :host does; a scripted, bot-driven or
+	// dedicated host holds tick zero in a lobby until lobbyQuorum guests pass the
+	// start gate.
+	HostAddress string
+
+	// TLS is the certificate a wss:// door serves, -cert and -key or the one -selfsign
+	// made for the run; nil opens none. It is the run's, so a door :host opens later
+	// serves it too. Trust is what a wss:// dial trusts a host by, -ca; nil is the
+	// system's roots.
+	TLS, Trust *tls.Config
+
+	// JoinAddress is the session this run joins, at startup or through :join, at
+	// whatever tick the host has reached. The host's offer supplies simulation
+	// identity before the App is constructed.
+	JoinAddress string
+
+	// SessionName is what one address calls this session, so a deployment can put
+	// several behind one. A host answers to it and refuses a dial that named
+	// another; a joiner sends it before the handshake, where a front door can read
+	// it. Empty on both is an address with one session on it.
+	SessionName string
+
+	// ListenAddress pins the port this participant is dialled back on, and
+	// NoAdvertise refuses to publish one. Only a migrate session uses either. The
+	// default is the coordinator's own port — one firewall rule for a session —
+	// falling back to an OS-assigned one, and a bind that fails leaves the
+	// participant a leaf rather than failing the run.
+	ListenAddress string
+	NoAdvertise   bool
+
+	// RelayAddress is where a joined run admits participants that cannot reach the
+	// host, carrying their artifacts on its own link: an address to bind, or, with the
+	// vif:// scheme kept, a router to publish the door through (relayRouter). Empty
+	// relays only its bots.
+	RelayAddress string
+
+	// FixedAuthority pins authorship to the participant that opens the session, so
+	// losing it ends the session rather than moving it. It is a session property:
+	// the coordinator's value travels in the offer. Default on for a dedicated host,
+	// which an orchestrator replaces at the same address, off for an interactive
+	// one. See doc/multi-player.md §5.
+	FixedAuthority bool
+
+	// SlowPolicy is when this run, while authoring, evicts a participant that cannot
+	// keep up, and ShedPolicy what it drops when it cannot keep its own tick; nil
+	// keeps the default. See converge.SlowPolicy and converge.ShedPolicy.
+	SlowPolicy *converge.SlowPolicy
+	ShedPolicy *converge.ShedPolicy
+
+	// Participants is a ceiling on the roster's cursors, a playing host's own
+	// included; zero means the whole roster. On a scripted or bot-driven host an
+	// explicit value is also what the startup lobby waits for. Unset, and always on
+	// a dedicated host, the lobby starts on its first guest and the rest arrive
+	// through the mid-run gate; an interactive host has no lobby.
+	Participants int
+
+	// Bots names the graph of each bot seat this run holds, one entry a bot. Seats
+	// join the session the run is in, and a run in none opens one with no listener.
+	Bots []string
+
+	// ClaimStore keeps the claims this process comes back to its sessions with past
+	// its own life, which a page's reload needs; nil keeps them while it runs.
+	ClaimStore ClaimStore
+
+	// holder is the participant whose bot this run is, zero for any other run.
+	holder link.PeerID
+	relay  func() (net.Conn, error) // a bot's stream to its holder; see seatLink
+
+	// claims is the process's claim keeper, which every run Run builds and every seat
+	// they hold shares; Normalize gives a run built another way one of its own.
+	claims *claimKeeper
+
+	// sessionPlayers is the -players of the session this run joined, which it holds
+	// to should it take that session over; Participants is a host's own.
+	sessionPlayers int
+
+	// hostListeners are the first run's -host doors, bound before its terminal
+	// started; the run serves them once its clock runs.
+	hostListeners []net.Listener
+
+	// joinPress says this run's join is one its player started, at launch or from a
+	// :join, whose seat waits for their press (membership.joinWaits). A run dialled on
+	// its own, or whose player already pressed, takes its seat once its world is built.
+	joinPress bool
+}
+
+// joining is this session half pointed at the session a :join names, as -join would
+// have built it. -players and -authority go: they set a session this run no longer
+// hosts, and the one it joins has its own, which its offer carries.
+func (s Membership) joining(target string) (Membership, error) {
+	e, err := link.ParseEndpoint(target)
+	if err != nil {
+		return s, err
+	}
+	s.HostAddress, s.Participants, s.FixedAuthority = "", 0, false
+	s.JoinAddress, s.SessionName = e.Addr, e.Name
+	return s, nil
+}
+
+// hostNetwork is the transport the doors this run opens at addr are served with.
+func (s Membership) hostNetwork(addr string) *link.Config {
+	cfg := network.DebugConfig(link.RoleHost, addr)
+	cfg.TLS = s.TLS
+	return &cfg.Config
+}
+
+// bindDoors binds every door addr names, none when one cannot be had.
+func (s Membership) bindDoors(addr string) ([]net.Listener, error) {
+	doors, err := link.Doors(addr)
+	if err != nil {
+		return nil, err
+	}
+	var lns []net.Listener
+	for _, d := range doors {
+		ln, err := link.Listen(d.Addr, s.hostNetwork(d.Addr))
+		if err != nil {
+			closeDoors(lns)
+			return nil, err
+		}
+		lns = append(lns, ln)
+	}
+	return lns, nil
+}
+
+func closeDoors(lns []net.Listener) {
+	for _, ln := range lns {
+		_ = ln.Close()
+	}
+}
+
+// relayRouter is the router -relay names with the vif:// scheme, to publish this
+// run's door through rather than an address to bind: a door behind a NAT, reached at
+// the router's address (doc/multi-player.md §5.6).
+func (s *Membership) relayRouter() (string, bool) {
+	if !strings.HasPrefix(s.RelayAddress, "vif://") {
+		return "", false
+	}
+	e, err := link.ParseEndpoint(s.RelayAddress)
+	if err != nil || e.Addr == "" {
+		return "", false
+	}
+	return e.Addr, true
+}
+
 // open wires the membership over the run's configuration and scenario before the
 // run builds anything; the world, the context, the scheduler, the network service
 // and the protocol halves follow as the run gets each.
-func (m *membership) open(run membershipRun, cfg *Config, scenario *resource.Scenario, log *vlog.Log, glue *corrector.Corrector, life *lifecycle.Controller) {
+func (m *membership) open(run membershipRun, cfg *Membership, scenario *resource.Scenario, log *vlog.Log, glue *corrector.Corrector, life *lifecycle.Controller) {
 	m.run, m.cfg, m.scenario, m.log, m.glue, m.life = run, cfg, scenario, log, glue, life
 	m.admissions = network.NewAdmissionLimiter()
 	m.claims = cfg.claims
@@ -185,6 +352,14 @@ func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture, 
 }
 func (a *App) SessionSummary() string { return a.membership.SessionSummary() }
 func (a *App) barrierLocked() bool    { return a.membership.barrierLocked() }
+
+// The run's settings the membership reads, live: tests switch a running run's mode,
+// and a join copies the whole Config where it dials (joinBase).
+func (a *App) mode() Mode                  { return a.cfg.Mode }
+func (a *App) scripted() bool              { return a.cfg.scriptedSession }
+func (a *App) geometryDefaulted() bool     { return a.cfg.geometryDefaulted }
+func (a *App) resources() resource.Options { return a.cfg.Resources }
+func (a *App) joinBase() joinBase          { return a.cfg }
 
 // replacing reports whether a run to replace this one is latched already.
 func (a *App) replacing() bool { return a.restart.Load() != nil }

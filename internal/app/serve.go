@@ -83,7 +83,7 @@ func (a *App) Serve() error {
 	// stopped clock would time every such dial out.
 	a.membership.openMidRunJoins()
 	a.log.Info("session", "msg", "server running",
-		"address", a.cfg.HostAddress, "capacity", a.membership.sessionCapacity())
+		"address", a.cfg.Membership.HostAddress, "capacity", a.membership.sessionCapacity())
 
 	frameTicker := time.NewTicker(a.ctx.FrameInterval())
 	defer frameTicker.Stop()
@@ -216,7 +216,7 @@ func (a *App) resumeVacant() {
 func (a *App) logSessionEnd(st lifecycle.State) {
 	a.log.Info("session", "msg", "session ended",
 		"phase", st.Phase.String(), "reason", st.Reason, "guests", st.Guests,
-		"address", a.cfg.HostAddress, "tick", a.Position().Tick)
+		"address", a.cfg.Membership.HostAddress, "tick", a.Position().Tick)
 }
 
 // releaseFrame is App.frame's handshake without the frame: it takes the completed

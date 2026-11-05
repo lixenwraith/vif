@@ -278,7 +278,7 @@ func waitForWraiths(t *testing.T, a *App, n int) {
 // as the drop it was asked for rather than a link loss, and the rest leave with the run.
 func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
 	// Not parallel: paced runs against wall-clock deadlines.
-	holder, stop := driveBot(t, Config{Bots: []string{"roam", "patrol"}}, "patrol", nil)
+	holder, stop := driveBot(t, Config{Membership: Membership{Bots: []string{"roam", "patrol"}}}, "patrol", nil)
 	if addr := holder.HostAddr(); addr != "" {
 		t.Fatalf("a run with bots listens on %s", addr)
 	}
@@ -334,7 +334,7 @@ func TestBotRemovalDoesNotFollowReusedRosterIdentities(t *testing.T) {
 func TestAnAuthorityPausesOnlyWhileItsOtherParticipantsAreItsBots(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	holder, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	holder, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, holder, 2)
 	// A bot is rostered before its seat learns its participant, and until a tick
 	// latches that, its link is a stranger's to the pause gate. A host's bots join
@@ -376,7 +376,7 @@ func TestASeatHoldsWithItsWorld(t *testing.T) {
 			}
 		}
 	}
-	holder, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	holder, _ := driveBot(t, Config{Membership: Membership{Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, holder, 2)
 	var b *App
 	until("the bot to be seated", func() bool {
@@ -410,7 +410,7 @@ func TestASeatHoldsWithItsWorld(t *testing.T) {
 // slot's owner and the participant holding a bot, and its bare keys its own slot.
 func TestTheRosterCardsNameABotAndItsHolder(t *testing.T) {
 	// Not parallel: paced runs against wall-clock deadlines.
-	holder, _ := driveBot(t, Config{Bots: []string{"roam"}}, "patrol", nil)
+	holder, _ := driveBot(t, Config{Membership: Membership{Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, holder, 2)
 	var b *App
 	waitUntil(t, func() bool {
@@ -449,9 +449,10 @@ func TestTheRosterCardsNameABotAndItsHolder(t *testing.T) {
 func TestAGuestsBotsWaitWithIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	guest, leave := driveBot(t, Config{JoinAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	guest, leave := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
+		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	id := link.PeerID(guest.membership.localParticipant())
 	leave()
@@ -708,9 +709,11 @@ func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 func TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, leave := driveBot(t, Config{HostAddress: addr, FixedAuthority: true, Bots: []string{"roam"}}, "patrol", nil)
+	host, leave := driveBot(t, Config{Membership: Membership{HostAddress: addr, FixedAuthority: true,
+		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	fork, _ := driveRun(t, "script", Config{JoinAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	fork, _ := driveRun(t, "script", Config{Membership: Membership{JoinAddress: addr,
+		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitForCursors(t, fork, 4)
 	leave()
@@ -727,9 +730,10 @@ func TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd(t *testing.T) {
 func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, leave := driveBot(t, Config{HostAddress: addr, FixedAuthority: true, Bots: []string{"roam"}}, "patrol", nil)
+	host, leave := driveBot(t, Config{Membership: Membership{HostAddress: addr, FixedAuthority: true,
+		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	cfg := Config{JoinAddress: addr, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
+	cfg := Config{Membership: Membership{JoinAddress: addr}, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
 		Resources: resource.Options{Embedded: true}}
 	g, err := loadBotGraph(cfg.Resources, "patrol")
 	if err != nil {
@@ -763,9 +767,11 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines. The session is
 	// named: the guest's relay acceptor checks the name, so its seat must send it.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}, SessionName: "named"}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"},
+		SessionName: "named"}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	guest, _ := driveBot(t, Config{JoinAddress: addr, SessionName: "named", Bots: []string{"roam"}}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, SessionName: "named",
+		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitForCursors(t, guest, 4)
 	if h, g := host.membership.sessionTransport().PeerCount(), guest.membership.sessionTransport().PeerCount(); h != 2 || g != 2 {
@@ -794,9 +800,11 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}, SessionName: "named"}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"},
+		SessionName: "named"}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	guest, _ := driveBot(t, Config{JoinAddress: addr, SessionName: "named", Bots: []string{"roam"}}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, SessionName: "named",
+		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitForCursors(t, guest, 4)
 	waitForSeats(t, guest, 1)
@@ -836,10 +844,11 @@ func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	host, leave := driveBot(t, Config{Membership: Membership{HostAddress: addr,
+		Bots: []string{DefaultBotGraph}}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 2)
-	successor, _ := driveBot(t, Config{JoinAddress: addr}, DefaultBotGraph, nil)
-	guest, _ := driveBot(t, Config{JoinAddress: addr}, DefaultBotGraph, nil)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, DefaultBotGraph, nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, DefaultBotGraph, nil)
 	for _, a := range []*App{host, successor, guest} {
 		waitForCursors(t, a, 4)
 	}
@@ -887,7 +896,7 @@ func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 func TestALobbyClosesOnlyOnGuestsOnItsLink(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	bots := slices.Repeat([]string{"roam"}, 6)
-	host, _ := driveBot(t, Config{HostAddress: freeAddress(t), Bots: bots}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: freeAddress(t), Bots: bots}}, "patrol", nil)
 	waitForCursors(t, host, len(bots)+1)
 }
 
@@ -940,7 +949,8 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	}
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
-	cfg := Config{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}, claims: newClaimKeeper(nil)}
+	cfg := Config{Membership: Membership{JoinAddress: host.HostAddr(), Bots: []string{"patrol"},
+		claims: newClaimKeeper(nil)}}
 	_, leave := driveBot(t, cfg, "patrol", nil)
 	waitForCursors(t, host, 3)
 	left := places(host, everyone)
@@ -966,7 +976,8 @@ func TestALateSurvivorsPlaceIsGivenBackWithItsBots(t *testing.T) {
 	}
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
-	guest, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr(),
+		Bots: []string{"patrol"}}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	waitForCursors(t, guest, 3)
 	before := places(host, everyone)
@@ -1003,7 +1014,8 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 	stopTicks := tickInBackground(host)
 	stop := func() { stopTicks(); host.Close() }
 	t.Cleanup(stop)
-	holder, _ := driveBot(t, Config{JoinAddress: host.HostAddr(), Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	holder, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr(),
+		Bots: []string{DefaultBotGraph}}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 3)
 	waitForCursors(t, holder, 3)
 	port, err := holder.membership.socketPort()
@@ -1081,9 +1093,11 @@ func TestBotReplayEndsAtTheRecordedSimulationBoundary(t *testing.T) {
 
 func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr,
+		Bots: []string{DefaultBotGraph}}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 2)
-	guest, _ := driveBot(t, Config{JoinAddress: addr, Bots: []string{DefaultBotGraph, DefaultBotGraph}}, DefaultBotGraph, nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
+		Bots: []string{DefaultBotGraph, DefaultBotGraph}}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 5)
 	waitForCursors(t, guest, 5)
 	holder := guest.membership.localParticipant()
@@ -1155,10 +1169,12 @@ func TestBotInputPreservesOperatorFeedback(t *testing.T) {
 
 func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
 	addr := freeAddress(t)
-	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
+	host, leave := driveBot(t, Config{Membership: Membership{HostAddress: addr,
+		Bots: []string{DefaultBotGraph}}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 2)
-	successor, _ := driveBot(t, Config{JoinAddress: addr, Bots: []string{DefaultBotGraph}}, DefaultBotGraph, nil)
-	other, _ := driveBot(t, Config{JoinAddress: addr}, DefaultBotGraph, nil)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
+		Bots: []string{DefaultBotGraph}}}, DefaultBotGraph, nil)
+	other, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, DefaultBotGraph, nil)
 	for _, a := range []*App{host, successor, other} {
 		waitForCursors(t, a, 5)
 	}
@@ -1226,13 +1242,13 @@ func waitForMotion(t *testing.T, a *App, e core.Entity, what string) {
 func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	relayAddr := freeAddress(t)
-	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
-	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr}}, "roam", nil)
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}
@@ -1256,16 +1272,17 @@ func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	relayAddr := freeAddress(t)
-	relay, leave := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	relay, leave := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
+		RelayAddress: relayAddr}}, "patrol", nil)
 	waitForCursors(t, host, 3)
-	other, _ := driveBot(t, Config{JoinAddress: addr}, "patrol", nil)
+	other, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, "patrol", nil)
 	other.ctx.Relaying.Store(true)
 	waitForCursors(t, host, 4)
 	waitListening(t, relayAddr)
-	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr}}, "roam", nil)
 	for _, a := range []*App{host, relay, other, person} {
 		waitForCursors(t, a, 5)
 	}
@@ -1291,15 +1308,17 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 func TestAPersonBehindARelayReachesTheHostThatTookOver(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, leave := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	next, _ := driveBot(t, Config{JoinAddress: addr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	next, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
+		ListenAddress: freeAddress(t)}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	relayAddr := freeAddress(t)
-	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr,
+		ListenAddress: freeAddress(t)}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitListening(t, relayAddr)
-	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr}}, "roam", nil)
 	for _, a := range []*App{host, next, relay, person} {
 		waitForCursors(t, a, 5)
 	}
@@ -1348,13 +1367,13 @@ func TestAPersonBehindARelayReachesTheHostThatTookOver(t *testing.T) {
 func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	relayAddr := freeAddress(t)
-	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
-	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr}}, "roam", nil)
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}
@@ -1380,10 +1399,11 @@ func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
 func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, leave := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, leave := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	relayAddr := freeAddress(t)
-	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr,
+		ListenAddress: freeAddress(t)}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
 	id := link.PeerID(relay.membership.localParticipant())
@@ -1394,7 +1414,7 @@ func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
 		r := authorityOf(relay)
 		return r.Authority == id && !r.Migrating && !relay.Context().TimeCtl.Held()
 	}, "the relay taking the session over and playing on")
-	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr}}, "roam", nil)
 	if got := authorityOf(person); got.Authority != id || got.Term != network.FirstTerm+1 {
 		t.Fatalf("a player that joined at the successor's relay door holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
 	}
@@ -1413,12 +1433,13 @@ func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
 func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	peer, _ := driveBot(t, Config{JoinAddress: addr, ListenAddress: freeAddress(t)}, "patrol", nil)
+	peer, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
+		ListenAddress: freeAddress(t)}}, "patrol", nil)
 	peer.ctx.Relaying.Store(true)
 	waitForCursors(t, host, 3)
-	guest, _ := driveBot(t, Config{JoinAddress: addr, NoAdvertise: true}, "roam", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, NoAdvertise: true}}, "roam", nil)
 	for _, a := range []*App{host, peer, guest} {
 		waitForCursors(t, a, 4)
 	}
@@ -1428,7 +1449,7 @@ func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
 	// The host's door is where nothing answers, as a host this guest alone cannot
 	// reach is; the mode is the one whose loop takes a rejoin.
 	c := guest.membership.claim.Load()
-	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.JoinAddress = ModePlay, "127.0.0.1:1" })
+	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.Membership.JoinAddress = ModePlay, "127.0.0.1:1" })
 	if c == nil || !host.instance().DropParticipant(id) {
 		t.Fatal("the guest holds no claim, or its link would not drop")
 	}
@@ -1448,12 +1469,13 @@ func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
 func TestADroppedGuestRejoinsAtACandidatesDoor(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	door := freeAddress(t)
-	peer, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: door, ListenAddress: freeAddress(t)}, "patrol", nil)
+	peer, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: door,
+		ListenAddress: freeAddress(t)}}, "patrol", nil)
 	waitForCursors(t, host, 3)
-	guest, _ := driveBot(t, Config{JoinAddress: addr, NoAdvertise: true}, "roam", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, NoAdvertise: true}}, "roam", nil)
 	for _, a := range []*App{host, peer, guest} {
 		waitForCursors(t, a, 4)
 	}
@@ -1466,7 +1488,7 @@ func TestADroppedGuestRejoinsAtACandidatesDoor(t *testing.T) {
 		t.Fatalf(":session on the host reads %q; want the door named", host.SessionSummary())
 	}
 	c := guest.membership.claim.Load()
-	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.JoinAddress = ModePlay, "127.0.0.1:1" })
+	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.Membership.JoinAddress = ModePlay, "127.0.0.1:1" })
 	if c == nil || !host.instance().DropParticipant(id) {
 		t.Fatal("the guest holds no claim, or its link would not drop")
 	}
@@ -1507,13 +1529,14 @@ func downstreamOf(a *App) (out []uint32) {
 func TestARelayedPersonsOwnAddressReachesTheSession(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	relayAddr := freeAddress(t)
-	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
-	person, _ := driveBot(t, Config{JoinAddress: relayAddr, ListenAddress: freeAddress(t)}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr,
+		ListenAddress: freeAddress(t)}}, "roam", nil)
 	id, want := link.PeerID(person.membership.localParticipant()), person.reach.DeclaredAddr()
 	if want == "" {
 		t.Fatal("the relayed person declared no address")

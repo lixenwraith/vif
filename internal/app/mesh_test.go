@@ -357,7 +357,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 
 	host := mustHeadless(t, seed, 120, 40)
 	t.Cleanup(host.Close)
-	host.cfg.Participants = 3
+	host.cfg.Membership.Participants = 3
 
 	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant

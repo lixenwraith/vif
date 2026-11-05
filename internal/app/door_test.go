@@ -88,10 +88,11 @@ func routerStandIn(t *testing.T) (string, *network.TunnelHub) {
 func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	router, hub := routerStandIn(t)
-	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: "vif://" + router}, "patrol", nil)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
+		RelayAddress: "vif://" + router}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	relayID := link.PeerID(relay.membership.localParticipant())
 	var door string
@@ -104,7 +105,7 @@ func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
 	if err != nil || e.Addr != router || !hub.Has(e.Name) {
 		t.Fatalf("the relay's door is %q (%v); want a link at the router naming a door it carries", door, err)
 	}
-	person, _ := driveBot(t, Config{JoinAddress: e.Addr, SessionName: e.Name}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: e.Addr, SessionName: e.Name}}, "roam", nil)
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}

@@ -150,11 +150,11 @@ func (m *membership) changeScenarioLocked(name string) (bool, error) {
 	if port != nil && !m.world.IsSessionCoordinator() {
 		return false, errors.New("only the host can change a live session's scenario")
 	}
-	if m.cfg.Mode != ModePlay {
-		return false, fmt.Errorf("%s mode has no restart loop", m.cfg.Mode)
+	if mode := m.run.mode(); mode != ModePlay {
+		return false, fmt.Errorf("%s mode has no restart loop", mode)
 	}
 	// A scenario received from a coordinator answers its own name and no other.
-	o := m.cfg.Resources
+	o := m.run.resources()
 	o.Scenario, o.Embedded = name, false
 	if o.Provided != nil && o.Provided.Name != name {
 		o.Provided = nil
@@ -201,7 +201,7 @@ func (m *membership) changeScenarioLocked(name string) (bool, error) {
 // A restart follows the authority's current address, which may have migrated.
 // Called under the world lock; the restart loop consumes the atomic request.
 func (m *membership) receiveSessionRestart(from uint32, addr string) {
-	if m.cfg.Mode != ModePlay || !m.sessionRoleLocked().joined() {
+	if m.run.mode() != ModePlay || !m.sessionRoleLocked().joined() {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
 	// A host's own doors are bind addresses with no host, and say the session stayed
@@ -261,7 +261,7 @@ func (m *membership) sessionRoleLocked() sessionRole {
 	opened := m.midRunPort != nil
 	m.sessionMu.Unlock()
 	switch {
-	case m.cfg.Mode.Serves():
+	case m.run.mode().Serves():
 		return roleServer
 	case m.sessionTransportLocked() == nil:
 		return roleSolo
@@ -278,8 +278,8 @@ func (m *membership) sessionRoleLocked() sessionRole {
 }
 
 func (m *membership) joinErrorLocked() error {
-	if m.cfg.Mode != ModePlay {
-		return fmt.Errorf("%s mode has no restart loop", m.cfg.Mode)
+	if mode := m.run.mode(); mode != ModePlay {
+		return fmt.Errorf("%s mode has no restart loop", mode)
 	}
 	if why := sessionRoles[m.sessionRoleLocked()].join; why != "" {
 		return errors.New(why)
@@ -296,10 +296,10 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 	}
 	// A site is asked for a session off the lock, since it answers once the pod is up.
 	site, err := link.ParseEndpoint(target)
-	next := *m.cfg
+	next, base := *m.cfg, m.run.joinBase()
 	if err == nil && site.Scheme != link.SchemeSite {
 		if next, err = m.cfg.joining(target); err == nil {
-			err = next.Validate()
+			err = base.validateWith(next)
 		}
 	}
 	if err != nil {
@@ -322,13 +322,13 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 			if door, err = network.RequestSession(site.Addr, players, scenario); err == nil {
 				m.ctx.SetStatusMessage("Joining "+link.Shown(door)+"...", parameter.StatusProgress)
 				if next, err = next.joining(door); err == nil {
-					err = next.Validate()
+					err = base.validateWith(next)
 				}
 			}
 		}
 		var d *joinDial
 		if err == nil {
-			d, err = dialJoin(next)
+			d, err = dialJoin(next, base)
 		}
 		switch {
 		case err != nil:
@@ -590,8 +590,8 @@ func (m *membership) openSessionLocked(kept []network.RosterEntry) error {
 // leaveErrorLocked says why this run cannot leave its session now. Caller MUST hold
 // updateMutex.
 func (m *membership) leaveErrorLocked() error {
-	if m.cfg.Mode != ModePlay {
-		return fmt.Errorf("%s mode has no loop to leave from", m.cfg.Mode)
+	if mode := m.run.mode(); mode != ModePlay {
+		return fmt.Errorf("%s mode has no loop to leave from", mode)
 	}
 	if why := sessionRoles[m.sessionRoleLocked()].leave; why != "" {
 		return errors.New(why)

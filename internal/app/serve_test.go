@@ -265,7 +265,7 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Config{
-				Mode: tt.mode, HostAddress: "127.0.0.1:0", Participants: tt.participants,
+				Mode: tt.mode, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: tt.participants},
 				Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E4E,
 			}
 			cfg.scriptedSession = tt.scripted
@@ -332,7 +332,7 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			a, err := New(Config{
-				Mode: ModeServer, HostAddress: "127.0.0.1:0", Participants: tt.participants,
+				Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: tt.participants},
 				Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E5E,
 			})
 			if err != nil {
@@ -398,7 +398,7 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 			t.Parallel()
 			a := mustHeadless(t, 0x5E6E, 120, 40)
 			defer a.Close()
-			a.cfg.Participants, a.cfg.sessionPlayers = tt.participants, tt.joined
+			a.cfg.Membership.Participants, a.cfg.Membership.sessionPlayers = tt.participants, tt.joined
 			if tt.serves {
 				a.cfg.Mode = ModeServer
 			}
@@ -563,7 +563,7 @@ func TestServerModeIsWiredWithoutATerminal(t *testing.T) {
 
 	base := func() Config {
 		return Config{
-			Mode: ModeServer, HostAddress: "127.0.0.1:0", Participants: 1,
+			Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: 1},
 			Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
 		}
 	}
@@ -572,7 +572,7 @@ func TestServerModeIsWiredWithoutATerminal(t *testing.T) {
 	}
 	// One guest is a session; on an ordinary host the same value would not be.
 	ordinary := base()
-	ordinary.Mode, ordinary.Participants = ModePlay, 1
+	ordinary.Mode, ordinary.Membership.Participants = ModePlay, 1
 	if err := ordinary.Validate(); err == nil {
 		t.Fatal("an interactive host accepted a one-participant lobby")
 	}
@@ -580,8 +580,8 @@ func TestServerModeIsWiredWithoutATerminal(t *testing.T) {
 		name  string
 		apply func(*Config)
 	}{
-		{"no bind address", func(c *Config) { c.HostAddress = "" }},
-		{"more guests than slots", func(c *Config) { c.Participants = parameter.MaxPlayers + 1 }},
+		{"no bind address", func(c *Config) { c.Membership.HostAddress = "" }},
+		{"more guests than slots", func(c *Config) { c.Membership.Participants = parameter.MaxPlayers + 1 }},
 		{"a simulation rate", func(c *Config) { c.TimeScaleSpec = "2" }},
 		{"a colour mode", func(c *Config) { c.ColorModeSet = true }},
 	} {

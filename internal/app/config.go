@@ -1,17 +1,13 @@
 package app
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
-	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/pkg/vmath"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/lifecycle"
@@ -100,8 +96,6 @@ func (m Mode) Audio() bool {
 // Built from CLI flags by cmd/vif, or programmatically by embedders
 // (map editor, wasm entry, headless harness) that have no flag set
 type Config struct {
-	holder link.PeerID
-	relay  func() (net.Conn, error) // a guest's bot's stream to its holder; see relayLink
 	// Mode selects the runtime shape; the zero value is the interactive game
 	Mode Mode
 
@@ -133,9 +127,6 @@ type Config struct {
 	// such as settings it dropped, or the failure of the run this one replaces.
 	Notice string
 
-	// ClaimStore keeps the claims this process comes back to its sessions with past
-	// its own life, which a page's reload needs; nil keeps them while it runs.
-	ClaimStore ClaimStore
 	// MusicWAV is the directory the music is recorded to as a WAV file; "" records none.
 	MusicWAV string
 
@@ -178,66 +169,9 @@ type Config struct {
 	// file. Harnesses set it to capture records in memory.
 	JournalSink event.JournalSink
 
-	// HostAddress is the address this run hosts a session on. An interactive run
-	// opens it once its clock runs, as :host does; a scripted, bot-driven or
-	// dedicated host holds tick zero in a lobby until lobbyQuorum guests pass the
-	// start gate.
-	HostAddress string
-
-	// TLS is the certificate a wss:// door serves, -cert and -key or the one -selfsign
-	// made for the run; nil opens none. It is the run's, so a door :host opens later
-	// serves it too. Trust is what a wss:// dial trusts a host by, -ca; nil is the
-	// system's roots.
-	TLS, Trust *tls.Config
-
-	// JoinAddress is the session this run joins, at startup or through :join, at
-	// whatever tick the host has reached. The host's offer supplies simulation
-	// identity before the App is constructed.
-	JoinAddress string
-
-	// SessionName is what one address calls this session, so a deployment can put
-	// several behind one. A host answers to it and refuses a dial that named
-	// another; a joiner sends it before the handshake, where a front door can read
-	// it. Empty on both is an address with one session on it.
-	SessionName string
-
-	// ListenAddress pins the port this participant is dialled back on, and
-	// NoAdvertise refuses to publish one. Only a migrate session uses either. The
-	// default is the coordinator's own port — one firewall rule for a session —
-	// falling back to an OS-assigned one, and a bind that fails leaves the
-	// participant a leaf rather than failing the run.
-	ListenAddress string
-	NoAdvertise   bool
-
-	// RelayAddress is where a joined run admits participants that cannot reach the
-	// host, carrying their artifacts on its own link: an address to bind, or, with the
-	// vif:// scheme kept, a router to publish the door through (relayRouter). Empty
-	// relays only its bots.
-	RelayAddress string
-
-	// FixedAuthority pins authorship to the participant that opens the session, so
-	// losing it ends the session rather than moving it. It is a session property:
-	// the coordinator's value travels in the offer. Default on for a dedicated host,
-	// which an orchestrator replaces at the same address, off for an interactive
-	// one. See doc/multi-player.md §5.
-	FixedAuthority bool
-
-	// SlowPolicy is when this run, while authoring, evicts a participant that cannot
-	// keep up, and ShedPolicy what it drops when it cannot keep its own tick; nil
-	// keeps the default. See converge.SlowPolicy and converge.ShedPolicy.
-	SlowPolicy *converge.SlowPolicy
-	ShedPolicy *converge.ShedPolicy
-
-	// Participants is a ceiling on the roster's cursors, a playing host's own
-	// included; zero means the whole roster. On a scripted or bot-driven host an
-	// explicit value is also what the startup lobby waits for. Unset, and always on
-	// a dedicated host, the lobby starts on its first guest and the rest arrive
-	// through the mid-run gate; an interactive host has no lobby.
-	Participants int
-
-	// Bots names the graph of each bot seat this run holds, one entry a bot. Seats
-	// join the session the run is in, and a run in none opens one with no listener.
-	Bots []string
+	// Membership is the session half: what the membership holds of this run's
+	// configuration, and writes back for the run that replaces this one.
+	Membership Membership
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
 	// assumes; margins apply as usual, so the viewport is smaller than these.
@@ -276,34 +210,17 @@ type Config struct {
 	// HostAddress because nothing waits in a startup lobby: guests use the mid-run gate.
 	resumeHost string
 
-	// hostListeners are the first run's -host doors, bound before its terminal
-	// started; the run serves them once its clock runs.
-	hostListeners []net.Listener
-
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the
 	// transport detail private leaves Config's public session surface role-neutral.
 	networkConfig *link.Config
-
-	// sessionPlayers is the -players of the session this run joined, which it holds
-	// to should it take that session over; Participants is a host's own.
-	sessionPlayers int
 
 	// dialled is a :join its session already answered, dialled while the run it
 	// replaces played on.
 	dialled *joinDial
 
-	// joinPress says this run's join is one its player started, at launch or from a
-	// :join, whose seat waits for their press (App.joinWaits). A run dialled on its
-	// own, or whose player already pressed, takes its seat once its world is built.
-	joinPress bool
-
 	// startScreen says this run is the launch on a host without a start screen of its
 	// own, which waits behind the game's (App.startScreen)
 	startScreen bool
-
-	// claims is the process's claim keeper, which every run Run builds and every seat
-	// they hold shares; Normalize gives a run built another way one of its own.
-	claims *claimKeeper
 
 	// journalCarried says Journal came from the run this one replaces, which was
 	// journaling or asked to start: one that fails to open leaves this run
@@ -359,7 +276,7 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	local.CellAspect = fromAnchor.CellAspect
 	local.LockMap = true
 	local.TickInterval = fromAnchor.TickInterval
-	local.sessionPlayers = o.Players
+	local.Membership.sessionPlayers = o.Players
 	// The session's rate is its host's, a script's or bot's pace included; a
 	// harness's manual clock is driven by Tick and takes none.
 	if !local.Mode.Driven() || local.scriptedSession {
@@ -368,17 +285,23 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	return local, local.Validate()
 }
 
-// joining is this configuration pointed at the session a :join names, as -join
-// would have built it. -players and -authority go: they set a session this run no
-// longer hosts, and the one it joins has its own, which its offer carries.
-func (c Config) joining(target string) (Config, error) {
-	e, err := link.ParseEndpoint(target)
-	if err != nil {
-		return c, err
+// validateWith checks this configuration with s as its session half: a join's,
+// before anything is dialled.
+func (c Config) validateWith(s Membership) error {
+	c.Membership = s
+	return c.Validate()
+}
+
+// prepare is the resources a dial of s's session builds its world on, settled on
+// its preview: this configuration as the session makes it, checked, with the
+// session's scenario resolved.
+func (c Config) prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error) {
+	c.Membership = s
+	var err error
+	if c, err = ConfigForJoin(c, preview); err == nil {
+		err = resolveJoinScenario(&c, pending, preview)
 	}
-	c.HostAddress, c.Participants, c.FixedAuthority = "", 0, false
-	c.JoinAddress, c.SessionName = e.Addr, e.Name
-	return c, nil
+	return c.Resources, err
 }
 
 // joinNotice adds one line to what the next run's status line opens with.
@@ -394,77 +317,46 @@ func joinNotice(notice, line string) string {
 // clock rather than before it: the next run is not waiting for a lobby, it is
 // reopening a door its guests are already at.
 func (c Config) restarted(next *restartRequest) (Config, *Config) {
-	c.Notice, c.dialled, c.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
+	c.Notice, c.dialled, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
 	c.Journal, c.journalCarried = next.Journal, next.Journal
-	c.joinPress, c.Resources.Provided = next.press, next.provided
+	c.Membership.joinPress, c.Resources.Provided = next.press, next.provided
 	if next.Scenario != "" {
 		c.Resources.Scenario, c.Resources.Embedded = next.Scenario, false
 	}
-	c.HostAddress, c.resumeHost = "", next.Host
+	c.Membership.HostAddress, c.resumeHost = "", next.Host
 	switch {
 	case next.Rejoin:
 		if next.Join != "" {
-			c.JoinAddress = next.Join
+			c.Membership.JoinAddress = next.Join
 		}
 	case next.Join == "" && next.dialled != nil:
 		solo := c
-		solo.JoinAddress, solo.SessionName, solo.sessionPlayers = "", "", 0
+		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.Membership.sessionPlayers = "", "", 0
 		c.dialled = next.dialled
 		return c, &solo
 	case next.Join != "":
 		solo := c
-		solo.JoinAddress, solo.SessionName, solo.sessionPlayers = "", "", 0
-		joined, err := c.joining(next.Join)
+		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.Membership.sessionPlayers = "", "", 0
+		joined, err := c.Membership.joining(next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
 			next.dialled.abandon(err)
 			solo.Notice = "Join failed: " + err.Error()
 			return solo, nil
 		}
-		joined.dialled = next.dialled
-		return joined, &solo
+		c.Membership, c.dialled = joined, next.dialled
+		return c, &solo
 	default:
 		// Not following anyone: a run that led its session, and one that
 		// inherited it and has nobody left, both start over on their own.
-		c.JoinAddress = ""
+		c.Membership.JoinAddress = ""
 	}
 	return c, nil
 }
 
-// hostNetwork is the transport the doors this run opens at addr are served with.
-func (c Config) hostNetwork(addr string) *link.Config {
-	cfg := network.DebugConfig(link.RoleHost, addr)
-	cfg.TLS = c.TLS
-	return &cfg.Config
-}
-
-// bindDoors binds every door addr names, none when one cannot be had.
-func (c Config) bindDoors(addr string) ([]net.Listener, error) {
-	doors, err := link.Doors(addr)
-	if err != nil {
-		return nil, err
-	}
-	var lns []net.Listener
-	for _, d := range doors {
-		ln, err := link.Listen(d.Addr, c.hostNetwork(d.Addr))
-		if err != nil {
-			closeDoors(lns)
-			return nil, err
-		}
-		lns = append(lns, ln)
-	}
-	return lns, nil
-}
-
-func closeDoors(lns []net.Listener) {
-	for _, ln := range lns {
-		_ = ln.Close()
-	}
-}
-
 // Normalize fills unset fields that carry a defined default
 func (c *Config) Normalize() {
-	if c.claims == nil {
-		c.claims = newClaimKeeper(c.ClaimStore)
+	if c.Membership.claims == nil {
+		c.Membership.claims = newClaimKeeper(c.Membership.ClaimStore)
 	}
 	if c.Play.AutoFire == "" {
 		c.Play = paths.DefaultPlay()
@@ -499,20 +391,20 @@ func (c Config) Validate() error {
 	// on its site, and no listener to host or serve from. Its bots dial nothing,
 	// joining it in-process.
 	var join link.Endpoint
-	if c.JoinAddress != "" {
+	if c.Membership.JoinAddress != "" {
 		var err error
-		if join, err = link.ParseEndpoint(c.JoinAddress); err != nil {
+		if join, err = link.ParseEndpoint(c.Membership.JoinAddress); err != nil {
 			return err
 		}
 	}
-	if c.HostAddress != "" {
-		if _, err := link.Doors(c.HostAddress); err != nil {
+	if c.Membership.HostAddress != "" {
+		if _, err := link.Doors(c.Membership.HostAddress); err != nil {
 			return err
 		}
 	}
-	if c.RelayAddress != "" {
-		relay, err := link.ParseEndpoint(c.RelayAddress)
-		_, router := c.relayRouter()
+	if c.Membership.RelayAddress != "" {
+		relay, err := link.ParseEndpoint(c.Membership.RelayAddress)
+		_, router := c.Membership.relayRouter()
 		switch {
 		case err != nil:
 		case router && relay.Name != "":
@@ -520,7 +412,7 @@ func (c Config) Validate() error {
 		case !router:
 			err = relay.Listenable()
 		}
-		if err == nil && c.JoinAddress == "" {
+		if err == nil && c.Membership.JoinAddress == "" {
 			err = errors.New("-relay admits participants to a session this run joined")
 		}
 		if err != nil {
@@ -529,18 +421,19 @@ func (c Config) Validate() error {
 	}
 	if !buildHasSocketNetwork {
 		switch {
-		case c.HostAddress != "":
+		case c.Membership.HostAddress != "":
 			return errBrowserHosting
-		case c.RelayAddress != "":
+		case c.Membership.RelayAddress != "":
 			return errors.New("a browser relays only its own bots")
-		case c.JoinAddress != "" && c.relay == nil && join.Scheme != link.SchemeWebSocket && c.SessionName == "":
+		case c.Membership.JoinAddress != "" && c.Membership.relay == nil &&
+			join.Scheme != link.SchemeWebSocket && c.Membership.SessionName == "":
 			return errors.New("a browser cannot dial host:port; join with a session's link")
 		}
 	}
-	if c.HostAddress != "" && c.JoinAddress != "" {
+	if c.Membership.HostAddress != "" && c.Membership.JoinAddress != "" {
 		return errors.New("-host and -join are mutually exclusive")
 	}
-	if c.HostAddress != "" || c.JoinAddress != "" {
+	if c.Membership.HostAddress != "" || c.Membership.JoinAddress != "" {
 		switch {
 		case c.Mode == ModeReplay:
 			return fmt.Errorf("%s: journal playback cannot join a network session", c.Mode)
@@ -552,11 +445,11 @@ func (c Config) Validate() error {
 	if c.Mode.Serves() {
 		minParticipants = 1 // a dedicated host is not one of them
 	}
-	if c.Participants != 0 && (c.Participants < minParticipants || c.Participants > parameter.MaxPlayers) {
+	if n := c.Membership.Participants; n != 0 && (n < minParticipants || n > parameter.MaxPlayers) {
 		return fmt.Errorf("-players %d is outside the supported range %d..%d",
-			c.Participants, minParticipants, parameter.MaxPlayers)
+			n, minParticipants, parameter.MaxPlayers)
 	}
-	if c.Mode.Serves() && c.HostAddress == "" {
+	if c.Mode.Serves() && c.Membership.HostAddress == "" {
 		return errors.New("server: a dedicated host needs a bind address")
 	}
 	if err := c.Lifetime.Validate(); err != nil {
@@ -574,11 +467,11 @@ func (c Config) Validate() error {
 		// than one that says it cannot.
 		return fmt.Errorf("%s: -probe serves a dedicated host; this mode has no supervisor to answer", c.Mode)
 	}
-	if c.Participants != 0 && c.JoinAddress != "" {
+	if c.Membership.Participants != 0 && c.Membership.JoinAddress != "" {
 		return errors.New("-players configures a host, not a joining guest")
 	}
-	if len(c.Bots) > parameter.MaxPlayers {
-		return fmt.Errorf("-bot %d is more than the %d a session holds", len(c.Bots), parameter.MaxPlayers)
+	if len(c.Membership.Bots) > parameter.MaxPlayers {
+		return fmt.Errorf("-bot %d is more than the %d a session holds", len(c.Membership.Bots), parameter.MaxPlayers)
 	}
 	if c.LogScope != "" {
 		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {
@@ -591,7 +484,7 @@ func (c Config) Validate() error {
 		}
 	}
 	if c.scriptedSession && c.TimeScaleSpec == ScriptPaceMax &&
-		(c.HostAddress != "" || c.JoinAddress != "" || len(c.Bots) > 0) {
+		(c.Membership.HostAddress != "" || c.Membership.JoinAddress != "" || len(c.Membership.Bots) > 0) {
 		return errors.New("-speed max cannot pace a session: a script that outruns its peer " +
 			"is not simulating the session it is in")
 	}
@@ -633,18 +526,4 @@ func (c Config) validateDriven() error {
 		return fmt.Errorf("%s: %dx%d leaves no game area", c.Mode, c.Width, c.Height)
 	}
 	return nil
-}
-
-// relayRouter is the router -relay names with the vif:// scheme, to publish this
-// run's door through rather than an address to bind: a door behind a NAT, reached at
-// the router's address (doc/multi-player.md §5.6).
-func (c *Config) relayRouter() (string, bool) {
-	if !strings.HasPrefix(c.RelayAddress, "vif://") {
-		return "", false
-	}
-	e, err := link.ParseEndpoint(c.RelayAddress)
-	if err != nil || e.Addr == "" {
-		return "", false
-	}
-	return e.Addr, true
 }

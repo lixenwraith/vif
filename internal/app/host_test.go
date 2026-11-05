@@ -118,7 +118,7 @@ func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			host := mustHeadless(t, 0x3016, 120, 40)
 			defer host.Close()
-			host.cfg.Participants = tt.participants
+			host.cfg.Membership.Participants = tt.participants
 			if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 				t.Fatalf("begin hosting: %v", err)
 			}
@@ -311,10 +311,10 @@ func TestAJoinerLandsInAHeldSessionHeld(t *testing.T) {
 func TestAJoinThroughARelayLandsInAHeldSessionHeld(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	addr := freeAddress(t)
-	host, _ := driveBot(t, Config{HostAddress: addr, Bots: []string{"roam"}}, "patrol", nil)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
 	relayAddr := freeAddress(t)
-	relay, _ := driveBot(t, Config{JoinAddress: addr, RelayAddress: relayAddr}, "patrol", nil)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
 	// A driven host takes no step while held, so its end is settled here, as a
@@ -328,7 +328,7 @@ func TestAJoinThroughARelayLandsInAHeldSessionHeld(t *testing.T) {
 	hold(true)
 	waitUntil(t, func() bool { return host.Context().TimeCtl.Held() && relay.Context().TimeCtl.Held() }, "the session held")
 	at := host.Position().Tick
-	person, _ := driveBot(t, Config{JoinAddress: relayAddr}, "roam", nil)
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr}}, "roam", nil)
 	waitUntil(t, func() bool { return person.Context().TimeCtl.Held() }, "the joiner held")
 	if tick := person.Position().Tick; tick != at || host.Position().Tick != at {
 		t.Fatalf("the joiner holds at tick %d and the host stands at %d, want both at %d", tick, host.Position().Tick, at)
@@ -361,8 +361,8 @@ func TestAReconnectIsTheSameJoin(t *testing.T) {
 	// gate armed once the roster has closed.
 	cfg := Config{
 		Mode: ModeHeadless, Seed: seed, Width: 120, Height: 40,
-		Resources:   resource.Options{Embedded: true},
-		HostAddress: addr, Participants: 2,
+		Resources:  resource.Options{Embedded: true},
+		Membership: Membership{HostAddress: addr, Participants: 2},
 	}
 	cfg.scriptedSession = true
 	hosted, hostFailed := make(chan *App, 1), make(chan error, 1)
@@ -613,7 +613,7 @@ func TestScenarioChangeNeedsARestartLoop(t *testing.T) {
 // a host that refuses it leaves the game as it was rather than ending it.
 func TestARefusedJoinLeavesTheRunPlaying(t *testing.T) {
 	t.Parallel()
-	host, err := NewHeadless(Config{Seed: 0x3021, Width: 120, Height: 40, SessionName: "this",
+	host, err := NewHeadless(Config{Seed: 0x3021, Width: 120, Height: 40, Membership: Membership{SessionName: "this"},
 		Resources: resource.Options{Embedded: true}})
 	if err != nil {
 		t.Fatalf("host: %v", err)
@@ -1799,7 +1799,7 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	}
 	host := hosting(ticking(mustHeadless(t, fixtureSeed, BotWidth, BotHeight)))
 	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
-	guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
+	guest.cfg.Membership.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
 	gone := mustHeadless(t, 0x3104, BotWidth, BotHeight)
 	tickUntilCursor(t, gone)
 	stopGone := tickInBackground(gone)
@@ -1807,7 +1807,7 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	t.Cleanup(leave)
 	hosting(gone)
 	left, leftPort := mustSocketJoiner(t, gone.HostAddr(), 0x3104, BotWidth, BotHeight)
-	left.cfg.JoinAddress = gone.HostAddr()
+	left.cfg.Membership.JoinAddress = gone.HostAddr()
 
 	for _, row := range []struct {
 		kind              string
@@ -1898,12 +1898,12 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	tickUntilCursor(t, host)
 	stopTicking := tickInBackground(host)
 	t.Cleanup(stopTicking)
-	host.cfg.Participants = 3
+	host.cfg.Membership.Participants = 3
 	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatal(err)
 	}
 	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
-	guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
+	guest.cfg.Membership.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
 	stopTicking()
 	waitForRosterPair(t, host, guest)
 	id, term := guest.membership.localParticipant(), guest.membership.authorityTerm()
@@ -1961,8 +1961,8 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	}
 	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
 	guest.World().RunSafe(func() {
-		guest.cfg.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
-		guest.cfg.Mode = ModePlay               // the mode whose loop takes a fork on
+		guest.cfg.Membership.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
+		guest.cfg.Mode = ModePlay                          // the mode whose loop takes a fork on
 	})
 	stopTicking()
 	waitForRosterPair(t, host, guest)
@@ -2173,7 +2173,7 @@ func TestAnAbandonedRelayedIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.
 func TestAFullSessionGivesTheLongestWaitingWraithsPlaceToANewcomer(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, 120, 40)
 	defer host.Close()
-	host.cfg.Participants = 3
+	host.cfg.Membership.Participants = 3
 	host.AttachTransport(network.NewMesh().Node(1))
 	tickUntilCursor(t, host)
 	anchor := host.JoinAnchor()
@@ -2241,7 +2241,7 @@ func awayGuest(t *testing.T) (*App, network.SessionOffer, string) {
 	t.Helper()
 	host := mustHeadless(t, fixtureSeed, 120, 40)
 	t.Cleanup(host.Close)
-	host.cfg.Participants = 2
+	host.cfg.Membership.Participants = 2
 	host.AttachTransport(network.NewMesh().Node(1))
 	tickUntilCursor(t, host)
 	guest, err := host.membership.assignFor(host.JoinAnchor(), 0, nil)
@@ -2433,10 +2433,10 @@ func TestAHostTakesJoinsAtEveryDoor(t *testing.T) {
 	if len(doors) != 2 || !strings.HasPrefix(doors[1].String(), "ws://") {
 		t.Fatalf("the host answers at %v; want a tcp door and a ws door", doors)
 	}
-	if host.cfg.HostAddress != "127.0.0.1:0,ws://127.0.0.1:0" {
-		t.Fatalf("the host records its doors as %q", host.cfg.HostAddress)
+	if host.cfg.Membership.HostAddress != "127.0.0.1:0,ws://127.0.0.1:0" {
+		t.Fatalf("the host records its doors as %q", host.cfg.Membership.HostAddress)
 	}
-	guest, _ := driveBot(t, Config{JoinAddress: doors[1].String() + "/"}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: doors[1].String() + "/"}}, "patrol", nil)
 	waitForCursors(t, guest, 2)
 	waitForCursors(t, host, 2)
 }
@@ -2450,7 +2450,7 @@ func TestARestartNamesTheDoorAGuestCameInBy(t *testing.T) {
 		apps := meshSession(t, 0xA1A3, 2, [][2]int{{1, 2}})
 		localCursors(t, apps)
 		guest := apps[1]
-		guest.cfg.Mode, guest.cfg.JoinAddress = ModePlay, "10.0.0.1:7777" // a joined run with a loop; the rule is the address
+		guest.cfg.Mode, guest.cfg.Membership.JoinAddress = ModePlay, "10.0.0.1:7777" // a joined run with a loop; the rule is the address
 		guest.World().RunSafe(func() { guest.membership.receiveSessionRestart(1, payload) })
 		req := guest.restart.Load()
 		if req == nil || !req.Rejoin || req.Join != want {
