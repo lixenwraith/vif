@@ -11,20 +11,13 @@ import (
 // or event goroutine. Tick drives the simulation instead.
 func NewHeadless(cfg Config) (*App, error) {
 	cfg.Mode = ModeHeadless
-	return newDriven(cfg)
-}
-
-// NewReplay builds and starts a presenting runtime for a recorded run: terminal and
-// renderer, but a manual clock the caller ticks and geometry taken from the journal.
-func NewReplay(cfg Config) (*App, error) {
-	cfg.Mode = ModeReplay
-	return newDriven(cfg)
+	return newDriven(runConfig{Config: cfg})
 }
 
 // newDriven wires a caller-driven runtime, sealing the system set and freezing the
 // metric set before anything dispatches so a Settle before the first Tick registers nothing
-func newDriven(cfg Config) (*App, error) {
-	a, err := New(cfg)
+func newDriven(cfg runConfig) (*App, error) {
+	a, err := newApp(cfg)
 	if err != nil {
 		return nil, err
 	}

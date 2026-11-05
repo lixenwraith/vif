@@ -359,12 +359,12 @@ func TestAReconnectIsTheSameJoin(t *testing.T) {
 
 	// newScriptApp is a scripted -host: a lobby, the start gate, and the mid-run
 	// gate armed once the roster has closed.
-	cfg := Config{
+	cfg := runConfig{Config: Config{
 		Mode: ModeHeadless, Seed: seed, Width: 120, Height: 40,
 		Resources:  resource.Options{Embedded: true},
 		Membership: Membership{HostAddress: addr, Participants: 2},
-	}
-	cfg.scriptedSession = true
+	}}
+	cfg.wiring.scriptedSession = true
 	hosted, hostFailed := make(chan *App, 1), make(chan error, 1)
 	go func() {
 		if a, err := newScriptApp(cfg, nil); err != nil {
@@ -855,8 +855,8 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 	// What Run does next: the replaced run goes, and the request builds the next
 	// one, driven here rather than presented.
 	replaced()
-	next, _ := Config{}.restarted(req)
-	driveBot(t, next, "patrol", nil)
+	next, _ := runConfig{}.restarted(req)
+	driveRun(t, "bot", next, "patrol", nil)
 	waitForCursors(t, host, 3)
 }
 
@@ -997,17 +997,17 @@ func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configur
 	pending, offered := dialSession(t, addr)
 	t.Cleanup(func() { _ = pending.Close() })
 
-	joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: w, Height: h}, offered)
+	joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: w, Height: h}}, offered)
 	if err != nil {
 		t.Fatalf("join config: %v", err)
 	}
 	for _, f := range configure {
-		f(&joinCfg)
+		f(&joinCfg.Config)
 	}
 	if joinCfg.Seed != seed {
 		t.Fatalf("join config drew seed %#x, host runs %#x", joinCfg.Seed, seed)
 	}
-	guest, err := NewHeadless(joinCfg)
+	guest, err := newDriven(joinCfg)
 	if err != nil {
 		t.Fatalf("join app: %v", err)
 	}
@@ -1525,7 +1525,7 @@ func TestASuccessorKeepsTheHoldTheLostHostSet(t *testing.T) {
 			localCursors(t, apps)
 			primeRetention(t, apps)
 			at := holdSession(t, apps)
-			apps[1].cfg.scriptedSession = scripted
+			apps[1].cfg.wiring.scriptedSession = scripted
 			closeParticipant(apps[0])
 			survivors := apps[1:]
 			if !settleAuthority(t, survivors, func() bool {

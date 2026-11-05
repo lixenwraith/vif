@@ -700,13 +700,13 @@ func TestAGAScenarioStagesAcrossAReset(t *testing.T) {
 	defer host.Close()
 	reset(host)
 
-	cfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 160, Height: 50, Resources: td},
+	cfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: 160, Height: 50, Resources: td}},
 		sessionOfferFor(host.JoinAnchor(), 2))
 	if err != nil {
 		t.Fatalf("join config: %v", err)
 	}
 	cfg.Resources.Scenario = td.Scenario
-	guest, err := NewHeadless(cfg)
+	guest, err := newDriven(cfg)
 	if err != nil {
 		t.Fatalf("guest: %v", err)
 	}

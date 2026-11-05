@@ -296,7 +296,7 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 	}
 	// A site is asked for a session off the lock, since it answers once the pod is up.
 	site, err := link.ParseEndpoint(target)
-	next, base := *m.cfg, m.run.joinBase()
+	next, wire, base := *m.cfg, *m.wiring, m.run.joinBase()
 	if err == nil && site.Scheme != link.SchemeSite {
 		if next, err = m.cfg.joining(target); err == nil {
 			err = base.validateWith(next)
@@ -328,7 +328,7 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 		}
 		var d *joinDial
 		if err == nil {
-			d, err = dialJoin(next, base)
+			d, err = dialJoin(next, wire, base)
 		}
 		switch {
 		case err != nil:
@@ -411,8 +411,8 @@ func (m *membership) beginHostingLocked(addr, authority string) error {
 
 	// Bound before anything is written, so a port this run cannot have leaves it as
 	// it was; a startup -host bound them before the terminal started.
-	lns := m.cfg.hostListeners
-	m.cfg.hostListeners = nil
+	lns := m.wiring.hostListeners
+	m.wiring.hostListeners = nil
 	if lns == nil {
 		if lns, err = m.cfg.bindDoors(addr); err != nil {
 			m.cfg.FixedAuthority = fixed
@@ -706,14 +706,14 @@ func (m *membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	}
 	// Nothing names the session left: not the address a restart would go back to,
 	// nor the name the next one would answer to, nor the ceiling it was opened with.
-	cfg := *m.cfg
-	m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.cfg.sessionPlayers = "", "", "", 0
+	cfg, wire := *m.cfg, *m.wiring
+	m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.sessionPlayers = "", "", "", 0
 	// The claim the run left under keeps its record as it stands, for a return to
 	// that session; the one it opens issues its own.
 	prior := m.claim.Swap(nil)
 	if err := m.openSessionLocked(kept); err != nil {
 		m.claim.Store(prior)
-		*m.cfg = cfg
+		*m.cfg, *m.wiring = cfg, wire
 		for _, c := range carried {
 			m.claims.forget(c)
 		}

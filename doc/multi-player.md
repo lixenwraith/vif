@@ -444,7 +444,7 @@ A session runs at its host's rate as it stops at its host's hold. The host's
 `:speed` (Simulation → Game speed) crosses `EventGameSpeed`, admissible from the
 authority alone, so every participant changes rate at one agreed tick, and a
 guest's is refused (`speedRefused`). A joiner adopts the rate its offer's anchor
-names (`ConfigForJoin`), a script's or bot's pace included, and every driven run
+names (`configForJoin`), a script's or bot's pace included, and every driven run
 paces at its own clock's rate, which the crossing moves on a seat as on its holder.
 The authority's per-second budgets (`driveEviction`, `driveIngress`) count a second
 of game time, and a window the rate changed in starts over, grace for eviction. A

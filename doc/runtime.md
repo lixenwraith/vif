@@ -960,8 +960,8 @@ per run, and the command validates the name and latches which one comes next;
 naming the scenario already loaded resets in place instead. The same loop replaces
 the run for a `:join`, a session restart and a removal by the host, and the first
 of these asked for is the one served: a run already being replaced refuses another.
-One builder, `Config.restarted`, makes each next run from the command line `Run` was
-given and what the restart names. A scenario change, a restart and a `:join` seat
+One builder, `runConfig.restarted`, makes each next run from the command line `Run`
+was given and what the restart names. A scenario change, a restart and a `:join` seat
 the run's bots again, read when the restart is asked for, since a session closing
 ends them before the switch; a bot told to leave is not among them, and a removal
 by the host seats none.

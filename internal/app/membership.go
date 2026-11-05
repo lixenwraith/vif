@@ -24,14 +24,15 @@ import (
 // membership is the run's place in its session: hosting and joining, the roster and
 // the offer, the seats it holds, the claims it comes back with, the relay desk and
 // the authority it follows or holds. It is the half of converge.Instance the
-// protocol moves. It holds the session half of the run's Config (cfg) and reads the
-// rest of the run through membershipRun alone.
+// protocol moves. It holds the session half of the run's Config (cfg) and of its
+// wiring (wiring), and reads the rest of the run through membershipRun alone.
 type membership struct {
 	run membershipRun
 
 	world      *engine.World
 	ctx        *engine.GameContext
 	cfg        *Membership
+	wiring     *membershipWiring
 	log        *vlog.Log
 	scheduler  *engine.Scheduler // wired when the run builds its own, after the world
 	scenario   *resource.Scenario
@@ -143,8 +144,8 @@ type membership struct {
 // membershipRun is what the membership reads of the run beyond its world and its
 // session half: its mode, script and geometry and the files it may load, where it
 // stands and how it is paced, the lobby it shows on, the journal and identity it
-// writes a session into, the Config a join builds on, the vacancy a dedicated host
-// resumes from, and the run that replaces this one.
+// writes a session into, the Config and wiring a join builds on, the vacancy a
+// dedicated host resumes from, and the run that replaces this one.
 type membershipRun interface {
 	mode() Mode
 	scripted() bool
@@ -166,9 +167,9 @@ type membershipRun interface {
 	replacing() bool
 }
 
-// joinBase is the run's Config as a join dialled from it builds on, copied where the
-// dial starts so the dial reads nothing of the run's own: a session half is checked
-// against it (validateWith) and a session's scenario prepared on it (prepare).
+// joinBase is the run's Config and wiring as a join dialled from it builds on, copied
+// where the dial starts so the dial reads nothing of the run's own: a session half is
+// checked against it (validateWith) and a session's scenario prepared on it (prepare).
 type joinBase interface {
 	validateWith(s Membership) error
 	prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error)
@@ -242,7 +243,13 @@ type Membership struct {
 	// ClaimStore keeps the claims this process comes back to its sessions with past
 	// its own life, which a page's reload needs; nil keeps them while it runs.
 	ClaimStore ClaimStore
+}
 
+// membershipWiring is the session half of a run's wiring, which the membership holds
+// beside Membership: the seat a bot's run is, the claims the process comes back with,
+// the ceiling of a session it joined, the doors Run bound for it, and the press its
+// join waits for.
+type membershipWiring struct {
 	// holder is the participant whose bot this run is, zero for any other run.
 	holder link.PeerID
 	relay  func() (net.Conn, error) // a bot's stream to its holder; see seatLink
@@ -326,10 +333,10 @@ func (s *Membership) relayRouter() (string, bool) {
 // open wires the membership over the run's configuration and scenario before the
 // run builds anything; the world, the context, the scheduler, the network service
 // and the protocol halves follow as the run gets each.
-func (m *membership) open(run membershipRun, cfg *Membership, scenario *resource.Scenario, log *vlog.Log, glue *corrector.Corrector, life *lifecycle.Controller) {
-	m.run, m.cfg, m.scenario, m.log, m.glue, m.life = run, cfg, scenario, log, glue, life
+func (m *membership) open(run membershipRun, cfg *Membership, wire *membershipWiring, scenario *resource.Scenario, log *vlog.Log, glue *corrector.Corrector, life *lifecycle.Controller) {
+	m.run, m.cfg, m.wiring, m.scenario, m.log, m.glue, m.life = run, cfg, wire, scenario, log, glue, life
 	m.admissions = network.NewAdmissionLimiter()
-	m.claims = cfg.claims
+	m.claims = wire.claims
 }
 
 // The session API stays the run's for whatever reads it through the run, and the
@@ -354,10 +361,10 @@ func (a *App) SessionSummary() string { return a.membership.SessionSummary() }
 func (a *App) barrierLocked() bool    { return a.membership.barrierLocked() }
 
 // The run's settings the membership reads, live: tests switch a running run's mode,
-// and a join copies the whole Config where it dials (joinBase).
+// and a join copies the whole Config and wiring where it dials (joinBase).
 func (a *App) mode() Mode                  { return a.cfg.Mode }
-func (a *App) scripted() bool              { return a.cfg.scriptedSession }
-func (a *App) geometryDefaulted() bool     { return a.cfg.geometryDefaulted }
+func (a *App) scripted() bool              { return a.cfg.wiring.scriptedSession }
+func (a *App) geometryDefaulted() bool     { return a.cfg.wiring.geometryDefaulted }
 func (a *App) resources() resource.Options { return a.cfg.Resources }
 func (a *App) joinBase() joinBase          { return a.cfg }
 

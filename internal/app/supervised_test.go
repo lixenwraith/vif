@@ -292,11 +292,11 @@ func TestAGuestThatLeavesBeforeConfirmingDoesNotEndTheSession(t *testing.T) {
 	// A real guest up to the point of the abuse: the coordinator verifies what a
 	// joiner turned out to be, so only one that built its world gets into a roster.
 	pending, offered := dialSession(t, port.Addr().String())
-	joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, offered)
+	joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: 120, Height: 40}}, offered)
 	if err != nil {
 		t.Fatalf("join config: %v", err)
 	}
-	guest, err := NewHeadless(joinCfg)
+	guest, err := newDriven(joinCfg)
 	if err != nil {
 		t.Fatalf("join app: %v", err)
 	}

@@ -118,8 +118,8 @@ func (p *framePresentation) Flush(cells []terminal.Cell, _, _ int) {
 // the stand-in's smaller map never shows; the session's then fills the game area.
 func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 	// Not parallel: this binds a real socket.
-	host, err := newSessionApp(Config{Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"},
-		Resources: resource.Options{Embedded: true}, Seed: 0x6E04})
+	host, err := newSessionApp(runConfig{Config: Config{Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"},
+		Resources: resource.Options{Embedded: true}, Seed: 0x6E04}})
 	if err != nil {
 		t.Fatalf("server: %v", err)
 	}
@@ -137,8 +137,8 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 
 	const w, h = 160, 45
 	screen := &framePresentation{w: w, h: h}
-	guest, err := newSessionApp(Config{Mode: ModePlay, Membership: Membership{JoinAddress: port.Addr().String()},
-		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}})
+	guest, err := newSessionApp(runConfig{Config: Config{Mode: ModePlay, Membership: Membership{JoinAddress: port.Addr().String()},
+		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}}})
 	if err != nil {
 		t.Fatalf("join: %v", err)
 	}
@@ -300,10 +300,10 @@ func TestAScenarioThatSetsItsOwnMapIsServedOnIt(t *testing.T) {
 	t.Parallel()
 	root := fixedMapScenario(t)
 	for _, size := range [][2]int{{120, 40}, {0, 0}} {
-		a, err := newSessionApp(Config{
+		a, err := newSessionApp(runConfig{Config: Config{
 			Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"}, Width: size[0], Height: size[1],
 			Resources: resource.Options{Dir: root, Scenario: "fixed"}, Seed: 0x6E02,
-		})
+		}})
 		if err != nil {
 			t.Fatalf("server: %v", err)
 		}
@@ -341,7 +341,7 @@ func serveWithBots(t *testing.T, cfg Config) (*App, <-chan error) {
 	t.Helper()
 	cfg.Mode, cfg.Seed = ModeServer, 0x6E05
 	cfg.Membership.HostAddress, cfg.Membership.Bots = "127.0.0.1:0", []string{"roam"}
-	a, err := newSessionApp(cfg)
+	a, err := newSessionApp(runConfig{Config: cfg})
 	if err != nil {
 		t.Fatalf("server: %v", err)
 	}
@@ -662,8 +662,8 @@ func TestAFirstGameWaitsForItsPlayersPress(t *testing.T) {
 func TestTheLaunchWaitsBehindTheStartScreen(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	const w, h = 120, 40
-	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
-		Host: Host{Presentation: &framePresentation{w: w, h: h}}, startScreen: true})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
+		Host: Host{Presentation: &framePresentation{w: w, h: h}}}, wiring: wiring{startScreen: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -758,8 +758,8 @@ func TestAWaitingJoinTakesTheOperatorsKeysAsAHeldGameDoes(t *testing.T) {
 func TestHelpOverTheStartScreenTakesThePointer(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	const w, h = 80, 18 // short enough that the scrollbar's top cell lies under the button
-	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5746,
-		Host: Host{Presentation: &framePresentation{w: w, h: h}}, startScreen: true})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5746,
+		Host: Host{Presentation: &framePresentation{w: w, h: h}}}, wiring: wiring{startScreen: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
