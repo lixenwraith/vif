@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -362,9 +363,9 @@ func cursorCell(t *testing.T, a *App, slot uint8) component.PositionComponent {
 }
 
 // replaySourceOf reaches the barrier that retains the suffix.
-func replaySourceOf(t *testing.T, a *App) replaySource {
+func replaySourceOf(t *testing.T, a *App) corrector.ReplaySource {
 	t.Helper()
-	src, _ := a.glue.replaySource()
+	src, _ := a.glue.ReplaySource()
 	if src == nil {
 		t.Fatal("this run has no barrier to retain a suffix")
 	}

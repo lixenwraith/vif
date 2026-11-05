@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -30,7 +31,7 @@ type membership struct {
 	log        *vlog.Log
 	scheduler  *engine.Scheduler // wired when the run builds its own, after the world
 	scenario   *resource.Scenario
-	glue       *corrector
+	glue       *corrector.Corrector
 	life       *lifecycle.Controller
 	networkSvc *service.NetworkService
 
@@ -148,7 +149,7 @@ type membershipRun interface {
 	lobbyEvents() <-chan lobbyEvent
 	lobbyEventCancels(ev lobbyEvent) bool
 	buildAnchor() event.JournalAnchor
-	sessionAnchorFields(an event.JournalAnchor) []anchorField
+	sessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField
 	journalLostLocked(j *event.Journal, err error)
 	resumeVacant()
 	replaceWith(req *restartRequest) bool
@@ -158,14 +159,14 @@ type membershipRun interface {
 // open wires the membership over the run's configuration and scenario before the
 // run builds anything; the world, the context, the scheduler, the network service
 // and the protocol halves follow as the run gets each.
-func (m *membership) open(run membershipRun, cfg *Config, scenario *resource.Scenario, log *vlog.Log, glue *corrector, life *lifecycle.Controller) {
+func (m *membership) open(run membershipRun, cfg *Config, scenario *resource.Scenario, log *vlog.Log, glue *corrector.Corrector, life *lifecycle.Controller) {
 	m.run, m.cfg, m.scenario, m.log, m.glue, m.life = run, cfg, scenario, log, glue, life
 	m.admissions = network.NewAdmissionLimiter()
 	m.claims = cfg.claims
 }
 
-// The session API stays the run's for whatever reads it through the run, and
-// correctionRun's authority stamp, assigned participant and barrier are its own.
+// The session API stays the run's for whatever reads it through the run, and the
+// barrier is its own.
 func (a *App) ApplyPendingCorrections()                { a.membership.ApplyPendingCorrections() }
 func (a *App) AttachTransport(port engine.NetworkPort) { a.membership.AttachTransport(port) }
 func (a *App) BeginHosting(addr string) error          { return a.membership.BeginHosting(addr) }
@@ -182,15 +183,8 @@ func (a *App) JoinSession(o network.SessionOffer) error {
 func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture, bytes int) error {
 	return a.membership.JoinSessionAt(o, cap, bytes)
 }
-func (a *App) SessionSummary() string      { return a.membership.SessionSummary() }
-func (a *App) assignedParticipant() uint32 { return a.membership.assignedParticipant() }
-func (a *App) barrierLocked() bool         { return a.membership.barrierLocked() }
-func (a *App) authorityStamp() (network.AuthorityTerm, uint32) {
-	return a.membership.authorityStamp()
-}
-
-// landingHold is the hold the world a join installs lands in; see membership.landingHold.
-func (a *App) landingHold() (held, start bool) { return a.membership.landingHold() }
+func (a *App) SessionSummary() string { return a.membership.SessionSummary() }
+func (a *App) barrierLocked() bool    { return a.membership.barrierLocked() }
 
 // replacing reports whether a run to replace this one is latched already.
 func (a *App) replacing() bool { return a.restart.Load() != nil }

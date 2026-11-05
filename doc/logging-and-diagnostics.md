@@ -109,7 +109,7 @@ cursorless coordinator included.
 | `tick` | `Scheduler.processTick` | once per simulation tick, before the tick body |
 
 Installing a received world, a join's capture or a correction, moves both to its
-header's (`corrector.adoptClockLocked`). `tick` is stamped with the tick *about to
+header's (`Corrector.adoptClockLocked`). `tick` is stamped with the tick *about to
 execute*, so records emitted inside `processTick` carry the tick they describe
 rather than the previous one. A played or served runtime adopts `vlog.Default()`,
 which also stamps the process's own records (flags, runtime capture, a crash); a
@@ -286,7 +286,7 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
-| `capture staged` / `capture installed` | INFO | `tick`, `streams`, `systems`, `stage_us` / `tick`, `projected_ticks`, `stage_us`, `commit_us`, `project_us`, `write_us`, `correction_entries`, `correction_entities`, `correction_cells` | `App.stageProved`, `StagedInstall.Commit` |
+| `capture staged` / `capture installed` | INFO | `tick`, `streams`, `systems`, `stage_us` / `tick`, `projected_ticks`, `stage_us`, `commit_us`, `project_us`, `write_us`, `correction_entries`, `correction_entities`, `correction_cells` | `Corrector.stageProved`, `StagedInstall.Commit` |
 | `session captured` | INFO | `tick`, `bytes`, `streams`, `systems` | the authority taking a keyframe outside the cadence: a join's snapshot, a fallback |
 | `correction published` / `repair applied` | DEBUG | `tick`, `keyframe`, `bytes`, `chunks`, `whole_bodies`, `peers`, `of`, `cadence_ticks`, `keyframe_period_ticks`, `encode_us` / `tick`, `pages`, `sections`, `cells` | `Corrections` |
 | `correction not applied` / `repair failed its proof` | WARN | `tick`, `error` / `error` | `Corrections`; a failed proof asks the authority for a keyframe |
@@ -298,7 +298,7 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
-| `journal opened` / `journal closed` | INFO | `path`, plus `run`, `tick` on a mid-run opening, `records`, `encode_failed` on a close | `app.initJournal` and `:journal start`; `app.Close` and `:journal stop` |
+| `journal opened` / `journal closed` | INFO | `path`, plus `run`, `tick` on a mid-run opening, `records`, `encode_failed` on a close | `Scribe.InitJournal` and `:journal start`; `App.Close` and `:journal stop` |
 | `journal not opened` / `journal not reopened` | WARN | `error` | a `:journal start` the run refused or could not open (§9); a journal a replaced run carried that the next run could not open |
 | `run may hold part of an opening it does not match` | ERROR | `error` | a `:journal start` whose adoption of the opening failed after it wrote: a defect |
 | `seat journal opened` / `seat journal closed` / `seat journal not changed` / `seat journal not closed` | INFO / INFO / WARN / WARN | `slot`, plus `path`, or `start` and `error`; `reason` on a close as the bot leaves | the holder, for a `:journal start\|stop <slot>` its bot seat served, and for a seat whose bot left |
@@ -1345,8 +1345,8 @@ both the snapshot and the recorder.
 | Flight recorder | `internal/status/recorder.go` |
 | Journal record/anchor schema and queue sink | `internal/event/journal.go`, `journal_sink.go`, `origin.go` |
 | Recording lifecycle, capture, loading, replay/fuzz/script drivers | `internal/journal` |
-| Journal start and stop mid-run, the opening and its adoption, seat journals | `internal/app/journal.go`, `seat.go` |
-| Replay/config verification and presentation, replay checkpoints | `internal/app/replay.go`, `play.go`, `clone.go` |
+| Journal start and stop mid-run, the opening and its adoption, seat journals | `internal/app/internal/scribe/journal.go`, `internal/app/seat.go` |
+| Replay/config verification and presentation, replay checkpoints | `internal/app/replay.go`, `play.go`, `clone.go`, `internal/app/internal/scribe` |
 | Comparison surfaces and world digests | `internal/app/surface.go`, `internal/snapshot/surface.go`, `digest.go` |
 | Tick stamping, FSM taps, dispatch tap, triggers | `internal/engine/scheduler.go` |
 | Lock hold sampling | `internal/engine/sync_std.go` |

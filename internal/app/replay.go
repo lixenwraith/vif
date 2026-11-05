@@ -3,19 +3,17 @@ package app
 import (
 	"errors"
 	"fmt"
-	"github.com/lixenwraith/vif/pkg/vmath"
 	"path/filepath"
-	"slices"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
-	"github.com/lixenwraith/vif/internal/service"
 	"github.com/lixenwraith/vif/internal/snapshot"
-	"github.com/lixenwraith/vif/pkg/position"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // ConfigFromAnchor rebuilds the headless config a journal was recorded under, mid-run
@@ -63,65 +61,6 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	return cfg, cfg.Validate()
 }
 
-// anchorField is one value the anchor names and this App must reproduce
-type anchorField struct {
-	name      string
-	want, got any
-}
-
-// sessionAnchorFields are what two participants in one session must agree on:
-// record layout and tick rate, the seed and session counter every RNG stream
-// derives from, and the scenario's bytes, whose name is only a lookup hint.
-// Geometry is per-instance, and the corpus is player domain, read from each
-// machine's own roots and never reconciled (D-11, doc/multi-player.md).
-func (sc *scribe) sessionAnchorFields(an event.JournalAnchor) []anchorField {
-	return []anchorField{
-		{"schema", an.Schema, uint64(event.JournalSchema)},
-		{"seed", an.Seed, sc.world.Resources.Rand.Root()},
-		{"session", an.Session, sc.world.Resources.Rand.Session()},
-		{"scenario_digest", an.ScenarioDigest, sc.scenario.Digest()},
-		{"tick_ns", an.TickInterval, int64(sc.world.TickInterval())},
-	}
-}
-
-// anchorIdentity adds what a replay must reproduce and a join must not require.
-// A recorded run typed the blocks of one corpus, so replaying its input against
-// another yields different glyphs; a peer joining live only has to agree on the
-// world, and brings its own text into it.
-func (sc *scribe) anchorIdentity(an event.JournalAnchor) []anchorField {
-	reg := sc.world.Resources.Status
-	svc := service.MustGet[*service.ContentService](sc.hub, "content")
-	return append(sc.sessionAnchorFields(an),
-		anchorField{"content_id", an.ContentID, reg.Strings.Get("content.source").Load()},
-		anchorField{"content_pin", an.ContentPin, svc.Pin()},
-		anchorField{"content_files", an.ContentFiles, uint64(reg.Ints.Get("content.files").Load())},
-		anchorField{"content_blocks", an.ContentBlocks, uint64(reg.Ints.Get("content.blocks").Load())},
-		anchorField{"content_lines", an.ContentLines, uint64(reg.Ints.Get("content.lines").Load())},
-	)
-}
-
-// firstAnchorMismatch reports the first field this App does not reproduce
-func firstAnchorMismatch(kind string, fields []anchorField) error {
-	for _, f := range fields {
-		if f.want != f.got {
-			return fmt.Errorf("%s mismatch: %s recorded %v, this run has %v", kind, f.name, f.want, f.got)
-		}
-	}
-	return nil
-}
-
-// VerifyAnchor reports whether this App reproduces what the anchor recorded.
-// A resolved path proves which corpus was asked for, not which one loaded, so the
-// fingerprint is compared after construction: a discovered file or a changed corpus
-// becomes a startup error instead of an unexplained snapshot diff many ticks later.
-// Call after NewHeadless, before Replay.
-func (sc *scribe) VerifyAnchor(an event.JournalAnchor) error {
-	fields := append(sc.anchorIdentity(an),
-		anchorField{"width", an.Width, sc.ctx.Width},
-		anchorField{"height", an.Height, sc.ctx.Height})
-	return firstAnchorMismatch("anchor", fields)
-}
-
 // newReplayDriver checks App-specific policy, then hands the stream to
 // internal/journal. The driver itself knows only the small replayTarget contract.
 func newReplayDriver(a *App, s *journal.Stream) (*journal.ReplayDriver, error) {
@@ -150,14 +89,8 @@ func (t replayTarget) PushBody(rec event.JournalRecord, payload any) {
 }
 
 func (t replayTarget) Digest() (d event.JournalDigest) {
-	t.a.world.RunSafe(func() { d = t.a.scribe.journalDigestLocked() })
+	t.a.world.RunSafe(func() { d = t.a.scribe.JournalDigestLocked() })
 	return d
-}
-
-// journalDigestLocked is the world a journal's digest carries: both domains, since
-// a replay reproduces the player's own as well. Caller MUST hold updateMutex.
-func (sc *scribe) journalDigestLocked() event.JournalDigest {
-	return snapshot.DigestWorld(sc.world, position.ScopeAll).Journal()
 }
 
 // Install writes a world the recorded run wrote, rebuilt from the one this replay
@@ -166,7 +99,7 @@ func (sc *scribe) journalDigestLocked() event.JournalDigest {
 func (t replayTarget) Install(c event.JournalCapture) error {
 	var (
 		d   snapshot.WrittenDelta
-		own ownState
+		own scribe.OwnState
 	)
 	if err := snapshot.DecodeJSON(c.Body, &d); err != nil {
 		return err
@@ -180,8 +113,8 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 	var err error
 	a.world.RunSafe(func() {
 		var before, cap snapshot.SharedCapture
-		if before, err = a.glue.captureSharedLocked(); err == nil {
-			cap, err = a.glue.encoder.ApplyWritten(before, d)
+		if before, err = a.glue.CaptureSharedLocked(); err == nil {
+			cap, err = a.glue.Encoder().ApplyWritten(before, d)
 		}
 		if err != nil {
 			return
@@ -194,9 +127,9 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			a.world.MarkSessionShared()
 			a.ctx.PublishMapLock()
 		}
-		_, err = a.glue.writeSharedLocked(cap, &before, true, c.Opens)
+		_, err = a.glue.WriteSharedLocked(cap, &before, true, c.Opens)
 		if err == nil && c.Opens {
-			err = a.scribe.openedLocked(c, own)
+			err = a.scribe.OpenedLocked(c, own)
 		}
 		// The hold the run landed in with this world, held here as it was there.
 		if err == nil && c.Held && !c.Opens {
@@ -216,31 +149,6 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		}
 	})
 	return err
-}
-
-// openedLocked settles what writing a journal's opening world queued, with input
-// bound to the slot the run followed, writes the run's own side over what that
-// derived, then takes up the play mode, the hold and the systems the run stood in.
-// Caller MUST hold updateMutex.
-func (sc *scribe) openedLocked(c event.JournalCapture, own ownState) error {
-	sc.world.PushLocalOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: c.Slot}, event.OriginSystem)
-	sc.scheduler.SettleLocked()
-	if err := sc.installOwnLocked(own); err != nil {
-		return err
-	}
-	sc.ctx.SetPlayMode(c.Mode)
-	sc.world.UpdateBoundsRadius()
-	if c.Start {
-		sc.ctx.TimeCtl.HoldAs(engine.HoldStart)
-	} else {
-		sc.ctx.TimeCtl.SetHeld(c.Held)
-	}
-	for _, sys := range sc.world.Systems() {
-		if t, ok := sys.(engine.Toggled); ok {
-			t.SetEnabled(!slices.Contains(c.Off, sys.Name()))
-		}
-	}
-	return nil
 }
 
 // loadJournal reads a journal set and the configuration that reproduces it. The
