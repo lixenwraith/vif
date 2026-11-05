@@ -117,14 +117,20 @@ type OverlayRenderer struct {
 	logo    logoCells
 	aspect  vmath.Aspect
 	console *render.Console
+
+	exact bool // an emulator in 256 colors: the window keeps its own colors, see Render
 }
 
 // NewOverlayRenderer creates a new overlay renderer
 func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 	r := &OverlayRenderer{gameCtx: gameCtx, pinMarker: parameter.OverlayPinMarker}
-	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
+	switch cfg := gameCtx.World.Resources.Config; {
+	case cfg.ColorMode != terminal.ColorMode256:
+	case cfg.TextConsole:
 		r.pinMarker = parameter.OverlayPinMarker256
 		r.console = render.ConsoleFor(cfg.ConsolePalette)
+	default:
+		r.exact = true
 	}
 	return r
 }
@@ -174,6 +180,11 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	}
 
 	r.adapter.FlushTo(buf, g.X, g.Y, visual.MaskUI)
+	// An emulator's theme draws the console's entries as it likes, which can sink a hint
+	// into its background; xterm's cube it shows as it is, so the window goes out as drawn
+	if r.exact {
+		buf.KeepExact(render.RectWH(g.X, g.Y, g.W, g.H))
+	}
 }
 
 // renderContent dispatches on the content's layout and draws the chrome

@@ -242,38 +242,59 @@ func (c *Console) nearestWhere(fg uint8, ok func(uint8) bool) uint8 {
 }
 
 // quantize settles every cell on the entries the console shows, leaving no style for the
-// console to recolor text by: reverse is swapped in and dim takes a darker entry
+// console to recolor text by: reverse is swapped in and dim takes a darker entry. A cell a
+// renderer kept exact keeps its colors; on an emulator every cell's black then becomes the
+// background.
 func (b *RenderBuffer) quantize() {
-	c := b.console
 	for i := range b.cells {
-		if b.exact.Contains(i%b.width, i/b.width) {
-			continue
-		}
 		cell := &b.cells[i]
-		fg, fgIndex := cell.Fg, cell.Attrs&terminal.AttrFg256 != 0
-		bg, bgIndex := cell.Bg, cell.Attrs&terminal.AttrBg256 != 0
-		if cell.Attrs&terminal.AttrReverse != 0 {
-			fg, fgIndex, bg, bgIndex = bg, bgIndex, fg, fgIndex
+		if len(b.exact) == 0 || !b.isExact(i%b.width, i/b.width) {
+			b.console.quantizeCell(cell, b.masks[i]&visual.MaskUI != 0)
 		}
-		f, g := c.fgEntry(fg, fgIndex), c.bgEntry(bg, bgIndex)
-		// The theme background is the console's black, where text reads best, whichever
-		// entry is nearest (FreeBSD's dark gray)
-		if !bgIndex && bg == visual.RgbBackground {
-			g = 0
+		if b.emulator {
+			blackAsBackground(cell)
 		}
-		if cell.Attrs&terminal.AttrDim != 0 {
-			f = dimEntry(f)
+	}
+}
+
+// quantizeCell settles one cell on the console's entries; UI text is held to the higher
+// contrast
+func (c *Console) quantizeCell(cell *terminal.Cell, ui bool) {
+	fg, fgIndex := cell.Fg, cell.Attrs&terminal.AttrFg256 != 0
+	bg, bgIndex := cell.Bg, cell.Attrs&terminal.AttrBg256 != 0
+	if cell.Attrs&terminal.AttrReverse != 0 {
+		fg, fgIndex, bg, bgIndex = bg, bgIndex, fg, fgIndex
+	}
+	f, g := c.fgEntry(fg, fgIndex), c.bgEntry(bg, bgIndex)
+	// The theme background is the console's black, where text reads best, whichever
+	// entry is nearest (FreeBSD's dark gray)
+	if !bgIndex && bg == visual.RgbBackground {
+		g = 0
+	}
+	if cell.Attrs&terminal.AttrDim != 0 {
+		f = dimEntry(f)
+	}
+	// A full block is its color, not text on a background
+	if cell.Rune > ' ' && cell.Rune != '█' {
+		if ui {
+			f = c.readable[f][g]
+		} else {
+			f = c.legible[f][g]
 		}
-		// A full block is its color, not text on a background
-		if cell.Rune > ' ' && cell.Rune != '█' {
-			if b.masks[i]&visual.MaskUI != 0 {
-				f = c.readable[f][g]
-			} else {
-				f = c.legible[f][g]
-			}
-		}
-		cell.Fg, cell.Bg = color.RGB{R: f}, color.RGB{R: g}
-		cell.Attrs = terminal.AttrFg256 | terminal.AttrBg256
+	}
+	cell.Fg, cell.Bg = color.RGB{R: f}, color.RGB{R: g}
+	cell.Attrs = terminal.AttrFg256 | terminal.AttrBg256
+}
+
+// blackAsBackground sends the console's black as the theme background's RGB. A console's
+// black is the background every color was chosen against; an emulator's theme draws entry
+// 0 as it likes, most often a lighter neighbour of its own background.
+func blackAsBackground(cell *terminal.Cell) {
+	if cell.Attrs&terminal.AttrFg256 != 0 && cell.Fg.R == visual.ConBlack {
+		cell.Fg, cell.Attrs = visual.RgbBackground, cell.Attrs&^terminal.AttrFg256
+	}
+	if cell.Attrs&terminal.AttrBg256 != 0 && cell.Bg.R == visual.ConBlack {
+		cell.Bg, cell.Attrs = visual.RgbBackground, cell.Attrs&^terminal.AttrBg256
 	}
 }
 

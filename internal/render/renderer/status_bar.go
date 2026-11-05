@@ -51,9 +51,10 @@ func (t *statusText) hold(key int64, a, b string, format func() string) string {
 // tenths keys a duration in seconds by the one decimal its text shows
 func tenths(seconds float64) int64 { return int64(math.Round(seconds * 10)) }
 
-// statusPalette holds the status bar's colours. TrueColor takes the theme's; a text console
-// takes fixed entries, each apart from the items beside it and with the text that reads best on
-// it, since a theme colour could land on any of eight backgrounds, black included.
+// statusPalette holds the status bar's colours. TrueColor takes the theme's, and so does an
+// emulator in 256 colors, through xterm's cube; a text console takes fixed entries, each apart
+// from the items beside it and with the text that reads best on it, since a theme colour could
+// land on any of eight backgrounds, black included.
 type statusPalette struct {
 	audio            [4]statusItem // by channel mask
 	mode             [5]statusItem // normal, visual, insert, search, command
@@ -140,6 +141,7 @@ func statusPalette256(c *render.Console) *statusPalette {
 type StatusBarRenderer struct {
 	gameCtx *engine.GameContext
 	pal     *statusPalette
+	exact   bool // an emulator in 256 colors: the bar keeps truecolor's colors, see Render
 
 	// Sound/Audio indicator
 	statAudioMask *atomic.Int64
@@ -233,8 +235,12 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 
 		statDamageMultiplier: statusReg.Ints.Get("energy.damage_multiplier"),
 	}
-	if cfg := gameCtx.World.Resources.Config; cfg.ColorMode == terminal.ColorMode256 {
+	switch cfg := gameCtx.World.Resources.Config; {
+	case cfg.ColorMode != terminal.ColorMode256:
+	case cfg.TextConsole:
 		r.pal = statusPalette256(render.ConsoleFor(cfg.ConsolePalette))
+	default:
+		r.pal.label, r.exact = r.pal.label.with(" 256 "), true
 	}
 	return r
 }
@@ -251,6 +257,10 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		for x := range ctx.ScreenWidth {
 			buf.SetWithBg(x, y, ' ', visual.RgbBackground, visual.RgbBackground)
 		}
+	}
+	// An emulator's theme would draw the console's entries as it likes; the cube it shows as is
+	if r.exact {
+		buf.KeepExact(render.RectWH(0, itemsY, ctx.ScreenWidth, lineY-itemsY+1))
 	}
 
 	realNow := r.gameCtx.TimeCtl.RealTime()

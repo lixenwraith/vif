@@ -264,13 +264,13 @@ that proves wrong or that a document now states, and link the document instead.
   lines but no ▀ ▄ ▌ ▐, quadrants or ▓, and draw double lines single; the 256 tier
   uses only what they have.
 - The 256 tier's entries 0–15 take an emulator's theme, so no contrast between two
-  of them is promised; a colour, or 15, on entry 0 is safe.
+  of them is promised; a colour, or 15, on entry 0 is safe. UI that must read in an
+  emulator keeps its rectangle exact (`KeepExact`), as the overlay and status bar do.
 - On the Linux console the 256 tier shows sixteen colours: a pale tint over a rim
   falls to the rim's own, so a glow that must read there is near white, as the
   Wraith field's is.
-- The 256 tier finishes every frame on a console palette even in an emulator, so a
-  background has eight entries: a white one lands on the grey the overlay's text
-  box takes, and a cursor there needs a hue (the orange's yellow) to show.
+- A text console has eight backgrounds: a white one lands on the grey the overlay's
+  text box takes, so a cursor there needs a hue (the orange's yellow) to show.
 
 ## Widgets
 

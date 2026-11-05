@@ -15,7 +15,8 @@ import (
 // TestStartScreenAsksOnItsButton: the start screen covers every row above the status bar
 // with the prompt on its button, adds the help button only where help opens, draws
 // nothing once it is down, on a console uses only glyphs every console font has, and in
-// a 256-color emulator sends the button in the site's colors past the console pass.
+// a 256-color emulator sends the mark and the button in the site's colors past the console
+// pass, on the theme background the page gets.
 func TestStartScreenAsksOnItsButton(t *testing.T) {
 	t.Parallel()
 	const w, h, prompt = 80, 24, "Click or press a key to start"
@@ -67,7 +68,7 @@ func TestStartScreenAsksOnItsButton(t *testing.T) {
 		}
 
 		if mode == terminal.ColorMode256 && !tier.console {
-			buf.SetConsole(render.ConsoleFor(engine.ConsolePalette{}))
+			buf.SetConsole(render.ConsoleFor(engine.ConsolePalette{}), true)
 			var frame frameSurface
 			buf.FlushToTerminal(&frame)
 			var x, y int
@@ -79,8 +80,17 @@ func TestStartScreenAsksOnItsButton(t *testing.T) {
 			}
 			label, cap := frame.cells[y*w+x], frame.cells[(y-1)*w+w/2]
 			if label.Fg != visual.RgbStartButtonText || label.Bg != visual.RgbStartButton || label.Attrs != terminal.AttrNone ||
-				cap.Fg != visual.RgbStartButton || cap.Attrs != terminal.AttrBg256 || cap.Bg.R != visual.Start256Bg {
+				cap.Fg != visual.RgbStartButton || cap.Attrs != terminal.AttrNone || cap.Bg != visual.RgbBackground {
 				t.Fatalf("an emulator's button left the console pass as %+v under %+v", label, cap)
+			}
+			wedge := false
+			for _, c := range frame.cells {
+				for _, rgb := range visual.RgbLogoWedges {
+					wedge = wedge || c.Attrs == terminal.AttrNone && (c.Fg == rgb || c.Bg == rgb)
+				}
+			}
+			if corner := frame.cells[0]; !wedge || corner.Bg != visual.RgbBackground || corner.Attrs&terminal.AttrBg256 != 0 {
+				t.Fatalf("an emulator's mark left in its own colors %v, on a page of %+v", wedge, corner)
 			}
 		}
 	}
