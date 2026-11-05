@@ -36,7 +36,7 @@ const (
 
 // Config, its session half Membership and the ClaimStore that keeps a process's
 // claims are config's, aliased for the callers that build a Config: cmd/vif from its
-// flags, and embedders (map editor, wasm entry, headless harness) with no flag set.
+// flags, and the Android host and the headless harness with no flag set.
 type (
 	Config     = config.Config
 	Membership = config.Membership

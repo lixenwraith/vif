@@ -148,11 +148,8 @@ type App struct {
 	reach       *converge.Reach
 }
 
-// New wires the runtime, releasing anything already started on failure. Errors are
-// returned rather than panicked: the map editor and the wasm entry need them.
-func New(cfg Config) (*App, error) { return newApp(runConfig{Config: cfg}) }
-
-// newApp is New for a run built with its wiring.
+// newApp wires the runtime for a run built with its wiring, releasing anything
+// already started on failure.
 func newApp(cfg runConfig) (*App, error) {
 	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {

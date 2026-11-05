@@ -148,6 +148,10 @@ that proves wrong or that a document now states, and link the document instead.
   `[stamped]`, as `EventFuseRequest` is: Shared from the region, player from a
   participant's own producer's `PushLocal`; a `[local]` one may not reach Shared
   state (D-10).
+- What a Shared request does to Shared state may turn only on what every instance
+  holds alike. An election or a guard that one instance alone sees decides nothing
+  there: a fusion that consumes composites on every instance lands them by a Shared
+  carrier on each, not by the elected instance's own (`FuseSystem.fuse`).
 - What only the operator does or sees, a pause, an overlay request, the speakers,
   is pushed `OriginDevice`: never journaled and outside the event tallies, so a
   replay, which has an operator of its own, still matches. One left on the ambient

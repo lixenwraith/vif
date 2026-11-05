@@ -346,10 +346,10 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			a, err := New(Config{
+			a, err := newApp(runConfig{Config: Config{
 				Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: tt.participants},
 				Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E5E,
-			})
+			}})
 			if err != nil {
 				t.Fatalf("server: %v", err)
 			}
