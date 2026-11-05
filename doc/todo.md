@@ -22,9 +22,8 @@ follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
 
 What vanguard met in the machine and is still open, its certain faults having
 landed. Open items elsewhere it meets:
-[payload field names at load](#check-payload-field-names-against-their-event-at-load),
-[a program spawning another](#let-a-program-spawn-another-program),
-and [attack and materialize rows](#give-data-species-attack-and-materialize-rows-of-their-own).
+[payload field names at load](#check-payload-field-names-against-their-event-at-load)
+and [a program spawning another](#let-a-program-spawn-another-program).
 
 #### Give a program's entrance an entering state
 
@@ -33,15 +32,13 @@ and [attack and materialize rows](#give-data-species-attack-and-materialize-rows
   (`enter`), `internal/component/behavior.go` (`BehaviorEntrance`)
 - Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)
 
-A prototype's `entrance = "materialize"` plays a `swarm`-style materialize over
-the footprint for its `entrance_ms`, a second when that is 0, and lands the body as
-it ends, beside any rock that came over it, and nothing of it reaches the machine,
+A prototype's `entrance = "materialize"` plays its own materialize style over the
+footprint for its `entrance_ms`, the style's whole when that is 0, and lands the body
+as it ends, beside any rock that came over it, and nothing of it reaches the machine,
 which starts in `initial` the tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
 What a program would declare next:
 
-- The materialize's style, `swarm` or `nugget` until a program has
-  [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
-  and whether a countdown shows over it.
+- Whether a countdown shows over the materialize.
 - An entering state the machine runs while the materialize holds, so a program can
   telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
   nor takes damage, as no body stands yet.
@@ -1131,18 +1128,6 @@ raise another program, or more of itself, because the vocabulary is built before
 any program compiles. Its build could take any program name and push
 `EventBehaviorSpawnRequest`, which drops and counts an unknown one; the load-time
 check of that name belongs with the payload names under Authoring.
-
-### Give data species attack and materialize rows of their own
-
-- Priority: P3
-- Affected files: `internal/profile/combat.go`, `internal/component/materialize.go`
-
-A prototype names a combat row (`swarm` or `quasar`) and a program's materializes
-a style (`swarm` or `nugget`), so a new attack profile or materialize style is a Go
-change ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)). Rows of
-its own would grow those tables per scenario from the prototype, as soft collision
-builds a data species' rows from its `mass` and loot rolls the drop table its
-`drops` names.
 
 ### Fuse single-cell species and unit composites into any species
 

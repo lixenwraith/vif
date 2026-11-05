@@ -7,6 +7,7 @@ package behavior
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -108,6 +109,11 @@ type prototypeDoc struct {
 	Entrance   string     `toml:"entrance"`
 	EntranceMs int        `toml:"entrance_ms"`
 
+	// Its own rows: what an attack family does to it, keyed by family, and the
+	// materialize style its entrance plays
+	Attacks     map[string]attackDoc `toml:"attacks"`
+	Materialize *styleDoc            `toml:"materialize"`
+
 	// The look: frames, the palettes their cells index, the colour of a glyph
 	// without an entry, and the console pair a 256-colour host draws
 	Frames []visual.LookFrame `toml:"frames"`
@@ -135,6 +141,22 @@ type physicsDoc struct {
 	Restitution   *float64 `toml:"restitution"`
 }
 
+// attackDoc is one attack family's profile against the species: each key replaces
+// its combat row's, and one left out keeps it
+type attackDoc struct {
+	Damage    *int  `toml:"damage"`
+	Stun      *bool `toml:"stun"`
+	Knockback *bool `toml:"knockback"`
+}
+
+// styleDoc is the species' materialize style: each key replaces the swarm's
+type styleDoc struct {
+	Color    *color.RGB `toml:"color"`
+	FillMs   *int       `toml:"fill_ms"`
+	HoldMs   *int       `toml:"hold_ms"`
+	RecedeMs *int       `toml:"recede_ms"`
+}
+
 // contactDoc is energy drained through a shield and heat a bare cursor loses
 type contactDoc struct {
 	Energy int `toml:"energy"`
@@ -160,6 +182,8 @@ func checkName(name string) error {
 		return fmt.Errorf("program name %.32q is not [a-z][a-z0-9_]* of at most %d bytes", name, parameter.BehaviorNameMax)
 	case slices.Contains(component.SpeciesNames[:], name):
 		return fmt.Errorf("program name %q is a code species", name)
+	case slices.ContainsFunc(component.MaterializeStyles[:], func(s component.MaterializeStyle) bool { return s.Name == name }):
+		return fmt.Errorf("program name %q is a materialize style", name)
 	case slices.Contains(reservedNames, name):
 		return fmt.Errorf("program name %q is reserved by the kill counters", name)
 	}
@@ -231,12 +255,18 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loo
 		return component.CombatEntityNames[r] == d.Combat
 	}); i >= 0 {
 		p.Combat = combatRows[i]
+		for _, err := range d.attacks(&p) {
+			fail("attacks: %w", err)
+		}
 	} else {
 		names := make([]string, len(combatRows))
 		for i, r := range combatRows {
 			names[i] = component.CombatEntityNames[r]
 		}
 		fail("combat %q is not one of %s", d.Combat, strings.Join(names, ", "))
+	}
+	for _, err := range d.style(&p) {
+		fail("materialize: %w", err)
 	}
 	p.Homing, p.Restitution = profile.BehaviorHoming, parameter.BehaviorRestitution
 	for _, k := range []struct {
@@ -285,4 +315,85 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loo
 		return component.BehaviorPrototype{}, errors.Join(errs...)
 	}
 	return p, nil
+}
+
+// attacks fills p's row from its combat row, each family the prototype names
+// taking the damage and effects it gives
+func (d *prototypeDoc) attacks(p *component.BehaviorPrototype) (errs []error) {
+	for atk := range component.CombatAttackTypeCount {
+		if base := profile.Defending(atk, p.Combat); base != nil {
+			p.Attacks[atk] = component.AttackRow{Damage: base.DamageValue, Effects: base.EffectMask}
+		}
+	}
+	row := component.CombatEntityNames[p.Combat]
+	for _, family := range slices.Sorted(maps.Keys(d.Attacks)) {
+		a := d.Attacks[family]
+		atk := component.CombatAttackType(slices.Index(component.CombatAttackNames[:], family))
+		base := profile.Defending(atk, p.Combat)
+		switch {
+		case atk < 0:
+			errs = append(errs, fmt.Errorf("%q is not one of %s", family, strings.Join(component.CombatAttackNames[:], ", ")))
+			continue
+		case base == nil:
+			errs = append(errs, fmt.Errorf("%s: the %s row takes no %s", family, row, family))
+			continue
+		case a.Damage != nil && *a.Damage < 0:
+			errs = append(errs, fmt.Errorf("%s: damage %d is negative", family, *a.Damage))
+		case a.Stun != nil && *a.Stun && base.DamageType != component.CombatDamageArea:
+			errs = append(errs, fmt.Errorf("%s: only an area hit stuns", family))
+		case a.Knockback != nil && *a.Knockback && base.Collision == nil:
+			errs = append(errs, fmt.Errorf("%s: the %s row takes no knockback from it", family, row))
+		}
+		own := &p.Attacks[atk]
+		if a.Damage != nil {
+			own.Damage = *a.Damage
+		}
+		for _, k := range []struct {
+			set *bool
+			bit component.CombatEffectMask
+		}{{a.Stun, component.CombatEffectStun}, {a.Knockback, component.CombatEffectKinetic}} {
+			switch {
+			case k.set == nil:
+			case *k.set:
+				own.Effects |= k.bit
+			default:
+				own.Effects &^= k.bit
+			}
+		}
+	}
+	return errs
+}
+
+// style makes p's materialize style the swarm's, named by the program, with the
+// colour and timings the prototype gives
+func (d *prototypeDoc) style(p *component.BehaviorPrototype) (errs []error) {
+	p.Materialize = component.MaterializeStyles[component.SpawnTypeSwarm]
+	p.Materialize.Name, p.Materialize.Color = p.Name, visual.RgbMaterialize
+	if d.Materialize == nil {
+		return nil
+	}
+	if d.Materialize.Color != nil {
+		p.Materialize.Color = *d.Materialize.Color
+	}
+	for _, k := range []struct {
+		key string
+		ms  *int
+		set *time.Duration
+	}{
+		{"fill_ms", d.Materialize.FillMs, &p.Materialize.Fill},
+		{"hold_ms", d.Materialize.HoldMs, &p.Materialize.Hold},
+		{"recede_ms", d.Materialize.RecedeMs, &p.Materialize.Recede},
+	} {
+		switch {
+		case k.ms == nil:
+		case *k.ms < 0:
+			errs = append(errs, fmt.Errorf("%s %d is negative", k.key, *k.ms))
+		default:
+			*k.set = time.Duration(*k.ms) * time.Millisecond
+		}
+	}
+	if p.Materialize.Duration() <= 0 {
+		errs = append(errs, errors.New("fill_ms, hold_ms and recede_ms play nothing"))
+	}
+	return errs
 }

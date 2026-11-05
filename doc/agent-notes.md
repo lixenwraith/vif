@@ -367,6 +367,9 @@ that proves wrong or that a document now states, and link the document instead.
   kill whose drop is below certain shoots until the table's pity makes it certain
   (vanguard's U within two kills), and counts a kill's drops as the loot new since
   it, since earlier drops may still be flying (`internal/app/vanguard_test.go`).
+- The behavior vocabulary is built before any program compiles, so a verb whose
+  arg names what programs extend (a species, a materialize style) registers with
+  `Named`, whose build gets the set's payload names; `Effect` decodes without them.
 
 ## Corpus
 

@@ -104,6 +104,21 @@ func (r *Resource) Footprint(s component.SpeciesType) vmath.Footprint {
 	return vmath.Footprint{}
 }
 
+// MaterializeStyle is a spawn type's style: a code type's row of
+// component.MaterializeStyles, a program's its prototype's, and false for a type
+// neither holds
+func (r *Resource) MaterializeStyle(t component.SpawnType) (component.MaterializeStyle, bool) {
+	switch i := int(t - component.SpawnTypeDataFirst); {
+	case t < 0:
+		return component.MaterializeStyle{}, false
+	case t < component.SpawnTypeCount:
+		return component.MaterializeStyles[t], true
+	case i < len(r.Behaviors):
+		return r.Behaviors[i].Materialize, true
+	}
+	return component.MaterializeStyle{}, false
+}
+
 // === World Resources ===
 
 // --- Time Resource ---

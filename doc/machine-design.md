@@ -616,8 +616,11 @@ smaller part of it.
 
 - **Prototype** (`component.BehaviorPrototype`, plain data in
   `Resources.Behaviors`). Footprint (at most `BehaviorFootprintMax` cells each
-  way) and header offset, hit points, the combat row it fights as (`swarm` or
-  `quasar`, the unit composites whose damage lands on their header), its physics
+  way) and header offset, hit points, the combat row its own starts from (`swarm`
+  or `quasar`, the unit composites whose damage lands on their header) with each
+  attack family's damage, stun and knockback its `[prototype.attacks]` names, its
+  materialize style (the swarm's, with the colour and timings its
+  `[prototype.materialize]` names, its entrance's and named by the program), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
   `parameter.BehaviorRestitution`, with each key of the program's
   `[prototype.physics]` replacing its value), soft-collision mass, the drop table
@@ -628,18 +631,17 @@ smaller part of it.
   entries of the prototype's fg and bg palettes with its attributes, plus the
   colour of a glyph without an entry and an optional console pair;
   `visual.CompileLook` builds it from the authored rows, the eye's types' art
-  included. It names rows of per-kind tables that are code, so a new attack profile
-  or materialize style is a code change
-  ([todo](todo.md#give-data-species-attack-and-materialize-rows-of-their-own)).
+  included.
 - **Species IDs.** `component.SpeciesType` keeps its code enum, ending at
   `SpeciesCount`; `SpeciesDataFirst = SpeciesCount` and
   `SpeciesMax = SpeciesCount + parameter.BehaviorProgramsMax` bound the data
-  range. Programs take `SpeciesDataFirst + i` in sorted-name order, and a scenario
-  with more fails to compile. A scenario's guard names a species
+  range. Programs take `SpeciesDataFirst + i` in sorted-name order, and their
+  styles `SpawnTypeDataFirst + i` alike; a scenario with more fails to compile. A scenario's guard names a species
   (`PayloadSpeciesIn`): the FSM bridge resolves it at load against
   `SpeciesNames` and the compiled prototypes, so a new program moves no guard. A name is `[a-z][a-z0-9_]*` of at most
-  `BehaviorNameMax` bytes, neither a code species' name nor `total` or
-  `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`.
+  `BehaviorNameMax` bytes, neither a code species' or a materialize style's name
+  nor `total` or `uncredited`, because it keys `kills.<name>` and
+  `behavior.<name>.*` and names its style.
 - **Species tables.** Every table indexed by `SpeciesType` is `[SpeciesMax]`, so a
   data ID never indexes out of range: `profile.Contact`, `profile.SoftKraken`,
   the loot system's resolved drop tables, the soft-collision matrices and caches,

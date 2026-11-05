@@ -301,8 +301,9 @@ mask, as a wall's `block_mask`, takes a name or a list of them standing for thei
 union (`["cursor", "kinetic"]`). A gateway's `sub_type` takes its `species`' own
 kinds (`species = "eye", sub_type = "flame"`), and a species without kinds takes
 none. A species field takes a code species or one of the scenario's behavior
-programs, as `PayloadSpeciesIn` does, and a loot field a code kind or one of the
-scenario's own ([Loot](#loot)). A name its type lacks, or a number, fails
+programs, as `PayloadSpeciesIn` does, a materialize style field a code style or a
+program's own, and a loot field a code kind or one of the scenario's own
+([Loot](#loot)). A name its type lacks, or a number, fails
 the load, naming the field's path and the names it takes. `:emit` and an
 authored script's event decode a payload the same way.
 
@@ -870,8 +871,9 @@ its header at that cell or the nearest place its footprint fits, searched over t
 whole map. A cell on an edge or past it searches from the footprint flush against
 that edge, on the row or column it names, so a request names an edge blind to the
 body's size and header offset. The instance stands at once, or, its prototype
-naming `entrance = "materialize"`, a materialize plays over that footprint for the
-prototype's `entrance_ms`, a second when that is 0 or absent, and the instance
+naming `entrance = "materialize"`, a materialize in its own style plays over that
+footprint for the prototype's `entrance_ms`, the style's whole when that is 0 or
+absent, and the instance
 lands as it ends, beside any rock that came over the footprint meanwhile; `behavior.count` counts it from the request. A request naming
 no program raises nothing (`behavior.unknown_program_rejects`), nor one finding no
 room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
@@ -895,13 +897,13 @@ width = 4                           # Footprint, 1..8 cells each way
 height = 2
 header = { x = 1, y = 0 }           # Header cell inside the footprint
 hp = 40
-combat = "swarm"                    # Attack-matrix row it fights as: swarm or quasar
+combat = "swarm"                    # Attack-matrix row its own starts from: swarm or quasar
 mass = 2.0                          # Soft collision, flocking, knockback; 0: the row's knockback only (optional)
 drops = "raider"                    # Drop table its kills roll, the scenario's or a code species' (optional)
 contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare cursor's heat
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
 entrance = "materialize"            # Lands as a materialize over its footprint ends; none stands at once (optional)
-entrance_ms = 250                   # How long that materialize plays; 0 plays the style's second (optional)
+entrance_ms = 250                   # How long that materialize plays; 0 plays its style's whole (optional)
 frames = [                          # Each frame a string per row, height rows of width cells
     { glyphs = ["╔oo╗", "╚══╝"], fg = ["0110", "1001"], attr = [" BB ", "    "] },
     { glyphs = ["┌--┐", "└──┘"] },  # fg, bg and attr are each optional
@@ -921,6 +923,14 @@ arrival_radius = 2.0                # Cells from the target where arrival steeri
 arrival_drag = 2.0                  # Drag's added multiple at the target; needs arrival_radius
 dead_zone = 0.5                     # Snap radius at the target once slow
 restitution = 0.5                   # Speed kept off a wall or the map's edge, 0 to 1
+
+[prototype.attacks]                 # Its own attack row: each family named replaces its combat row's keys (optional)
+pulse = { damage = 0, stun = false }  # damage, stun (an area hit's alone) and knockback (where the row takes it)
+missile = { damage = 9 }            # Families: tracer, shield, lightning, explosion, missile, pulse, self_destruct, bullet, ray, burn
+
+[prototype.materialize]             # Its own style, named by the program: the swarm's, each key replacing one (optional)
+color = { r = 255, g = 120, b = 0 }  # The beams' colour
+fill_ms = 300                       # Each beam's head running in; hold_ms and recede_ms likewise
 
 [states.Strike]
 duration_ms = 800                   # Timed: its Timeout fires when the entry has run this
@@ -992,7 +1002,7 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
   and `CancelTelegraph`, `Lightning { color }` (a `cyan`, `red`, `gold`, `green` or
   `purple` bolt to the nearest cursor, which takes the contact damage),
-  `Materialize { spawn, duration_ms }` (a `swarm` or `nugget` materialize over the
+  `Materialize { spawn, duration_ms }` (a `swarm`, `nugget` or program's style over the
   footprint at the target for `duration_ms`, its style's own when that is 0 or
   absent, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
   swarm or quasar at the header plus x, y) and `EmitEvent` (shared and local

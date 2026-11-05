@@ -15,7 +15,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// A beacon's beams take the nugget's own colour; a spawn's keep the materialize cyan
+// A beacon's beams take the nugget's own colour, a spawn's the materialize cyan and a
+// program's style its own
 var materializePalette = [component.SpawnTypeCount]color.RGB{
 	component.SpawnTypeDrain:  visual.RgbMaterialize,
 	component.SpawnTypeSwarm:  visual.RgbMaterialize,
@@ -61,7 +62,11 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	timers := r.gameCtx.World.Components.Timer
 	materializes.Each(func(e core.Entity, mat *component.MaterializeComponent) bool {
 		timer, ok := timers.GetPtr(e)
-		if !ok || mat.Type < 0 || mat.Type >= component.SpawnTypeCount {
+		if !ok {
+			return true
+		}
+		style, ok := r.gameCtx.World.Resources.MaterializeStyle(mat.Type)
+		if !ok {
 			return true
 		}
 		elapsed := timer.Elapsed(component.TimerDeadline)
@@ -70,8 +75,11 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		area := mat.Footprint.At(mat.X, mat.Y)
 		targetVX, targetVY, _ := ctx.MapToViewport(area.X, area.Y)
 
-		style := timedStyle(component.MaterializeStyles[mat.Type], timer.Slots[component.TimerDeadline].Duration)
-		c := materializePalette[mat.Type]
+		style = timedStyle(style, timer.Slots[component.TimerDeadline].Duration)
+		c := style.Color
+		if mat.Type < component.SpawnTypeCount {
+			c = materializePalette[mat.Type]
+		}
 		for _, dir := range [...]beamDir{dirUp, dirDown, dirLeft, dirRight} {
 			r.renderBeam(ctx, buf, pf, area.Width, area.Height, elapsed, style, c, targetVX, targetVY, dir)
 		}

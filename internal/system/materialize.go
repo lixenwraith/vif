@@ -109,7 +109,8 @@ func (s *MaterializeSystem) Update() {
 // the footprint it resolves, its header held on the map, lasting the request's
 // duration or, when that is not positive, its style's
 func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, p *event.MaterializeRequestPayload) {
-	if p.Type < 0 || p.Type >= component.SpawnTypeCount {
+	style, ok := s.world.Resources.MaterializeStyle(p.Type)
+	if !ok {
 		return
 	}
 	foot := p.Footprint
@@ -128,7 +129,7 @@ func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, p *event.
 		Type:      p.Type,
 		Species:   p.Species,
 	})
-	duration := component.MaterializeStyles[p.Type].Duration()
+	duration := style.Duration()
 	if p.DurationMs > 0 {
 		duration = time.Duration(p.DurationMs) * time.Millisecond
 	}

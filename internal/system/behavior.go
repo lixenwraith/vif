@@ -293,10 +293,10 @@ func (s *BehaviorSystem) entering(e core.Entity) (int, bool) {
 	return s.programOf(m.Species)
 }
 
-// enter opens program i's entrance: a Shared materialize naming the species over
-// the footprint found as a spawn finds it, for as long as its prototype gives, so
-// the body lands as it ends, and a capture meanwhile carries the pending spawn as
-// it carries any store (D-19)
+// enter opens program i's entrance: a Shared materialize in its own style naming
+// the species over the footprint found as a spawn finds it, for as long as its
+// prototype gives, so the body lands as it ends, and a capture meanwhile carries
+// the pending spawn as it carries any store (D-19)
 func (s *BehaviorSystem) enter(i, x, y int) {
 	p := &s.set.Prototypes()[i]
 	left, top, found := s.findFootprint(p, x, y)
@@ -307,7 +307,7 @@ func (s *BehaviorSystem) enter(i, x, y int) {
 	s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
 		X:          left + p.Footprint.HeaderX,
 		Y:          top + p.Footprint.HeaderY,
-		Type:       component.SpawnTypeSwarm,
+		Type:       component.SpawnTypeDataFirst + component.SpawnType(i),
 		Species:    p.Species,
 		DurationMs: p.EntranceDuration.Milliseconds(),
 	})
@@ -800,11 +800,11 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			})
 		}, nil
 	})
-	v.Effect("Materialize", func(a *materializeArgs) (func(*behaviorCtx), error) {
+	v.Named("Materialize", func(names *dialect.Names, a *materializeArgs) (func(*behaviorCtx), error) {
 		// A drain materialize's completion spawns a drain, so only the announcing styles
-		spawn := slices.IndexFunc(component.MaterializeStyles[:], func(s component.MaterializeStyle) bool { return s.Name == a.Spawn })
-		if spawn < 0 || component.SpawnType(spawn) == component.SpawnTypeDrain {
-			return nil, fmt.Errorf("spawn %q is not one of swarm, nugget", a.Spawn)
+		spawn, ok := names.Value[component.SpawnType](a.Spawn)
+		if !ok || spawn == component.SpawnTypeDrain {
+			return nil, fmt.Errorf("spawn %q is not swarm, nugget or a program's style", a.Spawn)
 		}
 		if a.DurationMs < 0 {
 			return nil, fmt.Errorf("duration_ms %d is negative", a.DurationMs)
@@ -818,7 +818,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 				X:          x,
 				Y:          y,
 				Footprint:  c.proto.Footprint,
-				Type:       component.SpawnType(spawn),
+				Type:       spawn,
 				DurationMs: a.DurationMs,
 			})
 		}, nil
