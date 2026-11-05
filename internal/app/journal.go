@@ -1,13 +1,13 @@
 package app
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/content"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -64,19 +64,6 @@ func joinNotice(notice, line string) string {
 		return line
 	}
 	return notice + "; " + line
-}
-
-// lineHolds refuses a capture whose payloads one journal line could not hold, as no
-// reader would then take the journal.
-func lineHolds(payloads ...[]byte) error {
-	n := 0
-	for _, p := range payloads {
-		n += base64.StdEncoding.EncodedLen(len(p))
-	}
-	if n > parameter.JournalLineBytes-parameter.JournalLineHeadroom {
-		return fmt.Errorf("the world is %d MiB, more than a journal line holds", n>>20)
-	}
-	return nil
 }
 
 // journalLostLocked closes j where it is still true once a world this run wrote
@@ -386,7 +373,7 @@ func (sc *scribe) openJournalLocked(an event.JournalAnchor, twin *App) (*journal
 	if err != nil {
 		return nil, err
 	}
-	if err := lineHolds(opening.Body, opening.Own); err != nil {
+	if err := journal.LineHolds(opening.Body, opening.Own); err != nil {
 		return nil, err
 	}
 	d, err := newReplayDriver(twin, journal.Set{Captures: []event.JournalCapture{opening}}.Stream())
@@ -417,7 +404,7 @@ func (sc *scribe) openJournalLocked(an event.JournalAnchor, twin *App) (*journal
 // in, written against twin's settled boot, with the operator state and the run's own
 // side beside it. Caller MUST hold updateMutex.
 func (sc *scribe) openingLocked(twin *App) (event.JournalCapture, error) {
-	cap, err := sc.glue.captureSharedLocked()
+	cap, err := sc.glue.CaptureSharedLocked()
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
@@ -430,11 +417,11 @@ func (sc *scribe) openingLocked(twin *App) (event.JournalCapture, error) {
 		return event.JournalCapture{}, err
 	}
 	var boot snapshot.SharedCapture
-	twin.world.RunSafe(func() { boot, err = twin.glue.captureSharedLocked() })
+	twin.world.RunSafe(func() { boot, err = twin.glue.CaptureSharedLocked() })
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
-	d, err := sc.glue.encoder.DiffWritten(boot, cap)
+	d, err := sc.glue.Encoder().DiffWritten(boot, cap)
 	if err != nil {
 		return event.JournalCapture{}, err
 	}
@@ -480,7 +467,7 @@ func (sc *scribe) ownStateLocked() (ownState, error) {
 		Side:    sc.world.CapturePlayerSide(),
 		Content: service.MustGet[*service.ContentService](sc.hub, "content").CursorState(),
 		Events:  sc.world.Resources.Event.Queue.Telemetry(),
-		Status:  statusCellsLocked(sc.world, statusKeysLocked(sc.world, func(k string) bool { return !ownedStatusKey(k) })),
+		Status:  corrector.StatusCellsLocked(sc.world, corrector.StatusKeysLocked(sc.world, func(k string) bool { return !ownedStatusKey(k) })),
 		Order:   sc.world.CaptureOrder(),
 	}
 	own.Side.Streams = slices.DeleteFunc(own.Side.Streams, ownedStream)
@@ -530,7 +517,7 @@ func (sc *scribe) installOwnLocked(own ownState) error {
 		return err
 	}
 	sc.world.Resources.Event.Queue.SetTelemetry(own.Events)
-	installStatusLocked(sc.world, own.Status)
+	corrector.InstallStatusLocked(sc.world, own.Status)
 	// Last, once both domains' rows stand: the shared write and the settle placed theirs
 	if err := sc.world.InstallOrder(own.Order); err != nil {
 		return fmt.Errorf("the run's order: %w", err)
@@ -566,7 +553,7 @@ func (sc *scribe) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 		return fmt.Errorf("RNG streams this run does not issue: %v", unknown)
 	}
 	sc.world.Resources.Rand.LoadStreams(core.DomainPlayer, kept)
-	savers := sharedStateSaversLocked(sc.world)
+	savers := corrector.SharedStateSaversLocked(sc.world)
 	for _, rec := range c.systems {
 		if slices.Contains(ownedSystems, rec.System) {
 			continue
@@ -599,7 +586,7 @@ func (sc *scribe) adoptLocked(twin *App, d *journal.ReplayDriver) error {
 		Floats:  slices.DeleteFunc(c.status.Floats, func(s snapshot.FloatCell) bool { return ownedStatusKey(s.Key) }),
 		Strings: slices.DeleteFunc(c.status.Strings, func(s snapshot.StringCell) bool { return ownedStatusKey(s.Key) }),
 	}
-	installStatusLocked(sc.world, c.status)
+	corrector.InstallStatusLocked(sc.world, c.status)
 	if at, got := sc.run.Position(), sc.journalDigestLocked(); at != c.at || got != c.digest {
 		return fmt.Errorf("the run stands at %+v with digest %+v after taking on the journal's opening, which stands at %+v with %+v",
 			at, got, c.at, c.digest)

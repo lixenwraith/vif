@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/content"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -44,7 +45,7 @@ type checkpoint struct {
 // checkpointLocked reads a replay copy and where its driver stands, into reuse's
 // storage when one is given. Caller MUST hold updateMutex.
 func (sc *scribe) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldCopy) (*checkpoint, error) {
-	systems, err := captureSystemStatesLocked(sc.world)
+	systems, err := corrector.CaptureSystemStatesLocked(sc.world)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +75,7 @@ func (sc *scribe) checkpointLocked(d *journal.ReplayDriver, reuse *engine.WorldC
 		queue:     sc.world.Resources.Event.Queue.CopyOut(),
 		scheduler: sc.scheduler.CopyOut(),
 		systems:   systems,
-		status:    statusCellsLocked(sc.world, statusKeysLocked(sc.world, func(string) bool { return true })),
+		status:    corrector.StatusCellsLocked(sc.world, corrector.StatusKeysLocked(sc.world, func(string) bool { return true })),
 		paused:    sc.ctx.TimeCtl.IsPaused(),
 		scale:     sc.ctx.TimeCtl.Scale(),
 		width:     sc.ctx.Width,
@@ -116,7 +117,7 @@ func (sc *scribe) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
 	if unknown := c.world.LoadStreams(sc.world.Resources.Rand); len(unknown) > 0 {
 		return fmt.Errorf("restore: RNG streams this copy does not issue: %v", unknown)
 	}
-	savers := sharedStateSaversLocked(sc.world)
+	savers := corrector.SharedStateSaversLocked(sc.world)
 	for _, rec := range c.systems {
 		if err := savers[rec.System].LoadShared(rec.Data); err != nil {
 			return fmt.Errorf("restore %s: %w", rec.System, err)
@@ -152,7 +153,7 @@ func (sc *scribe) restoreLocked(c *checkpoint, d *journal.ReplayDriver) error {
 	if err := service.MustGet[*service.ContentService](sc.hub, "content").SetCursorState(c.content); err != nil {
 		return err
 	}
-	installStatusLocked(sc.world, c.status)
+	corrector.InstallStatusLocked(sc.world, c.status)
 	d.Resume(c.driver)
 	return nil
 }

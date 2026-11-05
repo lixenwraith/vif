@@ -12,7 +12,9 @@ flowchart TD
     Vif --> Resource["internal/resource"]
     App --> Resource
     App --> Converge["internal/converge"]
+    App --> Corrector["internal/app/internal/corrector"]
     Converge --> Snapshot["internal/snapshot"]
+    Corrector --> Snapshot
     App --> Snapshot
     App --> Services["internal/service"]
     App --> Runtime["engine, input, mode, bot, FSM"]
@@ -24,7 +26,8 @@ flowchart TD
 ```
 
 `internal/app` is the composition root. Other packages should not construct an
-entire game runtime or depend back upward on it.
+entire game runtime or depend back upward on it; the run types nested under it read
+the run through a seam it implements.
 
 ## 2. Simulation package topology
 
@@ -70,7 +73,8 @@ render abstraction, while the orchestrator owns the presentation's surface.
 |---|---|
 | `cmd/vif` | Flags and the one help table that also renders `doc/vif.6` and the shell completions in `deploy/package/`; `vif.toml` defaults; logging/journal/runtime-capture setup; play/serve/replay/script/bot/check/schema selection; the session request a `-join` site answers; process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
-| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, seat bots and relay their links, drive frame/input/playback/script loops and replay checkpoints, capture and install the shared world, open a journal where a run stands, verify anchor/config identity, and run a dedicated host's lifetime and probe. A presenting run presents through the host's `Presentation` and speakers (`app.Host`), the terminal when the host supplies none. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements: the correction glue, `corrector`, over the world and the capture encoder, and the run's place in its session, `membership`, beside it. The journal and its replay are `scribe`'s. Each of the three reads the run through one interface, and `App` is what is left: construct the world, wire the services, run the loop. |
+| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, seat bots and relay their links, drive frame/input/playback/script loops and replay checkpoints, capture and install the shared world, open a journal where a run stands, verify anchor/config identity, and run a dedicated host's lifetime and probe. A presenting run presents through the host's `Presentation` and speakers (`app.Host`), the terminal when the host supplies none. It owns the world and the lock over it; the authority protocol that reads and writes that world lives in `internal/converge` and reaches it only through the `converge.Instance` seam this package implements: the correction glue, `corrector.Corrector`, over the world and the capture encoder, and the run's place in its session, `membership`, beside it. The journal and its replay are `scribe`'s. Each of the three reads the run through one interface, and `App` is what is left: construct the world, wire the services, run the loop. |
+| `internal/app/internal/corrector` | The correction glue over one run's world: capture, verify, stage, project and install the shared world over the world and the capture encoder, write a world in place and journal what it moved, and the status cells and carriers a checkpoint and a journal's opening read the same way. It reads the run through `corrector.Run` alone (`correctionRun` in `internal/app`) and resolves a capture into a `Staging` world only the run can build, a headless App of its seed, scenario and corpus. |
 | `internal/converge` | The authority protocol: which generation of the session this instance is part of and who is authoring it, the succession that moves authorship when the author goes, the adaptive per-link correction cadence a host publishes, the selective manifest/page exchange that makes a converged link cost hashes, the install a guest commits between two ticks, slow-participant eviction, the answers a relay serves the participants behind it, and the listening port and succession chain a survivor dials down. It holds no world: `converge.Instance` is the whole of what it asks the run for, and every method on it takes the world lock itself except `CaptureSharedLocked` and `IndexSharedLocked`, which `TickClosed` calls from inside a tick — which is also what lets its own criteria drive it against a stub world instead of a composition root. |
 | `internal/asset` | Every embedded shipped file — fallback scenario, tutorial corpus, default keymap and `vif.toml`, shipped bot graphs, the source-archive version stamp — plus the splash bitmap font and the cell font atlas the window, page and Android view draw with. The module's only package with an `embed` directive; the shipped sound and music banks are the audio module's `bank`. |
 | `internal/component` | Pure ECS component data, enums/masks and per-kind tables; logic over them lives in the owning system (exceptions in [ECS](ecs-and-events.md#4-component-catalog)). `PositionComponent` is `position.Point`, vmath's flat cell coordinate, and `engine` stores it in the rows beside the spatial index. |

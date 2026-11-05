@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
@@ -131,6 +132,10 @@ func mustRoundTrip(t *testing.T, a *App) snapshot.SharedCapture {
 	}
 	return cap
 }
+
+// stagingOf is the run a staged install resolved into, valid until it commits or
+// is discarded.
+func stagingOf(s *corrector.StagedInstall) *App { return s.StagingWorld().(stagingRun).App }
 
 func mustEncode(t *testing.T, cap snapshot.SharedCapture) []byte {
 	t.Helper()

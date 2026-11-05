@@ -109,7 +109,7 @@ cursorless coordinator included.
 | `tick` | `Scheduler.processTick` | once per simulation tick, before the tick body |
 
 Installing a received world, a join's capture or a correction, moves both to its
-header's (`corrector.adoptClockLocked`). `tick` is stamped with the tick *about to
+header's (`Corrector.adoptClockLocked`). `tick` is stamped with the tick *about to
 execute*, so records emitted inside `processTick` carry the tick they describe
 rather than the previous one. A played or served runtime adopts `vlog.Default()`,
 which also stamps the process's own records (flags, runtime capture, a crash); a
@@ -286,7 +286,7 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 
 | `msg` | Level | Fields | Emitted by |
 |---|---|---|---|
-| `capture staged` / `capture installed` | INFO | `tick`, `streams`, `systems`, `stage_us` / `tick`, `projected_ticks`, `stage_us`, `commit_us`, `project_us`, `write_us`, `correction_entries`, `correction_entities`, `correction_cells` | `App.stageProved`, `StagedInstall.Commit` |
+| `capture staged` / `capture installed` | INFO | `tick`, `streams`, `systems`, `stage_us` / `tick`, `projected_ticks`, `stage_us`, `commit_us`, `project_us`, `write_us`, `correction_entries`, `correction_entities`, `correction_cells` | `Corrector.stageProved`, `StagedInstall.Commit` |
 | `session captured` | INFO | `tick`, `bytes`, `streams`, `systems` | the authority taking a keyframe outside the cadence: a join's snapshot, a fallback |
 | `correction published` / `repair applied` | DEBUG | `tick`, `keyframe`, `bytes`, `chunks`, `whole_bodies`, `peers`, `of`, `cadence_ticks`, `keyframe_period_ticks`, `encode_us` / `tick`, `pages`, `sections`, `cells` | `Corrections` |
 | `correction not applied` / `repair failed its proof` | WARN | `tick`, `error` / `error` | `Corrections`; a failed proof asks the authority for a keyframe |

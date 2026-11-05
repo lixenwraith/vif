@@ -3,11 +3,11 @@ package app
 import (
 	"errors"
 	"fmt"
-	"github.com/lixenwraith/vif/pkg/vmath"
 	"path/filepath"
 	"slices"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/service"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/pkg/position"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // ConfigFromAnchor rebuilds the headless config a journal was recorded under, mid-run
@@ -63,24 +64,18 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	return cfg, cfg.Validate()
 }
 
-// anchorField is one value the anchor names and this App must reproduce
-type anchorField struct {
-	name      string
-	want, got any
-}
-
 // sessionAnchorFields are what two participants in one session must agree on:
 // record layout and tick rate, the seed and session counter every RNG stream
 // derives from, and the scenario's bytes, whose name is only a lookup hint.
 // Geometry is per-instance, and the corpus is player domain, read from each
 // machine's own roots and never reconciled (D-11, doc/multi-player.md).
-func (sc *scribe) sessionAnchorFields(an event.JournalAnchor) []anchorField {
-	return []anchorField{
-		{"schema", an.Schema, uint64(event.JournalSchema)},
-		{"seed", an.Seed, sc.world.Resources.Rand.Root()},
-		{"session", an.Session, sc.world.Resources.Rand.Session()},
-		{"scenario_digest", an.ScenarioDigest, sc.scenario.Digest()},
-		{"tick_ns", an.TickInterval, int64(sc.world.TickInterval())},
+func (sc *scribe) sessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField {
+	return []corrector.AnchorField{
+		{Name: "schema", Want: an.Schema, Got: uint64(event.JournalSchema)},
+		{Name: "seed", Want: an.Seed, Got: sc.world.Resources.Rand.Root()},
+		{Name: "session", Want: an.Session, Got: sc.world.Resources.Rand.Session()},
+		{Name: "scenario_digest", Want: an.ScenarioDigest, Got: sc.scenario.Digest()},
+		{Name: "tick_ns", Want: an.TickInterval, Got: int64(sc.world.TickInterval())},
 	}
 }
 
@@ -88,26 +83,16 @@ func (sc *scribe) sessionAnchorFields(an event.JournalAnchor) []anchorField {
 // A recorded run typed the blocks of one corpus, so replaying its input against
 // another yields different glyphs; a peer joining live only has to agree on the
 // world, and brings its own text into it.
-func (sc *scribe) anchorIdentity(an event.JournalAnchor) []anchorField {
+func (sc *scribe) anchorIdentity(an event.JournalAnchor) []corrector.AnchorField {
 	reg := sc.world.Resources.Status
 	svc := service.MustGet[*service.ContentService](sc.hub, "content")
 	return append(sc.sessionAnchorFields(an),
-		anchorField{"content_id", an.ContentID, reg.Strings.Get("content.source").Load()},
-		anchorField{"content_pin", an.ContentPin, svc.Pin()},
-		anchorField{"content_files", an.ContentFiles, uint64(reg.Ints.Get("content.files").Load())},
-		anchorField{"content_blocks", an.ContentBlocks, uint64(reg.Ints.Get("content.blocks").Load())},
-		anchorField{"content_lines", an.ContentLines, uint64(reg.Ints.Get("content.lines").Load())},
+		corrector.AnchorField{Name: "content_id", Want: an.ContentID, Got: reg.Strings.Get("content.source").Load()},
+		corrector.AnchorField{Name: "content_pin", Want: an.ContentPin, Got: svc.Pin()},
+		corrector.AnchorField{Name: "content_files", Want: an.ContentFiles, Got: uint64(reg.Ints.Get("content.files").Load())},
+		corrector.AnchorField{Name: "content_blocks", Want: an.ContentBlocks, Got: uint64(reg.Ints.Get("content.blocks").Load())},
+		corrector.AnchorField{Name: "content_lines", Want: an.ContentLines, Got: uint64(reg.Ints.Get("content.lines").Load())},
 	)
-}
-
-// firstAnchorMismatch reports the first field this App does not reproduce
-func firstAnchorMismatch(kind string, fields []anchorField) error {
-	for _, f := range fields {
-		if f.want != f.got {
-			return fmt.Errorf("%s mismatch: %s recorded %v, this run has %v", kind, f.name, f.want, f.got)
-		}
-	}
-	return nil
 }
 
 // VerifyAnchor reports whether this App reproduces what the anchor recorded.
@@ -117,9 +102,9 @@ func firstAnchorMismatch(kind string, fields []anchorField) error {
 // Call after NewHeadless, before Replay.
 func (sc *scribe) VerifyAnchor(an event.JournalAnchor) error {
 	fields := append(sc.anchorIdentity(an),
-		anchorField{"width", an.Width, sc.ctx.Width},
-		anchorField{"height", an.Height, sc.ctx.Height})
-	return firstAnchorMismatch("anchor", fields)
+		corrector.AnchorField{Name: "width", Want: an.Width, Got: sc.ctx.Width},
+		corrector.AnchorField{Name: "height", Want: an.Height, Got: sc.ctx.Height})
+	return corrector.FirstAnchorMismatch("anchor", fields)
 }
 
 // newReplayDriver checks App-specific policy, then hands the stream to
@@ -180,8 +165,8 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 	var err error
 	a.world.RunSafe(func() {
 		var before, cap snapshot.SharedCapture
-		if before, err = a.glue.captureSharedLocked(); err == nil {
-			cap, err = a.glue.encoder.ApplyWritten(before, d)
+		if before, err = a.glue.CaptureSharedLocked(); err == nil {
+			cap, err = a.glue.Encoder().ApplyWritten(before, d)
 		}
 		if err != nil {
 			return
@@ -194,7 +179,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 			a.world.MarkSessionShared()
 			a.ctx.PublishMapLock()
 		}
-		_, err = a.glue.writeSharedLocked(cap, &before, true, c.Opens)
+		_, err = a.glue.WriteSharedLocked(cap, &before, true, c.Opens)
 		if err == nil && c.Opens {
 			err = a.scribe.openedLocked(c, own)
 		}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -135,7 +136,7 @@ type App struct {
 	// glue is the correction glue over this run's world: what the authority protocol
 	// reads and writes, and what a journal's written worlds and a join's install go
 	// through. It reads the run through correctionRun.
-	glue corrector
+	glue corrector.Corrector
 
 	// membership is this run's place in its session, and the protocol's view of it
 	// beside the glue. It reads the run through membershipRun.
@@ -360,13 +361,13 @@ func (a *App) initWorld() error {
 	// Corpus telemetry needs the registry NewGameContext creates
 	content := service.MustGet[*service.ContentService](a.hub, "content")
 	content.PublishStatus(a.world.Resources.Status)
-	a.glue.open(a, a.world, a.log, content, &a.scenario)
+	a.glue.Open(correctionRun{a}, a.world, a.log, content, &a.scenario)
 	// The protocol is built here rather than before init because it reads the
 	// telemetry cells and the status registry this world owns. Nothing can reach
 	// it earlier: the transport hooks bound above answer nothing until the service
 	// is started, which is after construction returns.
 	a.corrections, a.authority, a.reach =
-		converge.New(a.instance(), a.glue.telemetry, a.world.Resources.Status)
+		converge.New(a.instance(), a.glue.Telemetry(), a.world.Resources.Status)
 	a.membership.corrections, a.membership.authority, a.membership.reach = a.corrections, a.authority, a.reach
 	if a.cfg.SlowPolicy != nil {
 		a.authority.SetSlowPolicy(*a.cfg.SlowPolicy)
@@ -544,7 +545,8 @@ func (a *App) initScheduler() error {
 		a.frameReady,
 	)
 	a.ctx.ResetChan = resetChan
-	a.glue.scheduler, a.membership.scheduler, a.scribe.scheduler = a.scheduler, a.scheduler, a.scheduler
+	a.glue.SetScheduler(a.scheduler)
+	a.membership.scheduler, a.scribe.scheduler = a.scheduler, a.scheduler
 	a.scheduler.SetJournalDigest(a.scribe.journalDigestLocked)
 
 	register := func(m *fsm.Machine[*engine.World]) { manifest.RegisterFSMComponents(m, a.behaviors.Declared()) }
@@ -580,7 +582,7 @@ func (a *App) Close() {
 	a.reach.Close()
 	a.closeProbe()
 	a.membership.closeMidRunPort()
-	a.glue.discardStagingWorld()
+	a.glue.DiscardStaging()
 	a.hub.StopAll()
 	a.scribe.closedAtExit, a.scribe.closedAtExitAs = a.scribe.closeJournal()
 

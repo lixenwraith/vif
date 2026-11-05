@@ -3,6 +3,7 @@ package app
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -25,7 +26,7 @@ type scribe struct {
 	log       *vlog.Log
 	scheduler *engine.Scheduler // wired when the run builds its own, after the world
 	scenario  *resource.Scenario
-	glue      *corrector
+	glue      *corrector.Corrector
 	hub       *service.Hub
 
 	// recorder is the journal this run keeps, nil when it keeps none; atomic, as a
@@ -55,7 +56,7 @@ type scribeRun interface {
 
 // open wires the scribe over the run's configuration, scenario and services before
 // the run builds anything; the world, the context and the scheduler follow.
-func (sc *scribe) open(run scribeRun, cfg *Config, scenario *resource.Scenario, log *vlog.Log, hub *service.Hub, glue *corrector) {
+func (sc *scribe) open(run scribeRun, cfg *Config, scenario *resource.Scenario, log *vlog.Log, hub *service.Hub, glue *corrector.Corrector) {
 	sc.run, sc.cfg, sc.scenario, sc.log, sc.hub, sc.glue = run, cfg, scenario, log, hub, glue
 }
 
@@ -66,7 +67,7 @@ func (a *App) buildAnchor() event.JournalAnchor          { return a.scribe.build
 func (a *App) journalLostLocked(j *event.Journal, err error) {
 	a.scribe.journalLostLocked(j, err)
 }
-func (a *App) sessionAnchorFields(an event.JournalAnchor) []anchorField {
+func (a *App) sessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField {
 	return a.scribe.sessionAnchorFields(an)
 }
 func (a *App) askSeatJournal(slot int, start bool) error {

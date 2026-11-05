@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/network"
@@ -139,10 +140,10 @@ func TestAJoinIgnoresTheCorpusAReplayRequires(t *testing.T) {
 	an.ContentID = "elsewhere/content"
 	an.ContentFiles += 2
 
-	if err := firstAnchorMismatch("join", a.sessionAnchorFields(an)); err != nil {
+	if err := corrector.FirstAnchorMismatch("join", a.sessionAnchorFields(an)); err != nil {
 		t.Fatalf("a peer reading its own corpus was refused: %v", err)
 	}
-	err := firstAnchorMismatch("replay", a.scribe.anchorIdentity(an))
+	err := corrector.FirstAnchorMismatch("replay", a.scribe.anchorIdentity(an))
 	if err == nil || !strings.Contains(err.Error(), "content_id") {
 		t.Fatalf("a replay accepted a corpus it did not record: %v", err)
 	}

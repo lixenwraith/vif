@@ -746,7 +746,7 @@ What the feature itself needs, best shaped by deploying it step by step:
 ### Project a correction outside the live lock
 
 - Priority: P2
-- Affected files: `internal/app/snapshot_stage.go`, `internal/system/network.go`
+- Affected files: `internal/app/internal/corrector/snapshot_stage.go`, `internal/system/network.go`
 - Guide: [Netcode design](netcode-design.md#less-work-under-the-live-lock)
 
 An install compares the staging world's stores against the live ones in place and
