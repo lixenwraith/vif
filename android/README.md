@@ -6,7 +6,7 @@ the game runs in-process through a `gomobile bind` library, presents on a
 
 | Path | What |
 |---|---|
-| `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config` whose `Host` is the view and the speakers and calls `app.Run`. |
+| `go.mod`, `game/` | The Go host, a module of its own so the repository's `go build ./...` never sees gomobile. `game.Start` builds an `app.Config`, and an `app.Host` of the view and the speakers, and hands both to `app.Run`. |
 | `app/` | The Java app: `MainActivity` (lifecycle, assets, Back), `StartScreen` (what the app opens on), `GameView` (render thread, taps, keys), `MenuDialog` (the configuration menu, drawn from the run's snapshot), `CellDrawer` (`OnCanvas`, and `FromRaster`, the fallback), `Speaker`; `res/` holds `../lixen-logo.svg` as the vector `logo`, which the start screen shows, Android's splash screen insets to the start screen's size on its page (`themes.xml`) and the launcher icon insets on black, with its lines alone as the themed icon. |
 | `../wad/` | Packaged as the APK's `assets/wad/` and copied to the app's files directory once per install, where the game reads it as its system root. |
 | `files/config/vif/vif.toml` | The user root's settings, read and written back as a terminal run does: each `[play]` value (sfx, music, sfx volume, auto-fire, mouse, HUD) as it changes, the file created at the first change. No permission: the app's own directory. |

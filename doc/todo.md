@@ -1522,30 +1522,25 @@ another system may not call them directly.
 ### Give Config a package of its own
 
 - Priority: P3
-- Affected files: `internal/app/config.go`, `membership.go`, `presentation.go`,
-  `presentation_headless.go`, `audio.go`, `audio_none.go`, `loop.go`, `seat.go`,
-  `session.go`
+- Affected files: `internal/app/config.go`, `membership.go`, `claim.go`,
+  `internal/app/internal/config`
 
 `Config` is the run's configuration, its session half the field `Membership`; what
-the run is built with beside it, its wiring, is `runConfig`'s and stays in `app`.
-It goes to `internal/app/internal/config`, a leaf package `app` aliases (`Config`,
-`Membership`, `Mode` and its constants), so `cmd/vif` and Android keep compiling
-and [the membership's package](#give-the-membership-a-package-of-its-own) can
-import it, in two more steps, one PR each, the next after the last is merged and
-tested (Lixen, 2026-11-05):
-
-1. `Host` out of `Config`, handed to the run beside it: it is build-tagged and holds
-   the `Presentation` interface. `Mode` moves with `Config`, taking `buildHasAudio`,
-   which only its `Audio` reads.
-2. `Config`, `Membership` and `ClaimStore` into the package. `Validate`'s
-   build-tagged rules (`validateBuildConfig`, `validateAudioBuildConfig`,
-   `buildHasSocketNetwork`, `scriptPacing`, `errBrowserHosting`) go with it or stay
-   as an `app` check after it. `Config.Validate` is `runConfig.Validate` with no
-   wiring, the wiring's rules (`relay`, `scriptedSession`) among `Config`'s;
-   parting them can change which error a config breaking two of them reports.
-   `Membership`'s methods that use `app` types (`joining`, `hostNetwork`,
-   `bindDoors`, `closeDoors`, `relayRouter`) become functions, since a package
-   cannot add methods to a type it only aliases.
+the run is built with beside it, the platform's `Host` and its wiring, is
+`runConfig`'s and stays in `app`. `Mode` is already `internal/app/internal/config`'s,
+with the build's `buildHasAudio` its `Audio` reads, and `app` aliases it with its
+constants. One step is left, after the last is merged and tested (Lixen,
+2026-11-05): `Config`, `Membership` and `ClaimStore` into that package, aliased
+the same way, so `cmd/vif` and Android keep compiling and
+[the membership's package](#give-the-membership-a-package-of-its-own) can import
+it. `Validate`'s build-tagged rules (`validateBuildConfig`,
+`validateAudioBuildConfig`, `buildHasSocketNetwork`, `scriptPacing`,
+`errBrowserHosting`) go with it or stay as an `app` check after it.
+`Config.Validate` is `runConfig.Validate` with no wiring, the wiring's rules
+(`relay`, `scriptedSession`) among `Config`'s; parting them can change which error
+a config breaking two of them reports. `Membership`'s methods that use `app` types
+(`joining`, `hostNetwork`, `bindDoors`, `relayRouter`) become functions, since a
+package cannot add methods to a type it only aliases.
 
 ### Give the membership a package of its own
 
@@ -1559,7 +1554,7 @@ reading the run through one seam and resolving into a run only `App` builds (a
 half, `Membership` and the wiring's `membershipWiring`, and reads the rest of the
 run through `membershipRun`, dialling a join against a copy of it (`joinBase`). It
 waits on [Config's package](#give-config-a-package-of-its-own), which takes
-`Membership` and `Mode` out of `app`. Three ties to `app` are left after it:
+`Membership` out of `app`, as it took `Mode`. Three ties to `app` are left after it:
 
 - The seat runner: `seat.go` builds each bot's `runConfig` and runs its `App`
   through `drive`, reading the slot, scribe and fork cell off it; the run has to
