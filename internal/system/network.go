@@ -2884,9 +2884,7 @@ func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.C
 		p.Heat, p.Overheat, p.EmberActive = c.Current, c.Overheat, c.EmberActive
 	}
 	if c, ok := s.world.Components.Shield.GetComponent(cursor); ok {
-		p.ShieldActive = c.Active
-		p.ShieldRadiusX, p.ShieldRadiusY = c.RadiusX, c.RadiusY
-		p.ShieldInvRxSq, p.ShieldInvRySq = c.InvRxSq, c.InvRySq
+		p.ShieldActive, p.ShieldRadius, p.ShieldColor = c.Active, c.Radius, c.Color
 	}
 	if c, ok := s.world.Components.Boost.GetComponent(cursor); ok {
 		p.BoostActive = c.Active
@@ -3060,9 +3058,7 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 		c.Current, c.Overheat, c.EmberActive = p.Heat, p.Overheat, p.EmberActive
 	}
 	if c, ok := s.world.Components.Shield.GetPtr(cursor); ok {
-		c.Active = p.ShieldActive
-		c.RadiusX, c.RadiusY = p.ShieldRadiusX, p.ShieldRadiusY
-		c.InvRxSq, c.InvRySq = p.ShieldInvRxSq, p.ShieldInvRySq
+		c.Active, c.Radius, c.Color = p.ShieldActive, p.ShieldRadius, p.ShieldColor
 	}
 	if c, ok := s.world.Components.Boost.GetPtr(cursor); ok {
 		c.Active = p.BoostActive

@@ -1071,6 +1071,20 @@ A cursor then takes what an attack family does rather than a fixed `CursorDamage
 
 A request overriding the disruptor's `PulseSpec` for every cursor field by field, as a mount's is, carried in the weapon system's local save as the gun's aim is (`EventGunAimRequest`).
 
+### Let a scenario mount and shape a shield
+
+- Priority: P3
+- Affected files: `internal/system/shield.go`, `internal/system/interaction.go`,
+  `internal/event/payload.go`
+
+A request naming an entity, a radius and a colour, so a scenario mounts a shield on
+a tower or a wall and sizes or tints it from what it watches, as a cursor's energy
+turns its shield on and off and sets its polarity. `ShieldComponent` carries both,
+the capture with it, and any shield draws at them; missing are the request, which
+the entity's owner applies as a cursor's owner writes its own shield (D-2), and a
+contact rule: `CursorContactAt` reads cursors' shields alone and only a cursor's
+drains energy, so a mounted shield guards nothing yet.
+
 ## Species
 
 ### Show a species' machine state in a debug overlay

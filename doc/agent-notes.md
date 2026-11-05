@@ -74,6 +74,11 @@ that proves wrong or that a document now states, and link the document instead.
   it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
   component structs compiles once per component, and each copy's name spells the
   struct's fields, costing a third as much as its code.
+- `go generate ./internal/manifest` type-checks `internal/event` from source, its
+  generated `payload_gen.go` included, so removing a payload struct's field stops
+  the generator on the stale codec's use of it ("type-check ...: has no field"):
+  delete that field's lines from `payload_gen.go` first, and the run writes the
+  codec anew.
 
 ## Ticks and events
 
@@ -310,6 +315,10 @@ that proves wrong or that a document now states, and link the document instead.
 - Benchmarks in a cloud container move a fifth between runs, and benchstat is not
   installed: build main's and the branch's test binaries (`go test -c` in a `git
   worktree` of main) and compare medians of alternating runs.
+- A bench whose first call builds a once-per-process table reads high under a
+  fixed `-benchtime Nx`: `color.RGBTo256`'s lookup table, built on a 256-colour
+  frame's first conversion in about 180 ms, adds 9 µs a frame to a 20000x run. Use
+  a time-based `-benchtime`, which the warm-up rounds absorb.
 - A renderer's first call in a live frame runs about twice its hot-bench time,
   its tables and code gone cold under the frame's other work: the ember paints in
   9-12 µs when repeated at once and 20-26 µs as the frame's first. Read a gain

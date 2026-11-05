@@ -147,7 +147,7 @@ func TestSpeciesContactStrikesOnlyOwnedCursors(t *testing.T) {
 	w.Positions.SetPosition(remote, component.PositionComponent{X: 5, Y: 5})
 	for _, cursor := range []core.Entity{local, remote} {
 		shield, _ := w.Components.Shield.GetPtr(cursor)
-		shield.Active, shield.InvRxSq, shield.InvRySq = true, 1, 1
+		shield.Active, shield.Radius = true, 1
 	}
 
 	header := w.CreateEntity(core.DomainShared)
@@ -223,7 +223,7 @@ func TestSnakeHeadHeatsOnlyWhileUnshielded(t *testing.T) {
 		t.Fatalf("unshielded snake = (%d drains, %d heats), want (0, 1)", d, h)
 	}
 	shield, _ := w.Components.Shield.GetPtr(local)
-	shield.Active, shield.InvRxSq, shield.InvRySq = true, 1, 1
+	shield.Active, shield.Radius = true, 1
 	if d, h := strikes(true); d != 1 || h != 0 {
 		t.Fatalf("shielded cursor on the head = (%d drains, %d heats), want (1, 0)", d, h)
 	}

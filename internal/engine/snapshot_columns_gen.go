@@ -1256,16 +1256,16 @@ func encodeColumnsShield(dst []byte, rows []StoreEntry[component.ShieldComponent
 		dst = appendInt(dst, rows[i].Value.DrainElapsed)
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.RadiusX)
+		dst = appendF64(dst, rows[i].Value.Radius)
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.RadiusY)
+		dst = appendUint(dst, rows[i].Value.Color.R)
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.InvRxSq)
+		dst = appendUint(dst, rows[i].Value.Color.G)
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.InvRySq)
+		dst = appendUint(dst, rows[i].Value.Color.B)
 	}
 	for i := range rows {
 		dst = appendUint(dst, rows[i].Value.Type)
@@ -1287,16 +1287,16 @@ func decodeColumnsShield(r *columnReader) []StoreEntry[component.ShieldComponent
 		readInt(&rows[i].Value.DrainElapsed, r)
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.RadiusX, r)
+		readF64(&rows[i].Value.Radius, r)
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.RadiusY, r)
+		readUint(&rows[i].Value.Color.R, r)
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.InvRxSq, r)
+		readUint(&rows[i].Value.Color.G, r)
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.InvRySq, r)
+		readUint(&rows[i].Value.Color.B, r)
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Type, r)

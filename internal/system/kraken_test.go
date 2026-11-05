@@ -526,7 +526,7 @@ func TestKrakenContactsDamageEachOwnerAndPushOtherSpecies(t *testing.T) {
 	for _, cursor := range []core.Entity{first, second, remote} {
 		w.Positions.SetPosition(cursor, component.PositionComponent{X: leg.X, Y: leg.Y})
 	}
-	w.Components.Shield.SetComponent(first, component.ShieldComponent{Active: true, RadiusX: 4, RadiusY: 2, InvRxSq: 1.0 / 16, InvRySq: 1.0 / 4})
+	w.Components.Shield.SetComponent(first, component.ShieldComponent{Active: true, Radius: 4})
 	s.interact()
 	shieldHits, heatHits := 0, 0
 	for _, ev := range w.Resources.Event.Queue.Consume() {

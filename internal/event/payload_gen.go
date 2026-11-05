@@ -536,6 +536,12 @@ var codecPlayoutLeadPayload = structCodec{size: unsafe.Sizeof(PlayoutLeadPayload
 	{off: unsafe.Offsetof(PlayoutLeadPayload{}.Ticks), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
 }}
 
+var codecColorRGB = structCodec{size: unsafe.Sizeof(color.RGB{}), fields: []field{
+	{off: unsafe.Offsetof(color.RGB{}.R), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(color.RGB{}.G), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+	{off: unsafe.Offsetof(color.RGB{}.B), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
+}}
+
 func (p *CursorStatePayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecCursorStatePayload, unsafe.Pointer(p)
 }
@@ -548,10 +554,7 @@ var codecCursorStatePayload = structCodec{size: unsafe.Sizeof(CursorStatePayload
 	{off: unsafe.Offsetof(CursorStatePayload{}.Energy), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.Heat), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.Overheat), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldRadiusX), kind: kindFloat},
-	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldRadiusY), kind: kindFloat},
-	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldInvRxSq), kind: kindFloat},
-	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldInvRySq), kind: kindFloat},
+	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldRadius), kind: kindFloat},
 	{off: unsafe.Offsetof(CursorStatePayload{}.BoostRemaining), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.BoostTotal), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.MainFireCooldown), kind: kindInt, size: unsafe.Sizeof(int64(0))},
@@ -563,6 +566,7 @@ var codecCursorStatePayload = structCodec{size: unsafe.Sizeof(CursorStatePayload
 	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkRemaining), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkType), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkLevel), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldColor), kind: kindStruct, sub: &codecColorRGB},
 	{off: unsafe.Offsetof(CursorStatePayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.EmberActive), kind: kindBool},
 	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldActive), kind: kindBool},
@@ -723,12 +727,6 @@ func (p *GoldJumpRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecGoldJumpRequestPayload = structCodec{size: unsafe.Sizeof(GoldJumpRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(GoldJumpRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
-}}
-
-var codecColorRGB = structCodec{size: unsafe.Sizeof(color.RGB{}), fields: []field{
-	{off: unsafe.Offsetof(color.RGB{}.R), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
-	{off: unsafe.Offsetof(color.RGB{}.G), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
-	{off: unsafe.Offsetof(color.RGB{}.B), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 }}
 
 func (p *SplashTimerRequestPayload) codec() (*structCodec, unsafe.Pointer) {

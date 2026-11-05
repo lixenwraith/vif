@@ -834,13 +834,13 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
 - Projected: 736 syncs a second at 16 players, 0.56 MB/s before deflate at their
   old size, to about a tenth with a presence mask and less again while cursors idle.
 - In: a sync carries the cells that are set, named by the codec's presence mask,
-  a bit a cell, so an unset cell costs nothing: a fighting cursor's sync is 82
-  bytes framed with the header, 391 before the codec.
+  a bit a cell, so an unset cell costs nothing, and the shield its one radius
+  (journal schema 63), its rows derived where they are used: a fighting cursor's
+  sync is 59 bytes framed with the header, 82 with the shield's two radii and
+  inverse squares, 391 before the codec.
 - Left: a sync sent only when a cell differs from the last one sent, with a
   refresh every K syncs, so a frame a full queue refused costs bounded staleness.
-  A sync stays a whole state, never a delta on an unacknowledged base. Cells every
-  receiver re-derives (the shield's inverse squares from its radii) leave the
-  payload.
+  A sync stays a whole state, never a delta on an unacknowledged base.
 - Needs: determinism and latency are unchanged, a sync still committed at one
   tick for every instance and mirrors already lagging by `NetworkSyncTicks`.
 

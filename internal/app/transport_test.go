@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -141,7 +142,7 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 		h.Current, h.EmberActive = 55, true
 		h.EmberElapsed = -time.Hour
 		sh, _ := b.World().Components.Shield.GetPtr(ownedOnB)
-		sh.Active, sh.InvRxSq, sh.InvRySq = true, 0.25, 1.0
+		sh.Active, sh.Radius, sh.Color = true, 2, color.RGB{R: 10, G: 20, B: 30}
 	})
 
 	b.Tick(parameter.NetworkSyncTicks)
@@ -158,13 +159,13 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 		ownedShield, _ = b.World().Components.Shield.GetComponent(ownedOnB)
 	})
 
-	// Heat and the shield ellipse are mirrored for the remote cursor's presentation
-	// and owner-local interactions; they determine no shared outcome.
+	// Heat and the shield's reach and colour are mirrored for the remote cursor's
+	// presentation and owner-local interactions; they determine no shared outcome.
 	if mirrored.Current != owned.Current || mirrored.Current != 55 || !mirrored.EmberActive {
 		t.Fatalf("remote heat on a = %d, owner holds %d; ember %t",
 			mirrored.Current, owned.Current, mirrored.EmberActive)
 	}
-	if mirrorShield.InvRxSq != 0.25 || mirrorShield.InvRySq != 1.0 ||
+	if mirrorShield.Radius != 2 || mirrorShield.Color != ownedShield.Color ||
 		mirrorShield.Active != ownedShield.Active {
 		t.Fatalf("remote shield on a = %#v, owner holds %#v", mirrorShield, ownedShield)
 	}
@@ -741,7 +742,7 @@ func testCursorStateRoundTrip(t *testing.T) {
 	want := &event.CursorStatePayload{
 		Entity: core.MakeEntity(core.DomainShared, 5), Slot: 1, Seq: 3,
 		Energy: -12, Heat: 55, Overheat: 2, EmberActive: true,
-		ShieldActive: true, ShieldRadiusX: 9, ShieldInvRxSq: 0.25, ShieldInvRySq: 1,
+		ShieldActive: true, ShieldRadius: 9, ShieldColor: color.RGB{R: 1, G: 2, B: 3},
 		BoostActive: true, BoostRemaining: 1234, BoostTotal: 5678,
 		WeaponCharges: []int{1, 0, 2}, WeaponCooldown: []int64{7, 0, 9},
 		HitPoints: 88, BlinkActive: true, BlinkType: 3, BlinkLevel: 2,
@@ -761,7 +762,7 @@ func testCursorStateRoundTrip(t *testing.T) {
 		t.Fatalf("decoded payload = %T, want *event.CursorStatePayload", payload)
 	}
 	if got.Energy != want.Energy || got.Heat != want.Heat || !got.EmberActive ||
-		got.ShieldInvRxSq != want.ShieldInvRxSq || got.BoostRemaining != want.BoostRemaining ||
+		got.ShieldRadius != want.ShieldRadius || got.ShieldColor != want.ShieldColor || got.BoostRemaining != want.BoostRemaining ||
 		len(got.WeaponCharges) != 3 || got.WeaponCharges[2] != 2 ||
 		len(got.WeaponCooldown) != 3 || got.WeaponCooldown[2] != 9 {
 		t.Fatalf("cursor state round trip = %#v, want %#v", got, want)

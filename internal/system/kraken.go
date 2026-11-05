@@ -485,17 +485,17 @@ func (s *KrakenSystem) interact() {
 	}
 }
 
-// touches reports contact as composites have it: an active shield wherever the
-// footprint enters its ellipse, a bare cursor only on a covered cell.
+// touches reports contact as composites have it: a shield wherever the footprint
+// enters its reach, a bare cursor only on a covered cell.
 func (s *KrakenSystem) touches(cursor core.Entity, x, y int) bool {
 	shield, ok := s.world.Components.Shield.GetPtr(cursor)
-	if !ok || !shield.Active {
+	if !ok || !shield.Active || !(shield.Radius > 0) {
 		return s.covers(x, y)
 	}
-	rx, ry := int(shield.RadiusX), int(shield.RadiusY)
-	for cy := y - ry; cy <= y+ry; cy++ {
-		for cx := x - rx; cx <= x+rx; cx++ {
-			if s.covers(cx, cy) && vmath.EllipseContainsPoint(cx, cy, x, y, shield.InvRxSq, shield.InvRySq) {
+	rx, ry := s.world.ShieldReach(shield)
+	for cy := max(0, y-ry); cy <= min(s.gridH-1, y+ry); cy++ {
+		for cx := max(0, x-rx); cx <= min(s.gridW-1, x+rx); cx++ {
+			if s.covers(cx, cy) && shieldCovers(s.world, shield, x, y, cx, cy) {
 				return true
 			}
 		}

@@ -126,7 +126,7 @@ const (
 	PulseStunDuration = 2000 * time.Millisecond
 
 	// PulseRadiusX is disruptor weapon horizontal radius; vertical is half at RefAspect
-	PulseRadiusX = PlayerShieldRadiusX * 3.5
+	PulseRadiusX = PlayerShieldRadius * 3.5
 
 	// PulseDuration is how long a disruptor's pulse lasts; it strikes once, as it fires
 	PulseDuration = 250 * time.Millisecond

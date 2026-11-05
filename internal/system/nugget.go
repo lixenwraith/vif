@@ -320,14 +320,13 @@ func (s *NuggetSystem) collectionCursor(nuggetX, nuggetY int) core.Entity {
 		return 0
 	}
 
-	emberInvRxSq, emberInvRySq := vmath.EllipseInvRadiiSq(visual.EmberRadiusX,
-		s.world.Resources.Config.CellAspect.Y(visual.EmberRadiusY))
-	if heatComp, ok := s.world.Components.Heat.GetComponent(cursor); ok && heatComp.EmberActive &&
-		vmath.EllipseContainsPoint(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, emberInvRxSq, emberInvRySq) {
+	dyCirc := s.world.Resources.Config.CellAspect.Circular(float64(nuggetY - cursorPos.Y))
+	if heatComp, ok := s.world.Components.Heat.GetPtr(cursor); ok && heatComp.EmberActive &&
+		vmath.CircleContains(float64(nuggetX-cursorPos.X), dyCirc, visual.EmberRadius*visual.EmberRadius) {
 		return cursor
 	}
-	if shieldComp, ok := s.world.Components.Shield.GetComponent(cursor); ok && shieldComp.Active &&
-		vmath.EllipseContainsPoint(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+	if shieldComp, ok := s.world.Components.Shield.GetPtr(cursor); ok &&
+		shieldCovers(s.world, shieldComp, cursorPos.X, cursorPos.Y, nuggetX, nuggetY) {
 		return cursor
 	}
 	if cursorPos.X == nuggetX && cursorPos.Y == nuggetY {

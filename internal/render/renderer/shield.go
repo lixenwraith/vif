@@ -15,173 +15,306 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
+// ShieldStyle is how one Paint lights a field: its kind's look, the colour and
+// palette it wears, its glow, the blend a peer's takes, and whether it is the local
+// cursor's own, the lens every other field lights over
 type ShieldStyle struct {
-	Config     *visual.ShieldConfig
+	Look       *visual.ShieldLook
 	GlowPeriod time.Duration
-	BlendScale float32
+	BlendScale float64
 	Color      color.RGB
 	GlowColor  color.RGB
 	Palette256 uint8
-	_          [1]byte
-	SkipX      int16
-	SkipY      int16
+	Local      bool
 }
 
-// shieldCellFunc renders a single cell within the shield ellipse
-type shieldCellFunc func(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64)
+// shieldGeometry is a radius's field at the cell aspect, worked out once. A
+// quadrant's cells, by |dy|*stride+|dx|, hold their alpha at full opacity and their
+// glow terms; each row, the columns it draws and the ones its 256-colour rim covers.
+type shieldGeometry struct {
+	radius         float64
+	invRadiusSq    float64
+	reachX, reachY int // the box's half extents, the feather included
+	stride         int
+	used           uint64 // the lookup that last took it
 
-// shieldFrameFunc prepares the colour state one Paint needs
-type shieldFrameFunc func(p *ShieldPainter)
-
-// ShieldPainter is a reusable shield halo renderer
-type ShieldPainter struct {
-	renderCell   shieldCellFunc
-	prepareFrame shieldFrameFunc
-
-	// Per-Paint transient state
-	style            ShieldStyle
-	glowActive       bool
-	rotDirX, rotDirY float64
-	cellDx, cellDy   float64
-	rim256, glow256  uint8
+	shape      []float64 // zero draws nothing: the centre, and past the feather
+	edge       []float64 // the turning glow's edge factor, zero inside its threshold
+	dirX, dirY []float64 // the cell's direction from the centre
+	span       []int     // by |dy|: the widest |dx| drawn, -1 for none
+	rimLo      []int     // by |dy|: the |dx| the rim covers, none when rimLo > rimHi
+	rimHi      []int
 }
 
-// NewShieldPainter creates a painter dispatching to the appropriate color mode
-func NewShieldPainter(colorMode terminal.ColorMode) *ShieldPainter {
-	p := &ShieldPainter{}
-	if colorMode == terminal.ColorMode256 {
-		p.renderCell, p.prepareFrame = shieldCell256, shieldFrame256
-	} else {
-		p.renderCell, p.prepareFrame = shieldCellTrueColor, shieldFrameTrueColor
+// distSq is a cell's normalized squared distance from the centre, its row given in
+// columns (vmath.Aspect.Circular)
+func (g *shieldGeometry) distSq(dx int, dyCirc float64) float64 {
+	return (float64(dx*dx) + dyCirc*dyCirc) * g.invRadiusSq
+}
+
+// build works the field out for a radius over a box, keeping the tables' storage
+func (g *shieldGeometry) build(radius float64, reachX, reachY int, aspect vmath.Aspect) {
+	g.radius, g.invRadiusSq = radius, 1/(radius*radius)
+	g.reachX, g.reachY, g.stride = reachX, reachY, reachX+1
+	cells, rows := g.stride*(reachY+1), reachY+1
+	g.shape, g.edge = resized(g.shape, cells), resized(g.edge, cells)
+	g.dirX, g.dirY = resized(g.dirX, cells), resized(g.dirY, cells)
+	g.span, g.rimLo, g.rimHi = resized(g.span, rows), resized(g.rimLo, rows), resized(g.rimHi, rows)
+
+	rimMin, rimMax := g.rimBand(aspect)
+	edgeAlpha := math.Sqrt(visual.ShieldFeatherStart)
+	for ady := range rows {
+		dyCirc, nextCirc := aspect.Circular(float64(ady)), aspect.Circular(float64(ady+1))
+		g.span[ady], g.rimLo[ady], g.rimHi[ady] = -1, g.stride, -1
+		for adx := range g.stride {
+			i := ady*g.stride + adx
+			g.shape[i], g.edge[i] = 0, 0
+			g.dirX[i], g.dirY[i] = vmath.Normalize2D(float64(adx), float64(ady))
+			if adx == 0 && ady == 0 {
+				continue
+			}
+			d := g.distSq(adx, dyCirc)
+			if d <= visual.ShieldFeatherEnd {
+				if d <= visual.ShieldFeatherStart {
+					g.shape[i] = math.Sqrt(d)
+				} else {
+					g.shape[i] = edgeAlpha * (1 - (d-visual.ShieldFeatherStart)/visual.ShieldFeatherRange)
+				}
+				g.span[ady] = adx
+				if d > visual.ShieldGlowEdgeThreshold {
+					g.edge[i] = (d - visual.ShieldGlowEdgeThreshold) / (1 - visual.ShieldGlowEdgeThreshold)
+				}
+			}
+			// A cell whose outward neighbour leaves the rim's disc joins the band, so the
+			// rim of any radius closes into a ring; a row's rim stays one run
+			if d <= rimMax && (d >= rimMin || g.distSq(adx+1, dyCirc) > rimMax || g.distSq(adx, nextCirc) > rimMax) {
+				g.rimLo[ady] = min(g.rimLo[ady], adx)
+				g.rimHi[ady] = adx
+			}
+		}
 	}
-	return p
+
+	// A rim whose top is its axis cell alone lowers it onto the row beneath, so the
+	// ring is flat there instead of carrying a lone cell; the centre row never takes it
+	top := rows - 1
+	for top > 0 && g.rimLo[top] > g.rimHi[top] {
+		top--
+	}
+	if top >= 2 && g.rimHi[top] == 0 {
+		g.rimLo[top], g.rimHi[top] = g.stride, -1
+		g.rimLo[top-1] = 0
+	}
 }
 
-// Paint renders a shield halo centered at (centerX, centerY) in map coordinates
-// Caller must set write mask
-func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, style ShieldStyle) {
-	p.style = style
-	cfg := style.Config
+// rimBand fits the 256-colour rim to the cell grid: it spans from the outermost drawn
+// cell on each axis inward, starting before Shield256RimStart when a shield is too
+// small for that band to hold a whole row or column
+func (g *shieldGeometry) rimBand(aspect vmath.Aspect) (float64, float64) {
+	var edgeX, edgeY float64
+	for n := g.reachX; n > 0 && edgeX == 0; n-- {
+		if d := g.distSq(n, 0); d <= visual.ShieldFeatherEnd {
+			edgeX = d
+		}
+	}
+	for n := g.reachY; n > 0 && edgeY == 0; n-- {
+		if d := g.distSq(0, aspect.Circular(float64(n))); d <= visual.ShieldFeatherEnd {
+			edgeY = d
+		}
+	}
+	return min(visual.Shield256RimStart, edgeX, edgeY), max(edgeX, edgeY)
+}
 
+// resized is s holding n elements, reusing its storage when it can
+func resized[T any](s []T, n int) []T {
+	if cap(s) < n {
+		return make([]T, n)
+	}
+	return s[:n]
+}
+
+// ShieldPainter paints shield fields from per-radius tables. In TrueColor the local
+// cursor's field is a lens: every cell it lights starts from black, as the field
+// alone always did, and any other field crossing it adds its light there.
+type ShieldPainter struct {
+	trueColor bool
+	aspect    vmath.Aspect
+	geoms     [visual.ShieldGeometryCacheMax]shieldGeometry
+	lookups   uint64
+
+	lensSpan     []int // the local field's span by |dy|, copied so no rebuild moves it
+	lensX, lensY int
+	lensOn       bool
+
+	// Per-Paint state
+	style                 ShieldStyle
+	alphaScale, glowScale float64
+	glowActive            bool
+	rotDirX, rotDirY      float64
+	glow256               uint8
+}
+
+// NewShieldPainter creates a painter for a color mode and cell aspect
+func NewShieldPainter(colorMode terminal.ColorMode, aspect vmath.Aspect) *ShieldPainter {
+	return &ShieldPainter{trueColor: colorMode != terminal.ColorMode256, aspect: aspect}
+}
+
+// geometry is the field for a radius, built on first use and kept for the most
+// recently used radii. The box stops at the map's size, which a cell's distance from
+// a centre on the map never passes.
+func (p *ShieldPainter) geometry(radius float64, ctx *render.RenderContext) *shieldGeometry {
+	reachX := int(min(math.Ceil(radius*parameter.ShieldFeatherEndRatio)+1, float64(ctx.MapWidth)))
+	reachY := int(min(math.Ceil(p.aspect.FromCircular(radius)*parameter.ShieldFeatherEndRatio)+1, float64(ctx.MapHeight)))
+	p.lookups++
+	oldest := &p.geoms[0]
+	for i := range p.geoms {
+		g := &p.geoms[i]
+		if g.radius == radius && g.reachX == reachX && g.reachY == reachY {
+			g.used = p.lookups
+			return g
+		}
+		if g.used < oldest.used {
+			oldest = g
+		}
+	}
+	oldest.build(radius, reachX, reachY, p.aspect)
+	oldest.used = p.lookups
+	return oldest
+}
+
+// SetLens makes the field of a radius centred on (x, y) this frame's lens
+func (p *ShieldPainter) SetLens(ctx render.RenderContext, radius float64, x, y int) {
+	p.lensSpan = append(p.lensSpan[:0], p.geometry(radius, &ctx).span...)
+	p.lensX, p.lensY, p.lensOn = x, y, true
+}
+
+// ClearLens leaves every field over the theme background
+func (p *ShieldPainter) ClearLens() { p.lensOn = false }
+
+// lensRow is the map columns of a row the lens covers, none when lo > hi
+func (p *ShieldPainter) lensRow(mapY int) (int, int) {
+	if p.style.Local {
+		return math.MinInt, math.MaxInt
+	}
+	ady := mapY - p.lensY
+	if ady < 0 {
+		ady = -ady
+	}
+	if !p.lensOn || ady >= len(p.lensSpan) || p.lensSpan[ady] < 0 {
+		return 1, 0
+	}
+	return p.lensX - p.lensSpan[ady], p.lensX + p.lensSpan[ady]
+}
+
+// Paint draws a field of a radius centred on (centerX, centerY) in map coordinates,
+// over the visible map; a radius that is not positive draws nothing.
+// Caller must set write mask.
+func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, radius float64, style ShieldStyle) {
+	if !(radius > 0) {
+		return
+	}
+	g := p.geometry(radius, &ctx)
+	visMinX, visMinY, visMaxX, visMaxY := ctx.VisibleMapBounds()
+	x0, x1 := max(visMinX, centerX-g.reachX), min(visMaxX, centerX+g.reachX)
+	y0, y1 := max(visMinY, centerY-g.reachY), min(visMaxY, centerY+g.reachY)
+	if x0 > x1 || y0 > y1 {
+		return
+	}
+
+	p.style = style
+	p.alphaScale = style.Look.MaxOpacity * style.BlendScale
+	p.glowScale = style.Look.GlowIntensity * style.BlendScale
 	p.glowActive = style.GlowPeriod > 0
 	if p.glowActive {
 		period := int64(style.GlowPeriod)
-		phase := ctx.GameTime.UnixNano() % period
-		angle := float64(phase) / float64(period) * vmath.TwoPi
-		p.rotDirX = vmath.Cos(angle)
-		p.rotDirY = vmath.Sin(angle)
+		angle := float64(ctx.GameTime.UnixNano()%period) / float64(period) * vmath.TwoPi
+		p.rotDirX, p.rotDirY = vmath.Cos(angle), vmath.Sin(angle)
 	}
-	p.prepareFrame(p)
 
-	// Bounding box uses visual radius from config (includes feather zone)
-	mapStartX := max(0, centerX-cfg.VisualRadiusXInt)
-	mapEndX := min(ctx.MapWidth-1, centerX+cfg.VisualRadiusXInt)
-	mapStartY := max(0, centerY-cfg.VisualRadiusYInt)
-	mapEndY := min(ctx.MapHeight-1, centerY+cfg.VisualRadiusYInt)
+	// Every cell within the visible bounds maps to the screen by one offset
+	offX := ctx.GameXOffset + ctx.MapOffsetX - ctx.CameraX
+	offY := ctx.GameYOffset + ctx.MapOffsetY - ctx.CameraY
+	if p.trueColor {
+		p.paintTrueColor(buf, g, centerX, centerY, x0, x1, y0, y1, offX, offY)
+		return
+	}
+	p.glow256 = color.RGBTo256(style.GlowColor)
+	p.paint256(buf, g, centerX, centerY, x0, x1, y0, y1, offX, offY)
+}
 
-	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
-		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
-			if int16(mapX) == style.SkipX && int16(mapY) == style.SkipY {
-				continue
+// paintTrueColor screens the field over each row's drawn span, left of the centre and
+// then from it, so a half's columns share a sign and walk its row of the quadrant
+func (p *ShieldPainter) paintTrueColor(buf *render.RenderBuffer, g *shieldGeometry, cx, cy, x0, x1, y0, y1, offX, offY int) {
+	for mapY := y0; mapY <= y1; mapY++ {
+		ady, qy := mapY-cy, p.rotDirY
+		if ady < 0 {
+			ady, qy = -ady, -qy
+		}
+		span := g.span[ady]
+		if span < 0 {
+			continue
+		}
+		first := 0
+		if ady == 0 {
+			first = 1 // the centre draws nothing
+		}
+		lensLo, lensHi := p.lensRow(mapY)
+		row, screenY := ady*g.stride, mapY+offY
+		p.fieldSpan(buf, g, row, max(x0, cx-span), min(x1, cx-1), cx, -1, screenY, offX, lensLo, lensHi, -p.rotDirX, qy)
+		p.fieldSpan(buf, g, row, max(x0, cx+first), min(x1, cx+span), cx, 1, screenY, offX, lensLo, lensHi, p.rotDirX, qy)
+	}
+}
+
+// fieldSpan screens one half-row, the lens's columns over black and the rest over the
+// theme background where nothing has drawn, and lights the turning glow
+func (p *ShieldPainter) fieldSpan(buf *render.RenderBuffer, g *shieldGeometry, row, lo, hi, cx, sign, screenY, offX, lensLo, lensHi int, qx, qy float64) {
+	for mapX := lo; mapX <= hi; mapX++ {
+		i := row + (mapX-cx)*sign
+		base := visual.RgbBackground
+		if mapX >= lensLo && mapX <= lensHi {
+			base = visual.RgbBlack
+		}
+		screenX := mapX + offX
+		buf.SetBgScreen(screenX, screenY, p.style.Color, base, g.shape[i]*p.alphaScale)
+		if !p.glowActive {
+			continue
+		}
+		if edge := g.edge[i]; edge > 0 {
+			if dot := g.dirX[i]*qx + g.dirY[i]*qy; dot > 0 {
+				buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, dot*edge*p.glowScale, terminal.AttrNone)
 			}
-
-			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-			if !visible {
-				continue
-			}
-
-			dx := float64(mapX - centerX)
-			dy := float64(mapY - centerY)
-			normalizedDistSq := vmath.EllipseDistSq(dx, dy, cfg.InvRxSq, cfg.InvRySq)
-
-			if normalizedDistSq > visual.ShieldFeatherEnd {
-				continue
-			}
-
-			p.cellDx = dx
-			p.cellDy = dy
-			p.renderCell(p, buf, screenX, screenY, normalizedDistSq)
 		}
 	}
 }
 
-func shieldFrameTrueColor(*ShieldPainter) {}
-
-// shieldFrame256 resolves the rim and glow palettes. A peer's is not dimmed as in TrueColor:
-// the console shows a dimmed rim as black, and the peer cursor already says whose it is
-func shieldFrame256(p *ShieldPainter) {
-	p.rim256, p.glow256 = p.style.Palette256, color.RGBTo256(p.style.GlowColor)
-}
-
-// shieldCellTrueColor renders linear gradient with feather fade
-func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64) {
-	cfg := p.style.Config
-	blendScale := float64(p.style.BlendScale)
-
-	// Linear distance for smoother falloff
-	normDist := math.Sqrt(normalizedDistSq)
-	if normDist > 1.0 {
-		normDist = 1.0
-	}
-
-	// Compute alpha with feather fade
-	var alpha float64
-	if normalizedDistSq <= visual.ShieldFeatherStart {
-		// Core zone: linear falloff
-		alpha = normDist * cfg.MaxOpacity
-	} else {
-		// Feather zone: fade from edge alpha to zero
-		if visual.ShieldFeatherRange == 0.0 {
-			return
+// paint256 draws each row's rim cells solid, as paintTrueColor walks its spans. A
+// peer's rim is not dimmed: the console shows a dimmed rim as black, and the peer
+// cursor already says whose it is.
+func (p *ShieldPainter) paint256(buf *render.RenderBuffer, g *shieldGeometry, cx, cy, x0, x1, y0, y1, offX, offY int) {
+	for mapY := y0; mapY <= y1; mapY++ {
+		ady, qy := mapY-cy, p.rotDirY
+		if ady < 0 {
+			ady, qy = -ady, -qy
 		}
-		edgeAlpha := math.Sqrt(visual.ShieldFeatherStart) * cfg.MaxOpacity
-		fadeProgress := (normalizedDistSq - visual.ShieldFeatherStart) / visual.ShieldFeatherRange
-		alpha = edgeAlpha * (1.0 - fadeProgress)
+		lo, hi := g.rimLo[ady], g.rimHi[ady]
+		if lo > hi {
+			continue
+		}
+		row, screenY := ady*g.stride, mapY+offY
+		p.rimSpan(buf, g, row, max(x0, cx-hi), min(x1, cx-max(lo, 1)), cx, -1, screenY, offX, -p.rotDirX, qy)
+		p.rimSpan(buf, g, row, max(x0, cx+lo), min(x1, cx+hi), cx, 1, screenY, offX, p.rotDirX, qy)
 	}
-
-	if alpha <= 0.0 {
-		return
-	}
-
-	buf.SetBgScreen(screenX, screenY, p.style.Color, visual.RgbBackground, alpha*blendScale)
-
-	// Glow overlay
-	if !p.glowActive || normalizedDistSq <= visual.ShieldGlowEdgeThreshold {
-		return
-	}
-
-	// Vector normalization
-	cellDirX, cellDirY := vmath.Normalize2D(p.cellDx, p.cellDy)
-
-	dot := vmath.DotProduct(cellDirX, cellDirY, p.rotDirX, p.rotDirY)
-	if dot <= 0 {
-		return
-	}
-
-	edgeRange := 1.0 - visual.ShieldGlowEdgeThreshold
-	if edgeRange == 0.0 {
-		return
-	}
-	edgeFactor := (normalizedDistSq - visual.ShieldGlowEdgeThreshold) / edgeRange
-	intensity := dot * edgeFactor * cfg.GlowIntensity * blendScale
-
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, intensity, terminal.AttrNone)
 }
 
-// shieldCell256 renders a solid rim band, lit in the glow colour where it faces the rotating glow
-func shieldCell256(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64) {
-	cfg := p.style.Config
-	if normalizedDistSq < cfg.Rim256Min || normalizedDistSq > cfg.Rim256Max {
-		return
-	}
-	palette := p.rim256
-	if p.glowActive {
-		cellDirX, cellDirY := vmath.Normalize2D(p.cellDx, p.cellDy)
-		if vmath.DotProduct(cellDirX, cellDirY, p.rotDirX, p.rotDirY) >= visual.Shield256GlowDot {
+// rimSpan draws one half-row's rim, lit in the glow colour where it faces the glow
+func (p *ShieldPainter) rimSpan(buf *render.RenderBuffer, g *shieldGeometry, row, lo, hi, cx, sign, screenY, offX int, qx, qy float64) {
+	for mapX := lo; mapX <= hi; mapX++ {
+		i := row + (mapX-cx)*sign
+		palette := p.style.Palette256
+		if p.glowActive && g.dirX[i]*qx+g.dirY[i]*qy >= visual.Shield256GlowDot {
 			palette = p.glow256
 		}
+		buf.SetBg256(mapX+offX, screenY, palette)
 	}
-	buf.SetBg256(screenX, screenY, palette)
 }
 
 // --- Cursor Shield Renderer ---
@@ -192,13 +325,11 @@ type emberTransitionState struct {
 	transitionStart time.Time
 }
 
-// ShieldRenderer renders active player shields with dynamic energy-based coloring,
-// and the Wraith field round every Wraith
+// ShieldRenderer renders every active shield at its own radius and colour, and the
+// Wraith field round every Wraith
 type ShieldRenderer struct {
 	gameCtx *engine.GameContext
 	painter *ShieldPainter
-	configs [component.ShieldTypeCount]visual.ShieldConfig // at the cell aspect
-	wraith  visual.ShieldConfig
 
 	// Per-entity ember transition tracking (keyed by entity)
 	emberTransitions map[core.Entity]*emberTransitionState
@@ -206,21 +337,19 @@ type ShieldRenderer struct {
 
 // NewShieldRenderer creates the cursor shield system renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
-	r := &ShieldRenderer{
+	cfg := gameCtx.World.Resources.Config
+	return &ShieldRenderer{
 		gameCtx:          gameCtx,
-		painter:          NewShieldPainter(gameCtx.World.Resources.Config.ColorMode),
+		painter:          NewShieldPainter(cfg.ColorMode, cfg.CellAspect),
 		emberTransitions: make(map[core.Entity]*emberTransitionState),
 	}
-	for t := range r.configs {
-		r.configs[t] = visual.ShieldConfigFor(component.ShieldType(t), gameCtx.World.Resources.Config.CellAspect)
-	}
-	r.wraith = visual.WraithFieldFor(gameCtx.World.Resources.Config.CellAspect)
-	return r
 }
 
-// Render draws the Wraith fields, then all active player shields
+// Render lays the local field's lens, then draws the Wraith fields and every active
+// shield, the local cursor's last
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskField)
+	r.layLens(ctx)
 	r.renderWraiths(ctx, buf)
 
 	shields := r.gameCtx.World.Components.Shield
@@ -244,17 +373,35 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 }
 
+// layLens takes the local cursor's shield, when it draws this frame, as the lens. In
+// 256 colours a field is a solid rim, with no base to darken.
+func (r *ShieldRenderer) layLens(ctx render.RenderContext) {
+	r.painter.ClearLens()
+	world := r.gameCtx.World
+	local := world.Resources.Player.Entity
+	shield, ok := world.Components.Shield.GetPtr(local)
+	if !r.painter.trueColor || !ok || !shield.Active || !(shield.Radius > 0) {
+		return
+	}
+	if heat, ok := world.Components.Heat.GetPtr(local); ok && heat.EmberActive {
+		return
+	}
+	if pos, ok := world.CursorCell(local); ok {
+		r.painter.SetLens(ctx, shield.Radius, pos.X, pos.Y)
+	}
+}
+
 // renderWraiths paints the Wraith field at the cell each Wraith holds, none for one
 // off the map, subordinate to the live fields as a peer's is.
 func (r *ShieldRenderer) renderWraiths(ctx render.RenderContext, buf *render.RenderBuffer) {
-	cfg := &r.wraith
+	look := &visual.WraithField
 	style := ShieldStyle{
-		Config: cfg, BlendScale: visual.PeerFieldBlend, Color: cfg.Color, GlowColor: cfg.GlowColor,
-		Palette256: cfg.Palette256, GlowPeriod: cfg.GlowPeriod, SkipX: -1, SkipY: -1,
+		Look: look, BlendScale: visual.PeerFieldBlend, Color: look.Color, GlowColor: look.GlowColor,
+		Palette256: look.Palette256, GlowPeriod: look.GlowPeriod,
 	}
 	r.gameCtx.World.Components.Wraith.Each(func(_ core.Entity, w *component.WraithComponent) bool {
 		if w.X >= 0 {
-			r.painter.Paint(buf, ctx, w.X, w.Y, style)
+			r.painter.Paint(buf, ctx, w.X, w.Y, parameter.PlayerShieldRadius, style)
 		}
 		return true
 	})
@@ -274,7 +421,7 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 		transitionIntensity = r.updateTransition(transition, emberActive, ctx.GameTime)
 	}
 
-	if emberActive {
+	if emberActive || !(shieldComp.Radius > 0) {
 		return
 	}
 
@@ -284,34 +431,29 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 		return
 	}
 
-	cfg := &r.configs[shieldComp.Type]
+	look := &visual.ShieldLooks[shieldComp.Type]
 	style := ShieldStyle{
-		Config:     cfg,
+		Look:       look,
 		BlendScale: 1,
-		Color:      cfg.Color,
-		Palette256: cfg.Palette256,
-		GlowColor:  cfg.GlowColor,
-		GlowPeriod: cfg.GlowPeriod,
-		SkipX:      -1,
-		SkipY:      -1,
-	}
-
-	if local {
-		style.SkipX = int16(shieldPos.X)
-		style.SkipY = int16(shieldPos.Y)
+		Color:      look.Color,
+		Palette256: look.Palette256,
+		GlowColor:  look.GlowColor,
+		GlowPeriod: look.GlowPeriod,
+		Local:      local,
 	}
 
 	var lootLook *component.LootLook
 	switch shieldComp.Type {
 	case component.ShieldTypePlayer:
 		if energy, ok := r.gameCtx.World.Components.Energy.GetPtr(shieldEntity); ok && energy.Current < 0 {
-			style.Color = cfg.ColorAlt
-			style.Palette256 = cfg.Palette256Alt
+			style.Color = look.ColorAlt
+			style.Palette256 = look.Palette256Alt
 		}
 		if boost, ok := r.gameCtx.World.Components.Boost.GetPtr(shieldEntity); ok && boost.Active {
 			style.GlowPeriod = parameter.ShieldBoostRotationDuration
-		} else {
-			style.GlowPeriod = 0
+		}
+		if !local {
+			style.BlendScale = visual.PeerFieldBlend
 		}
 
 	case component.ShieldTypeLoot:
@@ -320,12 +462,11 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 			style.GlowColor = lootLook.Glow
 		}
 	}
-
-	if shieldComp.Type == component.ShieldTypePlayer && !local {
-		style.BlendScale = visual.PeerFieldBlend
+	if shieldComp.Color != (color.RGB{}) {
+		style.Color, style.Palette256 = shieldComp.Color, color.RGBTo256(shieldComp.Color)
 	}
 
-	r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, style)
+	r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, shieldComp.Radius, style)
 
 	// Loot's rune draws with its halo, after the species layers, so no body hides a drop.
 	if lootLook != nil {
@@ -335,7 +476,7 @@ func (r *ShieldRenderer) renderShield(ctx render.RenderContext, buf *render.Rend
 	}
 
 	if transitionIntensity > 0.001 {
-		r.renderTransitionOverlay(buf, ctx, shieldPos.X, shieldPos.Y, cfg, transitionIntensity)
+		r.renderTransitionOverlay(buf, ctx, shieldPos.X, shieldPos.Y, shieldComp.Radius, transitionIntensity)
 	}
 }
 
@@ -395,44 +536,23 @@ func (r *ShieldRenderer) transitionEnvelope(progress float64) float64 {
 	return (1.0 - fallProgress) * visual.EmberTransitionMaxIntensity
 }
 
-// renderTransitionOverlay applies ember-colored screen blend over shield area
-func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, cfg *visual.ShieldConfig, intensity float64) {
-	// Use ember edge color for continuity
-	overlayColor := visual.RgbEmberEdgeLow
-
-	// Bounding box matches shield visual radius
-	mapStartX := max(0, centerX-cfg.VisualRadiusXInt)
-	mapEndX := min(ctx.MapWidth-1, centerX+cfg.VisualRadiusXInt)
-	mapStartY := max(0, centerY-cfg.VisualRadiusYInt)
-	mapEndY := min(ctx.MapHeight-1, centerY+cfg.VisualRadiusYInt)
-
-	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
-		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
-			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-			if !visible {
-				continue
-			}
-
-			dx := float64(mapX - centerX)
-			dy := float64(mapY - centerY)
-			normDistSq := vmath.EllipseDistSq(dx, dy, cfg.InvRxSq, cfg.InvRySq)
-
-			// Only within shield boundary (with small margin)
+// renderTransitionOverlay screens the ember's edge colour over the shield's field,
+// stronger towards its edge, so the shield rises out of the ember that ended
+func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, radius float64, intensity float64) {
+	g := r.painter.geometry(radius, &ctx)
+	visMinX, visMinY, visMaxX, visMaxY := ctx.VisibleMapBounds()
+	offX := ctx.GameXOffset + ctx.MapOffsetX - ctx.CameraX
+	offY := ctx.GameYOffset + ctx.MapOffsetY - ctx.CameraY
+	centre := visual.EmberTransitionCentreShare
+	for mapY := max(visMinY, centerY-g.reachY); mapY <= min(visMaxY, centerY+g.reachY); mapY++ {
+		dyCirc := r.painter.aspect.Circular(float64(mapY - centerY))
+		for mapX := max(visMinX, centerX-g.reachX); mapX <= min(visMaxX, centerX+g.reachX); mapX++ {
+			normDistSq := g.distSq(mapX-centerX, dyCirc)
 			if normDistSq > visual.ShieldFeatherEnd {
 				continue
 			}
-
-			// Radial falloff: stronger at edges, weaker at center
-			normDist := math.Sqrt(normDistSq)
-			if normDist > 1.0 {
-				normDist = 1.0
-			}
-			radialFactor := normDist // 0 at center, 1 at edge
-
-			// Combine intensity with radial falloff
-			cellIntensity := intensity * (0.3 + 0.7*radialFactor)
-
-			buf.SetBgScreen(screenX, screenY, overlayColor, visual.RgbBackground, cellIntensity)
+			radial := min(math.Sqrt(normDistSq), 1.0)
+			buf.SetBgScreen(mapX+offX, mapY+offY, visual.RgbEmberEdgeLow, visual.RgbBackground, intensity*(centre+(1-centre)*radial))
 		}
 	}
 }
