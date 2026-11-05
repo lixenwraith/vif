@@ -124,7 +124,7 @@ func (m *membership) seatBots() error {
 // does not resolve is the caller's error; the join runs on the seat's goroutine.
 // Caller MUST hold updateMutex.
 func (m *membership) addSeatLocked(spec string) error {
-	graph, err := loadBotGraph(m.cfg.Resources, spec)
+	graph, err := loadBotGraph(m.run.resources(), spec)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (m *membership) addSeatLocked(spec string) error {
 	m.seats = append(m.seats, s)
 	m.seatsMu.Unlock()
 	cfg.log = vlog.NewLog("seat " + strconv.FormatUint(s.number, 10))
-	mode := m.cfg.Mode // the seat's goroutine reads nothing of its holder's config
+	mode := m.run.mode() // the seat's goroutine reads nothing of its holder's config
 	core.Go(func() { m.playSeat(s, cfg, mode) })
 	return nil
 }
@@ -154,7 +154,7 @@ func (m *membership) seatConfigLocked() (Config, error) {
 		}
 	}
 	width, height := m.seatScreenLocked()
-	return Config{Mode: ModeHeadless, Resources: m.cfg.Resources, Width: width, Height: height,
+	return Config{Mode: ModeHeadless, Resources: m.run.resources(), Width: width, Height: height,
 		NoAdvertise: true, StatTicks: -1, RecTicks: -1, JoinAddress: seatJoin, SessionName: m.cfg.SessionName,
 		holder: link.PeerID(m.world.LocalParticipant()), relay: m.seatLink, claims: m.claims}, nil
 }
@@ -191,7 +191,7 @@ func (m *membership) seatLink() (net.Conn, error) {
 // see what that person sees, or a bot's own for a holder that names none, a server or
 // headless run given no -size. Caller holds updateMutex.
 func (m *membership) seatScreenLocked() (int, int) {
-	if m.cfg.geometryDefaulted || !engine.ViewportFits(m.ctx.Width, m.ctx.Height) {
+	if m.run.geometryDefaulted() || !engine.ViewportFits(m.ctx.Width, m.ctx.Height) {
 		return BotWidth, BotHeight
 	}
 	return m.ctx.Width, m.ctx.Height

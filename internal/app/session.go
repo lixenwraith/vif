@@ -211,7 +211,7 @@ func (m *membership) sessionCapacity() int {
 		n = parameter.MaxPlayers
 	}
 	n = min(n, m.scenario.MaxPlayers)
-	if m.cfg.Mode.Serves() {
+	if m.run.mode().Serves() {
 		return n
 	}
 	return n - 1
@@ -225,7 +225,7 @@ func (m *membership) playersSet() int { return cmp.Or(m.cfg.Participants, m.cfg.
 // guest half; an interactive host drives the one that is left, a dedicated one
 // drives none.
 func (m *membership) playerCapacity() int {
-	if m.cfg.Mode.Serves() {
+	if m.run.mode().Serves() {
 		return m.sessionCapacity()
 	}
 	return m.sessionCapacity() + 1
@@ -260,7 +260,7 @@ func (m *membership) rosterGuests() (guests, bots int) {
 // A min_players of 0 waits for one: a session with nobody in it parks.
 func (m *membership) lobbyQuorum() int {
 	switch {
-	case m.cfg.Mode.Serves():
+	case m.run.mode().Serves():
 		return max(1, m.scenario.MinPlayers)
 	case m.cfg.Participants <= 0:
 		return max(1, m.scenario.MinPlayers-1)
@@ -271,7 +271,7 @@ func (m *membership) lobbyQuorum() int {
 // rosterPlayers is how many players, bots counted, this run's session holds: its
 // guests, and its own cursor unless it is a dedicated host.
 func (m *membership) rosterPlayers() int {
-	if m.cfg.Mode.Serves() {
+	if m.run.mode().Serves() {
 		return m.guestCount()
 	}
 	return m.guestCount() + 1
@@ -336,7 +336,7 @@ func (m *membership) noteJoinerReport(id link.PeerID, report network.JoinerRepor
 // its own map (crop off), wins. It runs before the roster closes, so these bounds are
 // the ones the offer names and every later guest adopts.
 func (m *membership) adoptLobbyGeometry() {
-	if !m.cfg.Mode.Serves() || !m.cfg.geometryDefaulted {
+	if !m.run.mode().Serves() || !m.run.geometryDefaulted() {
 		return
 	}
 	m.sessionMu.Lock()
@@ -384,7 +384,7 @@ func (m *membership) adoptLobbyGeometry() {
 // hostSlot is the roster slot this instance takes for itself: the first one on an
 // ordinary host, and none at all on a dedicated one.
 func (m *membership) hostSlot() uint8 {
-	if m.cfg.Mode.Serves() {
+	if m.run.mode().Serves() {
 		return parameter.NoPlayerSlot
 	}
 	return 0
@@ -396,7 +396,7 @@ func newJoiningApp(cfg Config) (*App, error) {
 	d := cfg.dialled
 	if d == nil {
 		var err error
-		if d, err = dialJoin(cfg); err != nil {
+		if d, err = dialJoin(cfg.Membership, cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -423,7 +423,7 @@ type joinDial struct {
 // built a world, and nothing is held for it: its place is assigned at its seat. It
 // names every claim of its kind it keeps, so a place one of them waits under is the
 // one its seat is offered.
-func dialJoin(cfg Config) (*joinDial, error) {
+func dialJoin(cfg Membership, base joinBase) (*joinDial, error) {
 	pending, preview, err := network.PreviewSession(cfg.JoinAddress, joinNetConfig(cfg))
 	if err != nil {
 		if cfg.relay != nil {
@@ -432,19 +432,17 @@ func dialJoin(cfg Config) (*joinDial, error) {
 		return nil, fmt.Errorf("join %s: %w", link.Shown(cfg.JoinAddress), err)
 	}
 	d := &joinDial{pending: pending, offer: preview, claims: cfg.claims}
-	if cfg, err = ConfigForJoin(cfg, preview); err == nil {
-		err = resolveJoinScenario(&cfg, pending, preview)
-	}
+	resources, err := base.prepare(cfg, pending, preview)
 	if err != nil {
 		d.abandon(err)
 		return nil, err
 	}
-	d.resources = cfg.Resources
+	d.resources = resources
 	return d, nil
 }
 
 // joinNetConfig is the transport a dial of cfg's session runs on.
-func joinNetConfig(cfg Config) *network.Config {
+func joinNetConfig(cfg Membership) *network.Config {
 	netCfg := network.DebugConfig(link.RolePeer, cfg.JoinAddress)
 	netCfg.OnError = logSessionError
 	netCfg.Identity = buildIdentity()
@@ -557,7 +555,7 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 // joinWaits says this run's seat waits for its player's press: a dial that player
 // started, in a run a person plays, with the start wait on.
 func (m *membership) joinWaits() bool {
-	return m.cfg.joinPress && m.cfg.Mode.OwnsInput() && m.ctx.WaitStart.Load()
+	return m.cfg.joinPress && m.run.mode().OwnsInput() && m.ctx.WaitStart.Load()
 }
 
 // seated reports whether this joining run holds its place in its session yet.
@@ -910,7 +908,7 @@ func (m *membership) openRosterLocked() {
 // ownClaim is the digest of the claim this run is in its session under, issued when
 // a session it opens first names it; a dedicated host has no place to come back to.
 func (m *membership) ownClaim() string {
-	if m.cfg.Mode.Serves() {
+	if m.run.mode().Serves() {
 		return ""
 	}
 	c := m.claim.Load()

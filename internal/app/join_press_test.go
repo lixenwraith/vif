@@ -162,7 +162,7 @@ func TestARetriedOpenDialsAfresh(t *testing.T) {
 	host := hostingRun(t, 0x3035, 0)
 	cfg := joinerConfig(host.HostAddr(), false)
 	cfg.Normalize()
-	d, err := dialJoin(cfg)
+	d, err := dialJoin(cfg.Membership, cfg)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

@@ -140,7 +140,8 @@ type App struct {
 	glue corrector.Corrector
 
 	// membership is this run's place in its session, and the protocol's view of it
-	// beside the glue. It reads the run through membershipRun.
+	// beside the glue. It holds cfg's session half and reads the rest of the run
+	// through membershipRun.
 	membership membership
 
 	// scribe keeps this run's journal and reads one back. It reads the run through
@@ -178,7 +179,7 @@ func New(cfg Config) (*App, error) {
 		hub:  service.NewHub(log),
 		life: lifecycle.New(cfg.Lifetime),
 	}
-	a.membership.open(a, &a.cfg, &a.scenario, log, &a.glue, a.life)
+	a.membership.open(a, &a.cfg.Membership, &a.scenario, log, &a.glue, a.life)
 	a.scribe.Open(scribeRun{a}, &a.scenario, log, a.hub, &a.glue)
 	if a.cfg.JoinAddress != "" && a.cfg.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")

@@ -1576,18 +1576,25 @@ another system may not call them directly.
 ### Give the membership a package of its own
 
 - Priority: P3
-- Affected files: `internal/app/config.go`, `membership.go`, `host.go`, `join.go`,
-  `seat.go`, `cmd/vif`, `android/game`
+- Affected files: `internal/app/membership.go`, `seat.go`, `session.go`, `host.go`,
+  `converge.go`, `loop.go`
 
 The corrector and the scribe have packages under `internal/app/internal`, each
 reading the run through one seam and resolving into a run only `App` builds (a
-`corrector.Staging`, a `scribe.Twin`). `membership` stays, because `Config` is its
-state too: it reads 24 of its fields, 9 unexported (`holder`, `relay`, `claims`,
-`joinPress`, `sessionPlayers`, `scriptedSession`, `geometryDefaulted`,
-`hostListeners`, `log`), copies it whole to dial a `:join` and a redial, and writes
-the session half back (`HostAddress`, `JoinAddress`, `SessionName`,
-`FixedAuthority`, `sessionPlayers`, `hostListeners`) for the run `App` builds next.
-A package for it needs that session half as a type of its own, which changes
-`Config`'s fields for `cmd/vif`, the Android binding and about a hundred test
-literals; one package for all three run types would have taken `Config`, the
-restart request, the join dial, the claims and the seats with it.
+`corrector.Staging`, a `scribe.Twin`). `membership` holds only `Config`'s session
+half, `Membership`, and reads the rest of the run through `membershipRun`, dialling
+a join against a copy of it (`joinBase`). Four ties to `app` are left:
+
+- The seat runner: `seat.go` builds each bot's `Config` and runs its `App` through
+  `drive`, reading the slot, scribe and fork cell off it; the run has to start and
+  answer for a seat behind the seam.
+- The seam's `app` types: `Mode` and `ModePlay`, `restartRequest` (`replaceWith`,
+  and the requests `host.go` and `converge.go` build), `lobbyEvent`, `joinBase`.
+- `Membership`'s unexported fields `app` sets: `claims`, `hostListeners` and
+  `joinPress` (`Run`, `Config.restarted`), `sessionPlayers` (`ConfigForJoin`),
+  `holder` and `relay` (a seat's `Config`; `Validate` reads `relay`). The type
+  moves with the package and `app` aliases it, so the embedded field keeps its name.
+- What `app` shares: `forkCell`, `errBrowserHosting` (`Validate`),
+  `errSessionCanceled`, `errSessionSignalled` and `errSessionExpired` (the loops),
+  `buildHasSocketNetwork`, `ClaimStore`, and `joinDial`, which `Config.dialled`
+  carries and whose `open`, like `session.go`'s constructors, builds the run.
