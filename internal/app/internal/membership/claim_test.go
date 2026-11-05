@@ -1,9 +1,10 @@
-package app
+package membership
 
 import (
 	"slices"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -131,7 +132,7 @@ func TestATabKeepsItsClaimsAcrossAReload(t *testing.T) {
 // asked to take it on before the claim goes.
 func TestAForkLetsItsClaimGo(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []Mode{ModePlay, ModeHeadless} {
+	for _, mode := range []config.Mode{config.ModePlay, config.ModeHeadless} {
 		m := wraithWorld()()
 		m.run, m.claims = stubRun{mode: mode}, NewClaimKeeper(nil)
 		c := m.claims.issue(false)
@@ -141,7 +142,7 @@ func TestAForkLetsItsClaimGo(t *testing.T) {
 			t.Errorf("a %s fork holds its claim %t and names it on its next dial %t; want it let go, named",
 				mode, m.claim.Load() != nil, named)
 		}
-		if loop := mode == ModePlay; m.leaving.Load() != loop {
+		if loop := mode == config.ModePlay; m.leaving.Load() != loop {
 			t.Errorf("a %s fork asks its loop to take it on %t; want %t", mode, m.leaving.Load(), loop)
 		}
 	}

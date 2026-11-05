@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -444,7 +445,7 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 	person.handleResize(170, 50)
 	seated := mustHeadless(t, fixtureSeed, 160, 45)
 	t.Cleanup(seated.Close)
-	graph, err := LoadBotGraph(resource.Options{Embedded: true}, "roam")
+	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, "roam")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
@@ -135,7 +136,7 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 	a := mustHeadless(t, fixtureSeed, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
-	graph, err := LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	graph, err := membership.LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
 	if err != nil {
 		t.Fatal(err)
 	}

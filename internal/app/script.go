@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -82,7 +83,7 @@ func RunScript(cfg Config, host Host, path string) (journal.ScriptStats, error) 
 // time unless -speed says otherwise. It reports its counters however it stops;
 // quit says the graph ended the run itself.
 func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
-	graph, err := LoadBotGraph(cfg.Resources, spec)
+	graph, err := membership.LoadBotGraph(cfg.Resources, spec)
 	if err != nil {
 		return bot.Stats{}, err
 	}
@@ -140,7 +141,7 @@ func drive(cfg runConfig, kind, name string, signals <-chan os.Signal, hold func
 
 	a, err := newScriptApp(cfg, signals)
 	if err != nil {
-		if errors.Is(err, ErrSessionCanceled) {
+		if errors.Is(err, membership.ErrSessionCanceled) {
 			return false, nil
 		}
 		return false, err
@@ -174,7 +175,7 @@ func drive(cfg runConfig, kind, name string, signals <-chan os.Signal, hold func
 		}
 		// A headless bot left with no session plays for nobody; a watched one plays
 		// on, as a person does, and a seat ends as its holder says (seatEnds).
-		if a.membership.Dismissed() || kind == "bot" && a.cfg.wiring.membership.Holder == 0 && ForkCell(a.world).Load() {
+		if a.membership.Dismissed() || kind == "bot" && a.cfg.wiring.membership.Holder == 0 && membership.ForkCell(a.world).Load() {
 			return false, nil
 		}
 		// Between two steps, as a presenting run's loop serves it between two waits
@@ -185,7 +186,7 @@ func drive(cfg runConfig, kind, name string, signals <-chan os.Signal, hold func
 			if held {
 				a.ApplyPendingCorrections()
 			}
-			if !WaitScriptTick(signals, parameter.PausedPollInterval) {
+			if !membership.WaitScriptTick(signals, parameter.PausedPollInterval) {
 				return false, nil
 			}
 			nextTick = time.Now() // [wall]
@@ -208,7 +209,7 @@ func drive(cfg runConfig, kind, name string, signals <-chan os.Signal, hold func
 			trim, step := a.scheduler.TakePace()
 			tick := a.ctx.TimeCtl.Scale().Wall(a.ctx.World.TickInterval())
 			nextTick = nextTick.Add(engine.PacedInterval(tick, trim, step))
-			if !WaitScriptTick(signals, time.Until(nextTick)) {
+			if !membership.WaitScriptTick(signals, time.Until(nextTick)) {
 				return false, nil
 			}
 		}

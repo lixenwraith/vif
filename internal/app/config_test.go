@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
@@ -192,8 +193,8 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
 	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
 		Membership: Membership{HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
-			Participants: 4, FixedAuthority: true}}, wiring: wiring{membership: Wiring{SessionPlayers: 3}}}
-	dialled := &JoinDial{}
+			Participants: 4, FixedAuthority: true}}, wiring: wiring{membership: membership.Wiring{SessionPlayers: 3}}}
+	dialled := &membership.JoinDial{}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
 		Join: "10.0.0.2:7777/abc", Dialled: dialled, Bots: []string{"roam"}, Journal: true})
 	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.Notice != "n" ||

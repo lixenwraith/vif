@@ -12,6 +12,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app/internal/corrector"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -40,7 +41,7 @@ const fallbackColorMode = terminal.ColorMode256
 type restartRequest struct {
 	// RestartAsk is what the membership asks of the next run, the whole of a
 	// request the membership makes.
-	RestartAsk
+	membership.RestartAsk
 
 	// provided is the scenario a join already holds, which a run joining the same
 	// session again has no need to fetch twice.
@@ -132,7 +133,7 @@ type App struct {
 	// membership is this run's place in its session, and the protocol's view of it
 	// beside the glue. It holds cfg's session half and reads the rest of the run
 	// through membershipRun.
-	membership membership
+	membership membership.Membership
 
 	// scribe keeps this run's journal and reads one back. It reads the run through
 	// scribeRun.

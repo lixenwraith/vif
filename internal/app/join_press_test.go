@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
@@ -50,7 +51,7 @@ func joinerConfig(addr string, press bool, bots ...string) runConfig {
 	screen := &pressPresentation{framePresentation: framePresentation{w: 120, h: 40}, events: make(chan terminal.Event, 1)}
 	return runConfig{Config: Config{Mode: ModePlay, Membership: Membership{JoinAddress: addr, Bots: bots},
 		Resources: resource.Options{Embedded: true}}, host: Host{Presentation: screen},
-		wiring: wiring{membership: Wiring{JoinPress: press}}}
+		wiring: wiring{membership: membership.Wiring{JoinPress: press}}}
 }
 
 // hostingRun is a run with a player that opened its session to cap participants,
@@ -167,7 +168,7 @@ func TestARetriedOpenDialsAfresh(t *testing.T) {
 	host := awayGuest(t).host
 	cfg := joinerConfig(host.HostAddr(), false)
 	cfg.Normalize()
-	d, err := DialJoin(cfg.Membership, cfg.wiring.membership, cfg)
+	d, err := membership.DialJoin(cfg.Membership, cfg.wiring.membership, cfg)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

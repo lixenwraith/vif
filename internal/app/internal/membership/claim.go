@@ -1,4 +1,4 @@
-package app
+package membership
 
 import (
 	"encoding/json"
@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -17,7 +18,7 @@ import (
 type ClaimKeeper struct {
 	mu     sync.Mutex
 	claims []*claim // oldest first
-	store  ClaimStore
+	store  config.ClaimStore
 	stored time.Time // [wall] the last write a sync made
 }
 
@@ -32,7 +33,7 @@ type claim struct {
 
 // NewClaimKeeper reads the claims store kept, if any; a document or a claim this
 // build cannot read is left out, and replaced at the next change.
-func NewClaimKeeper(store ClaimStore) *ClaimKeeper {
+func NewClaimKeeper(store config.ClaimStore) *ClaimKeeper {
 	k := &ClaimKeeper{store: store}
 	if store == nil {
 		return k

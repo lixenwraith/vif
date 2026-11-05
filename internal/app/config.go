@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/vif/internal/app/internal/config"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/resource"
@@ -66,7 +67,7 @@ type wiring struct {
 
 	// dialled is a :join its session already answered, dialled while the run it
 	// replaces played on.
-	dialled *JoinDial
+	dialled *membership.JoinDial
 
 	// startScreen says this run is the launch on a host without a start screen of its
 	// own, which waits behind the game's (App.startScreen)
@@ -101,7 +102,7 @@ type wiring struct {
 	geometryDefaulted bool
 
 	// membership is the wiring's session half, which the membership holds.
-	membership Wiring
+	membership membership.Wiring
 }
 
 // configForJoin applies the host-authored simulation identity to local operator
@@ -153,7 +154,7 @@ func (c runConfig) Prepare(s Membership, pending *network.PendingJoin, preview n
 	c.Membership = s
 	var err error
 	if c, err = configForJoin(c, preview); err == nil {
-		err = ResolveJoinScenario(&c.Config, pending, preview)
+		err = membership.ResolveJoinScenario(&c.Config, pending, preview)
 	}
 	return c.Resources, err
 }
@@ -191,7 +192,7 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	case next.Join != "":
 		solo := c
 		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.SessionPlayers = "", "", 0
-		joined, err := Joining(c.Membership, next.Join)
+		joined, err := membership.Joining(c.Membership, next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
 			next.Dialled.Abandon(err)
 			solo.Notice = "Join failed: " + err.Error()
@@ -211,7 +212,7 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 // run with no claim keeper one of its own.
 func (c *runConfig) Normalize() {
 	if c.wiring.membership.Claims == nil {
-		c.wiring.membership.Claims = NewClaimKeeper(c.Membership.ClaimStore)
+		c.wiring.membership.Claims = membership.NewClaimKeeper(c.Membership.ClaimStore)
 	}
 	width, height := c.Width, c.Height
 	if c.Config.Normalize(); c.Width != width || c.Height != height {

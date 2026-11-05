@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -308,12 +309,12 @@ func TestAJoinerAdoptsTheHostsTick(t *testing.T) {
 	if got := guest.World().TickInterval(); got != tick {
 		t.Fatalf("the joiner ticks at %s, its host at %s", got, tick)
 	}
-	if err := IdentityFromAnchor(an).Verify(IdentityFromAnchor(guest.JoinAnchor())); err != nil {
+	if err := membership.IdentityFromAnchor(an).Verify(membership.IdentityFromAnchor(guest.JoinAnchor())); err != nil {
 		t.Fatalf("a joiner that adopted the host's tick was refused: %v", err)
 	}
 	kept := mustHeadless(t, seed, 120, 40)
 	defer kept.Close()
-	if err := IdentityFromAnchor(an).Verify(IdentityFromAnchor(kept.JoinAnchor())); err == nil ||
+	if err := membership.IdentityFromAnchor(an).Verify(membership.IdentityFromAnchor(kept.JoinAnchor())); err == nil ||
 		!strings.Contains(err.Error(), "tick_ns") {
 		t.Fatalf("a joiner on its own tick was told %v", err)
 	}

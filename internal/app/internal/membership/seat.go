@@ -1,4 +1,4 @@
-package app
+package membership
 
 import (
 	"cmp"
@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -86,18 +87,18 @@ type seat struct {
 	slot   atomic.Uint32
 }
 
-// SeatPlay is a seat's run as its holder hands it to be played (memberRun.PlaySeat):
+// SeatPlay is a seat's run as its holder hands it to be played (Run.PlaySeat):
 // the Config and wiring it joins with and its log, the graph it plays, the channel
 // that halts it, the pause it stands still with, its holder's mode as it was seated
 // and its number among its holder's seats.
 type SeatPlay struct {
-	Config Config
+	Config config.Config
 	Wiring Wiring
 	Log    *vlog.Log
 	Graph  *bot.Graph
 	Stop   <-chan os.Signal
 	Hold   func() bool
-	Mode   Mode
+	Mode   config.Mode
 	Number uint64
 }
 
@@ -116,7 +117,7 @@ func (s *seat) halted() bool {
 // seatHalted reports whether participant id is a seat this run told to leave, so
 // its link closing is the drop that was asked for. A seat forgets itself before
 // its link closes, so the drop is remembered by identity until then.
-func (m *membership) seatHalted(id uint32) bool {
+func (m *Membership) seatHalted(id uint32) bool {
 	m.seatsMu.Lock()
 	defer m.seatsMu.Unlock()
 	i := slices.Index(m.dropped, id)
@@ -127,7 +128,7 @@ func (m *membership) seatHalted(id uint32) bool {
 }
 
 // SeatBots seats cfg.Bots in the session this run is in, or in one it opens for them.
-func (m *membership) SeatBots() error {
+func (m *Membership) SeatBots() error {
 	if len(m.cfg.Bots) == 0 {
 		return nil
 	}
@@ -148,7 +149,7 @@ func (m *membership) SeatBots() error {
 // addSeatLocked seats one bot playing spec. The graph is parsed here, so a name that
 // does not resolve is the caller's error; the join runs on the seat's goroutine.
 // Caller MUST hold updateMutex.
-func (m *membership) addSeatLocked(spec string) error {
+func (m *Membership) addSeatLocked(spec string) error {
 	graph, err := LoadBotGraph(m.run.Resources(), spec)
 	if err != nil {
 		return err
@@ -173,7 +174,7 @@ func (m *membership) addSeatLocked(spec string) error {
 // seatConfigLocked is a new seat's run, which joins this run's session in-process; a
 // run in none first opens one with no listener. It sends the session's name, which
 // the handshake its holder serves checks. Caller holds updateMutex.
-func (m *membership) seatConfigLocked() (SeatPlay, error) {
+func (m *Membership) seatConfigLocked() (SeatPlay, error) {
 	if m.sessionTransportLocked() == nil {
 		if err := m.openSessionLocked(nil); err != nil {
 			return SeatPlay{}, err
@@ -181,8 +182,8 @@ func (m *membership) seatConfigLocked() (SeatPlay, error) {
 	}
 	width, height := m.run.SeatScreenLocked()
 	return SeatPlay{
-		Config: Config{Mode: ModeHeadless, Resources: m.run.Resources(), Width: width, Height: height,
-			StatTicks: -1, RecTicks: -1, Membership: Membership{NoAdvertise: true, JoinAddress: seatJoin,
+		Config: config.Config{Mode: config.ModeHeadless, Resources: m.run.Resources(), Width: width, Height: height,
+			StatTicks: -1, RecTicks: -1, Membership: config.Membership{NoAdvertise: true, JoinAddress: seatJoin,
 				SessionName: m.cfg.SessionName}},
 		Wiring: Wiring{Holder: link.PeerID(m.world.LocalParticipant()),
 			Relay: m.seatLink, Claims: m.claims},
@@ -192,7 +193,7 @@ func (m *membership) seatConfigLocked() (SeatPlay, error) {
 // seatLink opens a stream to this run for one of its bots and serves the join
 // handshake on the near end: the coordinator's, or a still-guest's, which asks the
 // authority on its own link for each answer.
-func (m *membership) seatLink() (net.Conn, error) {
+func (m *Membership) seatLink() (net.Conn, error) {
 	var (
 		port     *link.SocketPort
 		accept   func(net.Conn) (link.PeerID, error)
@@ -221,7 +222,7 @@ func (m *membership) seatLink() (net.Conn, error) {
 // ends for it, standing still while its holder's pause does. A join refused while
 // the session starts or hands off is retried, as the refusal asks; any other failure
 // ends it.
-func (m *membership) playSeat(s *seat, play SeatPlay) {
+func (m *Membership) playSeat(s *seat, play SeatPlay) {
 	defer close(s.done)
 	defer m.forgetSeat(s)
 	play.Graph, play.Stop = s.graph, s.stop
@@ -234,7 +235,7 @@ func (m *membership) playSeat(s *seat, play SeatPlay) {
 	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
 	for {
 		var driver *bot.Driver
-		finished, err := m.run.PlaySeat(play, func(run *membership, d *bot.Driver) int {
+		finished, err := m.run.PlaySeat(play, func(run *Membership, d *bot.Driver) int {
 			driver = d
 			// The offer rather than the world: the cursor binds a tick later.
 			run.sessionMu.Lock()
@@ -264,7 +265,7 @@ func (m *membership) playSeat(s *seat, play SeatPlay) {
 	}
 }
 
-func (m *membership) forgetSeat(s *seat) {
+func (m *Membership) forgetSeat(s *seat) {
 	m.seatsMu.Lock()
 	m.seats = slices.DeleteFunc(m.seats, func(o *seat) bool { return o == s })
 	m.seatsMu.Unlock()
@@ -274,7 +275,7 @@ func (m *membership) forgetSeat(s *seat) {
 // then the drop that was asked for, as it is for a seat dropped alone, unless the
 // seats keep their places: then it is a lost link, whose cursor the session keeps
 // as a Wraith.
-func (m *membership) HaltSeats(keep bool) []*seat {
+func (m *Membership) HaltSeats(keep bool) []*seat {
 	m.seatsMu.Lock()
 	defer m.seatsMu.Unlock()
 	seats := slices.Clone(m.seats)
@@ -289,28 +290,28 @@ func (m *membership) HaltSeats(keep bool) []*seat {
 
 // CloseSeats halts every seat, keeping their places or not, and waits for each to
 // leave, so a holder's bots depart the session before it does.
-func (m *membership) CloseSeats(keep bool) {
+func (m *Membership) CloseSeats(keep bool) {
 	for _, s := range m.HaltSeats(keep) {
 		<-s.done
 	}
 }
 
 // dropSeat halts the seat on slot; it leaves as any participant does.
-func (m *membership) dropSeat(slot int) error {
+func (m *Membership) dropSeat(slot int) error {
 	if m.stopSeat(func(s *seat) bool { return s.id.Load() != 0 && int(s.slot.Load()) == slot }) {
 		return nil
 	}
 	return fmt.Errorf("no bot of this run's is on slot %X", slot)
 }
 
-func (m *membership) removeSeat(id uint64) error {
+func (m *Membership) removeSeat(id uint64) error {
 	if m.stopSeat(func(s *seat) bool { return s.number == id }) {
 		return nil
 	}
 	return fmt.Errorf("this bot has already left")
 }
 
-func (m *membership) stopSeat(match func(*seat) bool) bool {
+func (m *Membership) stopSeat(match func(*seat) bool) bool {
 	m.seatsMu.Lock()
 	defer m.seatsMu.Unlock()
 	for _, s := range m.seats {
@@ -327,7 +328,7 @@ func (m *membership) stopSeat(match func(*seat) bool) bool {
 
 // SeatGraphs are the graphs of the seats this run holds, in the order they came; a
 // seat told to leave is not held, even while it is still leaving.
-func (m *membership) SeatGraphs() []string {
+func (m *Membership) SeatGraphs() []string {
 	m.seatsMu.Lock()
 	defer m.seatsMu.Unlock()
 	specs := make([]string, 0, len(m.seats))
@@ -339,7 +340,7 @@ func (m *membership) SeatGraphs() []string {
 	return specs
 }
 
-func (m *membership) botSeats() []engine.BotSeat {
+func (m *Membership) botSeats() []engine.BotSeat {
 	m.seatsMu.Lock()
 	defer m.seatsMu.Unlock()
 	bots := make([]engine.BotSeat, 0, len(m.seats))
@@ -350,7 +351,7 @@ func (m *membership) botSeats() []engine.BotSeat {
 	return bots
 }
 
-func (m *membership) seatsSummary() string {
+func (m *Membership) seatsSummary() string {
 	bots := m.botSeats()
 	if len(bots) == 0 {
 		return "No bots; :bot add [N[:graph]|graph] seats bots"
@@ -373,7 +374,7 @@ func (m *membership) seatsSummary() string {
 // seatsOnly reports whether every participant linked to this run is a seat it
 // holds, which is what lets an authority pause: its seats stand still with it.
 // Called under the world lock.
-func (m *membership) seatsOnly() bool {
+func (m *Membership) seatsOnly() bool {
 	port, ok := m.sessionTransportLocked().(interface{ Peers() []uint32 })
 	if !ok {
 		return false

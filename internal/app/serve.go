@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/lifecycle"
@@ -62,9 +63,9 @@ func (a *App) Serve() error {
 
 	if err := a.membership.StartHostSession(sigChan); err != nil {
 		switch {
-		case errors.Is(err, ErrSessionCanceled):
+		case errors.Is(err, membership.ErrSessionCanceled):
 			return nil
-		case errors.Is(err, ErrSessionExpired):
+		case errors.Is(err, membership.ErrSessionExpired):
 			a.logSessionEnd(a.life.State(time.Now()))
 			return nil
 		}

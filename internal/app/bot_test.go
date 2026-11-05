@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/component"
@@ -184,7 +185,7 @@ func driveRun(t *testing.T, kind string, cfg runConfig, graph string, hold func(
 	if cfg.Resources == (resource.Options{}) {
 		cfg.Resources = resource.Options{Embedded: true}
 	}
-	g, err := LoadBotGraph(cfg.Resources, graph)
+	g, err := membership.LoadBotGraph(cfg.Resources, graph)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -660,7 +661,7 @@ func TestASeatsRunsListInTheOrderItsSeatsCame(t *testing.T) {
 // whose loop takes its fork into a session of its own and seats its bots again there.
 func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 	t.Parallel()
-	graph, err := LoadBotGraph(resource.Options{Embedded: true}, "roam")
+	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, "roam")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,11 +671,11 @@ func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 		fork  func(holder, seat *App)
 		steps bool
 	}{
-		{"its headless holder's fork", ModeHeadless, func(h, _ *App) { ForkCell(h.world).Store(true) }, false},
-		{"its own fork", ModeHeadless, func(_, s *App) { ForkCell(s.world).Store(true) }, false},
+		{"its headless holder's fork", ModeHeadless, func(h, _ *App) { membership.ForkCell(h.world).Store(true) }, false},
+		{"its own fork", ModeHeadless, func(_, s *App) { membership.ForkCell(s.world).Store(true) }, false},
 		{"both forks under a play run", ModePlay, func(h, s *App) {
-			ForkCell(h.world).Store(true)
-			ForkCell(s.world).Store(true)
+			membership.ForkCell(h.world).Store(true)
+			membership.ForkCell(s.world).Store(true)
 		}, true},
 	} {
 		holder := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
@@ -713,7 +714,7 @@ func TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd(t *testing.T) {
 	waitForCursors(t, host, 4)
 	waitForCursors(t, fork, 4)
 	leave()
-	waitUntil(t, func() bool { return ForkCell(fork.world).Load() }, "the guest forked")
+	waitUntil(t, func() bool { return membership.ForkCell(fork.world).Load() }, "the guest forked")
 	waitForCursors(t, fork, 1)
 	local := link.PeerID(fork.membership.LocalParticipant())
 	if roster := fork.instance().WorldRoster(); len(roster) != 1 || roster[0].ID != local {
@@ -731,7 +732,7 @@ func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 	waitForCursors(t, host, 2)
 	cfg := Config{Membership: Membership{JoinAddress: addr}, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
 		Resources: resource.Options{Embedded: true}}
-	g, err := LoadBotGraph(cfg.Resources, "patrol")
+	g, err := membership.LoadBotGraph(cfg.Resources, "patrol")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -944,7 +945,7 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
 	cfg := runConfig{Config: Config{Membership: Membership{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}},
-		wiring: wiring{membership: Wiring{Claims: NewClaimKeeper(nil)}}}
+		wiring: wiring{membership: membership.Wiring{Claims: membership.NewClaimKeeper(nil)}}}
 	_, leave := driveRun(t, "bot", cfg, "patrol", nil)
 	waitForCursors(t, host, 3)
 	left := places(host, everyone)
@@ -1141,7 +1142,7 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 func TestBotInputPreservesOperatorFeedback(t *testing.T) {
 	a, _ := playBot(t, DefaultBotGraph, fixtureSeed, 10, nil)
 	defer a.Close()
-	g, err := LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	g, err := membership.LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1184,7 +1185,7 @@ func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
 		waitForWraiths(t, a, 2)
 		for deadline := time.Now().Add(socketWait); (uint32(a.authority.Holder()) != id || a.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		}
-		if uint32(a.authority.Holder()) != id || ForkCell(a.world).Load() {
+		if uint32(a.authority.Holder()) != id || membership.ForkCell(a.world).Load() {
 			t.Fatal("survivors split after the host group left")
 		}
 	}

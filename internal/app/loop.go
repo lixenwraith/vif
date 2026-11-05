@@ -13,6 +13,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app/internal/config"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -36,18 +37,18 @@ func Run(c Config, host Host) error {
 	}
 	// One keeper for every run of the process, so a run that replaces another comes
 	// back to the place that one left.
-	cfg.wiring.membership.Claims = NewClaimKeeper(cfg.Membership.ClaimStore)
+	cfg.wiring.membership.Claims = membership.NewClaimKeeper(cfg.Membership.ClaimStore)
 	// A host with a player plays from its first tick and opens its door once the
 	// clock runs, as :host does; only a run with nobody to play waits in a lobby.
 	cfg.Membership.HostAddress, cfg.wiring.resumeHost = "", cfg.Membership.HostAddress
 	// A port the player asked for that this run cannot have ends it before the
 	// terminal starts, as a -join that cannot dial does.
 	if cfg.wiring.resumeHost != "" && config.SocketNetwork {
-		lns, err := BindDoors(cfg.Membership, cfg.wiring.resumeHost)
+		lns, err := membership.BindDoors(cfg.Membership, cfg.wiring.resumeHost)
 		if err != nil {
 			return fmt.Errorf("host %s: %w", cfg.wiring.resumeHost, err)
 		}
-		defer CloseDoors(lns) // the run's port closes them first; one that never served them must not keep them
+		defer membership.CloseDoors(lns) // the run's port closes them first; one that never served them must not keep them
 		cfg.wiring.membership.HostListeners = lns
 	}
 	// One terminal for every run: a replacement redraws on it instead of leaving
@@ -68,14 +69,14 @@ func Run(c Config, host Host) error {
 		next, err := runScenario(cfg, rejoin)
 		// The press the host took and the start screen were the first game's
 		cfg.wiring.membership.HostListeners, cfg.host.Pressed, cfg.wiring.startScreen = nil, false, false
-		if err != nil && solo != nil && !errors.Is(err, ErrSessionSignalled) {
+		if err != nil && solo != nil && !errors.Is(err, membership.ErrSessionSignalled) {
 			vlog.Warn("session", "msg", "join failed; playing solo",
 				"join", cfg.Membership.JoinAddress, "error", err.Error())
 			cfg, solo = *solo, nil
 			cfg.Notice = "Join failed: " + err.Error()
 			continue
 		}
-		if err != nil && !errors.Is(err, ErrSessionCanceled) {
+		if err != nil && !errors.Is(err, membership.ErrSessionCanceled) {
 			return err
 		}
 		if next == nil {
@@ -506,14 +507,14 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 	for {
 		select {
 		case <-signals:
-			return nil, ErrSessionSignalled
+			return nil, membership.ErrSessionSignalled
 		case ev := <-a.lobbyEvents():
 			pressed := false
 			if !a.takeEventWith(ev, func(ev terminal.Event, intent *input.Intent) bool {
 				pressed = a.joinPressed(ev, intent)
 				return pressed
 			}) {
-				return nil, ErrSessionCanceled
+				return nil, membership.ErrSessionCanceled
 			}
 			if !pressed {
 				a.showJoinAsk() // drawn again with what the key opened, typed or resized
@@ -521,7 +522,7 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 			}
 			a.showJoinStatus("Joining " + link.Shown(a.cfg.Membership.JoinAddress) + "...")
 			err := a.membership.TakeSeat(true, signals)
-			if errors.Is(err, ErrSessionMoved) {
+			if errors.Is(err, membership.ErrSessionMoved) {
 				// Pressed already, and holding the bots it was to seat once it was in.
 				a.log.Info("session", "msg", "joining the session's new game",
 					"join", link.Shown(a.cfg.Membership.JoinAddress))

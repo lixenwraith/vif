@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -2156,8 +2157,8 @@ func TestAForkKeepsTheHoldItsLostHostSet(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ForkCell(a.world).Store(true) // as giveUp leaves it
-		askLeave(t, a)                // as a fork asks its loop
+		membership.ForkCell(a.world).Store(true) // as giveUp leaves it
+		askLeave(t, a)                           // as a fork asks its loop
 		a.membership.LeaveSession()
 		if held, msg := a.ctx.TimeCtl.Held(), a.ctx.GetStatusMessage(); held != tt.held || msg != tt.notice {
 			t.Errorf("a fork under %s goes on held %t, saying %q; want held %t, saying %q", tt.name, held, msg, tt.held, tt.notice)
