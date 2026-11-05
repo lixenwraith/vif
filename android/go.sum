@@ -1,7 +1,7 @@
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/lixenwraith/audio v0.1.0 h1:NwYmwX72cHztHGepUlWkV6vaEdCb5Zx1V6FP0ivOT6M=
-github.com/lixenwraith/audio v0.1.0/go.mod h1:kHP3kE+o4nnelbDXNlR9KrbP868cyiZgq1eiuwohyvs=
+github.com/lixenwraith/audio v0.3.1 h1:Cq/ohuIupnVT2pfII9ypgdMkYsUwOnTfByPO+SsyF0w=
+github.com/lixenwraith/audio v0.3.1/go.mod h1:GhsJVOCcD2Umnrg6ZdGrJULPPJgDqwHyLXDIiUrxI0w=
 github.com/lixenwraith/color v0.1.5 h1:GRT4PBb9R04ahXW7SGlsfDttqew8E2lgt9GGujL0jEo=
 github.com/lixenwraith/color v0.1.5/go.mod h1:L/I3Vxp6pqslAIzWyZGgKCm2lyStHCA4vKaUoMUm7bU=
 github.com/lixenwraith/genetic v0.1.0 h1:Qbm9UKIHk7J/9YyrJYn6tssvAHlzwgglQlYmJYuMJtI=
