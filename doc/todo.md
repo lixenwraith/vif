@@ -21,9 +21,8 @@ follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
 ### Machine follow-ups
 
 What vanguard met in the machine and is still open, its certain faults having
-landed. Open items elsewhere it meets:
-[payload field names at load](#check-payload-field-names-against-their-event-at-load)
-and [a program spawning another](#let-a-program-spawn-another-program).
+landed. One open item elsewhere it meets:
+[payload field names at load](#check-payload-field-names-against-their-event-at-load).
 
 #### Give a program's entrance an entering state
 
