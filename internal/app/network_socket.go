@@ -4,8 +4,6 @@ package app
 
 import "github.com/lixenwraith/vif/internal/service"
 
-const buildHasSocketNetwork = true
-
 // pageHidden is false outside a browser: a terminal is drawn whether seen or not.
 func pageHidden() bool { return false }
 

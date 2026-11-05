@@ -82,7 +82,7 @@ remains stands on its own.
 
 - Priority: P3, not now: it needs other foundation changes first
 - Affected files: `pkg/position`, `internal/engine/position.go`,
-  `internal/app/config.go`, `internal/system/navigation.go`, `pkg/navigation`,
+  `internal/app/internal/config`, `internal/system/navigation.go`, `pkg/navigation`,
   `internal/render/renderer`
 - Guide: [Position §3](position-package.md#3-the-volume),
   [Rendering §2](rendering.md#2-render-context-and-coordinates)
@@ -1519,29 +1519,6 @@ another system may not call them directly.
 
 ## Structure
 
-### Give Config a package of its own
-
-- Priority: P3
-- Affected files: `internal/app/config.go`, `membership.go`, `claim.go`,
-  `internal/app/internal/config`
-
-`Config` is the run's configuration, its session half the field `Membership`; what
-the run is built with beside it, the platform's `Host` and its wiring, is
-`runConfig`'s and stays in `app`. `Mode` is already `internal/app/internal/config`'s,
-with the build's `buildHasAudio` its `Audio` reads, and `app` aliases it with its
-constants. One step is left, after the last is merged and tested (Lixen,
-2026-11-05): `Config`, `Membership` and `ClaimStore` into that package, aliased
-the same way, so `cmd/vif` and Android keep compiling and
-[the membership's package](#give-the-membership-a-package-of-its-own) can import
-it. `Validate`'s build-tagged rules (`validateBuildConfig`,
-`validateAudioBuildConfig`, `buildHasSocketNetwork`, `scriptPacing`,
-`errBrowserHosting`) go with it or stay as an `app` check after it.
-`Config.Validate` is `runConfig.Validate` with no wiring, the wiring's rules
-(`relay`, `scriptedSession`) among `Config`'s; parting them can change which error
-a config breaking two of them reports. `Membership`'s methods that use `app` types
-(`joining`, `hostNetwork`, `bindDoors`, `relayRouter`) become functions, since a
-package cannot add methods to a type it only aliases.
-
 ### Give the membership a package of its own
 
 - Priority: P3
@@ -1552,16 +1529,17 @@ The corrector and the scribe have packages under `internal/app/internal`, each
 reading the run through one seam and resolving into a run only `App` builds (a
 `corrector.Staging`, a `scribe.Twin`). `membership` holds only the run's session
 half, `Membership` and the wiring's `membershipWiring`, and reads the rest of the
-run through `membershipRun`, dialling a join against a copy of it (`joinBase`). It
-waits on [Config's package](#give-config-a-package-of-its-own), which takes
-`Membership` out of `app`, as it took `Mode`. Three ties to `app` are left after it:
+run through `membershipRun`, dialling a join against a copy of it (`joinBase`).
+`Membership` is `internal/app/internal/config`'s, which a membership package can
+import, and the functions over it (`joining`, `hostNetwork`, `bindDoors`) go with
+the membership, `Run` and `runConfig.restarted` calling them there. Three ties to
+`app` are left:
 
 - The seat runner: `seat.go` builds each bot's `runConfig` and runs its `App`
   through `drive`, reading the slot, scribe and fork cell off it; the run has to
   start and answer for a seat behind the seam.
 - The seam's `app` types: `restartRequest` (`replaceWith`, and the requests
   `host.go` and `converge.go` build), `lobbyEvent`, `joinBase`.
-- What `app` shares: `forkCell`, `errBrowserHosting` (`Validate`),
-  `errSessionCanceled`, `errSessionSignalled` and `errSessionExpired` (the loops),
-  `buildHasSocketNetwork`, and `joinDial`, which the wiring's `dialled` carries
-  and whose `open`, like `session.go`'s constructors, builds the run.
+- What `app` shares: `forkCell`, `errSessionCanceled`, `errSessionSignalled` and
+  `errSessionExpired` (the loops), and `joinDial`, which the wiring's `dialled`
+  carries and whose `open`, like `session.go`'s constructors, builds the run.

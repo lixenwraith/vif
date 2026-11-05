@@ -3,3 +3,5 @@
 package config
 
 const buildHasAudio = true
+
+func validateAudioBuildConfig(Config) error { return nil }

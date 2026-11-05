@@ -44,8 +44,6 @@ type presentationState struct {
 	menuSent bool
 }
 
-func validateBuildConfig(Config) error { return nil }
-
 func (a *App) initPresentationService() error {
 	if !a.cfg.Mode.Presents() {
 		return nil

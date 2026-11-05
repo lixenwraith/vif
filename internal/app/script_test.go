@@ -147,7 +147,7 @@ func TestScriptPacingSelectsTheWallRate(t *testing.T) {
 		t.Fatal("-speed max was accepted for a session")
 	}
 	// The same rate on a driven run that is not a script is still meaningless.
-	harness := Config{Mode: ModeHeadless, Width: DefaultWidth, Height: DefaultHeight, TimeScaleSpec: "2"}
+	harness := runConfig{Config: Config{Mode: ModeHeadless, Width: DefaultWidth, Height: DefaultHeight, TimeScaleSpec: "2"}}
 	if err := harness.Validate(); err == nil {
 		t.Fatal("a manual-clock harness accepted a simulation rate")
 	}

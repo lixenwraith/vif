@@ -11,13 +11,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// ClaimStore keeps a process's claims past the process: a page's, across a reload,
-// in the tab's own storage. Without one they last as long as the process does.
-type ClaimStore interface {
-	Load() ([]byte, error)
-	Store([]byte) error
-}
-
 // claimKeeper is what one process comes back to its sessions with: the token each
 // of its runs and seats joined under, and what its cursor held when it left. Every
 // run of the process and every seat it holds shares one.

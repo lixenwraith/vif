@@ -801,7 +801,7 @@ across instances is the invariant the domain model rests on.
 | Concern | Primary source |
 |---|---|
 | Build targets | `Makefile`, `go.mod` |
-| CLI and filesystem policy | `cmd/vif/main.go`, `cmd/vif/usage.go`, `internal/app/config.go`, `internal/resource/resolve.go`, `internal/paths` |
+| CLI and filesystem policy | `cmd/vif/main.go`, `cmd/vif/usage.go`, `internal/app/config.go`, `internal/app/internal/config`, `internal/resource/resolve.go`, `internal/paths` |
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
 | CI | `.github/workflows/test.yml`, `release.yml` |
 | End-to-end checks | `script/test.sh`, `script/*.toml` |

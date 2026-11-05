@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
@@ -42,7 +43,7 @@ func (m *membership) serveRelay() {
 	if err != nil {
 		return
 	}
-	if router, ok := m.cfg.relayRouter(); ok {
+	if router, ok := config.RelayRouter(m.cfg.RelayAddress); ok {
 		m.publishDoor(port, router)
 		return
 	}

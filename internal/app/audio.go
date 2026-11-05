@@ -14,8 +14,6 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-func validateAudioBuildConfig(Config) error { return nil }
-
 func (a *App) initAudioService() error {
 	if !a.cfg.Mode.Audio() || a.cfg.wiring.borrow != nil {
 		return nil

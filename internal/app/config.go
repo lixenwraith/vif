@@ -3,18 +3,10 @@ package app
 import (
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/lixenwraith/vif/pkg/vmath"
-
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/engine"
-	"github.com/lixenwraith/vif/internal/event"
-	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
-	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
 	link "github.com/lixenwraith/vif/pkg/network"
@@ -22,8 +14,8 @@ import (
 
 // Terminal-equivalent dimensions applied when a caller-driven run leaves them unset
 const (
-	DefaultWidth  = 80
-	DefaultHeight = 24
+	DefaultWidth  = config.DefaultWidth
+	DefaultHeight = config.DefaultHeight
 
 	// BotWidth and BotHeight are a bot's screen where nothing names another: a
 	// headless bot given no -size, a seat whose holder names none, and so the map a
@@ -44,116 +36,14 @@ const (
 	ModeServer   = config.ModeServer
 )
 
-// Config is the resolved startup configuration
-// Built from CLI flags by cmd/vif, or programmatically by embedders
-// (map editor, wasm entry, headless harness) that have no flag set
-type Config struct {
-	// Mode selects the runtime shape; the zero value is the interactive game
-	Mode Mode
-
-	// Resources names every external file this run may load: the config root and
-	// the individual scenario, content, keymap and audio overrides.
-	Resources resource.Options
-
-	// ColorMode overrides terminal detection when ColorModeSet is true
-	ColorMode    terminal.ColorMode
-	ColorModeSet bool
-	// NoTmuxFrameCap draws the terminal at the run's rate inside tmux or screen,
-	// vif.toml's [presentation] tmux_frame_cap = false
-	NoTmuxFrameCap bool
-
-	// AudioBackend forces a named backend; "" = auto-detect priority chain
-	AudioBackend string
-
-	// Play is how the run starts: the audio channels, the sfx volume, auto-fire,
-	// the mouse and the HUD, vif.toml's [play] as a flag amended it; one naming no
-	// auto-fire word takes the embedded table. Settings is where a change the player
-	// makes is written back; nil keeps it to this run.
-	Play     paths.Play
-	Settings paths.SettingsStore
-
-	// Notice is what the run's status line opens with: what the host's start found,
-	// such as settings it dropped, or the failure of the run this one replaces.
-	Notice string
-
-	// MusicWAV is the directory the music is recorded to as a WAV file; "" records none.
-	MusicWAV string
-
-	// AudioBuffer is the mixer period; zero is the audio package's default
-	AudioBuffer time.Duration
-
-	// LogScope is the initial scope spec; "" = all
-	LogScope string
-
-	// StatTicks overrides the status snapshot period in game ticks;
-	// 0 = parameter default, negative = disabled
-	StatTicks int
-
-	// RecTicks overrides the flight-recorder depth in game ticks;
-	// 0 = parameter default, negative = disabled
-	RecTicks int
-
-	// TimeScaleSpec is the initial simulation rate ladder token; "" = real time. An
-	// authored script reads it as the wall rate its ticks are paced at, defaulting
-	// to ScriptPaceMax solo and to real time in a session.
-	TimeScaleSpec string
-
-	// TickInterval is the game time one tick advances, chosen by a session's host
-	// and adopted by its joiners; zero is parameter.GameUpdateInterval.
-	TickInterval time.Duration
-
-	// System seed for RNG
-	Seed uint64
-
-	// Session is the RNG session a run reproduces rather than counts to: the seed
-	// names the family of streams, this names the game in it. Zero counts from one;
-	// a join and a replay adopt the anchor's number, because a restarted session is
-	// several games in and every stream it draws is a function of that number.
-	Session uint64
-
-	// Journal enables the replay journal, written to its own file
-	Journal bool
-
-	// JournalSink overrides the journal destination; nil opens the vlog journal
-	// file. Harnesses set it to capture records in memory.
-	JournalSink event.JournalSink
-
-	// Membership is the session half: what the membership holds of this run's
-	// configuration, and writes back for the run that replaces this one.
-	Membership Membership
-
-	// Width and Height are the terminal-equivalent dimensions a caller-driven run
-	// assumes; margins apply as usual, so the viewport is smaller than these.
-	// Ignored when the terminal owns geometry; zero selects the defaults.
-	Width, Height int
-
-	// MapWidth, MapHeight and CropOnResize are the D-14 map latch a joining run
-	// adopts instead of deriving from its terminal. Applied before the FSM boots:
-	// the boot script spawns cursor slot zero centred on the map, so a latch adopted
-	// later leaves that shared cursor on the wrong cell. Zero means no latch.
-	MapWidth, MapHeight int
-	CropOnResize        bool
-	// CellAspect is the cell's width over its height the geometry runs at; zero
-	// takes the presentation's, which for a terminal is the reference
-	CellAspect vmath.Aspect
-
-	// ProbeAddress binds the liveness, readiness and metrics endpoint. Empty
-	// leaves it unbound, which is what an interactive run wants: a person watching
-	// the screen is the probe.
-	ProbeAddress string
-
-	// Lifetime bounds an allocated session: the first-guest window, the empty-roster
-	// grace, and the drain a termination request opens. The zero policy times out
-	// nothing, which is what an interactively started host wants. See
-	// internal/lifecycle.
-	Lifetime lifecycle.Policy
-
-	// LockMap latches the world as shared before the FSM boots, so this run's
-	// terminal never rewrites shared map bounds and its crossings take the session's
-	// playout lead. A hosting run sets it because its bounds are what joiners adopt;
-	// a run reproducing a session sets it from the anchor's SessionShared.
-	LockMap bool
-}
+// Config, its session half Membership and the ClaimStore that keeps a process's
+// claims are config's, aliased for the callers that build a Config: cmd/vif from its
+// flags, and embedders (map editor, wasm entry, headless harness) with no flag set.
+type (
+	Config     = config.Config
+	Membership = config.Membership
+	ClaimStore = config.ClaimStore
+)
 
 // runConfig is a run's Config with what the run is built with beside it: host, the
 // platform's adapters its caller hands over, and the wiring, which this package
@@ -304,7 +194,7 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	case next.Join != "":
 		solo := c
 		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.sessionPlayers = "", "", 0
-		joined, err := c.Membership.joining(next.Join)
+		joined, err := joining(c.Membership, next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
 			next.dialled.abandon(err)
 			solo.Notice = "Join failed: " + err.Error()
@@ -320,22 +210,6 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	return c, nil
 }
 
-// Normalize fills unset fields that carry a defined default
-func (c *Config) Normalize() {
-	if c.Play.AutoFire == "" {
-		c.Play = paths.DefaultPlay()
-	}
-	if c.Mode.OwnsGeometry() {
-		return
-	}
-	if c.Width == 0 {
-		c.Width = DefaultWidth
-	}
-	if c.Height == 0 {
-		c.Height = DefaultHeight
-	}
-}
-
 // Normalize is Config's, noting a size it supplied (geometryDefaulted), and gives a
 // run with no claim keeper one of its own.
 func (c *runConfig) Normalize() {
@@ -348,162 +222,56 @@ func (c *runConfig) Normalize() {
 	}
 }
 
-// Validate reports configuration conflicts
-func (c Config) Validate() error { return runConfig{Config: c}.Validate() }
-
 // Validate is Config's with the wiring's rules: what a script's or bot's run may do
 // (scriptedSession), and how a browser's bot joins (relay).
 func (c runConfig) Validate() error {
-	if err := c.Resources.Validate(); err != nil {
+	if err := c.Config.Validate(); err != nil {
 		return err
 	}
-	if c.TickInterval != 0 && (c.TickInterval < parameter.TickIntervalMin || c.TickInterval > parameter.TickIntervalMax) {
-		return fmt.Errorf("-tick %s is outside %s to %s", c.TickInterval, parameter.TickIntervalMin, parameter.TickIntervalMax)
-	}
-	if err := validateBuildConfig(c.Config); err != nil {
-		return err
-	}
-	if err := validateAudioBuildConfig(c.Config); err != nil {
-		return err
-	}
+	return c.validateWiring()
+}
+
+// validateWiring holds the run to the rules its wiring relaxes or adds.
+func (c runConfig) validateWiring() error {
+	scripted := c.wiring.scriptedSession
 	// A browser joins over a session's WebSocket route and nothing else: it has no
 	// socket to dial a host:port with, so a link naming a session there is looked up
-	// on its site, and no listener to host or serve from. Its bots dial nothing,
-	// joining it in-process.
-	var join link.Endpoint
-	if c.Membership.JoinAddress != "" {
-		var err error
-		if join, err = link.ParseEndpoint(c.Membership.JoinAddress); err != nil {
-			return err
-		}
-	}
-	if c.Membership.HostAddress != "" {
-		if _, err := link.Doors(c.Membership.HostAddress); err != nil {
-			return err
-		}
-	}
-	if c.Membership.RelayAddress != "" {
-		relay, err := link.ParseEndpoint(c.Membership.RelayAddress)
-		_, router := c.Membership.relayRouter()
-		switch {
-		case err != nil:
-		case router && relay.Name != "":
-			err = errors.New("-relay vif://<router> names no session: the router names the door")
-		case !router:
-			err = relay.Listenable()
-		}
-		if err == nil && c.Membership.JoinAddress == "" {
-			err = errors.New("-relay admits participants to a session this run joined")
-		}
-		if err != nil {
-			return err
-		}
-	}
-	if !buildHasSocketNetwork {
-		switch {
-		case c.Membership.HostAddress != "":
-			return errBrowserHosting
-		case c.Membership.RelayAddress != "":
-			return errors.New("a browser relays only its own bots")
-		case c.Membership.JoinAddress != "" && c.wiring.membership.relay == nil &&
-			join.Scheme != link.SchemeWebSocket && c.Membership.SessionName == "":
+	// on its site. Its bots dial nothing, joining it in-process.
+	if !config.SocketNetwork && c.Membership.JoinAddress != "" && c.wiring.membership.relay == nil &&
+		c.Membership.SessionName == "" {
+		if join, _ := link.ParseEndpoint(c.Membership.JoinAddress); join.Scheme != link.SchemeWebSocket {
 			return errors.New("a browser cannot dial host:port; join with a session's link")
 		}
 	}
-	if c.Membership.HostAddress != "" && c.Membership.JoinAddress != "" {
-		return errors.New("-host and -join are mutually exclusive")
+	if (c.Membership.HostAddress != "" || c.Membership.JoinAddress != "") &&
+		c.Mode != ModePlay && !c.Mode.Serves() && !scripted {
+		return fmt.Errorf("%s: network sessions require app.RunScript", c.Mode)
 	}
-	if c.Membership.HostAddress != "" || c.Membership.JoinAddress != "" {
-		switch {
-		case c.Mode == ModeReplay:
-			return fmt.Errorf("%s: journal playback cannot join a network session", c.Mode)
-		case c.Mode != ModePlay && !c.Mode.Serves() && !c.wiring.scriptedSession:
-			return fmt.Errorf("%s: network sessions require app.RunScript", c.Mode)
-		}
+	if c.TimeScaleSpec == "" {
+		return nil
 	}
-	minParticipants := 2
-	if c.Mode.Serves() {
-		minParticipants = 1 // a dedicated host is not one of them
-	}
-	if n := c.Membership.Participants; n != 0 && (n < minParticipants || n > parameter.MaxPlayers) {
-		return fmt.Errorf("-players %d is outside the supported range %d..%d",
-			n, minParticipants, parameter.MaxPlayers)
-	}
-	if c.Mode.Serves() && c.Membership.HostAddress == "" {
-		return errors.New("server: a dedicated host needs a bind address")
-	}
-	if err := c.Lifetime.Validate(); err != nil {
-		return err
-	}
-	if c.Lifetime.Bounded() && !c.Mode.Serves() {
-		// Refused rather than ignored, for the same reason -probe is: the bounds
-		// end a process, and one that silently kept a flag that was meant to end it
-		// is the failure this would be hiding.
-		return fmt.Errorf("%s: session lifetime bounds an allocated -serve session; this mode is ended by its operator", c.Mode)
-	}
-	if c.ProbeAddress != "" && !c.Mode.Serves() {
-		// Refused rather than ignored, for the reason validateDriven refuses a
-		// colour mode with no terminal: a flag that silently does nothing is worse
-		// than one that says it cannot.
-		return fmt.Errorf("%s: -probe serves a dedicated host; this mode has no supervisor to answer", c.Mode)
-	}
-	if c.Membership.Participants != 0 && c.Membership.JoinAddress != "" {
-		return errors.New("-players configures a host, not a joining guest")
-	}
-	if len(c.Membership.Bots) > parameter.MaxPlayers {
-		return fmt.Errorf("-bot %d is more than the %d a session holds", len(c.Membership.Bots), parameter.MaxPlayers)
-	}
-	if c.LogScope != "" {
-		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {
-			return err
-		}
-	}
-	if c.TimeScaleSpec != "" && !c.wiring.scriptedSession {
+	if !scripted {
 		if _, ok := engine.ParseScale(c.TimeScaleSpec); !ok {
 			return fmt.Errorf("-speed %q is not a ladder rate (1/8 1/4 1/2 1 2 4 8)", c.TimeScaleSpec)
 		}
 	}
-	if c.wiring.scriptedSession && c.TimeScaleSpec == ScriptPaceMax &&
+	if scripted && c.TimeScaleSpec == ScriptPaceMax &&
 		(c.Membership.HostAddress != "" || c.Membership.JoinAddress != "" || len(c.Membership.Bots) > 0) {
 		return errors.New("-speed max cannot pace a session: a script that outruns its peer " +
 			"is not simulating the session it is in")
 	}
-	if c.Mode.OwnsGeometry() {
-		return nil
-	}
-	return c.validateDriven()
-}
-
-// validateDriven rejects settings a run without its own terminal cannot honour,
-// rather than accepting a flag that would silently do nothing
-func (c runConfig) validateDriven() error {
-	if c.ColorModeSet && !c.Mode.Presents() {
-		return fmt.Errorf("%s: color mode is unused, no terminal is created", c.Mode)
-	}
-	if c.AudioBackend != "" && !c.Mode.Audio() {
-		return fmt.Errorf("%s: audio backend is unused, no audio service is created", c.Mode)
-	}
-	if (c.Resources.Music != "" || c.Resources.Sounds != "") && !c.Mode.Audio() {
-		return fmt.Errorf("%s: audio config is unused, no audio service is created", c.Mode)
-	}
 	// A manual clock records a simulation rate and never applies it. An authored
 	// script reads the same field as its wall pace, which is a property of the run
 	// rather than of the clock; every other driven mode has nothing to do with it.
-	if c.TimeScaleSpec != "" {
-		switch {
-		case c.wiring.scriptedSession:
-			if _, err := scriptPacing(c.Config); err != nil {
-				return err
-			}
-		case c.Mode.Serves():
-			return fmt.Errorf("%s: a dedicated host runs at the session's rate", c.Mode)
-		default:
-			return fmt.Errorf("%s: the manual clock is driven by Tick, not by a rate", c.Mode)
-		}
+	switch {
+	case c.Mode.OwnsGeometry():
+		return nil
+	case scripted:
+		_, err := scriptPacing(c.Config)
+		return err
+	case c.Mode.Serves():
+		return fmt.Errorf("%s: a dedicated host runs at the session's rate", c.Mode)
+	default:
+		return fmt.Errorf("%s: the manual clock is driven by Tick, not by a rate", c.Mode)
 	}
-	// Matches what MetaSystem admits, so a live journal always rebuilds a valid config
-	if !engine.ViewportFits(c.Width, c.Height) {
-		return fmt.Errorf("%s: %dx%d leaves no game area", c.Mode, c.Width, c.Height)
-	}
-	return nil
 }

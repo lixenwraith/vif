@@ -175,6 +175,10 @@ that proves wrong or that a document now states, and link the document instead.
   presenting entry point built on a `Config` alone draws on the terminal, not the
   window, page or Android view, and no test catches that for a watched script or
   bot. A test that presents builds its run with `newApp` on a `runConfig`.
+- A type `internal/app` aliases from `internal/app/internal/config` carries its
+  exported methods to `cmd/vif` and Android, which cannot import the package, and
+  `app` cannot add methods to it: a rule that reads a run's wiring stays on `app`'s
+  `runConfig`, as `runConfig.Validate` adds the wiring's rules to `Config.Validate`'s.
 
 ## Tests that flake
 

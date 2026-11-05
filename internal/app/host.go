@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -298,7 +299,7 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 	site, err := link.ParseEndpoint(target)
 	next, wire, base := *m.cfg, *m.wiring, m.run.joinBase()
 	if err == nil && site.Scheme != link.SchemeSite {
-		if next, err = m.cfg.joining(target); err == nil {
+		if next, err = joining(*m.cfg, target); err == nil {
 			err = base.validateWith(next)
 		}
 	}
@@ -321,7 +322,7 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 		if site.Scheme == link.SchemeSite {
 			if door, err = network.RequestSession(site.Addr, players, scenario); err == nil {
 				m.ctx.SetStatusMessage("Joining "+link.Shown(door)+"...", parameter.StatusProgress)
-				if next, err = next.joining(door); err == nil {
+				if next, err = joining(next, door); err == nil {
 					err = base.validateWith(next)
 				}
 			}
@@ -357,13 +358,9 @@ func (m *membership) BeginHosting(addr string) error {
 	return err
 }
 
-// errBrowserHosting is why a browser never hosts: a page opens connections but
-// cannot accept one, so no player could reach a session it opened
-var errBrowserHosting = errors.New("hosting unavailable in a browser, which cannot accept connections; host from the installed game")
-
 func (m *membership) hostErrorLocked() error {
-	if !buildHasSocketNetwork {
-		return errBrowserHosting
+	if !config.SocketNetwork {
+		return config.ErrBrowserHosting
 	}
 	if m.dialling.Load() {
 		return errors.New("host: a join is already being dialled")
@@ -414,7 +411,7 @@ func (m *membership) beginHostingLocked(addr, authority string) error {
 	lns := m.wiring.hostListeners
 	m.wiring.hostListeners = nil
 	if lns == nil {
-		if lns, err = m.cfg.bindDoors(addr); err != nil {
+		if lns, err = bindDoors(*m.cfg, addr); err != nil {
 			m.cfg.FixedAuthority = fixed
 			return fmt.Errorf("host %s: %w", addr, err)
 		}
@@ -472,7 +469,7 @@ func (m *membership) hostTakenSessionLocked(addr string) error {
 		if port.ListensOn(d.Addr) {
 			continue
 		}
-		ln, err := link.Listen(d.Addr, m.cfg.hostNetwork(d.Addr))
+		ln, err := link.Listen(d.Addr, hostNetwork(*m.cfg, d.Addr))
 		if err != nil {
 			closeDoors(opened)
 			return fmt.Errorf("host %s: %w", d.Addr, err)
@@ -770,7 +767,7 @@ func (m *membership) SessionSummary() string {
 // Caller MUST hold updateMutex.
 func (m *membership) sessionSummaryLocked() string {
 	if m.sessionTransportLocked() == nil {
-		if !buildHasSocketNetwork {
+		if !config.SocketNetwork {
 			return "Solo run; :join <link> joins a session"
 		}
 		return "Solo run; :host <addr> opens it to participants, :join <target> joins one"
