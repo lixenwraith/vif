@@ -16,7 +16,7 @@ operated on by the runtime, see [ECS and events](ecs-and-events.md).
 | `ModeScript` | Yes | Yes | script, or the presentation for a watched bot / playback controls | If built | `ManualClock`; `journal.ScriptDriver` or `bot.Driver` invokes ticks and injections; the presented form of a `ModeHeadless` script or bot, network I/O included |
 | `ModeServer` | No | No | config / none | No | `PausableClock`; scheduler and event goroutines, as `ModePlay`, with no presentation and no local cursor |
 
-The six predicates in `internal/app/config.go` are the policy boundary:
+The six predicates in `internal/app/internal/config` are the policy boundary:
 `Presents`, `Driven`, `Serves`, `OwnsGeometry`, `OwnsInput`, and `Audio`. Assembly
 checks them rather than scattering mode comparisons through the runtime. A config
 whose mode does not own geometry defaults to terminal-equivalent geometry 80x24
@@ -1096,7 +1096,7 @@ not indefinitely leave the terminal in raw mode.
 | Concern | Primary source |
 |---|---|
 | Entry selection, diagnostics setup, exit policy | `cmd/vif/main.go` |
-| Runtime modes and composition | `internal/app/config.go`, `app.go`, `headless.go` |
+| Runtime modes and composition | `internal/app/internal/config`, `internal/app/config.go`, `app.go`, `headless.go` |
 | Build capability adapters | `internal/app/presentation_*`, `audio*`, `network_*` |
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
 | Session gates, mid-run hosting and restarts, dedicated host, probe, bot seats | `internal/app/session.go`, `host.go`, `serve.go`, `probe.go`, `seat.go` |

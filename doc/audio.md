@@ -213,8 +213,8 @@ events and keep the sequencer unaware of gameplay concepts.
 - Game service: `internal/service/adapter_audio.go`
 - Game event adapters: `internal/system/audio.go`, `music.go`; `speakers.go`
   holds the mask both publish and the handover; `audio_none.go` the null systems
-- Mode and build selection, replay default: `internal/app/config.go`,
-  `audio.go`, `audio_none.go`, `play.go`
+- Mode and build selection, replay default: `internal/app/internal/config`,
+  `internal/app/audio.go`, `audio_none.go`, `play.go`
 - Game policy: `internal/parameter/audio.go`, `music.go`, `sfx.go`,
   `sfx_audio.go`
 - Authoring tool: the `lixenwraith/stapes` module (§4), with its command

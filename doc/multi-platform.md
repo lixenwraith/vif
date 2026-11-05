@@ -63,7 +63,7 @@ The build split follows capabilities rather than operating-system names:
 | Capability | Build-specific seam | What stays common |
 |---|---|---|
 | Presentation | `internal/app/presentation_*`, generated `manifest/render_gen.go`, the host's `Presentation` or the terminal service | World, systems, semantic input, scheduler |
-| Audio | `internal/app/audio*`, `engine/resource_audio*`, audio service/systems, generated audio builder | Event payload identifiers in `lixenwraith/audio/model` |
+| Audio | `internal/app/audio*`, `internal/app/internal/config/audio*` (`Mode.Audio`), `engine/resource_audio*`, audio service/systems, generated audio builder | Event payload identifiers in `lixenwraith/audio/model` |
 | Socket network | `internal/app/network_*` | Network protocol and simulation-facing `engine.NetworkPort` |
 | Logging | existing `internal/vlog` build variants | Call sites and status collection |
 | Resources | `engine.FileProvider` and `ContentProvider` | Parsed config/content models |

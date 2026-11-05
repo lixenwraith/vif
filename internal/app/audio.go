@@ -14,8 +14,6 @@ import (
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-const buildHasAudio = true
-
 func validateAudioBuildConfig(Config) error { return nil }
 
 func (a *App) initAudioService() error {

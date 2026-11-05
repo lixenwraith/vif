@@ -80,7 +80,7 @@ Assembly is mode-dependent:
 | `ModeScript` | file, presentation, content, audio, and the same `RoleHost`/`RolePeer` network a headless script registers |
 | `ModeServer` | file, content, and `RoleHost` network; no presentation and no audio |
 
-The predicates in `internal/app/config.go` are authoritative for presentation and
+The predicates in `internal/app/internal/config` are authoritative for presentation and
 audio capabilities, then build capabilities constrain them further. A
 `vif_headless` build has no terminal or audio adapter; `vif_noaudio` has no audio
 adapter. Native networking is role-selected separately:
@@ -1160,7 +1160,7 @@ metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 | Concern | Primary source |
 |---|---|
 | Service contract/hub | `internal/service/interface.go`, `hub.go` |
-| Mode-to-service policy | `internal/app/config.go`, `app.go` |
+| Mode-to-service policy | `internal/app/internal/config`, `internal/app/app.go` |
 | File adapter | `internal/service/adapter_file.go` |
 | Terminal adapter | `internal/service/adapter_terminal.go` |
 | Content/audio adapters | `internal/service/adapter_content.go`, `adapter_audio.go` |
