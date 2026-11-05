@@ -152,8 +152,7 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 				s.programs[i].lifecycle.spawnFailures.Add(1)
 				return
 			}
-			p := &s.set.Prototypes()[i]
-			s.spawn(i, payload.X+p.HeaderX, payload.Y+p.HeaderY)
+			s.spawn(i, payload.X, payload.Y)
 		}
 
 	case *event.BehaviorCancelRequestPayload:
@@ -305,11 +304,9 @@ func (s *BehaviorSystem) enter(i, x, y int) {
 		s.programs[i].lifecycle.spawnFailures.Add(1)
 		return
 	}
-	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
-		X:          left,
-		Y:          top,
-		AreaWidth:  p.Width,
-		AreaHeight: p.Height,
+	s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+		X:          left + p.Footprint.HeaderX,
+		Y:          top + p.Footprint.HeaderY,
 		Type:       component.SpawnTypeSwarm,
 		Species:    p.Species,
 		DurationMs: p.EntranceDuration.Milliseconds(),
@@ -322,7 +319,7 @@ func (s *BehaviorSystem) enter(i, x, y int) {
 // cave's rock among them, and to the body, a cell on an edge or past it searching
 // from the footprint flush against it
 func (s *BehaviorSystem) findFootprint(p *component.BehaviorPrototype, x, y int) (int, int, bool) {
-	return s.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, -1)
+	return s.world.Positions.FindFreeAreaInside(x, y, p.Footprint, component.WallBlockSpawn, -1)
 }
 
 // countNow counts an instance of program i the moment it is asked for or lands, not
@@ -344,7 +341,8 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 		s.programs[i].lifecycle.spawnFailures.Add(1)
 		return
 	}
-	headerX, headerY := left+p.HeaderX, top+p.HeaderY
+	foot := p.Footprint
+	headerX, headerY := left+foot.HeaderX, top+foot.HeaderY
 	s.clearFootprint(p, headerX, headerY, 0)
 
 	header := s.world.CreateEntity(core.DomainShared)
@@ -359,10 +357,7 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 		Kinetic: physics.Kinetic{PreciseX: preciseX, PreciseY: preciseY},
 	})
 	s.world.Components.Navigation.SetComponent(header, component.NavigationComponent{
-		Width:         p.Width,
-		Height:        p.Height,
-		HeaderX:       p.HeaderX,
-		HeaderY:       p.HeaderY,
+		Footprint:     foot,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 	s.world.Components.Combat.SetComponent(header, component.CombatComponent{
@@ -374,16 +369,16 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 		armTimer(s.world, header, component.TimerDeadline, p.Lifetime)
 	}
 
-	members := make([]component.MemberEntry, 0, p.Width*p.Height)
-	for row := range p.Height {
-		for col := range p.Width {
+	members := make([]component.MemberEntry, 0, foot.Width*foot.Height)
+	for row := range foot.Height {
+		for col := range foot.Width {
 			member := s.world.CreateEntity(core.DomainShared)
 			s.world.Positions.SetPosition(member, component.PositionComponent{X: left + col, Y: top + row})
 			s.world.Components.Protection.SetComponent(member, component.ProtectionComponent{
 				Mask: component.ProtectFromParticle | component.ProtectFromSpecies,
 			})
 			s.world.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: header})
-			members = append(members, component.MemberEntry{Entity: member, OffsetX: col - p.HeaderX, OffsetY: row - p.HeaderY})
+			members = append(members, component.MemberEntry{Entity: member, OffsetX: col - foot.HeaderX, OffsetY: row - foot.HeaderY})
 		}
 	}
 	s.world.Components.Header.SetComponent(header, component.HeaderComponent{
@@ -417,9 +412,10 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 // with effect
 func (s *BehaviorSystem) clearFootprint(p *component.BehaviorPrototype, headerX, headerY int, effect event.EventType) {
 	s.sweep.reset()
-	for row := range p.Height {
-		for col := range p.Width {
-			s.sweep.collect(s.world, headerX-p.HeaderX+col, headerY-p.HeaderY+row, func(e core.Entity) bool {
+	area := p.Footprint.At(headerX, headerY)
+	for row := range area.Height {
+		for col := range area.Width {
+			s.sweep.collect(s.world, area.X+col, area.Y+row, func(e core.Entity) bool {
 				return speciesClearable(s.world, e, s.statProtected, s.statProtectedPlayer)
 			})
 		}
@@ -486,17 +482,17 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 	if c.frozen || !ok {
 		return
 	}
-	p, config := c.proto, s.world.Resources.Config
+	foot, config := c.proto.Footprint, s.world.Resources.Config
 	wallCheck := func(left, top int) bool {
-		return s.world.Positions.BlocksArea(left, top, p.Width, p.Height, component.WallBlockKinetic)
+		return s.world.Positions.BlocksArea(left, top, foot.Width, foot.Height, component.WallBlockKinetic)
 	}
 	x, y, motion := physics.IntegrateWithBounceStats(
 		&c.kinetic.Kinetic,
 		c.dtSec,
-		p.HeaderX, p.HeaderY,
-		p.HeaderX, config.MapWidth-(p.Width-p.HeaderX),
-		p.HeaderY, config.MapHeight-(p.Height-p.HeaderY),
-		p.Restitution,
+		foot.HeaderX, foot.HeaderY,
+		foot.HeaderX, config.MapWidth-(foot.Width-foot.HeaderX),
+		foot.HeaderY, config.MapHeight-(foot.Height-foot.HeaderY),
+		c.proto.Restitution,
 		wallCheck,
 	)
 	s.motion.Record(motion)
@@ -510,12 +506,11 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 // footprint fits, clearing the landing with a flash
 func (s *BehaviorSystem) teleport(c *behaviorCtx) {
 	p := c.proto
-	left, top, found := s.world.Positions.FindFreeAreaInside(
-		c.behavior.TargetX, c.behavior.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
+	left, top, found := s.world.Positions.FindFreeAreaInside(c.behavior.TargetX, c.behavior.TargetY, p.Footprint, component.WallBlockSpawn, 0)
 	if !found {
 		return
 	}
-	x, y := left+p.HeaderX, top+p.HeaderY
+	x, y := left+p.Footprint.HeaderX, top+p.Footprint.HeaderY
 	s.clearFootprint(p, x, y, event.EventFlashSpawnOneRequest)
 	c.kinetic.PreciseX, c.kinetic.PreciseY = vmath.Point{X: x, Y: y}.Center()
 	c.kinetic.VelX, c.kinetic.VelY = 0, 0
@@ -675,8 +670,7 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		return func(c *behaviorCtx) bool {
 			x, y, ok := aim(c)
 			pos, placed := c.sys.world.Positions.GetPosition(c.entity)
-			p := c.proto
-			return ok && placed && bodyHasLineOfSight(c.sys.world, pos.X, pos.Y, x, y, p.Width, p.Height, p.HeaderX, p.HeaderY)
+			return ok && placed && bodyHasLineOfSight(c.sys.world, pos.X, pos.Y, x, y, c.proto.Footprint)
 		}, nil
 	})
 	v.Predicate("HasTarget", reads(func(c *behaviorCtx) bool {
@@ -727,10 +721,10 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			if !ok {
 				return false
 			}
-			p := c.proto
-			left, top, found := c.sys.world.Positions.FindFreeAreaInside(x, y, p.Width, p.Height, p.HeaderX, p.HeaderY, component.WallBlockSpawn, 0)
+			foot := c.proto.Footprint
+			left, top, found := c.sys.world.Positions.FindFreeAreaInside(x, y, foot, component.WallBlockSpawn, 0)
 			if found {
-				c.probe(left+p.HeaderX, top+p.HeaderY)
+				c.probe(left+foot.HeaderX, top+foot.HeaderY)
 			}
 			return found
 		}, nil
@@ -761,14 +755,14 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 		rgb := telegraphColors[i].rgb
 		// A countdown over what is left of the entry, so a cue's reads true too
 		return func(c *behaviorCtx) {
-			p, m := c.proto, c.behavior.Machine
+			foot, m := c.proto.Footprint, c.behavior.Machine
 			c.sys.world.PushLocal(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 				AnchorEntity: c.entity,
 				Color:        rgb,
-				MarginLeft:   p.HeaderX,
-				MarginRight:  p.Width - p.HeaderX,
-				MarginTop:    p.HeaderY,
-				MarginBottom: p.Height - p.HeaderY,
+				MarginLeft:   foot.HeaderX,
+				MarginRight:  foot.Width - foot.HeaderX,
+				MarginTop:    foot.HeaderY,
+				MarginBottom: foot.Height - foot.HeaderY,
 				Duration:     m.Duration - m.Elapsed,
 			})
 		}, nil
@@ -820,12 +814,10 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			if !ok {
 				return
 			}
-			p := c.proto
-			c.sys.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
-				X:          x - p.HeaderX,
-				Y:          y - p.HeaderY,
-				AreaWidth:  p.Width,
-				AreaHeight: p.Height,
+			c.sys.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+				X:          x,
+				Y:          y,
+				Footprint:  c.proto.Footprint,
 				Type:       component.SpawnType(spawn),
 				DurationMs: a.DurationMs,
 			})

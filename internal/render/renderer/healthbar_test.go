@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func TestKrakenHealthBarStaysVisibleCenteredAndScalesInBothColorModes(t *testing.T) {
@@ -88,7 +89,7 @@ func TestAKrakensHealthBarSpansTheHitPointsItRoseWith(t *testing.T) {
 func TestADataSpeciesHealthBarSpansItsPrototype(t *testing.T) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "warden", Width: 6, Height: 2, HeaderX: 1, HitPoints: 40}}
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "warden", Footprint: vmath.Footprint{Width: 6, Height: 2, HeaderX: 1}, HitPoints: 40}}
 	e := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(e, component.PositionComponent{X: 20, Y: 12})
 	w.Components.Behavior.SetComponent(e, component.BehaviorComponent{})

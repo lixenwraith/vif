@@ -70,7 +70,7 @@ func standRaider(s *BehaviorSystem, program string, x, y int) {
 		Payload: &event.BehaviorSpawnRequestPayload{Program: program, X: x, Y: y},
 	})
 	for _, ev := range s.world.Resources.Event.Queue.Consume() {
-		if p, ok := ev.Payload.(*event.MaterializeAreaRequestPayload); ok {
+		if p, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
 			s.HandleEvent(event.GameEvent{Type: event.EventMaterializeComplete, Domain: core.DomainShared, Payload: &event.MaterializeCompletedPayload{
 				X: p.X, Y: p.Y, Type: p.Type, Species: p.Species,
 			}})
@@ -255,7 +255,8 @@ func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
 	cfg := newWorld().Resources.Config
 	width, height, row, col := cfg.MapWidth, cfg.MapHeight, cfg.MapHeight/2, cfg.MapWidth/2
 	for i, p := range set.Prototypes() {
-		right, bottom := width-p.Width+p.HeaderX, height-p.Height+p.HeaderY
+		foot := p.Footprint
+		right, bottom := width-foot.Width+foot.HeaderX, height-foot.Height+foot.HeaderY
 		for _, tc := range []struct {
 			edge         string
 			x, y         int
@@ -263,8 +264,8 @@ func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
 		}{
 			{"right", width - 1, row, right, row},
 			{"past the right", width + 9, row, right, row},
-			{"left", 0, row, p.HeaderX, row},
-			{"top", col, -3, col, p.HeaderY},
+			{"left", 0, row, foot.HeaderX, row},
+			{"top", col, -3, col, foot.HeaderY},
 			{"bottom", col, height - 1, col, bottom},
 			{"corner", width + 2, height + 2, right, bottom},
 		} {
@@ -278,7 +279,7 @@ func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
 				}
 				if pos, _ := w.Positions.GetPosition(headers[0]); pos.X != tc.wantX || pos.Y != tc.wantY {
 					t.Fatalf("a %dx%d body asked for (%d,%d) stands at (%d,%d), want (%d,%d)",
-						p.Width, p.Height, tc.x, tc.y, pos.X, pos.Y, tc.wantX, tc.wantY)
+						foot.Width, foot.Height, tc.x, tc.y, pos.X, pos.Y, tc.wantX, tc.wantY)
 				}
 			})
 		}
@@ -293,8 +294,8 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 	for i, p := range set.Prototypes() {
 		t.Run(p.Name, func(t *testing.T) {
 			for f, frame := range p.Look.Frames {
-				if len(frame) != p.Width*p.Height {
-					t.Fatalf("frame %d holds %d cells, want %d×%d", f, len(frame), p.Width, p.Height)
+				if len(frame) != p.Footprint.Width*p.Footprint.Height {
+					t.Fatalf("frame %d holds %d cells, want %d×%d", f, len(frame), p.Footprint.Width, p.Footprint.Height)
 				}
 			}
 			if len(p.Look.Frames) < 2 || !p.Look.Console {

@@ -268,10 +268,7 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 		// swarm it carries lands as it ends, on its footprint
 		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok &&
 			ev.Domain == core.DomainShared && payload.Species == component.SpeciesSwarm {
-			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
-				X: payload.X + parameter.SwarmHeaderOffsetX,
-				Y: payload.Y + parameter.SwarmHeaderOffsetY,
-			})
+			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{X: payload.X, Y: payload.Y})
 		}
 	}
 }
@@ -1205,16 +1202,10 @@ func (s *StormSystem) findLanding(c *circleCtx) {
 		circlePY+distance*vmath.Sin(angle)*0.5,
 	)
 
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		target.X, target.Y,
-		parameter.SwarmWidth, parameter.SwarmHeight,
-		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	foot := component.Footprints[component.SpeciesSwarm]
+	left, top, found := s.world.Positions.FindFreeAreaInside(target.X, target.Y, foot, component.WallBlockSpawn, 0)
 	c.circle.LandingFound = found
-	c.circle.AttackTargetX = topLeftX + parameter.SwarmHeaderOffsetX
-	c.circle.AttackTargetY = topLeftY + parameter.SwarmHeaderOffsetY
+	c.circle.AttackTargetX, c.circle.AttackTargetY = left+foot.HeaderX, top+foot.HeaderY
 }
 
 // materializeIn materializes a swarm onto the landing its attack found: a cue, so
@@ -1223,13 +1214,11 @@ func (s *StormSystem) materializeIn(c *circleCtx) {
 	if !c.circle.LandingFound {
 		return
 	}
-	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
-		X:          c.circle.AttackTargetX - parameter.SwarmHeaderOffsetX,
-		Y:          c.circle.AttackTargetY - parameter.SwarmHeaderOffsetY,
-		AreaWidth:  parameter.SwarmWidth,
-		AreaHeight: parameter.SwarmHeight,
-		Type:       component.SpawnTypeSwarm,
-		Species:    component.SpeciesSwarm,
+	s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+		X:       c.circle.AttackTargetX,
+		Y:       c.circle.AttackTargetY,
+		Type:    component.SpawnTypeSwarm,
+		Species: component.SpeciesSwarm,
 	})
 }
 

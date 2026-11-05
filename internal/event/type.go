@@ -263,12 +263,10 @@ const (
 
 	// --- Materialize ---
 
-	// EventMaterializeRequest (MaterializeRequestPayload) [stamped] signals a request to start a materialization visual effect
+	// EventMaterializeRequest (MaterializeRequestPayload) [stamped] starts a materialize over a body's footprint, of any size
 	EventMaterializeRequest
-	// EventMaterializeComplete (MaterializeCompletedPayload) [stamped] signals materialization finished at location
+	// EventMaterializeComplete (MaterializeCompletedPayload) [stamped] signals a materialize ended, at the header cell its body lands on
 	EventMaterializeComplete
-	// EventMaterializeAreaRequest (MaterializeAreaRequestPayload) [stamped] requests area-based materialization (swarm, quasar)
-	EventMaterializeAreaRequest
 
 	// --- Flash ---
 

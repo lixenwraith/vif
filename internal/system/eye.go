@@ -228,13 +228,7 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 	}
 
 	// The footprint the request names, pulled inside the map, or the nearest free one
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		payload.X, payload.Y,
-		parameter.EyeWidth, parameter.EyeHeight,
-		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(payload.X, payload.Y, component.Footprints[component.SpeciesEye], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		s.abandonEval(payload)
@@ -305,10 +299,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 
 	// Navigation (single consolidated write, includes route assignment)
 	navComp := component.NavigationComponent{
-		Width:         parameter.EyeWidth,
-		Height:        parameter.EyeHeight,
-		HeaderX:       parameter.EyeHeaderOffsetX,
-		HeaderY:       parameter.EyeHeaderOffsetY,
+		Footprint:     component.Footprints[component.SpeciesEye],
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	}
 	if routeID >= 0 {

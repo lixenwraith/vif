@@ -648,7 +648,7 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 	matEntities := s.world.Components.Materialize.Entities()
 	for _, matEntity := range matEntities {
 		if matComp, ok := s.world.Components.Materialize.GetPtr(matEntity); ok {
-			key := uint64(matComp.TargetX)<<32 | uint64(matComp.TargetY)
+			key := uint64(matComp.X)<<32 | uint64(matComp.Y)
 			queuedPositions[key] = true
 		}
 	}

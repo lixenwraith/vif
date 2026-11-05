@@ -297,15 +297,9 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 
 	// Tier 2: Spiral from last random attempt center
 	last := cells[len(cells)-1]
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		last.X, last.Y,
-		width, height,
-		radiusX, radiusY, // anchor offset = radius (center to top-left)
-		component.WallBlockSpawn,
-		parameter.PylonSpawnSpiralMaxRadius,
-	)
+	foot := vmath.Footprint{Width: width, Height: height, HeaderX: radiusX, HeaderY: radiusY}
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(last.X, last.Y, foot, component.WallBlockSpawn, parameter.PylonSpawnSpiralMaxRadius)
 	if found {
-		// Convert top-left back to center
 		return topLeftX + radiusX, topLeftY + radiusY, true
 	}
 

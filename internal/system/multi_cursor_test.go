@@ -28,8 +28,7 @@ func TestSnakePursuitKeepsItsRouteUntilAReachableTargetIsMuchCloser(t *testing.T
 	w.Positions.SetPosition(head, component.PositionComponent{X: 40, Y: 10})
 	w.Components.SnakeHead.SetComponent(head, component.SnakeHeadComponent{})
 	w.Components.Navigation.SetComponent(head, component.NavigationComponent{
-		Width: parameter.SnakeHeadWidth, Height: parameter.SnakeHeadHeight,
-		HeaderX: parameter.SnakeHeadHeaderOffsetX, HeaderY: parameter.SnakeHeadHeaderOffsetY,
+		Footprint:     component.Footprints[component.SpeciesSnake],
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 	motion := component.KineticComponent{}

@@ -385,8 +385,9 @@ materialize, `MaterializeComponent.Species` naming the species its completion
 lands; a drain pair's swarm rides the spirits its drains fly in,
 `SpiritComponent.Species` naming the species the spirit's arrival lands. The
 pending spawn is the materialize or spirit entity, which a capture carries with
-the stores, not a list beside its system. A materialize lasts its request's
-`DurationMs`, its style's when that is 0: the deadline slot keeps the duration it
+the stores, not a list beside its system. A materialize covers its request's
+`Footprint`, its species' (`Resource.Footprint`) when that is zero, its header on
+the request's cell, and lasts its request's `DurationMs`, its style's when that is 0: the deadline slot keeps the duration it
 was armed with, which a capture carries with the timer and the renderer spreads
 the style's fill, hold and recede over.
 

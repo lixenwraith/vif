@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 func TestDrainOnlyReceivesKrakenSoftCollisions(t *testing.T) {
@@ -35,8 +36,8 @@ func TestADataSpeciesTakesSoftCollisionRowsOnlyWithMass(t *testing.T) {
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	heavy, weightless := component.SpeciesDataFirst, component.SpeciesDataFirst+1
 	w.Resources.Behaviors = []component.BehaviorPrototype{
-		{Name: "warden", Species: heavy, Width: 4, Height: 2, Mass: 2},
-		{Name: "wisp", Species: weightless, Width: 1, Height: 1},
+		{Name: "warden", Species: heavy, Footprint: vmath.Footprint{Width: 4, Height: 2}, Mass: 2},
+		{Name: "wisp", Species: weightless, Footprint: vmath.CellFootprint},
 	}
 	s := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
 

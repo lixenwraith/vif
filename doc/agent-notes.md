@@ -247,6 +247,11 @@ that proves wrong or that a document now states, and link the document instead.
   `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
   nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
   package the change never touched.
+- A body's size is one `vmath.Footprint`, its header offset inside it, and a
+  species' is read through `Resource.Footprint`, never as four ints or a parallel
+  parameter: the searches, line of sight, passability tiers and a materialize take
+  the struct, and an event's or a component's cell names the header, never the
+  top-left.
 
 ## Glyphs and colours
 

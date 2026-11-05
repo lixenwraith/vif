@@ -66,19 +66,20 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 		}
 		elapsed := timer.Elapsed(component.TimerDeadline)
 
-		// Transform target area to viewport coords
-		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
+		// The footprint's top-left in viewport coords
+		area := mat.Footprint.At(mat.X, mat.Y)
+		targetVX, targetVY, _ := ctx.MapToViewport(area.X, area.Y)
 
 		style := timedStyle(component.MaterializeStyles[mat.Type], timer.Slots[component.TimerDeadline].Duration)
 		c := materializePalette[mat.Type]
 		for _, dir := range [...]beamDir{dirUp, dirDown, dirLeft, dirRight} {
-			r.renderBeam(ctx, buf, pf, mat, elapsed, style, c, targetVX, targetVY, dir)
+			r.renderBeam(ctx, buf, pf, area.Width, area.Height, elapsed, style, c, targetVX, targetVY, dir)
 		}
 		return true
 	})
 }
 
-func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, elapsed time.Duration, style component.MaterializeStyle, c color.RGB, targetVX, targetVY int, dir beamDir) {
+func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, width, height int, elapsed time.Duration, style component.MaterializeStyle, c color.RGB, targetVX, targetVY int, dir beamDir) {
 	var edgePos, distance int
 	var spanStart, spanEnd int // Range along the target edge
 
@@ -87,24 +88,24 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 		edgePos = pf.Y0
 		distance = targetVY - pf.Y0
 		spanStart = targetVX
-		spanEnd = targetVX + mat.AreaWidth - 1
+		spanEnd = targetVX + width - 1
 	case dirDown:
 		edgePos = pf.Y1 - 1
-		targetBottom := targetVY + mat.AreaHeight - 1
+		targetBottom := targetVY + height - 1
 		distance = pf.Y1 - 1 - targetBottom
 		spanStart = targetVX
-		spanEnd = targetVX + mat.AreaWidth - 1
+		spanEnd = targetVX + width - 1
 	case dirLeft:
 		edgePos = pf.X0
 		distance = targetVX - pf.X0
 		spanStart = targetVY
-		spanEnd = targetVY + mat.AreaHeight - 1
+		spanEnd = targetVY + height - 1
 	case dirRight:
 		edgePos = pf.X1 - 1
-		targetRight := targetVX + mat.AreaWidth - 1
+		targetRight := targetVX + width - 1
 		distance = pf.X1 - 1 - targetRight
 		spanStart = targetVY
-		spanEnd = targetVY + mat.AreaHeight - 1
+		spanEnd = targetVY + height - 1
 	}
 
 	if distance <= 0 {

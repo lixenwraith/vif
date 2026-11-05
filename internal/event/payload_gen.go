@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"time"
 	"unsafe"
 )
@@ -92,7 +93,6 @@ var payloadNew = [EventTypeCount]func() any{
 	EventPingGridRequest:                 func() any { return new(PingGridRequestPayload) },
 	EventMaterializeRequest:              func() any { return new(MaterializeRequestPayload) },
 	EventMaterializeComplete:             func() any { return new(MaterializeCompletedPayload) },
-	EventMaterializeAreaRequest:          func() any { return new(MaterializeAreaRequestPayload) },
 	EventFlashSpawnOneRequest:            func() any { return new(FlashRequestPayload) },
 	EventExplosionRequest:                func() any { return new(ExplosionRequestPayload) },
 	EventExplosionBatchRequest:           func() any { return new(ExplosionBatchRequestPayload) },
@@ -265,7 +265,6 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventPingGridRequest:                 &codecPingGridRequestPayload,
 	EventMaterializeRequest:              &codecMaterializeRequestPayload,
 	EventMaterializeComplete:             &codecMaterializeCompletedPayload,
-	EventMaterializeAreaRequest:          &codecMaterializeAreaRequestPayload,
 	EventFlashSpawnOneRequest:            &codecFlashRequestPayload,
 	EventExplosionRequest:                &codecExplosionRequestPayload,
 	EventExplosionBatchRequest:           &codecExplosionBatchRequestPayload,
@@ -1058,6 +1057,13 @@ var codecPingGridRequestPayload = structCodec{size: unsafe.Sizeof(PingGridReques
 	{off: unsafe.Offsetof(PingGridRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
 }}
 
+var codecVmathFootprint = structCodec{size: unsafe.Sizeof(vmath.Footprint{}), fields: []field{
+	{off: unsafe.Offsetof(vmath.Footprint{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(vmath.Footprint{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(vmath.Footprint{}.HeaderX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(vmath.Footprint{}.HeaderY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
 func (p *MaterializeRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecMaterializeRequestPayload, unsafe.Pointer(p)
 }
@@ -1065,7 +1071,9 @@ func (p *MaterializeRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecMaterializeRequestPayload = structCodec{size: unsafe.Sizeof(MaterializeRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Footprint), kind: kindStruct, sub: &codecVmathFootprint},
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
+	{off: unsafe.Offsetof(MaterializeRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
 	{off: unsafe.Offsetof(MaterializeRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
@@ -1078,20 +1086,6 @@ var codecMaterializeCompletedPayload = structCodec{size: unsafe.Sizeof(Materiali
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
 	{off: unsafe.Offsetof(MaterializeCompletedPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
-}}
-
-func (p *MaterializeAreaRequestPayload) codec() (*structCodec, unsafe.Pointer) {
-	return &codecMaterializeAreaRequestPayload, unsafe.Pointer(p)
-}
-
-var codecMaterializeAreaRequestPayload = structCodec{size: unsafe.Sizeof(MaterializeAreaRequestPayload{}), fields: []field{
-	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaWidth), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.AreaHeight), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.SpawnType(0))},
-	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
-	{off: unsafe.Offsetof(MaterializeAreaRequestPayload{}.DurationMs), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 }}
 
 func (p *FlashRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1971,10 +1965,7 @@ var codecRouteGraphRequestPayload = structCodec{size: unsafe.Sizeof(RouteGraphRe
 	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.SourceY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.RouteGraphID), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.TargetGroupID), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
-	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.HeaderX), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.HeaderY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(RouteGraphRequestPayload{}.Footprint), kind: kindStruct, sub: &codecVmathFootprint},
 }}
 
 func (p *RouteGraphComputedPayload) codec() (*structCodec, unsafe.Pointer) {

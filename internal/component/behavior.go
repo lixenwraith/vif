@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/pkg/machine"
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
@@ -37,8 +38,7 @@ type BehaviorPrototype struct {
 	Name    string      // the program's name, which keys its status rows
 	Species SpeciesType // SpeciesDataFirst plus the program's index
 
-	Width, Height    int // footprint in cells
-	HeaderX, HeaderY int // phantom head offset from the top-left
+	Footprint vmath.Footprint // its body around the phantom head
 
 	HitPoints        int
 	Combat           CombatEntityType      // the attack-matrix row it fights as

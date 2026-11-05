@@ -17,6 +17,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/profile"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // programDoc is one program as its file holds it: the fsm dialect's state keys
@@ -170,7 +171,7 @@ func checkName(name string) error {
 func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loot *component.LootSet) (component.BehaviorPrototype, error) {
 	p := component.BehaviorPrototype{
 		Name: name, Species: species,
-		Width: d.Width, Height: d.Height, HeaderX: d.Header.X, HeaderY: d.Header.Y,
+		Footprint: vmath.Footprint{Width: d.Width, Height: d.Height, HeaderX: d.Header.X, HeaderY: d.Header.Y},
 		HitPoints: d.HP, Mass: d.Mass,
 		Contact:          component.CursorDamage{EnergyDrain: d.Contact.Energy, HeatDelta: -d.Contact.Heat},
 		Lifetime:         time.Duration(d.LifetimeMs) * time.Millisecond,
@@ -184,7 +185,7 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loo
 	if d.Width < 1 || d.Width > limit || d.Height < 1 || d.Height > limit {
 		fail("width and height %d×%d outside 1..%d", d.Width, d.Height, limit)
 	} else {
-		if d.Header.X < 0 || d.Header.X >= d.Width || d.Header.Y < 0 || d.Header.Y >= d.Height {
+		if !p.Footprint.Valid() {
 			fail("header {%d, %d} outside the %d×%d footprint", d.Header.X, d.Header.Y, d.Width, d.Height)
 		}
 		art := visual.LookArt{Fg: d.Fg, Bg: d.Bg, Color: d.Color, Frames: d.Frames}

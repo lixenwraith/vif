@@ -91,6 +91,19 @@ type Resource struct {
 	audioResources
 }
 
+// Footprint is a species' body around its header, the one size every reader of a
+// species' takes: a code species' row of component.Footprints, a data species' its
+// prototype's, and none for a species this scenario does not declare
+func (r *Resource) Footprint(s component.SpeciesType) vmath.Footprint {
+	if s < component.SpeciesCount {
+		return component.Footprints[s]
+	}
+	if i := int(s - component.SpeciesDataFirst); i < len(r.Behaviors) {
+		return r.Behaviors[i].Footprint
+	}
+	return vmath.Footprint{}
+}
+
 // === World Resources ===
 
 // --- Time Resource ---

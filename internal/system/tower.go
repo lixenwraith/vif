@@ -281,13 +281,8 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 
 	// Spiral fallback from last attempt
 	last := cells[len(cells)-1]
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		last.X, last.Y,
-		width, height,
-		radiusX, radiusY,
-		component.WallBlockSpawn,
-		parameter.TowerSpawnSpiralMaxRadius,
-	)
+	foot := vmath.Footprint{Width: width, Height: height, HeaderX: radiusX, HeaderY: radiusY}
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(last.X, last.Y, foot, component.WallBlockSpawn, parameter.TowerSpawnSpiralMaxRadius)
 	if found {
 		return topLeftX + radiusX, topLeftY + radiusY, true
 	}

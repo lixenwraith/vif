@@ -11,7 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
-	"github.com/lixenwraith/vif/pkg/navigation"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Navigation re-testing only the cells the wall log names stands where one
@@ -42,7 +42,7 @@ func TestNavigationOnTheWallLogStandsAsAWholeReread(t *testing.T) {
 				e = world.CreateEntity(core.DomainShared)
 				world.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 			}
-			world.Components.Navigation.SetComponent(e, component.NavigationComponent{Width: 4 - 3*(i%2), Height: 2 - i%2})
+			world.Components.Navigation.SetComponent(e, component.NavigationComponent{Footprint: vmath.Footprint{Width: 4 - 3*(i%2), Height: 2 - i%2}})
 			navs = append(navs, e)
 		}
 		spawn := func() {
@@ -156,11 +156,10 @@ func TestABodyTheEyeDoesNotHoldRoutesByATierOfItsOwn(t *testing.T) {
 			world.Components.Wall.SetComponent(wall, component.WallComponent{BlockMask: component.WallBlockKinetic})
 		}
 	}
-	big := navigation.Footprint{Width: 7, Height: 5, HeaderX: 3, HeaderY: 2}
+	big := vmath.Footprint{Width: 7, Height: 5, HeaderX: 3, HeaderY: 2}
 	body := world.CreateEntity(core.DomainShared)
 	world.Positions.SetPosition(body, component.PositionComponent{X: 12, Y: 7})
-	world.Components.Navigation.SetComponent(body, component.NavigationComponent{
-		Width: big.Width, Height: big.Height, HeaderX: big.HeaderX, HeaderY: big.HeaderY})
+	world.Components.Navigation.SetComponent(body, component.NavigationComponent{Footprint: big})
 	nav := ready(NewNavigationSystem(world)).(*NavigationSystem)
 	nav.Update()
 
@@ -172,8 +171,7 @@ func TestABodyTheEyeDoesNotHoldRoutesByATierOfItsOwn(t *testing.T) {
 	if own.GetDistance(30, 7) >= 0 || own.GetDistance(30, 22) < 0 || eye.GetDistance(30, 7) < 0 {
 		t.Fatal("the body's field leads through the gap only the eye fits, or not through the wide one")
 	}
-	nav.handleRouteGraphRequest(&event.RouteGraphRequestPayload{RouteGraphID: 9, SourceX: 12, SourceY: 7,
-		Width: big.Width, Height: big.Height, HeaderX: big.HeaderX, HeaderY: big.HeaderY})
+	nav.handleRouteGraphRequest(&event.RouteGraphRequestPayload{RouteGraphID: 9, SourceX: 12, SourceY: 7, Footprint: big})
 	rg := world.Resources.RouteGraph.Get(9)
 	if rg == nil || rg.Footprint != big || !nav.routeGraphFresh(rg, 0) {
 		t.Fatal("no fresh route graph for the body the request named")

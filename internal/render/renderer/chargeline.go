@@ -55,10 +55,8 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 		}
 
 		r.renderPulses(ctx, buf,
-			footprintAt(headerPos.X, headerPos.Y, parameter.SwarmWidth, parameter.SwarmHeight,
-				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
-			footprintAt(swarmComp.LockedTargetX, swarmComp.LockedTargetY, parameter.SwarmWidth, parameter.SwarmHeight,
-				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
+			component.Footprints[component.SpeciesSwarm].At(headerPos.X, headerPos.Y),
+			component.Footprints[component.SpeciesSwarm].At(swarmComp.LockedTargetX, swarmComp.LockedTargetY),
 			swarmComp.Machine.Elapsed, parameter.SwarmChargeDuration, parameter.SwarmChargeLineShowDelay)
 		return true
 	})
@@ -77,8 +75,8 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 		p := &prototypes[b.Program]
 		pulse := time.Duration(float64(b.Machine.Duration) * parameter.BehaviorChargeLinePulseShare)
 		r.renderPulses(ctx, buf,
-			footprintAt(pos.X, pos.Y, p.Width, p.Height, p.HeaderX, p.HeaderY),
-			footprintAt(b.TargetX, b.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY),
+			p.Footprint.At(pos.X, pos.Y),
+			p.Footprint.At(b.TargetX, b.TargetY),
 			b.Machine.Elapsed, pulse, b.Machine.Duration-parameter.SwarmChargeLinePulseCount*pulse)
 		return true
 	})

@@ -129,29 +129,29 @@ func (s *FuseSystem) quasarMaterializing() bool {
 	return false
 }
 
-// fuseInto plays a fusion over area, and the species lands as what plays it ends:
-// the spirits the sources fly in, unless the effect is the materialize or no
-// source flies, else a materialize naming the species its completion lands. Either
-// is this instance's own: a shared one would exist only on the producer.
-func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEffect, sources []vmath.Point, area vmath.Area) {
+// fuseInto plays a fusion over the species' footprint with its header on (x, y), and
+// the species lands as what plays it ends: the spirits the sources fly in, unless
+// the effect is the materialize or no source flies, else a materialize naming the
+// species its completion lands. Either is this instance's own: a shared one would
+// exist only on the producer.
+func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEffect, sources []vmath.Point, x, y int) {
 	if effect != event.FuseEffectMaterialize && len(sources) > 0 {
-		s.effectSpiritArea(species, sources, area, component.SpiritCyan)
+		s.effectSpiritArea(species, sources, x, y, component.SpiritCyan)
 		return
 	}
-	s.world.PushLocal(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
-		X:          area.X,
-		Y:          area.Y,
-		AreaWidth:  area.Width,
-		AreaHeight: area.Height,
-		Type:       component.SpawnTypeSwarm,
-		Species:    species,
+	s.world.PushLocal(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+		X:       x,
+		Y:       y,
+		Type:    component.SpawnTypeSwarm,
+		Species: species,
 	})
 }
 
-// effectSpiritArea flies one spirit per source into the target area, player-domain
-// visuals; every spirit flies one time, and the first names the species its arrival
-// lands on the area, so the spawn rides it
-func (s *FuseSystem) effectSpiritArea(species component.SpeciesType, sources []vmath.Point, area vmath.Area, c component.SpiritColor) {
+// effectSpiritArea flies one spirit per source into the species' footprint with its
+// header on (x, y), player-domain visuals; every spirit flies one time, and the
+// first names the species its arrival lands there, so the spawn rides it
+func (s *FuseSystem) effectSpiritArea(species component.SpeciesType, sources []vmath.Point, x, y int, c component.SpiritColor) {
+	area := s.world.Resources.Footprint(species).At(x, y)
 	for i, src := range sources {
 		dest := area.DistributePoint(i, s.rng)
 
@@ -164,7 +164,7 @@ func (s *FuseSystem) effectSpiritArea(species component.SpeciesType, sources []v
 			BaseColor: c,
 		}
 		if i == 0 {
-			request.Species, request.LandX, request.LandY = species, area.X, area.Y
+			request.Species, request.LandX, request.LandY = species, x, y
 		}
 		s.world.PushLocal(event.EventSpiritSpawnRequest, request)
 	}
@@ -210,13 +210,8 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	midY := (posA.Y + posB.Y) / 2
 
 	// The nearest footprint inside the map free of walls a spawn is kept from
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		midX, midY,
-		parameter.SwarmWidth, parameter.SwarmHeight,
-		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	foot := component.Footprints[component.SpeciesSwarm]
+	left, top, found := s.world.Positions.FindFreeAreaInside(midX, midY, foot, component.WallBlockSpawn, 0)
 	if !found {
 		s.statSpawnFailures.Add(1)
 		return
@@ -225,8 +220,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	s.killDrains([]core.Entity{drainA, drainB})
 
 	sources := []vmath.Point{{X: posA.X, Y: posA.Y}, {X: posB.X, Y: posB.Y}}
-	area := vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.SwarmWidth, Height: parameter.SwarmHeight}
-	s.fuseInto(component.SpeciesSwarm, effect, sources, area)
+	s.fuseInto(component.SpeciesSwarm, effect, sources, left+foot.HeaderX, top+foot.HeaderY)
 }
 
 // handleQuasarFuse consumes every drain into one quasar at their centroid
@@ -257,38 +251,26 @@ func (s *FuseSystem) handleQuasarFuse() {
 	}
 
 	// The nearest footprint inside the map free of walls a spawn is kept from
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		cX, cY,
-		parameter.QuasarWidth, parameter.QuasarHeight,
-		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	foot := component.Footprints[component.SpeciesQuasar]
+	left, top, found := s.world.Positions.FindFreeAreaInside(cX, cY, foot, component.WallBlockSpawn, 0)
 	if !found {
 		s.statSpawnFailures.Add(1)
 		return
 	}
 
-	area := vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
-	s.fuseInto(component.SpeciesQuasar, event.FuseEffectMaterialize, sources, area)
+	s.fuseInto(component.SpeciesQuasar, event.FuseEffectMaterialize, sources, left+foot.HeaderX, top+foot.HeaderY)
 	s.killDrains(drainEntities)
 }
 
-// landFusion crosses the spawn a fusion's spirit or materialize held, its header on the
-// footprint whose top-left is x, y. The species spawn is the shared result, and the
-// request is the D-3 artifact that carries it — stamped player because the fuse
-// produced it, which is what tells it from the same type a shared storm pushes.
+// landFusion crosses the spawn a fusion's spirit or materialize held, its header on
+// (x, y). The species spawn is the shared result, and the request is the D-3
+// artifact that carries it — stamped player because the fuse produced it, which is
+// what tells it from the same type a shared storm pushes.
 func (s *FuseSystem) landFusion(species component.SpeciesType, x, y int) {
 	switch species {
 	case component.SpeciesQuasar:
-		s.world.PushCrossing(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{
-			X: x + parameter.QuasarHeaderOffsetX,
-			Y: y + parameter.QuasarHeaderOffsetY,
-		})
+		s.world.PushCrossing(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{X: x, Y: y})
 	case component.SpeciesSwarm:
-		s.world.PushCrossing(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
-			X: x + parameter.SwarmHeaderOffsetX,
-			Y: y + parameter.SwarmHeaderOffsetY,
-		})
+		s.world.PushCrossing(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{X: x, Y: y})
 	}
 }

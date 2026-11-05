@@ -258,13 +258,7 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 
 	// The head's footprint the request names, pulled inside the map, or the nearest
 	// free one
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		payload.X, payload.Y,
-		parameter.SnakeHeadWidth, parameter.SnakeHeadHeight,
-		parameter.SnakeHeadHeaderOffsetX, parameter.SnakeHeadHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(payload.X, payload.Y, component.Footprints[component.SpeciesSnake], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		return
@@ -361,10 +355,7 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 
 	// Navigation component (same pattern as Quasar)
 	s.world.Components.Navigation.SetComponent(headEntity, component.NavigationComponent{
-		Width:         parameter.SnakeHeadWidth,
-		Height:        parameter.SnakeHeadHeight,
-		HeaderX:       parameter.SnakeHeadHeaderOffsetX,
-		HeaderY:       parameter.SnakeHeadHeaderOffsetY,
+		Footprint:     component.Footprints[component.SpeciesSnake],
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 		LockTicks:     parameter.NavFlowMinTicksBetweenCompute,
 	})

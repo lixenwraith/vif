@@ -140,11 +140,12 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			if carriers != 1 || carrier.Species != component.SpeciesSwarm || spirits[0].Domain() != core.DomainPlayer {
 				t.Fatalf("%d spirits name a species (the first %+v), want one player-domain spirit naming the swarm", carriers, carrier)
 			}
+			area := component.Footprints[component.SpeciesSwarm].At(carrier.LandX, carrier.LandY)
 			for _, e := range spirits {
 				sp, _ := w.Components.Spirit.GetComponent(e)
-				if x, y := int(sp.TargetX), int(sp.TargetY); x < carrier.LandX || x >= carrier.LandX+parameter.SwarmWidth ||
-					y < carrier.LandY || y >= carrier.LandY+parameter.SwarmHeight {
-					t.Fatalf("a spirit flies to (%d, %d), off the footprint at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
+				if x, y := int(sp.TargetX), int(sp.TargetY); x < area.X || x >= area.X+area.Width ||
+					y < area.Y || y >= area.Y+area.Height {
+					t.Fatalf("a spirit flies to (%d, %d), off the footprint headed at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
 				}
 			}
 
@@ -161,8 +162,8 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			if len(spawns) != 1 || spawns[0].Domain != core.DomainPlayer {
 				t.Fatalf("spawns = %+v as the spirits arrived, want one crossing", spawns)
 			}
-			if x, y := spawnCell(spawns[0].Payload); x != carrier.LandX+parameter.SwarmHeaderOffsetX || y != carrier.LandY+parameter.SwarmHeaderOffsetY {
-				t.Fatalf("the swarm lands at (%d, %d), off the footprint at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
+			if x, y := spawnCell(spawns[0].Payload); x != carrier.LandX || y != carrier.LandY {
+				t.Fatalf("the swarm lands at (%d, %d), off the header the spirit names (%d, %d)", x, y, carrier.LandX, carrier.LandY)
 			}
 			for _, e := range spirits {
 				if timer, ok := w.Components.Timer.GetPtr(e); !ok || timer.Expired(component.TimerLifetime) ||
@@ -201,12 +202,10 @@ func TestOnlyAPlayerSpiritLandsAFusion(t *testing.T) {
 // footprint the tick the materialize, and so its visual, ends; nothing waits beside it
 func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 	for _, c := range []struct {
-		name          string
-		request       func(cursor core.Entity, drains [2]core.Entity) event.GameEvent
-		species       component.SpeciesType
-		spawn         event.EventType
-		width, height int
-		headX, headY  int
+		name    string
+		request func(cursor core.Entity, drains [2]core.Entity) event.GameEvent
+		species component.SpeciesType
+		spawn   event.EventType
 	}{
 		{
 			name: "drain pair, the materialize",
@@ -215,8 +214,6 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 					Payload: &event.FuseSwarmRequestPayload{DrainA: d[0], DrainB: d[1], Effect: event.FuseEffectMaterialize}}
 			},
 			species: component.SpeciesSwarm, spawn: event.EventSwarmSpawnRequest,
-			width: parameter.SwarmWidth, height: parameter.SwarmHeight,
-			headX: parameter.SwarmHeaderOffsetX, headY: parameter.SwarmHeaderOffsetY,
 		},
 		{
 			name: "quasar",
@@ -224,8 +221,6 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 				return event.GameEvent{Type: event.EventFuseQuasarRequest, Payload: &event.FuseQuasarRequestPayload{Entity: cursor}}
 			},
 			species: component.SpeciesQuasar, spawn: event.EventQuasarSpawnRequest,
-			width: parameter.QuasarWidth, height: parameter.QuasarHeight,
-			headX: parameter.QuasarHeaderOffsetX, headY: parameter.QuasarHeaderOffsetY,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -237,8 +232,8 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 				t.Fatalf("materializes = %v, want one player-domain materialize", materializes)
 			}
 			materialize, _ := w.Components.Materialize.GetComponent(materializes[0])
-			if materialize.Species != c.species || materialize.AreaWidth != c.width || materialize.AreaHeight != c.height {
-				t.Fatalf("materialize = %+v, want species %d over a %dx%d footprint", materialize, c.species, c.width, c.height)
+			if foot := component.Footprints[c.species]; materialize.Species != c.species || materialize.Footprint != foot {
+				t.Fatalf("materialize = %+v, want species %d over its footprint %+v", materialize, c.species, foot)
 			}
 			if n := len(b.sent(event.EventSpiritSpawnRequest, 0)); n != 0 || w.Components.Drain.CountEntities() != 0 {
 				t.Fatalf("%d spirits with %d drains left, want none and none", n, w.Components.Drain.CountEntities())
@@ -256,8 +251,8 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 			if len(spawns) != 1 || spawns[0].Domain != core.DomainPlayer || w.Components.Materialize.CountEntities() != 0 {
 				t.Fatalf("spawns = %+v as the materialize ended, want one crossing", spawns)
 			}
-			if x, y := spawnCell(spawns[0].Payload); x != materialize.TargetX+c.headX || y != materialize.TargetY+c.headY {
-				t.Fatalf("the spawn names (%d, %d), off the materialize's footprint at (%d, %d)", x, y, materialize.TargetX, materialize.TargetY)
+			if x, y := spawnCell(spawns[0].Payload); x != materialize.X || y != materialize.Y {
+				t.Fatalf("the spawn names (%d, %d), off the materialize's header (%d, %d)", x, y, materialize.X, materialize.Y)
 			}
 		})
 	}

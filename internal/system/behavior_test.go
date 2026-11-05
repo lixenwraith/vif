@@ -173,7 +173,7 @@ func TestAWardenWindsUpPastItsRangeThenChargesTheCellItStored(t *testing.T) {
 	}
 
 	start, _ := w.Positions.GetPosition(header)
-	materializes := countEvents(stepWhile(t, w, s, b, wardenWind), event.EventMaterializeAreaRequest)
+	materializes := countEvents(stepWhile(t, w, s, b, wardenWind), event.EventMaterializeRequest)
 	if b.Machine.State != wardenStrike || combat.IsEnraged || !b.Shielded ||
 		combat.Status[component.StatusWard].Remaining <= 0 {
 		t.Fatalf("wind-up ended: state %d enraged %v shielded %v ward %v, want a warded strike",
@@ -289,8 +289,8 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 	var footprints []component.MaterializeComponent
 	for _, m := range w.Components.Materialize.Entities() {
 		c, _ := w.Components.Materialize.GetComponent(m)
-		if m.Domain() != core.DomainShared || c.Species != p.Species || c.AreaWidth != p.Width || c.AreaHeight != p.Height {
-			t.Fatalf("materialize %+v, want a Shared one naming the warden over its %dx%d footprint", c, p.Width, p.Height)
+		if m.Domain() != core.DomainShared || c.Species != p.Species || c.Footprint != p.Footprint {
+			t.Fatalf("materialize %+v, want a Shared one naming the warden over its footprint %+v", c, p.Footprint)
 		}
 		footprints = append(footprints, c)
 	}
@@ -306,7 +306,7 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 		t.Fatalf("%d wardens landed before their materializes ended", n)
 	}
 	rock := footprints[1]
-	spawnWall(w, rock.TargetX, rock.TargetY)
+	spawnWall(w, rock.X, rock.Y)
 	e.tick()
 	headers := w.Components.Behavior.Entities()
 	if len(headers) != 2 || w.Components.Materialize.CountEntities() != 0 {
@@ -315,14 +315,13 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 	landed := map[[2]int]bool{}
 	for _, header := range headers {
 		pos, _ := w.Positions.GetPosition(header)
-		left, top := pos.X-p.HeaderX, pos.Y-p.HeaderY
-		if !w.Positions.IsAreaFree(left, top, p.Width, p.Height, component.WallBlockSpawn) {
-			t.Fatalf("a warden landed at (%d, %d) on the rock that came over its footprint", left, top)
+		if a := p.Footprint.At(pos.X, pos.Y); !w.Positions.IsAreaFree(a.X, a.Y, a.Width, a.Height, component.WallBlockSpawn) {
+			t.Fatalf("a warden landed at (%d, %d) on the rock that came over its footprint", pos.X, pos.Y)
 		}
-		landed[[2]int{left, top}] = true
+		landed[[2]int{pos.X, pos.Y}] = true
 	}
-	if clear := footprints[0]; !landed[[2]int{clear.TargetX, clear.TargetY}] {
-		t.Fatalf("wardens landed at %v, none on the clear footprint at (%d, %d)", landed, clear.TargetX, clear.TargetY)
+	if clear := footprints[0]; !landed[[2]int{clear.X, clear.Y}] {
+		t.Fatalf("wardens landed at %v, none on the clear footprint at (%d, %d)", landed, clear.X, clear.Y)
 	}
 }
 
@@ -356,9 +355,9 @@ func TestAMaterializeCueTimesItsMaterialize(t *testing.T) {
 	w := ctx.World
 	b, _ := w.Components.Behavior.GetPtr(header)
 	stepBehaviors(w, s)
-	var request *event.MaterializeAreaRequestPayload
+	var request *event.MaterializeRequestPayload
 	for _, ev := range stepWhile(t, w, s, b, wardenWind) {
-		if p, ok := ev.Payload.(*event.MaterializeAreaRequestPayload); ok {
+		if p, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
 			request = p
 		}
 	}

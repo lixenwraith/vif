@@ -1,6 +1,9 @@
 package component
 
-import "github.com/lixenwraith/vif/internal/parameter"
+import (
+	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath"
+)
 
 // SpeciesType identifies a gameplay species across lifecycle, navigation,
 // genetics, loot, and telemetry systems.
@@ -43,4 +46,29 @@ var SpeciesNames = [SpeciesCount]string{
 	SpeciesEye:    "eye",
 	SpeciesTower:  "tower",
 	SpeciesKraken: "kraken",
+}
+
+// Footprints are each code species' body around its header, from its parameters: a
+// pylon's and a tower's at their default radii, which a request may change, a
+// snake's its head, a storm's one circle and a kraken's its body without its legs.
+// A data species declares its own in its prototype.
+var Footprints = [SpeciesCount]vmath.Footprint{
+	SpeciesNone:  {},
+	SpeciesDrain: {Width: 1, Height: 1},
+	SpeciesSwarm: {Width: parameter.SwarmWidth, Height: parameter.SwarmHeight,
+		HeaderX: parameter.SwarmHeaderOffsetX, HeaderY: parameter.SwarmHeaderOffsetY},
+	SpeciesQuasar: {Width: parameter.QuasarWidth, Height: parameter.QuasarHeight,
+		HeaderX: parameter.QuasarHeaderOffsetX, HeaderY: parameter.QuasarHeaderOffsetY},
+	SpeciesStorm: {Width: 2*parameter.StormCircleRadiusX + 1, Height: 2*parameter.StormCircleRadiusY + 1,
+		HeaderX: parameter.StormCircleRadiusX, HeaderY: parameter.StormCircleRadiusY},
+	SpeciesPylon: {Width: 2*parameter.PylonDefaultRadiusX + 1, Height: 2*parameter.PylonDefaultRadiusY + 1,
+		HeaderX: parameter.PylonDefaultRadiusX, HeaderY: parameter.PylonDefaultRadiusY},
+	SpeciesSnake: {Width: parameter.SnakeHeadWidth, Height: parameter.SnakeHeadHeight,
+		HeaderX: parameter.SnakeHeadHeaderOffsetX, HeaderY: parameter.SnakeHeadHeaderOffsetY},
+	SpeciesEye: {Width: parameter.EyeWidth, Height: parameter.EyeHeight,
+		HeaderX: parameter.EyeHeaderOffsetX, HeaderY: parameter.EyeHeaderOffsetY},
+	SpeciesTower: {Width: 2*parameter.TowerDefaultRadiusX + 1, Height: 2*parameter.TowerDefaultRadiusY + 1,
+		HeaderX: parameter.TowerDefaultRadiusX, HeaderY: parameter.TowerDefaultRadiusY},
+	SpeciesKraken: {Width: 4*parameter.KrakenBodyRadius + 1, Height: 2*parameter.KrakenBodyRadius + 1,
+		HeaderX: 2 * parameter.KrakenBodyRadius, HeaderY: parameter.KrakenBodyRadius},
 }

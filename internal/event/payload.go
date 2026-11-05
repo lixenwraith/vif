@@ -637,26 +637,19 @@ type PingGridRequestPayload struct {
 
 // --- Materialize ---
 
-// MaterializeRequestPayload contains parameters to start a visual spawn sequence
+// MaterializeRequestPayload starts a materialize over a body's footprint with its
+// header on X, Y: Footprint when it is a body, else the species' own, else one cell
 type MaterializeRequestPayload struct {
-	X          int                 `toml:"x"`
-	Y          int                 `toml:"y"`
-	Type       component.SpawnType `toml:"type"`
-	DurationMs int64               `toml:"duration_ms"` // 0 = its style's
-}
-
-// MaterializeAreaRequestPayload for area-based materialization (swarm, quasar)
-type MaterializeAreaRequestPayload struct {
-	X          int                   `toml:"x"`          // Top-left X
-	Y          int                   `toml:"y"`          // Top-left Y
-	AreaWidth  int                   `toml:"area_width"` // 0 or 1 = single cell
-	AreaHeight int                   `toml:"area_height"`
+	X          int                   `toml:"x"`
+	Y          int                   `toml:"y"`
+	Footprint  vmath.Footprint       `toml:"footprint"`
 	Type       component.SpawnType   `toml:"type"`
-	Species    component.SpeciesType `toml:"species"`     // the species its completion lands; SpeciesNone lands nothing
+	Species    component.SpeciesType `toml:"species"`     // the species its end lands; SpeciesNone lands nothing
 	DurationMs int64                 `toml:"duration_ms"` // 0 = its style's
 }
 
-// MaterializeCompletedPayload carries details about a completed materialization
+// MaterializeCompletedPayload is a materialize that ended, at the header cell its
+// body lands on
 type MaterializeCompletedPayload struct {
 	X       int                   `toml:"x"`
 	Y       int                   `toml:"y"`
@@ -1045,16 +1038,15 @@ type SpiritSpawnRequestPayload struct {
 	TargetY   int                   `toml:"target_y"`
 	Char      rune                  `toml:"char"`
 	BaseColor component.SpiritColor `toml:"base_color"`
-	// Species is the species the spirit's arrival lands, on the footprint whose
-	// top-left is LandX, LandY, so a drain pair's swarm rides its spirit;
-	// SpeciesNone lands nothing
+	// Species is the species the spirit's arrival lands, its header on LandX, LandY,
+	// so a drain pair's swarm rides its spirit; SpeciesNone lands nothing
 	Species component.SpeciesType `toml:"species"`
 	LandX   int                   `toml:"land_x"`
 	LandY   int                   `toml:"land_y"`
 }
 
-// SpiritArrivedPayload is the species a spirit's arrival lands and the top-left of
-// the footprint it lands on
+// SpiritArrivedPayload is the species a spirit's arrival lands and the header cell
+// it lands on
 type SpiritArrivedPayload struct {
 	X       int                   `toml:"x"`
 	Y       int                   `toml:"y"`
@@ -1506,17 +1498,13 @@ type TargetGroupRemovePayload struct {
 }
 
 // RouteGraphRequestPayload requests route graph computation for a gateway-target pair,
-// for the body the routes are for: Width×Height cells with the header HeaderX,
-// HeaderY from the top-left, the eye's when it names none
+// for the body the routes are for, the eye's when the footprint is zero
 type RouteGraphRequestPayload struct {
-	SourceX       int    `toml:"source_x"` // Gateway spawn position
-	SourceY       int    `toml:"source_y"`
-	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity); valid only while route-graph anchors are shared, the domain tag sits above bit 32
-	TargetGroupID uint8  `toml:"target_group_id"`
-	Width         int    `toml:"width"`
-	Height        int    `toml:"height"`
-	HeaderX       int    `toml:"header_x"`
-	HeaderY       int    `toml:"header_y"`
+	SourceX       int             `toml:"source_x"` // Gateway spawn position
+	SourceY       int             `toml:"source_y"`
+	RouteGraphID  uint32          `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity); valid only while route-graph anchors are shared, the domain tag sits above bit 32
+	TargetGroupID uint8           `toml:"target_group_id"`
+	Footprint     vmath.Footprint `toml:"footprint"`
 }
 
 // RouteGraphComputedPayload signals route graph computation completion

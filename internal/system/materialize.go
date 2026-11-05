@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // MaterializeSystem manages materializer animations and triggering spawn completion
@@ -45,7 +46,6 @@ func (s *MaterializeSystem) Priority() int {
 func (s *MaterializeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMaterializeRequest,
-		event.EventMaterializeAreaRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -64,25 +64,8 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	switch ev.Type {
-
-	case event.EventMaterializeRequest:
-		if payload, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
-			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, 1, 1, 1, payload.Type, component.SpeciesNone, payload.DurationMs)
-		}
-
-	case event.EventMaterializeAreaRequest:
-		if payload, ok := ev.Payload.(*event.MaterializeAreaRequestPayload); ok {
-			width := payload.AreaWidth
-			height := payload.AreaHeight
-			if width < 1 {
-				width = 1
-			}
-			if height < 1 {
-				height = 1
-			}
-			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, width, height, 1, payload.Type, payload.Species, payload.DurationMs)
-		}
+	if payload, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
+		s.spawnMaterializeEffect(ev.Domain, payload)
 	}
 }
 
@@ -109,11 +92,10 @@ func (s *MaterializeSystem) Update() {
 			// The completion carries the domain of the entity it completes, so a
 			// gated shared spawn and a drain materialize stay distinguishable (D-7).
 			s.world.PushEventDomain(event.EventMaterializeComplete, &event.MaterializeCompletedPayload{
-				X:       matComp.TargetX,
-				Y:       matComp.TargetY,
+				X:       matComp.X,
+				Y:       matComp.Y,
 				Type:    matComp.Type,
 				Species: matComp.Species,
-				// Note: MaterializeCompletedPayload may need AreaWidth/Height if consumers need it
 			}, matEntity.Domain())
 			toDestroy = append(toDestroy, matEntity)
 			continue
@@ -123,42 +105,32 @@ func (s *MaterializeSystem) Update() {
 	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
-// spawnMaterializeEffect creates one materialize entity in the request's domain,
-// lasting durationMs, or its style's duration when that is not positive
-func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType, species component.SpeciesType, durationMs int64) {
-	if spawnType < 0 || spawnType >= component.SpawnTypeCount {
+// spawnMaterializeEffect creates one materialize entity in the request's domain over
+// the footprint it resolves, its header held on the map, lasting the request's
+// duration or, when that is not positive, its style's
+func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, p *event.MaterializeRequestPayload) {
+	if p.Type < 0 || p.Type >= component.SpawnTypeCount {
 		return
 	}
+	foot := p.Footprint
+	if !foot.Valid() {
+		foot = s.world.Resources.Footprint(p.Species)
+	}
+	if !foot.Valid() {
+		foot = vmath.CellFootprint
+	}
 	config := s.world.Resources.Config
-
-	// Clamp target coordinates
-	if targetX < 0 {
-		targetX = 0
-	}
-	if targetX >= config.MapWidth {
-		targetX = config.MapWidth - 1
-	}
-	if targetY < 0 {
-		targetY = 0
-	}
-	if targetY >= config.MapHeight {
-		targetY = config.MapHeight - 1
-	}
-
 	entity := s.world.CreateEntity(domain)
-
 	s.world.Components.Materialize.SetComponent(entity, component.MaterializeComponent{
-		TargetX:    targetX,
-		TargetY:    targetY,
-		AreaWidth:  areaWidth,
-		AreaHeight: areaHeight,
-		BeamWidth:  beamWidth,
-		Type:       spawnType,
-		Species:    species,
+		X:         max(0, min(p.X, config.MapWidth-1)),
+		Y:         max(0, min(p.Y, config.MapHeight-1)),
+		Footprint: foot,
+		Type:      p.Type,
+		Species:   p.Species,
 	})
-	duration := component.MaterializeStyles[spawnType].Duration()
-	if durationMs > 0 {
-		duration = time.Duration(durationMs) * time.Millisecond
+	duration := component.MaterializeStyles[p.Type].Duration()
+	if p.DurationMs > 0 {
+		duration = time.Duration(p.DurationMs) * time.Millisecond
 	}
 	armTimer(s.world, entity, component.TimerDeadline, duration)
 }

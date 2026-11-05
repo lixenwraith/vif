@@ -256,7 +256,7 @@ func TestTheBlueCueMaterializesOnceAnAttack(t *testing.T) {
 		for tick := range 250 {
 			storm.updateCircleAttacks(stormComp, parameter.GameUpdateInterval)
 			for _, ev := range w.Resources.Event.Queue.Consume() {
-				if ev.Type == event.EventMaterializeAreaRequest {
+				if ev.Type == event.EventMaterializeRequest {
 					ticks = append(ticks, tick)
 				}
 			}
@@ -353,11 +353,10 @@ func TestAStormsEndEndsItsMaterializes(t *testing.T) {
 	}
 	storm.materializeIn(&circleCtx{circle: &component.StormCircleComponent{LandingFound: true, AttackTargetX: 20, AttackTargetY: 12}})
 	others := []event.GameEvent{
-		{Type: event.EventMaterializeAreaRequest, Domain: core.DomainPlayer, Payload: &event.MaterializeAreaRequestPayload{
-			X: 4, Y: 16, AreaWidth: parameter.SwarmWidth, AreaHeight: parameter.SwarmHeight,
-			Type: component.SpawnTypeSwarm, Species: component.SpeciesSwarm}},
-		{Type: event.EventMaterializeAreaRequest, Domain: core.DomainShared, Payload: &event.MaterializeAreaRequestPayload{
-			X: 30, Y: 16, AreaWidth: parameter.SwarmWidth, AreaHeight: parameter.SwarmHeight, Type: component.SpawnTypeSwarm}},
+		{Type: event.EventMaterializeRequest, Domain: core.DomainPlayer, Payload: &event.MaterializeRequestPayload{
+			X: 4, Y: 16, Type: component.SpawnTypeSwarm, Species: component.SpeciesSwarm}},
+		{Type: event.EventMaterializeRequest, Domain: core.DomainShared, Payload: &event.MaterializeRequestPayload{
+			X: 30, Y: 16, Footprint: component.Footprints[component.SpeciesSwarm], Type: component.SpawnTypeSwarm}},
 	}
 	b.deliver(append(w.Resources.Event.Queue.Consume(), others...)...)
 	b.tick()

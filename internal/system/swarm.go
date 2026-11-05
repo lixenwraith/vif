@@ -340,13 +340,7 @@ func (s *SwarmSystem) Update() {
 // spawnSwarm stands a swarm with its header at the cell, its footprint pulled inside
 // the map, or on the nearest footprint free of walls a spawn is kept from
 func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		targetX, targetY,
-		parameter.SwarmWidth, parameter.SwarmHeight,
-		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(targetX, targetY, component.Footprints[component.SpeciesSwarm], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		return
@@ -405,10 +399,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 
 	// Navigation component for flow field guidance around obstacles
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
-		Width:         parameter.SwarmWidth,
-		Height:        parameter.SwarmHeight,
-		HeaderX:       parameter.SwarmHeaderOffsetX,
-		HeaderY:       parameter.SwarmHeaderOffsetY,
+		Footprint:     component.Footprints[component.SpeciesSwarm],
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 
@@ -503,7 +494,7 @@ func (s *SwarmSystem) enterLock(c *swarmCtx) {
 func (s *SwarmSystem) hasLineOfSight(c *swarmCtx) bool {
 	pos, ok := s.world.Positions.GetPosition(c.entity)
 	return ok && bodyHasLineOfSight(s.world, pos.X, pos.Y, c.swarm.LockedTargetX, c.swarm.LockedTargetY,
-		parameter.SwarmWidth, parameter.SwarmHeight, parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY)
+		component.Footprints[component.SpeciesSwarm])
 }
 
 // probeKinetic admits a charge only with a body to fly
@@ -546,14 +537,9 @@ func (s *SwarmSystem) probeLanding(c *swarmCtx) bool {
 // map, that holds no wall a spawn is kept from, the cell itself first, into the
 // context's landing
 func (s *SwarmSystem) findRoom(c *swarmCtx, x, y int) bool {
-	left, top, found := s.world.Positions.FindFreeAreaInside(
-		x, y,
-		parameter.SwarmWidth, parameter.SwarmHeight,
-		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
-	c.landingX, c.landingY = left+parameter.SwarmHeaderOffsetX, top+parameter.SwarmHeaderOffsetY
+	foot := component.Footprints[component.SpeciesSwarm]
+	left, top, found := s.world.Positions.FindFreeAreaInside(x, y, foot, component.WallBlockSpawn, 0)
+	c.landingX, c.landingY = left+foot.HeaderX, top+foot.HeaderY
 	return found
 }
 

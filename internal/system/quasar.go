@@ -280,13 +280,7 @@ func (s *QuasarSystem) Update() {
 // spawnQuasar stands a quasar with its header at the cell, its footprint pulled
 // inside the map, or on the nearest footprint free of walls a spawn is kept from
 func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		targetX, targetY,
-		parameter.QuasarWidth, parameter.QuasarHeight,
-		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(targetX, targetY, component.Footprints[component.SpeciesQuasar], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		return
@@ -359,10 +353,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 
 	// Navigation component for flow field guidance around obstacles
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
-		Width:         parameter.QuasarWidth,
-		Height:        parameter.QuasarHeight,
-		HeaderX:       parameter.QuasarHeaderOffsetX,
-		HeaderY:       parameter.QuasarHeaderOffsetY,
+		Footprint:     component.Footprints[component.SpeciesQuasar],
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 
