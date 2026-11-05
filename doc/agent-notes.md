@@ -152,6 +152,11 @@ that proves wrong or that a document now states, and link the document instead.
   holds alike. An election or a guard that one instance alone sees decides nothing
   there: a fusion that consumes composites on every instance lands them by a Shared
   carrier on each, not by the elected instance's own (`FuseSystem.fuse`).
+- A player-domain mechanic reading the whole roster (`ClosestCursor`,
+  `CheckCursorOverlaps`, navigation's group 0) meets other participants' cursors,
+  which never see it: `strikeCursor`'s owner gate stops the damage but not a
+  knockback, a death or the crossing either pays. A drain locks on its own cursor and
+  meets no other (`DrainSystem.handleDrainInteractions`).
 - What only the operator does or sees, a pause, an overlay request, the speakers,
   is pushed `OriginDevice`: never journaled and outside the event tallies, so a
   replay, which has an operator of its own, still matches. One left on the ambient
@@ -159,6 +164,11 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Determinism and the harness
 
+- A choice every instance must make alike is tested over two worlds holding one
+  roster, each latched as its own participant (`World.AdoptSession`) and driving its
+  own slot, fed the same events
+  (`TestASweepNamingNoCursorTakesTheFirstParticipantsDrains`); a mesh session adds
+  only the order crossings reach them in.
 - `TestSystemDomainProfiles` holds each system to its declared domain: a Shared one
   touching a Player-only store needs an allowlist entry with its reason (the wall
   system's `"wall:Particle"` mask lookup), while a Player system may read Shared
