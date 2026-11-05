@@ -170,6 +170,11 @@ that proves wrong or that a document now states, and link the document instead.
   test that builds a joiner as a join does goes through `configForJoin` into
   `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,
   and a test of what a join holds to then passes on nothing.
+- The platform's `Host` reaches a run only in its `runConfig` (`host`), which `Run`,
+  `RunScript` and `RunBot` fill from the `Host` handed beside the `Config`: a
+  presenting entry point built on a `Config` alone draws on the terminal, not the
+  window, page or Android view, and no test catches that for a watched script or
+  bot. A test that presents builds its run with `newApp` on a `runConfig`.
 
 ## Tests that flake
 

@@ -109,7 +109,8 @@ real time, which nobody can change. `max` is refused in a session: a participant
 running faster than the rest reaches ticks they have not, and every correction
 rebases it back to the authority's tick.
 
-`-watch` presents the run on this terminal instead of running it headlessly. The
+`-watch` presents the run on the screen play would, the terminal or the desktop
+window (the platform's `Host`), instead of running it headlessly. The
 simulation is unchanged — the same manual clock, the same script geometry, the
 same driver — so a presented run and a headless one of the same script produce
 the same world. Only pan and quit are offered while a presented script is in a
@@ -965,9 +966,10 @@ was given and what the restart names. A scenario change, a restart and a `:join`
 the run's bots again, read when the restart is asked for, since a session closing
 ends them before the switch; a bot told to leave is not among them, and a removal
 by the host seats none.
-Everything operator-owned restarts with it. The terminal does not: `Run` opens one
-for the process and every run presents on it, so a replacement redraws the screen
-rather than leaving and re-entering it. See
+Everything operator-owned restarts with it. The screen does not: every run presents
+on the platform `Host`'s `Presentation`, handed to `Run` beside its `Config`, or on
+the one terminal `Run` opens for the process where that `Host` names none, so a
+replacement redraws the screen rather than leaving and re-entering it. See
 [HFSM and configuration](fsm-and-configuration.md) §2.
 
 In a session every participant does this together. Only the coordinator may ask;

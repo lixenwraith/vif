@@ -424,16 +424,17 @@ runs, the `render.Surface` frames are flushed to, its size, how long it has held
 a frame, the events it reports in the terminal's vocabulary (`terminal.Event`,
 which a host posts for the keys and pointer cells it maps), and the pointer mode.
 One the player can leave without quitting also reports that on `Away`, and a solo
-run pauses until they return, drawn undimmed: the pause is not theirs. The terminal is one (`terminalHost`); it is the
-default when `Config.Host` names none. A host also supplies its speakers as
-`Host.Audio`, a writer the mixer streams PCM to in place of a backend found by
-name. Adding a graphical host is therefore composition, not a simulation fork:
+run pauses until they return, drawn undimmed: the pause is not theirs. The terminal
+is one (`terminalHost`); it is the default when the `app.Host` a run is handed
+names none. A host also supplies its speakers as `Host.Audio`, a writer the mixer
+streams PCM to in place of a backend found by name. Adding a graphical host is
+therefore composition, not a simulation fork:
 
 1. implement `Presentation` over the window or view, drawing the cell grid with
    the embedded font atlas (`asset.DefaultFont`, `pkg/glyph`): `glyph.Raster`
    is the software drawer, a `Surface` any host can start from;
-2. build a `Config` with that `Host` and call `app.Run`; a library binding wraps
-   that call;
+2. call `app.Run` with a `Config` and that `Host` beside it, as `app.RunScript`
+   and `app.RunBot` take one for a watched run; a library binding wraps that call;
 3. keep graphical assets and renderer construction out of the common manifest
    builder, and leave components, systems, events, scheduler and the manifest
    fingerprint common.
@@ -507,8 +508,8 @@ A muted game posts nothing; the touch strip's speaker button sends Ctrl-S, as a
 keyboard would, to cycle the channels.
 
 Android follows that path in `android/` ([its README](../android/README.md)), a
-module of its own bound by `gomobile bind`. `game.Start` builds a `Config` whose
-`Host` is the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and calls
+module of its own bound by `gomobile bind`. `game.Start` builds a `Config` and a
+`Host` of the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and hands both to
 `app.Run`. The app opens on a start screen (`StartScreen`) over the view, in
 lixen.com's dark theme as every host's is: the logo, "Tap to start" under it on the
 site's blue button and a `?` in a ring of that blue that opens the touch controls.

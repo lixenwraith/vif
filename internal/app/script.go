@@ -42,8 +42,8 @@ func scriptPacing(cfg Config) (paced bool, err error) {
 
 // RunScript loads an authored deterministic script and runs it. A host/join
 // configuration uses the ordinary session handshake; ModeScript presents the run
-// on this terminal and every other mode runs it headlessly.
-func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
+// on the platform's Host, as Run does, and every other mode runs it headlessly.
+func RunScript(cfg Config, host Host, path string) (journal.ScriptStats, error) {
 	script, err := journal.LoadScript(path)
 	if err != nil {
 		return journal.ScriptStats{}, err
@@ -52,7 +52,7 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 		cfg.Width, cfg.Height = script.Width, script.Height
 	}
 	var driver *journal.ScriptDriver
-	finished, err := runDriven(runConfig{Config: cfg}, "script", path, func(a *App) (pacedSource, error) {
+	finished, err := runDriven(runConfig{Config: cfg, host: host}, "script", path, func(a *App) (pacedSource, error) {
 		d, err := journal.NewScriptDriver(scriptTarget{a: a}, script)
 		if err != nil {
 			return nil, err
@@ -81,7 +81,7 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 // cfg.Resources resolves. It is otherwise a script run, and presented, it keeps real
 // time unless -speed says otherwise. It reports its counters however it stops;
 // quit says the graph ended the run itself.
-func RunBot(cfg Config, spec string) (bot.Stats, error) {
+func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 	graph, err := loadBotGraph(cfg.Resources, spec)
 	if err != nil {
 		return bot.Stats{}, err
@@ -90,7 +90,7 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	if cfg.Mode == ModeScript && cfg.TimeScaleSpec == "" {
 		cfg.TimeScaleSpec = "1"
 	}
-	run := runConfig{Config: cfg}
+	run := runConfig{Config: cfg, host: host}
 	if run.Width == 0 && run.Height == 0 {
 		run.wiring.terminalGeometry = run.Mode == ModeScript
 		run.Width, run.Height = BotWidth, BotHeight

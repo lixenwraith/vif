@@ -78,10 +78,10 @@ What vif sets of the engine:
   the service keeps the silent engine: gameplay continues, sound requests become
   no-ops with rejection telemetry, and absence of a device is not an
   application-start failure.
-- **Speakers.** A host that has its own hands them over as `app.Config.Host.Audio`,
-  the engine's `Sink`, which a scenario change plays on through: Android's is its
-  `AudioTrack`; the browser's posts each buffer that sounds to the page, which
-  plays it through an AudioWorklet.
+- **Speakers.** A host that has its own hands them over as `app.Host.Audio`
+  beside the run's `Config`, the engine's `Sink`, which a scenario change plays on
+  through: Android's is its `AudioTrack`; the browser's posts each buffer that
+  sounds to the page, which plays it through an AudioWorklet.
 - **Telemetry.** Played and dropped totals and rejection categories are surfaced
   through the game status registry.
 - **Sfx.** A scenario requests an sfx by its sound's name, `EventSoundRequest {

@@ -103,9 +103,6 @@ type Config struct {
 	// the individual scenario, content, keymap and audio overrides.
 	Resources resource.Options
 
-	// Host is the platform's adapters; the zero value is the build's own
-	Host Host
-
 	// ColorMode overrides terminal detection when ColorModeSet is true
 	ColorMode    terminal.ColorMode
 	ColorModeSet bool
@@ -206,11 +203,13 @@ type Config struct {
 	LockMap bool
 }
 
-// runConfig is a run's Config with the wiring it is built with, which this package
+// runConfig is a run's Config with what the run is built with beside it: host, the
+// platform's adapters its caller hands over, and the wiring, which this package
 // sets and no caller can. The App keeps it as cfg; its Validate adds the wiring's
 // rules to Config's, and its Normalize what the wiring settles.
 type runConfig struct {
 	Config
+	host   Host
 	wiring wiring
 }
 

@@ -27,7 +27,7 @@ func (a *App) initAudioService() error {
 		return err
 	}
 	p := a.cfg.Play
-	return a.hub.Register(service.NewAudioService(p.Sfx, p.Music, p.SfxVolume, a.cfg.AudioBackend, a.cfg.AudioBuffer, src, a.cfg.Host.Audio))
+	return a.hub.Register(service.NewAudioService(p.Sfx, p.Music, p.SfxVolume, a.cfg.AudioBackend, a.cfg.AudioBuffer, src, a.cfg.host.Audio))
 }
 
 // audioPlay reads the channels and the sfx volume as the player left them
