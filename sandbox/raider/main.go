@@ -267,9 +267,9 @@ func (a *app) resize(w, h int) {
 	a.buf = render.NewRenderBuffer(mode, w, h)
 	switch {
 	case a.native:
-		a.buf.SetConsole(render.ConsoleFor(render.DetectConsolePalette()))
+		a.buf.SetConsole(render.ConsoleFor(render.DetectConsolePalette()), false)
 	case tiers[a.tier].console:
-		a.buf.SetConsole(render.ConsoleFor(tiers[a.tier].palette))
+		a.buf.SetConsole(render.ConsoleFor(tiers[a.tier].palette), false)
 	}
 	rng := rand.New(rand.NewPCG(1, 2))
 	a.glyphs = a.glyphs[:0]
