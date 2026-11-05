@@ -61,6 +61,19 @@ func (v *Vocabulary[C]) Effect[A any](name string, build func(*A) (func(C), erro
 	v.add(name, verb[C]{kind: dialect.KindAction, keys: payloadKey[A](), args: dialect.Fields[A](), apply: payload(build)})
 }
 
+// Named registers an effect whose payload names what a scenario's programs extend,
+// a species or a style: build takes the names its set's payloads take beside A
+func (v *Vocabulary[C]) Named[A any](name string, build func(names *dialect.Names, a *A) (func(C), error)) {
+	apply := func(names *dialect.Names, _ string, raw any) (func(C), error) {
+		a, err := dialect.Decode[A](raw)
+		if err != nil {
+			return nil, fmt.Errorf("payload: %w", err)
+		}
+		return build(names, a)
+	}
+	v.add(name, verb[C]{kind: dialect.KindAction, keys: payloadKey[A](), args: dialect.Fields[A](), apply: apply})
+}
+
 // Sustained registers an action a state's update runs on every tick it holds
 func (v *Vocabulary[C]) Sustained[A any](name string, build func(*A) (func(C), error)) {
 	v.add(name, verb[C]{kind: dialect.KindSustained, keys: payloadKey[A](), args: dialect.Fields[A](), apply: payload(build)})

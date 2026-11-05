@@ -132,3 +132,32 @@ func (a Area) DistributePoint(index int, rng *FastRand) Point {
 	}
 	return Point{X: a.X + index%a.Width, Y: a.Y + index/a.Width}
 }
+
+// Footprint is a body's cells around the header it stands and moves by: Width×Height
+// cells, the header HeaderX, HeaderY from the top-left
+type Footprint struct {
+	Width   int `toml:"width"`
+	Height  int `toml:"height"`
+	HeaderX int `toml:"header_x"`
+	HeaderY int `toml:"header_y"`
+}
+
+// CellFootprint is the footprint of a body one cell across
+var CellFootprint = Footprint{Width: 1, Height: 1}
+
+// At returns the area the body covers with its header on the cell
+func (f Footprint) At(x, y int) Area {
+	return Area{X: x - f.HeaderX, Y: y - f.HeaderY, Width: f.Width, Height: f.Height}
+}
+
+// Valid reports whether the footprint is a body: a cell or more, its header on it
+func (f Footprint) Valid() bool {
+	return f.Width >= 1 && f.Height >= 1 && f.HeaderX >= 0 && f.HeaderY >= 0 && f.HeaderX < f.Width && f.HeaderY < f.Height
+}
+
+// Covers reports whether f's cells around a header hold o's around the same
+// header, so every header f fits on o fits on too
+func (f Footprint) Covers(o Footprint) bool {
+	return f.HeaderX >= o.HeaderX && f.HeaderY >= o.HeaderY &&
+		f.Width-f.HeaderX >= o.Width-o.HeaderX && f.Height-f.HeaderY >= o.Height-o.HeaderY
+}

@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/pkg/machine"
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
@@ -37,22 +38,30 @@ type BehaviorPrototype struct {
 	Name    string      // the program's name, which keys its status rows
 	Species SpeciesType // SpeciesDataFirst plus the program's index
 
-	Width, Height    int // footprint in cells
-	HeaderX, HeaderY int // phantom head offset from the top-left
+	Footprint vmath.Footprint // its body around the phantom head
 
 	HitPoints        int
-	Combat           CombatEntityType      // the attack-matrix row it fights as
-	Homing           physics.HomingProfile // what its homing steers by
-	Restitution      float64               // velocity it keeps on a wall or boundary bounce
-	Mass             float64               // soft-collision mass; 0 takes no soft collision or flocking
-	Drops            string                // the drop table its kills roll, by name; "" drops nothing
-	Contact          CursorDamage          // what touching it costs a cursor
-	Lifetime         time.Duration         // 0 = lives until killed or cancelled
-	Entrance         BehaviorEntrance      // how it comes onto the map
-	EntranceDuration time.Duration         // how long the entrance plays, 0 = its materialize's own
+	Combat           CombatEntityType                 // the attack-matrix row its own starts from
+	Attacks          [CombatAttackTypeCount]AttackRow // what each attack family does to it
+	Homing           physics.HomingProfile            // what its homing steers by
+	Restitution      float64                          // velocity it keeps on a wall or boundary bounce
+	Mass             float64                          // soft-collision mass; 0 takes no soft collision or flocking
+	Drops            string                           // the drop table its kills roll, by name; "" drops nothing
+	Contact          CursorDamage                     // what touching it costs a cursor
+	Lifetime         time.Duration                    // 0 = lives until killed or cancelled
+	Entrance         BehaviorEntrance                 // how it comes onto the map
+	EntranceDuration time.Duration                    // how long the entrance plays, 0 = its materialize's own
+	Materialize      MaterializeStyle                 // its own style, its entrance's, SpawnTypeDataFirst plus its index
 
 	Look    Look          // its frames, cell by cell
 	Pattern time.Duration // how long each frame shows
+}
+
+// AttackRow is what one attack family does to a data species: the damage its hit
+// deals and the effects it leaves, its combat row's where the prototype names none
+type AttackRow struct {
+	Damage  int
+	Effects CombatEffectMask
 }
 
 // BehaviorEntrance is how a data species comes onto the map when it is asked for

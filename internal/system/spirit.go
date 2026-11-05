@@ -73,9 +73,8 @@ func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update sends the arrival of each spirit naming a species, the tick its deadline
-// ends its flight, in the spirit's domain; its lifetime timer drives and ends the
-// flight's frames
+// Update lands the species each spirit naming one carries, the tick its deadline
+// ends its flight; its lifetime timer drives and ends the flight's frames
 func (s *SpiritSystem) Update() {
 	if !s.enabled {
 		return
@@ -93,14 +92,21 @@ func (s *SpiritSystem) Update() {
 		if timer, ok := s.world.Components.Timer.GetPtr(e); !ok || !timer.Expired(component.TimerDeadline) {
 			continue
 		}
-		s.world.PushEventDomain(event.EventSpiritArrived, &event.SpiritArrivedPayload{
-			X:       spirit.LandX,
-			Y:       spirit.LandY,
-			Species: spirit.Species,
-		}, e.Domain())
+		s.land(e.Domain(), &event.SpeciesLandRequestPayload{Species: spirit.Species, X: spirit.LandX, Y: spirit.LandY})
 		// Landed: the arrival frame still draws, and nothing lands twice
 		spirit.Species = component.SpeciesNone
 	}
+}
+
+// land asks for the species a spirit carried: a Shared one flew on every instance,
+// each landing its own copy, and a player one flew here alone, so its landing is
+// the D-3 artifact that crosses
+func (s *SpiritSystem) land(domain core.Domain, p *event.SpeciesLandRequestPayload) {
+	if domain == core.DomainShared {
+		s.world.PushEventDomain(event.EventSpeciesLandRequest, p, core.DomainShared)
+		return
+	}
+	s.world.PushCrossing(event.EventSpeciesLandRequest, p)
 }
 
 // spawnSpirit creates spirit entities and their components in the requesting domain, without position store registration (vfx only, no world interaction)

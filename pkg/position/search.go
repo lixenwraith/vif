@@ -17,25 +17,18 @@ var spiralDirs = [8][2]int{
 }
 
 // FindFreeAreaSpiral searches outward from origin, 45° counter-clockwise from top,
-// for a width×height area free of walls matching mask (0 = any wall). The anchor
-// offset is the header's position from the area's top-left; maxRadius 0 means
-// DefaultSearchRadius, and a negative one, MapSearchRadius: rays reaching every
-// row and column of the map.
-// Returns the area's top-left and whether one was found.
-func (x *Index[E]) FindFreeAreaSpiral(
-	originX, originY int,
-	width, height int,
-	anchorOffsetX, anchorOffsetY int,
-	mask Mask,
-	maxRadius int,
-) (int, int, bool) {
+// for a header cell whose footprint is free of walls matching mask (0 = any wall);
+// maxRadius 0 means DefaultSearchRadius, and a negative one, MapSearchRadius: rays
+// reaching every row and column of the map. Returns the footprint's top-left and
+// whether one was found.
+func (x *Index[E]) FindFreeAreaSpiral(originX, originY int, foot vmath.Footprint, mask Mask, maxRadius int) (int, int, bool) {
 	px, py, found := x.SpiralSearch(originX, originY, maxRadius, func(px, py int) bool {
-		return x.IsAreaFree(px-anchorOffsetX, py-anchorOffsetY, width, height, mask)
+		return x.IsAreaFree(px-foot.HeaderX, py-foot.HeaderY, foot.Width, foot.Height, mask)
 	})
 	if !found {
 		return 0, 0, false
 	}
-	return px - anchorOffsetX, py - anchorOffsetY, true
+	return px - foot.HeaderX, py - foot.HeaderY, true
 }
 
 // SpiralSearch is FindFreeAreaSpiral's walk for a footprint no rectangle holds: the
@@ -66,20 +59,14 @@ func (x *Index[E]) SpiralSearch(originX, originY, maxRadius int, fits func(px, p
 }
 
 // FindFreeAreaInside is FindFreeAreaSpiral from the origin pulled in from the
-// map's edges until the area with its anchor there lies inside the map: an origin
-// on an edge, or past it, searches from the area flush against that edge on the
-// origin's row or column, whichever edge it is, so a caller names an edge cell
-// blind to the area's size and anchor. An area larger than the map finds nothing.
-func (x *Index[E]) FindFreeAreaInside(
-	originX, originY int,
-	width, height int,
-	anchorOffsetX, anchorOffsetY int,
-	mask Mask,
-	maxRadius int,
-) (int, int, bool) {
-	originX = max(anchorOffsetX, min(originX, x.Width-width+anchorOffsetX))
-	originY = max(anchorOffsetY, min(originY, x.Height-height+anchorOffsetY))
-	return x.FindFreeAreaSpiral(originX, originY, width, height, anchorOffsetX, anchorOffsetY, mask, maxRadius)
+// map's edges until the footprint with its header there lies inside the map: an
+// origin on an edge, or past it, searches from the footprint flush against that
+// edge on the origin's row or column, so a caller names an edge cell blind to the
+// body. A footprint larger than the map finds nothing.
+func (x *Index[E]) FindFreeAreaInside(originX, originY int, foot vmath.Footprint, mask Mask, maxRadius int) (int, int, bool) {
+	originX = max(foot.HeaderX, min(originX, x.Width-foot.Width+foot.HeaderX))
+	originY = max(foot.HeaderY, min(originY, x.Height-foot.Height+foot.HeaderY))
+	return x.FindFreeAreaSpiral(originX, originY, foot, mask, maxRadius)
 }
 
 // MapSearchRadius is the spiral radius whose rays reach every column and every row
@@ -173,24 +160,15 @@ func (x *Index[E]) FindLastFreeOnRay(startX, startY, endX, endY int, mask Mask) 
 	return lastFreeX, lastFreeY, true
 }
 
-// HasAreaLineOfSight reports whether a width×height body whose anchor, the cell
-// it moves by, is anchorX, anchorY from its top-left lies inside the map and clear
-// of walls matching mask with its anchor on each cell of the line strictly between
-// (x0, y0) and (x1, y1)
-func (x *Index[E]) HasAreaLineOfSight(x0, y0, x1, y1, width, height, anchorX, anchorY int, mask Mask) bool {
-	// Degenerate case: point entity
-	if width <= 1 && height <= 1 {
+// HasAreaLineOfSight reports whether a body of the footprint lies inside the map and
+// clear of walls matching mask with its header on each cell of the line strictly
+// between (x0, y0) and (x1, y1)
+func (x *Index[E]) HasAreaLineOfSight(x0, y0, x1, y1 int, foot vmath.Footprint, mask Mask) bool {
+	if foot.Width <= 1 && foot.Height <= 1 {
 		return x.HasLineOfSight(x0, y0, x1, y1, mask)
 	}
-
 	for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
-		boxX := line.X() - anchorX
-		boxY := line.Y() - anchorY
-
-		if boxX < 0 || boxY < 0 || boxX+width > x.Width || boxY+height > x.Height {
-			return false
-		}
-		if x.BlocksArea(boxX, boxY, width, height, mask) {
+		if !x.IsAreaFree(line.X()-foot.HeaderX, line.Y()-foot.HeaderY, foot.Width, foot.Height, mask) {
 			return false
 		}
 	}

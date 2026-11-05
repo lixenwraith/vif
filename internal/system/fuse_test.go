@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -76,15 +77,38 @@ func materializeTicks() int {
 	return int(component.MaterializeStyles[component.SpawnTypeSwarm].Duration() / parameter.GameUpdateInterval)
 }
 
-// spawnCell is the header cell a swarm or quasar spawn request names
-func spawnCell(payload any) (int, int) {
-	switch p := payload.(type) {
-	case *event.SwarmSpawnRequestPayload:
-		return p.X, p.Y
-	case *event.QuasarSpawnRequestPayload:
+// landings returns the land requests naming the species delivered since the mark
+func (b *materializeWorld) landings(species component.SpeciesType, mark int) []event.GameEvent {
+	var out []event.GameEvent
+	for _, ev := range b.sent(event.EventSpeciesLandRequest, mark) {
+		if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok && p.Species == species {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// landCell is the header cell a land request names
+func landCell(ev event.GameEvent) (int, int) {
+	if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok {
 		return p.X, p.Y
 	}
 	return -1, -1
+}
+
+// pairRequest is the drain system's: the two drains into a swarm
+func pairRequest(drains [2]core.Entity, effect event.FuseEffect) event.GameEvent {
+	return event.GameEvent{Type: event.EventFuseRequest, Domain: core.DomainPlayer, Payload: &event.FuseRequestPayload{
+		Entities: drains[:], Target: component.SpeciesSwarm, Effect: effect,
+	}}
+}
+
+// quasarRequest is the quasar region's: every drain of the cursor into a quasar
+func quasarRequest(cursor core.Entity) event.GameEvent {
+	return event.GameEvent{Type: event.EventFuseRequest, Domain: core.DomainPlayer, Payload: &event.FuseRequestPayload{
+		Sources: []event.FuseSource{{Species: component.SpeciesDrain}}, Cursor: cursor,
+		Target: component.SpeciesQuasar, Effect: event.FuseEffectMaterialize,
+	}}
 }
 
 // newFusionWorld is a 40x24 world with two cursors and two drains, running the
@@ -120,8 +144,7 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			b, _, drains := newFusionWorld(t)
 			w := b.w
-			b.deliver(event.GameEvent{Type: event.EventFuseSwarmRequest, Domain: core.DomainPlayer,
-				Payload: &event.FuseSwarmRequestPayload{DrainA: drains[0], DrainB: drains[1], Effect: c.effect}})
+			b.deliver(pairRequest(drains, c.effect))
 			if n := w.Components.Materialize.CountEntities(); n != 0 {
 				t.Fatalf("%d materializes, want the spirits alone", n)
 			}
@@ -140,11 +163,12 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			if carriers != 1 || carrier.Species != component.SpeciesSwarm || spirits[0].Domain() != core.DomainPlayer {
 				t.Fatalf("%d spirits name a species (the first %+v), want one player-domain spirit naming the swarm", carriers, carrier)
 			}
+			area := component.Footprints[component.SpeciesSwarm].At(carrier.LandX, carrier.LandY)
 			for _, e := range spirits {
 				sp, _ := w.Components.Spirit.GetComponent(e)
-				if x, y := int(sp.TargetX), int(sp.TargetY); x < carrier.LandX || x >= carrier.LandX+parameter.SwarmWidth ||
-					y < carrier.LandY || y >= carrier.LandY+parameter.SwarmHeight {
-					t.Fatalf("a spirit flies to (%d, %d), off the footprint at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
+				if x, y := int(sp.TargetX), int(sp.TargetY); x < area.X || x >= area.X+area.Width ||
+					y < area.Y || y >= area.Y+area.Height {
+					t.Fatalf("a spirit flies to (%d, %d), off the footprint headed at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
 				}
 			}
 
@@ -153,16 +177,16 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			for range flight - 1 {
 				b.tick()
 			}
-			if n := len(b.sent(event.EventSwarmSpawnRequest, mark)); n != 0 {
+			if n := len(b.landings(component.SpeciesSwarm, mark)); n != 0 {
 				t.Fatalf("%d swarms before the spirits arrived", n)
 			}
 			b.tick()
-			spawns := b.sent(event.EventSwarmSpawnRequest, mark)
+			spawns := b.landings(component.SpeciesSwarm, mark)
 			if len(spawns) != 1 || spawns[0].Domain != core.DomainPlayer {
 				t.Fatalf("spawns = %+v as the spirits arrived, want one crossing", spawns)
 			}
-			if x, y := spawnCell(spawns[0].Payload); x != carrier.LandX+parameter.SwarmHeaderOffsetX || y != carrier.LandY+parameter.SwarmHeaderOffsetY {
-				t.Fatalf("the swarm lands at (%d, %d), off the footprint at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
+			if x, y := landCell(spawns[0]); x != carrier.LandX || y != carrier.LandY {
+				t.Fatalf("the swarm lands at (%d, %d), off the header the spirit names (%d, %d)", x, y, carrier.LandX, carrier.LandY)
 			}
 			for _, e := range spirits {
 				if timer, ok := w.Components.Timer.GetPtr(e); !ok || timer.Expired(component.TimerLifetime) ||
@@ -172,26 +196,10 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			}
 
 			b.tick()
-			if n := len(b.sent(event.EventSwarmSpawnRequest, mark)); n != 1 || w.Components.Spirit.CountEntities() != 0 {
+			if n := len(b.landings(component.SpeciesSwarm, mark)); n != 1 || w.Components.Spirit.CountEntities() != 0 {
 				t.Fatalf("%d swarms and %d spirits a tick on, want one and none", n, w.Components.Spirit.CountEntities())
 			}
 		})
-	}
-}
-
-// TestOnlyAPlayerSpiritLandsAFusion: a fusion's spirits run on one instance alone,
-// so a Shared spirit's arrival crosses nothing (D-7)
-func TestOnlyAPlayerSpiritLandsAFusion(t *testing.T) {
-	b, _, _ := newFusionWorld(t)
-	b.deliver(event.GameEvent{Type: event.EventSpiritArrived, Domain: core.DomainShared,
-		Payload: &event.SpiritArrivedPayload{X: 10, Y: 10, Species: component.SpeciesSwarm}})
-	if n := len(b.sent(event.EventSwarmSpawnRequest, 0)); n != 0 {
-		t.Fatalf("a Shared spirit crossed %d swarms", n)
-	}
-	b.deliver(event.GameEvent{Type: event.EventSpiritArrived, Domain: core.DomainPlayer,
-		Payload: &event.SpiritArrivedPayload{X: 10, Y: 10, Species: component.SpeciesSwarm}})
-	if n := len(b.sent(event.EventSwarmSpawnRequest, 0)); n != 1 {
-		t.Fatalf("a player spirit crossed %d swarms, want one", n)
 	}
 }
 
@@ -201,31 +209,23 @@ func TestOnlyAPlayerSpiritLandsAFusion(t *testing.T) {
 // footprint the tick the materialize, and so its visual, ends; nothing waits beside it
 func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 	for _, c := range []struct {
-		name          string
-		request       func(cursor core.Entity, drains [2]core.Entity) event.GameEvent
-		species       component.SpeciesType
-		spawn         event.EventType
-		width, height int
-		headX, headY  int
+		name    string
+		request func(cursor core.Entity, drains [2]core.Entity) event.GameEvent
+		species component.SpeciesType
 	}{
 		{
 			name: "drain pair, the materialize",
 			request: func(_ core.Entity, d [2]core.Entity) event.GameEvent {
-				return event.GameEvent{Type: event.EventFuseSwarmRequest, Domain: core.DomainPlayer,
-					Payload: &event.FuseSwarmRequestPayload{DrainA: d[0], DrainB: d[1], Effect: event.FuseEffectMaterialize}}
+				return pairRequest(d, event.FuseEffectMaterialize)
 			},
-			species: component.SpeciesSwarm, spawn: event.EventSwarmSpawnRequest,
-			width: parameter.SwarmWidth, height: parameter.SwarmHeight,
-			headX: parameter.SwarmHeaderOffsetX, headY: parameter.SwarmHeaderOffsetY,
+			species: component.SpeciesSwarm,
 		},
 		{
 			name: "quasar",
 			request: func(cursor core.Entity, _ [2]core.Entity) event.GameEvent {
-				return event.GameEvent{Type: event.EventFuseQuasarRequest, Payload: &event.FuseQuasarRequestPayload{Entity: cursor}}
+				return quasarRequest(cursor)
 			},
-			species: component.SpeciesQuasar, spawn: event.EventQuasarSpawnRequest,
-			width: parameter.QuasarWidth, height: parameter.QuasarHeight,
-			headX: parameter.QuasarHeaderOffsetX, headY: parameter.QuasarHeaderOffsetY,
+			species: component.SpeciesQuasar,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -237,8 +237,8 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 				t.Fatalf("materializes = %v, want one player-domain materialize", materializes)
 			}
 			materialize, _ := w.Components.Materialize.GetComponent(materializes[0])
-			if materialize.Species != c.species || materialize.AreaWidth != c.width || materialize.AreaHeight != c.height {
-				t.Fatalf("materialize = %+v, want species %d over a %dx%d footprint", materialize, c.species, c.width, c.height)
+			if foot := component.Footprints[c.species]; materialize.Species != c.species || materialize.Footprint != foot {
+				t.Fatalf("materialize = %+v, want species %d over its footprint %+v", materialize, c.species, foot)
 			}
 			if n := len(b.sent(event.EventSpiritSpawnRequest, 0)); n != 0 || w.Components.Drain.CountEntities() != 0 {
 				t.Fatalf("%d spirits with %d drains left, want none and none", n, w.Components.Drain.CountEntities())
@@ -248,25 +248,26 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 			for range materializeTicks() - 1 {
 				b.tick()
 			}
-			if n := len(b.sent(c.spawn, mark)); n != 0 || w.Components.Materialize.CountEntities() != 1 {
+			if n := len(b.landings(c.species, mark)); n != 0 || w.Components.Materialize.CountEntities() != 1 {
 				t.Fatalf("%d spawns before the materialize ended", n)
 			}
 			b.tick()
-			spawns := b.sent(c.spawn, mark)
+			spawns := b.landings(c.species, mark)
 			if len(spawns) != 1 || spawns[0].Domain != core.DomainPlayer || w.Components.Materialize.CountEntities() != 0 {
 				t.Fatalf("spawns = %+v as the materialize ended, want one crossing", spawns)
 			}
-			if x, y := spawnCell(spawns[0].Payload); x != materialize.TargetX+c.headX || y != materialize.TargetY+c.headY {
-				t.Fatalf("the spawn names (%d, %d), off the materialize's footprint at (%d, %d)", x, y, materialize.TargetX, materialize.TargetY)
+			if x, y := landCell(spawns[0]); x != materialize.X || y != materialize.Y {
+				t.Fatalf("the spawn names (%d, %d), off the materialize's header (%d, %d)", x, y, materialize.X, materialize.Y)
 			}
 		})
 	}
 }
 
-// TestAQuasarFusionWaitsForTheOneInFlight: the materialize is the pending fusion,
-// so a second request is refused while it flies and admitted once it has landed;
-// a drain pair's spirits hold back nothing
-func TestAQuasarFusionWaitsForTheOneInFlight(t *testing.T) {
+// TestASweepWaitsForTheFusionIntoItsTargetInFlight: the quasar's materialize is
+// the pending fusion, so a second sweep into the quasar is refused while it flies
+// and admitted once it has landed; a drain pair's spirits, naming the swarm, hold
+// back nothing
+func TestASweepWaitsForTheFusionIntoItsTargetInFlight(t *testing.T) {
 	b, cursor, drains := newFusionWorld(t)
 	quasarMaterializes := func() (n int) {
 		for _, e := range b.w.Components.Materialize.Entities() {
@@ -276,9 +277,8 @@ func TestAQuasarFusionWaitsForTheOneInFlight(t *testing.T) {
 		}
 		return n
 	}
-	request := event.GameEvent{Type: event.EventFuseQuasarRequest, Payload: &event.FuseQuasarRequestPayload{Entity: cursor}}
-	b.deliver(event.GameEvent{Type: event.EventFuseSwarmRequest, Domain: core.DomainPlayer,
-		Payload: &event.FuseSwarmRequestPayload{DrainA: drains[0], DrainB: drains[1]}})
+	request := quasarRequest(cursor)
+	b.deliver(pairRequest(drains, event.FuseEffectNone))
 	b.deliver(request)
 	if n := quasarMaterializes(); n != 1 {
 		t.Fatalf("%d quasar materializes beside a drain pair's spirits, want one", n)
@@ -295,4 +295,193 @@ func TestAQuasarFusionWaitsForTheOneInFlight(t *testing.T) {
 	if n := quasarMaterializes(); n != 1 {
 		t.Fatalf("%d quasar materializes after a request once the first landed, want a new one", n)
 	}
+}
+
+// TestAFusionTakesAnySharedSpeciesForItsTarget: a request fuses its sources into any
+// species with a body in the Shared domain, a materialize naming it over its
+// footprint, a program's in its own style; none, the drain and an undeclared
+// program are refused, and nothing is consumed
+func TestAFusionTakesAnySharedSpeciesForItsTarget(t *testing.T) {
+	warden := component.SpeciesDataFirst
+	for _, c := range []struct {
+		name   string
+		target component.SpeciesType
+		style  component.SpawnType // -1 refuses
+	}{
+		{"eye", component.SpeciesEye, component.SpawnTypeSwarm},
+		{"kraken", component.SpeciesKraken, component.SpawnTypeSwarm},
+		{"a program", warden, component.SpawnTypeDataFirst},
+		{"none", component.SpeciesNone, -1},
+		{"the drain", component.SpeciesDrain, -1},
+		{"an undeclared program", warden + 1, -1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b, _, drains := newFusionWorld(t)
+			w := b.w
+			w.Resources.Behaviors = compileWarden(t).Prototypes()
+			b.deliver(event.GameEvent{Type: event.EventFuseRequest, Domain: core.DomainPlayer, Payload: &event.FuseRequestPayload{
+				Entities: drains[:], Target: c.target, Effect: event.FuseEffectMaterialize}})
+			materializes := w.Components.Materialize.Entities()
+			if c.style < 0 {
+				if len(materializes) != 0 || w.Components.Drain.CountEntities() != 2 {
+					t.Fatalf("%d materializes with %d drains left, want none and both", len(materializes), w.Components.Drain.CountEntities())
+				}
+				return
+			}
+			if len(materializes) != 1 || w.Components.Drain.CountEntities() != 0 {
+				t.Fatalf("%d materializes with %d drains left, want one and none", len(materializes), w.Components.Drain.CountEntities())
+			}
+			m, _ := w.Components.Materialize.GetComponent(materializes[0])
+			if m.Species != c.target || m.Footprint != w.Resources.Footprint(c.target) || m.Type != c.style {
+				t.Fatalf("materialize %+v, want species %d over %+v in style %d", m, c.target, w.Resources.Footprint(c.target), c.style)
+			}
+		})
+	}
+}
+
+// TestASweepTakesItsCountOfTheOldestDrains: a source row with a count takes that
+// many of the cursor's drains, the oldest first, and leaves the rest standing
+func TestASweepTakesItsCountOfTheOldestDrains(t *testing.T) {
+	b, cursor, drains := newFusionWorld(t)
+	w := b.w
+	b.deliver(event.GameEvent{Type: event.EventFuseRequest, Domain: core.DomainPlayer, Payload: &event.FuseRequestPayload{
+		Sources: []event.FuseSource{{Species: component.SpeciesDrain, Count: 1}}, Cursor: cursor,
+		Target: component.SpeciesEye, Effect: event.FuseEffectMaterialize,
+	}})
+	if left := w.Components.Drain.Entities(); len(left) != 1 || left[0] != max(drains[0], drains[1]) {
+		t.Fatalf("drains %v left of %v, want the younger alone", left, drains)
+	}
+}
+
+// standHeader stands a composite's bare phantom head: a Shared header of behavior
+// b and type typ at (x, y), under parent unless that is 0
+func standHeader(w *engine.World, b component.Behavior, typ component.CompositeType, parent core.Entity, x, y int) core.Entity {
+	e := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+	w.Components.Header.SetComponent(e, component.HeaderComponent{Behavior: b, Type: typ, ParentHeader: parent})
+	return e
+}
+
+// TestASharedFusionTakesItsCompositesOnEveryInstance: a Shared request, which every
+// instance derives, takes the unit composites at their root its rows sweep, the
+// oldest first, unrewarded on each instance alike, and places the target at their
+// centroid; the instance its cursor elects alone sweeps its drains and carries the
+// landing on its first spirit, where another flies the composites' spirits only
+func TestASharedFusionTakesItsCompositesOnEveryInstance(t *testing.T) {
+	for _, elected := range []bool{true, false} {
+		b, cursor, _ := newFusionWorld(t)
+		w := b.w
+		w.Resources.Behaviors = compileWarden(t).Prototypes()
+		b.handlers = append(b.handlers, ready(NewCompositeSystem(w)).(event.Handler))
+		// The oldest swarm is dying: its kill is its own system's to report
+		dying := standHeader(w, component.BehaviorSwarm, component.CompositeTypeUnit, 0, 14, 14)
+		w.Components.Combat.SetComponent(dying, component.CombatComponent{})
+		swarms := []core.Entity{
+			standHeader(w, component.BehaviorSwarm, component.CompositeTypeUnit, 0, 8, 6),
+			standHeader(w, component.BehaviorSwarm, component.CompositeTypeUnit, 0, 32, 6),
+		}
+		warden := standHeader(w, component.BehaviorData, component.CompositeTypeUnit, 0, 20, 18)
+		w.Components.Behavior.SetComponent(warden, component.BehaviorComponent{})
+		kept := []core.Entity{
+			swarms[1], dying,
+			standHeader(w, component.BehaviorSnake, component.CompositeTypeUnit, swarms[1], 10, 10),
+			standHeader(w, component.BehaviorPylon, component.CompositeTypeAblative, 0, 12, 12),
+		}
+		if !elected {
+			cursor = spawnRemoteCursor(t, w, 2, 1, 1, 7)
+		}
+
+		b.deliver(event.GameEvent{Type: event.EventFuseRequest, Domain: core.DomainShared, Payload: &event.FuseRequestPayload{
+			Sources: []event.FuseSource{
+				{Species: component.SpeciesSwarm, Count: 1}, {Species: component.SpeciesDrain}, {Species: component.SpeciesDataFirst},
+				{Species: component.SpeciesSnake}, {Species: component.SpeciesPylon},
+			},
+			Cursor: cursor, Target: component.SpeciesQuasar,
+		}})
+		for _, e := range []core.Entity{swarms[0], warden} {
+			if w.Components.Header.HasEntity(e) {
+				t.Fatalf("elected %v: composite %v stands after the fusion", elected, e)
+			}
+		}
+		for _, e := range kept {
+			if !w.Components.Header.HasEntity(e) {
+				t.Fatalf("elected %v: composite %v went, which the request does not take", elected, e)
+			}
+		}
+		for _, ev := range b.sent(event.EventCompositeDestroyRequest, 0) {
+			if ev.Domain != core.DomainShared {
+				t.Fatalf("elected %v: a composite went by a %v request, want Shared", elected, ev.Domain)
+			}
+		}
+		for _, ev := range b.sent(event.EventSpeciesKilled, 0) {
+			if p := ev.Payload.(*event.SpeciesKilledPayload); p.Species != component.SpeciesDrain {
+				t.Fatalf("elected %v: a kill of species %d reported, want the drains' alone", elected, p.Species)
+			}
+		}
+
+		spirits := b.sent(event.EventSpiritSpawnRequest, 0)
+		wantSpirits, wantDrains := 2, 2
+		if elected {
+			wantSpirits, wantDrains = 4, 0
+		}
+		if len(spirits) != wantSpirits || w.Components.Drain.CountEntities() != wantDrains {
+			t.Fatalf("elected %v: %d spirits with %d drains left, want %d and %d",
+				elected, len(spirits), w.Components.Drain.CountEntities(), wantSpirits, wantDrains)
+		}
+		first := spirits[0].Payload.(*event.SpiritSpawnRequestPayload)
+		if first.StartX != 8 || first.StartY != 6 {
+			t.Fatalf("elected %v: the first spirit flies from (%d, %d), want the swarm's header (8, 6)", elected, first.StartX, first.StartY)
+		}
+		for i, ev := range spirits {
+			p := ev.Payload.(*event.SpiritSpawnRequestPayload)
+			carries := elected && i == 0
+			if (p.Species == component.SpeciesQuasar) != carries || (carries && (p.LandX != 14 || p.LandY != 12)) {
+				t.Fatalf("elected %v: spirit %d names species %d landing (%d, %d), want the first alone on the elected instance, at the composites' centroid (14, 12)",
+					elected, i, p.Species, p.LandX, p.LandY)
+			}
+		}
+		if n := w.Components.Materialize.CountEntities(); n != 0 {
+			t.Fatalf("elected %v: %d materializes beside the spirits", elected, n)
+		}
+	}
+}
+
+// TestARequestTakesOnlyWhatItsDomainHolds: a participant's request names drains
+// alone, and a Shared one no drain by entity, whose id no other instance shares;
+// either fails whole, consuming nothing
+func TestARequestTakesOnlyWhatItsDomainHolds(t *testing.T) {
+	b, cursor, drains := newFusionWorld(t)
+	w := b.w
+	swarm := standHeader(w, component.BehaviorSwarm, component.CompositeTypeUnit, 0, 8, 6)
+	for _, ev := range []event.GameEvent{
+		{Type: event.EventFuseRequest, Domain: core.DomainPlayer, Payload: &event.FuseRequestPayload{
+			Sources: []event.FuseSource{{Species: component.SpeciesDrain}, {Species: component.SpeciesSwarm}}, Cursor: cursor, Target: component.SpeciesQuasar}},
+		{Type: event.EventFuseRequest, Domain: core.DomainPlayer, Payload: &event.FuseRequestPayload{
+			Entities: []core.Entity{drains[0], swarm}, Target: component.SpeciesQuasar}},
+		{Type: event.EventFuseRequest, Domain: core.DomainShared, Payload: &event.FuseRequestPayload{
+			Entities: []core.Entity{swarm, drains[0]}, Cursor: cursor, Target: component.SpeciesQuasar}},
+	} {
+		b.deliver(ev)
+	}
+	if n := w.Resources.Status.Ints.Get("fuse.spawn_failures").Load(); n != 3 {
+		t.Fatalf("fuse.spawn_failures = %d, want each of the three requests", n)
+	}
+	if !w.Components.Header.HasEntity(swarm) || w.Components.Drain.CountEntities() != 2 ||
+		len(b.sent(event.EventSpiritSpawnRequest, 0))+len(b.sent(event.EventCompositeDestroyRequest, 0)) != 0 {
+		t.Fatal("a refused request consumed a source")
+	}
+}
+
+// compileWarden is the warden program's set, one declared data species
+func compileWarden(t *testing.T) *BehaviorSet {
+	t.Helper()
+	doc, err := toml.NewParser([]byte(wardenProgram)).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	set, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
 }

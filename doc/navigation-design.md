@@ -20,7 +20,7 @@ into motion; loot reads one resource; `AdaptationSystem` reads route graphs.
 |---|---|---|
 | `SearchGrid` | One passability read into a bordered grid with the open directions of every cell precomputed; every Dijkstra on that tier runs on it | fields, reaches, route solver |
 | `FlowField`, `FlowFieldCache` | A field toward a target group's cells, in a cache that throttles its recompute | species through `NavigationComponent` |
-| `Footprint`, `CompositePassability` | A body's cells around its header, and the header cells at which they fit | each composite tier's grid |
+| `vmath.Footprint`, `CompositePassability` | A body's cells around its header, its species' own, and the header cells at which they fit | each composite tier's grid |
 | `Reach` | One search from a cell measuring its distance to several goals | the snake lock |
 | `RouteGraph`, `CorridorField` | A gateway's distinct corridors to its target, each with a field over its corridor alone | routed eyes, adaptation |
 | `TargetResource`, `RouteGraphResource`, `PursuitResource` | The resolved groups, the graphs by gateway, the field toward each cursor | species, gateways, loot |
@@ -215,8 +215,8 @@ corridor's cells with their distance and step, searched on the graph's grid with
 everything outside the corridor a wall, a diagonal's corners included, and kept
 sorted by cell, so a route costs its corridor rather than the map. The graph
 records the body it routes and its tier's generation it was computed on: a
-request names the body (`width`, `height`, `header_x`, `header_y`), the eye's when
-it names none, and a gateway's routes are for its eyes.
+request names the body (`footprint`), the eye's when it names none, and a
+gateway's routes are for its eyes.
 
 A gateway spawned to route by graph requests one at once
 (`EventRouteGraphRequest`); graphs live in `RouteGraphResource` by the gateway's
@@ -363,9 +363,9 @@ steers alike by a field a few ticks old.
 - Use a shared field for many actors with the same footprint and targets; never
   one per entity. An actor whose goal is one participant's cursor reads that
   cursor's private group.
-- A navigator declares its footprint and header offset in `NavigationComponent`,
-  and navigation keeps the tier that steers it; a route graph request for a body
-  other than the eye names its footprint.
+- A navigator carries its species' footprint (`Resource.Footprint`) in
+  `NavigationComponent`, and navigation keeps the tier that steers it; a route
+  graph request for a body other than the eye names its footprint.
 - A new shared derivation with a throttle carries its phase (D-17) and must
   decide identically whether or not anything reads it.
 

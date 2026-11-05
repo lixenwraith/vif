@@ -51,7 +51,7 @@ func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.
 			if p.Species >= component.SpeciesDataFirst {
 				created = append(created, *p)
 			}
-		case *event.MaterializeCompletedPayload:
+		case *event.SpeciesLandRequestPayload:
 			if ev.Domain == core.DomainShared && p.Species >= component.SpeciesDataFirst {
 				materialized++
 			}
@@ -88,7 +88,7 @@ func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.
 		t.Fatalf("%d raiders spawned over a minute, want several", len(created))
 	}
 	if materialized != len(created) {
-		t.Fatalf("%d raiders stood as %d materializes ended, want each landing as its own ends", len(created), materialized)
+		t.Fatalf("%d raiders stood as %d materializes landed them, want each landing as its own ends", len(created), materialized)
 	}
 	types := map[component.SpeciesType]bool{}
 	for _, p := range created {

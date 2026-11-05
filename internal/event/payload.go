@@ -637,31 +637,23 @@ type PingGridRequestPayload struct {
 
 // --- Materialize ---
 
-// MaterializeRequestPayload contains parameters to start a visual spawn sequence
+// MaterializeRequestPayload starts a materialize over a body's footprint with its
+// header on X, Y: Footprint when it is a body, else the species' own, else one cell
 type MaterializeRequestPayload struct {
-	X          int                 `toml:"x"`
-	Y          int                 `toml:"y"`
-	Type       component.SpawnType `toml:"type"`
-	DurationMs int64               `toml:"duration_ms"` // 0 = its style's
-}
-
-// MaterializeAreaRequestPayload for area-based materialization (swarm, quasar)
-type MaterializeAreaRequestPayload struct {
-	X          int                   `toml:"x"`          // Top-left X
-	Y          int                   `toml:"y"`          // Top-left Y
-	AreaWidth  int                   `toml:"area_width"` // 0 or 1 = single cell
-	AreaHeight int                   `toml:"area_height"`
+	X          int                   `toml:"x"`
+	Y          int                   `toml:"y"`
+	Footprint  vmath.Footprint       `toml:"footprint"`
 	Type       component.SpawnType   `toml:"type"`
-	Species    component.SpeciesType `toml:"species"`     // the species its completion lands; SpeciesNone lands nothing
+	Species    component.SpeciesType `toml:"species"`     // the species its end lands; SpeciesNone lands nothing
 	DurationMs int64                 `toml:"duration_ms"` // 0 = its style's
 }
 
-// MaterializeCompletedPayload carries details about a completed materialization
+// MaterializeCompletedPayload is a materialize that ended, at its header cell; the
+// species it carried lands by its own request (SpeciesLandRequestPayload)
 type MaterializeCompletedPayload struct {
-	X       int                   `toml:"x"`
-	Y       int                   `toml:"y"`
-	Type    component.SpawnType   `toml:"type"`
-	Species component.SpeciesType `toml:"species"`
+	X    int                 `toml:"x"`
+	Y    int                 `toml:"y"`
+	Type component.SpawnType `toml:"type"`
 }
 
 // --- Flash ---
@@ -928,12 +920,6 @@ type CursorSetLocalPayload struct {
 
 // --- Fuse ---
 
-// FuseQuasarRequestPayload selects which participant owns the player-domain
-// continuation of one shared escalation decision.
-type FuseQuasarRequestPayload struct {
-	Entity core.Entity `toml:"entity"`
-}
-
 // FuseEffect is what plays a fusion and carries its spawn: the spirits its sources
 // fly in, or a materialize over the footprint
 type FuseEffect int
@@ -946,11 +932,24 @@ const (
 
 var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spirit", FuseEffectMaterialize: "materialize"}
 
-// FuseSwarmRequestPayload contains the two drains to fuse
-type FuseSwarmRequestPayload struct {
-	DrainA core.Entity `toml:"drain_a"`
-	DrainB core.Entity `toml:"drain_b"`
-	Effect FuseEffect  `toml:"effect"`
+// FuseRequestPayload asks for one fusion into Target, played by Effect. Its sources
+// are Entities when it names any, failing when one no longer stands, or else each
+// Sources row's, swept from what stands. A participant's request takes its drains; a
+// Shared one takes unit composites, by entity or row, on every instance, and drains
+// by row on the instance simulating Cursor, the coordinator's in a live session when
+// 0, which also plays the effect that lands the target.
+type FuseRequestPayload struct {
+	Sources  []FuseSource          `toml:"sources"`
+	Entities []core.Entity         `toml:"entities"`
+	Cursor   core.Entity           `toml:"cursor"`
+	Target   component.SpeciesType `toml:"target"`
+	Effect   FuseEffect            `toml:"effect"`
+}
+
+// FuseSource is a sweep's Count sources of one species, every one when Count is 0
+type FuseSource struct {
+	Species component.SpeciesType `toml:"species"`
+	Count   int                   `toml:"count"`
 }
 
 // --- Quasar ---
@@ -1045,20 +1044,11 @@ type SpiritSpawnRequestPayload struct {
 	TargetY   int                   `toml:"target_y"`
 	Char      rune                  `toml:"char"`
 	BaseColor component.SpiritColor `toml:"base_color"`
-	// Species is the species the spirit's arrival lands, on the footprint whose
-	// top-left is LandX, LandY, so a drain pair's swarm rides its spirit;
-	// SpeciesNone lands nothing
+	// Species is the species the spirit's arrival lands, its header on LandX, LandY,
+	// so a drain pair's swarm rides its spirit; SpeciesNone lands nothing
 	Species component.SpeciesType `toml:"species"`
 	LandX   int                   `toml:"land_x"`
 	LandY   int                   `toml:"land_y"`
-}
-
-// SpiritArrivedPayload is the species a spirit's arrival lands and the top-left of
-// the footprint it lands on
-type SpiritArrivedPayload struct {
-	X       int                   `toml:"x"`
-	Y       int                   `toml:"y"`
-	Species component.SpeciesType `toml:"species"`
 }
 
 // --- Lightning ---
@@ -1190,6 +1180,14 @@ type SpeciesCreatedPayload struct {
 	MemberCount int                   `toml:"member_count"` // Composite members; zero for non-composites
 	Genes       []float64             `toml:"genes"`
 	EvalID      uint64                `toml:"eval_id"`
+}
+
+// SpeciesLandRequestPayload is the species a carrier held, landing with its header
+// on X, Y, the nearest place its footprint fits when that cell does not
+type SpeciesLandRequestPayload struct {
+	Species component.SpeciesType `toml:"species"`
+	X       int                   `toml:"x"`
+	Y       int                   `toml:"y"`
 }
 
 // --- Loot ---
@@ -1506,17 +1504,13 @@ type TargetGroupRemovePayload struct {
 }
 
 // RouteGraphRequestPayload requests route graph computation for a gateway-target pair,
-// for the body the routes are for: Width×Height cells with the header HeaderX,
-// HeaderY from the top-left, the eye's when it names none
+// for the body the routes are for, the eye's when the footprint is zero
 type RouteGraphRequestPayload struct {
-	SourceX       int    `toml:"source_x"` // Gateway spawn position
-	SourceY       int    `toml:"source_y"`
-	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity); valid only while route-graph anchors are shared, the domain tag sits above bit 32
-	TargetGroupID uint8  `toml:"target_group_id"`
-	Width         int    `toml:"width"`
-	Height        int    `toml:"height"`
-	HeaderX       int    `toml:"header_x"`
-	HeaderY       int    `toml:"header_y"`
+	SourceX       int             `toml:"source_x"` // Gateway spawn position
+	SourceY       int             `toml:"source_y"`
+	RouteGraphID  uint32          `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity); valid only while route-graph anchors are shared, the domain tag sits above bit 32
+	TargetGroupID uint8           `toml:"target_group_id"`
+	Footprint     vmath.Footprint `toml:"footprint"`
 }
 
 // RouteGraphComputedPayload signals route graph computation completion

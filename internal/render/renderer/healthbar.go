@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // HealthBarRenderer draws health indicators above combat entities
@@ -58,13 +59,14 @@ func getOppositePosition(pos visual.HealthBarPosition) visual.HealthBarPosition 
 }
 
 var healthBarSpecs = [component.CombatEntityCount]struct {
-	width, height, maxHP, offsetX, offsetY int
-	centered                               bool
+	foot     vmath.Footprint
+	maxHP    int
+	centered bool
 }{
-	component.CombatEntityDrain:  {1, 1, parameter.CombatInitialHPDrain, 0, 0, false},
-	component.CombatEntitySwarm:  {parameter.SwarmWidth, parameter.SwarmHeight, parameter.CombatInitialHPSwarm, parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY, false},
-	component.CombatEntityQuasar: {parameter.QuasarWidth, parameter.QuasarHeight, parameter.CombatInitialHPQuasar, parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY, false},
-	component.CombatEntityKraken: {visual.KrakenHealthBarWidth, 1, parameter.KrakenInitialHP, 0, 0, true},
+	component.CombatEntityDrain:  {component.Footprints[component.SpeciesDrain], parameter.CombatInitialHPDrain, false},
+	component.CombatEntitySwarm:  {component.Footprints[component.SpeciesSwarm], parameter.CombatInitialHPSwarm, false},
+	component.CombatEntityQuasar: {component.Footprints[component.SpeciesQuasar], parameter.CombatInitialHPQuasar, false},
+	component.CombatEntityKraken: {vmath.Footprint{Width: visual.KrakenHealthBarWidth, Height: 1}, parameter.KrakenInitialHP, true},
 }
 
 // Render draws health bars for all applicable combat entities
@@ -88,7 +90,7 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		// A data species fights as a code row, but its body and hit points are its own
 		if b, ok := r.gameCtx.World.Components.Behavior.GetComponent(entity); ok && int(b.Program) < len(r.gameCtx.World.Resources.Behaviors) {
 			p := &r.gameCtx.World.Resources.Behaviors[b.Program]
-			spec.width, spec.height, spec.maxHP, spec.offsetX, spec.offsetY = p.Width, p.Height, p.HitPoints, p.HeaderX, p.HeaderY
+			spec.foot, spec.maxHP = p.Footprint, p.HitPoints
 		}
 		// A Kraken's full bar is the hit points it rose with
 		if k, ok := r.gameCtx.World.Components.Kraken.GetComponent(entity); ok && k.MaxHitPoints > 0 {
@@ -97,9 +99,7 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		if spec.maxHP == 0 {
 			return true
 		}
-		width, height, maxHP := spec.width, spec.height, spec.maxHP
-		offsetX, offsetY := spec.offsetX, spec.offsetY
-
+		maxHP := spec.maxHP
 		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 		if !ok {
 			return true
@@ -115,22 +115,19 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 
 		if spec.centered {
-			length := max(visual.HealthBarMinLength, int(math.Ceil(float64(width)*ratio)))
+			length := max(visual.HealthBarMinLength, int(math.Ceil(float64(spec.foot.Width)*ratio)))
 			r.renderHealthBar(ctx, buf, pos.X-length/2, pos.Y, length, ratio, visual.HealthBarAbove)
 			return true
 		}
 
-		// Entity top-left corner (accounting for header offset)
-		entityX := pos.X - offsetX
-		entityY := pos.Y - offsetY
-
 		// Try primary position, fallback to opposite if OOB
+		body := spec.foot.At(pos.X, pos.Y)
 		position := r.position
-		barX, barY, barLength := r.calculateBar(entityX, entityY, width, height, ratio, position)
+		barX, barY, barLength := r.calculateBar(body.X, body.Y, body.Width, body.Height, ratio, position)
 
 		if r.isBarOOB(ctx, barX, barY, barLength, position) {
 			position = getOppositePosition(position)
-			barX, barY, barLength = r.calculateBar(entityX, entityY, width, height, ratio, position)
+			barX, barY, barLength = r.calculateBar(body.X, body.Y, body.Width, body.Height, ratio, position)
 		}
 
 		r.renderHealthBar(ctx, buf, barX, barY, barLength, ratio, position)

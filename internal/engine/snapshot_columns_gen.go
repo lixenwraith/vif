@@ -1802,16 +1802,16 @@ func encodeColumnsNavigation(dst []byte, rows []StoreEntry[component.NavigationC
 		dst = appendF64(dst, rows[i].Value.FlowY)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.Width)
+		dst = appendInt(dst, rows[i].Value.Footprint.Width)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.Height)
+		dst = appendInt(dst, rows[i].Value.Footprint.Height)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.HeaderX)
+		dst = appendInt(dst, rows[i].Value.Footprint.HeaderX)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.HeaderY)
+		dst = appendInt(dst, rows[i].Value.Footprint.HeaderY)
 	}
 	for i := range rows {
 		dst = appendF64(dst, rows[i].Value.FlowLookahead)
@@ -1851,16 +1851,16 @@ func decodeColumnsNavigation(r *columnReader) []StoreEntry[component.NavigationC
 		readF64(&rows[i].Value.FlowY, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.Width, r)
+		readInt(&rows[i].Value.Footprint.Width, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.Height, r)
+		readInt(&rows[i].Value.Footprint.Height, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.HeaderX, r)
+		readInt(&rows[i].Value.Footprint.HeaderX, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.HeaderY, r)
+		readInt(&rows[i].Value.Footprint.HeaderY, r)
 	}
 	for i := range rows {
 		readF64(&rows[i].Value.FlowLookahead, r)
@@ -2740,19 +2740,22 @@ func decodeColumnsSpirit(r *columnReader) []StoreEntry[component.SpiritComponent
 func encodeColumnsMaterialize(dst []byte, rows []StoreEntry[component.MaterializeComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.TargetX)
+		dst = appendInt(dst, rows[i].Value.X)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.TargetY)
+		dst = appendInt(dst, rows[i].Value.Y)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.AreaWidth)
+		dst = appendInt(dst, rows[i].Value.Footprint.Width)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.AreaHeight)
+		dst = appendInt(dst, rows[i].Value.Footprint.Height)
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.BeamWidth)
+		dst = appendInt(dst, rows[i].Value.Footprint.HeaderX)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.Footprint.HeaderY)
 	}
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.Type)
@@ -2771,19 +2774,22 @@ func decodeColumnsMaterialize(r *columnReader) []StoreEntry[component.Materializ
 	rows := make([]StoreEntry[component.MaterializeComponent], n)
 	readEntityColumn(rows, r)
 	for i := range rows {
-		readInt(&rows[i].Value.TargetX, r)
+		readInt(&rows[i].Value.X, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.TargetY, r)
+		readInt(&rows[i].Value.Y, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.AreaWidth, r)
+		readInt(&rows[i].Value.Footprint.Width, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.AreaHeight, r)
+		readInt(&rows[i].Value.Footprint.Height, r)
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.BeamWidth, r)
+		readInt(&rows[i].Value.Footprint.HeaderX, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.Footprint.HeaderY, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.Type, r)

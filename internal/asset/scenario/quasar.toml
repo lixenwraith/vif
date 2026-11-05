@@ -20,7 +20,7 @@ on_enter = [
     # Persistent effects live on QuasarHold. This state keeps only one-shot fuse
     # work, which correction must not replay.
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { intensity = 0.8, duration_ms = 200, cursor = 0 }, payload_vars = { cursor = "fuse_owner" } },
-    { action = "EmitEvent", event = "EventFuseQuasarRequest", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
+    { action = "EmitEvent", event = "EventFuseRequest", payload = { sources = [{ species = "drain" }], target = "quasar", effect = "materialize", cursor = 0 }, payload_vars = { cursor = "fuse_owner" } },
 ]
 transitions = [
     { trigger = "EventSpeciesCreated", target = "QuasarGoldSpawn", guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["quasar"] } },

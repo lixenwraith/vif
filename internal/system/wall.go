@@ -906,8 +906,8 @@ func (s *WallSystem) displaceComposite(hit compositeHit, cave bool) int64 {
 			left, top, right, bottom = min(left, c.X), min(top, c.Y), max(right, c.X), max(bottom, c.Y)
 		}
 		var x, y int
-		x, y, found = positions.FindFreeAreaSpiral(headerPos.X, headerPos.Y, right-left+1, bottom-top+1,
-			headerPos.X-left, headerPos.Y-top, mask, 0)
+		body := vmath.Footprint{Width: right - left + 1, Height: bottom - top + 1, HeaderX: headerPos.X - left, HeaderY: headerPos.Y - top}
+		x, y, found = positions.FindFreeAreaSpiral(headerPos.X, headerPos.Y, body, mask, 0)
 		dx, dy = x-left, y-top
 	}
 	if !found {

@@ -211,9 +211,9 @@ func (s *StormSystem) Priority() int {
 func (s *StormSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventStormSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventStormCancelRequest,
 		event.EventCompositeIntegrityBreach,
-		event.EventMaterializeComplete,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -235,21 +235,23 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	x, y, spawn := s.spawnAt(ev)
 	if !s.enabled {
-		if ev.Type == event.EventStormSpawnRequest {
+		if spawn {
+			s.lifecycle.spawnFailures.Add(1)
+		}
+		return
+	}
+	if spawn {
+		if s.rootEntity == 0 {
+			s.spawnStorm(x, y)
+		} else {
 			s.lifecycle.spawnFailures.Add(1)
 		}
 		return
 	}
 
 	switch ev.Type {
-	case event.EventStormSpawnRequest:
-		if s.rootEntity == 0 {
-			s.spawnStorm()
-		} else {
-			s.lifecycle.spawnFailures.Add(1)
-		}
-
 	case event.EventStormCancelRequest:
 		if s.rootEntity != 0 {
 			s.lifecycle.despawned.Add(1)
@@ -261,17 +263,6 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 			if payload.Behavior == component.BehaviorStorm && payload.RemainingCount == 0 {
 				s.handleCircleBreach(payload.HeaderEntity)
 			}
-		}
-
-	case event.EventMaterializeComplete:
-		// A blue attack's materialize is the only Shared one naming the swarm, and the
-		// swarm it carries lands as it ends, on its footprint
-		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok &&
-			ev.Domain == core.DomainShared && payload.Species == component.SpeciesSwarm {
-			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
-				X: payload.X + parameter.SwarmHeaderOffsetX,
-				Y: payload.Y + parameter.SwarmHeaderOffsetY,
-			})
 		}
 	}
 }
@@ -381,11 +372,20 @@ func (s *StormSystem) AliveCount(c *component.StormComponent) int {
 	return count
 }
 
-// spawnStorm creates the root header and 3 circle sub-headers
-func (s *StormSystem) spawnStorm() {
-	config := s.world.Resources.Config
-	centerX := config.MapWidth / 2
-	centerY := config.MapHeight / 2
+// spawnAt reads a request for a storm at a cell: its own spawn request, at the map's
+// centre, or a land request naming it
+func (s *StormSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
+	if ev.Type == event.EventStormSpawnRequest {
+		return s.world.Resources.Config.MapWidth / 2, s.world.Resources.Config.MapHeight / 2, true
+	}
+	if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok && p.Species == component.SpeciesStorm {
+		return p.X, p.Y, true
+	}
+	return 0, 0, false
+}
+
+// spawnStorm creates the root header and 3 circle sub-headers around the cell
+func (s *StormSystem) spawnStorm(centerX, centerY int) {
 	centerPX, centerPY := (vmath.Point{X: centerX, Y: centerY}).Center()
 
 	// Pre-calculate circle spawn parameters
@@ -1205,16 +1205,10 @@ func (s *StormSystem) findLanding(c *circleCtx) {
 		circlePY+distance*vmath.Sin(angle)*0.5,
 	)
 
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		target.X, target.Y,
-		parameter.SwarmWidth, parameter.SwarmHeight,
-		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	foot := component.Footprints[component.SpeciesSwarm]
+	left, top, found := s.world.Positions.FindFreeAreaInside(target.X, target.Y, foot, component.WallBlockSpawn, 0)
 	c.circle.LandingFound = found
-	c.circle.AttackTargetX = topLeftX + parameter.SwarmHeaderOffsetX
-	c.circle.AttackTargetY = topLeftY + parameter.SwarmHeaderOffsetY
+	c.circle.AttackTargetX, c.circle.AttackTargetY = left+foot.HeaderX, top+foot.HeaderY
 }
 
 // materializeIn materializes a swarm onto the landing its attack found: a cue, so
@@ -1223,13 +1217,11 @@ func (s *StormSystem) materializeIn(c *circleCtx) {
 	if !c.circle.LandingFound {
 		return
 	}
-	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
-		X:          c.circle.AttackTargetX - parameter.SwarmHeaderOffsetX,
-		Y:          c.circle.AttackTargetY - parameter.SwarmHeaderOffsetY,
-		AreaWidth:  parameter.SwarmWidth,
-		AreaHeight: parameter.SwarmHeight,
-		Type:       component.SpawnTypeSwarm,
-		Species:    component.SpeciesSwarm,
+	s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+		X:       c.circle.AttackTargetX,
+		Y:       c.circle.AttackTargetY,
+		Type:    component.SpawnTypeSwarm,
+		Species: component.SpeciesSwarm,
 	})
 }
 

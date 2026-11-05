@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // TestADataSpeciesDrawsTheFrameItShowsInItsStateColour: each member takes its cell
@@ -32,7 +33,7 @@ func TestADataSpeciesDrawsTheFrameItShowsInItsStateColour(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	header, combat := wardenAt(w, component.BehaviorPrototype{Name: "warden", Width: 2, Height: 1, HeaderX: 1, HitPoints: 40, Look: look})
+	header, combat := wardenAt(w, component.BehaviorPrototype{Name: "warden", Footprint: vmath.Footprint{Width: 2, Height: 1, HeaderX: 1}, HitPoints: 40, Look: look})
 
 	draw := func() (terminal.Cell, terminal.Cell) {
 		w.Components.Combat.SetComponent(header, *combat)
@@ -72,7 +73,7 @@ func TestADataSpeciesOnAConsoleDrawsItsConsolePair(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	header, combat := wardenAt(w, component.BehaviorPrototype{Name: "warden", Width: 2, Height: 1, HeaderX: 1, HitPoints: 40, Look: look})
+	header, combat := wardenAt(w, component.BehaviorPrototype{Name: "warden", Footprint: vmath.Footprint{Width: 2, Height: 1, HeaderX: 1}, HitPoints: 40, Look: look})
 
 	draw := func() (terminal.Cell, terminal.Cell) {
 		w.Components.Combat.SetComponent(header, *combat)
@@ -117,7 +118,7 @@ func TestADataSpeciesInAStateFlaggedTeleportLineDrawsIt(t *testing.T) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
-	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Width: 2, Height: 1, HeaderX: 1, HitPoints: 20}}
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Footprint: vmath.Footprint{Width: 2, Height: 1, HeaderX: 1}, HitPoints: 20}}
 	header := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 5, Y: 5})
 	b := component.BehaviorComponent{TargetX: 30, TargetY: 5}
@@ -146,7 +147,7 @@ func TestADataSpeciesInAChargeLineStateDrawsTheChargeLine(t *testing.T) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
-	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Width: 2, Height: 1, HeaderX: 1, HitPoints: 20}}
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Footprint: vmath.Footprint{Width: 2, Height: 1, HeaderX: 1}, HitPoints: 20}}
 	header := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 5, Y: 5})
 
@@ -191,7 +192,7 @@ func TestTheChargeAndTeleportLinesReachTheLandingMarker(t *testing.T) {
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
-	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Width: 3, Height: 2, HeaderX: 1, HitPoints: 20}}
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Footprint: vmath.Footprint{Width: 3, Height: 2, HeaderX: 1}, HitPoints: 20}}
 	header := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 5, Y: 5})
 
@@ -224,7 +225,7 @@ func TestTheLandingMarkerBlinksOnTheFootprintCentreUntilTheLanding(t *testing.T)
 	w := engine.NewWorld()
 	game := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
-	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Width: 3, Height: 2, HeaderX: 1, HitPoints: 20}}
+	w.Resources.Behaviors = []component.BehaviorPrototype{{Name: "raider", Footprint: vmath.Footprint{Width: 3, Height: 2, HeaderX: 1}, HitPoints: 20}}
 	raider, swarm := w.CreateEntity(core.DomainShared), w.CreateEntity(core.DomainShared)
 	marked := func(x, y int) color.RGB {
 		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 40, 24)

@@ -163,7 +163,7 @@ func (s *SoftCollisionSystem) initMatrix() {
 	var data []body
 	for _, p := range s.world.Resources.Behaviors {
 		if p.Mass > 0 {
-			invRx, invRy := vmath.EllipseInvRadiiSq(float64(p.Width)/2, float64(p.Height)/2)
+			invRx, invRy := vmath.EllipseInvRadiiSq(float64(p.Footprint.Width)/2, float64(p.Footprint.Height)/2)
 			data = append(data, body{p.Species, p.Mass, invRx, invRy})
 		}
 	}

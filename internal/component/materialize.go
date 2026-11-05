@@ -3,25 +3,19 @@ package component
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// MaterializeComponent represents a materialize, beams converging on a spawn
-// target; its deadline timer runs it and completes it
+// MaterializeComponent is a materialize over a body's footprint with its header on
+// X, Y, which its deadline timer runs and completes
 type MaterializeComponent struct {
-	// Target area (beams converge to this rectangle)
-	TargetX    int // Top-left X
-	TargetY    int // Top-left Y
-	AreaWidth  int // Target width (1 = single column)
-	AreaHeight int // Target height (1 = single row)
-
-	// Visual parameters
-	BeamWidth int // Beam thickness perpendicular to direction (1 = thin)
-
-	// Type of entity being spawned (for completion event)
-	Type SpawnType
-	// Species is the species the completion lands, so the materialize itself holds
-	// the spawn; SpeciesNone lands nothing
+	X, Y      int
+	Footprint vmath.Footprint
+	Type      SpawnType // the style it plays, which its completion carries
+	// Species is the species its end lands, so the materialize itself holds the
+	// spawn; SpeciesNone lands nothing
 	Species SpeciesType
 }
 
@@ -36,11 +30,17 @@ const (
 	SpawnTypeCount
 )
 
-// MaterializeStyle is one spawn type: the name a document calls it by, and its
-// materialize's timing; the fill runs each beam's head from the edge to the
-// target, the hold keeps the beam, the recede runs the tail after it
+// SpawnTypeDataFirst is the first program's style: a scenario's programs take
+// SpawnTypeDataFirst onward in sorted-name order, as their species do
+const SpawnTypeDataFirst = SpawnTypeCount
+
+// MaterializeStyle is one spawn type: the name a document calls it by, its beams'
+// colour, a program's alone, as the renderer holds a code style's, and its timing;
+// the fill runs each beam's head from the edge to the target, the hold keeps the
+// beam, the recede runs the tail after it
 type MaterializeStyle struct {
 	Name               string
+	Color              color.RGB
 	Fill, Hold, Recede time.Duration
 }
 

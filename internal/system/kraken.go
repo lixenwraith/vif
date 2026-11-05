@@ -52,8 +52,8 @@ func (s *KrakenSystem) Init() {
 }
 
 func (s *KrakenSystem) EventTypes() []event.EventType {
-	return []event.EventType{event.EventKrakenSpawnRequest, event.EventKrakenCancelRequest,
-		event.EventMetaSystemCommandRequest}
+	return []event.EventType{event.EventKrakenSpawnRequest, event.EventSpeciesLandRequest,
+		event.EventKrakenCancelRequest, event.EventMetaSystemCommandRequest}
 }
 
 func (s *KrakenSystem) HandleEvent(ev event.GameEvent) {
@@ -71,6 +71,11 @@ func (s *KrakenSystem) HandleEvent(ev event.GameEvent) {
 				p = &event.KrakenSpawnRequestPayload{}
 			}
 			s.spawn(p)
+		}
+	case event.EventSpeciesLandRequest:
+		// A land request naming the kraken is its spawn request at its defaults
+		if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok && s.enabled && p.Species == component.SpeciesKraken {
+			s.spawn(&event.KrakenSpawnRequestPayload{X: p.X, Y: p.Y})
 		}
 	}
 }

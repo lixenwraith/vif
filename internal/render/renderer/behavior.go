@@ -61,11 +61,11 @@ func (r *BehaviorRenderer) Render(ctx render.RenderContext, buf *render.RenderBu
 			if !visible {
 				continue
 			}
-			row, col := member.OffsetY+p.HeaderY, member.OffsetX+p.HeaderX
-			if row < 0 || row >= p.Height || col < 0 || col >= p.Width {
+			row, col := member.OffsetY+p.Footprint.HeaderY, member.OffsetX+p.Footprint.HeaderX
+			if row < 0 || row >= p.Footprint.Height || col < 0 || col >= p.Footprint.Width {
 				continue
 			}
-			r.paint.cell(buf, screenX, screenY, &p.Look, &frame[row*p.Width+col], tint, hit || combat.IsEnraged, hit)
+			r.paint.cell(buf, screenX, screenY, &p.Look, &frame[row*p.Footprint.Width+col], tint, hit || combat.IsEnraged, hit)
 		}
 		return true
 	})

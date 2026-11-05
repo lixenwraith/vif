@@ -1,8 +1,11 @@
 package system
 
 import (
+	"slices"
 	"testing"
 
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 )
@@ -43,5 +46,51 @@ func TestASpeciesAskedForAtAMapCornerStandsWholeInsideIt(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestALandRequestStandsTheCodeSpeciesItNames: every Shared code species' own system
+// answers a land request naming it as its spawn request at that request's defaults,
+// so a fusion or a program lands any of them; one naming another species stands
+// nothing
+func TestALandRequestStandsTheCodeSpeciesItNames(t *testing.T) {
+	systems := map[component.SpeciesType]func(*engine.World) engine.System{
+		component.SpeciesSwarm: NewSwarmSystem, component.SpeciesQuasar: NewQuasarSystem,
+		component.SpeciesStorm: NewStormSystem, component.SpeciesPylon: NewPylonSystem,
+		component.SpeciesSnake: NewSnakeSystem, component.SpeciesEye: NewEyeSystem,
+		component.SpeciesTower: NewTowerSystem, component.SpeciesKraken: NewKrakenSystem,
+	}
+	for species := component.SpeciesNone + 1; species < component.SpeciesCount; species++ {
+		if component.SpeciesDomains[species] != core.DomainShared {
+			continue
+		}
+		build, ok := systems[species]
+		if !ok {
+			t.Fatalf("%s is a Shared species no case stands", component.SpeciesNames[species])
+		}
+		t.Run(component.SpeciesNames[species], func(t *testing.T) {
+			w := engine.NewWorld()
+			engine.NewGameContextWithClock(w, 120, 60, engine.NewManualClock())
+			s := ready(build(w)).(event.Handler)
+			land := func(named component.SpeciesType) (created []component.SpeciesType) {
+				// Delivered as the router does, to a system that takes it
+				if slices.Contains(s.EventTypes(), event.EventSpeciesLandRequest) {
+					s.HandleEvent(event.GameEvent{Type: event.EventSpeciesLandRequest,
+						Payload: &event.SpeciesLandRequestPayload{Species: named, X: 60, Y: 30}})
+				}
+				for _, ev := range w.Resources.Event.Queue.Consume() {
+					if p, ok := ev.Payload.(*event.SpeciesCreatedPayload); ok {
+						created = append(created, p.Species)
+					}
+				}
+				return created
+			}
+			if created := land(component.SpeciesDrain); len(created) != 0 {
+				t.Fatalf("a land request naming the drain stood %v", created)
+			}
+			if created := land(species); len(created) != 1 || created[0] != species {
+				t.Fatalf("a land request naming it stood %v", created)
+			}
+		})
 	}
 }

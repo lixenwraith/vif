@@ -27,6 +27,7 @@ func TestWorldDefiningArtifactsAreNeverRetained(t *testing.T) {
 		event.EventSwarmSpawnRequest,
 		event.EventQuasarSpawnRequest,
 		event.EventBehaviorSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventDrainDefeated,
 	} {
 		if !barrierBound(et) {

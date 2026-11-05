@@ -21,7 +21,7 @@ import (
 // field, reach and route graph of the footprint searches, the generation it last
 // moved at, and the cells a tick's wall change turned on it
 type navTier struct {
-	foot           navigation.Footprint
+	foot           vmath.Footprint
 	pass           *navigation.CompositePassability // nil on the point tier, whose passability is the walls
 	grid           navigation.SearchGrid
 	gen            uint64
@@ -43,10 +43,7 @@ type targetGroupNav struct {
 }
 
 // eyeFootprint is the composite tier every body it covers steers by
-var eyeFootprint = navigation.Footprint{
-	Width: parameter.EyeWidth, Height: parameter.EyeHeight,
-	HeaderX: parameter.EyeHeaderOffsetX, HeaderY: parameter.EyeHeaderOffsetY,
-}
+var eyeFootprint = component.Footprints[component.SpeciesEye]
 
 // NavigationSystem resolves target groups, maintains each group's flow field on
 // every passability tier, keeps the tiers up to the walls, and computes gateway
@@ -85,8 +82,8 @@ type NavigationSystem struct {
 	routeRebuildTicks, refreshTicks int
 
 	reach      navigation.Reach
-	recomputes int64                  // fields that fell due this tick
-	need       []navigation.Footprint // syncTiers' scratch
+	recomputes int64             // fields that fell due this tick
+	need       []vmath.Footprint // syncTiers' scratch
 
 	statEntities   *atomic.Int64
 	statRecomputes *atomic.Int64
@@ -122,7 +119,7 @@ func (s *NavigationSystem) Init() {
 	clear(s.targets[:])
 	s.routeRebuildTicks, s.refreshTicks = 0, 0
 	s.gridsAt, s.wallsSeq, s.derived = 0, 0, false
-	s.tiers = []*navTier{{foot: navigation.Point}, {foot: eyeFootprint}}
+	s.tiers = []*navTier{{foot: vmath.CellFootprint}, {foot: eyeFootprint}}
 
 	config := s.world.Resources.Config
 	s.resize(config.MapWidth, config.MapHeight)
@@ -368,20 +365,22 @@ func (s *NavigationSystem) derive(t *navTier) {
 
 // validBody reports whether a footprint is one a body can have: its header on it,
 // and no larger than the largest a data species may declare
-func validBody(f navigation.Footprint) bool {
-	return f.Width >= 1 && f.Height >= 1 && f.Width <= parameter.BehaviorFootprintMax && f.Height <= parameter.BehaviorFootprintMax &&
-		f.HeaderX >= 0 && f.HeaderY >= 0 && f.HeaderX < f.Width && f.HeaderY < f.Height
+func validBody(f vmath.Footprint) bool {
+	return f.Valid() && f.Width <= parameter.BehaviorFootprintMax && f.Height <= parameter.BehaviorFootprintMax
 }
 
-// bodyOf is the footprint a navigator declares
-func bodyOf(nav *component.NavigationComponent) navigation.Footprint {
-	return navigation.Footprint{Width: max(nav.Width, 1), Height: max(nav.Height, 1), HeaderX: nav.HeaderX, HeaderY: nav.HeaderY}
+// bodyOf is the footprint a navigator declares, one cell when it declares none
+func bodyOf(nav *component.NavigationComponent) vmath.Footprint {
+	if nav.Footprint.Valid() {
+		return nav.Footprint
+	}
+	return vmath.CellFootprint
 }
 
 // tierOf is the index of the tier a body steers by: the point tier for one cell
 // across, the eye's for a body its cells hold, else the body's own, -1 while no
 // tier is kept for it
-func (s *NavigationSystem) tierOf(foot navigation.Footprint) int {
+func (s *NavigationSystem) tierOf(foot vmath.Footprint) int {
 	switch {
 	case foot.Width <= 1 && foot.Height <= 1:
 		return 0
@@ -398,7 +397,7 @@ func (s *NavigationSystem) tierOf(foot navigation.Footprint) int {
 
 // keepTier is the tier a body steers by, derived from the walls as they stand
 // when the body is the first to need it, every group taking a field on it
-func (s *NavigationSystem) keepTier(foot navigation.Footprint) int {
+func (s *NavigationSystem) keepTier(foot vmath.Footprint) int {
 	if i := s.tierOf(foot); i >= 0 {
 		return i
 	}
@@ -422,7 +421,7 @@ func (s *NavigationSystem) keepTier(foot navigation.Footprint) int {
 // navigator or a gateway's route graph steers by, and no other
 func (s *NavigationSystem) syncTiers() {
 	need := s.need[:0]
-	keep := func(foot navigation.Footprint) {
+	keep := func(foot vmath.Footprint) {
 		if foot.Width > 1 || foot.Height > 1 {
 			if !eyeFootprint.Covers(foot) && !slices.Contains(need, foot) {
 				need = append(need, foot)
@@ -455,7 +454,7 @@ func (s *NavigationSystem) syncTiers() {
 }
 
 // footOrder orders footprints by width, height and header, the order extra tiers keep
-func footOrder(a, b navigation.Footprint) int {
+func footOrder(a, b vmath.Footprint) int {
 	return cmp.Or(cmp.Compare(a.Width, b.Width), cmp.Compare(a.Height, b.Height),
 		cmp.Compare(a.HeaderX, b.HeaderX), cmp.Compare(a.HeaderY, b.HeaderY))
 }
@@ -557,7 +556,7 @@ func (s *NavigationSystem) Update() {
 		// The body as it is, from its header: a wider or taller one flies no
 		// straighter, and a centred box is not where the body stands
 		foot := bodyOf(navComp)
-		if bodyHasLineOfSight(s.world, gridX, gridY, targetX, targetY, foot.Width, foot.Height, foot.HeaderX, foot.HeaderY) {
+		if bodyHasLineOfSight(s.world, gridX, gridY, targetX, targetY, foot) {
 			navComp.HasDirectPath = true
 			navComp.FlowX = 0
 			navComp.FlowY = 0
@@ -1079,7 +1078,7 @@ func (s *NavigationSystem) refreshRouteGraphs() {
 			SourceX:       anchorPos.X + gw.OffsetX,
 			SourceY:       anchorPos.Y + gw.OffsetY,
 			TargetGroupID: gw.GroupID,
-			Width:         foot.Width, Height: foot.Height, HeaderX: foot.HeaderX, HeaderY: foot.HeaderY,
+			Footprint:     foot,
 		})
 		return
 	}
@@ -1107,9 +1106,8 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 	}
 
 	foot := eyeFootprint
-	if payload.Width > 0 || payload.Height > 0 {
-		foot = navigation.Footprint{Width: payload.Width, Height: payload.Height, HeaderX: payload.HeaderX, HeaderY: payload.HeaderY}
-		if !validBody(foot) {
+	if payload.Footprint != (vmath.Footprint{}) {
+		if foot = payload.Footprint; !validBody(foot) {
 			return
 		}
 	}
@@ -1138,7 +1136,7 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 
 // computeRouteGraph routes a body from source to target over the tier it steers by
 // and stamps the graph with the tier's generation it read.
-func (s *NavigationSystem) computeRouteGraph(sourceX, sourceY, targetX, targetY int, foot navigation.Footprint) *navigation.RouteGraph {
+func (s *NavigationSystem) computeRouteGraph(sourceX, sourceY, targetX, targetY int, foot vmath.Footprint) *navigation.RouteGraph {
 	config := s.world.Resources.Config
 	t := s.tiers[s.keepTier(foot)]
 	rg := s.solver.Compute(sourceX, sourceY, targetX, targetY, config.MapWidth, config.MapHeight, foot, t.blockedBits(s))
@@ -1202,12 +1200,12 @@ type navTargetGroup struct {
 // navRouteGraph is one gateway route graph's derivation inputs, named by the graph
 // ID the gateway carries so it survives gateways being added or removed.
 type navRouteGraph struct {
-	GraphID   uint32               `json:"graph_id"`
-	SourceX   int                  `json:"source_x"`
-	SourceY   int                  `json:"source_y"`
-	TargetX   int                  `json:"target_x"`
-	TargetY   int                  `json:"target_y"`
-	Footprint navigation.Footprint `json:"footprint"`
+	GraphID   uint32          `json:"graph_id"`
+	SourceX   int             `json:"source_x"`
+	SourceY   int             `json:"source_y"`
+	TargetX   int             `json:"target_x"`
+	TargetY   int             `json:"target_y"`
+	Footprint vmath.Footprint `json:"footprint"`
 }
 
 // navGroupPhase is one target group's throttle phase on every tier, named by group
@@ -1221,11 +1219,11 @@ type navGroupPhase struct {
 // navFieldPhase is a group's throttle phase on one tier, named by the tier's
 // footprint so it survives tiers being kept or dropped.
 type navFieldPhase struct {
-	Footprint   navigation.Footprint `json:"footprint"`
-	Ticks       int                  `json:"ticks"`
-	Pending     bool                 `json:"pending"`
-	Computed    bool                 `json:"computed"`
-	LastTargets []vmath.Point        `json:"last_targets"`
+	Footprint   vmath.Footprint `json:"footprint"`
+	Ticks       int             `json:"ticks"`
+	Pending     bool            `json:"pending"`
+	Computed    bool            `json:"computed"`
+	LastTargets []vmath.Point   `json:"last_targets"`
 }
 
 // SaveShared carries the D-17 recompute phase (D-19). The fields themselves are
@@ -1349,7 +1347,7 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 	s.routeRebuildTicks, s.refreshTicks = snap.RouteRebuildTicks, snap.RefreshTicks
 
 	s.applyWalls()
-	var feet []navigation.Footprint
+	var feet []vmath.Footprint
 	for _, phase := range snap.Groups {
 		if int(phase.GroupID) >= len(s.targets) {
 			return fmt.Errorf("navigation: invalid cache group %d", phase.GroupID)

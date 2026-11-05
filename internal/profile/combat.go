@@ -49,6 +49,32 @@ func register(p *AttackProfile) {
 	attackMatrix[p.AttackType][p.Attacker][p.Defender] = p
 }
 
+// Defending is the profile family atk lands on defender with, whichever attacker
+// throws it; nil when none does
+func Defending(atk component.CombatAttackType, defender component.CombatEntityType) *AttackProfile {
+	for attacker := range component.CombatEntityCount {
+		if p := Attack(atk, attacker, defender); p != nil {
+			return p
+		}
+	}
+	return nil
+}
+
+// DataRow is a data species' own profiles by family and attacker: its combat row's,
+// each family dealing the damage and leaving the effects its prototype's row names
+func DataRow(p *component.BehaviorPrototype) (row [component.CombatAttackTypeCount][component.CombatEntityCount]*AttackProfile) {
+	for atk := range component.CombatAttackTypeCount {
+		for attacker := range component.CombatEntityCount {
+			if base := Attack(atk, attacker, p.Combat); base != nil {
+				own := *base
+				own.DamageValue, own.EffectMask = p.Attacks[atk].Damage, p.Attacks[atk].Effects
+				row[atk][attacker] = &own
+			}
+		}
+	}
+	return row
+}
+
 // cursorDefenders lists every entity the player can attack
 var cursorDefenders = [...]component.CombatEntityType{
 	component.CombatEntityDrain,

@@ -61,6 +61,7 @@ func (s *PylonSystem) Priority() int {
 func (s *PylonSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventPylonSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventPylonCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -83,19 +84,19 @@ func (s *PylonSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	request, spawn := s.spawnRequest(ev)
 	if !s.enabled {
-		if ev.Type == event.EventPylonSpawnRequest {
+		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
 		}
 		return
 	}
+	if spawn {
+		s.spawnPylon(request)
+		return
+	}
 
 	switch ev.Type {
-	case event.EventPylonSpawnRequest:
-		if payload, ok := ev.Payload.(*event.PylonSpawnRequestPayload); ok {
-			s.spawnPylon(payload)
-		}
-
 	case event.EventPylonCancelRequest:
 		s.lifecycle.despawned.Add(int64(s.world.Components.Pylon.CountEntities()))
 		s.terminateAll()
@@ -141,6 +142,18 @@ func (s *PylonSystem) Update() {
 
 	s.statCount.Store(int64(activeCount))
 	s.statActive.Store(activeCount > 0)
+}
+
+// spawnRequest reads a request for a pylon: its own spawn request, or a land request
+// naming it, at that request's defaults
+func (s *PylonSystem) spawnRequest(ev event.GameEvent) (*event.PylonSpawnRequestPayload, bool) {
+	switch p := ev.Payload.(type) {
+	case *event.PylonSpawnRequestPayload:
+		return p, true
+	case *event.SpeciesLandRequestPayload:
+		return &event.PylonSpawnRequestPayload{X: p.X, Y: p.Y}, p.Species == component.SpeciesPylon
+	}
+	return nil, false
 }
 
 func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
@@ -297,15 +310,9 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 
 	// Tier 2: Spiral from last random attempt center
 	last := cells[len(cells)-1]
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		last.X, last.Y,
-		width, height,
-		radiusX, radiusY, // anchor offset = radius (center to top-left)
-		component.WallBlockSpawn,
-		parameter.PylonSpawnSpiralMaxRadius,
-	)
+	foot := vmath.Footprint{Width: width, Height: height, HeaderX: radiusX, HeaderY: radiusY}
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(last.X, last.Y, foot, component.WallBlockSpawn, parameter.PylonSpawnSpiralMaxRadius)
 	if found {
-		// Convert top-left back to center
 		return topLeftX + radiusX, topLeftY + radiusY, true
 	}
 

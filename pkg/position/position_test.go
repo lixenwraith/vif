@@ -319,7 +319,7 @@ func TestAnAreaLineOfSightFliesTheBodyFromItsAnchor(t *testing.T) {
 				}
 			}
 		}
-		if got := x.HasAreaLineOfSight(x0, y0, x1, y1, bw, bh, ax, ay, mask); got != want {
+		if got := x.HasAreaLineOfSight(x0, y0, x1, y1, vmath.Footprint{Width: bw, Height: bh, HeaderX: ax, HeaderY: ay}, mask); got != want {
 			t.Fatalf("%d×%d body anchored %d,%d from (%d,%d) to (%d,%d) mask %d: %t, its cells say %t",
 				bw, bh, ax, ay, x0, y0, x1, y1, mask, got, want)
 		}

@@ -8,7 +8,6 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/vmath"
@@ -54,8 +53,7 @@ func (r *LandingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		default:
 			return true
 		}
-		r.mark(ctx, buf, footprintAt(x, y, parameter.SwarmWidth, parameter.SwarmHeight,
-			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY), sw.Machine.Elapsed)
+		r.mark(ctx, buf, component.Footprints[component.SpeciesSwarm].At(x, y), sw.Machine.Elapsed)
 		return true
 	})
 
@@ -65,18 +63,13 @@ func (r *LandingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			return true
 		}
 		p := &prototypes[b.Program]
-		r.mark(ctx, buf, footprintAt(b.TargetX, b.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY), b.Machine.Elapsed)
+		r.mark(ctx, buf, p.Footprint.At(b.TargetX, b.TargetY), b.Machine.Elapsed)
 		return true
 	})
 }
 
-// footprintAt is the area a body covers with its header on (x, y); its centre is where
-// the landing marker blinks and where the charge and teleport lines run between
-func footprintAt(x, y, width, height, headerX, headerY int) vmath.Area {
-	return vmath.Area{X: x - headerX, Y: y - headerY, Width: width, Height: height}
-}
-
-// mark draws the marker on the footprint's centre, its cycle starting on each state's entry
+// mark draws the marker on the centre of the area the body covers, its cycle starting
+// on each state's entry
 func (r *LandingRenderer) mark(ctx render.RenderContext, buf *render.RenderBuffer, footprint vmath.Area, elapsed time.Duration) {
 	c := footprint.Center()
 	if screenX, screenY, visible := ctx.MapToScreen(c.X, c.Y); visible {

@@ -403,9 +403,10 @@ func (a *app) drawRow(cave int, rs []raider, first bool, y int, elapsed time.Dur
 		if len(p.Look.Frames) > 1 && p.Pattern > 0 {
 			frame = p.Look.Frames[int(elapsed/p.Pattern)%len(p.Look.Frames)]
 		}
-		ox, oy := x+(cardW-1-p.Width)/2, open+openRows-p.Height
+		w := p.Footprint.Width
+		ox, oy := x+(cardW-1-w)/2, open+openRows-p.Footprint.Height
 		for j := range frame {
-			a.cell(ox+j%p.Width, oy+j/p.Width, &frame[j], &p.Look, elapsed)
+			a.cell(ox+j%w, oy+j/w, &frame[j], &p.Look, elapsed)
 		}
 	}
 }

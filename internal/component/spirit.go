@@ -60,8 +60,8 @@ type SpiritComponent struct {
 	BaseColor  SpiritColor
 	BlinkColor SpiritColor
 
-	// Species is the species the spirit's arrival lands, on the footprint whose
-	// top-left is LandX, LandY; SpeciesNone lands nothing
+	// Species is the species the spirit's arrival lands, its header on LandX, LandY;
+	// SpeciesNone lands nothing
 	Species      SpeciesType
 	LandX, LandY int
 }

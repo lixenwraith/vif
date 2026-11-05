@@ -1,6 +1,9 @@
 package component
 
-import "github.com/lixenwraith/vif/internal/core"
+import (
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/pkg/vmath"
+)
 
 // NavigationComponent provides pathfinding state for kinetic entities
 type NavigationComponent struct {
@@ -17,10 +20,9 @@ type NavigationComponent struct {
 	FlowX float64
 	FlowY float64
 
-	// The body's footprint and its header's offset from the top-left, set at spawn:
-	// area line of sight reads the size, and the passability tier it steers by all four
-	Width, Height    int
-	HeaderX, HeaderY int
+	// The body's footprint, set at spawn from its species': area line of sight and
+	// the passability tier it steers by read it
+	Footprint vmath.Footprint
 
 	// FlowLookahead is how far along the flow vector, in cells, the homing target is
 	// placed while HasDirectPath is false

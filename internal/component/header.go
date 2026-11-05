@@ -34,6 +34,22 @@ var BehaviorNames = [...]string{
 	BehaviorData:   "data",
 }
 
+// BehaviorSpecies is the code species whose composites each Behavior routes; a data
+// species' is its program's, which its BehaviorComponent names
+var BehaviorSpecies = [...]SpeciesType{
+	BehaviorNone:   SpeciesNone,
+	BehaviorGold:   SpeciesNone,
+	BehaviorQuasar: SpeciesQuasar,
+	BehaviorSwarm:  SpeciesSwarm,
+	BehaviorStorm:  SpeciesStorm,
+	BehaviorPylon:  SpeciesPylon,
+	BehaviorSnake:  SpeciesSnake,
+	BehaviorEye:    SpeciesEye,
+	BehaviorTower:  SpeciesTower,
+	BehaviorKraken: SpeciesKraken,
+	BehaviorData:   SpeciesNone,
+}
+
 // CompositeType defines how the composite handles damage and lifecycle
 type CompositeType uint8
 
