@@ -93,7 +93,7 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...lin
 		a.AttachTransport(mesh.Node(link.PeerID(i + 1)))
 	}
 	for _, a := range apps {
-		a.membership.activateNetworkSession()
+		a.membership.ActivateNetworkSession()
 	}
 	return apps
 }

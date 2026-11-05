@@ -1,4 +1,4 @@
-package app
+package membership
 
 import (
 	"github.com/lixenwraith/vif/internal/asset"
@@ -26,13 +26,13 @@ func buildIdentity() network.PeerIdentity {
 // actually built. It reads the live anchor rather than the configuration, because
 // what matters is the corpus that loaded and the seed the world is running, not the
 // ones that were asked for.
-func (m *membership) sessionIdentity() network.PeerIdentity {
-	return identityFromAnchor(m.JoinAnchor())
+func (m *Membership) sessionIdentity() network.PeerIdentity {
+	return IdentityFromAnchor(m.JoinAnchor())
 }
 
-// identityFromAnchor is the same for an anchor already in hand — the offer a
+// IdentityFromAnchor is the same for an anchor already in hand — the offer a
 // coordinator sent, which is what it later compares a joiner's report against.
-func identityFromAnchor(j event.JoinAnchor) network.PeerIdentity {
+func IdentityFromAnchor(j event.JoinAnchor) network.PeerIdentity {
 	return buildIdentity().SessionFrom(j.Anchor)
 }
 
@@ -40,9 +40,9 @@ func identityFromAnchor(j event.JoinAnchor) network.PeerIdentity {
 // accepts an offer: the geometry a dedicated host may size its map from, the
 // identity that host refuses the join on, and the claim it comes back with, with
 // what it brings back when the offer is the place that claim waits under.
-func (m *membership) joinerReport() network.JoinerReport {
+func (m *Membership) joinerReport() network.JoinerReport {
 	r := network.JoinerReport{
-		Holder:   m.wiring.holder,
+		Holder:   m.wiring.Holder,
 		Width:    m.ctx.Width,
 		Height:   m.ctx.Height,
 		Identity: m.sessionIdentity(),

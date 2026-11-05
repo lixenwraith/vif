@@ -187,7 +187,7 @@ func divergenceReading(host, guest *App, leadMax int64) string {
 // in ticks, whether the link read as the limit and as constrained, and the rate the
 // meter read it at.
 func cadenceOf(host, guest *App) string {
-	id := guest.membership.localParticipant()
+	id := guest.membership.LocalParticipant()
 	for _, p := range host.corrections.Cadence().Peers {
 		if p.Participant == id {
 			return itoa(int64(p.CadenceTicks)) + " ticks (constrained " + strconv.FormatBool(p.Constrained) +

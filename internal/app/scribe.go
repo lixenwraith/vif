@@ -15,12 +15,12 @@ type scribeRun struct{ a *App }
 
 func (r scribeRun) Position() event.Stamp          { return r.a.Position() }
 func (r scribeRun) Settle()                        { r.a.Settle() }
-func (r scribeRun) BarrierLocked() bool            { return r.a.membership.barrierLocked() }
+func (r scribeRun) BarrierLocked() bool            { return r.a.membership.BarrierLocked() }
 func (r scribeRun) JournalSink() event.JournalSink { return r.a.cfg.JournalSink }
 func (r scribeRun) AskSeatJournal(slot int, start bool) error {
-	return r.a.membership.askSeatJournal(slot, start)
+	return r.a.askSeatJournal(slot, start)
 }
-func (r scribeRun) SeatJournalSummaries() []string { return r.a.membership.seatJournalSummaries() }
+func (r scribeRun) SeatJournalSummaries() []string { return r.a.seatJournalSummaries() }
 func (r scribeRun) Replacing() bool                { return r.a.replacing() }
 
 func (r scribeRun) JournalTwin(an event.JournalAnchor) (scribe.Twin, error) {

@@ -351,8 +351,8 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	pa, pb := network.NewLoopbackPair(offer.Host, offer.Assigned)
 	a.AttachTransport(pa)
 	b.AttachTransport(pb)
-	a.membership.activateNetworkSession()
-	b.membership.activateNetworkSession()
+	a.membership.ActivateNetworkSession()
+	b.membership.ActivateNetworkSession()
 
 	var target core.Entity
 	a.World().RunSafe(func() { target = a.World().Resources.Player.Slot(0) })
@@ -1141,8 +1141,8 @@ func TestSharedIdentityCrossingWaitsOnItsProducer(t *testing.T) {
 	pa, pb := network.NewLoopbackPair(offer.Host, offer.Assigned)
 	a.AttachTransport(pa)
 	b.AttachTransport(pb)
-	a.membership.activateNetworkSession()
-	b.membership.activateNetworkSession()
+	a.membership.ActivateNetworkSession()
+	b.membership.ActivateNetworkSession()
 
 	next := func(x *App) uint64 {
 		var n uint64

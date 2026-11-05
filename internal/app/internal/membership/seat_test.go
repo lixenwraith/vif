@@ -1,4 +1,4 @@
-package app
+package membership
 
 import (
 	"os"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestBotRemovalDoesNotFollowReusedRosterIdentities(t *testing.T) {
-	var m membership
+	var m Membership
 	old := &seat{number: 1, graph: &bot.Graph{Name: "default"}, stop: make(chan os.Signal)}
 	old.id.Store(2)
 	old.slot.Store(1)

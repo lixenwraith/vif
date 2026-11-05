@@ -447,11 +447,9 @@ func TestVanguardABotSeatFliesTheShipsGunPath(t *testing.T) {
 	var armedAt uint64
 	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		if seat == nil {
-			holder.membership.seatsMu.Lock()
-			if len(holder.membership.seats) == 1 {
-				seat = seatApp(holder.membership.seats[0])
+			if s := seatRunOf(holder); s != nil {
+				seat = s.run
 			}
-			holder.membership.seatsMu.Unlock()
 			continue
 		}
 		tick := seat.Position().Tick

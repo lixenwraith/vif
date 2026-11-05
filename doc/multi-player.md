@@ -79,7 +79,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Host loss | `-authority migrate` (default off `-serve`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. `-authority host` (default on `-serve`): nobody takes it, and every survivor continues alone once its redial ends. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`). |
-| Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
+| Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `errSessionEnding`, distinct from the retryable `errSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
 corrections, makes a converged exchange hash-only, and preserves responsive local
@@ -431,7 +431,7 @@ same with the world it proved at the held tick (`Corrections.ProvedWorld`), kept
 while the hold stands for a join that arrives after the proof. A hold that lands
 while a gate waits for its lead ends the wait at the held tick (`KeyframeAt`,
 `ProvedWorld`), and one that ends while the held world is read starts the gate over,
-running (`membership.gateJoiner`). A journal records the hold with the world the
+running (`Membership.gateJoiner`). A journal records the hold with the world the
 join installed (`JournalCapture.Held`, `Start`), so a replay holds there as the run
 did, and the resume the run recorded ends it there. A joiner admitted while
 its host's new game waits for the host's press is held as a start
@@ -487,7 +487,7 @@ any joiner does. The host keeps the handshake for a ready period of 5 s, and tel
 its player who is ready to join and waiting for their press; a press
 after it dials again and seats the world already built while the session plays the
 game it was built for, and a session that started another game meanwhile is joined
-anew, already pressed (`membership.takeSeat`). A run no player is pressing for seats at
+anew, already pressed (`Membership.TakeSeat`). A run no player is pressing for seats at
 once: a bot seat, a redial after a lost host, a run following its session to a new
 game, a page or Android host that took its own start press, and any run with the
 wait off (`-nw`, `[play] wait = false`). Nothing stands in for the waiting player on
@@ -636,7 +636,7 @@ answering, or past the window, it walks every candidate for one that carries it 
 forks after a walk down the whole list (`Reach.cutOff`, `Authority.redialRelay`).
 A guest whose own link to a host still running dropped, and whose redial cannot
 reach that host, rejoins under its claim through the candidates it walks to
-(`membership.rejoinThrough`): the port of one relaying for others takes the join as
+(`Membership.rejoinThrough`): the port of one relaying for others takes the join as
 its `-relay` door would and asks the host, which gives the place its Wraith keeps
 back, and the guest plays on behind that candidate; a port not relaying refuses, as
 it refuses every join while another participant hosts.
@@ -673,7 +673,7 @@ no second instance. A person's fork drops nobody: every place waits as a Wraith 
 the session it goes on in (§5.5). A fork still linked keeps its roster while a link
 stands: a run with no loop sees its seats end on its fork (§5.5), and the last of
 them going leaves it with none, when it drops as one left with none at the fork
-does (`membership.reportPeerLost`).
+does (`Membership.reportPeerLost`).
 
 A departure, however it is produced, also clears what the instance had applied from
 that participant. An identity returns to the pool once its participant is dismissed
@@ -787,7 +787,7 @@ link (§5.2), and the authority's own two, which it crosses once
   rebuilds a Wraith as a Wraith, its wait going on from the last game's, so no run
   of resets keeps one.
 - **Yield.** A dial a full session cannot otherwise admit has the participant away
-  longest dismissed for it (`membership.yieldLocked`) and is refused `RefusalYielding`,
+  longest dismissed for it (`Membership.yieldLocked`) and is refused `RefusalYielding`,
   which seats and first joins retry in a moment; the retry takes the freed place.
   A successor orders who is away by their Wraiths' waits.
 
@@ -797,7 +797,7 @@ occupied and its clock runs while one waits, which is what lets its wait run out
 A defeat is the players left: a Wraith neither loses nor holds one up.
 
 **Coming back.** Each place is joined under a **claim**: a random token the
-participant's process keeps (`claimKeeper`; a page in its tab's `sessionStorage`,
+participant's process keeps (`ClaimKeeper`; a page in its tab's `sessionStorage`,
 so a reload keeps it and another tab is another player; a terminal for the
 process's life) and whose digest the roster entry and the cursor carry, so a
 successor's roster carries it too. The host's own entry carries one. When the
@@ -820,7 +820,7 @@ at the free cell nearest the one the Wraith held, on every instance. A Wraith is
 driven by nobody, its own participant included, until that arrival.
 
 A claim whose place is still linked, which the host has not yet seen go, closes that
-link (`membership.closeStaleLink`): its departure crosses as any lost link's does, and the
+link (`Membership.closeStaleLink`): its departure crosses as any lost link's does, and the
 dial is refused `RefusalReturning`, which it retries in a moment into the place. A
 place held through a relay waits for the relay to see its link go, and one another
 dial is taking back is refused the same way. The roster carries digests alone and a
@@ -842,12 +842,12 @@ a guest relayed keep their slots as when any relay leaves (§5), and the guests 
 host that left run §5.1, which under `-authority host` is the fork.
 
 A person's fork leaves the same way. `converge.Instance.Forked` hands the run the
-roster it held, and its loop serves the fork as it serves `:leave` (`membership.forked`,
-`membership.leaveSession`), except that it keeps every place rather than its bots' alone:
+roster it held, and its loop serves the fork as it serves `:leave` (`Membership.forked`,
+`Membership.LeaveSession`), except that it keeps every place rather than its bots' alone:
 each other player's cursor waits as a Wraith in the session it opens, for its player
 to take back once `:host` opens the door (§5.4). A hold the lost host set stands
 there for this run's own `:pause`, and a freeze ends; the status bar says which. A
-seat under such a run ends only when the run halts it (`membership.seatEnds`), never on its
+seat under such a run ends only when the run halts it (`seatEnds`), never on its
 own fork or the run's, so the leave finds every bot to seat again. A run with no
 loop to serve the fork stays the fork (§5.1).
 
@@ -862,7 +862,7 @@ there (§5.4), and the session it opens issues its own.
 
 Its bots leave first, as they do when it quits, though as lost links rather than
 dropped seats, so the session left keeps their places too. The session it opens
-keeps them as well, each under a claim of its own (`claimKeeper.carry`: a new token
+keeps them as well, each under a claim of its own (`ClaimKeeper.carry`: a new token
 over a copy of the record the bot left with, which stays the left session's for a
 return there), and once the old door is shut each bot is seated again and takes
 its place back; a bot's journal closes with its seat. In between, the run's loop
@@ -909,7 +909,7 @@ link (`MsgRelayJoin`, step `RelayDoor`); the authority completes a bare `:port` 
 the run's join connection as it completes a declared port, and the chain goes out
 as it always has, on `MsgPeerList`, in the offer and in the handoff record, so every
 participant holds every door, `:session` names them, and a run with no path to its
-authority rejoins at one (`membership.rejoinThrough` dials a candidate's door before
+authority rejoins at one (`Membership.rejoinThrough` dials a candidate's door before
 its port). A door is an attribute of an entry and not a candidacy: a participant with
 a door and no port is still a leaf. A relayed person tells nobody, since it has no
 link to the authority to tell; a relay has one.

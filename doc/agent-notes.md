@@ -119,7 +119,7 @@ that proves wrong or that a document now states, and link the document instead.
   in `RebindCursorRoster` too, never only in the arrival's handler.
 - A joiner's world holds no entry for it until its arrival crosses there, while the
   authority's may already: what the run itself is, a bot seat, is its own word
-  (`Instance.Seated`), never read off its roster entry. Its `localSlot` stays
+  (`Instance.Seated`), never read off its roster entry. Its `LocalSlot` stays
   `NoPlayerSlot` until then, which takes the joiner's own ticks: a test waiting on it
   ticks the joiner (`arrival` in `host_test.go`).
 - `NetworkSystem.Flush` runs at the tick's close under the world lock, after the

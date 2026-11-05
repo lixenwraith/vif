@@ -258,8 +258,8 @@ greps for rather than enumerating every refusal.
 | `late survivor taken back` | INFO | `peer`, `term`, `places` | `Authority.takeBack`: a membership report that reached the host after the floor gives the survivor its place back, with its bots' (Multiplayer §5.2) |
 | `authoring under a new term` / `following a new authority` / `continuing locally` | WARN / INFO / WARN | `term`, `seeded_from_tick`, `have_baseline` / `term`, `authority` / `held_term`, `authority`, `reason` | the candidate that took the term; every survivor that follows it; a survivor left playing alone, which reached no candidate, lost its path, or is under a pinned authority |
 | `redialling the lost host` / `redialling the lost relay` / `the redial was refused` / `the redial admitted this run back` / `the redial found no place for this run` | INFO | `authority`, `dial` / `relay`, `dial` / `peer`, `error` / `peer` / `peer` | a person's run redialling the host it joined where the chain says or at its own door, or the relay it joined through at that relay's door (multi-player.md §5.1) |
-| `a candidate refused the rejoin` / `a candidate took this run back to its host` / `the host holds no place for this run` | INFO | `candidate`, `error` / `candidate`, `authority` / `candidate` | `membership.rejoinThrough`: a guest whose redial could not reach its host rejoining through the candidates it walks to, one relaying for others taking it back (multi-player.md §5.1) |
-| `relaying joins through a router` / `router door lost` | INFO / WARN | `router`, `door` / `router`, `error` | `membership.publishDoor`: the door this run publishes through a router was named, or its control connection ended and is being reopened (Multiplayer §5.6) |
+| `a candidate refused the rejoin` / `a candidate took this run back to its host` / `the host holds no place for this run` | INFO | `candidate`, `error` / `candidate`, `authority` / `candidate` | `Membership.rejoinThrough`: a guest whose redial could not reach its host rejoining through the candidates it walks to, one relaying for others taking it back (multi-player.md §5.1) |
+| `relaying joins through a router` / `router door lost` | INFO / WARN | `router`, `door` / `router`, `error` | `Membership.publishDoor`: the door this run publishes through a router was named, or its control connection ended and is being reopened (Multiplayer §5.6) |
 | `path to the authority lost` | WARN | `relay`, `redial` | `Authority.redialRelay`: a participant cut off at the relay it joined through, and whether its run redials that relay's door before it walks |
 | `uncommitted crossings resent at handoff` | INFO | `crossings`, `dropped` | a guest resending to the new authority the crossings no authority committed (`NetworkSystem.ResendUncommitted`); `dropped` are those past one frame, which the next correction takes back |
 | `join installed the session world` | INFO | `tick`, `run`, `stage_us`, `commit_us` | `App.JoinSessionAt` |
@@ -272,7 +272,7 @@ greps for rather than enumerating every refusal.
 
 | `msg` | Level | Fields | Source |
 |---|---|---|---|
-| `peer admitted` | INFO | `peer`, `holder`, `remote`, `declared` | `membership.noteJoinerReport`, on the coordinator |
+| `peer admitted` | INFO | `peer`, `holder`, `remote`, `declared` | `Membership.noteJoinerReport`, on the coordinator |
 
 `remote` is the accepted socket's address and `declared` what the peer said it
 listens on. They are here and nowhere else: it is the one value that proves a
@@ -1345,7 +1345,7 @@ both the snapshot and the recorder.
 | Flight recorder | `internal/status/recorder.go` |
 | Journal record/anchor schema and queue sink | `internal/event/journal.go`, `journal_sink.go`, `origin.go` |
 | Recording lifecycle, capture, loading, replay/fuzz/script drivers | `internal/journal` |
-| Journal start and stop mid-run, the opening and its adoption, seat journals | `internal/app/internal/scribe/journal.go`, `internal/app/seat.go` |
+| Journal start and stop mid-run, the opening and its adoption, seat journals | `internal/app/internal/scribe/journal.go`, `internal/app/membership.go` |
 | Replay/config verification and presentation, replay checkpoints | `internal/app/replay.go`, `play.go`, `clone.go`, `internal/app/internal/scribe` |
 | Comparison surfaces and world digests | `internal/app/surface.go`, `internal/snapshot/surface.go`, `digest.go` |
 | Tick stamping, FSM taps, dispatch tap, triggers | `internal/engine/scheduler.go` |

@@ -94,7 +94,7 @@ func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
 	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
 		RelayAddress: "vif://" + router}}, "patrol", nil)
 	waitForCursors(t, host, 3)
-	relayID := link.PeerID(relay.membership.localParticipant())
+	relayID := link.PeerID(relay.membership.LocalParticipant())
 	var door string
 	waitUntil(t, func() bool {
 		d, ok := host.authority.Chain().Door(relayID)
@@ -109,9 +109,9 @@ func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}
-	if through := relayOf(person); through != relayID || person.membership.sessionTransport().PeerCount() != 1 {
+	if through := relayOf(person); through != relayID || person.membership.SessionTransport().PeerCount() != 1 {
 		t.Fatalf("the person joined through participant %d holding %d links; want through the relay, on its one link",
-			through, person.membership.sessionTransport().PeerCount())
+			through, person.membership.SessionTransport().PeerCount())
 	}
-	waitForMotion(t, host, cursorOf(t, host, person.membership.localParticipant()), "the person's cursor on the host")
+	waitForMotion(t, host, cursorOf(t, host, person.membership.LocalParticipant()), "the person's cursor on the host")
 }

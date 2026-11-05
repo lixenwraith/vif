@@ -1,12 +1,13 @@
 // The membership's startup gates, waited out on a run whose lobby nobody types into.
 
-package app
+package membership
 
 import (
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/network"
 	link "github.com/lixenwraith/vif/pkg/network"
@@ -20,16 +21,16 @@ func TestEachStartupGateCarriesItsOwnDeadline(t *testing.T) {
 	t.Parallel()
 	life := lifecycle.New(lifecycle.Policy{FirstJoin: 80 * time.Millisecond})
 	life.Start(time.Now())
-	m := membership{run: stubRun{mode: ModeServer}}
+	m := Membership{run: stubRun{mode: config.ModeServer}}
 
 	port := link.NewSocketPort(&network.DebugConfig(link.RoleHost, "127.0.0.1:0").Config)
 	defer port.Close()
 
 	never := func() bool { return false }
-	expired := func(now time.Time) error { life.State(now); return errSessionExpired }
+	expired := func(now time.Time) error { life.State(now); return ErrSessionExpired }
 	err := m.waitForStartup(port, nil, life.State(time.Now()).Deadline, expired, never)
-	if !errors.Is(err, errSessionExpired) {
-		t.Fatalf("the lobby wait returned %v, want errSessionExpired", err)
+	if !errors.Is(err, ErrSessionExpired) {
+		t.Fatalf("the lobby wait returned %v, want ErrSessionExpired", err)
 	}
 
 	// The start gate: its bound settles the condition instead of ending the run,

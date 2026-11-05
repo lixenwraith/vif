@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
@@ -135,11 +136,11 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 	a := mustHeadless(t, fixtureSeed, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
-	graph, err := loadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	graph, err := membership.LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +166,7 @@ func TestAWatchingBotOperatorCanResetAndSeatBotsWhileTheSessionKeepsTicking(t *t
 		t.Fatalf("new game failed: %s, position %+v", a.ctx.GetStatusMessage(), a.Position())
 	}
 	command("bot add 1:patrol")
-	if a.membership.sessionTransport() == nil {
+	if a.membership.SessionTransport() == nil {
 		t.Fatalf("bot add opened no session: %s", a.ctx.GetStatusMessage())
 	}
 	press(terminal.KeyRune, ':')
@@ -377,7 +378,7 @@ func TestAReplaySeekLandsOnTheFirstStepAtOrPastItsTick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}

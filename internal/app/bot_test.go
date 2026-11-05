@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/component"
@@ -55,7 +56,7 @@ func playBot(t *testing.T, name string, seed uint64, n int, capture *journal.Cap
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
+	d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.LocalParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,10 +166,13 @@ func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, f
 	return driveRun(t, "bot", runConfig{Config: cfg}, graph, hold)
 }
 
-// seatApp is the run seat s plays, nil until it is seated and once it leaves.
-func seatApp(s *seat) *App {
-	if r, ok := s.running().(seatRun); ok {
-		return r.App
+// seatRunOf is the run holder plays for its one seat, nil until it is seated, once
+// it leaves and while the holder plays others.
+func seatRunOf(holder *App) *seatRun {
+	holder.seatRunsMu.Lock()
+	defer holder.seatRunsMu.Unlock()
+	if len(holder.seatRuns) == 1 {
+		return holder.seatRuns[0]
 	}
 	return nil
 }
@@ -181,14 +185,14 @@ func driveRun(t *testing.T, kind string, cfg runConfig, graph string, hold func(
 	if cfg.Resources == (resource.Options{}) {
 		cfg.Resources = resource.Options{Embedded: true}
 	}
-	g, err := loadBotGraph(cfg.Resources, graph)
+	g, err := membership.LoadBotGraph(cfg.Resources, graph)
 	if err != nil {
 		t.Fatal(err)
 	}
 	stop, built, done := make(chan os.Signal), make(chan *App, 1), make(chan error, 1)
 	go func() {
 		_, err := drive(cfg, kind, graph, stop, hold, func(a *App) (pacedSource, error) {
-			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.localParticipant())
+			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.LocalParticipant())
 			built <- a
 			return botSource{d}, err
 		})
@@ -308,7 +312,7 @@ func TestAHoldersBotsComeAndGoAsParticipants(t *testing.T) {
 		t.Fatalf("a dropped seat was reported as a link loss: %q", msg)
 	}
 	stop()
-	if left := holder.membership.seatGraphs(); len(left) != 0 {
+	if left := holder.membership.SeatGraphs(); len(left) != 0 {
 		t.Fatalf("seats %v outlived their holder", left)
 	}
 }
@@ -365,10 +369,8 @@ func TestASeatHoldsWithItsWorld(t *testing.T) {
 	waitForCursors(t, holder, 2)
 	var b *App
 	until("the bot to be seated", func() bool {
-		holder.membership.seatsMu.Lock()
-		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 {
-			b = seatApp(holder.membership.seats[0])
+		if s := seatRunOf(holder); s != nil {
+			b = s.run
 		}
 		return b != nil
 	})
@@ -399,15 +401,13 @@ func TestTheRosterCardsNameABotAndItsHolder(t *testing.T) {
 	waitForCursors(t, holder, 2)
 	var b *App
 	waitUntil(t, func() bool {
-		holder.membership.seatsMu.Lock()
-		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 {
-			b = seatApp(holder.membership.seats[0])
+		if s := seatRunOf(holder); s != nil {
+			b = s.run
 		}
 		return b != nil
 	}, "the bot seated")
 	waitForCursors(t, b, 2)
-	host, seat := int64(holder.membership.localParticipant()), int64(b.membership.localParticipant())
+	host, seat := int64(holder.membership.LocalParticipant()), int64(b.membership.LocalParticipant())
 	want := map[string]int64{
 		"player.0.peer": host, "player.0.holder": 0, "player.1.peer": seat, "player.1.holder": host,
 	}
@@ -439,7 +439,7 @@ func TestAGuestsBotsWaitWithIt(t *testing.T) {
 	guest, leave := driveBot(t, Config{Membership: Membership{JoinAddress: addr,
 		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 4)
-	id := link.PeerID(guest.membership.localParticipant())
+	id := link.PeerID(guest.membership.LocalParticipant())
 	leave()
 	waitForWraiths(t, host, 2)
 	roster := host.instance().WorldRoster()
@@ -477,16 +477,12 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		t.Fatalf("add bot: %v", err)
 	}
 	waitForCursors(t, holder, 2)
-	var s *seat
+	var s *seatRun
 	until("the bot to be seated", func() bool {
-		holder.membership.seatsMu.Lock()
-		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 && seatApp(holder.membership.seats[0]) != nil {
-			s = holder.membership.seats[0]
-		}
+		s = seatRunOf(holder)
 		return s != nil
 	})
-	slot := int(s.slot.Load())
+	slot := s.slot
 	drives := func(a *App) (e core.Entity) {
 		a.World().RunSafe(func() { e = a.World().Resources.Player.Entity })
 		return e
@@ -501,7 +497,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	}
 	var paths []string
 	for round := range 2 {
-		b := seatApp(s)
+		b := s.run
 		until("the bot to drive its own cursor", func() bool { return bound(b) })
 		holderCursor, seatCursor := drives(holder), drives(b)
 		// The second opening is asked with the first journals' stop, before either loop serves it
@@ -519,9 +515,9 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 			h, r := holder.scribe.Recorder(), b.scribe.Recorder()
 			return h != nil && r != nil && !slices.Contains(paths, h.Path()) && !slices.Contains(paths, r.Path())
 		})
-		if drives(holder) != holderCursor || drives(b) != seatCursor || int(b.membership.localSlot()) != slot {
+		if drives(holder) != holderCursor || drives(b) != seatCursor || int(b.membership.LocalSlot()) != slot {
 			t.Fatalf("the holder drives %d and its seat %d on slot %d after the openings, %d and %d on slot %d before",
-				drives(holder), drives(b), b.membership.localSlot(), holderCursor, seatCursor, slot)
+				drives(holder), drives(b), b.membership.LocalSlot(), holderCursor, seatCursor, slot)
 		}
 		paths = append(paths, holder.scribe.Recorder().Path(), b.scribe.Recorder().Path())
 		from := b.Position().Tick
@@ -531,7 +527,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
-	b := seatApp(s)
+	b := s.run
 	until("both journals to close", func() bool { return holder.scribe.Recorder() == nil && b.scribe.Recorder() == nil })
 	stop()
 	for _, p := range paths {
@@ -562,11 +558,9 @@ func TestASeatsOpeningLeavesItsRunAsItWas(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatal("timed out waiting for the bot to play")
 		}
-		holder.membership.seatsMu.Lock()
-		if len(holder.membership.seats) == 1 {
-			b = seatApp(holder.membership.seats[0])
+		if s := seatRunOf(holder); s != nil {
+			b = s.run
 		}
-		holder.membership.seatsMu.Unlock()
 	}
 	// Under the seat's own lock throughout, so its loop takes no step in between
 	var before, after []string
@@ -615,16 +609,12 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add bot: %v", err)
 	}
-	var s *seat
+	var s *seatRun
 	until("the bot to be seated", func() bool {
-		holder.membership.seatsMu.Lock()
-		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 && seatApp(holder.membership.seats[0]) != nil {
-			s = holder.membership.seats[0]
-		}
+		s = seatRunOf(holder)
 		return s != nil
 	})
-	slot, b := int(s.slot.Load()), seatApp(s)
+	slot, b := s.slot, s.run
 	holder.World().RunSafe(func() { err = ctl.StartJournal(slot) })
 	if err != nil {
 		t.Fatalf("start: %v", err)
@@ -642,6 +632,28 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 	if st, err := VerifyJournal(Config{}, path); err != nil {
 		t.Fatalf("%s reproduced %d digests: %v", path, st.Digests, err)
 	}
+	// Its run is gone with it, not a leaving bot's still
+	holder.World().RunSafe(func() { err = ctl.StartJournal(slot) })
+	if err == nil || !strings.Contains(err.Error(), "no bot of this run's") {
+		t.Fatalf("a journal asked of the slot the bot left: %v", err)
+	}
+}
+
+// TestASeatsRunsListInTheOrderItsSeatsCame: a seat seated ahead of an earlier one
+// lists after it, as its holder's seats do.
+func TestASeatsRunsListInTheOrderItsSeatsCame(t *testing.T) {
+	t.Parallel()
+	a := &App{}
+	for _, n := range []uint64{2, 3, 1} {
+		a.addSeatRun(&seatRun{number: n})
+	}
+	var got []uint64
+	for _, s := range a.seatRuns {
+		got = append(got, s.number)
+	}
+	if !slices.Equal(got, []uint64{1, 2, 3}) {
+		t.Fatalf("seat runs listed as %v", got)
+	}
 }
 
 // TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn: a seat ends once its
@@ -649,7 +661,7 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 // whose loop takes its fork into a session of its own and seats its bots again there.
 func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 	t.Parallel()
-	graph, err := loadBotGraph(resource.Options{Embedded: true}, "roam")
+	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, "roam")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -659,22 +671,22 @@ func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 		fork  func(holder, seat *App)
 		steps bool
 	}{
-		{"its headless holder's fork", ModeHeadless, func(h, _ *App) { forkCell(h.world).Store(true) }, false},
-		{"its own fork", ModeHeadless, func(_, s *App) { forkCell(s.world).Store(true) }, false},
+		{"its headless holder's fork", ModeHeadless, func(h, _ *App) { membership.ForkCell(h.world).Store(true) }, false},
+		{"its own fork", ModeHeadless, func(_, s *App) { membership.ForkCell(s.world).Store(true) }, false},
 		{"both forks under a play run", ModePlay, func(h, s *App) {
-			forkCell(h.world).Store(true)
-			forkCell(s.world).Store(true)
+			membership.ForkCell(h.world).Store(true)
+			membership.ForkCell(s.world).Store(true)
 		}, true},
 	} {
 		holder := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 		t.Cleanup(holder.Close)
 		seated := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 		t.Cleanup(seated.Close)
-		d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.membership.localParticipant())
+		d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.membership.LocalParticipant())
 		if err != nil {
 			t.Fatal(err)
 		}
-		src := &seatSource{botSource: botSource{d}, ends: holder.membership.seatEnds(tt.mode, seatRun{seated}), screen: &holder.seatScreen,
+		src := &seatSource{botSource: botSource{d}, ends: seatEnds(tt.mode, holder.world, seated.world), screen: &holder.seatScreen,
 			run: seated, shown: screen{BotWidth, BotHeight}}
 		tt.fork(holder, seated)
 		more, err := src.Step()
@@ -702,9 +714,9 @@ func TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd(t *testing.T) {
 	waitForCursors(t, host, 4)
 	waitForCursors(t, fork, 4)
 	leave()
-	waitUntil(t, func() bool { return forkCell(fork.world).Load() }, "the guest forked")
+	waitUntil(t, func() bool { return membership.ForkCell(fork.world).Load() }, "the guest forked")
 	waitForCursors(t, fork, 1)
-	local := link.PeerID(fork.membership.localParticipant())
+	local := link.PeerID(fork.membership.LocalParticipant())
 	if roster := fork.instance().WorldRoster(); len(roster) != 1 || roster[0].ID != local {
 		t.Fatalf("the fork's roster holds %+v; want its own cursor alone", roster)
 	}
@@ -720,7 +732,7 @@ func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 	waitForCursors(t, host, 2)
 	cfg := Config{Membership: Membership{JoinAddress: addr}, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
 		Resources: resource.Options{Embedded: true}}
-	g, err := loadBotGraph(cfg.Resources, "patrol")
+	g, err := membership.LoadBotGraph(cfg.Resources, "patrol")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -728,7 +740,7 @@ func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 	t.Cleanup(func() { close(stop) })
 	go func() {
 		_, err := drive(runConfig{Config: cfg}, "bot", g.Name, stop, nil, func(a *App) (pacedSource, error) {
-			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.localParticipant())
+			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.LocalParticipant())
 			return botSource{d}, err
 		})
 		ended <- err
@@ -759,10 +771,10 @@ func TestAGuestsBotsJoinThroughIt(t *testing.T) {
 		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitForCursors(t, guest, 4)
-	if h, g := host.membership.sessionTransport().PeerCount(), guest.membership.sessionTransport().PeerCount(); h != 2 || g != 2 {
+	if h, g := host.membership.SessionTransport().PeerCount(), guest.membership.SessionTransport().PeerCount(); h != 2 || g != 2 {
 		t.Fatalf("the host holds %d links and the guest %d, want 2 each", h, g)
 	}
-	local := link.PeerID(guest.membership.localParticipant())
+	local := link.PeerID(guest.membership.LocalParticipant())
 	roster := host.instance().WorldRoster()
 	i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return e.Holder == local })
 	if i < 0 {
@@ -794,7 +806,7 @@ func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 	waitForCursors(t, guest, 4)
 	waitForSeats(t, guest, 1)
 	seated := guest.ctx.SessionCtl.Bots()[0]
-	itsBots := heldBy(guest.membership.localParticipant())
+	itsBots := heldBy(guest.membership.LocalParticipant())
 	left := places(guest, itsBots)
 
 	leaveAs(t, guest)
@@ -838,7 +850,7 @@ func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 		waitForCursors(t, a, 4)
 	}
 	port := portOf(t, guest)
-	id := successor.membership.localParticipant()
+	id := successor.membership.LocalParticipant()
 	for deadline := time.Now().Add(socketWait); !port.Connected(id) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	leave()
@@ -861,7 +873,7 @@ func TestAStillGuestSeatsBotsAfterItsHostLeaves(t *testing.T) {
 	// The bot is rostered before its handshake ends, so its link to the guest can
 	// land after its cursor does
 	links := func() (int, int) {
-		return successor.membership.sessionTransport().PeerCount(), guest.membership.sessionTransport().PeerCount()
+		return successor.membership.SessionTransport().PeerCount(), guest.membership.SessionTransport().PeerCount()
 	}
 	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		if s, g := links(); s == 1 && g == 2 {
@@ -933,7 +945,7 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
 	cfg := runConfig{Config: Config{Membership: Membership{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}},
-		wiring: wiring{membership: membershipWiring{claims: newClaimKeeper(nil)}}}
+		wiring: wiring{membership: membership.Wiring{Claims: membership.NewClaimKeeper(nil)}}}
 	_, leave := driveRun(t, "bot", cfg, "patrol", nil)
 	waitForCursors(t, host, 3)
 	left := places(host, everyone)
@@ -964,7 +976,7 @@ func TestALateSurvivorsPlaceIsGivenBackWithItsBots(t *testing.T) {
 	waitForCursors(t, host, 3)
 	waitForCursors(t, guest, 3)
 	before := places(host, everyone)
-	local := link.PeerID(host.membership.localParticipant())
+	local := link.PeerID(host.membership.LocalParticipant())
 	var survivor, back []network.RosterEntry
 	for _, p := range host.instance().WorldRoster() {
 		if p.ID == local {
@@ -1007,9 +1019,10 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 	if port.PeerCount() != 2 {
 		t.Fatal("the holder has no warm link to its bot")
 	}
-	holder.membership.seatsMu.Lock()
-	kept := holder.membership.seats[0]
-	holder.membership.seatsMu.Unlock()
+	kept := seatRunOf(holder)
+	if kept == nil {
+		t.Fatal("the holder plays no run for its bot")
+	}
 	stop()
 	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		if holder.authority.Holder() == holder.authority.Local() && !holder.authority.Migrating() {
@@ -1028,10 +1041,11 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 		t.Fatalf("adding bots: %v", err)
 	}
 	waitForCursors(t, holder, 5)
-	select {
-	case <-kept.done:
+	holder.seatRunsMu.Lock()
+	playing := slices.Contains(holder.seatRuns, kept)
+	holder.seatRunsMu.Unlock()
+	if !playing {
 		t.Fatal("the holder's existing bot was replaced during migration")
-	default:
 	}
 }
 
@@ -1081,7 +1095,7 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 		Bots: []string{DefaultBotGraph, DefaultBotGraph}}}, DefaultBotGraph, nil)
 	waitForCursors(t, host, 5)
 	waitForCursors(t, guest, 5)
-	holder := guest.membership.localParticipant()
+	holder := guest.membership.LocalParticipant()
 	var guestSlot, botSlot int
 	host.world.RunSafe(func() {
 		for _, p := range host.ctx.SessionCtl.Participants() {
@@ -1109,7 +1123,7 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 	})
 	waitForCursors(t, host, 4)
 	waitForCursors(t, guest, 4)
-	if guest.membership.dismissed.Load() {
+	if guest.membership.Dismissed() {
 		t.Fatal("dropping one bot dismissed its holder")
 	}
 	host.world.RunSafe(func() {
@@ -1118,9 +1132,9 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 		}
 	})
 	waitForCursors(t, host, 2)
-	for deadline := time.Now().Add(socketWait); !guest.membership.dismissed.Load() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	for deadline := time.Now().Add(socketWait); !guest.membership.Dismissed() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
-	if !guest.membership.dismissed.Load() {
+	if !guest.membership.Dismissed() {
 		t.Fatal("dropped guest did not receive dismissal")
 	}
 }
@@ -1128,7 +1142,7 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 func TestBotInputPreservesOperatorFeedback(t *testing.T) {
 	a, _ := playBot(t, DefaultBotGraph, fixtureSeed, 10, nil)
 	defer a.Close()
-	g, err := loadBotGraph(a.cfg.Resources, DefaultBotGraph)
+	g, err := membership.LoadBotGraph(a.cfg.Resources, DefaultBotGraph)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1160,7 +1174,7 @@ func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
 		waitForCursors(t, a, 5)
 	}
 	port := portOf(t, other)
-	id := successor.membership.localParticipant()
+	id := successor.membership.LocalParticipant()
 	for deadline := time.Now().Add(socketWait); !port.Connected(id) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	if !port.Connected(id) {
@@ -1171,7 +1185,7 @@ func TestHostAndBotsLeavingPreservesTheSurvivingSession(t *testing.T) {
 		waitForWraiths(t, a, 2)
 		for deadline := time.Now().Add(socketWait); (uint32(a.authority.Holder()) != id || a.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		}
-		if uint32(a.authority.Holder()) != id || forkCell(a.world).Load() {
+		if uint32(a.authority.Holder()) != id || membership.ForkCell(a.world).Load() {
 			t.Fatal("survivors split after the host group left")
 		}
 	}
@@ -1230,17 +1244,17 @@ func TestAPersonJoinsThroughARelayingGuest(t *testing.T) {
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}
-	id := person.membership.localParticipant()
+	id := person.membership.LocalParticipant()
 	roster := host.instance().WorldRoster()
 	if i := slices.IndexFunc(roster, func(e network.RosterEntry) bool { return uint32(e.ID) == id }); i < 0 || roster[i].Holder != 0 {
 		t.Fatalf("the host holds the relayed person as %+v, want an independent participant", roster)
 	}
-	if h, r, p := host.membership.sessionTransport().PeerCount(), relay.membership.sessionTransport().PeerCount(),
-		person.membership.sessionTransport().PeerCount(); h != 2 || r != 2 || p != 1 {
+	if h, r, p := host.membership.SessionTransport().PeerCount(), relay.membership.SessionTransport().PeerCount(),
+		person.membership.SessionTransport().PeerCount(); h != 2 || r != 2 || p != 1 {
 		t.Fatalf("the host holds %d links, the relay %d and the person %d, want 2, 2 and 1", h, r, p)
 	}
 	waitForMotion(t, host, cursorOf(t, host, id), "the relayed person's cursor on the host")
-	waitForMotion(t, person, cursorOf(t, person, host.membership.localParticipant()), "the host's cursor on the relayed person")
+	waitForMotion(t, person, cursorOf(t, person, host.membership.LocalParticipant()), "the host's cursor on the relayed person")
 }
 
 // TestAPersonFindsAnotherPathWhenItsRelayLeaves: left with no link, a relayed
@@ -1264,8 +1278,8 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 	for _, a := range []*App{host, relay, other, person} {
 		waitForCursors(t, a, 5)
 	}
-	id := person.membership.localParticipant()
-	if p := person.membership.sessionTransport().PeerCount(); p != 1 {
+	id := person.membership.LocalParticipant()
+	if p := person.membership.SessionTransport().PeerCount(); p != 1 {
 		t.Fatalf("the person holds %d links before its relay leaves, want its relay alone", p)
 	}
 
@@ -1274,7 +1288,7 @@ func TestAPersonFindsAnotherPathWhenItsRelayLeaves(t *testing.T) {
 		waitForWraiths(t, a, 1)
 	}
 	waitForMotion(t, host, cursorOf(t, host, id), "the relayed person's cursor on the host after its relay left")
-	if o, p := other.membership.sessionTransport().PeerCount(), person.membership.sessionTransport().PeerCount(); o != 2 || p != 1 {
+	if o, p := other.membership.SessionTransport().PeerCount(), person.membership.SessionTransport().PeerCount(); o != 2 || p != 1 {
 		t.Fatalf("the other guest holds %d links and the person %d, want the person behind the other guest", o, p)
 	}
 }
@@ -1300,7 +1314,7 @@ func TestAPersonBehindARelayReachesTheHostThatTookOver(t *testing.T) {
 	for _, a := range []*App{host, next, relay, person} {
 		waitForCursors(t, a, 5)
 	}
-	id, nextID := person.membership.localParticipant(), link.PeerID(next.membership.localParticipant())
+	id, nextID := person.membership.LocalParticipant(), link.PeerID(next.membership.LocalParticipant())
 	waitUntil(t, func() bool { _, ok := person.authority.Chain().Lookup(nextID); return ok }, "the next host in the person's chain")
 
 	// The person's chain names the next host where nothing answers, which is what a
@@ -1317,7 +1331,7 @@ func TestAPersonBehindARelayReachesTheHostThatTookOver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	person.authority.Receive(uint8(network.MsgPeerList), relay.membership.localParticipant(), body)
+	person.authority.Receive(uint8(network.MsgPeerList), relay.membership.LocalParticipant(), body)
 	if got, _ := person.authority.Chain().Lookup(nextID); got != "127.0.0.1:1" {
 		t.Fatalf("the person's chain names the next host at %q, want the address nothing answers at", got)
 	}
@@ -1330,10 +1344,10 @@ func TestAPersonBehindARelayReachesTheHostThatTookOver(t *testing.T) {
 		r := authorityOf(person)
 		return r.Authority == nextID && !r.Migrating
 	}, "the person following the guest that took over")
-	waitUntil(t, func() bool { return person.membership.sessionTransport().PeerCount() == 2 }, "the person's own link to its host")
+	waitUntil(t, func() bool { return person.membership.SessionTransport().PeerCount() == 2 }, "the person's own link to its host")
 	waitUntil(t, func() bool { return !slices.Contains(downstreamOf(relay), id) }, "the relay letting the person go")
 	waitForMotion(t, next, cursorOf(t, next, id), "the person's cursor on the host it reached")
-	if p := person.membership.sessionTransport().PeerCount(); p != 2 {
+	if p := person.membership.SessionTransport().PeerCount(); p != 2 {
 		t.Fatalf("the person holds %d links, want its relay and its host", p)
 	}
 }
@@ -1355,7 +1369,7 @@ func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}
-	id, relayID := person.membership.localParticipant(), link.PeerID(relay.membership.localParticipant())
+	id, relayID := person.membership.LocalParticipant(), link.PeerID(relay.membership.LocalParticipant())
 	person.World().RunSafe(func() { person.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
 	if !relay.instance().DropParticipant(id) {
 		t.Fatal("the person's link would not drop")
@@ -1364,11 +1378,11 @@ func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
 	// only with the dial that took it back under that claim.
 	var req *restartRequest
 	waitUntil(t, func() bool { req = person.restart.Load(); return req != nil }, "the person admitted back through its relay")
-	if req.dialled == nil || uint32(req.dialled.offer.Assigned) != id ||
-		req.dialled.offer.Relay != relayID || req.Notice != "Relay connection restored" {
+	if req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id ||
+		req.Dialled.Offer().Relay != relayID || req.Notice != "Relay connection restored" {
 		t.Fatalf("the person was not admitted back into its own place through its relay: %+v", req)
 	}
-	req.dialled.abandon(errors.New("the test is over"))
+	req.Dialled.Abandon(errors.New("the test is over"))
 }
 
 // TestARelayDoorAdmitsAsTheHostOnceItsRunHosts: a guest's -relay door, which asks
@@ -1385,7 +1399,7 @@ func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
 		ListenAddress: freeAddress(t)}}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	waitListening(t, relayAddr)
-	id := link.PeerID(relay.membership.localParticipant())
+	id := link.PeerID(relay.membership.LocalParticipant())
 	waitUntil(t, func() bool { return len(relay.authority.Chain()) == 1 }, "the relay in the chain")
 
 	leave() // the host and its bot go
@@ -1397,12 +1411,12 @@ func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
 	if got := authorityOf(person); got.Authority != id || got.Term != network.FirstTerm+1 {
 		t.Fatalf("a player that joined at the successor's relay door holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
 	}
-	if through := relayOf(person); through != 0 || person.membership.sessionTransport().PeerCount() != 1 {
+	if through := relayOf(person); through != 0 || person.membership.SessionTransport().PeerCount() != 1 {
 		t.Fatalf("the player joined through participant %d holding %d links; want the host's own guest",
-			through, person.membership.sessionTransport().PeerCount())
+			through, person.membership.SessionTransport().PeerCount())
 	}
 	waitForCursors(t, relay, 4) // the first host and its bot wait as Wraiths
-	waitForMotion(t, relay, cursorOf(t, relay, person.membership.localParticipant()), "the player's cursor on the host that admitted it")
+	waitForMotion(t, relay, cursorOf(t, relay, person.membership.LocalParticipant()), "the player's cursor on the host that admitted it")
 }
 
 // TestADroppedGuestRejoinsThroughARelayingPeer: a guest whose own link to a live
@@ -1422,8 +1436,8 @@ func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
 	for _, a := range []*App{host, peer, guest} {
 		waitForCursors(t, a, 4)
 	}
-	id, peerID := guest.membership.localParticipant(), link.PeerID(peer.membership.localParticipant())
-	hostID := link.PeerID(host.membership.localParticipant())
+	id, peerID := guest.membership.LocalParticipant(), link.PeerID(peer.membership.LocalParticipant())
+	hostID := link.PeerID(host.membership.LocalParticipant())
 	waitUntil(t, func() bool { _, ok := guest.authority.Chain().Lookup(peerID); return ok }, "the relaying peer in the guest's chain")
 	// The host's door is where nothing answers, as a host this guest alone cannot
 	// reach is; the mode is the one whose loop takes a rejoin.
@@ -1433,11 +1447,11 @@ func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
 	}
 	var req *restartRequest
 	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back through the relaying peer")
-	if req.dialled == nil || uint32(req.dialled.offer.Assigned) != id ||
-		req.dialled.offer.Relay != peerID || req.dialled.offer.Host != hostID {
+	if req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id ||
+		req.Dialled.Offer().Relay != peerID || req.Dialled.Offer().Host != hostID {
 		t.Fatalf("the guest was not taken back into its own place through the relaying peer: %+v", req)
 	}
-	req.dialled.abandon(errors.New("the test is over"))
+	req.Dialled.Abandon(errors.New("the test is over"))
 }
 
 // TestADroppedGuestRejoinsAtACandidatesDoor: a relay's door is named in the chain
@@ -1457,10 +1471,10 @@ func TestADroppedGuestRejoinsAtACandidatesDoor(t *testing.T) {
 	for _, a := range []*App{host, peer, guest} {
 		waitForCursors(t, a, 4)
 	}
-	id, peerID := guest.membership.localParticipant(), link.PeerID(peer.membership.localParticipant())
+	id, peerID := guest.membership.LocalParticipant(), link.PeerID(peer.membership.LocalParticipant())
 	for _, a := range []*App{host, guest} {
 		waitUntil(t, func() bool { d, ok := a.authority.Chain().Door(peerID); return ok && d == door },
-			fmt.Sprintf("participant %d's chain naming the relay's door", a.membership.localParticipant()))
+			fmt.Sprintf("participant %d's chain naming the relay's door", a.membership.LocalParticipant()))
 	}
 	if !strings.Contains(host.SessionSummary(), "relaying at "+door) {
 		t.Fatalf(":session on the host reads %q; want the door named", host.SessionSummary())
@@ -1471,10 +1485,10 @@ func TestADroppedGuestRejoinsAtACandidatesDoor(t *testing.T) {
 	}
 	var req *restartRequest
 	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back at the relay's door")
-	if req.dialled == nil || uint32(req.dialled.offer.Assigned) != id || req.dialled.offer.Relay != peerID {
+	if req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id || req.Dialled.Offer().Relay != peerID {
 		t.Fatalf("the guest was not taken back into its own place at the relay's door: %+v", req)
 	}
-	req.dialled.abandon(errors.New("the test is over"))
+	req.Dialled.Abandon(errors.New("the test is over"))
 }
 
 // waitUntil waits for a running session to reach a state, a socket deadline away.
@@ -1521,7 +1535,7 @@ func TestARelayedPersonsOwnAddressReachesTheSession(t *testing.T) {
 	waitListening(t, relayAddr)
 	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr,
 		ListenAddress: freeAddress(t)}}, "roam", nil)
-	id, want := link.PeerID(person.membership.localParticipant()), person.reach.DeclaredAddr()
+	id, want := link.PeerID(person.membership.LocalParticipant()), person.reach.DeclaredAddr()
 	if want == "" {
 		t.Fatal("the relayed person declared no address")
 	}
@@ -1566,7 +1580,7 @@ on_enter = [
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.localParticipant())
+	d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.LocalParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}

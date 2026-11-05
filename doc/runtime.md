@@ -151,7 +151,7 @@ Without it the server takes that geometry from its **first person**. Otherwise a
 with no `-size` would fall back to `app.DefaultWidth` x `DefaultHeight` (80x24), a
 79x21 map — and because the joiner adopts the host's latch, every participant would
 then play on it however large its own terminal is. The joiner's acceptance therefore
-carries its own geometry (`network.JoinerReport`), and `membership.adoptLobbyGeometry` applies the
+carries its own geometry (`network.JoinerReport`), and `Membership.adoptLobbyGeometry` applies the
 first person's before the roster closes, so the bounds it produces are the ones the
 offer names and the tick-zero capture contains. A seat's report names its holder and
 sizes nothing. A server that seats bots of its own starts on them at once, on a bot's
@@ -196,9 +196,9 @@ A signal reads the roster at the instant it arrives rather than the loop's last
 reading, which can be a second old: a drain that read a stale empty roster would end
 a session somebody had only just joined.
 
-`draining` and `expired` refuse a dial with `ErrSessionEnding`, and `/health` keeps
+`draining` and `expired` refuse a dial with `errSessionEnding`, and `/health` keeps
 answering 200 with `ready=false` plus the phase and the time remaining — a drain is
-not a fault. The refusal is deliberately distinguishable from `ErrSessionStarting`:
+not a fault. The refusal is deliberately distinguishable from `errSessionStarting`:
 that one means retry, this one means the session is leaving.
 
 The start gate waits only on guests still linked. One that leaves before confirming
@@ -274,7 +274,7 @@ The arming happens after `scheduler.Start` rather than before it, because the ga
 waits for a capture one playout lead ahead of the current tick and a clock that has
 not started never reaches it. Between the lobby reading its roster and that arming
 there is a window neither gate can serve, so a dial landing in it is refused with
-`ErrSessionStarting` — a refusal the dialer retries, rather than an identity and a
+`errSessionStarting` — a refusal the dialer retries, rather than an identity and a
 silent wait for a start gate no longer being sent.
 
 A scripted participant schedules its actions on the ticks it issues, so it may
@@ -312,7 +312,7 @@ preview of its offer and `JournalAnchor`, adopts its seed, configuration identit
 and map latch, takes the scenario's bytes from the coordinator when no root here
 holds them, and only then calls `New`. The preview holds no place: the seat that
 names the run's participant follows the built and checked world, at once or at its
-player's press (`membership.takeSeat`), and binds that identity into the port and world
+player's press (`Membership.TakeSeat`), and binds that identity into the port and world
 `New` made without it. Until the start gate installs the session's world, a
 presenting joiner draws its status line alone: the world it composed stands in on
 the map its dial was offered, which a server sizing its session from its first
@@ -668,20 +668,20 @@ flowchart LR
 - Draws come from `vmath.NewSeededRand(seed, "bot.<participant>")`. Graph state is
   in no capture, journal or fingerprint.
 
-A seat (`internal/app/seat.go`) is that driver on another headless instance in the
-holder's process, on its own goroutine and paced against the authority like any
-guest. It joins on an in-process stream (`seatLink`) its holder serves with the
-handshake it holds when the seat dials: a still-guest's relays the join on its own
-link, an authority's admits it as any joiner. A run in no session first opens one
-with no listener (`openSessionLocked`), which `:host` later serves a listener on
-(`SocketPort.Serve`). A seat plays in its holder's screen: a
+A seat (`internal/app/internal/membership/seat.go`) is that driver on another
+headless instance in the holder's process, on its own goroutine and paced against
+the authority like any guest. It joins on an in-process stream (`seatLink`) its
+holder serves with the handshake it holds when the seat dials: a still-guest's
+relays the join on its own link, an authority's admits it as any joiner. A run in no
+session first opens one with no listener (`openSessionLocked`), which `:host` later
+serves a listener on (`SocketPort.Serve`). A seat plays in its holder's screen: a
 person's terminal, which `App.handleResize` publishes as it changes and the seat
 takes between two steps, or the holder's `-size`, else a bot's 120x40. A play-mode
 holder's seats stand still while it is paused; a driven holder's step on. A hold
-stops seats at its tick, as it stops every participant. A
-headless bot ends once its instance forks, and a seat once it or its holder does,
-unless its holder is a person's run: its loop takes the fork into a session of its
-own and seats its bots again there, so only the run ends its seats (`membership.seatEnds`).
+stops seats at its tick, as it stops every participant. A headless bot ends once its
+instance forks, and a seat once it or its holder does, unless its holder is a
+person's run: its loop takes the fork into a session of its own and seats its bots
+again there, so only the run ends its seats (`seatEnds`).
 
 ## 5. Simulation tick steps
 
@@ -1099,7 +1099,7 @@ not indefinitely leave the terminal in raw mode.
 | Runtime modes and composition | `internal/app/internal/config`, `internal/app/config.go`, `app.go`, `headless.go` |
 | Build capability adapters | `internal/app/presentation_*`, `audio*`, `network_*` |
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
-| Session gates, mid-run hosting and restarts, dedicated host, probe, bot seats | `internal/app/session.go`, `host.go`, `serve.go`, `probe.go`, `seat.go` |
+| Session gates, mid-run hosting and restarts, dedicated host, probe, bot seats | `internal/app/internal/membership/session.go`, `host.go`, `seat.go`; `internal/app/serve.go`, `probe.go`, `membership.go` |
 | Allocated-session lifetime policy | `internal/lifecycle` |
 | Replay copies and checkpoints | `internal/app/clone.go`, `internal/app/internal/scribe/checkpoint.go` |
 | Recording, replay, fuzz, and authored script drivers | `internal/journal` |
