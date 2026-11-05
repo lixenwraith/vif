@@ -20,7 +20,7 @@ import (
 func supervisedServer(t *testing.T, players int, p lifecycle.Policy) *App {
 	t.Helper()
 	a, err := New(Config{
-		Mode: ModeServer, HostAddress: "127.0.0.1:0", Participants: players,
+		Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: players},
 		Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
 		Seed: 0x11FE, Lifetime: p,
 	})
@@ -53,7 +53,7 @@ func seatGuests(a *App, n int) {
 func TestAnUnclaimedSessionEndsItsOwnLobby(t *testing.T) {
 	t.Parallel()
 	cfg := Config{
-		Mode: ModeServer, HostAddress: "127.0.0.1:0",
+		Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"},
 		Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
 		Seed: 0x11FF, Lifetime: lifecycle.Policy{FirstJoin: 150 * time.Millisecond},
 	}
@@ -405,7 +405,7 @@ func TestSupervisorFlagsAreRefusedWhereNothingWouldHonourThem(t *testing.T) {
 		}
 	}
 	negative := Config{
-		Mode: ModeServer, HostAddress: ":7777", Width: 120, Height: 40,
+		Mode: ModeServer, Membership: Membership{HostAddress: ":7777"}, Width: 120, Height: 40,
 		Resources: resource.Options{Embedded: true},
 		Lifetime:  lifecycle.Policy{FirstJoin: -time.Second},
 	}

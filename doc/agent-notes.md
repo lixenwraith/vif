@@ -82,6 +82,9 @@ that proves wrong or that a document now states, and link the document instead.
   the generator on the stale codec's use of it ("type-check ...: has no field"):
   delete that field's lines from `payload_gen.go` first, and the run writes the
   codec anew.
+- Go 1.27 takes a promoted field as a struct literal's key, though not through an
+  embedded pointer, so fields moved into an embedded struct keep every literal,
+  selector and method call compiling.
 
 ## Ticks and events
 

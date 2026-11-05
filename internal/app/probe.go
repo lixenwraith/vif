@@ -81,7 +81,7 @@ func (a *App) probeSnapshot() probe.Snapshot {
 		"guests":   strconv.Itoa(guests),
 		"bots":     strconv.Itoa(bots), // of the guests, so a bot-filled session does not read as people
 		"capacity": strconv.Itoa(capacity),
-		"address":  a.cfg.HostAddress,
+		"address":  a.cfg.Membership.HostAddress,
 		"phase":    life.Phase.String(),
 		// As a refusal names it, so a session list can say which page it admits
 		// before that page dials and is refused.

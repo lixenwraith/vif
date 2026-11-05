@@ -33,19 +33,19 @@ func Run(cfg Config) error {
 	}
 	// One keeper for every run of the process, so a run that replaces another comes
 	// back to the place that one left.
-	cfg.claims = newClaimKeeper(cfg.ClaimStore)
+	cfg.Membership.claims = newClaimKeeper(cfg.Membership.ClaimStore)
 	// A host with a player plays from its first tick and opens its door once the
 	// clock runs, as :host does; only a run with nobody to play waits in a lobby.
-	cfg.HostAddress, cfg.resumeHost = "", cfg.HostAddress
+	cfg.Membership.HostAddress, cfg.resumeHost = "", cfg.Membership.HostAddress
 	// A port the player asked for that this run cannot have ends it before the
 	// terminal starts, as a -join that cannot dial does.
 	if cfg.resumeHost != "" && buildHasSocketNetwork {
-		lns, err := cfg.bindDoors(cfg.resumeHost)
+		lns, err := cfg.Membership.bindDoors(cfg.resumeHost)
 		if err != nil {
 			return fmt.Errorf("host %s: %w", cfg.resumeHost, err)
 		}
 		defer closeDoors(lns) // the run's port closes them first; one that never served them must not keep them
-		cfg.hostListeners = lns
+		cfg.Membership.hostListeners = lns
 	}
 	// One terminal for every run: a replacement redraws on it instead of leaving
 	// and re-entering the screen. The first run's hub opens it; Run releases it.
@@ -57,16 +57,17 @@ func Run(cfg Config) error {
 	}
 	// A join the player started at launch is seated at their press, unless the host
 	// they launched from already took it.
-	cfg.joinPress = cfg.JoinAddress != "" && !cfg.Host.Pressed
+	cfg.Membership.joinPress = cfg.Membership.JoinAddress != "" && !cfg.Host.Pressed
 	cfg.startScreen = !cfg.Host.StartScreen
 	rejoin := false
 	var solo *Config // what a :join that fails after its dial plays on as
 	for {
 		next, err := runScenario(cfg, rejoin)
 		// The press the host took and the start screen were the first game's
-		cfg.hostListeners, cfg.Host.Pressed, cfg.startScreen = nil, false, false
+		cfg.Membership.hostListeners, cfg.Host.Pressed, cfg.startScreen = nil, false, false
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
-			vlog.Warn("session", "msg", "join failed; playing solo", "join", cfg.JoinAddress, "error", err.Error())
+			vlog.Warn("session", "msg", "join failed; playing solo",
+				"join", cfg.Membership.JoinAddress, "error", err.Error())
 			cfg, solo = *solo, nil
 			cfg.Notice = "Join failed: " + err.Error()
 			continue
@@ -80,7 +81,7 @@ func Run(cfg Config) error {
 		cfg, solo = cfg.restarted(next)
 		rejoin = next.Rejoin
 		vlog.Info("app", "msg", "run restarting", "scenario", cfg.Resources.Scenario,
-			"host", next.Host, "join", cfg.JoinAddress, "rejoin", rejoin)
+			"host", next.Host, "join", cfg.Membership.JoinAddress, "rejoin", rejoin)
 	}
 }
 
@@ -165,7 +166,7 @@ func (a *App) Loop() (*restartRequest, error) {
 	if a.cfg.Notice != "" {
 		a.ctx.SetStatusMessage(a.cfg.Notice, parameter.StatusAlert)
 	}
-	if a.cfg.JoinAddress != "" {
+	if a.cfg.Membership.JoinAddress != "" {
 		a.membership.activateNetworkSession()
 		if err := a.membership.resumeJoinedSession(); err != nil {
 			return nil, err
@@ -477,7 +478,7 @@ func (a *App) holdFirstGame(reports <-chan bool) {
 			drained = true
 		}
 	}
-	if !a.unseen && (!a.ctx.WaitStart.Load() || a.cfg.JoinAddress != "" || a.cfg.Host.Pressed) {
+	if !a.unseen && (!a.ctx.WaitStart.Load() || a.cfg.Membership.JoinAddress != "" || a.cfg.Host.Pressed) {
 		return
 	}
 	a.scheduler.Prepare() // the hold settles before the clock starts
@@ -531,12 +532,14 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 				a.showJoinAsk() // drawn again with what the key opened, typed or resized
 				continue
 			}
-			a.showJoinStatus("Joining " + link.Shown(a.cfg.JoinAddress) + "...")
+			a.showJoinStatus("Joining " + link.Shown(a.cfg.Membership.JoinAddress) + "...")
 			err := a.membership.takeSeat(true, signals)
 			if errors.Is(err, errSessionMoved) {
 				// Pressed already, and holding the bots it was to seat once it was in.
-				a.log.Info("session", "msg", "joining the session's new game", "join", link.Shown(a.cfg.JoinAddress))
-				return &restartRequest{Rejoin: true, provided: a.cfg.Resources.Provided, Bots: a.cfg.Bots}, nil
+				a.log.Info("session", "msg", "joining the session's new game",
+					"join", link.Shown(a.cfg.Membership.JoinAddress))
+				return &restartRequest{Rejoin: true, provided: a.cfg.Resources.Provided,
+					Bots: a.cfg.Membership.Bots}, nil
 			}
 			return nil, err
 		}
@@ -577,7 +580,7 @@ func joinPress(ev terminal.Event, mouseOff bool) bool {
 // joinPrompt is the status line a join waiting for its press stands with, asking for
 // the press the player's last suggests, as startPrompt does.
 func (a *App) joinPrompt() string {
-	host := link.Shown(a.cfg.JoinAddress)
+	host := link.Shown(a.cfg.Membership.JoinAddress)
 	switch {
 	case a.touched:
 		return "Tap to join " + host

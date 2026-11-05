@@ -211,8 +211,8 @@ func main() {
 		_, err = app.RunScript(cfg, *flagScript)
 	case (*flagWatch || *flagHeadless) && bots > 0:
 		cfg := buildConfig()
-		graph := cfg.Bots[0]
-		cfg.Bots = cfg.Bots[1:]
+		graph := cfg.Membership.Bots[0]
+		cfg.Membership.Bots = cfg.Membership.Bots[1:]
 		if *flagWatch {
 			cfg.Mode = app.ModeScript
 		} else {
@@ -261,10 +261,10 @@ func verifyJournal(path string) error {
 // plays until its graph quits, and hosting it waits in the lobby for players.
 func botNotice(cfg app.Config, spec string) {
 	switch {
-	case cfg.HostAddress != "":
-		fmt.Printf("Bot %s hosting %s (headless); Ctrl-C stops it\n", spec, cfg.HostAddress)
-	case cfg.JoinAddress != "":
-		fmt.Printf("Bot %s joining %s (headless); Ctrl-C stops it\n", spec, cfg.JoinAddress)
+	case cfg.Membership.HostAddress != "":
+		fmt.Printf("Bot %s hosting %s (headless); Ctrl-C stops it\n", spec, cfg.Membership.HostAddress)
+	case cfg.Membership.JoinAddress != "":
+		fmt.Printf("Bot %s joining %s (headless); Ctrl-C stops it\n", spec, cfg.Membership.JoinAddress)
 	default:
 		fmt.Printf("Bot %s running headless; Ctrl-C stops it\n", spec)
 	}
@@ -411,22 +411,27 @@ func buildConfig() app.Config {
 		TickInterval:  *flagTick,
 		Seed:          *flagSeed,
 		Journal:       flagJournal.set,
-		SessionName:   flagSession.name,
-		Participants:  flagSession.players,
-		NoAdvertise:   flagSession.noAdvertise,
+		Membership: app.Membership{
+			SessionName:  flagSession.name,
+			Participants: flagSession.players,
+			NoAdvertise:  flagSession.noAdvertise,
+		},
 	}
 
 	// Validated in validateInvocation; a link's name overrides nothing, because a
 	// joiner has no -name of its own.
 	if flagSession.join != "" {
 		join := endpoint(flagSession.join)
-		cfg.JoinAddress, cfg.SessionName = join.Addr, cmp.Or(join.Name, cfg.SessionName)
+		cfg.Membership.JoinAddress = join.Addr
+		cfg.Membership.SessionName = cmp.Or(join.Name, cfg.Membership.SessionName)
 	}
-	cfg.HostAddress, cfg.ListenAddress = doorList(flagSession.host), endpoint(flagSession.listen).Addr
-	cfg.RelayAddress, cfg.TLS, cfg.Trust = relayTarget(flagSession.relay), sessionTLS, sessionTrust
+	cfg.Membership.HostAddress = doorList(flagSession.host)
+	cfg.Membership.ListenAddress = endpoint(flagSession.listen).Addr
+	cfg.Membership.RelayAddress = relayTarget(flagSession.relay)
+	cfg.Membership.TLS, cfg.Membership.Trust = sessionTLS, sessionTrust
 
 	if flagSession.serve != "" {
-		cfg.HostAddress = doorList(flagSession.serve)
+		cfg.Membership.HostAddress = doorList(flagSession.serve)
 		cfg.ProbeAddress = flagSession.probe
 		cfg.Lifetime = flagSession.lifetime()
 	}
@@ -434,18 +439,19 @@ func buildConfig() app.Config {
 	// host *is* the session, so an orchestrator replacing it at the same address is
 	// the reconnect its guests want; a person's machine is not, so there the
 	// surviving guest continuing the game is worth more than the address staying put.
-	cfg.FixedAuthority = flagSession.serve != ""
-	cfg.SlowPolicy = &flagSession.slow
-	cfg.ShedPolicy = &flagSession.shed
+	cfg.Membership.FixedAuthority = flagSession.serve != ""
+	cfg.Membership.SlowPolicy = &flagSession.slow
+	cfg.Membership.ShedPolicy = &flagSession.shed
 	if flagSession.authority != "" {
-		cfg.FixedAuthority = flagSession.authority == authorityHost
+		cfg.Membership.FixedAuthority = flagSession.authority == authorityHost
 	}
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
-	cfg.Bots, _ = app.BotSpecs(flagSession.bot)
+	cfg.Membership.Bots, _ = app.BotSpecs(flagSession.bot)
 
-	cfg.Play, cfg.Settings, cfg.ClaimStore, cfg.Notice = settings.Play, settingsStore, pageClaims, settingsNotice
+	cfg.Play, cfg.Settings, cfg.Notice = settings.Play, settingsStore, settingsNotice
+	cfg.Membership.ClaimStore = pageClaims
 	// -mute either way names both channels for this run, and -nw the wait; unset,
 	// [play] stands, and a value set here is never written back
 	flag.Visit(func(f *flag.Flag) {
