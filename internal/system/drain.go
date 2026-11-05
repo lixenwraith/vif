@@ -798,9 +798,11 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// A fresh drain waits one interval before its first energy drain
 	armTimer(s.world, entity, component.TimerCooldown, parameter.DrainEnergyDrainInterval)
 
-	// Navigation component with defaults
+	// Locked on its own cursor, navigation steers it by that cursor's private field:
+	// the roster's answers the nearest player, who may be another participant
 	navComp := component.NavigationComponent{
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
+		LockedTarget:  s.world.Resources.Player.Entity,
 	}
 	s.world.Components.Navigation.SetComponent(entity, navComp)
 
@@ -886,6 +888,10 @@ func (s *DrainSystem) handleDrainInteractions() {
 
 		for j := range overlaps.Count {
 			overlap := &overlaps.Entries[j]
+			// Another participant's cursor never sees this drain, so it meets none of it
+			if overlap.Cursor != s.world.Resources.Player.Entity {
+				continue
+			}
 			// Apply shield-zone interactions before exact cursor contact.
 			if len(overlap.ShieldMembers) > 0 {
 				if drainReady {
