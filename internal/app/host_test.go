@@ -30,6 +30,8 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	link "github.com/lixenwraith/vif/pkg/network"
+	"github.com/lixenwraith/vif/pkg/vmath"
+	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
 func TestAllocatorRequestForwardsOptionsAndPreservesRunOnRefusal(t *testing.T) {
@@ -1814,6 +1816,61 @@ func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 		if got != 1 {
 			t.Fatalf("participant %d observed %d quasar spawn requests, want 1", i+1, got)
 		}
+	}
+}
+
+// TestAGuestsDrainBreaksTheGoldOnEveryInstance: a guest's drain standing on a gold
+// member breaks the sequence as a crossing, so the host and the guest lose it at one
+// tick, rather than the guest alone until the host's correction puts it back
+func TestAGuestsDrainBreaksTheGoldOnEveryInstance(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x601D, 2, [][2]int{{1, 2}})
+	local := localCursors(t, apps)
+	for i := 0; !goldActive(apps[0]) || !goldActive(apps[1]); i++ {
+		if i > 200 {
+			t.Fatal("no gold sequence stands on both instances")
+		}
+		tickAll(apps)
+	}
+
+	guest := apps[1]
+	guest.World().RunSafe(func() {
+		w := guest.World()
+		var member core.Entity
+		w.Components.Glyph.Each(func(e core.Entity, _ *component.GlyphComponent) bool {
+			member = e
+			return e.Domain() != core.DomainShared
+		})
+		pos, _ := w.Positions.GetPosition(member)
+		// Heat keeps the drain population from despawning it; the stun holds it on the member
+		if h, ok := w.Components.Heat.GetPtr(local[1]); ok {
+			h.Current = parameter.HeatMax / 2
+		}
+		d := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(d, pos)
+		w.Components.Drain.SetComponent(d, component.DrainComponent{LastIntX: pos.X, LastIntY: pos.Y})
+		combat := component.CombatComponent{OwnerEntity: d, CombatEntityType: component.CombatEntityDrain,
+			HitPoints: parameter.CombatInitialHPDrain}
+		combat.Status[component.StatusStun].Remaining = time.Second
+		w.Components.Combat.SetComponent(d, combat)
+		cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.Center()
+		w.Components.Kinetic.SetComponent(d, component.KineticComponent{Kinetic: physics.Kinetic{PreciseX: cx, PreciseY: cy}})
+	})
+
+	var broke [2]uint64
+	for i := 0; broke[0] == 0 || broke[1] == 0; i++ {
+		if i > 4*parameter.NetworkBarrierMaxDelayTicks {
+			t.Fatalf("gold broke at ticks %v (host, guest), want on both", broke)
+		}
+		tickAll(apps)
+		for j, a := range apps {
+			if broke[j] == 0 && !goldActive(a) {
+				broke[j] = a.Position().Tick
+			}
+		}
+	}
+	if broke[0] != broke[1] {
+		t.Fatalf("gold broke at tick %d on the host and %d on the guest, want one tick", broke[0], broke[1])
 	}
 }
 
