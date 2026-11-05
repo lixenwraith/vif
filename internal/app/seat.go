@@ -138,7 +138,7 @@ func (m *membership) addSeatLocked(spec string) error {
 	s.number = m.seatSerial
 	m.seats = append(m.seats, s)
 	m.seatsMu.Unlock()
-	cfg.log = vlog.NewLog("seat " + strconv.FormatUint(s.number, 10))
+	cfg.wiring.log = vlog.NewLog("seat " + strconv.FormatUint(s.number, 10))
 	mode := m.run.mode() // the seat's goroutine reads nothing of its holder's config
 	core.Go(func() { m.playSeat(s, cfg, mode) })
 	return nil
@@ -147,17 +147,20 @@ func (m *membership) addSeatLocked(spec string) error {
 // seatConfigLocked is a new seat's run, which joins this run's session in-process; a
 // run in none first opens one with no listener. It sends the session's name, which
 // the handshake its holder serves checks. Caller holds updateMutex.
-func (m *membership) seatConfigLocked() (Config, error) {
+func (m *membership) seatConfigLocked() (runConfig, error) {
 	if m.sessionTransportLocked() == nil {
 		if err := m.openSessionLocked(nil); err != nil {
-			return Config{}, err
+			return runConfig{}, err
 		}
 	}
 	width, height := m.seatScreenLocked()
-	return Config{Mode: ModeHeadless, Resources: m.run.resources(), Width: width, Height: height,
-		StatTicks: -1, RecTicks: -1, Membership: Membership{NoAdvertise: true, JoinAddress: seatJoin,
-			SessionName: m.cfg.SessionName, holder: link.PeerID(m.world.LocalParticipant()),
-			relay: m.seatLink, claims: m.claims}}, nil
+	return runConfig{
+		Config: Config{Mode: ModeHeadless, Resources: m.run.resources(), Width: width, Height: height,
+			StatTicks: -1, RecTicks: -1, Membership: Membership{NoAdvertise: true, JoinAddress: seatJoin,
+				SessionName: m.cfg.SessionName}},
+		wiring: wiring{membership: membershipWiring{holder: link.PeerID(m.world.LocalParticipant()),
+			relay: m.seatLink, claims: m.claims}},
+	}, nil
 }
 
 // seatLink opens a stream to this run for one of its bots and serves the join
@@ -202,7 +205,7 @@ func (m *membership) seatScreenLocked() (int, int) {
 // ends for it (seatEnds), standing still while its holder's pause does. A join
 // refused while the session starts or hands off is retried, as the refusal asks;
 // any other failure ends it. mode is the holder's, read as it was seated.
-func (m *membership) playSeat(s *seat, cfg Config, mode Mode) {
+func (m *membership) playSeat(s *seat, cfg runConfig, mode Mode) {
 	defer close(s.done)
 	defer m.forgetSeat(s)
 	// A holder whose clock stops when paused stops its seats with it; a driven one

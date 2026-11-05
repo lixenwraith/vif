@@ -17,7 +17,7 @@ import (
 )
 
 // ConfigFromAnchor rebuilds the headless config a journal was recorded under, mid-run
-// openings included; NewReplay retargets it for presentation. Speed is dropped: the
+// openings included; PlayJournal retargets it for presentation. Speed is dropped: the
 // manual clock takes no rate. The scenario is asked for by name, so one outside the
 // config roots needs -config-dir; VerifyAnchor proves what resolved is what ran.
 func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {

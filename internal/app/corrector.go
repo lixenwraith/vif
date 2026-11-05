@@ -48,8 +48,8 @@ func (s stagingRun) Corrector() *corrector.Corrector { return &s.glue }
 // capture: a world on other bounds or another session's roots answers another question.
 func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	// Only inputs that can change the simulated world are projected: subtracting I/O
-	// options from the live Config lets a new local option reach NewHeadless. Dir
-	// stays, since the corpus and FSM files resolve through it. The scenario is
+	// options from the live Config lets a new local option reach the staging world.
+	// Dir stays, since the corpus and FSM files resolve through it. The scenario is
 	// handed over, not re-resolved: it is what the capture was produced against,
 	// and it may have come from the coordinator and exist nowhere on this host.
 	staged := a.scenario
@@ -66,7 +66,6 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 		RecTicks:  -1,
 		StatTicks: -1,
 		LockMap:   true,
-		log:       vlog.NewLog("staging"),
 	}
 	if cap.Header.MapWidth > 0 && cap.Header.MapHeight > 0 {
 		cfg.MapWidth, cfg.MapHeight = cap.Header.MapWidth, cap.Header.MapHeight
@@ -81,7 +80,7 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	// A live run owns the terminal; the staging world only needs a viewport large
 	// enough to hold the latched map, which is what the live instance already runs.
 	cfg.Width, cfg.Height = a.ctx.Width, a.ctx.Height
-	staging, err := NewHeadless(cfg)
+	staging, err := newDriven(runConfig{Config: cfg, wiring: wiring{log: vlog.NewLog("staging")}})
 	if err == nil {
 		staging.world.Project()
 	}

@@ -212,7 +212,7 @@ between — not in the capture, because the capture predates it; not on the wire
 because the participant was not yet a peer. Nothing would detect that.
 
 The join anchor owns the seed, RNG session, tick rate, the scenario and its digest,
-the speed and the D-14 map latch. `ConfigForJoin` runs before `New`, so
+the speed and the D-14 map latch. `configForJoin` runs before `newApp`, so
 `initWorld` cannot draw a different seed. The coordinator assigns canonical
 participant IDs and roster slots; every instance creates the roster in slot order
 and marks only its own cursor human-controlled.

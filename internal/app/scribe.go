@@ -54,9 +54,9 @@ func (a *App) journalTwin(an event.JournalAnchor) (*App, error) {
 	cfg.Resources = resource.Options{Dir: a.cfg.Resources.Dir, Content: a.cfg.Resources.Content,
 		Embedded: a.cfg.Resources.Embedded, Provided: &scenario}
 	cfg.RecTicks, cfg.StatTicks = -1, -1
-	cfg.log = vlog.NewLog("journal")
-	cfg.log.Mute(true)
-	twin, err := NewHeadless(cfg)
+	log := vlog.NewLog("journal")
+	log.Mute(true)
+	twin, err := newDriven(runConfig{Config: cfg, wiring: wiring{log: log}})
 	if err != nil {
 		return nil, err
 	}

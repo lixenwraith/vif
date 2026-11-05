@@ -421,11 +421,11 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 		t.Fatalf("dial session: %v", err)
 	}
 	t.Cleanup(func() { _ = pending.Close() })
-	joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, offered)
+	joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: 120, Height: 40}}, offered)
 	if err != nil {
 		t.Fatalf("join config: %v", err)
 	}
-	b, err := NewHeadless(joinCfg)
+	b, err := newDriven(joinCfg)
 	if err != nil {
 		t.Fatalf("join app: %v", err)
 	}

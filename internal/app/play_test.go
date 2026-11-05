@@ -298,7 +298,7 @@ func replayPlayer(t *testing.T, set journal.Set, edit func(*Config)) *player {
 	shown := &replayCopy{a: a, src: journalSource{d, a.log, parameter.GameUpdateInterval}}
 	p := &player{a: a, src: shown.src, interval: parameter.GameUpdateInterval,
 		scale: engine.ScaleNormal}
-	p.rw = newRewinder(shown, a, replayCopies(a, cfg, stream, NewHeadless))
+	p.rw = newRewinder(shown, a, replayCopies(a, cfg, stream, newDriven))
 	t.Cleanup(func() {
 		p.rw.close()
 		a.Close()

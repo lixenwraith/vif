@@ -259,7 +259,7 @@ func TestAJoinerAdoptsTheHostsRngSession(t *testing.T) {
 			an.Anchor.Session, first)
 	}
 
-	cfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, network.SessionOffer{
+	cfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: 120, Height: 40}}, network.SessionOffer{
 		Anchor: an, Host: 1, Assigned: 2, Term: network.FirstTerm,
 		Roster: []network.RosterEntry{
 			{ID: 1, Slot: 0}, {ID: 2, Slot: 1},
@@ -271,7 +271,7 @@ func TestAJoinerAdoptsTheHostsRngSession(t *testing.T) {
 	if cfg.Session != an.Anchor.Session {
 		t.Fatalf("the join config carries session %d, the host is on %d", cfg.Session, an.Anchor.Session)
 	}
-	guest, err := NewHeadless(cfg)
+	guest, err := newDriven(cfg)
 	if err != nil {
 		t.Fatalf("join app: %v", err)
 	}
@@ -294,14 +294,14 @@ func TestAJoinerAdoptsTheHostsTick(t *testing.T) {
 	}
 	defer host.Close()
 	an := host.JoinAnchor()
-	cfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, network.SessionOffer{
+	cfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: 120, Height: 40}}, network.SessionOffer{
 		Anchor: an, Host: 1, Assigned: 2, Term: network.FirstTerm,
 		Roster: []network.RosterEntry{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
 	})
 	if err != nil {
 		t.Fatalf("join config: %v", err)
 	}
-	guest, err := NewHeadless(cfg)
+	guest, err := newDriven(cfg)
 	if err != nil {
 		t.Fatalf("join app: %v", err)
 	}

@@ -161,12 +161,12 @@ func TestEveryShippedGraphPlays(t *testing.T) {
 // goroutine and paced, and returns the run once the driver is on it, with its stop.
 func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, func()) {
 	t.Helper()
-	return driveRun(t, "bot", cfg, graph, hold)
+	return driveRun(t, "bot", runConfig{Config: cfg}, graph, hold)
 }
 
 // driveRun is driveBot as the kind of run it names: a bot run ends with its session,
 // a script's plays its fork on. A config naming no resources plays the embedded ones.
-func driveRun(t *testing.T, kind string, cfg Config, graph string, hold func() bool) (*App, func()) {
+func driveRun(t *testing.T, kind string, cfg runConfig, graph string, hold func() bool) (*App, func()) {
 	t.Helper()
 	cfg.Seed, cfg.Width, cfg.Height = fixtureSeed, BotWidth, BotHeight
 	if cfg.Resources == (resource.Options{}) {
@@ -712,8 +712,8 @@ func TestAForkDropsTheCursorsItCannotReachOnceItsSeatsEnd(t *testing.T) {
 	host, leave := driveBot(t, Config{Membership: Membership{HostAddress: addr, FixedAuthority: true,
 		Bots: []string{"roam"}}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	fork, _ := driveRun(t, "script", Config{Membership: Membership{JoinAddress: addr,
-		Bots: []string{"roam"}}}, "patrol", nil)
+	fork, _ := driveRun(t, "script", runConfig{Config: Config{Membership: Membership{JoinAddress: addr,
+		Bots: []string{"roam"}}}}, "patrol", nil)
 	waitForCursors(t, host, 4)
 	waitForCursors(t, fork, 4)
 	leave()
@@ -742,7 +742,7 @@ func TestAHeadlessBotEndsWhenItsSessionDoes(t *testing.T) {
 	stop, ended := make(chan os.Signal), make(chan error, 1)
 	t.Cleanup(func() { close(stop) })
 	go func() {
-		_, err := drive(cfg, "bot", g.Name, stop, nil, func(a *App) (pacedSource, error) {
+		_, err := drive(runConfig{Config: cfg}, "bot", g.Name, stop, nil, func(a *App) (pacedSource, error) {
 			d, err := bot.NewDriver(a, a.ctx, g, a.Seed(), a.membership.localParticipant())
 			return botSource{d}, err
 		})
@@ -949,15 +949,15 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	}
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
-	cfg := Config{Membership: Membership{JoinAddress: host.HostAddr(), Bots: []string{"patrol"},
-		claims: newClaimKeeper(nil)}}
-	_, leave := driveBot(t, cfg, "patrol", nil)
+	cfg := runConfig{Config: Config{Membership: Membership{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}},
+		wiring: wiring{membership: membershipWiring{claims: newClaimKeeper(nil)}}}
+	_, leave := driveRun(t, "bot", cfg, "patrol", nil)
 	waitForCursors(t, host, 3)
 	left := places(host, everyone)
 	leave()
 	waitForWraiths(t, host, 2)
 
-	driveBot(t, cfg, "patrol", nil)
+	driveRun(t, "bot", cfg, "patrol", nil)
 	waitForWraiths(t, host, 0)
 	if got := places(host, everyone); !maps.Equal(got, left) {
 		t.Fatalf("after coming back the session holds %v (entity, participant by slot), want the places it left, %v", got, left)
