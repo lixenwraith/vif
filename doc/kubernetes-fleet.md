@@ -53,7 +53,7 @@ flowchart LR
 | Join identity | The coordinator refuses a peer whose protocol, simulation fingerprint, capture schema, journal schema, tick interval, seed, RNG session or scenario digest differs from the offer it made. The corpus is not among them: glyphs are player domain, so each participant reads its own and a peer with different text still joins. |
 | Session name | Optional. `-name` makes one address able to serve several sessions: the dialer sends it before the handshake, so a front door can route on it, and the session refuses a name that is not its own. A routing key, not a credential. Every fleet pod answers to its session ID, on every route (§9). |
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
-| Shutdown | `SIGTERM` drains: readiness false, dials refused with `errSessionEnding`, exit when the roster empties or `-drain` elapses. |
+| Shutdown | `SIGTERM` drains: readiness false, dials refused as ending (`RefusalEnding`), exit when the roster empties or `-drain` elapses. |
 | Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster, map, tick and build. |
 | Storage | Match state is never persisted. A 256 MiB node tmpfs backs one Retain local PV/PVC for ephemeral public game logs, and an 8 MiB node directory backs a second, read-only one for scenarios. A session Job mounts those two claims and nothing else. Replacing the scenario tree is an atomic rename: a running match keeps the inode its pod mounted, and the next pod gets the new one. |
 

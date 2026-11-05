@@ -196,10 +196,14 @@ A signal reads the roster at the instant it arrives rather than the loop's last
 reading, which can be a second old: a drain that read a stale empty roster would end
 a session somebody had only just joined.
 
-`draining` and `expired` refuse a dial with `errSessionEnding`, and `/health` keeps
+`draining` and `expired` refuse a dial as ending (`sessionEnding`), and `/health` keeps
 answering 200 with `ready=false` plus the phase and the time remaining — a drain is
-not a fault. The refusal is deliberately distinguishable from `errSessionStarting`:
-that one means retry, this one means the session is leaving.
+not a fault, and an update first drains the fleet's sessions this way
+(`deploy/k3s/session.sh drain`). The refusal is deliberately distinguishable
+from `errSessionStarting`: that one means retry, this one means the session is
+leaving, so no dialer retries it, and vif-router gives a join to a draining or
+expired pod the same answer without dialling it. A host leaving its own session
+refuses alike ([Multi-player §5.5](multi-player.md#55-leaving-a-session)).
 
 The start gate waits only on guests still linked. One that leaves before confirming
 it installed the world is dropped from the wait, and one still unconfirmed after

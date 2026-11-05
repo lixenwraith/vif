@@ -30,10 +30,10 @@ import (
 
 func geometryServer(t *testing.T, w, h int) *App {
 	t.Helper()
-	a, err := New(Config{
+	a, err := newApp(runConfig{Config: Config{
 		Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"}, Width: w, Height: h,
 		Resources: resource.Options{Embedded: true}, Seed: 0x6E01,
-	})
+	}})
 	if err != nil {
 		t.Fatalf("server: %v", err)
 	}

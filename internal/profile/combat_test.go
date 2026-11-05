@@ -76,6 +76,17 @@ func TestKineticEffectImpliesCollision(t *testing.T) {
 	})
 }
 
+// TestAFamilyLandsAlikeFromEveryAttacker: a family's damage and effects on a defender
+// do not turn on who throws it, which a data species' row (DataRow) takes as given
+func TestAFamilyLandsAlikeFromEveryAttacker(t *testing.T) {
+	eachProfile(func(p *AttackProfile) {
+		if d := Defending(p.AttackType, p.Defender); d.DamageValue != p.DamageValue || d.EffectMask != p.EffectMask {
+			t.Errorf("attack %d vs %d: attacker %d deals %d with effects %b, attacker %d %d with %b",
+				p.AttackType, p.Defender, p.Attacker, p.DamageValue, p.EffectMask, d.Attacker, d.DamageValue, d.EffectMask)
+		}
+	})
+}
+
 func TestMatrixSelfConsistent(t *testing.T) {
 	for atk := range attackMatrix {
 		for a := range attackMatrix[atk] {

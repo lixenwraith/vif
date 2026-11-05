@@ -18,11 +18,11 @@ import (
 // starts by hand: supervised, but ended by the person who started it.
 func supervisedServer(t *testing.T, players int, p lifecycle.Policy) *App {
 	t.Helper()
-	a, err := New(Config{
+	a, err := newApp(runConfig{Config: Config{
 		Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: players},
 		Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
 		Seed: 0x11FE, Lifetime: p,
-	})
+	}})
 	if err != nil {
 		t.Fatalf("server: %v", err)
 	}
