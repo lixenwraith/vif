@@ -204,14 +204,26 @@ type Config struct {
 	// playout lead. A hosting run sets it because its bounds are what joiners adopt;
 	// a run reproducing a session sets it from the anchor's SessionShared.
 	LockMap bool
+}
 
+// runConfig is a run's Config with the wiring it is built with, which this package
+// sets and no caller can. The App keeps it as cfg; its Validate adds the wiring's
+// rules to Config's, and its Normalize what the wiring settles.
+type runConfig struct {
+	Config
+	wiring wiring
+}
+
+// wiring is what a run is built with beside its Config, none of it a caller's to
+// set: what one run hands the next, what a script's, a bot's or a seat's run, a
+// replay's copy or a staging world is made with, and what construction settles.
+type wiring struct {
 	// resumeHost is Run's own: the address this run opens once its clock runs, the
 	// -host a player gave or the door a rebuilt coordinator reopens. It is not
 	// HostAddress because nothing waits in a startup lobby: guests use the mid-run gate.
 	resumeHost string
 
-	// networkConfig is prepared by Run after host/join negotiation. Keeping the
-	// transport detail private leaves Config's public session surface role-neutral.
+	// networkConfig is the transport the host or join negotiation prepared.
 	networkConfig *link.Config
 
 	// dialled is a :join its session already answered, dialled while the run it
@@ -249,13 +261,17 @@ type Config struct {
 	// exactly this". Normalize runs more than once on the way to a session, so only
 	// the pass that fills a zero sets it.
 	geometryDefaulted bool
+
+	// membership is the wiring's session half, which the membership holds.
+	membership membershipWiring
 }
 
-// ConfigForJoin applies the host-authored simulation identity to local operator options.
-func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
+// configForJoin applies the host-authored simulation identity to local operator
+// options, and the session's -players to the run's wiring.
+func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 	fromAnchor, err := ConfigFromAnchor(o.Anchor.Anchor)
 	if err != nil {
-		return Config{}, err
+		return runConfig{}, err
 	}
 	local.Seed = fromAnchor.Seed
 	local.Session = fromAnchor.Session
@@ -276,10 +292,10 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	local.CellAspect = fromAnchor.CellAspect
 	local.LockMap = true
 	local.TickInterval = fromAnchor.TickInterval
-	local.Membership.sessionPlayers = o.Players
+	local.wiring.membership.sessionPlayers = o.Players
 	// The session's rate is its host's, a script's or bot's pace included; a
 	// harness's manual clock is driven by Tick and takes none.
-	if !local.Mode.Driven() || local.scriptedSession {
+	if !local.Mode.Driven() || local.wiring.scriptedSession {
 		local.TimeScaleSpec = o.Anchor.Anchor.Speed
 	}
 	return local, local.Validate()
@@ -287,7 +303,7 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 
 // validateWith checks this configuration with s as its session half: a join's,
 // before anything is dialled.
-func (c Config) validateWith(s Membership) error {
+func (c runConfig) validateWith(s Membership) error {
 	c.Membership = s
 	return c.Validate()
 }
@@ -295,11 +311,11 @@ func (c Config) validateWith(s Membership) error {
 // prepare is the resources a dial of s's session builds its world on, settled on
 // its preview: this configuration as the session makes it, checked, with the
 // session's scenario resolved.
-func (c Config) prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error) {
+func (c runConfig) prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error) {
 	c.Membership = s
 	var err error
-	if c, err = ConfigForJoin(c, preview); err == nil {
-		err = resolveJoinScenario(&c, pending, preview)
+	if c, err = configForJoin(c, preview); err == nil {
+		err = resolveJoinScenario(&c.Config, pending, preview)
 	}
 	return c.Resources, err
 }
@@ -316,14 +332,14 @@ func joinNotice(notice, line string) string {
 // solo run a :join that fails after its dial plays on as. Hosting resumes after the
 // clock rather than before it: the next run is not waiting for a lobby, it is
 // reopening a door its guests are already at.
-func (c Config) restarted(next *restartRequest) (Config, *Config) {
-	c.Notice, c.dialled, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
-	c.Journal, c.journalCarried = next.Journal, next.Journal
-	c.Membership.joinPress, c.Resources.Provided = next.press, next.provided
+func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
+	c.Notice, c.wiring.dialled, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
+	c.Journal, c.wiring.journalCarried = next.Journal, next.Journal
+	c.wiring.membership.joinPress, c.Resources.Provided = next.press, next.provided
 	if next.Scenario != "" {
 		c.Resources.Scenario, c.Resources.Embedded = next.Scenario, false
 	}
-	c.Membership.HostAddress, c.resumeHost = "", next.Host
+	c.Membership.HostAddress, c.wiring.resumeHost = "", next.Host
 	switch {
 	case next.Rejoin:
 		if next.Join != "" {
@@ -331,19 +347,19 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 		}
 	case next.Join == "" && next.dialled != nil:
 		solo := c
-		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.Membership.sessionPlayers = "", "", 0
-		c.dialled = next.dialled
+		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.sessionPlayers = "", "", 0
+		c.wiring.dialled = next.dialled
 		return c, &solo
 	case next.Join != "":
 		solo := c
-		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.Membership.sessionPlayers = "", "", 0
+		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.sessionPlayers = "", "", 0
 		joined, err := c.Membership.joining(next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
 			next.dialled.abandon(err)
 			solo.Notice = "Join failed: " + err.Error()
 			return solo, nil
 		}
-		c.Membership, c.dialled = joined, next.dialled
+		c.Membership, c.wiring.dialled = joined, next.dialled
 		return c, &solo
 	default:
 		// Not following anyone: a run that led its session, and one that
@@ -355,9 +371,6 @@ func (c Config) restarted(next *restartRequest) (Config, *Config) {
 
 // Normalize fills unset fields that carry a defined default
 func (c *Config) Normalize() {
-	if c.Membership.claims == nil {
-		c.Membership.claims = newClaimKeeper(c.Membership.ClaimStore)
-	}
 	if c.Play.AutoFire == "" {
 		c.Play = paths.DefaultPlay()
 	}
@@ -365,25 +378,41 @@ func (c *Config) Normalize() {
 		return
 	}
 	if c.Width == 0 {
-		c.Width, c.geometryDefaulted = DefaultWidth, true
+		c.Width = DefaultWidth
 	}
 	if c.Height == 0 {
-		c.Height, c.geometryDefaulted = DefaultHeight, true
+		c.Height = DefaultHeight
+	}
+}
+
+// Normalize is Config's, noting a size it supplied (geometryDefaulted), and gives a
+// run with no claim keeper one of its own.
+func (c *runConfig) Normalize() {
+	if c.wiring.membership.claims == nil {
+		c.wiring.membership.claims = newClaimKeeper(c.Membership.ClaimStore)
+	}
+	width, height := c.Width, c.Height
+	if c.Config.Normalize(); c.Width != width || c.Height != height {
+		c.wiring.geometryDefaulted = true
 	}
 }
 
 // Validate reports configuration conflicts
-func (c Config) Validate() error {
+func (c Config) Validate() error { return runConfig{Config: c}.Validate() }
+
+// Validate is Config's with the wiring's rules: what a script's or bot's run may do
+// (scriptedSession), and how a browser's bot joins (relay).
+func (c runConfig) Validate() error {
 	if err := c.Resources.Validate(); err != nil {
 		return err
 	}
 	if c.TickInterval != 0 && (c.TickInterval < parameter.TickIntervalMin || c.TickInterval > parameter.TickIntervalMax) {
 		return fmt.Errorf("-tick %s is outside %s to %s", c.TickInterval, parameter.TickIntervalMin, parameter.TickIntervalMax)
 	}
-	if err := validateBuildConfig(c); err != nil {
+	if err := validateBuildConfig(c.Config); err != nil {
 		return err
 	}
-	if err := validateAudioBuildConfig(c); err != nil {
+	if err := validateAudioBuildConfig(c.Config); err != nil {
 		return err
 	}
 	// A browser joins over a session's WebSocket route and nothing else: it has no
@@ -425,7 +454,7 @@ func (c Config) Validate() error {
 			return errBrowserHosting
 		case c.Membership.RelayAddress != "":
 			return errors.New("a browser relays only its own bots")
-		case c.Membership.JoinAddress != "" && c.Membership.relay == nil &&
+		case c.Membership.JoinAddress != "" && c.wiring.membership.relay == nil &&
 			join.Scheme != link.SchemeWebSocket && c.Membership.SessionName == "":
 			return errors.New("a browser cannot dial host:port; join with a session's link")
 		}
@@ -437,7 +466,7 @@ func (c Config) Validate() error {
 		switch {
 		case c.Mode == ModeReplay:
 			return fmt.Errorf("%s: journal playback cannot join a network session", c.Mode)
-		case c.Mode != ModePlay && !c.Mode.Serves() && !c.scriptedSession:
+		case c.Mode != ModePlay && !c.Mode.Serves() && !c.wiring.scriptedSession:
 			return fmt.Errorf("%s: network sessions require app.RunScript", c.Mode)
 		}
 	}
@@ -478,12 +507,12 @@ func (c Config) Validate() error {
 			return err
 		}
 	}
-	if c.TimeScaleSpec != "" && !c.scriptedSession {
+	if c.TimeScaleSpec != "" && !c.wiring.scriptedSession {
 		if _, ok := engine.ParseScale(c.TimeScaleSpec); !ok {
 			return fmt.Errorf("-speed %q is not a ladder rate (1/8 1/4 1/2 1 2 4 8)", c.TimeScaleSpec)
 		}
 	}
-	if c.scriptedSession && c.TimeScaleSpec == ScriptPaceMax &&
+	if c.wiring.scriptedSession && c.TimeScaleSpec == ScriptPaceMax &&
 		(c.Membership.HostAddress != "" || c.Membership.JoinAddress != "" || len(c.Membership.Bots) > 0) {
 		return errors.New("-speed max cannot pace a session: a script that outruns its peer " +
 			"is not simulating the session it is in")
@@ -496,7 +525,7 @@ func (c Config) Validate() error {
 
 // validateDriven rejects settings a run without its own terminal cannot honour,
 // rather than accepting a flag that would silently do nothing
-func (c Config) validateDriven() error {
+func (c runConfig) validateDriven() error {
 	if c.ColorModeSet && !c.Mode.Presents() {
 		return fmt.Errorf("%s: color mode is unused, no terminal is created", c.Mode)
 	}
@@ -511,8 +540,8 @@ func (c Config) validateDriven() error {
 	// rather than of the clock; every other driven mode has nothing to do with it.
 	if c.TimeScaleSpec != "" {
 		switch {
-		case c.scriptedSession:
-			if _, err := scriptPacing(c); err != nil {
+		case c.wiring.scriptedSession:
+			if _, err := scriptPacing(c.Config); err != nil {
 				return err
 			}
 		case c.Mode.Serves():

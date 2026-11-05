@@ -56,7 +56,7 @@ var errSessionExpired = errors.New("session lifetime expired")
 
 // newSessionApp resolves the startup handshake before a joining App draws a
 // seed. Interactive play and authored headless scripts share this construction.
-func newSessionApp(cfg Config) (*App, error) {
+func newSessionApp(cfg runConfig) (*App, error) {
 	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -74,16 +74,16 @@ func newSessionApp(cfg Config) (*App, error) {
 	if cfg.Membership.HostAddress != "" {
 		return newHostingApp(cfg)
 	}
-	return New(cfg)
+	return newApp(cfg)
 }
 
 // newHostingApp installs a tick-zero acceptor before the service is initialized.
 // The map latch is engaged for the whole run: the anchor a joiner adopts names
 // these bounds, and a crop landing between that offer and the start gate would move
 // them under a participant that has already built its world on them (D-14).
-func newHostingApp(cfg Config) (*App, error) {
+func newHostingApp(cfg runConfig) (*App, error) {
 	cfg.LockMap = true
-	a, err := New(cfg)
+	a, err := newApp(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (m *membership) sessionCapacity() int {
 
 // playersSet is the `-players` this run's session was opened with, zero for none:
 // its own as that session's host, else the one the offer it joined on carried.
-func (m *membership) playersSet() int { return cmp.Or(m.cfg.Participants, m.cfg.sessionPlayers) }
+func (m *membership) playersSet() int { return cmp.Or(m.cfg.Participants, m.wiring.sessionPlayers) }
 
 // playerCapacity is the cursor ceiling `-players` names. sessionCapacity is its
 // guest half; an interactive host drives the one that is left, a dedicated one
@@ -390,13 +390,13 @@ func (m *membership) hostSlot() uint8 {
 	return 0
 }
 
-// newJoiningApp builds the App on a dial of its session: the one Config carries
+// newJoiningApp builds the App on a dial of its session: the one its wiring carries
 // from a :join or a redial, or one made now.
-func newJoiningApp(cfg Config) (*App, error) {
-	d := cfg.dialled
+func newJoiningApp(cfg runConfig) (*App, error) {
+	d := cfg.wiring.dialled
 	if d == nil {
 		var err error
-		if d, err = dialJoin(cfg.Membership, cfg); err != nil {
+		if d, err = dialJoin(cfg.Membership, cfg.wiring.membership, cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -423,15 +423,15 @@ type joinDial struct {
 // built a world, and nothing is held for it: its place is assigned at its seat. It
 // names every claim of its kind it keeps, so a place one of them waits under is the
 // one its seat is offered.
-func dialJoin(cfg Membership, base joinBase) (*joinDial, error) {
-	pending, preview, err := network.PreviewSession(cfg.JoinAddress, joinNetConfig(cfg))
+func dialJoin(cfg Membership, wire membershipWiring, base joinBase) (*joinDial, error) {
+	pending, preview, err := network.PreviewSession(cfg.JoinAddress, joinNetConfig(cfg, wire))
 	if err != nil {
-		if cfg.relay != nil {
+		if wire.relay != nil {
 			return nil, fmt.Errorf("join through the holder: %w", err)
 		}
 		return nil, fmt.Errorf("join %s: %w", link.Shown(cfg.JoinAddress), err)
 	}
-	d := &joinDial{pending: pending, offer: preview, claims: cfg.claims}
+	d := &joinDial{pending: pending, offer: preview, claims: wire.claims}
 	resources, err := base.prepare(cfg, pending, preview)
 	if err != nil {
 		d.abandon(err)
@@ -442,14 +442,14 @@ func dialJoin(cfg Membership, base joinBase) (*joinDial, error) {
 }
 
 // joinNetConfig is the transport a dial of cfg's session runs on.
-func joinNetConfig(cfg Membership) *network.Config {
+func joinNetConfig(cfg Membership, wire membershipWiring) *network.Config {
 	netCfg := network.DebugConfig(link.RolePeer, cfg.JoinAddress)
 	netCfg.OnError = logSessionError
 	netCfg.Identity = buildIdentity()
 	netCfg.SessionName = cfg.SessionName
-	netCfg.Dial = cfg.relay
+	netCfg.Dial = wire.relay
 	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
-	netCfg.Claims = cfg.claims.tokens(cfg.holder != 0)
+	netCfg.Claims = wire.claims.tokens(wire.holder != 0)
 	netCfg.TLS = cfg.Trust
 	netCfg.ConnectPeer = network.PeerDialer(netCfg.Identity, netCfg.ConnectTimeout)
 	return netCfg
@@ -485,10 +485,10 @@ func (d *joinDial) abandon(cause error) {
 // open constructs the joining App cfg describes, on the preview or the offer: the
 // world is built and checked before the seat, which comes now unless this run's
 // player presses for it (Loop). A dial already seated replies here.
-func (d *joinDial) open(cfg Config) (*App, error) {
+func (d *joinDial) open(cfg runConfig) (*App, error) {
 	pending, offer := d.pending, d.offer
-	cfg.Resources, cfg.networkConfig = d.resources, pending.TransportConfig()
-	cfg, err := ConfigForJoin(cfg, offer)
+	cfg.Resources, cfg.wiring.networkConfig = d.resources, pending.TransportConfig()
+	cfg, err := configForJoin(cfg, offer)
 	if err != nil {
 		d.abandon(err)
 		return nil, err
@@ -507,17 +507,17 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 		listener, declared = converge.BindAdvertised(cfg.Membership.ListenAddress, cfg.Membership.JoinAddress)
 	}
 	if listener != nil {
-		// Installed before New, because New is what builds the port that serves
+		// Installed before newApp, because newApp is what builds the port that serves
 		// this listener. The gate holds the App rather than closing over it for the
 		// same reason: it does not exist yet, nor does the identity it answers with.
-		cfg.networkConfig.PreboundListener = listener
-		cfg.networkConfig.AcceptPeer = network.PeerAcceptor(network.PeerGate{
+		cfg.wiring.networkConfig.PreboundListener = listener
+		cfg.wiring.networkConfig.AcceptPeer = network.PeerAcceptor(network.PeerGate{
 			Local:    gate.Local,
 			Identity: identityFromAnchor(offer.Anchor),
 			Admit:    gate.Admit,
-		}, cfg.networkConfig.ConnectTimeout)
+		}, cfg.wiring.networkConfig.ConnectTimeout)
 	}
-	a, err := New(cfg)
+	a, err := newApp(cfg)
 	if err != nil {
 		if listener != nil {
 			_ = listener.Close()
@@ -556,7 +556,7 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 // joinWaits says this run's seat waits for its player's press: a dial that player
 // started, in a run a person plays, with the start wait on.
 func (m *membership) joinWaits() bool {
-	return m.cfg.joinPress && m.run.mode().OwnsInput() && m.ctx.WaitStart.Load()
+	return m.wiring.joinPress && m.run.mode().OwnsInput() && m.ctx.WaitStart.Load()
 }
 
 // seated reports whether this joining run holds its place in its session yet.
@@ -603,14 +603,14 @@ func (m *membership) takeSeat(pressed bool, signals <-chan os.Signal) error {
 	if err != nil {
 		return err
 	}
-	return m.bindSeat(pending, offer, m.claims.take(offer, m.cfg.holder != 0))
+	return m.bindSeat(pending, offer, m.claims.take(offer, m.wiring.holder != 0))
 }
 
 // redialSeat dials this run's session again and seats at once, while the game there
 // is the one this run's world was built on. What it dialled is closed unless it
 // seated.
 func (m *membership) redialSeat() (*network.PendingJoin, network.SessionOffer, error) {
-	pending, preview, err := network.PreviewSession(m.cfg.JoinAddress, joinNetConfig(*m.cfg))
+	pending, preview, err := network.PreviewSession(m.cfg.JoinAddress, joinNetConfig(*m.cfg, *m.wiring))
 	if err != nil {
 		return nil, network.SessionOffer{}, err
 	}
@@ -654,7 +654,7 @@ func (m *membership) bindSeat(pending *network.PendingJoin, offer network.Sessio
 		return err
 	}
 	if c == nil {
-		c = m.claims.issue(m.cfg.holder != 0)
+		c = m.claims.issue(m.wiring.holder != 0)
 	}
 	// The latch reads it when the first tick opens, as it would have read it from New.
 	m.world.RunSafe(func() { m.world.Resources.Network.ParticipantID = uint32(offer.Assigned) })
@@ -914,7 +914,7 @@ func (m *membership) ownClaim() string {
 	}
 	c := m.claim.Load()
 	if c == nil {
-		c = m.claims.issue(m.cfg.holder != 0)
+		c = m.claims.issue(m.wiring.holder != 0)
 		m.claim.Store(c)
 	}
 	return network.ClaimDigest(c.Token)

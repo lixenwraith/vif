@@ -264,23 +264,23 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 		{name: "lobby", mode: ModeHeadless, scripted: true, participants: 2, peers: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{
+			cfg := runConfig{Config: Config{
 				Mode: tt.mode, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: tt.participants},
 				Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E4E,
-			}
-			cfg.scriptedSession = tt.scripted
-			a, err := New(cfg)
+			}}
+			cfg.wiring.scriptedSession = tt.scripted
+			a, err := newApp(cfg)
 			if err != nil {
 				t.Fatalf("host: %v", err)
 			}
 			defer a.Close()
 
-			if a.cfg.networkConfig.OnAdmit == nil {
+			if a.cfg.wiring.networkConfig.OnAdmit == nil {
 				t.Fatal("this host installs no mid-run gate")
 			}
-			if a.cfg.networkConfig.MaxPeers != tt.peers {
+			if a.cfg.wiring.networkConfig.MaxPeers != tt.peers {
 				t.Fatalf("the transport admits %d peers, want %d",
-					a.cfg.networkConfig.MaxPeers, tt.peers)
+					a.cfg.wiring.networkConfig.MaxPeers, tt.peers)
 			}
 
 			// Before the lobby closes the gate is startHostSessionOn's, and a second
@@ -346,7 +346,7 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 			if got := a.membership.lobbyQuorum(); got != 1 {
 				t.Fatalf("quorum = %d, want 1: a server starts on its first guest", got)
 			}
-			if got := a.cfg.networkConfig.MaxPeers; got != tt.wantCapacity {
+			if got := a.cfg.wiring.networkConfig.MaxPeers; got != tt.wantCapacity {
 				t.Fatalf("transport admits %d peers, want the capacity %d", got, tt.wantCapacity)
 			}
 		})
@@ -398,7 +398,7 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 			t.Parallel()
 			a := mustHeadless(t, 0x5E6E, 120, 40)
 			defer a.Close()
-			a.cfg.Membership.Participants, a.cfg.Membership.sessionPlayers = tt.participants, tt.joined
+			a.cfg.Membership.Participants, a.cfg.wiring.membership.sessionPlayers = tt.participants, tt.joined
 			if tt.serves {
 				a.cfg.Mode = ModeServer
 			}

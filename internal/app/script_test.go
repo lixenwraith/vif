@@ -139,10 +139,10 @@ func TestScriptPacingSelectsTheWallRate(t *testing.T) {
 
 	// A script that outran its peers would produce epochs faster than the barrier
 	// delivers them, so the one combination that cannot mean anything is refused.
-	unpacedSession := Config{
+	unpacedSession := runConfig{Config: Config{
 		Mode: ModeHeadless, Width: DefaultWidth, Height: DefaultHeight,
-		Membership: Membership{HostAddress: ":0"}, TimeScaleSpec: ScriptPaceMax, scriptedSession: true,
-	}
+		Membership: Membership{HostAddress: ":0"}, TimeScaleSpec: ScriptPaceMax,
+	}, wiring: wiring{scriptedSession: true}}
 	if err := unpacedSession.Validate(); err == nil {
 		t.Fatal("-speed max was accepted for a session")
 	}

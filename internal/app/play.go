@@ -37,14 +37,15 @@ func PlayJournal(viewer Config, paths ...string) error {
 	// A replay's clock opens at the rate its journal did, and its records move it as
 	// the run's moved, which is the rate it is presented at.
 	rate := parseSpeed(an.Speed)
-	newReplay := func(cfg Config) (*App, error) {
-		r, err := NewReplay(cfg)
+	newReplay := func(cfg runConfig) (*App, error) {
+		cfg.Mode = ModeReplay
+		r, err := newDriven(cfg)
 		if err == nil {
 			r.ctx.TimeCtl.SetScale(rate)
 		}
 		return r, err
 	}
-	a, err := newReplay(cfg)
+	a, err := newReplay(runConfig{Config: cfg})
 	if err != nil {
 		return err
 	}
@@ -82,12 +83,12 @@ func PlayJournal(viewer Config, paths ...string) error {
 // replayCopies builds copies of lender's run for going back. A copy replays ticks
 // the log already holds, so it writes once presented, and holds no flight recorder:
 // the process has one, and adopt hands it to the copy presented.
-func replayCopies(lender *App, cfg Config, stream *journal.Stream, newApp func(Config) (*App, error)) func() (*App, pacedSource, error) {
+func replayCopies(lender *App, cfg Config, stream *journal.Stream, build func(runConfig) (*App, error)) func() (*App, pacedSource, error) {
 	return func() (*App, pacedSource, error) {
-		rc := cfg
-		rc.borrow, rc.log, rc.RecTicks = &lender.presentationState, vlog.NewLog(""), -1
-		rc.log.Mute(true)
-		twin, err := newApp(rc)
+		rc := runConfig{Config: cfg}
+		rc.wiring.borrow, rc.wiring.log, rc.RecTicks = &lender.presentationState, vlog.NewLog(""), -1
+		rc.wiring.log.Mute(true)
+		twin, err := build(rc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -175,7 +176,7 @@ type viewerCommand struct {
 	paused bool
 }
 
-// run drives the presentation loop until the viewer quits. NewReplay has already
+// run drives the presentation loop until the viewer quits. PlayJournal has already
 // started the replay's services through newDriven.
 func (p *player) run() error {
 	interval := p.a.frameInterval()

@@ -393,11 +393,11 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 			t.Fatalf("guest %d offered %d participants, want the lobby so far (%d)", i+1, got, want)
 		}
 
-		joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, offered)
+		joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: 120, Height: 40}}, offered)
 		if err != nil {
 			t.Fatalf("guest %d config: %v", i+1, err)
 		}
-		g, err := NewHeadless(joinCfg)
+		g, err := newDriven(joinCfg)
 		if err != nil {
 			t.Fatalf("guest %d app: %v", i+1, err)
 		}

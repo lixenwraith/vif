@@ -50,12 +50,12 @@ func (a *App) initPresentationService() error {
 	if !a.cfg.Mode.Presents() {
 		return nil
 	}
-	if b := a.cfg.borrow; b != nil {
+	if b := a.cfg.wiring.borrow; b != nil {
 		a.pres = b.pres // the lender's hub starts and stops it
 		return nil
 	}
 	if a.pres = a.cfg.Host.Presentation; a.pres == nil {
-		a.pres = newTerminal(a.cfg)
+		a.pres = newTerminal(a.cfg.Config)
 	}
 	return a.hub.Register(a.pres)
 }
@@ -111,14 +111,14 @@ func (a *App) presentationGeometry(width, height int) (int, int, terminal.ColorM
 	}
 	// A presentation that has to be restored after a crash says so; a copy built
 	// off the frame loop shares the lender's
-	if f, ok := a.pres.(interface{ Fini() }); ok && a.cfg.borrow == nil {
+	if f, ok := a.pres.(interface{ Fini() }); ok && a.cfg.wiring.borrow == nil {
 		core.SetCrashTerminal(f)
 	}
 	// The terminal reports a text console as 16 colors, the console the 256-color tier draws for
 	if colorMode = a.pres.Surface().ColorMode(); colorMode == terminal.ColorMode16 {
 		colorMode = terminal.ColorMode256
 	}
-	if a.cfg.Mode.OwnsGeometry() || a.cfg.terminalGeometry {
+	if a.cfg.Mode.OwnsGeometry() || a.cfg.wiring.terminalGeometry {
 		width, height = a.pres.Size()
 	}
 	return width, height, colorMode, aspect
@@ -182,7 +182,7 @@ func (a *App) showStartupStatus(message string) {
 // button at the launch, where the host has no start screen of its own, else on the
 // status line, drawing the command line or overlay the operator opened over the wait.
 func (a *App) showJoinAsk() {
-	if !a.cfg.startScreen {
+	if !a.cfg.wiring.startScreen {
 		a.showJoinStatus(a.joinPrompt())
 		return
 	}

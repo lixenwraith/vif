@@ -52,7 +52,7 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 		cfg.Width, cfg.Height = script.Width, script.Height
 	}
 	var driver *journal.ScriptDriver
-	finished, err := runDriven(cfg, "script", path, func(a *App) (pacedSource, error) {
+	finished, err := runDriven(runConfig{Config: cfg}, "script", path, func(a *App) (pacedSource, error) {
 		d, err := journal.NewScriptDriver(scriptTarget{a: a}, script)
 		if err != nil {
 			return nil, err
@@ -90,15 +90,16 @@ func RunBot(cfg Config, spec string) (bot.Stats, error) {
 	if cfg.Mode == ModeScript && cfg.TimeScaleSpec == "" {
 		cfg.TimeScaleSpec = "1"
 	}
-	if cfg.Width == 0 && cfg.Height == 0 {
-		cfg.terminalGeometry = cfg.Mode == ModeScript
-		cfg.Width, cfg.Height = BotWidth, BotHeight
+	run := runConfig{Config: cfg}
+	if run.Width == 0 && run.Height == 0 {
+		run.wiring.terminalGeometry = run.Mode == ModeScript
+		run.Width, run.Height = BotWidth, BotHeight
 	}
 	var (
 		driver *bot.Driver
 		played *App
 	)
-	quit, err := runDriven(cfg, "bot", name, func(a *App) (pacedSource, error) {
+	quit, err := runDriven(run, "bot", name, func(a *App) (pacedSource, error) {
 		d, err := bot.NewDriver(a, a.ctx, graph, a.Seed(), a.membership.localParticipant())
 		driver, played = d, a
 		return botSource{d}, err
@@ -125,7 +126,7 @@ func loadBotGraph(o resource.Options, spec string) (*bot.Graph, error) {
 
 // runDriven plays one driven participant, a script or a bot, until it finishes or
 // the process is signalled.
-func runDriven(cfg Config, kind, name string, build func(*App) (pacedSource, error)) (finished bool, err error) {
+func runDriven(cfg runConfig, kind, name string, build func(*App) (pacedSource, error)) (finished bool, err error) {
 	signals, stopSignals := notifySignals()
 	defer stopSignals()
 	return drive(cfg, kind, name, signals, nil, build)
@@ -135,13 +136,13 @@ func runDriven(cfg Config, kind, name string, build func(*App) (pacedSource, err
 // steps that driver headless under the run's wall pace, or presented. finished is
 // false when stop or a cancelled session ended the run first. While hold reports
 // true, or a hold stands, the run stands still and re-anchors its pace after.
-func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() bool,
+func drive(cfg runConfig, kind, name string, signals <-chan os.Signal, hold func() bool,
 	build func(*App) (pacedSource, error)) (finished bool, err error) {
 	if cfg.Mode != ModeScript {
 		cfg.Mode = ModeHeadless
 	}
-	cfg.scriptedSession = true
-	paced, err := scriptPacing(cfg)
+	cfg.wiring.scriptedSession = true
+	paced, err := scriptPacing(cfg.Config)
 	if err != nil {
 		return false, err
 	}
@@ -182,7 +183,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		}
 		// A headless bot left with no session plays for nobody; a watched one plays
 		// on, as a person does, and a seat ends as its holder says (seatEnds).
-		if a.membership.dismissed.Load() || kind == "bot" && a.cfg.Membership.holder == 0 && forkCell(a.world).Load() {
+		if a.membership.dismissed.Load() || kind == "bot" && a.cfg.wiring.membership.holder == 0 && forkCell(a.world).Load() {
 			return false, nil
 		}
 		// Between two steps, as a presenting run's loop serves it between two waits
@@ -251,7 +252,7 @@ func (s botSource) progress() string {
 
 // newScriptApp starts the same tick-zero gate as interactive play, but leaves the
 // scheduler caller-driven after the roster is closed.
-func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
+func newScriptApp(cfg runConfig, signals <-chan os.Signal) (*App, error) {
 	a, err := newSessionApp(cfg)
 	if err != nil {
 		return nil, err

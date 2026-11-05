@@ -27,44 +27,45 @@ import (
 
 // A scenario change rebuilds the run because its FSM metrics are frozen at startup.
 // In a session the coordinator requests the change for every participant.
-func Run(cfg Config) error {
+func Run(c Config) error {
+	cfg := runConfig{Config: c}
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
 	// One keeper for every run of the process, so a run that replaces another comes
 	// back to the place that one left.
-	cfg.Membership.claims = newClaimKeeper(cfg.Membership.ClaimStore)
+	cfg.wiring.membership.claims = newClaimKeeper(cfg.Membership.ClaimStore)
 	// A host with a player plays from its first tick and opens its door once the
 	// clock runs, as :host does; only a run with nobody to play waits in a lobby.
-	cfg.Membership.HostAddress, cfg.resumeHost = "", cfg.Membership.HostAddress
+	cfg.Membership.HostAddress, cfg.wiring.resumeHost = "", cfg.Membership.HostAddress
 	// A port the player asked for that this run cannot have ends it before the
 	// terminal starts, as a -join that cannot dial does.
-	if cfg.resumeHost != "" && buildHasSocketNetwork {
-		lns, err := cfg.Membership.bindDoors(cfg.resumeHost)
+	if cfg.wiring.resumeHost != "" && buildHasSocketNetwork {
+		lns, err := cfg.Membership.bindDoors(cfg.wiring.resumeHost)
 		if err != nil {
-			return fmt.Errorf("host %s: %w", cfg.resumeHost, err)
+			return fmt.Errorf("host %s: %w", cfg.wiring.resumeHost, err)
 		}
 		defer closeDoors(lns) // the run's port closes them first; one that never served them must not keep them
-		cfg.Membership.hostListeners = lns
+		cfg.wiring.membership.hostListeners = lns
 	}
 	// One terminal for every run: a replacement redraws on it instead of leaving
 	// and re-entering the screen. The first run's hub opens it; Run releases it.
 	if cfg.Host.Presentation == nil {
-		term := newTerminal(cfg)
+		term := newTerminal(cfg.Config)
 		term.Retain()
 		defer term.Release()
 		cfg.Host.Presentation = term
 	}
 	// A join the player started at launch is seated at their press, unless the host
 	// they launched from already took it.
-	cfg.Membership.joinPress = cfg.Membership.JoinAddress != "" && !cfg.Host.Pressed
-	cfg.startScreen = !cfg.Host.StartScreen
+	cfg.wiring.membership.joinPress = cfg.Membership.JoinAddress != "" && !cfg.Host.Pressed
+	cfg.wiring.startScreen = !cfg.Host.StartScreen
 	rejoin := false
-	var solo *Config // what a :join that fails after its dial plays on as
+	var solo *runConfig // what a :join that fails after its dial plays on as
 	for {
 		next, err := runScenario(cfg, rejoin)
 		// The press the host took and the start screen were the first game's
-		cfg.Membership.hostListeners, cfg.Host.Pressed, cfg.startScreen = nil, false, false
+		cfg.wiring.membership.hostListeners, cfg.Host.Pressed, cfg.wiring.startScreen = nil, false, false
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
 			vlog.Warn("session", "msg", "join failed; playing solo",
 				"join", cfg.Membership.JoinAddress, "error", err.Error())
@@ -87,7 +88,7 @@ func Run(cfg Config) error {
 
 // runScenario owns one App from construction to teardown. What it returns is the
 // run to build next; nil means the player quit.
-func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
+func runScenario(cfg runConfig, rejoin bool) (next *restartRequest, err error) {
 	a, err := openRun(cfg, rejoin)
 	if err != nil {
 		return nil, err
@@ -114,7 +115,7 @@ func runScenario(cfg Config, rejoin bool) (next *restartRequest, err error) {
 // rebuilds itself. A first -join retries only a refusal that passes in moments: it
 // reports a host that is not there at once, which is what an operator dialling by
 // hand wants, and a refusal that no retry helps meets the same answer a second later.
-func openRun(cfg Config, rejoin bool) (*App, error) {
+func openRun(cfg runConfig, rejoin bool) (*App, error) {
 	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
 	for {
 		a, err := newSessionApp(cfg)
@@ -127,7 +128,7 @@ func openRun(cfg Config, rejoin bool) (*App, error) {
 		}
 		// A dial the run before handed over ends with the attempt that failed on it,
 		// as a seat refused once the world was built does: the next one dials afresh.
-		cfg.dialled = nil
+		cfg.wiring.dialled = nil
 		time.Sleep(parameter.SessionRejoinInterval)
 	}
 }
@@ -203,9 +204,9 @@ func (a *App) Loop() (*restartRequest, error) {
 	// After the clock: the mid-run gate reads a capture a playout lead ahead of a
 	// tick that has to be running. A door a rebuilt run cannot reopen costs the
 	// session, not the game.
-	if a.cfg.resumeHost != "" {
-		if err := a.BeginHosting(a.cfg.resumeHost); err != nil {
-			a.log.Warn("session", "msg", "hosting not opened; playing solo", "address", a.cfg.resumeHost, "error", err.Error())
+	if a.cfg.wiring.resumeHost != "" {
+		if err := a.BeginHosting(a.cfg.wiring.resumeHost); err != nil {
+			a.log.Warn("session", "msg", "hosting not opened; playing solo", "address", a.cfg.wiring.resumeHost, "error", err.Error())
 			a.ctx.SetStatusMessage(err.Error()+"; playing solo", parameter.StatusAlert)
 		}
 	}
@@ -484,7 +485,7 @@ func (a *App) holdFirstGame(reports <-chan bool) {
 	a.scheduler.Prepare() // the hold settles before the clock starts
 	a.world.RunSafe(func() { a.ctx.HoldAs(engine.HoldStart) })
 	a.scheduler.DispatchEventsImmediately()
-	a.startScreen = a.cfg.startScreen
+	a.startScreen = a.cfg.wiring.startScreen
 }
 
 // takeStart starts a waiting game at its player's press: a key going down that Ctrl

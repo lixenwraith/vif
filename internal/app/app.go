@@ -34,7 +34,7 @@ import (
 const fallbackColorMode = terminal.ColorMode256
 
 // restartRequest is what one run asks the next one to be. Loop returns it and
-// Config.restarted builds the next run from it on the command line Run was given,
+// runConfig.restarted builds the next run from it on the command line Run was given,
 // so the operator's own flags still decide everything a restart does not name — a
 // pinned -seed most of all.
 type restartRequest struct {
@@ -87,7 +87,7 @@ func (a *App) replaceWith(req *restartRequest) bool {
 // App owns the wired runtime: services, world, input, scheduler, and the selected
 // presentation adapter.
 type App struct {
-	cfg Config
+	cfg runConfig
 
 	hub *service.Hub
 	log *vlog.Log
@@ -159,13 +159,16 @@ type App struct {
 
 // New wires the runtime, releasing anything already started on failure. Errors are
 // returned rather than panicked: the map editor and the wasm entry need them.
-func New(cfg Config) (*App, error) {
+func New(cfg Config) (*App, error) { return newApp(runConfig{Config: cfg}) }
+
+// newApp is New for a run built with its wiring.
+func newApp(cfg runConfig) (*App, error) {
 	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
-	log := cfg.log
+	log := cfg.wiring.log
 	if log == nil {
 		// A driven run stamps its own ticks: a process may step several at once.
 		log = vlog.Default()
@@ -179,9 +182,9 @@ func New(cfg Config) (*App, error) {
 		hub:  service.NewHub(log),
 		life: lifecycle.New(cfg.Lifetime),
 	}
-	a.membership.open(a, &a.cfg.Membership, &a.scenario, log, &a.glue, a.life)
+	a.membership.open(a, &a.cfg.Membership, &a.cfg.wiring.membership, &a.scenario, log, &a.glue, a.life)
 	a.scribe.Open(scribeRun{a}, &a.scenario, log, a.hub, &a.glue)
-	if a.cfg.Membership.JoinAddress != "" && a.cfg.networkConfig == nil {
+	if a.cfg.Membership.JoinAddress != "" && a.cfg.wiring.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")
 	}
 	if err := a.init(); err != nil {
@@ -218,13 +221,13 @@ func (a *App) init() error {
 		return err
 	}
 	// After the scenario, whose max_players bounds what the transport admits.
-	if a.cfg.Membership.HostAddress != "" && a.cfg.networkConfig == nil {
-		a.cfg.networkConfig = a.membership.hostNetworkConfig()
+	if a.cfg.Membership.HostAddress != "" && a.cfg.wiring.networkConfig == nil {
+		a.cfg.wiring.networkConfig = a.membership.hostNetworkConfig()
 	}
 	// A guest's own port takes joins beside its peer links: as the host once it
 	// authors the session, a successor taking players where its session reaches it,
 	// and as its -relay door would while its player relays for others.
-	if c := a.cfg.networkConfig; c != nil && c.AcceptPeer != nil {
+	if c := a.cfg.wiring.networkConfig; c != nil && c.AcceptPeer != nil {
 		c.AcceptSession, c.OnAdmit = a.membership.relayAcceptor(a.membership.admitHosted), a.membership.releaseRelayedJoiner
 	}
 	if err := a.initServices(); err != nil {
@@ -234,7 +237,7 @@ func (a *App) init() error {
 		return err
 	}
 	if a.cfg.Journal {
-		notice, err := a.scribe.InitJournal(a.cfg.journalCarried)
+		notice, err := a.scribe.InitJournal(a.cfg.wiring.journalCarried)
 		if err != nil {
 			return err
 		}
@@ -309,7 +312,7 @@ func (a *App) initWorld() error {
 	if r := a.world.Resources.Network; r != nil {
 		// A joiner is nobody until its seat names it (bindSeat), not the coordinator
 		// a port with no identity otherwise stands for.
-		if a.cfg.Membership.JoinAddress != "" && a.cfg.networkConfig != nil && a.cfg.networkConfig.ParticipantID == 0 {
+		if a.cfg.Membership.JoinAddress != "" && a.cfg.wiring.networkConfig != nil && a.cfg.wiring.networkConfig.ParticipantID == 0 {
 			r.ParticipantID = 0
 		}
 		a.membership.bindSessionHooks(r)

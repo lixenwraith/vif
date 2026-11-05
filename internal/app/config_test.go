@@ -134,9 +134,10 @@ func TestASoloPauseStandsUntilTheNextPause(t *testing.T) {
 func TestNetworkSessionConfigValidation(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name string
-		cfg  Config
-		want string
+		name     string
+		cfg      Config
+		scripted bool // the run is a script's or a bot's (wiring.scriptedSession)
+		want     string
 	}{
 		{name: "host", cfg: Config{Membership: Membership{HostAddress: ":7777"}}},
 		{name: "join", cfg: Config{Membership: Membership{JoinAddress: "127.0.0.1:7777"}}},
@@ -152,11 +153,9 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 			want: "RunScript",
 		},
 		{
-			name: "headless script host",
-			cfg: Config{
-				Mode: ModeHeadless, Membership: Membership{HostAddress: ":7777"}, Width: 80, Height: 24,
-				scriptedSession: true,
-			},
+			name:     "headless script host",
+			cfg:      Config{Mode: ModeHeadless, Membership: Membership{HostAddress: ":7777"}, Width: 80, Height: 24},
+			scripted: true,
 		},
 		{
 			name: "exclusive",
@@ -171,7 +170,9 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.cfg.Validate()
+			run := runConfig{Config: tt.cfg}
+			run.wiring.scriptedSession = tt.scripted
+			err := run.Validate()
 			if tt.want == "" && err != nil {
 				t.Fatalf("Validate() error = %v", err)
 			}
@@ -189,31 +190,31 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 // own, keeping the ceiling its session was opened with.
 func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
-	line := Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
+	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
 		Membership: Membership{HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
-			Participants: 4, FixedAuthority: true, sessionPlayers: 3}}
+			Participants: 4, FixedAuthority: true}}, wiring: wiring{membership: membershipWiring{sessionPlayers: 3}}}
 	dialled := &joinDial{}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
 		Join: "10.0.0.2:7777/abc", dialled: dialled, Bots: []string{"roam"}, Journal: true})
 	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.Notice != "n" ||
-		!slices.Equal(next.Membership.Bots, []string{"roam"}) || !next.Journal || !next.journalCarried {
+		!slices.Equal(next.Membership.Bots, []string{"roam"}) || !next.Journal || !next.wiring.journalCarried {
 		t.Fatalf("next run %+v; want the command line with what the restart named", next)
 	}
-	if next.Membership.HostAddress != "" || next.resumeHost != "127.0.0.1:7001" {
+	if next.Membership.HostAddress != "" || next.wiring.resumeHost != "127.0.0.1:7001" {
 		t.Fatalf("hosting opens %q before the clock and %q after it; want only after",
-			next.Membership.HostAddress, next.resumeHost)
+			next.Membership.HostAddress, next.wiring.resumeHost)
 	}
 	if next.Membership.JoinAddress != "10.0.0.2:7777" || next.Membership.SessionName != "abc" ||
-		next.dialled != dialled {
+		next.wiring.dialled != dialled {
 		t.Fatalf("a :join builds %q/%q on %p; want the target on its own dial",
-			next.Membership.JoinAddress, next.Membership.SessionName, next.dialled)
+			next.Membership.JoinAddress, next.Membership.SessionName, next.wiring.dialled)
 	}
 	if next.Membership.Participants != 0 || next.Membership.FixedAuthority {
 		t.Fatalf("a :join keeps -players %d and a pinned authority %t; want neither, its session's coming with its offer",
 			next.Membership.Participants, next.Membership.FixedAuthority)
 	}
 	if solo == nil || solo.Seed != 7 || solo.Membership.JoinAddress != "" || solo.Membership.SessionName != "" ||
-		solo.Membership.sessionPlayers != 0 || solo.dialled != nil {
+		solo.wiring.membership.sessionPlayers != 0 || solo.wiring.dialled != nil {
 		t.Fatalf("a :join falls back to %+v; want the same run on its own", solo)
 	}
 	moved, _ := line.restarted(&restartRequest{Rejoin: true, Join: "10.0.0.3:7777"})
@@ -222,9 +223,9 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 			moved.Membership.JoinAddress, moved.Membership.SessionName)
 	}
 	if alone, solo := line.restarted(&restartRequest{}); alone.Membership.JoinAddress != "" || solo != nil ||
-		alone.Membership.sessionPlayers != 3 {
+		alone.wiring.membership.sessionPlayers != 3 {
 		t.Fatalf("a run following nobody dials %q under a ceiling of %d; want nothing dialled, the session's 3 kept",
-			alone.Membership.JoinAddress, alone.Membership.sessionPlayers)
+			alone.Membership.JoinAddress, alone.wiring.membership.sessionPlayers)
 	}
 }
 

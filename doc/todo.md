@@ -1526,29 +1526,24 @@ another system may not call them directly.
   `presentation_headless.go`, `audio.go`, `audio_none.go`, `loop.go`, `seat.go`,
   `session.go`
 
-`Config` is the run's configuration, its session half the field `Membership`. It
-goes to `internal/app/internal/config`, a leaf package `app` aliases (`Config`,
+`Config` is the run's configuration, its session half the field `Membership`; what
+the run is built with beside it, its wiring, is `runConfig`'s and stays in `app`.
+It goes to `internal/app/internal/config`, a leaf package `app` aliases (`Config`,
 `Membership`, `Mode` and its constants), so `cmd/vif` and Android keep compiling
 and [the membership's package](#give-the-membership-a-package-of-its-own) can
-import it. What keeps it in `app` is that it carries the run as well as its
-configuration, so it goes in three steps, one PR each, the next after the last is
-merged and tested (Lixen, 2026-11-05):
+import it, in two more steps, one PR each, the next after the last is merged and
+tested (Lixen, 2026-11-05):
 
-1. The run wiring out: `Config`'s unexported fields (`resumeHost`, `networkConfig`,
-   `dialled`, `startScreen`, `journalCarried`, `log`, `borrow`, `scriptedSession`,
-   `terminalGeometry`, `geometryDefaulted`) and `Membership`'s (`holder`, `relay`,
-   `claims`, `sessionPlayers`, `hostListeners`, `joinPress`) into an `app`-private
-   struct that `Run`, `restarted` and the seat builder hand on beside `Config`.
-   Three are `app` types: `joinDial`, `presentationState`, `claimKeeper`. `Validate`
-   reads `relay` and `scriptedSession`, so those rules take the struct too.
-2. `Host` out of `Config`, handed to the run beside it: it is build-tagged and holds
+1. `Host` out of `Config`, handed to the run beside it: it is build-tagged and holds
    the `Presentation` interface. `Mode` moves with `Config`, taking `buildHasAudio`,
    which only its `Audio` reads.
-3. `Config`, `Membership` and `ClaimStore` into the package. `Validate`'s
+2. `Config`, `Membership` and `ClaimStore` into the package. `Validate`'s
    build-tagged rules (`validateBuildConfig`, `validateAudioBuildConfig`,
    `buildHasSocketNetwork`, `scriptPacing`, `errBrowserHosting`) go with it or stay
-   as an `app` check after it. The methods that use `app` types (`restarted`,
-   `prepare`, `validateWith`, and `Membership`'s `joining`, `hostNetwork`,
+   as an `app` check after it. `Config.Validate` is `runConfig.Validate` with no
+   wiring, the wiring's rules (`relay`, `scriptedSession`) among `Config`'s;
+   parting them can change which error a config breaking two of them reports.
+   `Membership`'s methods that use `app` types (`joining`, `hostNetwork`,
    `bindDoors`, `closeDoors`, `relayRouter`) become functions, since a package
    cannot add methods to a type it only aliases.
 
@@ -1560,19 +1555,18 @@ merged and tested (Lixen, 2026-11-05):
 
 The corrector and the scribe have packages under `internal/app/internal`, each
 reading the run through one seam and resolving into a run only `App` builds (a
-`corrector.Staging`, a `scribe.Twin`). `membership` holds only `Config`'s session
-half, `Membership`, and reads the rest of the run through `membershipRun`, dialling
-a join against a copy of it (`joinBase`). It waits on
-[Config's package](#give-config-a-package-of-its-own), which takes `Membership`'s
-unexported fields out with the run wiring and `Mode` with `Config`. Three ties to
-`app` are left after it:
+`corrector.Staging`, a `scribe.Twin`). `membership` holds only the run's session
+half, `Membership` and the wiring's `membershipWiring`, and reads the rest of the
+run through `membershipRun`, dialling a join against a copy of it (`joinBase`). It
+waits on [Config's package](#give-config-a-package-of-its-own), which takes
+`Membership` and `Mode` out of `app`. Three ties to `app` are left after it:
 
-- The seat runner: `seat.go` builds each bot's `Config` and runs its `App` through
-  `drive`, reading the slot, scribe and fork cell off it; the run has to start and
-  answer for a seat behind the seam.
+- The seat runner: `seat.go` builds each bot's `runConfig` and runs its `App`
+  through `drive`, reading the slot, scribe and fork cell off it; the run has to
+  start and answer for a seat behind the seam.
 - The seam's `app` types: `restartRequest` (`replaceWith`, and the requests
   `host.go` and `converge.go` build), `lobbyEvent`, `joinBase`.
 - What `app` shares: `forkCell`, `errBrowserHosting` (`Validate`),
   `errSessionCanceled`, `errSessionSignalled` and `errSessionExpired` (the loops),
-  `buildHasSocketNetwork`, and `joinDial`, which `Config.dialled` carries and whose
-  `open`, like `session.go`'s constructors, builds the run.
+  `buildHasSocketNetwork`, and `joinDial`, which the wiring's `dialled` carries
+  and whose `open`, like `session.go`'s constructors, builds the run.

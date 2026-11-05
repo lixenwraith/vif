@@ -19,7 +19,7 @@ const buildHasAudio = true
 func validateAudioBuildConfig(Config) error { return nil }
 
 func (a *App) initAudioService() error {
-	if !a.cfg.Mode.Audio() || a.cfg.borrow != nil {
+	if !a.cfg.Mode.Audio() || a.cfg.wiring.borrow != nil {
 		return nil
 	}
 	src, err := resource.Audio(a.cfg.Resources)

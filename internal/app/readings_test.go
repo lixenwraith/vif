@@ -266,11 +266,11 @@ func socketSession(t *testing.T, cfg Config, players int) ([]*App, *link.SocketP
 			t.Fatalf("guest %d dial: %v", i+1, err)
 		}
 		t.Cleanup(func() { _ = pending.Close() })
-		joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: cfg.Width, Height: cfg.Height, Resources: cfg.Resources}, offered)
+		joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: cfg.Width, Height: cfg.Height, Resources: cfg.Resources}}, offered)
 		if err != nil {
 			t.Fatalf("guest %d config: %v", i+1, err)
 		}
-		g, err := NewHeadless(joinCfg)
+		g, err := newDriven(joinCfg)
 		if err != nil {
 			t.Fatalf("guest %d app: %v", i+1, err)
 		}

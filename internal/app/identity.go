@@ -42,7 +42,7 @@ func identityFromAnchor(j event.JoinAnchor) network.PeerIdentity {
 // what it brings back when the offer is the place that claim waits under.
 func (m *membership) joinerReport() network.JoinerReport {
 	r := network.JoinerReport{
-		Holder:   m.cfg.holder,
+		Holder:   m.wiring.holder,
 		Width:    m.ctx.Width,
 		Height:   m.ctx.Height,
 		Identity: m.sessionIdentity(),

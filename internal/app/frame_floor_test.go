@@ -66,8 +66,8 @@ func (p flooredPresentation) FrameFloor() time.Duration { return p.floor }
 func TestFrameIntervalHoldsToThePresentationsFloor(t *testing.T) {
 	t.Parallel()
 	interval := func(pres Presentation, tick time.Duration, fps int32) time.Duration {
-		a, err := newSessionApp(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true},
-			Host: Host{Presentation: pres}})
+		a, err := newSessionApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true},
+			Host: Host{Presentation: pres}}})
 		if err != nil {
 			t.Fatal(err)
 		}

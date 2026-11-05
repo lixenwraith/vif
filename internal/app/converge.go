@@ -41,7 +41,7 @@ func (m *membership) LocalParticipant() uint32 { return m.localParticipant() }
 
 func (m *membership) Seated() bool {
 	var seated bool
-	m.world.RunSafe(func() { seated = m.cfg.holder != 0 })
+	m.world.RunSafe(func() { seated = m.wiring.holder != 0 })
 	return seated
 }
 
@@ -481,12 +481,13 @@ var errRedialEnded = errors.New("the run went on without this host")
 func (m *membership) redial(lost link.PeerID) bool {
 	var (
 		cfg  Membership
+		wire membershipWiring
 		base joinBase
 	)
 	door, relay := false, false
 	m.world.RunSafe(func() {
-		cfg, base = *m.cfg, m.run.joinBase()
-		door = m.run.mode() == ModePlay && cfg.holder == 0 && cfg.JoinAddress != "" &&
+		cfg, wire, base = *m.cfg, *m.wiring, m.run.joinBase()
+		door = m.run.mode() == ModePlay && wire.holder == 0 && cfg.JoinAddress != "" &&
 			!m.leaving.Load() && !m.run.replacing()
 		relay = lost == m.joinedThrough
 	})
@@ -509,7 +510,7 @@ func (m *membership) redial(lost link.PeerID) bool {
 	} else {
 		m.log.Info("session", "msg", "redialling the lost host", "authority", uint64(lost), "dial", link.Shown(addr))
 	}
-	core.Go(func() { m.redialDoor(cfg, base, addr, lost, c, relay) })
+	core.Go(func() { m.redialDoor(cfg, wire, base, addr, lost, c, relay) })
 	return true
 }
 
@@ -518,7 +519,7 @@ func (m *membership) redial(lost link.PeerID) bool {
 // refusal no retry helps, a door nothing answers at, or a place that is not this
 // run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
 // A run that stays in its session holds its claim again.
-func (m *membership) redialDoor(cfg Membership, base joinBase, addr string, lost link.PeerID, c *claim, relay bool) {
+func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base joinBase, addr string, lost link.PeerID, c *claim, relay bool) {
 	dial := cfg
 	dial.JoinAddress = addr
 	notice := "Host connection restored"
@@ -526,10 +527,10 @@ func (m *membership) redialDoor(cfg Membership, base joinBase, addr string, lost
 		notice = "Relay connection restored"
 	}
 	for m.authority.Redialing(lost) {
-		d, err := dialJoin(dial, base)
+		d, err := dialJoin(dial, wire, base)
 		if err == nil {
 			// Seated at once: which place the host offers is what the redial asks.
-			err = d.seat(cfg.holder != 0)
+			err = d.seat(wire.holder != 0)
 		}
 		if err != nil {
 			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
@@ -551,7 +552,7 @@ func (m *membership) redialDoor(cfg Membership, base joinBase, addr string, lost
 			m.authority.RedialRefused(lost)
 		}
 	}
-	if !relay && m.rejoinThrough(cfg, base, lost, c) {
+	if !relay && m.rejoinThrough(cfg, wire, base, lost, c) {
 		return
 	}
 	m.world.RunSafe(func() {
@@ -571,7 +572,7 @@ func (m *membership) redialDoor(cfg Membership, base joinBase, addr string, lost
 // door would: the host still runs, with this run's Wraith, and only this run's
 // link went. Reports whether one took it, the run then replaced by the one
 // admitted; one that refuses outright, or a host with no place, is not dialled again.
-func (m *membership) rejoinThrough(cfg Membership, base joinBase, lost link.PeerID, c *claim) bool {
+func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base joinBase, lost link.PeerID, c *claim) bool {
 	dial := cfg
 	done := make(map[link.PeerID]bool)
 	for {
@@ -591,9 +592,9 @@ func (m *membership) rejoinThrough(cfg Membership, base joinBase, lost link.Peer
 				continue
 			}
 			dial.JoinAddress = addr
-			d, err := dialJoin(dial, base)
+			d, err := dialJoin(dial, wire, base)
 			if err == nil {
-				err = d.seat(cfg.holder != 0)
+				err = d.seat(wire.holder != 0)
 			}
 			if err != nil {
 				if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {

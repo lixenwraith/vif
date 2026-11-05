@@ -46,10 +46,11 @@ func waitingJoiner(t *testing.T, addr string, bots ...string) (*App, *pressPrese
 
 // joinerConfig is the run a player's join of addr opens on a screen with a keyboard,
 // waiting for their press or not.
-func joinerConfig(addr string, press bool, bots ...string) Config {
+func joinerConfig(addr string, press bool, bots ...string) runConfig {
 	screen := &pressPresentation{framePresentation: framePresentation{w: 120, h: 40}, events: make(chan terminal.Event, 1)}
-	return Config{Mode: ModePlay, Membership: Membership{JoinAddress: addr, Bots: bots, joinPress: press},
-		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}}
+	return runConfig{Config: Config{Mode: ModePlay, Membership: Membership{JoinAddress: addr, Bots: bots},
+		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}},
+		wiring: wiring{membership: membershipWiring{joinPress: press}}}
 }
 
 // hostingRun is a run with a player that opened its session to cap participants,
@@ -162,11 +163,11 @@ func TestARetriedOpenDialsAfresh(t *testing.T) {
 	host := hostingRun(t, 0x3035, 0)
 	cfg := joinerConfig(host.HostAddr(), false)
 	cfg.Normalize()
-	d, err := dialJoin(cfg.Membership, cfg)
+	d, err := dialJoin(cfg.Membership, cfg.wiring.membership, cfg)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
-	cfg.dialled = d
+	cfg.wiring.dialled = d
 	// The seat finds the session starting, and a retry a moment later finds it open.
 	host.membership.lobbyClosing.Store(true)
 	reopen := time.AfterFunc(4*parameter.SessionRejoinInterval, func() { host.membership.lobbyClosing.Store(false) }) // [wall]
@@ -316,17 +317,17 @@ func TestOnlyATypingOrMovingKeyOrAClickSeatsAJoin(t *testing.T) {
 // whose player already pressed, does not.
 func TestOnlyAJoinItsPlayerStartedWaitsForTheirPress(t *testing.T) {
 	t.Parallel()
-	base := Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}}
+	base := runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}}}
 	joined, solo := base.restarted(&restartRequest{Join: "127.0.0.1:7777", press: true})
-	if !joined.Membership.joinPress || joined.Membership.JoinAddress == "" || solo == nil {
+	if !joined.wiring.membership.joinPress || joined.Membership.JoinAddress == "" || solo == nil {
 		t.Fatalf("a :join asks for its player's press %v, joining %q",
-			joined.Membership.joinPress, joined.Membership.JoinAddress)
+			joined.wiring.membership.joinPress, joined.Membership.JoinAddress)
 	}
 	provided := &resource.Scenario{Name: "kept"}
 	rejoined, _ := joined.restarted(&restartRequest{Rejoin: true, provided: provided})
-	if rejoined.Membership.joinPress || rejoined.Resources.Provided != provided {
+	if rejoined.wiring.membership.joinPress || rejoined.Resources.Provided != provided {
 		t.Fatalf("a rejoin asks for a press %v and joins with scenario %v",
-			rejoined.Membership.joinPress, rejoined.Resources.Provided)
+			rejoined.wiring.membership.joinPress, rejoined.Resources.Provided)
 	}
 	if again, _ := rejoined.restarted(&restartRequest{Rejoin: true}); again.Resources.Provided != nil {
 		t.Fatal("a scenario one join held outlived the run it was handed to")

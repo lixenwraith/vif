@@ -14,7 +14,7 @@ import (
 // RunServer wires, runs and tears down a dedicated host.
 func RunServer(cfg Config) error {
 	cfg.Mode = ModeServer
-	a, err := newSessionApp(cfg)
+	a, err := newSessionApp(runConfig{Config: cfg})
 	if err != nil {
 		return err
 	}

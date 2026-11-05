@@ -166,6 +166,10 @@ that proves wrong or that a document now states, and link the document instead.
   run the four shapes on both from their package directories, a second or so each,
   and read late commits and late copies; pages repaired move with any change of
   timing.
+- A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
+  test that builds a joiner as a join does goes through `configForJoin` into
+  `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,
+  and a test of what a join holds to then passes on nothing.
 
 ## Tests that flake
 

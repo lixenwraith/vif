@@ -19,7 +19,7 @@ func (a *App) initNetworkService() error {
 	if a.cfg.Membership.JoinAddress == "" {
 		return nil
 	}
-	a.networkSvc = service.NewNetworkService(a.cfg.networkConfig)
+	a.networkSvc = service.NewNetworkService(a.cfg.wiring.networkConfig)
 	a.membership.networkSvc = a.networkSvc
 	return a.hub.Register(a.networkSvc)
 }
