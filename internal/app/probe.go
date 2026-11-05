@@ -50,9 +50,9 @@ func (a *App) probeSnapshot() probe.Snapshot {
 
 	live, clock := a.observeTick(tick, now, running, paused)
 
-	guests, bots := a.membership.rosterGuests()
-	capacity := a.membership.sessionCapacity()
-	closing := a.membership.lobbyClosing.Load()
+	guests, bots := a.membership.RosterGuests()
+	capacity := a.membership.SessionCapacity()
+	closing := a.membership.LobbyClosing()
 	// The lifetime policy is read rather than folded here: a probe is a read of the
 	// run, and a session that ended because an orchestrator happened to scrape it
 	// would be a session whose lifetime depended on being watched. The serve loop

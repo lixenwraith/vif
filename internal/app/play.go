@@ -105,7 +105,7 @@ func replayCopies(lender *App, cfg Config, stream *journal.Stream, build func(ru
 // paced tick occupies the game interval at its clock's rate, and an unpaced run is
 // presented as fast as the frame loop can render it.
 func runPresented(a *App, src pacedSource, kind, name string, paced bool, signals <-chan os.Signal) error {
-	live := a.membership.sessionTransport() != nil
+	live := a.membership.SessionTransport() != nil
 	interval := a.world.TickInterval()
 	if !paced {
 		interval = time.Millisecond // the floor perTick already clamps to
@@ -201,7 +201,7 @@ func (p *player) run() error {
 	last := time.Now()
 
 	for {
-		if p.a.membership.dismissed.Load() {
+		if p.a.membership.Dismissed() {
 			return p.failure()
 		}
 		p.a.scribe.ServeJournal()
@@ -280,7 +280,7 @@ func (p *player) advance(elapsed time.Duration) {
 	if p.rw != nil && p.rw.lent {
 		return // a batch holds the presented copy
 	}
-	p.live = p.driven && p.a.membership.sessionTransport() != nil
+	p.live = p.driven && p.a.membership.SessionTransport() != nil
 	if p.live {
 		p.paused, p.scale, p.interval = false, engine.ScaleNormal, p.a.world.TickInterval()
 	}
@@ -628,7 +628,7 @@ func viewAxis(camera, recorded, size, mapSize, pan int) (cam, offset, kept int) 
 // routed through the keymap: these drive the viewer, not the game. Any other key is
 // offered to the keymap for the game bindings a viewer owns.
 func (p *player) key(ev terminal.Event) bool {
-	p.live = p.driven && p.a.membership.sessionTransport() != nil
+	p.live = p.driven && p.a.membership.SessionTransport() != nil
 	if p.cmd != nil {
 		// The viewer's command line or overlay, parsed as the game parses it
 		if intent := p.a.inputMachine.Process(ev); intent != nil {

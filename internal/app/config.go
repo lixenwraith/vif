@@ -66,7 +66,7 @@ type wiring struct {
 
 	// dialled is a :join its session already answered, dialled while the run it
 	// replaces played on.
-	dialled *joinDial
+	dialled *JoinDial
 
 	// startScreen says this run is the launch on a host without a start screen of its
 	// own, which waits behind the game's (App.startScreen)
@@ -101,7 +101,7 @@ type wiring struct {
 	geometryDefaulted bool
 
 	// membership is the wiring's session half, which the membership holds.
-	membership membershipWiring
+	membership Wiring
 }
 
 // configForJoin applies the host-authored simulation identity to local operator
@@ -114,7 +114,7 @@ func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 	local.Seed = fromAnchor.Seed
 	local.Session = fromAnchor.Session
 	// The scenario's name is only a hint for the root lookup, which -d skips:
-	// resolveJoinScenario compares digests and fetches the bytes no root here holds.
+	// ResolveJoinScenario compares digests and fetches the bytes no root here holds.
 	// The corpus is not taken at all: what a player types is resolved here, from
 	// this machine's roots or -d, and never reconciled with the coordinator.
 	if !local.Resources.Embedded {
@@ -130,7 +130,7 @@ func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 	local.CellAspect = fromAnchor.CellAspect
 	local.LockMap = true
 	local.TickInterval = fromAnchor.TickInterval
-	local.wiring.membership.sessionPlayers = o.Players
+	local.wiring.membership.SessionPlayers = o.Players
 	// The session's rate is its host's, a script's or bot's pace included; a
 	// harness's manual clock is driven by Tick and takes none.
 	if !local.Mode.Driven() || local.wiring.scriptedSession {
@@ -153,7 +153,7 @@ func (c runConfig) Prepare(s Membership, pending *network.PendingJoin, preview n
 	c.Membership = s
 	var err error
 	if c, err = configForJoin(c, preview); err == nil {
-		err = resolveJoinScenario(&c.Config, pending, preview)
+		err = ResolveJoinScenario(&c.Config, pending, preview)
 	}
 	return c.Resources, err
 }
@@ -173,7 +173,7 @@ func joinNotice(notice, line string) string {
 func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	c.Notice, c.wiring.dialled, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
 	c.Journal, c.wiring.journalCarried = next.Journal, next.Journal
-	c.wiring.membership.joinPress, c.Resources.Provided = next.press, next.provided
+	c.wiring.membership.JoinPress, c.Resources.Provided = next.Press, next.provided
 	if next.Scenario != "" {
 		c.Resources.Scenario, c.Resources.Embedded = next.Scenario, false
 	}
@@ -183,21 +183,21 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 		if next.Join != "" {
 			c.Membership.JoinAddress = next.Join
 		}
-	case next.Join == "" && next.dialled != nil:
+	case next.Join == "" && next.Dialled != nil:
 		solo := c
-		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.sessionPlayers = "", "", 0
-		c.wiring.dialled = next.dialled
+		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.SessionPlayers = "", "", 0
+		c.wiring.dialled = next.Dialled
 		return c, &solo
 	case next.Join != "":
 		solo := c
-		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.sessionPlayers = "", "", 0
-		joined, err := joining(c.Membership, next.Join)
+		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.SessionPlayers = "", "", 0
+		joined, err := Joining(c.Membership, next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
-			next.dialled.abandon(err)
+			next.Dialled.Abandon(err)
 			solo.Notice = "Join failed: " + err.Error()
 			return solo, nil
 		}
-		c.Membership, c.wiring.dialled = joined, next.dialled
+		c.Membership, c.wiring.dialled = joined, next.Dialled
 		return c, &solo
 	default:
 		// Not following anyone: a run that led its session, and one that
@@ -210,8 +210,8 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 // Normalize is Config's, noting a size it supplied (geometryDefaulted), and gives a
 // run with no claim keeper one of its own.
 func (c *runConfig) Normalize() {
-	if c.wiring.membership.claims == nil {
-		c.wiring.membership.claims = newClaimKeeper(c.Membership.ClaimStore)
+	if c.wiring.membership.Claims == nil {
+		c.wiring.membership.Claims = NewClaimKeeper(c.Membership.ClaimStore)
 	}
 	width, height := c.Width, c.Height
 	if c.Config.Normalize(); c.Width != width || c.Height != height {
@@ -234,7 +234,7 @@ func (c runConfig) validateWiring() error {
 	// A browser joins over a session's WebSocket route and nothing else: it has no
 	// socket to dial a host:port with, so a link naming a session there is looked up
 	// on its site. Its bots dial nothing, joining it in-process.
-	if !config.SocketNetwork && c.Membership.JoinAddress != "" && c.wiring.membership.relay == nil &&
+	if !config.SocketNetwork && c.Membership.JoinAddress != "" && c.wiring.membership.Relay == nil &&
 		c.Membership.SessionName == "" {
 		if join, _ := link.ParseEndpoint(c.Membership.JoinAddress); join.Scheme != link.SchemeWebSocket {
 			return errors.New("a browser cannot dial host:port; join with a session's link")

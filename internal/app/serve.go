@@ -56,21 +56,21 @@ func (a *App) Serve() error {
 	// lobby. An unbounded policy starts too and simply never reaches a deadline.
 	a.life.Start(time.Now())
 	// Before the lobby, which the host's own bots may be all of.
-	if err := a.membership.seatBots(); err != nil {
+	if err := a.membership.SeatBots(); err != nil {
 		return err
 	}
 
-	if err := a.membership.startHostSession(sigChan); err != nil {
+	if err := a.membership.StartHostSession(sigChan); err != nil {
 		switch {
-		case errors.Is(err, errSessionCanceled):
+		case errors.Is(err, ErrSessionCanceled):
 			return nil
-		case errors.Is(err, errSessionExpired):
+		case errors.Is(err, ErrSessionExpired):
 			a.logSessionEnd(a.life.State(time.Now()))
 			return nil
 		}
 		return err
 	}
-	a.membership.activateNetworkSession()
+	a.membership.ActivateNetworkSession()
 	// Paused during construction so the lobby wait does not age a game-time
 	// deadline; the start gate is what releases tick zero.
 	a.ctx.TimeCtl.SetPaused(false)
@@ -81,9 +81,9 @@ func (a *App) Serve() error {
 	// than a lobby member, so a dropped guest comes back into the slot its departure
 	// released. The gate reads a capture a playout lead ahead, so arming it over a
 	// stopped clock would time every such dial out.
-	a.membership.openMidRunJoins()
+	a.membership.OpenMidRunJoins()
 	a.log.Info("session", "msg", "server running",
-		"address", a.cfg.Membership.HostAddress, "capacity", a.membership.sessionCapacity())
+		"address", a.cfg.Membership.HostAddress, "capacity", a.membership.SessionCapacity())
 
 	frameTicker := time.NewTicker(a.ctx.FrameInterval())
 	defer frameTicker.Stop()
@@ -101,7 +101,7 @@ func (a *App) Serve() error {
 			// nobody could schedule. A second signal ends it, and so does a drain
 			// that finds an empty roster or runs out its deadline. The host's own
 			// bots are nobody's match, so they leave at once.
-			a.membership.haltSeats(false)
+			a.membership.HaltSeats(false)
 			st := a.interrupt(time.Now(), "signal "+sig.String())
 			a.log.Info("app", "msg", "signal received",
 				"signal", sig.String(), "phase", st.Phase.String(),
@@ -115,7 +115,7 @@ func (a *App) Serve() error {
 			a.releaseFrame()
 
 		case now := <-life.C:
-			st := a.life.Observe(a.membership.guestCount(), now)
+			st := a.life.Observe(a.membership.GuestCount(), now)
 			if st.Expired {
 				a.logSessionEnd(st)
 				return nil
@@ -137,7 +137,7 @@ func (a *App) Serve() error {
 // holds, and the loop's last observation can be a whole parameter.LifecycleInterval old, so a
 // stale empty roster would end a session somebody had only just joined.
 func (a *App) interrupt(now time.Time, reason string) lifecycle.State {
-	a.life.Observe(a.membership.guestCount(), now)
+	a.life.Observe(a.membership.GuestCount(), now)
 	return a.life.Interrupt(now, reason)
 }
 
@@ -236,7 +236,7 @@ func (a *App) releaseFrame() {
 // localPlayers is how many cursors this instance drives. A dedicated host drives
 // none, which is the whole of what "zero players" means.
 func (a *App) localPlayers() int {
-	if a.membership.localSlot() == parameter.NoPlayerSlot {
+	if a.membership.LocalSlot() == parameter.NoPlayerSlot {
 		return 0
 	}
 	return 1

@@ -27,7 +27,7 @@ func (stubRun) Scripted() bool { return false }
 func (stubRun) LobbyEvents() <-chan terminal.Event { return nil }
 
 // TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty: -players and max_players
-// are cursor ceilings, the lower holding, of which sessionCapacity is the guest half.
+// are cursor ceilings, the lower holding, of which SessionCapacity is the guest half.
 // An explicit -players on a scripted or bot-driven host is also the lobby's party,
 // min_players raises any lobby's, and a -players under min_players is refused. A run
 // that joined holds to the -players its session was opened with, should it host.
@@ -84,11 +84,11 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 				sc.MaxPlayers = tt.high
 			}
 			m := membership{run: stubRun{mode: mode}, scenario: &sc,
-				cfg: &Membership{Participants: tt.participants}, wiring: &membershipWiring{sessionPlayers: tt.joined}}
-			if err := m.playersFit(sc); (err != nil) != tt.refused {
+				cfg: &Membership{Participants: tt.participants}, wiring: &Wiring{SessionPlayers: tt.joined}}
+			if err := m.PlayersFit(sc); (err != nil) != tt.refused {
 				t.Fatalf("fit = %v, want refused %t", err, tt.refused)
 			}
-			if got := m.sessionCapacity(); got != tt.capacity {
+			if got := m.SessionCapacity(); got != tt.capacity {
 				t.Fatalf("guest capacity = %d, want %d", got, tt.capacity)
 			}
 			if got := m.playerCapacity(); got != tt.players {

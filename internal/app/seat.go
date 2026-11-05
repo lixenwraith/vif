@@ -42,8 +42,8 @@ func BotSpecs(spec string) ([]string, error) {
 	return slices.Repeat([]string{cmp.Or(graph, DefaultBotGraph)}, n), nil
 }
 
-// loadBotGraph resolves and parses one graph spec, a name or a path.
-func loadBotGraph(o resource.Options, spec string) (*bot.Graph, error) {
+// LoadBotGraph resolves and parses one graph spec, a name or a path.
+func LoadBotGraph(o resource.Options, spec string) (*bot.Graph, error) {
 	data, name, err := resource.BotGraph(o, spec)
 	if err != nil {
 		return nil, err
@@ -51,9 +51,9 @@ func loadBotGraph(o resource.Options, spec string) (*bot.Graph, error) {
 	return bot.ParseGraph(name, data)
 }
 
-// waitScriptTick waits delay unless signals delivers first, and reports whether it
+// WaitScriptTick waits delay unless signals delivers first, and reports whether it
 // waited it out: a driven run's paced tick, a seat's rejoin.
-func waitScriptTick(signals <-chan os.Signal, delay time.Duration) bool {
+func WaitScriptTick(signals <-chan os.Signal, delay time.Duration) bool {
 	if delay <= 0 {
 		return true
 	}
@@ -86,19 +86,19 @@ type seat struct {
 	slot   atomic.Uint32
 }
 
-// seatPlay is a seat's run as its holder hands it to be played (memberRun.PlaySeat):
+// SeatPlay is a seat's run as its holder hands it to be played (memberRun.PlaySeat):
 // the Config and wiring it joins with and its log, the graph it plays, the channel
 // that halts it, the pause it stands still with, its holder's mode as it was seated
 // and its number among its holder's seats.
-type seatPlay struct {
-	config Config
-	wiring membershipWiring
-	log    *vlog.Log
-	graph  *bot.Graph
-	stop   <-chan os.Signal
-	hold   func() bool
-	mode   Mode
-	number uint64
+type SeatPlay struct {
+	Config Config
+	Wiring Wiring
+	Log    *vlog.Log
+	Graph  *bot.Graph
+	Stop   <-chan os.Signal
+	Hold   func() bool
+	Mode   Mode
+	Number uint64
 }
 
 func (s *seat) halt() { s.once.Do(func() { close(s.stop) }) }
@@ -126,12 +126,12 @@ func (m *membership) seatHalted(id uint32) bool {
 	return i >= 0
 }
 
-// seatBots seats cfg.Bots in the session this run is in, or in one it opens for them.
-func (m *membership) seatBots() error {
+// SeatBots seats cfg.Bots in the session this run is in, or in one it opens for them.
+func (m *membership) SeatBots() error {
 	if len(m.cfg.Bots) == 0 {
 		return nil
 	}
-	if m.sessionTransport() == nil {
+	if m.SessionTransport() == nil {
 		m.run.Settle() // Bind the boot cursor before opening the bots' session.
 	}
 	var err error
@@ -149,7 +149,7 @@ func (m *membership) seatBots() error {
 // does not resolve is the caller's error; the join runs on the seat's goroutine.
 // Caller MUST hold updateMutex.
 func (m *membership) addSeatLocked(spec string) error {
-	graph, err := loadBotGraph(m.run.Resources(), spec)
+	graph, err := LoadBotGraph(m.run.Resources(), spec)
 	if err != nil {
 		return err
 	}
@@ -163,9 +163,9 @@ func (m *membership) addSeatLocked(spec string) error {
 	s.number = m.seatSerial
 	m.seats = append(m.seats, s)
 	m.seatsMu.Unlock()
-	play.log = vlog.NewLog("seat " + strconv.FormatUint(s.number, 10))
-	play.mode = m.run.Mode() // the seat's goroutine reads nothing of its holder's config
-	play.number = s.number
+	play.Log = vlog.NewLog("seat " + strconv.FormatUint(s.number, 10))
+	play.Mode = m.run.Mode() // the seat's goroutine reads nothing of its holder's config
+	play.Number = s.number
 	core.Go(func() { m.playSeat(s, play) })
 	return nil
 }
@@ -173,19 +173,19 @@ func (m *membership) addSeatLocked(spec string) error {
 // seatConfigLocked is a new seat's run, which joins this run's session in-process; a
 // run in none first opens one with no listener. It sends the session's name, which
 // the handshake its holder serves checks. Caller holds updateMutex.
-func (m *membership) seatConfigLocked() (seatPlay, error) {
+func (m *membership) seatConfigLocked() (SeatPlay, error) {
 	if m.sessionTransportLocked() == nil {
 		if err := m.openSessionLocked(nil); err != nil {
-			return seatPlay{}, err
+			return SeatPlay{}, err
 		}
 	}
 	width, height := m.run.SeatScreenLocked()
-	return seatPlay{
-		config: Config{Mode: ModeHeadless, Resources: m.run.Resources(), Width: width, Height: height,
+	return SeatPlay{
+		Config: Config{Mode: ModeHeadless, Resources: m.run.Resources(), Width: width, Height: height,
 			StatTicks: -1, RecTicks: -1, Membership: Membership{NoAdvertise: true, JoinAddress: seatJoin,
 				SessionName: m.cfg.SessionName}},
-		wiring: membershipWiring{holder: link.PeerID(m.world.LocalParticipant()),
-			relay: m.seatLink, claims: m.claims},
+		Wiring: Wiring{Holder: link.PeerID(m.world.LocalParticipant()),
+			Relay: m.seatLink, Claims: m.claims},
 	}, nil
 }
 
@@ -221,15 +221,15 @@ func (m *membership) seatLink() (net.Conn, error) {
 // ends for it, standing still while its holder's pause does. A join refused while
 // the session starts or hands off is retried, as the refusal asks; any other failure
 // ends it.
-func (m *membership) playSeat(s *seat, play seatPlay) {
+func (m *membership) playSeat(s *seat, play SeatPlay) {
 	defer close(s.done)
 	defer m.forgetSeat(s)
-	play.graph, play.stop = s.graph, s.stop
+	play.Graph, play.Stop = s.graph, s.stop
 	// A holder whose clock stops when paused stops its seats with it; a driven one
 	// steps through a pause, and so do they. A hold reaches them as the crossing it
 	// is, at the tick every participant stops at.
-	if !play.mode.Driven() {
-		play.hold = m.ctx.TimeCtl.OwnPause
+	if !play.Mode.Driven() {
+		play.Hold = m.ctx.TimeCtl.OwnPause
 	}
 	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
 	for {
@@ -247,7 +247,7 @@ func (m *membership) playSeat(s *seat, play seatPlay) {
 			return int(entry.Slot)
 		})
 		if driver == nil && err != nil && network.RetryOf(err) == network.RetrySoon && time.Now().Before(deadline) &&
-			waitScriptTick(s.stop, parameter.SessionRejoinInterval) {
+			WaitScriptTick(s.stop, parameter.SessionRejoinInterval) {
 			continue
 		}
 		switch {
@@ -270,11 +270,11 @@ func (m *membership) forgetSeat(s *seat) {
 	m.seatsMu.Unlock()
 }
 
-// haltSeats halts every seat without waiting and returns them. Each link closing is
+// HaltSeats halts every seat without waiting and returns them. Each link closing is
 // then the drop that was asked for, as it is for a seat dropped alone, unless the
 // seats keep their places: then it is a lost link, whose cursor the session keeps
 // as a Wraith.
-func (m *membership) haltSeats(keep bool) []*seat {
+func (m *membership) HaltSeats(keep bool) []*seat {
 	m.seatsMu.Lock()
 	defer m.seatsMu.Unlock()
 	seats := slices.Clone(m.seats)
@@ -287,10 +287,10 @@ func (m *membership) haltSeats(keep bool) []*seat {
 	return seats
 }
 
-// closeSeats halts every seat, keeping their places or not, and waits for each to
+// CloseSeats halts every seat, keeping their places or not, and waits for each to
 // leave, so a holder's bots depart the session before it does.
-func (m *membership) closeSeats(keep bool) {
-	for _, s := range m.haltSeats(keep) {
+func (m *membership) CloseSeats(keep bool) {
+	for _, s := range m.HaltSeats(keep) {
 		<-s.done
 	}
 }
@@ -325,9 +325,9 @@ func (m *membership) stopSeat(match func(*seat) bool) bool {
 	return false
 }
 
-// seatGraphs are the graphs of the seats this run holds, in the order they came; a
+// SeatGraphs are the graphs of the seats this run holds, in the order they came; a
 // seat told to leave is not held, even while it is still leaving.
-func (m *membership) seatGraphs() []string {
+func (m *membership) SeatGraphs() []string {
 	m.seatsMu.Lock()
 	defer m.seatsMu.Unlock()
 	specs := make([]string, 0, len(m.seats))

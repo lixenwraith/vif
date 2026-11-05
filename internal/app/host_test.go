@@ -123,7 +123,7 @@ func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
 			if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 				t.Fatalf("begin hosting: %v", err)
 			}
-			if got := host.membership.sessionCapacity() + 1; got != tt.want {
+			if got := host.membership.SessionCapacity() + 1; got != tt.want {
 				t.Fatalf("lobby size = %d, want %d", got, tt.want)
 			}
 		})
@@ -241,7 +241,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	alignTicks(t, host, guest)
 	assertControl(t, host, 1, component.ControlRemote)
 	assertControl(t, guest, 1, component.ControlLocal)
-	if got := guest.membership.localSlot(); got != 1 {
+	if got := guest.membership.LocalSlot(); got != 1 {
 		t.Fatalf("guest follows slot %d, want its own slot 1", got)
 	}
 
@@ -855,7 +855,7 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 		}
 	}
 	req := a.restart.Load()
-	if req == nil || req.dialled == nil || !slices.Equal(req.Bots, []string{"roam"}) {
+	if req == nil || req.Dialled == nil || !slices.Equal(req.Bots, []string{"roam"}) {
 		t.Fatalf("restart %+v; want a dialled join that seats roam again (status %q)", req, a.Context().GetStatusMessage())
 	}
 	// What Run does next: the replaced run goes, and the request builds the next
@@ -939,9 +939,9 @@ func TestAHostThatCannotBindLeavesTheRunSolo(t *testing.T) {
 	if err := a.BeginHosting(busy.Addr().String()); err == nil {
 		t.Fatal("hosting on a port in use was accepted")
 	}
-	if w := a.World(); w.SessionShared() || w.SessionBarrier() || a.membership.sessionTransport() != nil {
+	if w := a.World(); w.SessionShared() || w.SessionBarrier() || a.membership.SessionTransport() != nil {
 		t.Fatalf("a refused port left the run shared %t, barrier %t, transport %v",
-			w.SessionShared(), w.SessionBarrier(), a.membership.sessionTransport())
+			w.SessionShared(), w.SessionBarrier(), a.membership.SessionTransport())
 	}
 }
 
@@ -1094,7 +1094,7 @@ func lobbySession(t *testing.T, host Config, players int, guest Config) []*App {
 		if a.cfg.Membership.HostAddress != "" {
 			return -1
 		}
-		return int(a.membership.localSlot())
+		return int(a.membership.LocalSlot())
 	}
 	slices.SortFunc(apps, func(x, y *App) int { return cmp.Compare(place(x), place(y)) })
 	return apps
@@ -1118,12 +1118,12 @@ func lobbyHost(t *testing.T, cfg Config) (*App, string, <-chan error) {
 		t.Fatalf("host services: %v", err)
 	}
 	a.life.Start(time.Now())
-	if err := a.membership.seatBots(); err != nil {
+	if err := a.membership.SeatBots(); err != nil {
 		t.Fatalf("host bots: %v", err)
 	}
 	stop, gate, done := make(chan os.Signal, 1), make(chan error, 1), make(chan struct{})
 	go func() {
-		gate <- a.membership.startHostSession(stop)
+		gate <- a.membership.StartHostSession(stop)
 		close(done)
 	}()
 	// Before Close: a gate still waiting is left as its operator would leave it.
@@ -1427,7 +1427,7 @@ func TestAShedIsToldToEveryParticipant(t *testing.T) {
 	for range parameter.NetworkBarrierMaxDelayTicks + 2 {
 		tickAll([]*App{apps[2], apps[0], apps[1]})
 	}
-	if !apps[2].membership.dismissed.Load() || !apps[2].membership.shed.Load() {
+	if !apps[2].membership.Dismissed() || !apps[2].membership.Shed() {
 		t.Fatal("the shed participant was not told it was shed")
 	}
 	if got, want := apps[1].Context().GetStatusMessage(),
@@ -1862,7 +1862,7 @@ func TestALostLinksIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
 	stop()
 	lost := link.PeerID(guest.World().LocalParticipant())
 	_ = port.Close()
-	for deadline := time.Now().Add(socketWait); host.membership.sessionTransport().PeerCount() > 0; time.Sleep(time.Millisecond) {
+	for deadline := time.Now().Add(socketWait); host.membership.SessionTransport().PeerCount() > 0; time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the host never lost the guest's link")
 		}
@@ -1998,7 +1998,7 @@ func askLeave(t *testing.T, a *App) {
 func leaveAs(t *testing.T, a *App) {
 	t.Helper()
 	askLeave(t, a)
-	a.membership.leaveSession()
+	a.membership.LeaveSession()
 }
 
 // TestALeavingGuestPlaysOnInASessionOfItsOwn: a guest that leaves goes on with the
@@ -2021,7 +2021,7 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	guest.cfg.Membership.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	id, term := guest.membership.localParticipant(), guest.authority.Term()
+	id, term := guest.membership.LocalParticipant(), guest.authority.Term()
 	var own core.Entity
 	guest.World().RunSafe(func() { own = guest.world.Resources.Player.Slot(1) })
 
@@ -2038,9 +2038,9 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 		guest.cfg.Mode = mode
 		hostErr = guest.ctx.SessionCtl.HostError()
 	})
-	if !authoring || guest.membership.localParticipant() != id || guest.authority.Term() != term+1 {
+	if !authoring || guest.membership.LocalParticipant() != id || guest.authority.Term() != term+1 {
 		t.Fatalf("after leaving, participant %d authoring %t at term %d; want it authoring as %d at term %d",
-			guest.membership.localParticipant(), authoring, guest.authority.Term(), id, term+1)
+			guest.membership.LocalParticipant(), authoring, guest.authority.Term(), id, term+1)
 	}
 	if left != 0 || kept != own {
 		t.Fatalf("after leaving, slot 0 holds %d and slot 1 %d; want the host gone and the guest's own %d kept", left, kept, own)
@@ -2048,7 +2048,7 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	if hostErr != nil || joinErr != nil || leaveErr == nil || !strings.Contains(leaveErr.Error(), "only its own bots") {
 		t.Fatalf("after leaving, :host %v, :join %v, :leave %v; want the first two taken and a session of its own to leave", hostErr, joinErr, leaveErr)
 	}
-	if got := guest.membership.sessionCapacity() + 1; got != min(parameter.MaxPlayers, guest.scenario.MaxPlayers) {
+	if got := guest.membership.SessionCapacity() + 1; got != min(parameter.MaxPlayers, guest.scenario.MaxPlayers) {
 		t.Fatalf("after leaving, the guest holds its own session to %d players; want no ceiling but the scenario's", got)
 	}
 	resume := tickInBackground(host)
@@ -2084,18 +2084,18 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	})
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	id, term, token := guest.membership.localParticipant(), guest.authority.Term(), store.token(t)
+	id, term, token := guest.membership.LocalParticipant(), guest.authority.Term(), store.token(t)
 	held := places(guest, everyone)
 
 	leaveAs(t, host)
 	stopGuest := tickInBackground(guest)
-	for deadline := time.Now().Add(socketWait); !guest.membership.leaving.Load() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	for deadline := time.Now().Add(socketWait); !guest.membership.Leaving() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	stopGuest()
-	if !guest.membership.leaving.Load() {
+	if !guest.membership.Leaving() {
 		t.Fatal("the guest lost its pinned host, and nothing asked its loop to take it on")
 	}
-	guest.membership.leaveSession() // as Run's loop does
+	guest.membership.LeaveSession() // as Run's loop does
 
 	var authoring bool
 	var hostErr, joinErr, leaveErr error
@@ -2104,9 +2104,9 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 		joinErr, leaveErr = guest.ctx.SessionCtl.JoinError(), guest.ctx.SessionCtl.LeaveError()
 		hostErr = guest.ctx.SessionCtl.HostError()
 	})
-	if !authoring || guest.membership.localParticipant() != id || guest.authority.Term() != term+1 {
+	if !authoring || guest.membership.LocalParticipant() != id || guest.authority.Term() != term+1 {
 		t.Fatalf("after its fork, participant %d authoring %t at term %d; want it authoring as %d at term %d",
-			guest.membership.localParticipant(), authoring, guest.authority.Term(), id, term+1)
+			guest.membership.LocalParticipant(), authoring, guest.authority.Term(), id, term+1)
 	}
 	if got := places(guest, everyone); len(held) != 2 || !maps.Equal(got, held) || !wraithIn(guest, 0) {
 		t.Fatalf("after its fork the guest holds %v (entity, participant by slot), the host's a Wraith %t; want %v, the host's a Wraith",
@@ -2156,9 +2156,9 @@ func TestAForkKeepsTheHoldItsLostHostSet(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		forkCell(a.world).Store(true) // as giveUp leaves it
+		ForkCell(a.world).Store(true) // as giveUp leaves it
 		askLeave(t, a)                // as a fork asks its loop
-		a.membership.leaveSession()
+		a.membership.LeaveSession()
 		if held, msg := a.ctx.TimeCtl.Held(), a.ctx.GetStatusMessage(); held != tt.held || msg != tt.notice {
 			t.Errorf("a fork under %s goes on held %t, saying %q; want held %t, saying %q", tt.name, held, msg, tt.held, tt.notice)
 		}
@@ -2235,7 +2235,7 @@ func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
 	seated := host.ctx.SessionCtl.Bots()[0]
 	_, port := mustSocketJoiner(t, addr, fixtureSeed, BotWidth, BotHeight)
 	waitForCursors(t, host, 3)
-	itsBots := heldBy(host.membership.localParticipant())
+	itsBots := heldBy(host.membership.LocalParticipant())
 	left := places(host, itsBots)
 
 	leaveAs(t, host)
@@ -2382,11 +2382,11 @@ func cursorIn(a *App, slot uint8) (held bool) {
 func arrival(t *testing.T, host, guest *App) (link.PeerID, uint8) {
 	t.Helper()
 	for deadline := time.Now().Add(socketWait); ; time.Sleep(joinTestTickInterval / 5) { // [wall] a link bound
-		if slot := guest.membership.localSlot(); slot != parameter.NoPlayerSlot && cursorIn(host, slot) && cursorIn(guest, slot) {
-			return link.PeerID(guest.membership.localParticipant()), slot
+		if slot := guest.membership.LocalSlot(); slot != parameter.NoPlayerSlot && cursorIn(host, slot) && cursorIn(guest, slot) {
+			return link.PeerID(guest.membership.LocalParticipant()), slot
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the guest's arrival never crossed: it plays in slot %d", guest.membership.localSlot())
+			t.Fatalf("the guest's arrival never crossed: it plays in slot %d", guest.membership.LocalSlot())
 		}
 		guest.Tick(1)
 	}

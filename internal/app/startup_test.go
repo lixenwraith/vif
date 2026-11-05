@@ -26,9 +26,9 @@ func TestEachStartupGateCarriesItsOwnDeadline(t *testing.T) {
 	defer port.Close()
 
 	never := func() bool { return false }
-	expired := func(now time.Time) error { life.State(now); return errSessionExpired }
+	expired := func(now time.Time) error { life.State(now); return ErrSessionExpired }
 	err := m.waitForStartup(port, nil, life.State(time.Now()).Deadline, expired, never)
-	if !errors.Is(err, errSessionExpired) {
+	if !errors.Is(err, ErrSessionExpired) {
 		t.Fatalf("the lobby wait returned %v, want errSessionExpired", err)
 	}
 

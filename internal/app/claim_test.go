@@ -27,7 +27,7 @@ func offerOf(c *claim) network.SessionOffer {
 // player its own, and none a run is in its session under; an offer of a place one
 // waits under hands that claim to the run.
 func TestADialNamesTheClaimsNoRunHoldsOfItsKind(t *testing.T) {
-	k := newClaimKeeper(nil)
+	k := NewClaimKeeper(nil)
 	person, bot := k.issue(false), k.issue(true)
 	if got := append(k.tokens(false), k.tokens(true)...); len(got) != 0 {
 		t.Fatalf("claims their runs hold were named: %q", got)
@@ -54,7 +54,7 @@ func TestADialNamesTheClaimsNoRunHoldsOfItsKind(t *testing.T) {
 // TestAPlayerBringsBackWhatItLeftWith: a claim keeps its run's syncs while the run
 // is in its session under it, and what the last one held once the run leaves.
 func TestAPlayerBringsBackWhatItLeftWith(t *testing.T) {
-	k := newClaimKeeper(nil)
+	k := NewClaimKeeper(nil)
 	c := k.issue(false)
 	left := event.CursorRecord{Energy: 500, Heat: 3, HitPoints: 61}
 	k.keep(c, event.CursorRecord{Energy: 100})
@@ -71,7 +71,7 @@ func TestAPlayerBringsBackWhatItLeftWith(t *testing.T) {
 // is kept on that claim alone, so the one it left under brings back the record as it
 // stood. Only a claim a run gave up is carried.
 func TestAPlaceCarriedOnKeepsTheRecordItLeftWith(t *testing.T) {
-	k := newClaimKeeper(nil)
+	k := NewClaimKeeper(nil)
 	left := k.issue(true)
 	k.keep(left, event.CursorRecord{Energy: 500, Charges: []int{2, 1}})
 	if k.carry(network.ClaimDigest(left.Token)) != nil {
@@ -100,17 +100,17 @@ func TestAPlaceCarriedOnKeepsTheRecordItLeftWith(t *testing.T) {
 // ClaimsKept, the oldest no run holds giving way.
 func TestATabKeepsItsClaimsAcrossAReload(t *testing.T) {
 	tab := &memoryClaims{}
-	k := newClaimKeeper(tab)
+	k := NewClaimKeeper(tab)
 	bot := k.issue(true)
 	k.keep(bot, event.CursorRecord{Energy: 77})
 	k.release(bot)
-	reloaded := newClaimKeeper(tab)
+	reloaded := NewClaimKeeper(tab)
 	if got := reloaded.tokens(true); !slices.Equal(got, []string{bot.Token}) || reloaded.claims[0].Record.Energy != 77 {
 		t.Fatalf("after a reload the tab names %q with %+v, want its bot's claim and record", got, reloaded.claims[0].Record)
 	}
 
 	for _, doc := range []string{`not a document`, `[{"token":"0123"}]`, `[null]`} {
-		if got := newClaimKeeper(&memoryClaims{doc: []byte(doc)}).claims; len(got) != 0 {
+		if got := NewClaimKeeper(&memoryClaims{doc: []byte(doc)}).claims; len(got) != 0 {
 			t.Fatalf("a kept %s was read as claims %+v", doc, got)
 		}
 	}
@@ -133,7 +133,7 @@ func TestAForkLetsItsClaimGo(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []Mode{ModePlay, ModeHeadless} {
 		m := wraithWorld()()
-		m.run, m.claims = stubRun{mode: mode}, newClaimKeeper(nil)
+		m.run, m.claims = stubRun{mode: mode}, NewClaimKeeper(nil)
 		c := m.claims.issue(false)
 		m.claim.Store(c)
 		m.forked(nil, 2)

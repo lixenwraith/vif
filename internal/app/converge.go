@@ -41,7 +41,7 @@ func (m *membership) LocalParticipant() uint32 { return m.localParticipant() }
 
 func (m *membership) Seated() bool {
 	var seated bool
-	m.world.RunSafe(func() { seated = m.wiring.holder != 0 })
+	m.world.RunSafe(func() { seated = m.wiring.Holder != 0 })
 	return seated
 }
 
@@ -81,7 +81,7 @@ func (m *membership) Transport() engine.NetworkPort {
 	if m.dismissed.Load() {
 		return nil
 	}
-	return m.sessionTransport()
+	return m.SessionTransport()
 }
 
 // Downstream reads the barrier's view of who is behind this instance.
@@ -154,7 +154,7 @@ func (m *membership) DrainOffTick() {
 // DropParticipant closes one participant's link; a direct neighbour observes the
 // loss and the authority turns it into one departure at one agreed tick.
 func (m *membership) DropParticipant(id uint32) bool {
-	p, ok := m.sessionTransport().(engine.PeerDroppingPort)
+	p, ok := m.SessionTransport().(engine.PeerDroppingPort)
 	return ok && p.Disconnect(id)
 }
 
@@ -272,7 +272,7 @@ func (m *membership) reportPeerLost(id uint32) bool {
 		m.corrections.QueuePeerLost(id)
 	}
 	halted := m.seatHalted(id)
-	if m.run.Mode() != ModePlay && forkCell(m.world).Load() {
+	if m.run.Mode() != ModePlay && ForkCell(m.world).Load() {
 		m.dropAbandonedLocked(m.worldRosterLocked(), nil, link.PeerID(m.world.LocalParticipant()))
 	}
 	return halted
@@ -299,10 +299,10 @@ func (m *membership) adoptCorrectionBaseline(cap snapshot.SharedCapture, bytes i
 
 // === authority ===
 
-// authorityStamp is the term and participant a capture read now is authoritative
+// AuthorityStamp is the term and participant a capture read now is authoritative
 // under. Zero on a solo run, which is what makes a capture saved from one carry no
 // authority claim at all.
-func (m *membership) authorityStamp() (network.AuthorityTerm, uint32) {
+func (m *membership) AuthorityStamp() (network.AuthorityTerm, uint32) {
 	if m.authority == nil {
 		return 0, 0
 	}
@@ -455,17 +455,17 @@ func (m *membership) thawLocked() (held bool) {
 // forked goes on with a run its session gave up. The claim it was in that session
 // under keeps its record as it stood, whatever links it still holds: what a fork
 // plays is not what its player brings back. A play run's loop takes it into a
-// session of its own (leaveSession), keeping every other player's place for
+// session of its own (LeaveSession), keeping every other player's place for
 // whoever hosts next; a run with no loop drops them and plays on as the fork.
 func (m *membership) forked(roster []network.RosterEntry, local link.PeerID) {
 	if m.run.Mode() == ModePlay {
 		// Leaving before the claim goes, as a redial holds its claim again before it
 		// reads leaving: whichever of the two runs second lets the claim go.
 		m.leaving.Store(true)
-		m.leaveClaim()
+		m.LeaveClaim()
 		return
 	}
-	m.leaveClaim()
+	m.LeaveClaim()
 	m.dropAbandonedCursors(roster, local)
 	m.world.RunSafe(func() { m.thawLocked() })
 }
@@ -481,13 +481,13 @@ var errRedialEnded = errors.New("the run went on without this host")
 func (m *membership) redial(lost link.PeerID) bool {
 	var (
 		cfg  Membership
-		wire membershipWiring
-		base joinBase
+		wire Wiring
+		base JoinBase
 	)
 	door, relay := false, false
 	m.world.RunSafe(func() {
 		cfg, wire, base = *m.cfg, *m.wiring, m.run.JoinBase()
-		door = m.run.Mode() == ModePlay && wire.holder == 0 && cfg.JoinAddress != "" &&
+		door = m.run.Mode() == ModePlay && wire.Holder == 0 && cfg.JoinAddress != "" &&
 			!m.leaving.Load() && !m.run.Replacing()
 		relay = lost == m.joinedThrough
 	})
@@ -519,7 +519,7 @@ func (m *membership) redial(lost link.PeerID) bool {
 // refusal no retry helps, a door nothing answers at, or a place that is not this
 // run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
 // A run that stays in its session holds its claim again.
-func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base joinBase, addr string, lost link.PeerID, c *claim, relay bool) {
+func (m *membership) redialDoor(cfg Membership, wire Wiring, base JoinBase, addr string, lost link.PeerID, c *claim, relay bool) {
 	dial := cfg
 	dial.JoinAddress = addr
 	notice := "Host connection restored"
@@ -527,10 +527,10 @@ func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base join
 		notice = "Relay connection restored"
 	}
 	for m.authority.Redialing(lost) {
-		d, err := dialJoin(dial, wire, base)
+		d, err := DialJoin(dial, wire, base)
 		if err == nil {
 			// Seated at once: which place the host offers is what the redial asks.
-			err = d.seat(wire.holder != 0)
+			err = d.seat(wire.Holder != 0)
 		}
 		if err != nil {
 			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
@@ -541,12 +541,12 @@ func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base join
 			}
 			continue
 		}
-		back := &restartAsk{Notice: notice, dialled: d}
+		back := &RestartAsk{Notice: notice, Dialled: d}
 		if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 			m.log.Info("session", "msg", "the redial admitted this run back", "peer", uint64(lost))
 			return
 		}
-		d.abandon(errRedialEnded)
+		d.Abandon(errRedialEnded)
 		if d.claim != c {
 			m.log.Info("session", "msg", "the redial found no place for this run", "peer", uint64(lost))
 			m.authority.RedialRefused(lost)
@@ -572,7 +572,7 @@ func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base join
 // door would: the host still runs, with this run's Wraith, and only this run's
 // link went. Reports whether one took it, the run then replaced by the one
 // admitted; one that refuses outright, or a host with no place, is not dialled again.
-func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base joinBase, lost link.PeerID, c *claim) bool {
+func (m *membership) rejoinThrough(cfg Membership, wire Wiring, base JoinBase, lost link.PeerID, c *claim) bool {
 	dial := cfg
 	done := make(map[link.PeerID]bool)
 	for {
@@ -592,9 +592,9 @@ func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base j
 				continue
 			}
 			dial.JoinAddress = addr
-			d, err := dialJoin(dial, wire, base)
+			d, err := DialJoin(dial, wire, base)
 			if err == nil {
-				err = d.seat(wire.holder != 0)
+				err = d.seat(wire.Holder != 0)
 			}
 			if err != nil {
 				if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
@@ -603,12 +603,12 @@ func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base j
 				}
 				continue
 			}
-			back := &restartAsk{Notice: "Host connection restored", dialled: d}
+			back := &RestartAsk{Notice: "Host connection restored", Dialled: d}
 			if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 				m.log.Info("session", "msg", "a candidate took this run back to its host", "candidate", uint64(id), "authority", uint64(lost))
 				return true
 			}
-			d.abandon(errRedialEnded)
+			d.Abandon(errRedialEnded)
 			if d.claim != c {
 				m.log.Info("session", "msg", "the host holds no place for this run", "candidate", uint64(id))
 				return false
@@ -627,7 +627,7 @@ func (m *membership) publishAuthorityResource() {
 // publishAuthorityResourceLocked is the same write for a caller that holds the
 // world lock. Caller MUST hold updateMutex.
 func (m *membership) publishAuthorityResourceLocked() {
-	term, holder := m.authorityStamp()
+	term, holder := m.AuthorityStamp()
 	if r := m.world.Resources.Network; r != nil {
 		r.Authority.Store(holder)
 		r.Term.Store(uint64(term))

@@ -15,10 +15,10 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// ErrJoinMidRun is returned by Join, the admission that re-derives the world, when
+// errJoinMidRun is returned by Join, the admission that re-derives the world, when
 // the two participants are not at the same position; JoinAt admits at any tick for
 // a caller that installs the world it is sent.
-var ErrJoinMidRun = errors.New("join: participants are not at the same position")
+var errJoinMidRun = errors.New("join: participants are not at the same position")
 
 // JoinAnchor describes this session to a participant that wants to share it: the
 // identity VerifyAnchor already checks, plus the live D-14 map latch.
@@ -64,7 +64,7 @@ func (m *membership) join(j event.JoinAnchor, midRun bool) error {
 	}
 	if st := m.run.Position(); !midRun && (st.Run != an.Run || st.Tick != an.Tick) {
 		return fmt.Errorf("%w: host at run %d tick %d, this instance at run %d tick %d",
-			ErrJoinMidRun, an.Run, an.Tick, st.Run, st.Tick)
+			errJoinMidRun, an.Run, an.Tick, st.Run, st.Tick)
 	}
 	m.adoptMapLatch(an)
 	return nil
@@ -235,7 +235,7 @@ func (m *membership) bindSessionControl(o network.SessionOffer, local link.PeerI
 			slot = parameter.NoPlayerSlot
 		}
 	})
-	if slot != m.localSlot() {
+	if slot != m.LocalSlot() {
 		m.ctx.PushEventOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: slot}, event.OriginDebug)
 		m.scheduler.Settle()
 	}
@@ -272,8 +272,8 @@ func (m *membership) bindCursorOwnersLocked(participants []network.RosterEntry, 
 	}
 }
 
-// localSlot returns the roster slot this instance's input follows.
-func (m *membership) localSlot() uint8 {
+// LocalSlot returns the roster slot this instance's input follows.
+func (m *membership) LocalSlot() uint8 {
 	var slot uint8
 	m.world.RunSafe(func() { slot = m.world.Resources.Player.LocalSlot() })
 	return slot
@@ -310,8 +310,8 @@ func (m *membership) AttachTransport(port engine.NetworkPort) {
 // Caller MUST hold updateMutex.
 func (m *membership) attachTransportLocked(port engine.NetworkPort) {
 	r := engine.NewNetworkResource(port)
-	m.bindSessionHooks(r)
-	term, holder := m.authorityStamp()
+	m.BindSessionHooks(r)
+	term, holder := m.AuthorityStamp()
 	if holder != 0 {
 		r.Authority.Store(holder)
 		r.Term.Store(uint64(term))
@@ -322,9 +322,9 @@ func (m *membership) attachTransportLocked(port engine.NetworkPort) {
 	m.ctx.PublishMapLock()
 }
 
-// bindSessionHooks answers a network resource from this run's session layer, the
+// BindSessionHooks answers a network resource from this run's session layer, the
 // service's endpoint and an attached one alike.
-func (m *membership) bindSessionHooks(r *engine.NetworkResource) {
+func (m *membership) BindSessionHooks(r *engine.NetworkResource) {
 	r.Relay = uint32(m.joinedThrough)
 	r.OnDeparture = m.participantDeparted
 	// Replays and staging worlds apply roster changes without ending their viewer.
@@ -332,7 +332,7 @@ func (m *membership) bindSessionHooks(r *engine.NetworkResource) {
 		r.OnDismissed = func(shed bool) {
 			m.shed.Store(shed)
 			m.dismissed.Store(true)
-			m.haltSeats(false)
+			m.HaltSeats(false)
 			// The place is gone, and the claim with it.
 			if c := m.claim.Swap(nil); c != nil {
 				m.claims.forget(c)
@@ -405,9 +405,9 @@ func (m *membership) keepRecord(p *event.CursorStatePayload) {
 	}
 }
 
-// leaveClaim gives up the claim this run is in its session under, which keeps the
+// LeaveClaim gives up the claim this run is in its session under, which keeps the
 // record its last sync left.
-func (m *membership) leaveClaim() {
+func (m *membership) LeaveClaim() {
 	if c := m.claim.Swap(nil); c != nil {
 		m.claims.release(c)
 	}

@@ -165,7 +165,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 	host.life.Start(time.Now())
 	port := portOf(t, host)
 	gate := make(chan error, 1)
-	go func() { gate <- host.membership.startHostSession(nil) }()
+	go func() { gate <- host.membership.StartHostSession(nil) }()
 
 	const w, h = 160, 45
 	screen := &framePresentation{w: w, h: h}
@@ -180,7 +180,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 	if mw, mh := mapSize(guest); mw >= area.Width() && mh >= area.Height() {
 		t.Fatalf("the joiner built on a %dx%d map, not the smaller one a sizing server offers", mw, mh)
 	}
-	if err := guest.membership.startJoinSession(nil); err != nil {
+	if err := guest.membership.StartJoinSession(nil); err != nil {
 		t.Fatalf("join gate: %v", err)
 	}
 	if err := <-gate; err != nil {
@@ -444,11 +444,11 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 	person.handleResize(170, 50)
 	seated := mustHeadless(t, fixtureSeed, 160, 45)
 	t.Cleanup(seated.Close)
-	graph, err := loadBotGraph(resource.Options{Embedded: true}, "roam")
+	graph, err := LoadBotGraph(resource.Options{Embedded: true}, "roam")
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.membership.localParticipant())
+	d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.membership.LocalParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}

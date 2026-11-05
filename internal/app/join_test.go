@@ -162,10 +162,10 @@ func TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor(t *testing.T) {
 	assertControl(t, guest, 0, component.ControlRemote)
 	assertControl(t, guest, 1, component.ControlLocal)
 
-	if got := guest.membership.localSlot(); got != 1 {
+	if got := guest.membership.LocalSlot(); got != 1 {
 		t.Fatalf("guest follows slot %d, want its own slot 1", got)
 	}
-	if got := host.membership.localSlot(); got != 0 {
+	if got := host.membership.LocalSlot(); got != 0 {
 		t.Fatalf("host follows slot %d, want its own slot 0", got)
 	}
 }
@@ -186,7 +186,7 @@ func TestAJoinerDrivesOnlyItsOwnCursor(t *testing.T) {
 	if err := guest.JoinSessionAt(sessionOfferFor(an, 2), mustRoundTrip(t, host), 0); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
-	if got := guest.membership.localSlot(); got != parameter.NoPlayerSlot {
+	if got := guest.membership.LocalSlot(); got != parameter.NoPlayerSlot {
 		t.Fatalf("a joiner awaiting its arrival follows slot %d", got)
 	}
 
@@ -204,7 +204,7 @@ func TestAJoinerDrivesOnlyItsOwnCursor(t *testing.T) {
 		t.Fatalf("correction: %v", err)
 	}
 	assertControl(t, guest, 1, component.ControlLocal)
-	if got := guest.membership.localSlot(); got != 1 {
+	if got := guest.membership.LocalSlot(); got != 1 {
 		t.Fatalf("a joiner follows slot %d once a correction brings its cursor, want 1", got)
 	}
 }
@@ -308,12 +308,12 @@ func TestAJoinerAdoptsTheHostsTick(t *testing.T) {
 	if got := guest.World().TickInterval(); got != tick {
 		t.Fatalf("the joiner ticks at %s, its host at %s", got, tick)
 	}
-	if err := identityFromAnchor(an).Verify(identityFromAnchor(guest.JoinAnchor())); err != nil {
+	if err := IdentityFromAnchor(an).Verify(IdentityFromAnchor(guest.JoinAnchor())); err != nil {
 		t.Fatalf("a joiner that adopted the host's tick was refused: %v", err)
 	}
 	kept := mustHeadless(t, seed, 120, 40)
 	defer kept.Close()
-	if err := identityFromAnchor(an).Verify(identityFromAnchor(kept.JoinAnchor())); err == nil ||
+	if err := IdentityFromAnchor(an).Verify(IdentityFromAnchor(kept.JoinAnchor())); err == nil ||
 		!strings.Contains(err.Error(), "tick_ns") {
 		t.Fatalf("a joiner on its own tick was told %v", err)
 	}

@@ -38,8 +38,8 @@ func waitingJoiner(t *testing.T, addr string, bots ...string) (*App, *pressPrese
 		t.Fatalf("join: %v", err)
 	}
 	t.Cleanup(guest.Close)
-	if guest.membership.seated() || guest.membership.localParticipant() != 0 {
-		t.Fatalf("a join waiting for its press is seated as participant %d", guest.membership.localParticipant())
+	if guest.membership.HoldsPlace() || guest.membership.LocalParticipant() != 0 {
+		t.Fatalf("a join waiting for its press is seated as participant %d", guest.membership.LocalParticipant())
 	}
 	return guest, cfg.host.Presentation.(*pressPresentation)
 }
@@ -50,7 +50,7 @@ func joinerConfig(addr string, press bool, bots ...string) runConfig {
 	screen := &pressPresentation{framePresentation: framePresentation{w: 120, h: 40}, events: make(chan terminal.Event, 1)}
 	return runConfig{Config: Config{Mode: ModePlay, Membership: Membership{JoinAddress: addr, Bots: bots},
 		Resources: resource.Options{Embedded: true}}, host: Host{Presentation: screen},
-		wiring: wiring{membership: membershipWiring{joinPress: press}}}
+		wiring: wiring{membership: Wiring{JoinPress: press}}}
 }
 
 // hostingRun is a run with a player that opened its session to cap participants,
@@ -77,7 +77,7 @@ func TestAJoinWaitingForItsPressHoldsNoPlace(t *testing.T) {
 	const seed = 0x3031
 	host := hostingRun(t, seed, 2)
 	waiting, screen := waitingJoiner(t, host.HostAddr())
-	if n := host.membership.guestCount(); n != 0 {
+	if n := host.membership.GuestCount(); n != 0 {
 		t.Fatalf("the host holds %d guest(s) for a join that has not pressed", n)
 	}
 
@@ -87,7 +87,7 @@ func TestAJoinWaitingForItsPressHoldsNoPlace(t *testing.T) {
 	if next != nil || !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
 		t.Fatalf("the press into a session filled meanwhile was answered %v, %v; want a full session's refusal", next, err)
 	}
-	if waiting.membership.seated() {
+	if waiting.membership.HoldsPlace() {
 		t.Fatal("the refused press seated its run")
 	}
 }
@@ -103,27 +103,27 @@ func TestALatePressDialsAgainIntoTheSameGame(t *testing.T) {
 	world := guest.World()
 
 	time.Sleep(parameter.NetworkJoinPressWindow + parameter.SessionRejoinInterval) // [wall] the player away past the ready period
-	if n := host.membership.guestCount(); n != 0 {
+	if n := host.membership.GuestCount(); n != 0 {
 		t.Fatalf("the host holds %d guest(s) for a join whose ready period ran out", n)
 	}
 	screen.events <- press
 	if next, err := guest.awaitJoinPress(nil); next != nil || err != nil {
 		t.Fatalf("a late press was answered %v, %v; want a seat", next, err)
 	}
-	if !guest.membership.seated() || guest.World() != world {
+	if !guest.membership.HoldsPlace() || guest.World() != world {
 		t.Fatal("a late press did not seat the run it came to, on the world it built")
 	}
-	id := guest.membership.localParticipant()
+	id := guest.membership.LocalParticipant()
 	if id == 0 {
 		t.Fatal("the seated run is no participant")
 	}
-	if err := guest.membership.startJoinSession(nil); err != nil {
+	if err := guest.membership.StartJoinSession(nil); err != nil {
 		t.Fatalf("join gate: %v", err)
 	}
 	// The host links the participant its offer assigned, so a run that took another
 	// identity than its offer's is not the one linked.
-	if linked := portOf(t, host).Connected(id); !linked || host.membership.guestCount() != 1 {
-		t.Fatalf("after its gate the host holds %d guest(s), linked to participant %d %v", host.membership.guestCount(), id, linked)
+	if linked := portOf(t, host).Connected(id); !linked || host.membership.GuestCount() != 1 {
+		t.Fatalf("after its gate the host holds %d guest(s), linked to participant %d %v", host.membership.GuestCount(), id, linked)
 	}
 }
 
@@ -142,17 +142,17 @@ func TestAPressIntoAGameItsSessionReplacedJoinsTheNewOne(t *testing.T) {
 
 	screen.events <- press
 	next, err := guest.awaitJoinPress(nil)
-	if err != nil || next == nil || !next.Rejoin || next.press || !slices.Equal(next.Bots, []string{"roam"}) {
+	if err != nil || next == nil || !next.Rejoin || next.Press || !slices.Equal(next.Bots, []string{"roam"}) {
 		t.Fatalf("a press into a replaced game was answered %+v, %v; want a rejoin, pressed, with its bot", next, err)
 	}
-	if guest.membership.seated() {
+	if guest.membership.HoldsPlace() {
 		t.Fatal("a press into a replaced game seated its run")
 	}
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] the host's handshake ends off this goroutine
-	for host.membership.guestCount() != 0 && time.Now().Before(deadline) {
+	for host.membership.GuestCount() != 0 && time.Now().Before(deadline) {
 		time.Sleep(parameter.SessionRejoinInterval) // [wall]
 	}
-	if n := host.membership.guestCount(); n != 0 {
+	if n := host.membership.GuestCount(); n != 0 {
 		t.Fatalf("the host holds %d guest(s) for a seat its joiner turned down", n)
 	}
 }
@@ -167,7 +167,7 @@ func TestARetriedOpenDialsAfresh(t *testing.T) {
 	host := awayGuest(t).host
 	cfg := joinerConfig(host.HostAddr(), false)
 	cfg.Normalize()
-	d, err := dialJoin(cfg.Membership, cfg.wiring.membership, cfg)
+	d, err := DialJoin(cfg.Membership, cfg.wiring.membership, cfg)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -178,8 +178,8 @@ func TestARetriedOpenDialsAfresh(t *testing.T) {
 		t.Fatalf("a :join refused for a moment at its seat did not open: %v", err)
 	}
 	t.Cleanup(a.Close)
-	if !a.membership.seated() || a.membership.localParticipant() == 0 {
-		t.Fatalf("the reopened run is seated %v as participant %d", a.membership.seated(), a.membership.localParticipant())
+	if !a.membership.HoldsPlace() || a.membership.LocalParticipant() == 0 {
+		t.Fatalf("the reopened run is seated %v as participant %d", a.membership.HoldsPlace(), a.membership.LocalParticipant())
 	}
 }
 
@@ -257,7 +257,7 @@ func TestAPreviewRefusesOnlyWhatItsSeatWould(t *testing.T) {
 
 	a := awayGuest(t)
 	a.stop() // a yield begun is the next tick's to act on
-	before := a.host.membership.guestCount()
+	before := a.host.membership.GuestCount()
 	for _, claims := range [][]string{nil, {a.token}} {
 		o, err := preview(a.host.HostAddr(), claims...)
 		if err != nil || o.ValidatePreview() != nil {
@@ -270,7 +270,7 @@ func TestAPreviewRefusesOnlyWhatItsSeatWould(t *testing.T) {
 		r := a.host.world.Resources.Network
 		dismiss, kept = r.DismissWraith(), r.WraithKept(uint32(a.id))
 	})
-	if after := a.host.membership.guestCount(); after != before || dismiss != 0 || kept {
+	if after := a.host.membership.GuestCount(); after != before || dismiss != 0 || kept {
 		t.Fatalf("a preview began a seat's work: %d guests of %d, participant %d dismissed, the place held for a return %t",
 			after, before, dismiss, kept)
 	}
@@ -329,16 +329,16 @@ func TestOnlyATypingOrMovingKeyOrAClickSeatsAJoin(t *testing.T) {
 func TestOnlyAJoinItsPlayerStartedWaitsForTheirPress(t *testing.T) {
 	t.Parallel()
 	base := runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}}}
-	joined, solo := base.restarted(&restartRequest{Join: "127.0.0.1:7777", press: true})
-	if !joined.wiring.membership.joinPress || joined.Membership.JoinAddress == "" || solo == nil {
+	joined, solo := base.restarted(&restartRequest{Join: "127.0.0.1:7777", Press: true})
+	if !joined.wiring.membership.JoinPress || joined.Membership.JoinAddress == "" || solo == nil {
 		t.Fatalf("a :join asks for its player's press %v, joining %q",
-			joined.wiring.membership.joinPress, joined.Membership.JoinAddress)
+			joined.wiring.membership.JoinPress, joined.Membership.JoinAddress)
 	}
 	provided := &resource.Scenario{Name: "kept"}
 	rejoined, _ := joined.restarted(&restartRequest{Rejoin: true, provided: provided})
-	if rejoined.wiring.membership.joinPress || rejoined.Resources.Provided != provided {
+	if rejoined.wiring.membership.JoinPress || rejoined.Resources.Provided != provided {
 		t.Fatalf("a rejoin asks for a press %v and joins with scenario %v",
-			rejoined.wiring.membership.joinPress, rejoined.Resources.Provided)
+			rejoined.wiring.membership.JoinPress, rejoined.Resources.Provided)
 	}
 	if again, _ := rejoined.restarted(&restartRequest{Rejoin: true}); again.Resources.Provided != nil {
 		t.Fatal("a scenario one join held outlived the run it was handed to")

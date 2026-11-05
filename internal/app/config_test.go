@@ -192,10 +192,10 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
 	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
 		Membership: Membership{HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
-			Participants: 4, FixedAuthority: true}}, wiring: wiring{membership: membershipWiring{sessionPlayers: 3}}}
-	dialled := &joinDial{}
+			Participants: 4, FixedAuthority: true}}, wiring: wiring{membership: Wiring{SessionPlayers: 3}}}
+	dialled := &JoinDial{}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
-		Join: "10.0.0.2:7777/abc", dialled: dialled, Bots: []string{"roam"}, Journal: true})
+		Join: "10.0.0.2:7777/abc", Dialled: dialled, Bots: []string{"roam"}, Journal: true})
 	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.Notice != "n" ||
 		!slices.Equal(next.Membership.Bots, []string{"roam"}) || !next.Journal || !next.wiring.journalCarried {
 		t.Fatalf("next run %+v; want the command line with what the restart named", next)
@@ -214,7 +214,7 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 			next.Membership.Participants, next.Membership.FixedAuthority)
 	}
 	if solo == nil || solo.Seed != 7 || solo.Membership.JoinAddress != "" || solo.Membership.SessionName != "" ||
-		solo.wiring.membership.sessionPlayers != 0 || solo.wiring.dialled != nil {
+		solo.wiring.membership.SessionPlayers != 0 || solo.wiring.dialled != nil {
 		t.Fatalf("a :join falls back to %+v; want the same run on its own", solo)
 	}
 	moved, _ := line.restarted(&restartRequest{Rejoin: true, Join: "10.0.0.3:7777"})
@@ -223,9 +223,9 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 			moved.Membership.JoinAddress, moved.Membership.SessionName)
 	}
 	if alone, solo := line.restarted(&restartRequest{}); alone.Membership.JoinAddress != "" || solo != nil ||
-		alone.wiring.membership.sessionPlayers != 3 {
+		alone.wiring.membership.SessionPlayers != 3 {
 		t.Fatalf("a run following nobody dials %q under a ceiling of %d; want nothing dialled, the session's 3 kept",
-			alone.Membership.JoinAddress, alone.wiring.membership.sessionPlayers)
+			alone.Membership.JoinAddress, alone.wiring.membership.SessionPlayers)
 	}
 }
 

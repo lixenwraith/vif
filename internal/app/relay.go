@@ -86,8 +86,8 @@ func (m *membership) publishDoor(port *link.SocketPort, router string) {
 	})
 }
 
-// closeDoor ends the door this run publishes through a router, if any.
-func (m *membership) closeDoor() {
+// CloseDoor ends the door this run publishes through a router, if any.
+func (m *membership) CloseDoor() {
 	m.tunnelMu.Lock()
 	defer m.tunnelMu.Unlock()
 	if m.tunnelStop != nil {
@@ -149,7 +149,7 @@ func (m *membership) relayDoorHosts() bool {
 // authority is asked nothing until the seat, which is where it allocates and refuses.
 func (m *membership) relayPreview(local link.PeerID) (network.SessionOffer, error) {
 	if m.authority != nil && m.authority.Migrating() {
-		return network.SessionOffer{}, ErrSessionHandoff
+		return network.SessionOffer{}, errSessionHandoff
 	}
 	anchor := m.JoinAnchor()
 	m.sessionMu.Lock()
@@ -267,7 +267,7 @@ func (m *membership) askAuthority(req network.RelayJoin) (network.RelayAdmit, er
 	}
 	if !m.tellAuthority(req) {
 		stop()
-		return network.RelayAdmit{}, ErrSessionHandoff
+		return network.RelayAdmit{}, errSessionHandoff
 	}
 	timer := time.NewTimer(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
 	defer timer.Stop()
@@ -355,9 +355,9 @@ func (m *membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 	var err error
 	switch {
 	case !coordinator:
-		err = ErrSessionHandoff
+		err = errSessionHandoff
 	case req.Step == network.RelayAssign && !m.lateJoins.Load():
-		err = ErrSessionStarting
+		err = errSessionStarting
 	case req.Step == network.RelayAssign:
 		ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, req.Claims)
 		m.closeStaleLink(err, m.sessionTransportLocked())

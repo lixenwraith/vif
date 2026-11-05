@@ -38,9 +38,9 @@ const fallbackColorMode = terminal.ColorMode256
 // so the operator's own flags still decide everything a restart does not name — a
 // pinned -seed most of all.
 type restartRequest struct {
-	// restartAsk is what the membership asks of the next run, the whole of a
+	// RestartAsk is what the membership asks of the next run, the whole of a
 	// request the membership makes.
-	restartAsk
+	RestartAsk
 
 	// provided is the scenario a join already holds, which a run joining the same
 	// session again has no need to fetch twice.
@@ -62,7 +62,7 @@ type restartRequest struct {
 // may be the session closing, which ends them before this run is replaced. The
 // first request stands; a later one is refused.
 func (a *App) replaceWith(req *restartRequest) bool {
-	req.Bots = a.membership.seatGraphs()
+	req.Bots = a.membership.SeatGraphs()
 	return a.restart.CompareAndSwap(nil, req)
 }
 
@@ -172,7 +172,7 @@ func newApp(cfg runConfig) (*App, error) {
 		hub:  service.NewHub(log),
 		life: lifecycle.New(cfg.Lifetime),
 	}
-	a.membership.open(membershipRun{a}, &a.cfg.Membership, &a.cfg.wiring.membership, &a.scenario, log, &a.glue, a.life)
+	a.membership.Open(membershipRun{a}, &a.cfg.Membership, &a.cfg.wiring.membership, &a.scenario, log, &a.glue, a.life)
 	a.scribe.Open(scribeRun{a}, &a.scenario, log, a.hub, &a.glue)
 	if a.cfg.Membership.JoinAddress != "" && a.cfg.wiring.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")
@@ -212,13 +212,13 @@ func (a *App) init() error {
 	}
 	// After the scenario, whose max_players bounds what the transport admits.
 	if a.cfg.Membership.HostAddress != "" && a.cfg.wiring.networkConfig == nil {
-		a.cfg.wiring.networkConfig = a.membership.hostNetworkConfig()
+		a.cfg.wiring.networkConfig = a.membership.HostNetworkConfig()
 	}
 	// A guest's own port takes joins beside its peer links: as the host once it
 	// authors the session, a successor taking players where its session reaches it,
 	// and as its -relay door would while its player relays for others.
 	if c := a.cfg.wiring.networkConfig; c != nil && c.AcceptPeer != nil {
-		c.AcceptSession, c.OnAdmit = a.membership.relayAcceptor(a.membership.admitHosted), a.membership.releaseRelayedJoiner
+		c.AcceptSession, c.OnAdmit = a.membership.GuestDoor()
 	}
 	if err := a.initServices(); err != nil {
 		return err
@@ -246,7 +246,7 @@ func (a *App) init() error {
 	if err := a.initScheduler(); err != nil {
 		return err
 	}
-	a.ctx.SessionCtl = sessionControl{control{&a.membership}, a}
+	a.ctx.SessionCtl = sessionControl{a.membership.Control(), a}
 
 	a.log.Info("app", "msg", "init completed",
 		"width", a.ctx.Width,
@@ -286,7 +286,6 @@ func (a *App) initServices() error {
 func (a *App) initWorld() error {
 	// Services take no world argument, so placement relative to InitAll is free
 	a.world = engine.NewWorld()
-	a.membership.world = a.world
 	a.world.Resources.Rand = engine.NewRandResource(a.cfg.Seed)
 	// A run reproducing a session draws that session's streams, and a session's
 	// streams are drawn one below the number it reports: construction draws them and
@@ -305,7 +304,7 @@ func (a *App) initWorld() error {
 		if a.cfg.Membership.JoinAddress != "" && a.cfg.wiring.networkConfig != nil && a.cfg.wiring.networkConfig.ParticipantID == 0 {
 			r.ParticipantID = 0
 		}
-		a.membership.bindSessionHooks(r)
+		a.membership.BindSessionHooks(r)
 		// A session endpoint exists, so this run is shared for its whole life whether
 		// or not a peer is attached at a given tick. Latching here rather than
 		// reading the port keeps the anchor, the D-14 verdict and the playout barrier
@@ -324,7 +323,7 @@ func (a *App) initWorld() error {
 	} else {
 		a.ctx = engine.NewGameContext(a.world, width, height)
 	}
-	a.membership.ctx = a.ctx
+	a.membership.Bind(a.world, a.ctx)
 	a.scribe.Bind(a.world, a.ctx)
 	a.ctx.BindLog(a.log)
 	a.ctx.SetTickInterval(cmp.Or(a.cfg.TickInterval, parameter.GameUpdateInterval))
@@ -370,7 +369,7 @@ func (a *App) initWorld() error {
 	// is started, which is after construction returns.
 	a.corrections, a.authority, a.reach =
 		converge.New(a.instance(), a.glue.Telemetry(), a.world.Resources.Status)
-	a.membership.corrections, a.membership.authority, a.membership.reach = a.corrections, a.authority, a.reach
+	a.membership.SetConverge(a.corrections, a.authority, a.reach)
 	if a.cfg.Membership.SlowPolicy != nil {
 		a.authority.SetSlowPolicy(*a.cfg.Membership.SlowPolicy)
 	}
@@ -548,7 +547,7 @@ func (a *App) initScheduler() error {
 	)
 	a.ctx.ResetChan = resetChan
 	a.glue.SetScheduler(a.scheduler)
-	a.membership.scheduler = a.scheduler
+	a.membership.SetScheduler(a.scheduler)
 	a.scribe.SetScheduler(a.scheduler)
 	a.scheduler.SetJournalDigest(a.scribe.JournalDigestLocked)
 
@@ -570,21 +569,19 @@ func (a *App) initScheduler() error {
 func (a *App) Close() {
 	a.log.Info("app", "msg", "shutdown started")
 	begin := time.Now()
-	a.membership.closeDoor()
-	a.membership.closeSeats(false)
+	a.membership.CloseDoor()
+	a.membership.CloseSeats(false)
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}
-	a.membership.leaveClaim()
-	if a.membership.pendingJoin != nil {
-		_ = a.membership.pendingJoin.Close()
-	}
+	a.membership.LeaveClaim()
+	a.membership.ClosePendingJoin()
 	if a.corrections != nil {
 		a.corrections.Close()
 	}
 	a.reach.Close()
 	a.closeProbe()
-	a.membership.closeMidRunPort()
+	a.membership.CloseMidRunPort()
 	a.glue.DiscardStaging()
 	a.hub.StopAll()
 	a.scribe.CloseAtExit()
@@ -628,7 +625,7 @@ func (a *App) readScenario() error {
 	if err != nil {
 		return fmt.Errorf("scenario: %w", err)
 	}
-	if err := a.membership.playersFit(sc); err != nil {
+	if err := a.membership.PlayersFit(sc); err != nil {
 		return err
 	}
 	programs, err := sc.Behaviors()

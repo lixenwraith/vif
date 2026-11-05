@@ -59,7 +59,7 @@ func leaveLobby(t *testing.T, a *App, left int, dials ...*network.PendingJoin) {
 	for _, d := range dials {
 		_ = d.Close()
 	}
-	waitUntil(t, func() bool { return a.membership.guestCount() == left }, "the dials' places to be released")
+	waitUntil(t, func() bool { return a.membership.GuestCount() == left }, "the dials' places to be released")
 }
 
 // TestAnUnclaimedSessionEndsItsOwnLobby is the whole reason the first-guest window
@@ -236,7 +236,7 @@ func TestASignalReadsTheRosterItArrivesWith(t *testing.T) {
 	// Not parallel: this binds a real socket.
 	a, addr := supervisedLobby(t, 4, lifecycle.Policy{FirstJoin: time.Minute, Empty: time.Minute, Drain: time.Minute})
 	now := time.Now()
-	a.life.Observe(a.membership.guestCount(), now) // the loop's last tick: nobody had arrived
+	a.life.Observe(a.membership.GuestCount(), now) // the loop's last tick: nobody had arrived
 
 	seatedDial(t, addr) // the guest connects between two ticks
 	st := a.interrupt(now.Add(100*time.Millisecond), "signal terminated")
@@ -290,7 +290,7 @@ func TestGuestCountExcludesTheCoordinator(t *testing.T) {
 	// Not parallel: this binds a real socket.
 	a, addr := supervisedLobby(t, 4, lifecycle.Policy{Empty: time.Minute})
 
-	if got := a.membership.guestCount(); got != 0 {
+	if got := a.membership.GuestCount(); got != 0 {
 		t.Fatalf("an unopened roster holds %d guests, want 0", got)
 	}
 	// A dial opens the roster on the coordinator's own entry, which its leaving
@@ -300,7 +300,7 @@ func TestGuestCountExcludesTheCoordinator(t *testing.T) {
 	for range 3 {
 		seatedDial(t, addr)
 	}
-	if got := a.membership.guestCount(); got != 3 {
+	if got := a.membership.GuestCount(); got != 3 {
 		t.Fatalf("a roster of three guests holds %d", got)
 	}
 }
@@ -314,13 +314,13 @@ func TestVacancyGraceEndsAnEmptiedSession(t *testing.T) {
 
 	one, _ := seatedDial(t, addr)
 	two, _ := seatedDial(t, addr)
-	if st := a.life.Observe(a.membership.guestCount(), now.Add(time.Second)); st.Phase != lifecycle.PhaseOccupied {
+	if st := a.life.Observe(a.membership.GuestCount(), now.Add(time.Second)); st.Phase != lifecycle.PhaseOccupied {
 		t.Fatalf("phase = %s with two guests, want occupied", st.Phase)
 	}
 
 	left := now.Add(10 * time.Minute)
 	leaveLobby(t, a, 0, one, two)
-	st := a.life.Observe(a.membership.guestCount(), left)
+	st := a.life.Observe(a.membership.GuestCount(), left)
 	if st.Phase != lifecycle.PhaseVacant {
 		t.Fatalf("phase = %s after the last guest left, want vacant", st.Phase)
 	}

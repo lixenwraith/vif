@@ -49,7 +49,7 @@ func TestADedicatedHostDrivesNoCursor(t *testing.T) {
 		t.Fatalf("host a cursorless session: %v", err)
 	}
 
-	if got := host.membership.localSlot(); got != parameter.NoPlayerSlot {
+	if got := host.membership.LocalSlot(); got != parameter.NoPlayerSlot {
 		t.Fatalf("the coordinator took slot %d, want none", got)
 	}
 	if host.localPlayers() != 0 {
@@ -130,7 +130,7 @@ func TestAGuestOfADedicatedHostDrivesItsOwn(t *testing.T) {
 	if err := guest.JoinSession(offer); err != nil {
 		t.Fatalf("join a cursorless host's session: %v", err)
 	}
-	if got := guest.membership.localSlot(); got != 1 {
+	if got := guest.membership.LocalSlot(); got != 1 {
 		t.Fatalf("the guest drives slot %d, want its own slot 1", got)
 	}
 	if guest.localPlayers() != 1 {
@@ -211,7 +211,7 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 		a.AttachTransport(mesh.Node(link.PeerID(i + 1)))
 	}
 	for _, a := range apps {
-		a.membership.activateNetworkSession()
+		a.membership.ActivateNetworkSession()
 	}
 
 	// Each guest drives its own cursor, so the correction has something to close.
@@ -291,12 +291,12 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 			}
 			addr := port.Addr().String()
 
-			// Before the lobby closes the gate is startHostSession's, and a second
+			// Before the lobby closes the gate is StartHostSession's, and a second
 			// one would race it. The admission of the lobby's guest is therefore a
 			// no-op to the mid-run gate rather than a release: the clock the lobby
 			// holds still stays held until the run lets it go.
 			lobby := make(chan error, 1)
-			go func() { lobby <- a.membership.startHostSession(nil) }()
+			go func() { lobby <- a.membership.StartHostSession(nil) }()
 			pending, offered := dialSession(t, addr)
 			defer pending.Close()
 			takePlace(t, pending, offered, network.JoinerReport{Width: 120, Height: 40})
@@ -318,7 +318,7 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 				network.RetryOf(err) != network.RetrySoon {
 				t.Fatalf("a dial during the closing window returned %v, want a refusal to retry soon", err)
 			}
-			a.membership.openMidRunJoins()
+			a.membership.OpenMidRunJoins()
 			late, _, err := dialOnce(addr)
 			if err != nil {
 				t.Fatalf("a dial after the gate opened was refused: %v", err)
@@ -355,7 +355,7 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 			}
 			defer a.Close()
 
-			if got := a.membership.sessionCapacity(); got != tt.wantCapacity {
+			if got := a.membership.SessionCapacity(); got != tt.wantCapacity {
 				t.Fatalf("capacity = %d, want %d", got, tt.wantCapacity)
 			}
 			if got := a.cfg.wiring.networkConfig.MaxPeers; got != tt.wantCapacity {
