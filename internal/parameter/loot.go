@@ -50,17 +50,15 @@ const (
 // Collection radius (Chebyshev)
 const LootCollectRadius = 2
 
-// Shield geometry (shared across all loot types)
+// Shield (shared across all loot types)
 const (
-	LootShieldRadiusX    = 2.5
-	LootShieldRadiusY    = 1.5
+	LootShieldRadius     = 2.75
 	LootShieldMaxOpacity = 0.5
 )
 
 // Glow effect
 const (
 	LootGlowRotationPeriod = 500 * time.Millisecond
-	LootGlowEdgeThreshold  = 0.25
 	LootGlowIntensity      = 0.7
 )
 

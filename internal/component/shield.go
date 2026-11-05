@@ -2,9 +2,11 @@ package component
 
 import (
 	"time"
+
+	"github.com/lixenwraith/color"
 )
 
-// ShieldType distinguishes shield configurations for visual lookup
+// ShieldType names a shield's kind, whose look visual.ShieldLooks holds
 type ShieldType uint8
 
 const (
@@ -14,16 +16,16 @@ const (
 	ShieldTypeCount
 )
 
-// ShieldComponent holds runtime state for game mechanics
-// Visual parameters come from visual.ShieldConfigFor(Type, aspect)
+// ShieldComponent is a shield's state. Radius is its reach in columns, its rows the
+// cell aspect's (vmath.Aspect.FromCircular), for contact and drawing alike, so
+// whatever sizes a shield writes Radius alone; zero reaches no cell. Color tints
+// the field, zero taking the kind's colour.
 type ShieldComponent struct {
 	// DrainElapsed is how long a player's shield has been up since it rose or last drained
 	DrainElapsed time.Duration
 
-	RadiusX float64
-	RadiusY float64
-	InvRxSq float64
-	InvRySq float64
+	Radius float64
+	Color  color.RGB
 
 	Type   ShieldType
 	Active bool

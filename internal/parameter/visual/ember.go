@@ -8,10 +8,9 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// Precomputed inverse squared radii for ellipse containment
 var (
-	EmberRadiusX = parameter.PlayerShieldRadiusX
-	EmberRadiusY = parameter.PlayerShieldRadiusY // at the reference aspect
+	// EmberRadius is the ember's reach in columns, its rows the cell aspect's, as a shield's
+	EmberRadius = parameter.PlayerShieldRadius
 
 	// Precomputed constants
 	ExpLUTDecayK      float64 = vmath.ExpLUTDecayK
@@ -24,6 +23,8 @@ var (
 	EmberTransitionDuration     = 1000 * time.Millisecond
 	EmberTransitionRiseRatio    = 0.1 // 10% rise time
 	EmberTransitionMaxIntensity = 0.7 // Peak overlay
+	// EmberTransitionCentreShare is the overlay's share at the shield's centre, all of it at the edge
+	EmberTransitionCentreShare = 0.3
 )
 
 // EmberParams holds interpolated visual parameters for a given heat level

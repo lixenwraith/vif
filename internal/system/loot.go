@@ -470,14 +470,10 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		},
 	})
 
-	cfg := visual.ShieldConfigFor(component.ShieldTypeLoot, s.world.Resources.Config.CellAspect)
 	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
-		Active:  true,
-		Type:    component.ShieldTypeLoot,
-		RadiusX: cfg.RadiusX,
-		RadiusY: cfg.RadiusY,
-		InvRxSq: cfg.InvRxSq,
-		InvRySq: cfg.InvRySq,
+		Active: true,
+		Type:   component.ShieldTypeLoot,
+		Radius: parameter.LootShieldRadius,
 	})
 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})

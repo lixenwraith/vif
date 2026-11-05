@@ -1,13 +1,11 @@
 package visual
 
 import (
-	"math"
 	"time"
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 const (
@@ -20,6 +18,8 @@ const (
 	Shield256GlowDot = 0.8
 	// ShieldGlowEdgeThreshold is normalized distSq below which glow is suppressed
 	ShieldGlowEdgeThreshold = 0.36
+	// ShieldGeometryCacheMax is how many radii a shield renderer keeps worked out
+	ShieldGeometryCacheMax = 8
 )
 
 // Shield visual feather zone (renderer-only, does NOT affect game logic)
@@ -33,135 +33,45 @@ const (
 	ShieldFeatherRange = ShieldFeatherEnd - ShieldFeatherStart
 )
 
-// ShieldConfig holds pre-calculated geometric and visual parameters
-// Field order: geometry (hot), visual params (warm), colors (cold)
-type ShieldConfig struct {
-	// Geometry - accessed per-cell for containment
-	InvRxSq float64
-	InvRySq float64
-	RadiusX float64
-	RadiusY float64
-
-	// Visual params - accessed per-cell for alpha
+// ShieldLook is a shield kind's light. Its extent is each shield's own radius, and a
+// shield's own Color replaces Color and Palette256.
+type ShieldLook struct {
 	MaxOpacity    float64
 	GlowIntensity float64
+	GlowPeriod    time.Duration // a cursor's turns while it boosts, at ShieldBoostRotationDuration
 
-	// 256-color rim band in normalized distSq
-	Rim256Min float64
-	Rim256Max float64
-
-	// Iteration bounds - accessed once per entity
-	VisualRadiusXInt int
-	VisualRadiusYInt int
-
-	// Timing - accessed once per entity
-	GlowPeriod time.Duration
-
-	// Colors - accessed once per entity or per-cell for blend
 	Color         color.RGB
-	ColorAlt      color.RGB
-	GlowColor     color.RGB
+	ColorAlt      color.RGB // a cursor's at negative energy
+	GlowColor     color.RGB // a drop's is its kind's glow
 	Palette256    uint8
 	Palette256Alt uint8
 }
 
-// ShieldConfigFor is one shield type's geometry and colors at a cell aspect. The
-// player's and the loot's are circles authored at the reference aspect; the
-// quasar's hugs its footprint, which is cells whatever the aspect.
-func ShieldConfigFor(t component.ShieldType, a vmath.Aspect) ShieldConfig {
-	switch t {
-	case component.ShieldTypeQuasar:
-		qrx := float64(parameter.QuasarWidth)/2.0 + float64(parameter.QuasarShieldPadX)
-		qry := float64(parameter.QuasarHeight)/2.0 + float64(parameter.QuasarShieldPadY)
-		return buildShieldConfig(
-			qrx, qry,
-			parameter.QuasarShieldMaxOpacity,
-			RgbQuasarShield, RgbQuasarShield,
-			Quasar256Rim, Quasar256Rim,
-			color.RGB{},
-			0,
-			0,
-		)
-	case component.ShieldTypeLoot:
-		return buildShieldConfig(
-			parameter.LootShieldRadiusX,
-			a.Y(parameter.LootShieldRadiusY),
-			parameter.LootShieldMaxOpacity,
-			RgbLootShieldBorder, RgbLootShieldBorder,
-			Loot256Rim, Loot256Rim,
-			color.RGB{},
-			parameter.LootGlowIntensity,
-			parameter.LootGlowRotationPeriod,
-		)
-	}
-	return buildShieldConfig(
-		parameter.PlayerShieldRadiusX,
-		a.Y(parameter.PlayerShieldRadiusY),
-		parameter.ShieldMaxOpacity,
-		RgbTracerPositive, RgbTracerNegative,
-		Shield256Positive, Shield256Negative,
-		RgbBoostGlow,
-		ShieldPlayerGlowIntensity,
-		0,
-	)
+// ShieldLooks is indexed by component.ShieldType
+var ShieldLooks = [component.ShieldTypeCount]ShieldLook{
+	component.ShieldTypePlayer: {
+		MaxOpacity: parameter.ShieldMaxOpacity, GlowIntensity: ShieldPlayerGlowIntensity,
+		Color: RgbTracerPositive, ColorAlt: RgbTracerNegative, GlowColor: RgbBoostGlow,
+		Palette256: Shield256Positive, Palette256Alt: Shield256Negative,
+	},
+	component.ShieldTypeQuasar: {
+		MaxOpacity: parameter.QuasarShieldMaxOpacity,
+		Color:      RgbQuasarShield, ColorAlt: RgbQuasarShield,
+		Palette256: Quasar256Rim, Palette256Alt: Quasar256Rim,
+	},
+	component.ShieldTypeLoot: {
+		MaxOpacity: parameter.LootShieldMaxOpacity, GlowIntensity: parameter.LootGlowIntensity,
+		GlowPeriod: parameter.LootGlowRotationPeriod,
+		Color:      RgbLootShieldBorder, ColorAlt: RgbLootShieldBorder,
+		Palette256: Loot256Rim, Palette256Alt: Loot256Rim,
+	},
 }
 
-// WraithFieldFor is the field round a Wraith: the player shield's geometry with the
-// boost's turning glow, pale and slower
-func WraithFieldFor(a vmath.Aspect) ShieldConfig {
-	return buildShieldConfig(
-		parameter.PlayerShieldRadiusX,
-		a.Y(parameter.PlayerShieldRadiusY),
-		parameter.ShieldMaxOpacity,
-		RgbWraithField, RgbWraithField,
-		Wraith256Rim, Wraith256Rim,
-		RgbWraithGlow,
-		ShieldPlayerGlowIntensity,
-		parameter.WraithGlowPeriod,
-	)
-}
-
-func buildShieldConfig(rx, ry, maxOpacity float64, colorMain, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
-	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
-
-	visualRxInt := int(math.Ceil(rx*parameter.ShieldFeatherEndRatio)) + 1
-	visualRyInt := int(math.Ceil(ry*parameter.ShieldFeatherEndRatio)) + 1
-	rimMin, rimMax := rim256Band(invRxSq, invRySq, visualRxInt, visualRyInt)
-
-	return ShieldConfig{
-		RadiusX:          rx,
-		RadiusY:          ry,
-		InvRxSq:          invRxSq,
-		InvRySq:          invRySq,
-		VisualRadiusXInt: visualRxInt,
-		VisualRadiusYInt: visualRyInt,
-		MaxOpacity:       maxOpacity,
-		GlowIntensity:    glowIntensity,
-		Rim256Min:        rimMin,
-		Rim256Max:        rimMax,
-		GlowPeriod:       glowPeriod,
-		Color:            colorMain,
-		ColorAlt:         colorAlt,
-		Palette256:       palette,
-		Palette256Alt:    paletteAlt,
-		GlowColor:        glowColor,
-	}
-}
-
-// rim256Band fits the 256-color rim to the cell grid: it spans from the outermost drawn cell on
-// each axis inward, starting before Shield256RimStart when a shield is too small for that band
-// to hold a whole row or column, so every shield closes into a ring
-func rim256Band(invRxSq, invRySq float64, reachX, reachY int) (float64, float64) {
-	var edgeX, edgeY float64
-	for n := reachX; n > 0 && edgeX == 0; n-- {
-		if d := vmath.EllipseDistSq(float64(n), 0, invRxSq, invRySq); d <= ShieldFeatherEnd {
-			edgeX = d
-		}
-	}
-	for n := reachY; n > 0 && edgeY == 0; n-- {
-		if d := vmath.EllipseDistSq(0, float64(n), invRxSq, invRySq); d <= ShieldFeatherEnd {
-			edgeY = d
-		}
-	}
-	return min(Shield256RimStart, edgeX, edgeY), max(edgeX, edgeY)
+// WraithField is the field round a Wraith, at the player shield's radius: the boost's
+// turning glow, pale and slower
+var WraithField = ShieldLook{
+	MaxOpacity: parameter.ShieldMaxOpacity, GlowIntensity: ShieldPlayerGlowIntensity,
+	GlowPeriod: parameter.WraithGlowPeriod,
+	Color:      RgbWraithField, ColorAlt: RgbWraithField, GlowColor: RgbWraithGlow,
+	Palette256: Wraith256Rim, Palette256Alt: Wraith256Rim,
 }

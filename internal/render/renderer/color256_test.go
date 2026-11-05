@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/component"
@@ -55,26 +56,62 @@ func TestEmber256WearsTheHeatBarLeadColour(t *testing.T) {
 	}
 }
 
-// TestShield256RimClosesOnEveryAxis: every shield's 256-colour rim crosses both
-// axes on both sides of its centre, however few cells tall the shield is.
+// TestShield256RimClosesOnEveryAxis: at any radius and cell aspect, a shield's
+// 256-colour rim crosses each axis its TrueColor field reaches along, on both sides
+// of its centre, and no axis the field leaves bare; and once the field reaches a row
+// above its centre, the rim closes round it, so no step between edge-sharing cells
+// leads from the centre past the field without crossing it
 func TestShield256RimClosesOnEveryAxis(t *testing.T) {
 	t.Parallel()
-	const w, h, cx, cy = 60, 30, 30, 15
+	const w, h, cx, cy = 90, 90, 45, 45
+	untouched := color.RGB{R: 1, G: 2, B: 3}
 	rc := render.RenderContext{ViewportWidth: w, ViewportHeight: h, MapWidth: w, MapHeight: h}
-	p := NewShieldPainter(terminal.ColorMode256)
+	look := &visual.ShieldLooks[component.ShieldTypePlayer]
+	style := ShieldStyle{Look: look, BlendScale: 1, Color: look.Color, Palette256: look.Palette256}
+	radii := []float64{parameter.PlayerShieldRadius, parameter.QuasarShieldRadius, parameter.LootShieldRadius}
+	for r := 0.5; r <= 30; r += 0.25 {
+		radii = append(radii, r)
+	}
 
-	for shieldType := range component.ShieldTypeCount {
-		cfg := visual.ShieldConfigFor(shieldType, vmath.RefAspect)
-		buf := render.NewRenderBuffer(terminal.ColorMode256, w, h)
-		p.Paint(buf, rc, cx, cy, ShieldStyle{Config: &cfg, BlendScale: 1, Palette256: cfg.Palette256, SkipX: -1, SkipY: -1})
+	for _, aspect := range []vmath.Aspect{vmath.RefAspect, 0.45, 0.6, 1} {
+		field, rim := NewShieldPainter(terminal.ColorModeTrueColor, aspect), NewShieldPainter(terminal.ColorMode256, aspect)
+		for _, radius := range radii {
+			lit := render.NewRenderBuffer(terminal.ColorModeTrueColor, w, h)
+			ring := render.NewRenderBuffer(terminal.ColorMode256, w, h)
+			field.Paint(lit, rc, cx, cy, radius, style)
+			rim.Paint(ring, rc, cx, cy, radius, style)
+			inField := func(x, y int) bool { return lit.BackgroundAt(x, y, untouched) != untouched }
+			onRim := func(x, y int) bool { return ring.CellAt(x, y).Attrs&terminal.AttrBg256 != 0 }
 
-		for _, dir := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
-			crossed := false
-			for n := 1; n <= cfg.VisualRadiusXInt && !crossed; n++ {
-				crossed = buf.CellAt(cx+dir[0]*n, cy+dir[1]*n).Attrs&terminal.AttrBg256 != 0
+			for _, dir := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+				reached, crossed := false, false
+				for n := 1; n < cx; n++ {
+					x, y := cx+dir[0]*n, cy+dir[1]*n
+					reached = reached || inField(x, y)
+					crossed = crossed || onRim(x, y)
+				}
+				if reached != crossed {
+					t.Errorf("aspect %v radius %v towards %v: field reaches %v, rim crosses %v", aspect, radius, dir, reached, crossed)
+				}
 			}
-			if !crossed {
-				t.Errorf("shield type %d: no rim cell towards %v", shieldType, dir)
+
+			if !inField(cx, cy-1) {
+				continue
+			}
+			seen := map[[2]int]bool{{cx, cy}: true}
+			for queue := [][2]int{{cx, cy}}; len(queue) > 0; queue = queue[1:] {
+				c := queue[0]
+				if c != [2]int{cx, cy} && !inField(c[0], c[1]) {
+					t.Errorf("aspect %v radius %v: cell %v past the field is reached from the centre inside the rim", aspect, radius, c)
+					break
+				}
+				for _, d := range [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+					n := [2]int{c[0] + d[0], c[1] + d[1]}
+					if !seen[n] && !onRim(n[0], n[1]) {
+						seen[n] = true
+						queue = append(queue, n)
+					}
+				}
 			}
 		}
 	}

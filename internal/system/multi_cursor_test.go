@@ -481,7 +481,7 @@ func TestShotContactStrikesOnlyTheTouchedOwnedCursor(t *testing.T) {
 	}
 
 	shield, _ := w.Components.Shield.GetComponent(first)
-	shield.Active, shield.InvRxSq, shield.InvRySq = true, 1, 1
+	shield.Active, shield.Radius = true, 1
 	w.Components.Shield.SetComponent(first, shield)
 	if hit := CursorContactAt(w, 5, 5); hit != first {
 		t.Fatalf("contact at shielded cell = %d, want %d", hit, first)

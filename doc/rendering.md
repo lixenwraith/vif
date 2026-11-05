@@ -169,14 +169,14 @@ units. The presentation reports its aspect with its grid
 (`Presentation.CellAspect`), `ConfigResource.CellAspect` holds it beside the
 color mode and `RenderContext.CellAspect` carries it to the renderers;
 `navigation.CostsFor` builds a field's costs from it (10, 20 and 22 at the
-reference, 10, 10 and 14 for a square cell), `visual.ShieldConfigFor` and each
-inverse-radius pair are computed where they are used, and ascimage takes it as
-`-aspect`. Footprint radii (the quasar's and the snake head's collision, the
-quasar shield) are cells whatever the aspect. It is simulation identity: the
-anchor carries it (`JournalAnchor.CellAspect`) and a guest adopts the host's as
-it adopts the map bounds (D-14), since two participants at different aspects
-would steer differently. Projection stays `PointAt` (floor): a graphical surface
-shows the same cell snapping a terminal does.
+reference, 10, 10 and 14 for a square cell), a shield's rows are `FromCircular` of
+its radius wherever the shield is used, and ascimage takes it as `-aspect`.
+Footprint radii (the quasar's and the snake head's collision) are cells whatever the
+aspect. It is simulation identity: the anchor carries it
+(`JournalAnchor.CellAspect`) and a guest adopts the host's as it adopts the map
+bounds (D-14), since two participants at different aspects would steer differently.
+Projection stays `PointAt` (floor): a graphical surface shows the same cell snapping
+a terminal does.
 
 ## 3. Compositor data model
 
@@ -442,7 +442,7 @@ matters, which is when they overlap. `PriorityPeerCursor` sits directly under
 
 `peer_cursor` keeps a participant visible even when it projects no shield or
 ember. A Wraith wears the Wraith field round the cell it holds
-(`visual.WraithFieldFor`): the player shield's geometry, pale and cool, its glow
+(`visual.WraithField`): the player shield's radius, pale and cool, its glow
 turning every `WraithGlowPeriod`, at the peer blend, its rim green in 256 colours.
 The local cursor and the inverted marker read the cell underneath through one
 `cellContent`, which picks the cell's top glyph as typing does, so what they show
@@ -450,10 +450,11 @@ is what a keystroke would hit.
 
 Peer shield and ember fields keep their owner's color and geometry. In truecolor
 they compose at `visual.PeerFieldBlend` (30%) of local intensity over the
-existing or theme background; in 256-color they are drawn undimmed, since the
-console would show a dimmed rim as black. Ember walks the fixed roster instead
-of every shield, keeps one heat cache per slot, and commits its layers in one
-background write. Its per-cell work is lookups: the angle of every cell offset
+existing background, or where nothing drew the lens's black (below) or the theme;
+in 256-color they are drawn undimmed, since the console would show a dimmed rim
+as black. Ember walks the fixed roster instead of every shield, keeps one heat
+cache per slot, and commits its layers in one background write. Its per-cell
+work is lookups: the angle of every cell offset
 it can visit is tabled once per painter, each radial step of the glow is composed
 over the theme background when heat or blend changes, so only a cell something
 else painted blends live, and a ring skips the cells its Gaussian cannot light.
@@ -470,6 +471,26 @@ cold caches. A coarser ring Gaussian table measured no gain. Both
 field renderers compose peers first and the local cursor last, without sorting
 or changing store/slot order. The distinction remains render-only; no
 transported state changes.
+
+A shield draws at its own `Radius`, in columns with the aspect's rows, and in its
+own `Color` when one is set, its kind's look otherwise (`visual.ShieldLooks`, a
+cursor's by polarity). The painter works a radius out once into a quadrant table,
+each cell's alpha, glow edge and direction and each row's drawn span and rim run,
+keeps the last `visual.ShieldGeometryCacheMax` (8) radii it used, and stops a box
+at the map's size, so any radius draws a bounded box; a radius changing every frame
+builds a table every frame. In truecolor the local cursor's field is a lens: every
+cell it lights starts from black, so a lone shield keeps its full contrast, and any
+other field crossing it, a peer's, a drop's or a Wraith's, adds its light there. In
+256 colors the rim fits the grid at any radius: it spans from the outermost drawn
+cell on each axis inward, takes in each cell whose outward neighbour leaves it, so
+the ring closes, and lowers a top that is the axis cell alone onto the row beneath.
+`BenchmarkShieldRender`, medians of three alternating runs net of the buffer clear,
+native, against the per-kind tables this replaced: one cursor 3.8 to 2.4 µs,
+boosting 5.5 to 4.0, in 256 colors 2.3 to 0.6, sixteen cursors 60 to 38, and 32
+drops 22 to 14, each round drop drawing 16 cells against the 14 of the old
+ellipse; a radius changing every frame paints in 3.1. At the cursor's radius a
+peer's field, a Wraith's and a cursor's in 256 colors draw what the tables drew, cell
+for cell.
 
 ## 8. Renderer responsibilities
 
