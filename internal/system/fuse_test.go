@@ -387,6 +387,8 @@ func TestASweepNamingNoCursorTakesTheFirstParticipantsDrains(t *testing.T) {
 	}{
 		{"both playing", func() {}, 0},
 		{"the first away", func() {
+			// Guest 2's own world takes the departure too, which a live session never
+			// shows the departed instance: a Wraith is the first participant nowhere
 			for _, g := range guests {
 				g.deliver(event.GameEvent{Type: event.EventCursorWraithRequest, Payload: &event.CursorWraithRequestPayload{Slot: 0}})
 			}
@@ -395,6 +397,8 @@ func TestASweepNamingNoCursorTakesTheFirstParticipantsDrains(t *testing.T) {
 	} {
 		step.roster()
 		for _, g := range guests {
+			// Each guest's own drains, as its DrainSystem raises them from its heat:
+			// no other instance holds them, so only the elected one can sweep
 			for _, x := range []int{20, 24} {
 				d := g.w.CreateEntity(core.DomainPlayer)
 				g.w.Positions.SetPosition(d, component.PositionComponent{X: x, Y: 12})
