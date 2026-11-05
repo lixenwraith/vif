@@ -138,6 +138,7 @@ func (s *QuasarSystem) Priority() int {
 func (s *QuasarSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventQuasarSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventQuasarCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -160,19 +161,19 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	x, y, spawn := s.spawnAt(ev)
 	if !s.enabled {
-		if ev.Type == event.EventQuasarSpawnRequest {
+		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
 		}
 		return
 	}
+	if spawn {
+		s.spawnQuasar(x, y)
+		return
+	}
 
 	switch ev.Type {
-	case event.EventQuasarSpawnRequest:
-		if payload, ok := ev.Payload.(*event.QuasarSpawnRequestPayload); ok {
-			s.spawnQuasar(payload.X, payload.Y)
-		}
-
 	case event.EventQuasarCancelRequest:
 		// Cancel all quasars
 		entities := s.world.Components.Quasar.Entities()
@@ -275,6 +276,18 @@ func (s *QuasarSystem) Update() {
 
 	s.statCount.Store(int64(activeCount))
 	s.statActive.Store(activeCount > 0)
+}
+
+// spawnAt reads a request for a quasar at a cell: its own spawn request, or a land
+// request naming it, which its carrier sent as it ended
+func (s *QuasarSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
+	switch p := ev.Payload.(type) {
+	case *event.QuasarSpawnRequestPayload:
+		return p.X, p.Y, true
+	case *event.SpeciesLandRequestPayload:
+		return p.X, p.Y, p.Species == component.SpeciesQuasar
+	}
+	return 0, 0, false
 }
 
 // spawnQuasar stands a quasar with its header at the cell, its footprint pulled

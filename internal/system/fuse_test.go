@@ -76,12 +76,20 @@ func materializeTicks() int {
 	return int(component.MaterializeStyles[component.SpawnTypeSwarm].Duration() / parameter.GameUpdateInterval)
 }
 
-// spawnCell is the header cell a swarm or quasar spawn request names
-func spawnCell(payload any) (int, int) {
-	switch p := payload.(type) {
-	case *event.SwarmSpawnRequestPayload:
-		return p.X, p.Y
-	case *event.QuasarSpawnRequestPayload:
+// landings returns the land requests naming the species delivered since the mark
+func (b *materializeWorld) landings(species component.SpeciesType, mark int) []event.GameEvent {
+	var out []event.GameEvent
+	for _, ev := range b.sent(event.EventSpeciesLandRequest, mark) {
+		if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok && p.Species == species {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// landCell is the header cell a land request names
+func landCell(ev event.GameEvent) (int, int) {
+	if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok {
 		return p.X, p.Y
 	}
 	return -1, -1
@@ -154,15 +162,15 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			for range flight - 1 {
 				b.tick()
 			}
-			if n := len(b.sent(event.EventSwarmSpawnRequest, mark)); n != 0 {
+			if n := len(b.landings(component.SpeciesSwarm, mark)); n != 0 {
 				t.Fatalf("%d swarms before the spirits arrived", n)
 			}
 			b.tick()
-			spawns := b.sent(event.EventSwarmSpawnRequest, mark)
+			spawns := b.landings(component.SpeciesSwarm, mark)
 			if len(spawns) != 1 || spawns[0].Domain != core.DomainPlayer {
 				t.Fatalf("spawns = %+v as the spirits arrived, want one crossing", spawns)
 			}
-			if x, y := spawnCell(spawns[0].Payload); x != carrier.LandX || y != carrier.LandY {
+			if x, y := landCell(spawns[0]); x != carrier.LandX || y != carrier.LandY {
 				t.Fatalf("the swarm lands at (%d, %d), off the header the spirit names (%d, %d)", x, y, carrier.LandX, carrier.LandY)
 			}
 			for _, e := range spirits {
@@ -173,26 +181,10 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			}
 
 			b.tick()
-			if n := len(b.sent(event.EventSwarmSpawnRequest, mark)); n != 1 || w.Components.Spirit.CountEntities() != 0 {
+			if n := len(b.landings(component.SpeciesSwarm, mark)); n != 1 || w.Components.Spirit.CountEntities() != 0 {
 				t.Fatalf("%d swarms and %d spirits a tick on, want one and none", n, w.Components.Spirit.CountEntities())
 			}
 		})
-	}
-}
-
-// TestOnlyAPlayerSpiritLandsAFusion: a fusion's spirits run on one instance alone,
-// so a Shared spirit's arrival crosses nothing (D-7)
-func TestOnlyAPlayerSpiritLandsAFusion(t *testing.T) {
-	b, _, _ := newFusionWorld(t)
-	b.deliver(event.GameEvent{Type: event.EventSpiritArrived, Domain: core.DomainShared,
-		Payload: &event.SpiritArrivedPayload{X: 10, Y: 10, Species: component.SpeciesSwarm}})
-	if n := len(b.sent(event.EventSwarmSpawnRequest, 0)); n != 0 {
-		t.Fatalf("a Shared spirit crossed %d swarms", n)
-	}
-	b.deliver(event.GameEvent{Type: event.EventSpiritArrived, Domain: core.DomainPlayer,
-		Payload: &event.SpiritArrivedPayload{X: 10, Y: 10, Species: component.SpeciesSwarm}})
-	if n := len(b.sent(event.EventSwarmSpawnRequest, 0)); n != 1 {
-		t.Fatalf("a player spirit crossed %d swarms, want one", n)
 	}
 }
 
@@ -205,7 +197,6 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 		name    string
 		request func(cursor core.Entity, drains [2]core.Entity) event.GameEvent
 		species component.SpeciesType
-		spawn   event.EventType
 	}{
 		{
 			name: "drain pair, the materialize",
@@ -213,14 +204,14 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 				return event.GameEvent{Type: event.EventFuseSwarmRequest, Domain: core.DomainPlayer,
 					Payload: &event.FuseSwarmRequestPayload{DrainA: d[0], DrainB: d[1], Effect: event.FuseEffectMaterialize}}
 			},
-			species: component.SpeciesSwarm, spawn: event.EventSwarmSpawnRequest,
+			species: component.SpeciesSwarm,
 		},
 		{
 			name: "quasar",
 			request: func(cursor core.Entity, _ [2]core.Entity) event.GameEvent {
 				return event.GameEvent{Type: event.EventFuseQuasarRequest, Payload: &event.FuseQuasarRequestPayload{Entity: cursor}}
 			},
-			species: component.SpeciesQuasar, spawn: event.EventQuasarSpawnRequest,
+			species: component.SpeciesQuasar,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -243,15 +234,15 @@ func TestAFusionLandsWhenItsMaterializeEnds(t *testing.T) {
 			for range materializeTicks() - 1 {
 				b.tick()
 			}
-			if n := len(b.sent(c.spawn, mark)); n != 0 || w.Components.Materialize.CountEntities() != 1 {
+			if n := len(b.landings(c.species, mark)); n != 0 || w.Components.Materialize.CountEntities() != 1 {
 				t.Fatalf("%d spawns before the materialize ended", n)
 			}
 			b.tick()
-			spawns := b.sent(c.spawn, mark)
+			spawns := b.landings(c.species, mark)
 			if len(spawns) != 1 || spawns[0].Domain != core.DomainPlayer || w.Components.Materialize.CountEntities() != 0 {
 				t.Fatalf("spawns = %+v as the materialize ended, want one crossing", spawns)
 			}
-			if x, y := spawnCell(spawns[0].Payload); x != materialize.X || y != materialize.Y {
+			if x, y := landCell(spawns[0]); x != materialize.X || y != materialize.Y {
 				t.Fatalf("the spawn names (%d, %d), off the materialize's header (%d, %d)", x, y, materialize.X, materialize.Y)
 			}
 		})

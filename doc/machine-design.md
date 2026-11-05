@@ -381,42 +381,44 @@ its edges, then what its host does around the step.
 
 A deferred spawn rides the entrance that shows it, so the spawn, the entrance's
 timer and its visual end on one tick. A spawn out of nothing rides a
-materialize, `MaterializeComponent.Species` naming the species its completion
-lands; a drain pair's swarm rides the spirits its drains fly in,
-`SpiritComponent.Species` naming the species the spirit's arrival lands. The
-pending spawn is the materialize or spirit entity, which a capture carries with
+materialize, `MaterializeComponent.Species` naming the species it carries; a
+drain pair's swarm rides the spirits its drains fly in, the first's
+`SpiritComponent.Species` naming it. As the carrier ends, its system sends
+`EventSpeciesLandRequest` with the species and its header cell, which the
+species' own system answers as its spawn request: Shared for a Shared carrier,
+which every instance ran and lands alike, and stamped player for a personal one,
+which ran on one instance alone, so its landing is the barrier-bound D-3 crossing.
+The pending spawn is the materialize or spirit entity, which a capture carries with
 the stores, not a list beside its system. A materialize covers its request's
 `Footprint`, its species' (`Resource.Footprint`) when that is zero, its header on
 the request's cell, and lasts its request's `DurationMs`, its style's when that is 0: the deadline slot keeps the duration it
 was armed with, which a capture carries with the timer and the renderer spreads
 the style's fill, hold and recede over.
 
-- **Storm.** The blue's cue starts a Shared materialize naming the swarm, and
-  `StormSystem` lands the swarm on its `EventMaterializeComplete`, its header on
-  the materialize's footprint. `terminateStorm` ends the storm's materializes in
-  flight, and the storm's own capture (`stormSnapshot`) holds its root alone.
+- **Storm.** The blue's cue starts a Shared materialize naming the swarm, which
+  lands with its header on the materialize's footprint. `terminateStorm` ends the
+  storm's materializes in flight, and the storm's own capture (`stormSnapshot`)
+  holds its root alone.
 - **Fusions.** A drain pair flies its drains in as player-domain spirits, the
-  first naming the swarm and its footprint, and `SpiritSystem` sends
-  `EventSpiritArrived` on the tick the spirits draw their arrival frame, its
-  deadline running the half-second flight. A quasar fusion plays a player-domain
-  materialize naming the quasar, as does a drain pair whose request asks for one
-  (`FuseEffectMaterialize`). On the arrival or the materialize's completion
-  `landFusion` crosses the spawn request (D-3). A quasar fusion is refused while
-  one's materialize flies (`quasarMaterializing`), the fuse keeps no state of its own
-  (`FuseSystem.Update` is empty), and `killDrains` alone reports the consumed
-  drains' deaths.
+  first naming the swarm and its footprint, which lands on the tick the spirits
+  draw their arrival frame, its deadline running the half-second flight. A quasar
+  fusion plays a player-domain materialize naming the quasar, as does a drain pair
+  whose request asks for one (`FuseEffectMaterialize`). A quasar fusion is refused
+  while one's materialize flies (`quasarMaterializing`), the fuse keeps no state of
+  its own (`FuseSystem.Update` is empty), and `killDrains` alone reports the
+  consumed drains' deaths.
 - **Data species.** A prototype naming `entrance = "materialize"` comes on as
-  the storm's swarm does, the fuse playing no part: `BehaviorSystem.enter` starts
-  a Shared materialize naming the species, for the prototype's `entrance_ms`, over
-  the nearest place its footprint fits, searched over the whole map (`findFootprint`: `FindFreeAreaInside` with a
-  negative radius, the origin pulled in from the edges until the footprint fits),
-  and on its Shared completion `spawn` lands the body, searching again from that
-  footprint, since rock may have come over it meanwhile. The materialize counts as
-  an instance from its request, so a cap read off `behavior.count` holds it, and a
-  cancel of the program ends its materializes in flight.
+  the storm's swarm does: `BehaviorSystem.enter` starts a Shared materialize naming
+  the species, for the prototype's `entrance_ms`, over the nearest place its
+  footprint fits, searched over the whole map (`findFootprint`: `FindFreeAreaInside`
+  with a negative radius, the origin pulled in from the edges until the footprint
+  fits), and `spawn` answers its land request, searching again from that footprint,
+  since rock may have come over it meanwhile. The materialize counts as an instance
+  from its request, so a cap read off `behavior.count` holds it, and a cancel of the
+  program ends its materializes in flight.
 
-The drain keeps its own queue (`pendingSpawns`), which completes on
-`EventMaterializeComplete`, not on a timer of its own.
+The drain keeps its own queue (`pendingSpawns`): its materialize names no species,
+and it completes on `EventMaterializeComplete`, not on a timer of its own.
 
 ### 4.5 Species without a machine
 

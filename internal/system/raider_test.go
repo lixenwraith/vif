@@ -62,8 +62,8 @@ func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, 
 }
 
 // standRaider asks for a raider with its header at the cell and lands it at once,
-// completing the materialize it comes on through, so a test of its machine starts
-// on the body the request stood
+// as the materialize it comes on through would as it ended, so a test of its
+// machine starts on the body the request stood
 func standRaider(s *BehaviorSystem, program string, x, y int) {
 	s.HandleEvent(event.GameEvent{
 		Type:    event.EventBehaviorSpawnRequest,
@@ -71,8 +71,8 @@ func standRaider(s *BehaviorSystem, program string, x, y int) {
 	})
 	for _, ev := range s.world.Resources.Event.Queue.Consume() {
 		if p, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
-			s.HandleEvent(event.GameEvent{Type: event.EventMaterializeComplete, Domain: core.DomainShared, Payload: &event.MaterializeCompletedPayload{
-				X: p.X, Y: p.Y, Type: p.Type, Species: p.Species,
+			s.HandleEvent(event.GameEvent{Type: event.EventSpeciesLandRequest, Domain: core.DomainShared, Payload: &event.SpeciesLandRequestPayload{
+				Species: p.Species, X: p.X, Y: p.Y,
 			}})
 		}
 	}

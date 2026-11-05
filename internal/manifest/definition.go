@@ -154,7 +154,7 @@ var Systems = []SystemDef{
 	// --- Spawning / Materialize ---
 	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual", Requires: []string{"timer"}}, // stamped from the requester (D-7); every spawn passes this gate, timed by its deadline timer
 	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "dual", Requires: []string{"materialize", "spirit"},
-		Optional: []string{"drain", "quasar", "swarm"}}, // a fusion's player spirits or materialize hold its spawn, which crosses through the spawn request (D-3)
+		Optional: []string{"drain", "quasar", "swarm"}}, // a fusion's player spirits or materialize hold its spawn, whose land request crosses (D-3)
 	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual", Requires: []string{"timer"}}, // creates in the requesting domain, currently from the fuse's player-domain fusions (D-7)
 
 	// --- Projectiles ---

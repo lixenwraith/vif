@@ -188,6 +188,7 @@ func (s *SwarmSystem) Priority() int {
 func (s *SwarmSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSwarmSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventSwarmCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -210,19 +211,19 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	x, y, spawn := s.spawnAt(ev)
 	if !s.enabled {
-		if ev.Type == event.EventSwarmSpawnRequest {
+		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
 		}
 		return
 	}
+	if spawn {
+		s.spawnSwarm(x, y)
+		return
+	}
 
 	switch ev.Type {
-	case event.EventSwarmSpawnRequest:
-		if payload, ok := ev.Payload.(*event.SwarmSpawnRequestPayload); ok {
-			s.spawnSwarm(payload.X, payload.Y)
-		}
-
 	case event.EventSwarmCancelRequest:
 		headerEntities := s.world.Components.Swarm.Entities()
 		s.lifecycle.despawned.Add(int64(len(headerEntities)))
@@ -335,6 +336,18 @@ func (s *SwarmSystem) Update() {
 
 	s.statCount.Store(int64(activeCount))
 	s.statActive.Store(activeCount > 0)
+}
+
+// spawnAt reads a request for a swarm at a cell: its own spawn request, or a land
+// request naming it, which its carrier sent as it ended
+func (s *SwarmSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
+	switch p := ev.Payload.(type) {
+	case *event.SwarmSpawnRequestPayload:
+		return p.X, p.Y, true
+	case *event.SpeciesLandRequestPayload:
+		return p.X, p.Y, p.Species == component.SpeciesSwarm
+	}
+	return 0, 0, false
 }
 
 // spawnSwarm stands a swarm with its header at the cell, its footprint pulled inside

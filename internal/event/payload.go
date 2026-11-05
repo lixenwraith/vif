@@ -648,13 +648,12 @@ type MaterializeRequestPayload struct {
 	DurationMs int64                 `toml:"duration_ms"` // 0 = its style's
 }
 
-// MaterializeCompletedPayload is a materialize that ended, at the header cell its
-// body lands on
+// MaterializeCompletedPayload is a materialize that ended, at its header cell; the
+// species it carried lands by its own request (SpeciesLandRequestPayload)
 type MaterializeCompletedPayload struct {
-	X       int                   `toml:"x"`
-	Y       int                   `toml:"y"`
-	Type    component.SpawnType   `toml:"type"`
-	Species component.SpeciesType `toml:"species"`
+	X    int                 `toml:"x"`
+	Y    int                 `toml:"y"`
+	Type component.SpawnType `toml:"type"`
 }
 
 // --- Flash ---
@@ -1045,14 +1044,6 @@ type SpiritSpawnRequestPayload struct {
 	LandY   int                   `toml:"land_y"`
 }
 
-// SpiritArrivedPayload is the species a spirit's arrival lands and the header cell
-// it lands on
-type SpiritArrivedPayload struct {
-	X       int                   `toml:"x"`
-	Y       int                   `toml:"y"`
-	Species component.SpeciesType `toml:"species"`
-}
-
 // --- Lightning ---
 
 // LightningSpawnRequestPayload contains parameters to spawn a lightning entity
@@ -1182,6 +1173,14 @@ type SpeciesCreatedPayload struct {
 	MemberCount int                   `toml:"member_count"` // Composite members; zero for non-composites
 	Genes       []float64             `toml:"genes"`
 	EvalID      uint64                `toml:"eval_id"`
+}
+
+// SpeciesLandRequestPayload is the species a carrier held, landing with its header
+// on X, Y, the nearest place its footprint fits when that cell does not
+type SpeciesLandRequestPayload struct {
+	Species component.SpeciesType `toml:"species"`
+	X       int                   `toml:"x"`
+	Y       int                   `toml:"y"`
 }
 
 // --- Loot ---

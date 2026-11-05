@@ -11,7 +11,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// MaterializeSystem manages materializer animations and triggering spawn completion
+// MaterializeSystem plays each materialize over its footprint until its deadline,
+// then sends its completion and, for one carrying a species, the request landing it
 type MaterializeSystem struct {
 	world *engine.World
 
@@ -92,17 +93,30 @@ func (s *MaterializeSystem) Update() {
 			// The completion carries the domain of the entity it completes, so a
 			// gated shared spawn and a drain materialize stay distinguishable (D-7).
 			s.world.PushEventDomain(event.EventMaterializeComplete, &event.MaterializeCompletedPayload{
-				X:       matComp.X,
-				Y:       matComp.Y,
-				Type:    matComp.Type,
-				Species: matComp.Species,
+				X:    matComp.X,
+				Y:    matComp.Y,
+				Type: matComp.Type,
 			}, matEntity.Domain())
+			if matComp.Species != component.SpeciesNone {
+				s.land(matEntity.Domain(), &event.SpeciesLandRequestPayload{Species: matComp.Species, X: matComp.X, Y: matComp.Y})
+			}
 			toDestroy = append(toDestroy, matEntity)
 			continue
 		}
 	}
 
 	s.world.DestroyEntitiesBatch(toDestroy)
+}
+
+// land asks for the species a materialize carried: a Shared one ran on every
+// instance, each landing its own copy, and a player one ran here alone, so its
+// landing is the D-3 artifact that crosses
+func (s *MaterializeSystem) land(domain core.Domain, p *event.SpeciesLandRequestPayload) {
+	if domain == core.DomainShared {
+		s.world.PushEventDomain(event.EventSpeciesLandRequest, p, core.DomainShared)
+		return
+	}
+	s.world.PushCrossing(event.EventSpeciesLandRequest, p)
 }
 
 // spawnMaterializeEffect creates one materialize entity in the request's domain over

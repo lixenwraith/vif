@@ -424,20 +424,23 @@ func TestACancelEndsItsProgramsEntrancesInFlight(t *testing.T) {
 	}
 }
 
-// TestOnlyASharedMaterializeLandsADataSpecies: a player-domain materialize ran on
-// one instance alone, so its completion names a species no other instance spawns
-func TestOnlyASharedMaterializeLandsADataSpecies(t *testing.T) {
+// TestALandRequestStandsTheDataSpeciesItNames: a personal carrier's landing
+// crosses, so a player-stamped request stands the body as a Shared entrance's does,
+// its header on the request's cell
+func TestALandRequestStandsTheDataSpeciesItNames(t *testing.T) {
 	e, _ := newEntranceWorld(t)
 	w := e.w
 	e.deliver(event.GameEvent{
-		Type:   event.EventMaterializeComplete,
-		Domain: core.DomainPlayer,
-		Payload: &event.MaterializeCompletedPayload{
-			X: wardenX, Y: wardenY, Type: component.SpawnTypeSwarm, Species: w.Resources.Behaviors[0].Species,
-		},
+		Type:    event.EventSpeciesLandRequest,
+		Domain:  core.DomainPlayer,
+		Payload: &event.SpeciesLandRequestPayload{Species: w.Resources.Behaviors[0].Species, X: wardenX, Y: wardenY},
 	})
-	if n := w.Components.Behavior.CountEntities(); n != 0 {
-		t.Fatalf("a player materialize landed %d wardens", n)
+	headers := w.Components.Behavior.Entities()
+	if len(headers) != 1 {
+		t.Fatalf("%d wardens stood, want one", len(headers))
+	}
+	if pos, _ := w.Positions.GetPosition(headers[0]); pos.X != wardenX || pos.Y != wardenY {
+		t.Fatalf("the warden stands at (%d, %d), want (%d, %d)", pos.X, pos.Y, wardenX, wardenY)
 	}
 }
 

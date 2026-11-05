@@ -78,10 +78,10 @@ that proves wrong or that a document now states, and link the document instead.
   `geometry_test.go` and `join_press_test.go` drive the presentation that profile
   leaves out, so its gate is `go build -tags vif_headless ./...` alone.
 - `go generate ./internal/manifest` type-checks `internal/event` from source, its
-  generated `payload_gen.go` included, so removing a payload struct's field stops
-  the generator on the stale codec's use of it ("type-check ...: has no field"):
-  delete that field's lines from `payload_gen.go` first, and the run writes the
-  codec anew.
+  generated files included, so removing a payload struct, a field of one or an
+  event stops the generator on the stale use of it ("type-check ...: has no field",
+  "undefined"): delete those lines from `payload_gen.go` and `registry_gen.go`
+  first, and the run writes them anew.
 
 ## Ticks and events
 

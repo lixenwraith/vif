@@ -107,7 +107,7 @@ func (s *BehaviorSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventBehaviorSpawnRequest,
 		event.EventBehaviorCancelRequest,
-		event.EventMaterializeComplete,
+		event.EventSpeciesLandRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
@@ -144,10 +144,9 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 			s.spawn(i, payload.X, payload.Y)
 		}
 
-	case *event.MaterializeCompletedPayload:
-		// Only a Shared materialize naming a data species is an entrance: every
-		// instance ran it, so each lands the body (D-7)
-		if i, ok := s.programOf(payload.Species); ok && ev.Domain == core.DomainShared {
+	case *event.SpeciesLandRequestPayload:
+		// An entrance's end or a fusion's, which every instance applies alike
+		if i, ok := s.programOf(payload.Species); ok {
 			if !s.enabled {
 				s.programs[i].lifecycle.spawnFailures.Add(1)
 				return

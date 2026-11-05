@@ -213,7 +213,6 @@ func (s *StormSystem) EventTypes() []event.EventType {
 		event.EventStormSpawnRequest,
 		event.EventStormCancelRequest,
 		event.EventCompositeIntegrityBreach,
-		event.EventMaterializeComplete,
 		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -261,14 +260,6 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 			if payload.Behavior == component.BehaviorStorm && payload.RemainingCount == 0 {
 				s.handleCircleBreach(payload.HeaderEntity)
 			}
-		}
-
-	case event.EventMaterializeComplete:
-		// A blue attack's materialize is the only Shared one naming the swarm, and the
-		// swarm it carries lands as it ends, on its footprint
-		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok &&
-			ev.Domain == core.DomainShared && payload.Species == component.SpeciesSwarm {
-			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{X: payload.X, Y: payload.Y})
 		}
 	}
 }

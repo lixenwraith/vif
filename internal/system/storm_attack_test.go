@@ -303,12 +303,12 @@ func TestStormDrawsBeforeItReadsLivePositions(t *testing.T) {
 // TestTheBlueSwarmLandsAsItsMaterializeEnds: the swarm a blue attack materializes
 // in rides its materialize, a Shared entity naming the species, and stands on the
 // landing the tick the materialize, and so its visual, ends: the attack opens on
-// tick 0, the materialize on 40 (2 s). The storm lands it alone; the fuse crosses
-// only a fusion's.
+// tick 0, the materialize on 40 (2 s). Its land request is Shared, every instance
+// landing its own copy.
 func TestTheBlueSwarmLandsAsItsMaterializeEnds(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	storm := ready(NewStormSystem(w)).(*StormSystem)
-	b := newMaterializeWorld(w, storm, ready(NewSwarmSystem(w)), ready(NewFuseSystem(w)))
+	b := newMaterializeWorld(w, storm, ready(NewSwarmSystem(w)))
 	stormComp, circle := openingCircle(storm, component.StormCircleBlue, parameter.StormZMid-1)
 
 	for tick := range 40 + materializeTicks() + 1 {
@@ -328,7 +328,7 @@ func TestTheBlueSwarmLandsAsItsMaterializeEnds(t *testing.T) {
 				t.Fatalf("tick %d: the materialize is %v naming %d, want a Shared one naming the swarm", tick, materializes[0], materialize.Species)
 			}
 		default:
-			requests := b.sent(event.EventSwarmSpawnRequest, 0)
+			requests := b.landings(component.SpeciesSwarm, 0)
 			if len(materializes) != 0 || len(swarms) != 1 || len(requests) != 1 || requests[0].Domain != core.DomainShared {
 				t.Fatalf("tick %d: %d materializes, %d swarms and requests %+v as the materialize ended, want one Shared request and its swarm", tick, len(materializes), len(swarms), requests)
 			}
@@ -340,9 +340,9 @@ func TestTheBlueSwarmLandsAsItsMaterializeEnds(t *testing.T) {
 }
 
 // TestAStormsEndEndsItsMaterializes: a materialize in flight is a swarm the storm
-// has yet to land, so the storm's end ends it and nothing lands after. A fusion's
+// has yet to land, so the storm's end ends it and it lands nothing. A fusion's
 // player-domain materialize and a Shared one naming no species are not the
-// storm's: both fly on, and neither lands a swarm.
+// storm's: both fly on, the fusion's landing its swarm and the other nothing.
 func TestAStormsEndEndsItsMaterializes(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	storm := ready(NewStormSystem(w)).(*StormSystem)
@@ -368,7 +368,8 @@ func TestAStormsEndEndsItsMaterializes(t *testing.T) {
 	for range materializeTicks() {
 		b.tick()
 	}
-	if n := w.Components.Swarm.CountEntities(); n != 0 {
-		t.Fatalf("%d swarms landed after the storm ended", n)
+	lands := b.landings(component.SpeciesSwarm, 0)
+	if len(lands) != 1 || lands[0].Domain != core.DomainPlayer || w.Components.Swarm.CountEntities() != 1 {
+		t.Fatalf("land requests %+v landed %d swarms after the storm ended, want the fusion's alone", lands, w.Components.Swarm.CountEntities())
 	}
 }

@@ -135,6 +135,7 @@ func InitRegistry() {
 	RegisterType("EventSpeciesKilled", EventSpeciesKilled)
 	RegisterType("EventSpeciesKillConfirmed", EventSpeciesKillConfirmed)
 	RegisterType("EventDrainDefeated", EventDrainDefeated)
+	RegisterType("EventSpeciesLandRequest", EventSpeciesLandRequest)
 	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest)
 	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest)
 	RegisterType("EventDrainPause", EventDrainPause)
@@ -159,7 +160,6 @@ func InitRegistry() {
 	RegisterType("EventStrobeRequest", EventStrobeRequest)
 	RegisterType("EventSpiritSpawnRequest", EventSpiritSpawnRequest)
 	RegisterType("EventSpiritDespawnRequest", EventSpiritDespawnRequest)
-	RegisterType("EventSpiritArrived", EventSpiritArrived)
 	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest)
 	RegisterType("EventLightningUpdateRequest", EventLightningUpdateRequest)
 	RegisterType("EventLightningDespawnRequest", EventLightningDespawnRequest)
@@ -346,6 +346,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventSpeciesKilled:                   ClassStamped,
 	EventSpeciesKillConfirmed:            ClassLocal,
 	EventDrainDefeated:                   ClassBus,
+	EventSpeciesLandRequest:              ClassBus,
 	EventFuseQuasarRequest:               ClassLocal,
 	EventFuseSwarmRequest:                ClassLocal,
 	EventDrainPause:                      ClassLocal,
@@ -370,7 +371,6 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventStrobeRequest:                   ClassLocal,
 	EventSpiritSpawnRequest:              ClassStamped,
 	EventSpiritDespawnRequest:            ClassStamped,
-	EventSpiritArrived:                   ClassStamped,
 	EventLightningSpawnRequest:           ClassLocal,
 	EventLightningUpdateRequest:          ClassLocal,
 	EventLightningDespawnRequest:         ClassLocal,

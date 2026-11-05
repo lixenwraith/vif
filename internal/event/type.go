@@ -265,7 +265,7 @@ const (
 
 	// EventMaterializeRequest (MaterializeRequestPayload) [stamped] starts a materialize over a body's footprint, of any size
 	EventMaterializeRequest
-	// EventMaterializeComplete (MaterializeCompletedPayload) [stamped] signals a materialize ended, at the header cell its body lands on
+	// EventMaterializeComplete (MaterializeCompletedPayload) [stamped] signals a materialize ended, at its header cell
 	EventMaterializeComplete
 
 	// --- Flash ---
@@ -355,6 +355,8 @@ const (
 	EventSpeciesKillConfirmed
 	// EventDrainDefeated (DrainDefeatedPayload) [bus] advances progression and names the causal cursor domain
 	EventDrainDefeated
+	// EventSpeciesLandRequest (SpeciesLandRequestPayload) [bus] lands the species a materialize or spirit carried, its header on the cell; the species' own system answers it
+	EventSpeciesLandRequest
 
 	// --- Fuse ---
 
@@ -433,8 +435,6 @@ const (
 	EventSpiritSpawnRequest
 	// EventSpiritDespawnRequest [stamped] signals force-clear of all spirit entities
 	EventSpiritDespawnRequest
-	// EventSpiritArrived (SpiritArrivedPayload) [stamped] signals a spirit naming a species reached its target, which lands the species
-	EventSpiritArrived
 
 	// --- Lightning ---
 

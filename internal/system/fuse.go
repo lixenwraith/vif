@@ -15,7 +15,7 @@ import (
 // FuseSystem plays drain fusions and holds nothing: each spawn rides what plays it, a
 // drain pair's swarm landing as the spirits its drains fly in arrive and a quasar,
 // which no drains fly in, as its materialize ends. A fusion is player-domain: it
-// consumes drains and their visuals and crosses only the geometry-only spawn request.
+// consumes drains and their visuals, and its carrier's landing is what crosses.
 type FuseSystem struct {
 	world *engine.World
 
@@ -55,8 +55,6 @@ func (s *FuseSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventFuseQuasarRequest,
 		event.EventFuseSwarmRequest,
-		event.EventMaterializeComplete,
-		event.EventSpiritArrived,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -99,19 +97,6 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.FuseSwarmRequestPayload); ok {
 			s.handleSwarmFuse(payload.DrainA, payload.DrainB, payload.Effect)
 		}
-
-	case event.EventMaterializeComplete:
-		// The completion carries its materialize's domain (D-7), and a fusion's ran on
-		// this instance alone
-		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok && ev.Domain != core.DomainShared {
-			s.landFusion(payload.Species, payload.X, payload.Y)
-		}
-
-	case event.EventSpiritArrived:
-		// A fusion's spirits ran on this instance alone, as its materialize does
-		if payload, ok := ev.Payload.(*event.SpiritArrivedPayload); ok && ev.Domain != core.DomainShared {
-			s.landFusion(payload.Species, payload.X, payload.Y)
-		}
 	}
 }
 
@@ -132,8 +117,8 @@ func (s *FuseSystem) quasarMaterializing() bool {
 // fuseInto plays a fusion over the species' footprint with its header on (x, y), and
 // the species lands as what plays it ends: the spirits the sources fly in, unless
 // the effect is the materialize or no source flies, else a materialize naming the
-// species its completion lands. Either is this instance's own: a shared one would
-// exist only on the producer.
+// species. Either is this instance's own, a shared one existing only on the
+// producer, so its landing crosses.
 func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEffect, sources []vmath.Point, x, y int) {
 	if effect != event.FuseEffectMaterialize && len(sources) > 0 {
 		s.effectSpiritArea(species, sources, x, y, component.SpiritCyan)
@@ -260,17 +245,4 @@ func (s *FuseSystem) handleQuasarFuse() {
 
 	s.fuseInto(component.SpeciesQuasar, event.FuseEffectMaterialize, sources, left+foot.HeaderX, top+foot.HeaderY)
 	s.killDrains(drainEntities)
-}
-
-// landFusion crosses the spawn a fusion's spirit or materialize held, its header on
-// (x, y). The species spawn is the shared result, and the request is the D-3
-// artifact that carries it — stamped player because the fuse produced it, which is
-// what tells it from the same type a shared storm pushes.
-func (s *FuseSystem) landFusion(species component.SpeciesType, x, y int) {
-	switch species {
-	case component.SpeciesQuasar:
-		s.world.PushCrossing(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{X: x, Y: y})
-	case component.SpeciesSwarm:
-		s.world.PushCrossing(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{X: x, Y: y})
-	}
 }

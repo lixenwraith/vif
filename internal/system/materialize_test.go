@@ -75,3 +75,44 @@ func TestAMaterializeCoversTheFootprintItsRequestResolves(t *testing.T) {
 		})
 	}
 }
+
+// TestACarrierLandsItsSpeciesInItsOwnDomain: a materialize or spirit naming a
+// species asks for it as it ends with its header on the carrier's cell, Shared where
+// every instance ran the carrier and stamped player, a crossing, where this instance
+// alone did; one naming none asks for nothing
+func TestACarrierLandsItsSpeciesInItsOwnDomain(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		carrier func(core.Domain, component.SpeciesType) event.GameEvent
+	}{
+		{"materialize", func(d core.Domain, species component.SpeciesType) event.GameEvent {
+			return event.GameEvent{Type: event.EventMaterializeRequest, Domain: d,
+				Payload: &event.MaterializeRequestPayload{X: 30, Y: 12, Type: component.SpawnTypeSwarm, Species: species}}
+		}},
+		{"spirit", func(d core.Domain, species component.SpeciesType) event.GameEvent {
+			return event.GameEvent{Type: event.EventSpiritSpawnRequest, Domain: d,
+				Payload: &event.SpiritSpawnRequestPayload{StartX: 2, StartY: 2, TargetX: 30, TargetY: 12, Char: 'x',
+					Species: species, LandX: 30, LandY: 12}}
+		}},
+	} {
+		for _, domain := range []core.Domain{core.DomainShared, core.DomainPlayer} {
+			t.Run(tc.name+" "+domain.String(), func(t *testing.T) {
+				w, _, _ := testCursorWorld(t)
+				spirits := ready(NewSpiritSystem(w))
+				b := newMaterializeWorld(w, spirits)
+				b.spirits = spirits
+				b.deliver(tc.carrier(domain, component.SpeciesQuasar), tc.carrier(domain, component.SpeciesNone))
+				for range 2 * materializeTicks() {
+					b.tick()
+				}
+				lands := b.sent(event.EventSpeciesLandRequest, 0)
+				if len(lands) != 1 || lands[0].Domain != domain {
+					t.Fatalf("land requests = %+v, want one in the %s domain", lands, domain)
+				}
+				if p, _ := lands[0].Payload.(*event.SpeciesLandRequestPayload); p == nil || *p != (event.SpeciesLandRequestPayload{Species: component.SpeciesQuasar, X: 30, Y: 12}) {
+					t.Fatalf("the land request carries %+v, want the quasar headed at (30, 12)", lands[0].Payload)
+				}
+			})
+		}
+	}
+}

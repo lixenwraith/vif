@@ -11,8 +11,8 @@ import (
 )
 
 // TestASpiritLandsWhatItNamesOnItsArrivalFrame: a spirit naming a species sends one
-// arrival, in its own domain, with the species and its footprint, on the tick it
-// draws its last frame on its target; a spirit naming none sends nothing
+// land request with the species and its header cell, on the tick it draws its last
+// frame on its target; a spirit naming none sends nothing
 func TestASpiritLandsWhatItNamesOnItsArrivalFrame(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
@@ -36,7 +36,7 @@ func TestASpiritLandsWhatItNamesOnItsArrivalFrame(t *testing.T) {
 		spirits.Update()
 		for _, ev := range w.Resources.Event.Queue.Consume() {
 			switch ev.Type {
-			case event.EventSpiritArrived:
+			case event.EventSpeciesLandRequest:
 				arrivals = append(arrivals, ev)
 				arrivedOn = n
 			case event.EventDeathBatch:
@@ -44,11 +44,11 @@ func TestASpiritLandsWhatItNamesOnItsArrivalFrame(t *testing.T) {
 			}
 		}
 	}
-	if len(arrivals) != 1 || arrivals[0].Domain != core.DomainPlayer {
-		t.Fatalf("arrivals = %+v, want one in the player domain", arrivals)
+	if len(arrivals) != 1 {
+		t.Fatalf("land requests = %+v, want one", arrivals)
 	}
-	if p, _ := arrivals[0].Payload.(*event.SpiritArrivedPayload); p == nil || *p != (event.SpiritArrivedPayload{X: 28, Y: 9, Species: component.SpeciesSwarm}) {
-		t.Fatalf("the arrival carries %+v, want the swarm on the footprint at (28, 9)", arrivals[0].Payload)
+	if p, _ := arrivals[0].Payload.(*event.SpeciesLandRequestPayload); p == nil || *p != (event.SpeciesLandRequestPayload{Species: component.SpeciesSwarm, X: 28, Y: 9}) {
+		t.Fatalf("the land request carries %+v, want the swarm headed at (28, 9)", arrivals[0].Payload)
 	}
 	if want := int(parameter.SpiritAnimationDuration / parameter.GameUpdateInterval); arrivedOn != want || lastFrame != want {
 		t.Fatalf("arrived on tick %d with the last frame on %d, want both on %d", arrivedOn, lastFrame, want)

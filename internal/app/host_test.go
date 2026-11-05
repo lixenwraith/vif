@@ -1684,7 +1684,7 @@ func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 	for i, a := range apps {
 		i := i
 		a.SetDispatchTap(func(ev event.GameEvent) {
-			if ev.Type == event.EventQuasarSpawnRequest {
+			if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok && p.Species == component.SpeciesQuasar {
 				spawns[i]++
 			}
 		})
