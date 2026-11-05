@@ -360,7 +360,7 @@ const (
 
 	// --- Fuse ---
 
-	// EventFuseRequest (FuseRequestPayload) [local] asks for one fusion: its sources consumed into its target species
+	// EventFuseRequest (FuseRequestPayload) [stamped] asks for one fusion of its sources into its target species: a participant's own of its drains, or a Shared trigger's, which every instance derives
 	EventFuseRequest
 
 	// --- Drain ---

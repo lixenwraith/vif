@@ -137,6 +137,12 @@ that proves wrong or that a document now states, and link the document instead.
   on the context over it (`GameMode.Operator`), and reach neither. A live run's
   mode changes only through the router (`transitionMode`), which keeps the input
   machine in step: a path that sets it elsewhere leaves every key but Ctrl+Q dead.
+- `World.PushLocal` stamps player in any scope, and the FSM bridge pushes every
+  class but local in the ambient domain, Shared during a region's actions. A
+  request a region raises on every instance that changes Shared state is
+  `[stamped]`, as `EventFuseRequest` is: Shared from the region, player from a
+  participant's own producer's `PushLocal`; a `[local]` one may not reach Shared
+  state (D-10).
 - What only the operator does or sees, a pause, an overlay request, the speakers,
   is pushed `OriginDevice`: never journaled and outside the event tallies, so a
   replay, which has an operator of its own, still matches. One left on the ambient
@@ -148,6 +154,9 @@ that proves wrong or that a document now states, and link the document instead.
   touching a Player-only store needs an allowlist entry with its reason (the wall
   system's `"wall:Particle"` mask lookup), while a Player system may read Shared
   state.
+- `TestNoOrderDependentMapRange` matches a ranged identifier by name against every
+  map-typed name in `internal/system`: a local slice named `drains` trips on
+  `ParticleSystem`'s map field. Rename the local, or allowlist it with its reason.
 - The divergence harness
   ([netcode design §3.5](netcode-design.md#35-the-divergence-harness)) compares two
   binaries: `git worktree add` main, build `go test -c ./internal/app` in each tree,

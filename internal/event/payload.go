@@ -934,8 +934,10 @@ var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spi
 
 // FuseRequestPayload asks for one fusion into Target, played by Effect. Its sources
 // are Entities when it names any, failing when one no longer stands, or else each
-// Sources row's, swept from what stands. A drain is Player-domain, so drains are
-// swept on the instance simulating Cursor: the coordinator's in a live session when 0.
+// Sources row's, swept from what stands. A participant's request takes its drains; a
+// Shared one takes unit composites, by entity or row, on every instance, and drains
+// by row on the instance simulating Cursor, the coordinator's in a live session when
+// 0, which also plays the effect that lands the target.
 type FuseRequestPayload struct {
 	Sources  []FuseSource          `toml:"sources"`
 	Entities []core.Entity         `toml:"entities"`

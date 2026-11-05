@@ -79,7 +79,7 @@ never enters the replay suffix (D-9).
 |---|---|
 | Direct player hit on a shared target | one combat request per target |
 | Missile, dust, or disruptor area effect | immutable centre/radius/attack geometry |
-| Drain fusion | the species and header cell its materialize or spirit lands, from the causal participant |
+| Fusion | the species and header cell its materialize or spirit lands, from the causal participant |
 | Shared gold member typed | header, member, and typist cursor |
 | Jump to the live gold sequence | cursor |
 | Dying drain donation | target and heal amount |

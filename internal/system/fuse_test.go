@@ -353,6 +353,125 @@ func TestASweepTakesItsCountOfTheOldestDrains(t *testing.T) {
 	}
 }
 
+// standHeader stands a composite's bare phantom head: a Shared header of behavior
+// b and type typ at (x, y), under parent unless that is 0
+func standHeader(w *engine.World, b component.Behavior, typ component.CompositeType, parent core.Entity, x, y int) core.Entity {
+	e := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+	w.Components.Header.SetComponent(e, component.HeaderComponent{Behavior: b, Type: typ, ParentHeader: parent})
+	return e
+}
+
+// TestASharedFusionTakesItsCompositesOnEveryInstance: a Shared request, which every
+// instance derives, takes the unit composites at their root its rows sweep, the
+// oldest first, unrewarded on each instance alike, and places the target at their
+// centroid; the instance its cursor elects alone sweeps its drains and carries the
+// landing on its first spirit, where another flies the composites' spirits only
+func TestASharedFusionTakesItsCompositesOnEveryInstance(t *testing.T) {
+	for _, elected := range []bool{true, false} {
+		b, cursor, _ := newFusionWorld(t)
+		w := b.w
+		w.Resources.Behaviors = compileWarden(t).Prototypes()
+		b.handlers = append(b.handlers, ready(NewCompositeSystem(w)).(event.Handler))
+		// The oldest swarm is dying: its kill is its own system's to report
+		dying := standHeader(w, component.BehaviorSwarm, component.CompositeTypeUnit, 0, 14, 14)
+		w.Components.Combat.SetComponent(dying, component.CombatComponent{})
+		swarms := []core.Entity{
+			standHeader(w, component.BehaviorSwarm, component.CompositeTypeUnit, 0, 8, 6),
+			standHeader(w, component.BehaviorSwarm, component.CompositeTypeUnit, 0, 32, 6),
+		}
+		warden := standHeader(w, component.BehaviorData, component.CompositeTypeUnit, 0, 20, 18)
+		w.Components.Behavior.SetComponent(warden, component.BehaviorComponent{})
+		kept := []core.Entity{
+			swarms[1], dying,
+			standHeader(w, component.BehaviorSnake, component.CompositeTypeUnit, swarms[1], 10, 10),
+			standHeader(w, component.BehaviorPylon, component.CompositeTypeAblative, 0, 12, 12),
+		}
+		if !elected {
+			cursor = spawnRemoteCursor(t, w, 2, 1, 1, 7)
+		}
+
+		b.deliver(event.GameEvent{Type: event.EventFuseRequest, Domain: core.DomainShared, Payload: &event.FuseRequestPayload{
+			Sources: []event.FuseSource{
+				{Species: component.SpeciesSwarm, Count: 1}, {Species: component.SpeciesDrain}, {Species: component.SpeciesDataFirst},
+				{Species: component.SpeciesSnake}, {Species: component.SpeciesPylon},
+			},
+			Cursor: cursor, Target: component.SpeciesQuasar,
+		}})
+		for _, e := range []core.Entity{swarms[0], warden} {
+			if w.Components.Header.HasEntity(e) {
+				t.Fatalf("elected %v: composite %v stands after the fusion", elected, e)
+			}
+		}
+		for _, e := range kept {
+			if !w.Components.Header.HasEntity(e) {
+				t.Fatalf("elected %v: composite %v went, which the request does not take", elected, e)
+			}
+		}
+		for _, ev := range b.sent(event.EventCompositeDestroyRequest, 0) {
+			if ev.Domain != core.DomainShared {
+				t.Fatalf("elected %v: a composite went by a %v request, want Shared", elected, ev.Domain)
+			}
+		}
+		for _, ev := range b.sent(event.EventSpeciesKilled, 0) {
+			if p := ev.Payload.(*event.SpeciesKilledPayload); p.Species != component.SpeciesDrain {
+				t.Fatalf("elected %v: a kill of species %d reported, want the drains' alone", elected, p.Species)
+			}
+		}
+
+		spirits := b.sent(event.EventSpiritSpawnRequest, 0)
+		wantSpirits, wantDrains := 2, 2
+		if elected {
+			wantSpirits, wantDrains = 4, 0
+		}
+		if len(spirits) != wantSpirits || w.Components.Drain.CountEntities() != wantDrains {
+			t.Fatalf("elected %v: %d spirits with %d drains left, want %d and %d",
+				elected, len(spirits), w.Components.Drain.CountEntities(), wantSpirits, wantDrains)
+		}
+		first := spirits[0].Payload.(*event.SpiritSpawnRequestPayload)
+		if first.StartX != 8 || first.StartY != 6 {
+			t.Fatalf("elected %v: the first spirit flies from (%d, %d), want the swarm's header (8, 6)", elected, first.StartX, first.StartY)
+		}
+		for i, ev := range spirits {
+			p := ev.Payload.(*event.SpiritSpawnRequestPayload)
+			carries := elected && i == 0
+			if (p.Species == component.SpeciesQuasar) != carries || (carries && (p.LandX != 14 || p.LandY != 12)) {
+				t.Fatalf("elected %v: spirit %d names species %d landing (%d, %d), want the first alone on the elected instance, at the composites' centroid (14, 12)",
+					elected, i, p.Species, p.LandX, p.LandY)
+			}
+		}
+		if n := w.Components.Materialize.CountEntities(); n != 0 {
+			t.Fatalf("elected %v: %d materializes beside the spirits", elected, n)
+		}
+	}
+}
+
+// TestARequestTakesOnlyWhatItsDomainHolds: a participant's request names drains
+// alone, and a Shared one no drain by entity, whose id no other instance shares;
+// either fails whole, consuming nothing
+func TestARequestTakesOnlyWhatItsDomainHolds(t *testing.T) {
+	b, cursor, drains := newFusionWorld(t)
+	w := b.w
+	swarm := standHeader(w, component.BehaviorSwarm, component.CompositeTypeUnit, 0, 8, 6)
+	for _, ev := range []event.GameEvent{
+		{Type: event.EventFuseRequest, Domain: core.DomainPlayer, Payload: &event.FuseRequestPayload{
+			Sources: []event.FuseSource{{Species: component.SpeciesDrain}, {Species: component.SpeciesSwarm}}, Cursor: cursor, Target: component.SpeciesQuasar}},
+		{Type: event.EventFuseRequest, Domain: core.DomainPlayer, Payload: &event.FuseRequestPayload{
+			Entities: []core.Entity{drains[0], swarm}, Target: component.SpeciesQuasar}},
+		{Type: event.EventFuseRequest, Domain: core.DomainShared, Payload: &event.FuseRequestPayload{
+			Entities: []core.Entity{swarm, drains[0]}, Cursor: cursor, Target: component.SpeciesQuasar}},
+	} {
+		b.deliver(ev)
+	}
+	if n := w.Resources.Status.Ints.Get("fuse.spawn_failures").Load(); n != 3 {
+		t.Fatalf("fuse.spawn_failures = %d, want each of the three requests", n)
+	}
+	if !w.Components.Header.HasEntity(swarm) || w.Components.Drain.CountEntities() != 2 ||
+		len(b.sent(event.EventSpiritSpawnRequest, 0))+len(b.sent(event.EventCompositeDestroyRequest, 0)) != 0 {
+		t.Fatal("a refused request consumed a source")
+	}
+}
+
 // compileWarden is the warden program's set, one declared data species
 func compileWarden(t *testing.T) *BehaviorSet {
 	t.Helper()

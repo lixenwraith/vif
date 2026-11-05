@@ -346,7 +346,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventSpeciesKillConfirmed:            ClassLocal,
 	EventDrainDefeated:                   ClassBus,
 	EventSpeciesLandRequest:              ClassBus,
-	EventFuseRequest:                     ClassLocal,
+	EventFuseRequest:                     ClassStamped,
 	EventDrainPause:                      ClassLocal,
 	EventDrainResume:                     ClassLocal,
 	EventQuasarSpawnRequest:              ClassBus,

@@ -1118,29 +1118,21 @@ exists, with no observer, so a per-program `behavior.<program>.transition_stalls
 needs an observer that reaches a counter bound later, in `NewBehaviorSystem` with
 the lifecycle rows.
 
-### Fuse single-cell species and unit composites into any species
+### Let a player mechanic or a program fuse composites
 
 - Priority: P3
-- Affected files: `internal/system/fuse.go`, `internal/event/payload.go`
-  (`FuseRequestPayload`)
+- Affected files: `internal/system/fuse.go`, `internal/event/type.go`,
+  `internal/system/behavior.go` (`EmitEvent`)
 - Design: [D-3](domain-design.md#d-3--cross-the-smallest-shared-outcome)
 
-One `EventFuseRequest` takes drains, named or swept, into any Shared species with a
-footprint, which lands by its land request. The idea grows its sources to any unit
-composite (`CompositeTypeUnit`: damage on the header, the members its hitboxes; the
-swarm, quasar, eye, kraken and every data species), so quasars and swarms fuse as
-drains do.
-
-- **Domains.** A composite is Shared, so consuming one is a Shared outcome every
-  peer applies at one tick, from a Shared trigger or as the crossing a player's
-  request sends, the composite going with no reward by
-  `EventCompositeDestroyRequest`, as the rock crushes one. A fusion of both kinds
-  splits by domain, each batch domain-pure as `killDrains` keeps it, and lands one
-  target. A composite with a `ParentHeader`, the snake's head, is no source.
-- **Visuals.** Each source flies one spirit, a composite's from its header, and the
-  first names the target its arrival lands; the materialize effect plays over the
-  footprint instead. A Shared fusion's spirits stay each instance's own, as a drain
-  fusion's do.
+A fusion takes unit composites only from a Shared request, one a region raises on
+every instance, each consuming them alike. A participant's own request, pushed
+player, takes its drains alone and fails naming a composite, and a program's
+`EmitEvent` takes no stamped event, so neither a player mechanic nor a program can
+fuse composites. A player mechanic would cross the Shared outcome as a bus artifact
+naming the composites and the target's landing, barrier-bound since it retires
+Shared entities; a program's request would push the request Shared, as a region's
+does.
 
 ## Environment
 
