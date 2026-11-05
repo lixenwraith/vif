@@ -1004,9 +1004,9 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
   `purple` bolt to the nearest cursor, which takes the contact damage),
   `Materialize { spawn, duration_ms }` (a `swarm`, `nugget` or program's style over the
   footprint at the target for `duration_ms`, its style's own when that is 0 or
-  absent, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (a
-  swarm or quasar at the header plus x, y) and `EmitEvent` (shared and local
-  events).
+  absent, which marks and spawns nothing), `SpawnSpecies { species, x, y }` (any
+  Shared species, a program's among them, landing at the header plus x, y) and
+  `EmitEvent` (shared and local events).
 - Sustained: `Home` (steer to the target by the prototype's physics), `ChargeToStored`
   (the velocity that reaches the stored cell as the timed entry ends),
   `Drag { rate }` (linear drag per second) and `Freeze` (no move this tick).

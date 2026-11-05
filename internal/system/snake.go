@@ -71,6 +71,7 @@ func (s *SnakeSystem) Priority() int {
 func (s *SnakeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSnakeSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventSnakeCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -93,19 +94,19 @@ func (s *SnakeSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	request, spawn := s.spawnRequest(ev)
 	if !s.enabled {
-		if ev.Type == event.EventSnakeSpawnRequest {
+		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
 		}
 		return
 	}
+	if spawn {
+		s.spawnSnake(request)
+		return
+	}
 
 	switch ev.Type {
-	case event.EventSnakeSpawnRequest:
-		if payload, ok := ev.Payload.(*event.SnakeSpawnRequestPayload); ok {
-			s.spawnSnake(payload)
-		}
-
 	case event.EventSnakeCancelRequest:
 		s.lifecycle.despawned.Add(int64(s.world.Components.Snake.CountEntities()))
 		s.terminateAll()
@@ -247,6 +248,18 @@ func (s *SnakeSystem) Update() {
 
 	s.statCount.Store(int64(activeCount))
 	s.statActive.Store(activeCount > 0)
+}
+
+// spawnRequest reads a request for a snake: its own spawn request, or a land request
+// naming it, at that request's defaults
+func (s *SnakeSystem) spawnRequest(ev event.GameEvent) (*event.SnakeSpawnRequestPayload, bool) {
+	switch p := ev.Payload.(type) {
+	case *event.SnakeSpawnRequestPayload:
+		return p, true
+	case *event.SpeciesLandRequestPayload:
+		return &event.SnakeSpawnRequestPayload{X: p.X, Y: p.Y}, p.Species == component.SpeciesSnake
+	}
+	return nil, false
 }
 
 // spawnSnake creates the complete snake entity structure

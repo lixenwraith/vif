@@ -1118,59 +1118,29 @@ exists, with no observer, so a per-program `behavior.<program>.transition_stalls
 needs an observer that reaches a counter bound later, in `NewBehaviorSystem` with
 the lifecycle rows.
 
-### Let a program spawn another program
-
-- Priority: P3
-- Affected files: `internal/system/behavior.go` (`SpawnSpecies`)
-
-`SpawnSpecies` raises a swarm or a quasar by their spawn requests; a program cannot
-raise another program, or more of itself, because the vocabulary is built before
-any program compiles. Its build could take any program name and push
-`EventBehaviorSpawnRequest`, which drops and counts an unknown one; the load-time
-check of that name belongs with the payload names under Authoring.
-
 ### Fuse single-cell species and unit composites into any species
 
 - Priority: P3
 - Affected files: `internal/system/fuse.go`, `internal/event/payload.go`
-  (`FuseSwarmRequestPayload`, `FuseQuasarRequestPayload`),
-  `internal/system/drain.go` (`detectSwarmFusions`), `internal/system/behavior.go`
-  (`spawnRequests`), `internal/asset/scenario/quasar.toml`,
-  `wad/scenario/td/td_main.toml`
+  (`FuseRequestPayload`)
 - Design: [D-3](domain-design.md#d-3--cross-the-smallest-shared-outcome)
 
-A fusion takes drains alone, into one of two species: two enraged drains into a
-swarm, every drain of the elected cursor into a quasar. The idea grows it to any
-number of sources of any single-cell species, the drain today and any later one, and
-of any unit composite (`CompositeTypeUnit`: damage on the header, the members its
-hitboxes; the swarm, quasar, eye, kraken and every data species), fused into any
-species, so quasars and swarms fuse as drains do.
+One `EventFuseRequest` takes drains, named or swept, into any Shared species with a
+footprint, which lands by its land request. The idea grows its sources to any unit
+composite (`CompositeTypeUnit`: damage on the header, the members its hitboxes; the
+swarm, quasar, eye, kraken and every data species), so quasars and swarms fuse as
+drains do.
 
-- **One request.** An `EventFuseRequest` names its sources, by species and count or
-  as a cursor's, the target species and the `FuseEffect`, and
-  `EventFuseSwarmRequest` and `EventFuseQuasarRequest` become two uses of it: the
-  drain system's pairs and the quasar scenarios' triggers play as now.
-- **Domains.** Drains are Player-domain, so a drain fusion is local and crosses one
-  spawn request from the causal participant (D-3). A composite is Shared, so
-  consuming one is a Shared outcome every peer applies at one tick, from a Shared
-  trigger or as the crossing a player's request sends, the composite going with no
-  reward by `EventCompositeDestroyRequest`, as the rock crushes one. A fusion of
-  both kinds splits by domain, each batch domain-pure as `killDrains` keeps it, and
-  lands one target. A composite with a `ParentHeader`, the snake's head, is no
-  source.
-- **Any target.** The target lands by its own spawn request: `landFusion`'s two
-  cases become a table every species' request joins, `spawnRequests` in
-  `behavior.go` the start of it, a data species by `EventBehaviorSpawnRequest`,
-  named at load as `PayloadSpeciesIn` names one. Its footprint, a code species'
-  parameters or a prototype's, places it at the sources' centroid by
-  `FindFreeAreaInside`.
+- **Domains.** A composite is Shared, so consuming one is a Shared outcome every
+  peer applies at one tick, from a Shared trigger or as the crossing a player's
+  request sends, the composite going with no reward by
+  `EventCompositeDestroyRequest`, as the rock crushes one. A fusion of both kinds
+  splits by domain, each batch domain-pure as `killDrains` keeps it, and lands one
+  target. A composite with a `ParentHeader`, the snake's head, is no source.
 - **Visuals.** Each source flies one spirit, a composite's from its header, and the
   first names the target its arrival lands; the materialize effect plays over the
   footprint instead. A Shared fusion's spirits stay each instance's own, as a drain
   fusion's do.
-
-In order: the one request carrying the two drain fusions unchanged in play, then any
-target from drains, then composites as Shared sources, one test per rule.
 
 ## Environment
 

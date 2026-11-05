@@ -589,19 +589,6 @@ var telegraphColors = []struct {
 	rgb  color.RGB
 }{{"cyan", visual.RgbSplashCyan}, {"white", visual.RgbSplashWhite}}
 
-// spawnRequests are the code species SpawnSpecies spawns, each by its request
-var spawnRequests = []struct {
-	species component.SpeciesType
-	request func(x, y int) (event.EventType, any)
-}{
-	{component.SpeciesSwarm, func(x, y int) (event.EventType, any) {
-		return event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{X: x, Y: y}
-	}},
-	{component.SpeciesQuasar, func(x, y int) (event.EventType, any) {
-		return event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{X: x, Y: y}
-	}},
-}
-
 // The args the verbs decode, each strictly, once at load
 type (
 	behaviorNoArgs struct{}
@@ -822,20 +809,19 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 			})
 		}, nil
 	})
-	v.Effect("SpawnSpecies", func(a *spawnSpeciesArgs) (func(*behaviorCtx), error) {
-		i := slices.IndexFunc(spawnRequests, func(r struct {
-			species component.SpeciesType
-			request func(x, y int) (event.EventType, any)
-		}) bool {
-			return component.SpeciesNames[r.species] == a.Species
-		})
-		if i < 0 {
-			return nil, fmt.Errorf("species %q is not one of swarm, quasar", a.Species)
+	v.Named("SpawnSpecies", func(names *dialect.Names, a *spawnSpeciesArgs) (func(*behaviorCtx), error) {
+		// Any Shared species, a program's among them, stands by the land request its
+		// own system answers; a drain is a participant's own
+		species, ok := names.Value[component.SpeciesType](a.Species)
+		if !ok || species == component.SpeciesNone ||
+			species < component.SpeciesCount && component.SpeciesDomains[species] != core.DomainShared {
+			return nil, fmt.Errorf("species %q is not a Shared species", a.Species)
 		}
-		request := spawnRequests[i].request
 		return func(c *behaviorCtx) {
 			if pos, ok := c.sys.world.Positions.GetPosition(c.entity); ok {
-				c.sys.world.PushEvent(request(pos.X+a.X, pos.Y+a.Y))
+				c.sys.world.PushEvent(event.EventSpeciesLandRequest, &event.SpeciesLandRequestPayload{
+					Species: species, X: pos.X + a.X, Y: pos.Y + a.Y,
+				})
 			}
 		}, nil
 	})

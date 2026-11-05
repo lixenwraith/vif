@@ -399,14 +399,17 @@ the style's fill, hold and recede over.
   lands with its header on the materialize's footprint. `terminateStorm` ends the
   storm's materializes in flight, and the storm's own capture (`stormSnapshot`)
   holds its root alone.
-- **Fusions.** A drain pair flies its drains in as player-domain spirits, the
-  first naming the swarm and its footprint, which lands on the tick the spirits
-  draw their arrival frame, its deadline running the half-second flight. A quasar
-  fusion plays a player-domain materialize naming the quasar, as does a drain pair
-  whose request asks for one (`FuseEffectMaterialize`). A quasar fusion is refused
-  while one's materialize flies (`quasarMaterializing`), the fuse keeps no state of
-  its own (`FuseSystem.Update` is empty), and `killDrains` alone reports the
-  consumed drains' deaths.
+- **Fusions.** One `EventFuseRequest` names its sources, by entity or by sweep
+  rows of species and count, and its target: any Shared species with a footprint,
+  a program's among them. The sources fly in as player-domain spirits, the first
+  naming the target and its footprint, which lands on the tick the spirits draw
+  their arrival frame, its deadline running the half-second flight; a request
+  asking for the materialize (`FuseEffectMaterialize`), or one with no source,
+  plays a player-domain materialize naming the target, in its style. Two enraged
+  drains ask by their entities for a swarm, and a scenario sweeps the elected
+  cursor's drains into a quasar. A sweep is refused while a fusion into its target
+  flies (`inFlight`), the fuse keeps no state of its own (`FuseSystem.Update` is
+  empty), and `killDrains` alone reports the consumed drains' deaths.
 - **Data species.** A prototype naming `entrance = "materialize"` comes on as
   the storm's swarm does: `BehaviorSystem.enter` starts a Shared materialize naming
   the species, for the prototype's `entrance_ms`, over the nearest place its
@@ -564,8 +567,9 @@ per instance:
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
   `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),
-  `Materialize` (a `swarm` or `nugget` materialize that lands nothing), `SpawnSpecies` (a
-  swarm or a quasar) and `EmitEvent`.
+  `Materialize` (a `swarm`, `nugget` or program's materialize that lands nothing),
+  `SpawnSpecies` (any Shared species, a program's among them, by its land request)
+  and `EmitEvent`.
 - Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Drag` (linear drag
   per second, so it holds at any tick rate) and `Freeze` (no move this tick), each
   over the in-place helpers of `pkg/vmath/physics` the code species use
@@ -848,7 +852,8 @@ captures, one a tick, read the frames. Per species:
   to `gun`, `EventWeaponAddRequest { entity = 1, weapon = "disruptor" }`, `a`)
   stuns the circles in a series, and a stunned burst holds and resumes.
 - Fusions: two enraged drains fly in as cyan spirits, and their swarm lands as
-  the spirits arrive, with no materialize. `:emit EventFuseQuasarRequest` lands its
+  the spirits arrive, with no materialize. `:emit EventFuseRequest { sources =
+  [{ species = "drain" }], target = "quasar", effect = "materialize" }` lands its
   quasar the tick its materialize's last cells go.
 - Data species: `:n vanguard`, with `:god` to outlast the raid. A raider
   materializes at the right edge every two seconds while fewer than three fly or

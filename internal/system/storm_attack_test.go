@@ -289,7 +289,7 @@ func TestStormDrawsBeforeItReadsLivePositions(t *testing.T) {
 				}
 			}
 		}
-		storm.spawnStorm()
+		storm.spawnStorm(w.Resources.Config.MapWidth/2, w.Resources.Config.MapHeight/2)
 		spawned := storm.rng.State()
 		stormComp, _ := openingCircle(storm, component.StormCircleBlue, parameter.StormZMid-1)
 		storm.updateCircleAttacks(stormComp, parameter.GameUpdateInterval)
@@ -347,7 +347,7 @@ func TestAStormsEndEndsItsMaterializes(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	storm := ready(NewStormSystem(w)).(*StormSystem)
 	b := newMaterializeWorld(w, storm, ready(NewSwarmSystem(w)))
-	storm.spawnStorm()
+	storm.spawnStorm(w.Resources.Config.MapWidth/2, w.Resources.Config.MapHeight/2)
 	if storm.rootEntity == 0 {
 		t.Fatal("no storm spawned")
 	}

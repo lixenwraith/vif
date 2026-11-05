@@ -123,8 +123,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventSpeciesKillConfirmed:            func() any { return new(SpeciesKilledPayload) },
 	EventDrainDefeated:                   func() any { return new(DrainDefeatedPayload) },
 	EventSpeciesLandRequest:              func() any { return new(SpeciesLandRequestPayload) },
-	EventFuseQuasarRequest:               func() any { return new(FuseQuasarRequestPayload) },
-	EventFuseSwarmRequest:                func() any { return new(FuseSwarmRequestPayload) },
+	EventFuseRequest:                     func() any { return new(FuseRequestPayload) },
 	EventDrainPause:                      func() any { return new(CursorScopePayload) },
 	EventDrainResume:                     func() any { return new(CursorScopePayload) },
 	EventQuasarSpawnRequest:              func() any { return new(QuasarSpawnRequestPayload) },
@@ -295,8 +294,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventSpeciesKillConfirmed:            &codecSpeciesKilledPayload,
 	EventDrainDefeated:                   &codecDrainDefeatedPayload,
 	EventSpeciesLandRequest:              &codecSpeciesLandRequestPayload,
-	EventFuseQuasarRequest:               &codecFuseQuasarRequestPayload,
-	EventFuseSwarmRequest:                &codecFuseSwarmRequestPayload,
+	EventFuseRequest:                     &codecFuseRequestPayload,
 	EventDrainPause:                      &codecCursorScopePayload,
 	EventDrainResume:                     &codecCursorScopePayload,
 	EventQuasarSpawnRequest:              &codecQuasarSpawnRequestPayload,
@@ -1390,22 +1388,21 @@ var codecSpeciesLandRequestPayload = structCodec{size: unsafe.Sizeof(SpeciesLand
 	{off: unsafe.Offsetof(SpeciesLandRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
-func (p *FuseQuasarRequestPayload) codec() (*structCodec, unsafe.Pointer) {
-	return &codecFuseQuasarRequestPayload, unsafe.Pointer(p)
-}
-
-var codecFuseQuasarRequestPayload = structCodec{size: unsafe.Sizeof(FuseQuasarRequestPayload{}), fields: []field{
-	{off: unsafe.Offsetof(FuseQuasarRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+var codecFuseSource = structCodec{size: unsafe.Sizeof(FuseSource{}), fields: []field{
+	{off: unsafe.Offsetof(FuseSource{}.Species), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(FuseSource{}.Count), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
-func (p *FuseSwarmRequestPayload) codec() (*structCodec, unsafe.Pointer) {
-	return &codecFuseSwarmRequestPayload, unsafe.Pointer(p)
+func (p *FuseRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecFuseRequestPayload, unsafe.Pointer(p)
 }
 
-var codecFuseSwarmRequestPayload = structCodec{size: unsafe.Sizeof(FuseSwarmRequestPayload{}), fields: []field{
-	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.DrainA), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
-	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.DrainB), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
-	{off: unsafe.Offsetof(FuseSwarmRequestPayload{}.Effect), kind: kindInt, size: unsafe.Sizeof(FuseEffect(0))},
+var codecFuseRequestPayload = structCodec{size: unsafe.Sizeof(FuseRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(FuseRequestPayload{}.Sources), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecFuseSource}, stride: unsafe.Sizeof(FuseSource{}), make: func(p unsafe.Pointer, n int) { *(*[]FuseSource)(p) = make([]FuseSource, n) }},
+	{off: unsafe.Offsetof(FuseRequestPayload{}.Entities), kind: kindSlice, elem: &field{kind: kindUint, size: unsafe.Sizeof(core.Entity(0))}, stride: unsafe.Sizeof(core.Entity(0)), make: func(p unsafe.Pointer, n int) { *(*[]core.Entity)(p) = make([]core.Entity, n) }},
+	{off: unsafe.Offsetof(FuseRequestPayload{}.Cursor), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(FuseRequestPayload{}.Target), kind: kindUint, size: unsafe.Sizeof(component.SpeciesType(0))},
+	{off: unsafe.Offsetof(FuseRequestPayload{}.Effect), kind: kindInt, size: unsafe.Sizeof(FuseEffect(0))},
 }}
 
 func (p *CursorScopePayload) codec() (*structCodec, unsafe.Pointer) {

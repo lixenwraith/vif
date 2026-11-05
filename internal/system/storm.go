@@ -211,6 +211,7 @@ func (s *StormSystem) Priority() int {
 func (s *StormSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventStormSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventStormCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -234,21 +235,23 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	x, y, spawn := s.spawnAt(ev)
 	if !s.enabled {
-		if ev.Type == event.EventStormSpawnRequest {
+		if spawn {
+			s.lifecycle.spawnFailures.Add(1)
+		}
+		return
+	}
+	if spawn {
+		if s.rootEntity == 0 {
+			s.spawnStorm(x, y)
+		} else {
 			s.lifecycle.spawnFailures.Add(1)
 		}
 		return
 	}
 
 	switch ev.Type {
-	case event.EventStormSpawnRequest:
-		if s.rootEntity == 0 {
-			s.spawnStorm()
-		} else {
-			s.lifecycle.spawnFailures.Add(1)
-		}
-
 	case event.EventStormCancelRequest:
 		if s.rootEntity != 0 {
 			s.lifecycle.despawned.Add(1)
@@ -369,11 +372,20 @@ func (s *StormSystem) AliveCount(c *component.StormComponent) int {
 	return count
 }
 
-// spawnStorm creates the root header and 3 circle sub-headers
-func (s *StormSystem) spawnStorm() {
-	config := s.world.Resources.Config
-	centerX := config.MapWidth / 2
-	centerY := config.MapHeight / 2
+// spawnAt reads a request for a storm at a cell: its own spawn request, at the map's
+// centre, or a land request naming it
+func (s *StormSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
+	if ev.Type == event.EventStormSpawnRequest {
+		return s.world.Resources.Config.MapWidth / 2, s.world.Resources.Config.MapHeight / 2, true
+	}
+	if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok && p.Species == component.SpeciesStorm {
+		return p.X, p.Y, true
+	}
+	return 0, 0, false
+}
+
+// spawnStorm creates the root header and 3 circle sub-headers around the cell
+func (s *StormSystem) spawnStorm(centerX, centerY int) {
 	centerPX, centerPY := (vmath.Point{X: centerX, Y: centerY}).Center()
 
 	// Pre-calculate circle spawn parameters

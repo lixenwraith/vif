@@ -64,6 +64,7 @@ func (s *EyeSystem) Priority() int {
 func (s *EyeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventEyeSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventEyeCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -87,23 +88,21 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	request, spawn := s.spawnRequest(ev)
 	if !s.enabled {
 		// Release GA evaluations for spawn requests dropped while disabled
-		if ev.Type == event.EventEyeSpawnRequest {
+		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
-			if payload, ok := ev.Payload.(*event.EyeSpawnRequestPayload); ok {
-				s.abandonEval(payload)
-			}
+			s.abandonEval(request)
 		}
+		return
+	}
+	if spawn {
+		s.spawnEye(request)
 		return
 	}
 
 	switch ev.Type {
-	case event.EventEyeSpawnRequest:
-		if payload, ok := ev.Payload.(*event.EyeSpawnRequestPayload); ok {
-			s.spawnEye(payload)
-		}
-
 	case event.EventEyeCancelRequest:
 		// despawnEye removes from Eye immediately.
 		headerEntities := s.world.Components.Eye.GetAllEntities()
@@ -219,6 +218,18 @@ func (s *EyeSystem) Update() {
 }
 
 // === Spawn ===
+
+// spawnRequest reads a request for an eye: its own spawn request, or a land request
+// naming it, at that request's defaults on the shared flow field
+func (s *EyeSystem) spawnRequest(ev event.GameEvent) (*event.EyeSpawnRequestPayload, bool) {
+	switch p := ev.Payload.(type) {
+	case *event.EyeSpawnRequestPayload:
+		return p, true
+	case *event.SpeciesLandRequestPayload:
+		return &event.EyeSpawnRequestPayload{X: p.X, Y: p.Y, RouteID: -1}, p.Species == component.SpeciesEye
+	}
+	return nil, false
+}
 
 func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 	if int(payload.Type) >= parameter.EyeTypeCount {

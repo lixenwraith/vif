@@ -104,6 +104,15 @@ func (r *Resource) Footprint(s component.SpeciesType) vmath.Footprint {
 	return vmath.Footprint{}
 }
 
+// SpeciesDomain is the domain a species' bodies live in: a code species' row of
+// component.SpeciesDomains, a data species' Shared
+func (r *Resource) SpeciesDomain(s component.SpeciesType) core.Domain {
+	if s < component.SpeciesCount {
+		return component.SpeciesDomains[s]
+	}
+	return core.DomainShared
+}
+
 // MaterializeStyle is a spawn type's style: a code type's row of
 // component.MaterializeStyles, a program's its prototype's, and false for a type
 // neither holds

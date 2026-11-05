@@ -1,6 +1,7 @@
 package component
 
 import (
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -46,6 +47,21 @@ var SpeciesNames = [SpeciesCount]string{
 	SpeciesEye:    "eye",
 	SpeciesTower:  "tower",
 	SpeciesKraken: "kraken",
+}
+
+// SpeciesDomains are the domain each code species' bodies live in: a drain is its
+// participant's own, every other species Shared, as every data species is
+var SpeciesDomains = [SpeciesCount]core.Domain{
+	SpeciesNone:   core.DomainShared,
+	SpeciesDrain:  core.DomainPlayer,
+	SpeciesSwarm:  core.DomainShared,
+	SpeciesQuasar: core.DomainShared,
+	SpeciesStorm:  core.DomainShared,
+	SpeciesPylon:  core.DomainShared,
+	SpeciesSnake:  core.DomainShared,
+	SpeciesEye:    core.DomainShared,
+	SpeciesTower:  core.DomainShared,
+	SpeciesKraken: core.DomainShared,
 }
 
 // Footprints are each code species' body around its header, from its parameters: a

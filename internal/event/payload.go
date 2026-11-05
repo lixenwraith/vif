@@ -920,12 +920,6 @@ type CursorSetLocalPayload struct {
 
 // --- Fuse ---
 
-// FuseQuasarRequestPayload selects which participant owns the player-domain
-// continuation of one shared escalation decision.
-type FuseQuasarRequestPayload struct {
-	Entity core.Entity `toml:"entity"`
-}
-
 // FuseEffect is what plays a fusion and carries its spawn: the spirits its sources
 // fly in, or a materialize over the footprint
 type FuseEffect int
@@ -938,11 +932,22 @@ const (
 
 var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spirit", FuseEffectMaterialize: "materialize"}
 
-// FuseSwarmRequestPayload contains the two drains to fuse
-type FuseSwarmRequestPayload struct {
-	DrainA core.Entity `toml:"drain_a"`
-	DrainB core.Entity `toml:"drain_b"`
-	Effect FuseEffect  `toml:"effect"`
+// FuseRequestPayload asks for one fusion into Target, played by Effect. Its sources
+// are Entities when it names any, failing when one no longer stands, or else each
+// Sources row's, swept from what stands. A drain is Player-domain, so drains are
+// swept on the instance simulating Cursor: the coordinator's in a live session when 0.
+type FuseRequestPayload struct {
+	Sources  []FuseSource          `toml:"sources"`
+	Entities []core.Entity         `toml:"entities"`
+	Cursor   core.Entity           `toml:"cursor"`
+	Target   component.SpeciesType `toml:"target"`
+	Effect   FuseEffect            `toml:"effect"`
+}
+
+// FuseSource is a sweep's Count sources of one species, every one when Count is 0
+type FuseSource struct {
+	Species component.SpeciesType `toml:"species"`
+	Count   int                   `toml:"count"`
 }
 
 // --- Quasar ---

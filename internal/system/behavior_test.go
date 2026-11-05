@@ -553,6 +553,40 @@ func TestADataSpeciesTakesEachAttackByItsOwnRow(t *testing.T) {
 	}
 }
 
+// TestASpawnSpeciesLandsAnySharedSpecies: the verb asks the species it names, a
+// program's among them, to land at the header plus its offset, and a species that is
+// not Shared fails the compile
+func TestASpawnSpeciesLandsAnySharedSpecies(t *testing.T) {
+	const enter = `on_enter = [{ action = "Telegraph", payload = { color = "cyan" } }]`
+	spawning := func(species string) string {
+		return strings.Replace(wardenProgram, enter, strings.TrimSuffix(enter, "]")+
+			`, { action = "SpawnSpecies", payload = { species = "`+species+`", x = 2, y = 1 } }]`, 1)
+	}
+	ctx, s, header := newProgramWorld(t, spawning("warden"), wardenX+40, wardenY)
+	var landing *event.SpeciesLandRequestPayload
+	for _, ev := range stepBehaviors(ctx.World, s) {
+		if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok {
+			landing = p
+		}
+	}
+	pos, _ := ctx.World.Positions.GetPosition(header)
+	want := event.SpeciesLandRequestPayload{Species: component.SpeciesDataFirst, X: pos.X + 2, Y: pos.Y + 1}
+	if landing == nil || *landing != want {
+		t.Fatalf("entering Wind requested %+v, want %+v", landing, want)
+	}
+
+	for _, species := range []string{"drain", "none"} {
+		doc, err := toml.NewParser([]byte(spawning(species))).Parse()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
+		if err == nil || !strings.Contains(err.Error(), "is not a Shared species") {
+			t.Fatalf("a SpawnSpecies naming %s compiled: %v", species, err)
+		}
+	}
+}
+
 // TestAnEmittedPayloadNamesADataSpeciesByItsProgram: EmitEvent spells a species by
 // a program's name, which its set numbers, and a name no species holds fails the
 // compile

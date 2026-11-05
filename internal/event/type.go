@@ -360,10 +360,8 @@ const (
 
 	// --- Fuse ---
 
-	// EventFuseQuasarRequest (FuseQuasarRequestPayload) [local] asks the elected cursor's drains to fuse into quasar
-	EventFuseQuasarRequest
-	// EventFuseSwarmRequest (FuseSwarmRequestPayload) [local] signals two enraged drains should fuse into swarm
-	EventFuseSwarmRequest
+	// EventFuseRequest (FuseRequestPayload) [local] asks for one fusion: its sources consumed into its target species
+	EventFuseRequest
 
 	// --- Drain ---
 
