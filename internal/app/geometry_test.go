@@ -31,7 +31,7 @@ import (
 func geometryServer(t *testing.T, w, h int) *App {
 	t.Helper()
 	a, err := New(Config{
-		Mode: ModeServer, HostAddress: "127.0.0.1:0", Width: w, Height: h,
+		Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"}, Width: w, Height: h,
 		Resources: resource.Options{Embedded: true}, Seed: 0x6E01,
 	})
 	if err != nil {
@@ -118,7 +118,7 @@ func (p *framePresentation) Flush(cells []terminal.Cell, _, _ int) {
 // the stand-in's smaller map never shows; the session's then fills the game area.
 func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 	// Not parallel: this binds a real socket.
-	host, err := newSessionApp(Config{Mode: ModeServer, HostAddress: "127.0.0.1:0",
+	host, err := newSessionApp(Config{Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"},
 		Resources: resource.Options{Embedded: true}, Seed: 0x6E04})
 	if err != nil {
 		t.Fatalf("server: %v", err)
@@ -137,7 +137,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 
 	const w, h = 160, 45
 	screen := &framePresentation{w: w, h: h}
-	guest, err := newSessionApp(Config{Mode: ModePlay, JoinAddress: port.Addr().String(),
+	guest, err := newSessionApp(Config{Mode: ModePlay, Membership: Membership{JoinAddress: port.Addr().String()},
 		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}})
 	if err != nil {
 		t.Fatalf("join: %v", err)
@@ -301,7 +301,7 @@ func TestAScenarioThatSetsItsOwnMapIsServedOnIt(t *testing.T) {
 	root := fixedMapScenario(t)
 	for _, size := range [][2]int{{120, 40}, {0, 0}} {
 		a, err := newSessionApp(Config{
-			Mode: ModeServer, HostAddress: "127.0.0.1:0", Width: size[0], Height: size[1],
+			Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"}, Width: size[0], Height: size[1],
 			Resources: resource.Options{Dir: root, Scenario: "fixed"}, Seed: 0x6E02,
 		})
 		if err != nil {
@@ -339,7 +339,8 @@ func fixedMapScenario(t *testing.T) string {
 // the channel returned.
 func serveWithBots(t *testing.T, cfg Config) (*App, <-chan error) {
 	t.Helper()
-	cfg.Mode, cfg.HostAddress, cfg.Seed, cfg.Bots = ModeServer, "127.0.0.1:0", 0x6E05, []string{"roam"}
+	cfg.Mode, cfg.Seed = ModeServer, 0x6E05
+	cfg.Membership.HostAddress, cfg.Membership.Bots = "127.0.0.1:0", []string{"roam"}
 	a, err := newSessionApp(cfg)
 	if err != nil {
 		t.Fatalf("server: %v", err)

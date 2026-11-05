@@ -63,15 +63,15 @@ func newSessionApp(cfg Config) (*App, error) {
 	}
 	// Before anything is built, so a graph that does not resolve fails in front of
 	// the operator. Each seat parses its own copy when it is added.
-	for _, spec := range cfg.Bots {
+	for _, spec := range cfg.Membership.Bots {
 		if _, err := loadBotGraph(cfg.Resources, spec); err != nil {
 			return nil, err
 		}
 	}
-	if cfg.JoinAddress != "" {
+	if cfg.Membership.JoinAddress != "" {
 		return newJoiningApp(cfg)
 	}
-	if cfg.HostAddress != "" {
+	if cfg.Membership.HostAddress != "" {
 		return newHostingApp(cfg)
 	}
 	return New(cfg)
@@ -502,8 +502,9 @@ func (d *joinDial) open(cfg Config) (*App, error) {
 	var listener net.Listener
 	var declared string
 	gate := &converge.PeerLinkGate{}
-	if !offer.FixedAuthority && !cfg.NoAdvertise && buildHasSocketNetwork && (offer.Relay == 0 || cfg.ListenAddress != "") {
-		listener, declared = converge.BindAdvertised(cfg.ListenAddress, cfg.JoinAddress)
+	if !offer.FixedAuthority && !cfg.Membership.NoAdvertise && buildHasSocketNetwork &&
+		(offer.Relay == 0 || cfg.Membership.ListenAddress != "") {
+		listener, declared = converge.BindAdvertised(cfg.Membership.ListenAddress, cfg.Membership.JoinAddress)
 	}
 	if listener != nil {
 		// Installed before New, because New is what builds the port that serves

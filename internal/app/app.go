@@ -181,7 +181,7 @@ func New(cfg Config) (*App, error) {
 	}
 	a.membership.open(a, &a.cfg.Membership, &a.scenario, log, &a.glue, a.life)
 	a.scribe.Open(scribeRun{a}, &a.scenario, log, a.hub, &a.glue)
-	if a.cfg.JoinAddress != "" && a.cfg.networkConfig == nil {
+	if a.cfg.Membership.JoinAddress != "" && a.cfg.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")
 	}
 	if err := a.init(); err != nil {
@@ -218,7 +218,7 @@ func (a *App) init() error {
 		return err
 	}
 	// After the scenario, whose max_players bounds what the transport admits.
-	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
+	if a.cfg.Membership.HostAddress != "" && a.cfg.networkConfig == nil {
 		a.cfg.networkConfig = a.membership.hostNetworkConfig()
 	}
 	// A guest's own port takes joins beside its peer links: as the host once it
@@ -309,7 +309,7 @@ func (a *App) initWorld() error {
 	if r := a.world.Resources.Network; r != nil {
 		// A joiner is nobody until its seat names it (bindSeat), not the coordinator
 		// a port with no identity otherwise stands for.
-		if a.cfg.JoinAddress != "" && a.cfg.networkConfig != nil && a.cfg.networkConfig.ParticipantID == 0 {
+		if a.cfg.Membership.JoinAddress != "" && a.cfg.networkConfig != nil && a.cfg.networkConfig.ParticipantID == 0 {
 			r.ParticipantID = 0
 		}
 		a.membership.bindSessionHooks(r)
@@ -378,11 +378,11 @@ func (a *App) initWorld() error {
 	a.corrections, a.authority, a.reach =
 		converge.New(a.instance(), a.glue.Telemetry(), a.world.Resources.Status)
 	a.membership.corrections, a.membership.authority, a.membership.reach = a.corrections, a.authority, a.reach
-	if a.cfg.SlowPolicy != nil {
-		a.authority.SetSlowPolicy(*a.cfg.SlowPolicy)
+	if a.cfg.Membership.SlowPolicy != nil {
+		a.authority.SetSlowPolicy(*a.cfg.Membership.SlowPolicy)
 	}
-	if a.cfg.ShedPolicy != nil {
-		a.authority.SetShedPolicy(*a.cfg.ShedPolicy)
+	if a.cfg.Membership.ShedPolicy != nil {
+		a.authority.SetShedPolicy(*a.cfg.Membership.ShedPolicy)
 	}
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
@@ -394,7 +394,7 @@ func (a *App) initWorld() error {
 	// before the FSM creates any game-time deadline, then release them only after
 	// the common start gate. Otherwise the lobby wait ages every absolute deadline
 	// before tick one.
-	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
+	if a.cfg.Membership.HostAddress != "" || a.cfg.Membership.JoinAddress != "" {
 		a.ctx.TimeCtl.SetPaused(true)
 	}
 

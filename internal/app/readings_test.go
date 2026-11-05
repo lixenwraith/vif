@@ -242,7 +242,7 @@ func socketSession(t *testing.T, cfg Config, players int) ([]*App, *link.SocketP
 		t.Fatal(err)
 	}
 	t.Cleanup(host.Close)
-	host.cfg.Participants = players
+	host.cfg.Membership.Participants = players
 
 	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = engine.CoordinatorParticipant

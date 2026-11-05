@@ -155,8 +155,9 @@ func (m *membership) seatConfigLocked() (Config, error) {
 	}
 	width, height := m.seatScreenLocked()
 	return Config{Mode: ModeHeadless, Resources: m.run.resources(), Width: width, Height: height,
-		NoAdvertise: true, StatTicks: -1, RecTicks: -1, JoinAddress: seatJoin, SessionName: m.cfg.SessionName,
-		holder: link.PeerID(m.world.LocalParticipant()), relay: m.seatLink, claims: m.claims}, nil
+		StatTicks: -1, RecTicks: -1, Membership: Membership{NoAdvertise: true, JoinAddress: seatJoin,
+			SessionName: m.cfg.SessionName, holder: link.PeerID(m.world.LocalParticipant()),
+			relay: m.seatLink, claims: m.claims}}, nil
 }
 
 // seatLink opens a stream to this run for one of its bots and serves the join

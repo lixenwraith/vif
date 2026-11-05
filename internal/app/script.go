@@ -29,7 +29,7 @@ const ScriptPaceMax = "max"
 func scriptPacing(cfg Config) (paced bool, err error) {
 	switch {
 	case cfg.TimeScaleSpec == "":
-		return cfg.HostAddress != "" || cfg.JoinAddress != "" || len(cfg.Bots) > 0, nil
+		return cfg.Membership.HostAddress != "" || cfg.Membership.JoinAddress != "" || len(cfg.Membership.Bots) > 0, nil
 	case cfg.TimeScaleSpec == ScriptPaceMax:
 		return false, nil
 	}
@@ -57,7 +57,7 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 		if err != nil {
 			return nil, err
 		}
-		if cfg.HostAddress != "" || cfg.JoinAddress != "" {
+		if cfg.Membership.HostAddress != "" || cfg.Membership.JoinAddress != "" {
 			if err := d.Live(); err != nil {
 				return nil, err
 			}
@@ -182,7 +182,7 @@ func drive(cfg Config, kind, name string, signals <-chan os.Signal, hold func() 
 		}
 		// A headless bot left with no session plays for nobody; a watched one plays
 		// on, as a person does, and a seat ends as its holder says (seatEnds).
-		if a.membership.dismissed.Load() || kind == "bot" && a.cfg.holder == 0 && forkCell(a.world).Load() {
+		if a.membership.dismissed.Load() || kind == "bot" && a.cfg.Membership.holder == 0 && forkCell(a.world).Load() {
 			return false, nil
 		}
 		// Between two steps, as a presenting run's loop serves it between two waits
@@ -271,7 +271,7 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 	if err := a.hub.StartAll(); err != nil {
 		return fail(err)
 	}
-	if a.cfg.HostAddress != "" {
+	if a.cfg.Membership.HostAddress != "" {
 		// Before the lobby, which the host's own bots may be all of.
 		if err := a.membership.seatBots(); err != nil {
 			return fail(err)
@@ -280,7 +280,7 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 			return fail(err)
 		}
 	}
-	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
+	if a.cfg.Membership.HostAddress != "" || a.cfg.Membership.JoinAddress != "" {
 		a.membership.activateNetworkSession()
 		if err := a.membership.resumeJoinedSession(); err != nil {
 			return fail(err)
@@ -294,7 +294,7 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 	// about to start stepping. On a run that hosts nothing this is inert until a
 	// later :host opens a session.
 	a.membership.openMidRunJoins()
-	if a.cfg.HostAddress == "" {
+	if a.cfg.Membership.HostAddress == "" {
 		if err := a.membership.seatBots(); err != nil {
 			return fail(err)
 		}
