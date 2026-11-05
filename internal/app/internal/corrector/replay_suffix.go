@@ -1,4 +1,4 @@
-package app
+package corrector
 
 import (
 	"github.com/lixenwraith/vif/internal/event"
@@ -6,11 +6,11 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// replaySource is the seam the barrier offers the correction path. An interface
+// ReplaySource is the seam the barrier offers the correction path. An interface
 // rather than a concrete type for the same reason AdoptSnapshot is: the system set
 // is assembled from the manifest, and a run without a network system has nothing
 // to project rather than being broken.
-type replaySource interface {
+type ReplaySource interface {
 	LocalReplaySuffix(fence uint64) ([]event.ScheduledWireFrame, []event.Origin, bool)
 	ReplaySuffixSize() (int, int64)
 	RetainedAfter(tick uint64, fences link.CrossingFences) ([]event.ScheduledWireFrame, []uint32, []event.Origin)
@@ -26,12 +26,12 @@ type replaySink interface {
 // for its source and the agreed artifacts due after its tick, each at its own tick, so
 // the projection is the world this instance would have reached (multi-player.md §3.3);
 // a suffix missing a record is unavailable, not shorter. Caller MUST hold updateMutex.
-func (c *corrector) feedProjectionLocked(staging *App, header snapshot.CaptureHeader) {
+func (c *Corrector) feedProjectionLocked(staging *Corrector, header snapshot.CaptureHeader) {
 	src, local := c.replaySourceLocked()
 	if src == nil {
 		return // no session barrier: nothing was ever retained
 	}
-	sink, _ := staging.glue.replaySource()
+	sink, _ := staging.ReplaySource()
 	dst, ok := sink.(replaySink)
 	if !ok {
 		return
@@ -71,18 +71,18 @@ func (c *corrector) feedProjectionLocked(staging *App, header snapshot.CaptureHe
 
 // replaySourceLocked finds the barrier that retains the suffix, and this instance's
 // own participant identity. Caller MUST hold updateMutex.
-func (c *corrector) replaySourceLocked() (replaySource, uint32) {
+func (c *Corrector) replaySourceLocked() (ReplaySource, uint32) {
 	local := c.world.LocalParticipant()
 	for _, sys := range c.world.Systems() {
-		if r, ok := sys.(replaySource); ok {
+		if r, ok := sys.(ReplaySource); ok {
 			return r, local
 		}
 	}
 	return nil, local
 }
 
-// replaySource is replaySourceLocked for a caller that does not hold the lock.
-func (c *corrector) replaySource() (out replaySource, local uint32) {
+// ReplaySource is replaySourceLocked for a caller that does not hold the lock.
+func (c *Corrector) ReplaySource() (out ReplaySource, local uint32) {
 	c.world.RunSafe(func() { out, local = c.replaySourceLocked() })
 	return out, local
 }

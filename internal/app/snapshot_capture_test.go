@@ -108,7 +108,7 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("stage with explicit local options: %v", err)
 			}
-			stageCfg := staged.StagingWorld().cfg
+			stageCfg := stagingOf(staged).cfg
 			if stageCfg.ColorModeSet || stageCfg.AudioBackend != "" || stageCfg.Play != paths.DefaultPlay() ||
 				stageCfg.LogScope != "" || stageCfg.Resources.Keymap != "" ||
 				stageCfg.Resources.Music != "" || stageCfg.Resources.Sounds != "" ||
@@ -736,15 +736,15 @@ func TestAnIndexReadInPlaceMatchesTheCaptures(t *testing.T) {
 			tickAll(apps)
 		}
 		guest.World().RunSafe(func() {
-			light, err := guest.glue.captureLightLocked()
+			light, err := guest.glue.CaptureLightLocked()
 			if err != nil || len(light.World.Positions) != 0 {
 				t.Fatalf("round %d: light capture: err %v, %d position rows, want none", round, err, len(light.World.Positions))
 			}
-			live, err := guest.glue.encoder.BuildLive(guest.world, light, 1)
+			live, err := guest.glue.Encoder().BuildLive(guest.world, light, 1)
 			if err != nil {
 				t.Fatalf("round %d: live index: %v", round, err)
 			}
-			cap, err := guest.glue.captureSharedLocked()
+			cap, err := guest.glue.CaptureSharedLocked()
 			if err != nil {
 				t.Fatalf("round %d: capture: %v", round, err)
 			}

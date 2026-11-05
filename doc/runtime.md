@@ -1099,9 +1099,9 @@ not indefinitely leave the terminal in raw mode.
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
 | Session gates, mid-run hosting and restarts, dedicated host, probe, bot seats | `internal/app/session.go`, `host.go`, `serve.go`, `probe.go`, `seat.go` |
 | Allocated-session lifetime policy | `internal/lifecycle` |
-| Replay copies and checkpoints | `internal/app/clone.go` |
+| Replay copies and checkpoints | `internal/app/clone.go`, `internal/app/internal/scribe/checkpoint.go` |
 | Recording, replay, fuzz, and authored script drivers | `internal/journal` |
-| Replay identity and comparison boundary | `internal/app/replay.go`, `surface.go`, `internal/snapshot/surface.go` |
+| Replay identity and comparison boundary | `internal/app/replay.go`, `surface.go`, `internal/app/internal/scribe/journal.go`, `internal/snapshot/surface.go` |
 | Tick and event scheduling | `internal/engine/scheduler.go` |
 | World locking and system execution | `internal/engine/world.go`, `sync_*.go` |
 | Play/manual clocks, simulation time and time control | `internal/engine/pausable_clock.go`, `manual_clock.go`, `sim_clock.go`, `time_control.go` |

@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -19,10 +20,10 @@ import (
 // instance is the App as the authority protocol sees it: the correction glue over
 // its world, and beside it the run's membership, which the protocol moves. Every
 // method takes the world lock itself, which is what keeps converge.Instance's
-// contract — "never called while the caller holds it" — a property of this file
-// rather than of every call site.
+// contract — "never called while the caller holds it" — a property of these two
+// types rather than of every call site.
 type instance struct {
-	*corrector
+	*corrector.Corrector
 	*membership
 }
 
@@ -148,48 +149,6 @@ func (m *membership) DrainOffTick() {
 			m.releaseHold("Resumed by the host")
 		}
 	})
-}
-
-// CaptureSharedLocked is the read without its seal, for a comparison under the lock.
-func (c *corrector) CaptureSharedLocked() (snapshot.SharedCapture, error) {
-	return c.captureSharedLocked()
-}
-
-// IndexSharedLocked indexes the live world under its lock against the authority
-// and term a manifest names, copying nothing but the index's own.
-func (c *corrector) IndexSharedLocked(authority uint32, term network.AuthorityTerm) (*snapshot.Manifest, snapshot.SharedCapture, error) {
-	light, err := c.captureLightLocked()
-	if err != nil {
-		return nil, snapshot.SharedCapture{}, err
-	}
-	light.Header.Term = term
-	index, err := c.encoder.BuildLive(c.world, light, authority)
-	return index, light, err
-}
-
-// InstallCapture resolves a capture against the staging world, projects it to this
-// instance's tick and commits it between two ticks, reporting how far this instance
-// had drifted from the projection.
-func (c *corrector) InstallCapture(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
-	staged, err := c.stageProved(cap)
-	if err != nil {
-		return engine.WorldDifference{}, err
-	}
-	if err := staged.Commit(); err != nil {
-		return engine.WorldDifference{}, err
-	}
-	return staged.Difference(), nil
-}
-
-func (c *corrector) Encoder() *snapshot.Encoder { return &c.encoder }
-
-// AdoptAuthority takes a header whose world this instance already holds: the
-// barrier's fences move to it and the ledger is settled against this world, which
-// the authority has just proved is its own.
-func (c *corrector) AdoptAuthority(h snapshot.CaptureHeader) {
-	c.world.RunSafe(func() { c.adoptSnapshotBarrierLocked(h) })
-	c.confirmPredictions(h.Tick, c.world)
-	c.world.RunSafe(func() { c.telemetry.InstallTick.Store(int64(h.Tick)) })
 }
 
 // DropParticipant closes one participant's link; a direct neighbour observes the

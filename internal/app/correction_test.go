@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -323,16 +324,16 @@ func TestStagingWorldIsBuiltOnceAndReused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stage first: %v", err)
 	}
-	world := stagedFirst.StagingWorld()
+	world := stagingOf(stagedFirst)
 	stagedFirst.Discard()
 	stagedSecond, err := reused.StageShared(second)
 	if err != nil {
 		t.Fatalf("stage second: %v", err)
 	}
-	if stagedSecond.StagingWorld() != world {
+	if stagingOf(stagedSecond) != world {
 		t.Fatal("the second install built a second staging world")
 	}
-	got := stagedSecond.StagingWorld().SnapshotShared()
+	got := stagingOf(stagedSecond).SnapshotShared()
 	stagedSecond.Discard()
 
 	// Another takes only the second, into a world built for it.
@@ -343,7 +344,7 @@ func TestStagingWorldIsBuiltOnceAndReused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stage fresh: %v", err)
 	}
-	want := stagedFresh.StagingWorld().SnapshotShared()
+	want := stagingOf(stagedFresh).SnapshotShared()
 	stagedFresh.Discard()
 
 	if idx, lw, lg, ok := snapshot.FirstDiff(want, got); ok {
@@ -390,7 +391,7 @@ func TestReconcileMatchesAFullInstall(t *testing.T) {
 	if err := moved.InstallShared(early); err != nil {
 		t.Fatalf("install early: %v", err)
 	}
-	diff, err := moved.glue.reconcileShared(late)
+	diff, err := moved.glue.ReconcileShared(late)
 	if err != nil {
 		t.Fatalf("reconcile late: %v", err)
 	}
@@ -1591,11 +1592,11 @@ func TestAWriteInPlaceMatchesACaptureWrite(t *testing.T) {
 		t.Fatalf("install early: %v", err)
 	}
 	var before snapshot.SharedCapture
-	byCapture.world.RunSafe(func() { before, err = byCapture.glue.captureSharedLocked() })
+	byCapture.world.RunSafe(func() { before, err = byCapture.glue.CaptureSharedLocked() })
 	if err != nil {
 		t.Fatalf("capture before: %v", err)
 	}
-	wantDiff, err := byCapture.glue.reconcileShared(late)
+	wantDiff, err := byCapture.glue.ReconcileShared(late)
 	if err != nil {
 		t.Fatalf("reconcile late: %v", err)
 	}
@@ -1609,9 +1610,9 @@ func TestAWriteInPlaceMatchesACaptureWrite(t *testing.T) {
 	}
 	var (
 		gotDiff engine.WorldDifference
-		written stagedWrite
+		written corrector.StagedWrite
 	)
-	inPlace.world.RunSafe(func() { gotDiff, written, err = inPlace.glue.writeStagedLocked(source, late.Header, true) })
+	inPlace.world.RunSafe(func() { gotDiff, written, err = inPlace.glue.WriteStagedLocked(&source.glue, late.Header, true) })
 	if err != nil {
 		t.Fatalf("write in place: %v", err)
 	}
@@ -1621,8 +1622,8 @@ func TestAWriteInPlaceMatchesACaptureWrite(t *testing.T) {
 	if wantDiff.Entries == 0 {
 		t.Fatal("120 ticks moved nothing, so the write proved nothing")
 	}
-	if written.delta == nil || !reflect.DeepEqual(*written.delta, wantDelta) {
-		t.Fatalf("the delta recorded in place differs from DiffSharedWorld over the captures:\n%s", deltaDiff(written.delta, wantDelta))
+	if written.Delta == nil || !reflect.DeepEqual(*written.Delta, wantDelta) {
+		t.Fatalf("the delta recorded in place differs from DiffSharedWorld over the captures:\n%s", deltaDiff(written.Delta, wantDelta))
 	}
 	want, got := byCapture.SnapshotShared(), inPlace.SnapshotShared()
 	if idx, lw, lg, ok := snapshot.FirstDiff(want, got); ok {
