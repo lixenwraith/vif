@@ -328,8 +328,10 @@ One matrix judges every approach, on harnesses that exist:
   `TestNetcodeReadingsOverSockets` (§3.1's shape over sockets,
   `VIF_NETCODE_READINGS=1`, a CPU profile per row under `VIF_NETCODE_PROFILE=<dir>`;
   a td row is taken three times and the run at the median keyframe rate reported,
-  every run's rate beside it, `VIF_NETCODE_READINGS_RUNS` setting the count),
-  `TestNetcodeReadingsForBatch3` (§3.7, `VIF_NETCODE_BATCH3=1`); a browser joiner.
+  every run's rate beside it, `VIF_NETCODE_READINGS_RUNS` setting the count; its
+  guests join as `-join` does, from one address, so a 16-player row waits about two
+  minutes for the admission budget), `TestNetcodeReadingsForBatch3` (§3.7,
+  `VIF_NETCODE_BATCH3=1`); a browser joiner.
 - **Host**: native at `GOMAXPROCS=1`; a fleet pod at 500m CPU; a WASM guest.
   `BenchmarkHeadlessTicks`; [Measure a full roster](todo.md#measure-a-full-roster).
 - **Load**: idle; a move every third tick and a shot every sixth; the storm high

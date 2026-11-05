@@ -916,7 +916,7 @@ func TestAJournalReplaysAcrossALeave(t *testing.T) {
 			leaver, bots := host, 0
 			if side != "guest" {
 				var err error
-				host.World().RunSafe(func() { err = (sessionControl{host}).AddBot("roam") })
+				host.World().RunSafe(func() { err = host.ctx.SessionCtl.AddBot("roam") })
 				if err != nil {
 					t.Fatalf("bot: %v", err)
 				}
@@ -1199,7 +1199,7 @@ func TestAReplayStandsWhereTheRunsWriteLeftIt(t *testing.T) {
 	var hosted, opened left
 	unsettled()
 	a.World().RunSafe(func() {
-		if err = a.membership.beginHostingLocked("127.0.0.1:0", ""); err == nil {
+		if err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", ""); err == nil {
 			hosted = left{a.Position(), a.barrierLocked()}
 		}
 	})

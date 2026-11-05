@@ -109,9 +109,9 @@ func TestARelayPublishesItsDoorThroughTheRouter(t *testing.T) {
 	for _, a := range []*App{host, relay, person} {
 		waitForCursors(t, a, 4)
 	}
-	if person.membership.joinedThrough != relayID || person.membership.sessionTransport().PeerCount() != 1 {
+	if through := relayOf(person); through != relayID || person.membership.sessionTransport().PeerCount() != 1 {
 		t.Fatalf("the person joined through participant %d holding %d links; want through the relay, on its one link",
-			person.membership.joinedThrough, person.membership.sessionTransport().PeerCount())
+			through, person.membership.sessionTransport().PeerCount())
 	}
 	waitForMotion(t, host, cursorOf(t, host, person.membership.localParticipant()), "the person's cursor on the host")
 }

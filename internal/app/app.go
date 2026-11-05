@@ -38,30 +38,12 @@ const fallbackColorMode = terminal.ColorMode256
 // so the operator's own flags still decide everything a restart does not name — a
 // pinned -seed most of all.
 type restartRequest struct {
-	Notice string
-	// Scenario replaces -s. Empty keeps the command line's, which is what a guest
-	// rebuilding into a session that is about to re-offer it one wants.
-	Scenario string
+	// restartAsk is what the membership asks of the next run, the whole of a
+	// request the membership makes.
+	restartAsk
 
-	// Host is the address to open hosting on once the next run's clock is running.
-	// A coordinator changing scenario does not go back into a startup lobby: its
-	// guests are already redialling, and the mid-run gate is the door they arrive
-	// at — the same one a reconnect has always used.
-	Host string
-
-	// Rejoin says the next run follows this session rather than leads it, and Join
-	// where to dial now that succession moved the door. Join alone is a :join target
-	// that dialled holds already admitted; dialled alone is this run's own door,
-	// redialled once its host went. With none the next run is solo, which is what an
-	// authority with an empty roster has become.
-	Rejoin  bool
-	Join    string
-	dialled *joinDial
-
-	// press says the next run's player started its join, so its seat waits for
-	// their press. provided is the scenario a join already holds, which a run
-	// joining the same session again has no need to fetch twice.
-	press    bool
+	// provided is the scenario a join already holds, which a run joining the same
+	// session again has no need to fetch twice.
 	provided *resource.Scenario
 
 	// Bots are the graphs of the seats this run held, which the next one seats again.
@@ -107,6 +89,10 @@ type App struct {
 	restart      atomic.Pointer[restartRequest]
 	inputMachine *input.Machine
 	router       *mode.Router
+
+	// seatScreen is this run's terminal as its seats follow it, published on each
+	// resize by a run whose terminal is its geometry; nil until the first.
+	seatScreen atomic.Pointer[screen]
 
 	scheduler      *engine.Scheduler
 	frameReady     chan struct{}
@@ -182,7 +168,7 @@ func newApp(cfg runConfig) (*App, error) {
 		hub:  service.NewHub(log),
 		life: lifecycle.New(cfg.Lifetime),
 	}
-	a.membership.open(a, &a.cfg.Membership, &a.cfg.wiring.membership, &a.scenario, log, &a.glue, a.life)
+	a.membership.open(membershipRun{a}, &a.cfg.Membership, &a.cfg.wiring.membership, &a.scenario, log, &a.glue, a.life)
 	a.scribe.Open(scribeRun{a}, &a.scenario, log, a.hub, &a.glue)
 	if a.cfg.Membership.JoinAddress != "" && a.cfg.wiring.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")
@@ -256,7 +242,7 @@ func (a *App) init() error {
 	if err := a.initScheduler(); err != nil {
 		return err
 	}
-	a.ctx.SessionCtl = sessionControl{a}
+	a.ctx.SessionCtl = sessionControl{control{&a.membership}, a}
 
 	a.log.Info("app", "msg", "init completed",
 		"width", a.ctx.Width,

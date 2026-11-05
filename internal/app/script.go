@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/bot"
@@ -14,7 +15,6 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
@@ -113,15 +113,6 @@ func RunBot(cfg Config, host Host, spec string) (bot.Stats, error) {
 		"injected", stats.Injected, "dropped", stats.Dropped, "fitness", stats.Fitness, "state", stats.State,
 		"typed", reg.Ints.Get("typing.correct").Load(), "errors", reg.Ints.Get("typing.errors").Load())
 	return stats, err
-}
-
-// loadBotGraph resolves and parses one graph spec, a name or a path.
-func loadBotGraph(o resource.Options, spec string) (*bot.Graph, error) {
-	data, name, err := resource.BotGraph(o, spec)
-	if err != nil {
-		return nil, err
-	}
-	return bot.ParseGraph(name, data)
 }
 
 // runDriven plays one driven participant, a script or a bot, until it finishes or
@@ -250,6 +241,33 @@ func (s botSource) progress() string {
 	return fmt.Sprintf("tick %d | %s | %d intents, %d dropped", st.Ticks, st.State, st.Injected, st.Dropped)
 }
 
+// screen is a terminal's size in cells.
+type screen struct{ w, h int }
+
+// seatSource ends a seat once its session is gone for it (seatEnds): a holder left
+// with no session takes its bots along. A seat follows its holder's screen as it is
+// published, between two of its steps.
+type seatSource struct {
+	botSource
+	ends   []*atomic.Bool
+	screen *atomic.Pointer[screen]
+	run    *App
+	shown  screen
+}
+
+func (s *seatSource) Step() (bool, error) {
+	for _, gone := range s.ends {
+		if gone.Load() {
+			return false, nil
+		}
+	}
+	if sc := s.screen.Load(); sc != nil && *sc != s.shown {
+		s.shown = *sc
+		s.run.Resize(sc.w, sc.h)
+	}
+	return s.botSource.Step()
+}
+
 // newScriptApp starts the same tick-zero gate as interactive play, but leaves the
 // scheduler caller-driven after the roster is closed.
 func newScriptApp(cfg runConfig, signals <-chan os.Signal) (*App, error) {
@@ -301,20 +319,6 @@ func newScriptApp(cfg runConfig, signals <-chan os.Signal) (*App, error) {
 		}
 	}
 	return a, nil
-}
-
-func waitScriptTick(signals <-chan os.Signal, delay time.Duration) bool {
-	if delay <= 0 {
-		return true
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-signals:
-		return false
-	case <-timer.C:
-		return true
-	}
 }
 
 type scriptTarget struct{ a *App }

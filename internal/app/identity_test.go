@@ -26,7 +26,8 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatalf("begin hosting: %v", err)
 	}
-	addr := host.membership.midRunPort.Addr().String()
+	port := portOf(t, host)
+	addr := port.Addr().String()
 
 	// A guest that reports a different simulation, having done its own checks and
 	// passed them: the anchor it was sent is the anchor it holds.
@@ -43,7 +44,7 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 	_ = pending.Complete(nil, report)
 
 	select {
-	case err := <-host.membership.midRunPort.Errors():
+	case err := <-port.Errors():
 		if !errors.Is(err, &network.Refusal{Code: network.RefusalIdentity}) {
 			t.Fatalf("the host refused for %v, want an identity refusal", err)
 		}
@@ -54,9 +55,9 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 		t.Fatal("the host never refused a peer running a different simulation")
 	}
 
-	if host.membership.guestCount() != 0 || host.membership.midRunPort.PeerCount() != 0 {
+	if host.membership.guestCount() != 0 || port.PeerCount() != 0 {
 		t.Fatalf("the refused peer is still in the session: roster %d peers %d",
-			host.membership.guestCount(), host.membership.midRunPort.PeerCount())
+			host.membership.guestCount(), port.PeerCount())
 	}
 }
 
@@ -64,15 +65,10 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 // other: what a coordinator offers is what it later measures a reply against, so a
 // reset between the two cannot turn a valid join into a mismatch or the reverse.
 func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
-	t.Parallel()
-	a := mustHeadless(t, 0x0FFE, 120, 40)
-	defer a.Close()
-	tickUntilCursor(t, a)
-
-	offer, err := a.membership.assignParticipant(nil)
-	if err != nil {
-		t.Fatalf("assign: %v", err)
-	}
+	// Not parallel: a real socket against wall-clock deadlines.
+	a := offering(t, 0x0FFE)
+	pending, offer := dialSession(t, a.HostAddr())
+	defer pending.Close()
 	if offer.Identity.Protocol != network.ProtocolVersion {
 		t.Fatalf("the offer names protocol %d", offer.Identity.Protocol)
 	}
@@ -89,9 +85,22 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 	}
 	// The offer's identity and this instance's own describe the same session,
 	// because one is derived from the anchor the other was read from.
-	if err := offer.Identity.Verify(a.membership.sessionIdentity()); err != nil {
+	if err := offer.Identity.Verify(identityFromAnchor(a.JoinAnchor())); err != nil {
 		t.Fatalf("a host would refuse itself: %v", err)
 	}
+}
+
+// offering is a solo run on seed that opened a session with :host on a loopback port,
+// for a dial to read the offer it makes.
+func offering(t *testing.T, seed uint64) *App {
+	t.Helper()
+	a := mustHeadless(t, seed, 120, 40)
+	t.Cleanup(a.Close)
+	tickUntilCursor(t, a)
+	if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	return a
 }
 
 // TestADifferentCorpusStillJoins is the rule content follows: the corpus is the
@@ -99,22 +108,17 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 // machines with different content installed are still running the same session.
 // The scenario is the opposite and stays refused, which is what keeps them apart.
 func TestADifferentCorpusStillJoins(t *testing.T) {
-	t.Parallel()
-	a := mustHeadless(t, 0x0C0C, 120, 40)
-	defer a.Close()
-	tickUntilCursor(t, a)
-
-	offer, err := a.membership.assignParticipant(nil)
-	if err != nil {
-		t.Fatalf("assign: %v", err)
-	}
-	if err := offer.Identity.Verify(a.membership.sessionIdentity()); err != nil {
+	// Not parallel: a real socket against wall-clock deadlines.
+	a := offering(t, 0x0C0C)
+	pending, offer := dialSession(t, a.HostAddr())
+	defer pending.Close()
+	if err := offer.Identity.Verify(identityFromAnchor(a.JoinAnchor())); err != nil {
 		t.Fatalf("a peer with the same session was refused: %v", err)
 	}
 
-	elsewhere := a.membership.sessionIdentity()
+	elsewhere := identityFromAnchor(a.JoinAnchor())
 	elsewhere.ScenarioDigest = "sha256:0000000000000000"
-	err = offer.Identity.Verify(elsewhere)
+	err := offer.Identity.Verify(elsewhere)
 	if err == nil {
 		t.Fatal("a peer simulating a different scenario was accepted")
 	}

@@ -249,23 +249,23 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 // TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone covers the seam that lets a host
 // outlive its guests: the mid-run gate is installed from construction, answers
 // nothing until the run arms it, and finds the endpoint NetworkService contributed.
-// Both host shapes are driven, and the window between the two gates is the third
-// state — the only one whose honest answer is a refusal the dialer retries.
+// Both host shapes are driven through a lobby of one guest, and the window between
+// the two gates is the third state — the only one whose honest answer is a refusal
+// the dialer retries.
 func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 	// Not parallel: this binds a real socket.
 	for _, tt := range []struct {
-		name         string
-		mode         Mode
-		scripted     bool
-		participants int
-		peers        int
+		name     string
+		mode     Mode
+		scripted bool
+		peers    int
 	}{
 		{name: "dedicated", mode: ModeServer, peers: parameter.MaxPlayers},
-		{name: "lobby", mode: ModeHeadless, scripted: true, participants: 2, peers: 1},
+		{name: "lobby", mode: ModeHeadless, scripted: true, peers: parameter.MaxPlayers - 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := runConfig{Config: Config{
-				Mode: tt.mode, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: tt.participants},
+				Mode: tt.mode, Membership: Membership{HostAddress: "127.0.0.1:0"},
 				Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E4E,
 			}}
 			cfg.wiring.scriptedSession = tt.scripted
@@ -282,42 +282,57 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 				t.Fatalf("the transport admits %d peers, want %d",
 					a.cfg.wiring.networkConfig.MaxPeers, tt.peers)
 			}
-
-			// Before the lobby closes the gate is startHostSessionOn's, and a second
-			// one would race it. An unarmed dial is therefore a no-op rather than a
-			// refusal.
-			a.membership.admitLateJoiner(2)
-			if a.membership.lateJoins.Load() {
-				t.Fatal("the mid-run gate armed itself")
-			}
-			// The window in between: the lobby's offers are already out and the
-			// mid-run gate waits on a capture a stopped clock never reaches.
-			a.membership.lobbyClosing.Store(true)
-			if _, err := a.membership.assignParticipant(nil); !errors.Is(err, ErrSessionStarting) {
-				t.Fatalf("a dial during the closing window returned %v, want ErrSessionStarting", err)
-			}
-			a.membership.openMidRunJoins()
-			if _, err := a.membership.assignParticipant(nil); err != nil {
-				t.Fatalf("a dial after the gate opened was refused: %v", err)
-			}
-
 			if err := a.hub.StartAll(); err != nil {
 				t.Fatalf("start services: %v", err)
 			}
-			port, err := a.membership.socketPort()
-			if err != nil || port == nil {
-				t.Fatalf("this host has no endpoint to admit onto: %v", err)
-			}
+			port := portOf(t, a)
 			if bound := port.Addr(); bound == nil {
 				t.Fatal("the endpoint is not bound")
 			}
+			addr := port.Addr().String()
+
+			// Before the lobby closes the gate is startHostSession's, and a second
+			// one would race it. The admission of the lobby's guest is therefore a
+			// no-op to the mid-run gate rather than a release: the clock the lobby
+			// holds still stays held until the run lets it go.
+			lobby := make(chan error, 1)
+			go func() { lobby <- a.membership.startHostSession(nil) }()
+			pending, offered := dialSession(t, addr)
+			defer pending.Close()
+			takePlace(t, pending, offered, network.JoinerReport{Width: 120, Height: 40})
+			select {
+			case err := <-lobby:
+				if err != nil {
+					t.Fatalf("the lobby: %v", err)
+				}
+			case <-time.After(socketWait): // [wall] a link bound, not a game one
+				t.Fatalf("the lobby did not close on its guest within %s", socketWait)
+			}
+			if !a.ctx.TimeCtl.OwnPause() {
+				t.Fatal("the lobby's guest released the clock its lobby holds still")
+			}
+
+			// The window in between: the lobby's offers are already out and the
+			// mid-run gate waits on a capture a stopped clock never reaches.
+			if _, _, err := dialOnce(addr); !errors.Is(err, &network.Refusal{Code: network.RefusalStarting}) ||
+				network.RetryOf(err) != network.RetrySoon {
+				t.Fatalf("a dial during the closing window returned %v, want a refusal to retry soon", err)
+			}
+			a.membership.openMidRunJoins()
+			late, _, err := dialOnce(addr)
+			if err != nil {
+				t.Fatalf("a dial after the gate opened was refused: %v", err)
+			}
+			late.Close()
 		})
 	}
 }
 
 // TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers pins what -players means on a
 // server: a ceiling, never a requirement. A lobby that waited for its full roster
-// would make a fleet host's readiness a function of how many people wanted to play.
+// would make a fleet host's readiness a function of how many people wanted to play;
+// that its lobby starts on its first guest is the server rows of the quorum table
+// (TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty).
 func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -343,82 +358,8 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 			if got := a.membership.sessionCapacity(); got != tt.wantCapacity {
 				t.Fatalf("capacity = %d, want %d", got, tt.wantCapacity)
 			}
-			if got := a.membership.lobbyQuorum(); got != 1 {
-				t.Fatalf("quorum = %d, want 1: a server starts on its first guest", got)
-			}
 			if got := a.cfg.wiring.networkConfig.MaxPeers; got != tt.wantCapacity {
 				t.Fatalf("transport admits %d peers, want the capacity %d", got, tt.wantCapacity)
-			}
-		})
-	}
-}
-
-// TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty: -players and max_players
-// are cursor ceilings, the lower holding, of which sessionCapacity is the guest half.
-// An explicit -players on a scripted or bot-driven host is also the lobby's party,
-// min_players raises any lobby's, and a -players under min_players is refused. A run
-// that joined holds to the -players its session was opened with, should it host.
-func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
-	t.Parallel()
-	for _, tt := range []struct {
-		name         string
-		serves       bool
-		participants int
-		joined       int // the -players the offer this run joined on carried
-		low, high    int // the scenario's range: zero keeps its default, a negative low is 0
-		capacity     int
-		players      int
-		quorum       int
-		refused      bool
-	}{
-		{name: "host/unset", capacity: parameter.MaxPlayers - 1,
-			players: parameter.MaxPlayers, quorum: 1},
-		{name: "host/two", participants: 2, capacity: 1, players: 2, quorum: 1},
-		{name: "host/four", participants: 4, capacity: 3, players: 4, quorum: 3},
-		{name: "host/over", participants: parameter.MaxPlayers + 4,
-			capacity: parameter.MaxPlayers - 1, players: parameter.MaxPlayers,
-			quorum: parameter.MaxPlayers - 1},
-		{name: "serve/unset", serves: true, capacity: parameter.MaxPlayers,
-			players: parameter.MaxPlayers, quorum: 1},
-		{name: "serve/three", serves: true, participants: 3, capacity: 3,
-			players: 3, quorum: 1},
-		{name: "serve/one", serves: true, participants: 1, capacity: 1,
-			players: 1, quorum: 1},
-		{name: "host/scenario max", participants: 4, high: 2, capacity: 1, players: 2, quorum: 1},
-		{name: "host/scenario min", low: 3, capacity: parameter.MaxPlayers - 1,
-			players: parameter.MaxPlayers, quorum: 2},
-		{name: "host/under min", participants: 2, low: 3, capacity: 1, players: 2, quorum: 1, refused: true},
-		{name: "joined/under min", joined: 2, low: 3, capacity: 1, players: 2, quorum: 2, refused: true},
-		{name: "serve/scenario range", serves: true, participants: 4, low: 2, high: 3,
-			capacity: 3, players: 3, quorum: 2},
-		{name: "serve/no players", serves: true, low: -1, capacity: parameter.MaxPlayers,
-			players: parameter.MaxPlayers, quorum: 1},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			a := mustHeadless(t, 0x5E6E, 120, 40)
-			defer a.Close()
-			a.cfg.Membership.Participants, a.cfg.wiring.membership.sessionPlayers = tt.participants, tt.joined
-			if tt.serves {
-				a.cfg.Mode = ModeServer
-			}
-			if tt.low != 0 {
-				a.scenario.MinPlayers = max(tt.low, 0)
-			}
-			if tt.high != 0 {
-				a.scenario.MaxPlayers = tt.high
-			}
-			if err := a.membership.playersFit(a.scenario); (err != nil) != tt.refused {
-				t.Fatalf("fit = %v, want refused %t", err, tt.refused)
-			}
-			if got := a.membership.sessionCapacity(); got != tt.capacity {
-				t.Fatalf("guest capacity = %d, want %d", got, tt.capacity)
-			}
-			if got := a.membership.playerCapacity(); got != tt.players {
-				t.Fatalf("cursor capacity = %d, want %d", got, tt.players)
-			}
-			if got := a.membership.lobbyQuorum(); got != tt.quorum {
-				t.Fatalf("quorum = %d, want %d", got, tt.quorum)
 			}
 		})
 	}

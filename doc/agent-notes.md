@@ -119,7 +119,9 @@ that proves wrong or that a document now states, and link the document instead.
   in `RebindCursorRoster` too, never only in the arrival's handler.
 - A joiner's world holds no entry for it until its arrival crosses there, while the
   authority's may already: what the run itself is, a bot seat, is its own word
-  (`Instance.Seated`), never read off its roster entry.
+  (`Instance.Seated`), never read off its roster entry. Its `localSlot` stays
+  `NoPlayerSlot` until then, which takes the joiner's own ticks: a test waiting on it
+  ticks the joiner (`arrival` in `host_test.go`).
 - `NetworkSystem.Flush` runs at the tick's close under the world lock, after the
   tick's settle, so a hold it releases at a crossing's apply tick sees everything
   that crossing paid in that tick (`NetworkSystem.crossSettled`).
@@ -166,6 +168,17 @@ that proves wrong or that a document now states, and link the document instead.
   run the four shapes on both from their package directories, a second or so each,
   and read late commits and late copies; pages repaired move with any change of
   timing.
+- A host admits `NetworkAdmitBurst` (6) dials from one address per
+  `NetworkAdmitWindow` (a minute), a fixed window, and loopback is one address: a
+  test lobby past six dials fills a window more per six (`lobbySession` sizes its
+  wait so), a dial refused after admission counts and a budget refusal does not.
+  A dial reaching a host with `MaxHandshakes` (8) handshakes in flight is closed
+  unanswered, which the dialer reads as `io.EOF` ("connected, but no vif session
+  answered there"), and is retried as a refusal is (`scriptedRun`).
+- A test proven to pin a rule by mutating the rule's line runs from a copy of the
+  tree (`tar` it out), so the working tree stays editable; a mutation that survives
+  is run against main's own tests in a `git worktree`, where surviving too makes it
+  an old gap rather than a lost pin.
 - A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
   test that builds a joiner as a join does goes through `configForJoin` into
   `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,

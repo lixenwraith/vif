@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -309,12 +308,12 @@ func TestAJoinerAdoptsTheHostsTick(t *testing.T) {
 	if got := guest.World().TickInterval(); got != tick {
 		t.Fatalf("the joiner ticks at %s, its host at %s", got, tick)
 	}
-	if err := identityFromAnchor(an).Verify(guest.membership.sessionIdentity()); err != nil {
+	if err := identityFromAnchor(an).Verify(identityFromAnchor(guest.JoinAnchor())); err != nil {
 		t.Fatalf("a joiner that adopted the host's tick was refused: %v", err)
 	}
 	kept := mustHeadless(t, seed, 120, 40)
 	defer kept.Close()
-	if err := identityFromAnchor(an).Verify(kept.membership.sessionIdentity()); err == nil ||
+	if err := identityFromAnchor(an).Verify(identityFromAnchor(kept.JoinAnchor())); err == nil ||
 		!strings.Contains(err.Error(), "tick_ns") {
 		t.Fatalf("a joiner on its own tick was told %v", err)
 	}
@@ -363,8 +362,8 @@ func TestReproducingJoinAdmissionAndRefusals(t *testing.T) {
 	host.Tick(5)
 	late := mustHeadless(t, seed, 120, 40)
 	defer late.Close()
-	if err := late.Join(host.JoinAnchor()); !errors.Is(err, ErrJoinMidRun) {
-		t.Fatalf("join with a mid-run host = %v, want ErrJoinMidRun", err)
+	if err := late.Join(host.JoinAnchor()); err == nil || !strings.Contains(err.Error(), "not at the same position") {
+		t.Fatalf("join with a mid-run host = %v, want a position mismatch", err)
 	}
 }
 

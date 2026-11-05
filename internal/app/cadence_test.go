@@ -26,7 +26,9 @@ func shapedPair(t *testing.T, seed uint64, shape link.LinkShape) (*App, *App, *l
 	if err := b.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
-	a.membership.adoptMapLatch(an.Anchor)
+	if err := a.Join(an); err != nil {
+		t.Fatalf("host latch: %v", err)
+	}
 
 	mesh := network.NewMesh()
 	mesh.Link(1, 2)
