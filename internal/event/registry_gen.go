@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 206
+const EventTypeCount = 204
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -102,7 +102,6 @@ func InitRegistry() {
 	RegisterType("EventPingGridRequest", EventPingGridRequest)
 	RegisterType("EventMaterializeRequest", EventMaterializeRequest)
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete)
-	RegisterType("EventMaterializeAreaRequest", EventMaterializeAreaRequest)
 	RegisterType("EventFlashSpawnOneRequest", EventFlashSpawnOneRequest)
 	RegisterType("EventFlashSpawnBatchRequest", EventFlashSpawnBatchRequest)
 	RegisterType("EventExplosionRequest", EventExplosionRequest)
@@ -136,8 +135,8 @@ func InitRegistry() {
 	RegisterType("EventSpeciesKilled", EventSpeciesKilled)
 	RegisterType("EventSpeciesKillConfirmed", EventSpeciesKillConfirmed)
 	RegisterType("EventDrainDefeated", EventDrainDefeated)
-	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest)
-	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest)
+	RegisterType("EventSpeciesLandRequest", EventSpeciesLandRequest)
+	RegisterType("EventFuseRequest", EventFuseRequest)
 	RegisterType("EventDrainPause", EventDrainPause)
 	RegisterType("EventDrainResume", EventDrainResume)
 	RegisterType("EventQuasarSpawnRequest", EventQuasarSpawnRequest)
@@ -160,7 +159,6 @@ func InitRegistry() {
 	RegisterType("EventStrobeRequest", EventStrobeRequest)
 	RegisterType("EventSpiritSpawnRequest", EventSpiritSpawnRequest)
 	RegisterType("EventSpiritDespawnRequest", EventSpiritDespawnRequest)
-	RegisterType("EventSpiritArrived", EventSpiritArrived)
 	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest)
 	RegisterType("EventLightningUpdateRequest", EventLightningUpdateRequest)
 	RegisterType("EventLightningDespawnRequest", EventLightningDespawnRequest)
@@ -314,7 +312,6 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventPingGridRequest:                 ClassLocal,
 	EventMaterializeRequest:              ClassStamped,
 	EventMaterializeComplete:             ClassStamped,
-	EventMaterializeAreaRequest:          ClassStamped,
 	EventFlashSpawnOneRequest:            ClassLocal,
 	EventFlashSpawnBatchRequest:          ClassLocal,
 	EventExplosionRequest:                ClassBus,
@@ -348,8 +345,8 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventSpeciesKilled:                   ClassStamped,
 	EventSpeciesKillConfirmed:            ClassLocal,
 	EventDrainDefeated:                   ClassBus,
-	EventFuseQuasarRequest:               ClassLocal,
-	EventFuseSwarmRequest:                ClassLocal,
+	EventSpeciesLandRequest:              ClassBus,
+	EventFuseRequest:                     ClassStamped,
 	EventDrainPause:                      ClassLocal,
 	EventDrainResume:                     ClassLocal,
 	EventQuasarSpawnRequest:              ClassBus,
@@ -372,7 +369,6 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventStrobeRequest:                   ClassLocal,
 	EventSpiritSpawnRequest:              ClassStamped,
 	EventSpiritDespawnRequest:            ClassStamped,
-	EventSpiritArrived:                   ClassStamped,
 	EventLightningSpawnRequest:           ClassLocal,
 	EventLightningUpdateRequest:          ClassLocal,
 	EventLightningDespawnRequest:         ClassLocal,

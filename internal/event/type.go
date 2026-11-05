@@ -263,12 +263,10 @@ const (
 
 	// --- Materialize ---
 
-	// EventMaterializeRequest (MaterializeRequestPayload) [stamped] signals a request to start a materialization visual effect
+	// EventMaterializeRequest (MaterializeRequestPayload) [stamped] starts a materialize over a body's footprint, of any size
 	EventMaterializeRequest
-	// EventMaterializeComplete (MaterializeCompletedPayload) [stamped] signals materialization finished at location
+	// EventMaterializeComplete (MaterializeCompletedPayload) [stamped] signals a materialize ended, at its header cell
 	EventMaterializeComplete
-	// EventMaterializeAreaRequest (MaterializeAreaRequestPayload) [stamped] requests area-based materialization (swarm, quasar)
-	EventMaterializeAreaRequest
 
 	// --- Flash ---
 
@@ -357,13 +355,13 @@ const (
 	EventSpeciesKillConfirmed
 	// EventDrainDefeated (DrainDefeatedPayload) [bus] advances progression and names the causal cursor domain
 	EventDrainDefeated
+	// EventSpeciesLandRequest (SpeciesLandRequestPayload) [bus] lands the species a materialize or spirit carried, its header on the cell; the species' own system answers it
+	EventSpeciesLandRequest
 
 	// --- Fuse ---
 
-	// EventFuseQuasarRequest (FuseQuasarRequestPayload) [local] asks the elected cursor's drains to fuse into quasar
-	EventFuseQuasarRequest
-	// EventFuseSwarmRequest (FuseSwarmRequestPayload) [local] signals two enraged drains should fuse into swarm
-	EventFuseSwarmRequest
+	// EventFuseRequest (FuseRequestPayload) [stamped] asks for one fusion of its sources into its target species: a participant's own of its drains, or a Shared trigger's, which every instance derives
+	EventFuseRequest
 
 	// --- Drain ---
 
@@ -435,8 +433,6 @@ const (
 	EventSpiritSpawnRequest
 	// EventSpiritDespawnRequest [stamped] signals force-clear of all spirit entities
 	EventSpiritDespawnRequest
-	// EventSpiritArrived (SpiritArrivedPayload) [stamped] signals a spirit naming a species reached its target, which lands the species
-	EventSpiritArrived
 
 	// --- Lightning ---
 

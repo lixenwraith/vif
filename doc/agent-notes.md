@@ -78,10 +78,10 @@ that proves wrong or that a document now states, and link the document instead.
   `geometry_test.go` and `join_press_test.go` drive the presentation that profile
   leaves out, so its gate is `go build -tags vif_headless ./...` alone.
 - `go generate ./internal/manifest` type-checks `internal/event` from source, its
-  generated `payload_gen.go` included, so removing a payload struct's field stops
-  the generator on the stale codec's use of it ("type-check ...: has no field"):
-  delete that field's lines from `payload_gen.go` first, and the run writes the
-  codec anew.
+  generated files included, so removing a payload struct, a field of one or an
+  event stops the generator on the stale use of it ("type-check ...: has no field",
+  "undefined"): delete those lines from `payload_gen.go` and `registry_gen.go`
+  first, and the run writes them anew.
 - Go 1.27 takes a promoted field as a struct literal's key, though not through an
   embedded pointer, so fields moved into an embedded struct keep every literal,
   selector and method call compiling.
@@ -140,6 +140,12 @@ that proves wrong or that a document now states, and link the document instead.
   on the context over it (`GameMode.Operator`), and reach neither. A live run's
   mode changes only through the router (`transitionMode`), which keeps the input
   machine in step: a path that sets it elsewhere leaves every key but Ctrl+Q dead.
+- `World.PushLocal` stamps player in any scope, and the FSM bridge pushes every
+  class but local in the ambient domain, Shared during a region's actions. A
+  request a region raises on every instance that changes Shared state is
+  `[stamped]`, as `EventFuseRequest` is: Shared from the region, player from a
+  participant's own producer's `PushLocal`; a `[local]` one may not reach Shared
+  state (D-10).
 - What only the operator does or sees, a pause, an overlay request, the speakers,
   is pushed `OriginDevice`: never journaled and outside the event tallies, so a
   replay, which has an operator of its own, still matches. One left on the ambient
@@ -151,6 +157,9 @@ that proves wrong or that a document now states, and link the document instead.
   touching a Player-only store needs an allowlist entry with its reason (the wall
   system's `"wall:Particle"` mask lookup), while a Player system may read Shared
   state.
+- `TestNoOrderDependentMapRange` matches a ranged identifier by name against every
+  map-typed name in `internal/system`: a local slice named `drains` trips on
+  `ParticleSystem`'s map field. Rename the local, or allowlist it with its reason.
 - The divergence harness
   ([netcode design §3.5](netcode-design.md#35-the-divergence-harness)) compares two
   binaries: `git worktree add` main, build `go test -c ./internal/app` in each tree,
@@ -253,6 +262,11 @@ that proves wrong or that a document now states, and link the document instead.
   `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
   nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
   package the change never touched.
+- A body's size is one `vmath.Footprint`, its header offset inside it, and a
+  species' is read through `Resource.Footprint`, never as four ints or a parallel
+  parameter: the searches, line of sight, passability tiers and a materialize take
+  the struct, and an event's or a component's cell names the header, never the
+  top-left.
 
 ## Glyphs and colours
 
@@ -368,6 +382,9 @@ that proves wrong or that a document now states, and link the document instead.
   kill whose drop is below certain shoots until the table's pity makes it certain
   (vanguard's U within two kills), and counts a kill's drops as the loot new since
   it, since earlier drops may still be flying (`internal/app/vanguard_test.go`).
+- The behavior vocabulary is built before any program compiles, so a verb whose
+  arg names what programs extend (a species, a materialize style) registers with
+  `Named`, whose build gets the set's payload names; `Effect` decodes without them.
 
 ## Corpus
 

@@ -2,9 +2,11 @@ package navigation
 
 import (
 	"cmp"
-	"github.com/lixenwraith/vif/pkg/position"
 	"math/bits"
 	"slices"
+
+	"github.com/lixenwraith/vif/pkg/position"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Route graph tuning. It lives here rather than in the game's parameter package
@@ -103,8 +105,8 @@ type RouteGraph struct {
 	SourceX, SourceY int
 	TargetX, TargetY int
 
-	Footprint Footprint // the body the passability fits
-	Grid      uint64    // Caller's generation of the passability the routes were computed on
+	Footprint vmath.Footprint // the body the passability fits
+	Grid      uint64          // Caller's generation of the passability the routes were computed on
 }
 
 // RouteSolver computes route graphs on scratch kept from one computation to the
@@ -124,7 +126,7 @@ type RouteSolver struct {
 func ComputeRouteGraph(
 	sourceX, sourceY, targetX, targetY int,
 	mapW, mapH int,
-	foot Footprint,
+	foot vmath.Footprint,
 	blocked position.Bits,
 ) *RouteGraph {
 	return new(RouteSolver).Compute(sourceX, sourceY, targetX, targetY, mapW, mapH, foot, blocked)
@@ -134,7 +136,7 @@ func ComputeRouteGraph(
 func (rs *RouteSolver) Compute(
 	sourceX, sourceY, targetX, targetY int,
 	mapW, mapH int,
-	foot Footprint,
+	foot vmath.Footprint,
 	blocked position.Bits,
 ) *RouteGraph {
 	if mapW <= 0 || mapH <= 0 {

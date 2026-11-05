@@ -61,6 +61,7 @@ func (s *TowerSystem) Priority() int {
 func (s *TowerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventTowerSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventTowerCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -83,19 +84,19 @@ func (s *TowerSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	request, spawn := s.spawnRequest(ev)
 	if !s.enabled {
-		if ev.Type == event.EventTowerSpawnRequest {
+		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
 		}
 		return
 	}
+	if spawn {
+		s.spawnTower(request)
+		return
+	}
 
 	switch ev.Type {
-	case event.EventTowerSpawnRequest:
-		if payload, ok := ev.Payload.(*event.TowerSpawnRequestPayload); ok {
-			s.spawnTower(payload)
-		}
-
 	case event.EventTowerCancelRequest:
 		s.lifecycle.despawned.Add(int64(s.world.Components.Tower.CountEntities()))
 		s.terminateAll()
@@ -140,6 +141,18 @@ func (s *TowerSystem) Update() {
 }
 
 // === Spawn ===
+
+// spawnRequest reads a request for a tower: its own spawn request, or a land request
+// naming it, at that request's defaults
+func (s *TowerSystem) spawnRequest(ev event.GameEvent) (*event.TowerSpawnRequestPayload, bool) {
+	switch p := ev.Payload.(type) {
+	case *event.TowerSpawnRequestPayload:
+		return p, true
+	case *event.SpeciesLandRequestPayload:
+		return &event.TowerSpawnRequestPayload{X: p.X, Y: p.Y}, p.Species == component.SpeciesTower
+	}
+	return nil, false
+}
 
 func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 	radiusX := payload.RadiusX
@@ -281,13 +294,8 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 
 	// Spiral fallback from last attempt
 	last := cells[len(cells)-1]
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		last.X, last.Y,
-		width, height,
-		radiusX, radiusY,
-		component.WallBlockSpawn,
-		parameter.TowerSpawnSpiralMaxRadius,
-	)
+	foot := vmath.Footprint{Width: width, Height: height, HeaderX: radiusX, HeaderY: radiusY}
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(last.X, last.Y, foot, component.WallBlockSpawn, parameter.TowerSpawnSpiralMaxRadius)
 	if found {
 		return topLeftX + radiusX, topLeftY + radiusY, true
 	}

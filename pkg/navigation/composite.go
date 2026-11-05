@@ -8,22 +8,6 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// Footprint is a body's cells around the header it navigates by: Width×Height
-// cells, the header HeaderX, HeaderY from the top-left
-type Footprint struct {
-	Width, Height, HeaderX, HeaderY int
-}
-
-// Point is the footprint of a body one cell across
-var Point = Footprint{Width: 1, Height: 1}
-
-// Covers reports whether f's cells around a header hold o's around the same
-// header, so every header f fits on o fits on too
-func (f Footprint) Covers(o Footprint) bool {
-	return f.HeaderX >= o.HeaderX && f.HeaderY >= o.HeaderY &&
-		f.Width-f.HeaderX >= o.Width-o.HeaderX && f.Height-f.HeaderY >= o.Height-o.HeaderY
-}
-
 // CompositePassability is where a footprint's header may stand: a bit a header,
 // set where the footprint lies off the grid or over a wall, derived from the
 // walls a row of words at a time.
@@ -46,7 +30,7 @@ type CompositePassability struct {
 }
 
 // NewCompositePassability creates the passability grid of a footprint on a map
-func NewCompositePassability(mapW, mapH int, foot Footprint) *CompositePassability {
+func NewCompositePassability(mapW, mapH int, foot vmath.Footprint) *CompositePassability {
 	p := &CompositePassability{
 		FootprintW: foot.Width,
 		FootprintH: foot.Height,
@@ -248,6 +232,6 @@ func (p *CompositePassability) GetDimensions() (width, height int) {
 }
 
 // Footprint is the footprint the grid fits
-func (p *CompositePassability) Footprint() Footprint {
-	return Footprint{Width: p.FootprintW, Height: p.FootprintH, HeaderX: p.HeaderOffX, HeaderY: p.HeaderOffY}
+func (p *CompositePassability) Footprint() vmath.Footprint {
+	return vmath.Footprint{Width: p.FootprintW, Height: p.FootprintH, HeaderX: p.HeaderOffX, HeaderY: p.HeaderOffY}
 }

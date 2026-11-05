@@ -173,7 +173,7 @@ func TestAWardenWindsUpPastItsRangeThenChargesTheCellItStored(t *testing.T) {
 	}
 
 	start, _ := w.Positions.GetPosition(header)
-	materializes := countEvents(stepWhile(t, w, s, b, wardenWind), event.EventMaterializeAreaRequest)
+	materializes := countEvents(stepWhile(t, w, s, b, wardenWind), event.EventMaterializeRequest)
 	if b.Machine.State != wardenStrike || combat.IsEnraged || !b.Shielded ||
 		combat.Status[component.StatusWard].Remaining <= 0 {
 		t.Fatalf("wind-up ended: state %d enraged %v shielded %v ward %v, want a warded strike",
@@ -289,8 +289,8 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 	var footprints []component.MaterializeComponent
 	for _, m := range w.Components.Materialize.Entities() {
 		c, _ := w.Components.Materialize.GetComponent(m)
-		if m.Domain() != core.DomainShared || c.Species != p.Species || c.AreaWidth != p.Width || c.AreaHeight != p.Height {
-			t.Fatalf("materialize %+v, want a Shared one naming the warden over its %dx%d footprint", c, p.Width, p.Height)
+		if m.Domain() != core.DomainShared || c.Species != p.Species || c.Footprint != p.Footprint {
+			t.Fatalf("materialize %+v, want a Shared one naming the warden over its footprint %+v", c, p.Footprint)
 		}
 		footprints = append(footprints, c)
 	}
@@ -306,7 +306,7 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 		t.Fatalf("%d wardens landed before their materializes ended", n)
 	}
 	rock := footprints[1]
-	spawnWall(w, rock.TargetX, rock.TargetY)
+	spawnWall(w, rock.X, rock.Y)
 	e.tick()
 	headers := w.Components.Behavior.Entities()
 	if len(headers) != 2 || w.Components.Materialize.CountEntities() != 0 {
@@ -315,14 +315,13 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 	landed := map[[2]int]bool{}
 	for _, header := range headers {
 		pos, _ := w.Positions.GetPosition(header)
-		left, top := pos.X-p.HeaderX, pos.Y-p.HeaderY
-		if !w.Positions.IsAreaFree(left, top, p.Width, p.Height, component.WallBlockSpawn) {
-			t.Fatalf("a warden landed at (%d, %d) on the rock that came over its footprint", left, top)
+		if a := p.Footprint.At(pos.X, pos.Y); !w.Positions.IsAreaFree(a.X, a.Y, a.Width, a.Height, component.WallBlockSpawn) {
+			t.Fatalf("a warden landed at (%d, %d) on the rock that came over its footprint", pos.X, pos.Y)
 		}
-		landed[[2]int{left, top}] = true
+		landed[[2]int{pos.X, pos.Y}] = true
 	}
-	if clear := footprints[0]; !landed[[2]int{clear.TargetX, clear.TargetY}] {
-		t.Fatalf("wardens landed at %v, none on the clear footprint at (%d, %d)", landed, clear.TargetX, clear.TargetY)
+	if clear := footprints[0]; !landed[[2]int{clear.X, clear.Y}] {
+		t.Fatalf("wardens landed at %v, none on the clear footprint at (%d, %d)", landed, clear.X, clear.Y)
 	}
 }
 
@@ -356,9 +355,9 @@ func TestAMaterializeCueTimesItsMaterialize(t *testing.T) {
 	w := ctx.World
 	b, _ := w.Components.Behavior.GetPtr(header)
 	stepBehaviors(w, s)
-	var request *event.MaterializeAreaRequestPayload
+	var request *event.MaterializeRequestPayload
 	for _, ev := range stepWhile(t, w, s, b, wardenWind) {
-		if p, ok := ev.Payload.(*event.MaterializeAreaRequestPayload); ok {
+		if p, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
 			request = p
 		}
 	}
@@ -372,6 +371,37 @@ func TestAMaterializeCueTimesItsMaterialize(t *testing.T) {
 	}
 	if _, err := CompileBehaviors(map[string]map[string]any{"warden": doc}, nil); err == nil || !strings.Contains(err.Error(), "duration_ms -1 is negative") {
 		t.Fatalf("a negative duration compiled: %v", err)
+	}
+}
+
+// TestADataSpeciesMaterializesInItsOwnStyle: a program's style is its own, its
+// entrance playing it for the style's time, and a Materialize names it by the program
+func TestADataSpeciesMaterializesInItsOwnStyle(t *testing.T) {
+	e, _ := newEntranceWorld(t, "materialize = { fill_ms = 100, hold_ms = 50, recede_ms = 50 }")
+	enterWarden(e, wardenX, wardenY)
+	entrances := e.w.Components.Materialize.Entities()
+	if len(entrances) != 1 {
+		t.Fatalf("%d materializes, want the entrance's", len(entrances))
+	}
+	m, _ := e.w.Components.Materialize.GetComponent(entrances[0])
+	timer, _ := e.w.Components.Timer.GetPtr(entrances[0])
+	if d := timer.Slots[component.TimerDeadline].Duration; m.Type != component.SpawnTypeDataFirst || d != 200*time.Millisecond {
+		t.Fatalf("the entrance plays style %d for %v, want the warden's own %d for 200ms", m.Type, d, component.SpawnTypeDataFirst)
+	}
+
+	own := strings.Replace(wardenProgram, `payload = { spawn = "swarm" }`, `payload = { spawn = "warden" }`, 1)
+	ctx, s, header := newProgramWorld(t, own, wardenX+40, wardenY)
+	w := ctx.World
+	b, _ := w.Components.Behavior.GetPtr(header)
+	stepBehaviors(w, s)
+	var request *event.MaterializeRequestPayload
+	for _, ev := range stepWhile(t, w, s, b, wardenWind) {
+		if p, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
+			request = p
+		}
+	}
+	if request == nil || request.Type != component.SpawnTypeDataFirst {
+		t.Fatalf("the cue naming the warden requested %+v, want its style %d", request, component.SpawnTypeDataFirst)
 	}
 }
 
@@ -394,20 +424,23 @@ func TestACancelEndsItsProgramsEntrancesInFlight(t *testing.T) {
 	}
 }
 
-// TestOnlyASharedMaterializeLandsADataSpecies: a player-domain materialize ran on
-// one instance alone, so its completion names a species no other instance spawns
-func TestOnlyASharedMaterializeLandsADataSpecies(t *testing.T) {
+// TestALandRequestStandsTheDataSpeciesItNames: a personal carrier's landing
+// crosses, so a player-stamped request stands the body as a Shared entrance's does,
+// its header on the request's cell
+func TestALandRequestStandsTheDataSpeciesItNames(t *testing.T) {
 	e, _ := newEntranceWorld(t)
 	w := e.w
 	e.deliver(event.GameEvent{
-		Type:   event.EventMaterializeComplete,
-		Domain: core.DomainPlayer,
-		Payload: &event.MaterializeCompletedPayload{
-			X: wardenX, Y: wardenY, Type: component.SpawnTypeSwarm, Species: w.Resources.Behaviors[0].Species,
-		},
+		Type:    event.EventSpeciesLandRequest,
+		Domain:  core.DomainPlayer,
+		Payload: &event.SpeciesLandRequestPayload{Species: w.Resources.Behaviors[0].Species, X: wardenX, Y: wardenY},
 	})
-	if n := w.Components.Behavior.CountEntities(); n != 0 {
-		t.Fatalf("a player materialize landed %d wardens", n)
+	headers := w.Components.Behavior.Entities()
+	if len(headers) != 1 {
+		t.Fatalf("%d wardens stood, want one", len(headers))
+	}
+	if pos, _ := w.Positions.GetPosition(headers[0]); pos.X != wardenX || pos.Y != wardenY {
+		t.Fatalf("the warden stands at (%d, %d), want (%d, %d)", pos.X, pos.Y, wardenX, wardenY)
 	}
 }
 
@@ -498,6 +531,59 @@ func TestADataSpeciesIsKnockedBackByItsOwnMass(t *testing.T) {
 	}
 	if got := push(2 * profile.MassSwarm); got != swarm/2 {
 		t.Fatalf("a warden of twice the swarm's mass pushed %v, want half the swarm's %v", got, swarm)
+	}
+}
+
+// TestADataSpeciesTakesEachAttackByItsOwnRow: combat resolves a hit on a data
+// species by the row its prototype builds, a family it names taking its keys and
+// the rest its combat row's profile
+func TestADataSpeciesTakesEachAttackByItsOwnRow(t *testing.T) {
+	program := strings.Replace(wardenProgram, "mass = 2.0", "mass = 2.0\nattacks = { pulse = { damage = 0, stun = false } }", 1)
+	ctx, _, header := newProgramWorld(t, program, wardenX+4, wardenY)
+	w := ctx.World
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
+	c, _ := w.Components.Combat.GetPtr(header)
+	if pulse := combat.attack(component.CombatAttackPulse, component.CombatEntityCursor, header, c); pulse == nil ||
+		pulse.DamageValue != 0 || pulse.EffectMask&component.CombatEffectStun != 0 {
+		t.Fatalf("a pulse lands %+v, want no damage and no stun", pulse)
+	}
+	swarm := profile.Attack(component.CombatAttackTracer, component.CombatEntityCursor, component.CombatEntitySwarm)
+	if tracer := combat.attack(component.CombatAttackTracer, component.CombatEntityCursor, header, c); tracer == nil || *tracer != *swarm {
+		t.Fatalf("a tracer lands %+v, want the swarm row's %+v", tracer, swarm)
+	}
+}
+
+// TestASpawnSpeciesLandsAnySharedSpecies: the verb asks the species it names, a
+// program's among them, to land at the header plus its offset, and a species that is
+// not Shared fails the compile
+func TestASpawnSpeciesLandsAnySharedSpecies(t *testing.T) {
+	const enter = `on_enter = [{ action = "Telegraph", payload = { color = "cyan" } }]`
+	spawning := func(species string) string {
+		return strings.Replace(wardenProgram, enter, strings.TrimSuffix(enter, "]")+
+			`, { action = "SpawnSpecies", payload = { species = "`+species+`", x = 2, y = 1 } }]`, 1)
+	}
+	ctx, s, header := newProgramWorld(t, spawning("warden"), wardenX+40, wardenY)
+	var landing *event.SpeciesLandRequestPayload
+	for _, ev := range stepBehaviors(ctx.World, s) {
+		if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok {
+			landing = p
+		}
+	}
+	pos, _ := ctx.World.Positions.GetPosition(header)
+	want := event.SpeciesLandRequestPayload{Species: component.SpeciesDataFirst, X: pos.X + 2, Y: pos.Y + 1}
+	if landing == nil || *landing != want {
+		t.Fatalf("entering Wind requested %+v, want %+v", landing, want)
+	}
+
+	for _, species := range []string{"drain", "none"} {
+		doc, err := toml.NewParser([]byte(spawning(species))).Parse()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = CompileBehaviors(map[string]map[string]any{"warden": doc}, nil)
+		if err == nil || !strings.Contains(err.Error(), "is not a Shared species") {
+			t.Fatalf("a SpawnSpecies naming %s compiled: %v", species, err)
+		}
 	}
 }
 

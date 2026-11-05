@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/pkg/position"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // TestAPlacementWithNoClearSlotTakesTheOneOverlappingTheLeast: with walls on every
@@ -53,6 +54,7 @@ func TestAFreeAreaInsideSearchesFromTheEdgeItsOriginPassed(t *testing.T) {
 	NewGameContextWithClock(w, 80, 40, NewManualClock())
 	cfg := w.Resources.Config
 	const width, height, anchorX, anchorY = 5, 3, 2, 1
+	foot := vmath.Footprint{Width: width, Height: height, HeaderX: anchorX, HeaderY: anchorY}
 	row, col := cfg.MapHeight/2, cfg.MapWidth/2
 	right, bottom := cfg.MapWidth-width, cfg.MapHeight-height
 	for _, tc := range []struct {
@@ -69,13 +71,13 @@ func TestAFreeAreaInsideSearchesFromTheEdgeItsOriginPassed(t *testing.T) {
 		{"bottom", col, cfg.MapHeight - 1, col - anchorX, bottom},
 		{"corner", -3, cfg.MapHeight + 3, 0, bottom},
 	} {
-		left, top, found := w.Positions.FindFreeAreaInside(tc.x, tc.y, width, height, anchorX, anchorY, component.WallBlockAll, 0)
+		left, top, found := w.Positions.FindFreeAreaInside(tc.x, tc.y, foot, component.WallBlockAll, 0)
 		if !found || left != tc.wantLeft || top != tc.wantTop {
 			t.Errorf("%s: (%d,%d) found %v at (%d,%d), want the area at (%d,%d)",
 				tc.edge, tc.x, tc.y, found, left, top, tc.wantLeft, tc.wantTop)
 		}
 	}
-	if _, _, found := w.Positions.FindFreeAreaInside(col, row, cfg.MapWidth+1, height, 0, 0, component.WallBlockAll, -1); found {
+	if _, _, found := w.Positions.FindFreeAreaInside(col, row, vmath.Footprint{Width: cfg.MapWidth + 1, Height: height}, component.WallBlockAll, -1); found {
 		t.Error("an area wider than the map found a place")
 	}
 }

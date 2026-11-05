@@ -27,6 +27,9 @@ type CombatSystem struct {
 	// artifact determines costs no allocation and no stream position
 	rngArtifact vmath.FastRand
 
+	// dataRows are each data species' own profiles, by program index
+	dataRows [][component.CombatAttackTypeCount][component.CombatEntityCount]*profile.AttackProfile
+
 	// Telemetry
 	statActive        *atomic.Bool
 	statCount         *atomic.Int64
@@ -104,6 +107,9 @@ func NewCombatSystem(world *engine.World) engine.System {
 		s.statDamageDefender[i] = reg.Ints.Get("combat.damage_defender_" + name)
 		s.statAbsorbAttacker[i] = reg.Ints.Get("combat.absorbed_attacker_" + name)
 		s.statAbsorbDefender[i] = reg.Ints.Get("combat.absorbed_defender_" + name)
+	}
+	for i := range world.Resources.Behaviors {
+		s.dataRows = append(s.dataRows, profile.DataRow(&world.Resources.Behaviors[i]))
 	}
 
 	return s
@@ -360,6 +366,19 @@ func (s *CombatSystem) knockbackImpulse(target core.Entity, dirX, dirY float64, 
 		ratio, p.AngleVariance, p.ImpulseMin, p.ImpulseMax, rng)
 }
 
+// attack is the profile an attack family from attacker lands on target with: a data
+// species' own row, else the matrix's for its combat row
+func (s *CombatSystem) attack(atk component.CombatAttackType, attacker component.CombatEntityType, target core.Entity, c *component.CombatComponent) *profile.AttackProfile {
+	b, ok := s.world.Components.Behavior.GetPtr(target)
+	if !ok || int(b.Program) >= len(s.dataRows) {
+		return profile.Attack(atk, attacker, c.CombatEntityType)
+	}
+	if uint(atk) >= uint(component.CombatAttackTypeCount) || uint(attacker) >= uint(component.CombatEntityCount) {
+		return nil
+	}
+	return s.dataRows[b.Program][atk][attacker]
+}
+
 // Shared crossings draw from their artifact so playout order cannot change impulses.
 // Local targets and re-derived events use their domain streams. Salt separates
 // multiple impulses produced by the same artifact.
@@ -415,7 +434,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		}
 	}
 
-	attack := profile.Attack(payload.AttackType, attackerType, targetCombatComp.CombatEntityType)
+	attack := s.attack(payload.AttackType, attackerType, targetEntity, targetCombatComp)
 	if attack == nil {
 		s.statUnprofiled.Add(1)
 		return
@@ -603,7 +622,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
-	attack := profile.Attack(payload.AttackType, attackerType, targetCombatComp.CombatEntityType)
+	attack := s.attack(payload.AttackType, attackerType, targetEntity, targetCombatComp)
 	if attack == nil || attack.DamageType != component.CombatDamageArea {
 		s.statUnprofiled.Add(1)
 		return

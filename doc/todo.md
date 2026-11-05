@@ -21,10 +21,8 @@ follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
 ### Machine follow-ups
 
 What vanguard met in the machine and is still open, its certain faults having
-landed. Open items elsewhere it meets:
-[payload field names at load](#check-payload-field-names-against-their-event-at-load),
-[a program spawning another](#let-a-program-spawn-another-program),
-and [attack and materialize rows](#give-data-species-attack-and-materialize-rows-of-their-own).
+landed. One open item elsewhere it meets:
+[payload field names at load](#check-payload-field-names-against-their-event-at-load).
 
 #### Give a program's entrance an entering state
 
@@ -33,15 +31,13 @@ and [attack and materialize rows](#give-data-species-attack-and-materialize-rows
   (`enter`), `internal/component/behavior.go` (`BehaviorEntrance`)
 - Guide: [Behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)
 
-A prototype's `entrance = "materialize"` plays a `swarm`-style materialize over
-the footprint for its `entrance_ms`, a second when that is 0, and lands the body as
-it ends, beside any rock that came over it, and nothing of it reaches the machine,
+A prototype's `entrance = "materialize"` plays its own materialize style over the
+footprint for its `entrance_ms`, the style's whole when that is 0, and lands the body
+as it ends, beside any rock that came over it, and nothing of it reaches the machine,
 which starts in `initial` the tick the body stands. Lixen expects entrances to grow for machines (2026-10-27).
 What a program would declare next:
 
-- The materialize's style, `swarm` or `nugget` until a program has
-  [rows of its own](#give-data-species-attack-and-materialize-rows-of-their-own),
-  and whether a countdown shows over it.
+- Whether a countdown shows over the materialize.
 - An entering state the machine runs while the materialize holds, so a program can
   telegraph, re-aim or cancel its arrival; while it runs the body neither strikes
   nor takes damage, as no body stands yet.
@@ -1121,71 +1117,21 @@ exists, with no observer, so a per-program `behavior.<program>.transition_stalls
 needs an observer that reaches a counter bound later, in `NewBehaviorSystem` with
 the lifecycle rows.
 
-### Let a program spawn another program
+### Let a player mechanic or a program fuse composites
 
 - Priority: P3
-- Affected files: `internal/system/behavior.go` (`SpawnSpecies`)
-
-`SpawnSpecies` raises a swarm or a quasar by their spawn requests; a program cannot
-raise another program, or more of itself, because the vocabulary is built before
-any program compiles. Its build could take any program name and push
-`EventBehaviorSpawnRequest`, which drops and counts an unknown one; the load-time
-check of that name belongs with the payload names under Authoring.
-
-### Give data species attack and materialize rows of their own
-
-- Priority: P3
-- Affected files: `internal/profile/combat.go`, `internal/component/materialize.go`
-
-A prototype names a combat row (`swarm` or `quasar`) and a program's materializes
-a style (`swarm` or `nugget`), so a new attack profile or materialize style is a Go
-change ([Behavior machines §6.4](machine-design.md#64-beyond-the-machine)). Rows of
-its own would grow those tables per scenario from the prototype, as soft collision
-builds a data species' rows from its `mass` and loot rolls the drop table its
-`drops` names.
-
-### Fuse single-cell species and unit composites into any species
-
-- Priority: P3
-- Affected files: `internal/system/fuse.go`, `internal/event/payload.go`
-  (`FuseSwarmRequestPayload`, `FuseQuasarRequestPayload`),
-  `internal/system/drain.go` (`detectSwarmFusions`), `internal/system/behavior.go`
-  (`spawnRequests`), `internal/asset/scenario/quasar.toml`,
-  `wad/scenario/td/td_main.toml`
+- Affected files: `internal/system/fuse.go`, `internal/event/type.go`,
+  `internal/system/behavior.go` (`EmitEvent`)
 - Design: [D-3](domain-design.md#d-3--cross-the-smallest-shared-outcome)
 
-A fusion takes drains alone, into one of two species: two enraged drains into a
-swarm, every drain of the elected cursor into a quasar. The idea grows it to any
-number of sources of any single-cell species, the drain today and any later one, and
-of any unit composite (`CompositeTypeUnit`: damage on the header, the members its
-hitboxes; the swarm, quasar, eye, kraken and every data species), fused into any
-species, so quasars and swarms fuse as drains do.
-
-- **One request.** An `EventFuseRequest` names its sources, by species and count or
-  as a cursor's, the target species and the `FuseEffect`, and
-  `EventFuseSwarmRequest` and `EventFuseQuasarRequest` become two uses of it: the
-  drain system's pairs and the quasar scenarios' triggers play as now.
-- **Domains.** Drains are Player-domain, so a drain fusion is local and crosses one
-  spawn request from the causal participant (D-3). A composite is Shared, so
-  consuming one is a Shared outcome every peer applies at one tick, from a Shared
-  trigger or as the crossing a player's request sends, the composite going with no
-  reward by `EventCompositeDestroyRequest`, as the rock crushes one. A fusion of
-  both kinds splits by domain, each batch domain-pure as `killDrains` keeps it, and
-  lands one target. A composite with a `ParentHeader`, the snake's head, is no
-  source.
-- **Any target.** The target lands by its own spawn request: `landFusion`'s two
-  cases become a table every species' request joins, `spawnRequests` in
-  `behavior.go` the start of it, a data species by `EventBehaviorSpawnRequest`,
-  named at load as `PayloadSpeciesIn` names one. Its footprint, a code species'
-  parameters or a prototype's, places it at the sources' centroid by
-  `FindFreeAreaInside`.
-- **Visuals.** Each source flies one spirit, a composite's from its header, and the
-  first names the target its arrival lands; the materialize effect plays over the
-  footprint instead. A Shared fusion's spirits stay each instance's own, as a drain
-  fusion's do.
-
-In order: the one request carrying the two drain fusions unchanged in play, then any
-target from drains, then composites as Shared sources, one test per rule.
+A fusion takes unit composites only from a Shared request, one a region raises on
+every instance, each consuming them alike. A participant's own request, pushed
+player, takes its drains alone and fails naming a composite, and a program's
+`EmitEvent` takes no stamped event, so neither a player mechanic nor a program can
+fuse composites. A player mechanic would cross the Shared outcome as a bus artifact
+naming the composites and the target's landing, barrier-bound since it retires
+Shared entities; a program's request would push the request Shared, as a region's
+does.
 
 ## Environment
 

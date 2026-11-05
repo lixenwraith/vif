@@ -54,10 +54,8 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 		}
 
 		r.renderLine(ctx, buf,
-			footprintAt(headerPos.X, headerPos.Y, parameter.SwarmWidth, parameter.SwarmHeight,
-				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
-			footprintAt(swarmComp.TeleportTargetX, swarmComp.TeleportTargetY, parameter.SwarmWidth, parameter.SwarmHeight,
-				parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY),
+			component.Footprints[component.SpeciesSwarm].At(headerPos.X, headerPos.Y),
+			component.Footprints[component.SpeciesSwarm].At(swarmComp.TeleportTargetX, swarmComp.TeleportTargetY),
 			swarmComp.Machine.Progress())
 		return true
 	})
@@ -74,8 +72,8 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 		}
 		p := &prototypes[b.Program]
 		r.renderLine(ctx, buf,
-			footprintAt(pos.X, pos.Y, p.Width, p.Height, p.HeaderX, p.HeaderY),
-			footprintAt(b.TargetX, b.TargetY, p.Width, p.Height, p.HeaderX, p.HeaderY),
+			p.Footprint.At(pos.X, pos.Y),
+			p.Footprint.At(b.TargetX, b.TargetY),
 			b.Machine.Progress())
 		return true
 	})

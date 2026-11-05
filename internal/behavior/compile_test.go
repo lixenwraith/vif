@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/fsm/dialect"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/profile"
 	"github.com/lixenwraith/vif/pkg/machine"
 )
@@ -205,6 +206,46 @@ func TestAProgramsPhysicsKeysReplaceTheDefaultOneByOne(t *testing.T) {
 	}
 }
 
+// A prototype's own rows take its keys over the rows they start from one by one:
+// each attack family it names over its combat row's, and its materialize style,
+// which the program names, over the swarm's
+func TestAPrototypesOwnRowsTakeItsKeysOverTheRowsTheyStartFrom(t *testing.T) {
+	src := strings.Replace(warden, "mass = 2.0", "mass = 2.0\n"+
+		"attacks = { pulse = { damage = 0, stun = false }, missile = { damage = 9 } }\n"+
+		"materialize = { color = { r = 1, g = 2, b = 3 }, fill_ms = 100 }", 1)
+	set, err := Compile(testVocabulary(), map[string]map[string]any{"plain": parse(t, warden), "tuned": parse(t, src)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, tuned := set.Prototypes()[0], set.Prototypes()[1]
+	for atk := range component.CombatAttackTypeCount {
+		base := profile.Defending(atk, component.CombatEntitySwarm)
+		want := component.AttackRow{Damage: base.DamageValue, Effects: base.EffectMask}
+		if plain.Attacks[atk] != want {
+			t.Errorf("%s: no attacks key takes %+v, want the swarm row's %+v", component.CombatAttackNames[atk], plain.Attacks[atk], want)
+		}
+		switch atk {
+		case component.CombatAttackPulse:
+			want = component.AttackRow{Damage: 0, Effects: base.EffectMask &^ component.CombatEffectStun}
+		case component.CombatAttackMissile:
+			want.Damage = 9
+		}
+		if tuned.Attacks[atk] != want {
+			t.Errorf("%s: the tuned row takes %+v, want %+v", component.CombatAttackNames[atk], tuned.Attacks[atk], want)
+		}
+	}
+	swarm := component.MaterializeStyles[component.SpawnTypeSwarm]
+	want := swarm
+	want.Name, want.Color = "plain", visual.RgbMaterialize
+	if plain.Materialize != want {
+		t.Errorf("no materialize key plays %+v, want the swarm's %+v", plain.Materialize, want)
+	}
+	want.Name, want.Color, want.Fill = "tuned", color.RGB{R: 1, G: 2, B: 3}, 100*time.Millisecond
+	if tuned.Materialize != want {
+		t.Errorf("the tuned style plays %+v, want %+v", tuned.Materialize, want)
+	}
+}
+
 // A step runs the program's edges in the machine's phases with the test verbs:
 // each line is what one step ran and the state it ended in. Every entry, the
 // start's included, ends with the host's entered hook.
@@ -289,6 +330,12 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 		{"console pair", `pattern_ms = 500`, `pattern_ms = 500` + "\nfg256 = 14", `program 'warden': prototype: fg256 and bg256 come together`, 1},
 		{"one frame a period", `pattern_ms = 500`, `pattern_ms = 0`, `program 'warden': prototype: pattern_ms 0: 2 frames need a positive period`, 1},
 		{"header", `header = { x = 1, y = 0 }`, `header = { x = 4, y = 0 }`, "program 'warden': prototype: header {4, 0} outside the 4×2 footprint", 1},
+		{"attack family", `mass = 2.0`, "mass = 2.0\nattacks = { punch = { damage = 1 } }", `program 'warden': prototype: attacks: "punch" is not one of tracer, shield`, 1},
+		{"direct stun", `mass = 2.0`, "mass = 2.0\nattacks = { tracer = { stun = true } }", `program 'warden': prototype: attacks: tracer: only an area hit stuns`, 1},
+		{"knockback", `mass = 2.0`, "mass = 2.0\nattacks = { pulse = { knockback = true } }", `program 'warden': prototype: attacks: pulse: the swarm row takes no knockback from it`, 1},
+		{"negative damage", `mass = 2.0`, "mass = 2.0\nattacks = { ray = { damage = -1 } }", `program 'warden': prototype: attacks: ray: damage -1 is negative`, 1},
+		{"style timing", `mass = 2.0`, "mass = 2.0\nmaterialize = { fill_ms = -1 }", `program 'warden': prototype: materialize: fill_ms -1 is negative`, 1},
+		{"silent style", `mass = 2.0`, "mass = 2.0\nmaterialize = { fill_ms = 0, hold_ms = 0, recede_ms = 0 }", `program 'warden': prototype: materialize: fill_ms, hold_ms and recede_ms play nothing`, 1},
 		{"two faults", "hp = 40\ncombat = \"swarm\"", "hp = 0\ncombat = \"drain\"", "program 'warden': prototype: hp 0 is not positive", 2},
 	}
 	for _, tc := range cases {
@@ -327,6 +374,7 @@ func TestAProgramNameKeepsToTheRules(t *testing.T) {
 		{over, fmt.Sprintf("%d behavior programs, at most %d", parameter.BehaviorProgramsMax+1, parameter.BehaviorProgramsMax)},
 		{map[string]map[string]any{"Warden": doc}, `program name "Warden" is not [a-z][a-z0-9_]*`},
 		{map[string]map[string]any{"swarm": doc}, `program name "swarm" is a code species`},
+		{map[string]map[string]any{"nugget": doc}, `program name "nugget" is a materialize style`},
 		{map[string]map[string]any{"total": doc}, `program name "total" is reserved`},
 	} {
 		if _, err := Compile(testVocabulary(), tc.programs, nil); err == nil || !strings.Contains(err.Error(), tc.want) {

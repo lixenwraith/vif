@@ -91,6 +91,43 @@ type Resource struct {
 	audioResources
 }
 
+// Footprint is a species' body around its header, the one size every reader of a
+// species' takes: a code species' row of component.Footprints, a data species' its
+// prototype's, and none for a species this scenario does not declare
+func (r *Resource) Footprint(s component.SpeciesType) vmath.Footprint {
+	if s < component.SpeciesCount {
+		return component.Footprints[s]
+	}
+	if i := int(s - component.SpeciesDataFirst); i < len(r.Behaviors) {
+		return r.Behaviors[i].Footprint
+	}
+	return vmath.Footprint{}
+}
+
+// SpeciesDomain is the domain a species' bodies live in: a code species' row of
+// component.SpeciesDomains, a data species' Shared
+func (r *Resource) SpeciesDomain(s component.SpeciesType) core.Domain {
+	if s < component.SpeciesCount {
+		return component.SpeciesDomains[s]
+	}
+	return core.DomainShared
+}
+
+// MaterializeStyle is a spawn type's style: a code type's row of
+// component.MaterializeStyles, a program's its prototype's, and false for a type
+// neither holds
+func (r *Resource) MaterializeStyle(t component.SpawnType) (component.MaterializeStyle, bool) {
+	switch i := int(t - component.SpawnTypeDataFirst); {
+	case t < 0:
+		return component.MaterializeStyle{}, false
+	case t < component.SpawnTypeCount:
+		return component.MaterializeStyles[t], true
+	case i < len(r.Behaviors):
+		return r.Behaviors[i].Materialize, true
+	}
+	return component.MaterializeStyle{}, false
+}
+
 // === World Resources ===
 
 // --- Time Resource ---

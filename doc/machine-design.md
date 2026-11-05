@@ -381,41 +381,52 @@ its edges, then what its host does around the step.
 
 A deferred spawn rides the entrance that shows it, so the spawn, the entrance's
 timer and its visual end on one tick. A spawn out of nothing rides a
-materialize, `MaterializeComponent.Species` naming the species its completion
-lands; a drain pair's swarm rides the spirits its drains fly in,
-`SpiritComponent.Species` naming the species the spirit's arrival lands. The
-pending spawn is the materialize or spirit entity, which a capture carries with
-the stores, not a list beside its system. A materialize lasts its request's
-`DurationMs`, its style's when that is 0: the deadline slot keeps the duration it
+materialize, `MaterializeComponent.Species` naming the species it carries; a
+drain pair's swarm rides the spirits its drains fly in, the first's
+`SpiritComponent.Species` naming it. As the carrier ends, its system sends
+`EventSpeciesLandRequest` with the species and its header cell, which the
+species' own system answers as its spawn request: Shared for a Shared carrier,
+which every instance ran and lands alike, and stamped player for a personal one,
+which ran on one instance alone, so its landing is the barrier-bound D-3 crossing.
+The pending spawn is the materialize or spirit entity, which a capture carries with
+the stores, not a list beside its system. A materialize covers its request's
+`Footprint`, its species' (`Resource.Footprint`) when that is zero, its header on
+the request's cell, and lasts its request's `DurationMs`, its style's when that is 0: the deadline slot keeps the duration it
 was armed with, which a capture carries with the timer and the renderer spreads
 the style's fill, hold and recede over.
 
-- **Storm.** The blue's cue starts a Shared materialize naming the swarm, and
-  `StormSystem` lands the swarm on its `EventMaterializeComplete`, its header on
-  the materialize's footprint. `terminateStorm` ends the storm's materializes in
-  flight, and the storm's own capture (`stormSnapshot`) holds its root alone.
-- **Fusions.** A drain pair flies its drains in as player-domain spirits, the
-  first naming the swarm and its footprint, and `SpiritSystem` sends
-  `EventSpiritArrived` on the tick the spirits draw their arrival frame, its
-  deadline running the half-second flight. A quasar fusion plays a player-domain
-  materialize naming the quasar, as does a drain pair whose request asks for one
-  (`FuseEffectMaterialize`). On the arrival or the materialize's completion
-  `landFusion` crosses the spawn request (D-3). A quasar fusion is refused while
-  one's materialize flies (`quasarMaterializing`), the fuse keeps no state of its own
+- **Storm.** The blue's cue starts a Shared materialize naming the swarm, which
+  lands with its header on the materialize's footprint. `terminateStorm` ends the
+  storm's materializes in flight, and the storm's own capture (`stormSnapshot`)
+  holds its root alone.
+- **Fusions.** One `EventFuseRequest` names its sources, by entity or by sweep
+  rows of species and count, and its target: any Shared species with a footprint,
+  a program's among them. Its sources are drains, a participant's own, and unit
+  composites at their root, which only a Shared request, one a region raises on
+  every instance, takes: each instance consumes them alike, unrewarded, and places
+  the target at their centroid. The sources fly in as player-domain spirits, a
+  composite's from its header, and on the instance the request's cursor elects the
+  first names the target and its footprint, which lands on the tick the spirits
+  draw their arrival frame, its deadline running the half-second flight; a request
+  asking for the materialize (`FuseEffectMaterialize`), or one with no source,
+  plays a player-domain materialize naming the target there instead, in its style.
+  Two enraged drains ask by their entities for a swarm, and a scenario sweeps the
+  elected cursor's drains into a quasar. The elected instance plays no sweep into a
+  target whose fusion flies (`inFlight`), the fuse keeps no state of its own
   (`FuseSystem.Update` is empty), and `killDrains` alone reports the consumed
   drains' deaths.
 - **Data species.** A prototype naming `entrance = "materialize"` comes on as
-  the storm's swarm does, the fuse playing no part: `BehaviorSystem.enter` starts
-  a Shared materialize naming the species, for the prototype's `entrance_ms`, over
-  the nearest place its footprint fits, searched over the whole map (`findFootprint`: `FindFreeAreaInside` with a
-  negative radius, the origin pulled in from the edges until the footprint fits),
-  and on its Shared completion `spawn` lands the body, searching again from that
-  footprint, since rock may have come over it meanwhile. The materialize counts as
-  an instance from its request, so a cap read off `behavior.count` holds it, and a
-  cancel of the program ends its materializes in flight.
+  the storm's swarm does: `BehaviorSystem.enter` starts a Shared materialize naming
+  the species, for the prototype's `entrance_ms`, over the nearest place its
+  footprint fits, searched over the whole map (`findFootprint`: `FindFreeAreaInside`
+  with a negative radius, the origin pulled in from the edges until the footprint
+  fits), and `spawn` answers its land request, searching again from that footprint,
+  since rock may have come over it meanwhile. The materialize counts as an instance
+  from its request, so a cap read off `behavior.count` holds it, and a cancel of the
+  program ends its materializes in flight.
 
-The drain keeps its own queue (`pendingSpawns`), which completes on
-`EventMaterializeComplete`, not on a timer of its own.
+The drain keeps its own queue (`pendingSpawns`): its materialize names no species,
+and it completes on `EventMaterializeComplete`, not on a timer of its own.
 
 ### 4.5 Species without a machine
 
@@ -561,8 +572,9 @@ per instance:
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
   `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),
-  `Materialize` (a `swarm` or `nugget` materialize that lands nothing), `SpawnSpecies` (a
-  swarm or a quasar) and `EmitEvent`.
+  `Materialize` (a `swarm`, `nugget` or program's materialize that lands nothing),
+  `SpawnSpecies` (any Shared species, a program's among them, by its land request)
+  and `EmitEvent`.
 - Sustained verbs run in a tick: `Home`, `ChargeToStored`, `Drag` (linear drag
   per second, so it holds at any tick rate) and `Freeze` (no move this tick), each
   over the in-place helpers of `pkg/vmath/physics` the code species use
@@ -615,8 +627,11 @@ smaller part of it.
 
 - **Prototype** (`component.BehaviorPrototype`, plain data in
   `Resources.Behaviors`). Footprint (at most `BehaviorFootprintMax` cells each
-  way) and header offset, hit points, the combat row it fights as (`swarm` or
-  `quasar`, the unit composites whose damage lands on their header), its physics
+  way) and header offset, hit points, the combat row its own starts from (`swarm`
+  or `quasar`, the unit composites whose damage lands on their header) with each
+  attack family's damage, stun and knockback its `[prototype.attacks]` names, its
+  materialize style (the swarm's, with the colour and timings its
+  `[prototype.materialize]` names, its entrance's and named by the program), its physics
   (a homing profile and a restitution, `profile.BehaviorHoming` and
   `parameter.BehaviorRestitution`, with each key of the program's
   `[prototype.physics]` replacing its value), soft-collision mass, the drop table
@@ -627,18 +642,17 @@ smaller part of it.
   entries of the prototype's fg and bg palettes with its attributes, plus the
   colour of a glyph without an entry and an optional console pair;
   `visual.CompileLook` builds it from the authored rows, the eye's types' art
-  included. It names rows of per-kind tables that are code, so a new attack profile
-  or materialize style is a code change
-  ([todo](todo.md#give-data-species-attack-and-materialize-rows-of-their-own)).
+  included.
 - **Species IDs.** `component.SpeciesType` keeps its code enum, ending at
   `SpeciesCount`; `SpeciesDataFirst = SpeciesCount` and
   `SpeciesMax = SpeciesCount + parameter.BehaviorProgramsMax` bound the data
-  range. Programs take `SpeciesDataFirst + i` in sorted-name order, and a scenario
-  with more fails to compile. A scenario's guard names a species
+  range. Programs take `SpeciesDataFirst + i` in sorted-name order, and their
+  styles `SpawnTypeDataFirst + i` alike; a scenario with more fails to compile. A scenario's guard names a species
   (`PayloadSpeciesIn`): the FSM bridge resolves it at load against
   `SpeciesNames` and the compiled prototypes, so a new program moves no guard. A name is `[a-z][a-z0-9_]*` of at most
-  `BehaviorNameMax` bytes, neither a code species' name nor `total` or
-  `uncredited`, because it keys `kills.<name>` and `behavior.<name>.*`.
+  `BehaviorNameMax` bytes, neither a code species' or a materialize style's name
+  nor `total` or `uncredited`, because it keys `kills.<name>` and
+  `behavior.<name>.*` and names its style.
 - **Species tables.** Every table indexed by `SpeciesType` is `[SpeciesMax]`, so a
   data ID never indexes out of range: `profile.Contact`, `profile.SoftKraken`,
   the loot system's resolved drop tables, the soft-collision matrices and caches,
@@ -843,7 +857,8 @@ captures, one a tick, read the frames. Per species:
   to `gun`, `EventWeaponAddRequest { entity = 1, weapon = "disruptor" }`, `a`)
   stuns the circles in a series, and a stunned burst holds and resumes.
 - Fusions: two enraged drains fly in as cyan spirits, and their swarm lands as
-  the spirits arrive, with no materialize. `:emit EventFuseQuasarRequest` lands its
+  the spirits arrive, with no materialize. `:emit EventFuseRequest { sources =
+  [{ species = "drain" }], target = "quasar", effect = "materialize" }` lands its
   quasar the tick its materialize's last cells go.
 - Data species: `:n vanguard`, with `:god` to outlast the raid. A raider
   materializes at the right edge every two seconds while fewer than three fly or

@@ -53,9 +53,9 @@ var crossingPushes = map[string]string{
 	// A ray band's hit on a Shared target: its member set and owner cross, as a shield impact's do.
 	"weapon:EventCombatAttackAreaCrossingRequest": "ray band; each Shared target's member set and the owner cross",
 
-	// D-3 table, drain fusion: the spawn request carries the header cell only.
-	"fuse:EventQuasarSpawnRequest": "drain fusion; the quasar header cell crosses",
-	"fuse:EventSwarmSpawnRequest":  "drain fusion; the swarm header cell crosses",
+	// D-3 table, fusion: a player carrier's landing names the species and header cell only.
+	"materialize:EventSpeciesLandRequest": "a fusion's personal materialize ending; the species and its header cell cross",
+	"spirit:EventSpeciesLandRequest":      "a fusion's personal spirit arriving; the species and its header cell cross",
 
 	// D-3 table, gold: the typed member and its typist cross.
 	"typing:EventCompositeMemberDestroyed": "gold member typed; header, member and typist cross",

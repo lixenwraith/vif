@@ -363,7 +363,7 @@ func (s *DrainSystem) processDrainStates() {
 	}
 }
 
-// detectSwarmFusions pairs enraged drains and emits fusion requests
+// detectSwarmFusions pairs enraged drains, each pair a request to fuse into a swarm
 func (s *DrainSystem) detectSwarmFusions() {
 	if s.spawningPaused() {
 		return
@@ -388,10 +388,10 @@ func (s *DrainSystem) detectSwarmFusions() {
 		drainB := enragedDrains[1]
 		enragedDrains = enragedDrains[2:]
 
-		s.world.PushLocal(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
-			DrainA: drainA,
-			DrainB: drainB,
-			Effect: event.FuseEffectSpirit,
+		s.world.PushLocal(event.EventFuseRequest, &event.FuseRequestPayload{
+			Entities: []core.Entity{drainA, drainB},
+			Target:   component.SpeciesSwarm,
+			Effect:   event.FuseEffectSpirit,
 		})
 		s.statFusions.Add(1)
 	}
@@ -648,7 +648,7 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 	matEntities := s.world.Components.Materialize.Entities()
 	for _, matEntity := range matEntities {
 		if matComp, ok := s.world.Components.Materialize.GetPtr(matEntity); ok {
-			key := uint64(matComp.TargetX)<<32 | uint64(matComp.TargetY)
+			key := uint64(matComp.X)<<32 | uint64(matComp.Y)
 			queuedPositions[key] = true
 		}
 	}

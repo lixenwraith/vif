@@ -188,6 +188,7 @@ func (s *SwarmSystem) Priority() int {
 func (s *SwarmSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSwarmSpawnRequest,
+		event.EventSpeciesLandRequest,
 		event.EventSwarmCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventSpeciesKilled,
@@ -210,19 +211,19 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	x, y, spawn := s.spawnAt(ev)
 	if !s.enabled {
-		if ev.Type == event.EventSwarmSpawnRequest {
+		if spawn {
 			s.lifecycle.spawnFailures.Add(1)
 		}
 		return
 	}
+	if spawn {
+		s.spawnSwarm(x, y)
+		return
+	}
 
 	switch ev.Type {
-	case event.EventSwarmSpawnRequest:
-		if payload, ok := ev.Payload.(*event.SwarmSpawnRequestPayload); ok {
-			s.spawnSwarm(payload.X, payload.Y)
-		}
-
 	case event.EventSwarmCancelRequest:
 		headerEntities := s.world.Components.Swarm.Entities()
 		s.lifecycle.despawned.Add(int64(len(headerEntities)))
@@ -337,16 +338,22 @@ func (s *SwarmSystem) Update() {
 	s.statActive.Store(activeCount > 0)
 }
 
+// spawnAt reads a request for a swarm at a cell: its own spawn request, or a land
+// request naming it, which its carrier sent as it ended
+func (s *SwarmSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
+	switch p := ev.Payload.(type) {
+	case *event.SwarmSpawnRequestPayload:
+		return p.X, p.Y, true
+	case *event.SpeciesLandRequestPayload:
+		return p.X, p.Y, p.Species == component.SpeciesSwarm
+	}
+	return 0, 0, false
+}
+
 // spawnSwarm stands a swarm with its header at the cell, its footprint pulled inside
 // the map, or on the nearest footprint free of walls a spawn is kept from
 func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(
-		targetX, targetY,
-		parameter.SwarmWidth, parameter.SwarmHeight,
-		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(targetX, targetY, component.Footprints[component.SpeciesSwarm], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		return
@@ -405,10 +412,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 
 	// Navigation component for flow field guidance around obstacles
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
-		Width:         parameter.SwarmWidth,
-		Height:        parameter.SwarmHeight,
-		HeaderX:       parameter.SwarmHeaderOffsetX,
-		HeaderY:       parameter.SwarmHeaderOffsetY,
+		Footprint:     component.Footprints[component.SpeciesSwarm],
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 
@@ -503,7 +507,7 @@ func (s *SwarmSystem) enterLock(c *swarmCtx) {
 func (s *SwarmSystem) hasLineOfSight(c *swarmCtx) bool {
 	pos, ok := s.world.Positions.GetPosition(c.entity)
 	return ok && bodyHasLineOfSight(s.world, pos.X, pos.Y, c.swarm.LockedTargetX, c.swarm.LockedTargetY,
-		parameter.SwarmWidth, parameter.SwarmHeight, parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY)
+		component.Footprints[component.SpeciesSwarm])
 }
 
 // probeKinetic admits a charge only with a body to fly
@@ -546,14 +550,9 @@ func (s *SwarmSystem) probeLanding(c *swarmCtx) bool {
 // map, that holds no wall a spawn is kept from, the cell itself first, into the
 // context's landing
 func (s *SwarmSystem) findRoom(c *swarmCtx, x, y int) bool {
-	left, top, found := s.world.Positions.FindFreeAreaInside(
-		x, y,
-		parameter.SwarmWidth, parameter.SwarmHeight,
-		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
-	c.landingX, c.landingY = left+parameter.SwarmHeaderOffsetX, top+parameter.SwarmHeaderOffsetY
+	foot := component.Footprints[component.SpeciesSwarm]
+	left, top, found := s.world.Positions.FindFreeAreaInside(x, y, foot, component.WallBlockSpawn, 0)
+	c.landingX, c.landingY = left+foot.HeaderX, top+foot.HeaderY
 	return found
 }
 
