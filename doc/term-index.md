@@ -384,7 +384,7 @@ index](https://github.com/lixenwraith/stapes/blob/main/doc/term-index.md).
 
 **D-15** (also: Classification is declared once) — Domain rule: system domain profiles, required and optional dependencies and snapshot participation are declared once in `internal/manifest/definition.go` and generated into runtime tables. [Domain design D-15](domain-design.md#d-15--classification-is-declared-once) · `internal/manifest` `SystemDef`
 
-**D-16** (also: Shared triggers elect one causal player) — Domain rule: a Shared trigger selects one causal cursor deterministically before reading any Player state, and only that cursor's owner emits the crossing; the main scenario captures the drain-defeat crossing's cursor as `fuse_owner`. [Domain design D-16](domain-design.md#d-16--shared-triggers-elect-one-causal-player) · `internal/system` `DrainSystem.crossDefeated` · `internal/event` `DrainDefeatedPayload`
+**D-16** (also: Shared triggers elect one causal player) — Domain rule: a Shared trigger selects one causal cursor deterministically before reading any Player state, and only that cursor's owner emits the crossing; the main and td scenarios capture the drain-defeat crossing's cursor as `fuse_owner`. [Domain design D-16](domain-design.md#d-16--shared-triggers-elect-one-causal-player) · `internal/system` `DrainSystem.crossDefeated` · `internal/event` `DrainDefeatedPayload`
 
 **D-17** (also: Throttle phase is state) — Domain rule: a throttled Shared derivation carries its inputs and its recompute phase in the capture; navigation saves its counters, last targets and route-rebuild budget and re-derives fields and graphs on install. [Domain design D-17](domain-design.md#d-17--throttle-phase-is-state) · `internal/system` `NavigationSystem`
 

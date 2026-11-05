@@ -1819,6 +1819,42 @@ func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 	}
 }
 
+// TestTdFusesTheCausalParticipantsDrains: td's quasar phase opens on the drain defeat
+// that crosses its threshold and fuses that participant's drains, as main's does: the
+// guest whose defeat it was lands the quasar, and the host takes it from the guest
+func TestTdFusesTheCausalParticipantsDrains(t *testing.T) {
+	t.Parallel()
+	cfg := Config{Seed: 0x7D, Width: 200, Height: 60, Resources: resource.Options{Dir: soakRoot, Scenario: "td"}}
+	apps := meshSessionOf(t, cfg, 2, [][2]int{{1, 2}})
+	state := func(a *App) string { return a.World().Resources.Status.Strings.Get("fsm.state").Load() }
+	for i := 0; state(apps[0]) != "TdCalm"; i++ {
+		if i > 600 {
+			t.Fatalf("td never reached TdCalm, at %s", state(apps[0]))
+		}
+		tickAll(apps)
+	}
+	var fromPeer [2][]bool // each instance's quasar landings, by whether a peer sent it
+	for i, a := range apps {
+		a.SetDispatchTap(func(ev event.GameEvent) {
+			if p, ok := ev.Payload.(*event.SpeciesLandRequestPayload); ok && p.Species == component.SpeciesQuasar {
+				fromPeer[i] = append(fromPeer[i], ev.Origin == event.OriginNetwork)
+			}
+		})
+		a.World().Resources.Status.Ints.Get("kills.drain").Store(9)
+	}
+	// The guest's tenth defeat names the cursor it drives now: td's start rebuilt the roster
+	var cursor core.Entity
+	apps[1].World().RunSafe(func() { cursor = apps[1].World().Resources.Player.Entity })
+	apps[1].Context().PushCrossing(event.EventDrainDefeated, &event.DrainDefeatedPayload{Entity: cursor})
+	apps[1].Settle()
+	for range 40 + parameter.NetworkBarrierDelayTicks {
+		tickAll(apps)
+	}
+	if !slices.Equal(fromPeer[0], []bool{true}) || !slices.Equal(fromPeer[1], []bool{false}) {
+		t.Fatalf("quasar landings by peer: host %v, guest %v; want one each, the guest's", fromPeer[0], fromPeer[1])
+	}
+}
+
 // TestAGuestsDrainBreaksTheGoldOnEveryInstance: a guest's drain standing on a gold
 // member breaks the sequence as a crossing, so the host and the guest lose it at one
 // tick, rather than the guest alone until the host's correction puts it back
