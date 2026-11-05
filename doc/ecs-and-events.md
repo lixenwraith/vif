@@ -475,9 +475,9 @@ constant that carries none; see [the domain model](domain-design.md) D-10. When
 adding or changing an event, update the declaration and payload together, then
 regenerate. The class decides the records every instance's journal must agree on
 (`event.Replicated`); `event.OnWire` selects the narrower set a peer must
-receive: a Bus event a Player producer pushed as a crossing, or a Stamped one
-resolving Shared that `stampedCrossings` in `wire.go` names, never a re-derived
-Shared event, a `Derived` follow-up or an event a peer produced.
+receive: a Bus or Stamped push at Shared state that this participant's own
+simulation made (`GameEvent.Own`, D-7), never a re-derived Shared event, a
+`Derived` follow-up or an event a peer produced.
 
 The catalog covers these domains:
 

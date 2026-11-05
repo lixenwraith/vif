@@ -339,7 +339,31 @@ func (s *Scheduler) reportRegions() error {
 
 // RegisterEventHandler adds an event handler to router, must be called before Start()
 func (s *Scheduler) RegisterEventHandler(handler event.Handler) {
+	if d, ok := s.world.systemDomain(handler); ok && d == SystemPlayer {
+		handler = ownHandler{Handler: handler, queue: s.world.Resources.Event.Queue}
+	}
 	s.eventRouter.Register(handler)
+}
+
+// ownHandler runs a player-profile system's handler in its producer scope, so
+// what it pushes is its participant's own, as in the system's Update (D-3)
+type ownHandler struct {
+	event.Handler
+	queue *event.EventQueue
+}
+
+func (h ownHandler) HandleEvent(ev event.GameEvent) {
+	was := h.queue.SetOwn(true)
+	h.Handler.HandleEvent(ev)
+	h.queue.SetOwn(was)
+}
+
+// Name keeps the system's name on its profiler timer
+func (h ownHandler) Name() string {
+	if n, ok := h.Handler.(interface{ Name() string }); ok {
+		return n.Name()
+	}
+	return strings.TrimPrefix(fmt.Sprintf("%T", h.Handler), "*")
 }
 
 // SetDispatchTap installs an observer called for every event before the FSM and

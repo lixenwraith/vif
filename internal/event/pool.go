@@ -94,7 +94,10 @@ func ReleaseWallBatchSpawn(p *WallBatchSpawnRequestPayload) {
 // ReleaseDeferredPayload returns a pooled payload after the barrier encoded it.
 // Non-pooled payloads need no action.
 func ReleaseDeferredPayload(payload any) {
-	if p, ok := payload.(*ExplosionBatchRequestPayload); ok {
+	switch p := payload.(type) {
+	case *ExplosionBatchRequestPayload:
 		ReleaseExplosionBatchRequest(p)
+	case *DeathRequestPayload:
+		ReleaseDeathRequest(p)
 	}
 }
