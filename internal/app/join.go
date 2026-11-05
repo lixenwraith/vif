@@ -33,7 +33,7 @@ func (m *membership) JoinAnchor() event.JoinAnchor {
 // the operator `:host` path does, because mode/ runs inside it.
 // Caller MUST hold updateMutex.
 func (m *membership) joinAnchorLocked() event.JoinAnchor {
-	an := m.run.buildAnchor()
+	an := m.run.BuildAnchor()
 	an.Schema = event.JournalSchema
 	cfg := m.world.Resources.Config
 	an.MapWidth, an.MapHeight, an.CropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize
@@ -56,7 +56,7 @@ func (m *membership) JoinAt(j event.JoinAnchor) error { return m.join(j, true) }
 
 func (m *membership) join(j event.JoinAnchor, midRun bool) error {
 	an := j.Anchor
-	if err := corrector.FirstAnchorMismatch("join", m.run.sessionAnchorFields(an)); err != nil {
+	if err := corrector.FirstAnchorMismatch("join", m.run.SessionAnchorFields(an)); err != nil {
 		return err
 	}
 	if an.MapWidth <= 0 || an.MapHeight <= 0 {

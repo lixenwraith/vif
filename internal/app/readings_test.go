@@ -23,7 +23,6 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
-	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
@@ -231,87 +230,13 @@ func takeReading(t *testing.T, name string, cfg Config, players int, region stri
 	return r
 }
 
-// socketSession is a host and players-1 guests joined over real sockets, each link
-// deflated as a session's is, ticked by the caller; the host's port is returned for
-// its readings.
+// socketSession is a host and players-1 guests joined over real sockets as -host
+// and -join join them, each link deflated as a session's is, ticked by the caller;
+// the host's port is returned for its readings.
 func socketSession(t *testing.T, cfg Config, players int) ([]*App, *link.SocketPort) {
 	t.Helper()
-	cfg.Mode = ModeHeadless
-	host, err := NewHeadless(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(host.Close)
-	host.cfg.Membership.Participants = players
-
-	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
-	hostCfg.ParticipantID = engine.CoordinatorParticipant
-	hostCfg.MaxPeers = host.membership.sessionCapacity()
-	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: host.membership.assignParticipant, Release: host.membership.releaseParticipant, Scenario: host.membership.scenarioBody,
-	}, socketWait)
-	hostPort := link.NewSocketPort(&hostCfg.Config)
-	t.Cleanup(func() { _ = hostPort.Close() })
-	if err := hostPort.Start(); err != nil {
-		t.Fatal(err)
-	}
-	host.AttachTransport(hostPort)
-	hostStarted := make(chan error, 1)
-	go func() { hostStarted <- host.membership.startHostSessionOn(hostPort, nil) }()
-
-	guests := make([]*App, 0, players-1)
-	for i := range players - 1 {
-		pending, offered, err := network.DialSession(hostPort.Addr().String(), network.DebugConfig(link.RolePeer, ""))
-		if err != nil {
-			t.Fatalf("guest %d dial: %v", i+1, err)
-		}
-		t.Cleanup(func() { _ = pending.Close() })
-		joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: cfg.Width, Height: cfg.Height, Resources: cfg.Resources}}, offered)
-		if err != nil {
-			t.Fatalf("guest %d config: %v", i+1, err)
-		}
-		g, err := newDriven(joinCfg)
-		if err != nil {
-			t.Fatalf("guest %d app: %v", i+1, err)
-		}
-		t.Cleanup(g.Close)
-		g.membership.pendingJoin, g.membership.sessionOffer = pending, offered
-		if err := g.Join(offered.Anchor); err != nil {
-			_ = pending.Complete(err, network.JoinerReport{})
-			t.Fatalf("guest %d identity: %v", i+1, err)
-		}
-		if err := pending.Complete(nil, g.membership.joinerReport()); err != nil {
-			t.Fatalf("guest %d reply: %v", i+1, err)
-		}
-		guests = append(guests, g)
-	}
-	gated := make(chan error, len(guests))
-	for _, g := range guests {
-		go func() { gated <- g.membership.startJoinSession(nil) }()
-	}
-	for range guests {
-		if err := <-gated; err != nil {
-			t.Fatalf("guest startup: %v", err)
-		}
-	}
-	if err := <-hostStarted; err != nil {
-		t.Fatalf("host startup: %v", err)
-	}
-	for i, g := range guests {
-		port := link.NewSocketPort(g.membership.pendingJoin.TransportConfig())
-		t.Cleanup(func() { _ = port.Close() })
-		if err := port.Start(); err != nil {
-			t.Fatalf("guest %d transport: %v", i+1, err)
-		}
-		g.AttachTransport(port)
-		waitSocket(t, port, func() bool { return port.PeerCount() == 1 }, fmt.Sprintf("guest %d peer", i+1))
-	}
-	waitSocket(t, hostPort, func() bool { return hostPort.PeerCount() == len(guests) }, "host peers")
-	apps := append([]*App{host}, guests...)
-	for _, a := range apps {
-		a.membership.activateNetworkSession()
-	}
-	return apps, hostPort
+	apps := lobbySession(t, cfg, players, Config{Width: cfg.Width, Height: cfg.Height, Resources: cfg.Resources})
+	return apps, portOf(t, apps[0])
 }
 
 // snapshotStats reads every counter a reading differences.

@@ -113,18 +113,17 @@ func TestALatePressDialsAgainIntoTheSameGame(t *testing.T) {
 	if !guest.membership.seated() || guest.World() != world {
 		t.Fatal("a late press did not seat the run it came to, on the world it built")
 	}
-	id := link.PeerID(guest.membership.localParticipant())
-	if id == 0 || id != guest.membership.sessionOffer.Assigned {
-		t.Fatalf("the seated run is participant %d, its offer names %d", id, guest.membership.sessionOffer.Assigned)
+	id := guest.membership.localParticipant()
+	if id == 0 {
+		t.Fatal("the seated run is no participant")
 	}
 	if err := guest.membership.startJoinSession(nil); err != nil {
 		t.Fatalf("join gate: %v", err)
 	}
-	host.membership.sessionMu.Lock()
-	rostered := slices.ContainsFunc(host.membership.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
-	host.membership.sessionMu.Unlock()
-	if !rostered || host.membership.guestCount() != 1 {
-		t.Fatalf("after its gate the host holds %d guest(s), participant %d among them %v", host.membership.guestCount(), id, rostered)
+	// The host links the participant its offer assigned, so a run that took another
+	// identity than its offer's is not the one linked.
+	if linked := portOf(t, host).Connected(id); !linked || host.membership.guestCount() != 1 {
+		t.Fatalf("after its gate the host holds %d guest(s), linked to participant %d %v", host.membership.guestCount(), id, linked)
 	}
 }
 
@@ -136,7 +135,10 @@ func TestAPressIntoAGameItsSessionReplacedJoinsTheNewOne(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	host := hostingRun(t, 0x3034, 0)
 	guest, screen := waitingJoiner(t, host.HostAddr(), "roam")
-	guest.membership.sessionOffer.Anchor.Anchor.Seed++ // built on a game the session has since replaced
+	// The session's next game, crossing at the playout lead while this run waits.
+	was := host.JoinAnchor().Anchor.Session
+	host.World().RunSafe(func() { mode.ExecuteCommand(host.Context(), "n") })
+	waitUntil(t, func() bool { return host.JoinAnchor().Anchor.Session != was }, "the host's next game")
 
 	screen.events <- press
 	next, err := guest.awaitJoinPress(nil)
@@ -160,7 +162,9 @@ func TestAPressIntoAGameItsSessionReplacedJoinsTheNewOne(t *testing.T) {
 // over went with the attempt refused on it.
 func TestARetriedOpenDialsAfresh(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
-	host := hostingRun(t, 0x3035, 0)
+	// A full session a player left: the seat finds the Wraith giving up its place,
+	// and a retry a moment later finds that place free.
+	host := awayGuest(t).host
 	cfg := joinerConfig(host.HostAddr(), false)
 	cfg.Normalize()
 	d, err := dialJoin(cfg.Membership, cfg.wiring.membership, cfg)
@@ -168,10 +172,6 @@ func TestARetriedOpenDialsAfresh(t *testing.T) {
 		t.Fatalf("dial: %v", err)
 	}
 	cfg.wiring.dialled = d
-	// The seat finds the session starting, and a retry a moment later finds it open.
-	host.membership.lobbyClosing.Store(true)
-	reopen := time.AfterFunc(4*parameter.SessionRejoinInterval, func() { host.membership.lobbyClosing.Store(false) }) // [wall]
-	defer reopen.Stop()
 
 	a, err := openRun(cfg, false)
 	if err != nil {
@@ -238,32 +238,43 @@ func TestAJoinerLandsInAGameWaitingForItsHostsStart(t *testing.T) {
 // full one a player left previews, for a seat to take that place back or have it
 // given up, and neither is begun until then.
 func TestAPreviewRefusesOnlyWhatItsSeatWould(t *testing.T) {
-	t.Parallel()
-	host := mustHeadless(t, fixtureSeed, 120, 40)
-	t.Cleanup(host.Close)
-	host.cfg.Membership.Participants = 2
-	host.AttachTransport(network.NewMesh().Node(1))
-	tickUntilCursor(t, host)
-	if _, err := host.membership.assignFor(host.JoinAnchor(), 0, nil); err != nil {
-		t.Fatal(err)
+	// Not parallel: real sockets against wall-clock deadlines.
+	preview := func(addr string, claims ...string) (network.SessionOffer, error) {
+		cfg := network.DebugConfig(link.RolePeer, "")
+		cfg.Claims = claims
+		pending, o, err := network.PreviewSession(addr, cfg)
+		if err == nil {
+			_ = pending.Close()
+		}
+		return o, err
 	}
-	if _, err := host.membership.previewParticipant(nil); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+	full := mustHosting(t, Membership{Participants: 2})
+	seated, _ := dialSession(t, full.HostAddr())
+	defer seated.Close()
+	if _, err := preview(full.HostAddr()); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
 		t.Fatalf("a full session previewed a newcomer with %v, want a full session's refusal", err)
 	}
 
-	away, guest, token := awayGuest(t)
-	before := len(away.membership.sessionRoster)
-	for _, claims := range [][]string{nil, {token}} {
-		o, err := away.membership.previewParticipant(claims)
+	a := awayGuest(t)
+	a.stop() // a yield begun is the next tick's to act on
+	before := a.host.membership.guestCount()
+	for _, claims := range [][]string{nil, {a.token}} {
+		o, err := preview(a.host.HostAddr(), claims...)
 		if err != nil || o.ValidatePreview() != nil {
 			t.Fatalf("a full session a player left previewed claims %v with %+v, %v", claims, o, err)
 		}
 	}
-	if len(away.membership.sessionRoster) != before || away.membership.yielding != 0 || away.membership.dismissWraith.Load() != 0 || len(away.membership.returning) != 0 {
-		t.Fatalf("a preview began a seat's work: roster %d of %d, yielding %d, returning %v",
-			len(away.membership.sessionRoster), before, away.membership.yielding, away.membership.returning)
+	var dismiss uint32
+	var kept bool
+	a.host.World().RunSafe(func() {
+		r := a.host.world.Resources.Network
+		dismiss, kept = r.DismissWraith(), r.WraithKept(uint32(a.id))
+	})
+	if after := a.host.membership.guestCount(); after != before || dismiss != 0 || kept {
+		t.Fatalf("a preview began a seat's work: %d guests of %d, participant %d dismissed, the place held for a return %t",
+			after, before, dismiss, kept)
 	}
-	if !wraithIn(away, assignedSlot(guest)) {
+	if !wraithIn(a.host, a.slot) {
 		t.Fatal("a preview moved the Wraith that keeps the player's place")
 	}
 }

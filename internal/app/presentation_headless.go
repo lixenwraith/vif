@@ -33,11 +33,9 @@ func (a *App) applyMouseMode(bool, bool) {}
 
 func (a *App) keyReportApplier() mode.KeyReportApplier { return nil }
 
-type lobbyEvent struct{}
+func (a *App) lobbyEvents() <-chan terminal.Event { return nil }
 
-func (a *App) lobbyEvents() <-chan lobbyEvent { return nil }
-
-func (a *App) lobbyEventCancels(lobbyEvent) bool { return false }
+func (a *App) lobbyEventCancels(terminal.Event) bool { return false }
 
 func (a *App) pollTerminalEarly() error { return nil }
 

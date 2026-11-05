@@ -315,26 +315,10 @@ func (a *App) Loop() (*restartRequest, error) {
 			default:
 			}
 
-		case err := <-a.doorErrors():
+		case err := <-a.membership.doorErrors():
 			a.showDoorError(err)
 		}
 	}
-}
-
-// doorErrors is where the port this run takes joins at reports a dial it refused or
-// lost, nil for a run with none; the loop shows each, as a lobby does, since only
-// the log heard a playing host's.
-func (a *App) doorErrors() <-chan error {
-	a.membership.sessionMu.Lock()
-	port := a.membership.midRunPort
-	a.membership.sessionMu.Unlock()
-	if port == nil {
-		port, _ = a.membership.socketPort()
-	}
-	if port == nil {
-		return nil
-	}
-	return port.Errors()
 }
 
 func (a *App) showDoorError(err error) {
@@ -442,7 +426,7 @@ func (a *App) handleResize(width, height int) {
 	a.scheduler.DispatchEventsImmediately()
 	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
 	if a.cfg.Mode.OwnsGeometry() {
-		a.membership.seatScreen.Store(&screen{a.ctx.Width, a.ctx.Height})
+		a.seatScreen.Store(&screen{a.ctx.Width, a.ctx.Height})
 	}
 }
 

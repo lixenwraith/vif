@@ -4,15 +4,18 @@ package app
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/app/internal/corrector"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // TestMain hides the machine's config roots. A joiner's config resolves the default
@@ -38,6 +41,34 @@ func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
 		t.Fatalf("headless: %v", err)
 	}
 	return a
+}
+
+// portOf is the socket a run's session runs on, as its world holds it: a host's
+// door, whether opened at start or with :host, or a joiner's link to its session
+// and the door it takes joins at once it hosts.
+func portOf(t *testing.T, a *App) *link.SocketPort {
+	t.Helper()
+	var port engine.NetworkPort
+	a.World().RunSafe(func() {
+		if r := a.world.Resources.Network; r != nil {
+			port = r.Port
+		}
+	})
+	p, ok := port.(*link.SocketPort)
+	if !ok {
+		t.Fatalf("the run's session runs on %T, not a socket", port)
+	}
+	return p
+}
+
+// dialling reports whether a run's :join is still being dialled, as its commands
+// tell it: :host, which nothing opens while one is, says so first.
+func dialling(a *App) (busy bool) {
+	a.World().RunSafe(func() {
+		err := a.ctx.SessionCtl.HostError()
+		busy = err != nil && strings.Contains(err.Error(), "being dialled")
+	})
+	return busy
 }
 
 // mustJoiner builds a participant the way ConfigForJoin does for a real join: it

@@ -415,10 +415,15 @@ func TestADepartedParticipantLeavesNoCrossingFenceBehind(t *testing.T) {
 		t.Fatal("the host applied nothing from the guest; there is no fence to leave behind")
 	}
 
-	// The departure the coordinator produces when the link goes, applied at the tick
-	// it names on every instance.
-	host.membership.crossDeparture(guestParticipant, 1)
-	for range parameter.NetworkBarrierDelayTicks + 2 {
+	// The link goes, and the departure the coordinator produces for it applies at
+	// the tick it names, the guest's cursor waiting as a Wraith from there.
+	if !host.instance().DropParticipant(uint32(guestParticipant)) {
+		t.Fatal("the guest's link would not drop")
+	}
+	for ticks := 0; !wraithIn(host, 1); ticks++ {
+		if ticks > 4*parameter.NetworkBarrierMaxDelayTicks {
+			t.Fatal("the guest's departure never applied on the host")
+		}
 		host.Tick(1)
 	}
 	if got := hostFence(t, host, guestParticipant); got != 0 {

@@ -6,7 +6,6 @@ import (
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
-	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/network"
@@ -347,44 +346,17 @@ func assertMeshParity(t *testing.T, apps []*App, step int) {
 	}
 }
 
-// TestThreeParticipantLobbyClosesOnOneRoster drives the real startup handshake for a
-// lobby larger than a pair. Each joiner dials at a different time and so receives a
-// different partial offer; what every instance builds its roster from is the roster
-// the start gate closes on, which is the whole reason that gate carries one.
-func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
+// TestALobbyOffersEachJoinerTheLobbySoFar: a joiner that dials while a lobby fills
+// is offered the lobby as it stands, itself last; the roster every instance builds
+// from comes later, with the start gate (TestThreeParticipantLobbyClosesOnOneRoster).
+func TestALobbyOffersEachJoinerTheLobbySoFar(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
-	const seed = 0x5EEDBEEF
-
-	host := mustHeadless(t, seed, 120, 40)
-	t.Cleanup(host.Close)
-	host.cfg.Membership.Participants = 3
-
-	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
-	hostCfg.ParticipantID = engine.CoordinatorParticipant
-	hostCfg.MaxPeers = host.membership.sessionCapacity()
-	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: host.membership.assignParticipant, Release: host.membership.releaseParticipant,
-	}, socketWait)
-	hostPort := link.NewSocketPort(&hostCfg.Config)
-	t.Cleanup(func() { _ = hostPort.Close() })
-	if err := hostPort.Start(); err != nil {
-		t.Fatalf("host transport: %v", err)
-	}
-	host.AttachTransport(hostPort)
-
-	hostStarted := make(chan error, 1)
-	go func() { hostStarted <- host.membership.startHostSessionOn(hostPort, nil) }()
-
+	_, addr, _ := lobbyHost(t, Config{Mode: ModeHeadless, Seed: 0x5EEDBEEF, Width: 120, Height: 40,
+		Resources: resource.Options{Embedded: true}, Membership: Membership{Participants: 3}})
 	// Two joiners arrive one after the other, so the first sees a two-entry offer
 	// and the second a three-entry one.
-	guests := make([]*App, 0, 2)
-	ports := make([]*link.SocketPort, 0, 2)
 	for i := range 2 {
-		pending, offered, err := network.DialSession(hostPort.Addr().String(),
-			network.DebugConfig(link.RolePeer, ""))
-		if err != nil {
-			t.Fatalf("guest %d dial: %v", i+1, err)
-		}
+		pending, offered := dialSession(t, addr)
 		t.Cleanup(func() { _ = pending.Close() })
 		if want := link.PeerID(i + 2); offered.Assigned != want {
 			t.Fatalf("guest %d assigned participant %d, want %d", i+1, offered.Assigned, want)
@@ -392,58 +364,22 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 		if got, want := len(offered.Roster), i+2; got != want {
 			t.Fatalf("guest %d offered %d participants, want the lobby so far (%d)", i+1, got, want)
 		}
+	}
+}
 
-		joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: 120, Height: 40}}, offered)
-		if err != nil {
-			t.Fatalf("guest %d config: %v", i+1, err)
-		}
-		g, err := newDriven(joinCfg)
-		if err != nil {
-			t.Fatalf("guest %d app: %v", i+1, err)
-		}
-		t.Cleanup(g.Close)
-		g.membership.pendingJoin, g.membership.sessionOffer = pending, offered
-		if err := g.Join(offered.Anchor); err != nil {
-			_ = pending.Complete(err, network.JoinerReport{})
-			t.Fatalf("guest %d identity: %v", i+1, err)
-		}
-		if err := pending.Complete(nil, g.membership.joinerReport()); err != nil {
-			t.Fatalf("guest %d reply: %v", i+1, err)
-		}
-		guests = append(guests, g)
-	}
-
-	// The gate releases only once the lobby is full, so both joiners wait here.
-	gated := make(chan error, len(guests))
-	for _, g := range guests {
-		go func() { gated <- g.membership.startJoinSession(nil) }()
-	}
-	for range guests {
-		if err := <-gated; err != nil {
-			t.Fatalf("guest startup: %v", err)
-		}
-	}
-	if err := <-hostStarted; err != nil {
-		t.Fatalf("host startup: %v", err)
-	}
-
-	for i, g := range guests {
-		port := link.NewSocketPort(g.membership.pendingJoin.TransportConfig())
-		t.Cleanup(func() { _ = port.Close() })
-		if err := port.Start(); err != nil {
-			t.Fatalf("guest %d transport: %v", i+1, err)
-		}
-		g.AttachTransport(port)
-		ports = append(ports, port)
-	}
-	waitSocket(t, hostPort, func() bool { return hostPort.PeerCount() == 2 }, "host peers")
-	for i, port := range ports {
+// TestThreeParticipantLobbyClosesOnOneRoster drives the real startup handshake for a
+// lobby larger than a pair. Each joiner dials at a different time and so receives a
+// different partial offer; what every instance builds its roster from is the roster
+// the start gate closes on, which is the whole reason that gate carries one.
+func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
+	apps := lobbySession(t, Config{Seed: 0x5EEDBEEF, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}},
+		3, Config{Width: 120, Height: 40})
+	host := portOf(t, apps[0])
+	waitSocket(t, host, func() bool { return host.PeerCount() == 2 }, "host peers")
+	for i, g := range apps[1:] {
+		port := portOf(t, g)
 		waitSocket(t, port, func() bool { return port.PeerCount() == 1 }, fmt.Sprintf("guest %d peer", i+1))
-	}
-
-	apps := append([]*App{host}, guests...)
-	for _, a := range apps {
-		a.membership.activateNetworkSession()
 	}
 
 	// One roster on every instance is the point: same slots, same shared entities,

@@ -10,7 +10,6 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
-	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/journal"
@@ -39,9 +38,11 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 	if err := b.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
-	// The host runs the same level setup its guest adopted, so the two see one
-	// event sequence; a join that only moved the guest would be the divergence.
-	a.membership.adoptMapLatch(an.Anchor)
+	// The host takes the anchor it offers too, running the level setup its guest
+	// adopted, so the two see one event sequence.
+	if err := a.Join(an); err != nil {
+		t.Fatalf("host latch: %v", err)
+	}
 
 	// The geometry is settled before the link exists. SetupLevel carries a
 	// ClassShared payload, so inside a live session only the authority may produce
@@ -340,10 +341,7 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	b := mustHeadless(t, seed, 120, 40)
 	t.Cleanup(func() { a.Close(); b.Close() })
 
-	offer, err := a.membership.hostOffer()
-	if err != nil {
-		t.Fatalf("host offer: %v", err)
-	}
+	offer := sessionOfferFor(a.JoinAnchor(), 2)
 	if err := b.JoinSession(offer); err != nil {
 		t.Fatalf("join roster: %v", err)
 	}
@@ -393,68 +391,11 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	// handshake, neither of which needs the long run the in-process one takes.
 	steps := soakScale(60, 120, 800)
 
-	a, err := NewHeadless(Config{
-		Seed: seed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
-	})
-	if err != nil {
-		t.Fatalf("host: %v", err)
-	}
-	t.Cleanup(a.Close)
-	// The lobby is not closed here: hostOffer closes it, and the coordinator has to
-	// allocate this run's guest identity from an open one.
-	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
-	hostCfg.ParticipantID = engine.CoordinatorParticipant
-	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: a.membership.assignParticipant, Release: a.membership.releaseParticipant,
-	}, socketWait)
-	host := link.NewSocketPort(&hostCfg.Config)
-	t.Cleanup(func() { _ = host.Close() })
-	if err := host.Start(); err != nil {
-		t.Fatalf("host transport: %v", err)
-	}
-	a.AttachTransport(host)
-	hostStarted := make(chan error, 1)
-	go func() { hostStarted <- a.membership.startHostSessionOn(host, nil) }()
-
-	pending, offered, err := network.DialSession(host.Addr().String(), network.DebugConfig(link.RolePeer, ""))
-	if err != nil {
-		t.Fatalf("dial session: %v", err)
-	}
-	t.Cleanup(func() { _ = pending.Close() })
-	joinCfg, err := configForJoin(runConfig{Config: Config{Mode: ModeHeadless, Width: 120, Height: 40}}, offered)
-	if err != nil {
-		t.Fatalf("join config: %v", err)
-	}
-	b, err := newDriven(joinCfg)
-	if err != nil {
-		t.Fatalf("join app: %v", err)
-	}
-	t.Cleanup(b.Close)
-	b.membership.pendingJoin = pending
-	b.membership.sessionOffer = offered
-	if err := b.Join(offered.Anchor); err != nil {
-		_ = pending.Complete(err, network.JoinerReport{})
-		t.Fatalf("join identity: %v", err)
-	}
-	if err := pending.Complete(nil, b.membership.joinerReport()); err != nil {
-		t.Fatalf("join reply: %v", err)
-	}
-	if err := b.membership.startJoinSession(nil); err != nil {
-		t.Fatalf("join startup: %v", err)
-	}
-
-	guest := link.NewSocketPort(pending.TransportConfig())
-	t.Cleanup(func() { _ = guest.Close() })
-	if err := guest.Start(); err != nil {
-		t.Fatalf("guest transport: %v", err)
-	}
-	b.AttachTransport(guest)
+	apps := lobbySession(t, Config{Seed: seed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}},
+		2, Config{Width: 120, Height: 40})
+	a, b := apps[0], apps[1]
+	host, guest := portOf(t, a), portOf(t, b)
 	waitSocket(t, guest, func() bool { return guest.PeerCount() == 1 }, "guest peer")
-	if err := <-hostStarted; err != nil {
-		t.Fatalf("host startup: %v", err)
-	}
-	a.membership.activateNetworkSession()
-	b.membership.activateNetworkSession()
 
 	var localA, localB core.Entity
 	a.World().RunSafe(func() { localA = a.World().Resources.Player.Slot(0) })
@@ -1190,10 +1131,7 @@ func TestSharedIdentityCrossingWaitsOnItsProducer(t *testing.T) {
 	b := mustHeadless(t, seed, 120, 40)
 	t.Cleanup(func() { a.Close(); b.Close() })
 
-	offer, err := a.membership.hostOffer()
-	if err != nil {
-		t.Fatalf("host offer: %v", err)
-	}
+	offer := sessionOfferFor(a.JoinAnchor(), 2)
 	if err := b.JoinSession(offer); err != nil {
 		t.Fatalf("join roster: %v", err)
 	}

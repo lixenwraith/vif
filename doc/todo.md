@@ -1455,23 +1455,24 @@ another system may not call them directly.
 
 - Priority: P3
 - Affected files: `internal/app/membership.go`, `seat.go`, `session.go`, `host.go`,
-  `converge.go`, `loop.go`
+  `converge.go`, `join.go`, `relay.go`, `identity.go`, `claim.go`
 
 The corrector and the scribe have packages under `internal/app/internal`, each
 reading the run through one seam and resolving into a run only `App` builds (a
 `corrector.Staging`, a `scribe.Twin`). `membership` holds only the run's session
 half, `Membership` and the wiring's `membershipWiring`, and reads the rest of the
-run through `membershipRun`, dialling a join against a copy of it (`joinBase`).
-`Membership` is `internal/app/internal/config`'s, which a membership package can
-import, and the functions over it (`joining`, `hostNetwork`, `bindDoors`) go with
-the membership, `Run` and `runConfig.restarted` calling them there. Three ties to
-`app` are left:
+run through `memberRun`, which `App` answers as `membershipRun`, dialling a join
+against a copy of it (`joinBase`). It names no `app` type the package could not
+take along: a restart it asks for is a `restartAsk`, a seat's run the run plays
+(`PlaySeat`), a dial's run the run builds (`openDial`). `app`'s tests reach it
+through what `app`'s own code calls, the world's network hooks and real dials, so
+the package exports that and no more. Two groups of tests read inside it:
 
-- The seat runner: `seat.go` builds each bot's `runConfig` and runs its `App`
-  through `drive`, reading the slot, scribe and fork cell off it; the run has to
-  start and answer for a seat behind the seam.
-- The seam's `app` types: `restartRequest` (`replaceWith`, and the requests
-  `host.go` and `converge.go` build), `lobbyEvent`, `joinBase`.
-- What `app` shares: `forkCell`, `errSessionCanceled`, `errSessionSignalled` and
-  `errSessionExpired` (the loops), and `joinDial`, which the wiring's `dialled`
-  carries and whose `open`, like `session.go`'s constructors, builds the run.
+- Its own rules over a bare membership (`capacity_test.go`, `claim_test.go`,
+  `prepared_test.go`, `seat_test.go`, `startup_test.go`, `wraith_test.go`), which
+  move with it.
+- The seat tests (`bot_test.go`'s, `vanguard_test.go`'s,
+  `TestASeatPlaysInItsHoldersScreen`), which find a seat's run in `seats`. The runs
+  the App plays for its seats, and the journals `scribe.go` and `loop.go` read off
+  them (`askSeatJournal`, `seatJournalSummaries`, `seatJournalNotices`), go to
+  `app` with the move, where these tests read them.

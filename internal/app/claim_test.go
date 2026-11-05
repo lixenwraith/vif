@@ -124,3 +124,25 @@ func TestATabKeepsItsClaimsAcrossAReload(t *testing.T) {
 			len(k.claims), k.claims[0] == held, slices.Contains(k.claims, bot), parameter.ClaimsKept)
 	}
 }
+
+// TestAForkLetsItsClaimGo: what a fork plays is not what its player brings back, so
+// the claim it was in its session under is let go as it stood, whether its loop
+// takes it into a session of its own or it plays on where it stood; the loop is
+// asked to take it on before the claim goes.
+func TestAForkLetsItsClaimGo(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []Mode{ModePlay, ModeHeadless} {
+		m := wraithWorld()()
+		m.run, m.claims = stubRun{mode: mode}, newClaimKeeper(nil)
+		c := m.claims.issue(false)
+		m.claim.Store(c)
+		m.forked(nil, 2)
+		if named := slices.Contains(m.claims.tokens(false), c.Token); m.claim.Load() != nil || !named {
+			t.Errorf("a %s fork holds its claim %t and names it on its next dial %t; want it let go, named",
+				mode, m.claim.Load() != nil, named)
+		}
+		if loop := mode == ModePlay; m.leaving.Load() != loop {
+			t.Errorf("a %s fork asks its loop to take it on %t; want %t", mode, m.leaving.Load(), loop)
+		}
+	}
+}

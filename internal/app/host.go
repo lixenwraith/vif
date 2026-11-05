@@ -23,56 +23,67 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// The router already holds the world lock when calling this adapter.
-type sessionControl struct{ a *App }
+// sessionControl is the operator's session surface: the membership's half (control)
+// and the journal's, which the scribe answers. The router holds the world lock
+// calling it.
+type sessionControl struct {
+	control
+	a *App
+}
 
-func (c sessionControl) BeginHosting(addr, authority string) error {
-	return c.a.membership.beginHostingLocked(addr, authority)
-}
-func (c sessionControl) Join(target string) error { return c.a.membership.joinLocked(target) }
-func (c sessionControl) SessionSummary() string   { return c.a.membership.sessionSummaryLocked() }
-func (c sessionControl) DropBot(slot int) error {
-	if err := c.a.membership.dropSeat(slot); err == nil {
-		return nil
-	}
-	e := c.a.world.Resources.Player.Slot(uint8(slot))
-	cursor, ok := c.a.world.Components.Cursor.GetComponent(e)
-	if !ok || cursor.Holder == 0 {
-		return fmt.Errorf("no bot on slot %X", slot)
-	}
-	return c.a.membership.dropPlayerLocked(e)
-}
-func (c sessionControl) RemoveBot(id uint64) error   { return c.a.membership.removeSeat(id) }
-func (c sessionControl) BotSummary() string          { return c.a.membership.seatsSummary() }
-func (c sessionControl) Bots() []engine.BotSeat      { return c.a.membership.botSeats() }
-func (c sessionControl) HostError() error            { return c.a.membership.hostErrorLocked() }
-func (c sessionControl) JoinError() error            { return c.a.membership.joinErrorLocked() }
-func (c sessionControl) Leave() error                { return c.a.membership.leaveLocked() }
-func (c sessionControl) LeaveError() error           { return c.a.membership.leaveErrorLocked() }
 func (c sessionControl) StartJournal(slot int) error { return c.a.scribe.StartJournalLocked(slot) }
 func (c sessionControl) StopJournal(slot int) error  { return c.a.scribe.StopJournalLocked(slot) }
 func (c sessionControl) JournalError() error         { return c.a.scribe.JournalErrorLocked() }
 func (c sessionControl) Journaling() bool            { return c.a.scribe.Journaling() }
 func (c sessionControl) JournalSummary() string      { return c.a.scribe.JournalSummary() }
 
-func (c sessionControl) DropPlayer(slot int) error {
+// control is the membership's half of the operator's engine.SessionController:
+// hosting, joining and leaving, the scenario, the bots this run holds and the
+// players its host may drop. Its caller holds the world lock.
+type control struct{ m *membership }
+
+func (c control) BeginHosting(addr, authority string) error {
+	return c.m.beginHostingLocked(addr, authority)
+}
+func (c control) Join(target string) error { return c.m.joinLocked(target) }
+func (c control) SessionSummary() string   { return c.m.sessionSummaryLocked() }
+func (c control) DropBot(slot int) error {
+	if err := c.m.dropSeat(slot); err == nil {
+		return nil
+	}
+	e := c.m.world.Resources.Player.Slot(uint8(slot))
+	cursor, ok := c.m.world.Components.Cursor.GetComponent(e)
+	if !ok || cursor.Holder == 0 {
+		return fmt.Errorf("no bot on slot %X", slot)
+	}
+	return c.m.dropPlayerLocked(e)
+}
+func (c control) RemoveBot(id uint64) error { return c.m.removeSeat(id) }
+func (c control) BotSummary() string        { return c.m.seatsSummary() }
+func (c control) Bots() []engine.BotSeat    { return c.m.botSeats() }
+func (c control) HostError() error          { return c.m.hostErrorLocked() }
+func (c control) JoinError() error          { return c.m.joinErrorLocked() }
+func (c control) Leave() error              { return c.m.leaveLocked() }
+func (c control) LeaveError() error         { return c.m.leaveErrorLocked() }
+
+func (c control) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {
 		return errors.New("invalid player slot")
 	}
-	return c.a.membership.dropPlayerLocked(c.a.world.Resources.Player.Slot(uint8(slot)))
+	return c.m.dropPlayerLocked(c.m.world.Resources.Player.Slot(uint8(slot)))
 }
 
-func (c sessionControl) RemovePlayer(entity core.Entity) error {
-	return c.a.membership.dropPlayerLocked(entity)
+func (c control) RemovePlayer(entity core.Entity) error {
+	return c.m.dropPlayerLocked(entity)
 }
 
-func (c sessionControl) Participants() []engine.SessionParticipant {
+func (c control) Participants() []engine.SessionParticipant {
 	var out []engine.SessionParticipant
 	for slot := range parameter.MaxPlayers {
-		e := c.a.world.Resources.Player.Slot(uint8(slot))
-		if p, ok := c.a.world.Components.Cursor.GetComponent(e); ok {
+		e := c.m.world.Resources.Player.Slot(uint8(slot))
+		if p, ok := c.m.world.Components.Cursor.GetComponent(e); ok {
 			out = append(out, engine.SessionParticipant{Entity: e, Slot: p.Slot, Holder: p.Holder,
-				Local: c.a.world.SimulatesLocally(e), Away: c.a.world.Components.Wraith.HasEntity(e)})
+				Local: c.m.world.SimulatesLocally(e), Away: c.m.world.Components.Wraith.HasEntity(e)})
 		}
 	}
 	return out
@@ -96,7 +107,7 @@ func (m *membership) dropPlayerLocked(entity core.Entity) error {
 	return nil
 }
 
-func (c sessionControl) RequestSession(site string, players int, scenario string) error {
+func (c control) RequestSession(site string, players int, scenario string) error {
 	e, err := link.ParseEndpoint(site)
 	if err != nil {
 		return err
@@ -107,11 +118,11 @@ func (c sessionControl) RequestSession(site string, players int, scenario string
 	if players < 0 || players > parameter.MaxPlayers {
 		return fmt.Errorf("players must be 0 (server default) or 1..%d", parameter.MaxPlayers)
 	}
-	return c.a.membership.joinSessionLocked(site, players, scenario)
+	return c.m.joinSessionLocked(site, players, scenario)
 }
 
-func (c sessionControl) AddBot(graph string) error {
-	if c.a.membership.dialling.Load() {
+func (c control) AddBot(graph string) error {
+	if c.m.dialling.Load() {
 		return errors.New("a join is already being dialled")
 	}
 	specs, err := BotSpecs(cmp.Or(graph, DefaultBotGraph))
@@ -122,24 +133,24 @@ func (c sessionControl) AddBot(graph string) error {
 		return errors.New("no bots to add; name a count of 1 or more")
 	}
 	for _, spec := range specs {
-		if err := c.a.membership.addSeatLocked(spec); err != nil {
+		if err := c.m.addSeatLocked(spec); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c sessionControl) ChangeScenario(name string) (bool, error) {
-	return c.a.membership.changeScenarioLocked(name)
+func (c control) ChangeScenario(name string) (bool, error) {
+	return c.m.changeScenarioLocked(name)
 }
 
 // The embedded scenario answers to the main name, which is how a row restarts it.
-func (c sessionControl) Scenarios() ([]string, string) {
-	current := c.a.scenario.Name
+func (c control) Scenarios() ([]string, string) {
+	current := c.m.scenario.Name
 	if current == resource.EmbeddedLabel {
 		current = paths.MainScenarioName
 	}
-	return resource.Scenarios(c.a.cfg.Resources), current
+	return resource.Scenarios(c.m.run.Resources()), current
 }
 
 // Validate before teardown; a different scenario needs a new App and metric set.
@@ -151,11 +162,11 @@ func (m *membership) changeScenarioLocked(name string) (bool, error) {
 	if port != nil && !m.world.IsSessionCoordinator() {
 		return false, errors.New("only the host can change a live session's scenario")
 	}
-	if mode := m.run.mode(); mode != ModePlay {
+	if mode := m.run.Mode(); mode != ModePlay {
 		return false, fmt.Errorf("%s mode has no restart loop", mode)
 	}
 	// A scenario received from a coordinator answers its own name and no other.
-	o := m.run.resources()
+	o := m.run.Resources()
 	o.Scenario, o.Embedded = name, false
 	if o.Provided != nil && o.Provided.Name != name {
 		o.Provided = nil
@@ -170,7 +181,7 @@ func (m *membership) changeScenarioLocked(name string) (bool, error) {
 	if err := m.playersFit(sc); err != nil {
 		return false, err
 	}
-	req := &restartRequest{Scenario: name}
+	req := &restartAsk{Scenario: name}
 	if port != nil {
 		// Where this run's participants come back to. The address it already
 		// listens on when it opened the session; the one it advertised when it
@@ -185,7 +196,7 @@ func (m *membership) changeScenarioLocked(name string) (bool, error) {
 			return false, errors.New("this participant has no address its session can return to")
 		}
 	}
-	if !m.run.replaceWith(req) {
+	if !m.run.ReplaceWith(req) {
 		return false, scribe.ErrRunReplaced
 	}
 	if port != nil {
@@ -202,7 +213,7 @@ func (m *membership) changeScenarioLocked(name string) (bool, error) {
 // A restart follows the authority's current address, which may have migrated.
 // Called under the world lock; the restart loop consumes the atomic request.
 func (m *membership) receiveSessionRestart(from uint32, addr string) {
-	if m.run.mode() != ModePlay || !m.sessionRoleLocked().joined() {
+	if m.run.Mode() != ModePlay || !m.sessionRoleLocked().joined() {
 		return // a coordinator hears its own broadcast back on a mesh; a driven run has no loop
 	}
 	// A host's own doors are bind addresses with no host, and say the session stayed
@@ -210,7 +221,7 @@ func (m *membership) receiveSessionRestart(from uint32, addr string) {
 	if doors, err := link.Doors(addr); err == nil && doors[0].Hostless() {
 		addr = ""
 	}
-	if m.run.replaceWith(&restartRequest{Rejoin: true, Join: addr}) {
+	if m.run.ReplaceWith(&restartAsk{Rejoin: true, Join: addr}) {
 		m.ctx.SetStatusMessage("Session restarting; rejoining "+link.Shown(cmp.Or(addr, m.cfg.JoinAddress))+"...", parameter.StatusProgress)
 		m.log.Info("session", "msg", "session restarting", "authority", from, "dial", addr)
 	}
@@ -262,7 +273,7 @@ func (m *membership) sessionRoleLocked() sessionRole {
 	opened := m.midRunPort != nil
 	m.sessionMu.Unlock()
 	switch {
-	case m.run.mode().Serves():
+	case m.run.Mode().Serves():
 		return roleServer
 	case m.sessionTransportLocked() == nil:
 		return roleSolo
@@ -279,7 +290,7 @@ func (m *membership) sessionRoleLocked() sessionRole {
 }
 
 func (m *membership) joinErrorLocked() error {
-	if mode := m.run.mode(); mode != ModePlay {
+	if mode := m.run.Mode(); mode != ModePlay {
 		return fmt.Errorf("%s mode has no restart loop", mode)
 	}
 	if why := sessionRoles[m.sessionRoleLocked()].join; why != "" {
@@ -297,10 +308,10 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 	}
 	// A site is asked for a session off the lock, since it answers once the pod is up.
 	site, err := link.ParseEndpoint(target)
-	next, wire, base := *m.cfg, *m.wiring, m.run.joinBase()
+	next, wire, base := *m.cfg, *m.wiring, m.run.JoinBase()
 	if err == nil && site.Scheme != link.SchemeSite {
 		if next, err = joining(*m.cfg, target); err == nil {
-			err = base.validateWith(next)
+			err = base.ValidateWith(next)
 		}
 	}
 	if err != nil {
@@ -323,7 +334,7 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 			if door, err = network.RequestSession(site.Addr, players, scenario); err == nil {
 				m.ctx.SetStatusMessage("Joining "+link.Shown(door)+"...", parameter.StatusProgress)
 				if next, err = joining(next, door); err == nil {
-					err = base.validateWith(next)
+					err = base.ValidateWith(next)
 				}
 			}
 		}
@@ -335,7 +346,7 @@ func (m *membership) joinSessionLocked(target string, players int, scenario stri
 		case err != nil:
 			m.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
 			m.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
-		case !m.run.replaceWith(&restartRequest{Join: door, dialled: d, press: true}):
+		case !m.run.ReplaceWith(&restartAsk{Join: door, dialled: d, press: true}):
 			d.abandon(errors.New("the run that dialled is being replaced"))
 		}
 	})
@@ -445,6 +456,16 @@ func (m *membership) beginHostingLocked(addr, authority string) error {
 	return nil
 }
 
+// openAwayLocked starts who is away from a session this run opens: whom it kept a
+// place for, longest first. Who was on the way back to the session it left stays
+// with that session, as does a place it asked a Wraith there to give up: an
+// identity it hands out again is somebody new. Caller holds sessionMu and MUST hold
+// updateMutex.
+func (m *membership) openAwayLocked(kept []network.RosterEntry) {
+	m.awayOrder, m.yielding, m.returning = m.awayOrderLocked(kept), 0, nil
+	m.dismissWraith.Store(0)
+}
+
 // doorsText names every door a port answers at, as a status line reads them.
 func doorsText(doors []net.Addr) string {
 	names := make([]string, len(doors))
@@ -527,11 +548,7 @@ func (m *membership) openSessionLocked(kept []network.RosterEntry) error {
 	self.Claim = m.ownClaim()
 	m.sessionRoster = append([]network.RosterEntry{self}, kept...)
 	m.sessionOffer = network.SessionOffer{}
-	// Who is away is whom the run kept a place for. Who was on the way back to the
-	// session it left stays with that session: an identity it hands out again is
-	// somebody new.
-	m.awayOrder, m.yielding, m.returning = m.awayOrderLocked(kept), 0, nil
-	m.dismissWraith.Store(0)
+	m.openAwayLocked(kept)
 	roster := slices.Clone(m.sessionRoster)
 	m.sessionMu.Unlock()
 
@@ -577,7 +594,7 @@ func (m *membership) openSessionLocked(kept []network.RosterEntry) error {
 	}
 	if err != nil {
 		m.log.Error("session", "msg", "opened session not taken as written", "error", err.Error())
-		m.run.journalLostLocked(journal, err)
+		m.run.JournalLostLocked(journal, err)
 	}
 
 	m.log.Info("session", "msg", "session opened", "tick", m.run.Position().Tick)
@@ -587,7 +604,7 @@ func (m *membership) openSessionLocked(kept []network.RosterEntry) error {
 // leaveErrorLocked says why this run cannot leave its session now. Caller MUST hold
 // updateMutex.
 func (m *membership) leaveErrorLocked() error {
-	if mode := m.run.mode(); mode != ModePlay {
+	if mode := m.run.Mode(); mode != ModePlay {
 		return fmt.Errorf("%s mode has no loop to leave from", mode)
 	}
 	if why := sessionRoles[m.sessionRoleLocked()].leave; why != "" {
@@ -598,7 +615,7 @@ func (m *membership) leaveErrorLocked() error {
 		return errors.New("a join is already being dialled")
 	case m.leaving.Load():
 		return errors.New("this run is already leaving its session")
-	case m.dismissed.Load() || m.run.replacing():
+	case m.dismissed.Load() || m.run.Replacing():
 		return scribe.ErrRunReplaced
 	}
 	return nil
@@ -678,7 +695,7 @@ func leftNotice(err error, lost, held, bots bool) (string, parameter.StatusKind)
 // lock. Caller MUST hold updateMutex.
 func (m *membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	// A run being replaced is not left: what replaces it decides where it goes.
-	if m.dismissed.Load() || m.run.replacing() {
+	if m.dismissed.Load() || m.run.Replacing() {
 		return nil, scribe.ErrRunReplaced
 	}
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
