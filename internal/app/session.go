@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -95,7 +96,7 @@ func newHostingApp(cfg runConfig) (*App, error) {
 
 // hostNetworkConfig captures the App before the service starts its accept loop.
 func (m *membership) hostNetworkConfig() *link.Config {
-	netCfg := m.cfg.hostNetwork(m.cfg.HostAddress)
+	netCfg := hostNetwork(*m.cfg, m.cfg.HostAddress)
 	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = m.sessionCapacity()
 	netCfg.OnError = logSessionError
@@ -502,7 +503,7 @@ func (d *joinDial) open(cfg runConfig) (*App, error) {
 	var listener net.Listener
 	var declared string
 	gate := &converge.PeerLinkGate{}
-	if !offer.FixedAuthority && !cfg.Membership.NoAdvertise && buildHasSocketNetwork &&
+	if !offer.FixedAuthority && !cfg.Membership.NoAdvertise && config.SocketNetwork &&
 		(offer.Relay == 0 || cfg.Membership.ListenAddress != "") {
 		listener, declared = converge.BindAdvertised(cfg.Membership.ListenAddress, cfg.Membership.JoinAddress)
 	}

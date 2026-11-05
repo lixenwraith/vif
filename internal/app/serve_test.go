@@ -585,8 +585,8 @@ func TestServerModeIsWiredWithoutATerminal(t *testing.T) {
 		{"a simulation rate", func(c *Config) { c.TimeScaleSpec = "2" }},
 		{"a colour mode", func(c *Config) { c.ColorModeSet = true }},
 	} {
-		cfg := base()
-		tc.apply(&cfg)
+		cfg := runConfig{Config: base()}
+		tc.apply(&cfg.Config)
 		if err := cfg.Validate(); err == nil {
 			t.Errorf("a dedicated host accepted %s", tc.name)
 		}

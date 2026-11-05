@@ -1,0 +1,100 @@
+package config
+
+import (
+	"crypto/tls"
+	"strings"
+
+	"github.com/lixenwraith/vif/internal/converge"
+	link "github.com/lixenwraith/vif/pkg/network"
+)
+
+// Membership is the session half of Config: the session this run hosts or joins and
+// the rules it opens one with, how the run is reached and relays for others, the bots
+// it seats and the claims it comes back with. It is all of Config the membership holds.
+type Membership struct {
+	// HostAddress is the address this run hosts a session on. An interactive run
+	// opens it once its clock runs, as :host does; a scripted, bot-driven or
+	// dedicated host holds tick zero in a lobby until lobbyQuorum guests pass the
+	// start gate.
+	HostAddress string
+
+	// TLS is the certificate a wss:// door serves, -cert and -key or the one -selfsign
+	// made for the run; nil opens none. It is the run's, so a door :host opens later
+	// serves it too. Trust is what a wss:// dial trusts a host by, -ca; nil is the
+	// system's roots.
+	TLS, Trust *tls.Config
+
+	// JoinAddress is the session this run joins, at startup or through :join, at
+	// whatever tick the host has reached. The host's offer supplies simulation
+	// identity before the App is constructed.
+	JoinAddress string
+
+	// SessionName is what one address calls this session, so a deployment can put
+	// several behind one. A host answers to it and refuses a dial that named
+	// another; a joiner sends it before the handshake, where a front door can read
+	// it. Empty on both is an address with one session on it.
+	SessionName string
+
+	// ListenAddress pins the port this participant is dialled back on, and
+	// NoAdvertise refuses to publish one. Only a migrate session uses either. The
+	// default is the coordinator's own port — one firewall rule for a session —
+	// falling back to an OS-assigned one, and a bind that fails leaves the
+	// participant a leaf rather than failing the run.
+	ListenAddress string
+	NoAdvertise   bool
+
+	// RelayAddress is where a joined run admits participants that cannot reach the
+	// host, carrying their artifacts on its own link: an address to bind, or, with the
+	// vif:// scheme kept, a router to publish the door through (RelayRouter). Empty
+	// relays only its bots.
+	RelayAddress string
+
+	// FixedAuthority pins authorship to the participant that opens the session, so
+	// losing it ends the session rather than moving it. It is a session property:
+	// the coordinator's value travels in the offer. Default on for a dedicated host,
+	// which an orchestrator replaces at the same address, off for an interactive
+	// one. See doc/multi-player.md §5.
+	FixedAuthority bool
+
+	// SlowPolicy is when this run, while authoring, evicts a participant that cannot
+	// keep up, and ShedPolicy what it drops when it cannot keep its own tick; nil
+	// keeps the default. See converge.SlowPolicy and converge.ShedPolicy.
+	SlowPolicy *converge.SlowPolicy
+	ShedPolicy *converge.ShedPolicy
+
+	// Participants is a ceiling on the roster's cursors, a playing host's own
+	// included; zero means the whole roster. On a scripted or bot-driven host an
+	// explicit value is also what the startup lobby waits for. Unset, and always on
+	// a dedicated host, the lobby starts on its first guest and the rest arrive
+	// through the mid-run gate; an interactive host has no lobby.
+	Participants int
+
+	// Bots names the graph of each bot seat this run holds, one entry a bot. Seats
+	// join the session the run is in, and a run in none opens one with no listener.
+	Bots []string
+
+	// ClaimStore keeps the claims this process comes back to its sessions with past
+	// its own life, which a page's reload needs; nil keeps them while it runs.
+	ClaimStore ClaimStore
+}
+
+// ClaimStore keeps a process's claims past the process: a page's, across a reload,
+// in the tab's own storage. Without one they last as long as the process does.
+type ClaimStore interface {
+	Load() ([]byte, error)
+	Store([]byte) error
+}
+
+// RelayRouter is the router -relay names with the vif:// scheme, to publish this
+// run's door through rather than an address to bind: a door behind a NAT, reached at
+// the router's address (doc/multi-player.md §5.6).
+func RelayRouter(relay string) (string, bool) {
+	if !strings.HasPrefix(relay, "vif://") {
+		return "", false
+	}
+	e, err := link.ParseEndpoint(relay)
+	if err != nil || e.Addr == "" {
+		return "", false
+	}
+	return e.Addr, true
+}
