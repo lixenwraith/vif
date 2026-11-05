@@ -103,9 +103,8 @@ const SocketNetwork = runtime.GOARCH != "wasm"
 // cannot accept one, so no player could reach a session it opened
 var ErrBrowserHosting = errors.New("hosting unavailable in a browser, which cannot accept connections; host from the installed game")
 
-// Config is the resolved startup configuration
-// Built from CLI flags by cmd/vif, or programmatically by embedders
-// (map editor, wasm entry, headless harness) that have no flag set
+// Config is the resolved startup configuration, built from CLI flags by cmd/vif, or
+// by the Android host and the headless harness, which have no flag set
 type Config struct {
 	// Mode selects the runtime shape; the zero value is the interactive game
 	Mode Mode

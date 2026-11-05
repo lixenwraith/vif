@@ -42,11 +42,13 @@ var errNotHosting = &network.Refusal{Code: network.RefusalUnknown, Reason: "this
 // reason it retries errSessionHandoff.
 var errSessionStarting = &network.Refusal{Code: network.RefusalStarting, Reason: "session is starting"}
 
-// errSessionEnding is the kind of refusal a draining or expired session gives a
-// dial. It is the opposite of errSessionStarting: this run is leaving, so retrying
-// against it is exactly the wrong answer, and a router reading it should place
-// the participant somewhere else.
-var errSessionEnding = &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending"}
+// sessionEnding refuses a dial at a session that is ending: its host is leaving it,
+// or an allocated host drains on a termination signal, as an update takes it down,
+// or has expired. Unlike errSessionStarting it is never retried, and vif-router
+// gives a join to a draining pod the same answer without reaching it.
+func sessionEnding(why string) error {
+	return &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: " + why}
+}
 
 // ErrSessionExpired ends a lobby whose allocated window closed before a guest
 // reached it. It is a clean end rather than a failure — the session did what it was
@@ -725,14 +727,14 @@ func (m *Membership) refusedLocked() error {
 	// A dial while this run leaves its session would be offered a term that ends with
 	// it, on a door about to shut; its bots go back in once the run has left.
 	if m.leaving.Load() {
-		return &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: its host is leaving it"}
+		return sessionEnding("its host is leaving it")
 	}
 	// A draining or expired session refuses before it allocates anything. The
 	// roster slot, the identity and the capture that would follow are all work
 	// spent on a participant this process is about to stop authoring for, and the
 	// refusal is what makes a drain a drain rather than a slower shutdown.
 	if st := m.life.State(time.Now()); !st.Admit {
-		return &network.Refusal{Code: network.RefusalEnding, Reason: "session is ending: " + st.Reason}
+		return sessionEnding(st.Reason)
 	}
 	return nil
 }
