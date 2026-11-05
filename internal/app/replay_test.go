@@ -916,7 +916,7 @@ func TestAJournalReplaysAcrossALeave(t *testing.T) {
 			leaver, bots := host, 0
 			if side != "guest" {
 				var err error
-				host.World().RunSafe(func() { err = (sessionControl{host}).AddBot("roam") })
+				host.World().RunSafe(func() { err = host.ctx.SessionCtl.AddBot("roam") })
 				if err != nil {
 					t.Fatalf("bot: %v", err)
 				}

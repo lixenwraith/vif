@@ -6,7 +6,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app/internal/corrector"
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
+	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -23,9 +26,9 @@ import (
 // the offer, the seats it holds, the claims it comes back with, the relay desk and
 // the authority it follows or holds. It is the half of converge.Instance the
 // protocol moves. It holds the session half of the run's Config (cfg) and of its
-// wiring (wiring), and reads the rest of the run through membershipRun alone.
+// wiring (wiring), and reads the rest of the run through memberRun alone.
 type membership struct {
-	run membershipRun
+	run memberRun
 
 	world      *engine.World
 	ctx        *engine.GameContext
@@ -126,10 +129,7 @@ type membership struct {
 	dropped    []uint32 // seats told to leave, until their links close
 	seatSerial uint64
 
-	// seatScreen is this run's terminal as its seats follow it, published on each
-	// resize by a run whose terminal is its geometry; nil until the first.
-	seatScreen atomic.Pointer[screen]
-	relay      relayDesk
+	relay relayDesk
 	// tunnelStop ends the door this run publishes through a router (publishDoor).
 	tunnelMu   sync.Mutex
 	tunnelStop context.CancelFunc
@@ -139,38 +139,67 @@ type membership struct {
 	joinedThrough link.PeerID
 }
 
-// membershipRun is what the membership reads of the run beyond its world and its
+// memberRun is what the membership reads of the run beyond its world and its
 // session half: its mode, script and geometry and the files it may load, where it
 // stands and how it is paced, the lobby it shows on, the journal and identity it
 // writes a session into, the Config and wiring a join builds on, the vacancy a
-// dedicated host resumes from, and the run that replaces this one.
-type membershipRun interface {
-	mode() Mode
-	scripted() bool
-	geometryDefaulted() bool
-	resources() resource.Options
-	joinBase() joinBase
+// dedicated host resumes from, the run that replaces this one and its seats' runs.
+type memberRun interface {
+	Mode() Mode
+	Scripted() bool
+	GeometryDefaulted() bool
+	Resources() resource.Options
+	JoinBase() joinBase
 	Position() event.Stamp
 	Settle()
 	Resize(width, height int)
-	showStartupStatus(message string)
-	showJoinStatus(message string)
-	lobbyEvents() <-chan lobbyEvent
-	lobbyEventCancels(ev lobbyEvent) bool
-	buildAnchor() event.JournalAnchor
-	sessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField
-	journalLostLocked(j *event.Journal, err error)
-	resumeVacant()
-	replaceWith(req *restartRequest) bool
-	replacing() bool
+	ShowStartupStatus(message string)
+	ShowJoinStatus(message string)
+	LobbyEvents() <-chan terminal.Event
+	LobbyEventCancels(ev terminal.Event) bool
+	BuildAnchor() event.JournalAnchor
+	SessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField
+	JournalLostLocked(j *event.Journal, err error)
+	ResumeVacant()
+	ReplaceWith(ask *restartAsk) bool
+	Replacing() bool
+	PlaySeat(p seatPlay, seated func(seatRunner, *bot.Driver) []*atomic.Bool) (run seatRunner, finished bool, err error)
+}
+
+// restartAsk is what the membership asks the run that replaces this one to be
+// (memberRun.ReplaceWith), which the run's own request carries (restartRequest).
+type restartAsk struct {
+	Notice string
+	// Scenario replaces -s. Empty keeps the command line's, which is what a guest
+	// rebuilding into a session that is about to re-offer it one wants.
+	Scenario string
+
+	// Host is the address to open hosting on once the next run's clock is running.
+	// A coordinator changing scenario does not go back into a startup lobby: its
+	// guests are already redialling, and the mid-run gate is the door they arrive
+	// at — the same one a reconnect has always used.
+	Host string
+
+	// Rejoin says the next run follows this session rather than leads it, and Join
+	// where to dial now that succession moved the door. Join alone is a :join target
+	// that dialled holds already admitted; dialled alone is this run's own door,
+	// redialled once its host went. With none the next run is solo, which is what an
+	// authority with an empty roster has become.
+	Rejoin  bool
+	Join    string
+	dialled *joinDial
+
+	// press says the next run's player started its join, so its seat waits for
+	// their press.
+	press bool
 }
 
 // joinBase is the run's Config and wiring as a join dialled from it builds on, copied
 // where the dial starts so the dial reads nothing of the run's own: a session half is
-// checked against it (validateWith) and a session's scenario prepared on it (prepare).
+// checked against it (ValidateWith) and a session's scenario prepared on it (Prepare).
 type joinBase interface {
-	validateWith(s Membership) error
-	prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error)
+	ValidateWith(s Membership) error
+	Prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error)
 }
 
 // membershipWiring is the session half of a run's wiring, which the membership holds
@@ -247,7 +276,7 @@ func closeDoors(lns []net.Listener) {
 // open wires the membership over the run's configuration and scenario before the
 // run builds anything; the world, the context, the scheduler, the network service
 // and the protocol halves follow as the run gets each.
-func (m *membership) open(run membershipRun, cfg *Membership, wire *membershipWiring, scenario *resource.Scenario, log *vlog.Log, glue *corrector.Corrector, life *lifecycle.Controller) {
+func (m *membership) open(run memberRun, cfg *Membership, wire *membershipWiring, scenario *resource.Scenario, log *vlog.Log, glue *corrector.Corrector, life *lifecycle.Controller) {
 	m.run, m.cfg, m.wiring, m.scenario, m.log, m.glue, m.life = run, cfg, wire, scenario, log, glue, life
 	m.admissions = network.NewAdmissionLimiter()
 	m.claims = wire.claims
@@ -274,13 +303,62 @@ func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture, 
 func (a *App) SessionSummary() string { return a.membership.SessionSummary() }
 func (a *App) barrierLocked() bool    { return a.membership.barrierLocked() }
 
-// The run's settings the membership reads, live: tests switch a running run's mode,
-// and a join copies the whole Config and wiring where it dials (joinBase).
-func (a *App) mode() Mode                  { return a.cfg.Mode }
-func (a *App) scripted() bool              { return a.cfg.wiring.scriptedSession }
-func (a *App) geometryDefaulted() bool     { return a.cfg.wiring.geometryDefaulted }
-func (a *App) resources() resource.Options { return a.cfg.Resources }
-func (a *App) joinBase() joinBase          { return a.cfg }
+// membershipRun is the run as its membership reads it: the memberRun seam, answered
+// by its configuration, presentation and scribe, and the seats it plays (PlaySeat).
+type membershipRun struct{ a *App }
+
+// The run's settings, read live: tests switch a running run's mode, and a join
+// copies the whole Config and wiring where it dials (JoinBase).
+func (r membershipRun) Mode() Mode                  { return r.a.cfg.Mode }
+func (r membershipRun) Scripted() bool              { return r.a.cfg.wiring.scriptedSession }
+func (r membershipRun) GeometryDefaulted() bool     { return r.a.cfg.wiring.geometryDefaulted }
+func (r membershipRun) Resources() resource.Options { return r.a.cfg.Resources }
+func (r membershipRun) JoinBase() joinBase          { return r.a.cfg }
+
+func (r membershipRun) Position() event.Stamp              { return r.a.Position() }
+func (r membershipRun) Settle()                            { r.a.Settle() }
+func (r membershipRun) Resize(width, height int)           { r.a.Resize(width, height) }
+func (r membershipRun) ShowStartupStatus(message string)   { r.a.showStartupStatus(message) }
+func (r membershipRun) ShowJoinStatus(message string)      { r.a.showJoinStatus(message) }
+func (r membershipRun) LobbyEvents() <-chan terminal.Event { return r.a.lobbyEvents() }
+func (r membershipRun) LobbyEventCancels(ev terminal.Event) bool {
+	return r.a.lobbyEventCancels(ev)
+}
+func (r membershipRun) BuildAnchor() event.JournalAnchor { return r.a.buildAnchor() }
+func (r membershipRun) SessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField {
+	return r.a.sessionAnchorFields(an)
+}
+func (r membershipRun) JournalLostLocked(j *event.Journal, err error) { r.a.journalLostLocked(j, err) }
+func (r membershipRun) ResumeVacant()                                 { r.a.resumeVacant() }
+func (r membershipRun) Replacing() bool                               { return r.a.replacing() }
+
+// ReplaceWith latches the membership's ask as this run's request (replaceWith).
+func (r membershipRun) ReplaceWith(ask *restartAsk) bool {
+	return r.a.replaceWith(&restartRequest{restartAsk: *ask})
+}
+
+// PlaySeat drives a seat's run as drive does a bot's, until it ends: seated is told
+// of the run and its driver before the first step and says what ends the seat, and
+// the seat follows this run's screen (seatScreen). run is nil if none was built.
+func (r membershipRun) PlaySeat(p seatPlay, seated func(seatRunner, *bot.Driver) []*atomic.Bool) (run seatRunner, finished bool, err error) {
+	cfg := runConfig{Config: p.config, wiring: wiring{log: p.log, membership: p.wiring}}
+	finished, err = drive(cfg, "bot", p.graph.Name, p.stop, p.hold, func(b *App) (pacedSource, error) {
+		run = seatRun{b}
+		d, err := bot.NewDriver(b, b.ctx, p.graph, b.Seed(), b.membership.localParticipant())
+		if err != nil {
+			return nil, err
+		}
+		return &seatSource{botSource: botSource{d}, ends: seated(run, d), screen: &r.a.seatScreen,
+			run: b, shown: screen{cfg.Width, cfg.Height}}, nil
+	})
+	return run, finished, err
+}
+
+// seatRun is a seat's run as its holder's membership reads it (seatRunner).
+type seatRun struct{ *App }
+
+func (s seatRun) Membership() *membership { return &s.membership }
+func (s seatRun) Scribe() *scribe.Scribe  { return &s.scribe }
 
 // replacing reports whether a run to replace this one is latched already.
 func (a *App) replacing() bool { return a.restart.Load() != nil }

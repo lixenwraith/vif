@@ -447,7 +447,7 @@ func TestVanguardABotSeatFliesTheShipsGunPath(t *testing.T) {
 		if seat == nil {
 			holder.membership.seatsMu.Lock()
 			if len(holder.membership.seats) == 1 {
-				seat = holder.membership.seats[0].app.Load()
+				seat = seatApp(holder.membership.seats[0])
 			}
 			holder.membership.seatsMu.Unlock()
 			continue

@@ -31,7 +31,7 @@ type instance struct {
 func (a *App) instance() instance { return instance{&a.glue, &a.membership} }
 
 func (m *membership) Position() event.Stamp  { return m.run.Position() }
-func (m *membership) Driven() bool           { return m.run.mode().Driven() }
+func (m *membership) Driven() bool           { return m.run.Mode().Driven() }
 func (m *membership) Held() bool             { return m.ctx.TimeCtl.Held() }
 func (m *membership) Rate() engine.TimeScale { return m.ctx.TimeCtl.Scale() }
 
@@ -272,7 +272,7 @@ func (m *membership) reportPeerLost(id uint32) bool {
 		m.corrections.QueuePeerLost(id)
 	}
 	halted := m.seatHalted(id)
-	if m.run.mode() != ModePlay && forkCell(m.world).Load() {
+	if m.run.Mode() != ModePlay && forkCell(m.world).Load() {
 		m.dropAbandonedLocked(m.worldRosterLocked(), nil, link.PeerID(m.world.LocalParticipant()))
 	}
 	return halted
@@ -391,7 +391,7 @@ func (m *membership) applyAuthorityChange(rec network.HandoffRecord, mine bool, 
 		m.corrections.BecomeAuthority(rec)
 		// Live scripts and bots advance their clock, but need the same publication
 		// pump as their original host; only harnesses publish corrections by hand.
-		if m.run.scripted() {
+		if m.run.Scripted() {
 			m.corrections.StartPump()
 		}
 		m.crossPredecessorDeparture(rec)
@@ -445,7 +445,7 @@ func (m *membership) thaw() {
 // or it hosts no session, and nobody here can end it. Caller MUST hold updateMutex,
 // between two ticks.
 func (m *membership) thawLocked() (held bool) {
-	if m.ctx.TimeCtl.Holds(engine.HoldFreeze) || m.run.scripted() || !m.world.IsSessionCoordinator() {
+	if m.ctx.TimeCtl.Holds(engine.HoldFreeze) || m.run.Scripted() || !m.world.IsSessionCoordinator() {
 		m.releaseHold("Resumed")
 		return false
 	}
@@ -458,7 +458,7 @@ func (m *membership) thawLocked() (held bool) {
 // session of its own (leaveSession), keeping every other player's place for
 // whoever hosts next; a run with no loop drops them and plays on as the fork.
 func (m *membership) forked(roster []network.RosterEntry, local link.PeerID) {
-	if m.run.mode() == ModePlay {
+	if m.run.Mode() == ModePlay {
 		// Leaving before the claim goes, as a redial holds its claim again before it
 		// reads leaving: whichever of the two runs second lets the claim go.
 		m.leaving.Store(true)
@@ -486,9 +486,9 @@ func (m *membership) redial(lost link.PeerID) bool {
 	)
 	door, relay := false, false
 	m.world.RunSafe(func() {
-		cfg, wire, base = *m.cfg, *m.wiring, m.run.joinBase()
-		door = m.run.mode() == ModePlay && wire.holder == 0 && cfg.JoinAddress != "" &&
-			!m.leaving.Load() && !m.run.replacing()
+		cfg, wire, base = *m.cfg, *m.wiring, m.run.JoinBase()
+		door = m.run.Mode() == ModePlay && wire.holder == 0 && cfg.JoinAddress != "" &&
+			!m.leaving.Load() && !m.run.Replacing()
 		relay = lost == m.joinedThrough
 	})
 	if !door || !relay && lost != m.authority.Holder() {
@@ -541,8 +541,8 @@ func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base join
 			}
 			continue
 		}
-		back := &restartRequest{Notice: notice, dialled: d}
-		if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.replaceWith(back) {
+		back := &restartAsk{Notice: notice, dialled: d}
+		if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 			m.log.Info("session", "msg", "the redial admitted this run back", "peer", uint64(lost))
 			return
 		}
@@ -561,7 +561,7 @@ func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base join
 		}
 		// Held before leaving is read, the other way round from forked.
 		if !m.claim.CompareAndSwap(nil, c) ||
-			(m.leaving.Load() || m.run.replacing()) && m.claim.CompareAndSwap(c, nil) {
+			(m.leaving.Load() || m.run.Replacing()) && m.claim.CompareAndSwap(c, nil) {
 			m.claims.release(c)
 		}
 	})
@@ -603,8 +603,8 @@ func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base j
 				}
 				continue
 			}
-			back := &restartRequest{Notice: "Host connection restored", dialled: d}
-			if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.replaceWith(back) {
+			back := &restartAsk{Notice: "Host connection restored", dialled: d}
+			if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 				m.log.Info("session", "msg", "a candidate took this run back to its host", "candidate", uint64(id), "authority", uint64(lost))
 				return true
 			}

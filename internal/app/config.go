@@ -12,16 +12,13 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// Terminal-equivalent dimensions applied when a caller-driven run leaves them unset
+// Terminal-equivalent dimensions applied when a caller-driven run leaves them
+// unset, and a bot's screen where nothing names another (config.BotWidth)
 const (
 	DefaultWidth  = config.DefaultWidth
 	DefaultHeight = config.DefaultHeight
-
-	// BotWidth and BotHeight are a bot's screen where nothing names another: a
-	// headless bot given no -size, a seat whose holder names none, and so the map a
-	// server's own bots start alone.
-	BotWidth  = 120
-	BotHeight = 40
+	BotWidth      = config.BotWidth
+	BotHeight     = config.BotHeight
 )
 
 // Mode is config's runtime shape, aliased with its constants for the callers that
@@ -142,17 +139,17 @@ func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 	return local, local.Validate()
 }
 
-// validateWith checks this configuration with s as its session half: a join's,
+// ValidateWith checks this configuration with s as its session half: a join's,
 // before anything is dialled.
-func (c runConfig) validateWith(s Membership) error {
+func (c runConfig) ValidateWith(s Membership) error {
 	c.Membership = s
 	return c.Validate()
 }
 
-// prepare is the resources a dial of s's session builds its world on, settled on
+// Prepare is the resources a dial of s's session builds its world on, settled on
 // its preview: this configuration as the session makes it, checked, with the
 // session's scenario resolved.
-func (c runConfig) prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error) {
+func (c runConfig) Prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error) {
 	c.Membership = s
 	var err error
 	if c, err = configForJoin(c, preview); err == nil {

@@ -87,6 +87,12 @@ func (m Mode) Audio() bool {
 const (
 	DefaultWidth  = 80
 	DefaultHeight = 24
+
+	// BotWidth and BotHeight are a bot's screen where nothing names another: a
+	// headless bot given no -size, a seat whose holder names none, and so the map a
+	// server's own bots start alone.
+	BotWidth  = 120
+	BotHeight = 40
 )
 
 // SocketNetwork reports whether this build binds and dials sockets, which a

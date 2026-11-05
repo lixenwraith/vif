@@ -729,7 +729,7 @@ func TestABotToldToLeaveIsNotSeatedAgain(t *testing.T) {
 	stop := tickInBackground(a)
 	t.Cleanup(func() { stop(); a.Close() })
 	var err error
-	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("roam") })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -765,7 +765,7 @@ func TestARunWithOnlyItsBotsChangesToAScenarioThatHoldsThem(t *testing.T) {
 	tickUntilCursor(t, a)
 	stop := tickInBackground(a)
 	t.Cleanup(func() { stop(); a.Close() })
-	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("roam") })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -792,7 +792,7 @@ func TestARunWithOnlyItsBotsOpensTheirSessionToOthers(t *testing.T) {
 	stop := tickInBackground(a)
 	t.Cleanup(func() { stop(); a.Close() })
 	var err error
-	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("roam") })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -834,7 +834,7 @@ func TestARunWithOnlyItsBotsJoinsAnotherSessionWithThem(t *testing.T) {
 	replaced := sync.OnceFunc(func() { stop(); a.Close() })
 	t.Cleanup(replaced)
 	var err error
-	a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("roam") })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1784,7 +1784,7 @@ func TestASessionCommandIsGatedByTheRoleARunHolds(t *testing.T) {
 	}
 	withBot := func(a *App) *App {
 		var err error
-		a.World().RunSafe(func() { err = (sessionControl{a}).AddBot("roam") })
+		a.World().RunSafe(func() { err = a.ctx.SessionCtl.AddBot("roam") })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2085,7 +2085,7 @@ func TestALeavingHostTakesItsBotsAndShutsItsDoor(t *testing.T) {
 	}
 	addr := host.HostAddr()
 	var err error
-	host.World().RunSafe(func() { err = (sessionControl{host}).AddBot("roam") })
+	host.World().RunSafe(func() { err = host.ctx.SessionCtl.AddBot("roam") })
 	if err != nil {
 		t.Fatal(err)
 	}

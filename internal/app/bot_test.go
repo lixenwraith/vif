@@ -164,6 +164,14 @@ func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, f
 	return driveRun(t, "bot", runConfig{Config: cfg}, graph, hold)
 }
 
+// seatApp is the run seat s plays, nil until it is seated and once it leaves.
+func seatApp(s *seat) *App {
+	if r, ok := s.running().(seatRun); ok {
+		return r.App
+	}
+	return nil
+}
+
 // driveRun is driveBot as the kind of run it names: a bot run ends with its session,
 // a script's plays its fork on. A config naming no resources plays the embedded ones.
 func driveRun(t *testing.T, kind string, cfg runConfig, graph string, hold func() bool) (*App, func()) {
@@ -383,7 +391,7 @@ func TestASeatHoldsWithItsWorld(t *testing.T) {
 		holder.membership.seatsMu.Lock()
 		defer holder.membership.seatsMu.Unlock()
 		if len(holder.membership.seats) == 1 {
-			b = holder.membership.seats[0].app.Load()
+			b = seatApp(holder.membership.seats[0])
 		}
 		return b != nil
 	})
@@ -417,7 +425,7 @@ func TestTheRosterCardsNameABotAndItsHolder(t *testing.T) {
 		holder.membership.seatsMu.Lock()
 		defer holder.membership.seatsMu.Unlock()
 		if len(holder.membership.seats) == 1 {
-			b = holder.membership.seats[0].app.Load()
+			b = seatApp(holder.membership.seats[0])
 		}
 		return b != nil
 	}, "the bot seated")
@@ -496,7 +504,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	until("the bot to be seated", func() bool {
 		holder.membership.seatsMu.Lock()
 		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 && holder.membership.seats[0].app.Load() != nil {
+		if len(holder.membership.seats) == 1 && seatApp(holder.membership.seats[0]) != nil {
 			s = holder.membership.seats[0]
 		}
 		return s != nil
@@ -516,7 +524,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	}
 	var paths []string
 	for round := range 2 {
-		b := s.app.Load()
+		b := seatApp(s)
 		until("the bot to drive its own cursor", func() bool { return bound(b) })
 		holderCursor, seatCursor := drives(holder), drives(b)
 		// The second opening is asked with the first journals' stop, before either loop serves it
@@ -546,7 +554,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
-	b := s.app.Load()
+	b := seatApp(s)
 	until("both journals to close", func() bool { return holder.scribe.Recorder() == nil && b.scribe.Recorder() == nil })
 	stop()
 	for _, p := range paths {
@@ -579,7 +587,7 @@ func TestASeatsOpeningLeavesItsRunAsItWas(t *testing.T) {
 		}
 		holder.membership.seatsMu.Lock()
 		if len(holder.membership.seats) == 1 {
-			b = holder.membership.seats[0].app.Load()
+			b = seatApp(holder.membership.seats[0])
 		}
 		holder.membership.seatsMu.Unlock()
 	}
@@ -634,12 +642,12 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 	until("the bot to be seated", func() bool {
 		holder.membership.seatsMu.Lock()
 		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 && holder.membership.seats[0].app.Load() != nil {
+		if len(holder.membership.seats) == 1 && seatApp(holder.membership.seats[0]) != nil {
 			s = holder.membership.seats[0]
 		}
 		return s != nil
 	})
-	slot, b := int(s.slot.Load()), s.app.Load()
+	slot, b := int(s.slot.Load()), seatApp(s)
 	holder.World().RunSafe(func() { err = ctl.StartJournal(slot) })
 	if err != nil {
 		t.Fatalf("start: %v", err)
@@ -689,7 +697,7 @@ func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		src := &seatSource{botSource: botSource{d}, ends: holder.membership.seatEnds(tt.mode, seated), screen: &holder.membership.seatScreen,
+		src := &seatSource{botSource: botSource{d}, ends: holder.membership.seatEnds(tt.mode, seatRun{seated}), screen: &holder.seatScreen,
 			run: seated, shown: screen{BotWidth, BotHeight}}
 		tt.fork(holder, seated)
 		more, err := src.Step()
@@ -1103,7 +1111,7 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 	holder := guest.membership.localParticipant()
 	var guestSlot, botSlot int
 	host.world.RunSafe(func() {
-		for _, p := range (sessionControl{host}).Participants() {
+		for _, p := range host.ctx.SessionCtl.Participants() {
 			c, _ := host.world.Components.Cursor.GetComponent(p.Entity)
 			if c.PeerID == holder {
 				guestSlot = int(p.Slot)
@@ -1117,12 +1125,12 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 		t.Fatal("guest bot ownership absent from the host roster")
 	}
 	guest.world.RunSafe(func() {
-		if err := (sessionControl{guest}).DropPlayer(0); err == nil {
+		if err := guest.ctx.SessionCtl.DropPlayer(0); err == nil {
 			t.Error("guest dropped the host")
 		}
 	})
 	host.world.RunSafe(func() {
-		if err := (sessionControl{host}).DropBot(botSlot); err != nil {
+		if err := host.ctx.SessionCtl.DropBot(botSlot); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -1132,7 +1140,7 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 		t.Fatal("dropping one bot dismissed its holder")
 	}
 	host.world.RunSafe(func() {
-		if err := (sessionControl{host}).DropPlayer(guestSlot); err != nil {
+		if err := host.ctx.SessionCtl.DropPlayer(guestSlot); err != nil {
 			t.Fatal(err)
 		}
 	})
