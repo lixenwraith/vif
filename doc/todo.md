@@ -843,7 +843,7 @@ source. The join, the session stream and the simulation are unchanged.
 - Affected files: `internal/network/session.go` (`RosterEntry`, `SessionOffer`),
   `internal/app/session.go`, `internal/app/join.go`, `internal/engine/world.go`
   (`FollowLocalCursor`), `internal/mode/config_menu.go`, `cmd/vif`, `web/terminal.js`,
-  `internal/app/journal.go`, `internal/app/replay.go`
+  `internal/app/internal/scribe/journal.go`, `internal/app/replay.go`
 - Guide: [Domain design §1](domain-design.md#1-domains-and-identity),
   [Multi-player §1](multi-player.md#1-vocabulary-and-boundaries)
 
@@ -882,7 +882,7 @@ beyond admission and the follow target goes over the wire for it.
 
 The journal's slot handling needs a review alongside. A journal records its slot
 from `LocalSlot` at the opening (`JournalCapture.Slot`, `JournalAnchor.Slot`),
-its replay binds input there (`openedLocked`), and later installs bind by
+its replay binds input there (`Scribe.OpenedLocked`), and later installs bind by
 identity (`RebindCursorRoster`). Three cases want a test: a journal a joiner opens
 before its arrival, which may now record `NoPlayerSlot` and must bind when the arrival
 or a correction brings the cursor; a spectator's journal, whose target switches are
@@ -1573,16 +1573,21 @@ another system may not call them directly.
 
 ## Structure
 
-### Move the three run types to packages
+### Give the membership a package of its own
 
 - Priority: P3
-- Affected files: `internal/app`
+- Affected files: `internal/app/config.go`, `membership.go`, `host.go`, `join.go`,
+  `seat.go`, `cmd/vif`, `android/game`
 
-`corrector`, `membership` and `scribe` each read the run through one interface
-(`correctionRun`, `membershipRun`, `scribeRun`), and `App` is the composition
-root the package map names, but all three stay in `internal/app`, which is
-still 33,000 lines. Each builds runs (the staging world, the journal twin, a
-dial's run, a seat's bot), so a package for one needs the run's constructor as a
-second seam, and the tests drive whole Apps through `NewHeadless`, so none could
-move its tests with it. A package per type waits on a constructor seam the tests
-can be written against.
+The corrector and the scribe have packages under `internal/app/internal`, each
+reading the run through one seam and resolving into a run only `App` builds (a
+`corrector.Staging`, a `scribe.Twin`). `membership` stays, because `Config` is its
+state too: it reads 24 of its fields, 9 unexported (`holder`, `relay`, `claims`,
+`joinPress`, `sessionPlayers`, `scriptedSession`, `geometryDefaulted`,
+`hostListeners`, `log`), copies it whole to dial a `:join` and a redial, and writes
+the session half back (`HostAddress`, `JoinAddress`, `SessionName`,
+`FixedAuthority`, `sessionPlayers`, `hostListeners`) for the run `App` builds next.
+A package for it needs that session half as a type of its own, which changes
+`Config`'s fields for `cmd/vif`, the Android binding and about a hundred test
+literals; one package for all three run types would have taken `Config`, the
+restart request, the join dial, the claims and the seats with it.

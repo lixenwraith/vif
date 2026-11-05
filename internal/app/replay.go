@@ -4,18 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/app/internal/corrector"
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
-	"github.com/lixenwraith/vif/internal/service"
 	"github.com/lixenwraith/vif/internal/snapshot"
-	"github.com/lixenwraith/vif/pkg/position"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -64,49 +61,6 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	return cfg, cfg.Validate()
 }
 
-// sessionAnchorFields are what two participants in one session must agree on:
-// record layout and tick rate, the seed and session counter every RNG stream
-// derives from, and the scenario's bytes, whose name is only a lookup hint.
-// Geometry is per-instance, and the corpus is player domain, read from each
-// machine's own roots and never reconciled (D-11, doc/multi-player.md).
-func (sc *scribe) sessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField {
-	return []corrector.AnchorField{
-		{Name: "schema", Want: an.Schema, Got: uint64(event.JournalSchema)},
-		{Name: "seed", Want: an.Seed, Got: sc.world.Resources.Rand.Root()},
-		{Name: "session", Want: an.Session, Got: sc.world.Resources.Rand.Session()},
-		{Name: "scenario_digest", Want: an.ScenarioDigest, Got: sc.scenario.Digest()},
-		{Name: "tick_ns", Want: an.TickInterval, Got: int64(sc.world.TickInterval())},
-	}
-}
-
-// anchorIdentity adds what a replay must reproduce and a join must not require.
-// A recorded run typed the blocks of one corpus, so replaying its input against
-// another yields different glyphs; a peer joining live only has to agree on the
-// world, and brings its own text into it.
-func (sc *scribe) anchorIdentity(an event.JournalAnchor) []corrector.AnchorField {
-	reg := sc.world.Resources.Status
-	svc := service.MustGet[*service.ContentService](sc.hub, "content")
-	return append(sc.sessionAnchorFields(an),
-		corrector.AnchorField{Name: "content_id", Want: an.ContentID, Got: reg.Strings.Get("content.source").Load()},
-		corrector.AnchorField{Name: "content_pin", Want: an.ContentPin, Got: svc.Pin()},
-		corrector.AnchorField{Name: "content_files", Want: an.ContentFiles, Got: uint64(reg.Ints.Get("content.files").Load())},
-		corrector.AnchorField{Name: "content_blocks", Want: an.ContentBlocks, Got: uint64(reg.Ints.Get("content.blocks").Load())},
-		corrector.AnchorField{Name: "content_lines", Want: an.ContentLines, Got: uint64(reg.Ints.Get("content.lines").Load())},
-	)
-}
-
-// VerifyAnchor reports whether this App reproduces what the anchor recorded.
-// A resolved path proves which corpus was asked for, not which one loaded, so the
-// fingerprint is compared after construction: a discovered file or a changed corpus
-// becomes a startup error instead of an unexplained snapshot diff many ticks later.
-// Call after NewHeadless, before Replay.
-func (sc *scribe) VerifyAnchor(an event.JournalAnchor) error {
-	fields := append(sc.anchorIdentity(an),
-		corrector.AnchorField{Name: "width", Want: an.Width, Got: sc.ctx.Width},
-		corrector.AnchorField{Name: "height", Want: an.Height, Got: sc.ctx.Height})
-	return corrector.FirstAnchorMismatch("anchor", fields)
-}
-
 // newReplayDriver checks App-specific policy, then hands the stream to
 // internal/journal. The driver itself knows only the small replayTarget contract.
 func newReplayDriver(a *App, s *journal.Stream) (*journal.ReplayDriver, error) {
@@ -135,14 +89,8 @@ func (t replayTarget) PushBody(rec event.JournalRecord, payload any) {
 }
 
 func (t replayTarget) Digest() (d event.JournalDigest) {
-	t.a.world.RunSafe(func() { d = t.a.scribe.journalDigestLocked() })
+	t.a.world.RunSafe(func() { d = t.a.scribe.JournalDigestLocked() })
 	return d
-}
-
-// journalDigestLocked is the world a journal's digest carries: both domains, since
-// a replay reproduces the player's own as well. Caller MUST hold updateMutex.
-func (sc *scribe) journalDigestLocked() event.JournalDigest {
-	return snapshot.DigestWorld(sc.world, position.ScopeAll).Journal()
 }
 
 // Install writes a world the recorded run wrote, rebuilt from the one this replay
@@ -151,7 +99,7 @@ func (sc *scribe) journalDigestLocked() event.JournalDigest {
 func (t replayTarget) Install(c event.JournalCapture) error {
 	var (
 		d   snapshot.WrittenDelta
-		own ownState
+		own scribe.OwnState
 	)
 	if err := snapshot.DecodeJSON(c.Body, &d); err != nil {
 		return err
@@ -181,7 +129,7 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		}
 		_, err = a.glue.WriteSharedLocked(cap, &before, true, c.Opens)
 		if err == nil && c.Opens {
-			err = a.scribe.openedLocked(c, own)
+			err = a.scribe.OpenedLocked(c, own)
 		}
 		// The hold the run landed in with this world, held here as it was there.
 		if err == nil && c.Held && !c.Opens {
@@ -201,31 +149,6 @@ func (t replayTarget) Install(c event.JournalCapture) error {
 		}
 	})
 	return err
-}
-
-// openedLocked settles what writing a journal's opening world queued, with input
-// bound to the slot the run followed, writes the run's own side over what that
-// derived, then takes up the play mode, the hold and the systems the run stood in.
-// Caller MUST hold updateMutex.
-func (sc *scribe) openedLocked(c event.JournalCapture, own ownState) error {
-	sc.world.PushLocalOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: c.Slot}, event.OriginSystem)
-	sc.scheduler.SettleLocked()
-	if err := sc.installOwnLocked(own); err != nil {
-		return err
-	}
-	sc.ctx.SetPlayMode(c.Mode)
-	sc.world.UpdateBoundsRadius()
-	if c.Start {
-		sc.ctx.TimeCtl.HoldAs(engine.HoldStart)
-	} else {
-		sc.ctx.TimeCtl.SetHeld(c.Held)
-	}
-	for _, sys := range sc.world.Systems() {
-		if t, ok := sys.(engine.Toggled); ok {
-			t.SetEnabled(!slices.Contains(c.Off, sys.Name()))
-		}
-	}
-	return nil
 }
 
 // loadJournal reads a journal set and the configuration that reproduces it. The

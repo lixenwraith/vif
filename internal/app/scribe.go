@@ -1,76 +1,80 @@
 package app
 
 import (
-	"sync/atomic"
-
 	"github.com/lixenwraith/vif/internal/app/internal/corrector"
-	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/resource"
-	"github.com/lixenwraith/vif/internal/service"
 	"github.com/lixenwraith/vif/internal/vlog"
 )
 
-// scribe keeps the run's journal and reads one back: it opens and closes the journal,
-// writes the world a run stands in and the anchor that names it, verifies an anchor
-// against this run, installs a written world as a replay, and reads and restores
-// the checkpoints a rewind moves between. It depends on the journal package and the
-// world, not on a session, and reads the run through scribeRun alone.
-type scribe struct {
-	run scribeRun
+// scribeRun is the run as its journal reads it: the scribe.Run seam, answered by the
+// membership, the run's configuration and the twin it builds.
+type scribeRun struct{ a *App }
 
-	world     *engine.World
-	ctx       *engine.GameContext
-	cfg       *Config
-	log       *vlog.Log
-	scheduler *engine.Scheduler // wired when the run builds its own, after the world
-	scenario  *resource.Scenario
-	glue      *corrector.Corrector
-	hub       *service.Hub
+func (r scribeRun) Position() event.Stamp          { return r.a.Position() }
+func (r scribeRun) Settle()                        { r.a.Settle() }
+func (r scribeRun) BarrierLocked() bool            { return r.a.membership.barrierLocked() }
+func (r scribeRun) JournalSink() event.JournalSink { return r.a.cfg.JournalSink }
+func (r scribeRun) AskSeatJournal(slot int, start bool) error {
+	return r.a.membership.askSeatJournal(slot, start)
+}
+func (r scribeRun) SeatJournalSummaries() []string { return r.a.membership.seatJournalSummaries() }
+func (r scribeRun) Replacing() bool                { return r.a.replacing() }
 
-	// recorder is the journal this run keeps, nil when it keeps none; atomic, as a
-	// holder reads its seats' from its own goroutine. journalAsk is a start or stop
-	// the command line asked for that the run's loop has not served yet. closedAtExit
-	// is the journal Close shut and why its tail may be lost, which a seat's holder
-	// reports on the same goroutine.
-	recorder       atomic.Pointer[journal.Recorder]
-	journalAsk     atomic.Pointer[journalAsk]
-	closedAtExit   string
-	closedAtExitAs error
+func (r scribeRun) JournalTwin(an event.JournalAnchor) (scribe.Twin, error) {
+	twin, err := r.a.journalTwin(an)
+	if err != nil {
+		return nil, err
+	}
+	return twinRun{twin}, nil
 }
 
-// scribeRun is what the scribe reads of the run beyond its world: where the run
-// stands and how it settles, whether its barrier owns its crossings, the twin a
-// journal opens against, the seats whose journals it starts, stops and names, and
-// whether a run to replace this one is latched.
-type scribeRun interface {
-	Position() event.Stamp
-	Settle()
-	barrierLocked() bool
-	journalTwin(an event.JournalAnchor) (*App, error)
-	askSeatJournal(slot int, start bool) error
-	seatJournalSummaries() []string
-	replacing() bool
+// twinRun is a headless replay standing as the boot a journal's opening is written
+// against, read through its own scribe.
+type twinRun struct{ *App }
+
+func (t twinRun) Scribe() *scribe.Scribe { return &t.scribe }
+func (t twinRun) ReplayDriver(s *journal.Stream) (*journal.ReplayDriver, error) {
+	return newReplayDriver(t.App, s)
 }
 
-// open wires the scribe over the run's configuration, scenario and services before
-// the run builds anything; the world, the context and the scheduler follow.
-func (sc *scribe) open(run scribeRun, cfg *Config, scenario *resource.Scenario, log *vlog.Log, hub *service.Hub, glue *corrector.Corrector) {
-	sc.run, sc.cfg, sc.scenario, sc.log, sc.hub, sc.glue = run, cfg, scenario, log, hub, glue
+// journalTwin builds a replay of a journal opening on anchor, its boot settled: the
+// world such a replay holds before it writes the one the journal opened on.
+func (a *App) journalTwin(an event.JournalAnchor) (*App, error) {
+	an.Schema = event.JournalSchema // as the journal writes it
+	cfg, err := ConfigFromAnchor(an)
+	if err != nil {
+		return nil, err
+	}
+	// Handed over rather than resolved by name, as a staging world's scenario is: it
+	// may have come from the coordinator and exist nowhere on this host.
+	scenario := a.scenario
+	cfg.Resources = resource.Options{Dir: a.cfg.Resources.Dir, Content: a.cfg.Resources.Content,
+		Embedded: a.cfg.Resources.Embedded, Provided: &scenario}
+	cfg.RecTicks, cfg.StatTicks = -1, -1
+	cfg.log = vlog.NewLog("journal")
+	cfg.log.Mute(true)
+	twin, err := NewHeadless(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := twin.VerifyAnchor(an); err != nil {
+		twin.Close()
+		return nil, err
+	}
+	twin.Settle()
+	return twin, nil
 }
 
 // The anchor and the lost journal stay the run's for the glue and the membership,
-// which read the run; the seats' journals are the membership's.
+// which read the run.
 func (a *App) VerifyAnchor(an event.JournalAnchor) error { return a.scribe.VerifyAnchor(an) }
-func (a *App) buildAnchor() event.JournalAnchor          { return a.scribe.buildAnchor() }
+func (a *App) buildAnchor() event.JournalAnchor          { return a.scribe.BuildAnchor() }
 func (a *App) journalLostLocked(j *event.Journal, err error) {
-	a.scribe.journalLostLocked(j, err)
+	a.scribe.JournalLostLocked(j, err)
 }
 func (a *App) sessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField {
-	return a.scribe.sessionAnchorFields(an)
+	return a.scribe.SessionAnchorFields(an)
 }
-func (a *App) askSeatJournal(slot int, start bool) error {
-	return a.membership.askSeatJournal(slot, start)
-}
-func (a *App) seatJournalSummaries() []string { return a.membership.seatJournalSummaries() }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app/internal/corrector"
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -144,7 +145,7 @@ type App struct {
 
 	// scribe keeps this run's journal and reads one back. It reads the run through
 	// scribeRun.
-	scribe scribe
+	scribe scribe.Scribe
 
 	// The three halves of the authority protocol, built together because they hold
 	// references to each other: corrections is what this instance publishes and
@@ -178,7 +179,7 @@ func New(cfg Config) (*App, error) {
 		life: lifecycle.New(cfg.Lifetime),
 	}
 	a.membership.open(a, &a.cfg, &a.scenario, log, &a.glue, a.life)
-	a.scribe.open(a, &a.cfg, &a.scenario, log, a.hub, &a.glue)
+	a.scribe.Open(scribeRun{a}, &a.scenario, log, a.hub, &a.glue)
 	if a.cfg.JoinAddress != "" && a.cfg.networkConfig == nil {
 		return nil, errors.New("join sessions must be started with app.Run")
 	}
@@ -231,8 +232,14 @@ func (a *App) init() error {
 	if err := a.initWorld(); err != nil {
 		return err
 	}
-	if err := a.scribe.initJournal(); err != nil {
-		return err
+	if a.cfg.Journal {
+		notice, err := a.scribe.InitJournal(a.cfg.journalCarried)
+		if err != nil {
+			return err
+		}
+		if notice != "" {
+			a.cfg.Notice = joinNotice(a.cfg.Notice, notice)
+		}
 	}
 	// After the journal opens, so a run that starts in a session notes it first.
 	a.world.RunSafe(a.world.LatchSession)
@@ -285,7 +292,7 @@ func (a *App) initServices() error {
 func (a *App) initWorld() error {
 	// Services take no world argument, so placement relative to InitAll is free
 	a.world = engine.NewWorld()
-	a.membership.world, a.scribe.world = a.world, a.world
+	a.membership.world = a.world
 	a.world.Resources.Rand = engine.NewRandResource(a.cfg.Seed)
 	// A run reproducing a session draws that session's streams, and a session's
 	// streams are drawn one below the number it reports: construction draws them and
@@ -323,7 +330,8 @@ func (a *App) initWorld() error {
 	} else {
 		a.ctx = engine.NewGameContext(a.world, width, height)
 	}
-	a.membership.ctx, a.scribe.ctx = a.ctx, a.ctx
+	a.membership.ctx = a.ctx
+	a.scribe.Bind(a.world, a.ctx)
 	a.ctx.BindLog(a.log)
 	a.ctx.SetTickInterval(cmp.Or(a.cfg.TickInterval, parameter.GameUpdateInterval))
 	a.applyPlay()
@@ -546,8 +554,9 @@ func (a *App) initScheduler() error {
 	)
 	a.ctx.ResetChan = resetChan
 	a.glue.SetScheduler(a.scheduler)
-	a.membership.scheduler, a.scribe.scheduler = a.scheduler, a.scheduler
-	a.scheduler.SetJournalDigest(a.scribe.journalDigestLocked)
+	a.membership.scheduler = a.scheduler
+	a.scribe.SetScheduler(a.scheduler)
+	a.scheduler.SetJournalDigest(a.scribe.JournalDigestLocked)
 
 	register := func(m *fsm.Machine[*engine.World]) { manifest.RegisterFSMComponents(m, a.behaviors.Declared()) }
 	if err := a.scheduler.LoadScenarioFromFS(a.scenario.FS(), a.scenario.Entry(), register); err != nil {
@@ -584,7 +593,7 @@ func (a *App) Close() {
 	a.membership.closeMidRunPort()
 	a.glue.DiscardStaging()
 	a.hub.StopAll()
-	a.scribe.closedAtExit, a.scribe.closedAtExitAs = a.scribe.closeJournal()
+	a.scribe.CloseAtExit()
 
 	a.log.Info("app", "msg", "shutdown completed", "us", time.Since(begin).Microseconds())
 }

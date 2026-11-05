@@ -74,6 +74,9 @@ that proves wrong or that a document now states, and link the document instead.
   it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
   component structs compiles once per component, and each copy's name spells the
   struct's fields, costing a third as much as its code.
+- `internal/app`'s tests do not build with `-tags vif_headless`: `config_test.go`,
+  `geometry_test.go` and `join_press_test.go` drive the presentation that profile
+  leaves out, so its gate is `go build -tags vif_headless ./...` alone.
 - `go generate ./internal/manifest` type-checks `internal/event` from source, its
   generated `payload_gen.go` included, so removing a payload struct's field stops
   the generator on the stale codec's use of it ("type-check ...: has no field"):

@@ -203,7 +203,7 @@ func (p *player) run() error {
 		if p.a.membership.dismissed.Load() {
 			return p.failure()
 		}
-		p.a.scribe.serveJournal()
+		p.a.scribe.ServeJournal()
 		// A batch holds the presented copy: keys wait for it, and so does the frame
 		lent := p.rw != nil && p.rw.lent
 		evs := events
@@ -530,7 +530,7 @@ func (p *player) seekTo(to event.Stamp, resume bool) {
 	p.cancelSeek()
 	p.paused = true
 	c := rw.shown
-	if ck := rw.nearest(len(rw.trail) - 1); ck != nil && ck.steps > c.steps+parameter.ReplayRing && rw.build != nil {
+	if ck := rw.nearest(len(rw.trail) - 1); ck != nil && ck.Steps > c.steps+parameter.ReplayRing && rw.build != nil {
 		p.seek = &seekState{step: -1, to: &to, resume: resume, hidden: true}
 		rw.want = &move{step: -1, to: &to}
 		rw.pump()
@@ -552,7 +552,7 @@ func (p *player) toStep(m int, resume bool) {
 	switch ck := rw.nearest(m); {
 	case m == c.steps && c.err == nil:
 		p.paused = !resume
-	case m > c.steps && !c.end && c.err == nil && (ck == nil || ck.steps <= c.steps+parameter.ReplayRing):
+	case m > c.steps && !c.end && c.err == nil && (ck == nil || ck.Steps <= c.steps+parameter.ReplayRing):
 		p.seek = &seekState{step: m, resume: resume}
 		p.logSeek(p.a.Position(), rw.trail[m])
 	default:

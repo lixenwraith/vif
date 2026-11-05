@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -47,11 +48,11 @@ func (c sessionControl) HostError() error            { return c.a.membership.hos
 func (c sessionControl) JoinError() error            { return c.a.membership.joinErrorLocked() }
 func (c sessionControl) Leave() error                { return c.a.membership.leaveLocked() }
 func (c sessionControl) LeaveError() error           { return c.a.membership.leaveErrorLocked() }
-func (c sessionControl) StartJournal(slot int) error { return c.a.scribe.startJournalLocked(slot) }
-func (c sessionControl) StopJournal(slot int) error  { return c.a.scribe.stopJournalLocked(slot) }
-func (c sessionControl) JournalError() error         { return c.a.scribe.journalErrorLocked() }
-func (c sessionControl) Journaling() bool            { return c.a.scribe.journaling() }
-func (c sessionControl) JournalSummary() string      { return c.a.scribe.journalSummary() }
+func (c sessionControl) StartJournal(slot int) error { return c.a.scribe.StartJournalLocked(slot) }
+func (c sessionControl) StopJournal(slot int) error  { return c.a.scribe.StopJournalLocked(slot) }
+func (c sessionControl) JournalError() error         { return c.a.scribe.JournalErrorLocked() }
+func (c sessionControl) Journaling() bool            { return c.a.scribe.Journaling() }
+func (c sessionControl) JournalSummary() string      { return c.a.scribe.JournalSummary() }
 
 func (c sessionControl) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {
@@ -184,7 +185,7 @@ func (m *membership) changeScenarioLocked(name string) (bool, error) {
 		}
 	}
 	if !m.run.replaceWith(req) {
-		return false, errRunReplaced
+		return false, scribe.ErrRunReplaced
 	}
 	if port != nil {
 		// Said before this run's transport goes, because afterwards there is nobody
@@ -601,7 +602,7 @@ func (m *membership) leaveErrorLocked() error {
 	case m.leaving.Load():
 		return errors.New("this run is already leaving its session")
 	case m.dismissed.Load() || m.run.replacing():
-		return errRunReplaced
+		return scribe.ErrRunReplaced
 	}
 	return nil
 }
@@ -681,7 +682,7 @@ func leftNotice(err error, lost, held, bots bool) (string, parameter.StatusKind)
 func (m *membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	// A run being replaced is not left: what replaces it decides where it goes.
 	if m.dismissed.Load() || m.run.replacing() {
-		return nil, errRunReplaced
+		return nil, scribe.ErrRunReplaced
 	}
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
 	local := link.PeerID(m.world.LocalParticipant())
