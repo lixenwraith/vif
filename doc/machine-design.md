@@ -410,9 +410,13 @@ the style's fill, hold and recede over.
   flight; a request asking for the materialize (`FuseEffectMaterialize`), or one
   with no source, plays a materialize carrying it instead, in its style. A fusion
   taking composites has a Shared carrier, so every instance lands its own copy; one
-  of drains alone is the elected cursor's instance's, and its landing crosses. Two
-  enraged drains ask by their entities for a swarm, and a scenario sweeps the
-  elected cursor's drains into a quasar. The elected instance takes no drains while
+  of drains alone is the elected cursor's instance's, and its landing crosses. The
+  elected cursor is the request's, or for none the first participant's, the lowest
+  slot that plays, which every instance reads alike off the roster at the request's
+  tick: the host's in a hosted session, the first guest's on a host that drives no
+  cursor (`FuseSystem.elected`). Two enraged drains ask by their entities for a
+  swarm, and a scenario sweeps the elected cursor's drains into a quasar. The
+  elected instance takes no drains while
   a spawn of the target flies (`inFlight`), the fuse keeps no state of its own
   (`FuseSystem.Update` is empty), and `killDrains` alone reports the consumed
   drains' deaths.

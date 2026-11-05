@@ -185,17 +185,26 @@ func (s *FuseSystem) composite(e core.Entity) component.SpeciesType {
 	return component.BehaviorSpecies[h.Behavior]
 }
 
-// elected reports this instance simulates the cursor whose drains a sweep takes;
-// 0 is the coordinator's in a live session, so a Shared trigger naming none takes
-// drains on one instance
+// elected reports this instance simulates the cursor whose drains a sweep takes: the
+// request's, or for 0 the first participant's, read off the roster every instance
+// holds alike at the request's tick, so a Shared trigger naming none takes drains on
+// one instance, a host that drives no cursor's session included
 func (s *FuseSystem) elected(cursor core.Entity) bool {
 	if cursor == 0 {
-		if session := s.world.Session(); session.Live && !session.Coordinator() {
-			return false
-		}
-		cursor = s.world.Resources.Player.Entity
+		cursor = s.firstParticipant()
 	}
 	return s.world.ResolveOwnedCursor(cursor) != 0
+}
+
+// firstParticipant is the cursor in the lowest slot whose participant plays, a
+// Wraith's being away; zero with nobody playing
+func (s *FuseSystem) firstParticipant() core.Entity {
+	for i := range parameter.MaxPlayers {
+		if e := s.world.Resources.Player.Slot(uint8(i)); e != 0 && !s.world.Components.Wraith.HasEntity(e) {
+			return e
+		}
+	}
+	return 0
 }
 
 // inFlight reports a spawn of the species in flight on this instance: a materialize
