@@ -214,19 +214,14 @@ func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 
 // TestAGuestNoCandidateReachesForks: the centre of a star goes and its guests share
 // no link. The first candidate takes the term alone; the other guest walks the list
-// without reaching it and forks once its turn is over, giving up its claim, so what
-// it plays from there is not what its player brings back. The host keeps the
-// place of each participant it lost as a Wraith, and its own claim.
+// without reaching it and forks once its turn is over (what a fork does with its
+// claim is TestAForkLetsItsClaimGo's). The host keeps the place of each participant
+// it lost as a Wraith.
 func TestAGuestNoCandidateReachesForks(t *testing.T) {
 	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}}, 2)
 	localCursors(t, apps)
 	primeRetention(t, apps)
-	claims := make([]*claim, len(apps))
-	for i, a := range apps {
-		claims[i] = a.membership.claims.issue(false)
-		a.membership.claim.Store(claims[i])
-	}
 
 	closeParticipant(apps[0])
 	successor, cutOff := apps[1], apps[2]
@@ -258,12 +253,6 @@ func TestAGuestNoCandidateReachesForks(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("the fork holds %d cursors, want only its own", count)
 	}
-	if cutOff.membership.claim.Load() != nil || claimHeld(cutOff, claims[2]) {
-		t.Fatal("the fork still holds the claim its player comes back under")
-	}
-	if successor.membership.claim.Load() != claims[1] || !claimHeld(successor, claims[1]) {
-		t.Fatal("the successor gave up the claim it carries its session on under")
-	}
 }
 
 // TestAGuestWhoseLinkDroppedRedialsItsPlace: a person's run whose own link to its
@@ -281,16 +270,18 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	t.Cleanup(func() { stopTicks(); host.Close() })
 	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	c, id := guest.membership.claim.Load(), guest.membership.localParticipant()
+	id := guest.membership.localParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
-	if c == nil || !host.instance().DropParticipant(id) {
-		t.Fatal("the guest holds no claim, or its link would not drop")
+	if !host.instance().DropParticipant(id) {
+		t.Fatal("the guest's link would not drop")
 	}
+	// Its own place is the one its claim waits under, and the redial replaces the run
+	// only with the dial that took it back under that claim.
 	var req *restartRequest
 	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		req = guest.restart.Load()
 	}
-	if req == nil || req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id {
+	if req == nil || req.dialled == nil || uint32(req.dialled.offer.Assigned) != id {
 		t.Fatalf("the guest was not admitted back into its own place: %+v", req)
 	}
 	req.dialled.abandon(errors.New("the test is over"))
@@ -384,16 +375,16 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	}
 	waitForCursors(t, successor, 5)
 
-	c, gid := guest.membership.claim.Load(), guest.membership.localParticipant()
+	gid := guest.membership.localParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
-	if c == nil || !successor.instance().DropParticipant(gid) {
-		t.Fatal("the guest holds no claim, or its link would not drop")
+	if !successor.instance().DropParticipant(gid) {
+		t.Fatal("the guest's link would not drop")
 	}
 	var req *restartRequest
 	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		req = guest.restart.Load()
 	}
-	if req == nil || req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != gid ||
+	if req == nil || req.dialled == nil || uint32(req.dialled.offer.Assigned) != gid ||
 		req.dialled.offer.Host != id {
 		t.Fatalf("the guest was not admitted back into its own place at the successor: %+v", req)
 	}
@@ -437,13 +428,6 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	if line, want := successor.SessionSummary(), "Session hosting "+own+","; !strings.HasPrefix(line, want) {
 		t.Fatalf(":session on the successor reads %q; want it to open %q", line, want)
 	}
-}
-
-// claimHeld reads whether a run of a's process is in its session under c.
-func claimHeld(a *App, c *claim) bool {
-	a.membership.claims.mu.Lock()
-	defer a.membership.claims.mu.Unlock()
-	return c.held
 }
 
 // TestMembershipIsByteIdenticalAcrossAHandoff's other half. The

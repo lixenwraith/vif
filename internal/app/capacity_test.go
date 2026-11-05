@@ -1,22 +1,30 @@
-// The membership's own decisions, read off a run that answers nothing but its mode.
+// The membership's own decisions, read off a run that answers nothing but its mode
+// and a lobby nobody types into.
 
 package app
 
 import (
 	"testing"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
-// stubRun is a run as a membership decision that reads only its mode sees it; asked
-// anything else, it panics on the nil seam it embeds.
+// stubRun is a run as a membership decision that reads only its mode and its lobby
+// sees it; asked anything else, it panics on the nil seam it embeds.
 type stubRun struct {
 	memberRun
 	mode Mode
 }
 
 func (r stubRun) Mode() Mode { return r.mode }
+
+// Scripted is false: no script drives the run.
+func (stubRun) Scripted() bool { return false }
+
+// LobbyEvents is a lobby nobody types into.
+func (stubRun) LobbyEvents() <-chan terminal.Event { return nil }
 
 // TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty: -players and max_players
 // are cursor ceilings, the lower holding, of which sessionCapacity is the guest half.

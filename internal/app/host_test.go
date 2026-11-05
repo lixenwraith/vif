@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"net/http"
@@ -435,17 +436,18 @@ func joinDeadline(d time.Duration) <-chan os.Signal {
 	return ch
 }
 
-// dialSession dials until the coordinator answers with an offer. Both things it
-// retries past are the protocol's own: a host binding on its own goroutine is not
-// listening yet, and a refusal — a lobby mid-close, a Wraith giving up its place —
-// is the answer the design tells a dialer to retry on. A refusal spends the
-// address's admission budget, so it is retried at a rejoin's pace.
-func dialSession(t *testing.T, addr string) (*network.PendingJoin, network.SessionOffer) {
+// dialSession dials until the coordinator answers with an offer, naming the claims a
+// run that kept them names. Both things it retries past are the protocol's own: a
+// host binding on its own goroutine is not listening yet, and a refusal — a lobby
+// mid-close, a Wraith giving up its place — is the answer the design tells a dialer to
+// retry on. A refusal spends the address's admission budget, so it is retried at a
+// rejoin's pace.
+func dialSession(t *testing.T, addr string, claims ...string) (*network.PendingJoin, network.SessionOffer) {
 	t.Helper()
 	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
 	var last error
 	for time.Now().Before(deadline) {
-		pending, offered, err := network.DialSession(addr, network.DebugConfig(link.RolePeer, ""))
+		pending, offered, err := dialOnce(addr, claims...)
 		if err == nil {
 			return pending, offered
 		}
@@ -458,6 +460,13 @@ func dialSession(t *testing.T, addr string) (*network.PendingJoin, network.Sessi
 	}
 	t.Fatalf("dial session %s: %v", addr, last)
 	return nil, network.SessionOffer{}
+}
+
+// dialOnce is one dial that seats at once, naming claims: what its host answers.
+func dialOnce(addr string, claims ...string) (*network.PendingJoin, network.SessionOffer, error) {
+	cfg := network.DebugConfig(link.RolePeer, "")
+	cfg.Claims = claims
+	return network.DialSession(addr, cfg)
 }
 
 // tickInBackground keeps one instance running while the caller does something that
@@ -985,41 +994,158 @@ func TestHostCarriesItsAuthorityPolicy(t *testing.T) {
 	}
 }
 
-// mustSocketJoiner joins a live host as a driven run does, on the production path:
-// dial, scenario, world, seat and reply, the start gate, the capture, the install
-// and the catch-up, with no door of its own. This harness owns its ticks, so the
-// host must be ticking meanwhile. A host not listening yet, or a refusal, is retried
-// as dialSession retries them. configure edits the run's Config before it dials.
-func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configure ...func(*Config)) (*App, *link.SocketPort) {
-	t.Helper()
-	cfg := runConfig{Config: Config{Mode: ModeHeadless, Width: w, Height: h,
-		Membership: Membership{JoinAddress: addr, NoAdvertise: true}}}
-	for _, f := range configure {
-		f(&cfg.Config)
-	}
-	cfg.wiring.scriptedSession = true      // what a driven run is
-	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
+// admitPace is how often a dial its host's admission budget refused asks again: the
+// budget's own rate, so a window's reopening is met within one burst's share of it.
+const admitPace = parameter.NetworkAdmitWindow / parameter.NetworkAdmitBurst
+
+// scriptedRun starts cfg's run as RunScript does. A joiner dials until its host
+// answers: a host not listening yet, a refusal, or a dial its transport closed
+// unanswered because its handshakes in flight are at their bound, is retried as
+// dialSession retries them. Dialling and the start gate are left after wait, as a
+// person at the keyboard leaves them.
+func scriptedRun(cfg Config, wait time.Duration) (*App, error) {
+	rc := runConfig{Config: cfg}
+	rc.wiring.scriptedSession = true // what a driven run is
+	deadline := time.Now().Add(wait) // [wall] a link bound, not a game one
 	for {
-		guest, err := newScriptApp(cfg, joinDeadline(socketWait))
-		if err == nil {
-			t.Cleanup(guest.Close)
-			if guest.Seed() != seed {
-				t.Fatalf("the joiner drew seed %#x, host runs %#x", guest.Seed(), seed)
-			}
-			return guest, portOf(t, guest)
-		}
-		pause := time.Millisecond
+		a, err := newScriptApp(rc, joinDeadline(wait))
+		pause := parameter.SessionRejoinInterval
 		switch {
-		case errors.As(err, new(*network.Refusal)):
-			pause = parameter.SessionRejoinInterval
+		case err == nil || cfg.Membership.JoinAddress == "":
+			return a, err
+		case errors.Is(err, &network.Refusal{Code: network.RefusalBudget}):
+			pause = admitPace
+		case errors.As(err, new(*network.Refusal)), errors.Is(err, io.EOF):
 		case !errors.As(err, new(net.Error)):
-			t.Fatalf("join %s: %v", addr, err)
+			return nil, err
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("join %s: %v", addr, err)
+			return nil, err
 		}
 		time.Sleep(pause)
 	}
+}
+
+// mustSocketJoiner joins a live host as a driven run does, on the production path:
+// dial, scenario, world, seat and reply, the start gate, the capture, the install
+// and the catch-up, with no door of its own. This harness owns its ticks, so the
+// host must be ticking meanwhile. configure edits the run's Config before it dials.
+func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configure ...func(*Config)) (*App, *link.SocketPort) {
+	t.Helper()
+	cfg := Config{Mode: ModeHeadless, Width: w, Height: h, Membership: Membership{JoinAddress: addr, NoAdvertise: true}}
+	for _, f := range configure {
+		f(&cfg)
+	}
+	guest, err := scriptedRun(cfg, socketWait)
+	if err != nil {
+		t.Fatalf("join %s: %v", addr, err)
+	}
+	t.Cleanup(guest.Close)
+	if guest.Seed() != seed {
+		t.Fatalf("the joiner drew seed %#x, host runs %#x", guest.Seed(), seed)
+	}
+	return guest, portOf(t, guest)
+}
+
+// lobbySession is a host and players-1 guests started as RunScript starts -host and
+// -join, over real sockets: the host's lobby waits for all of them, each dialling it
+// as its run starts, and closes on them at once. Guests open no door of their own,
+// so the session is a star. The host comes first, its guests after it in the order
+// of the slots the lobby gave them. Every guest dials from one address, whose
+// admission budget lets a burst in each window: a larger lobby fills over windows,
+// each refused dial asking again at admitPace.
+func lobbySession(t *testing.T, host Config, players int, guest Config) []*App {
+	t.Helper()
+	windows := max(players-2, 0) / parameter.NetworkAdmitBurst // after the first
+	wait := socketWait + time.Duration(windows)*(parameter.NetworkAdmitWindow+admitPace)
+	addr := freeAddress(t)
+	host.Mode, host.Membership.HostAddress, host.Membership.Participants = ModeHeadless, addr, players
+	guest.Mode, guest.Membership.JoinAddress, guest.Membership.NoAdvertise = ModeHeadless, addr, true
+	type started struct {
+		a   *App
+		err error
+	}
+	runs := make(chan started, players)
+	for i := range players {
+		cfg := guest
+		if i == 0 {
+			cfg = host
+		}
+		go func() {
+			a, err := scriptedRun(cfg, wait)
+			runs <- started{a, err}
+		}()
+	}
+	apps := make([]*App, 0, players)
+	var failed error
+	for range players {
+		r := <-runs
+		if r.err != nil {
+			failed = cmp.Or(failed, r.err)
+			continue
+		}
+		t.Cleanup(r.a.Close)
+		apps = append(apps, r.a)
+	}
+	if failed != nil {
+		t.Fatalf("a lobby of %d: %v", players, failed)
+	}
+	place := func(a *App) int {
+		if a.cfg.Membership.HostAddress != "" {
+			return -1
+		}
+		return int(a.membership.localSlot())
+	}
+	slices.SortFunc(apps, func(x, y *App) int { return cmp.Compare(place(x), place(y)) })
+	return apps
+}
+
+// lobbyHost is a run that opened its startup lobby as RunScript's -host and Serve do,
+// on a loopback port of its own, with its bots seated and its lifetime started. The
+// lobby waits in the background until it closes or the test ends; the gate's outcome
+// arrives on the channel returned, and guests dial the address its door bound.
+func lobbyHost(t *testing.T, cfg Config) (*App, string, <-chan error) {
+	t.Helper()
+	cfg.Membership.HostAddress = "127.0.0.1:0"
+	rc := runConfig{Config: cfg}
+	rc.wiring.scriptedSession = true // a headless host is a script's
+	a, err := newSessionApp(rc)
+	if err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	t.Cleanup(a.Close)
+	if err := a.hub.StartAll(); err != nil {
+		t.Fatalf("host services: %v", err)
+	}
+	a.life.Start(time.Now())
+	if err := a.membership.seatBots(); err != nil {
+		t.Fatalf("host bots: %v", err)
+	}
+	stop, gate, done := make(chan os.Signal, 1), make(chan error, 1), make(chan struct{})
+	go func() {
+		gate <- a.membership.startHostSession(stop)
+		close(done)
+	}()
+	// Before Close: a gate still waiting is left as its operator would leave it.
+	t.Cleanup(func() {
+		stop <- os.Interrupt
+		<-done
+	})
+	return a, portOf(t, a).Addr().String(), gate
+}
+
+// rawJoiner dials addr as a client that is not a vif run: seated at once, it replies
+// to its offer with report, standing in for the world the offer names with the
+// identity the offer carries, and does nothing after; the test drives its stream.
+func rawJoiner(t *testing.T, addr string, report network.JoinerReport) (*network.PendingJoin, network.SessionOffer) {
+	t.Helper()
+	pending, offered := dialSession(t, addr)
+	t.Cleanup(func() { _ = pending.Close() })
+	report.Identity = offered.Identity
+	if err := pending.Complete(nil, report); err != nil {
+		t.Fatalf("participant %d's reply: %v", offered.Assigned, err)
+	}
+	return pending, offered
 }
 
 // alignTicks advances whichever instance is behind until the two stand on one tick,
@@ -1937,12 +2063,16 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 // claim it waits under.
 func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	store := &keptClaims{}
+	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
+		Resources: resource.Options{Embedded: true}, Membership: Membership{ClaimStore: store}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(host.Close)
 	tickUntilCursor(t, host)
 	stopTicking := tickInBackground(host)
 	t.Cleanup(stopTicking)
-	var err error
 	host.World().RunSafe(func() { err = host.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityHost) })
 	if err != nil {
 		t.Fatal(err)
@@ -1954,7 +2084,7 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	})
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	id, term, token := guest.membership.localParticipant(), guest.authority.Term(), host.membership.claim.Load().Token
+	id, term, token := guest.membership.localParticipant(), guest.authority.Term(), store.token(t)
 	held := places(guest, everyone)
 
 	leaveAs(t, host)
@@ -1988,9 +2118,15 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	if msg := guest.Context().GetStatusMessage(); msg != "Host connection lost; playing on in a session of your own" {
 		t.Fatalf("after its fork the guest says %q; want the loss said", msg)
 	}
-	back, err := guest.membership.assignFor(guest.JoinAnchor(), 0, []string{token})
-	if err != nil || uint64(back.Assigned) != held[0][1] || assignedSlot(back) != 0 {
-		t.Fatalf("the host's claim was given %d on slot %d, %v; want its own place, %d on slot 0", back.Assigned, assignedSlot(back), err, held[0][1])
+	if err := guest.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("the fork opens no door: %v", err)
+	}
+	stopGuest = tickInBackground(guest)
+	defer stopGuest()
+	back, offered := dialSession(t, guest.HostAddr(), token)
+	defer back.Close()
+	if uint64(offered.Assigned) != held[0][1] || assignedSlot(offered) != 0 {
+		t.Fatalf("the host's claim was given %d on slot %d; want its own place, %d on slot 0", offered.Assigned, assignedSlot(offered), held[0][1])
 	}
 }
 
@@ -2031,28 +2167,47 @@ func TestAForkKeepsTheHoldItsLostHostSet(t *testing.T) {
 
 // TestASessionARunOpensHasNobodyAwayFromIt: who was away from the session a run
 // left, or on the way back to it, stays with that session, so the next one hands an
-// identity out as somebody new: nobody there is yielded, dismissed or brought back.
+// identity out as somebody new: nobody there is dismissed or brought back. The host
+// leaves while a full session gives a newcomer one Wraith's place and a claim takes
+// another's back, its return waiting in the start gate.
 func TestASessionARunOpensHasNobodyAwayFromIt(t *testing.T) {
-	t.Parallel()
-	a := mustHeadless(t, fixtureSeed, 120, 40)
-	defer a.Close()
-	tickUntilCursor(t, a)
-	a.membership.sessionMu.Lock()
-	a.membership.awayOrder, a.membership.yielding = []link.PeerID{2}, 2
-	a.membership.returning = map[link.PeerID]returnPlace{2: {entry: network.RosterEntry{ID: 2, Slot: 1, Away: true}}}
-	a.membership.sessionMu.Unlock()
-	a.membership.dismissWraith.Store(2)
-	var err error
-	a.World().RunSafe(func() { err = a.membership.openSessionLocked(nil) })
-	if err != nil {
-		t.Fatal(err)
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHosting(t, Membership{Participants: 3})
+	stop := tickInBackground(host)
+	defer stop()
+	stores := []*keptClaims{{}, {}}
+	var ids []link.PeerID
+	for _, store := range stores {
+		guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.ClaimStore = store })
+		id, slot := arrival(t, host, guest)
+		_ = port.Close()
+		guest.Close()
+		waitUntil(t, func() bool { return wraithIn(host, slot) }, "the guest's cursor waiting as a Wraith")
+		ids = append(ids, id)
 	}
-	a.membership.sessionMu.Lock()
-	away, yielding, back := len(a.membership.awayOrder), a.membership.yielding, len(a.membership.returning)
-	a.membership.sessionMu.Unlock()
-	if away != 0 || yielding != 0 || back != 0 || a.membership.dismissWraith.Load() != 0 {
-		t.Fatalf("the session opened with %d away, %d yielding, %d on the way back and %d to dismiss; want nobody",
-			away, yielding, back, a.membership.dismissWraith.Load())
+	stop() // what the session asked of its next tick stays asked
+	if _, _, err := dialOnce(host.HostAddr()); !errors.Is(err, &network.Refusal{Code: network.RefusalYielding}) {
+		t.Fatalf("a newcomer to the full session was answered %v; want a place being given up", err)
+	}
+	back, offered := dialSession(t, host.HostAddr(), stores[1].token(t))
+	defer back.Close()
+	if offered.Assigned != ids[1] {
+		t.Fatalf("the claim took %d; want participant %d's place", offered.Assigned, ids[1])
+	}
+	if err := back.Complete(nil, network.JoinerReport{Identity: offered.Identity, Width: 120, Height: 40}); err != nil {
+		t.Fatalf("the returning player's reply: %v", err)
+	}
+
+	leaveAs(t, host)
+	var dismiss uint32
+	var kept bool
+	host.World().RunSafe(func() {
+		r := host.world.Resources.Network
+		dismiss, kept = r.DismissWraith(), r.WraithKept(uint32(ids[1]))
+	})
+	if dismiss != 0 || kept {
+		t.Fatalf("the session the host went on in dismisses participant %d and holds %d's place for a return %t; want neither",
+			dismiss, ids[1], kept)
 	}
 }
 
@@ -2131,29 +2286,27 @@ func TestADialWhileItsHostLeavesIsRefusedAsTheSessionEnding(t *testing.T) {
 // person joining right after a dropped probe of the relay's address was, is the
 // participant the crossing removes.
 func TestAnAbandonedRelayedIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
-	host := mustHeadless(t, fixtureSeed, 120, 40)
-	defer host.Close()
-	host.AttachTransport(network.NewMesh().Node(1))
-	anchor := host.JoinAnchor()
-	relay, err := host.membership.assignFor(anchor, 0, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	leaf, err := host.membership.assignFor(anchor, relay.Assigned, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	host.world.RunSafe(func() { host.membership.abandonRelayedLocked(relay.Assigned, leaf.Assigned) })
-	next, err := host.membership.assignFor(anchor, 0, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if next.Assigned == leaf.Assigned {
-		t.Fatalf("identity %d was reassigned while its departure was still to apply", leaf.Assigned)
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHosting(t, Membership{})
+	stop := tickInBackground(host)
+	defer stop()
+	pending, offered := dialSession(t, host.HostAddr())
+	relay := takePlace(t, pending, offered, network.JoinerReport{Width: 120, Height: 40})
+	stop() // the host takes its ticks as this test gives them from here
+
+	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayAssign, Nonce: 1})
+	leaf := relayAnswer(t, relay, 1).Offer.Assigned
+	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayAbandon, Leaf: leaf})
+	next, between := dialSession(t, host.HostAddr())
+	defer next.Close()
+	if between.Assigned == leaf {
+		t.Fatalf("identity %d was reassigned while its departure was still to apply", leaf)
 	}
 	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
-	if again, err := host.membership.assignFor(anchor, 0, nil); err != nil || again.Assigned != leaf.Assigned {
-		t.Fatalf("after the departure applied, assigned %d, %v; want %d back", again.Assigned, err, leaf.Assigned)
+	again, after := dialSession(t, host.HostAddr())
+	defer again.Close()
+	if after.Assigned != leaf {
+		t.Fatalf("after the departure applied, assigned %d; want %d back", after.Assigned, leaf)
 	}
 }
 
@@ -2161,54 +2314,47 @@ func TestAnAbandonedRelayedIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.
 // session cannot otherwise admit is told to retry in a moment while the participant
 // away longest is dismissed, and then takes that place; the other Wraith keeps its.
 func TestAFullSessionGivesTheLongestWaitingWraithsPlaceToANewcomer(t *testing.T) {
-	host := mustHeadless(t, fixtureSeed, 120, 40)
-	defer host.Close()
-	host.cfg.Membership.Participants = 3
-	host.AttachTransport(network.NewMesh().Node(1))
-	tickUntilCursor(t, host)
-	anchor := host.JoinAnchor()
-	slotOf := func(o network.SessionOffer) uint8 {
-		i := slices.IndexFunc(o.Roster, func(p network.RosterEntry) bool { return p.ID == o.Assigned })
-		return o.Roster[i].Slot
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHosting(t, Membership{Participants: 3})
+	stop := tickInBackground(host)
+	defer stop()
+	type place struct {
+		id   link.PeerID
+		slot uint8
 	}
-	var guests []network.SessionOffer
+	var left []place
+	var leave []func()
 	for range 2 {
-		offer, err := host.membership.assignFor(anchor, 0, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		host.world.RunSafe(func() { host.membership.crossArrivalLocked(offer.Assigned, slotOf(offer)) })
-		guests = append(guests, offer)
+		guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40)
+		var g place
+		g.id, g.slot = arrival(t, host, guest)
+		left = append(left, g)
+		leave = append(leave, func() { _ = port.Close(); guest.Close() })
 	}
-	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
-	for _, g := range guests {
-		host.membership.crossDeparture(g.Assigned, slotOf(g))
-		host.Tick(1)
-	}
-	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
-	away := func(g network.SessionOffer) (wraith bool) {
-		host.world.RunSafe(func() {
-			wraith = host.world.Components.Wraith.HasEntity(host.world.Resources.Player.Slot(slotOf(g)))
-		})
-		return wraith
-	}
-	if !away(guests[0]) || !away(guests[1]) {
-		t.Fatal("the departed guests' cursors are not waiting as Wraiths")
+	for i, g := range left {
+		leave[i]()
+		waitUntil(t, func() bool { return wraithIn(host, g.slot) }, "the guest's cursor waiting as a Wraith")
 	}
 
+	// The place on its way is given up as the host ticks, so a host standing still
+	// answers every newcomer the same.
+	stop()
 	for range 2 {
-		if _, err := host.membership.assignFor(anchor, 0, nil); !errors.Is(err, &network.Refusal{Code: network.RefusalYielding}) ||
+		if _, _, err := dialOnce(host.HostAddr()); !errors.Is(err, &network.Refusal{Code: network.RefusalYielding}) ||
 			network.RetryOf(err) != network.RetrySoon {
 			t.Fatalf("a full session with Wraiths answered a newcomer with %v; want a refusal to retry soon", err)
 		}
 	}
-	host.Tick(parameter.NetworkBarrierDelayTicks + 2)
-	offer, err := host.membership.assignFor(anchor, 0, nil)
-	if err != nil || offer.Assigned != guests[0].Assigned || slotOf(offer) != slotOf(guests[0]) {
-		t.Fatalf("after the yield the newcomer was given %+v, %v; want participant %d's place",
-			offer.Assigned, err, guests[0].Assigned)
+	resume := tickInBackground(host)
+	defer resume()
+	waitUntil(t, func() bool { return !cursorIn(host, left[0].slot) }, "the longest waiting Wraith dismissed")
+	pending, offered := dialSession(t, host.HostAddr())
+	defer pending.Close()
+	if offered.Assigned != left[0].id || assignedSlot(offered) != left[0].slot {
+		t.Fatalf("after the yield the newcomer was given %d on slot %d; want participant %d's place on slot %d",
+			offered.Assigned, assignedSlot(offered), left[0].id, left[0].slot)
 	}
-	if !away(guests[1]) {
+	if !wraithIn(host, left[1].slot) {
 		t.Fatal("the Wraith that waited less gave up its place too")
 	}
 }
@@ -2225,31 +2371,172 @@ func wraithIn(a *App, slot uint8) (away bool) {
 	return away
 }
 
-// awayGuest is a full session of two whose guest left under a claim, its cursor
-// waiting as a Wraith: the host, the guest's offer and the token it comes back with.
-func awayGuest(t *testing.T) (*App, network.SessionOffer, string) {
+// cursorIn reports whether a's world holds a cursor in slot.
+func cursorIn(a *App, slot uint8) (held bool) {
+	a.world.RunSafe(func() { held = a.world.Resources.Player.Slot(slot) != 0 })
+	return held
+}
+
+// arrival ticks a guest that joined a host ticking meanwhile until its arrival has
+// crossed on both: the participant it is and the slot it plays in.
+func arrival(t *testing.T, host, guest *App) (link.PeerID, uint8) {
 	t.Helper()
-	host := mustHeadless(t, fixtureSeed, 120, 40)
-	t.Cleanup(host.Close)
-	host.cfg.Membership.Participants = 2
-	host.AttachTransport(network.NewMesh().Node(1))
-	tickUntilCursor(t, host)
-	guest, err := host.membership.assignFor(host.JoinAnchor(), 0, nil)
+	for deadline := time.Now().Add(socketWait); ; time.Sleep(joinTestTickInterval / 5) { // [wall] a link bound
+		if slot := guest.membership.localSlot(); slot != parameter.NoPlayerSlot && cursorIn(host, slot) && cursorIn(guest, slot) {
+			return link.PeerID(guest.membership.localParticipant()), slot
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the guest's arrival never crossed: it plays in slot %d", guest.membership.localSlot())
+		}
+		guest.Tick(1)
+	}
+}
+
+// mustHosting is a solo run that opened a session with :host on a loopback port of
+// its own, under cfg: a mid-run host, with no lobby, whose every dial is a mid-run
+// join. The caller ticks it.
+func mustHosting(t *testing.T, cfg Membership) *App {
+	t.Helper()
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Membership: cfg})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("headless: %v", err)
 	}
-	token := network.NewClaimToken()
-	if err := host.membership.noteJoinerReport(guest.Assigned, network.JoinerReport{Claim: network.ClaimDigest(token)}); err != nil {
-		t.Fatal(err)
+	t.Cleanup(a.Close)
+	tickUntilCursor(t, a)
+	if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
 	}
-	host.world.RunSafe(func() { host.membership.crossArrivalLocked(guest.Assigned, assignedSlot(guest)) })
-	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
-	host.membership.crossDeparture(guest.Assigned, assignedSlot(guest))
-	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
-	if !wraithIn(host, assignedSlot(guest)) {
-		t.Fatal("the departed guest's cursor is not waiting as a Wraith")
+	return a
+}
+
+// takePlace completes a seated dial as a joiner whose world is built does: its
+// reply, the start gate, the world and its confirmation; the host must be ticking
+// meanwhile. The port it then runs on answers its host's probes until the test ends
+// or closes it.
+func takePlace(t *testing.T, pending *network.PendingJoin, offered network.SessionOffer, report network.JoinerReport) *link.SocketPort {
+	t.Helper()
+	cfg := pending.TransportConfig() // before the stream opens, as a run takes it
+	report.Identity = offered.Identity
+	if err := pending.Complete(nil, report); err != nil {
+		t.Fatalf("participant %d's reply: %v", offered.Assigned, err)
 	}
-	return host, guest, token
+	if _, err := pending.WaitStart(); err != nil {
+		t.Fatalf("participant %d's start gate: %v", offered.Assigned, err)
+	}
+	if _, _, err := pending.ReceiveSnapshot(); err != nil {
+		t.Fatalf("participant %d's world: %v", offered.Assigned, err)
+	}
+	if err := pending.Ready(); err != nil {
+		t.Fatalf("participant %d's confirmation: %v", offered.Assigned, err)
+	}
+	port := link.NewSocketPort(cfg)
+	if err := port.Start(); err != nil {
+		t.Fatalf("participant %d's port: %v", offered.Assigned, err)
+	}
+	t.Cleanup(func() { _ = port.Close() })
+	return port
+}
+
+// relayStep hands the coordinator one step of a relayed join as its network system
+// does a frame from holder.
+func relayStep(host *App, holder link.PeerID, req network.RelayJoin) {
+	body, _ := json.Marshal(req) // plain data cannot fail to encode
+	host.world.RunSafe(func() {
+		host.world.Resources.Network.OnRelayJoin(uint8(network.MsgRelayJoin), uint32(holder), body)
+	})
+}
+
+// relayAnswer is the coordinator's answer to the step a holder asked under nonce, as
+// the holder's port receives it.
+func relayAnswer(t *testing.T, holder *link.SocketPort, nonce uint32) network.RelayAdmit {
+	t.Helper()
+	in := make([]link.Inbound, 64)
+	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); {
+		for _, m := range in[:holder.Drain(in)] {
+			var ans network.RelayAdmit
+			if m.Msg == nil || m.Msg.Type != network.MsgRelayAdmit || json.Unmarshal(m.Msg.Payload, &ans) != nil || ans.Nonce != nonce {
+				continue
+			}
+			if err := ans.Refused(); err != nil {
+				t.Fatalf("the relayed step %d was refused: %v", nonce, err)
+			}
+			return ans
+		}
+		select {
+		case <-holder.Changes():
+		case <-time.After(10 * time.Millisecond): // [wall] a link bound, not a game one
+		}
+	}
+	t.Fatalf("no answer to the relayed step %d within %s", nonce, socketWait)
+	return network.RelayAdmit{}
+}
+
+// keptClaims is a ClaimStore a test reads: the claims document as a process last
+// stored it, as a page's storage or a claims file holds it.
+type keptClaims struct {
+	mu  sync.Mutex
+	doc []byte
+}
+
+func (s *keptClaims) Load() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.doc), nil
+}
+
+func (s *keptClaims) Store(doc []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.doc = slices.Clone(doc)
+	return nil
+}
+
+// token is the newest claim the document keeps for a person's place: the one the
+// last run of its process to join a session joined under.
+func (s *keptClaims) token(t *testing.T) string {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var kept []struct {
+		Token string `json:"token"`
+		Bot   bool   `json:"bot,omitempty"`
+	}
+	if err := json.Unmarshal(s.doc, &kept); err != nil {
+		t.Fatalf("the claims document %q: %v", s.doc, err)
+	}
+	for _, c := range slices.Backward(kept) {
+		if !c.Bot {
+			return c.Token
+		}
+	}
+	t.Fatalf("the claims document %q keeps no person's claim", s.doc)
+	return ""
+}
+
+// away is a full session of two whose guest left under the claim its run joined
+// with, its cursor waiting as a Wraith: the host, ticking until stop; the guest's
+// participant and slot; and the claim's token, as its process's store kept it.
+type away struct {
+	host  *App
+	id    link.PeerID
+	slot  uint8
+	token string
+	stop  func()
+}
+
+func awayGuest(t *testing.T) away {
+	t.Helper()
+	host := mustHosting(t, Membership{Participants: 2})
+	stop := tickInBackground(host)
+	t.Cleanup(stop)
+	store := &keptClaims{}
+	guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.ClaimStore = store })
+	a := away{host: host, token: store.token(t), stop: stop}
+	a.id, a.slot = arrival(t, host, guest)
+	_ = port.Close()
+	guest.Close()
+	waitUntil(t, func() bool { return wraithIn(host, a.slot) }, "the departed guest's cursor waiting as a Wraith")
+	return a
 }
 
 // TestAFullSessionTakesBackAPlayerWhoseWraithKeepsItsPlace: a dial naming the claim
@@ -2257,59 +2544,36 @@ func awayGuest(t *testing.T) (*App, network.SessionOffer, string) {
 // newcomer is meanwhile; its arrival takes the cursor back with what its player
 // brought of the game it left.
 func TestAFullSessionTakesBackAPlayerWhoseWraithKeepsItsPlace(t *testing.T) {
-	host, guest, token := awayGuest(t)
-	anchor := host.JoinAnchor()
-	back, err := host.membership.assignFor(anchor, 0, []string{network.NewClaimToken(), token})
-	if err != nil || back.Assigned != guest.Assigned || assignedSlot(back) != assignedSlot(guest) {
-		t.Fatalf("the returning player was given %d, %v; want its own place, %d", back.Assigned, err, guest.Assigned)
+	// Not parallel: real sockets against wall-clock deadlines.
+	a := awayGuest(t)
+	back, offered := dialSession(t, a.host.HostAddr(), network.NewClaimToken(), a.token)
+	if offered.Assigned != a.id || assignedSlot(offered) != a.slot {
+		t.Fatalf("the returning player was given %d on slot %d; want its own place, %d on slot %d",
+			offered.Assigned, assignedSlot(offered), a.id, a.slot)
 	}
-	if _, err := host.membership.assignFor(anchor, 0, nil); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+	if _, _, err := dialOnce(a.host.HostAddr()); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
 		t.Fatalf("a newcomer was answered %v while the place came back; want the session full", err)
 	}
 	record := &event.CursorRecord{Energy: 4321, HitPoints: 37}
-	if err := host.membership.noteJoinerReport(back.Assigned, network.JoinerReport{Claim: "ignored", Record: record}); err != nil {
-		t.Fatal(err)
-	}
-	host.world.RunSafe(func() { host.membership.crossArrivalLocked(back.Assigned, assignedSlot(back)) })
-	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
+	takePlace(t, back, offered, network.JoinerReport{Width: 120, Height: 40, Claim: "ignored", Record: record})
+	a.stop()
+	// Read on the tick the arrival applies, the first the cursor is no Wraith on.
 	var energy int64
 	var health int
-	host.world.RunSafe(func() {
-		e := host.world.Resources.Player.Slot(assignedSlot(back))
-		en, _ := host.world.Components.Energy.GetComponent(e)
-		combat, _ := host.world.Components.Combat.GetComponent(e)
-		energy, health = en.Current, combat.HitPoints
-	})
-	if wraithIn(host, assignedSlot(back)) || energy != record.Energy || health != record.HitPoints {
-		t.Fatalf("after the arrival the place is a Wraith %t, with energy %d and health %d; want it taken back with %+v",
-			wraithIn(host, assignedSlot(back)), energy, health, *record)
-	}
-}
-
-// TestAWraithWaitsUnderTheClaimItsRosterNames: a Wraith keeps the participant and
-// holder it left with and takes the claim the roster names it under, as a session a
-// run opens names its bots' afresh; an entry naming somebody else leaves it as it was.
-func TestAWraithWaitsUnderTheClaimItsRosterNames(t *testing.T) {
-	host, guest, token := awayGuest(t)
-	slot := assignedSlot(guest)
-	cursor := func() (c component.CursorComponent) {
-		host.world.RunSafe(func() { c, _ = host.world.Components.Cursor.GetComponent(host.world.Resources.Player.Slot(slot)) })
-		return c
-	}
-	bind := func(p network.RosterEntry) {
-		host.world.RunSafe(func() {
-			host.membership.bindCursorOwnersLocked([]network.RosterEntry{p}, engine.CoordinatorParticipant)
+	for wraith, deadline := true, time.Now().Add(socketWait); wraith; time.Sleep(joinTestTickInterval / 5) {
+		if time.Now().After(deadline) {
+			t.Fatal("the returning player's arrival never applied")
+		}
+		a.host.Tick(1)
+		a.host.world.RunSafe(func() {
+			e := a.host.world.Resources.Player.Slot(a.slot)
+			en, _ := a.host.world.Components.Energy.GetComponent(e)
+			combat, _ := a.host.world.Components.Combat.GetComponent(e)
+			wraith, energy, health = a.host.world.Components.Wraith.HasEntity(e), en.Current, combat.HitPoints
 		})
 	}
-	bind(network.RosterEntry{ID: guest.Assigned + 1, Slot: slot, Claim: network.ClaimDigest(network.NewClaimToken())})
-	if c := cursor(); c.Claim != network.ClaimDigest(token) || c.PeerID != uint32(guest.Assigned) {
-		t.Fatalf("an entry naming somebody else left the Wraith as participant %d under %q; want %d under its own claim", c.PeerID, c.Claim, guest.Assigned)
-	}
-	carried := network.ClaimDigest(network.NewClaimToken())
-	bind(network.RosterEntry{ID: guest.Assigned, Slot: slot, Holder: 9, Claim: carried})
-	if c := cursor(); c.Claim != carried || c.PeerID != uint32(guest.Assigned) || c.Holder != 0 || !wraithIn(host, slot) {
-		t.Fatalf("the Wraith is participant %d held by %d under %q, a Wraith %t; want %d held by nobody under %q, still waiting",
-			c.PeerID, c.Holder, c.Claim, wraithIn(host, slot), guest.Assigned, carried)
+	if energy != record.Energy || health != record.HitPoints {
+		t.Fatalf("after the arrival the place has energy %d and health %d; want it taken back with %+v", energy, health, *record)
 	}
 }
 
@@ -2317,92 +2581,61 @@ func TestAWraithWaitsUnderTheClaimItsRosterNames(t *testing.T) {
 // goes back to its Wraith when the join fails, directly or through a relay, its
 // wait no longer held off; the claim takes it again.
 func TestAReturnThatDoesNotCompleteLeavesItsWraithWaiting(t *testing.T) {
-	host, guest, token := awayGuest(t)
-	anchor := host.JoinAnchor()
-	took := func(holder link.PeerID) link.PeerID {
+	// Not parallel: real sockets against wall-clock deadlines.
+	a := awayGuest(t)
+	kept := func() (held bool) {
+		a.host.world.RunSafe(func() { held = a.host.world.Resources.Network.WraithKept(uint32(a.id)) })
+		return held
+	}
+	took := func() *network.PendingJoin {
 		t.Helper()
-		back, err := host.membership.assignFor(anchor, holder, []string{token})
-		if err != nil || back.Assigned != guest.Assigned {
-			t.Fatalf("the claim took %d, %v; want participant %d's place", back.Assigned, err, guest.Assigned)
+		pending, back := dialSession(t, a.host.HostAddr(), a.token)
+		if back.Assigned != a.id || !kept() {
+			t.Fatalf("the claim took %d, its Wraith's wait held off %t; want participant %d's place, held off", back.Assigned, kept(), a.id)
 		}
-		if !host.membership.wraithKept(uint32(back.Assigned)) {
-			t.Fatal("the Wraith's wait may run out while its player comes back")
-		}
-		return back.Assigned
+		return pending
 	}
-	host.membership.releaseParticipant(took(0))
-	id := took(engine.CoordinatorParticipant)
-	host.world.RunSafe(func() { host.membership.abandonRelayedLocked(engine.CoordinatorParticipant, id) })
-	host.Tick(parameter.NetworkBarrierDelayTicks + 2)
-	if host.membership.wraithKept(uint32(id)) || !wraithIn(host, assignedSlot(guest)) {
+	_ = took().Close() // gone before its reply
+	waitUntil(t, func() bool { return !kept() }, "the place a dial left given back to its Wraith")
+
+	relayStep(a.host, engine.CoordinatorParticipant, network.RelayJoin{Step: network.RelayAssign, Claims: []string{a.token}})
+	if !kept() {
+		t.Fatal("a claim a relay named did not take its place back")
+	}
+	relayStep(a.host, engine.CoordinatorParticipant, network.RelayJoin{Step: network.RelayAbandon, Leaf: a.id})
+	from := a.host.Position().Tick
+	waitUntil(t, func() bool { return a.host.Position().Tick > from+parameter.NetworkBarrierDelayTicks+1 }, "a playout lead past the abandonment")
+	if kept() || !wraithIn(a.host, a.slot) {
 		t.Fatalf("after a failed return through a relay the Wraith waits %t, held off %t; want it waiting, its wait running",
-			wraithIn(host, assignedSlot(guest)), host.membership.wraithKept(uint32(id)))
+			wraithIn(a.host, a.slot), kept())
 	}
-	took(0)
+	_ = took().Close()
 }
 
 // TestAClaimOnAPlaceStillLinkedClosesTheLinkItLeft: a dial naming the claim of a
 // place whose link the host still holds is told to retry in a moment, and that link
 // is closed, so its departure crosses and the retry takes the place back.
 func TestAClaimOnAPlaceStillLinkedClosesTheLinkItLeft(t *testing.T) {
-	host := mustHeadless(t, fixtureSeed, 120, 40)
-	defer host.Close()
-	mesh := network.NewMesh()
-	mesh.Link(1, 2)
-	host.AttachTransport(mesh.Node(1))
-	tickUntilCursor(t, host)
-	guest, err := host.membership.assignFor(host.JoinAnchor(), 0, nil)
-	if err != nil || guest.Assigned != 2 {
-		t.Fatalf("the linked guest was assigned %d, %v; want participant 2", guest.Assigned, err)
-	}
-	token := network.NewClaimToken()
-	if err := host.membership.noteJoinerReport(guest.Assigned, network.JoinerReport{Claim: network.ClaimDigest(token)}); err != nil {
-		t.Fatal(err)
-	}
-	host.world.RunSafe(func() { host.membership.crossArrivalLocked(guest.Assigned, assignedSlot(guest)) })
-	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHosting(t, Membership{})
+	stop := tickInBackground(host)
+	defer stop()
+	store := &keptClaims{}
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.ClaimStore = store })
+	id, slot := arrival(t, host, guest)
 
-	_, err = host.membership.assignParticipant([]string{token})
+	_, _, err := dialOnce(host.HostAddr(), store.token(t))
 	if !errors.Is(err, &network.Refusal{Code: network.RefusalReturning}) || network.RetryOf(err) != network.RetrySoon {
 		t.Fatalf("a claim on a place still linked was answered %v; want a refusal to retry soon", err)
 	}
-	if mesh.Node(1).Connected(2) {
+	if portOf(t, host).Connected(uint32(id)) {
 		t.Fatal("the link the returning player left is still open")
 	}
-	host.Tick(parameter.NetworkBarrierDelayTicks + 2)
-	back, err := host.membership.assignParticipant([]string{token})
-	if err != nil || back.Assigned != guest.Assigned || assignedSlot(back) != assignedSlot(guest) {
-		t.Fatalf("the retry was given %d, %v; want participant %d's place", back.Assigned, err, guest.Assigned)
-	}
-}
-
-// TestASuccessorOrdersWhoIsAwayByTheirWaits: a session taken over gives a newcomer
-// the place of whoever has waited longest, read off the Wraiths, not the roster.
-func TestASuccessorOrdersWhoIsAwayByTheirWaits(t *testing.T) {
-	host := mustHeadless(t, fixtureSeed, 120, 40)
-	defer host.Close()
-	host.AttachTransport(network.NewMesh().Node(1))
-	tickUntilCursor(t, host)
-	var guests []network.SessionOffer
-	for range 2 {
-		offer, err := host.membership.assignFor(host.JoinAnchor(), 0, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		host.world.RunSafe(func() { host.membership.crossArrivalLocked(offer.Assigned, assignedSlot(offer)) })
-		guests = append(guests, offer)
-	}
-	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
-	for _, g := range slices.Backward(guests) {
-		host.membership.crossDeparture(g.Assigned, assignedSlot(g))
-		host.Tick(4)
-	}
-	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
-	var order []link.PeerID
-	roster := host.instance().WorldRoster()
-	host.world.RunSafe(func() { order = host.membership.awayOrderLocked(roster) })
-	if want := []link.PeerID{guests[1].Assigned, guests[0].Assigned}; !slices.Equal(order, want) {
-		t.Fatalf("away longest first reads %v, want %v", order, want)
+	waitUntil(t, func() bool { return wraithIn(host, slot) }, "the closed link's departure")
+	back, offered := dialSession(t, host.HostAddr(), store.token(t))
+	defer back.Close()
+	if offered.Assigned != id || assignedSlot(offered) != slot {
+		t.Fatalf("the retry was given %d on slot %d; want participant %d's place on slot %d", offered.Assigned, assignedSlot(offered), id, slot)
 	}
 }
 

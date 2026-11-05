@@ -65,15 +65,10 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 // other: what a coordinator offers is what it later measures a reply against, so a
 // reset between the two cannot turn a valid join into a mismatch or the reverse.
 func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
-	t.Parallel()
-	a := mustHeadless(t, 0x0FFE, 120, 40)
-	defer a.Close()
-	tickUntilCursor(t, a)
-
-	offer, err := a.membership.assignParticipant(nil)
-	if err != nil {
-		t.Fatalf("assign: %v", err)
-	}
+	// Not parallel: a real socket against wall-clock deadlines.
+	a := offering(t, 0x0FFE)
+	pending, offer := dialSession(t, a.HostAddr())
+	defer pending.Close()
 	if offer.Identity.Protocol != network.ProtocolVersion {
 		t.Fatalf("the offer names protocol %d", offer.Identity.Protocol)
 	}
@@ -90,9 +85,22 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 	}
 	// The offer's identity and this instance's own describe the same session,
 	// because one is derived from the anchor the other was read from.
-	if err := offer.Identity.Verify(a.membership.sessionIdentity()); err != nil {
+	if err := offer.Identity.Verify(identityFromAnchor(a.JoinAnchor())); err != nil {
 		t.Fatalf("a host would refuse itself: %v", err)
 	}
+}
+
+// offering is a solo run on seed that opened a session with :host on a loopback port,
+// for a dial to read the offer it makes.
+func offering(t *testing.T, seed uint64) *App {
+	t.Helper()
+	a := mustHeadless(t, seed, 120, 40)
+	t.Cleanup(a.Close)
+	tickUntilCursor(t, a)
+	if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	return a
 }
 
 // TestADifferentCorpusStillJoins is the rule content follows: the corpus is the
@@ -100,22 +108,17 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 // machines with different content installed are still running the same session.
 // The scenario is the opposite and stays refused, which is what keeps them apart.
 func TestADifferentCorpusStillJoins(t *testing.T) {
-	t.Parallel()
-	a := mustHeadless(t, 0x0C0C, 120, 40)
-	defer a.Close()
-	tickUntilCursor(t, a)
-
-	offer, err := a.membership.assignParticipant(nil)
-	if err != nil {
-		t.Fatalf("assign: %v", err)
-	}
-	if err := offer.Identity.Verify(a.membership.sessionIdentity()); err != nil {
+	// Not parallel: a real socket against wall-clock deadlines.
+	a := offering(t, 0x0C0C)
+	pending, offer := dialSession(t, a.HostAddr())
+	defer pending.Close()
+	if err := offer.Identity.Verify(identityFromAnchor(a.JoinAnchor())); err != nil {
 		t.Fatalf("a peer with the same session was refused: %v", err)
 	}
 
-	elsewhere := a.membership.sessionIdentity()
+	elsewhere := identityFromAnchor(a.JoinAnchor())
 	elsewhere.ScenarioDigest = "sha256:0000000000000000"
-	err = offer.Identity.Verify(elsewhere)
+	err := offer.Identity.Verify(elsewhere)
 	if err == nil {
 		t.Fatal("a peer simulating a different scenario was accepted")
 	}

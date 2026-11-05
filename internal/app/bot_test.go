@@ -1356,14 +1356,15 @@ func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
 		waitForCursors(t, a, 4)
 	}
 	id, relayID := person.membership.localParticipant(), link.PeerID(relay.membership.localParticipant())
-	c := person.membership.claim.Load()
 	person.World().RunSafe(func() { person.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
-	if c == nil || !relay.instance().DropParticipant(id) {
-		t.Fatal("the person holds no claim, or its link would not drop")
+	if !relay.instance().DropParticipant(id) {
+		t.Fatal("the person's link would not drop")
 	}
+	// Its own place is the one its claim waits under, and the redial replaces the run
+	// only with the dial that took it back under that claim.
 	var req *restartRequest
 	waitUntil(t, func() bool { req = person.restart.Load(); return req != nil }, "the person admitted back through its relay")
-	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id ||
+	if req.dialled == nil || uint32(req.dialled.offer.Assigned) != id ||
 		req.dialled.offer.Relay != relayID || req.Notice != "Relay connection restored" {
 		t.Fatalf("the person was not admitted back into its own place through its relay: %+v", req)
 	}
@@ -1396,9 +1397,9 @@ func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
 	if got := authorityOf(person); got.Authority != id || got.Term != network.FirstTerm+1 {
 		t.Fatalf("a player that joined at the successor's relay door holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
 	}
-	if person.membership.joinedThrough != 0 || person.membership.sessionTransport().PeerCount() != 1 {
+	if through := relayOf(person); through != 0 || person.membership.sessionTransport().PeerCount() != 1 {
 		t.Fatalf("the player joined through participant %d holding %d links; want the host's own guest",
-			person.membership.joinedThrough, person.membership.sessionTransport().PeerCount())
+			through, person.membership.sessionTransport().PeerCount())
 	}
 	waitForCursors(t, relay, 4) // the first host and its bot wait as Wraiths
 	waitForMotion(t, relay, cursorOf(t, relay, person.membership.localParticipant()), "the player's cursor on the host that admitted it")
@@ -1426,14 +1427,13 @@ func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {
 	waitUntil(t, func() bool { _, ok := guest.authority.Chain().Lookup(peerID); return ok }, "the relaying peer in the guest's chain")
 	// The host's door is where nothing answers, as a host this guest alone cannot
 	// reach is; the mode is the one whose loop takes a rejoin.
-	c := guest.membership.claim.Load()
 	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.Membership.JoinAddress = ModePlay, "127.0.0.1:1" })
-	if c == nil || !host.instance().DropParticipant(id) {
-		t.Fatal("the guest holds no claim, or its link would not drop")
+	if !host.instance().DropParticipant(id) {
+		t.Fatal("the guest's link would not drop")
 	}
 	var req *restartRequest
 	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back through the relaying peer")
-	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id ||
+	if req.dialled == nil || uint32(req.dialled.offer.Assigned) != id ||
 		req.dialled.offer.Relay != peerID || req.dialled.offer.Host != hostID {
 		t.Fatalf("the guest was not taken back into its own place through the relaying peer: %+v", req)
 	}
@@ -1465,14 +1465,13 @@ func TestADroppedGuestRejoinsAtACandidatesDoor(t *testing.T) {
 	if !strings.Contains(host.SessionSummary(), "relaying at "+door) {
 		t.Fatalf(":session on the host reads %q; want the door named", host.SessionSummary())
 	}
-	c := guest.membership.claim.Load()
 	guest.World().RunSafe(func() { guest.cfg.Mode, guest.cfg.Membership.JoinAddress = ModePlay, "127.0.0.1:1" })
-	if c == nil || !host.instance().DropParticipant(id) {
-		t.Fatal("the guest holds no claim, or its link would not drop")
+	if !host.instance().DropParticipant(id) {
+		t.Fatal("the guest's link would not drop")
 	}
 	var req *restartRequest
 	waitUntil(t, func() bool { req = guest.restart.Load(); return req != nil }, "the guest taken back at the relay's door")
-	if req.dialled == nil || req.dialled.claim != c || uint32(req.dialled.offer.Assigned) != id || req.dialled.offer.Relay != peerID {
+	if req.dialled == nil || uint32(req.dialled.offer.Assigned) != id || req.dialled.offer.Relay != peerID {
 		t.Fatalf("the guest was not taken back into its own place at the relay's door: %+v", req)
 	}
 	req.dialled.abandon(errors.New("the test is over"))
@@ -1486,6 +1485,13 @@ func waitUntil(t *testing.T, done func() bool, what string) {
 			t.Fatalf("%s: not within %s", what, socketWait)
 		}
 	}
+}
+
+// relayOf is the participant a's session goes through, as its network resource names
+// it to the barrier: zero for a run linked to its host itself.
+func relayOf(a *App) (through link.PeerID) {
+	a.World().RunSafe(func() { through = link.PeerID(a.world.Resources.Network.Relay) })
+	return through
 }
 
 // downstreamOf is the participants an instance passes the authority's artifacts to.

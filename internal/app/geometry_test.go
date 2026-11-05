@@ -24,7 +24,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/internal/resource"
-	link "github.com/lixenwraith/vif/pkg/network"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
@@ -41,15 +40,52 @@ func geometryServer(t *testing.T, w, h int) *App {
 	return a
 }
 
-func reportGeometry(t *testing.T, a *App, report network.JoinerReport) {
+// sizingLobby is a dedicated host of w by h, none for zero, serving its lobby on res
+// as Serve does: guests dial the address returned.
+func sizingLobby(t *testing.T, w, h int, res resource.Options) (*App, string) {
 	t.Helper()
-	offer, err := a.membership.assignParticipant(nil)
+	a, addr, _ := lobbyHost(t, Config{Mode: ModeServer, Width: w, Height: h, Resources: res, Seed: 0x6E01})
+	return a, addr
+}
+
+// sizedBy has a guest whose terminal is report's join the lobby at addr, and returns
+// the start the lobby closes on: the session's bounds are settled from there.
+func sizedBy(t *testing.T, addr string, report network.JoinerReport) network.SessionOffer {
+	t.Helper()
+	pending, _ := rawJoiner(t, addr, report)
+	start, err := pending.WaitStart()
+	if err != nil {
+		t.Fatalf("the lobby never closed on a guest of %dx%d: %v", report.Width, report.Height, err)
+	}
+	return start
+}
+
+// reported has a guest whose terminal is report's join the lobby at addr and waits
+// for the host to have admitted it, guests on its link; the lobby closes on the
+// scenario's quorum, and the start comes on the pending join returned.
+func reported(t *testing.T, a *App, addr string, guests int, report network.JoinerReport) *network.PendingJoin {
+	t.Helper()
+	pending, _ := rawJoiner(t, addr, report)
+	port := portOf(t, a)
+	waitUntil(t, func() bool { return port.PeerCount() >= guests }, "the guest's admission")
+	return pending
+}
+
+// pairScenario writes a scenario whose lobby waits for two players and returns the
+// options that load it: a server's closes on its second guest.
+func pairScenario(t *testing.T) resource.Options {
+	t.Helper()
+	root := t.TempDir()
+	dir := writeScenario(t, root, "pair", "A game of two at least.")
+	path := filepath.Join(dir, "scenario.toml")
+	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := a.membership.noteJoinerReport(offer.Assigned, report); err != nil {
+	if err := os.WriteFile(path, append([]byte("min_players = 2\n"), body...), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return resource.Options{Dir: root, Scenario: "pair"}
 }
 
 func mapSize(a *App) (int, int) {
@@ -63,16 +99,15 @@ func mapSize(a *App) (int, int) {
 
 // Without an operator size, the first admitted person supplies the real geometry.
 func TestAServerWithNoSizeTakesItsMapFromItsFirstPerson(t *testing.T) {
-	t.Parallel()
-	a := geometryServer(t, 0, 0)
+	// Not parallel: this binds a real socket.
+	a, addr := sizingLobby(t, 0, 0, resource.Options{Embedded: true})
 
 	beforeW, beforeH := mapSize(a)
 	if beforeW > 80 {
 		t.Fatalf("a server with no -size started on a %dx%d map, expected the default", beforeW, beforeH)
 	}
 
-	reportGeometry(t, a, network.JoinerReport{Width: 160, Height: 45})
-	a.membership.adoptLobbyGeometry()
+	sizedBy(t, addr, network.JoinerReport{Width: 160, Height: 45})
 
 	w, h := mapSize(a)
 	if w <= beforeW || h <= beforeH {
@@ -171,31 +206,11 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 // the refusal a live session answers operators with must not reach it.
 func TestASizingHostIsNotRefusedByItsOwnLiveSession(t *testing.T) {
 	// Not parallel: this binds a real socket.
-	a := geometryServer(t, 0, 0)
-	hostCfg := network.DebugConfig(link.RoleHost, "127.0.0.1:0")
-	hostCfg.ParticipantID = engine.CoordinatorParticipant
-	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: a.membership.assignParticipant, Release: a.membership.releaseParticipant, Report: a.membership.noteJoinerReport,
-	}, socketWait)
-	port := link.NewSocketPort(&hostCfg.Config)
-	t.Cleanup(func() { _ = port.Close() })
-	if err := port.Start(); err != nil {
-		t.Fatalf("host transport: %v", err)
-	}
-	a.AttachTransport(port)
-
-	pending, offered := dialSession(t, port.Addr().String())
-	t.Cleanup(func() { _ = pending.Close() })
-	report := network.JoinerReport{Width: 160, Height: 45, Identity: identityFromAnchor(offered.Anchor)}
-	if err := pending.Complete(nil, report); err != nil {
-		t.Fatalf("join reply: %v", err)
-	}
-	waitSocket(t, port, func() bool { return port.PeerCount() > 0 }, "the guest's admission")
+	a, addr := sizingLobby(t, 0, 0, resource.Options{Embedded: true})
+	sizedBy(t, addr, network.JoinerReport{Width: 160, Height: 45})
 	if !a.World().LiveSession() {
 		t.Fatal("the session is not live, so the refusal is not exercised")
 	}
-
-	a.membership.adoptLobbyGeometry()
 
 	wantW, wantH := 160-parameter.LeftMargin, 45-parameter.TopMargin-parameter.BottomMargin
 	if w, h := mapSize(a); w != wantW || h != wantH {
@@ -211,12 +226,14 @@ func TestASizingHostIsNotRefusedByItsOwnLiveSession(t *testing.T) {
 // map under participants already playing on it — which D-14 forbids for the same
 // reason a terminal may not crop a shared map.
 func TestTheFirstPersonWins(t *testing.T) {
-	t.Parallel()
-	a := geometryServer(t, 0, 0)
+	// Not parallel: this binds a real socket.
+	a, addr := sizingLobby(t, 0, 0, pairScenario(t))
 
-	reportGeometry(t, a, network.JoinerReport{Width: 160, Height: 45})
-	reportGeometry(t, a, network.JoinerReport{Width: 80, Height: 24})
-	a.membership.adoptLobbyGeometry()
+	first := reported(t, a, addr, 1, network.JoinerReport{Width: 160, Height: 45})
+	reported(t, a, addr, 2, network.JoinerReport{Width: 80, Height: 24})
+	if _, err := first.WaitStart(); err != nil {
+		t.Fatalf("the lobby never closed on its two guests: %v", err)
+	}
 
 	if got := a.Context().Width; got != 160 {
 		t.Fatalf("geometry = %d, want the first person's 160", got)
@@ -226,12 +243,11 @@ func TestTheFirstPersonWins(t *testing.T) {
 // TestAnOperatorSizeIsNotOverridden: -size is a statement, and a guest's terminal
 // does not get to contradict it.
 func TestAnOperatorSizeIsNotOverridden(t *testing.T) {
-	t.Parallel()
-	a := geometryServer(t, 100, 30)
+	// Not parallel: this binds a real socket.
+	a, addr := sizingLobby(t, 100, 30, resource.Options{Embedded: true})
 
 	beforeW, beforeH := mapSize(a)
-	reportGeometry(t, a, network.JoinerReport{Width: 200, Height: 60})
-	a.membership.adoptLobbyGeometry()
+	sizedBy(t, addr, network.JoinerReport{Width: 200, Height: 60})
 
 	if w, h := mapSize(a); w != beforeW || h != beforeH {
 		t.Fatalf("an explicit -size was overridden: %dx%d became %dx%d", beforeW, beforeH, w, h)
@@ -242,17 +258,16 @@ func TestAnOperatorSizeIsNotOverridden(t *testing.T) {
 // guest that says nothing, or says something a viewport could not fit in, leaves
 // the session sized as it was rather than breaking it.
 func TestAnUnreportedOrUnusableGeometryChangesNothing(t *testing.T) {
-	t.Parallel()
+	// Not parallel: this binds real sockets.
 	for _, report := range []network.JoinerReport{
 		{},
 		{Width: 160},
 		{Width: 2, Height: 2},
 		{Width: -5, Height: -5},
 	} {
-		a := geometryServer(t, 0, 0)
+		a, addr := sizingLobby(t, 0, 0, resource.Options{Embedded: true})
 		beforeW, beforeH := mapSize(a)
-		reportGeometry(t, a, report)
-		a.membership.adoptLobbyGeometry()
+		sizedBy(t, addr, report)
 		if w, h := mapSize(a); w != beforeW || h != beforeH {
 			t.Fatalf("report %+v moved the map from %dx%d to %dx%d", report, beforeW, beforeH, w, h)
 		}
@@ -294,19 +309,11 @@ func TestTheCellAspectIsPartOfTheGeometry(t *testing.T) {
 // not resize it. Read before the boot settled, the lobby gave every guest the
 // operator's size and the first run played on it.
 func TestAScenarioThatSetsItsOwnMapIsServedOnIt(t *testing.T) {
-	t.Parallel()
+	// Not parallel: this binds real sockets.
 	root := fixedMapScenario(t)
 	for _, size := range [][2]int{{120, 40}, {0, 0}} {
-		a, err := newSessionApp(runConfig{Config: Config{
-			Mode: ModeServer, Membership: Membership{HostAddress: "127.0.0.1:0"}, Width: size[0], Height: size[1],
-			Resources: resource.Options{Dir: root, Scenario: "fixed"}, Seed: 0x6E02,
-		}})
-		if err != nil {
-			t.Fatalf("server: %v", err)
-		}
-		t.Cleanup(a.Close)
-		reportGeometry(t, a, network.JoinerReport{Width: 190, Height: 44})
-		a.membership.adoptLobbyGeometry()
+		a, addr := sizingLobby(t, size[0], size[1], resource.Options{Dir: root, Scenario: "fixed"})
+		sizedBy(t, addr, network.JoinerReport{Width: 190, Height: 44})
 		if w, h := mapSize(a); w != 90 || h != 30 {
 			t.Fatalf("-size %dx%d: map %dx%d, want the scenario's 90x30", size[0], size[1], w, h)
 		}
@@ -336,22 +343,8 @@ func fixedMapScenario(t *testing.T) string {
 // the channel returned.
 func serveWithBots(t *testing.T, cfg Config) (*App, <-chan error) {
 	t.Helper()
-	cfg.Mode, cfg.Seed = ModeServer, 0x6E05
-	cfg.Membership.HostAddress, cfg.Membership.Bots = "127.0.0.1:0", []string{"roam"}
-	a, err := newSessionApp(runConfig{Config: cfg})
-	if err != nil {
-		t.Fatalf("server: %v", err)
-	}
-	t.Cleanup(a.Close)
-	if err := a.hub.StartAll(); err != nil {
-		t.Fatalf("server services: %v", err)
-	}
-	a.life.Start(time.Now())
-	if err := a.membership.seatBots(); err != nil {
-		t.Fatalf("server bots: %v", err)
-	}
-	gate := make(chan error, 1)
-	go func() { gate <- a.membership.startHostSession(nil) }()
+	cfg.Mode, cfg.Seed, cfg.Membership.Bots = ModeServer, 0x6E05, []string{"roam"}
+	a, _, gate := lobbyHost(t, cfg)
 	return a, gate
 }
 
@@ -359,20 +352,21 @@ func serveWithBots(t *testing.T, cfg Config) (*App, <-chan error) {
 // from a seat's, which is its holder's screen; a lobby of seats alone plays on the
 // screen a bot is given, whatever they report.
 func TestASeatNeverSizesTheMap(t *testing.T) {
-	t.Parallel()
+	// Not parallel: this binds real sockets.
 	seat := network.JoinerReport{Holder: engine.CoordinatorParticipant, Width: 200, Height: 60}
 
-	alone := geometryServer(t, 0, 0)
-	reportGeometry(t, alone, seat)
-	alone.membership.adoptLobbyGeometry()
+	alone, addr := sizingLobby(t, 0, 0, resource.Options{Embedded: true})
+	sizedBy(t, addr, seat)
 	if got := alone.Context().Width; got != BotWidth {
 		t.Fatalf("geometry = %d after a 200-wide seat alone, want a bot's %d", got, BotWidth)
 	}
 
-	joined := geometryServer(t, 0, 0)
-	reportGeometry(t, joined, seat)
-	reportGeometry(t, joined, network.JoinerReport{Width: 160, Height: 45})
-	joined.membership.adoptLobbyGeometry()
+	joined, addr := sizingLobby(t, 0, 0, pairScenario(t))
+	first := reported(t, joined, addr, 1, seat)
+	reported(t, joined, addr, 2, network.JoinerReport{Width: 160, Height: 45})
+	if _, err := first.WaitStart(); err != nil {
+		t.Fatalf("the lobby never closed on its seat and its person: %v", err)
+	}
 	if got := joined.Context().Width; got != 160 {
 		t.Fatalf("geometry = %d, want the person's 160 over the seat's 200", got)
 	}

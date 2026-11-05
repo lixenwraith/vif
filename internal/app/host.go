@@ -456,6 +456,16 @@ func (m *membership) beginHostingLocked(addr, authority string) error {
 	return nil
 }
 
+// openAwayLocked starts who is away from a session this run opens: whom it kept a
+// place for, longest first. Who was on the way back to the session it left stays
+// with that session, as does a place it asked a Wraith there to give up: an
+// identity it hands out again is somebody new. Caller holds sessionMu and MUST hold
+// updateMutex.
+func (m *membership) openAwayLocked(kept []network.RosterEntry) {
+	m.awayOrder, m.yielding, m.returning = m.awayOrderLocked(kept), 0, nil
+	m.dismissWraith.Store(0)
+}
+
 // doorsText names every door a port answers at, as a status line reads them.
 func doorsText(doors []net.Addr) string {
 	names := make([]string, len(doors))
@@ -538,11 +548,7 @@ func (m *membership) openSessionLocked(kept []network.RosterEntry) error {
 	self.Claim = m.ownClaim()
 	m.sessionRoster = append([]network.RosterEntry{self}, kept...)
 	m.sessionOffer = network.SessionOffer{}
-	// Who is away is whom the run kept a place for. Who was on the way back to the
-	// session it left stays with that session: an identity it hands out again is
-	// somebody new.
-	m.awayOrder, m.yielding, m.returning = m.awayOrderLocked(kept), 0, nil
-	m.dismissWraith.Store(0)
+	m.openAwayLocked(kept)
 	roster := slices.Clone(m.sessionRoster)
 	m.sessionMu.Unlock()
 

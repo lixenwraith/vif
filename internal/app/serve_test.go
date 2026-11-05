@@ -249,23 +249,23 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 // TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone covers the seam that lets a host
 // outlive its guests: the mid-run gate is installed from construction, answers
 // nothing until the run arms it, and finds the endpoint NetworkService contributed.
-// Both host shapes are driven, and the window between the two gates is the third
-// state — the only one whose honest answer is a refusal the dialer retries.
+// Both host shapes are driven through a lobby of one guest, and the window between
+// the two gates is the third state — the only one whose honest answer is a refusal
+// the dialer retries.
 func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 	// Not parallel: this binds a real socket.
 	for _, tt := range []struct {
-		name         string
-		mode         Mode
-		scripted     bool
-		participants int
-		peers        int
+		name     string
+		mode     Mode
+		scripted bool
+		peers    int
 	}{
 		{name: "dedicated", mode: ModeServer, peers: parameter.MaxPlayers},
-		{name: "lobby", mode: ModeHeadless, scripted: true, participants: 2, peers: 1},
+		{name: "lobby", mode: ModeHeadless, scripted: true, peers: parameter.MaxPlayers - 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := runConfig{Config: Config{
-				Mode: tt.mode, Membership: Membership{HostAddress: "127.0.0.1:0", Participants: tt.participants},
+				Mode: tt.mode, Membership: Membership{HostAddress: "127.0.0.1:0"},
 				Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E4E,
 			}}
 			cfg.wiring.scriptedSession = tt.scripted
@@ -282,25 +282,6 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 				t.Fatalf("the transport admits %d peers, want %d",
 					a.cfg.wiring.networkConfig.MaxPeers, tt.peers)
 			}
-
-			// Before the lobby closes the gate is startHostSessionOn's, and a second
-			// one would race it. An unarmed dial is therefore a no-op rather than a
-			// refusal.
-			a.membership.admitLateJoiner(2)
-			if a.membership.lateJoins.Load() {
-				t.Fatal("the mid-run gate armed itself")
-			}
-			// The window in between: the lobby's offers are already out and the
-			// mid-run gate waits on a capture a stopped clock never reaches.
-			a.membership.lobbyClosing.Store(true)
-			if _, err := a.membership.assignParticipant(nil); !errors.Is(err, ErrSessionStarting) {
-				t.Fatalf("a dial during the closing window returned %v, want ErrSessionStarting", err)
-			}
-			a.membership.openMidRunJoins()
-			if _, err := a.membership.assignParticipant(nil); err != nil {
-				t.Fatalf("a dial after the gate opened was refused: %v", err)
-			}
-
 			if err := a.hub.StartAll(); err != nil {
 				t.Fatalf("start services: %v", err)
 			}
@@ -308,6 +289,41 @@ func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 			if bound := port.Addr(); bound == nil {
 				t.Fatal("the endpoint is not bound")
 			}
+			addr := port.Addr().String()
+
+			// Before the lobby closes the gate is startHostSession's, and a second
+			// one would race it. The admission of the lobby's guest is therefore a
+			// no-op to the mid-run gate rather than a release: the clock the lobby
+			// holds still stays held until the run lets it go.
+			lobby := make(chan error, 1)
+			go func() { lobby <- a.membership.startHostSession(nil) }()
+			pending, offered := dialSession(t, addr)
+			defer pending.Close()
+			takePlace(t, pending, offered, network.JoinerReport{Width: 120, Height: 40})
+			select {
+			case err := <-lobby:
+				if err != nil {
+					t.Fatalf("the lobby: %v", err)
+				}
+			case <-time.After(socketWait): // [wall] a link bound, not a game one
+				t.Fatalf("the lobby did not close on its guest within %s", socketWait)
+			}
+			if !a.ctx.TimeCtl.OwnPause() {
+				t.Fatal("the lobby's guest released the clock its lobby holds still")
+			}
+
+			// The window in between: the lobby's offers are already out and the
+			// mid-run gate waits on a capture a stopped clock never reaches.
+			if _, _, err := dialOnce(addr); !errors.Is(err, &network.Refusal{Code: network.RefusalStarting}) ||
+				network.RetryOf(err) != network.RetrySoon {
+				t.Fatalf("a dial during the closing window returned %v, want a refusal to retry soon", err)
+			}
+			a.membership.openMidRunJoins()
+			late, _, err := dialOnce(addr)
+			if err != nil {
+				t.Fatalf("a dial after the gate opened was refused: %v", err)
+			}
+			late.Close()
 		})
 	}
 }
