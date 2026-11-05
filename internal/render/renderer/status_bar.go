@@ -179,10 +179,6 @@ type StatusBarRenderer struct {
 	// Energy telemetry
 	statDamageMultiplier *atomic.Int64
 
-	// Cursor blink state
-	cursorBlinkOn   bool
-	lastBlinkToggle time.Time
-
 	// The session cell as last drawn, and when; and since when it has said down.
 	// See networkItem.
 	netHeld   statusItem
@@ -257,12 +253,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 	}
 
-	// Cursor blink runs on wall time: it must continue while the world is paused
 	realNow := r.gameCtx.TimeCtl.RealTime()
-	if realNow.Sub(r.lastBlinkToggle) >= parameter.StatusCursorBlinkDuration {
-		r.cursorBlinkOn = !r.cursorBlinkOn
-		r.lastBlinkToggle = realNow
-	}
 
 	// === BUILD ITEMS, BY PRIORITY ===
 
@@ -502,9 +493,15 @@ func spill(msg []rune, width, room int) []rune {
 // renderInput is typed input and, unless an overlay holds the keys, its blinking cursor
 func (r *StatusBarRenderer) renderInput(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg color.RGB, cursorPos int) {
 	cursorX := r.renderInputText(buf, y, startX, maxWidth, text, fg, cursorPos)
-	if !r.gameCtx.IsOverlayActive() && r.cursorBlinkOn && cursorX < startX+maxWidth {
-		buf.SetWithBg(cursorX, y, parameter.StatusCursorChar, visual.RgbStatusCursor, visual.RgbStatusCursorBg)
+	if !r.gameCtx.IsOverlayActive() && cursorShown(r.gameCtx) && cursorX < startX+maxWidth {
+		buf.SetWithBg(cursorX, y, parameter.CursorChar, visual.RgbCursor, visual.RgbStatusCursorBg)
 	}
+}
+
+// cursorShown is the blink phase every typing cursor shares, the command line's and
+// the overlay's; it runs on wall time, so it blinks on while the world is paused
+func cursorShown(gameCtx *engine.GameContext) bool {
+	return gameCtx.TimeCtl.RealTime().UnixNano()/int64(parameter.CursorBlinkDuration)%2 == 0
 }
 
 // renderItems lays the items out across the row edge to edge: as many as fit, in

@@ -58,7 +58,7 @@ var (
 	RgbStatusBar           = color.White
 	RgbTruncateIndicator   = color.Black
 	RgbTruncateIndicatorBg = color.Orange
-	RgbStatusCursor        = color.Orange
+	RgbCursor              = color.Orange // every typing cursor, the command line's and each overlay field's
 	RgbStatusCursorBg      = color.Black
 
 	RgbPingHighlight  = color.DimGray

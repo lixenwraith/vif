@@ -268,6 +268,9 @@ that proves wrong or that a document now states, and link the document instead.
 - On the Linux console the 256 tier shows sixteen colours: a pale tint over a rim
   falls to the rim's own, so a glow that must read there is near white, as the
   Wraith field's is.
+- The 256 tier finishes every frame on a console palette even in an emulator, so a
+  background has eight entries: a white one lands on the grey the overlay's text
+  box takes, and a cursor there needs a hue (the orange's yellow) to show.
 
 ## Widgets
 
@@ -279,7 +282,8 @@ that proves wrong or that a document now states, and link the document instead.
 - Run `bin/vif` in a tmux pane (`-nw` starts it without waiting for a key) and read
   it with `tmux capture-pane -p -e`, which keeps the SGR colours; turned into HTML
   spans and shot with Playwright, it shows real colours. `TERM=linux COLORTERM=`
-  gives the console tier.
+  gives the console tier. The capture carries SGR state from one line into the
+  next, so a converter that resets colours at each line paints wrong backgrounds.
 - Drive it with `tmux send-keys`: `:emit <Event> { ... }` raises any event, `:god`
   arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
   `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.
