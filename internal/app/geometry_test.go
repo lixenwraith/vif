@@ -435,7 +435,7 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 		{"a sized headless run", sized, 90, 28},
 	} {
 		var w, h int
-		tt.a.World().RunSafe(func() { w, h = tt.a.membership.seatScreenLocked() })
+		tt.a.World().RunSafe(func() { w, h = membershipRun{tt.a}.SeatScreenLocked() })
 		if w != tt.w || h != tt.h {
 			t.Errorf("%s seats its bots on %dx%d, want %dx%d", tt.name, w, h, tt.w, tt.h)
 		}

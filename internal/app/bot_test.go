@@ -165,10 +165,13 @@ func driveBot(t *testing.T, cfg Config, graph string, hold func() bool) (*App, f
 	return driveRun(t, "bot", runConfig{Config: cfg}, graph, hold)
 }
 
-// seatApp is the run seat s plays, nil until it is seated and once it leaves.
-func seatApp(s *seat) *App {
-	if r, ok := s.running().(seatRun); ok {
-		return r.App
+// seatRunOf is the run holder plays for its one seat, nil until it is seated, once
+// it leaves and while the holder plays others.
+func seatRunOf(holder *App) *seatRun {
+	holder.seatRunsMu.Lock()
+	defer holder.seatRunsMu.Unlock()
+	if len(holder.seatRuns) == 1 {
+		return holder.seatRuns[0]
 	}
 	return nil
 }
@@ -365,10 +368,8 @@ func TestASeatHoldsWithItsWorld(t *testing.T) {
 	waitForCursors(t, holder, 2)
 	var b *App
 	until("the bot to be seated", func() bool {
-		holder.membership.seatsMu.Lock()
-		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 {
-			b = seatApp(holder.membership.seats[0])
+		if s := seatRunOf(holder); s != nil {
+			b = s.run
 		}
 		return b != nil
 	})
@@ -399,10 +400,8 @@ func TestTheRosterCardsNameABotAndItsHolder(t *testing.T) {
 	waitForCursors(t, holder, 2)
 	var b *App
 	waitUntil(t, func() bool {
-		holder.membership.seatsMu.Lock()
-		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 {
-			b = seatApp(holder.membership.seats[0])
+		if s := seatRunOf(holder); s != nil {
+			b = s.run
 		}
 		return b != nil
 	}, "the bot seated")
@@ -477,16 +476,12 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 		t.Fatalf("add bot: %v", err)
 	}
 	waitForCursors(t, holder, 2)
-	var s *seat
+	var s *seatRun
 	until("the bot to be seated", func() bool {
-		holder.membership.seatsMu.Lock()
-		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 && seatApp(holder.membership.seats[0]) != nil {
-			s = holder.membership.seats[0]
-		}
+		s = seatRunOf(holder)
 		return s != nil
 	})
-	slot := int(s.slot.Load())
+	slot := s.slot
 	drives := func(a *App) (e core.Entity) {
 		a.World().RunSafe(func() { e = a.World().Resources.Player.Entity })
 		return e
@@ -501,7 +496,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	}
 	var paths []string
 	for round := range 2 {
-		b := seatApp(s)
+		b := s.run
 		until("the bot to drive its own cursor", func() bool { return bound(b) })
 		holderCursor, seatCursor := drives(holder), drives(b)
 		// The second opening is asked with the first journals' stop, before either loop serves it
@@ -531,7 +526,7 @@ func TestARunAndItsBotsJournalMidSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
-	b := seatApp(s)
+	b := s.run
 	until("both journals to close", func() bool { return holder.scribe.Recorder() == nil && b.scribe.Recorder() == nil })
 	stop()
 	for _, p := range paths {
@@ -562,11 +557,9 @@ func TestASeatsOpeningLeavesItsRunAsItWas(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatal("timed out waiting for the bot to play")
 		}
-		holder.membership.seatsMu.Lock()
-		if len(holder.membership.seats) == 1 {
-			b = seatApp(holder.membership.seats[0])
+		if s := seatRunOf(holder); s != nil {
+			b = s.run
 		}
-		holder.membership.seatsMu.Unlock()
 	}
 	// Under the seat's own lock throughout, so its loop takes no step in between
 	var before, after []string
@@ -615,16 +608,12 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add bot: %v", err)
 	}
-	var s *seat
+	var s *seatRun
 	until("the bot to be seated", func() bool {
-		holder.membership.seatsMu.Lock()
-		defer holder.membership.seatsMu.Unlock()
-		if len(holder.membership.seats) == 1 && seatApp(holder.membership.seats[0]) != nil {
-			s = holder.membership.seats[0]
-		}
+		s = seatRunOf(holder)
 		return s != nil
 	})
-	slot, b := int(s.slot.Load()), seatApp(s)
+	slot, b := s.slot, s.run
 	holder.World().RunSafe(func() { err = ctl.StartJournal(slot) })
 	if err != nil {
 		t.Fatalf("start: %v", err)
@@ -641,6 +630,28 @@ func TestASeatsJournalClosesWithItsBot(t *testing.T) {
 	}
 	if st, err := VerifyJournal(Config{}, path); err != nil {
 		t.Fatalf("%s reproduced %d digests: %v", path, st.Digests, err)
+	}
+	// Its run is gone with it, not a leaving bot's still
+	holder.World().RunSafe(func() { err = ctl.StartJournal(slot) })
+	if err == nil || !strings.Contains(err.Error(), "no bot of this run's") {
+		t.Fatalf("a journal asked of the slot the bot left: %v", err)
+	}
+}
+
+// TestASeatsRunsListInTheOrderItsSeatsCame: a seat seated ahead of an earlier one
+// lists after it, as its holder's seats do.
+func TestASeatsRunsListInTheOrderItsSeatsCame(t *testing.T) {
+	t.Parallel()
+	a := &App{}
+	for _, n := range []uint64{2, 3, 1} {
+		a.addSeatRun(&seatRun{number: n})
+	}
+	var got []uint64
+	for _, s := range a.seatRuns {
+		got = append(got, s.number)
+	}
+	if !slices.Equal(got, []uint64{1, 2, 3}) {
+		t.Fatalf("seat runs listed as %v", got)
 	}
 }
 
@@ -674,7 +685,7 @@ func TestASeatEndsWithItsSessionUnlessItsHoldersLoopTakesItOn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		src := &seatSource{botSource: botSource{d}, ends: holder.membership.seatEnds(tt.mode, seatRun{seated}), screen: &holder.seatScreen,
+		src := &seatSource{botSource: botSource{d}, ends: seatEnds(tt.mode, holder.world, seated.world), screen: &holder.seatScreen,
 			run: seated, shown: screen{BotWidth, BotHeight}}
 		tt.fork(holder, seated)
 		more, err := src.Step()
@@ -1007,9 +1018,10 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 	if port.PeerCount() != 2 {
 		t.Fatal("the holder has no warm link to its bot")
 	}
-	holder.membership.seatsMu.Lock()
-	kept := holder.membership.seats[0]
-	holder.membership.seatsMu.Unlock()
+	kept := seatRunOf(holder)
+	if kept == nil {
+		t.Fatal("the holder plays no run for its bot")
+	}
 	stop()
 	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		if holder.authority.Holder() == holder.authority.Local() && !holder.authority.Migrating() {
@@ -1028,10 +1040,11 @@ func TestAnInheritedSessionSeatsBotsWithoutReplacingItsExistingLinks(t *testing.
 		t.Fatalf("adding bots: %v", err)
 	}
 	waitForCursors(t, holder, 5)
-	select {
-	case <-kept.done:
+	holder.seatRunsMu.Lock()
+	playing := slices.Contains(holder.seatRuns, kept)
+	holder.seatRunsMu.Unlock()
+	if !playing {
 		t.Fatal("the holder's existing bot was replaced during migration")
-	default:
 	}
 }
 

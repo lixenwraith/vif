@@ -91,8 +91,12 @@ type App struct {
 	router       *mode.Router
 
 	// seatScreen is this run's terminal as its seats follow it, published on each
-	// resize by a run whose terminal is its geometry; nil until the first.
+	// resize by a run whose terminal is its geometry; nil until the first. seatRuns
+	// are the runs it plays for its seats while they play (PlaySeat); seatRunsMu is
+	// never held across a seat's own work.
 	seatScreen atomic.Pointer[screen]
+	seatRunsMu sync.Mutex
+	seatRuns   []*seatRun
 
 	scheduler      *engine.Scheduler
 	frameReady     chan struct{}

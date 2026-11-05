@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/app/internal/scribe"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -85,19 +84,12 @@ type seat struct {
 	once   sync.Once
 	id     atomic.Uint32 // the participant it was admitted as, zero until then
 	slot   atomic.Uint32
-	run    atomic.Pointer[seatRunner] // the seat's own run, nil until seated and once it leaves
-}
-
-// seatRunner is a seat's own run as its holder reads it: the membership it joined
-// with, and the scribe that keeps its journal.
-type seatRunner interface {
-	Membership() *membership
-	Scribe() *scribe.Scribe
 }
 
 // seatPlay is a seat's run as its holder hands it to be played (memberRun.PlaySeat):
 // the Config and wiring it joins with and its log, the graph it plays, the channel
-// that halts it and the pause it stands still with.
+// that halts it, the pause it stands still with, its holder's mode as it was seated
+// and its number among its holder's seats.
 type seatPlay struct {
 	config Config
 	wiring membershipWiring
@@ -105,17 +97,11 @@ type seatPlay struct {
 	graph  *bot.Graph
 	stop   <-chan os.Signal
 	hold   func() bool
+	mode   Mode
+	number uint64
 }
 
 func (s *seat) halt() { s.once.Do(func() { close(s.stop) }) }
-
-// running is the seat's own run, nil until it is seated and once it leaves.
-func (s *seat) running() seatRunner {
-	if r := s.run.Load(); r != nil {
-		return *r
-	}
-	return nil
-}
 
 // halted reports whether the seat was told to leave
 func (s *seat) halted() bool {
@@ -125,21 +111,6 @@ func (s *seat) halted() bool {
 	default:
 		return false
 	}
-}
-
-// seatJournalSummaries names the journal each seated bot keeps, by slot.
-func (m *membership) seatJournalSummaries() []string {
-	var parts []string
-	m.seatsMu.Lock()
-	for _, s := range m.seats {
-		if b := s.running(); b != nil {
-			if p := b.Scribe().Recorder().Path(); p != "" {
-				parts = append(parts, fmt.Sprintf("slot %X to %s", s.slot.Load(), p))
-			}
-		}
-	}
-	m.seatsMu.Unlock()
-	return parts
 }
 
 // seatHalted reports whether participant id is a seat this run told to leave, so
@@ -193,8 +164,9 @@ func (m *membership) addSeatLocked(spec string) error {
 	m.seats = append(m.seats, s)
 	m.seatsMu.Unlock()
 	play.log = vlog.NewLog("seat " + strconv.FormatUint(s.number, 10))
-	mode := m.run.Mode() // the seat's goroutine reads nothing of its holder's config
-	core.Go(func() { m.playSeat(s, play, mode) })
+	play.mode = m.run.Mode() // the seat's goroutine reads nothing of its holder's config
+	play.number = s.number
+	core.Go(func() { m.playSeat(s, play) })
 	return nil
 }
 
@@ -207,7 +179,7 @@ func (m *membership) seatConfigLocked() (seatPlay, error) {
 			return seatPlay{}, err
 		}
 	}
-	width, height := m.seatScreenLocked()
+	width, height := m.run.SeatScreenLocked()
 	return seatPlay{
 		config: Config{Mode: ModeHeadless, Resources: m.run.Resources(), Width: width, Height: height,
 			StatTicks: -1, RecTicks: -1, Membership: Membership{NoAdvertise: true, JoinAddress: seatJoin,
@@ -245,54 +217,35 @@ func (m *membership) seatLink() (net.Conn, error) {
 	return far, nil
 }
 
-// seatScreenLocked is the screen a new seat plays in: its holder's, so a person's bots
-// see what that person sees, or a bot's own for a holder that names none, a server or
-// headless run given no -size. Caller holds updateMutex.
-func (m *membership) seatScreenLocked() (int, int) {
-	if m.run.GeometryDefaulted() || !engine.ViewportFits(m.ctx.Width, m.ctx.Height) {
-		return BotWidth, BotHeight
-	}
-	return m.ctx.Width, m.ctx.Height
-}
-
 // playSeat runs one seat until its holder halts it, its graph quits, or the session
-// ends for it (seatEnds), standing still while its holder's pause does. A join
-// refused while the session starts or hands off is retried, as the refusal asks;
-// any other failure ends it. mode is the holder's, read as it was seated.
-func (m *membership) playSeat(s *seat, play seatPlay, mode Mode) {
+// ends for it, standing still while its holder's pause does. A join refused while
+// the session starts or hands off is retried, as the refusal asks; any other failure
+// ends it.
+func (m *membership) playSeat(s *seat, play seatPlay) {
 	defer close(s.done)
 	defer m.forgetSeat(s)
 	play.graph, play.stop = s.graph, s.stop
 	// A holder whose clock stops when paused stops its seats with it; a driven one
 	// steps through a pause, and so do they. A hold reaches them as the crossing it
 	// is, at the tick every participant stops at.
-	if !mode.Driven() {
+	if !play.mode.Driven() {
 		play.hold = m.ctx.TimeCtl.OwnPause
 	}
 	deadline := time.Now().Add(parameter.SessionRejoinWindow) // [wall] a link bound
 	for {
 		var driver *bot.Driver
-		run, finished, err := m.run.PlaySeat(play, func(b seatRunner, d *bot.Driver) []*atomic.Bool {
+		finished, err := m.run.PlaySeat(play, func(run *membership, d *bot.Driver) int {
 			driver = d
 			// The offer rather than the world: the cursor binds a tick later.
-			bm := b.Membership()
-			bm.sessionMu.Lock()
-			entry, _ := bm.sessionOffer.Entry(bm.sessionOffer.Assigned)
-			bm.sessionMu.Unlock()
+			run.sessionMu.Lock()
+			entry, _ := run.sessionOffer.Entry(run.sessionOffer.Assigned)
+			run.sessionMu.Unlock()
 			s.slot.Store(uint32(entry.Slot))
 			s.id.Store(uint32(entry.ID))
-			s.run.Store(&b)
 			m.log.Info("app", "msg", "bot seated", "graph", s.graph.Name,
 				"peer", s.id.Load(), "slot", s.slot.Load())
-			return m.seatEnds(mode, b)
+			return int(entry.Slot)
 		})
-		// Under seatsMu, so an ask lands before this or finds no run
-		m.seatsMu.Lock()
-		s.run.Store(nil)
-		m.seatsMu.Unlock()
-		if run != nil {
-			m.seatJournalLeft(int(s.slot.Load()), run)
-		}
 		if driver == nil && err != nil && network.RetryOf(err) == network.RetrySoon && time.Now().Before(deadline) &&
 			waitScriptTick(s.stop, parameter.SessionRejoinInterval) {
 			continue
@@ -309,16 +262,6 @@ func (m *membership) playSeat(s *seat, play seatPlay, mode Mode) {
 		}
 		return
 	}
-}
-
-// seatEnds is what ends seat, one of this run's, besides this run halting it: the
-// seat's fork or this run's. A play run's loop takes its fork into a session of its
-// own and seats its bots again there (forked), so nothing but the run ends its seats.
-func (m *membership) seatEnds(mode Mode, seat seatRunner) []*atomic.Bool {
-	if mode == ModePlay {
-		return nil
-	}
-	return []*atomic.Bool{forkCell(seat.Membership().world), forkCell(m.world)}
 }
 
 func (m *membership) forgetSeat(s *seat) {
@@ -380,94 +323,6 @@ func (m *membership) stopSeat(match func(*seat) bool) bool {
 		}
 	}
 	return false
-}
-
-// askSeatJournal asks the seat on slot to open or close its journal, which its own
-// loop serves between two of its steps; the outcome reaches this run's status line.
-// A seat is a run of its own, so it journals its own player domain, which no other
-// instance can: another participant's never leaves its machine.
-func (m *membership) askSeatJournal(slot int, start bool) error {
-	// Held to the ask, so a seat leaving takes it up or this finds no run
-	m.seatsMu.Lock()
-	defer m.seatsMu.Unlock()
-	var b *scribe.Scribe
-	leaving := false
-	for _, s := range m.seats {
-		if run := s.running(); run != nil && int(s.slot.Load()) == slot {
-			// A leaving seat's loop serves no more asks, and a live one may share its slot
-			if !s.halted() {
-				b = run.Scribe()
-				break
-			}
-			leaving = true
-		}
-	}
-	switch {
-	case b == nil && leaving && start:
-		return fmt.Errorf("the bot on slot %X is leaving", slot)
-	case b == nil && leaving:
-		return fmt.Errorf("the bot on slot %X is leaving; its journal closes with it", slot)
-	case b == nil:
-		return fmt.Errorf("no bot of this run's is on slot %X", slot)
-	case start && b.Recorder() != nil && !b.AskPending():
-		return fmt.Errorf("slot %X already journals to %s", slot, b.Recorder().Path())
-	case !start && b.CancelJournalStart():
-		return nil
-	case !start && b.Recorder() == nil:
-		return fmt.Errorf("slot %X keeps no journal", slot)
-	}
-	report := func(path string, err error) { m.reportSeatJournal(slot, start, path, err) }
-	if !b.QueueJournalAsk(start, report) {
-		return fmt.Errorf("slot %X is already opening or closing a journal", slot)
-	}
-	return nil
-}
-
-// seatJournalLeft tells this run's player what became of a seat's journal as its run
-// closed, which only the seat's Close saw: the journal it shut, or a start its loop
-// never served. Called on the seat's goroutine once its run has closed.
-func (m *membership) seatJournalLeft(slot int, run seatRunner) {
-	run.Scribe().AbandonAsks(errors.New("the bot left before it opened"))
-	switch path, err := run.Scribe().ClosedAtExit(); {
-	case err != nil:
-		m.log.Warn("journal", "msg", "seat journal not closed", "slot", slot, "error", err.Error())
-		m.ctx.SetStatusMessage(fmt.Sprintf("Slot %X left; its journal %s", slot, err), parameter.StatusAlert)
-	case path != "":
-		m.log.Info("journal", "msg", "seat journal closed", "slot", slot, "path", path, "reason", "bot left")
-		m.ctx.SetStatusMessage(fmt.Sprintf("Slot %X left; its journal closed: %s", slot, path), parameter.StatusNotice)
-	}
-}
-
-// reportSeatJournal tells this run's player how a seat's journal start or stop went.
-// It runs on the seat's goroutine, or the holder's for a start a stop cancelled; the
-// status line and the log take either.
-func (m *membership) reportSeatJournal(slot int, start bool, path string, err error) {
-	switch {
-	case err != nil:
-		m.log.Warn("journal", "msg", "seat journal not changed", "slot", slot, "start", start, "error", err.Error())
-		m.ctx.SetStatusMessage(fmt.Sprintf("Journal on slot %X: %s", slot, err), parameter.StatusAlert)
-	case start:
-		m.log.Info("journal", "msg", "seat journal opened", "slot", slot, "path", path)
-		m.ctx.SetStatusMessage(fmt.Sprintf("Slot %X journaling to %s", slot, path), parameter.StatusNotice)
-	default:
-		m.log.Info("journal", "msg", "seat journal closed", "slot", slot, "path", path)
-		m.ctx.SetStatusMessage(fmt.Sprintf("Slot %X journal closed: %s", slot, path), parameter.StatusNotice)
-	}
-}
-
-// seatJournalNotices names each journal a seat of this run keeps, which closes with it.
-func (m *membership) seatJournalNotices() []string {
-	m.seatsMu.Lock()
-	defer m.seatsMu.Unlock()
-	var out []string
-	for _, s := range m.seats {
-		if b := s.running(); b != nil {
-			if r := b.Scribe().Recorder(); r != nil {
-				out = append(out, fmt.Sprintf("slot %X journal closed: %s", s.slot.Load(), r.Path()))
-			}
-		}
-	}
-	return out
 }
 
 // seatGraphs are the graphs of the seats this run holds, in the order they came; a
