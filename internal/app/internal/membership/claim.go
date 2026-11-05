@@ -1,4 +1,4 @@
-package app
+package membership
 
 import (
 	"encoding/json"
@@ -6,18 +6,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// claimKeeper is what one process comes back to its sessions with: the token each
+// ClaimKeeper is what one process comes back to its sessions with: the token each
 // of its runs and seats joined under, and what its cursor held when it left. Every
 // run of the process and every seat it holds shares one.
-type claimKeeper struct {
+type ClaimKeeper struct {
 	mu     sync.Mutex
 	claims []*claim // oldest first
-	store  ClaimStore
+	store  config.ClaimStore
 	stored time.Time // [wall] the last write a sync made
 }
 
@@ -30,10 +31,10 @@ type claim struct {
 	held   bool
 }
 
-// newClaimKeeper reads the claims store kept, if any; a document or a claim this
+// NewClaimKeeper reads the claims store kept, if any; a document or a claim this
 // build cannot read is left out, and replaced at the next change.
-func newClaimKeeper(store ClaimStore) *claimKeeper {
-	k := &claimKeeper{store: store}
+func NewClaimKeeper(store config.ClaimStore) *ClaimKeeper {
+	k := &ClaimKeeper{store: store}
 	if store == nil {
 		return k
 	}
@@ -47,7 +48,7 @@ func newClaimKeeper(store ClaimStore) *claimKeeper {
 }
 
 // tokens is what a dial of the kind names: each claim of it no run holds.
-func (k *claimKeeper) tokens(bot bool) []string {
+func (k *ClaimKeeper) tokens(bot bool) []string {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	var out []string
@@ -61,7 +62,7 @@ func (k *claimKeeper) tokens(bot bool) []string {
 
 // take holds the claim an offer gives a place back under: the place it assigns
 // waits under that claim's digest. Nil is an offer of a new place.
-func (k *claimKeeper) take(o network.SessionOffer, bot bool) *claim {
+func (k *ClaimKeeper) take(o network.SessionOffer, bot bool) *claim {
 	entry, _ := o.Entry(o.Assigned)
 	if entry.Claim == "" {
 		return nil
@@ -78,7 +79,7 @@ func (k *claimKeeper) take(o network.SessionOffer, bot bool) *claim {
 }
 
 // issue holds a new claim, for a new place.
-func (k *claimKeeper) issue(bot bool) *claim {
+func (k *ClaimKeeper) issue(bot bool) *claim {
 	c := &claim{Token: network.NewClaimToken(), Bot: bot, held: true}
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -90,7 +91,7 @@ func (k *claimKeeper) issue(bot bool) *claim {
 // token over the record the place left with, so the claim it left under keeps that
 // record for a return to the session it left. Nil when no claim a run gave up has
 // that digest.
-func (k *claimKeeper) carry(digest string) *claim {
+func (k *ClaimKeeper) carry(digest string) *claim {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	i := slices.IndexFunc(k.claims, func(c *claim) bool { return !c.held && network.ClaimDigest(c.Token) == digest })
@@ -109,7 +110,7 @@ func (k *claimKeeper) carry(digest string) *claim {
 
 // addLocked keeps one more claim, and the oldest no run holds give way to it.
 // Caller holds mu.
-func (k *claimKeeper) addLocked(c *claim) {
+func (k *ClaimKeeper) addLocked(c *claim) {
 	k.claims = append(k.claims, c)
 	for i := 0; len(k.claims) > parameter.ClaimsKept && i < len(k.claims); i++ {
 		if !k.claims[i].held {
@@ -122,7 +123,7 @@ func (k *claimKeeper) addLocked(c *claim) {
 
 // keep records the cursor a held claim's run plays as its last sync sent it, which
 // is what the player brings back should it leave.
-func (k *claimKeeper) keep(c *claim, r event.CursorRecord) {
+func (k *ClaimKeeper) keep(c *claim, r event.CursorRecord) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if !c.held {
@@ -137,7 +138,7 @@ func (k *claimKeeper) keep(c *claim, r event.CursorRecord) {
 
 // release gives a claim up once its run is out of the session, its record as it was
 // then: what the run plays afterwards, alone or elsewhere, is not what it brings back.
-func (k *claimKeeper) release(c *claim) {
+func (k *ClaimKeeper) release(c *claim) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	c.held = false
@@ -146,7 +147,7 @@ func (k *claimKeeper) release(c *claim) {
 
 // hold takes a claim back for the run that let it go to redial its host, its record
 // as it was: false once a dial took it or newer claims pushed it out.
-func (k *claimKeeper) hold(c *claim) bool {
+func (k *ClaimKeeper) hold(c *claim) bool {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if c.held || !slices.Contains(k.claims, c) {
@@ -157,7 +158,7 @@ func (k *claimKeeper) hold(c *claim) bool {
 }
 
 // forget drops a claim whose place is gone: its participant was dismissed.
-func (k *claimKeeper) forget(c *claim) {
+func (k *ClaimKeeper) forget(c *claim) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.claims = slices.DeleteFunc(k.claims, func(o *claim) bool { return o == c })
@@ -165,7 +166,7 @@ func (k *claimKeeper) forget(c *claim) {
 }
 
 // storeLocked hands the store the claims as they stand. Caller holds mu.
-func (k *claimKeeper) storeLocked() {
+func (k *ClaimKeeper) storeLocked() {
 	if k.store == nil {
 		return
 	}

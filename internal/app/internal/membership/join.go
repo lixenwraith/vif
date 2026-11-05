@@ -1,4 +1,4 @@
-package app
+package membership
 
 import (
 	"errors"
@@ -15,15 +15,15 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// ErrJoinMidRun is returned by Join, the admission that re-derives the world, when
+// errJoinMidRun is returned by Join, the admission that re-derives the world, when
 // the two participants are not at the same position; JoinAt admits at any tick for
 // a caller that installs the world it is sent.
-var ErrJoinMidRun = errors.New("join: participants are not at the same position")
+var errJoinMidRun = errors.New("join: participants are not at the same position")
 
 // JoinAnchor describes this session to a participant that wants to share it: the
 // identity VerifyAnchor already checks, plus the live D-14 map latch.
 // The terminal fields describe this instance and the joiner ignores them.
-func (m *membership) JoinAnchor() event.JoinAnchor {
+func (m *Membership) JoinAnchor() event.JoinAnchor {
 	var out event.JoinAnchor
 	m.world.RunSafe(func() { out = m.joinAnchorLocked() })
 	return out
@@ -32,7 +32,7 @@ func (m *membership) JoinAnchor() event.JoinAnchor {
 // joinAnchorLocked is JoinAnchor for a caller that already holds the world lock —
 // the operator `:host` path does, because mode/ runs inside it.
 // Caller MUST hold updateMutex.
-func (m *membership) joinAnchorLocked() event.JoinAnchor {
+func (m *Membership) joinAnchorLocked() event.JoinAnchor {
 	an := m.run.BuildAnchor()
 	an.Schema = event.JournalSchema
 	cfg := m.world.Resources.Config
@@ -43,18 +43,18 @@ func (m *membership) joinAnchorLocked() event.JoinAnchor {
 	return event.JoinAnchor{Anchor: an}
 }
 
-// Join admits this App into the session an anchor describes: it verifies the
+// Join admits this run into the session an anchor describes: it verifies the
 // identity, refuses a position it cannot reconstruct, and adopts the map latch. Call
 // after NewHeadless, before the first Tick. JoinAt is the same admission for a
 // participant that receives the world instead of re-deriving it.
-func (m *membership) Join(j event.JoinAnchor) error { return m.join(j, false) }
+func (m *Membership) Join(j event.JoinAnchor) error { return m.join(j, false) }
 
-// JoinAt admits this App into a session at whatever tick the host has reached. The
+// JoinAt admits this run into a session at whatever tick the host has reached. The
 // caller installs the capture; this only checks that the two instances are the same
 // simulation and adopts the shared bounds.
-func (m *membership) JoinAt(j event.JoinAnchor) error { return m.join(j, true) }
+func (m *Membership) JoinAt(j event.JoinAnchor) error { return m.join(j, true) }
 
-func (m *membership) join(j event.JoinAnchor, midRun bool) error {
+func (m *Membership) join(j event.JoinAnchor, midRun bool) error {
 	an := j.Anchor
 	if err := corrector.FirstAnchorMismatch("join", m.run.SessionAnchorFields(an)); err != nil {
 		return err
@@ -64,7 +64,7 @@ func (m *membership) join(j event.JoinAnchor, midRun bool) error {
 	}
 	if st := m.run.Position(); !midRun && (st.Run != an.Run || st.Tick != an.Tick) {
 		return fmt.Errorf("%w: host at run %d tick %d, this instance at run %d tick %d",
-			ErrJoinMidRun, an.Run, an.Tick, st.Run, st.Tick)
+			errJoinMidRun, an.Run, an.Tick, st.Run, st.Tick)
 	}
 	m.adoptMapLatch(an)
 	return nil
@@ -73,7 +73,7 @@ func (m *membership) join(j event.JoinAnchor, midRun bool) error {
 // JoinSession verifies a coordinator offer and adopts its map and roster. It is the
 // tick-zero form, kept for a harness that builds both worlds itself; the session
 // path takes JoinSessionAt.
-func (m *membership) JoinSession(o network.SessionOffer) error {
+func (m *Membership) JoinSession(o network.SessionOffer) error {
 	if err := m.validateSessionOffer(o, o.Assigned); err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (m *membership) JoinSession(o network.SessionOffer) error {
 // map latch, which a capture's placements are relative to; the FSM boot's queued spawn,
 // which declares the cursor template; the staged install; then the roster on the
 // installed world. bytes is the capture's wire cost, zero for one this run did not receive.
-func (m *membership) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture, bytes int) error {
+func (m *Membership) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture, bytes int) error {
 	if err := m.validateSessionOffer(o, o.Assigned); err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (m *membership) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCa
 }
 
 // HostSession applies the same map and roster sequence after a guest accepts.
-func (m *membership) HostSession(o network.SessionOffer) error {
+func (m *Membership) HostSession(o network.SessionOffer) error {
 	if err := m.validateSessionOffer(o, o.Host); err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (m *membership) HostSession(o network.SessionOffer) error {
 	return m.configureSessionRoster(o, o.Host)
 }
 
-func (m *membership) validateSessionOffer(o network.SessionOffer, local link.PeerID) error {
+func (m *Membership) validateSessionOffer(o network.SessionOffer, local link.PeerID) error {
 	if err := o.Validate(); err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func cursorParticipants(participants []network.RosterEntry) int {
 }
 
 // configureSessionRoster creates slots in coordinator order, then applies local control.
-func (m *membership) configureSessionRoster(o network.SessionOffer, local link.PeerID) error {
+func (m *Membership) configureSessionRoster(o network.SessionOffer, local link.PeerID) error {
 	participants := make([]network.RosterEntry, 0, len(o.Roster))
 	for _, p := range o.Roster {
 		if p.Slot != parameter.NoPlayerSlot {
@@ -219,7 +219,7 @@ func (m *membership) configureSessionRoster(o network.SessionOffer, local link.P
 // the cursor this participant takes arrives as the EventParticipantJoined crossing at
 // one agreed tick, the only way a shared entity may be created after tick zero
 // (D-11), so a slot the offer names and the world does not hold is normal here.
-func (m *membership) bindSessionControl(o network.SessionOffer, local link.PeerID) error {
+func (m *Membership) bindSessionControl(o network.SessionOffer, local link.PeerID) error {
 	m.world.RunSafe(func() { m.bindCursorOwnersLocked(o.Roster, local) })
 	localAssignment, ok := o.Entry(local)
 	if !ok {
@@ -235,7 +235,7 @@ func (m *membership) bindSessionControl(o network.SessionOffer, local link.PeerI
 			slot = parameter.NoPlayerSlot
 		}
 	})
-	if slot != m.localSlot() {
+	if slot != m.LocalSlot() {
 		m.ctx.PushEventOrigin(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: slot}, event.OriginDebug)
 		m.scheduler.Settle()
 	}
@@ -248,7 +248,7 @@ func (m *membership) bindSessionControl(o network.SessionOffer, local link.PeerI
 // a succession cannot see leave. A Wraith keeps the owner it left with, driven by
 // nobody, under the claim the roster names, which a session a run opens names
 // afresh for its bots. Caller MUST hold updateMutex.
-func (m *membership) bindCursorOwnersLocked(participants []network.RosterEntry, local link.PeerID) {
+func (m *Membership) bindCursorOwnersLocked(participants []network.RosterEntry, local link.PeerID) {
 	roster := m.world.Resources.Player
 	for _, p := range participants {
 		if p.Slot == parameter.NoPlayerSlot {
@@ -272,15 +272,15 @@ func (m *membership) bindCursorOwnersLocked(participants []network.RosterEntry, 
 	}
 }
 
-// localSlot returns the roster slot this instance's input follows.
-func (m *membership) localSlot() uint8 {
+// LocalSlot returns the roster slot this instance's input follows.
+func (m *Membership) LocalSlot() uint8 {
 	var slot uint8
 	m.world.RunSafe(func() { slot = m.world.Resources.Player.LocalSlot() })
 	return slot
 }
 
 // localParticipant is this instance's session identity, zero outside a session.
-func (m *membership) localParticipant() uint32 {
+func (m *Membership) localParticipant() uint32 {
 	var id uint32
 	m.world.RunSafe(func() { id = m.world.LocalParticipant() })
 	return id
@@ -291,27 +291,27 @@ func (m *membership) localParticipant() uint32 {
 // they would for a map script and entities are kept. Config.MapWidth has already
 // installed the latch, so this is the confirmation; it runs unconditionally because
 // the event is part of the session's record stream a replay has to see.
-func (m *membership) adoptMapLatch(an event.JournalAnchor) {
+func (m *Membership) adoptMapLatch(an event.JournalAnchor) {
 	m.ctx.PushEventOrigin(event.EventLevelSetup, &event.LevelSetupPayload{
 		Width: an.MapWidth, Height: an.MapHeight, CropOnResize: an.CropOnResize,
 	}, event.OriginDebug)
 	m.scheduler.Settle()
 }
 
-// AttachTransport binds a transport to this App, for a harness or an embedder that
+// AttachTransport binds a transport to this run, for a harness or an embedder that
 // builds its own endpoint instead of taking the one NetworkService contributes.
 // NetworkSystem reads the port per tick, so this needs no re-registration.
-func (m *membership) AttachTransport(port engine.NetworkPort) {
+func (m *Membership) AttachTransport(port engine.NetworkPort) {
 	m.world.RunSafe(func() { m.attachTransportLocked(port) })
 }
 
 // attachTransportLocked is AttachTransport for a caller that already holds the
 // world lock — the operator command path does, because mode/ runs inside it.
 // Caller MUST hold updateMutex.
-func (m *membership) attachTransportLocked(port engine.NetworkPort) {
+func (m *Membership) attachTransportLocked(port engine.NetworkPort) {
 	r := engine.NewNetworkResource(port)
-	m.bindSessionHooks(r)
-	term, holder := m.authorityStamp()
+	m.BindSessionHooks(r)
+	term, holder := m.AuthorityStamp()
 	if holder != 0 {
 		r.Authority.Store(holder)
 		r.Term.Store(uint64(term))
@@ -322,9 +322,9 @@ func (m *membership) attachTransportLocked(port engine.NetworkPort) {
 	m.ctx.PublishMapLock()
 }
 
-// bindSessionHooks answers a network resource from this run's session layer, the
+// BindSessionHooks answers a network resource from this run's session layer, the
 // service's endpoint and an attached one alike.
-func (m *membership) bindSessionHooks(r *engine.NetworkResource) {
+func (m *Membership) BindSessionHooks(r *engine.NetworkResource) {
 	r.Relay = uint32(m.joinedThrough)
 	r.OnDeparture = m.participantDeparted
 	// Replays and staging worlds apply roster changes without ending their viewer.
@@ -332,7 +332,7 @@ func (m *membership) bindSessionHooks(r *engine.NetworkResource) {
 		r.OnDismissed = func(shed bool) {
 			m.shed.Store(shed)
 			m.dismissed.Store(true)
-			m.haltSeats(false)
+			m.HaltSeats(false)
 			// The place is gone, and the claim with it.
 			if c := m.claim.Swap(nil); c != nil {
 				m.claims.forget(c)
@@ -362,7 +362,7 @@ func (m *membership) bindSessionHooks(r *engine.NetworkResource) {
 // one past this instance's tick is the resume. The hold ends after the off-tick
 // drain, since ending it settles, which a system mid-drain must not. Caller MUST
 // hold updateMutex.
-func (m *membership) authorityAhead() {
+func (m *Membership) authorityAhead() {
 	if m.ctx.TimeCtl.Held() {
 		m.hostResumed = true
 	}
@@ -372,7 +372,7 @@ func (m *membership) authorityAhead() {
 // settled at once: the hold ends in the pass that dispatches the request, as on a
 // replay of this run, which has no link or succession to end it, so input settled
 // beside it counts alike on both. Caller MUST hold updateMutex, between two ticks.
-func (m *membership) releaseHold(said string) {
+func (m *Membership) releaseHold(said string) {
 	if !m.ctx.TimeCtl.Held() {
 		return
 	}
@@ -386,7 +386,7 @@ func (m *membership) releaseHold(said string) {
 
 // wraithKept reports whether a participant's Wraith is on its way back: a dial took
 // its place back, or its arrival crossed and has yet to apply.
-func (m *membership) wraithKept(participant uint32) bool {
+func (m *Membership) wraithKept(participant uint32) bool {
 	id := link.PeerID(participant)
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
@@ -399,15 +399,15 @@ func (m *membership) wraithKept(participant uint32) bool {
 
 // keepRecord keeps what this run's own cursor holds as its sync sends it, which is
 // what its player brings back should the run leave the session.
-func (m *membership) keepRecord(p *event.CursorStatePayload) {
+func (m *Membership) keepRecord(p *event.CursorStatePayload) {
 	if c := m.claim.Load(); c != nil {
 		m.claims.keep(c, p.Record())
 	}
 }
 
-// leaveClaim gives up the claim this run is in its session under, which keeps the
+// LeaveClaim gives up the claim this run is in its session under, which keeps the
 // record its last sync left.
-func (m *membership) leaveClaim() {
+func (m *Membership) LeaveClaim() {
 	if c := m.claim.Swap(nil); c != nil {
 		m.claims.release(c)
 	}

@@ -1,4 +1,4 @@
-package app
+package membership
 
 import (
 	"testing"
@@ -16,7 +16,7 @@ func TestASeatTakesOnlyTheGameItsWorldWasBuiltOn(t *testing.T) {
 	t.Parallel()
 	built := network.SessionOffer{Relay: 3, Anchor: event.JoinAnchor{Anchor: event.JournalAnchor{
 		Seed: 0x3036, Session: 2, ScenarioDigest: "sha256:0a0a", Tick: 40}}}
-	m := &membership{sessionOffer: built}
+	m := &Membership{sessionOffer: built}
 	for _, tt := range []struct {
 		name  string
 		moved func(*network.SessionOffer)

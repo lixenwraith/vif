@@ -1,12 +1,13 @@
 // The membership's own decisions, read off a run that answers nothing but its mode
 // and a lobby nobody types into.
 
-package app
+package membership
 
 import (
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 )
@@ -14,11 +15,11 @@ import (
 // stubRun is a run as a membership decision that reads only its mode and its lobby
 // sees it; asked anything else, it panics on the nil seam it embeds.
 type stubRun struct {
-	memberRun
-	mode Mode
+	Run
+	mode config.Mode
 }
 
-func (r stubRun) Mode() Mode { return r.mode }
+func (r stubRun) Mode() config.Mode { return r.mode }
 
 // Scripted is false: no script drives the run.
 func (stubRun) Scripted() bool { return false }
@@ -27,7 +28,7 @@ func (stubRun) Scripted() bool { return false }
 func (stubRun) LobbyEvents() <-chan terminal.Event { return nil }
 
 // TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty: -players and max_players
-// are cursor ceilings, the lower holding, of which sessionCapacity is the guest half.
+// are cursor ceilings, the lower holding, of which SessionCapacity is the guest half.
 // An explicit -players on a scripted or bot-driven host is also the lobby's party,
 // min_players raises any lobby's, and a -players under min_players is refused. A run
 // that joined holds to the -players its session was opened with, should it host.
@@ -73,9 +74,9 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			mode, sc := ModeHeadless, embedded
+			mode, sc := config.ModeHeadless, embedded
 			if tt.serves {
-				mode = ModeServer
+				mode = config.ModeServer
 			}
 			if tt.low != 0 {
 				sc.MinPlayers = max(tt.low, 0)
@@ -83,12 +84,12 @@ func TestPlayersAndTheScenarioRangeSetTheCeilingAndTheParty(t *testing.T) {
 			if tt.high != 0 {
 				sc.MaxPlayers = tt.high
 			}
-			m := membership{run: stubRun{mode: mode}, scenario: &sc,
-				cfg: &Membership{Participants: tt.participants}, wiring: &membershipWiring{sessionPlayers: tt.joined}}
-			if err := m.playersFit(sc); (err != nil) != tt.refused {
+			m := Membership{run: stubRun{mode: mode}, scenario: &sc,
+				cfg: &config.Membership{Participants: tt.participants}, wiring: &Wiring{SessionPlayers: tt.joined}}
+			if err := m.PlayersFit(sc); (err != nil) != tt.refused {
 				t.Fatalf("fit = %v, want refused %t", err, tt.refused)
 			}
-			if got := m.sessionCapacity(); got != tt.capacity {
+			if got := m.SessionCapacity(); got != tt.capacity {
 				t.Fatalf("guest capacity = %d, want %d", got, tt.capacity)
 			}
 			if got := m.playerCapacity(); got != tt.players {

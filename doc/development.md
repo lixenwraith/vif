@@ -384,7 +384,8 @@ and its slot is `parameter.NoPlayerSlot`.
 
 A server has no terminal to derive geometry from, so `-size` fixes the D-14 map
 latch every joiner adopts; without it the first person's terminal sizes the map
-before the lobby closes (`adoptLobbyGeometry`, `internal/app/session.go`), or a
+before the lobby closes (`adoptLobbyGeometry`,
+`internal/app/internal/membership/session.go`), or a
 bot's 120x40 when it seats bots of its own, as those start the game at once. A
 scenario that sets up its own map keeps it either way. It logs a session summary
 periodically rather than drawing a status bar, so `-l -lv info` is how the run is
@@ -418,11 +419,11 @@ example above holds at most four guests but plays as soon as one arrives. An
 interactive `-host` plays from its first tick and opens its port once the clock
 runs. Only a driven host (`-script`, or a `-headless`/`-watch` bot) that names
 `-players` waits in its lobby for that whole party before releasing tick zero
-(`lobbyQuorum`, `internal/app/session.go`). A dialling host is admitted at most
-`parameter.NetworkAdmitBurst` times per `NetworkAdmitWindow`, because the admission
-that follows a handshake reads and sends a whole world and a peer cycling through it
-would otherwise spend one connect per capture. A run's own bots join in-process and
-spend none.
+(`lobbyQuorum`, `internal/app/internal/membership/session.go`). A dialling host is
+admitted at most `parameter.NetworkAdmitBurst` times per `NetworkAdmitWindow`,
+because the admission that follows a handshake reads and sends a whole world and a
+peer cycling through it would otherwise spend one connect per capture. A run's own
+bots join in-process and spend none.
 
 ### A scripted participant
 

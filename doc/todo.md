@@ -158,8 +158,8 @@ The router takes `bots`, but `bots_max` stays 0 until these hold:
 ### Expose a bot difficulty knob
 
 - Priority: P3
-- Affected files: `internal/app/seat.go`, `cmd/vif`, `internal/mode/config_form.go`,
-  `tool/vif-router`
+- Affected files: `internal/app/internal/membership/seat.go`, `cmd/vif`,
+  `internal/mode/config_form.go`, `tool/vif-router`
 
 `actions_per_second` is the only knob, and nothing caps it. Options: a rate suffix
 such as `-bot 2:default@6` that `BotSpecs` parses, so `-bot`, `:bot add` and the
@@ -169,7 +169,7 @@ graph to. The fleet request carries it once the site exposes one.
 ### Let a watched holder pause with only its own bots
 
 - Priority: P3
-- Affected files: `internal/app/play.go`, `internal/app/seat.go`
+- Affected files: `internal/app/play.go`, `internal/app/internal/membership/seat.go`
 
 A watched bot with seats is in a session, so the viewer forces it unpaused and
 ignores pause keys. A person's run pauses with only its own bots; the viewer's pause
@@ -525,7 +525,7 @@ Windows are worth it.
 ### Cache a received scenario to the user root
 
 - Priority: P3
-- Affected files: `internal/resource`, `internal/app/session.go`
+- Affected files: `internal/resource`, `internal/app/internal/membership/session.go`
 
 A scenario received from a coordinator lives in memory and is dropped at exit, so
 rejoining the same session downloads it again. Writing it under the user root
@@ -701,7 +701,8 @@ rostered participant it neither links nor carries.
 ### Publish a player's session at the router
 
 - Priority: P3
-- Affected files: `tool/vif-router`, `internal/app/host.go`, `internal/network`, `web/terminal.js`
+- Affected files: `tool/vif-router`, `internal/app/internal/membership/host.go`,
+  `internal/network`, `web/terminal.js`
 - Guide: [Multiplayer](multi-player.md#56-relay-doors-and-the-router) §5.6
 
 A run publishes its `-relay` door through the router's reverse tunnel and is
@@ -792,10 +793,10 @@ returns to.
 ### Find games on the local network
 
 - Priority: P2
-- Affected files: `pkg/network`, `internal/network`, `internal/app/host.go`,
-  `internal/mode/config_menu.go`, `internal/mode/commands.go`,
-  `internal/paths/settings.go`, `internal/parameter`, `android/game/game.go`,
-  `android/app/src/main/java/com/lixen/vif/MainActivity.java`
+- Affected files: `pkg/network`, `internal/network`,
+  `internal/app/internal/membership/host.go`, `internal/mode/config_menu.go`,
+  `internal/mode/commands.go`, `internal/paths/settings.go`, `internal/parameter`,
+  `android/game/game.go`, `android/app/src/main/java/com/lixen/vif/MainActivity.java`
 - Guide: [Multiplayer](multi-player.md#50-who-listens-who-authors-who-can-be-reached) §5.0
 
 Players on one home network reach a host only by typing its address. A visible
@@ -837,8 +838,9 @@ source. The join, the session stream and the simulation are unchanged.
 
 - Priority: P2
 - Affected files: `internal/network/session.go` (`RosterEntry`, `SessionOffer`),
-  `internal/app/session.go`, `internal/app/join.go`, `internal/engine/world.go`
-  (`FollowLocalCursor`), `internal/mode/config_menu.go`, `cmd/vif`, `web/terminal.js`,
+  `internal/app/internal/membership/session.go`, `join.go`,
+  `internal/engine/world.go` (`FollowLocalCursor`), `internal/mode/config_menu.go`,
+  `cmd/vif`, `web/terminal.js`,
   `internal/app/internal/scribe/journal.go`, `internal/app/replay.go`
 - Guide: [Domain design §1](domain-design.md#1-domains-and-identity),
   [Multi-player §1](multi-player.md#1-vocabulary-and-boundaries)
@@ -955,8 +957,8 @@ an identity.
 ### Keep a Wraith's stats in the session
 
 - Priority: P2
-- Affected files: `internal/app/claim.go`, `internal/app/identity.go`,
-  `internal/app/host.go`, `internal/system/cursor.go`, `internal/system/network.go`
+- Affected files: `internal/app/internal/membership/claim.go`, `identity.go`,
+  `host.go`, `internal/system/cursor.go`, `internal/system/network.go`
 - Guide: [Multi-player](multi-player.md#54-wraiths) §5.4
 
 A player coming back to its Wraith brings its cursor's stats itself
@@ -984,8 +986,8 @@ the joiner's report, and drop the record from the keeper and the report.
 ### Place an arrival where its scenario places a cursor
 
 - Priority: P2
-- Affected files: `internal/system/network.go`, `internal/app/join.go`,
-  `internal/engine/resource.go`
+- Affected files: `internal/system/network.go`,
+  `internal/app/internal/membership/join.go`, `internal/engine/resource.go`
 
 A participant's cursor lands on the map centre whatever the scenario's boot request
 asked: `addParticipant` and a joiner's roster both push `Center: true` with the
@@ -1022,7 +1024,8 @@ transferred world instead of a scenario.
 ### Run a scenario with no players
 
 - Priority: P3
-- Affected files: `internal/app/session.go`, `internal/app/serve.go`, `wad/scenario/td`
+- Affected files: `internal/app/internal/membership/session.go`,
+  `internal/app/serve.go`, `wad/scenario/td`
 - Guide: [FSM and configuration](fsm-and-configuration.md#3-root-schema) §3
 
 `min_players = 0` is accepted and, like 1, waits for one player. A game that runs
@@ -1448,31 +1451,3 @@ when they land.
 down composites at run time, but no system or scenario uses them. A species or
 scenario that assembles composites would; it reaches them through events, since
 another system may not call them directly.
-
-## Structure
-
-### Give the membership a package of its own
-
-- Priority: P3
-- Affected files: `internal/app/membership.go`, `seat.go`, `session.go`, `host.go`,
-  `converge.go`, `join.go`, `relay.go`, `identity.go`, `claim.go`
-
-The corrector and the scribe have packages under `internal/app/internal`, each
-reading the run through one seam and resolving into a run only `App` builds (a
-`corrector.Staging`, a `scribe.Twin`). `membership` holds only the run's session
-half, `Membership` and the wiring's `membershipWiring`, and reads the rest of the
-run through `memberRun`, which `App` answers as `membershipRun`, dialling a join
-against a copy of it (`joinBase`). It names no `app` type the package could not
-take along: a restart it asks for is a `restartAsk`, a seat's run the run plays
-(`PlaySeat`), a dial's run the run builds (`openDial`). `app`'s tests reach it
-through what `app`'s own code calls, the world's network hooks and real dials, so
-the package exports that and no more. Two groups of tests read inside it:
-
-- Its own rules over a bare membership (`capacity_test.go`, `claim_test.go`,
-  `prepared_test.go`, `seat_test.go`, `startup_test.go`, `wraith_test.go`), which
-  move with it.
-- The seat tests (`bot_test.go`'s, `vanguard_test.go`'s,
-  `TestASeatPlaysInItsHoldersScreen`), which find a seat's run in `seats`. The runs
-  the App plays for its seats, and the journals `scribe.go` and `loop.go` read off
-  them (`askSeatJournal`, `seatJournalSummaries`, `seatJournalNotices`), go to
-  `app` with the move, where these tests read them.

@@ -15,14 +15,14 @@ type correctionRun struct{ a *App }
 
 func (r correctionRun) Position() event.Stamp { return r.a.Position() }
 func (r correctionRun) AuthorityStamp() (network.AuthorityTerm, uint32) {
-	return r.a.membership.authorityStamp()
+	return r.a.membership.AuthorityStamp()
 }
 func (r correctionRun) SessionAnchorFields(an event.JournalAnchor) []corrector.AnchorField {
 	return r.a.sessionAnchorFields(an)
 }
-func (r correctionRun) AssignedParticipant() uint32     { return r.a.membership.assignedParticipant() }
-func (r correctionRun) BarrierLocked() bool             { return r.a.membership.barrierLocked() }
-func (r correctionRun) LandingHold() (held, start bool) { return r.a.membership.landingHold() }
+func (r correctionRun) AssignedParticipant() uint32     { return r.a.membership.AssignedParticipant() }
+func (r correctionRun) BarrierLocked() bool             { return r.a.membership.BarrierLocked() }
+func (r correctionRun) LandingHold() (held, start bool) { return r.a.membership.LandingHold() }
 func (r correctionRun) JournalLostLocked(j *event.Journal, err error) {
 	r.a.journalLostLocked(j, err)
 }

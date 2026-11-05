@@ -270,7 +270,7 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	t.Cleanup(func() { stopTicks(); host.Close() })
 	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
 	waitForCursors(t, host, 2)
-	id := guest.membership.localParticipant()
+	id := guest.membership.LocalParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
 	if !host.instance().DropParticipant(id) {
 		t.Fatal("the guest's link would not drop")
@@ -281,10 +281,10 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		req = guest.restart.Load()
 	}
-	if req == nil || req.dialled == nil || uint32(req.dialled.offer.Assigned) != id {
+	if req == nil || req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id {
 		t.Fatalf("the guest was not admitted back into its own place: %+v", req)
 	}
-	req.dialled.abandon(errors.New("the test is over"))
+	req.Dialled.Abandon(errors.New("the test is over"))
 }
 
 // TestASuccessorTakesPlayersAsTheFirstHostDid: a guest's own port turns a join away
@@ -317,10 +317,10 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	if len(chain) != 2 {
 		t.Fatalf("the guests hold the chain %v; want both of them in it", chain)
 	}
-	if chain[0].ID == link.PeerID(guest.membership.localParticipant()) {
+	if chain[0].ID == link.PeerID(guest.membership.LocalParticipant()) {
 		successor, guest = guest, successor
 	}
-	id := link.PeerID(successor.membership.localParticipant())
+	id := link.PeerID(successor.membership.LocalParticipant())
 	door, _ := chain.Lookup(id)
 	const notHosting = "this participant does not host its session"
 	if _, _, err := network.DialSession(door, network.DebugConfig(link.RolePeer, "")); !errors.As(err, new(*network.Refusal)) ||
@@ -337,14 +337,14 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 		}
 		if a.authority.Holder() != id {
 			t.Fatalf("participant %d follows %d; want the first candidate, %d (%s; %s)",
-				a.membership.localParticipant(), a.authority.Holder(), id, a.authority.Summary(), a.SessionSummary())
+				a.membership.LocalParticipant(), a.authority.Holder(), id, a.authority.Summary(), a.SessionSummary())
 		}
 	}
 	// Dialled once the session plays again, as a player meets it: a join whose gate
 	// reads the frozen world fails if the thaw lands mid-read.
 	for deadline := time.Now().Add(socketWait); successor.Context().TimeCtl.Held() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
-	if got := successor.membership.sessionCapacity() + 1; got != 5 {
+	if got := successor.membership.SessionCapacity() + 1; got != 5 {
 		t.Fatalf("the successor holds the session to %d players; want its first host's -players, 5", got)
 	}
 	if line, want := successor.SessionSummary(), "Session hosting "+successor.reach.DeclaredAddr()+","; !strings.HasPrefix(line, want) {
@@ -375,7 +375,7 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	}
 	waitForCursors(t, successor, 5)
 
-	gid := guest.membership.localParticipant()
+	gid := guest.membership.LocalParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
 	if !successor.instance().DropParticipant(gid) {
 		t.Fatal("the guest's link would not drop")
@@ -384,11 +384,11 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		req = guest.restart.Load()
 	}
-	if req == nil || req.dialled == nil || uint32(req.dialled.offer.Assigned) != gid ||
-		req.dialled.offer.Host != id {
+	if req == nil || req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != gid ||
+		req.Dialled.Offer().Host != id {
 		t.Fatalf("the guest was not admitted back into its own place at the successor: %+v", req)
 	}
-	req.dialled.abandon(errors.New("the test is over"))
+	req.Dialled.Abandon(errors.New("the test is over"))
 }
 
 // TestASuccessorHostsAtItsOwnPort: :host on a successor naming the port its session
@@ -406,7 +406,7 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	t.Cleanup(stop)
 	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
 	waitForCursors(t, successor, 2)
-	id := link.PeerID(successor.membership.localParticipant())
+	id := link.PeerID(successor.membership.LocalParticipant())
 	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 	}
 	stop()
@@ -556,7 +556,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	}
 	waitUntil(t, joined, "the guest to join")
 	follow(guest, network.SessionOffer{
-		Anchor: guest.JoinAnchor(), Host: 9, Assigned: link.PeerID(guest.membership.localParticipant()), Relay: 8,
+		Anchor: guest.JoinAnchor(), Host: 9, Assigned: link.PeerID(guest.membership.LocalParticipant()), Relay: 8,
 		Term:  network.FirstTerm,
 		Chain: network.SuccessionChain{{ID: engine.CoordinatorParticipant, Addr: other.HostAddr()}},
 	})

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/app/internal/corrector"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/manifest"
 	"github.com/lixenwraith/vif/internal/network"
@@ -37,7 +38,7 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 	}
 	defer pending.Close()
 
-	report := network.JoinerReport{Width: 120, Height: 40, Identity: identityFromAnchor(offered.Anchor)}
+	report := network.JoinerReport{Width: 120, Height: 40, Identity: membership.IdentityFromAnchor(offered.Anchor)}
 	report.Identity.Simulation = "0000000000000000"
 
 	// Complete reports the acceptance; the host's refusal reaches its error channel.
@@ -55,9 +56,9 @@ func TestTheHostRefusesAPeerThatSkippedItsOwnCheck(t *testing.T) {
 		t.Fatal("the host never refused a peer running a different simulation")
 	}
 
-	if host.membership.guestCount() != 0 || port.PeerCount() != 0 {
+	if host.membership.GuestCount() != 0 || port.PeerCount() != 0 {
 		t.Fatalf("the refused peer is still in the session: roster %d peers %d",
-			host.membership.guestCount(), port.PeerCount())
+			host.membership.GuestCount(), port.PeerCount())
 	}
 }
 
@@ -85,7 +86,7 @@ func TestTheOfferCarriesWhatTheJoinIsCheckedAgainst(t *testing.T) {
 	}
 	// The offer's identity and this instance's own describe the same session,
 	// because one is derived from the anchor the other was read from.
-	if err := offer.Identity.Verify(identityFromAnchor(a.JoinAnchor())); err != nil {
+	if err := offer.Identity.Verify(membership.IdentityFromAnchor(a.JoinAnchor())); err != nil {
 		t.Fatalf("a host would refuse itself: %v", err)
 	}
 }
@@ -112,11 +113,11 @@ func TestADifferentCorpusStillJoins(t *testing.T) {
 	a := offering(t, 0x0C0C)
 	pending, offer := dialSession(t, a.HostAddr())
 	defer pending.Close()
-	if err := offer.Identity.Verify(identityFromAnchor(a.JoinAnchor())); err != nil {
+	if err := offer.Identity.Verify(membership.IdentityFromAnchor(a.JoinAnchor())); err != nil {
 		t.Fatalf("a peer with the same session was refused: %v", err)
 	}
 
-	elsewhere := identityFromAnchor(a.JoinAnchor())
+	elsewhere := membership.IdentityFromAnchor(a.JoinAnchor())
 	elsewhere.ScenarioDigest = "sha256:0000000000000000"
 	err := offer.Identity.Verify(elsewhere)
 	if err == nil {

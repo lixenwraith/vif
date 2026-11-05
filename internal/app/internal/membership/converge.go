@@ -1,4 +1,4 @@
-package app
+package membership
 
 import (
 	"cmp"
@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lixenwraith/vif/internal/app/internal/corrector"
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -17,38 +17,25 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
-// instance is the App as the authority protocol sees it: the correction glue over
-// its world, and beside it the run's membership, which the protocol moves. Every
-// method takes the world lock itself, which is what keeps converge.Instance's
-// contract — "never called while the caller holds it" — a property of these two
-// types rather than of every call site.
-type instance struct {
-	*corrector.Corrector
-	*membership
-}
+func (m *Membership) Position() event.Stamp  { return m.run.Position() }
+func (m *Membership) Driven() bool           { return m.run.Mode().Driven() }
+func (m *Membership) Held() bool             { return m.ctx.TimeCtl.Held() }
+func (m *Membership) Rate() engine.TimeScale { return m.ctx.TimeCtl.Scale() }
 
-// instance is the run as converge reads it.
-func (a *App) instance() instance { return instance{&a.glue, &a.membership} }
+func (m *Membership) TickInterval() time.Duration { return m.world.TickInterval() }
 
-func (m *membership) Position() event.Stamp  { return m.run.Position() }
-func (m *membership) Driven() bool           { return m.run.Mode().Driven() }
-func (m *membership) Held() bool             { return m.ctx.TimeCtl.Held() }
-func (m *membership) Rate() engine.TimeScale { return m.ctx.TimeCtl.Scale() }
+func (m *Membership) LocalParticipant() uint32 { return m.localParticipant() }
 
-func (m *membership) TickInterval() time.Duration { return m.world.TickInterval() }
-
-func (m *membership) LocalParticipant() uint32 { return m.localParticipant() }
-
-func (m *membership) Seated() bool {
+func (m *Membership) Seated() bool {
 	var seated bool
-	m.world.RunSafe(func() { seated = m.wiring.holder != 0 })
+	m.world.RunSafe(func() { seated = m.wiring.Holder != 0 })
 	return seated
 }
 
 // WorldRoster reads the roster off the cursors rather than off the lobby the offer
 // described: arrivals and departures are barrier-bound crossings, so this is the
 // same list on every instance.
-func (m *membership) WorldRoster() []network.RosterEntry {
+func (m *Membership) WorldRoster() []network.RosterEntry {
 	var out []network.RosterEntry
 	m.world.RunSafe(func() { out = m.worldRosterLocked() })
 	return out
@@ -56,7 +43,7 @@ func (m *membership) WorldRoster() []network.RosterEntry {
 
 // worldRosterLocked is WorldRoster for a caller that holds the world lock.
 // Caller MUST hold updateMutex.
-func (m *membership) worldRosterLocked() []network.RosterEntry {
+func (m *Membership) worldRosterLocked() []network.RosterEntry {
 	var out []network.RosterEntry
 	w := m.world
 	for slot := range parameter.MaxPlayers {
@@ -77,15 +64,15 @@ func (m *membership) worldRosterLocked() []network.RosterEntry {
 	return out
 }
 
-func (m *membership) Transport() engine.NetworkPort {
+func (m *Membership) Transport() engine.NetworkPort {
 	if m.dismissed.Load() {
 		return nil
 	}
-	return m.sessionTransport()
+	return m.SessionTransport()
 }
 
 // Downstream reads the barrier's view of who is behind this instance.
-func (m *membership) Downstream() (out []uint32) {
+func (m *Membership) Downstream() (out []uint32) {
 	m.world.RunSafe(func() {
 		for _, sys := range m.world.Systems() {
 			if d, ok := sys.(interface{ Downstream() []uint32 }); ok {
@@ -107,7 +94,7 @@ type relayLinks interface {
 
 // links runs fn on the network system under the world lock; a run without one
 // has nothing to ask.
-func (m *membership) links(fn func(relayLinks)) {
+func (m *Membership) links(fn func(relayLinks)) {
 	m.world.RunSafe(func() {
 		for _, sys := range m.world.Systems() {
 			if l, ok := sys.(relayLinks); ok {
@@ -120,23 +107,23 @@ func (m *membership) links(fn func(relayLinks)) {
 
 // Reaches reports a path to the authority; a run with no network system has
 // nothing that could lose one.
-func (m *membership) Reaches() bool {
+func (m *Membership) Reaches() bool {
 	reaches := true
 	m.links(func(l relayLinks) { reaches = l.Reaches() })
 	return reaches
 }
 
-func (m *membership) Carries(id uint32) (carries bool) {
+func (m *Membership) Carries(id uint32) (carries bool) {
 	m.links(func(l relayLinks) { carries = l.Carries(id) })
 	return carries
 }
 
-func (m *membership) Carry(id uint32) { m.links(func(l relayLinks) { l.Carry(id) }) }
+func (m *Membership) Carry(id uint32) { m.links(func(l relayLinks) { l.Carry(id) }) }
 
 // DrainOffTick translates whatever the endpoint holds without advancing a tick, so
 // a manifest, a request or a repair is acted on the moment it lands, and a resume
 // once the drain that carried it is done.
-func (m *membership) DrainOffTick() {
+func (m *Membership) DrainOffTick() {
 	m.world.RunSafe(func() {
 		for _, sys := range m.world.Systems() {
 			if d, ok := sys.(interface{ DrainOffTick() }); ok {
@@ -153,14 +140,14 @@ func (m *membership) DrainOffTick() {
 
 // DropParticipant closes one participant's link; a direct neighbour observes the
 // loss and the authority turns it into one departure at one agreed tick.
-func (m *membership) DropParticipant(id uint32) bool {
-	p, ok := m.sessionTransport().(engine.PeerDroppingPort)
+func (m *Membership) DropParticipant(id uint32) bool {
+	p, ok := m.SessionTransport().(engine.PeerDroppingPort)
 	return ok && p.Disconnect(id)
 }
 
 // ShedParticipant dismisses one participant, with its bots, for the load it costs:
 // the host's drop, the dismissal saying why.
-func (m *membership) ShedParticipant(id uint32) (shed bool) {
+func (m *Membership) ShedParticipant(id uint32) (shed bool) {
 	m.world.RunSafe(func() {
 		for _, e := range m.worldRosterLocked() {
 			if uint32(e.ID) == id {
@@ -175,7 +162,7 @@ func (m *membership) ShedParticipant(id uint32) (shed bool) {
 	return shed
 }
 
-func (m *membership) CommitLate(id uint32) (n uint64) {
+func (m *Membership) CommitLate(id uint32) (n uint64) {
 	m.world.RunSafe(func() {
 		if r := m.world.Resources.Network; r != nil && int(id) < len(r.CommitLate) {
 			n = r.CommitLate[id].Load()
@@ -184,7 +171,7 @@ func (m *membership) CommitLate(id uint32) (n uint64) {
 	return n
 }
 
-func (m *membership) Ingress(id uint32) (n uint64) {
+func (m *Membership) Ingress(id uint32) (n uint64) {
 	m.world.RunSafe(func() {
 		if r := m.world.Resources.Network; r != nil && int(id) < len(r.Ingress) {
 			n = r.Ingress[id].Load()
@@ -193,13 +180,13 @@ func (m *membership) Ingress(id uint32) (n uint64) {
 	return n
 }
 
-func (m *membership) AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID) {
+func (m *Membership) AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID) {
 	m.applyAuthorityChange(rec, mine, via)
 }
 
 // CrossDepartures keeps the places of the participants a new host's group does not
 // hold: each departs as a Wraith, as any departure does.
-func (m *membership) CrossDepartures(away []network.RosterEntry) {
+func (m *Membership) CrossDepartures(away []network.RosterEntry) {
 	for _, p := range away {
 		m.crossDeparture(p.ID, p.Slot)
 	}
@@ -208,22 +195,22 @@ func (m *membership) CrossDepartures(away []network.RosterEntry) {
 // CrossReturns gives back the places the floor took from survivors whose membership
 // reports came late, each crossed as a claim's return is: the arrival puts the
 // participant back in its slot, and its next sync brings its cursor with it.
-func (m *membership) CrossReturns(back []network.RosterEntry) {
+func (m *Membership) CrossReturns(back []network.RosterEntry) {
 	for _, p := range back {
 		m.crossParticipantArrival(p.ID, p.Slot)
 	}
 }
 
-func (m *membership) Redial(lost link.PeerID) bool { return m.redial(lost) }
+func (m *Membership) Redial(lost link.PeerID) bool { return m.redial(lost) }
 
-func (m *membership) Forked(roster []network.RosterEntry, local link.PeerID) {
+func (m *Membership) Forked(roster []network.RosterEntry, local link.PeerID) {
 	m.forked(roster, local)
 }
 
-func (m *membership) Freeze() { m.freeze() }
-func (m *membership) Thaw()   { m.thaw() }
+func (m *Membership) Freeze() { m.freeze() }
+func (m *Membership) Thaw()   { m.thaw() }
 
-func (m *membership) SetStatusMessage(msg string, kind parameter.StatusKind) {
+func (m *Membership) SetStatusMessage(msg string, kind parameter.StatusKind) {
 	m.ctx.SetStatusMessage(msg, kind)
 }
 
@@ -232,7 +219,7 @@ func (m *membership) SetStatusMessage(msg string, kind parameter.StatusKind) {
 // receiveCorrection queues one reassembled correction. It is the seam every
 // transport binds to, so a correction reaches the same queue however this run came
 // to be in a session. Caller holds the world lock: take the bytes and nothing else.
-func (m *membership) receiveCorrection(_ uint64, body []byte) {
+func (m *Membership) receiveCorrection(_ uint64, body []byte) {
 	if m.corrections != nil {
 		m.corrections.Receive(body)
 	}
@@ -241,14 +228,14 @@ func (m *membership) receiveCorrection(_ uint64, body []byte) {
 // receiveSelective queues one manifest, request or repair. Same rule as
 // receiveCorrection: the caller holds the world lock, so this takes the bytes and
 // decides nothing.
-func (m *membership) receiveSelective(kind uint8, from uint32, body []byte) {
+func (m *Membership) receiveSelective(kind uint8, from uint32, body []byte) {
 	if m.corrections != nil {
 		m.corrections.ReceiveSelective(kind, from, body)
 	}
 }
 
 // tickClosed runs under the world lock after every tick; see Corrections.TickClosed.
-func (m *membership) tickClosed(tick uint64) {
+func (m *Membership) tickClosed(tick uint64) {
 	if m.corrections != nil {
 		m.corrections.TickClosed(tick)
 	}
@@ -256,7 +243,7 @@ func (m *membership) tickClosed(tick uint64) {
 
 // receiveAuthorityFrame queues one succession frame, under the same rule: the
 // decode and the decision happen between two ticks, in the correction loop's drain.
-func (m *membership) receiveAuthorityFrame(kind uint8, from uint32, body []byte) {
+func (m *Membership) receiveAuthorityFrame(kind uint8, from uint32, body []byte) {
 	if m.corrections != nil {
 		m.corrections.ReceiveAuthorityFrame(kind, from, body)
 	}
@@ -267,12 +254,12 @@ func (m *membership) receiveAuthorityFrame(kind uint8, from uint32, body []byte)
 // fork, after the drop it made with them still linked, so the last link to go leaves
 // it with none, when it drops every cursor it does not simulate (dropAbandonedLocked);
 // a play run's loop takes its fork into its own session instead. Caller holds the world lock.
-func (m *membership) reportPeerLost(id uint32) bool {
+func (m *Membership) reportPeerLost(id uint32) bool {
 	if m.corrections != nil {
 		m.corrections.QueuePeerLost(id)
 	}
 	halted := m.seatHalted(id)
-	if m.run.Mode() != ModePlay && forkCell(m.world).Load() {
+	if m.run.Mode() != config.ModePlay && ForkCell(m.world).Load() {
 		m.dropAbandonedLocked(m.worldRosterLocked(), nil, link.PeerID(m.world.LocalParticipant()))
 	}
 	return halted
@@ -281,7 +268,7 @@ func (m *membership) reportPeerLost(id uint32) bool {
 // ApplyPendingCorrections installs whatever authority has arrived, between two
 // ticks. A caller-driven run reaches it from Tick; an interactive one has a
 // goroutine of its own, because nothing on its side calls Tick.
-func (m *membership) ApplyPendingCorrections() {
+func (m *Membership) ApplyPendingCorrections() {
 	if m.corrections == nil {
 		return
 	}
@@ -291,7 +278,7 @@ func (m *membership) ApplyPendingCorrections() {
 // adoptCorrectionBaseline records the capture a join installed, so the deltas that
 // follow it have the keyframe they name. It is the same object from both ends: the
 // host sent a keyframe and this is the instance that installed it.
-func (m *membership) adoptCorrectionBaseline(cap snapshot.SharedCapture, bytes int) {
+func (m *Membership) adoptCorrectionBaseline(cap snapshot.SharedCapture, bytes int) {
 	if m.corrections != nil {
 		m.corrections.SetBaseline(cap, bytes)
 	}
@@ -299,10 +286,10 @@ func (m *membership) adoptCorrectionBaseline(cap snapshot.SharedCapture, bytes i
 
 // === authority ===
 
-// authorityStamp is the term and participant a capture read now is authoritative
+// AuthorityStamp is the term and participant a capture read now is authoritative
 // under. Zero on a solo run, which is what makes a capture saved from one carry no
 // authority claim at all.
-func (m *membership) authorityStamp() (network.AuthorityTerm, uint32) {
+func (m *Membership) AuthorityStamp() (network.AuthorityTerm, uint32) {
 	if m.authority == nil {
 		return 0, 0
 	}
@@ -310,7 +297,7 @@ func (m *membership) authorityStamp() (network.AuthorityTerm, uint32) {
 }
 
 // authorityTerm is the generation this instance is part of.
-func (m *membership) authorityTerm() network.AuthorityTerm {
+func (m *Membership) authorityTerm() network.AuthorityTerm {
 	if m.authority == nil {
 		return 0
 	}
@@ -320,7 +307,7 @@ func (m *membership) authorityTerm() network.AuthorityTerm {
 // authorityID is the participant currently authoring, which every admission
 // artifact names. It falls back to the session's first identity so a run that has
 // not opened a session yet still offers a valid one.
-func (m *membership) authorityID() link.PeerID {
+func (m *Membership) authorityID() link.PeerID {
 	if m.authority == nil {
 		return engine.CoordinatorParticipant
 	}
@@ -332,7 +319,7 @@ func (m *membership) authorityID() link.PeerID {
 
 // openAuthority records the term and membership this run enters a session under,
 // and the relay it joined through, which is its path to the authority.
-func (m *membership) openAuthority(o network.SessionOffer, local link.PeerID) {
+func (m *Membership) openAuthority(o network.SessionOffer, local link.PeerID) {
 	if m.authority == nil {
 		return
 	}
@@ -344,7 +331,7 @@ func (m *membership) openAuthority(o network.SessionOffer, local link.PeerID) {
 // openAuthorityLocked is openAuthority for a caller that already holds the world
 // lock, which the operator `:host` path does.
 // Caller MUST hold updateMutex.
-func (m *membership) openAuthorityLocked(o network.SessionOffer, local link.PeerID) {
+func (m *Membership) openAuthorityLocked(o network.SessionOffer, local link.PeerID) {
 	if m.authority == nil {
 		return
 	}
@@ -358,7 +345,7 @@ func (m *membership) openAuthorityLocked(o network.SessionOffer, local link.Peer
 // instance's role. Who is away is ordered by their Wraiths' waits, and a place a
 // dial was taking back is the predecessor's to have finished. via is the link this
 // run follows the new host through, zero for a link of its own.
-func (m *membership) applyAuthorityChange(rec network.HandoffRecord, mine bool, via link.PeerID) {
+func (m *Membership) applyAuthorityChange(rec network.HandoffRecord, mine bool, via link.PeerID) {
 	var away []link.PeerID
 	m.world.RunSafe(func() { away = m.awayOrderLocked(rec.Roster) })
 	m.sessionMu.Lock()
@@ -402,7 +389,7 @@ func (m *membership) applyAuthorityChange(rec network.HandoffRecord, mine bool, 
 
 // awayOrderLocked is who of roster is away, longest first, as their Wraiths wait.
 // Caller MUST hold updateMutex.
-func (m *membership) awayOrderLocked(roster []network.RosterEntry) []link.PeerID {
+func (m *Membership) awayOrderLocked(roster []network.RosterEntry) []link.PeerID {
 	waited := make(map[link.PeerID]time.Duration)
 	var out []link.PeerID
 	for _, p := range roster {
@@ -421,7 +408,7 @@ func (m *membership) awayOrderLocked(roster []network.RosterEntry) []link.PeerID
 // freeze stops this run while its session's host changes, through the request the
 // session makes, settled at once as releaseHold settles its end, so a replay stands
 // still in the pass the run did. A hold standing already stays the host's.
-func (m *membership) freeze() {
+func (m *Membership) freeze() {
 	m.world.RunSafe(func() {
 		if !m.ctx.TimeCtl.Held() {
 			m.ctx.PushLocalOrigin(event.EventGameHoldRequest, &event.GamePausePayload{Paused: true}, event.OriginSession)
@@ -432,7 +419,7 @@ func (m *membership) freeze() {
 }
 
 // thaw resumes the session this run took over.
-func (m *membership) thaw() {
+func (m *Membership) thaw() {
 	m.world.RunSafe(func() {
 		if m.thawLocked() {
 			m.ctx.SetStatusMessage("Paused; this run hosts the session now", parameter.StatusNotice)
@@ -444,7 +431,7 @@ func (m *membership) thaw() {
 // stands: it stays for this run's own :pause, unless a script or bot drives the run
 // or it hosts no session, and nobody here can end it. Caller MUST hold updateMutex,
 // between two ticks.
-func (m *membership) thawLocked() (held bool) {
+func (m *Membership) thawLocked() (held bool) {
 	if m.ctx.TimeCtl.Holds(engine.HoldFreeze) || m.run.Scripted() || !m.world.IsSessionCoordinator() {
 		m.releaseHold("Resumed")
 		return false
@@ -455,17 +442,17 @@ func (m *membership) thawLocked() (held bool) {
 // forked goes on with a run its session gave up. The claim it was in that session
 // under keeps its record as it stood, whatever links it still holds: what a fork
 // plays is not what its player brings back. A play run's loop takes it into a
-// session of its own (leaveSession), keeping every other player's place for
+// session of its own (LeaveSession), keeping every other player's place for
 // whoever hosts next; a run with no loop drops them and plays on as the fork.
-func (m *membership) forked(roster []network.RosterEntry, local link.PeerID) {
-	if m.run.Mode() == ModePlay {
+func (m *Membership) forked(roster []network.RosterEntry, local link.PeerID) {
+	if m.run.Mode() == config.ModePlay {
 		// Leaving before the claim goes, as a redial holds its claim again before it
 		// reads leaving: whichever of the two runs second lets the claim go.
 		m.leaving.Store(true)
-		m.leaveClaim()
+		m.LeaveClaim()
 		return
 	}
-	m.leaveClaim()
+	m.LeaveClaim()
 	m.dropAbandonedCursors(roster, local)
 	m.world.RunSafe(func() { m.thawLocked() })
 }
@@ -478,16 +465,16 @@ var errRedialEnded = errors.New("the run went on without this host")
 // back, under the claim the run joined with. The chain names where each host but the
 // first is dialled; the first is at the door this run came in by. Only a person's run
 // redials. The claim is let go for the dial to name, its record as the drop left it.
-func (m *membership) redial(lost link.PeerID) bool {
+func (m *Membership) redial(lost link.PeerID) bool {
 	var (
-		cfg  Membership
-		wire membershipWiring
-		base joinBase
+		cfg  config.Membership
+		wire Wiring
+		base JoinBase
 	)
 	door, relay := false, false
 	m.world.RunSafe(func() {
 		cfg, wire, base = *m.cfg, *m.wiring, m.run.JoinBase()
-		door = m.run.Mode() == ModePlay && wire.holder == 0 && cfg.JoinAddress != "" &&
+		door = m.run.Mode() == config.ModePlay && wire.Holder == 0 && cfg.JoinAddress != "" &&
 			!m.leaving.Load() && !m.run.Replacing()
 		relay = lost == m.joinedThrough
 	})
@@ -519,7 +506,7 @@ func (m *membership) redial(lost link.PeerID) bool {
 // refusal no retry helps, a door nothing answers at, or a place that is not this
 // run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
 // A run that stays in its session holds its claim again.
-func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base joinBase, addr string, lost link.PeerID, c *claim, relay bool) {
+func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBase, addr string, lost link.PeerID, c *claim, relay bool) {
 	dial := cfg
 	dial.JoinAddress = addr
 	notice := "Host connection restored"
@@ -527,10 +514,10 @@ func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base join
 		notice = "Relay connection restored"
 	}
 	for m.authority.Redialing(lost) {
-		d, err := dialJoin(dial, wire, base)
+		d, err := DialJoin(dial, wire, base)
 		if err == nil {
 			// Seated at once: which place the host offers is what the redial asks.
-			err = d.seat(wire.holder != 0)
+			err = d.seat(wire.Holder != 0)
 		}
 		if err != nil {
 			if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
@@ -541,12 +528,12 @@ func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base join
 			}
 			continue
 		}
-		back := &restartAsk{Notice: notice, dialled: d}
+		back := &RestartAsk{Notice: notice, Dialled: d}
 		if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 			m.log.Info("session", "msg", "the redial admitted this run back", "peer", uint64(lost))
 			return
 		}
-		d.abandon(errRedialEnded)
+		d.Abandon(errRedialEnded)
 		if d.claim != c {
 			m.log.Info("session", "msg", "the redial found no place for this run", "peer", uint64(lost))
 			m.authority.RedialRefused(lost)
@@ -572,7 +559,7 @@ func (m *membership) redialDoor(cfg Membership, wire membershipWiring, base join
 // door would: the host still runs, with this run's Wraith, and only this run's
 // link went. Reports whether one took it, the run then replaced by the one
 // admitted; one that refuses outright, or a host with no place, is not dialled again.
-func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base joinBase, lost link.PeerID, c *claim) bool {
+func (m *Membership) rejoinThrough(cfg config.Membership, wire Wiring, base JoinBase, lost link.PeerID, c *claim) bool {
 	dial := cfg
 	done := make(map[link.PeerID]bool)
 	for {
@@ -592,9 +579,9 @@ func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base j
 				continue
 			}
 			dial.JoinAddress = addr
-			d, err := dialJoin(dial, wire, base)
+			d, err := DialJoin(dial, wire, base)
 			if err == nil {
-				err = d.seat(wire.holder != 0)
+				err = d.seat(wire.Holder != 0)
 			}
 			if err != nil {
 				if network.RetryOf(err) == network.RetryNever || errors.Is(err, syscall.ECONNREFUSED) {
@@ -603,12 +590,12 @@ func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base j
 				}
 				continue
 			}
-			back := &restartAsk{Notice: "Host connection restored", dialled: d}
+			back := &RestartAsk{Notice: "Host connection restored", Dialled: d}
 			if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 				m.log.Info("session", "msg", "a candidate took this run back to its host", "candidate", uint64(id), "authority", uint64(lost))
 				return true
 			}
-			d.abandon(errRedialEnded)
+			d.Abandon(errRedialEnded)
 			if d.claim != c {
 				m.log.Info("session", "msg", "the host holds no place for this run", "candidate", uint64(id))
 				return false
@@ -620,14 +607,14 @@ func (m *membership) rejoinThrough(cfg Membership, wire membershipWiring, base j
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:
 // which participant may produce a roster crossing, and under which generation.
-func (m *membership) publishAuthorityResource() {
+func (m *Membership) publishAuthorityResource() {
 	m.world.RunSafe(m.publishAuthorityResourceLocked)
 }
 
 // publishAuthorityResourceLocked is the same write for a caller that holds the
 // world lock. Caller MUST hold updateMutex.
-func (m *membership) publishAuthorityResourceLocked() {
-	term, holder := m.authorityStamp()
+func (m *Membership) publishAuthorityResourceLocked() {
+	term, holder := m.AuthorityStamp()
 	if r := m.world.Resources.Network; r != nil {
 		r.Authority.Store(holder)
 		r.Term.Store(uint64(term))
@@ -638,7 +625,7 @@ func (m *membership) publishAuthorityResourceLocked() {
 
 // sessionChain is what an offer carries, read through the authority because a
 // guest holds one too.
-func (m *membership) sessionChain() network.SuccessionChain {
+func (m *Membership) sessionChain() network.SuccessionChain {
 	if m.authority == nil {
 		return nil
 	}

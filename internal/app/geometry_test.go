@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/bot"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -165,7 +166,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 	host.life.Start(time.Now())
 	port := portOf(t, host)
 	gate := make(chan error, 1)
-	go func() { gate <- host.membership.startHostSession(nil) }()
+	go func() { gate <- host.membership.StartHostSession(nil) }()
 
 	const w, h = 160, 45
 	screen := &framePresentation{w: w, h: h}
@@ -180,7 +181,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 	if mw, mh := mapSize(guest); mw >= area.Width() && mh >= area.Height() {
 		t.Fatalf("the joiner built on a %dx%d map, not the smaller one a sizing server offers", mw, mh)
 	}
-	if err := guest.membership.startJoinSession(nil); err != nil {
+	if err := guest.membership.StartJoinSession(nil); err != nil {
 		t.Fatalf("join gate: %v", err)
 	}
 	if err := <-gate; err != nil {
@@ -435,7 +436,7 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 		{"a sized headless run", sized, 90, 28},
 	} {
 		var w, h int
-		tt.a.World().RunSafe(func() { w, h = tt.a.membership.seatScreenLocked() })
+		tt.a.World().RunSafe(func() { w, h = membershipRun{tt.a}.SeatScreenLocked() })
 		if w != tt.w || h != tt.h {
 			t.Errorf("%s seats its bots on %dx%d, want %dx%d", tt.name, w, h, tt.w, tt.h)
 		}
@@ -444,11 +445,11 @@ func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 	person.handleResize(170, 50)
 	seated := mustHeadless(t, fixtureSeed, 160, 45)
 	t.Cleanup(seated.Close)
-	graph, err := loadBotGraph(resource.Options{Embedded: true}, "roam")
+	graph, err := membership.LoadBotGraph(resource.Options{Embedded: true}, "roam")
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.membership.localParticipant())
+	d, err := bot.NewDriver(seated, seated.ctx, graph, seated.Seed(), seated.membership.LocalParticipant())
 	if err != nil {
 		t.Fatal(err)
 	}

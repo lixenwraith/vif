@@ -1,7 +1,7 @@
 // The membership's reading of the Wraiths a world holds, over a world that holds
 // nothing else.
 
-package app
+package membership
 
 import (
 	"slices"
@@ -19,8 +19,8 @@ import (
 // wraithWorld is a membership over a bare world whose cursors stand in the slots
 // named, each the participant and claim given, a Wraith that has waited as long as
 // waited says, or no Wraith for a negative wait.
-func wraithWorld(cursors ...component.CursorComponent) func(waited ...time.Duration) *membership {
-	return func(waited ...time.Duration) *membership {
+func wraithWorld(cursors ...component.CursorComponent) func(waited ...time.Duration) *Membership {
+	return func(waited ...time.Duration) *Membership {
 		w := engine.NewWorld()
 		ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock()) // the resources a world's context gives it
 		for i, c := range cursors {
@@ -31,7 +31,7 @@ func wraithWorld(cursors ...component.CursorComponent) func(waited ...time.Durat
 			}
 			w.Resources.Player.Bind(c.Slot, e)
 		}
-		return &membership{world: w, ctx: ctx}
+		return &Membership{world: w, ctx: ctx}
 	}
 }
 
