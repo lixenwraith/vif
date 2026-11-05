@@ -54,7 +54,7 @@ func (a *App) showStartupStatus(message string) {
 
 func (a *App) showJoinStatus(message string) { a.showStartupStatus(message) }
 
-func Run(Config) error {
+func Run(Config, Host) error {
 	return fmt.Errorf("interactive play is unavailable in a vif_headless build; use -serve")
 }
 

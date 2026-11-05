@@ -8,8 +8,6 @@ import (
 	"github.com/lixenwraith/vif/internal/paths"
 )
 
-const buildHasAudio = false
-
 func validateAudioBuildConfig(cfg Config) error {
 	if cfg.AudioBackend != "" {
 		return errors.New("audio backend is unavailable in this build")

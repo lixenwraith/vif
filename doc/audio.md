@@ -78,10 +78,10 @@ What vif sets of the engine:
   the service keeps the silent engine: gameplay continues, sound requests become
   no-ops with rejection telemetry, and absence of a device is not an
   application-start failure.
-- **Speakers.** A host that has its own hands them over as `app.Config.Host.Audio`,
-  the engine's `Sink`, which a scenario change plays on through: Android's is its
-  `AudioTrack`; the browser's posts each buffer that sounds to the page, which
-  plays it through an AudioWorklet.
+- **Speakers.** A host that has its own hands them over as `app.Host.Audio`
+  beside the run's `Config`, the engine's `Sink`, which a scenario change plays on
+  through: Android's is its `AudioTrack`; the browser's posts each buffer that
+  sounds to the page, which plays it through an AudioWorklet.
 - **Telemetry.** Played and dropped totals and rejection categories are surfaced
   through the game status registry.
 - **Sfx.** A scenario requests an sfx by its sound's name, `EventSoundRequest {
@@ -213,8 +213,8 @@ events and keep the sequencer unaware of gameplay concepts.
 - Game service: `internal/service/adapter_audio.go`
 - Game event adapters: `internal/system/audio.go`, `music.go`; `speakers.go`
   holds the mask both publish and the handover; `audio_none.go` the null systems
-- Mode and build selection, replay default: `internal/app/config.go`,
-  `audio.go`, `audio_none.go`, `play.go`
+- Mode and build selection, replay default: `internal/app/internal/config`,
+  `internal/app/audio.go`, `audio_none.go`, `play.go`
 - Game policy: `internal/parameter/audio.go`, `music.go`, `sfx.go`,
   `sfx_audio.go`
 - Authoring tool: the `lixenwraith/stapes` module (§4), with its command

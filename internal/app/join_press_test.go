@@ -41,7 +41,7 @@ func waitingJoiner(t *testing.T, addr string, bots ...string) (*App, *pressPrese
 	if guest.membership.seated() || guest.membership.localParticipant() != 0 {
 		t.Fatalf("a join waiting for its press is seated as participant %d", guest.membership.localParticipant())
 	}
-	return guest, cfg.Host.Presentation.(*pressPresentation)
+	return guest, cfg.host.Presentation.(*pressPresentation)
 }
 
 // joinerConfig is the run a player's join of addr opens on a screen with a keyboard,
@@ -49,7 +49,7 @@ func waitingJoiner(t *testing.T, addr string, bots ...string) (*App, *pressPrese
 func joinerConfig(addr string, press bool, bots ...string) runConfig {
 	screen := &pressPresentation{framePresentation: framePresentation{w: 120, h: 40}, events: make(chan terminal.Event, 1)}
 	return runConfig{Config: Config{Mode: ModePlay, Membership: Membership{JoinAddress: addr, Bots: bots},
-		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}},
+		Resources: resource.Options{Embedded: true}}, host: Host{Presentation: screen},
 		wiring: wiring{membership: membershipWiring{joinPress: press}}}
 }
 

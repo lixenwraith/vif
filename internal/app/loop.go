@@ -25,10 +25,11 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
+// Run plays c on the platform's Host, or the terminal where it names no presentation.
 // A scenario change rebuilds the run because its FSM metrics are frozen at startup.
 // In a session the coordinator requests the change for every participant.
-func Run(c Config) error {
-	cfg := runConfig{Config: c}
+func Run(c Config, host Host) error {
+	cfg := runConfig{Config: c, host: host}
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
@@ -50,22 +51,22 @@ func Run(c Config) error {
 	}
 	// One terminal for every run: a replacement redraws on it instead of leaving
 	// and re-entering the screen. The first run's hub opens it; Run releases it.
-	if cfg.Host.Presentation == nil {
+	if cfg.host.Presentation == nil {
 		term := newTerminal(cfg.Config)
 		term.Retain()
 		defer term.Release()
-		cfg.Host.Presentation = term
+		cfg.host.Presentation = term
 	}
 	// A join the player started at launch is seated at their press, unless the host
 	// they launched from already took it.
-	cfg.wiring.membership.joinPress = cfg.Membership.JoinAddress != "" && !cfg.Host.Pressed
-	cfg.wiring.startScreen = !cfg.Host.StartScreen
+	cfg.wiring.membership.joinPress = cfg.Membership.JoinAddress != "" && !cfg.host.Pressed
+	cfg.wiring.startScreen = !cfg.host.StartScreen
 	rejoin := false
 	var solo *runConfig // what a :join that fails after its dial plays on as
 	for {
 		next, err := runScenario(cfg, rejoin)
 		// The press the host took and the start screen were the first game's
-		cfg.wiring.membership.hostListeners, cfg.Host.Pressed, cfg.wiring.startScreen = nil, false, false
+		cfg.wiring.membership.hostListeners, cfg.host.Pressed, cfg.wiring.startScreen = nil, false, false
 		if err != nil && solo != nil && !errors.Is(err, errSessionSignalled) {
 			vlog.Warn("session", "msg", "join failed; playing solo",
 				"join", cfg.Membership.JoinAddress, "error", err.Error())
@@ -479,7 +480,7 @@ func (a *App) holdFirstGame(reports <-chan bool) {
 			drained = true
 		}
 	}
-	if !a.unseen && (!a.ctx.WaitStart.Load() || a.cfg.Membership.JoinAddress != "" || a.cfg.Host.Pressed) {
+	if !a.unseen && (!a.ctx.WaitStart.Load() || a.cfg.Membership.JoinAddress != "" || a.cfg.host.Pressed) {
 		return
 	}
 	a.scheduler.Prepare() // the hold settles before the clock starts

@@ -208,7 +208,7 @@ func main() {
 		if *flagWatch {
 			cfg.Mode = app.ModeScript
 		}
-		_, err = app.RunScript(cfg, *flagScript)
+		_, err = app.RunScript(cfg, platformHost, *flagScript)
 	case (*flagWatch || *flagHeadless) && bots > 0:
 		cfg := buildConfig()
 		graph := cfg.Membership.Bots[0]
@@ -219,13 +219,13 @@ func main() {
 			botNotice(cfg, graph)
 		}
 		var st bot.Stats
-		if st, err = app.RunBot(cfg, graph); err == nil && !*flagWatch {
+		if st, err = app.RunBot(cfg, platformHost, graph); err == nil && !*flagWatch {
 			fmt.Printf("Bot stopped: %d ticks, %d actions, fitness %d\n", st.Ticks, st.Injected, st.Fitness)
 		}
 	case flagSession.serve != "":
 		err = app.RunServer(buildConfig())
 	default:
-		err = app.Run(buildConfig())
+		err = app.Run(buildConfig(), platformHost)
 	}
 
 	shutdownDiagnostics()
@@ -401,7 +401,6 @@ var (
 // buildConfig translates parsed flags into the runtime configuration
 func buildConfig() app.Config {
 	cfg := app.Config{
-		Host:          platformHost,
 		AudioBackend:  flagAudioBackend,
 		Resources:     flagConfig.options(),
 		LogScope:      flagLogs.scope.value,

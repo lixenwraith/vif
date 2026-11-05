@@ -138,7 +138,7 @@ func TestAJoinerDrawsNoWorldBeforeItsSessions(t *testing.T) {
 	const w, h = 160, 45
 	screen := &framePresentation{w: w, h: h}
 	guest, err := newSessionApp(runConfig{Config: Config{Mode: ModePlay, Membership: Membership{JoinAddress: port.Addr().String()},
-		Resources: resource.Options{Embedded: true}, Host: Host{Presentation: screen}}})
+		Resources: resource.Options{Embedded: true}}, host: Host{Presentation: screen}})
 	if err != nil {
 		t.Fatalf("join: %v", err)
 	}
@@ -419,8 +419,8 @@ func TestAServersOwnBotsStartItsGameAtOnce(t *testing.T) {
 // run publishes its terminal as it resizes, and its seats take it between steps.
 func TestASeatPlaysInItsHoldersScreen(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
-	person, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true},
-		Host: Host{Presentation: &framePresentation{w: 160, h: 45}}})
+	person, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}},
+		host: Host{Presentation: &framePresentation{w: 160, h: 45}}})
 	if err != nil {
 		t.Fatalf("person: %v", err)
 	}
@@ -490,8 +490,8 @@ func TestAPausedRunItsPlayerLeftDrawsNothingUntilTheyReturn(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	screen := &awayScreen{framePresentation: framePresentation{w: 80, h: 24},
 		away: make(chan bool, 1), events: make(chan terminal.Event, 1)}
-	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5746,
-		Host: Host{Presentation: screen}})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5746},
+		host: Host{Presentation: screen}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,8 +544,8 @@ func TestAWaitingGameStartsOverAtTheScreensNewSize(t *testing.T) {
 	const pw, ph, lw, lh = 60, 100, 100, 60 // a phone held upright, then turned
 	open := func(p Presentation) *App {
 		t.Helper()
-		a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5743,
-			Host: Host{Presentation: p}})
+		a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5743},
+			host: Host{Presentation: p}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -623,8 +623,8 @@ func TestAFirstGameWaitsForItsPlayersPress(t *testing.T) {
 		"key":   {Type: terminal.EventKey, Key: terminal.KeyRune, Rune: 'j'},
 		"click": click(h/4, terminal.MouseActionPress),
 	} {
-		a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5744,
-			Host: Host{Presentation: &framePresentation{w: w, h: h}}})
+		a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5744},
+			host: Host{Presentation: &framePresentation{w: w, h: h}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -662,8 +662,8 @@ func TestAFirstGameWaitsForItsPlayersPress(t *testing.T) {
 func TestTheLaunchWaitsBehindTheStartScreen(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	const w, h = 120, 40
-	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
-		Host: Host{Presentation: &framePresentation{w: w, h: h}}}, wiring: wiring{startScreen: true}})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745},
+		host: Host{Presentation: &framePresentation{w: w, h: h}}, wiring: wiring{startScreen: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -696,8 +696,8 @@ func TestAWaitingJoinTakesTheOperatorsKeysAsAHeldGameDoes(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	const w, h = 120, 40
 	screen := &framePresentation{w: w, h: h}
-	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5747,
-		Host: Host{Presentation: screen}})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5747},
+		host: Host{Presentation: screen}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -758,8 +758,8 @@ func TestAWaitingJoinTakesTheOperatorsKeysAsAHeldGameDoes(t *testing.T) {
 func TestHelpOverTheStartScreenTakesThePointer(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	const w, h = 80, 18 // short enough that the scrollbar's top cell lies under the button
-	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5746,
-		Host: Host{Presentation: &framePresentation{w: w, h: h}}}, wiring: wiring{startScreen: true}})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5746},
+		host: Host{Presentation: &framePresentation{w: w, h: h}}, wiring: wiring{startScreen: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -814,8 +814,8 @@ func TestHelpOverTheStartScreenTakesThePointer(t *testing.T) {
 // types nothing.
 func TestAPasteTypesWhole(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
-	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
-		Host: Host{Presentation: &framePresentation{w: 120, h: 40}}})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745},
+		host: Host{Presentation: &framePresentation{w: 120, h: 40}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -836,8 +836,8 @@ func TestAPasteTypesWhole(t *testing.T) {
 // what was typed, and the next key goes on editing it.
 func TestAResetLeavesTheOperatorsMode(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
-	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745,
-		Host: Host{Presentation: &framePresentation{w: 120, h: 40}}})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5745},
+		host: Host{Presentation: &framePresentation{w: 120, h: 40}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -893,8 +893,8 @@ func TestAHostDrawingTheMenuIsHandedItAsItChanges(t *testing.T) {
 	// Not parallel: an interactive run is built on a presentation of its own.
 	screen := &menuScreen{awayScreen: awayScreen{framePresentation: framePresentation{w: 80, h: 24},
 		away: make(chan bool, 1), events: make(chan terminal.Event, 1)}, ops: make(chan mode.MenuOp, 1)}
-	a, err := New(Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5747,
-		Host: Host{Presentation: screen}})
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5747},
+		host: Host{Presentation: screen}})
 	if err != nil {
 		t.Fatal(err)
 	}

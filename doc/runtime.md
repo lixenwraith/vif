@@ -16,7 +16,7 @@ operated on by the runtime, see [ECS and events](ecs-and-events.md).
 | `ModeScript` | Yes | Yes | script, or the presentation for a watched bot / playback controls | If built | `ManualClock`; `journal.ScriptDriver` or `bot.Driver` invokes ticks and injections; the presented form of a `ModeHeadless` script or bot, network I/O included |
 | `ModeServer` | No | No | config / none | No | `PausableClock`; scheduler and event goroutines, as `ModePlay`, with no presentation and no local cursor |
 
-The six predicates in `internal/app/config.go` are the policy boundary:
+The six predicates in `internal/app/internal/config` are the policy boundary:
 `Presents`, `Driven`, `Serves`, `OwnsGeometry`, `OwnsInput`, and `Audio`. Assembly
 checks them rather than scattering mode comparisons through the runtime. A config
 whose mode does not own geometry defaults to terminal-equivalent geometry 80x24
@@ -109,7 +109,8 @@ real time, which nobody can change. `max` is refused in a session: a participant
 running faster than the rest reaches ticks they have not, and every correction
 rebases it back to the authority's tick.
 
-`-watch` presents the run on this terminal instead of running it headlessly. The
+`-watch` presents the run on the screen play would, the terminal or the desktop
+window (the platform's `Host`), instead of running it headlessly. The
 simulation is unchanged — the same manual clock, the same script geometry, the
 same driver — so a presented run and a headless one of the same script produce
 the same world. Only pan and quit are offered while a presented script is in a
@@ -965,9 +966,10 @@ was given and what the restart names. A scenario change, a restart and a `:join`
 the run's bots again, read when the restart is asked for, since a session closing
 ends them before the switch; a bot told to leave is not among them, and a removal
 by the host seats none.
-Everything operator-owned restarts with it. The terminal does not: `Run` opens one
-for the process and every run presents on it, so a replacement redraws the screen
-rather than leaving and re-entering it. See
+Everything operator-owned restarts with it. The screen does not: every run presents
+on the platform `Host`'s `Presentation`, handed to `Run` beside its `Config`, or on
+the one terminal `Run` opens for the process where that `Host` names none, so a
+replacement redraws the screen rather than leaving and re-entering it. See
 [HFSM and configuration](fsm-and-configuration.md) §2.
 
 In a session every participant does this together. Only the coordinator may ask;
@@ -1094,7 +1096,7 @@ not indefinitely leave the terminal in raw mode.
 | Concern | Primary source |
 |---|---|
 | Entry selection, diagnostics setup, exit policy | `cmd/vif/main.go` |
-| Runtime modes and composition | `internal/app/config.go`, `app.go`, `headless.go` |
+| Runtime modes and composition | `internal/app/internal/config`, `internal/app/config.go`, `app.go`, `headless.go` |
 | Build capability adapters | `internal/app/presentation_*`, `audio*`, `network_*` |
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
 | Session gates, mid-run hosting and restarts, dedicated host, probe, bot seats | `internal/app/session.go`, `host.go`, `serve.go`, `probe.go`, `seat.go` |

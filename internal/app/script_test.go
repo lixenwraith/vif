@@ -173,7 +173,7 @@ func TestAPacedScriptSpendsItsWallBudget(t *testing.T) {
 	paced := base
 	paced.TimeScaleSpec = "1"
 	start := time.Now() // [wall] the property under test
-	if _, err := RunScript(paced, path); err != nil {
+	if _, err := RunScript(paced, Host{}, path); err != nil {
 		t.Fatalf("paced script: %v", err)
 	}
 	elapsed := time.Since(start)
@@ -183,7 +183,7 @@ func TestAPacedScriptSpendsItsWallBudget(t *testing.T) {
 	}
 
 	start = time.Now()
-	if _, err := RunScript(base, path); err != nil {
+	if _, err := RunScript(base, Host{}, path); err != nil {
 		t.Fatalf("unpaced script: %v", err)
 	}
 	if unpaced := time.Since(start); unpaced >= elapsed {
@@ -214,7 +214,7 @@ func TestPresentedScriptModeIsWiredForATerminal(t *testing.T) {
 	}
 	_, err := RunScript(Config{
 		Mode: ModeScript, Resources: resource.Options{Embedded: true}, Seed: 0x5C71,
-	}, path)
+	}, Host{}, path)
 	if err == nil {
 		t.Fatal("a presented script ran without a usable terminal")
 	}
@@ -257,13 +257,13 @@ func runScriptPair(t *testing.T, host Config, hostPath string, guest Config, gue
 	hostResult := make(chan scriptResult, 1)
 	host.Membership.HostAddress, host.Membership.Participants = address, 2
 	go func() {
-		stats, err := RunScript(host, hostPath)
+		stats, err := RunScript(host, Host{}, hostPath)
 		hostResult <- scriptResult{stats: stats, err: err}
 	}()
 
 	guest.Membership.JoinAddress = address
 	for deadline := time.Now().Add(socketWait); ; time.Sleep(10 * time.Millisecond) {
-		g, err = RunScript(guest, guestPath)
+		g, err = RunScript(guest, Host{}, guestPath)
 		if err == nil {
 			break
 		}

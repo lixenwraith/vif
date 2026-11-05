@@ -58,8 +58,9 @@ type keyReportPresentation interface {
 	SetKeyReport(report terminal.KeyReport, allow terminal.KeySource) error
 }
 
-// Host is what a platform supplies to a run. A nil field is the build's own: the
-// terminal, and speakers reached by a backend's name.
+// Host is what a platform supplies to a run, handed to Run, RunScript or RunBot
+// beside its Config. A nil field is the build's own: the terminal, and speakers
+// reached by a backend's name.
 type Host struct {
 	Presentation Presentation
 	Audio        io.WriteCloser // takes the mixer's 44.1 kHz 16-bit stereo PCM

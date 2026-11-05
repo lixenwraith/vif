@@ -54,7 +54,7 @@ func (a *App) initPresentationService() error {
 		a.pres = b.pres // the lender's hub starts and stops it
 		return nil
 	}
-	if a.pres = a.cfg.Host.Presentation; a.pres == nil {
+	if a.pres = a.cfg.host.Presentation; a.pres == nil {
 		a.pres = newTerminal(a.cfg.Config)
 	}
 	return a.hub.Register(a.pres)
