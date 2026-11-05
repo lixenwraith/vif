@@ -277,6 +277,16 @@ func (w *World) AddSystem(system System, profile SystemProfile) {
 	}
 }
 
+// systemDomain is the domain profile h was registered under, when h is a system
+func (w *World) systemDomain(h any) (SystemDomain, bool) {
+	for i := range w.systems {
+		if any(w.systems[i].sys) == h {
+			return w.systems[i].profile.Domain, true
+		}
+	}
+	return 0, false
+}
+
 // HasSystem reports whether a system with the given name is registered
 func (w *World) HasSystem(name string) bool {
 	for i := range w.systems {
@@ -439,16 +449,22 @@ func (w *World) UpdateLocked() {
 	p := w.Resources.Prof
 	phase := p.BeginPhase(prof.PhaseSystems)
 	audit := domainAudit.Load()
+	var q *event.EventQueue
+	if r := w.Resources.Event; r != nil {
+		q = r.Queue
+	}
 	for i := range w.systems {
 		e := &w.systems[i]
 		// Attribution is a per-tick decision, matching the audit gate itself
 		if audit {
 			w.setAuditScope(e.sys.Name(), e.profile.Domain)
 		}
+		q.SetOwn(e.profile.Domain == SystemPlayer)
 		span := p.Begin(e.update)
 		e.sys.Update()
 		span.End()
 	}
+	q.SetOwn(false)
 	if audit {
 		w.clearAuditScope()
 	}

@@ -589,53 +589,14 @@ func observeOnly(t *testing.T, a *App) {
 	}
 }
 
-// TestWireEncoding covers the wire boundary without a session: which events travel
-// at all, and whether the codec preserves what the receiver pushes.
+// TestWireEncoding covers the wire boundary without a session: whether the codec
+// preserves what the receiver pushes. Which pushes travel is the engine's
+// TestAPushCrossesByItsProducersDomain.
 func TestWireEncoding(t *testing.T) {
 	t.Parallel()
 	event.EnsureRegistry()
-	t.Run("set", testWireSet)
 	t.Run("frame", testWireFrameRoundTrip)
 	t.Run("cursor state", testCursorStateRoundTrip)
-}
-
-// testWireSet asserts the predicate rather than the pipe: a Shared event is
-// re-derived on both sides and must never travel, a chain follow-up is derived from
-// the root that did (D-5), and an arriving artifact is never echoed.
-func testWireSet(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		ev   event.GameEvent
-		want bool
-	}{
-		{"bus crossing", event.GameEvent{
-			Type: event.EventCursorMoveRequest, Domain: core.DomainPlayer,
-			Payload: &event.CursorMoveRequestPayload{}}, true},
-		{"shared is compared, not sent", event.GameEvent{
-			Type: event.EventCursorMoved, Domain: core.DomainShared,
-			Payload: &event.CursorMovedPayload{}}, false},
-		{"local", event.GameEvent{
-			Type: event.EventEnergyAddRequest, Domain: core.DomainPlayer,
-			Payload: &event.EnergyAddPayload{}}, false},
-		{"stamped crossing at a shared target", event.GameEvent{
-			Type: event.EventCombatAttackDirectRequest, Domain: core.DomainShared,
-			Payload: &event.CombatAttackDirectRequestPayload{}}, true},
-		{"stamped hit on a player target", event.GameEvent{
-			Type: event.EventCombatAttackDirectRequest, Domain: core.DomainPlayer,
-			Payload: &event.CombatAttackDirectRequestPayload{}}, false},
-		{"derived chain follow-up", event.GameEvent{
-			Type: event.EventCombatAttackDirectRequest, Domain: core.DomainShared,
-			Payload: &event.CombatAttackDirectRequestPayload{ChainDepth: 1}}, false},
-		{"stamped death batch is re-derived", event.GameEvent{
-			Type: event.EventDeathBatch, Domain: core.DomainShared}, false},
-		{"an arriving artifact is not echoed", event.GameEvent{
-			Type: event.EventCursorMoveRequest, Domain: core.DomainPlayer,
-			Origin: event.OriginNetwork, Payload: &event.CursorMoveRequestPayload{}}, false},
-	} {
-		if got := event.OnWire(tc.ev); got != tc.want {
-			t.Errorf("OnWire(%s) = %t, want %t", tc.name, got, tc.want)
-		}
-	}
 }
 
 // testWireFrameRoundTrip asserts the codec preserves the event type, the

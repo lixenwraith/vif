@@ -355,50 +355,33 @@ func TestASweepTakesItsCountOfTheOldestDrains(t *testing.T) {
 
 // TestASweepNamingNoCursorTakesTheFirstParticipantsDrains: two guests of a host that
 // drives no cursor take a Shared sweep naming none on one instance between them, the
-// lowest slot's that plays: the first's, the second's while the first is away, and
-// the first's again once it is back
+// lowest slot's that plays: the first's, the second's while the first is away and its
+// instance out of the session, and the first's again in its readmitted run
 func TestASweepNamingNoCursorTakesTheFirstParticipantsDrains(t *testing.T) {
-	var guests [2]*materializeWorld
-	for i := range guests {
+	// arrive lands slot's participant on g, local there when it is g's own
+	arrive := func(g *materializeWorld, slot, own uint8) {
+		control := component.ControlRemote
+		if slot == own {
+			control = component.ControlLocal
+		}
+		g.deliver(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
+			X: 5 + 10*int(slot), Y: 5, Slot: slot, Control: uint8(control), PeerID: uint32(slot) + 2}})
+	}
+	// guest is a fresh run of slot's participant, both places standing
+	guest := func(slot uint8) *materializeWorld {
 		w := engine.NewWorld()
 		engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-		w.AdoptSession(engine.SessionState{Live: true, Participant: uint32(i + 2), Authority: engine.CoordinatorParticipant})
-		guests[i] = newMaterializeWorld(w, ready(NewFuseSystem(w)), ready(NewCursorSystem(w)))
-		w.Resources.Player.SetLocal(uint8(i))
+		w.AdoptSession(engine.SessionState{Live: true, Participant: uint32(slot) + 2, Authority: engine.CoordinatorParticipant})
+		g := newMaterializeWorld(w, ready(NewFuseSystem(w)), ready(NewCursorSystem(w)))
+		w.Resources.Player.SetLocal(slot)
+		arrive(g, 0, slot)
+		arrive(g, 1, slot)
+		return g
 	}
-	// arrive lands slot's participant, a Wraith's return, on both instances at once
-	arrive := func(slot uint8) {
-		for i, g := range guests {
-			control := component.ControlRemote
-			if i == int(slot) {
-				control = component.ControlLocal
-			}
-			g.deliver(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
-				X: 5 + 10*int(slot), Y: 5, Slot: slot, Control: uint8(control), PeerID: uint32(slot) + 2}})
-		}
-	}
-	arrive(0)
-	arrive(1)
-
-	for _, step := range []struct {
-		name   string
-		roster func()
-		sweeps int // the guest whose drains go
-	}{
-		{"both playing", func() {}, 0},
-		{"the first away", func() {
-			// Guest 2's own world takes the departure too, which a live session never
-			// shows the departed instance: a Wraith is the first participant nowhere
-			for _, g := range guests {
-				g.deliver(event.GameEvent{Type: event.EventCursorWraithRequest, Payload: &event.CursorWraithRequestPayload{Slot: 0}})
-			}
-		}, 1},
-		{"the first back", func() { arrive(0) }, 0},
-	} {
-		step.roster()
-		for _, g := range guests {
-			// Each guest's own drains, as its DrainSystem raises them from its heat:
-			// no other instance holds them, so only the elected one can sweep
+	// sweep gives each instance in the session drains of its own, as its DrainSystem
+	// raises them from its heat, and the request, and finds which swept
+	sweep := func(name string, session []*materializeWorld, sweeper *materializeWorld) {
+		for _, g := range session {
 			for _, x := range []int{20, 24} {
 				d := g.w.CreateEntity(core.DomainPlayer)
 				g.w.Positions.SetPosition(d, component.PositionComponent{X: x, Y: 12})
@@ -408,9 +391,10 @@ func TestASweepNamingNoCursorTakesTheFirstParticipantsDrains(t *testing.T) {
 				Sources: []event.FuseSource{{Species: component.SpeciesDrain}}, Target: component.SpeciesQuasar,
 				Effect: event.FuseEffectMaterialize}})
 		}
-		for i, g := range guests {
-			if swept := g.w.Components.Drain.CountEntities() == 0; swept != (i == step.sweeps) {
-				t.Fatalf("%s: guest %d swept its drains %t, want guest %d's alone", step.name, i+2, swept, step.sweeps+2)
+		for _, g := range session {
+			if swept := g.w.Components.Drain.CountEntities() == 0; swept != (g == sweeper) {
+				t.Fatalf("%s: participant %d swept its drains %t, want %t",
+					name, g.w.Session().Participant, swept, g == sweeper)
 			}
 			for range materializeTicks() {
 				g.tick()
@@ -420,6 +404,16 @@ func TestASweepNamingNoCursorTakesTheFirstParticipantsDrains(t *testing.T) {
 			}
 		}
 	}
+
+	first, second := guest(0), guest(1)
+	sweep("both playing", []*materializeWorld{first, second}, first)
+	// The first's link drops: its departure lands where the session goes on
+	second.deliver(event.GameEvent{Type: event.EventCursorWraithRequest, Payload: &event.CursorWraithRequestPayload{Slot: 0}})
+	sweep("the first away", []*materializeWorld{second}, second)
+	// Readmission replaces the first's run, and its arrival takes the Wraith's place back
+	first = guest(0)
+	arrive(second, 0, 1)
+	sweep("the first back", []*materializeWorld{first, second}, first)
 }
 
 // standHeader stands a composite's bare phantom head: a Shared header of behavior

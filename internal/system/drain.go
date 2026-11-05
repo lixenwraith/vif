@@ -1168,8 +1168,8 @@ func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wa
 // boundary rather than shared-side collision physics.
 func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity core.Entity) {
 	// A shared glyph is a gold member: it dies as under any species body and the
-	// breach ends the sequence. The drain is this instance's alone, so in a session
-	// the authority's next correction decides the loss.
+	// breach ends the sequence. A player system's death of a shared entity crosses,
+	// so every participant loses the sequence at the one tick it applies at.
 	if goldMember(s.world, entity) {
 		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entity)
 		return

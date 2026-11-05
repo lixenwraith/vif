@@ -81,6 +81,7 @@ never enters the replay suffix (D-9).
 | Missile, dust, or disruptor area effect | immutable centre/radius/attack geometry |
 | Fusion of a participant's drains | the species and header cell its materialize or spirit lands, from the causal participant |
 | Shared gold member typed | header, member, and typist cursor |
+| Drain breaking a gold member | the member's death |
 | Jump to the live gold sequence | cursor |
 | Dying drain donation | target and heal amount |
 | Personal drain death affecting shared progression | owner cursor |
@@ -181,8 +182,10 @@ that cursor's owner alone; equal-distance aims use roster order.
 ### D-7 — Domain is explicit ambient context
 
 `World.WithDomain`, `PushEventDomain`, `PushLocal`, and `PushCrossing` stamp the
-producer or target domain. The declared system profile does not silently change
-the ambient tag. Generic systems resolve the request or target domain at runtime.
+producer or target domain, and generic systems resolve the request or target domain
+at runtime. The declared profile names the producer: a player-profile system's
+Update and handlers push as this participant's own (`GameEvent.Own`), a Bus request
+there taking the player tag `PushCrossing` gives; a shared or dual profile adds none.
 
 ### D-8 — RNG streams are domain-separated and restorable
 
@@ -248,11 +251,13 @@ Each event type declares one class:
 
 `event.Replicated` answers whether two instances should hold the record.
 `event.OnWire` answers whether another peer must receive it. The wire set is
-narrower: sending a re-derived Shared event would apply it twice. A Bus type is on
-the wire only when a Player producer explicitly used the crossing path. A Stamped
-type is on the wire only when its tag names a Shared target and `stampedCrossings`
-lists it, which today is the direct combat request alone. A payload that reports
-itself `Derived`, a combat chain follow-up, never is (D-5).
+narrower: sending a re-derived Shared event would apply it twice. A Bus or Stamped
+push is on the wire when this participant's own simulation made it (D-7) at Shared
+state, a Stamped one's tag naming the Shared target, whatever API or helper pushed
+it: a drain's `EmitDeath` of a gold member crosses as a weapon's hit on a swarm
+does. A Bus request a session layer tags player crosses as its producer said, a
+shared or dual system's copy is re-derived, and a payload that reports itself
+`Derived`, a combat chain follow-up, never crosses (D-5).
 
 `EventWindStart` and `EventWindCancel` are Shared events: a Shared FSM can
 re-derive them on every instance, so sending them would apply the same wind

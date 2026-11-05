@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"sync/atomic"
 
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
@@ -25,6 +26,7 @@ type EventQueue struct {
 	deadLetter  [EventTypeCount]atomic.Int64
 	journal     atomic.Pointer[Journal] // nil = journaling off
 	wire        atomic.Pointer[wireHolder]
+	own         atomic.Bool           // a player-profile system is producing (SetOwn)
 	stamp       atomic.Pointer[Stamp] // record position; advanced under the world lock
 	wake        chan struct{}         // raised by every publish; a consumer sleeps on it
 
@@ -60,10 +62,38 @@ func (eq *EventQueue) signal() {
 // Push adds event using lock-free CAS with published flags pattern
 // Safe for concurrent producers. O(1) amortized
 func (eq *EventQueue) Push(ev GameEvent) {
+	eq.attribute(&ev)
 	if w := eq.wire.Load(); w != nil && OnWire(ev) && w.sink.Cross(ev) {
 		return
 	}
 	eq.publish(ev)
+}
+
+// SetOwn opens or closes the producer scope of a player-profile system, whose
+// simulation pushes are this participant's own, and reports the previous scope.
+// Only the world's update loop and the dispatcher, under the world lock, set it.
+func (eq *EventQueue) SetOwn(on bool) bool {
+	if eq == nil {
+		return false
+	}
+	return eq.own.Swap(on)
+}
+
+// attribute marks a push this participant's own: a simulation push in a
+// player-profile scope, whose Bus tag then names its producer as PushCrossing's
+// does (D-10), or a Bus request already tagged so. Producers off the world lock
+// carry an origin of their own, so the scope never reaches them.
+func (eq *EventQueue) attribute(ev *GameEvent) {
+	bus := ClassOf(ev.Type) == ClassBus
+	if ev.Origin == OriginSystem && eq.own.Load() {
+		ev.Own = true
+		if bus {
+			ev.Domain = core.DomainPlayer
+		}
+	}
+	if bus && ev.Domain == core.DomainPlayer {
+		ev.Own = true
+	}
 }
 
 // PushReady publishes an artifact already admitted by the barrier without
