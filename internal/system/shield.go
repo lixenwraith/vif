@@ -11,7 +11,6 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
-	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/status"
 )
 
@@ -131,7 +130,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// setActive applies shield state to one cursor and refreshes its ping bounds
+// setActive raises or drops one cursor's shield at the reach it holds and refreshes its ping bounds
 func (s *ShieldSystem) setActive(cursor core.Entity, active bool) {
 	shield, ok := s.world.Components.Shield.GetPtr(cursor)
 	if !ok {
@@ -139,12 +138,6 @@ func (s *ShieldSystem) setActive(cursor core.Entity, active bool) {
 	}
 
 	if active {
-		shield.Type = component.ShieldTypePlayer
-		cfg := visual.ShieldConfigFor(shield.Type, s.world.Resources.Config.CellAspect)
-		shield.RadiusX = cfg.RadiusX
-		shield.RadiusY = cfg.RadiusY
-		shield.InvRxSq = cfg.InvRxSq
-		shield.InvRySq = cfg.InvRySq
 		// The drain interval starts when the shield does. Inheriting whatever age the
 		// component was carrying makes the first period of every activation either
 		// instant or arbitrary.

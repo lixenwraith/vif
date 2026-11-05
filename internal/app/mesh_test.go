@@ -237,7 +237,7 @@ func TestGuestArtifactsReturnThroughTheirRelay(t *testing.T) {
 					if !ok {
 						t.Fatal("owner has no shield")
 					}
-					shield.RadiusX = 70 + float64(i)
+					shield.Radius = 70 + float64(i)
 				})
 			}
 			for range 24 {
@@ -250,8 +250,8 @@ func TestGuestArtifactsReturnThroughTheirRelay(t *testing.T) {
 					}
 					a.World().RunSafe(func() {
 						shield, ok := a.World().Components.Shield.GetComponent(local[j])
-						if !ok || shield.RadiusX != 70+float64(j) {
-							t.Errorf("participant %d sees %d's shield radius %g, want %g", i+1, j+1, shield.RadiusX, 70+float64(j))
+						if !ok || shield.Radius != 70+float64(j) {
+							t.Errorf("participant %d sees %d's shield radius %g, want %g", i+1, j+1, shield.Radius, 70+float64(j))
 						}
 					})
 				}

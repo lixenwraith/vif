@@ -230,7 +230,8 @@ energy penalties. Passive drain and explicit spends remain effective.
 ### Shield
 
 The shield activates whenever energy is nonzero and deactivates at zero. It is
-an ellipse around the cursor, not a rectangular grid range. It:
+round on screen about the cursor, its radius in columns and the rows the cell
+aspect makes of it (ten and five on a terminal), not a rectangular grid range. It:
 
 - turns hostile hits and contacts into energy drain instead of heat loss;
 - collects nuggets (loot is collected within two cells of its owner instead);

@@ -48,7 +48,7 @@ func TestWireEncodingBudget(t *testing.T) {
 		Type: event.EventCursorStateSync, Domain: core.DomainShared,
 		Payload: &event.CursorStatePayload{
 			Entity: 11, Slot: 0, Seq: 17, Energy: 80, Heat: 35, HitPoints: 100,
-			ShieldRadiusX: 7.5, ShieldRadiusY: 3.5, ShieldInvRxSq: 0.017, ShieldInvRySq: 0.082,
+			ShieldRadius:  7.5,
 			WeaponCharges: []int{0, 2, 1, 0}, WeaponCooldown: []int64{0, 250000000, 0, 0},
 		},
 	})
@@ -62,7 +62,7 @@ func TestWireEncodingBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A sync carries the cells that are set: this one, with its energy, heat, hit
-	// points, shield and two charged weapons, is a third of the 27-cell frame.
+	// points, shield and two charged weapons, is a third of the 25-cell frame.
 	if n := len(stateBody) + link.HeaderSize; n > 120 {
 		t.Fatalf("one owner-state sync: %d bytes exceeds the 120-byte budget", n)
 	}

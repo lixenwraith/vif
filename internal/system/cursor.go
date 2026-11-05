@@ -377,10 +377,7 @@ func (s *CursorSystem) equip(e core.Entity, x, y, heat, energy int) {
 	w.Components.Ping.SetComponent(e, component.PingComponent{ShowCrosshair: true})
 	w.Components.Heat.SetComponent(e, component.HeatComponent{Current: heat})
 	w.Components.Energy.SetComponent(e, component.EnergyComponent{Current: int64(energy)})
-	w.Components.Shield.SetComponent(e, component.ShieldComponent{
-		RadiusX: parameter.PlayerShieldRadiusX,
-		RadiusY: w.Resources.Config.CellAspect.Y(parameter.PlayerShieldRadiusY),
-	})
+	w.Components.Shield.SetComponent(e, component.ShieldComponent{Radius: parameter.PlayerShieldRadius})
 	w.Components.Boost.SetComponent(e, component.BoostComponent{})
 	// A fresh cursor holds one charge of every innate kind
 	var loadout component.WeaponComponent

@@ -38,12 +38,10 @@ const (
 
 // Shield visuals
 const (
-	// PlayerShieldRadiusX is horizontal cell radius for shield and ember
-	PlayerShieldRadiusX = 10.0
-	// PlayerShieldRadiusY is vertical cell radius (aspect-corrected)
-	PlayerShieldRadiusY = 5.0
+	// PlayerShieldRadius is the cursor shield's and the ember's reach in columns
+	PlayerShieldRadius = 10.0
 
-	// ShieldMaxOpacity is peak alpha at ellipse edge
+	// ShieldMaxOpacity is peak alpha at the shield's edge
 	ShieldMaxOpacity = 0.3
 
 	// ShieldFeatherStartRatio is normalized distance where fade begins (0.85)

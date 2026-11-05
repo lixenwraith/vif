@@ -14,7 +14,7 @@ type CursorOverlap struct {
 	Cursor        core.Entity   // Cursor identifies the contacted player.
 	OnCursor      bool          // OnCursor reports whether any part occupies the cursor cell.
 	ShieldActive  bool          // ShieldActive reports whether the cursor shield is active.
-	ShieldMembers []core.Entity // ShieldMembers lists parts inside the shield ellipse.
+	ShieldMembers []core.Entity // ShieldMembers lists parts the shield covers.
 }
 
 // CursorOverlaps holds every cursor contact in roster order.
@@ -64,8 +64,7 @@ func CursorContactAt(w *engine.World, x, y int) core.Entity {
 		if !ok {
 			continue
 		}
-		shield, ok := w.Components.Shield.GetPtr(cursor)
-		if ok && shield.Active && vmath.EllipseContainsPoint(x, y, pos.X, pos.Y, shield.InvRxSq, shield.InvRySq) {
+		if shield, ok := w.Components.Shield.GetPtr(cursor); ok && shieldCovers(w, shield, pos.X, pos.Y, x, y) {
 			return cursor
 		}
 	}
@@ -189,11 +188,21 @@ func overlapOf(w *engine.World, cursor core.Entity, cells []memberCell) CursorOv
 		if c.pos == cursorPos {
 			result.OnCursor = true
 		}
-		if shieldActive && vmath.EllipseContainsPoint(c.pos.X, c.pos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+		if shieldActive && shieldCovers(w, shieldComp, cursorPos.X, cursorPos.Y, c.pos.X, c.pos.Y) {
 			result.ShieldMembers = append(result.ShieldMembers, c.entity)
 		}
 	}
 	return result
+}
+
+// shieldCovers reports whether a shield centred on (cx, cy) reaches cell (x, y): up,
+// with a reach, and the cell within its radius at the cell aspect
+func shieldCovers(w *engine.World, shield *component.ShieldComponent, cx, cy, x, y int) bool {
+	if !shield.Active || !(shield.Radius > 0) {
+		return false
+	}
+	dyCirc := w.Resources.Config.CellAspect.Circular(float64(y - cy))
+	return vmath.CircleContains(float64(x-cx), dyCirc, shield.Radius*shield.Radius)
 }
 
 // cursorDefeated is the owner-authored lifecycle predicate: energy and heat both

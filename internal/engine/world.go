@@ -851,9 +851,21 @@ func (w *World) UpdateBoundsRadius() {
 		ping.BoundsActive = false
 		return
 	}
-	ping.BoundsRadiusX = int(shield.RadiusX) / parameter.PingBoundFactor
-	ping.BoundsRadiusY = int(shield.RadiusY) / parameter.PingBoundFactor
+	rx, ry := w.ShieldReach(&shield)
+	ping.BoundsRadiusX, ping.BoundsRadiusY = rx/parameter.PingBoundFactor, ry/parameter.PingBoundFactor
 	ping.BoundsActive = true
+}
+
+// ShieldReach is a shield's box half extents in whole cells: its radius in columns
+// and the rows the cell aspect makes of it, none without a reach. Each stops at the
+// map's size, which no cell's distance from a centre on the map passes, so any
+// radius a game or a peer writes converts to a bounded box.
+func (w *World) ShieldReach(shield *component.ShieldComponent) (int, int) {
+	if !(shield.Radius > 0) {
+		return 0, 0
+	}
+	cfg := w.Resources.Config
+	return int(min(shield.Radius, float64(cfg.MapWidth))), int(min(cfg.CellAspect.FromCircular(shield.Radius), float64(cfg.MapHeight)))
 }
 
 // ClearBoundsRadius drops one cursor's ping bounds. Paired with a local rebind:

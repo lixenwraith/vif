@@ -66,11 +66,10 @@ const (
 	QuasarZapBorderWidthCells = 2
 	// QuasarBorderPaddingCells is the padding to ensure continuous visual border in small window sizes
 	QuasarBorderPaddingCells = 2
-	// QuasarShieldPadX is horizontal cell padding
-	QuasarShieldPadX = 4
-	// QuasarShieldPadY is vertical cell padding
-	QuasarShieldPadY = 2
-	// QuasarShieldMaxOpacity is peak alpha at ellipse edge (TrueColor)
+	// QuasarShieldRadius is the shield's reach in columns, round on the cell aspect
+	// about the footprint
+	QuasarShieldRadius = 6.75
+	// QuasarShieldMaxOpacity is peak alpha at the shield's edge (TrueColor)
 	QuasarShieldMaxOpacity = 0.3
 )
 

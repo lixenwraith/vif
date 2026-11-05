@@ -336,15 +336,10 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 		SpeedMultiplier: 1.0,
 	})
 
-	// Add ShieldComponent (inactive by default), uses pre-calculated config
-	cfg := visual.ShieldConfigFor(component.ShieldTypeQuasar, s.world.Resources.Config.CellAspect)
+	// The shield rises while the quasar's state says so
 	s.world.Components.Shield.SetComponent(headerEntity, component.ShieldComponent{
-		Active:  false,
-		Type:    component.ShieldTypeQuasar,
-		RadiusX: cfg.RadiusX,
-		RadiusY: cfg.RadiusY,
-		InvRxSq: cfg.InvRxSq,
-		InvRySq: cfg.InvRySq,
+		Type:   component.ShieldTypeQuasar,
+		Radius: parameter.QuasarShieldRadius,
 	})
 
 	// Set combat component

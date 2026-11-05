@@ -168,8 +168,8 @@ func interpolateEmberColors(t float64) emberColors {
 func NewEmberPainter(colorMode terminal.ColorMode, aspect vmath.Aspect) *EmberPainter {
 	p := &EmberPainter{
 		aspect:   aspect,
-		radiusX:  visual.EmberRadiusX,
-		radiusY:  aspect.Y(visual.EmberRadiusY),
+		radiusX:  visual.EmberRadius,
+		radiusY:  aspect.FromCircular(visual.EmberRadius),
 		lastHeat: -1, // Force cache rebuild on first frame
 	}
 	p.radiusXInt = int(math.Floor(p.radiusX))

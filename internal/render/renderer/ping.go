@@ -1,8 +1,6 @@
 package renderer
 
 import (
-	"math"
-
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
@@ -10,6 +8,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // PingRenderer draws cursor row/column highlights and optional grid lines
@@ -91,7 +90,7 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 		return
 	}
 	shields.Each(func(shieldEntity core.Entity, shieldComp *component.ShieldComponent) bool {
-		if !shieldComp.Active {
+		if !shieldComp.Active || !(shieldComp.Radius > 0) {
 			return true
 		}
 
@@ -110,9 +109,8 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 			return true
 		}
 
-		// Bounding box
-		rx := int(math.Floor(shieldComp.RadiusX))
-		ry := int(math.Floor(shieldComp.RadiusY))
+		rx, ry := world.ShieldReach(shieldComp)
+		radiusSq := shieldComp.Radius * shieldComp.Radius
 
 		// Bounding box in viewport coords
 		startX := shieldVX - rx
@@ -135,16 +133,11 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 		}
 
 		for y := startY; y <= endY; y++ {
-			dy := float64(y - shieldVY)
-			dySq := dy * dy
+			dyCirc := ctx.CellAspect.Circular(float64(y - shieldVY))
 			rowOffset := y * w
 
 			for x := startX; x <= endX; x++ {
-				dx := float64(x - shieldVX)
-				dxSq := dx * dx
-
-				// Ellipse containment: (dx²*invRxSq + dy²*invRySq) <= 1.0
-				if dxSq*shieldComp.InvRxSq+dySq*shieldComp.InvRySq <= 1.0 {
+				if vmath.CircleContains(float64(x-shieldVX), dyCirc, radiusSq) {
 					idx := rowOffset + x
 					r.exclusionMask[idx/64] |= (1 << (idx % 64))
 				}

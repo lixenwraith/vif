@@ -808,10 +808,7 @@ type CursorStatePayload struct {
 	Heat     int   `toml:"heat,omitempty"`
 	Overheat int   `toml:"overheat,omitempty"`
 
-	ShieldRadiusX float64 `toml:"shield_radius_x,omitempty"`
-	ShieldRadiusY float64 `toml:"shield_radius_y,omitempty"`
-	ShieldInvRxSq float64 `toml:"shield_inv_rx_sq,omitempty"`
-	ShieldInvRySq float64 `toml:"shield_inv_ry_sq,omitempty"`
+	ShieldRadius float64 `toml:"shield_radius,omitempty"`
 
 	BoostRemaining   int64 `toml:"boost_remaining,omitempty"`
 	BoostTotal       int64 `toml:"boost_total,omitempty"`
@@ -827,11 +824,12 @@ type CursorStatePayload struct {
 	BlinkType      int   `toml:"blink_type,omitempty"`
 	BlinkLevel     int   `toml:"blink_level,omitempty"`
 
-	Slot         uint8 `toml:"slot,omitempty"`
-	EmberActive  bool  `toml:"ember_active,omitempty"`
-	ShieldActive bool  `toml:"shield_active,omitempty"`
-	BoostActive  bool  `toml:"boost_active,omitempty"`
-	BlinkActive  bool  `toml:"blink_active,omitempty"`
+	ShieldColor  color.RGB `toml:"shield_color,omitempty"`
+	Slot         uint8     `toml:"slot,omitempty"`
+	EmberActive  bool      `toml:"ember_active,omitempty"`
+	ShieldActive bool      `toml:"shield_active,omitempty"`
+	BoostActive  bool      `toml:"boost_active,omitempty"`
+	BlinkActive  bool      `toml:"blink_active,omitempty"`
 }
 
 // Record is the part of an owner's sync its player brings back to its Wraith.

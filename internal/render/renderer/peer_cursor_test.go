@@ -12,7 +12,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
-	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // peerWorld builds a world holding one cursor per slot, with slot 0 local.
@@ -187,6 +186,8 @@ func TestEverySlotHasItsOwnColour(t *testing.T) {
 	}
 }
 
+// TestPeerShieldBlendsAtThirtyPercent: a peer's field lights the theme at 30% of a
+// local one, which lights the black of its own lens.
 func TestPeerShieldBlendsAtThirtyPercent(t *testing.T) {
 	t.Parallel()
 	gameCtx, cursors := peerWorld(t, 2)
@@ -198,17 +199,17 @@ func TestPeerShieldBlendsAtThirtyPercent(t *testing.T) {
 		gameCtx.World.Positions.SetPosition(cursor, positions[i])
 		gameCtx.World.Components.Energy.SetComponent(cursor, component.EnergyComponent{Current: 1000})
 		gameCtx.World.Components.Shield.SetComponent(cursor, component.ShieldComponent{
-			Type: component.ShieldTypePlayer, Active: true,
+			Type: component.ShieldTypePlayer, Active: true, Radius: parameter.PlayerShieldRadius,
 		})
 	}
 
 	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 80, 24)
 	NewShieldRenderer(gameCtx).Render(rc, buf)
 
-	cfg := visual.ShieldConfigFor(component.ShieldTypePlayer, vmath.RefAspect)
-	alpha := 0.8 * cfg.MaxOpacity
-	wantLocal := color.Screen(visual.RgbBackground, cfg.Color, alpha)
-	wantPeer := color.Screen(visual.RgbBackground, cfg.Color, alpha*visual.PeerFieldBlend)
+	// Eight columns out of ten is 0.8 of the way to the edge
+	look := &visual.ShieldLooks[component.ShieldTypePlayer]
+	wantLocal := color.Screen(visual.RgbBlack, look.Color, 0.8*(look.MaxOpacity*1))
+	wantPeer := color.Screen(visual.RgbBackground, look.Color, 0.8*(look.MaxOpacity*visual.PeerFieldBlend))
 	if got := buf.CellAt(positions[0].X+8, positions[0].Y).Bg; got != wantLocal {
 		t.Fatalf("local shield = %v, want %v", got, wantLocal)
 	}
@@ -230,7 +231,7 @@ func TestConsolePeerFieldsAreNotDimmed(t *testing.T) {
 	gameCtx.World.Positions.SetPosition(peer, pos)
 	gameCtx.World.Components.Energy.SetComponent(peer, component.EnergyComponent{Current: 1000})
 	gameCtx.World.Components.Shield.SetComponent(peer, component.ShieldComponent{
-		Type: component.ShieldTypePlayer, Active: true,
+		Type: component.ShieldTypePlayer, Active: true, Radius: parameter.PlayerShieldRadius,
 	})
 	shield := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
 	NewShieldRenderer(gameCtx).Render(rc, shield)
@@ -244,7 +245,7 @@ func TestConsolePeerFieldsAreNotDimmed(t *testing.T) {
 		cell terminal.Cell
 		want uint8
 	}{
-		"shield": {shield.CellAt(pos.X+8, pos.Y), visual.ShieldConfigFor(component.ShieldTypePlayer, vmath.RefAspect).Palette256},
+		"shield": {shield.CellAt(pos.X+8, pos.Y), visual.ShieldLooks[component.ShieldTypePlayer].Palette256},
 		"ember":  {ember.CellAt(pos.X+5, pos.Y), heatLead256(100, rc.ScreenWidth)},
 	} {
 		if tc.cell.Attrs&terminal.AttrBg256 == 0 || tc.cell.Bg.R != tc.want {
@@ -299,7 +300,7 @@ func TestPlayerFieldsRenderLocalLast(t *testing.T) {
 	for _, cursor := range cursors {
 		gameCtx.World.Positions.SetPosition(cursor, pos)
 		gameCtx.World.Components.Shield.SetComponent(cursor, component.ShieldComponent{
-			Type: component.ShieldTypePlayer, Active: true,
+			Type: component.ShieldTypePlayer, Active: true, Radius: parameter.PlayerShieldRadius,
 		})
 	}
 	gameCtx.World.Components.Energy.SetComponent(cursors[0], component.EnergyComponent{Current: -1000})
@@ -307,7 +308,7 @@ func TestPlayerFieldsRenderLocalLast(t *testing.T) {
 
 	buf := render.NewRenderBuffer(terminal.ColorMode256, 80, 24)
 	NewShieldRenderer(gameCtx).Render(rc, buf)
-	wantShield := visual.ShieldConfigFor(component.ShieldTypePlayer, vmath.RefAspect).Palette256Alt
+	wantShield := visual.ShieldLooks[component.ShieldTypePlayer].Palette256Alt
 	if got := buf.CellAt(pos.X+8, pos.Y); got.Attrs&terminal.AttrBg256 == 0 || got.Bg.R != wantShield {
 		t.Fatalf("overlapping shield palette = (%d, %v), want local (%d, bg256)", got.Bg.R, got.Attrs, wantShield)
 	}
