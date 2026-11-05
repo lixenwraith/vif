@@ -13,15 +13,6 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 )
 
-// stampedCrossings names the Stamped types a player-domain producer pushes at a
-// shared target. Every other Stamped type resolving shared came from a shared
-// system reading shared state, so the receiver already produced it.
-// Combat is the whole list: drain and fuse stamp player, and every other producer
-// carries a shared profile.
-var stampedCrossings = map[EventType]bool{
-	EventCombatAttackDirectRequest: true,
-}
-
 // Derived is implemented by a payload the receiver reconstructs from the artifact
 // that crossed, so its own record stays local (D-5). A chain follow-up is the case:
 // the root hit crosses and the receiver chains from it.
@@ -62,24 +53,20 @@ func BoundTick(payload any, applyTick uint64) {
 	}
 }
 
-// OnWire reports whether a dispatched event must reach the other participants.
-// An event a peer produced is never echoed: it already reached everyone.
+// OnWire reports whether a dispatched event must reach the other participants:
+// a Bus or Stamped push this participant's own simulation made at shared state
+// (GameEvent.Own), whatever system or helper pushed it. A shared producer's copy is
+// re-derived everywhere, and an event a peer produced is never echoed.
 // By value: Push must stay allocation-free, and a pointer here escapes it.
 func OnWire(ev GameEvent) bool {
-	if ev.Origin == OriginNetwork {
+	if ev.Origin == OriginNetwork || !ev.Own {
 		return false
 	}
 	switch ClassOf(ev.Type) {
 	case ClassBus:
-		// A Bus artifact travels only when its producer explicitly stamps it as a
-		// crossing; types with a shared producer leave that re-derived copy local.
-		if ev.Domain != core.DomainPlayer {
-			return false
-		}
 	case ClassStamped:
-		// Here the tag is the target's domain, not the producer's (D-10), so the
-		// crossing is the shared one and the table names which types can be it.
-		if ev.Domain != core.DomainShared || !stampedCrossings[ev.Type] {
+		// Here the tag is the target's domain, not the producer's (D-10)
+		if ev.Domain != core.DomainShared {
 			return false
 		}
 	default:

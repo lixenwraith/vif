@@ -148,6 +148,11 @@ that proves wrong or that a document now states, and link the document instead.
   `[stamped]`, as `EventFuseRequest` is: Shared from the region, player from a
   participant's own producer's `PushLocal`; a `[local]` one may not reach Shared
   state (D-10).
+- A push is its participant's own only inside the producer scope the world's update
+  loop and the scheduler open around a player-profile system's code: a test calling
+  that system's `Update` or `HandleEvent` directly pushes nothing as its own, so a
+  crossing it expects needs `EventQueue.SetOwn(true)` around the call, or the real
+  loop (`TestAPushCrossesByItsProducersDomain`).
 - What a Shared request does to Shared state may turn only on what every instance
   holds alike. An election or a guard that one instance alone sees decides nothing
   there: a fusion that consumes composites on every instance lands them by a Shared

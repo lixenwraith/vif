@@ -22,6 +22,11 @@ type GameEvent struct {
 	// World.pushEvent, read by the player-domain consumers a second derivation
 	// would pay twice; never affects dispatch or replication.
 	Phase EventPhase
+
+	// Own marks a push this participant's own simulation made: a player-profile
+	// system's, or a request whose producer tag names a participant. A replicated
+	// one is its D-3 crossing (OnWire). Stamped by EventQueue.Push.
+	Own bool
 }
 
 // EventType represents the type of game event

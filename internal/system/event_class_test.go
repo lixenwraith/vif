@@ -130,15 +130,17 @@ func TestEventClassMatchesSystemProfile(t *testing.T) {
 }
 
 // TestCrossingPushesAreLive fails on an entry no longer describing real code, and
-// on a crossing that does not stamp. The stamp is what the wire reads: every Bus
-// type also has shared producers re-deriving their own copy, and a crossing left in
-// the ambient domain is indistinguishable from one of those (event.OnWire).
+// on a crossing a system outside the player profile does not stamp: its producer
+// scope crosses nothing, so a crossing left in the ambient domain would be its
+// re-derived copy (event.OnWire).
 func TestCrossingPushesAreLive(t *testing.T) {
 	pushes := parseSystemPushes(t, ".")
 	methods := make(map[string]map[string]bool)
+	player := make(map[string]bool)
 	for _, p := range pushes {
 		for name, m := range p.events {
 			methods[p.name+":"+name] = m
+			player[p.name+":"+name] = p.domain == "player"
 		}
 	}
 	for key := range crossingPushes {
@@ -147,7 +149,7 @@ func TestCrossingPushesAreLive(t *testing.T) {
 			t.Errorf("crossingPushes[%q] describes a push that no longer exists", key)
 			continue
 		}
-		if !m["PushCrossing"] {
+		if !m["PushCrossing"] && !player[key] {
 			t.Errorf("crossingPushes[%q] does not stamp: push it with World.PushCrossing (D-3)", key)
 		}
 	}
