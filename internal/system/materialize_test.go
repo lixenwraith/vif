@@ -65,13 +65,13 @@ func TestAMaterializeCoversTheFootprintItsRequestResolves(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w, _, _ := testCursorWorld(t)
 			newMaterializeWorld(w).deliver(event.GameEvent{Type: event.EventMaterializeRequest, Domain: core.DomainShared, Payload: tc.payload})
-			for _, e := range w.Components.Materialize.Entities() {
-				if m, _ := w.Components.Materialize.GetComponent(e); m.Footprint != tc.want || m.X != 30 || m.Y != 12 {
-					t.Fatalf("materialize %+v, want %+v with its header on (30, 12)", m, tc.want)
-				}
-				return
+			materializes := w.Components.Materialize.Entities()
+			if len(materializes) != 1 {
+				t.Fatalf("%d materializes, want one", len(materializes))
 			}
-			t.Fatal("no materialize")
+			if m, _ := w.Components.Materialize.GetComponent(materializes[0]); m.Footprint != tc.want || m.X != 30 || m.Y != 12 {
+				t.Fatalf("materialize %+v, want %+v with its header on (30, 12)", m, tc.want)
+			}
 		})
 	}
 }
