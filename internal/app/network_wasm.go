@@ -8,8 +8,6 @@ import (
 	"github.com/lixenwraith/vif/internal/service"
 )
 
-const buildHasSocketNetwork = false
-
 // pageHidden reports the page's visibility, which web/worker.js keeps in vifHidden.
 func pageHidden() bool { return js.Global().Get("vifHidden").Truthy() }
 

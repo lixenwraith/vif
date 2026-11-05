@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -41,8 +42,8 @@ func Run(c Config, host Host) error {
 	cfg.Membership.HostAddress, cfg.wiring.resumeHost = "", cfg.Membership.HostAddress
 	// A port the player asked for that this run cannot have ends it before the
 	// terminal starts, as a -join that cannot dial does.
-	if cfg.wiring.resumeHost != "" && buildHasSocketNetwork {
-		lns, err := cfg.Membership.bindDoors(cfg.wiring.resumeHost)
+	if cfg.wiring.resumeHost != "" && config.SocketNetwork {
+		lns, err := bindDoors(cfg.Membership, cfg.wiring.resumeHost)
 		if err != nil {
 			return fmt.Errorf("host %s: %w", cfg.wiring.resumeHost, err)
 		}
