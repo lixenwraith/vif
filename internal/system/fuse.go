@@ -14,11 +14,10 @@ import (
 )
 
 // FuseSystem plays fusions and holds nothing: a request's sources go into its target
-// species, which rides what plays the fusion, the spirits its sources fly in or a
-// materialize over the target's footprint, and lands as that ends. Its batches stay
-// domain-pure: drains and the effect that lands the target are the elected
-// participant's, whose landing crosses, and a Shared request's composites go on
-// every instance, each flying its own spirits.
+// species, which rides the spirits they fly in or a materialize over its footprint
+// and lands as that ends. A Shared request's composites fuse alike on every instance
+// by a Shared carrier; a fusion of drains alone is the elected participant's, whose
+// carrier crosses.
 type FuseSystem struct {
 	world *engine.World
 
@@ -88,28 +87,32 @@ func (s *FuseSystem) Update() {}
 // fuse plays one request: its sources consumed and its target placed on the nearest
 // footprint free of walls a spawn is kept from at their centroid, the composites'
 // alone when it takes any, and at the map's centre when a sweep finds none. It fails
-// naming what its domain cannot take or an entity no longer standing; a sweep's
-// elected participant plays no second fusion into a target in flight.
+// naming what its domain cannot take, an entity twice or one no longer standing; a
+// sweep's elected participant takes no drains while a spawn of the target flies.
 func (s *FuseSystem) fuse(shared bool, p *event.FuseRequestPayload) {
 	if !s.lands(p.Target) || !s.takes(shared, p) {
 		s.statSpawnFailures.Add(1)
 		return
 	}
 	var drains, composites []core.Entity
-	carries := true
+	elected := false
 	switch {
 	case len(p.Entities) == 0:
 		composites = s.sweepComposites(p.Sources)
-		if carries = s.elected(p.Cursor) && !s.inFlight(p.Target); carries {
+		if elected = s.elected(p.Cursor) && !s.inFlight(p.Target); elected {
 			drains = s.sweepDrains(p.Sources)
 		}
 	case shared:
-		composites, carries = p.Entities, s.elected(p.Cursor)
+		composites = p.Entities
 	default:
-		drains = p.Entities
+		drains, elected = p.Entities, true
 	}
-	if !carries && len(composites) == 0 {
-		return
+	carrier := core.DomainShared // composites stand alike everywhere, so every instance lands them
+	if len(composites) == 0 {
+		if !elected {
+			return
+		}
+		carrier = core.DomainPlayer
 	}
 
 	sources := append(s.positions(composites), s.positions(drains)...)
@@ -135,7 +138,7 @@ func (s *FuseSystem) fuse(shared bool, p *event.FuseRequestPayload) {
 	}
 	s.consume(composites)
 	s.killDrains(drains)
-	s.fuseInto(p.Target, p.Effect, sources, left+foot.HeaderX, top+foot.HeaderY, carries)
+	s.fuseInto(p.Target, p.Effect, sources, left+foot.HeaderX, top+foot.HeaderY, carrier)
 }
 
 // lands reports a species a land request stands: one with a body, in the Shared domain
@@ -144,19 +147,20 @@ func (s *FuseSystem) lands(species component.SpeciesType) bool {
 	return r.Footprint(species).Valid() && r.SpeciesDomain(species) == core.DomainShared
 }
 
-// takes reports a request names only sources its domain takes: a participant's its
-// drains alone, by entity or row, and a Shared one, every instance's alike,
-// composites by entity, whose ids every instance shares, and drains by row only
+// takes reports a request names only sources its domain takes, each once: a
+// participant's its drains alone, by entity or row, and a Shared one, every
+// instance's alike, composites by entity, whose ids every instance shares, and
+// drains by row only
 func (s *FuseSystem) takes(shared bool, p *event.FuseRequestPayload) bool {
-	if len(p.Entities) > 0 {
-		return !slices.ContainsFunc(p.Entities, func(e core.Entity) bool {
-			if shared {
-				return s.composite(e) == component.SpeciesNone
-			}
-			return !s.world.Components.Drain.HasEntity(e) || !s.world.Positions.HasPosition(e)
-		})
+	for i, e := range p.Entities {
+		switch {
+		case slices.Contains(p.Entities[:i], e),
+			shared && s.composite(e) == component.SpeciesNone,
+			!shared && (!s.world.Components.Drain.HasEntity(e) || !s.world.Positions.HasPosition(e)):
+			return false
+		}
 	}
-	return shared || !slices.ContainsFunc(p.Sources, func(row event.FuseSource) bool {
+	return len(p.Entities) > 0 || shared || !slices.ContainsFunc(p.Sources, func(row event.FuseSource) bool {
 		return row.Species != component.SpeciesDrain
 	})
 }
@@ -182,8 +186,8 @@ func (s *FuseSystem) composite(e core.Entity) component.SpeciesType {
 }
 
 // elected reports this instance simulates the cursor whose drains a sweep takes;
-// 0 is the coordinator's in a live session, so a Shared trigger naming none fuses
-// on one instance
+// 0 is the coordinator's in a live session, so a Shared trigger naming none takes
+// drains on one instance
 func (s *FuseSystem) elected(cursor core.Entity) bool {
 	if cursor == 0 {
 		if session := s.world.Session(); session.Live && !session.Coordinator() {
@@ -194,16 +198,16 @@ func (s *FuseSystem) elected(cursor core.Entity) bool {
 	return s.world.ResolveOwnedCursor(cursor) != 0
 }
 
-// inFlight reports a fusion into the species in flight on this instance, whose
-// carrier is its pending spawn
+// inFlight reports a spawn of the species in flight on this instance: a materialize
+// or spirit naming it, this participant's carrier or a Shared one
 func (s *FuseSystem) inFlight(species component.SpeciesType) bool {
 	for _, e := range s.world.Components.Materialize.Entities() {
-		if m, ok := s.world.Components.Materialize.GetPtr(e); ok && e.Domain() == core.DomainPlayer && m.Species == species {
+		if m, ok := s.world.Components.Materialize.GetPtr(e); ok && m.Species == species {
 			return true
 		}
 	}
 	for _, e := range s.world.Components.Spirit.Entities() {
-		if sp, ok := s.world.Components.Spirit.GetPtr(e); ok && e.Domain() == core.DomainPlayer && sp.Species == species {
+		if sp, ok := s.world.Components.Spirit.GetPtr(e); ok && sp.Species == species {
 			return true
 		}
 	}
@@ -269,34 +273,31 @@ func (s *FuseSystem) positions(sources []core.Entity) []vmath.Point {
 
 // fuseInto plays a fusion over the species' footprint with its header on (x, y): the
 // spirits the sources fly in, unless the effect is the materialize or no source
-// flies, else a materialize naming the species, in a data species' own style. On the
-// instance that carries it, the first spirit or the materialize names the species,
-// which lands as that ends; each is this instance's own, so its landing crosses.
-func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEffect, sources []vmath.Point, x, y int, carries bool) {
+// flies, else a materialize naming the species, in a data species' own style. The
+// first spirit or the materialize carries the species in the carrier's domain and
+// lands it as that ends: a Shared one on every instance, a player one by crossing.
+func (s *FuseSystem) fuseInto(species component.SpeciesType, effect event.FuseEffect, sources []vmath.Point, x, y int, carrier core.Domain) {
 	if effect != event.FuseEffectMaterialize && len(sources) > 0 {
-		s.effectSpiritArea(species, sources, x, y, component.SpiritCyan, carries)
-		return
-	}
-	if !carries {
+		s.effectSpiritArea(species, sources, x, y, component.SpiritCyan, carrier)
 		return
 	}
 	style := component.SpawnTypeSwarm
 	if species >= component.SpeciesDataFirst {
 		style = component.SpawnTypeDataFirst + component.SpawnType(species-component.SpeciesDataFirst)
 	}
-	s.world.PushLocal(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+	s.world.PushEventDomain(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
 		X:       x,
 		Y:       y,
 		Type:    style,
 		Species: species,
-	})
+	}, carrier)
 }
 
 // effectSpiritArea flies one spirit per source into the species' footprint with its
-// header on (x, y), player-domain visuals; every spirit flies one time, and when
-// this instance carries the fusion the first names the species its arrival lands
-// there, so the spawn rides it
-func (s *FuseSystem) effectSpiritArea(species component.SpeciesType, sources []vmath.Point, x, y int, c component.SpiritColor, carries bool) {
+// header on (x, y), every spirit one time: the first, in the carrier's domain, names
+// the species its arrival lands there, so the spawn rides it, and the rest are
+// player-domain visuals
+func (s *FuseSystem) effectSpiritArea(species component.SpeciesType, sources []vmath.Point, x, y int, c component.SpiritColor, carrier core.Domain) {
 	area := s.world.Resources.Footprint(species).At(x, y)
 	for i, src := range sources {
 		dest := area.DistributePoint(i, s.rng)
@@ -309,10 +310,12 @@ func (s *FuseSystem) effectSpiritArea(species component.SpeciesType, sources []v
 			Char:      visual.DrainChar,
 			BaseColor: c,
 		}
-		if i == 0 && carries {
+		domain := core.DomainPlayer
+		if i == 0 {
 			request.Species, request.LandX, request.LandY = species, x, y
+			domain = carrier
 		}
-		s.world.PushLocal(event.EventSpiritSpawnRequest, request)
+		s.world.PushEventDomain(event.EventSpiritSpawnRequest, request, domain)
 	}
 }
 

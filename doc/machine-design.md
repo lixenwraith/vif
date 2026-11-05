@@ -399,20 +399,21 @@ the style's fill, hold and recede over.
   lands with its header on the materialize's footprint. `terminateStorm` ends the
   storm's materializes in flight, and the storm's own capture (`stormSnapshot`)
   holds its root alone.
-- **Fusions.** One `EventFuseRequest` names its sources, by entity or by sweep
-  rows of species and count, and its target: any Shared species with a footprint,
-  a program's among them. Its sources are drains, a participant's own, and unit
-  composites at their root, which only a Shared request, one a region raises on
-  every instance, takes: each instance consumes them alike, unrewarded, and places
-  the target at their centroid. The sources fly in as player-domain spirits, a
-  composite's from its header, and on the instance the request's cursor elects the
-  first names the target and its footprint, which lands on the tick the spirits
-  draw their arrival frame, its deadline running the half-second flight; a request
-  asking for the materialize (`FuseEffectMaterialize`), or one with no source,
-  plays a player-domain materialize naming the target there instead, in its style.
-  Two enraged drains ask by their entities for a swarm, and a scenario sweeps the
-  elected cursor's drains into a quasar. The elected instance plays no sweep into a
-  target whose fusion flies (`inFlight`), the fuse keeps no state of its own
+- **Fusions.** One `EventFuseRequest` names its sources, by entity (each once) or
+  by sweep rows of species and count, and its target: any Shared species with a
+  footprint, a program's among them. Its sources are drains, a participant's own,
+  and unit composites at their root, which only a Shared request, one a region
+  raises on every instance, takes: each instance consumes them alike, unrewarded,
+  and places the target at their centroid. The sources fly in as spirits, a
+  composite's from its header, the first carrying the target, which lands on the
+  tick the spirits draw their arrival frame, its deadline running the half-second
+  flight; a request asking for the materialize (`FuseEffectMaterialize`), or one
+  with no source, plays a materialize carrying it instead, in its style. A fusion
+  taking composites has a Shared carrier, so every instance lands its own copy; one
+  of drains alone is the elected cursor's instance's, and its landing crosses. Two
+  enraged drains ask by their entities for a swarm, and a scenario sweeps the
+  elected cursor's drains into a quasar. The elected instance takes no drains while
+  a spawn of the target flies (`inFlight`), the fuse keeps no state of its own
   (`FuseSystem.Update` is empty), and `killDrains` alone reports the consumed
   drains' deaths.
 - **Data species.** A prototype naming `entrance = "materialize"` comes on as
