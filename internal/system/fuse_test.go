@@ -353,6 +353,75 @@ func TestASweepTakesItsCountOfTheOldestDrains(t *testing.T) {
 	}
 }
 
+// TestASweepNamingNoCursorTakesTheFirstParticipantsDrains: two guests of a host that
+// drives no cursor take a Shared sweep naming none on one instance between them, the
+// lowest slot's that plays: the first's, the second's while the first is away, and
+// the first's again once it is back
+func TestASweepNamingNoCursorTakesTheFirstParticipantsDrains(t *testing.T) {
+	var guests [2]*materializeWorld
+	for i := range guests {
+		w := engine.NewWorld()
+		engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+		w.AdoptSession(engine.SessionState{Live: true, Participant: uint32(i + 2), Authority: engine.CoordinatorParticipant})
+		guests[i] = newMaterializeWorld(w, ready(NewFuseSystem(w)), ready(NewCursorSystem(w)))
+		w.Resources.Player.SetLocal(uint8(i))
+	}
+	// arrive lands slot's participant, a Wraith's return, on both instances at once
+	arrive := func(slot uint8) {
+		for i, g := range guests {
+			control := component.ControlRemote
+			if i == int(slot) {
+				control = component.ControlLocal
+			}
+			g.deliver(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
+				X: 5 + 10*int(slot), Y: 5, Slot: slot, Control: uint8(control), PeerID: uint32(slot) + 2}})
+		}
+	}
+	arrive(0)
+	arrive(1)
+
+	for _, step := range []struct {
+		name   string
+		roster func()
+		sweeps int // the guest whose drains go
+	}{
+		{"both playing", func() {}, 0},
+		{"the first away", func() {
+			// Guest 2's own world takes the departure too, which a live session never
+			// shows the departed instance: a Wraith is the first participant nowhere
+			for _, g := range guests {
+				g.deliver(event.GameEvent{Type: event.EventCursorWraithRequest, Payload: &event.CursorWraithRequestPayload{Slot: 0}})
+			}
+		}, 1},
+		{"the first back", func() { arrive(0) }, 0},
+	} {
+		step.roster()
+		for _, g := range guests {
+			// Each guest's own drains, as its DrainSystem raises them from its heat:
+			// no other instance holds them, so only the elected one can sweep
+			for _, x := range []int{20, 24} {
+				d := g.w.CreateEntity(core.DomainPlayer)
+				g.w.Positions.SetPosition(d, component.PositionComponent{X: x, Y: 12})
+				g.w.Components.Drain.SetComponent(d, component.DrainComponent{})
+			}
+			g.deliver(event.GameEvent{Type: event.EventFuseRequest, Domain: core.DomainShared, Payload: &event.FuseRequestPayload{
+				Sources: []event.FuseSource{{Species: component.SpeciesDrain}}, Target: component.SpeciesQuasar,
+				Effect: event.FuseEffectMaterialize}})
+		}
+		for i, g := range guests {
+			if swept := g.w.Components.Drain.CountEntities() == 0; swept != (i == step.sweeps) {
+				t.Fatalf("%s: guest %d swept its drains %t, want guest %d's alone", step.name, i+2, swept, step.sweeps+2)
+			}
+			for range materializeTicks() {
+				g.tick()
+			}
+			for _, d := range g.w.Components.Drain.Entities() {
+				g.w.DestroyEntity(d)
+			}
+		}
+	}
+}
+
 // standHeader stands a composite's bare phantom head: a Shared header of behavior
 // b and type typ at (x, y), under parent unless that is 0
 func standHeader(w *engine.World, b component.Behavior, typ component.CompositeType, parent core.Entity, x, y int) core.Entity {

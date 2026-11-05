@@ -393,3 +393,55 @@ func TestDrainBreaksTheGoldMemberItCrosses(t *testing.T) {
 		t.Fatalf("deaths = %d, want 1", deaths)
 	}
 }
+
+// TestADrainPursuesItsOwnCursorPastANearerOne: a drain homes on the cursor whose heat
+// raised it, never on another participant's standing nearer, which never sees it
+func TestADrainPursuesItsOwnCursorPastANearerOne(t *testing.T) {
+	w, _, drain, drains, _ := testDrainInteractionWorld(t, 34, 12, 10, 12)
+	spawnRemoteCursor(t, w, 1, 4, 12, 3)
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	nav := ready(NewNavigationSystem(w)).(*NavigationSystem)
+	for range 5 {
+		nav.Update()
+		beginDrainTick(t, drains)
+		drains.updateDrainMovement()
+	}
+	if k, _ := w.Components.Kinetic.GetComponent(drain); k.VelX <= 0 {
+		t.Fatalf("drain velocity (%.2f, %.2f), want toward its own cursor on its right", k.VelX, k.VelY)
+	}
+}
+
+// TestADrainMeetsOnlyItsOwnCursor: another participant's shield over a drain knocks
+// it back no more than its cell takes it or counts a defeat, while its own cursor's
+// cell does both
+func TestADrainMeetsOnlyItsOwnCursor(t *testing.T) {
+	w, cursor, drain, drains, _ := testDrainInteractionWorld(t, 34, 12, 10, 12)
+	other := spawnRemoteCursor(t, w, 1, 10, 12, 3)
+	met := func() (knockbacks, defeats int) {
+		beginDrainTick(t, drains)
+		drains.handleDrainInteractions()
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch ev.Type {
+			case event.EventCombatAttackAreaRequest:
+				knockbacks++
+			case event.EventDrainDefeated:
+				defeats++
+			}
+		}
+		return knockbacks, defeats
+	}
+
+	for _, shielded := range []bool{true, false} {
+		if s, ok := w.Components.Shield.GetPtr(other); ok {
+			s.Active = shielded
+		}
+		if k, d := met(); k != 0 || d != 0 || !w.Components.Drain.HasEntity(drain) {
+			t.Fatalf("another's cursor, shield up %t: %d knockbacks and %d defeats, drain standing %t; want none and standing",
+				shielded, k, d, w.Components.Drain.HasEntity(drain))
+		}
+	}
+	w.Positions.SetPosition(cursor, component.PositionComponent{X: 10, Y: 12})
+	if _, d := met(); d != 1 {
+		t.Fatalf("its own cursor's cell counted %d defeats, want 1", d)
+	}
+}
