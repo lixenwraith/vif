@@ -97,6 +97,11 @@ that proves wrong or that a document now states, and link the document instead.
   `main`; a scratch one under `android/tmp/` calling every bound function, run with
   `GOOS=android` and `-filter '^github.com/lixenwraith/vif(/|$)'`, stands in for
   gomobile's wrapper.
+- deadcode lists code that is reserved and stays: `internal/system/composite.go`'s
+  lifecycle methods (their todo item), `pkg/vmath` and `pkg/vmath/physics` (other
+  repositories import them), `cmd/ascimage`'s viewer accessors (its next revision),
+  `appendF32`/`readF32` (what gen-manifest emits for a float32 field) and the vlog
+  stub's mirrors of live functions.
 - A cloud checkout is shallow, about 50 commits: `git log -S` names the boundary
   commit as a line's origin. `git fetch --deepen=3000 origin main` reaches the rest.
 

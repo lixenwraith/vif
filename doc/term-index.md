@@ -27,7 +27,7 @@ index](https://github.com/lixenwraith/stapes/blob/main/doc/term-index.md).
 
 **action** (also: ActionFunc, delayed action) — five senses. See also **APM**.
 - *FSM*: a named effect a state's `on_enter`, `on_update` or `on_exit`, or a transition, runs, with an optional guard and `delay_ms`; a delayed action counts down in region time and is dropped when its owning state exits. [FSM §8](fsm-and-configuration.md#8-actions-and-delayed-work) · [FSM reference: Actions](fsm-reference.md#actions) · `internal/fsm` `Action`, `ActionFunc`, `DelayedAction`
-- *Input*: a canonical action name such as `fire_main`, `motion_right` or `toggle_auto_fire`, which keymaps bind and bot and script intents name. [Input §10](input-and-modes.md#10-keymap-override-files) · `internal/input` `ActionNames`, `KeyEntry`
+- *Input*: a canonical action name such as `fire_main`, `motion_right` or `toggle_auto_fire`, which keymaps bind and bot and script intents name. [Input §10](input-and-modes.md#10-keymap-override-files) · `internal/input` `ActionEntry`, `KeyEntry`
 - *Bots*: an FSM action of a bot graph (`Intent`, `Text`, `TypeGlyph` or `PointAt`) that queues intents, sent at the graph's `actions_per_second` (default 12). [Bots: Actions](bots.md#actions) · `internal/bot` `Driver`, `DefaultActionsPerSecond`
 - *Scripts*: one `[[action]]` of an authored script, placed at a `(run, tick)` position and setting exactly one of `intent`, `text`, `command` or `event`. [Development: Authored headless scripts](development.md#authored-headless-scripts) · `internal/journal` `ScriptAction`
 - *Config menu*: an action row runs the command it names and closes the menu. [Menu: Key binding and persistence](config-menu.md#key-binding-and-persistence) · `internal/mode` `commandAction`

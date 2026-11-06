@@ -42,9 +42,6 @@ func (s *cellSweep) collect(w *engine.World, x, y int, clearable func(core.Entit
 	}
 }
 
-// count returns the total collected victims
-func (s *cellSweep) count() int { return len(s.shared) + len(s.player) }
-
 // emit routes each domain's victims through the death pipeline separately
 func (s *cellSweep) emit(w *engine.World, effect event.EventType) {
 	if len(s.shared) > 0 {

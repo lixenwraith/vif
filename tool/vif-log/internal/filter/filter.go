@@ -118,16 +118,6 @@ func (s *Stack) Add(f Filter) {
 	s.Compile()
 }
 
-// Find returns the first entry of the given kind.
-func (s *Stack) Find(kind string) (*Entry, bool) {
-	for i := range s.Entries {
-		if s.Entries[i].F.Kind() == kind {
-			return &s.Entries[i], true
-		}
-	}
-	return nil, false
-}
-
 // Set replaces the entry of f's kind, appending when absent.
 func (s *Stack) Set(f Filter) {
 	for i := range s.Entries {

@@ -130,9 +130,3 @@ func (s *MarkerSystem) spawnMarker(p *event.MarkerSpawnRequestPayload) {
 		armTimer(s.world, entity, component.TimerLifetime, p.Duration)
 	}
 }
-
-func (s *MarkerSystem) destroyAllMarkers() {
-	// Batch destruction mutates the live marker slice, so detach it first.
-	entities := s.world.Components.Marker.GetAllEntities()
-	s.world.DestroyEntitiesBatch(entities)
-}
