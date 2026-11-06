@@ -9,17 +9,6 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 )
 
-// captureSink records journal output in memory, for tests that need no file
-type captureSink struct {
-	records []JournalRecord
-	anchors []JournalAnchor
-}
-
-func (c *captureSink) Record(r JournalRecord) { c.records = append(c.records, r) }
-func (c *captureSink) Anchor(a JournalAnchor) { c.anchors = append(c.anchors, a) }
-func (c *captureSink) Capture(JournalCapture) {}
-func (c *captureSink) Finish(Stamp)           {}
-
 // TestJournalPayloadRoundTrip populates every registered prototype, encodes it
 // in its generated codec and decodes it back; the zero value too, since an
 // absent field has to read as zero, and a negative zero keeps its sign.

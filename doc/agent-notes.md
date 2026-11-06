@@ -85,6 +85,25 @@ that proves wrong or that a document now states, and link the document instead.
 - Go 1.27 takes a promoted field as a struct literal's key, though not through an
   embedded pointer, so fields moved into an embedded struct keep every literal,
   selector and method call compiling.
+- `go install golang.org/x/tools/cmd/deadcode@latest` outside the module builds with
+  the tool's own minimum Go (1.26), which refuses this module ("package requires
+  newer Go version go1.27"): install it, and staticcheck, under
+  `GOTOOLCHAIN=go1.27.3`.
+- deadcode reads one profile: `pkg/browser`'s `keyCode` reads dead on linux and is
+  live on js/wasm, `glyph.Texture.Atlas` and `Frames.ColorMode` on js/wasm and
+  Android. Call a function dead only where every profile compiling its file reports
+  it. Its `-test` run stops on `vif_headless` and windows, where `internal/app`'s
+  tests do not build: list the packages without it. The Android module has no
+  `main`; a scratch one under `android/tmp/` calling every bound function, run with
+  `GOOS=android` and `-filter '^github.com/lixenwraith/vif(/|$)'`, stands in for
+  gomobile's wrapper.
+- deadcode lists code that is reserved and stays: `internal/system/composite.go`'s
+  lifecycle methods (their todo item), `pkg/vmath` and `pkg/vmath/physics` (other
+  repositories import them), `cmd/ascimage`'s viewer accessors (its next revision),
+  `appendF32`/`readF32` (what gen-manifest emits for a float32 field) and the vlog
+  stub's mirrors of live functions.
+- A cloud checkout is shallow, about 50 commits: `git log -S` names the boundary
+  commit as a line's origin. `git fetch --deepen=3000 origin main` reaches the rest.
 
 ## Ticks and events
 
@@ -203,6 +222,11 @@ that proves wrong or that a document now states, and link the document instead.
   tree (`tar` it out), so the working tree stays editable; a mutation that survives
   is run against main's own tests in a `git worktree`, where surviving too makes it
   an old gap rather than a lost pin.
+- A correction leaves a cursor's owner-authored cells (D-13) alone four ways:
+  `applyShard`'s owner check, the encoder's exclusion, the owner-authored cursor
+  sets (`ownerAuthoredCursors`, `liveOwnerAuthoredCursors`) and
+  `RebindCursorRoster`'s restore. Each masks a mutation of the others, so a test
+  proving the rule turns them all off.
 - A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
   test that builds a joiner as a join does goes through `configForJoin` into
   `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,
@@ -227,7 +251,9 @@ that proves wrong or that a document now states, and link the document instead.
   more under `-race` or load: a relay-join hold and a mid-session journal test. A
   failure there takes about 16.5 s, a 15 s socket wait running out. Before calling
   one a regression, run it alone in fresh processes, alternating main's binary and
-  the branch's under the same load.
+  the branch's under the same load. `TestAClaimOnAPlaceStillLinkedClosesTheLinkItLeft`
+  failed once in 0.12 s ("the link the returning player left is still open") while
+  deadcode ran beside the suite, and passed 32 loaded runs on both binaries after.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not. Keep it near twice
   the CPU count: at five times, a socket join's catch-up is refused ("behind the

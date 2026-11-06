@@ -394,18 +394,6 @@ func (s *GoldSystem) requestTimerSplash(remaining time.Duration) {
 	})
 }
 
-// handleMemberTyped processes a gold character being typed
-func (s *GoldSystem) handleMemberTyped(payload *event.CompositeMemberDestroyedPayload) {
-	if !s.active || payload.HeaderEntity != s.headerEntity {
-		return
-	}
-
-	// Check if sequence complete
-	if payload.RemainingCount == 0 {
-		s.handleGoldComplete()
-	}
-}
-
 // recordContribution tallies one typed member against its cursor's roster slot
 func (s *GoldSystem) recordContribution(cursor core.Entity) {
 	if slot, ok := s.world.CursorSlot(cursor); ok && int(slot) < parameter.MaxPlayers {

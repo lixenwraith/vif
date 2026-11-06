@@ -176,12 +176,6 @@ func encodeSections(parts []sectionPart) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// isSections reports a body in the sections codec, which a capture travels in.
-func isSections(body []byte) bool {
-	return len(body) >= snapshotWireHeader && bytes.Equal(body[:4], snapshotWireMagic[:]) &&
-		body[5] == snapshotCodecSections
-}
-
 // decodeSections validates the envelope and expands each part to its JSON, every
 // length checked against the declared plain size before anything is allocated.
 func decodeSections(body []byte) ([]sectionPart, error) {

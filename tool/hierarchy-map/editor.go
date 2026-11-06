@@ -901,19 +901,6 @@ func (app *AppState) hasAddition(ref TagRef) bool {
 	return false
 }
 
-func formatTagRef(ref TagRef) string {
-	if ref.Tag == "" && ref.Module == "" {
-		return fmt.Sprintf("#%s{%s}", ref.Category, ref.Group)
-	}
-	if ref.Tag == "" {
-		return fmt.Sprintf("#%s{%s[%s]}", ref.Category, ref.Group, ref.Module)
-	}
-	if ref.Module == "" {
-		return fmt.Sprintf("#%s{%s(%s)}", ref.Category, ref.Group, ref.Tag)
-	}
-	return fmt.Sprintf("#%s{%s[%s(%s)]}", ref.Category, ref.Group, ref.Module, ref.Tag)
-}
-
 func (app *AppState) executeEditorSave() {
 	e := app.Editor
 	if e == nil {
@@ -1211,13 +1198,6 @@ func serializeTags(tags map[string]map[string]map[string][]string) string {
 	}
 
 	return "// @" + HierarchyLinePrefix + ": " + strings.Join(parts, ",")
-}
-
-func (app *AppState) saveEditorChanges() {
-	if app.Editor == nil || !app.Editor.Dirty() {
-		app.CloseEditor()
-		return
-	}
 }
 
 func (app *AppState) renderEditor(r tui.Region) {

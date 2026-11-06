@@ -98,9 +98,6 @@ func (s *Stack) Compile() {
 	})
 }
 
-// Needs reports the union of the enabled filters' requirements.
-func (s *Stack) Needs() Need { return s.needs }
-
 // Match evaluates the enabled filters in cost order.
 func (s *Stack) Match(c *Ctx) bool {
 	for _, i := range s.order {
@@ -116,16 +113,6 @@ func (s *Stack) Match(c *Ctx) bool {
 func (s *Stack) Add(f Filter) {
 	s.Entries = append(s.Entries, Entry{F: f, Enabled: true})
 	s.Compile()
-}
-
-// Find returns the first entry of the given kind.
-func (s *Stack) Find(kind string) (*Entry, bool) {
-	for i := range s.Entries {
-		if s.Entries[i].F.Kind() == kind {
-			return &s.Entries[i], true
-		}
-	}
-	return nil, false
 }
 
 // Set replaces the entry of f's kind, appending when absent.

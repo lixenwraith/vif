@@ -188,12 +188,6 @@ func Configure(c Config) {
 	}
 }
 
-// Init configures and starts a session in one call
-func Init(c Config) (string, error) {
-	Configure(c)
-	return Start()
-}
-
 // buildLogger constructs a configured, unstarted logger and its resolved path.
 // console selects stdout over a file; the two are exclusive, because a run that
 // wants its log on stdout is one whose filesystem is not where anybody will look.
@@ -385,15 +379,10 @@ func Shutdown(timeout time.Duration) {
 	}
 }
 
-// On reports whether a process record with this sub and level would be written.
-func On(sub string, level int64) bool { return defaultLog.On(sub, level) }
-
 // The process's own records; a runtime writes through its own handle.
-func Debug(sub string, args ...any)  { defaultLog.emit(sub, LevelDebug, 0, args) }
-func Info(sub string, args ...any)   { defaultLog.emit(sub, LevelInfo, 0, args) }
-func Warn(sub string, args ...any)   { defaultLog.emit(sub, LevelWarn, 0, args) }
-func Error(sub string, args ...any)  { defaultLog.emit(sub, LevelError, 0, args) }
-func Detail(sub string, args ...any) { defaultLog.emit(sub, LevelTrace, 0, args) }
+func Info(sub string, args ...any)  { defaultLog.emit(sub, LevelInfo, 0, args) }
+func Warn(sub string, args ...any)  { defaultLog.emit(sub, LevelWarn, 0, args) }
+func Error(sub string, args ...any) { defaultLog.emit(sub, LevelError, 0, args) }
 
 // On reports whether a record with this sub and level would be written.
 // Guard hot call sites with it: the variadic slice is built before the call

@@ -44,24 +44,20 @@ type Config struct {
 	Console    bool
 }
 
-func Init(Config) (string, error) { return "", ErrDisabled }
-func Configure(Config)            {}
-func Start() (string, error)      { return "", ErrDisabled }
-func Stop()                       {}
-func Enabled() bool               { return false }
-func Path() string                { return "" }
-func Dir() string                 { return "" }
-func LevelName() string           { return "OFF" }
-func SetLevelName(string) error   { return ErrDisabled }
-func On(string, int64) bool       { return false }
-func Debug(string, ...any)        {}
-func Info(string, ...any)         {}
-func Warn(string, ...any)         {}
-func Error(string, ...any)        {}
-func SetLevel(int64)              {}
-func CrashHook(any, []byte)       {}
-func Shutdown(time.Duration)      {}
-func Detail(string, ...any)       {}
+func Configure(Config)          {}
+func Start() (string, error)    { return "", ErrDisabled }
+func Stop()                     {}
+func Enabled() bool             { return false }
+func Path() string              { return "" }
+func Dir() string               { return "" }
+func LevelName() string         { return "OFF" }
+func SetLevelName(string) error { return ErrDisabled }
+func Info(string, ...any)       {}
+func Warn(string, ...any)       {}
+func Error(string, ...any)      {}
+func SetLevel(int64)            {}
+func CrashHook(any, []byte)     {}
+func Shutdown(time.Duration)    {}
 
 // JournalFile mirrors the real build's open journal; none is ever opened.
 type JournalFile struct{}

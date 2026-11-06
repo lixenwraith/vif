@@ -223,15 +223,6 @@ func (idx *Index) Category(name string) *CategoryIndex {
 	return idx.Categories[name]
 }
 
-// HasCategory checks if the index contains a specific category
-func (idx *Index) HasCategory(name string) bool {
-	if idx.Categories == nil {
-		return false
-	}
-	_, ok := idx.Categories[name]
-	return ok
-}
-
 // FilterState tracks active filter criteria and matching files
 type FilterState struct {
 	FilteredPaths        map[string]bool                                  // files matching current filter
