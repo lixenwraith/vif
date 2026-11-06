@@ -1821,7 +1821,8 @@ func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 
 // TestTdFusesTheCausalParticipantsDrains: td's quasar phase opens on the drain defeat
 // that crosses its threshold and fuses that participant's drains, as main's does: the
-// guest whose defeat it was lands the quasar, and the host takes it from the guest
+// guest whose defeat it was lands the quasar, the host takes it from the guest, and
+// only the guest's drains hold while the phase runs
 func TestTdFusesTheCausalParticipantsDrains(t *testing.T) {
 	t.Parallel()
 	cfg := Config{Seed: 0x7D, Width: 200, Height: 60, Resources: resource.Options{Dir: soakRoot, Scenario: "td"}}
@@ -1852,6 +1853,11 @@ func TestTdFusesTheCausalParticipantsDrains(t *testing.T) {
 	}
 	if !slices.Equal(fromPeer[0], []bool{true}) || !slices.Equal(fromPeer[1], []bool{false}) {
 		t.Fatalf("quasar landings by peer: host %v, guest %v; want one each, the guest's", fromPeer[0], fromPeer[1])
+	}
+	for i, want := range []bool{false, true} {
+		if got := statBoolOf(apps[i], "drain.paused"); got != want {
+			t.Fatalf("participant %d drains held %t in the quasar phase, want %t", i+1, got, want)
+		}
 	}
 }
 
