@@ -187,6 +187,11 @@ that proves wrong or that a document now states, and link the document instead.
   run the four shapes on both from their package directories, a second or so each,
   and read late commits and late copies; pages repaired move with any change of
   timing.
+- The harness's counts read the compared surface, which leaves out every D-13 cell,
+  so an owner sync a receiver drops moves none of them. A change to what a sync may
+  write is checked on a copy whose drop prints the sync instead
+  (`NetworkSystem.stateInRange`), over the four shapes and the `internal/app` suite
+  under `-test.v -test.parallel=1`, which puts each print under the test that sent it.
 - A host admits `NetworkAdmitBurst` (6) dials from one address per
   `NetworkAdmitWindow` (a minute), a fixed window, and loopback is one address: a
   test lobby past six dials fills a window more per six (`lobbySession` sizes its

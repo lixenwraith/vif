@@ -3026,11 +3026,10 @@ func (s *NetworkSystem) writeDueStates(nextTick uint64) {
 	s.dueStates = due[:0]
 }
 
-// writeCursorState applies one sync, dropping a stale or misaddressed one. The
-// payload names both an entity and a slot; they must agree, because the entity
-// selects the cells written and the slot keys the sequence that decides whether to
-// write them at all. A disagreement would age one participant's state under
-// another's sequence, so it is dropped rather than reconciled.
+// writeCursorState applies one sync, dropping a stale, misaddressed or out-of-range
+// one. The entity it names selects the cells written and its slot keys the sequence
+// that decides whether to write them, so the two must agree: a disagreement would
+// age one participant's state under another's sequence, and is dropped, not mended.
 func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 	cursor := s.world.ResolveCursor(p.Entity)
 	if cursor == 0 || s.world.SimulatesLocally(cursor) || int(p.Slot) >= parameter.MaxPlayers ||
@@ -3044,6 +3043,10 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 	}
 	if p.Seq <= s.lastSync[p.Slot] {
 		s.statDrop.Add(1) // reordered or replayed; the newer value already landed
+		return false
+	}
+	if !s.stateInRange(p) {
+		s.statDrop.Add(1) // counted, never clamped, so a bug or a hostile peer shows
 		return false
 	}
 	s.lastSync[p.Slot] = p.Seq
@@ -3078,6 +3081,47 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 	s.statState.Add(1)
 	return true
 }
+
+// stateInRange reports whether a sync holds only values its owner's systems produce,
+// read off the tables and parameters they write with. Energy has no bound there, nor
+// a shield's colour, nor the boost's durations above zero, which each kill extends;
+// a game sizes a shield, up to the map's diagonal, which reaches corner to corner.
+func (s *NetworkSystem) stateInRange(p *event.CursorStatePayload) bool {
+	cfg := s.world.Resources.Config
+	span := math.Hypot(float64(cfg.MapWidth), cfg.CellAspect.Circular(float64(cfg.MapHeight)))
+	if !upTo(p.Heat, parameter.HeatMax) || !upTo(p.Overheat, parameter.HeatMaxOverheat) ||
+		!upTo(p.ShieldRadius, span) || p.BoostRemaining < 0 || p.BoostTotal < 0 ||
+		!upTo(time.Duration(p.MainFireCooldown), parameter.WeaponCooldownMain) ||
+		!upTo(p.HitPoints, parameter.CombatInitialHPCursor) ||
+		!upTo(time.Duration(p.DamageImmunity), parameter.CombatDamageImmunityDuration) {
+		return false
+	}
+	for wt := range min(component.WeaponCount, component.WeaponType(len(p.WeaponCharges))) {
+		spec := &component.WeaponSpecs[wt]
+		most := spec.MaxCharges
+		if spec.Delivery == component.DeliveryTracer {
+			most = max(most, parameter.GunPathMax) // a scenario's path, which the sync omits
+		}
+		if !upTo(p.WeaponCharges[wt], most) {
+			return false
+		}
+	}
+	for wt := range min(component.WeaponCount, component.WeaponType(len(p.WeaponCooldown))) {
+		spec := &component.WeaponSpecs[wt]
+		if !upTo(time.Duration(p.WeaponCooldown[wt]), max(spec.Cooldown, spec.MaxedCooldown)) {
+			return false
+		}
+	}
+	for _, spent := range p.DamageImmunitySpent {
+		if spent >= unownedAttacker<<1 { // a bit per slot, then the unowned attacker's
+			return false
+		}
+	}
+	return true
+}
+
+// upTo reports whether v lies in [0, most]; a NaN does not
+func upTo[T ~int | ~int64 | ~float64](v, most T) bool { return v >= 0 && v <= most }
 
 // stateFrame wraps one cursor sync in the frame the codec already carries, so
 // state and crossings share one encoder

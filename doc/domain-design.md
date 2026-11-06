@@ -301,7 +301,11 @@ cursor's — so a mirror frozen at its creation value costs nothing. The two lis
 are otherwise the same and have to stay so: a value on one and not the other is
 either hashed and unrepairable, or repairable and silently overwritten. The sync is
 committed like a crossing: the authority writes a guest's at its own next tick and
-relays it with that tick, so every instance writes it at one tick.
+relays it with that tick, so every instance writes it at one tick. A receiver writes
+only values in the range its owner's systems produce (`NetworkSystem.stateInRange`),
+a shield's radius at most the map's diagonal: a sync holding one outside is dropped
+whole and counted in `network.frames_dropped`, never clamped, so a bug or a hostile
+peer shows in the stats.
 
 `CursorComponent.PeerID` is set when the cursor is created, by the arrival
 crossing or from the roster on a reset or a join, and is compared like any Shared

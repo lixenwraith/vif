@@ -800,9 +800,10 @@ produced only by the coordinator so it has one apply tick.
 
 `MsgStateSync` periodically copies the D-13 owner-authored cursor set but its
 presentation, is written at the tick the authority committed it to, and only when
-the payload's entity and roster slot agree and its sequence is newer than that
-slot's last. Disconnect drains through the same poll boundary and
-raises a local alert on the status bar. While the coordinator remains
+the payload's entity and roster slot agree, its sequence is newer than that slot's
+last and each value lies in the range its owner's systems produce (D-13).
+Disconnect drains through the same poll boundary and raises a local alert on the
+status bar. While the coordinator remains
 reachable, its roster crossing despawns only cursors owned by that participant
 and the bots it held, releases those slots' sync sequences, and leaves both the
 barrier and the map latch
