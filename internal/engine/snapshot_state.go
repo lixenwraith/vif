@@ -64,13 +64,3 @@ const (
 	// SharedStateSaver to carry it.
 	SnapshotState
 )
-
-var snapshotProfileNames = [...]string{"none", "state"}
-
-// String names the profile for diagnostics and test failures
-func (p SnapshotProfile) String() string {
-	if int(p) >= len(snapshotProfileNames) {
-		return "invalid"
-	}
-	return snapshotProfileNames[p]
-}

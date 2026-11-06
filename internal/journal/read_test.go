@@ -167,8 +167,10 @@ func TestReplicatedSelectsTheTransportedSet(t *testing.T) {
 	}
 
 	var got []uint64
-	for _, r := range s.Replicated() {
-		got = append(got, r.JSeq)
+	for _, r := range s.Records {
+		if r.Replicated() {
+			got = append(got, r.JSeq)
+		}
 	}
 	want := []uint64{1, 3, 4}
 	if len(got) != len(want) {

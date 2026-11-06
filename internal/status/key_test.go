@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestSplitKeyUsesBoundedSemanticGroups(t *testing.T) {
+func TestAKeySplitsIntoABoundedSemanticGroup(t *testing.T) {
 	tests := []struct {
 		key, group, name string
 	}{
@@ -36,9 +36,9 @@ func TestSplitKeyUsesBoundedSemanticGroups(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
-			group, name := SplitKey(tt.key)
+			group, name, _ := splitKey(tt.key)
 			if group != tt.group || name != tt.name {
-				t.Fatalf("SplitKey(%q) = (%q, %q), want (%q, %q)",
+				t.Fatalf("splitKey(%q) = (%q, %q), want (%q, %q)",
 					tt.key, group, name, tt.group, tt.name)
 			}
 		})

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/terminal"
 )
 
 // 256-color palette cube values
@@ -127,14 +126,6 @@ func drawText(x, y int, text string, fg, bg color.RGB) {
 	}
 }
 
-func drawTextFg(x, y int, text string, fg color.RGB) {
-	for i, ch := range text {
-		if x+i >= 0 && x+i < state.width && y >= 0 && y < state.height {
-			buf.SetFgOnly(x+i, y, ch, fg, terminal.AttrNone)
-		}
-	}
-}
-
 func drawSwatch(x, y, w int, c color.RGB) {
 	for i := range w {
 		if x+i >= 0 && x+i < state.width && y >= 0 && y < state.height {
@@ -178,17 +169,6 @@ func drawBox(x, y, w, h int, title string, fg, bg color.RGB) {
 		drawSwatchChar(x+i, y+h-1, '─', fg, bg)
 	}
 	drawSwatchChar(x+w-1, y+h-1, '┘', fg, bg)
-}
-
-// DrawColorInfoCompact draws a compact single-line color summary
-func DrawColorInfoCompact(x, y int, c color.RGB, label string) {
-	fg := color.RGB{R: 180, G: 180, B: 180}
-	bg := color.RGB{R: 20, G: 20, B: 30}
-
-	drawText(x, y, label+":", fg, bg)
-	labelLen := len(label) + 2
-	drawSwatch(x+labelLen, y, 3, c)
-	drawText(x+labelLen+4, y, fmt.Sprintf("(%3d,%3d,%3d) #%02X%02X%02X", c.R, c.G, c.B, c.R, c.G, c.B), color.RGB{R: 150, G: 150, B: 150}, bg)
 }
 
 func drawColorInfo(x, y int, info ColorInfo) int {

@@ -6,7 +6,6 @@ package paths
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -141,19 +140,6 @@ func ConfigFile(roots []string, explicit, category, name string) (string, error)
 		return "", fmt.Errorf("%s is a directory", explicit)
 	}
 	return explicit, nil
-}
-
-// ConfigTarget is where a document must be written for the next run with these
-// roots to read it first: the explicit path, else category/name under the first
-// root. A system root further down stays untouched and is shadowed.
-func ConfigTarget(roots []string, explicit, category, name string) (string, error) {
-	if explicit != "" {
-		return explicit, nil
-	}
-	if len(roots) == 0 {
-		return "", errors.New("no configuration root; name a file")
-	}
-	return filepath.Join(roots[0], category, name), nil
 }
 
 // DefaultLogDir returns the writable session-log directory. The XDG state

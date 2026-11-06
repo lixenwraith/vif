@@ -119,7 +119,7 @@ type Scheduler struct {
 }
 
 // regionStat caches the status pointers for one declared FSM region.
-// Keys are "fsm.<region>.<field>", so SplitKey folds every region into the
+// Keys are "fsm.<region>.<field>", so status.splitKey folds every region into the
 // single "fsm" stat record and the viewer drills down without new machinery.
 type regionStat struct {
 	name    string
@@ -920,10 +920,9 @@ func drainTimer(t *time.Timer) {
 
 // eventLoop settles queued events between ticks, pause or not, a whole settle at a
 // time so a journal's groups never interleave by wall time, sleeping on the queue's
-// wake while it is empty. Consume is single-consumer, so it runs under the world
-// lock: tried first, since short holds are cheaper to skip, retried an interval on,
-// and blocking after EventLoopBackoffMax misses, so a long hold cannot keep back
-// what was pushed outside a tick.
+// wake while it is empty. Consume is single-consumer, so it runs under the world lock:
+// tried first, as short holds are cheaper to skip, retried an interval on and blocking
+// after EventLoopBackoffMax misses, so a long hold keeps back no push outside a tick.
 func (s *Scheduler) eventLoop() {
 	defer s.wg.Done()
 
@@ -1128,12 +1127,11 @@ func (s *Scheduler) dispatchOnePass(src string) int {
 	return len(eventsList)
 }
 
-// apmAction names the key an input-origin event was, zero when it is no effort, or
-// returns the placement when it is pointer travel. A key is the event type, with a
-// motion's direction and a typed character, so h then l are two keys and ll one.
-// Read before the handlers, which may release a pooled payload and move the cursor.
-// A screen resize carries OriginInput so a replay reflows, not because the player acted,
-// and an input's echo so a replay presents it; the input's crossing is the action.
+// apmAction names the key an input-origin event was (zero for no effort), or the
+// placement for pointer travel. A key is the event type, with a motion's direction and
+// a typed character, so h then l are two keys and ll one. Read before the handlers,
+// which may release a pooled payload and move the cursor. A resize or an input's echo
+// carries OriginInput for its replay, not as an action: the input's crossing is that.
 func (s *Scheduler) apmAction(ev event.GameEvent) (key uint64, pointer *event.CursorMoveRequestPayload) {
 	switch ev.Type {
 	case event.EventScreenResize, event.EventInputPressEcho, event.EventInputReleaseEcho:

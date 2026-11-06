@@ -246,9 +246,6 @@ func (r *Resolver) Resolve(m Mode, c Chord) Action {
 	return r.single[skey{m, c}]
 }
 
-// Reset drops any pending prefix.
-func (r *Resolver) Reset() { r.armed = false }
-
 // FromEvent builds a chord from a key event. Shift is dropped where the key
 // identity already encodes it: runes carry their shifted form, and backtab is
 // shift+tab by definition.

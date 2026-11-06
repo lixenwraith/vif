@@ -497,7 +497,7 @@ store with no map lookup.
 
 ### Key convention
 
-`SplitKey` maps each stable dotted key to a bounded semantic group. Keys without
+`splitKey` maps each stable dotted key to a bounded semantic group. Keys without
 a dot land in `misc`. The group becomes the record's `msg`, and the projected
 short name becomes the field:
 

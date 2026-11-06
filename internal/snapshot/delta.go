@@ -181,13 +181,8 @@ const (
 	writtenSystemSet // the record list itself changed, so Systems is all of it
 )
 
-// DiffWritten expresses written against before, sealing written's integrity so a
-// rebuild can be proved rather than trusted.
-func DiffWritten(before, written SharedCapture) (WrittenDelta, error) {
-	return new(Encoder).DiffWritten(before, written)
-}
-
-// DiffWritten is the package function, sealing with e's encodings.
+// DiffWritten expresses written against before, sealing written's integrity with
+// e's encodings so a rebuild can be proved rather than trusted.
 func (e *Encoder) DiffWritten(before, written SharedCapture) (WrittenDelta, error) {
 	sum, err := e.Integrity(written)
 	if err != nil {
@@ -250,13 +245,9 @@ func diffParts(before, written SharedCapture) WrittenDelta {
 }
 
 // ApplyWritten rebuilds what a WrittenDelta describes from the capture held before
-// the write. A rebuild whose integrity does not match means the world it started
-// from was not the one the recorded run held: the replay diverged before here.
-func ApplyWritten(before SharedCapture, d WrittenDelta) (SharedCapture, error) {
-	return new(Encoder).ApplyWritten(before, d)
-}
-
-// ApplyWritten is the package function, proving the rebuild with e's encodings.
+// the write, proving the rebuild with e's encodings. A rebuild whose integrity does
+// not match means the world it started from was not the one the recorded run held:
+// the replay diverged before here.
 func (e *Encoder) ApplyWritten(before SharedCapture, d WrittenDelta) (SharedCapture, error) {
 	out := SharedCapture{
 		Header:  d.Header,

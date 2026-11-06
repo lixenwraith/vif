@@ -435,15 +435,3 @@ func ResolveMovementTarget(w *engine.World, entity core.Entity, kineticComp *com
 
 	return baseCenterX, baseCenterY, true
 }
-
-// ResolveBaseTargetPrecise returns centered sub-cell target coordinates for an entity
-// For use when species systems need the raw target position without navigation routing
-// (e.g. swarm lock phase, quasar zap range check, homing settled snap)
-func ResolveBaseTargetPrecise(w *engine.World, entity core.Entity) (float64, float64, bool) {
-	x, y, ok := resolveBaseTarget(w, entity)
-	if !ok {
-		return 0, 0, false
-	}
-	px, py := vmath.Point{X: x, Y: y}.Center()
-	return px, py, true
-}

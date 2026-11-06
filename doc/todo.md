@@ -932,6 +932,20 @@ crossing a host playing alone makes lands two ticks later than it needs to. Push
 the authority's lead when hosting starts, or let `driveOwnLead` run for an
 authority with no peers.
 
+### Let the selective-apply test see an adopted owner-authored cell
+
+- Priority: P2
+- Affected files: `internal/app/migration_test.go`
+
+`TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay` lowers the
+follower's energy so a correction adopting it would show, but owner sync hands
+the successor the new value first and the receiver compares its tick-close
+capture, so no correction carries a differing cell: the test stays green with
+every D-13 guard off at once (`applyShard`'s owner check, the encoder's
+exclusion, both owner-authored cursor sets, `RebindCursorRoster`'s restore).
+Perturb where the successor's mirror still differs at a tick close, and show the
+test then fails with the guards off.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under

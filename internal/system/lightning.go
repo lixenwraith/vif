@@ -165,9 +165,3 @@ func (s *LightningSystem) despawnLightning(owner, target core.Entity) {
 	}
 	s.world.DestroyEntitiesBatch(toDestroy)
 }
-
-func (s *LightningSystem) destroyAll() {
-	// Batch destruction mutates the live lightning slice, so detach it first.
-	entities := s.world.Components.Lightning.GetAllEntities()
-	s.world.DestroyEntitiesBatch(entities)
-}

@@ -132,21 +132,6 @@ func ActionEntry(name string) (KeyEntry, bool) {
 	return entry, ok
 }
 
-// IsActionName returns true if name is a registered action
-func IsActionName(name string) bool {
-	_, ok := actionRegistry[name]
-	return ok
-}
-
-// ActionNames returns all registered action names (for documentation/validation)
-func ActionNames() []string {
-	names := make([]string, 0, len(actionRegistry))
-	for name := range actionRegistry {
-		names = append(names, name)
-	}
-	return names
-}
-
 // PressAction presses the key char a scenario captured. Scripts and bots name it; a
 // keymap cannot bind it, since the scenario, not the player, chooses the keys.
 const PressAction = "press"

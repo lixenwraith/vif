@@ -4,7 +4,6 @@ import (
 	"math"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
@@ -135,26 +134,6 @@ func digestEntities(entities []core.Entity, scope position.Scope) []core.Entity 
 	}
 	slices.Sort(out)
 	return out
-}
-
-// RecordName is the identity of one snapshot line: its emitter and record name,
-// without the field values. Two instances build the same names from the same
-// world, so a differing hash under one name is the record to read.
-func RecordName(line string) string {
-	name := line
-	if i := strings.Index(name, "|msg="); i >= 0 {
-		head, tail := name[:i], name[i+len("|msg="):]
-		if j := strings.IndexByte(tail, '|'); j >= 0 {
-			tail = tail[:j]
-		}
-		return head + "|" + tail
-	}
-	if i := strings.IndexByte(name, '|'); i >= 0 {
-		if j := strings.IndexByte(name[i+1:], '|'); j >= 0 {
-			return name[:i+1+j]
-		}
-	}
-	return name
 }
 
 // SharedSurface assembles the cross-instance comparable surface once, for the two

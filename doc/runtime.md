@@ -627,8 +627,8 @@ counts the ticks the script has issued (§1.2).
 Same-position actions retain file order and each settles independently, matching
 separate live input groups. Four deliberately small action forms exist:
 
-- a canonical semantic input action from `input.ActionNames`, with optional
-  count and target character;
+- a canonical semantic input action, a name `input.ActionEntry` resolves, with
+  optional count and target character;
 - a string of semantic text-character intents;
 - a complete ex-command round trip;
 - a registered event plus an authored TOML payload and, when needed, an

@@ -1252,16 +1252,6 @@ func (s *DrainSystem) liveDrainCount() int {
 	return n
 }
 
-// isDying reports whether a drain's death was already emitted this tick
-func (s *DrainSystem) isDying(e core.Entity) bool {
-	for i := range s.drainCache {
-		if s.drainCache[i].entity == e {
-			return s.drainCache[i].dying
-		}
-	}
-	return false
-}
-
 // killPos returns the entry's death coordinate; -1 marks an absent position
 func (e *drainCacheEntry) killPos() (int, int) {
 	if !e.hasPos {

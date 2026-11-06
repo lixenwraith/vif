@@ -32,12 +32,12 @@ func TestEveryConfigKeyIsClassified(t *testing.T) {
 	// The split itself, stated once so a silent flip fails rather than drifts.
 	for _, f := range []string{"map_width", "map_height", "crop_on_resize",
 		"viewport_width", "viewport_height"} {
-		if !ConfigKeyReplicated(f) {
+		if !replicatedConfigKeys[f] {
 			t.Errorf("%s must be replicated: it is the area a map script draws on (D-14)", f)
 		}
 	}
 	for _, f := range []string{"camera_x", "camera_y", "color_mode"} {
-		if ConfigKeyReplicated(f) {
+		if replicatedConfigKeys[f] {
 			t.Errorf("%s must not be replicated: it describes this terminal", f)
 		}
 	}
@@ -89,9 +89,9 @@ func TestAPrivateMachineReadsItsOwnViewport(t *testing.T) {
 func TestConfigAccessorsWatchEveryNonReplicatedKey(t *testing.T) {
 	for _, f := range slices.Concat(ConfigIntFields(), ConfigBoolFields()) {
 		_, watched := divergentReads[f]
-		if watched == ConfigKeyReplicated(f) {
+		if watched == replicatedConfigKeys[f] {
 			t.Errorf("%s: replicated=%v but watched=%v; the two must be opposites",
-				f, ConfigKeyReplicated(f), watched)
+				f, replicatedConfigKeys[f], watched)
 		}
 	}
 }

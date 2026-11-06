@@ -26,7 +26,7 @@ This reference covers the status-registry telemetry of every system `manifest.Bu
 - The mirrored bare keys are `energy.current`, `heat.{current,overheat,at_max,ember}`, `shield.active`, `boost.{active,remaining}`, `typing.max_streak`, `weapon.<kind>`, `weapon.orbs` and `player.{x,y,entity,peer}`.
 - Energy, shield, heat, boost and weapon (its held kinds) publish every roster slot on each update through `eachRosterSlot`, a peer's cursor included, and zero a slot whose cursor is gone. `MetaSystem` writes -1 to `player.<slot>.{x,y}` for an empty slot.
 
-**Cards.** `status.SplitKey` projects keys into cards of at most `OverlayCardMaxEntries` (15) fields, and `TestTelemetryGroupsFitOverlayCards` enforces that limit. Visibility gates apply to views, snapshots and recorder windows:
+**Cards.** `status.splitKey` projects keys into cards of at most `OverlayCardMaxEntries` (15) fields, and `TestTelemetryGroupsFitOverlayCards` enforces that limit. Visibility gates apply to views, snapshots and recorder windows:
 
 - A slot's cards (`player.<slot>`, `player.<slot>.roster`, `player.<slot>.weapon`) are kept only while `player.<slot>.entity` is non-zero. The roster card holds the slot's `entity`, `control`, `peer`, `holder` and `wraith`.
 - The `combat.absorbed.*`, `combat.damage.*`, `prof*` and `proc` cards are kept only while a member is non-zero.

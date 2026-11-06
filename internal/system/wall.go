@@ -1680,17 +1680,6 @@ func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bo
 	return kind != 0 && s.world.Positions.Blocks(x, y, kind)
 }
 
-// isPerimeterWall returns true if wall at (x,y) has at least one non-wall neighbor
-func (s *WallSystem) isPerimeterWall(x, y int, style component.BoxDrawStyle) bool {
-	offsets := [4][2]int{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}
-	for _, off := range offsets {
-		if !s.hasWallWithStyle(x+off[0], y+off[1], style) {
-			return true
-		}
-	}
-	return false
-}
-
 // invalidateBoxNeighbors recomputes box chars for adjacent walls
 func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 	config := s.world.Resources.Config

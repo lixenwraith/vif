@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -333,7 +334,8 @@ func TestDrainReconciliationRespectsHeatChangesAndPause(t *testing.T) {
 	first := w.Components.Drain.Entities()[0]
 	drains.materializeDrainAt(20, 15)
 	drains.Update()
-	if drains.liveDrainCount() != 1 || drains.isDying(first) {
+	firstDying := func(c drainCacheEntry) bool { return c.entity == first && c.dying }
+	if drains.liveDrainCount() != 1 || slices.ContainsFunc(drains.drainCache, firstDying) {
 		t.Fatal("excess drains were not removed newest first")
 	}
 }
