@@ -119,15 +119,14 @@ transitions = [
     { trigger = "Tick", target = "TdQuasarFuse" },
 ]
 
-# Session-wide, unlike main's: nobody's drains bank kills toward the next quasar while
-# one forms or lives
+# The fused participant's drains hold, as main's do; the others' play on
 [states.TdQuasarPause]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventDrainPause", reconcile = true },
+    { action = "EmitEvent", event = "EventDrainPause", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
 ]
 on_exit = [
-    { action = "EmitEvent", event = "EventDrainResume", reconcile = true },
+    { action = "EmitEvent", event = "EventDrainResume", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
 ]
 
 [states.TdQuasarFuse]
