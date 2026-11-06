@@ -810,18 +810,11 @@ type CursorStatePayload struct {
 	DamageImmunity      int64                                   `toml:"damage_immunity,omitempty"`
 	DamageImmunitySpent [component.CombatAttackTypeCount]uint32 `toml:"damage_immunity_spent,omitempty"` // by component.CombatAttackType
 
-	ErrorFlash     int64 `toml:"error_flash,omitempty"`
-	BurstFlash     int64 `toml:"burst_flash,omitempty"`
-	BlinkRemaining int64 `toml:"blink_remaining,omitempty"`
-	BlinkType      int   `toml:"blink_type,omitempty"`
-	BlinkLevel     int   `toml:"blink_level,omitempty"`
-
 	ShieldColor  color.RGB `toml:"shield_color,omitempty"`
 	Slot         uint8     `toml:"slot,omitempty"`
 	EmberActive  bool      `toml:"ember_active,omitempty"`
 	ShieldActive bool      `toml:"shield_active,omitempty"`
 	BoostActive  bool      `toml:"boost_active,omitempty"`
-	BlinkActive  bool      `toml:"blink_active,omitempty"`
 }
 
 // Record is the part of an owner's sync its player brings back to its Wraith.

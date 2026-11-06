@@ -2873,7 +2873,8 @@ func (s *NetworkSystem) sendCursorState(p engine.NetworkPort) {
 	}
 }
 
-// readCursorState reads one cursor's D-13 set into a payload.
+// readCursorState reads one cursor's D-13 set into a payload, the view's
+// presentation aside: only the local cursor's is ever read.
 // Caller MUST hold updateMutex — Update runs inside the tick.
 func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.CursorStatePayload {
 	p := &event.CursorStatePayload{Entity: cursor, Slot: slot, Seq: s.syncSeq}
@@ -2903,11 +2904,6 @@ func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.C
 	if c, ok := s.world.Components.Combat.GetComponent(cursor); ok {
 		p.HitPoints, p.DamageImmunity = c.HitPoints, int64(c.RemainingDamageImmunity)
 		p.DamageImmunitySpent = c.DamageImmunitySpent
-	}
-	if c, ok := s.world.Components.CursorView.GetComponent(cursor); ok {
-		p.ErrorFlash, p.BurstFlash = int64(c.ErrorFlashRemaining), int64(c.BurstFlashRemaining)
-		p.BlinkActive, p.BlinkType, p.BlinkLevel = c.BlinkActive, c.BlinkType, c.BlinkLevel
-		p.BlinkRemaining = int64(c.BlinkRemaining)
 	}
 	return p
 }
@@ -3078,12 +3074,6 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 		c.HitPoints = p.HitPoints
 		c.RemainingDamageImmunity = time.Duration(p.DamageImmunity)
 		c.DamageImmunitySpent = p.DamageImmunitySpent
-	}
-	if c, ok := s.world.Components.CursorView.GetPtr(cursor); ok {
-		c.ErrorFlashRemaining = time.Duration(p.ErrorFlash)
-		c.BurstFlashRemaining = time.Duration(p.BurstFlash)
-		c.BlinkActive, c.BlinkType, c.BlinkLevel = p.BlinkActive, p.BlinkType, p.BlinkLevel
-		c.BlinkRemaining = time.Duration(p.BlinkRemaining)
 	}
 	s.statState.Add(1)
 	return true

@@ -294,14 +294,14 @@ A Shared cursor carries values written by exactly one instance rather than
 re-derived: its energy, heat, shield, boost, weapon and combat stores, and the
 `CursorViewComponent` and `PingComponent` presentation. For every cursor a
 participant owns, the authority's included, those cells stay out of the manifest
-hash, the correction magnitude and selective repair, and every one but
-`PingComponent` travels on the owner-state sync. Ping is the exception because
-nothing reads a remote cursor's copy — the renderer reads the local cursor's — so a
-mirror frozen at its creation value costs nothing. The two lists are otherwise the
-same and have to stay so: a value on one and not the other is either hashed and
-unrepairable, or repairable and silently overwritten. The sync is committed like a
-crossing: the authority writes a guest's at its own next tick and relays it with
-that tick, so every instance writes it at one tick.
+hash, the correction magnitude and selective repair, and every one but the
+presentation travels on the owner-state sync. The presentation is the exception
+because nothing reads a remote cursor's copy — the renderers read the local
+cursor's — so a mirror frozen at its creation value costs nothing. The two lists
+are otherwise the same and have to stay so: a value on one and not the other is
+either hashed and unrepairable, or repairable and silently overwritten. The sync is
+committed like a crossing: the authority writes a guest's at its own next tick and
+relays it with that tick, so every instance writes it at one tick.
 
 `CursorComponent.PeerID` is set when the cursor is created, by the arrival
 crossing or from the roster on a reset or a join, and is compared like any Shared
