@@ -226,7 +226,7 @@ var topics = []topicDef{
 			{Keys: ":step off", Desc: "Disarm a pending run-until and restore 1x"},
 			{Keys: ":region list|spawn|pause|resume|terminate ...", Desc: "Issue an FSM region primitive; unavailable live"},
 			{Keys: ":energy N", Desc: "Set player energy; negative values are valid"},
-			{Keys: ":heat N", Desc: "Set player heat, clamped to the maximum"},
+			{Keys: ":heat N", Desc: "Set player heat, 0 to 200: past 100 the excess is overheat"},
 			{Keys: ":boost", Desc: "Max heat and activate boost"},
 			{Keys: ":god  :demon", Desc: "Max heat, full positive or negative energy, and every weapon"},
 			{Keys: ":w <weapon> <n>  :weapon", Desc: "Set one weapon's charges, named by it or its attack: past its maximum it maxes out, 0 takes it, the gun included, and a negative n first flips the energy's sign, which drops every other weapon but the gun"},

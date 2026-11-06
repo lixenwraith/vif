@@ -558,17 +558,11 @@ var codecCursorStatePayload = structCodec{size: unsafe.Sizeof(CursorStatePayload
 	{off: unsafe.Offsetof(CursorStatePayload{}.HitPoints), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunity), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.DamageImmunitySpent), kind: kindArray, n: 10, elem: &field{kind: kindUint, size: unsafe.Sizeof(uint32(0))}, stride: unsafe.Sizeof(uint32(0))},
-	{off: unsafe.Offsetof(CursorStatePayload{}.ErrorFlash), kind: kindInt, size: unsafe.Sizeof(int64(0))},
-	{off: unsafe.Offsetof(CursorStatePayload{}.BurstFlash), kind: kindInt, size: unsafe.Sizeof(int64(0))},
-	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkRemaining), kind: kindInt, size: unsafe.Sizeof(int64(0))},
-	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkType), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkLevel), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldColor), kind: kindStruct, sub: &codecColorRGB},
 	{off: unsafe.Offsetof(CursorStatePayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(CursorStatePayload{}.EmberActive), kind: kindBool},
 	{off: unsafe.Offsetof(CursorStatePayload{}.ShieldActive), kind: kindBool},
 	{off: unsafe.Offsetof(CursorStatePayload{}.BoostActive), kind: kindBool},
-	{off: unsafe.Offsetof(CursorStatePayload{}.BlinkActive), kind: kindBool},
 }}
 
 func (p *SessionStatePayload) codec() (*structCodec, unsafe.Pointer) {

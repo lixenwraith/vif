@@ -839,7 +839,9 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
   a bit a cell, so an unset cell costs nothing, and the shield its one radius
   (journal schema 63), its rows derived where they are used: a fighting cursor's
   sync is 59 bytes framed with the header, 82 with the shield's two radii and
-  inverse squares, 391 before the codec.
+  inverse squares, 391 before the codec. The cursor view, which only its owner
+  reads, then left the sync (journal schema 66): 58 bytes, and a typing cursor's,
+  its blink and error flash lit, 58 from 69.
 - Left: a sync sent only when a cell differs from the last one sent, with a
   refresh every K syncs, so a frame a full queue refused costs bounded staleness.
   A sync stays a whole state, never a delta on an unacknowledged base.

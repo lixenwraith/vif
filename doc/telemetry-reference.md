@@ -241,7 +241,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.peers`, `network.connected` | Connected session peers, and whether there is at least one |
 | `network.map_latched` (bool) | The host-authored D-14 map dimensions are latched |
 | `network.state_applied` (int) | Owner-authored cursor snapshots applied to remote cursors |
-| `network.frames_dropped` (int) | Frames rejected by encoding, framing, ordering or identity checks |
+| `network.frames_dropped` (int) | Frames rejected by encoding, framing, ordering, identity or range checks |
 | `network.barrier_deferred` (int) | Local crossing artifacts the barrier took at production, to apply at the agreed tick |
 | `network.barrier_applied_local`, `network.barrier_applied_peer` (int) | Local and peer artifacts admitted at their playout boundary |
 | `network.barrier_late` (int) | Artifacts applied after their apply tick. Committed frames reach a paced guest before their tick, so a rise is a guest running ahead of its pacing band, which its next correction repairs |

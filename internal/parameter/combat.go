@@ -15,8 +15,11 @@ const (
 	// CombatInitialHPSwarm is swarm starting hit points
 	CombatInitialHPSwarm = 20
 
-	// CombatInitialHPStorm is drain starting hit points
+	// CombatInitialHPStorm is storm starting hit points
 	CombatInitialHPStorm = 1000
+
+	// CombatInitialHPCursor is a cursor's starting hit points, which nothing raises
+	CombatInitialHPCursor = 100
 
 	// CombatDamageEyeSelfDestruct is damage applied to target on eye self-destruct
 	CombatDamageEyeSelfDestruct = 5

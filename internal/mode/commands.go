@@ -1388,10 +1388,11 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true}
 }
 
-// handleHeatCommand sets the heat to a specified value
+// handleHeatCommand sets the heat, which the heat system bounds: past the meter's
+// maximum the excess is overheat
 func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 1 {
-		setCommandError(ctx, "Usage: :heat <0-100>")
+		setCommandError(ctx, fmt.Sprintf("Usage: :heat <0-%d>", parameter.HeatMax+parameter.HeatMaxOverheat))
 		return CommandResult{Continue: true}
 	}
 
@@ -1399,13 +1400,6 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if err != nil {
 		setCommandError(ctx, "Invalid number format")
 		return CommandResult{Continue: true}
-	}
-
-	if value < 0 {
-		value = 0
-	}
-	if value > parameter.HeatMax {
-		value = parameter.HeatMax
 	}
 
 	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{

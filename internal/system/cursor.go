@@ -28,7 +28,6 @@ type CursorSystem struct {
 	statSlotControl   [parameter.MaxPlayers]*atomic.Int64
 }
 
-// NewCursorSystem creates the cursor system
 func NewCursorSystem(world *engine.World) engine.System {
 	s := &CursorSystem{world: world}
 
@@ -56,10 +55,8 @@ func (s *CursorSystem) Init() {
 	s.publishRoster()
 }
 
-// Name returns system's name
 func (s *CursorSystem) Name() string { return "cursor" }
 
-// Priority returns the system's priority
 func (s *CursorSystem) Priority() int { return parameter.PriorityCursor }
 
 // Update ages every Wraith's wait on every instance; cursor lifecycle and placement
@@ -390,7 +387,7 @@ func (s *CursorSystem) equip(e core.Entity, x, y, heat, energy int) {
 	w.Components.Combat.SetComponent(e, component.CombatComponent{
 		OwnerEntity:      e,
 		CombatEntityType: component.CombatEntityCursor,
-		HitPoints:        100,
+		HitPoints:        parameter.CombatInitialHPCursor,
 	})
 }
 

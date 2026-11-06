@@ -647,7 +647,7 @@ func testCursorStateRoundTrip(t *testing.T) {
 		ShieldActive: true, ShieldRadius: 9, ShieldColor: color.RGB{R: 1, G: 2, B: 3},
 		BoostActive: true, BoostRemaining: 1234, BoostTotal: 5678,
 		WeaponCharges: []int{1, 0, 2}, WeaponCooldown: []int64{7, 0, 9},
-		HitPoints: 88, BlinkActive: true, BlinkType: 3, BlinkLevel: 2,
+		HitPoints: 88,
 	}
 	frame, encErr := event.NewWireFrame(event.GameEvent{
 		Type: event.EventCursorStateSync, Domain: core.DomainShared, Payload: want,

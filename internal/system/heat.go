@@ -22,7 +22,6 @@ type HeatSystem struct {
 	toggle
 }
 
-// NewHeatSystem creates a new heat system
 func NewHeatSystem(world *engine.World) engine.System {
 	s := &HeatSystem{world: world}
 
@@ -46,10 +45,8 @@ func (s *HeatSystem) Init() {
 	s.enabled = true
 }
 
-// Name returns system's name
 func (s *HeatSystem) Name() string { return "heat" }
 
-// Priority returns the system's priority
 func (s *HeatSystem) Priority() int { return parameter.PriorityHeat }
 
 // Update advances burst flash and ember decay for every cursor
@@ -101,7 +98,6 @@ func (s *HeatSystem) Update() {
 	})
 }
 
-// EventTypes returns the event types HeatSystem handles
 func (s *HeatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventHeatAddRequest,
@@ -217,7 +213,8 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 	s.pushDefeatTransition(cursor, wasDefeated)
 }
 
-// setHeat writes an absolute value to one cursor with clamping
+// setHeat writes an absolute value to one cursor, what passes the meter spilling
+// into overheat up to overheat's own; a set never bursts, the gain that fills it does
 func (s *HeatSystem) setHeat(cursor core.Entity, value int) {
 	heatComp, ok := s.world.Components.Heat.GetPtr(cursor)
 	if !ok {
@@ -225,17 +222,9 @@ func (s *HeatSystem) setHeat(cursor core.Entity, value int) {
 	}
 	wasDefeated := cursorDefeated(s.world, cursor)
 
-	// Clamp, spilling the excess into overheat
-	if value < 0 {
-		value = 0
-	}
-	if value > parameter.HeatMax {
-		heatComp.Overheat = value - parameter.HeatMax
-		value = parameter.HeatMax
-	} else {
-		heatComp.Overheat = 0
-	}
-	heatComp.Current = value
+	value = max(0, min(value, parameter.HeatMax+parameter.HeatMaxOverheat))
+	heatComp.Current = min(value, parameter.HeatMax)
+	heatComp.Overheat = value - heatComp.Current
 
 	s.publish(cursor, heatComp)
 	s.pushDefeatTransition(cursor, wasDefeated)
