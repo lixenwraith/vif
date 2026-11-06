@@ -48,7 +48,7 @@ func TestEntriesResolve(t *testing.T) {
 				continue
 			}
 			for _, a := range e.Actions {
-				if !input.IsActionName(a) {
+				if _, ok := input.ActionEntry(a); !ok {
 					t.Errorf("%s: unknown action %q", topics[i].Title, a)
 					continue
 				}

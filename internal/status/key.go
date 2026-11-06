@@ -8,13 +8,6 @@ import (
 // GroupMisc receives metrics registered without a "group.name" key
 const GroupMisc = "misc"
 
-// SplitKey maps a stable metric key to its bounded display/log group and field.
-// Keys without a separator fall into GroupMisc.
-func SplitKey(key string) (group, name string) {
-	group, name, _ = splitKey(key)
-	return group, name
-}
-
 // splitKey also returns the roster slot that controls group visibility.
 func splitKey(key string) (group, name, playerSlot string) {
 	domain, name, ok := strings.Cut(key, ".")
@@ -131,14 +124,11 @@ func splitKey(key string) (group, name, playerSlot string) {
 		}
 
 	case "snapshot":
-		// Six cards, six questions. The correction counters say how far this
-		// instance's prediction was from the authority and how much of the
-		// authority arrived; the cadence card says what operating point the link
-		// put the session at; the index card what proving equality cost and how
-		// often it succeeded outright; the repair card what a selective correction
-		// asked for, carried and refused; the replay card what this participant's
-		// own actions cost to preserve across one; and what is left describes what
-		// one capture cost.
+		// Six cards, six questions: correction, how far the prediction was from the
+		// authority and how much of it arrived; cadence, the link's operating point; index,
+		// what proving equality cost and how often it held outright; repair, what a
+		// selective correction asked for, carried and refused; replay, what this
+		// participant's own actions cost to preserve across one; the rest, what one capture cost.
 		if metric, ok := strings.CutPrefix(name, "cadence_"); ok {
 			return "snapshot.cadence", metric, ""
 		}
@@ -161,14 +151,10 @@ func splitKey(key string) (group, name, playerSlot string) {
 	return domain, name, ""
 }
 
-// snapshotSelectiveGroup partitions the selective-correction counters into the three
-// cards their questions divide into: what the index cost, what the repair moved,
-// and what replaying this participant's own actions across one took.
-//
-// It is a prefix table rather than three CutPrefix chains because the keys do not
-// share one stem — "hash_us" and "selective_bytes" belong with the manifests, and
-// "corrections_hash_only" has to be claimed here before the "correction" prefix
-// below takes it.
+// snapshotSelectiveGroup sorts the selective-correction counters into the index,
+// repair, relay and replay cards. It is a table rather than CutPrefix chains because
+// the keys share no stem: "hash_us" and "selective_bytes" belong with the manifests,
+// and "corrections_hash_only" is claimed here before the "correction" prefix takes it.
 func snapshotSelectiveGroup(name string) (string, bool) {
 	switch name {
 	case "corrections_hash_only", "hash_us", "selective_bytes",

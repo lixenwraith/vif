@@ -95,8 +95,8 @@ func TestDomainStacksWithTheRest(t *testing.T) {
 	s.Add(NewLevel())
 	s.Add(NewDomain())
 	s.Add(NewFields(t))
-	if s.Needs() != NeedFields {
-		t.Fatalf("stack needs = %v, want NeedFields", s.Needs())
+	if s.needs != NeedFields {
+		t.Fatalf("stack needs = %v, want NeedFields", s.needs)
 	}
 }
 

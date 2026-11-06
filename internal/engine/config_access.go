@@ -59,10 +59,6 @@ var divergentReads = func() map[string]*atomic.Bool {
 	return m
 }()
 
-// ConfigKeyReplicated reports whether every instance derives the same value for
-// a script-visible field
-func ConfigKeyReplicated(field string) bool { return replicatedConfigKeys[field] }
-
 // noteDivergentRead warns the first time a script reads a per-instance field while
 // the map is locked. The key stays readable: D-14 retains the whole surface and
 // this only marks where a map script has made itself instance-dependent.

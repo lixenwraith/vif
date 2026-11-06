@@ -52,9 +52,6 @@ func TestADedicatedHostDrivesNoCursor(t *testing.T) {
 	if got := host.membership.LocalSlot(); got != parameter.NoPlayerSlot {
 		t.Fatalf("the coordinator took slot %d, want none", got)
 	}
-	if host.localPlayers() != 0 {
-		t.Fatal("the coordinator reports a local player")
-	}
 	var (
 		count  int
 		local  core.Entity
@@ -132,9 +129,6 @@ func TestAGuestOfADedicatedHostDrivesItsOwn(t *testing.T) {
 	}
 	if got := guest.membership.LocalSlot(); got != 1 {
 		t.Fatalf("the guest drives slot %d, want its own slot 1", got)
-	}
-	if guest.localPlayers() != 1 {
-		t.Fatal("the guest reports no local player")
 	}
 	var owned int
 	guest.World().RunSafe(func() {
@@ -234,11 +228,11 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 	want := deliverCorrection(t, apps[0], apps[1:], advance)
 	for i, a := range apps[1:] {
 		assertCorrected(t, want, a, "guest of a dedicated host")
-		if a.localPlayers() != 1 {
+		if a.membership.LocalSlot() == parameter.NoPlayerSlot {
 			t.Fatalf("participant %d lost its cursor across a correction", i+2)
 		}
 	}
-	if apps[0].localPlayers() != 0 {
+	if apps[0].membership.LocalSlot() != parameter.NoPlayerSlot {
 		t.Fatal("the coordinator acquired a cursor across a correction")
 	}
 	if sent := statOf(apps[0], "snapshot.corrections_sent"); sent == 0 {
@@ -249,9 +243,8 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 // TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone covers the seam that lets a host
 // outlive its guests: the mid-run gate is installed from construction, answers
 // nothing until the run arms it, and finds the endpoint NetworkService contributed.
-// Both host shapes are driven through a lobby of one guest, and the window between
-// the two gates is the third state — the only one whose honest answer is a refusal
-// the dialer retries.
+// Both host shapes go through a lobby of one guest; between the two gates, the only
+// honest answer is a refusal the dialer retries.
 func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 	// Not parallel: this binds a real socket.
 	for _, tt := range []struct {

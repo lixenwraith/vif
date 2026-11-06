@@ -251,7 +251,9 @@ that proves wrong or that a document now states, and link the document instead.
   more under `-race` or load: a relay-join hold and a mid-session journal test. A
   failure there takes about 16.5 s, a 15 s socket wait running out. Before calling
   one a regression, run it alone in fresh processes, alternating main's binary and
-  the branch's under the same load.
+  the branch's under the same load. `TestAClaimOnAPlaceStillLinkedClosesTheLinkItLeft`
+  failed once in 0.12 s ("the link the returning player left is still open") while
+  deadcode ran beside the suite, and passed 32 loaded runs on both binaries after.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not. Keep it near twice
   the CPU count: at five times, a socket join's catch-up is refused ("behind the

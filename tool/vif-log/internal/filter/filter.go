@@ -98,9 +98,6 @@ func (s *Stack) Compile() {
 	})
 }
 
-// Needs reports the union of the enabled filters' requirements.
-func (s *Stack) Needs() Need { return s.needs }
-
 // Match evaluates the enabled filters in cost order.
 func (s *Stack) Match(c *Ctx) bool {
 	for _, i := range s.order {

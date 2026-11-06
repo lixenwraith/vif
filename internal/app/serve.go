@@ -233,12 +233,3 @@ func (a *App) releaseFrame() {
 	default: // channel full, skip signal
 	}
 }
-
-// localPlayers is how many cursors this instance drives. A dedicated host drives
-// none, which is the whole of what "zero players" means.
-func (a *App) localPlayers() int {
-	if a.membership.LocalSlot() == parameter.NoPlayerSlot {
-		return 0
-	}
-	return 1
-}

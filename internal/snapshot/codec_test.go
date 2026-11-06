@@ -128,7 +128,7 @@ func TestACaptureTravelsAsSectionsFromCachedBlobs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !isSections(first) {
+	if first[5] != snapshotCodecSections {
 		t.Fatalf("a capture left in codec %d, want the sections codec", first[5])
 	}
 	back, err := DecodeCapture(first)
