@@ -695,8 +695,6 @@ func TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay(t *testing.T) {
 			c.Current = max(c.Current-7, 0)
 		}
 	})
-	wantOwned := owned(follower, local[2])
-	wantPlayers := players(follower)
 
 	closeParticipant(apps[0])
 	survivors := apps[1:]
@@ -713,8 +711,8 @@ func TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay(t *testing.T) {
 		for range parameter.NetworkBarrierDelayTicks + 1 {
 			tickAll(survivors)
 		}
-		wantPlayers = players(follower)
-		wantOwned = owned(follower, local[2])
+		wantPlayers := players(follower)
+		wantOwned := owned(follower, local[2])
 		deliverCorrectionNow(t, survivors[0], []*App{survivors[1]}, func() {})
 		if got := owned(follower, local[2]); got != wantOwned {
 			t.Fatalf("the successor authored a cursor it does not simulate: %+v, was %+v",
