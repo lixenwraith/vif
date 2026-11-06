@@ -2536,13 +2536,11 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 		&event.PlayoutLeadPayload{Ticks: next}, event.OriginSession, core.DomainPlayer)
 }
 
-// ownLead is this tick's reading of the lead: the age at which the authority
-// committed this instance's newest epoch, which is the up path and the clock
-// offset measured where they are paid, plus a tick for the authority to relay the
-// crossing. A spike on a stream holds a burst of epochs that return in one tick,
-// so the worst age since the last reading counts, not the newest alone. Until an
-// epoch has come back the default stands; the authority waits one tick. The
-// reading reaches a participant behind a relay on the same copy.
+// ownLead is this tick's reading of the lead: the worst age, since the last reading,
+// at which the authority committed this instance's epochs (the up path and clock
+// offset, paid where measured; a spike returns a burst in one tick), plus a tick to
+// relay. The default stands until an epoch returns, the authority waits one tick,
+// and a participant behind a relay reads the same copy.
 func (s *NetworkSystem) ownLead() uint64 {
 	if s.participantID() == s.authorityParticipant() {
 		return parameter.NetworkBarrierMinDelayTicks
@@ -2812,12 +2810,11 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 	}
 }
 
-// publishStaleness reports how far behind the newest peer tick this instance
-// stands (network.lag_ticks: on a paced guest, the margin its pacing holds) and
-// whether it is out of step (network.stale): pacing's own verdict, read off the
-// same window and band that pace it, so the badge derives nothing of its own. Ahead
-// beyond the band, committed crossings reach it late; behind by a step, its lead
-// grows. Neither gates play.
+// publishStaleness reports how far behind the newest peer tick this instance stands
+// (network.lag_ticks: on a paced guest, the margin its pacing holds) and whether it
+// is out of step (network.stale), pacing's own verdict off the window and band that
+// pace it. Ahead beyond the band, committed crossings reach it late; behind by a
+// step, its lead grows. Neither gates play.
 func (s *NetworkSystem) publishStaleness(nextTick uint64) {
 	newest := s.NewestPeerEpoch()
 	lag := uint64(0)
