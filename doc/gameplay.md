@@ -204,9 +204,11 @@ penalties the game produces, so an unshielded hit's heat loss is not multiplied.
 ### Heat and ember
 
 Heat is clamped from `0` to `100`. Positive additions beyond the cap accumulate
-overheat. Reaching the overheat threshold emits a heat burst, flashes the meter,
-and activates the ember phase. Ember decays heat periodically and protects
-ordinary energy penalties while active. A heat penalty also clears the
+overheat. Reaching the overheat threshold, `100` more, emits a heat burst, flashes
+the meter, and activates the ember phase. A set (`:heat`, `EventHeatSetRequest`,
+`EventCursorArmRequest`) takes up to `200`, the excess over `100` as overheat; it
+never bursts, the gain that fills overheat does. Ember decays heat periodically and
+protects ordinary energy penalties while active. A heat penalty also clears the
 overheat accumulation. A scenario lights or puts out the ember with
 `EventCursorArmRequest`, and an ember that burns its heat out crosses
 `EventEmberSpent`, which a scenario can time a turn by.

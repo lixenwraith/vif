@@ -968,6 +968,9 @@ never comes back. This is a compromise. The values are owner-authored
 ([D-13](domain-design.md#d-13--owner-authored-shared-values-have-one-writer)) and a
 Wraith gives up everything the world reaches it through, so neither the host nor the
 shared world keeps them, and the session takes the returning run's word for them.
+`CursorSystem.restore` writes them as brought, held to none of the ranges a sync is
+(`NetworkSystem.stateInRange`), so a record past one stands on every instance, its
+owner's syncs dropped, until the owner's own systems move the value back inside.
 
 The fix shares some data of every cursor, so the session holds what each Wraith
 resumes with and a successor inherits it. That moves those values off the one-writer

@@ -62,7 +62,7 @@ func TestWireEncodingBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A sync carries the cells that are set: this one, with its energy, heat, hit
-	// points, shield and two charged weapons, is a third of the 25-cell frame.
+	// points, shield and two charged weapons, sets 8 of the frame's 19.
 	if n := len(stateBody) + link.HeaderSize; n > 120 {
 		t.Fatalf("one owner-state sync: %d bytes exceeds the 120-byte budget", n)
 	}

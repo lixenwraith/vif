@@ -2536,13 +2536,11 @@ func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 		&event.PlayoutLeadPayload{Ticks: next}, event.OriginSession, core.DomainPlayer)
 }
 
-// ownLead is this tick's reading of the lead: the age at which the authority
-// committed this instance's newest epoch, which is the up path and the clock
-// offset measured where they are paid, plus a tick for the authority to relay the
-// crossing. A spike on a stream holds a burst of epochs that return in one tick,
-// so the worst age since the last reading counts, not the newest alone. Until an
-// epoch has come back the default stands; the authority waits one tick. The
-// reading reaches a participant behind a relay on the same copy.
+// ownLead is this tick's reading of the lead: the worst age, since the last reading,
+// at which the authority committed this instance's epochs (the up path and clock
+// offset, paid where measured; a spike returns a burst in one tick), plus a tick to
+// relay. The default stands until an epoch returns, the authority waits one tick,
+// and a participant behind a relay reads the same copy.
 func (s *NetworkSystem) ownLead() uint64 {
 	if s.participantID() == s.authorityParticipant() {
 		return parameter.NetworkBarrierMinDelayTicks
@@ -2812,12 +2810,11 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 	}
 }
 
-// publishStaleness reports how far behind the newest peer tick this instance
-// stands (network.lag_ticks: on a paced guest, the margin its pacing holds) and
-// whether it is out of step (network.stale): pacing's own verdict, read off the
-// same window and band that pace it, so the badge derives nothing of its own. Ahead
-// beyond the band, committed crossings reach it late; behind by a step, its lead
-// grows. Neither gates play.
+// publishStaleness reports how far behind the newest peer tick this instance stands
+// (network.lag_ticks: on a paced guest, the margin its pacing holds) and whether it
+// is out of step (network.stale), pacing's own verdict off the window and band that
+// pace it. Ahead beyond the band, committed crossings reach it late; behind by a
+// step, its lead grows. Neither gates play.
 func (s *NetworkSystem) publishStaleness(nextTick uint64) {
 	newest := s.NewestPeerEpoch()
 	lag := uint64(0)
@@ -2873,7 +2870,8 @@ func (s *NetworkSystem) sendCursorState(p engine.NetworkPort) {
 	}
 }
 
-// readCursorState reads one cursor's D-13 set into a payload.
+// readCursorState reads one cursor's D-13 set into a payload, the view's
+// presentation aside: only the local cursor's is ever read.
 // Caller MUST hold updateMutex — Update runs inside the tick.
 func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.CursorStatePayload {
 	p := &event.CursorStatePayload{Entity: cursor, Slot: slot, Seq: s.syncSeq}
@@ -2903,11 +2901,6 @@ func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.C
 	if c, ok := s.world.Components.Combat.GetComponent(cursor); ok {
 		p.HitPoints, p.DamageImmunity = c.HitPoints, int64(c.RemainingDamageImmunity)
 		p.DamageImmunitySpent = c.DamageImmunitySpent
-	}
-	if c, ok := s.world.Components.CursorView.GetComponent(cursor); ok {
-		p.ErrorFlash, p.BurstFlash = int64(c.ErrorFlashRemaining), int64(c.BurstFlashRemaining)
-		p.BlinkActive, p.BlinkType, p.BlinkLevel = c.BlinkActive, c.BlinkType, c.BlinkLevel
-		p.BlinkRemaining = int64(c.BlinkRemaining)
 	}
 	return p
 }
@@ -3030,11 +3023,10 @@ func (s *NetworkSystem) writeDueStates(nextTick uint64) {
 	s.dueStates = due[:0]
 }
 
-// writeCursorState applies one sync, dropping a stale or misaddressed one. The
-// payload names both an entity and a slot; they must agree, because the entity
-// selects the cells written and the slot keys the sequence that decides whether to
-// write them at all. A disagreement would age one participant's state under
-// another's sequence, so it is dropped rather than reconciled.
+// writeCursorState applies one sync, dropping a stale, misaddressed or out-of-range
+// one. The entity it names selects the cells written and its slot keys the sequence
+// that decides whether to write them, so the two must agree: a disagreement would
+// age one participant's state under another's sequence, and is dropped, not mended.
 func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 	cursor := s.world.ResolveCursor(p.Entity)
 	if cursor == 0 || s.world.SimulatesLocally(cursor) || int(p.Slot) >= parameter.MaxPlayers ||
@@ -3048,6 +3040,10 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 	}
 	if p.Seq <= s.lastSync[p.Slot] {
 		s.statDrop.Add(1) // reordered or replayed; the newer value already landed
+		return false
+	}
+	if !s.stateInRange(p) {
+		s.statDrop.Add(1) // counted, never clamped, so a bug or a hostile peer shows
 		return false
 	}
 	s.lastSync[p.Slot] = p.Seq
@@ -3079,15 +3075,50 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 		c.RemainingDamageImmunity = time.Duration(p.DamageImmunity)
 		c.DamageImmunitySpent = p.DamageImmunitySpent
 	}
-	if c, ok := s.world.Components.CursorView.GetPtr(cursor); ok {
-		c.ErrorFlashRemaining = time.Duration(p.ErrorFlash)
-		c.BurstFlashRemaining = time.Duration(p.BurstFlash)
-		c.BlinkActive, c.BlinkType, c.BlinkLevel = p.BlinkActive, p.BlinkType, p.BlinkLevel
-		c.BlinkRemaining = time.Duration(p.BlinkRemaining)
-	}
 	s.statState.Add(1)
 	return true
 }
+
+// stateInRange reports whether a sync holds only values its owner's systems produce,
+// read off the tables and parameters they write with. Energy has no bound there, nor
+// a shield's colour, nor the boost's durations above zero, which each kill extends;
+// a game sizes a shield, up to the map's diagonal, which reaches corner to corner.
+func (s *NetworkSystem) stateInRange(p *event.CursorStatePayload) bool {
+	cfg := s.world.Resources.Config
+	span := math.Hypot(float64(cfg.MapWidth), cfg.CellAspect.Circular(float64(cfg.MapHeight)))
+	if !upTo(p.Heat, parameter.HeatMax) || !upTo(p.Overheat, parameter.HeatMaxOverheat) ||
+		!upTo(p.ShieldRadius, span) || p.BoostRemaining < 0 || p.BoostTotal < 0 ||
+		!upTo(time.Duration(p.MainFireCooldown), parameter.WeaponCooldownMain) ||
+		!upTo(p.HitPoints, parameter.CombatInitialHPCursor) ||
+		!upTo(time.Duration(p.DamageImmunity), parameter.CombatDamageImmunityDuration) {
+		return false
+	}
+	for wt := range min(component.WeaponCount, component.WeaponType(len(p.WeaponCharges))) {
+		spec := &component.WeaponSpecs[wt]
+		most := spec.MaxCharges
+		if spec.Delivery == component.DeliveryTracer {
+			most = max(most, parameter.GunPathMax) // a scenario's path, which the sync omits
+		}
+		if !upTo(p.WeaponCharges[wt], most) {
+			return false
+		}
+	}
+	for wt := range min(component.WeaponCount, component.WeaponType(len(p.WeaponCooldown))) {
+		spec := &component.WeaponSpecs[wt]
+		if !upTo(time.Duration(p.WeaponCooldown[wt]), max(spec.Cooldown, spec.MaxedCooldown)) {
+			return false
+		}
+	}
+	for _, spent := range p.DamageImmunitySpent {
+		if spent >= unownedAttacker<<1 { // a bit per slot, then the unowned attacker's
+			return false
+		}
+	}
+	return true
+}
+
+// upTo reports whether v lies in [0, most]; a NaN does not
+func upTo[T ~int | ~int64 | ~float64](v, most T) bool { return v >= 0 && v <= most }
 
 // stateFrame wraps one cursor sync in the frame the codec already carries, so
 // state and crossings share one encoder

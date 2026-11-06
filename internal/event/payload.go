@@ -810,18 +810,11 @@ type CursorStatePayload struct {
 	DamageImmunity      int64                                   `toml:"damage_immunity,omitempty"`
 	DamageImmunitySpent [component.CombatAttackTypeCount]uint32 `toml:"damage_immunity_spent,omitempty"` // by component.CombatAttackType
 
-	ErrorFlash     int64 `toml:"error_flash,omitempty"`
-	BurstFlash     int64 `toml:"burst_flash,omitempty"`
-	BlinkRemaining int64 `toml:"blink_remaining,omitempty"`
-	BlinkType      int   `toml:"blink_type,omitempty"`
-	BlinkLevel     int   `toml:"blink_level,omitempty"`
-
 	ShieldColor  color.RGB `toml:"shield_color,omitempty"`
 	Slot         uint8     `toml:"slot,omitempty"`
 	EmberActive  bool      `toml:"ember_active,omitempty"`
 	ShieldActive bool      `toml:"shield_active,omitempty"`
 	BoostActive  bool      `toml:"boost_active,omitempty"`
-	BlinkActive  bool      `toml:"blink_active,omitempty"`
 }
 
 // Record is the part of an owner's sync its player brings back to its Wraith.
@@ -932,12 +925,11 @@ const (
 
 var fuseEffectNames = [...]string{FuseEffectNone: "none", FuseEffectSpirit: "spirit", FuseEffectMaterialize: "materialize"}
 
-// FuseRequestPayload asks for one fusion into Target, played by Effect. Its sources
-// are Entities when it names any, failing when one no longer stands, or else each
-// Sources row's, swept from what stands. A participant's request takes its drains; a
-// Shared one takes unit composites, by entity or row, on every instance, and drains
-// by row on the instance simulating Cursor, the first participant's when 0, which
-// also plays the effect that lands the target.
+// FuseRequestPayload asks for one fusion into Target, played by Effect, from Entities
+// when it names any (failing when one no longer stands), else from what each Sources
+// row sweeps. A participant's takes its drains; a Shared one takes unit composites, by
+// entity or row, on every instance, and drains by row on the one simulating Cursor
+// (the first participant's when 0), which also plays the effect that lands Target.
 type FuseRequestPayload struct {
 	Sources  []FuseSource          `toml:"sources"`
 	Entities []core.Entity         `toml:"entities"`
@@ -1411,27 +1403,24 @@ type MazeSpawnRequestPayload struct {
 
 // CaveStartPayload lays a cave across the map, its rock following cave.Config at the
 // map's height, and scrolls it left at Speed columns a second, up to the soft cap. A
-// zero speed, gap or wavelength takes its default, a zero seed draws one, a zero mask
-// blocks everything, a zero visual draws stone and a zero reach caps no wall; a mouth
-// as wide as the map lays no rock in view, the cave entering past its right edge, and
-// EventCaveEntered follows once the mouth and the ramp have scrolled past. Art names a
-// stone art preset (pattern.ParseArtPreset) the rock draws, as EmitEvent's pick may.
+// mouth as wide as the map lays no rock in view, the cave entering past its right
+// edge, and EventCaveEntered follows once the mouth and the ramp have scrolled past.
 type CaveStartPayload struct {
-	Seed       uint64                     `toml:"seed"`
-	Speed      float64                    `toml:"speed"`
-	MinGap     int                        `toml:"min_gap"`
-	MaxGap     int                        `toml:"max_gap"`
+	Seed       uint64                     `toml:"seed"`    // zero draws one
+	Speed      float64                    `toml:"speed"`   // zero takes its default
+	MinGap     int                        `toml:"min_gap"` // zero takes its default
+	MaxGap     int                        `toml:"max_gap"` // zero takes its default
 	MinWall    int                        `toml:"min_wall"`
-	Wavelength int                        `toml:"wavelength"`
+	Wavelength int                        `toml:"wavelength"` // zero takes its default
 	Swing      int                        `toml:"swing"`
 	Detail     int                        `toml:"detail"`
 	Ramp       int                        `toml:"ramp"`
 	Octaves    int                        `toml:"octaves"`
-	Reach      int                        `toml:"reach"`
+	Reach      int                        `toml:"reach"` // zero caps no wall
 	Mouth      int                        `toml:"mouth"`
-	BlockMask  component.WallBlockMask    `toml:"block_mask"`
-	Visual     component.WallVisualConfig `toml:"visual"`
-	Art        string                     `toml:"art"`
+	BlockMask  component.WallBlockMask    `toml:"block_mask"` // zero blocks everything
+	Visual     component.WallVisualConfig `toml:"visual"`     // zero draws stone
+	Art        string                     `toml:"art"`        // a stone art preset (pattern.ParseArtPreset), as EmitEvent's pick may name
 }
 
 // CaveStopPayload brings the cave's scroll to rest at once, or easing over EaseMs

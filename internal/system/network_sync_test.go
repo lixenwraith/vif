@@ -3,10 +3,12 @@ package system
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/network"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -61,6 +63,87 @@ func TestCursorStateSyncWritesOnlyACoherentRemoteCursor(t *testing.T) {
 	net.writeCursorState(syncFor(local, 0, 1, 77))
 	if got := energyOf(local); got != before {
 		t.Fatalf("local energy after peer sync = %d, want %d", got, before)
+	}
+}
+
+// TestASyncHoldingAValueItsOwnerCannotIsDroppedWhole: a peer's sync is written only
+// while each value lies where its owner's systems keep it. One just past a bound is
+// dropped whole and counted, its sequence left to the next; one at every bound lands.
+func TestASyncHoldingAValueItsOwnerCannotIsDroppedWhole(t *testing.T) {
+	edge := func(w *engine.World, remote core.Entity) *event.CursorStatePayload {
+		cfg := w.Resources.Config
+		span := math.Hypot(float64(cfg.MapWidth), cfg.CellAspect.Circular(float64(cfg.MapHeight)))
+		p := &event.CursorStatePayload{Entity: remote, Slot: 2, Seq: 1,
+			Energy: -parameter.GodEnergyAmount, Heat: parameter.HeatMax, Overheat: parameter.HeatMaxOverheat,
+			ShieldActive: true, ShieldRadius: span, ShieldColor: color.RGB{R: 10, G: 20, B: 30},
+			BoostActive: true, BoostRemaining: int64(time.Hour), BoostTotal: int64(time.Hour),
+			MainFireCooldown: int64(parameter.WeaponCooldownMain), HitPoints: parameter.CombatInitialHPCursor,
+			DamageImmunity: int64(parameter.CombatDamageImmunityDuration),
+			WeaponCharges:  make([]int, component.WeaponCount), WeaponCooldown: make([]int64, component.WeaponCount)}
+		for wt, spec := range component.WeaponSpecs {
+			p.WeaponCharges[wt], p.WeaponCooldown[wt] = spec.MaxCharges, int64(max(spec.Cooldown, spec.MaxedCooldown))
+		}
+		p.WeaponCharges[component.WeaponGun] = parameter.GunPathMax
+		for atk := range p.DamageImmunitySpent {
+			p.DamageImmunitySpent[atk] = unownedAttacker<<1 - 1
+		}
+		return p
+	}
+	rows := []struct {
+		name string
+		past func(p *event.CursorStatePayload) // nil leaves every value at its bound
+	}{
+		{"every value at its bound", nil},
+		{"heat past its meter", func(p *event.CursorStatePayload) { p.Heat++ }},
+		{"overheat past its meter", func(p *event.CursorStatePayload) { p.Overheat++ }},
+		{"shield radius past the map's diagonal", func(p *event.CursorStatePayload) {
+			p.ShieldRadius = math.Nextafter(p.ShieldRadius, math.Inf(1))
+		}},
+		{"shield radius NaN", func(p *event.CursorStatePayload) { p.ShieldRadius = math.NaN() }},
+		{"shield radius below zero", func(p *event.CursorStatePayload) { p.ShieldRadius = math.Nextafter(0, -1) }},
+		{"boost remaining below zero", func(p *event.CursorStatePayload) { p.BoostRemaining = -1 }},
+		{"boost total below zero", func(p *event.CursorStatePayload) { p.BoostTotal = -1 }},
+		{"charges past the kind's cap", func(p *event.CursorStatePayload) { p.WeaponCharges[component.WeaponRod]++ }},
+		{"gun charges past the longest path", func(p *event.CursorStatePayload) { p.WeaponCharges[component.WeaponGun]++ }},
+		{"cooldown past the kind's longest", func(p *event.CursorStatePayload) { p.WeaponCooldown[component.WeaponLauncher]++ }},
+		{"main fire cooldown past its interval", func(p *event.CursorStatePayload) { p.MainFireCooldown++ }},
+		{"hit points past the cursor's", func(p *event.CursorStatePayload) { p.HitPoints++ }},
+		{"damage immunity past its window", func(p *event.CursorStatePayload) { p.DamageImmunity++ }},
+		{"damage immunity below zero", func(p *event.CursorStatePayload) { p.DamageImmunity = -1 }},
+		{"immunity spent by no attacker", func(p *event.CursorStatePayload) {
+			p.DamageImmunitySpent[component.CombatAttackSelfDestruct]++
+		}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			w, _, _ := testCursorWorld(t)
+			remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+			net := ready(NewNetworkSystem(w)).(*NetworkSystem)
+			p := edge(w, remote)
+			if row.past == nil {
+				if !net.writeCursorState(p) {
+					t.Fatal("a sync at every bound was dropped")
+				}
+				if c, _ := w.Components.Weapon.GetComponent(remote); c.Charges[component.WeaponGun] != parameter.GunPathMax {
+					t.Fatalf("gun charges after a sync at every bound = %d, want %d", c.Charges[component.WeaponGun], parameter.GunPathMax)
+				}
+				if c, _ := w.Components.Shield.GetComponent(remote); c.Radius != p.ShieldRadius || c.Color != p.ShieldColor {
+					t.Fatalf("shield after a sync at every bound = %g %+v, want %g %+v", c.Radius, c.Color, p.ShieldRadius, p.ShieldColor)
+				}
+				return
+			}
+			row.past(p)
+			dropped := net.statDrop.Load()
+			if net.writeCursorState(p) || net.statDrop.Load() != dropped+1 {
+				t.Fatal("the sync was applied, or dropped without being counted once")
+			}
+			if c, _ := w.Components.Energy.GetComponent(remote); c.Current == p.Energy {
+				t.Fatal("the dropped sync wrote its energy")
+			}
+			if !net.writeCursorState(edge(w, remote)) {
+				t.Fatal("the dropped sync spent its sequence: the next one at it was refused")
+			}
+		})
 	}
 }
 
