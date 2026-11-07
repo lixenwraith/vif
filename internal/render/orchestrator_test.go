@@ -47,6 +47,48 @@ func (s *scribbler) Render(_ RenderContext, buf *RenderBuffer) {
 	}
 }
 
+// bgLayer writes one background a cell from the left, skipping zero ones; a layer
+// that does not ask for coarse backgrounds leaves the switch alone
+type bgLayer struct {
+	coarse bool
+	bg     []color.RGB
+}
+
+func (l *bgLayer) Render(_ RenderContext, buf *RenderBuffer) {
+	if l.coarse {
+		buf.SetCoarseBg(true)
+	}
+	for x, c := range l.bg {
+		if c != (color.RGB{}) {
+			buf.SetBgOnly(x, 0, c)
+		}
+	}
+}
+
+// TestCoarseBackgroundsRoundOnlyFromTheirLayer: a background a layer wrote coarse
+// leaves as the xterm index that looks like it, or on its level, while the next
+// layer's writes stay exact, over the coarse cells too, as it never asked
+func TestCoarseBackgroundsRoundOnlyFromTheirLayer(t *testing.T) {
+	t.Parallel()
+	near, far, exact := color.RGB{R: 96, G: 136, B: 176}, color.RGB{R: 60, G: 20, B: 120}, color.RGB{R: 61, G: 21, B: 121}
+	term := &captureTerminal{}
+	o := NewRenderOrchestrator(term, 4, 1)
+	o.Register(Registration{Renderer: &bgLayer{coarse: true, bg: []color.RGB{near, far, far}}, Priority: PriorityOverlay})
+	o.Register(Registration{Renderer: &bgLayer{bg: []color.RGB{{}, {}, exact, exact}}, Priority: PriorityOverlay})
+	o.RenderFrame(RenderContext{}, engine.NewWorld())
+
+	want := []terminal.Cell{
+		{Bg: color.RGB{R: 67}, Attrs: terminal.AttrBg256}, // the cube's 95,135,175
+		{Bg: color.RGB{R: 56, G: 24, B: 120}},
+		{Bg: exact}, {Bg: exact},
+	}
+	for x, w := range want {
+		if got := term.at(x, 0); got.Bg != w.Bg || got.Attrs&terminal.AttrBg256 != w.Attrs {
+			t.Errorf("cell %d: bg %v palette %v, want %v palette %v", x, got.Bg, got.Attrs&terminal.AttrBg256 != 0, w.Bg, w.Attrs != 0)
+		}
+	}
+}
+
 // TestScreenSpaceLayersStayUnclipped keeps the clip from reaching the layers
 // that address the screen on purpose: the status bar, the gutters, the overlay
 // panels and the post-processing passes all live outside the map.

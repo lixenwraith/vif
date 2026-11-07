@@ -349,6 +349,7 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 // shield, the local cursor's last
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskField)
+	buf.SetCoarseBg(true)
 	r.layLens(ctx)
 	r.renderWraiths(ctx, buf)
 

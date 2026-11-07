@@ -115,6 +115,7 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 		} else {
 			o.buffer.ClearClip()
 		}
+		o.buffer.SetCoarseBg(false)
 		span := p.Begin(entry.timer)
 		entry.renderer.Render(ctx, o.buffer)
 		span.End()

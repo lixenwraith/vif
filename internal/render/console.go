@@ -128,7 +128,7 @@ func newConsole(p engine.ConsolePalette) *Console {
 		c.lab[i], c.lum[i] = labOf(rgb), luminance(rgb)
 	}
 	for key := range consoleLUTSize {
-		l := labOf(color.RGB{R: uint8(key>>10)<<3 | 4, G: uint8(key>>5&31)<<3 | 4, B: uint8(key&31)<<3 | 4})
+		l := labOf(lutColor(key))
 		c.fgLUT[key] = c.nearestLab(l, 16)
 		c.bgLUT[key] = c.nearestLab(l, c.bgColors)
 	}
@@ -311,6 +311,11 @@ func dimEntry(i uint8) uint8 {
 
 func lutKey(c color.RGB) int {
 	return int(c.R>>3)<<10 | int(c.G>>3)<<5 | int(c.B>>3)
+}
+
+// lutColor is the color in the middle of a lutKey's cell
+func lutColor(key int) color.RGB {
+	return color.RGB{R: uint8(key>>10)<<3 | 4, G: uint8(key>>5&31)<<3 | 4, B: uint8(key&31)<<3 | 4}
 }
 
 // cubeFamily is the console hue an xterm-256 index belongs to, by the rules FreeBSD's teken

@@ -106,6 +106,7 @@ func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		return
 	}
 	buf.SetWriteMask(r.mask)
+	buf.SetCoarseBg(true)
 	pulses.Each(func(_ core.Entity, p *component.PulseComponent) bool {
 		if p.Style == r.style && p.Palette < component.PaletteCount && p.Radius > 0 {
 			r.draw(r, ctx, buf, p)

@@ -106,6 +106,7 @@ func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 
 	buf.SetWriteMask(visual.MaskField)
+	buf.SetCoarseBg(true)
 
 	localEntity := roster.Entity
 	for slot := range parameter.MaxPlayers {
