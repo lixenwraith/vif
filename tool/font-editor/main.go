@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime/debug"
@@ -95,6 +96,7 @@ type Editor struct {
 
 func main() {
 	which := flag.String("face", "large", "the splash face to edit: large or small")
+	sheet := flag.Bool("sheet", false, "print every glyph of the face, a cell a pixel and then two rows a cell, and exit")
 	flag.Parse()
 	switch *which {
 	case "large":
@@ -106,6 +108,10 @@ func main() {
 		os.Exit(2)
 	}
 	gridCols = face.Width
+	if *sheet {
+		printSheet(os.Stdout, face)
+		return
+	}
 
 	term := terminal.New(terminal.ColorModeTrueColor)
 	if err := term.Init(); err != nil {
@@ -994,4 +1000,41 @@ func (e *Editor) drawStatus(cells []terminal.Cell) {
 
 	x := max(0, e.width-len(msg)-2)
 	e.drawText(cells, x, barY, msg, color.RGB{R: 255, G: 255, B: 255}, bg, terminal.AttrBold)
+}
+
+// printSheet writes every glyph of the face in code point order, 96 columns a
+// row of glyphs: first a cell a pixel, as the game draws the large face and a text
+// console the small one, then two pixel rows a cell as half blocks
+func printSheet(w io.Writer, face *asset.Face) {
+	perRow := max(1, 96/face.Width)
+	for pack := 1; pack <= face.Pack; pack++ {
+		fmt.Fprintf(w, "%s, %d pixel row(s) a cell\n", faceName, pack)
+		for first := 0; first < len(face.Glyphs); first += perRow {
+			last := min(first+perRow, len(face.Glyphs))
+			for y := 0; y < face.Height; y += pack {
+				var line strings.Builder
+				for i := first; i < last; i++ {
+					glyph := face.Glyphs[i]
+					for x := range face.Width {
+						top := face.Ink(glyph, x, y)
+						bottom := pack > 1 && face.Ink(glyph, x, y+1)
+						switch {
+						case top && bottom:
+							line.WriteRune(BlockFull)
+						case top && pack == 1:
+							line.WriteRune('#')
+						case top:
+							line.WriteRune(BlockUpper)
+						case bottom:
+							line.WriteRune(BlockLower)
+						default:
+							line.WriteRune('.')
+						}
+					}
+				}
+				fmt.Fprintln(w, line.String())
+			}
+			fmt.Fprintln(w)
+		}
+	}
 }
