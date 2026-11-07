@@ -267,6 +267,10 @@ type ConfigResource struct {
 	// slot, owner and control alone, with no cell or anything a cell carries
 	CursorsOffMap bool `toml:"-"`
 
+	// ContentBlocks is the scenario's [content] blocks: the spawner lays a corpus
+	// block's lines together where a slot holds them, else a line at a time
+	ContentBlocks bool `toml:"-"`
+
 	// NavRefreshTicks is the scenario's [navigation] field_refresh_ticks, how often a
 	// navigator or drop out of sight reads its field, and NavRebuildTicks its
 	// route_rebuild_ticks, how often a stale route graph may rebuild; zero is unset

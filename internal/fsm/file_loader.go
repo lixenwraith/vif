@@ -202,21 +202,25 @@ func includeBehaviors(fsys fs.FS, entry map[string]any, baseDir string, visited 
 	return nil
 }
 
-// includeContent reads the entry's content, the corpus files a scenario carries,
+// includeContent reads the entry's [content] files, the corpus a scenario carries,
 // into the file set a copy holds; the entry's embedder reads them as a corpus
 func includeContent(fsys fs.FS, entry map[string]any, baseDir string, visited *[]string) error {
 	raw, ok := entry["content"]
 	if !ok || visited == nil {
 		return nil
 	}
-	names, ok := raw.([]any)
+	table, ok := raw.(map[string]any)
 	if !ok {
-		return errors.New("content must be an array of file names")
+		return errors.New("content must be a table")
+	}
+	names, ok := table["files"].([]any)
+	if _, has := table["files"]; has && !ok {
+		return errors.New("content files must be an array of file names")
 	}
 	for _, item := range names {
 		name, ok := item.(string)
 		if !ok {
-			return errors.New("content must be an array of file names")
+			return errors.New("content files must be an array of file names")
 		}
 		full := path.Join(baseDir, name)
 		if _, err := fs.ReadFile(fsys, full); err != nil {

@@ -342,8 +342,9 @@ func (s *GlyphSystem) nextGlyphToSpawn() GlyphKey {
 	}
 }
 
-// spawnGlyphs pulls the next content block and places it: whole where a slot holds
-// it, so a bracket pair or a paragraph reads across its rows, else a line at a time
+// spawnGlyphs pulls the next content block and places it: a line at a time, or
+// where the scenario asks for blocks, whole where a slot holds it, so a bracket pair
+// or a paragraph reads across its rows
 func (s *GlyphSystem) spawnGlyphs() {
 	res := s.world.Resources.Content
 	if res == nil || res.Provider == nil {
@@ -358,7 +359,7 @@ func (s *GlyphSystem) spawnGlyphs() {
 	s.updateCensus()
 	key := s.nextGlyphToSpawn()
 
-	if s.placeBlock(block.Lines, key.Type, key.Level) {
+	if s.world.Resources.Config.ContentBlocks && s.placeBlock(block.Lines, key.Type, key.Level) {
 		return
 	}
 	for _, line := range block.Lines {

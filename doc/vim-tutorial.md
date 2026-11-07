@@ -28,7 +28,7 @@ re-laid when the state is entered again.
 
 ## 2. The first round
 
-`wad/scenario/vimtutor` runs eight lessons and a free practice; `vif -s vimtutor`
+`wad/scenario/vimtutor` runs eleven lessons and a free practice; `vif -s vimtutor`
 plays it, `vif -s vimtutor -check` validates it with its corpus. What it stands on:
 
 - Two splash faces (`asset.SplashFaces`): the large one as before, and a small one
@@ -41,25 +41,32 @@ plays it, `vif -s vimtutor -check` validates it with its corpus. What it stands 
   cursor and hides the next lesson. The glyph system lays and clears while it is
   disabled, so no corpus line lands on a lesson ([FSM
   reference](fsm-reference.md#splash-text-and-glyph-lines)).
-- A scenario carries its corpus: the entry's `content` names TOML corpus files,
-  in its container under its digest, which the run types in place of its roots'.
-  The tutor's is code in blocks of two to five lines.
-- A corpus block is laid whole, its lines on consecutive rows from one column,
-  so `%` finds a bracket's pair across rows and `{` `}` hop between blocks; where
-  no slot holds it, line by line as before.
-- `EventKeyCaptureRequest` takes `modes` and `idle`: the tutor captures `s`, and
-  in its last lesson `a p o O u m y c r n`, in Normal and Visual with nothing
-  pending, so `fa` and `qa` still take their letter and Insert types it.
+- A scenario carries its corpus: the entry's `[content] files` names TOML corpus
+  files, in its container under its digest, which the run types in place of its
+  roots'. The tutor's is code in blocks of two to five lines.
+- `[content] blocks = true` lays a corpus block whole, its lines on consecutive
+  rows from one column, so `%` finds a bracket's pair across rows and `{` `}` hop
+  between blocks; where no slot holds it, and in every scenario that leaves the
+  key unset, line by line, spread as before.
+- `EventKeyCaptureRequest` takes `modes` and `idle`: the tutor captures `s` and
+  `S`, and in its last lesson `a p o O u m y c r` as well, in Normal and Visual
+  with nothing pending, so `fa` and `qa` still take their letter and Insert types
+  it.
 
-A lesson is a state under `Lesson`, whose exit clears it (`Clear`: every glyph,
-the heading and the answer, under a white flash) and whose entry lays the next.
-The map floor is 80 by 24: the heading at row 1, the notes at rows 8 to 10, the
-practice line at 13, an answer at 16, all from column 4.
+A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every glyph,
+the heading and the answer, under a white flash; the parent's exit runs only when
+the last lesson leaves) and whose entry lays its text; `s` goes to the next and
+`S` to the one before, and a lesson in two steps (`$` then `^`, `x` then `dd`, `G`
+then `gg`) nests its second step as a child, which keeps the text laid. The map
+floor is 80 by 24: the heading at row 1, the notes at rows 8 to 11, the practice
+line or block at rows 14 to 16, an answer at 18, all from column 4. The later
+lessons practise on three lines, so a count, a line delete, `%` and a search
+have somewhere to go.
 
 ## 3. The next round
 
-- **More lessons**: `/` `n` `N`, `gg G M m` and the `g` corners, `o O [ ]`, `gl`
-  and the colour markers, `q` and `@` macros, `d` with a motion and `D`, `v`.
+- **More lessons**: `o O [ ]`, `gl` and the colour markers, `q` and `@` macros,
+  `d` with a motion and `D`, `v`, `N` and `M m` practised rather than told.
 - **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
   transition on `EventScreenResize` through a relay state would lay it again,
   since a state re-entering itself runs no entry actions.
@@ -77,6 +84,8 @@ practice line at 13, an answer at 16, all from column 4.
   they cannot be tutored yet. The todo item on the cheap ones (`c`, `*` `#`, `A`
   `I`, `.`, `r`) and on the tutor overriding `a` and `p`, which have nothing to
   fire or pause there, is the next step.
-- The practice text is the scenario's own corpus, not the run's.
+- The practice text is the scenario's own corpus, not the run's, and block
+  placement is the tutor's choice: the main scenario and `td` spread lines as
+  before.
 - The ping grid stays; the tutor's cursor has no shield, so Visual mode pings from
   the cursor alone.

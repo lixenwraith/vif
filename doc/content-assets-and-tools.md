@@ -27,8 +27,8 @@ served-block telemetry. `:content` presents a compact view during a run.
 
 Source resolution is:
 
-0. the scenario's own corpus, the files its entry's `content` names, carried in
-   its container under its digest, so every participant types the same
+0. the scenario's own corpus, the files its entry's `[content] files` names,
+   carried in its container under its digest, so every participant types the same
    ([FSM reference](fsm-reference.md#root-config-scenariotoml));
 1. `-f <path>`, or `[paths] content` in `vif.toml`: an explicit directory, or a
    single file pinned within its parent directory;
