@@ -21,10 +21,11 @@ func (b *oneBlock) NextBlock() (core.CodeBlock, bool) {
 	return core.CodeBlock{Lines: lines}, true
 }
 
-// A corpus block is laid whole: its lines on consecutive rows from one column, so a
-// bracket pair or a paragraph reads across them.
+// Where the scenario asks for blocks, a corpus block is laid whole: its lines on
+// consecutive rows from one column, so a bracket pair or a paragraph reads across them.
 func TestACorpusBlockIsLaidOnConsecutiveRows(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
+	w.Resources.Config.ContentBlocks = true
 	glyphs := ready(NewGlyphSystem(w)).(*GlyphSystem)
 	w.Resources.Content = &engine.ContentResource{Provider: &oneBlock{lines: []string{"func main() {", "    run()", "}"}}}
 	glyphs.spawnGlyphs()
