@@ -267,22 +267,41 @@ In order: reference kinds, order and provenance; a read-only graph of a scenario
 regions, states and blocks; placing and editing blocks into editor-owned files; the
 map layer and point markers; root `[[expand]]` blocks and library copies.
 
-### Add a vim tutorial scenario
+### Add the cheap vim keys, and let the tutor override the game's
 
 - Priority: P3
-- Affected files: `wad/scenario/vimtutor/` (new), `internal/input/machine.go`,
-  `internal/event/payload.go` (`KeyCapturePayload`)
+- Affected files: `internal/input/machine.go`, `actionnames.go`,
+  `internal/asset/input/keymap.toml`, `wad/scenario/vimtutor/scenario.toml`
 - Guide: [Vim tutorial](vim-tutorial.md), [Input and modes
   §4](input-and-modes.md#4-default-bindings)
 
-A scenario for practising vim motions with combat off, a lesson at a time: a
-heading in the small splash face, scenery lines that explain, a typeable practice
-line the cursor is moved onto, and a status prompt. The faces, the splash text and
-the laid glyph lines are in; the working doc lists what is still to lay (a scope on
-the key capture, the lessons) and the decisions it waits on (which vim keys to add
-in code, how a lesson answers a key it cannot teach). Rewriting intents in the
-router for one scenario would be a second mechanism beside the key table and the
-capture; not that.
+The tutor's last lesson captures the keys vif reads its own way (`a` auto-fire, `p`
+pause, `o` `O` column finds, `u` cursor undo, `m` the middle column) and the ones it
+binds to nothing (`y`, `c`, `r`), and answers each press with what the key does
+here; it tutors none. Two steps remain. The cheap vim keys in code: `c` with a
+motion, `cc` and `C` (the delete operator's grammar, then Insert), `*` and `#`
+(search for the glyph run under the cursor), `A` and `I` (Insert at the line's end
+or first glyph), `.` (the last change recorded in the input machine) and `r`
+(retype the glyph under the cursor, which needs a glyph replace event and a rule
+for whether it counts as typing); `y` and `p` have nothing to yank or put in a
+glyph field. And the tutor overriding the game's bindings for its run: it has no
+gun to auto-fire and no clock to pause, so `a` should append and `p` do nothing
+there, which a scenario keymap over the player's table
+([Input and modes §10](input-and-modes.md#10-keymap-override-files)) would give it,
+or a capture that answers `a` by entering Insert one cell on, which needs a mode
+change a scenario can request. Rewriting intents in the router for one scenario
+would be a second mechanism beside the key table and the capture; not that.
+
+### Grow the vim tutor
+
+- Priority: P3
+- Affected files: `wad/scenario/vimtutor/`
+- Guide: [Vim tutorial §3](vim-tutorial.md#3-the-next-round)
+
+The first round teaches `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x` and
+`dd`, `i` and typing, then the taken keys and free practice. The next adds search,
+the map and column motions, the markers and macros, lays a lesson again on a
+resize, centres from the map's edge, and cues a lesson cleared.
 
 ## Browser sessions
 

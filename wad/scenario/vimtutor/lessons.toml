@@ -1,0 +1,89 @@
+# The tutor's corpus: code to move through and type once the lessons are done,
+# laid in blocks so % finds a bracket's pair across rows.
+schema = 1
+
+[[blocks]]
+id = "main"
+lines = [
+  "func main() {",
+  "    fmt.Println(\"hello, vif\")",
+  "}",
+]
+
+[[blocks]]
+id = "loop"
+lines = [
+  "for i := 0; i < 10; i++ {",
+  "    sum += i * (i + 1)",
+  "}",
+]
+
+[[blocks]]
+id = "if"
+lines = [
+  "if err != nil {",
+  "    return fmt.Errorf(\"read: %w\", err)",
+  "}",
+]
+
+[[blocks]]
+id = "struct"
+lines = [
+  "type point struct {",
+  "    x, y int",
+  "}",
+]
+
+[[blocks]]
+id = "slice"
+lines = [
+  "words := []string{\"the\", \"quick\", \"fox\"}",
+  "for _, w := range words {",
+  "    count[w]++",
+  "}",
+]
+
+[[blocks]]
+id = "switch"
+lines = [
+  "switch key {",
+  "case 'h', 'j', 'k', 'l':",
+  "    move(key)",
+  "default:",
+  "    beep()",
+  "}",
+]
+
+[[blocks]]
+id = "map"
+lines = [
+  "seen := map[string]bool{}",
+  "if !seen[name] {",
+  "    seen[name] = true",
+  "}",
+]
+
+[[blocks]]
+id = "call"
+lines = [
+  "total := add(mul(2, 3), sub(9, 4))",
+  "print(total)",
+]
+
+[[blocks]]
+id = "method"
+lines = [
+  "func (p point) dist(q point) int {",
+  "    return abs(p.x-q.x) + abs(p.y-q.y)",
+  "}",
+]
+
+[[blocks]]
+id = "defer"
+lines = [
+  "f, err := os.Open(path)",
+  "if err != nil {",
+  "    return err",
+  "}",
+  "defer f.Close()",
+]

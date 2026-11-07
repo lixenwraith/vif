@@ -1,0 +1,307 @@
+description = "Vim tutor: the motions, a lesson at a time, with combat off."
+min_players = 1
+max_players = 16
+content = ["lessons.toml"]
+
+# Each lesson lays its heading in the small splash face, a few lines that explain,
+# and a practice line the cursor is moved onto, then waits for the result and
+# clears itself. The keys vif reads its own way have a lesson of their own, where
+# a press answers with what the key does here. The last lesson turns the glyph
+# spawner on, which types this scenario's own corpus: code, laid in blocks, so %
+# finds its pair.
+
+[map]
+min_width = 80
+min_height = 24
+
+[systems]
+only_systems = ["cursor", "typing", "timer", "death", "glyph", "particle", "transient", "audio", "energy", "heat", "splash", "ping", "flash", "fadeout"]
+
+[regions.tutor]
+initial = "Wait"
+
+[regions.player]
+initial = "PlayerBoot"
+background = true
+
+# --- Macros ---
+
+[macros.Say]
+doc = "Status message `message`."
+params = { message = "string" }
+body = { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "${message}" } }
+
+[macros.Heading]
+doc = "Write `text` in the small face at the top left, in the lesson's gold."
+params = { text = "string" }
+body = { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "${text}", font = "small", color = { r = 255, g = 200, b = 0 }, origin_x = 4, origin_y = 1 } }
+
+[macros.Answer]
+doc = "Write `text` in the small face under the practice line, in `color`, and flash the screen in it."
+params = { text = "string", color = "table" }
+body = [
+    { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "${text}", font = "small", color = "${color}", origin_x = 4, origin_y = 16 } },
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = "${color}", intensity = 0.4, duration_ms = 200 } },
+]
+
+[macros.Note]
+doc = "Lay `text` at row `row` as scenery: part of the lesson, which nothing types or deletes."
+params = { text = "string", row = "int" }
+body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = "${row}", type = "white", level = "normal", scenery = true } }
+
+[macros.Practice]
+doc = "Lay the practice line `text` at row 13, typeable, and stand the cursor on its first glyph."
+params = { text = "string" }
+body = [
+    { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "${text}", x = 4, y = 13, type = "blue", level = "bright" } },
+    { action = "EmitEvent", event = "EventCursorMoveRequest", payload = { entity = 0, x = 4, y = 13 }, payload_vars = { entity = "player_entity" } },
+]
+
+[macros.Mark]
+doc = "Lay a bright x at `x`, `y`, scenery, as the cell a lesson ends on."
+params = { x = "int", y = "int" }
+body = { action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "x", x = "${x}", y = "${y}", type = "white", level = "bright", scenery = true } }
+
+[macros.Clear]
+doc = "End the lesson: every glyph gone, the heading and the answer blanked, under a white flash."
+params = {}
+body = [
+    { action = "EmitEvent", event = "EventGlyphClearRequest" },
+    { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "", origin_x = 4, origin_y = 1 } },
+    { action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "", origin_x = 4, origin_y = 16 } },
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 0.3, duration_ms = 150 } },
+]
+
+[macros.Reached]
+doc = "Go to `target` once the cursor stands on `x`, `y`."
+params = { target = "string", x = "int", y = "int" }
+body = { trigger = "EventCursorMoved", target = "${target}", guard = "And", guard_args = { guards = [
+    { name = "PayloadIntCompare", args = { field = "x", op = "eq", value = "${x}" } },
+    { name = "PayloadIntCompare", args = { field = "y", op = "eq", value = "${y}" } },
+] } }
+
+[macros.Skip]
+doc = "Take s, in Normal and Visual with nothing pending, as the skip to `target`."
+params = { target = "string" }
+body = [
+    { trigger = "EventInputPressed", target = "${target}", guard = "PayloadStringEquals", guard_args = { field = "key", value = "s" } },
+]
+
+[macros.Taken]
+doc = "In the taken-keys lesson, a press of `key` answers with `text` in `color`, and says `message`."
+params = { key = "string", text = "string", color = "table", message = "string" }
+body = { trigger = "EventInputPressed", internal = true, guard = "PayloadStringEquals", guard_args = { field = "key", value = "${key}" }, actions = [
+    { macro = "Answer", text = "${text}", color = "${color}" },
+    { macro = "Say", message = "${message}" },
+] }
+
+# --- Tutor ---
+
+# The lessons wait for the cursor; the glyph spawner stays off until the last one,
+# so no corpus line lands on a lesson
+[states.Wait]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventMetaSystemCommandRequest", payload = { system_name = "glyph", enabled = false } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "Move" },
+]
+
+# s skips any lesson; in the taken-keys lesson it is one of the keys asked about.
+# Each lesson clears itself as it exits: a parent's exit runs only once the last
+# lesson leaves.
+[states.Lesson]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "s", modes = ["normal", "visual"], idle = true }, reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "" }, reconcile = true },
+]
+
+[states.Move]
+parent = "Lesson"
+on_exit = [{ macro = "Clear" }]
+on_enter = [
+    { macro = "Heading", text = "h j k l" },
+    { macro = "Note", text = "h moves left and l moves right, j moves down and k moves up", row = 8 },
+    { macro = "Note", text = "the arrow keys move as well, and H J K L leap half a screen", row = 9 },
+    { macro = "Note", text = "stand on the x below to go on; s skips a lesson", row = 10 },
+    { macro = "Practice", text = "start here" },
+    { macro = "Mark", x = 40, y = 18 },
+    { macro = "Say", message = "Lesson 1 of 8: move onto the x with h j k l" },
+]
+transitions = [
+    { macro = "Reached", target = "Words", x = 40, y = 18 },
+    { macro = "Skip", target = "Words" },
+]
+
+[states.Words]
+parent = "Lesson"
+on_exit = [{ macro = "Clear" }]
+on_enter = [
+    { macro = "Heading", text = "w b e" },
+    { macro = "Note", text = "w jumps to the next word and b to the one before", row = 8 },
+    { macro = "Note", text = "e lands on the end of a word; W B E step over punctuation", row = 9 },
+    { macro = "Note", text = "reach the last word of the line", row = 10 },
+    { macro = "Practice", text = "the quick brown fox jumps over the lazy dog" },
+    { macro = "Say", message = "Lesson 2 of 8: reach dog with w" },
+]
+transitions = [
+    { macro = "Reached", target = "Line", x = 44, y = 13 },
+    { macro = "Skip", target = "Line" },
+]
+
+[states.Line]
+parent = "Lesson"
+on_exit = [{ macro = "Clear" }]
+on_enter = [
+    { macro = "Heading", text = "0 ^ $" },
+    { macro = "Note", text = "0 goes to the start of the line and $ to its end", row = 8 },
+    { macro = "Note", text = "^ finds the first glyph after the indent", row = 9 },
+    { macro = "Note", text = "go to the end of the line, then back to its first glyph", row = 10 },
+    { macro = "Practice", text = "    an indented line ends with a period." },
+    { macro = "Say", message = "Lesson 3 of 8: $ to the period, then ^ back" },
+]
+transitions = [
+    { macro = "Reached", target = "LineBack", x = 43, y = 13 },
+    { macro = "Skip", target = "Find" },
+]
+
+[states.LineBack]
+parent = "Line"
+on_enter = [
+    { macro = "Say", message = "Now ^ to the first glyph" },
+]
+transitions = [
+    { macro = "Reached", target = "Find", x = 8, y = 13 },
+]
+
+[states.Find]
+parent = "Lesson"
+on_exit = [{ macro = "Clear" }]
+on_enter = [
+    { macro = "Heading", text = "f t ; ," },
+    { macro = "Note", text = "f then a glyph jumps onto its next one, t stops before it", row = 8 },
+    { macro = "Note", text = "F and T look back; ; repeats the find and , reverses it", row = 9 },
+    { macro = "Note", text = "hop from x to x with fx and then ;", row = 10 },
+    { macro = "Practice", text = "hop x from x here x to x the last x" },
+    { macro = "Say", message = "Lesson 4 of 8: reach the last x with fx and ;" },
+]
+transitions = [
+    { macro = "Reached", target = "Count", x = 38, y = 13 },
+    { macro = "Skip", target = "Count" },
+]
+
+[states.Count]
+parent = "Lesson"
+on_exit = [{ macro = "Clear" }]
+on_enter = [
+    { macro = "Heading", text = "3w 5l" },
+    { macro = "Note", text = "a count before a motion repeats it: 3w is three words on", row = 8 },
+    { macro = "Note", text = "5l is five cells right, 2j two rows down", row = 9 },
+    { macro = "Note", text = "reach five in one motion", row = 10 },
+    { macro = "Practice", text = "one two three four five six seven" },
+    { macro = "Say", message = "Lesson 5 of 8: 4w lands on five" },
+]
+transitions = [
+    { macro = "Reached", target = "Delete", x = 23, y = 13 },
+    { macro = "Skip", target = "Delete" },
+]
+
+[states.Delete]
+parent = "Lesson"
+on_exit = [{ macro = "Clear" }]
+on_enter = [
+    { macro = "Heading", text = "x d dd" },
+    { macro = "Note", text = "x deletes the glyph under the cursor", row = 8 },
+    { macro = "Note", text = "d then a motion deletes that far: dw a word, d$ to the end", row = 9 },
+    { macro = "Note", text = "dd deletes the whole line, D to its end", row = 10 },
+    { macro = "Practice", text = "delete this whole line with dd" },
+    { macro = "Say", message = "Lesson 6 of 8: dd deletes the line" },
+]
+transitions = [
+    { trigger = "EventDeleteRequest", target = "Insert" },
+    { macro = "Skip", target = "Insert" },
+]
+
+[states.Insert]
+parent = "Lesson"
+on_exit = [{ macro = "Clear" }]
+on_enter = [
+    { macro = "Heading", text = "i esc" },
+    { macro = "Note", text = "i enters insert mode at the cursor; esc returns to normal", row = 8 },
+    { macro = "Note", text = "in insert, type the glyph under the cursor to clear it", row = 9 },
+    { macro = "Note", text = "a match feeds the heat, a miss burns it", row = 10 },
+    { macro = "Practice", text = "type me" },
+    { action = "SetVar", payload = { name = "typed", value = 0 } },
+    { macro = "Say", message = "Lesson 7 of 8: i, then type the line" },
+]
+transitions = [
+    { trigger = "EventEnergyGlyphConsumed", internal = true, actions = [{ action = "IncrementVar", payload = { name = "typed" } }] },
+    { trigger = "Tick", target = "Taken", guard = "VarCompare", guard_args = { var = "typed", op = "gte", value = 6 } },
+    { macro = "Skip", target = "Taken" },
+]
+
+# The keys vif reads its own way: each press answers in the small face and on
+# the status bar, taken in Normal and Visual only, so a find or a register still
+# gets its letter; n goes on
+[states.Taken]
+parent = "Lesson"
+on_exit = [{ macro = "Clear" }]
+on_enter = [
+    { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "apoOumycrns", modes = ["normal", "visual"], idle = true }, reconcile = true },
+    { macro = "Heading", text = "a p o u m" },
+    { macro = "Note", text = "vif plays a subset of vim: some keys belong to the game", row = 8 },
+    { macro = "Note", text = "press a p o O u m y c r to read what each does here", row = 9 },
+    { macro = "Note", text = "they cannot be tutored yet; n goes on", row = 10 },
+    { macro = "Practice", text = "press the keys above, then n" },
+    { macro = "Say", message = "Lesson 8 of 8: a p o O u m y c r, then n" },
+]
+transitions = [
+    { macro = "Taken", key = "a", text = "auto fire", color = { r = 255, g = 120, b = 0 }, message = "a cycles auto fire, not append" },
+    { macro = "Taken", key = "p", text = "pause", color = { r = 120, g = 160, b = 255 }, message = "p pauses the game; there is nothing to put" },
+    { macro = "Taken", key = "o", text = "column find", color = { r = 0, g = 220, b = 120 }, message = "o finds the next glyph below, O above" },
+    { macro = "Taken", key = "O", text = "column find", color = { r = 0, g = 220, b = 120 }, message = "O finds the next glyph above, o below" },
+    { macro = "Taken", key = "u", text = "move undo", color = { r = 220, g = 80, b = 220 }, message = "u undoes a move, not a delete" },
+    { macro = "Taken", key = "m", text = "mid column", color = { r = 255, g = 255, b = 120 }, message = "m is the middle column, not a mark; M the middle row" },
+    { macro = "Taken", key = "y", text = "no yank", color = { r = 160, g = 160, b = 160 }, message = "y does nothing: there is nothing to yank" },
+    { macro = "Taken", key = "c", text = "not yet", color = { r = 160, g = 160, b = 160 }, message = "c does nothing yet" },
+    { macro = "Taken", key = "r", text = "not yet", color = { r = 160, g = 160, b = 160 }, message = "r does nothing yet" },
+    { trigger = "EventInputPressed", target = "Free", guard = "PayloadStringEquals", guard_args = { field = "key", value = "n" } },
+    { macro = "Skip", target = "Free" },
+]
+
+# Free practice: the spawner lays this scenario's code in blocks, so % finds a
+# bracket's pair across rows and { } hop between blocks
+[states.Free]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventMetaSystemCommandRequest", payload = { system_name = "glyph", enabled = true } },
+    { macro = "Say", message = "That is the first round: the code around you is yours to move through and type; :n starts over" },
+]
+
+# --- Player: one cursor at the practice line, with no gun, so Enter and Space do nothing ---
+
+[states.PlayerBoot]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { x = 4, y = 13, heat = 100, energy = 100 } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
+]
+
+[states.PlayerBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+[states.PlayerActive]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventWeaponRemoveRequest", payload = { entity = 0, weapon = "gun" }, payload_vars = { entity = "player_entity" } },
+]
