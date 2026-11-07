@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/lixenwraith/ascimage"
@@ -109,26 +110,57 @@ func renderFlags(fs *flag.FlagSet, o *opts) {
 	fs.Float64Var(&o.aspect, "aspect", ascimage.DefaultAspect, "a cell's `width` over its height on the display")
 }
 
+// modes and depths name the render modes and the color depths, for the flags,
+// the status lines and the export form alike
+var modes = []renderMode{{"quadrant", ascimage.ModeQuadrant}, {"bg", ascimage.ModeBackgroundOnly}}
+
+type renderMode struct {
+	name string
+	mode ascimage.RenderMode
+}
+
+type depth struct {
+	name string
+	mode terminal.ColorMode
+}
+
+var depths = []depth{{"true", terminal.ColorModeTrueColor}, {"256", terminal.ColorMode256}, {"16", terminal.ColorMode16}}
+
+func modeName(m ascimage.RenderMode) string {
+	for _, x := range modes {
+		if x.mode == m {
+			return x.name
+		}
+	}
+	return "unknown"
+}
+
+func depthName(d terminal.ColorMode) string {
+	for _, x := range depths {
+		if x.mode == d {
+			return x.name
+		}
+	}
+	return "none"
+}
+
 func (o *opts) renderMode() (ascimage.RenderMode, error) {
-	switch o.mode {
-	case "quadrant", "q":
-		return ascimage.ModeQuadrant, nil
-	case "bg", "background":
-		return ascimage.ModeBackgroundOnly, nil
+	for _, x := range modes {
+		if o.mode == x.name {
+			return x.mode, nil
+		}
 	}
 	return 0, usageError(fmt.Sprintf("-m %q: want quadrant or bg", o.mode))
 }
 
 func (o *opts) colorMode() (terminal.ColorMode, error) {
-	switch o.depth {
-	case "auto":
+	if o.depth == "auto" {
 		return terminal.DetectColorMode(), nil
-	case "true", "truecolor", "24":
-		return terminal.ColorModeTrueColor, nil
-	case "256":
-		return terminal.ColorMode256, nil
-	case "16":
-		return terminal.ColorMode16, nil
+	}
+	for _, x := range depths {
+		if o.depth == x.name {
+			return x.mode, nil
+		}
 	}
 	return 0, usageError(fmt.Sprintf("-c %q: want auto, true, 256 or 16", o.depth))
 }
@@ -335,6 +367,12 @@ func convertOne(o *opts, in, out string, mode ascimage.RenderMode, depth termina
 	if err != nil {
 		return "", err
 	}
+	return convertSource(o, src, out, mode, depth)
+}
+
+// convertSource writes a loaded input to one output, as convertOne does
+func convertSource(o *opts, src *source, out string, mode ascimage.RenderMode, depth terminal.ColorMode) (string, error) {
+	in := src.path
 	if src.dual != nil && (o.set["w"] || o.set["m"]) {
 		return "", fmt.Errorf("%s: an .aimg keeps its own cells, so -w and -m do not apply", in)
 	}
@@ -512,28 +550,14 @@ func cmdView(o *opts, args []string) error {
 	if len(args) == 1 {
 		path = args[0]
 	}
-	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
-		return errors.New("browsing a directory is not built yet")
-	}
-	src, err := load(path)
-	if err != nil {
-		return err
-	}
-	var viewer *Viewer
-	if src.dual != nil {
-		viewer = NewViewerFromDual(src.dual)
-	} else {
-		viewer = NewViewer(src.img, o.aspect)
-		viewer.RenderMode = mode
-		if o.zoom != "fit" {
-			var pct int
-			if _, err := fmt.Sscan(o.zoom, &pct); err != nil || pct < 10 || pct > 400 {
-				return usageError(fmt.Sprintf("-z %q: want fit, or 10 to 400", o.zoom))
-			}
-			viewer.ViewMode, viewer.ZoomLevel = ViewCustom, pct
+	start := newView(true, 100)
+	if o.zoom != "fit" {
+		pct, err := strconv.Atoi(strings.TrimSuffix(o.zoom, "%"))
+		if err != nil || pct < zooms[0] || pct > zooms[len(zooms)-1] {
+			return usageError(fmt.Sprintf("-z %q: want fit, or %d to %d", o.zoom, zooms[0], zooms[len(zooms)-1]))
 		}
+		start = newView(false, pct)
 	}
-	viewer.ColorMode = depth
-	viewer.ShowStatus = !o.noStatus
-	return runViewer(viewer, depth)
+	explicit := o.depth != "auto"
+	return runTUI(path, look{mode: mode, depth: depth, aspect: o.aspect}, start, !o.noStatus, depth, explicit)
 }

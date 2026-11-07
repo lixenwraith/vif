@@ -13,8 +13,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lixenwraith/ascimage"
+	"github.com/lixenwraith/terminal"
 )
 
 // maxPixels bounds a raster before it is decoded: a header can claim far more
@@ -31,8 +33,12 @@ type source struct {
 	size   int64  // file bytes
 	format string // png, jpeg, gif, aimg or aimgz
 	w, h   int    // a raster's pixels, an .aimg's cells
+	mtime  time.Time
 	img    image.Image
 	dual   *ascimage.DualModeImage
+
+	conv      *ascimage.ConvertedImage // an .aimg's cells in convDepth, for the view
+	convDepth terminal.ColorMode
 }
 
 func (s *source) dims() (int, int) { return s.w, s.h }
@@ -85,7 +91,7 @@ func open(path string, decode bool) (*source, error) {
 	if !fi.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s: not a regular file", path)
 	}
-	s := &source{path: path, size: fi.Size()}
+	s := &source{path: path, size: fi.Size(), mtime: fi.ModTime()}
 	br := bufio.NewReader(f)
 	head, _ := br.Peek(len("ASCIMG\n"))
 	if gz := ascimage.Gzipped(head); gz || bytes.Equal(head, []byte("ASCIMG\n")) {
