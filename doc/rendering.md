@@ -297,8 +297,9 @@ CIELAB, sent as `48;5;N`, else to the middle of its level of `visual.CoarseBgSte
 a channel. A run of cells then shares one SGR, and every other background stays
 exact. Bot play at 240x66 under tmux (24 frames a second), `sandbox/termbench` on a
 capture of each build: 27.8 KB a frame before, 20.6 KB after. Slow fields (storm,
-pulse, shield) showed the rounding as bands and stay exact, as does a plain
-nearest xterm color, which has only a gray near most dim glows.
+pulse, shield) and materialize's lingering trail showed the rounding as bands and
+stay exact; a plain nearest xterm color, which has only a gray near most dim
+glows, turned the ember's rings gray too.
 
 A third pass then repaints the void region: the part of the frame outside the
 playfield (the centering margin, and the gutter cells beside it) is filled with
