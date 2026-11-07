@@ -232,8 +232,8 @@ flowchart TD
     Pattern --> ECS["one composite wall: wall entities and normal renderer"]
 ```
 
-Ascimage ([its README](../pkg/ascimage/README.md)), a module of its own nested in
-`pkg/ascimage`, converts raster images into terminal cells using either:
+Ascimage ([its repository](https://github.com/lixenwraith/ascimage)) converts raster images into terminal cells
+using either:
 
 - quadrant mode: a Unicode quadrant represents a 2-by-2 pixel group;
 - background mode: one terminal background cell per sampled pixel.
@@ -241,7 +241,7 @@ Ascimage ([its README](../pkg/ascimage/README.md)), a module of its own nested i
 An `.aimg` stores truecolor and xterm-256 foreground/background data,
 transparency, rune, dimensions, render mode, and authored anchor-offset metadata,
 uncompressed; an `.aimgz` is the same file gzipped, and the reader tells the two
-apart by their bytes, whatever their names ([the format](../pkg/ascimage/doc/format.md)).
+apart by their bytes, whatever their names ([the format](https://github.com/lixenwraith/ascimage/blob/main/doc/format.md)).
 The pattern loader selects the active color representation, preserves
 palette attributes and anchor offsets, skips transparent cells, and creates
 `PatternCell` offsets.
@@ -271,8 +271,9 @@ the world, so `WallSystem` neither discovers roots nor opens host paths itself.
 
 ## 9. Ascimage tool
 
-Ascimage converts, prints and previews assets; [its README](../pkg/ascimage/README.md)
-is the full reference:
+Ascimage converts, prints and previews assets; `make tools` builds it as
+`bin/ascimage`, at the version vif's `go.mod` requires, and
+[its README](https://github.com/lixenwraith/ascimage) is the full reference:
 
 ```bash
 # One asset holding both color modes, plain or gzipped
@@ -334,5 +335,5 @@ narrower validation or experimental dependencies.
 | Embedded assets | `internal/asset/asset.go`, its `scenario`, `content`, `input`, `bot` and `font` directories, `font.go`, `vif.toml`, `version.txt`, `splash_font.go` |
 | Pattern conversion | `internal/pattern/pattern.go` |
 | Image open and spawn | `internal/system/wall.go` through `internal/service/adapter_file.go` |
-| Image codec | `lixenwraith/ascimage`, nested in `pkg/ascimage` |
-| Image tool and viewer | `pkg/ascimage/cmd/ascimage` |
+| Image codec | `lixenwraith/ascimage` |
+| Image tool and viewer | `lixenwraith/ascimage` `cmd/ascimage` |

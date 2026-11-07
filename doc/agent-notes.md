@@ -525,11 +525,10 @@ that proves wrong or that a document now states, and link the document instead.
 ## Ascimage
 
 - The image converter, viewer and `.aimg` format are
-  `github.com/lixenwraith/ascimage`, nested in `pkg/ascimage` until it moves to
-  its repository: a change to it lands there, under its own `AGENTS.md` and
-  [agent notes](../pkg/ascimage/doc/agent-notes.md), and vif's `go.mod` and
-  `android/go.mod` take it through a `replace`. vif's root `./...` leaves the
-  nested module out; `make tools`, `make test` and CI reach it with `go -C`.
+  `github.com/lixenwraith/ascimage`: a change to it lands there, under its own
+  `AGENTS.md` and [agent notes](https://github.com/lixenwraith/ascimage/blob/main/doc/agent-notes.md), and vif
+  takes its tag. `make tools` builds its command from the version `go.mod`
+  requires.
 
 ## Genetic
 
