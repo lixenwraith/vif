@@ -416,7 +416,7 @@ func TestAnEntryKeyNothingReadsIsRefused(t *testing.T) {
 	}
 }
 
-// TestContentFilesAreScenarioFilesAndItsCorpus: the corpus files an entry's content
+// TestContentFilesAreScenarioFilesAndItsCorpus: the corpus files an entry's [content]
 // names are carried and digested as a region file is, serve as the run's corpus in
 // place of the roots', and travel in the canonical form; a name the scenario has no
 // file for fails the load
@@ -427,12 +427,12 @@ func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("scenario.toml", "content = [\"lessons.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n")
+	write("scenario.toml", "[content]\nfiles = [\"lessons.toml\"]\nblocks = true\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n")
 	write("lessons.toml", "schema = 1\n[[blocks]]\nid = \"one\"\nlines = [\"press w to jump a word\", \"press b to jump back\"]\n")
 
 	sc := read(t, dir)
-	if sc.Files() != 3 {
-		t.Fatalf("scenario holds %d files, want the entry, the region and the corpus", sc.Files())
+	if sc.Files() != 3 || !sc.ContentBlocks {
+		t.Fatalf("scenario holds %d files, blocks %v; want the entry, the region and the corpus, laid in blocks", sc.Files(), sc.ContentBlocks)
 	}
 	copied, err := UnmarshalScenario("tutor", sc.Marshal())
 	if err != nil {
@@ -453,7 +453,7 @@ func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
 		t.Fatalf("the run's corpus = %+v, %v; want the scenario's own over the -f root", src, err)
 	}
 
-	write("scenario.toml", "content = [\"missing.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n")
+	write("scenario.toml", "[content]\nfiles = [\"missing.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n")
 	if _, err := LoadScenario(Options{Scenario: dir}); err == nil {
 		t.Fatal("a content file the scenario lacks loaded")
 	}

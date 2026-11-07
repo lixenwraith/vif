@@ -482,6 +482,11 @@ that proves wrong or that a document now states, and link the document instead.
 - A splash text cleared and written at one cell in one pass is one entity: the
   clear destroys it at once rather than by a death batch, or the write reuses an
   entity the batch then takes.
+- A line delete's `EventDeleteRequest` carries rows alone (`start_x` stays 0), so
+  a guard on `dd` compares `range_type` and `start_y`; `x` fills every field.
+- Reading a pane: the status bar's first item is the FSM state and its time, the
+  column ruler counts from the cursor, and the large glyph some way off the cursor
+  is the magnifier, the glyph under it in the large face.
 - The entry's top-level keys the FSM loader does not know are the embedder's
   (`resource.entryKeys` lists them), so a new entry key needs no loader change
   beyond reading its files into the container.

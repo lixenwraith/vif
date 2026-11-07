@@ -66,7 +66,10 @@ their arguments; operators and config fields) as JSON.
 ```toml
 description = "A short description for scenario selection."
 macro_files = ["macros.toml"]       # Macro libraries, relative to this file
-content = ["lessons.toml"]          # Corpus files, relative to this file: the run types these, not its content root
+
+[content]                           # The scenario's own corpus, carried in its container: the run types it, not its content root
+files = ["lessons.toml"]            # Corpus files, relative to this file
+blocks = true                       # Lay each block whole, its lines on consecutive rows; line by line when unset
 
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init

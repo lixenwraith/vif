@@ -55,10 +55,13 @@ type Scenario struct {
 	// NavRefreshTicks and NavRebuildTicks are [navigation] field_refresh_ticks and
 	// route_rebuild_ticks, zero when the scenario sets none
 	NavRefreshTicks, NavRebuildTicks int
+	// ContentBlocks is [content] blocks = true: the spawner lays a corpus block's
+	// lines together, on consecutive rows from one column, where a slot holds them
+	ContentBlocks bool
 
 	entry   string
 	files   []scenarioFile
-	content []string // the corpus files the entry names, each one of files
+	content []string // the corpus files [content] names, each one of files
 	digest  string
 }
 
@@ -159,8 +162,8 @@ func (s Scenario) Files() int { return len(s.files) }
 // FS serves the scenario's files to the loader without touching a host path.
 func (s Scenario) FS() fs.FS { return scenarioFS{files: s.files} }
 
-// Content is the corpus the entry's content names, served as a content root by
-// file name, and false when it names none: a run types it in place of its roots'
+// Content is the corpus [content] files names, served as a content root by file
+// name, and false when it names none: a run types it in place of its roots'
 func (s Scenario) Content() (fs.FS, bool) {
 	if len(s.content) == 0 {
 		return nil, false
@@ -329,8 +332,8 @@ func (s *Scenario) validate() error {
 	if err := s.readPlayers(doc); err != nil {
 		return err
 	}
-	if list, exists := doc["content"]; exists {
-		if err := s.readContent(list); err != nil {
+	if table, exists := doc["content"]; exists {
+		if err := s.readContent(table); err != nil {
 			return err
 		}
 	}
@@ -345,18 +348,28 @@ func (s *Scenario) validate() error {
 	return nil
 }
 
-// readContent reads content, the corpus files the entry names relative to itself:
-// each one of the scenario's files, and unique by the name a content root serves it as
+// readContent reads [content]: files, the corpus files the entry names relative to
+// itself, each one of the scenario's files and unique by the name a content root
+// serves it as, and blocks, whether the spawner lays a corpus block's lines together
 func (s *Scenario) readContent(v any) error {
-	list, ok := v.([]any)
+	table, ok := v.(map[string]any)
 	if !ok {
-		return errors.New("content must be an array of file names")
+		return errors.New("content must be a table")
+	}
+	if raw, has := table["blocks"]; has {
+		if s.ContentBlocks, ok = raw.(bool); !ok {
+			return errors.New("content blocks must be true or false")
+		}
+	}
+	list, ok := table["files"].([]any)
+	if _, has := table["files"]; has && !ok {
+		return errors.New("content files must be an array of file names")
 	}
 	s.content = nil
 	for _, item := range list {
 		name, ok := item.(string)
 		if !ok {
-			return errors.New("content must be an array of file names")
+			return errors.New("content files must be an array of file names")
 		}
 		full := path.Join(path.Dir(s.entry), name)
 		if !slices.ContainsFunc(s.files, func(f scenarioFile) bool { return f.name == full }) {
