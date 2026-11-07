@@ -95,6 +95,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[component.Behavior](component.BehaviorNames[:]...).
 		Enum[component.CombatAttackType](component.CombatAttackNames[:]...).
 		Enum[core.GameMode](core.ModeNames[:]...).
+		Mask[core.ModeMask](core.ModeMaskNames).
 		Enum[AudioMuteToggleMode](muteToggleModeNames[:]...).
 		Enum[InputSource](inputSourceNames[:]...).
 		Enum[DeleteRangeType](deleteRangeNames[:]...).
