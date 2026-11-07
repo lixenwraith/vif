@@ -326,8 +326,6 @@ router name the player to it.
   dependency
 - Prerequisite: every route carries real play without transport faults, the
   built-in WebSocket included; no auth layer goes in while that is being settled
-- Guide: [Authentication and session design](auth-session-design.md), whose §9
-  holds the questions to decide
 
 Issue a short-lived, session-scoped admission credential after authentication and
 consume it during the WebSocket handshake without putting it in page history or
@@ -338,9 +336,8 @@ is renamed/split before adding the planned `github.com/lixenwraith/auth`
 Argon2-SCRAM dependency. A terminal's own door takes the same handshake: a
 `-selfsign` door encrypts with no authority and a native joiner takes it as it is,
 open to a man in the middle until the SCRAM exchange with `WithChannelBinding` over
-the leaf certificate's digest authenticates both ends on that channel; `-ca` pins
-it meanwhile. A redial within the session shows a session pass instead, so a
-dropped link never authenticates again. A browser trusts a
+the leaf certificate's digest authenticates both ends on that channel, as
+`lixenwraith/chess` authenticates; `-ca` pins it meanwhile. A browser trusts a
 self-signed door only by being told to: pinning from a page needs WebTransport's
 `serverCertificateHashes`, which the route does not speak.
 

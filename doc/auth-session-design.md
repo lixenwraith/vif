@@ -199,7 +199,7 @@ chess v0.16.3 requires `lixenwraith/auth` v0.5.1 for its hashing, its JWT and it
 bearer parsing. It uses no SCRAM, no channel binding, no RS256 and no
 `SimpleTokenValidator`: its clients send the password over HTTPS and the server
 hashes it. The todo's channel-bound SCRAM "as `lixenwraith/chess` authenticates"
-was wrong, and now points here.
+is ahead of chess's code: vif would be auth's first SCRAM consumer.
 
 The calls:
 
@@ -749,187 +749,128 @@ before and after.
 
 ## 10. File catalog
 
-What an implementation reads and changes, by area.
+What an implementation reads and changes, by area. Paths are from each
+repository's root.
 
-The session layer (`internal/network`):
+The session layer, `internal/network`:
 
-- [protocol.go](../internal/network/protocol.go): the kinds, the reserved
-  `MsgAuthRequest` and `MsgAuthResponse`, `MsgSessionRoute`, `MsgJoinClaims`,
-  `MsgConnect`/`MsgAck`, the tunnel's kinds.
-- [session.go](../internal/network/session.go): `RosterEntry`, `SessionOffer`,
-  `JoinerReport`, `Coordinator`, `HostAcceptor`, `readSessionName`, `askClaims`,
-  `NewClaimToken`, `ClaimDigest`, `RefusalCode` and its table, `openJoinStream`,
-  `answerClaims`, `AdmissionLimiter`.
-- [reach.go](../internal/network/reach.go): `PeerAcceptor`, `PeerDialer`,
-  `peerHello`, `peerWelcome`, `SuccessionChain`.
-- [authority.go](../internal/network/authority.go): `AuthorityReport`,
-  `HandoffRecord`, which §7.1 signs and §7.3 reads term keys from.
-- [identity.go](../internal/network/identity.go): `ProtocolVersion`,
-  `PeerIdentity`.
-- [tunnel.go](../internal/network/tunnel.go): `PublishRequest`, `Published`,
-  `TunnelHub`, `DoorTunnel`, the resume token.
-- [config.go](../internal/network/config.go): `Config.Claims`, `Config.Identity`,
-  `RequestSession`.
-- [fuzz_test.go](../internal/network/fuzz_test.go): the handshake fuzz targets the
-  new frames join.
+- `protocol.go`: the kinds, the reserved `MsgAuthRequest` and `MsgAuthResponse`,
+  `MsgSessionRoute`, `MsgJoinClaims`, `MsgConnect`/`MsgAck`, the tunnel's kinds.
+- `session.go`: `RosterEntry`, `SessionOffer`, `JoinerReport`, `Coordinator`,
+  `HostAcceptor`, `readSessionName`, `askClaims`, `NewClaimToken`, `ClaimDigest`,
+  `RefusalCode` and its table, `openJoinStream`, `answerClaims`,
+  `AdmissionLimiter`.
+- `reach.go`: `PeerAcceptor`, `PeerDialer`, `peerHello`, `peerWelcome`,
+  `SuccessionChain`.
+- `authority.go`: `AuthorityReport`, `HandoffRecord`, which §7.1 signs and §7.3
+  reads term keys from.
+- `identity.go`: `ProtocolVersion`, `PeerIdentity`.
+- `tunnel.go`: `PublishRequest`, `Published`, `TunnelHub`, `DoorTunnel`, the resume
+  token.
+- `config.go`: `Config.Claims`, `Config.Identity`, `RequestSession`.
+- `fuzz_test.go`: the handshake fuzz targets the new frames join.
 
-The link (`pkg/network`):
+The link, `pkg/network`:
 
-- [endpoint.go](../pkg/network/endpoint.go): schemes, `LoadTLS`, `SelfSignedTLS`,
-  `Fingerprint`, `dialTLS`, `TrustTLS`, `RequestSession`, `ListedLinks`,
-  `linkSites`.
-- [transport.go](../pkg/network/transport.go) and
-  [config.go](../pkg/network/config.go): the accept loop, `MaxHandshakes`,
+- `endpoint.go`: schemes, `LoadTLS`, `SelfSignedTLS`, `Fingerprint`, `dialTLS`,
+  `TrustTLS`, `RequestSession`, `ListedLinks`, `linkSites`.
+- `transport.go` and `config.go`: the accept loop, `MaxHandshakes`,
   `ConnectTimeout`.
-- [connection.go](../pkg/network/connection.go): `PeerManager.AddConnectionAs`,
-  `ErrLinkStands`.
-- [websocket_wasm.go](../pkg/network/websocket_wasm.go): a page's socket, which can
-  set no header.
+- `connection.go`: `PeerManager.AddConnectionAs`, `ErrLinkStands`.
+- `websocket_wasm.go`: a page's socket, which can set no header.
 
 The protocol and the run:
 
-- [internal/converge/reach.go](../internal/converge/reach.go):
-  `Reach.admitPeerLink`.
-- [internal/converge/authority.go](../internal/converge/authority.go): `onReport`,
-  `takeBack`, where reports and handoffs are flooded and forwarded.
-- [internal/system/network.go](../internal/system/network.go): `crossingActors`,
-  `admissibleFromSource`, `stateInRange`.
-- [internal/event/payload.go](../internal/event/payload.go):
-  `ParticipantJoinedPayload`, which would carry a participant's key.
-- [internal/snapshot/capture.go](../internal/snapshot/capture.go): `Schema`.
+- `internal/converge/reach.go`: `Reach.admitPeerLink`.
+- `internal/converge/authority.go`: `onReport`, `takeBack`, where reports and
+  handoffs are flooded and forwarded.
+- `internal/system/network.go`: `crossingActors`, `admissibleFromSource`,
+  `stateInRange`.
+- `internal/event/payload.go`: `ParticipantJoinedPayload`, which would carry a
+  participant's key.
+- `internal/snapshot/capture.go`: `Schema`.
 
-Membership (`internal/app/internal/membership`):
+Membership, `internal/app/internal/membership`:
 
-- [claim.go](../internal/app/internal/membership/claim.go): `ClaimKeeper`, which
-  would keep keys and passes.
-- [identity.go](../internal/app/internal/membership/identity.go): `buildIdentity`,
-  `joinerReport`.
-- [session.go](../internal/app/internal/membership/session.go): the coordinator's
-  `HostAcceptor` wiring, `claimedLocked`, `closeStaleLink`, `yieldLocked`,
-  `redialSeat`.
-- [relay.go](../internal/app/internal/membership/relay.go): a relay's acceptor, and
-  the claims it carries to the authority.
-- [converge.go](../internal/app/internal/membership/converge.go): `redial`,
-  `redialDoor`, where a pass is shown.
-- [host.go](../internal/app/internal/membership/host.go),
-  [join.go](../internal/app/internal/membership/join.go) and
-  [seat.go](../internal/app/internal/membership/seat.go): hosting, dialling, and a
-  seat's claims.
-- [internal/app/internal/config/membership.go](../internal/app/internal/config/membership.go):
-  `Membership`, `ClaimStore`.
+- `claim.go`: `ClaimKeeper`, which would keep keys and passes.
+- `identity.go`: `buildIdentity`, `joinerReport`.
+- `session.go`: the coordinator's `HostAcceptor` wiring, `claimedLocked`,
+  `closeStaleLink`, `yieldLocked`, `redialSeat`.
+- `relay.go`: a relay's acceptor, and the claims it carries to the authority.
+- `converge.go`: `redial`, `redialDoor`, where a pass is shown.
+- `host.go`, `join.go` and `seat.go`: hosting, dialling, and a seat's claims.
+- `internal/app/internal/config/membership.go`: `Membership`, `ClaimStore`.
 
 Parameters, paths and commands:
 
-- [internal/parameter/network.go](../internal/parameter/network.go): `ClaimsKept`,
-  `ClaimStoreInterval`, `WraithTimeout`, `NetworkAdmitWindow`, `NetworkAdmitBurst`,
+- `internal/parameter/network.go`: `ClaimsKept`, `ClaimStoreInterval`,
+  `WraithTimeout`, `NetworkAdmitWindow`, `NetworkAdmitBurst`,
   `NetworkAdmitTracked`, `NetworkTunnelResumeWindow`,
-  `NetworkSessionRequestTimeout`; [player.go](../internal/parameter/player.go):
-  `MaxPlayers`.
-- [internal/paths/paths.go](../internal/paths/paths.go): `UserRoot` and the state
-  directory a native sign-in would be kept under.
-- [internal/mode/commands.go](../internal/mode/commands.go),
-  [config_menu.go](../internal/mode/config_menu.go) and
-  [config_form.go](../internal/mode/config_form.go): `:host`, `:join`, `:session`,
-  the Multiplayer page and its request form, where `:login` and a passphrase
-  prompt would go.
-- [cmd/vif/main.go](../cmd/vif/main.go) and [usage.go](../cmd/vif/usage.go): the
-  `-host`, `-serve`, `-join`, `-name`, `-cert`, `-key`, `-selfsign`, `-ca`,
-  `-relay` and `-authority` flags and the help table the manual is made from;
-  [browser.go](../cmd/vif/browser.go): a page's `ClaimStore`.
+  `NetworkSessionRequestTimeout`; `internal/parameter/player.go`: `MaxPlayers`.
+- `internal/paths/paths.go`: `UserRoot` and the state directory a native sign-in
+  would be kept under.
+- `internal/mode/commands.go`, `config_menu.go` and `config_form.go`: `:host`,
+  `:join`, `:session`, the Multiplayer page and its request form, where `:login`
+  and a passphrase prompt would go.
+- `cmd/vif/main.go` and `usage.go`: the `-host`, `-serve`, `-join`, `-name`,
+  `-cert`, `-key`, `-selfsign`, `-ca`, `-relay` and `-authority` flags and the help
+  table the manual is made from; `cmd/vif/browser.go`: a page's `ClaimStore`.
 
 Hosts:
 
-- [web/terminal.js](../web/terminal.js) and [web/worker.js](../web/worker.js): the
-  tab's claims in `sessionStorage`, the launch arguments.
-- [android/game/game.go](../android/game/game.go),
-  [StartScreen.java](../android/app/src/main/java/com/lixen/vif/StartScreen.java)
-  and [MainActivity.java](../android/app/src/main/java/com/lixen/vif/MainActivity.java):
-  the Android run, which keeps no claims past its process.
+- `web/terminal.js` and `web/worker.js`: the tab's claims in `sessionStorage`, the
+  launch arguments.
+- `android/game/game.go`, and `StartScreen.java` and `MainActivity.java` under
+  `android/app/src/main/java/com/lixen/vif`: the Android run, which keeps no claims
+  past its process.
 
-The router:
+The router, `tool/vif-router`:
 
-- [tool/vif-router/server.go](../tool/vif-router/server.go): the mux,
-  `/vif/api/sessions`, the create budget, `clientAddr`.
-- [ws_proxy.go](../tool/vif-router/ws_proxy.go): the browser route and its
-  `Origin` check.
-- [tcp_proxy.go](../tool/vif-router/tcp_proxy.go): the front door's placement,
-  `placeDoor`, the publication of a door.
-- [log_proxy.go](../tool/vif-router/log_proxy.go): the loopback forward an
-  identity service's routes would copy.
-- [config.go](../tool/vif-router/config.go): the router's flags.
-- [manifest.go](../tool/vif-router/manifest.go): the Job a pod runs, whose
-  arguments would carry the ticket verifier.
-- [kube.go](../tool/vif-router/kube.go): the router's own credential, a
-  ServiceAccount token file.
-- [README.md](../tool/vif-router/README.md): the router's API.
+- `server.go`: the mux, `/vif/api/sessions`, the create budget, `clientAddr`.
+- `ws_proxy.go`: the browser route and its `Origin` check.
+- `tcp_proxy.go`: the front door's placement, `placeDoor`, the publication of a
+  door.
+- `log_proxy.go`: the loopback forward an identity service's routes would copy.
+- `config.go`: the router's flags.
+- `manifest.go`: the Job a pod runs, whose arguments would carry the ticket
+  verifier.
+- `kube.go`: the router's own credential, a ServiceAccount token file.
+- `README.md`: the router's API.
 
 The deployment:
 
-- [deploy/guest/vif-router.env](../deploy/guest/vif-router.env),
-  [update-vif-router.sh](../deploy/guest/update-vif-router.sh) and
-  [vif-router.service](../deploy/guest/vif-router.service): the router's settings,
-  which hold no secret, its update behind the empty-fleet gate, and where a key file
-  would be made.
-- [deploy/update.sh](../deploy/update.sh): the components, and which of them wait
-  for an empty fleet.
-- [deploy/k3s/30-session.yaml](../deploy/k3s/30-session.yaml),
-  [render-session.sh](../deploy/k3s/render-session.sh) and
-  [session.sh](../deploy/k3s/session.sh): the session's Job as a template, and a
-  session made by hand.
-- [deploy/k3s/20-networkpolicy.yaml](../deploy/k3s/20-networkpolicy.yaml) and
-  [40-router-rbac.yaml](../deploy/k3s/40-router-rbac.yaml): what reaches a pod,
-  that it reaches nothing, and what the router may do.
-- [deploy/website/vif.nginx.example](../deploy/website/vif.nginx.example): the
-  reference edge §8's new requirements extend.
-- [Deploying the session fleet](kube-docker-deploy.md):
-  [§0](kube-docker-deploy.md#0-decisions) (D6), [§2](kube-docker-deploy.md#2-the-public-edge),
-  [§11](kube-docker-deploy.md#11-the-router) and
-  [§12](kube-docker-deploy.md#12-the-sites-edge).
+- `deploy/guest/vif-router.env`, `update-vif-router.sh` and `vif-router.service`:
+  the router's settings, which hold no secret, its update behind the empty-fleet
+  gate, and where a key file would be made.
+- `deploy/update.sh`: the components, and which of them wait for an empty fleet.
+- `deploy/k3s/30-session.yaml`, `render-session.sh` and `session.sh`: the
+  session's Job as a template, and a session made by hand.
+- `deploy/k3s/20-networkpolicy.yaml` and `40-router-rbac.yaml`: what reaches a
+  pod, that it reaches nothing, and what the router may do.
+- `deploy/website/vif.nginx.example`: the reference edge §8's new requirements
+  extend.
+- Deploying the session fleet §0 (D6), §2, §11 and §12.
 
-Documents that state today's posture: [Multiplayer §1, §5.4, §5.6 and
-§8](multi-player.md#8-remaining-gaps), [Services §7.1, §7.2 and
-§10](services-and-networking.md#71-admission), [The session fleet §4 and
-§9](kubernetes-fleet.md#4-security-posture), [Build profiles: Where WebSocket is
-spoken](multi-platform.md#where-websocket-is-spoken), [The public
-route](multi-platform.md#the-public-route) and [§6](multi-platform.md#6-browser-launch-arguments),
-[Domain design §7](domain-design.md#7-current-limits).
+Documents that state today's posture: Multiplayer §1, §5.4, §5.6 and §8; Services
+and networking §7.1, §7.2 and §10; The session fleet §4 and §9; Build profiles and
+platforms, Where WebSocket is spoken, The public route and §6; Domain design §7.
 
-[`lixenwraith/auth`](https://github.com/lixenwraith/auth):
-[scram.go](https://github.com/lixenwraith/auth/blob/main/scram.go),
-[argon2.go](https://github.com/lixenwraith/auth/blob/main/argon2.go),
-[jwt.go](https://github.com/lixenwraith/auth/blob/main/jwt.go),
-[token.go](https://github.com/lixenwraith/auth/blob/main/token.go),
-[error.go](https://github.com/lixenwraith/auth/blob/main/error.go),
-[example_test.go](https://github.com/lixenwraith/auth/blob/main/example_test.go)
-(a whole SCRAM exchange) and
-[README.md](https://github.com/lixenwraith/auth/blob/main/README.md) (limits and
+`lixenwraith/auth`: `scram.go`, `argon2.go`, `jwt.go`, `token.go`, `error.go`,
+`example_test.go` (a whole SCRAM exchange) and `README.md` (limits and
 deployment).
 
-[`lixenwraith/chess`](https://github.com/lixenwraith/chess), the reference
-consumer:
+`lixenwraith/chess`, the reference consumer:
 
-- [internal/server/service/service.go](https://github.com/lixenwraith/chess/blob/main/internal/server/service/service.go)
-  and [user.go](https://github.com/lixenwraith/chess/blob/main/internal/server/service/user.go):
-  the JWT manager, the KDF slots, sign-in and validation.
-- [reset.go](https://github.com/lixenwraith/chess/blob/main/internal/server/service/reset.go):
-  recovery tokens.
-- [internal/server/http/middleware.go](https://github.com/lixenwraith/chess/blob/main/internal/server/http/middleware.go),
-  [auth.go](https://github.com/lixenwraith/chess/blob/main/internal/server/http/auth.go)
-  and [handler.go](https://github.com/lixenwraith/chess/blob/main/internal/server/http/handler.go):
-  bearer parsing, the account routes and their limits.
-- [internal/server/storage/session.go](https://github.com/lixenwraith/chess/blob/main/internal/server/storage/session.go)
-  and [schema.go](https://github.com/lixenwraith/chess/blob/main/internal/server/storage/schema.go):
-  the sign-in table and its binding to a subject.
-- [cmd/chess-server/secret.go](https://github.com/lixenwraith/chess/blob/main/cmd/chess-server/secret.go),
-  [proxy.go](https://github.com/lixenwraith/chess/blob/main/cmd/chess-server/proxy.go)
-  and [cli/cli.go](https://github.com/lixenwraith/chess/blob/main/cmd/chess-server/cli/cli.go):
-  the key file, trusted proxies, the operator CLI.
-- [deploy/linux/chess-backup.timer](https://github.com/lixenwraith/chess/blob/main/deploy/linux/chess-backup.timer)
-  and [chess-backup.service](https://github.com/lixenwraith/chess/blob/main/deploy/linux/chess-backup.service):
-  the store's backup.
-- [internal/server/game/game.go](https://github.com/lixenwraith/chess/blob/main/internal/server/game/game.go)
-  and [processor/processor.go](https://github.com/lixenwraith/chess/blob/main/internal/server/processor/processor.go):
-  a game's slot claims.
-- [doc/architecture.md](https://github.com/lixenwraith/chess/blob/main/doc/architecture.md)
-  and [doc/api.md](https://github.com/lixenwraith/chess/blob/main/doc/api.md): its
-  design and its account API.
+- `internal/server/service/service.go` and `user.go`: the JWT manager, the KDF
+  slots, sign-in and validation.
+- `internal/server/service/reset.go`: recovery tokens.
+- `internal/server/http/middleware.go`, `auth.go` and `handler.go`: bearer
+  parsing, the account routes and their limits.
+- `internal/server/storage/session.go` and `schema.go`: the sign-in table and its
+  binding to a subject.
+- `cmd/chess-server/secret.go`, `proxy.go` and `cli/cli.go`: the key file, trusted
+  proxies, the operator CLI.
+- `deploy/linux/chess-backup.timer` and `chess-backup.service`: the store's backup.
+- `internal/server/game/game.go` and `internal/server/processor/processor.go`: a
+  game's slot claims.
+- `doc/architecture.md` and `doc/api.md`: its design and its account API.
