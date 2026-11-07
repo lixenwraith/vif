@@ -249,7 +249,7 @@ duplicating version strings that would become stale.
 | `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |
-| `tool/font-editor` | Edit the bitmap splash font. |
+| `tool/font-editor` | Edit either bitmap splash face. |
 | `tool/hierarchy-map` | Terminal UI that selects Go source subsets as LLM context, indexed by `@lixen:` annotations, local imports and symbol-level coupling. |
 | `tool/http-server` | Minimal static server used by `make serve` for the WASM bundle. |
 | `tool/vif-router` | Website-to-K3s session router; a host service, not part of the game binary. |

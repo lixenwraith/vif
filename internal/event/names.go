@@ -79,6 +79,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[component.EnergyDeltaType](component.EnergyDeltaNames[:]...).
 		Enum[component.GlyphType](component.GlyphTypeNames[:]...).
 		Enum[component.GlyphLevel](component.GlyphLevelNames[:]...).
+		Enum[component.SplashFont](component.SplashFontNames[:]...).
 		Enum[component.LightningColorType](component.LightningColorNames[:]...).
 		Enum[component.MarkerShape](component.MarkerShapeNames[:]...).
 		Enum[component.MarkerFade](component.MarkerFadeNames[:]...).

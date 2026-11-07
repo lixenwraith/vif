@@ -363,6 +363,15 @@ a game component needs no renderer if another renderer deliberately projects
 it (nuggets use their visual/sigil representation rather than a registered
 `nugget` renderer).
 
+The splash renderer draws its two faces (`asset.SplashFaces`) as cell
+backgrounds, so the glyph under an inked cell stays. The large face is a cell a
+pixel everywhere. The small face, six by twelve pixels, packs two pixel rows a cell
+where the host draws half blocks, a cell inked in one row as `▀` or `▄` in the
+splash's colour over the background it had; a text console, whose fonts lack them,
+draws it a cell a pixel, six cells wide and twelve tall ([Multi-platform
+§4](multi-platform.md#4-platform-matrix)). The splash system places by the same
+packing (`Config.TextConsole`), so a countdown's box is the cells it draws.
+
 The tracer renderer is intentionally background-only: every sampled trail
 cell writes no rune/foreground, so typeable text remains readable as a tracer
 crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input

@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -23,36 +24,37 @@ type BBox struct {
 type SplashSystem struct {
 	world *engine.World
 
-	// boxes is every countdown's padded box, filled once a layout pass and moved
-	// with each countdown placed, so a placement sees the ones placed before it
-	boxes []timerBox
+	// boxes is the padded box of every splash that holds space, a countdown's or a
+	// text's, filled once a layout pass and moved with each countdown placed, so a
+	// placement sees the ones placed before it
+	boxes []splashBox
 
 	toggle
 }
 
-// timerBox is a countdown's padded box and the countdown it belongs to
-type timerBox struct {
+// splashBox is a splash's padded box and the splash it belongs to
+type splashBox struct {
 	entity core.Entity
 	BBox
 }
 
-// timerInk is the box a countdown's digits ink inside their cells, the union over 0-9
-// so a countdown holds still as its count changes. Placement reserves the ink, not
-// the cells, whose blank rows and columns would keep the count off rows it fits in.
-var timerInk = func() BBox {
-	left, top, right, bottom := parameter.SplashCharWidth, parameter.SplashCharHeight, 0, 0
-	for digit := '0'; digit <= '9'; digit++ {
-		x, y, w, h := asset.SplashInkBounds(asset.SplashFont[digit-' '])
-		left, top = min(left, x), min(top, y)
-		right, bottom = max(right, x+w), max(bottom, y+h)
+// digitInk is the pixel box each face's digits ink inside their cells, the union over
+// 0-9 so a countdown holds still as its count changes. Placement reserves the ink,
+// not the cells, whose blank rows and columns would keep the count off rows it fits in.
+var digitInk = func() (ink [len(asset.SplashFaces)]BBox) {
+	for i := range asset.SplashFaces {
+		face := &asset.SplashFaces[i]
+		left, top, right, bottom := face.Width, face.Height, 0, 0
+		for digit := '0'; digit <= '9'; digit++ {
+			glyph, _ := face.Glyph(digit)
+			x, y, w, h := face.InkBounds(glyph)
+			left, top = min(left, x), min(top, y)
+			right, bottom = max(right, x+w), max(bottom, y+h)
+		}
+		ink[i] = BBox{X: left, Y: top, W: right - left, H: bottom - top}
 	}
-	return BBox{X: left, Y: top, W: right - left, H: bottom - top}
+	return ink
 }()
-
-// timerInkBox is the box a countdown of length digits inks, from its first cell's origin
-func timerInkBox(length int) BBox {
-	return BBox{X: timerInk.X, Y: timerInk.Y, W: (max(length, 1)-1)*parameter.SplashCharWidth + timerInk.W, H: timerInk.H}
-}
 
 // NewSplashSystem creates a new splash system
 func NewSplashSystem(world *engine.World) engine.System {
@@ -82,6 +84,7 @@ func (s *SplashSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSplashTimerRequest,
 		event.EventSplashTimerCancel,
+		event.EventSplashTextRequest,
 		event.EventCursorMoved,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
@@ -101,7 +104,7 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventCursorDespawned {
 		if payload, ok := ev.Payload.(*event.CursorDespawnedPayload); ok &&
 			payload.Slot == s.world.Resources.Player.LocalSlot() {
-			s.cleanupSplashesBySlot(component.SlotMagnifier)
+			s.retire(func(c *component.SplashComponent) bool { return c.Slot == component.SlotMagnifier })
 		}
 		return
 	}
@@ -118,7 +121,14 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventSplashTimerCancel:
 		if payload, ok := ev.Payload.(*event.SplashTimerCancelPayload); ok {
-			s.handleTimerCancel(payload.AnchorEntity)
+			s.retire(func(c *component.SplashComponent) bool {
+				return c.Slot == component.SlotTimer && c.AnchorEntity == payload.AnchorEntity
+			})
+		}
+
+	case event.EventSplashTextRequest:
+		if payload, ok := ev.Payload.(*event.SplashTextPayload); ok {
+			s.handleTextRequest(payload)
 		}
 
 	case event.EventCursorMoved:
@@ -135,8 +145,8 @@ func (s *SplashSystem) Update() {
 		return
 	}
 
-	s.fillTimerBoxes()
-	next := 0 // the next countdown's own box; boxes follow the store's order
+	s.fillBoxes()
+	next := 0 // the next placed splash's own box; boxes follow the store's order
 
 	splashes := s.world.Components.Splash
 	splashEntities := splashes.Entities()
@@ -178,19 +188,23 @@ func (s *SplashSystem) Update() {
 			}
 			splashes.SetComponent(splashEntity, splashComp)
 
+		case component.SlotText:
+			// A text stands where it was written and leaves on its timer alone
+			if next < len(s.boxes) && s.boxes[next].entity == splashEntity {
+				next++
+			}
+			continue
+
 		case component.SlotMagnifier:
 			// Validate magnifier - re-query entity under cursor
 			if !s.validateMagnifier(splashEntity, &splashComp) {
 				continue // Entity was destroyed
 			}
 
-			// Construct current BBox for magnifier
-			magW := splashComp.Length * parameter.SplashCharWidth
-			magH := parameter.SplashCharHeight
-			magBBox := BBox{X: splashComp.AnchorX, Y: splashComp.AnchorY, W: magW, H: magH}
-
-			// A countdown placed over the magnifier moves the magnifier
-			if s.collidesTimer(magBBox, -1) {
+			// A countdown or a text placed over the magnifier moves the magnifier
+			magW, magH := asset.SplashFaces[component.SplashLarge].Cells(1)
+			magBBox := BBox{X: splashComp.AnchorX, Y: splashComp.AnchorY, W: splashComp.Length * magW, H: magH}
+			if s.collides(magBBox, -1) {
 				if pos, ok := s.world.LocalCursor(); ok {
 					newX, newY := s.calculateProximityAnchor(pos.X, pos.Y, splashComp.Length)
 					if newX != splashComp.AnchorX || newY != splashComp.AnchorY {
@@ -243,6 +257,7 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 
 	splashComp := component.SplashComponent{
 		Color:        payload.Color,
+		Font:         payload.Font,
 		AnchorEntity: payload.AnchorEntity,
 		AnchorX:      payload.OriginX,
 		AnchorY:      payload.OriginY,
@@ -254,9 +269,15 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 	}
 	setTimerContent(&splashComp, payload.Duration)
 
-	// The new countdown is not in the store yet, so no box is its own
-	s.fillTimerBoxes()
-	s.calculateTimerOffset(&splashComp, -1)
+	// The new countdown is not in the store yet, so no box is its own. A large
+	// countdown with no clear slot takes the small face, which reads where the large
+	// cannot stand, and keeps it: a face chosen each pass would flicker as the room
+	// around a moving anchor changes.
+	s.fillBoxes()
+	if !s.calculateTimerOffset(&splashComp, -1) && splashComp.Font == component.SplashLarge {
+		splashComp.Font = component.SplashSmall
+		s.calculateTimerOffset(&splashComp, -1)
+	}
 
 	splashEntity := s.world.CreateEntity(core.DomainPlayer)
 	s.world.Components.Splash.SetComponent(splashEntity, splashComp)
@@ -267,60 +288,76 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 	armTimer(s.world, splashEntity, component.TimerLifetime, max(payload.Duration, time.Nanosecond))
 }
 
-// setTimerContent is the single representation boundary for a countdown. A
-// duration can hold more decimal seconds than SplashComponent.Content can hold;
-// saturating that exceptional value preserves the component invariant and makes
-// both layout and rendering safe. Positive fractional seconds round up so "1"
-// remains visible until expiry.
+// setTimerContent writes the seconds left as the countdown's digits. Positive
+// fractional seconds round up so "1" remains visible until expiry.
 func setTimerContent(splash *component.SplashComponent, remaining time.Duration) {
 	seconds := int64(remaining / time.Second)
 	if remaining > 0 && remaining%time.Second != 0 {
 		seconds++
 	}
-	if seconds < 0 {
-		seconds = 0
-	}
 
-	digits := strconv.FormatInt(seconds, 10)
-	if len(digits) > len(splash.Content) {
-		splash.Length = len(splash.Content)
-		for i := range splash.Content {
-			splash.Content[i] = '9'
-		}
-		return
-	}
-
-	splash.Length = len(digits)
-	for i := range digits {
+	digits := strconv.FormatInt(max(seconds, 0), 10)
+	splash.Length = min(len(digits), len(splash.Content))
+	for i := range splash.Length {
 		splash.Content[i] = rune(digits[i])
 	}
 }
 
-// handleTimerCancel destroys existing timer splash
-func (s *SplashSystem) handleTimerCancel(anchorEntity core.Entity) {
-	// Find and destroy specific timer
-	splashEntities := s.world.Components.Splash.Entities()
-	for _, splashEntity := range splashEntities {
-		splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity)
-		if !ok {
-			continue
+// handleTextRequest writes text at its origin cell in place of the text standing
+// there, or clears that text for an empty one
+func (s *SplashSystem) handleTextRequest(payload *event.SplashTextPayload) {
+	existing := s.find(func(c *component.SplashComponent) bool {
+		return c.Slot == component.SlotText && c.AnchorX == payload.OriginX && c.AnchorY == payload.OriginY
+	})
+	text := []rune(payload.Text)
+	if len(text) == 0 {
+		if existing != 0 {
+			event.EmitDeath(s.world.Resources.Event.Queue, 0, existing)
 		}
-		if splashComp.Slot == component.SlotTimer && splashComp.AnchorEntity == anchorEntity {
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
-			return
-		}
+		return
+	}
+
+	splashComp := component.SplashComponent{
+		Color:   payload.Color,
+		Font:    payload.Font,
+		AnchorX: payload.OriginX,
+		AnchorY: payload.OriginY,
+		Slot:    component.SlotText,
+	}
+	if splashComp.Color == (color.RGB{}) {
+		splashComp.Color = visual.RgbSplashWhite
+	}
+	splashComp.Length = copy(splashComp.Content[:], text)
+
+	splashEntity := existing
+	if splashEntity == 0 {
+		splashEntity = s.world.CreateEntity(core.DomainPlayer)
+		s.world.Components.Protection.SetComponent(splashEntity, component.ProtectionComponent{
+			Mask: component.ProtectFromSpecies,
+		})
+	}
+	s.world.Components.Splash.SetComponent(splashEntity, splashComp)
+	if payload.Duration > 0 {
+		armTimer(s.world, splashEntity, component.TimerLifetime, payload.Duration)
+	} else if timer, ok := s.world.Components.Timer.GetPtr(splashEntity); ok {
+		timer.Slots[component.TimerLifetime] = component.Countdown{}
 	}
 }
 
-// cleanupSplashesBySlot removes all splashes of a specific slot
-func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
-	splashEntities := s.world.Components.Splash.Entities()
-	for _, splashEntity := range splashEntities {
-		splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity)
-		if !ok {
-			continue
+// find is the first splash matching keep, 0 for none
+func (s *SplashSystem) find(match func(*component.SplashComponent) bool) core.Entity {
+	for _, splashEntity := range s.world.Components.Splash.Entities() {
+		if splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity); ok && match(splashComp) {
+			return splashEntity
 		}
-		if splashComp.Slot == slot {
+	}
+	return 0
+}
+
+// retire ends every splash matching match
+func (s *SplashSystem) retire(match func(*component.SplashComponent) bool) {
+	for _, splashEntity := range s.world.Components.Splash.Entities() {
+		if splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity); ok && match(splashComp) {
 			event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		}
 	}
@@ -329,16 +366,10 @@ func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 // cleanupTimers removes the countdowns of a composite anchor, or without one those
 // of the origin cell
 func (s *SplashSystem) cleanupTimers(anchor core.Entity, x, y int) {
-	splashEntities := s.world.Components.Splash.Entities()
-	for _, splashEntity := range splashEntities {
-		splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity)
-		if !ok || splashComp.Slot != component.SlotTimer || splashComp.AnchorEntity != anchor {
-			continue
-		}
-		if anchor != 0 || splashComp.AnchorX == x && splashComp.AnchorY == y {
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
-		}
-	}
+	s.retire(func(c *component.SplashComponent) bool {
+		return c.Slot == component.SlotTimer && c.AnchorEntity == anchor &&
+			(anchor != 0 || c.AnchorX == x && c.AnchorY == y)
+	})
 }
 
 // handleCursorMoved updates the magnifier splash based on cursor position
@@ -348,14 +379,14 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	entity, ok := s.world.Positions.TopGlyphAt(cursorX, cursorY)
 	if !ok {
 		// No glyph entity - clear magnifier
-		s.cleanupSplashesBySlot(component.SlotMagnifier)
+		s.retire(func(c *component.SplashComponent) bool { return c.Slot == component.SlotMagnifier })
 		return
 	}
 
 	// Get the character to display
 	glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
 	if !ok {
-		s.cleanupSplashesBySlot(component.SlotMagnifier)
+		s.retire(func(c *component.SplashComponent) bool { return c.Slot == component.SlotMagnifier })
 		return
 	}
 
@@ -363,11 +394,11 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	color := visual.GlyphColorLUT[glyphComp.Type][component.GlyphNormal]
 
 	// Calculate proximity anchor, at least SplashMinDistance from the cursor
-	s.fillTimerBoxes()
+	s.fillBoxes()
 	anchorX, anchorY := s.calculateProximityAnchor(cursorX, cursorY, 1)
 
 	// Check for existing magnifier to update in place
-	existingSplashEntity := s.findSplashEntityBySlot(component.SlotMagnifier)
+	existingSplashEntity := s.find(func(c *component.SplashComponent) bool { return c.Slot == component.SlotMagnifier })
 	if existingSplashEntity != 0 {
 		splashComp, ok := s.world.Components.Splash.GetPtr(existingSplashEntity)
 		if ok {
@@ -400,19 +431,19 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 // calculateProximityAnchor uses spiral search to find valid magnifier position
 // Works in virtual circular space, converts back to game elliptical space
 // Searches diagonals first to avoid overlapping with ping crosshair lines, clear of
-// the countdown boxes its caller filled
+// the boxes its caller filled
 func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int) (int, int) {
 	config := s.world.Resources.Config
 
-	splashW := charCount * parameter.SplashCharWidth
-	splashH := parameter.SplashCharHeight
+	splashW, splashH := asset.SplashFaces[component.SplashLarge].Cells(1)
+	splashW *= charCount
 
 	if splashW > config.MapWidth || splashH > config.MapHeight {
 		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
 	}
 
-	checkTimers := func(absX, absY, w, h int) bool {
-		return !s.collidesTimer(BBox{X: absX, Y: absY, W: w, H: h}, -1)
+	clear := func(absX, absY, w, h int) bool {
+		return !s.collides(BBox{X: absX, Y: absY, W: w, H: h}, -1)
 	}
 
 	absX, absY, found := s.world.Positions.FindFreeFromPattern(
@@ -423,7 +454,7 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 		parameter.SplashMinDistance*3,
 		true,
 		component.WallBlockAll,
-		checkTimers,
+		clear,
 	)
 
 	if found {
@@ -435,8 +466,8 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 	return anchorX, anchorY
 }
 
-// collidesTimer reports whether candidate overlaps any countdown's box but the one at skip
-func (s *SplashSystem) collidesTimer(candidate BBox, skip int) bool {
+// collides reports whether candidate overlaps any held box but the one at skip
+func (s *SplashSystem) collides(candidate BBox, skip int) bool {
 	for i := range s.boxes {
 		if i != skip && s.checkBBoxCollision(candidate, s.boxes[i].BBox) {
 			return true
@@ -445,11 +476,35 @@ func (s *SplashSystem) collidesTimer(candidate BBox, skip int) bool {
 	return false
 }
 
-// calculateTimerOffset finds valid offset for timer relative to anchor entity, clear
-// of every countdown's box but its own at self
-// Uses 8-direction search: cardinals first, then diagonals
-func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponent, self int) {
-	ink := timerInkBox(splashComp.Length)
+// pack is the pixel rows a cell holds for font on this host
+func (s *SplashSystem) pack(font component.SplashFont) int {
+	return asset.SplashFaces[font].Packed(s.world.Resources.Config.TextConsole)
+}
+
+// timerInkBox is the cells a countdown of length digits in font inks, from its first
+// cell's origin: the digits' pixel box, each pixel row pair one cell where the host
+// packs them
+func (s *SplashSystem) timerInkBox(font component.SplashFont, length int) BBox {
+	ink, pack := digitInk[font], s.pack(font)
+	top, bottom := ink.Y/pack, (ink.Y+ink.H+pack-1)/pack
+	return BBox{X: ink.X, Y: top, W: (max(length, 1)-1)*asset.SplashFaces[font].Width + ink.W, H: bottom - top}
+}
+
+// inkBox is the cells a splash inks from its origin: a countdown's digits, a text's
+// whole glyph cells
+func (s *SplashSystem) inkBox(c *component.SplashComponent) BBox {
+	if c.Slot == component.SlotTimer {
+		return s.timerInkBox(c.Font, c.Length)
+	}
+	w, h := asset.SplashFaces[c.Font].Cells(s.pack(c.Font))
+	return BBox{W: w * c.Length, H: h}
+}
+
+// calculateTimerOffset places the countdown's ink around its anchor, clear of every
+// held box but its own at self, cardinals first and then diagonals, and reports
+// whether a clear slot was found; where none is, the slot overlapping the least
+func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponent, self int) bool {
+	ink := s.timerInkBox(splashComp.Font, splashComp.Length)
 
 	anchorX, anchorY := splashComp.AnchorX, splashComp.AnchorY
 	if splashComp.AnchorEntity != 0 {
@@ -460,8 +515,8 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 		}
 	}
 
-	checkTimers := func(absX, absY, w, h int) bool {
-		return !s.collidesTimer(BBox{X: absX, Y: absY, W: w, H: h}, self)
+	clear := func(absX, absY, w, h int) bool {
+		return !s.collides(BBox{X: absX, Y: absY, W: w, H: h}, self)
 	}
 
 	exclusion := position.Exclusion{
@@ -471,38 +526,38 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 		Bottom: splashComp.MarginBottom,
 	}
 
-	// Where nothing is clear, the search returns the slot overlapping the least
-	offsetX, offsetY, _ := s.world.Positions.FindPlacementAroundExclusion(
+	offsetX, offsetY, found := s.world.Positions.FindPlacementAroundExclusion(
 		anchorX, anchorY,
 		ink.W, ink.H,
 		exclusion,
 		parameter.SplashTimerPadding,
 		position.PatternCardinalFirst,
 		component.WallBlockAll,
-		checkTimers,
+		clear,
 	)
 
 	// The search placed the ink; the cells start that far up and left of it
 	splashComp.OffsetX = offsetX - ink.X
 	splashComp.OffsetY = offsetY - ink.Y
+	return found
 }
 
-// fillTimerBoxes rebuilds the box of every countdown that holds space, in store order
-func (s *SplashSystem) fillTimerBoxes() {
+// fillBoxes rebuilds the box of every countdown and text that holds space, in store order
+func (s *SplashSystem) fillBoxes() {
 	s.boxes = s.boxes[:0]
 	for _, splashEntity := range s.world.Components.Splash.Entities() {
 		splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity)
-		if !ok || splashComp.Slot != component.SlotTimer {
+		if !ok || splashComp.Slot == component.SlotMagnifier {
 			continue
 		}
 		if box, ok := s.paddedBox(splashComp); ok {
-			s.boxes = append(s.boxes, timerBox{entity: splashEntity, BBox: box})
+			s.boxes = append(s.boxes, splashBox{entity: splashEntity, BBox: box})
 		}
 	}
 }
 
-// paddedBox is the space a countdown holds against the other splashes; a countdown
-// whose anchor is gone is leaving and holds none
+// paddedBox is the space a countdown or a text holds against the other splashes; a
+// countdown whose anchor is gone is leaving and holds none
 func (s *SplashSystem) paddedBox(splashComp *component.SplashComponent) (BBox, bool) {
 	x, y := splashComp.AnchorX, splashComp.AnchorY
 	if splashComp.AnchorEntity != 0 {
@@ -515,7 +570,7 @@ func (s *SplashSystem) paddedBox(splashComp *component.SplashComponent) (BBox, b
 	x, y = x+splashComp.OffsetX, y+splashComp.OffsetY
 
 	pad := parameter.SplashCollisionPadding
-	ink := timerInkBox(splashComp.Length)
+	ink := s.inkBox(splashComp)
 	return BBox{
 		X: x + ink.X - pad,
 		Y: y + ink.Y - pad,
@@ -528,16 +583,4 @@ func (s *SplashSystem) paddedBox(splashComp *component.SplashComponent) (BBox, b
 func (s *SplashSystem) checkBBoxCollision(a, b BBox) bool {
 	return a.X < b.X+b.W && a.X+a.W > b.X &&
 		a.Y < b.Y+b.H && a.Y+a.H > b.Y
-}
-
-// findSplashEntityBySlot returns entity ID of first splash with given slot, or 0
-func (s *SplashSystem) findSplashEntityBySlot(slot component.SplashSlot) core.Entity {
-	splashEntities := s.world.Components.Splash.Entities()
-	for _, splashEntity := range splashEntities {
-		splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity)
-		if ok && splashComp.Slot == slot {
-			return splashEntity
-		}
-	}
-	return 0
 }
