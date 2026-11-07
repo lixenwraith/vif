@@ -254,10 +254,10 @@ time knows an editor made it.
   vocabulary's actions and guards with their arguments and every event's payload
   fields ([Behavior machines §5](machine-design.md#5-dialect-kernel)).
 - **Map layer.** Geometry is generated at run time (`EventLevelSetup`, maze rooms,
-  `.vifimg` walls). A painted map needs a static form the digest covers, and
-  `.vifimg` assets come from the `image/` category, which it does not and a joiner
+  `.aimg` walls). A painted map needs a static form the digest covers, and
+  `.aimg` assets come from the `image/` category, which it does not and a joiner
   is not sent. Decide between a TOML wall encoding (rectangles or run-length rows)
-  and admitting `.vifimg` to the scenario container under its bounds.
+  and admitting `.aimg` to the scenario container under its bounds.
 - **In the game.** An editor mode beside command and visual in `internal/mode` acts on
   a paused world and draws through an overlay like `:graph`. Applying an edit
   validates with `resource.ValidateScenario` and restarts on it as `:n` does, since

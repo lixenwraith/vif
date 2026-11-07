@@ -51,10 +51,10 @@ make dev       # generated code + race-enabled debug build
 | `wasm` | Build log-free `web/vif.wasm` for the browser page in `web/`, with its toolchain's `web/wasm_exec.js`. |
 | `windows` | Experimental audio/log-free `windows/amd64`, `CGO_ENABLED=0` cross-build. |
 | `run` | Build the dev binary and execute it. |
-| `test` | Generate and run `go test -race ./...`. |
-| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, the full and WASM ones also with `GOEXPERIMENT=simd`, and vet and test the `android` module (§5). |
+| `test` | Generate and run `go test -race ./...`, and the nested `pkg/ascimage` module's. |
+| `verify` | Generate, test, vet, and compile the full (also with cgo off), `novlog`, audio-free, headless, `vif_nogui`, WASM and Windows variants, the full and WASM ones also with `GOEXPERIMENT=simd`, and vet and test the `android` module (§5) and vet the nested `pkg/ascimage` one. |
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
-| `tools` | Build `cmd/ascimage` and every `tool/*` command. |
+| `tools` | Build every `tool/*` command, and `bin/ascimage` from the nested `pkg/ascimage` module. |
 | `router` | Build the website-to-K3s session router as `bin/vif-router`. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `install-config` | Copy `wad/`, bot graphs, keymap and `vif.toml` into the user config root, the last two only when absent; `CLEAN=1` (here and for `install`) removes the previous install first. |
@@ -594,11 +594,13 @@ on the Go `go.mod` names, runs `go vet ./...`, `go build ./...`, the other profi
 and targets, the window and Android module tests, the browser build's tests under
 Node (`pkg/browser` and the `Browser` tests of `pkg/network`, through
 `go_js_wasm_exec`), and `go test -race ./...` with `GORACE` halting on the first
-race. The test steps print failures alone, a race's report beside its package.
+race, then vets and race-tests ascimage, the module nested in `pkg/ascimage`,
+which the root's `./...` leaves out. The test steps print failures alone, a
+race's report beside its package.
 
 `.github/workflows/release.yml` runs nightly, on demand and on a `v*` tag. It
 regenerates the registries and, on a tag, fails if that changed the tree, vets
-and tests, then builds CGO-free archives for `linux-amd64`, `linux-arm64`,
+and tests, the nested ascimage module too, then builds CGO-free archives for `linux-amd64`, `linux-arm64`,
 `linux-amd64-headless`, `freebsd-amd64`, `windows-amd64` (`novlog vif_noaudio`)
 and `web`, the wad archive through `make wad-archive`, a source archive on a tag,
 the Android APK through `android/toolchain.sh gradlew` on a second runner, and

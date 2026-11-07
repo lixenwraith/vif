@@ -581,13 +581,14 @@ pipeline but are visibility-gated.
 ## 10. Patterns and image-derived assets
 
 `internal/pattern` bridges terminal image assets into the game: it converts a
-dual-mode `.vifimg` into wall cells, which `WallSystem` spawns as one composite
+dual-mode `.aimg` into wall cells, which `WallSystem` spawns as one composite
 wall. Pattern results become simulation spawn data; they are not drawn by
 bypassing the ECS/render pipeline.
 
-The `cmd/ascimage` tool performs image conversion and viewing. The external
-terminal/color modules own general terminal and RGB primitives; vif
-retains only game-specific asset interpretation and layering.
+Ascimage (`lixenwraith/ascimage`, nested in `pkg/ascimage`) converts, prints
+and views images and owns the `.aimg` format. The external terminal/color
+modules own general terminal and RGB primitives; vif retains only
+game-specific asset interpretation and layering.
 
 ## 11. Adding a renderer
 
@@ -623,4 +624,4 @@ retains only game-specific asset interpretation and layering.
 | Visual constants/masks | `internal/parameter/visual/*.go` |
 | Concrete projections | `internal/render/renderer/*.go` |
 | Registry | `internal/manifest/definition.go` |
-| Image conversion/patterns | `pkg/ascimage`, `internal/pattern`, `cmd/ascimage` |
+| Image conversion/patterns | `lixenwraith/ascimage` (nested in `pkg/ascimage`), `internal/pattern` |

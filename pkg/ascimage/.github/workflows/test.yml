@@ -1,0 +1,46 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, 'claude/*' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Vet, test, fuzz and build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+
+    - name: Vet code
+      run: go vet ./...
+
+    - name: gofmt -l
+      run: out=$(gofmt -l .); [ -z "$out" ] || { echo "$out"; exit 1; }
+
+    - name: Run tests with race detector
+      run: go test -race ./...
+      env:
+        # Halt on the first race; its report prints beside the failing package.
+        GORACE: "halt_on_error=1"
+
+    # The reader opens whatever a browsed folder holds.
+    - name: Fuzz the .aimg reader
+      run: go test -run '^$' -fuzz FuzzReadDualMode -fuzztime 30s .
+
+    - name: Build for FreeBSD, Windows and macOS
+      run: |
+        CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build ./...
+        CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./...
+        CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build ./...
