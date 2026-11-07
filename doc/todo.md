@@ -298,10 +298,11 @@ would be a second mechanism beside the key table and the capture; not that.
 - Affected files: `wad/scenario/vimtutor/`
 - Guide: [Vim tutorial §3](vim-tutorial.md#3-the-next-round)
 
-The first round teaches `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x` and
-`dd`, `i` and typing, then the taken keys and free practice. The next adds search,
-the map and column motions, the markers and macros, lays a lesson again on a
-resize, centres from the map's edge, and cues a lesson cleared.
+The first round teaches `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x` then
+`dd`, `i` and typing, `%`, `/ n`, `gg G`, then the taken keys and free practice;
+`s` skips and `S` goes back. The next adds the column motions, `[ ]`, the markers
+and macros, `d` with a motion, `v`, lays a lesson again on a resize, centres from
+the map's edge, and cues a lesson cleared.
 
 ## Browser sessions
 
