@@ -585,8 +585,8 @@ dual-mode `.aimg` into wall cells, which `WallSystem` spawns as one composite
 wall. Pattern results become simulation spawn data; they are not drawn by
 bypassing the ECS/render pipeline.
 
-Ascimage (`lixenwraith/ascimage`, nested in `pkg/ascimage`) converts, prints
-and views images and owns the `.aimg` format. The external terminal/color
+Ascimage (`lixenwraith/ascimage`) converts, prints and views images and owns
+the `.aimg` format. The external terminal/color
 modules own general terminal and RGB primitives; vif retains only
 game-specific asset interpretation and layering.
 
@@ -624,4 +624,4 @@ game-specific asset interpretation and layering.
 | Visual constants/masks | `internal/parameter/visual/*.go` |
 | Concrete projections | `internal/render/renderer/*.go` |
 | Registry | `internal/manifest/definition.go` |
-| Image conversion/patterns | `lixenwraith/ascimage` (nested in `pkg/ascimage`), `internal/pattern` |
+| Image conversion/patterns | `lixenwraith/ascimage`, `internal/pattern` |

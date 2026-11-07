@@ -145,9 +145,8 @@ Start with the [documentation index](doc/README.md): architecture, package and
 runtime maps, and references for gameplay, ECS and events, input, state
 machines, rendering, audio, navigation and evolution, content, networking,
 multiplayer, deployment and development. [Stapes](https://github.com/lixenwraith/stapes)
-(formerly soundlab), in a repository of its own, and
-[ascimage](pkg/ascimage/README.md), nested in `pkg/ascimage` until it moves to
-its own, author sounds and wall images, and [script/](script/README.md)
+(formerly soundlab) and [ascimage](https://github.com/lixenwraith/ascimage), each in a repository of its own,
+author sounds and wall images, and [script/](script/README.md)
 holds the end-to-end checks Go tests cannot make.
 
 ## License

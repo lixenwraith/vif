@@ -3,13 +3,13 @@ module github.com/lixenwraith/vif/android
 go 1.27.3
 
 require (
-	github.com/lixenwraith/terminal v0.6.5
+	github.com/lixenwraith/terminal v0.6.6
 	github.com/lixenwraith/vif v0.0.0
 )
 
 require (
-	github.com/lixenwraith/ascimage v0.0.0 // indirect
-	github.com/lixenwraith/audio v0.4.0 // indirect
+	github.com/lixenwraith/ascimage v0.1.0 // indirect
+	github.com/lixenwraith/audio v0.8.2 // indirect
 	github.com/lixenwraith/color v0.1.5 // indirect
 	github.com/lixenwraith/genetic v0.1.0 // indirect
 	github.com/lixenwraith/log v0.1.13 // indirect
@@ -28,5 +28,3 @@ tool (
 	golang.org/x/mobile/cmd/gobind
 	golang.org/x/mobile/cmd/gomobile
 )
-
-replace github.com/lixenwraith/ascimage => ../pkg/ascimage

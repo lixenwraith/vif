@@ -221,18 +221,16 @@ wasm: check-go $(WEB_DIR)
 windows: check-go $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOEXP) $(GO) build $(GO_BUILDFLAGS) -tags "novlog vif_noaudio $(TAGS)" -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
-# ascimage, the image tool and library, is a module of its own nested in
-# pkg/ascimage until it moves to its repository; vif takes it through a replace
+# ascimage, the image tool, is built from the module go.mod requires, so it reads
+# and writes the .aimg this vif loads
 tools: check-go $(BIN_DIR)
-	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./tool/...
-	$(GO) -C pkg/ascimage build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(CURDIR)/$(BIN_DIR)/ascimage ./cmd/ascimage
+	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./tool/... github.com/lixenwraith/ascimage/cmd/ascimage
 
 router: check-go $(BIN_DIR)
 	$(GO) build $(GO_BUILDFLAGS) -ldflags="$(GO_LDFLAGS)" -o $(BIN_DIR)/vif-router ./tool/vif-router
 
 test: generate
 	$(GO) test -race ./...
-	$(GO) -C pkg/ascimage test -race ./...
 
 # verify covers the build-tag matrix a single-target build would miss
 verify: generate test
@@ -245,7 +243,6 @@ verify: generate test
 	$(GO) test -tags vif_noaudio ./internal/... $(SRC)
 	$(GO) test -tags vif_headless ./internal/manifest ./internal/system $(SRC)
 	cd android && $(GO) vet ./... && $(GO) test ./...
-	cd pkg/ascimage && $(GO) vet ./...
 	CGO_ENABLED=0 $(GO) test $(GUI_GCFLAGS) ./pkg/window
 	GOOS=js GOARCH=wasm $(GO) build ./...
 	GOEXPERIMENT=simd $(GO) build ./...
