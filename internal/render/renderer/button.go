@@ -37,19 +37,19 @@ const (
 	buttonLabel            // the key as one character, when the glyph does not fit
 )
 
-// buttonKey places a key's splash glyph with its ink centred on a w by h button. A
-// glyph whose ink does not fit, or a key the font lacks, falls back to the key as
-// one character in the middle.
+// buttonKey places a key's large splash glyph with its ink centred on a w by h
+// button. A glyph whose ink does not fit, or a key the face lacks, falls back to the
+// key as one character in the middle.
 type buttonKey struct {
-	glyph      splashBitmap
+	glyph      asset.SplashGlyph
 	big        bool
 	x, y, w, h int // glyph cell origin within the button, and the button's size
 }
 
 func placeButtonKey(key rune, w, h int) buttonKey {
-	glyph, ok := splashGlyph(key)
+	glyph, ok := splashLarge.Glyph(key)
 	k := buttonKey{glyph: glyph, w: w, h: h}
-	left, top, inkW, inkH := asset.SplashInkBounds(glyph)
+	left, top, inkW, inkH := splashLarge.InkBounds(glyph)
 	if ok && inkW > 0 && inkW <= w && inkH <= h {
 		k.big, k.x, k.y = true, (w-inkW)/2-left, (h-inkH)/2-top
 	}
@@ -58,7 +58,7 @@ func placeButtonKey(key rune, w, h int) buttonKey {
 
 func (k buttonKey) at(dx, dy int) buttonCell {
 	switch {
-	case k.big && asset.SplashInk(k.glyph, dx-k.x, dy-k.y):
+	case k.big && splashLarge.Ink(k.glyph, dx-k.x, dy-k.y):
 		return buttonInk
 	case !k.big && dx == k.w/2 && dy == k.h/2:
 		return buttonLabel

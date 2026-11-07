@@ -3973,6 +3973,9 @@ func encodeColumnsSplash(dst []byte, rows []StoreEntry[component.SplashComponent
 		dst = appendUint(dst, rows[i].Value.Color.B)
 	}
 	for i := range rows {
+		dst = appendUint(dst, rows[i].Value.Font)
+	}
+	for i := range rows {
 		dst = appendUint(dst, rows[i].Value.AnchorEntity)
 	}
 	for i := range rows {
@@ -4028,6 +4031,9 @@ func decodeColumnsSplash(r *columnReader) []StoreEntry[component.SplashComponent
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Color.B, r)
+	}
+	for i := range rows {
+		readUint(&rows[i].Value.Font, r)
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.AnchorEntity, r)

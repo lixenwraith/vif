@@ -1,5 +1,5 @@
 # Embedded corpus: typed as gameplay, read as a primer.
-# Lines must be printable ASCII. Blocks longer than five lines are split.
+# Lines are printable ASCII under 40 columns; a block holds at most five.
 schema = 1
 
 [[blocks]]
@@ -8,35 +8,26 @@ lines = [
   "welcome to vif, the cursor is you",
   "move like vim, type to stay alive",
   "f1 opens help from any mode",
+  "esc always brings you back to normal",
 ]
 
 [[blocks]]
 id = "modes"
 lines = [
-  "i enters insert mode",
-  "esc returns to normal mode",
-  "esc in normal mode pings the grid",
+  "normal mode moves, insert mode types",
+  "i enters insert at the cursor",
   "v toggles visual mode",
-  "where each step is the shield radius",
-]
-
-[[blocks]]
-id = "typing"
-lines = [
-  "type the glyph under the cursor",
-  "a match feeds your heat and boost",
-  "a miss burns ten heat and the boost",
-  "space clears ahead, backspace behind",
+  "esc in normal mode pings the grid",
+  "and drops a key half pressed",
 ]
 
 [[blocks]]
 id = "motion-hjkl"
 lines = [
-  "h moves the cursor left",
-  "j moves down and k moves up",
-  "l moves right",
+  "h j k l move left, down, up, right",
   "H J K L leap half a screen",
   "the arrow keys move as well",
+  "page up and page down leap too",
 ]
 
 [[blocks]]
@@ -54,6 +45,7 @@ lines = [
   "0 goes to the start of the line",
   "$ goes to the end of the line",
   "^ finds the first non blank",
+  "home and end do the same",
 ]
 
 [[blocks]]
@@ -86,12 +78,13 @@ lines = [
 ]
 
 [[blocks]]
-id = "markers"
+id = "typing"
 lines = [
-  "gl lights the colours to your right",
-  "then r, g or b jumps to that glyph",
-  "gh, gj and gk look the other ways",
-  "gll leaps to the nearest of any colour",
+  "in insert mode, type the glyph",
+  "under the cursor to clear it",
+  "a match feeds your heat and boost",
+  "a miss burns ten heat and the boost",
+  "space clears ahead, backspace behind",
 ]
 
 [[blocks]]
@@ -111,6 +104,7 @@ lines = [
   "3w moves three words on",
   "5x deletes five chars",
   "2dd clears two lines",
+  "3@a plays macro a three times",
 ]
 
 [[blocks]]
@@ -120,6 +114,34 @@ lines = [
   "enter jumps to the first match",
   "n and N walk the matches",
   "the search wraps around the map",
+]
+
+[[blocks]]
+id = "markers"
+lines = [
+  "gl lights the colours to your right",
+  "then r, g or b jumps to that glyph",
+  "gh, gj and gk look the other ways",
+  "gll leaps to the nearest of any colour",
+]
+
+[[blocks]]
+id = "vim-keys"
+lines = [
+  "vif plays a subset of vim",
+  "a cycles auto fire, not append",
+  "p pauses, there is nothing to put",
+  "o and O find glyphs in your column",
+  "u undoes a move, not a delete",
+]
+
+[[blocks]]
+id = "vim-keys-more"
+lines = [
+  "H J K L leap, they never join lines",
+  "m is the middle column, not a mark",
+  "y c r and the dot do nothing yet",
+  ": runs a command and :q quits",
 ]
 
 [[blocks]]
@@ -137,7 +159,7 @@ lines = [
   "a cycles auto fire: both, off, main",
   ":auto off and :auto main pick one",
   "manual fire works in every state",
-  "the next run keeps your choice",
+  "the next game keeps your choice",
 ]
 
 [[blocks]]
@@ -162,7 +184,7 @@ lines = [
 id = "keys"
 lines = [
   "p pauses the game and p resumes it",
-  "ctrl+s cycles music, effects, silence",
+  "ctrl+s cycles the sound channels",
   "ctrl+g or f10 opens the menu",
   "ctrl+q quits from any mode",
 ]
@@ -200,7 +222,7 @@ lines = [
 id = "commands"
 lines = [
   ":n starts a new game",
-  ":p pauses, as p does",
+  ":n and a name starts that scenario",
   ":h opens help, :t the telemetry",
   ":g opens the menu",
   ":q quits",

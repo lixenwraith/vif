@@ -2,9 +2,8 @@ package parameter
 
 // Splash Entity
 const (
-	SplashCharWidth  = 12
-	SplashCharHeight = 12
-	SplashMaxLength  = 8
+	// SplashMaxLength is the most characters a splash holds; a longer text is cropped
+	SplashMaxLength = 24
 
 	// SplashTimerPadding is the gap between a countdown's ink and its anchor's body
 	SplashTimerPadding = 1

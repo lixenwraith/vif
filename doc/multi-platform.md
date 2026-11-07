@@ -137,6 +137,11 @@ measured for each release.
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `pkg/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
+A text console (Linux's or FreeBSD vt's, 256 colours, `Config.TextConsole`) draws
+with fonts that lack the half blocks, so the small splash face, which packs two
+pixel rows a cell everywhere else, is drawn there a cell a pixel: the same glyphs,
+twelve cells tall instead of six ([Rendering §7](rendering.md#7-layer-inventory)).
+
 The zip plays in Windows Terminal, Windows 11's default terminal, whose console
 host forwards the game's request for mouse reports and, from 1.22, passes its
 output through as written. Windows 10's own console host, the ConPTY Alacritty

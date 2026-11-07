@@ -364,6 +364,15 @@ that proves wrong or that a document now states, and link the document instead.
   Wraith field's is.
 - A text console has eight backgrounds: a white one lands on the grey the overlay's
   text box takes, so a cursor there needs a hue (the orange's yellow) to show.
+- A terminal cell is about twice as tall as it is wide, so a bitmap drawn a cell a
+  pixel reads tall and narrow (the large splash face), and one drawn two pixel rows
+  a cell with `▀` and `▄` reads in square pixels (the small face). Preview a face by
+  rendering its rows in pairs, as `tool/font-editor`'s preview does; a glyph's
+  ends fall on half cells whichever rows it keeps to, so put the digits' eight rows
+  on four cell pairs (rows 2-9) rather than reaching for whole cells.
+- The splash system reads `Config.TextConsole` to size a box, a host fact no other
+  system reads: nothing compares a splash's offsets (`snapshot/surface.go` denies
+  `splash.`), so a journal replays across tiers.
 
 ## Widgets
 
@@ -458,6 +467,8 @@ that proves wrong or that a document now states, and link the document instead.
   `char` takes the character's code, `43` for `+` (`wad/scenario/dummy`'s pads).
 - An event drop belongs to a cursor, so drops a scenario lays before
   `EventCursorSpawned` go to nobody: lay them on that event.
+- A payload's `duration` is nanoseconds (`3000000000` for three seconds), where a
+  `duration_ms` field is milliseconds; `vif -schema` prints each field's type.
 - A drop table's rolls are player-domain, each instance rolling its own: a test of a
   kill whose drop is below certain shoots until the table's pity makes it certain
   (vanguard's U within two kills), and counts a kill's drops as the loot new since

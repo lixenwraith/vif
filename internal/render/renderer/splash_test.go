@@ -63,3 +63,43 @@ func TestAnchoredSplashIsNotDrawnWithoutItsAnchor(t *testing.T) {
 		t.Fatalf("countdown without its anchor drew %d cells from screen (%d,%d)", n, minX, minY)
 	}
 }
+
+// The small face packs two pixel rows a cell where the host draws half blocks, a
+// cell inked in one row as a half block in the colour, and a text console, whose
+// fonts lack them, draws it a cell a pixel.
+func TestTheSmallFaceDrawsHalfBlocksOffAConsole(t *testing.T) {
+	t.Parallel()
+	for _, console := range []bool{false, true} {
+		w := engine.NewWorld()
+		gameCtx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+		gameCtx.World.Resources.Config.TextConsole = console
+		text := component.SplashComponent{Length: 1, Color: visual.RgbSplashWhite, Font: component.SplashSmall, AnchorX: 10, AnchorY: 2, Slot: component.SlotText}
+		text.Content[0] = '1'
+		w.Components.Splash.SetComponent(w.CreateEntity(core.DomainPlayer), text)
+
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, 80, 24)
+		NewSplashRenderer(gameCtx).Render(peerContext(gameCtx), buf)
+		whole, half, minY, maxY := 0, 0, 24, -1
+		for y := range 24 {
+			for x := range 80 {
+				cell := buf.CellAt(x, y)
+				switch {
+				case cell.Bg == visual.RgbSplashWhite:
+					whole++
+				case (cell.Rune == '▀' || cell.Rune == '▄') && cell.Fg == visual.RgbSplashWhite:
+					half++
+				default:
+					continue
+				}
+				minY, maxY = min(minY, y), max(maxY, y)
+			}
+		}
+		rows := maxY - minY + 1
+		if console && (half != 0 || whole == 0 || rows != 8) {
+			t.Fatalf("console: the digit drew %d whole and %d half cells over %d rows, want its eight pixel rows as whole cells", whole, half, rows)
+		}
+		if !console && (half == 0 || whole == 0 || rows != 4) {
+			t.Fatalf("emulator: the digit drew %d whole and %d half cells over %d rows, want its eight pixel rows packed in four with half blocks", whole, half, rows)
+		}
+	}
+}
