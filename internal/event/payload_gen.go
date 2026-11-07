@@ -57,6 +57,8 @@ var payloadNew = [EventTypeCount]func() any{
 	EventGoldJumpRequest:                 func() any { return new(GoldJumpRequestPayload) },
 	EventSplashTimerRequest:              func() any { return new(SplashTimerRequestPayload) },
 	EventSplashTimerCancel:               func() any { return new(SplashTimerCancelPayload) },
+	EventSplashTextRequest:               func() any { return new(SplashTextPayload) },
+	EventGlyphLineRequest:                func() any { return new(GlyphLinePayload) },
 	EventEnergyAddRequest:                func() any { return new(EnergyAddPayload) },
 	EventEnergySetRequest:                func() any { return new(EnergySetPayload) },
 	EventEnergyCrossedZero:               func() any { return new(EnergyCrossedZeroPayload) },
@@ -228,6 +230,8 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventGoldJumpRequest:                 &codecGoldJumpRequestPayload,
 	EventSplashTimerRequest:              &codecSplashTimerRequestPayload,
 	EventSplashTimerCancel:               &codecSplashTimerCancelPayload,
+	EventSplashTextRequest:               &codecSplashTextPayload,
+	EventGlyphLineRequest:                &codecGlyphLinePayload,
 	EventEnergyAddRequest:                &codecEnergyAddPayload,
 	EventEnergySetRequest:                &codecEnergySetPayload,
 	EventEnergyCrossedZero:               &codecEnergyCrossedZeroPayload,
@@ -727,6 +731,7 @@ func (p *SplashTimerRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecSplashTimerRequestPayload = structCodec{size: unsafe.Sizeof(SplashTimerRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.Color), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.Font), kind: kindUint, size: unsafe.Sizeof(component.SplashFont(0))},
 	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.OriginX), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.OriginY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(SplashTimerRequestPayload{}.MarginLeft), kind: kindInt, size: unsafe.Sizeof(int(0))},
@@ -742,6 +747,32 @@ func (p *SplashTimerCancelPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecSplashTimerCancelPayload = structCodec{size: unsafe.Sizeof(SplashTimerCancelPayload{}), fields: []field{
 	{off: unsafe.Offsetof(SplashTimerCancelPayload{}.AnchorEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+}}
+
+func (p *SplashTextPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecSplashTextPayload, unsafe.Pointer(p)
+}
+
+var codecSplashTextPayload = structCodec{size: unsafe.Sizeof(SplashTextPayload{}), fields: []field{
+	{off: unsafe.Offsetof(SplashTextPayload{}.Text), kind: kindString},
+	{off: unsafe.Offsetof(SplashTextPayload{}.Font), kind: kindUint, size: unsafe.Sizeof(component.SplashFont(0))},
+	{off: unsafe.Offsetof(SplashTextPayload{}.Color), kind: kindStruct, sub: &codecColorRGB},
+	{off: unsafe.Offsetof(SplashTextPayload{}.OriginX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SplashTextPayload{}.OriginY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(SplashTextPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
+}}
+
+func (p *GlyphLinePayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGlyphLinePayload, unsafe.Pointer(p)
+}
+
+var codecGlyphLinePayload = structCodec{size: unsafe.Sizeof(GlyphLinePayload{}), fields: []field{
+	{off: unsafe.Offsetof(GlyphLinePayload{}.Text), kind: kindString},
+	{off: unsafe.Offsetof(GlyphLinePayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphLinePayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphLinePayload{}.Type), kind: kindInt, size: unsafe.Sizeof(component.GlyphType(0))},
+	{off: unsafe.Offsetof(GlyphLinePayload{}.Level), kind: kindInt, size: unsafe.Sizeof(component.GlyphLevel(0))},
+	{off: unsafe.Offsetof(GlyphLinePayload{}.Scenery), kind: kindBool},
 }}
 
 func (p *EnergyAddPayload) codec() (*structCodec, unsafe.Pointer) {

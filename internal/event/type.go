@@ -176,6 +176,13 @@ const (
 	EventSplashTimerRequest
 	// EventSplashTimerCancel (SplashTimerCancelPayload) [local] signals ending timer visual feedback
 	EventSplashTimerCancel
+	// EventSplashTextRequest (SplashTextPayload) [local] writes text in a splash face at a cell, in place of the text there; empty text clears it
+	EventSplashTextRequest
+
+	// --- Glyph ---
+
+	// EventGlyphLineRequest (GlyphLinePayload) [local] lays a line of glyphs from a cell, as the corpus's lines are laid
+	EventGlyphLineRequest
 
 	// --- Energy ---
 

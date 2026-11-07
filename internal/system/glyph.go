@@ -153,13 +153,14 @@ func (s *GlyphSystem) Priority() int {
 func (s *GlyphSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaSystemCommandRequest,
+		event.EventGlyphLineRequest,
 	}
 }
 
 // HandleEvent processes spawn configuration events
 func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
-
-	if ev.Type == event.EventMetaSystemCommandRequest {
+	switch ev.Type {
+	case event.EventMetaSystemCommandRequest:
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
 				s.enabled = payload.Enabled
@@ -171,10 +172,12 @@ func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 				}
 			}
 		}
-	}
 
-	if !s.enabled {
-		return
+	case event.EventGlyphLineRequest:
+		// A scenario's line stands whether or not the system lays lines of its own
+		if payload, ok := ev.Payload.(*event.GlyphLinePayload); ok {
+			s.placeLineAt(payload)
+		}
 	}
 }
 
@@ -362,43 +365,69 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		if s.nearCursor(row, startCol, lineLength) || s.blocked(row, startCol, lineLength) {
 			continue
 		}
-
-		// 1. Stage entities, skipping spaces
-		s.placement = s.placement[:0]
-		col := startCol
-		for _, r := range text {
-			if r != ' ' {
-				s.placement = append(s.placement, glyphPlacement{
-					entity: s.world.CreateEntity(core.DomainPlayer),
-					pos:    component.PositionComponent{X: col, Y: row},
-					char:   r,
-				})
-			}
-			col++
+		// Text placed under a scenery drift is scenery for life
+		if s.lay(text, startCol, row, glyphType, glyphLevel, s.statDriftScenery.Load()) {
+			return true
 		}
-		s.buffers.Observe(0, len(s.placement))
-
-		// 2. Batch position validation and commit
-		batch := s.world.Positions.BeginBatch(len(s.placement))
-		for _, gp := range s.placement {
-			batch.Add(gp.entity, gp.pos)
-		}
-		if err := batch.Commit(); err != nil {
-			for _, gp := range s.placement {
-				s.world.DestroyEntity(gp.entity)
-			}
-			continue
-		}
-
-		// 3. Attach glyph components; text placed under a scenery drift is scenery for life
-		scenery := s.statDriftScenery.Load()
-		for _, gp := range s.placement {
-			s.attachGlyph(gp.entity, gp.char, glyphType, glyphLevel, scenery)
-		}
-		return true
 	}
 
 	return false
+}
+
+// placeLineAt lays a scenario's line from its cell, cropped at the map's right edge
+// as a corpus line is; one that starts off the map, or meets a wall or rock, is
+// dropped whole
+func (s *GlyphSystem) placeLineAt(p *event.GlyphLinePayload) bool {
+	config := s.world.Resources.Config
+	if p.X < 0 || p.X >= config.MapWidth || p.Y < 0 || p.Y >= config.MapHeight {
+		return false
+	}
+	text, length := p.Text, 0
+	for i := range p.Text {
+		if p.X+length == config.MapWidth {
+			text = p.Text[:i]
+			break
+		}
+		length++
+	}
+	if length == 0 || s.blocked(p.Y, p.X, length) {
+		return false
+	}
+	return s.lay(text, p.X, p.Y, p.Type, p.Level, p.Scenery)
+}
+
+// lay stages text's runes from a cell, skipping spaces, and commits them as one
+// batch: a cell any entity holds drops the whole line
+func (s *GlyphSystem) lay(text string, x, y int, glyphType component.GlyphType, glyphLevel component.GlyphLevel, scenery bool) bool {
+	s.placement = s.placement[:0]
+	col := x
+	for _, r := range text {
+		if r != ' ' {
+			s.placement = append(s.placement, glyphPlacement{
+				entity: s.world.CreateEntity(core.DomainPlayer),
+				pos:    component.PositionComponent{X: col, Y: y},
+				char:   r,
+			})
+		}
+		col++
+	}
+	s.buffers.Observe(0, len(s.placement))
+
+	batch := s.world.Positions.BeginBatch(len(s.placement))
+	for _, gp := range s.placement {
+		batch.Add(gp.entity, gp.pos)
+	}
+	if err := batch.Commit(); err != nil {
+		for _, gp := range s.placement {
+			s.world.DestroyEntity(gp.entity)
+		}
+		return false
+	}
+
+	for _, gp := range s.placement {
+		s.attachGlyph(gp.entity, gp.char, glyphType, glyphLevel, scenery)
+	}
+	return true
 }
 
 // attachGlyph makes a placed entity a glyph, and scenery for life when placed as such

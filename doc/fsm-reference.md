@@ -721,6 +721,31 @@ button is refused. A button shows its key in the splash font once it is about te
 cells square, so a scenario sets a `[map]` floor that leaves room for its row.
 `wad/scenario/simon` is the worked example.
 
+### Splash text and glyph lines
+
+```toml
+{ action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "press a", font = "small", origin_x = 4, origin_y = 2 } }
+{ action = "EmitEvent", event = "EventSplashTextRequest", payload = { text = "", origin_x = 4, origin_y = 2 } }
+{ action = "EmitEvent", event = "EventGlyphLineRequest", payload = { text = "move with h j k l", x = 4, y = 12, type = "blue", level = "normal" } }
+{ action = "EmitEvent", event = "EventSplashTimerRequest", payload = { font = "small", color = { r = 255, g = 255, b = 255 }, duration = 3000000000 }, payload_vars = { origin_x = "x", origin_y = "y" } }
+```
+
+`EventSplashTextRequest` writes a line of splash text from a cell, its top left,
+in `font` `large` (the default, twelve cells square a glyph) or `small` (six by
+six, drawn a cell a pixel on a text console); a text written at a cell replaces
+the one standing there, an empty one clears it, and `duration`, in nanoseconds,
+ends it on its own. A zero `color` is the splash white, and a text is cropped at
+`parameter.SplashMaxLength` glyphs. `font` on `EventSplashTimerRequest` chooses a
+countdown's face the same way; a large countdown that finds no clear slot takes
+the small face as it spawns. `EventGlyphLineRequest` lays a line of typeable
+glyphs from a cell, left to right, as the corpus's lines are laid: cropped at the
+map's right edge, dropped whole where it meets a wall, rock or an entity, in `type`
+and `level` (dark green when unset), and `scenery = true` makes it part of the map
+that nothing types or deletes. The glyph system lays it whether or not it is
+enabled, so a scenario that wants no corpus text disables the system and lays its
+own. Both are player-domain presentation each instance makes for itself, as a
+status message is.
+
 ### PayloadSpeciesIn
 
 ```toml

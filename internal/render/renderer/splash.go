@@ -6,10 +6,12 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
+
+// splashLarge is the face a button's key is drawn in
+var splashLarge = &asset.SplashFaces[component.SplashLarge]
 
 // SplashRenderer draws large block characters as background effect
 type SplashRenderer struct {
@@ -29,10 +31,11 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
+	console := r.gameCtx.World.Resources.Config.TextConsole
 
 	splashes.Each(func(_ core.Entity, splash *component.SplashComponent) bool {
 		length := min(max(splash.Length, 0), len(splash.Content))
-		if length == 0 {
+		if length == 0 || int(splash.Font) >= len(asset.SplashFaces) {
 			return true
 		}
 
@@ -41,9 +44,10 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			return true
 		}
 
+		face := &asset.SplashFaces[splash.Font]
+		pack := face.Packed(console)
 		for i := range length {
-			charX := anchorX + i*parameter.SplashCharWidth
-			r.renderChar(ctx, buf, splash.Content[i], charX, anchorY, splash.Color)
+			r.renderChar(ctx, buf, face, pack, splash.Content[i], anchorX+i*face.Width, anchorY, splash.Color)
 		}
 		return true
 	})
@@ -63,37 +67,36 @@ func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (i
 	return anchorPos.X + splashComp.OffsetX, anchorPos.Y + splashComp.OffsetY, true
 }
 
-// splashBitmap is one glyph of the splash font, a row per element
-type splashBitmap = [parameter.SplashCharHeight]uint16
+// renderChar draws char's glyph from the cell at gameX, gameY, pack pixel rows a
+// cell: a cell inked whole as its background, under whatever glyph it shows, and one
+// inked in one of its two rows as a half block in the colour over the background it had
+func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, face *asset.Face, pack int, char rune, gameX, gameY int, c color.RGB) {
+	bitmap, _ := face.Glyph(char)
+	_, rows := face.Cells(pack)
 
-// splashGlyph returns char's glyph, and the fallback box with false where the font
-// has none
-func splashGlyph(char rune) (splashBitmap, bool) {
-	if char < 32 || char > 126 {
-		return asset.SplashFontFallback, false
-	}
-	return asset.SplashFont[char-32], true
-}
-
-func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, c color.RGB) {
-	bitmap, _ := splashGlyph(char)
-
-	for row := range parameter.SplashCharHeight {
+	for row := range rows {
 		mapY := gameY + row
 
-		for col := range parameter.SplashCharWidth {
-			if !asset.SplashInk(bitmap, col, row) {
+		for col := range face.Width {
+			top := face.Ink(bitmap, col, row*pack)
+			bottom := pack > 1 && face.Ink(bitmap, col, row*pack+1)
+			if !top && !bottom {
 				continue
 			}
 
-			mapX := gameX + col
-
-			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			screenX, screenY, visible := ctx.MapToScreen(gameX+col, mapY)
 			if !visible {
 				continue
 			}
 
-			buf.SetBgOnly(screenX, screenY, c)
+			switch {
+			case top && (bottom || pack == 1):
+				buf.SetBgOnly(screenX, screenY, c)
+			case top:
+				buf.SetWithBg(screenX, screenY, '▀', c, buf.BackgroundAt(screenX, screenY, visual.RgbBackground))
+			default:
+				buf.SetWithBg(screenX, screenY, '▄', c, buf.BackgroundAt(screenX, screenY, visual.RgbBackground))
+			}
 		}
 	}
 }

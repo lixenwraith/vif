@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,15 +13,23 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/component"
 )
 
 // Editor constants
 const (
 	GridRows     = 12
-	GridCols     = 12
 	MinChar      = 32
 	MaxChar      = 126
 	PreviewLimit = 40
+)
+
+// The face being edited, chosen by -face: its glyph array, its width and the name
+// its export carries
+var (
+	face     *asset.Face
+	faceName string
+	gridCols int
 )
 
 // UI Colors
@@ -85,6 +94,19 @@ type Editor struct {
 }
 
 func main() {
+	which := flag.String("face", "large", "the splash face to edit: large or small")
+	flag.Parse()
+	switch *which {
+	case "large":
+		face, faceName = &asset.SplashFaces[component.SplashLarge], "SplashFont"
+	case "small":
+		face, faceName = &asset.SplashFaces[component.SplashSmall], "SplashSmallFont"
+	default:
+		fmt.Fprintf(os.Stderr, "-face %q is neither large nor small\n", *which)
+		os.Exit(2)
+	}
+	gridCols = face.Width
+
 	term := terminal.New(terminal.ColorModeTrueColor)
 	if err := term.Init(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize terminal: %v\n", err)
@@ -110,7 +132,7 @@ func NewEditor(term terminal.Terminal) *Editor {
 		glyphs:      make(map[rune][GridRows]uint16),
 		original:    make(map[rune][GridRows]uint16),
 		current:     'A',
-		cursorX:     6,
+		cursorX:     gridCols / 2,
 		cursorY:     5,
 		previewText: "ABCDEFG 0123456789",
 	}
@@ -119,10 +141,10 @@ func NewEditor(term terminal.Terminal) *Editor {
 }
 
 func (e *Editor) loadAssets() {
-	for i := range len(asset.SplashFont) {
+	for i, glyph := range face.Glyphs {
 		r := rune(MinChar + i)
-		e.glyphs[r] = asset.SplashFont[i]
-		e.original[r] = asset.SplashFont[i]
+		e.glyphs[r] = glyph
+		e.original[r] = glyph
 	}
 }
 
@@ -222,7 +244,7 @@ func (e *Editor) handleRuneInput(r rune) {
 	case '0':
 		e.cursorX = 0
 	case '$':
-		e.cursorX = GridCols - 1
+		e.cursorX = gridCols - 1
 	case 'g':
 		e.cursorY = 0
 	case 'G':
@@ -442,8 +464,8 @@ func (e *Editor) moveCursor(dx, dy int) {
 	if e.cursorX < 0 {
 		e.cursorX = 0
 	}
-	if e.cursorX >= GridCols {
-		e.cursorX = GridCols - 1
+	if e.cursorX >= gridCols {
+		e.cursorX = gridCols - 1
 	}
 	if e.cursorY < 0 {
 		e.cursorY = 0
@@ -493,10 +515,10 @@ func (e *Editor) flipHorizontal() {
 	g := e.glyphs[e.current]
 	for r := range GridRows {
 		var newVal uint16
-		for c := range GridCols {
+		for c := range gridCols {
 			if (g[r] & (1 << (15 - c))) != 0 {
 				// Write to mirrored MSB-aligned position
-				newVal |= 1 << (15 - (GridCols - 1 - c))
+				newVal |= 1 << (15 - (gridCols - 1 - c))
 			}
 		}
 		g[r] = newVal
@@ -571,7 +593,7 @@ func (e *Editor) copyToClipboard() {
 
 func (e *Editor) exportAllGlyphs() {
 	var buf bytes.Buffer
-	buf.WriteString("var SplashFont = [95][12]uint16{\n")
+	fmt.Fprintf(&buf, "var %s = [95][12]uint16{\n", faceName)
 
 	for i := range 95 {
 		r := rune(MinChar + i)
@@ -699,7 +721,7 @@ func (e *Editor) drawHeader(cells []terminal.Cell) {
 	if e.modified {
 		modMark = "*"
 	}
-	header := fmt.Sprintf(" VIF FONT EDITOR │ '%c' (0x%02X)%s ", e.current, e.current, modMark)
+	header := fmt.Sprintf(" VIF FONT EDITOR │ %s │ '%c' (0x%02X)%s ", faceName, e.current, e.current, modMark)
 	startX := max(0, (e.width-len(header))/2)
 	e.drawText(cells, startX, 1, header, ColorText, ColorBg, terminal.AttrBold)
 }
@@ -708,13 +730,13 @@ func (e *Editor) drawGrid(cells []terminal.Cell) {
 	startX := 2
 	startY := 3
 
-	boxW := (GridCols * 2) + 4
+	boxW := (gridCols * 2) + 4
 	boxH := GridRows + 4
 
 	e.drawBox(cells, startX, startY, boxW, boxH, "Glyph")
 
 	// Column indicators
-	for col := range GridCols {
+	for col := range gridCols {
 		val := fmt.Sprintf("%X", col)
 		c := ColorDim
 		if col == e.cursorX {
@@ -732,7 +754,7 @@ func (e *Editor) drawGrid(cells []terminal.Cell) {
 		}
 		e.drawText(cells, startX+1, startY+2+r, rowNum, c, ColorBg, 0)
 
-		for c := range GridCols {
+		for c := range gridCols {
 			active := e.getBit(r, c)
 			isCursor := r == e.cursorY && c == e.cursorX
 
@@ -802,7 +824,7 @@ func (e *Editor) drawPreview(cells []terminal.Cell) {
 	// Calculate how many chars fit per row
 	pAreaX := startX + 2
 	pAreaW := boxW - 4
-	charsPerRow := max(1, pAreaW/(GridCols+1))
+	charsPerRow := max(1, pAreaW/(gridCols+1))
 
 	// Render preview glyphs in wrapped rows
 	charIdx := 0
@@ -818,7 +840,7 @@ func (e *Editor) drawPreview(cells []terminal.Cell) {
 
 			glyph, ok := e.glyphs[r]
 			if !ok {
-				renderX += GridCols + 1
+				renderX += gridCols + 1
 				continue
 			}
 
@@ -829,7 +851,7 @@ func (e *Editor) drawPreview(cells []terminal.Cell) {
 					break
 				}
 
-				for x := range GridCols {
+				for x := range gridCols {
 					if renderX+x >= pAreaX+pAreaW {
 						break
 					}
@@ -858,7 +880,7 @@ func (e *Editor) drawPreview(cells []terminal.Cell) {
 					e.setCell(cells, renderX+x, screenY, cell)
 				}
 			}
-			renderX += GridCols + 1
+			renderX += gridCols + 1
 		}
 	}
 }

@@ -335,22 +335,51 @@ type GoldJumpRequestPayload struct {
 // --- Splash ---
 
 // SplashTimerRequestPayload places a countdown beside its anchor, a composite header,
-// or without one beside its origin cell, one countdown to each
+// or without one beside its origin cell, one countdown to each. A large countdown
+// that finds no clear slot takes the small face.
 type SplashTimerRequestPayload struct {
-	AnchorEntity core.Entity   `toml:"anchor_entity"`
-	Color        color.RGB     `toml:"color"`
-	OriginX      int           `toml:"origin_x"`
-	OriginY      int           `toml:"origin_y"`
-	MarginLeft   int           `toml:"margin_left"`
-	MarginRight  int           `toml:"margin_right"`
-	MarginTop    int           `toml:"margin_top"`
-	MarginBottom int           `toml:"margin_bottom"`
-	Duration     time.Duration `toml:"duration"`
+	AnchorEntity core.Entity          `toml:"anchor_entity"`
+	Color        color.RGB            `toml:"color"`
+	Font         component.SplashFont `toml:"font"`
+	OriginX      int                  `toml:"origin_x"`
+	OriginY      int                  `toml:"origin_y"`
+	MarginLeft   int                  `toml:"margin_left"`
+	MarginRight  int                  `toml:"margin_right"`
+	MarginTop    int                  `toml:"margin_top"`
+	MarginBottom int                  `toml:"margin_bottom"`
+	Duration     time.Duration        `toml:"duration"`
 }
 
 // SplashTimerCancelPayload cancels countdown timer of an anchor
 type SplashTimerCancelPayload struct {
 	AnchorEntity core.Entity `toml:"anchor_entity"`
+}
+
+// SplashTextPayload writes text at its origin cell, the top left of its first glyph,
+// in place of the text standing there; empty text clears it. A zero colour is the
+// splash white, and a duration past zero ends the text on its own.
+type SplashTextPayload struct {
+	Text     string               `toml:"text"`
+	Font     component.SplashFont `toml:"font"`
+	Color    color.RGB            `toml:"color"`
+	OriginX  int                  `toml:"origin_x"`
+	OriginY  int                  `toml:"origin_y"`
+	Duration time.Duration        `toml:"duration"`
+}
+
+// --- Glyph ---
+
+// GlyphLinePayload lays a line of glyphs from a cell, left to right, as the corpus's
+// lines are laid: cropped at the map's right edge, dropped whole where it meets a
+// wall, rock or an entity. Scenery makes it part of the map, which nothing types or
+// deletes; type and level default to dark green.
+type GlyphLinePayload struct {
+	Text    string               `toml:"text"`
+	X       int                  `toml:"x"`
+	Y       int                  `toml:"y"`
+	Type    component.GlyphType  `toml:"type"`
+	Level   component.GlyphLevel `toml:"level"`
+	Scenery bool                 `toml:"scenery"`
 }
 
 // --- Energy ---

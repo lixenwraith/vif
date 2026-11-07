@@ -10,16 +10,29 @@ import (
 type SplashSlot uint8
 
 const (
-	SlotTimer     SplashSlot = iota // Gold timer, entity-anchored
+	SlotTimer     SplashSlot = iota // Countdown, anchored to an entity or an origin cell
 	SlotMagnifier                   // Typing preview, cursor-anchored
+	SlotText                        // Text a scenario writes at an origin cell
 )
 
-// SplashComponent holds state for splash effects (typing feedback, timers)
+// SplashFont names a splash face: the large one, or the small one at half its cells
+type SplashFont uint8
+
+const (
+	SplashLarge SplashFont = iota
+	SplashSmall
+)
+
+// SplashFontNames are what a document calls each SplashFont
+var SplashFontNames = [...]string{SplashLarge: "large", SplashSmall: "small"}
+
+// SplashComponent holds state for splash effects (countdowns, text, the magnifier)
 // Supports multiple concurrent entities
 type SplashComponent struct {
 	Content [parameter.SplashMaxLength]rune // Content buffer
 	Length  int                             // Active character count
 	Color   color.RGB                       // Render color
+	Font    SplashFont
 
 	// Positioning: Offset from AnchorEntity's position, or without one from AnchorX/Y
 	AnchorEntity                                     core.Entity
@@ -30,6 +43,7 @@ type SplashComponent struct {
 	OffsetY                                          int
 
 	// Visual purpose and uniqueness enforcement; a timer splash counts down on its
-	// lifetime timer, a magnifier persists while the cursor rests on a glyph
+	// lifetime timer, a magnifier persists while the cursor rests on a glyph, a text
+	// stands at its origin until replaced or cleared, or until its timer expires
 	Slot SplashSlot
 }

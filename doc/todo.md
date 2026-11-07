@@ -60,19 +60,6 @@ right edge on a row drawn two inside the top and bottom: two `ConfigToVar`,
 bumped by hand. A map-relative anchor on the request (an edge and an inset) or a
 draw advancing its own index would shorten it.
 
-#### Draw a countdown in a smaller splash font
-
-- Priority: P3
-- Affected files: `internal/asset/splash_font.go`, `internal/system/splash.go`
-  (`calculateTimerOffset`), `internal/render/renderer/splash.go`
-
-A `Telegraph` countdown draws a splash digit, a 12×12 box whose ink spans at most
-8×9, and is placed by that ink, taking the slot that overlaps the fewest blocked
-cells when none is clear. In 16 headless vanguard games (8 seeds at 120×40 and 200×60, 2,400 ticks
-each) 961 of 10,560 countdown ticks still ink a cell over rock, 3,538 of 272,730
-inked cells. A smaller font, chosen by the body's size or the room around it, would
-read in vanguard's narrowest cave (9 rows).
-
 ### Position, blocking and navigation
 
 The move into `pkg/position` is done ([Position](position-package.md)); what
@@ -283,48 +270,19 @@ map layer and point markers; root `[[expand]]` blocks and library copies.
 ### Add a vim tutorial scenario
 
 - Priority: P3
-- Affected files: `wad/scenario/<name>/` (new), `internal/asset/content/tutorial.toml`;
-  for the alternatives, `internal/input/machine.go`, `keyconfig.go`,
-  `internal/event/payload.go` (`KeyCapturePayload`), `internal/app/app.go`
-  (`loadKeymap`)
-- Guide: [Input and modes §1](input-and-modes.md#1-input-pipeline),
-  [§4](input-and-modes.md#4-default-bindings),
-  [§10](input-and-modes.md#10-keymap-override-files)
+- Affected files: `wad/scenario/vimtutor/` (new), `internal/input/machine.go`,
+  `internal/event/payload.go` (`KeyCapturePayload`)
+- Guide: [Vim tutorial](vim-tutorial.md), [Input and modes
+  §4](input-and-modes.md#4-default-bindings)
 
-A scenario for practising vim motions with combat mostly off: glyphs to reach, type
-and delete, no species, the gun taken (`EventWeaponRemoveRequest`) and the
-`particle` system off, so Enter, Space and auto-fire hit nothing, and a lesson on
-the status bar (`EventMetaStatusMessageRequest`) as each state is reached. Some
-Normal keys mean something else in vif (`a` auto-fire, `p` pause, `o` `O` `[` `]`
-column motions, `m` the middle column, `H` `J` `K` `L` half pages, `u` cursor undo,
-Enter, Space and Backspace fire), and vim's editing keys (`c`, `y`, `r`, `A`, `P`,
-`.`) are bound to nothing.
-
-- **Skip and tell (the plan).** Leave the keymap alone: with combat off the clashing
-  keys do no harm, and the scenario says up front that vif plays a subset of vim,
-  naming what it lacks and what reads differently as each lesson meets it. The
-  glyphs' text is the instance's corpus, resolved from its command line, not the
-  scenario's: until a scenario can carry one (a `content/` in its container, under
-  its digest), the lessons live in its status messages and the embedded tutorial.
-- **A notice on the press.** Capturing the clashing and dead keys
-  (`EventKeyCaptureRequest`) lets the FSM answer each press with a message, but a
-  capture holds in Insert and outranks pending grammar, so a captured `a` could no
-  longer be typed, found (`fa`) or name a register (`qa`). It needs a scope on the
-  payload: Normal and Visual only, and only with no sequence pending.
-- **Scenario key bindings (the alternative).** A sparse `[keymap]` in the scenario,
-  in the sections of `input/keymap.toml`, merged over the player's table for the
-  run (`p = "none"`, `a = "mode_insert"`). It entails parsing it with the scenario
-  (`input.LoadKeyConfig`) under the digest, so every participant has it; rebuilding
-  the table from the embedded, player and scenario layers at each scenario change
-  (`:n <scenario>`, a join), where `App.loadKeymap` builds it once at startup; an
-  atomic swap, as the parser reads its table off the world lock with no guard;
-  precedence over a player who moved the same action to another key, which favours
-  the scenario withholding actions rather than keys; and help following, as it
-  reads `GameContext.KeyTable`. A replay is untouched, since the journal records
-  what the keys did. It rebinds existing actions only: vim's append or put needs a
-  new action first.
-- Rewriting intents in the router for one scenario would be a second mechanism
-  beside the key table and the capture; not that.
+A scenario for practising vim motions with combat off, a lesson at a time: a
+heading in the small splash face, scenery lines that explain, a typeable practice
+line the cursor is moved onto, and a status prompt. The faces, the splash text and
+the laid glyph lines are in; the working doc lists what is still to lay (a scope on
+the key capture, the lessons) and the decisions it waits on (which vim keys to add
+in code, how a lesson answers a key it cannot teach). Rewriting intents in the
+router for one scenario would be a second mechanism beside the key table and the
+capture; not that.
 
 ## Browser sessions
 
