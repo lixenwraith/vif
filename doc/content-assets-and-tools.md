@@ -224,24 +224,25 @@ draw the cell grid themselves.
 
 ```mermaid
 flowchart TD
-    Raster["PNG, JPEG, or GIF"] --> Asc["pkg/ascimage converter"]
-    Asc --> Dual["dual-mode .vifimg"]
+    Raster["PNG, JPEG, or GIF"] --> Asc["ascimage convert"]
+    Asc --> Dual[".aimg, or .aimgz gzipped"]
     Request["WallPatternSpawnRequest"] --> Wall["WallSystem opens it through FileService"]
     Dual --> Wall
     Wall --> Pattern["internal/pattern PatternResult"]
     Pattern --> ECS["one composite wall: wall entities and normal renderer"]
 ```
 
-`pkg/ascimage` converts raster images into terminal cells using either:
+Ascimage ([its README](../pkg/ascimage/README.md)), a module of its own nested in
+`pkg/ascimage`, converts raster images into terminal cells using either:
 
 - quadrant mode: a Unicode quadrant represents a 2-by-2 pixel group;
 - background mode: one terminal background cell per sampled pixel.
 
-Dual `.vifimg` files store truecolor and xterm-256 foreground/background data,
-transparency, rune, dimensions, render mode, and authored anchor-offset metadata.
-The current version compresses the fixed-width cell stream with the
-standard-library deflate codec; the reader also accepts legacy uncompressed
-files. The pattern loader selects the active color representation, preserves
+An `.aimg` stores truecolor and xterm-256 foreground/background data,
+transparency, rune, dimensions, render mode, and authored anchor-offset metadata,
+uncompressed; an `.aimgz` is the same file gzipped, and the reader tells the two
+apart by their bytes, whatever their names ([the format](../pkg/ascimage/doc/format.md)).
+The pattern loader selects the active color representation, preserves
 palette attributes and anchor offsets, skips transparent cells, and creates
 `PatternCell` offsets.
 
@@ -252,17 +253,17 @@ wall renderer rather than drawing directly to the terminal.
 
 A pattern can be blocking (`WallBlockAll` or directional mask) or a nonblocking
 visual backdrop (`WallBlockNone`). The spawn event supplies the map coordinate.
-The `.vifimg` anchor offset is available in `PatternResult` as authored image
+The `.aimg` anchor offset is available in `PatternResult` as authored image
 metadata, but `WallSystem` does not consume it. A file that fails to open or decode
 is reported on the status line and spawns nothing.
 
-The extension is `.vifimg`, which is what `cmd/ascimage` detects and what the
-shipped `wad/image/test.vifimg` sample uses. `WallPatternSpawnRequest.path` is a
+The extensions are `.aimg` and `.aimgz`, and the shipped sample is
+`wad/image/test.aimg`. `WallPatternSpawnRequest.path` is a
 logical name below `image/`, resolved through `-config-dir`, the user
 configuration root, the checkout's `wad/` and the system roots in that order, and
 only a regular file there opens: never a host path, absolute or relative to the
 working directory, since a scenario is served to joiners
-([Packaging §1](packaging.md#1-shared-guidelines)). Thus `path="test.vifimg"`
+([Packaging §1](packaging.md#1-shared-guidelines)). Thus `path="test.aimg"`
 works both with `-config-dir wad` and from an installed tree, independent of the
 process working directory.
 Runtime image opens cross the generic `FileService` capability contributed to
@@ -270,23 +271,25 @@ the world, so `WallSystem` neither discovers roots nor opens host paths itself.
 
 ## 9. Ascimage tool
 
-`cmd/ascimage` converts and previews assets:
+Ascimage converts, prints and previews assets; [its README](../pkg/ascimage/README.md)
+is the full reference:
 
 ```bash
-# Create one asset containing both color modes
-ascimage -dual backdrop.vifimg -w 140 -m quadrant source.png
+# One asset holding both color modes, plain or gzipped
+ascimage convert -w 140 -m quadrant source.png backdrop.aimg
+ascimage convert -w 140 source.png backdrop.aimgz
 
-# Export one color mode as ANSI
-ascimage -o backdrop.ans -c true backdrop.vifimg
+# One color mode as ANSI
+ascimage convert -c true backdrop.aimg backdrop.ans
 
-# Interactive viewer
-ascimage backdrop.vifimg
+# Browse the shipped images, or view one
+ascimage wad/image
+ascimage wad/image/test.aimg
 ```
 
-The viewer supports fit/actual size, quadrant/background mode, truecolor/256
-toggle, zoom, pan, and status display. A cell whose sampled pixels are all
-transparent is stored transparent in dual output, so it creates no wall entity. See
-`cmd/ascimage/README.md` for its complete flag/control reference.
+A cell whose sampled pixels are all transparent is stored transparent, so it
+creates no wall entity. `:emit WallPatternSpawnRequest {path="test.aimg",x=0,y=0,block_mask="none"}`
+drops the shipped sample into a running game as a backdrop.
 
 ## 10. Other repository tools
 
@@ -331,5 +334,5 @@ narrower validation or experimental dependencies.
 | Embedded assets | `internal/asset/asset.go`, its `scenario`, `content`, `input`, `bot` and `font` directories, `font.go`, `vif.toml`, `version.txt`, `splash_font.go` |
 | Pattern conversion | `internal/pattern/pattern.go` |
 | Image open and spawn | `internal/system/wall.go` through `internal/service/adapter_file.go` |
-| Image codec | `pkg/ascimage` |
-| Image tool and viewer | `cmd/ascimage` |
+| Image codec | `lixenwraith/ascimage`, nested in `pkg/ascimage` |
+| Image tool and viewer | `pkg/ascimage/cmd/ascimage` |

@@ -38,7 +38,7 @@ alternative and is tens of thousands of lines: out of scope.
 
 | Blocker | Where it is today | What closes it | Size |
 |---|---|---|---|
-| Cells, not pixels | `render.Surface` and every host draw a cell grid ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)) | A half-block frame converter in `pkg/ascimage` (§3.2); a pixel path for graphical hosts later | ~150; pixel path ~400 |
+| Cells, not pixels | `render.Surface` and every host draw a cell grid ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)) | A half-block frame converter in `lixenwraith/ascimage` (§3.2); a pixel path for graphical hosts later | ~150; pixel path ~400 |
 | Sound effects | The mixer is synthesized and 44.1 kHz stereo | Resample each 8-bit lump to float once, at `CacheSound`, and play it through `AudioEngine.PlayBuffer`; centered and unstoppable, since that call has no pan and no voice handle | ~100 |
 | Music | Doom's is MUS played on OPL2 FM from the `GENMIDI` bank | An OPL2 emulator in Go, or MUS channels mapped onto the sequencer's voices; deferred, as gore defers it | ~1,000–1,500 |
 | Game data | No IWAD can ship in `wad/` | The player supplies one (§3.3) | ~80 |
@@ -71,11 +71,11 @@ vif's input hook holds a captured key on the same releases
 `▀` with the top pixel as foreground and the bottom as background gives two pixels
 a cell vertically and one horizontally, square at the reference aspect of 0.5. The
 whole 320x200 frame wants a 320x100 grid; a 200x60 terminal shows it area-averaged
-at 200x120. Quadrant cells, the other `pkg/ascimage` mode, double the horizontal
+at 200x120. Quadrant cells, the other ascimage mode, double the horizontal
 detail but hold two colors a cell, which fringes on Doom's textures. The atlas has
 `▀`, `▄` and the quadrants, so the window, the page and Android draw the same cells
-unchanged. `ascimage.ConvertImage` allocates its result each call; a frame loop
-needs a variant that fills a caller's `[]terminal.Cell`.
+unchanged. `ascimage.ConvertRect` fills a caller's `[]terminal.Cell`, any window
+of the grid, so a frame loop allocates nothing once its buffer has grown.
 
 A truecolor cell costs about 40 bytes, so a fully changed 200x60 frame at 35 fps is
 about 17 MB/s. A local emulator takes that, an SSH link does not. The terminal
@@ -118,7 +118,8 @@ useful without Doom.
 1. Terminal module: key actions from the key event protocol and the text consoles,
    restored on exit and suspend. Built (terminal v0.5.0, the consoles in v0.5.1).
 2. Hosts: window `KeyRelease`, page `keyup`, Android key up. Built.
-3. `pkg/ascimage`: a half-block converter into a caller's cells. ~150 lines.
+3. `lixenwraith/ascimage`: a half-block mode beside quadrant and background,
+   into a caller's cells as `ConvertRect` fills them. ~150 lines.
 4. `vif-doom` (GPL-2.0): a gore frontend per host (frame to cells to `Flush`, host
    events to Doom keys, sound effects to `PlayBuffer`), IWAD resolution, the hold
    fallback, and a keymap with vi keys beside Doom's. ~800–1,200 lines.

@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/lixenwraith/ascimage v0.0.0 // indirect
 	github.com/lixenwraith/audio v0.4.0 // indirect
 	github.com/lixenwraith/color v0.1.5 // indirect
 	github.com/lixenwraith/genetic v0.1.0 // indirect
@@ -27,3 +28,5 @@ tool (
 	golang.org/x/mobile/cmd/gobind
 	golang.org/x/mobile/cmd/gomobile
 )
+
+replace github.com/lixenwraith/ascimage => ../pkg/ascimage

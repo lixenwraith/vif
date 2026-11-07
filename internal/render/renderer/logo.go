@@ -3,11 +3,11 @@ package renderer
 import (
 	"math"
 
+	"github.com/lixenwraith/ascimage"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
-	"github.com/lixenwraith/vif/pkg/ascimage"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
