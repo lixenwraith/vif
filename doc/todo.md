@@ -1223,22 +1223,16 @@ the run in the state directory, as a shell's does.
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
-### Draw in 256 colors where true color buys nothing
+### Coarse backgrounds for the glows bot play does not show
 
-- Priority: P2
-- Affected files: `internal/render/renderer/*`, `internal/render/buffer.go`
-  (`finalizeTrueColorOcclusion`), `internal/visual`
+- Priority: P3
+- Affected files: `internal/render/renderer/*`
 
-A true color frame's bytes are what a terminal parses, and the browser and a
-remote session carry: bot play at 240x66 writes 9.4 KB a frame, 72% of it SGR
-that changes the background alone (423 a frame), the glow, trail and occlusion
-blends that step a background a few levels a cell; foregrounds are 88-93% exact
-palette colors already. Find the renderers whose gradients read the same quantized
-to the 256 palette or to fewer steps (a run of cells of one background then costs
-one SGR), and draw those as palette cells (`AttrBg256`), which lixenwraith/terminal
-writes as `48;5;N`. The 256 tier draws only indices below 16, which terminal
-v0.6.5 writes as `30-37`/`40-47` codes. Small color changes are acceptable;
-measure bytes a frame before and after with `sandbox/termbench` on a capture.
+Eight renderers let a truecolor frame round their backgrounds (`SetCoarseBg`,
+[rendering §6](rendering.md#6-finalization-and-color-modes)), the ones bot play's
+bytes came from. Lightning, rays, the kraken, pylons, towers, snakes and the
+teleport and charge lines blend gradients too: capture scenes that show them,
+measure with `sandbox/termbench`, and opt in those that save bytes.
 
 ### Move the browser and Android frame pipeline into terminal
 

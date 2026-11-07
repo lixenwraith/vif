@@ -15,7 +15,7 @@ flowchart TD
     Clip --> Lock["lock World"]
     Lock --> Layers["render stable priority layers, clipped per layer"]
     Layers --> Unlock["unlock World"]
-    Unlock --> Finalize["background, occlusion, void, and console finalize"]
+    Unlock --> Finalize["background, occlusion, coarse, void, and console finalize"]
     Finalize --> Flush["Surface Flush"]
 ```
 
@@ -186,12 +186,14 @@ The buffer allocates parallel arrays sized to `width * height`:
 |---|---|
 | terminal cells | Rune, foreground, background, attributes. |
 | `touched` | Whether a background channel has been explicitly drawn. |
+| `coarse` | Whether the background was last written by a layer that let it round (§6). |
 | masks | Semantic layer bits accumulated for post-processing. |
 | current write mask | Mask applied by subsequent drawing calls. |
+| coarse switch | `SetCoarseBg`; the orchestrator turns it off before each layer. |
 | clip rectangle | Writable area; set per layer by the orchestrator, reopened by `Clear`. |
 | background overlay | Deferred color/intensity for otherwise untouched cells. |
 | void region | Frame and playfield rectangles plus the color the void is filled with. |
-| finalizer function | Selected once from color mode and occlusion configuration. |
+| finalizer function | Selected once from color mode. |
 
 Resize reuses capacity when possible and synchronizes the terminal. Clear
 zeroes cells and metadata, reopens the clip to the whole buffer, and keeps
@@ -280,11 +282,23 @@ The buffer chooses one of two finalizers at construction:
 
 | Mode | Finalization |
 |---|---|
-| Truecolor with occlusion enabled | Fill untouched backgrounds, then dim touched backgrounds under runes whose masks match the occlusion set. |
-| 256-color or occlusion disabled | Fill untouched backgrounds only. |
+| Truecolor | Fill untouched backgrounds, dim touched backgrounds under runes whose masks match the occlusion set (while occlusion is enabled), then round coarse backgrounds. |
+| 256-color | Fill untouched backgrounds only. |
 
 Both use the normal background unless a renderer set a deferred background
 overlay, in which case its precomputed color/intensity fills untouched cells.
+
+Most of a truecolor frame's bytes are SGR that change a background alone, for the
+glows that step a background a few levels a cell. The explosion, ember, storm,
+materialize, tracer, shield, pulse and orb renderers call `SetCoarseBg(true)`,
+and the finalizer rounds each background they were last to write: to the xterm
+color (16-255) within `visual.CoarseBgPaletteDE` of it in CIELAB, sent as
+`48;5;N`, else to the middle of its level of `visual.CoarseBgStep` a channel. A
+run of cells then shares one SGR, and the theme background, glyphs, walls and UI
+stay exact. Bot play at 240x66 under tmux (24 frames a second), `sandbox/termbench`
+on a capture of each build: 27.8 KB a frame before, 16.9 KB after. The nearest xterm
+color alone would save more, but most dim glows have only a gray near them, so a
+storm, an ember or a pulse glow turned gray and banded in its dark.
 
 A third pass then repaints the void region: the part of the frame outside the
 playfield (the centering margin, and the gutter cells beside it) is filled with
@@ -602,7 +616,8 @@ game-specific asset interpretation and layering.
    palette attributes. A 256 path names console entries (`visual.Con*`), draws
    what the console cannot blend as solid cells past
    `visual.Effect256Threshold`, and keeps to glyphs every console font has
-   (`TestConsoleGlyphsAreInEveryConsoleFont`).
+   (`TestConsoleGlyphsAreInEveryConsoleFont`). A truecolor glow that steps its
+   background a few levels a cell calls `SetCoarseBg(true)` (§6).
 6. Verify behavior under camera cropping, centered small maps, terminal resize,
    pause, grayout/dim/strobe, and overlapping fields.
 7. Check that the surface flush remains outside the world lock and that no
@@ -615,7 +630,7 @@ game-specific asset interpretation and layering.
 | Orchestration and the frame sink (`Surface`) | `internal/render/orchestrator.go`, `interface.go` |
 | Context/transforms | `internal/render/context.go` |
 | Replay presentation and pan | `internal/app/play.go` |
-| Buffer/finalization | `internal/render/buffer.go` |
+| Buffer/finalization | `internal/render/buffer.go`; coarse backgrounds in `color.go` |
 | Text-console palette and quantizer | `internal/render/console.go` |
 | Color mode selection | `internal/app/presentation_terminal.go` |
 | Blending | `internal/render/blender.go`, `color.go` |
