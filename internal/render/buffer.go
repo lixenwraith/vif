@@ -28,8 +28,10 @@ type RenderBuffer struct {
 	colorMode    terminal.ColorMode
 	cells        []terminal.Cell
 	touched      []bool
+	coarse       []bool // the cell's background was last written while coarseBg held
 	masks        []uint8
 	currentMask  uint8
+	coarseBg     bool
 	width        int
 	height       int
 	clip         Rect
@@ -48,14 +50,16 @@ func NewRenderBuffer(colorMode terminal.ColorMode, width, height int) *RenderBuf
 		colorMode:   colorMode,
 		cells:       make([]terminal.Cell, size),
 		touched:     make([]bool, size),
+		coarse:      make([]bool, size),
 		masks:       make([]uint8, size),
 		currentMask: visual.MaskNone,
 		width:       width,
 		height:      height,
 		clip:        RectWH(0, 0, width, height),
 	}
-	if colorMode == terminal.ColorModeTrueColor && visual.OcclusionDimEnabled {
-		b.finalizeFunc = finalizeTrueColorOcclusion
+	if colorMode == terminal.ColorModeTrueColor {
+		b.finalizeFunc = finalizeTrueColor
+		coarseIndex() // built here, so the first glow costs no frame
 	} else {
 		b.finalizeFunc = finalizeSimple
 	}
@@ -91,10 +95,12 @@ func (b *RenderBuffer) Resize(width, height int) {
 	if cap(b.cells) < size {
 		b.cells = make([]terminal.Cell, size)
 		b.touched = make([]bool, size)
+		b.coarse = make([]bool, size)
 		b.masks = make([]uint8, size)
 	} else {
 		b.cells = b.cells[:size]
 		b.touched = b.touched[:size]
+		b.coarse = b.coarse[:size]
 		b.masks = b.masks[:size]
 	}
 	b.width = width
@@ -116,8 +122,10 @@ func (b *RenderBuffer) Clear() {
 
 	clear(b.cells)
 	clear(b.touched)
+	clear(b.coarse)
 	clear(b.masks)
 	b.currentMask = visual.MaskNone
+	b.coarseBg = false
 	b.bgOverlay = backgroundOverlay{}
 }
 
@@ -186,6 +194,11 @@ func (b *RenderBuffer) BackgroundAt(x, y int, fallback color.RGB) color.RGB {
 func (b *RenderBuffer) SetWriteMask(mask uint8) {
 	b.currentMask = mask
 }
+
+// SetCoarseBg lets the backgrounds written next leave a true color frame rounded
+// (coarsen): a glow that steps a few levels a cell then goes out in runs of one
+// SGR. The orchestrator turns it off before each renderer.
+func (b *RenderBuffer) SetCoarseBg(on bool) { b.coarseBg = on }
 
 // ResetMask replaces a cell's mask with the current write mask, discarding
 // tags left by lower layers so post-processing treats the cell as this layer only
@@ -263,6 +276,7 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg color.RGB, mode Blend
 			dst.Bg = color.Overlay(dst.Bg, bg, alpha)
 		}
 		b.touched[idx] = true
+		b.coarse[idx] = b.coarseBg
 	}
 
 	if flags&flagFg != 0 {
@@ -310,6 +324,7 @@ func (b *RenderBuffer) SetBgOnly(x, y int, bg color.RGB) {
 	b.cells[idx].Bg = bg
 	b.cells[idx].Attrs &^= terminal.AttrBg256
 	b.touched[idx] = true
+	b.coarse[idx] = b.coarseBg
 	b.masks[idx] |= b.currentMask
 }
 
@@ -329,6 +344,7 @@ func (b *RenderBuffer) SetBgScreen(x, y int, bg, base color.RGB, alpha float64) 
 
 	dst.Bg = color.Screen(dst.Bg, bg, alpha)
 	b.touched[idx] = true
+	b.coarse[idx] = b.coarseBg
 	b.masks[idx] |= b.currentMask
 }
 
@@ -346,6 +362,7 @@ func (b *RenderBuffer) SetBgAlphaOwned(x, y int, bg color.RGB, alpha float64) {
 	dst.Attrs &= terminal.AttrFg256
 	dst.Bg = color.Blend(dst.Bg, bg, alpha)
 	b.touched[idx] = true
+	b.coarse[idx] = b.coarseBg
 	b.masks[idx] = b.currentMask
 }
 
@@ -362,6 +379,7 @@ func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg color.RGB) {
 	dst.Bg = bg
 	dst.Attrs = terminal.AttrNone
 	b.touched[idx] = true
+	b.coarse[idx] = b.coarseBg
 	// An opaque write owns the cell: lower layers' tags must not reach post-processing
 	b.masks[idx] = b.currentMask
 }
@@ -377,6 +395,7 @@ func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {
 	// Preserve fg-related attrs, add bg256
 	b.cells[idx].Attrs = (b.cells[idx].Attrs & terminal.AttrFg256) | terminal.AttrBg256
 	b.touched[idx] = true
+	b.coarse[idx] = b.coarseBg
 	b.masks[idx] |= b.currentMask
 }
 
@@ -514,16 +533,24 @@ func (b *RenderBuffer) fillVoidBand(x0, x1, y0, y1 int) {
 	}
 }
 
-// finalizeTrueColorOcclusion resolves untouched backgrounds and dims occluded ones
-func finalizeTrueColorOcclusion(b *RenderBuffer) {
+// finalizeTrueColor resolves untouched backgrounds, dims occluded ones, and rounds
+// those a renderer let go coarse
+func finalizeTrueColor(b *RenderBuffer) {
 	untouchedBg := b.untouchedBg()
 	for i := range b.cells {
 		cell := &b.cells[i]
 		switch {
 		case !b.touched[i]:
 			cell.Bg = untouchedBg
-		case cell.Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0:
-			cell.Bg = color.Scale(cell.Bg, visual.OcclusionDimFactor)
+		case cell.Attrs&terminal.AttrBg256 != 0:
+			// An index is no RGB to dim or round
+		default:
+			if visual.OcclusionDimEnabled && cell.Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0 {
+				cell.Bg = color.Scale(cell.Bg, visual.OcclusionDimFactor)
+			}
+			if b.coarse[i] {
+				coarsen(cell)
+			}
 		}
 		if cell.Rune == 0 {
 			cell.Rune = ' '
@@ -531,7 +558,7 @@ func finalizeTrueColorOcclusion(b *RenderBuffer) {
 	}
 }
 
-// finalizeSimple resolves untouched backgrounds only (256-color or no occlusion)
+// finalizeSimple resolves untouched backgrounds only (256-color)
 func finalizeSimple(b *RenderBuffer) {
 	untouchedBg := b.untouchedBg()
 	for i := range b.cells {

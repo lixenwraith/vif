@@ -111,6 +111,7 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Render both types
 	buf.SetWriteMask(visual.MaskTransient)
+	buf.SetCoarseBg(true)
 
 	if r.dustMaxX >= r.dustMinX && r.dustMaxY >= r.dustMinY {
 		r.renderType(ctx, buf, r.accBufferDust, event.ExplosionTypeDust,

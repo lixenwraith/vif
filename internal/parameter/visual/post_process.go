@@ -30,3 +30,11 @@ const (
 	OcclusionDimFactor  = 0.8 // Bg intensity multiplier under foreground chars
 	OcclusionDimMask    = MaskTransient | MaskGlyph
 )
+
+// A coarse effect background (RenderBuffer.SetCoarseBg) in a true color frame takes
+// the xterm color within CoarseBgPaletteDE of it (CIELAB), else its level of
+// CoarseBgStep a channel: a glow then goes out in runs of one short SGR
+const (
+	CoarseBgPaletteDE = 8
+	CoarseBgStep      = 16
+)

@@ -458,6 +458,12 @@ that proves wrong or that a document now states, and link the document instead.
 - Vanguard's fourth-rank raiders fly 4.5 cells a second, so a raider that moved two
   cells in half a second is not stuck; read a stuck raider as one out of sight a full
   second that moved less than a cell in it.
+- `sandbox/termbench encode -capture` reads frames as they leave
+  `RenderBuffer.FlushToTerminal` (a little-endian uint16 width and height, then the
+  cells as they lie in memory); nothing in the tree dumps them, so a scratch hook
+  there writes the file. Under tmux the frame rate is floored at 24 a second
+  (rendering §1), so a frame captured there carries more change than one at 60:
+  compare bytes a frame only between captures of one shape.
 - tmux can throw frames away while vif sees nothing: it reads a pane at once, so
   writes return and held frames stay near zero. Attach a client (Alacritty under
   Xvfb, or a Python pty reader sized with `TIOCSWINSZ`) and poll `tmux list-clients
