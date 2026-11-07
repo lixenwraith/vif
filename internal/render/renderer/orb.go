@@ -58,7 +58,6 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
-	buf.SetCoarseBg(true)
 
 	orbs.Each(func(entity core.Entity, orbComp *component.OrbComponent) bool {
 		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)

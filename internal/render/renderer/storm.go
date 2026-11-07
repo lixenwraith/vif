@@ -149,7 +149,6 @@ func (r *StormRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
-	buf.SetCoarseBg(true)
 
 	storms.Each(func(_ core.Entity, stormComp *component.StormComponent) bool {
 		r.renderStorm(ctx, buf, stormComp)

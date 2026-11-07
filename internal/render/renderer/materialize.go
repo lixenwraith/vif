@@ -50,7 +50,6 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
-	buf.SetCoarseBg(true)
 
 	// Beams run from the edge of the map, not the edge of the terminal: on a
 	// viewport wider than the map the two differ by the centring margin, and a

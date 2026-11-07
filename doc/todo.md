@@ -1223,16 +1223,16 @@ the run in the state directory, as a shell's does.
 
 The framebuffer console shows a bright background under SGR 5, which vgacon blinks instead; telling them apart would give Linux FreeBSD's sixteen backgrounds.
 
-### Coarse backgrounds for the glows bot play does not show
+### Coarse backgrounds for other fast effects
 
 - Priority: P3
 - Affected files: `internal/render/renderer/*`
 
-Eight renderers let a truecolor frame round their backgrounds (`SetCoarseBg`,
-[rendering §6](rendering.md#6-finalization-and-color-modes)), the ones bot play's
-bytes came from. Lightning, rays, the kraken, pylons, towers, snakes and the
-teleport and charge lines blend gradients too: capture scenes that show them,
-measure with `sandbox/termbench`, and opt in those that save bytes.
+The explosion and ember let a truecolor frame round their backgrounds
+(`SetCoarseBg`, [rendering §6](rendering.md#6-finalization-and-color-modes));
+slow fields band and stay exact. Other fast effects may follow once they are seen
+in motion: in bot play materialize would save 1.8-2.1 KB a frame, tracer 0.6-0.7,
+orb and ray 0.1-0.2. Lightning, missiles and bullets did not show in the captures.
 
 ### Move the browser and Android frame pipeline into terminal
 

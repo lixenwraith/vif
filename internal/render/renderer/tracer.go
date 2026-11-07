@@ -54,7 +54,6 @@ func (r *TracerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
-	buf.SetCoarseBg(true)
 
 	tracers.Each(func(_ core.Entity, tracer *component.TracerComponent) bool {
 		if tracer.Palette >= component.PaletteCount {

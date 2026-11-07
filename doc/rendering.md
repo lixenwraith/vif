@@ -289,16 +289,16 @@ Both use the normal background unless a renderer set a deferred background
 overlay, in which case its precomputed color/intensity fills untouched cells.
 
 Most of a truecolor frame's bytes are SGR that change a background alone, for the
-glows that step a background a few levels a cell. The explosion, ember, storm,
-materialize, tracer, shield, pulse and orb renderers call `SetCoarseBg(true)`,
-and the finalizer rounds each background they were last to write: to the xterm
-color (16-255) within `visual.CoarseBgPaletteDE` of it in CIELAB, sent as
-`48;5;N`, else to the middle of its level of `visual.CoarseBgStep` a channel. A
-run of cells then shares one SGR, and the theme background, glyphs, walls and UI
-stay exact. Bot play at 240x66 under tmux (24 frames a second), `sandbox/termbench`
-on a capture of each build: 27.8 KB a frame before, 16.9 KB after. The nearest xterm
-color alone would save more, but most dim glows have only a gray near them, so a
-storm, an ember or a pulse glow turned gray and banded in its dark.
+glows that step a background a few levels a cell. The explosion and ember
+renderers, fast enough that the eye does not hold their steps, call
+`SetCoarseBg(true)`, and the finalizer rounds each background they were last to
+write: to the xterm color (16-255) within `visual.CoarseBgPaletteDE` of it in
+CIELAB, sent as `48;5;N`, else to the middle of its level of `visual.CoarseBgStep`
+a channel. A run of cells then shares one SGR, and every other background stays
+exact. Bot play at 240x66 under tmux (24 frames a second), `sandbox/termbench` on a
+capture of each build: 27.8 KB a frame before, 20.6 KB after. Slow fields (storm,
+pulse, shield) showed the rounding as bands and stay exact, as does a plain
+nearest xterm color, which has only a gray near most dim glows.
 
 A third pass then repaints the void region: the part of the frame outside the
 playfield (the centering margin, and the gutter cells beside it) is filled with
