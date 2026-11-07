@@ -515,7 +515,7 @@ const (
 	EventWallBatchSpawnRequest
 	// EventWallCompositeSpawnRequest (WallCompositeSpawnRequestPayload) [shared] requests creation of a multi-cell wall structure
 	EventWallCompositeSpawnRequest
-	// EventWallPatternSpawnRequest (WallPatternSpawnRequestPayload) [shared] requests creation of wall structure from .vifimg pattern file
+	// EventWallPatternSpawnRequest (WallPatternSpawnRequestPayload) [shared] requests creation of wall structure from .aimg pattern file
 	EventWallPatternSpawnRequest
 	// EventMazeSpawnRequest (MazeSpawnRequestPayload) [shared] signals maze generation and wall spawning
 	EventMazeSpawnRequest

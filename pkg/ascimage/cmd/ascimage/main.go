@@ -8,6 +8,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lixenwraith/ascimage"
@@ -34,7 +35,7 @@ func main() {
 	flag.StringVar(&modeStr, "m", "quadrant", "Render mode: 'bg' or 'quadrant'")
 	flag.StringVar(&colorStr, "c", "auto", "Color depth: 'auto', 'true', or '256'")
 	flag.IntVar(&width, "w", 0, "Output width (file mode only, 0 = 80)")
-	flag.StringVar(&dualOutput, "dual", "", "Output dual-mode .vifimg file")
+	flag.StringVar(&dualOutput, "dual", "", "Output a dual-mode .aimg file")
 	flag.StringVar(&output, "o", "", "Output ANSI to file ('-' for stdout), omit for interactive")
 	flag.BoolVar(&fitMode, "fit", true, "Start in fit-to-screen mode (interactive only)")
 	flag.BoolVar(&noStatus, "no-status", false, "Hide status bar (interactive only)")
@@ -52,22 +53,22 @@ func main() {
 	inputPath := flag.Arg(0)
 	colorMode := parseColorMode(colorStr)
 
-	if isVifimg(inputPath) {
-		runVifimgInput(inputPath, colorMode, output, noStatus)
+	if isAIMG(inputPath) {
+		runAIMGInput(inputPath, colorMode, output, noStatus)
 	} else {
 		runImageInput(inputPath, modeStr, colorMode, width, output, dualOutput,
 			fitMode, noStatus, zoomLevel, anchorX, anchorY, aspect)
 	}
 }
 
-func isVifimg(path string) bool {
-	return strings.HasSuffix(strings.ToLower(path), ".vifimg")
+func isAIMG(path string) bool {
+	return strings.EqualFold(filepath.Ext(path), ascimage.Extension)
 }
 
-func runVifimgInput(path string, colorMode terminal.ColorMode, output string, noStatus bool) {
+func runAIMGInput(path string, colorMode terminal.ColorMode, output string, noStatus bool) {
 	dual, err := ascimage.LoadDualMode(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading vifimg: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error loading aimg: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -134,17 +135,17 @@ func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, o
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: ascimage [options] <image|file.vifimg>")
-	fmt.Fprintln(os.Stderr, "\nSupported formats: PNG, JPEG, GIF (input), .vifimg (view/convert)")
+	fmt.Fprintln(os.Stderr, "Usage: ascimage [options] <image|file.aimg>")
+	fmt.Fprintln(os.Stderr, "\nSupported formats: PNG, JPEG, GIF (input), .aimg (view/convert)")
 	fmt.Fprintln(os.Stderr, "\nOptions:")
 	flag.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "\nModes:")
 	fmt.Fprintln(os.Stderr, "  Image input:")
-	fmt.Fprintln(os.Stderr, "    Dual-mode (-dual): write .vifimg for vif pattern system")
+	fmt.Fprintln(os.Stderr, "    Dual-mode (-dual): write .aimg for terminal games and tools")
 	fmt.Fprintln(os.Stderr, "    File output (-o):  write ANSI sequences to file")
 	fmt.Fprintln(os.Stderr, "    Interactive:        view image with zoom/pan controls (default)")
-	fmt.Fprintln(os.Stderr, "  .vifimg input:")
-	fmt.Fprintln(os.Stderr, "    File output (-o):  convert .vifimg to ANSI sequences")
+	fmt.Fprintln(os.Stderr, "  .aimg input:")
+	fmt.Fprintln(os.Stderr, "    File output (-o):  convert .aimg to ANSI sequences")
 	fmt.Fprintln(os.Stderr, "    Interactive:        view with color mode toggle (default)")
 	fmt.Fprintln(os.Stderr, "\nInteractive controls:")
 	fmt.Fprintln(os.Stderr, "  q, Esc, Ctrl+C    Quit")

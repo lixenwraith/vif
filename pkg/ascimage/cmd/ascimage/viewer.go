@@ -57,7 +57,7 @@ func NewViewer(img image.Image, aspect float64) *Viewer {
 	}
 }
 
-// NewViewerFromDual creates a viewer for a pre-converted .vifimg file
+// NewViewerFromDual creates a viewer for a pre-converted .aimg file
 func NewViewerFromDual(dual *ascimage.DualModeImage) *Viewer {
 	return &Viewer{
 		dualImg:    dual,
@@ -327,7 +327,7 @@ func (v *Viewer) renderStatus(buf tui.Region, termW, termH int) {
 	var status, help string
 
 	if v.dualImg != nil {
-		status = fmt.Sprintf(" %dx%d vifimg | %s | %s ",
+		status = fmt.Sprintf(" %dx%d aimg | %s | %s ",
 			v.srcWidth, v.srcHeight, v.RenderMode.String(), colorStr)
 		if v.dualImg.AnchorX != 0 || v.dualImg.AnchorY != 0 {
 			status += fmt.Sprintf("| anchor(%d,%d) ", v.dualImg.AnchorX, v.dualImg.AnchorY)
