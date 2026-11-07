@@ -1,7 +1,10 @@
 package render
 
 import (
+	"sync"
+
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 )
 
@@ -15,6 +18,40 @@ func init() {
 		progress := float64(i) / 255.0
 		HeatGradientLUT[i] = calculateHeatColor(progress)
 	}
+}
+
+// coarseIndex holds, by lutKey, the xterm index (16-255) that looks within
+// visual.CoarseBgPaletteDE of a color, or 0 where none does; the first truecolor
+// buffer builds it, in about 15 ms
+var coarseIndex = sync.OnceValue(func() *[consoleLUTSize]uint8 {
+	var xterm [240][3]float64
+	for i := range xterm {
+		xterm[i] = labOf(visual.Palette256RGB(uint8(16 + i)))
+	}
+	t := new([consoleLUTSize]uint8)
+	for key := range t {
+		l, bestD := labOf(lutColor(key)), float64(visual.CoarseBgPaletteDE)
+		for i := range xterm {
+			if d := labDistance(l, xterm[i]); d < bestD {
+				t[key], bestD = uint8(16+i), d
+			}
+		}
+	}
+	return t
+})
+
+// coarsen rounds a cell's RGB background to the xterm color that looks like it, which
+// goes out as 48;5;N, or else to the middle of its level of visual.CoarseBgStep
+func coarsen(cell *terminal.Cell) {
+	if i := coarseIndex()[lutKey(cell.Bg)]; i != 0 {
+		cell.Bg, cell.Attrs = color.RGB{R: i}, cell.Attrs|terminal.AttrBg256
+		return
+	}
+	cell.Bg = color.RGB{R: coarseLevel(cell.Bg.R), G: coarseLevel(cell.Bg.G), B: coarseLevel(cell.Bg.B)}
+}
+
+func coarseLevel(v uint8) uint8 {
+	return v/visual.CoarseBgStep*visual.CoarseBgStep + visual.CoarseBgStep/2
 }
 
 // LerpRGB interpolates between two colors with a normalized blend factor.
