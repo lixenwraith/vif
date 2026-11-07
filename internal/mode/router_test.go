@@ -211,7 +211,7 @@ func TestAHeldKeyCrossesOneReleaseHoweverItEnds(t *testing.T) {
 		}
 	}
 
-	ctx.KeyCapture.Set("12", true)
+	ctx.KeyCapture.Set("12", 0, false, true)
 	r.ProcessInputTick()
 	r.KeyReported(true)
 	expect("the answer to the console ask", "report releases=true")
@@ -228,7 +228,7 @@ func TestAHeldKeyCrossesOneReleaseHoweverItEnds(t *testing.T) {
 
 	r.transitionMode(core.ModeNormal)
 	key('1', terminal.KeyPress)
-	ctx.KeyCapture.Set("2", true)
+	ctx.KeyCapture.Set("2", 0, false, true)
 	r.ProcessInputTick()
 	expect("a hold the capture gives back", "press 1", "release 1 lost=true")
 
@@ -236,7 +236,7 @@ func TestAHeldKeyCrossesOneReleaseHoweverItEnds(t *testing.T) {
 	key('2', terminal.KeyPress)
 	expect("a press with presses alone reported", "report releases=false", "press 2", "release 2 lost=true")
 
-	ctx.KeyCapture.Set("", false)
+	ctx.KeyCapture.Set("", 0, false, false)
 	r.ProcessInputTick()
 	if !slices.Equal(asks, []bool{true, false}) {
 		t.Fatalf("asked for the console keyboard %v, want it while the capture asked and not after", asks)
@@ -251,7 +251,7 @@ func TestEveryPointerPressesAButton(t *testing.T) {
 	ctx := engine.NewGameContext(w, 80, 24)
 	r := NewRouter(ctx, input.NewMachine())
 	w.Components.Button.SetComponent(w.CreateEntity(core.DomainShared), component.ButtonComponent{Slot: 1, Key: '1'})
-	ctx.KeyCapture.Set("1", false)
+	ctx.KeyCapture.Set("1", 0, false, false)
 	config := w.Resources.Config
 	bx, by, bw, bh := component.ButtonRect(1, 1, config.MapWidth, config.MapHeight)
 	on := func(kind input.IntentType) *input.Intent {

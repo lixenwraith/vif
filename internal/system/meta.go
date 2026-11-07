@@ -161,7 +161,7 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventKeyCaptureRequest:
 		if p, ok := ev.Payload.(*event.KeyCapturePayload); ok && (p.Entity == 0 || p.Entity == s.world.Resources.Player.Entity) {
-			if refused := s.ctx.KeyCapture.Set(p.Keys, p.Releases); refused != "" {
+			if refused := s.ctx.KeyCapture.Set(p.Keys, p.Modes, p.Idle, p.Releases); refused != "" {
 				s.world.Log().Warn("input", "msg", "capture refused keys", "keys", refused)
 			}
 		}
@@ -481,7 +481,7 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 	// 6. Release the scenario's captured keys and clear the status. The play mode and
 	// the operator's, with its lines and overlay, outlive the reset, so a command line
 	// stays open across resets that keep coming. The FSM reset below spawns the cursor.
-	s.ctx.KeyCapture.Set("", false)
+	s.ctx.KeyCapture.Set("", 0, false, false)
 	s.ctx.ClearStatusMessage()
 
 	// 7. Cancel pending step requests; the rate survives a plain reset

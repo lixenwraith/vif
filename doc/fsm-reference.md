@@ -36,6 +36,9 @@ coordinator's, sent under the same bounds and held in memory. Installed layout:
 │   ├── main/              # optional override: a copy of internal/asset/scenario/
 │   ├── blank/scenario.toml
 │   ├── simon/scenario.toml
+│   ├── vimtutor/
+│   │   ├── scenario.toml
+│   │   └── lessons.toml   # the corpus the scenario carries
 │   ├── td/
 │   │   ├── scenario.toml
 │   │   ├── td_macros.toml # macro library
@@ -63,6 +66,7 @@ their arguments; operators and config fields) as JSON.
 ```toml
 description = "A short description for scenario selection."
 macro_files = ["macros.toml"]       # Macro libraries, relative to this file
+content = ["lessons.toml"]          # Corpus files, relative to this file: the run types these, not its content root
 
 [systems]
 disabled_systems = ["system_name", ...] # Disabled at FSM init
@@ -711,7 +715,10 @@ A press and its release carry `slot`, `key`, `source` and `tick`, a release also
 where the slot's keyboard reports one, as a bot's does, at once with `lost = true`
 where it taps. `releases = true` on the capture asks a console keyboard for
 releases too, and `EventInputReport { slot, releases }` says which a slot does
-while keys are captured.
+while keys are captured. `modes` names the play modes the capture holds in, every
+one when unset, and `idle = true` leaves a key to a count, operator or prefix
+already pending, so `fa` and `qa` still take an `a` the scenario captures; the
+tutor's last lesson does both.
 
 A button lights and sounds on every press of its key by itself, held lit until the
 release, so a machine judges a press and never plays its tone.
@@ -739,12 +746,16 @@ ends it on its own. A zero `color` is the splash white, and a text is cropped at
 countdown's face the same way; a large countdown that finds no clear slot takes
 the small face as it spawns. `EventGlyphLineRequest` lays a line of typeable
 glyphs from a cell, left to right, as the corpus's lines are laid: cropped at the
-map's right edge, dropped whole where it meets a wall, rock or an entity, in `type`
-and `level` (dark green when unset), and `scenery = true` makes it part of the map
-that nothing types or deletes. The glyph system lays it whether or not it is
+map's right edge, dropped whole where it meets a wall, rock or glyph, laid under a
+cursor or an effect, in `type` and `level` (dark green when unset), and
+`scenery = true` makes it part of the map that nothing types or deletes.
+`EventGlyphClearRequest { x, y, width, height }` removes the player glyphs in a
+rectangle at once and without an effect, every one for an empty rectangle, so a
+lesson leaves no dust behind: dust-all turns text into dust that orbits the cursor
+and hides what is laid next. The glyph system lays and clears whether or not it is
 enabled, so a scenario that wants no corpus text disables the system and lays its
-own. Both are player-domain presentation each instance makes for itself, as a
-status message is.
+own. All three are player-domain presentation each instance makes for itself, as a
+status message is. `wad/scenario/vimtutor` is the worked example.
 
 ### PayloadSpeciesIn
 
