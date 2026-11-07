@@ -9,7 +9,7 @@ require (
 
 require (
 	github.com/lixenwraith/ascimage v0.1.0 // indirect
-	github.com/lixenwraith/audio v0.4.0 // indirect
+	github.com/lixenwraith/audio v0.8.2 // indirect
 	github.com/lixenwraith/color v0.1.5 // indirect
 	github.com/lixenwraith/genetic v0.1.0 // indirect
 	github.com/lixenwraith/log v0.1.13 // indirect
