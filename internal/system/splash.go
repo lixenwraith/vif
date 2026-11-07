@@ -311,8 +311,9 @@ func (s *SplashSystem) handleTextRequest(payload *event.SplashTextPayload) {
 	})
 	text := []rune(payload.Text)
 	if len(text) == 0 {
+		// Gone at once: a text written at the cell in the same pass is a new one
 		if existing != 0 {
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, existing)
+			s.world.DestroyEntity(existing)
 		}
 		return
 	}

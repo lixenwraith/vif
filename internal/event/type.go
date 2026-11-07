@@ -183,6 +183,8 @@ const (
 
 	// EventGlyphLineRequest (GlyphLinePayload) [local] lays a line of glyphs from a cell, as the corpus's lines are laid
 	EventGlyphLineRequest
+	// EventGlyphClearRequest (GlyphClearPayload) [local] removes the glyphs in a rectangle without effect, every glyph when the rectangle is empty
+	EventGlyphClearRequest
 
 	// --- Energy ---
 

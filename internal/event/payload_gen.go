@@ -59,6 +59,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventSplashTimerCancel:               func() any { return new(SplashTimerCancelPayload) },
 	EventSplashTextRequest:               func() any { return new(SplashTextPayload) },
 	EventGlyphLineRequest:                func() any { return new(GlyphLinePayload) },
+	EventGlyphClearRequest:               func() any { return new(GlyphClearPayload) },
 	EventEnergyAddRequest:                func() any { return new(EnergyAddPayload) },
 	EventEnergySetRequest:                func() any { return new(EnergySetPayload) },
 	EventEnergyCrossedZero:               func() any { return new(EnergyCrossedZeroPayload) },
@@ -232,6 +233,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventSplashTimerCancel:               &codecSplashTimerCancelPayload,
 	EventSplashTextRequest:               &codecSplashTextPayload,
 	EventGlyphLineRequest:                &codecGlyphLinePayload,
+	EventGlyphClearRequest:               &codecGlyphClearPayload,
 	EventEnergyAddRequest:                &codecEnergyAddPayload,
 	EventEnergySetRequest:                &codecEnergySetPayload,
 	EventEnergyCrossedZero:               &codecEnergyCrossedZeroPayload,
@@ -775,6 +777,17 @@ var codecGlyphLinePayload = structCodec{size: unsafe.Sizeof(GlyphLinePayload{}),
 	{off: unsafe.Offsetof(GlyphLinePayload{}.Scenery), kind: kindBool},
 }}
 
+func (p *GlyphClearPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGlyphClearPayload, unsafe.Pointer(p)
+}
+
+var codecGlyphClearPayload = structCodec{size: unsafe.Sizeof(GlyphClearPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GlyphClearPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphClearPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphClearPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphClearPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
 func (p *EnergyAddPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecEnergyAddPayload, unsafe.Pointer(p)
 }
@@ -1047,6 +1060,8 @@ func (p *KeyCapturePayload) codec() (*structCodec, unsafe.Pointer) {
 var codecKeyCapturePayload = structCodec{size: unsafe.Sizeof(KeyCapturePayload{}), fields: []field{
 	{off: unsafe.Offsetof(KeyCapturePayload{}.Keys), kind: kindString},
 	{off: unsafe.Offsetof(KeyCapturePayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
+	{off: unsafe.Offsetof(KeyCapturePayload{}.Modes), kind: kindUint, size: unsafe.Sizeof(core.ModeMask(0))},
+	{off: unsafe.Offsetof(KeyCapturePayload{}.Idle), kind: kindBool},
 	{off: unsafe.Offsetof(KeyCapturePayload{}.Releases), kind: kindBool},
 }}
 

@@ -569,9 +569,21 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `simon` is a memory game, `dummy` is a weapon range, and `vanguard` is a
-side-scroller whose raiders are species its own behavior programs define. Each entry
-has a short `description` for scenario listings.
+scaffold, `simon` is a memory game, `dummy` is a weapon range, `vimtutor` teaches
+the motions a lesson at a time, and `vanguard` is a side-scroller whose raiders are
+species its own behavior programs define. Each entry has a short `description` for
+scenario listings.
+
+`vimtutor` is the tutor, combat off: the cursor has no gun, so Enter, Space and
+auto-fire do nothing, and the glyph spawner is off until the last lesson. Each
+lesson lays its heading in the small splash face, two or three lines that explain
+and a practice line, stands the cursor on the line's first glyph, prompts on the
+status bar and waits for the result, the cursor on a cell or the line deleted or
+typed; `s` skips a lesson. The lessons are `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`,
+counts, `x d dd`, `i` and typing, then the keys vif reads its own way (`a p o O u
+m y c r`), each answered on a press in the small face and on the status bar, and
+`n` opens free practice on the scenario's own corpus: code laid in blocks, so `%`
+finds a bracket's pair across rows ([Vim tutorial](vim-tutorial.md)).
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its

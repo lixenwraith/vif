@@ -187,8 +187,12 @@ func Files(o Options) service.FileSource {
 	return service.FileSource{Roots: paths.ConfigRoots(o.Dir)}
 }
 
-// Corpus locates the content corpus. An empty source selects embedded content.
-func Corpus(o Options) (service.ContentSource, error) {
+// Corpus locates the content corpus: the scenario's own when its entry names one,
+// else the roots'. An empty source selects embedded content.
+func Corpus(o Options, sc Scenario) (service.ContentSource, error) {
+	if fsys, ok := sc.Content(); ok {
+		return service.ContentSource{FS: fsys, Label: "scenario " + sc.Name, Explicit: true}, nil
+	}
 	if o.Embedded {
 		return service.ContentSource{}, nil
 	}

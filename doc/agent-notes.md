@@ -389,6 +389,11 @@ that proves wrong or that a document now states, and link the document instead.
 - Drive it with `tmux send-keys`: `:emit <Event> { ... }` raises any event, `:god`
   arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
   `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.
+- `tmux send-keys` drops a `;`: one alone is its command separator and a trailing
+  one in a `-l` string is cut, so `fx;;;;` sends three repeats; send `'\;'` as its
+  own argument. A capture shows the cursor on a glyph as the glyph, so read the
+  cursor from the telemetry overlay's player card (`:t`, `/player.0`) instead.
+- `-l <dir>` is `-l=<dir>`: with a space the log lands under `~/.local/state/vif/log`.
 - Xvfb, Alacritty and xdotool install in an Ubuntu container for real key and mouse
   input: `xdotool key` types, and tmux inside the window reads the screen back.
 - A headless probe in `internal/app` drives a scenario by intents
@@ -469,6 +474,17 @@ that proves wrong or that a document now states, and link the document instead.
   `EventCursorSpawned` go to nobody: lay them on that event.
 - A payload's `duration` is nanoseconds (`3000000000` for three seconds), where a
   `duration_ms` field is milliseconds; `vif -schema` prints each field's type.
+- `EventDustAllRequest` turns every glyph into dust that orbits the cursor for as
+  long as nothing bursts it, over whatever is laid next: a scenario clears text
+  with `EventGlyphClearRequest`. A transition between two children of one parent
+  runs neither the parent's exit nor its entry, so a lesson's clear sits on the
+  lesson, and a state re-entering itself runs no entry actions at all.
+- A splash text cleared and written at one cell in one pass is one entity: the
+  clear destroys it at once rather than by a death batch, or the write reuses an
+  entity the batch then takes.
+- The entry's top-level keys the FSM loader does not know are the embedder's
+  (`resource.entryKeys` lists them), so a new entry key needs no loader change
+  beyond reading its files into the container.
 - A drop table's rolls are player-domain, each instance rolling its own: a test of a
   kill whose drop is below certain shoots until the table's pity makes it certain
   (vanguard's U within two kills), and counts a kill's drops as the loot new since

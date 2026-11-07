@@ -17,6 +17,7 @@ import (
 	"testing/fstest"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/internal/content"
 	"github.com/lixenwraith/vif/internal/fsm"
 )
 
@@ -248,7 +249,7 @@ func TestCheckReportsTheProgramsAndLootItCompiled(t *testing.T) {
 		"behaviors ok: 1 (wisp)\nloot ok: 1 (ember)\ndrops ok: 1 (spark)\n": looted,
 	} {
 		var out strings.Builder
-		if err := checkScenario(Options{Scenario: dir}, &out); err != nil || !strings.HasSuffix(out.String(), want) {
+		if _, err := checkScenario(Options{Scenario: dir}, &out); err != nil || !strings.HasSuffix(out.String(), want) {
 			t.Errorf("check printed %q, %v; want it to end %q", out.String(), err, want)
 		}
 	}
@@ -412,5 +413,48 @@ func TestAnEntryKeyNothingReadsIsRefused(t *testing.T) {
 	_, err := ReadScenario("typo", fsys, "scenario.toml")
 	if err == nil || !strings.Contains(err.Error(), `entry "scenario.toml": unknown key "descripton"`) {
 		t.Fatalf("error %v", err)
+	}
+}
+
+// TestContentFilesAreScenarioFilesAndItsCorpus: the corpus files an entry's content
+// names are carried and digested as a region file is, serve as the run's corpus in
+// place of the roots', and travel in the canonical form; a name the scenario has no
+// file for fails the load
+func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
+	dir := writeScenario(t, filepath.Join(t.TempDir(), "scenario", "tutor"), scenarioRegion)
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("scenario.toml", "content = [\"lessons.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n")
+	write("lessons.toml", "schema = 1\n[[blocks]]\nid = \"one\"\nlines = [\"press w to jump a word\", \"press b to jump back\"]\n")
+
+	sc := read(t, dir)
+	if sc.Files() != 3 {
+		t.Fatalf("scenario holds %d files, want the entry, the region and the corpus", sc.Files())
+	}
+	copied, err := UnmarshalScenario("tutor", sc.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []Scenario{sc, copied} {
+		fsys, ok := s.Content()
+		if !ok {
+			t.Fatal("the scenario carries no corpus")
+		}
+		corpus, err := content.Load(fsys, content.DefaultPolicy())
+		if err != nil || corpus.BlockCount() != 1 || corpus.LineCount() != 2 {
+			t.Fatalf("the carried corpus loads as %+v, %v; want its one block of two lines", corpus, err)
+		}
+	}
+	src, err := Corpus(Options{Scenario: dir, Content: dir}, sc)
+	if err != nil || src.FS == nil || !src.Explicit || src.Label != "scenario tutor" {
+		t.Fatalf("the run's corpus = %+v, %v; want the scenario's own over the -f root", src, err)
+	}
+
+	write("scenario.toml", "content = [\"missing.toml\"]\n[regions.main]\ninitial = \"MainStart\"\nfile = \"main.toml\"\n")
+	if _, err := LoadScenario(Options{Scenario: dir}); err == nil {
+		t.Fatal("a content file the scenario lacks loaded")
 	}
 }

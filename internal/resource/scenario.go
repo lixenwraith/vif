@@ -56,9 +56,10 @@ type Scenario struct {
 	// route_rebuild_ticks, zero when the scenario sets none
 	NavRefreshTicks, NavRebuildTicks int
 
-	entry  string
-	files  []scenarioFile
-	digest string
+	entry   string
+	files   []scenarioFile
+	content []string // the corpus files the entry names, each one of files
+	digest  string
 }
 
 type scenarioFile struct {
@@ -157,6 +158,20 @@ func (s Scenario) Files() int { return len(s.files) }
 
 // FS serves the scenario's files to the loader without touching a host path.
 func (s Scenario) FS() fs.FS { return scenarioFS{files: s.files} }
+
+// Content is the corpus the entry's content names, served as a content root by
+// file name, and false when it names none: a run types it in place of its roots'
+func (s Scenario) Content() (fs.FS, bool) {
+	if len(s.content) == 0 {
+		return nil, false
+	}
+	files := make([]scenarioFile, 0, len(s.content))
+	for _, name := range s.content {
+		i := slices.IndexFunc(s.files, func(f scenarioFile) bool { return f.name == name })
+		files = append(files, scenarioFile{name: path.Base(name), data: s.files[i].data})
+	}
+	return scenarioFS{files: files}, true
+}
 
 // Marshal writes the canonical form: the one the digest is taken over and the one
 // a transfer carries. One format rather than two, so a copy that verifies is by
@@ -258,8 +273,8 @@ func UnmarshalScenario(name string, body []byte) (Scenario, error) {
 }
 
 // entryKeys are the top-level keys a scenario entry may hold
-var entryKeys = []string{"behaviors", "description", "drops", "loot", "macro_files", "macros", "map",
-	"max_players", "min_players", "navigation", "regions", "states", "systems"}
+var entryKeys = []string{"behaviors", "content", "description", "drops", "loot", "macro_files", "macros",
+	"map", "max_players", "min_players", "navigation", "regions", "states", "systems"}
 
 // validate holds every form of a scenario to one rule set: bounded, sorted,
 // .toml-only, naming nothing outside itself, its entry holding only entryKeys.
@@ -314,6 +329,11 @@ func (s *Scenario) validate() error {
 	if err := s.readPlayers(doc); err != nil {
 		return err
 	}
+	if list, exists := doc["content"]; exists {
+		if err := s.readContent(list); err != nil {
+			return err
+		}
+	}
 	if table, exists := doc["map"]; exists {
 		if err := s.readMap(table); err != nil {
 			return err
@@ -321,6 +341,31 @@ func (s *Scenario) validate() error {
 	}
 	if table, exists := doc["navigation"]; exists {
 		return s.readNavigation(table)
+	}
+	return nil
+}
+
+// readContent reads content, the corpus files the entry names relative to itself:
+// each one of the scenario's files, and unique by the name a content root serves it as
+func (s *Scenario) readContent(v any) error {
+	list, ok := v.([]any)
+	if !ok {
+		return errors.New("content must be an array of file names")
+	}
+	s.content = nil
+	for _, item := range list {
+		name, ok := item.(string)
+		if !ok {
+			return errors.New("content must be an array of file names")
+		}
+		full := path.Join(path.Dir(s.entry), name)
+		if !slices.ContainsFunc(s.files, func(f scenarioFile) bool { return f.name == full }) {
+			return fmt.Errorf("content %q is not one of the files", name)
+		}
+		if slices.ContainsFunc(s.content, func(c string) bool { return path.Base(c) == path.Base(full) }) {
+			return fmt.Errorf("content %q repeats a file name", name)
+		}
+		s.content = append(s.content, full)
 	}
 	return nil
 }
@@ -478,9 +523,48 @@ func (r *reader) u32() uint32 {
 
 func (r *reader) left() int { return len(r.buf) }
 
-// scenarioFS serves a held scenario. ReadFile is the path the loader takes;
-// Open exists so this is an fs.FS and behaves if something else reaches for one.
+// scenarioFS serves a held scenario. ReadFile is the path the loader takes, ReadDir
+// the one a corpus load takes over a content root, and Open exists so this is an
+// fs.FS and behaves if something else reaches for one.
 type scenarioFS struct{ files []scenarioFile }
+
+// ReadDir lists the files directly in name and, as directories, the first path
+// element of those below it
+func (f scenarioFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	var entries []fs.DirEntry
+	dirs := map[string]bool{}
+	for _, file := range f.files {
+		rel := file.name
+		if name != "." {
+			if !strings.HasPrefix(rel, name+"/") {
+				continue
+			}
+			rel = rel[len(name)+1:]
+		}
+		if dir, _, nested := strings.Cut(rel, "/"); nested {
+			if !dirs[dir] {
+				dirs[dir] = true
+				entries = append(entries, fs.FileInfoToDirEntry(scenarioDirInfo(dir)))
+			}
+			continue
+		}
+		entries = append(entries, fs.FileInfoToDirEntry(&scenarioOpenFile{name: file.name, Reader: bytes.NewReader(file.data)}))
+	}
+	if entries == nil && name != "." {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
+	}
+	return entries, nil
+}
+
+// scenarioDirInfo is a directory a held scenario's files lie under
+type scenarioDirInfo string
+
+func (d scenarioDirInfo) Name() string       { return string(d) }
+func (d scenarioDirInfo) Size() int64        { return 0 }
+func (d scenarioDirInfo) Mode() fs.FileMode  { return fs.ModeDir | 0o555 }
+func (d scenarioDirInfo) ModTime() time.Time { return time.Time{} }
+func (d scenarioDirInfo) IsDir() bool        { return true }
+func (d scenarioDirInfo) Sys() any           { return nil }
 
 func (f scenarioFS) ReadFile(name string) ([]byte, error) {
 	for _, file := range f.files {

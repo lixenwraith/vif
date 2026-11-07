@@ -4,13 +4,17 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
-// KeyCapture is the set of printable ASCII keys a scenario takes from Normal, Visual
-// and Insert parsing, and whether it asks a console keyboard for their releases.
-// Written under the world lock, read by the parser outside it.
+// KeyCapture is the set of printable ASCII keys a scenario takes from play-mode
+// parsing, the modes it takes them in, whether a sequence already pending keeps a
+// key, and whether it asks a console keyboard for their releases. Written under
+// the world lock, read by the parser outside it.
 type KeyCapture struct {
 	bits     [2]atomic.Uint64
+	modes    atomic.Uint32
+	idle     atomic.Bool
 	releases atomic.Bool
 }
 
@@ -18,9 +22,11 @@ type KeyCapture struct {
 // terminal sends as itself
 func Capturable(r rune) bool { return r >= ' ' && r <= '~' }
 
-// Set replaces the captured keys; an empty string releases them all. It reports
-// the runes it refused, which lie outside printable ASCII.
-func (c *KeyCapture) Set(keys string, releases bool) (refused string) {
+// Set replaces the captured keys; an empty string releases them all. modes are
+// the play modes the capture holds in, every one when zero, and idle leaves a key
+// to a count, operator or prefix pending. It reports the runes it refused, which
+// lie outside printable ASCII.
+func (c *KeyCapture) Set(keys string, modes core.ModeMask, idle, releases bool) (refused string) {
 	var bits [2]uint64
 	for _, r := range keys {
 		if !Capturable(r) {
@@ -29,8 +35,13 @@ func (c *KeyCapture) Set(keys string, releases bool) (refused string) {
 		}
 		bits[r>>6] |= 1 << (r & 63)
 	}
+	if modes == 0 {
+		modes = core.ModeMaskPlay
+	}
 	c.bits[0].Store(bits[0])
 	c.bits[1].Store(bits[1])
+	c.modes.Store(uint32(modes))
+	c.idle.Store(idle)
 	c.releases.Store(releases && bits != [2]uint64{})
 	return refused
 }
@@ -38,6 +49,12 @@ func (c *KeyCapture) Set(keys string, releases bool) (refused string) {
 // Has reports whether r is captured
 func (c *KeyCapture) Has(r rune) bool {
 	return c != nil && r >= 0 && r < 128 && c.bits[r>>6].Load()&(1<<(r&63)) != 0
+}
+
+// Takes reports whether a press of r in mode is the scenario's: captured, in a mode
+// the capture holds in, and not left to a sequence pending
+func (c *KeyCapture) Takes(r rune, mode InputMode, pending bool) bool {
+	return c.Has(r) && core.ModeMask(c.modes.Load()).Has(core.GameMode(mode)) && !(pending && c.idle.Load())
 }
 
 // Any reports whether any key is captured
@@ -139,8 +156,8 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 	}
 	switch m.mode {
 	case ModeNormal, ModeVisual, ModeInsert:
-		// A captured key outranks any pending grammar, so a count or operator never eats it
-		if ev.Key == terminal.KeyRune && m.capture.Has(ev.Rune) {
+		// A captured key outranks any pending grammar, unless its capture is idle
+		if ev.Key == terminal.KeyRune && m.capture.Takes(ev.Rune, m.mode, len(m.cmdBuffer) > 0) {
 			if ev.Action == terminal.KeyRepeat {
 				return nil // its hold is down already
 			}

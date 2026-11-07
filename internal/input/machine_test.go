@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/core"
 )
 
 // TestCapturedKeyOutranksPlayGrammar asserts a captured key reaches the scenario
 // from Normal mid-count and from Insert, while text entry still types it
 func TestCapturedKeyOutranksPlayGrammar(t *testing.T) {
 	var capture KeyCapture
-	if refused := capture.Set("15é", false); refused != "é" {
+	if refused := capture.Set("15é", 0, false, false); refused != "é" {
 		t.Fatalf("refused %q, want the non-ASCII rune", refused)
 	}
 	m := NewMachine()
@@ -38,7 +39,7 @@ func TestCapturedKeyOutranksPlayGrammar(t *testing.T) {
 		t.Fatalf("captured key in Command = %+v, want IntentTextChar", in)
 	}
 
-	capture.Set("", false)
+	capture.Set("", 0, false, false)
 	m.SetMode(ModeInsert)
 	if in := key('1'); in == nil || in.Type != IntentTextChar {
 		t.Fatalf("released key in Insert = %+v, want IntentTextChar", in)
@@ -50,7 +51,7 @@ func TestCapturedKeyOutranksPlayGrammar(t *testing.T) {
 // down; any other key's release is nothing and its repeat presses again.
 func TestOnlyACapturedKeyReleases(t *testing.T) {
 	var capture KeyCapture
-	capture.Set("1", false)
+	capture.Set("1", 0, false, false)
 	m := NewMachine()
 	m.SetCapture(&capture)
 	key := func(r rune, action terminal.KeyAction, lost bool) *Intent {
@@ -88,5 +89,29 @@ func TestControlKeysReachAnOverlay(t *testing.T) {
 		if in == nil || in.Type != want {
 			t.Errorf("key %v in an overlay = %+v, want %v", key, in, want)
 		}
+	}
+}
+
+// A capture scoped to Normal and Visual leaves its key to Insert, and an idle one
+// to a sequence already pending, so a find still takes the letter it captures.
+func TestAScopedCaptureYieldsToInsertAndToPendingGrammar(t *testing.T) {
+	var capture KeyCapture
+	capture.Set("a", core.ModeMaskNormal|core.ModeMaskVisual, true, false)
+	m := NewMachine()
+	m.SetCapture(&capture)
+	key := func(r rune) *Intent {
+		return m.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	}
+
+	if in := key('a'); in == nil || in.Type != IntentKeyPress || in.Char != 'a' {
+		t.Fatalf("idle Normal: a = %+v, want IntentKeyPress", in)
+	}
+	key('f')
+	if in := key('a'); in == nil || in.Type != IntentCharMotion || in.Char != 'a' {
+		t.Fatalf("after f: a = %+v, want the find's target, not a press", in)
+	}
+	m.SetMode(ModeInsert)
+	if in := key('a'); in == nil || in.Type != IntentTextChar {
+		t.Fatalf("Insert: a = %+v, want the typed character", in)
 	}
 }

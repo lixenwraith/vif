@@ -382,6 +382,16 @@ type GlyphLinePayload struct {
 	Scenery bool                 `toml:"scenery"`
 }
 
+// GlyphClearPayload removes the glyphs standing in a rectangle, from its top left
+// cell, at once and without an effect; an empty rectangle is the whole map. A gold
+// member is a shared composite's and stays.
+type GlyphClearPayload struct {
+	X      int `toml:"x"`
+	Y      int `toml:"y"`
+	Width  int `toml:"width"`
+	Height int `toml:"height"`
+}
+
 // --- Energy ---
 
 // EnergyAddPayload contains energy delta
@@ -581,12 +591,17 @@ var CharacterTypedPayloadPool = sync.Pool{
 }
 
 // KeyCapturePayload names the keys to capture, empty to release them. Entity scopes
-// it to the instance driving that cursor, every instance when zero. Releases asks a
-// console keyboard for releases too, switching it raw while the capture holds.
+// it to the instance driving that cursor, every instance when zero; Modes to the
+// play modes it holds in, every one when unset; Idle leaves a key to a count,
+// operator or prefix already pending, so a find or a register still takes it.
+// Releases asks a console keyboard for releases too, switching it raw while the
+// capture holds.
 type KeyCapturePayload struct {
-	Keys     string      `toml:"keys"`
-	Entity   core.Entity `toml:"entity"`
-	Releases bool        `toml:"releases"`
+	Keys     string        `toml:"keys"`
+	Entity   core.Entity   `toml:"entity"`
+	Modes    core.ModeMask `toml:"modes"`
+	Idle     bool          `toml:"idle"`
+	Releases bool          `toml:"releases"`
 }
 
 // InputSource says what made an input. Every press is released: by its own release

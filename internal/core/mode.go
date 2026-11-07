@@ -24,3 +24,22 @@ var ModeNames = [...]string{
 	ModeCommand: "command",
 	ModeOverlay: "overlay",
 }
+
+// ModeMask is a set of play modes, which a document names normal, visual and
+// insert, or play for all three
+type ModeMask uint8
+
+const (
+	ModeMaskNormal ModeMask = 1 << ModeNormal
+	ModeMaskVisual ModeMask = 1 << ModeVisual
+	ModeMaskInsert ModeMask = 1 << ModeInsert
+	ModeMaskPlay            = ModeMaskNormal | ModeMaskVisual | ModeMaskInsert
+)
+
+// ModeMaskNames are what a document calls each play mode, and the set of them
+var ModeMaskNames = map[string]ModeMask{
+	"normal": ModeMaskNormal, "visual": ModeMaskVisual, "insert": ModeMaskInsert, "play": ModeMaskPlay,
+}
+
+// Has reports whether the set holds mode
+func (m ModeMask) Has(mode GameMode) bool { return m&(1<<mode) != 0 }

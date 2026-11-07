@@ -26,64 +26,57 @@ The map is laid from `map_width` and `map_height` (`ConfigToVar`, then the
 arithmetic actions): a heading centred at `(map_width - 6 * len) / 2`, lessons
 re-laid when the state is entered again.
 
-## 2. Foundation laid
+## 2. The first round
+
+`wad/scenario/vimtutor` runs eight lessons and a free practice; `vif -s vimtutor`
+plays it, `vif -s vimtutor -check` validates it with its corpus. What it stands on:
 
 - Two splash faces (`asset.SplashFaces`): the large one as before, and a small one
   six by twelve pixels, drawn two pixel rows a cell with half blocks and a cell a
-  pixel on a text console ([Rendering §7](rendering.md#7-layer-inventory)). A
-  countdown takes `font`, and a large one with no clear slot takes the small face.
-- `EventSplashTextRequest`: a line of splash text at a cell, replaced by the next
-  text at that cell, cleared by an empty one, or timed out.
-- `EventGlyphLineRequest`: a line of glyphs laid at a cell, typeable or scenery,
-  honoured while the glyph system is disabled, so a scenario lays its own text and
-  no corpus line lands on a lesson ([FSM
+  pixel on a text console ([Rendering §7](rendering.md#7-layer-inventory)).
+- `EventSplashTextRequest` writes a heading or an answer at a cell;
+  `EventGlyphLineRequest` lays a typeable or scenery line, under the cursor too;
+  `EventGlyphClearRequest` removes the glyphs in a rectangle at once, which a
+  lesson's exit uses: dust-all would turn the text into dust that orbits the
+  cursor and hides the next lesson. The glyph system lays and clears while it is
+  disabled, so no corpus line lands on a lesson ([FSM
   reference](fsm-reference.md#splash-text-and-glyph-lines)).
-- The embedded primer (`internal/asset/content/tutorial.toml`) names where vif
-  reads a vim key differently, so a player meets the differences before the
-  tutorial exists.
+- A scenario carries its corpus: the entry's `content` names TOML corpus files,
+  in its container under its digest, which the run types in place of its roots'.
+  The tutor's is code in blocks of two to five lines.
+- A corpus block is laid whole, its lines on consecutive rows from one column,
+  so `%` finds a bracket's pair across rows and `{` `}` hop between blocks; where
+  no slot holds it, line by line as before.
+- `EventKeyCaptureRequest` takes `modes` and `idle`: the tutor captures `s`, and
+  in its last lesson `a p o O u m y c r n`, in Normal and Visual with nothing
+  pending, so `fa` and `qa` still take their letter and Insert types it.
 
-## 3. Still to lay
+A lesson is a state under `Lesson`, whose exit clears it (`Clear`: every glyph,
+the heading and the answer, under a white flash) and whose entry lays the next.
+The map floor is 80 by 24: the heading at row 1, the notes at rows 8 to 10, the
+practice line at 13, an answer at 16, all from column 4.
 
-- **A scope on the key capture.** `EventKeyCaptureRequest` holds a key in Insert
-  and over pending grammar too, so a tutorial that captures `a` to answer the press
-  could not let the player type an `a` in the practice line or find one with `fa`.
-  The payload needs the modes it holds in (`modes = "normal"`), and the parser
-  must leave a key alone while a count or an operator is pending.
-- **Combat off.** `only_systems` naming the cursor, timer, death, splash, glyph,
-  energy and heat systems, the gun taken on `EventCursorSpawned`
-  (`EventWeaponRemoveRequest { entity, weapon = "gun" }`), so Enter, Space and
-  auto-fire do nothing, and no species spawned.
-- **The lesson count.** The lessons, in order: `h j k l`; `w b e` and the big
-  forms; `0 ^ $`; `f t ; ,`; counts; `x`, `d` with a motion, `dd`, `D`; `i` and
-  typing the line; `/`, `n`, `N`; `gg G M m` and the `g` corners; `o O [ ]`, the
-  column finds vif adds; `gl` and the colour markers; `q` and `@` macros. Each is
-  one state; a lesson the player wants to skip has a status message naming the
-  key that skips it (a captured key, `s`, in Normal only once the capture is
-  scoped).
-- **Keys vif binds differently** (`a` auto-fire, `p` pause, `o` `O` `[` `]` column
-  finds, `m` the middle column, `H J K L` half pages, `u` cursor undo, Enter, Space
-  and Backspace fire) and keys it binds to nothing (`c`, `y`, `r`, `A`, `I`, `P`,
-  `.`, `*`, `#`, `~`). The lesson text says so where a lesson meets one; what else
-  to do with them is the decision below.
-- **Centring from the map's edge.** A text or a line placed from the right or the
+## 3. The next round
+
+- **More lessons**: `/` `n` `N`, `gg G M m` and the `g` corners, `o O [ ]`, `gl`
+  and the colour markers, `q` and `@` macros, `d` with a motion and `D`, `v`.
+- **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
+  transition on `EventScreenResize` through a relay state would lay it again,
+  since a state re-entering itself runs no entry actions.
+- **Centring from the map's edge**: a text or line placed from the right or the
   bottom edge (a negative origin, as the todo's spawn-from-the-edge item asks)
-  would spare the scenario the arithmetic; until then the macros compute it.
+  would spare the scenario its arithmetic.
+- **The magnifier**: a cursor resting on a glyph shows it large some way off, which
+  a lesson could do without; the splash system has no switch for it yet.
+- **Sound**: a chime on a lesson cleared and a buzz on a taken key, as simon cues.
 
-## 4. Decisions
+## 4. Decisions taken
 
-1. **Which vim keys to add in code**, rather than script or drop. In order of
-   cost: `c` with a motion, `cc` and `C` (the delete operator's grammar, then
-   Insert); `*` and `#` (search for the glyph run under the cursor, which search
-   mode already does); `A` and `I` (Insert at the line's end or first glyph);
-   `a` (Insert after the cursor, which clashes with auto-fire: move auto-fire to
-   `:auto` and another key, or leave `a` as it is); `r` (retype the glyph under the
-   cursor, which needs a glyph replace event and a rule for whether it counts as
-   typing); `.` (the last change recorded in the input machine). `y` and `p` have
-   nothing to yank or put in a glyph field, and `p` pauses: drop them, as the
-   primer says.
-2. **How a lesson answers a key it cannot teach**: capture it and say so on the
-   press (needs the capture scope above), or leave the key its vif meaning and
-   name the difference in the lesson text alone.
-3. **Whether the practice text is the scenario's own** (laid lines, as planned) or
-   a corpus the scenario carries (`content/` in its container, under its digest),
-   which the todo's authoring item leaves open. Laid lines need nothing new.
+- The vim keys vif lacks or reads its own way are not added in code for now: the
+  tutor captures them, answers each press with the key's meaning here, and says
+  they cannot be tutored yet. The todo item on the cheap ones (`c`, `*` `#`, `A`
+  `I`, `.`, `r`) and on the tutor overriding `a` and `p`, which have nothing to
+  fire or pause there, is the next step.
+- The practice text is the scenario's own corpus, not the run's.
+- The ping grid stays; the tutor's cursor has no shield, so Visual mode pings from
+  the cursor alone.

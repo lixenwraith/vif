@@ -85,6 +85,9 @@ func loadAndResolve(fsys fs.FS, name string, stack map[string]bool, visited *[]s
 		if err := includeBehaviors(fsys, parsed, baseDir, visited, macros); err != nil {
 			return nil, fmt.Errorf("%s: %w", cleanName, err)
 		}
+		if err := includeContent(fsys, parsed, baseDir, visited); err != nil {
+			return nil, fmt.Errorf("%s: %w", cleanName, err)
+		}
 	}
 
 	if parsed["states"] == nil {
@@ -195,6 +198,31 @@ func includeBehaviors(fsys fs.FS, entry map[string]any, baseDir string, visited 
 			return fmt.Errorf("behavior '%s': %w", name, err)
 		}
 		programs[name] = doc
+	}
+	return nil
+}
+
+// includeContent reads the entry's content, the corpus files a scenario carries,
+// into the file set a copy holds; the entry's embedder reads them as a corpus
+func includeContent(fsys fs.FS, entry map[string]any, baseDir string, visited *[]string) error {
+	raw, ok := entry["content"]
+	if !ok || visited == nil {
+		return nil
+	}
+	names, ok := raw.([]any)
+	if !ok {
+		return errors.New("content must be an array of file names")
+	}
+	for _, item := range names {
+		name, ok := item.(string)
+		if !ok {
+			return errors.New("content must be an array of file names")
+		}
+		full := path.Join(baseDir, name)
+		if _, err := fs.ReadFile(fsys, full); err != nil {
+			return fmt.Errorf("content %s: %w", name, err)
+		}
+		*visited = append(*visited, full)
 	}
 	return nil
 }
