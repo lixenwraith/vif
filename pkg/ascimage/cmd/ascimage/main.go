@@ -77,7 +77,7 @@ func runAIMGInput(path string, colorMode terminal.ColorMode, output string, noSt
 
 	if output != "" {
 		conv := dual.ToConvertedImage(colorMode)
-		if err := ascimage.WriteANSI(conv, output, colorMode); err != nil {
+		if err := writeANSI(conv, output); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 			os.Exit(1)
 		}
@@ -202,7 +202,7 @@ func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode te
 	converted := ascimage.ConvertImage(img, width, renderMode, colorMode, aspect)
 	fmt.Fprintf(os.Stderr, "Output: %dx%d cells\n", converted.Width, converted.Height)
 
-	if err := ascimage.WriteANSI(converted, output, colorMode); err != nil {
+	if err := writeANSI(converted, output); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 		os.Exit(1)
 	}
@@ -375,4 +375,20 @@ func renderFrame(viewer *Viewer, buf []terminal.Cell, term terminal.Terminal, te
 	root.Fill(lcolor.Gunmetal)
 	viewer.Render(root, termW, termH)
 	term.Flush(buf, termW, termH)
+}
+
+// writeANSI writes img as ANSI text to a file, or to stdout for "-"
+func writeANSI(img *ascimage.ConvertedImage, output string) error {
+	if output == "-" {
+		return ascimage.WriteANSI(os.Stdout, img)
+	}
+	f, err := os.Create(output)
+	if err != nil {
+		return err
+	}
+	if err := ascimage.WriteANSI(f, img); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
