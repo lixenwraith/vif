@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"image"
 
+	"github.com/lixenwraith/ascimage"
 	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/internal/render"
-	"github.com/lixenwraith/vif/pkg/ascimage"
-	"github.com/lixenwraith/vif/pkg/vmath"
+	"github.com/lixenwraith/terminal/tui"
 )
 
 // ViewMode determines how the image is displayed
@@ -30,7 +29,7 @@ type Viewer struct {
 
 	converted *ascimage.ConvertedImage
 	convWidth int
-	aspect    vmath.Aspect
+	aspect    float64
 
 	RenderMode ascimage.RenderMode
 	ColorMode  terminal.ColorMode
@@ -43,7 +42,7 @@ type Viewer struct {
 }
 
 // NewViewer creates a viewer for the given image, converting at a cell aspect
-func NewViewer(img image.Image, aspect vmath.Aspect) *Viewer {
+func NewViewer(img image.Image, aspect float64) *Viewer {
 	bounds := img.Bounds()
 	return &Viewer{
 		img:        img,
@@ -97,7 +96,7 @@ func (v *Viewer) calculateTargetWidth(termW, termH int) int {
 		if h <= availH {
 			return termW
 		}
-		w := int(float64(availH*v.srcWidth)/float64(v.aspect)) / v.srcHeight
+		w := int(float64(availH*v.srcWidth)/v.aspect) / v.srcHeight
 		if w < 1 {
 			w = 1
 		}
@@ -261,8 +260,8 @@ func (v *Viewer) AdjustZoom(delta int) {
 	}
 }
 
-// Render draws the image to the render buffer
-func (v *Viewer) Render(buf *render.RenderBuffer, termW, termH int) {
+// Render draws the image into the screen's region
+func (v *Viewer) Render(buf tui.Region, termW, termH int) {
 	if v.converted == nil {
 		return
 	}
@@ -296,7 +295,11 @@ func (v *Viewer) Render(buf *render.RenderBuffer, termW, termH int) {
 			srcIdx := srcY*v.converted.Width + srcX
 			cell := v.converted.Cells[srcIdx]
 
-			buf.Set(x, y, cell.Rune, cell.Fg, cell.Bg, render.BlendReplace, 1.0, cell.Attrs)
+			r := cell.Rune
+			if r == 0 {
+				r = ' '
+			}
+			buf.CellOpaque(x, y, r, cell.Fg, cell.Bg, cell.Attrs)
 		}
 	}
 
@@ -305,7 +308,7 @@ func (v *Viewer) Render(buf *render.RenderBuffer, termW, termH int) {
 	}
 }
 
-func (v *Viewer) renderStatus(buf *render.RenderBuffer, termW, termH int) {
+func (v *Viewer) renderStatus(buf tui.Region, termW, termH int) {
 	y := termH - 1
 
 	statusBg := lcolor.RGB{R: 40, G: 40, B: 50}
@@ -313,7 +316,7 @@ func (v *Viewer) renderStatus(buf *render.RenderBuffer, termW, termH int) {
 	keyFg := lcolor.RGB{R: 100, G: 180, B: 255}
 
 	for x := range termW {
-		buf.Set(x, y, ' ', statusFg, statusBg, render.BlendReplace, 1.0, terminal.AttrNone)
+		buf.CellOpaque(x, y, ' ', statusFg, statusBg, terminal.AttrNone)
 	}
 
 	colorStr := "24bit"
@@ -360,7 +363,7 @@ func (v *Viewer) renderStatus(buf *render.RenderBuffer, termW, termH int) {
 		if x >= termW {
 			break
 		}
-		buf.SetFgOnly(x, y, r, statusFg, terminal.AttrNone)
+		buf.Cell(x, y, r, statusFg, lcolor.RGB{}, terminal.AttrNone)
 		x++
 	}
 
@@ -375,7 +378,7 @@ func (v *Viewer) renderStatus(buf *render.RenderBuffer, termW, termH int) {
 			if r == ':' || (r >= 'a' && r <= 'z') {
 				fg = keyFg
 			}
-			buf.SetFgOnly(x, y, r, fg, terminal.AttrNone)
+			buf.Cell(x, y, r, fg, lcolor.RGB{}, terminal.AttrNone)
 			x++
 		}
 	}

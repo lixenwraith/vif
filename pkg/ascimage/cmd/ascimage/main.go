@@ -10,10 +10,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lixenwraith/ascimage"
+	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/internal/render"
-	"github.com/lixenwraith/vif/pkg/ascimage"
-	"github.com/lixenwraith/vif/pkg/vmath"
+	"github.com/lixenwraith/terminal/tui"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func main() {
 	flag.IntVar(&zoomLevel, "z", 100, "Initial zoom level percent (interactive only)")
 	flag.IntVar(&anchorX, "ax", 0, "Anchor X offset (dual-mode output)")
 	flag.IntVar(&anchorY, "ay", 0, "Anchor Y offset (dual-mode output)")
-	flag.Float64Var(&aspect, "aspect", float64(vmath.RefAspect), "Cell width over height of the target display")
+	flag.Float64Var(&aspect, "aspect", ascimage.DefaultAspect, "Cell width over height of the target display")
 	flag.Parse()
 
 	if flag.NArg() < 1 {
@@ -56,7 +56,7 @@ func main() {
 		runVifimgInput(inputPath, colorMode, output, noStatus)
 	} else {
 		runImageInput(inputPath, modeStr, colorMode, width, output, dualOutput,
-			fitMode, noStatus, zoomLevel, anchorX, anchorY, vmath.Aspect(aspect))
+			fitMode, noStatus, zoomLevel, anchorX, anchorY, aspect)
 	}
 }
 
@@ -94,7 +94,7 @@ func runVifimgInput(path string, colorMode terminal.ColorMode, output string, no
 }
 
 func runImageInput(path, modeStr string, colorMode terminal.ColorMode, width int,
-	output, dualOutput string, fitMode, noStatus bool, zoomLevel, anchorX, anchorY int, aspect vmath.Aspect) {
+	output, dualOutput string, fitMode, noStatus bool, zoomLevel, anchorX, anchorY int, aspect float64) {
 
 	img, err := loadImage(path)
 	if err != nil {
@@ -116,7 +116,7 @@ func runImageInput(path, modeStr string, colorMode terminal.ColorMode, width int
 	}
 }
 
-func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, output string, anchorX, anchorY int, aspect vmath.Aspect) {
+func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, output string, anchorX, anchorY int, aspect float64) {
 	if width <= 0 {
 		width = 80
 	}
@@ -193,7 +193,7 @@ func parseColorMode(s string) terminal.ColorMode {
 	}
 }
 
-func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, width int, output string, aspect vmath.Aspect) {
+func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, width int, output string, aspect float64) {
 	if width <= 0 {
 		width = 80
 	}
@@ -207,7 +207,7 @@ func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode te
 	}
 }
 
-func runInteractive(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, fitMode, noStatus bool, zoomLevel int, aspect vmath.Aspect) {
+func runInteractive(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, fitMode, noStatus bool, zoomLevel int, aspect float64) {
 	viewer := NewViewer(img, aspect)
 	viewer.RenderMode = renderMode
 	viewer.ColorMode = colorMode
@@ -236,7 +236,7 @@ func runViewer(viewer *Viewer, colorMode terminal.ColorMode) error {
 	defer term.Fini()
 
 	termW, termH := term.Size()
-	buf := render.NewRenderBuffer(colorMode, termW, termH)
+	buf := make([]terminal.Cell, termW*termH)
 
 	viewer.Update(termW, termH)
 	renderFrame(viewer, buf, term, termW, termH)
@@ -256,7 +256,7 @@ func runViewer(viewer *Viewer, colorMode terminal.ColorMode) error {
 
 		case terminal.EventResize:
 			termW, termH = ev.Width, ev.Height
-			buf.Resize(termW, termH)
+			buf = make([]terminal.Cell, termW*termH)
 			viewer.Update(termW, termH)
 
 		case terminal.EventError, terminal.EventClosed:
@@ -368,8 +368,10 @@ func handleKey(ev terminal.Event, viewer *Viewer, termW, termH int) keyAction {
 	return actionNone
 }
 
-func renderFrame(viewer *Viewer, buf *render.RenderBuffer, term terminal.Terminal, termW, termH int) {
-	buf.Clear()
-	viewer.Render(buf, termW, termH)
-	buf.FlushToTerminal(term)
+// renderFrame draws a frame on the backdrop a cell nothing drew shows
+func renderFrame(viewer *Viewer, buf []terminal.Cell, term terminal.Terminal, termW, termH int) {
+	root := tui.NewRegion(buf, termW, 0, 0, termW, termH)
+	root.Fill(lcolor.Gunmetal)
+	viewer.Render(root, termW, termH)
+	term.Flush(buf, termW, termH)
 }

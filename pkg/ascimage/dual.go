@@ -14,7 +14,6 @@ import (
 
 	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // DualModeImage holds both TrueColor and 256-color representations
@@ -47,7 +46,7 @@ const (
 )
 
 // ConvertImageDual converts image to both color modes in single pass
-func ConvertImageDual(img image.Image, targetWidth int, mode RenderMode, aspect vmath.Aspect) *DualModeImage {
+func ConvertImageDual(img image.Image, targetWidth int, mode RenderMode, aspect float64) *DualModeImage {
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()

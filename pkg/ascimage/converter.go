@@ -1,3 +1,7 @@
+// Package ascimage converts raster images into terminal cells, a Unicode quadrant
+// glyph fitted to each cell's four samples or one background color per sample,
+// and reads and writes them as one file holding true color and xterm-256 cells
+// at once.
 package ascimage
 
 import (
@@ -6,8 +10,10 @@ import (
 
 	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/pkg/vmath"
 )
+
+// DefaultAspect is a terminal cell's width over its height
+const DefaultAspect = 0.5
 
 // QuadrantChars maps 4-bit patterns to Unicode quadrant characters
 // Bit order: 0=UL, 1=UR, 2=LL, 3=LR (1 = foreground)
@@ -58,7 +64,7 @@ type ConvertedImage struct {
 }
 
 // ConvertImage converts an image to cells of the given aspect
-func ConvertImage(img image.Image, targetWidth int, mode RenderMode, colorMode terminal.ColorMode, aspect vmath.Aspect) *ConvertedImage {
+func ConvertImage(img image.Image, targetWidth int, mode RenderMode, colorMode terminal.ColorMode, aspect float64) *ConvertedImage {
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
@@ -85,12 +91,12 @@ func ConvertImage(img image.Image, targetWidth int, mode RenderMode, colorMode t
 }
 
 // CalculateOutputSize is the cell grid an image fills at a width, at least one row
-func CalculateOutputSize(srcW, srcH, targetWidth int, aspect vmath.Aspect) (outW, outH int) {
+func CalculateOutputSize(srcW, srcH, targetWidth int, aspect float64) (outW, outH int) {
 	if srcW == 0 || srcH == 0 || targetWidth <= 0 {
 		return 0, 0
 	}
 	imageRatio := float64(srcH) / float64(srcW)
-	return targetWidth, max(int(float64(targetWidth)*imageRatio*float64(aspect)), 1)
+	return targetWidth, max(int(float64(targetWidth)*imageRatio*aspect), 1)
 }
 
 func convertBackground(img image.Image, cells []terminal.Cell, outW, outH int, colorMode terminal.ColorMode) {

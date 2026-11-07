@@ -5,10 +5,10 @@ package pattern
 import (
 	"io"
 
+	"github.com/lixenwraith/ascimage"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
-	"github.com/lixenwraith/vif/pkg/ascimage"
 )
 
 // PatternCell holds visual data + offset for one cell
