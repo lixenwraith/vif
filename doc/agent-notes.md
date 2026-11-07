@@ -99,7 +99,7 @@ that proves wrong or that a document now states, and link the document instead.
   gomobile's wrapper.
 - deadcode lists code that is reserved and stays: `internal/system/composite.go`'s
   lifecycle methods (their todo item), `pkg/vmath` and `pkg/vmath/physics` (other
-  repositories import them), `cmd/ascimage`'s viewer accessors (its next revision),
+  repositories import them),
   `appendF32`/`readF32` (what gen-manifest emits for a float32 field) and the vlog
   stub's mirrors of live functions.
 - A cloud checkout is shallow, about 50 commits: `git log -S` names the boundary
@@ -521,6 +521,15 @@ that proves wrong or that a document now states, and link the document instead.
 
 - Materialize names the materialize effect alone; a teleport's or a charge's line is
   a line, never a beam.
+
+## Ascimage
+
+- The image converter, viewer and `.aimg` format are
+  `github.com/lixenwraith/ascimage`, nested in `pkg/ascimage` until it moves to
+  its repository: a change to it lands there, under its own `AGENTS.md` and
+  [agent notes](../pkg/ascimage/doc/agent-notes.md), and vif's `go.mod` and
+  `android/go.mod` take it through a `replace`. vif's root `./...` leaves the
+  nested module out; `make tools`, `make test` and CI reach it with `go -C`.
 
 ## Genetic
 

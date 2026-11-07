@@ -49,6 +49,12 @@ jobs:
       - name: Vet and test
         run: go vet ./... && go test ./...
 
+      # ascimage is a module of its own nested in pkg/ascimage, which the root's
+      # ./... leaves out; it ships in no archive here.
+      - name: Vet and test the ascimage module
+        working-directory: pkg/ascimage
+        run: go vet ./... && go test ./...
+
       - name: Build archives
         shell: bash
         run: |

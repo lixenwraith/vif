@@ -12,7 +12,7 @@ import (
 
 func TestFileServiceContributesCategorizedOpenCapability(t *testing.T) {
 	root := t.TempDir()
-	image := filepath.Join(root, "image", "backdrops", "test.vifimg")
+	image := filepath.Join(root, "image", "backdrops", "test.aimg")
 	if err := os.MkdirAll(filepath.Dir(image), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestFileServiceContributesCategorizedOpenCapability(t *testing.T) {
 	resources := &engine.Resource{}
 	hub.BindResources(resources)
 
-	f, err := resources.Files.Open("image", filepath.Join("backdrops", "test.vifimg"))
+	f, err := resources.Files.Open("image", filepath.Join("backdrops", "test.aimg"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,26 +48,26 @@ func TestFileServiceContributesCategorizedOpenCapability(t *testing.T) {
 	// A file of the same name beside the process must not shadow the root's copy,
 	// and nothing outside the roots opens, whatever the name's shape.
 	cwd := t.TempDir()
-	if err := os.WriteFile(filepath.Join(cwd, "test.vifimg"), []byte("cwd"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cwd, "test.aimg"), []byte("cwd"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(cwd)
-	if _, err := resources.Files.Open("image", "test.vifimg"); err == nil {
+	if _, err := resources.Files.Open("image", "test.aimg"); err == nil {
 		t.Fatal("a working-directory file opened as an image")
 	}
-	for _, name := range []string{filepath.Join("..", "outside.vifimg"), image, os.DevNull} {
+	for _, name := range []string{filepath.Join("..", "outside.aimg"), image, os.DevNull} {
 		if _, err := resources.Files.Open("image", name); err == nil {
 			t.Fatalf("name %q opened outside the roots", name)
 		}
 	}
-	if _, err := resources.Files.Open(filepath.Join("..", "image"), "test.vifimg"); err == nil {
+	if _, err := resources.Files.Open(filepath.Join("..", "image"), "test.aimg"); err == nil {
 		t.Fatal("invalid category accepted")
 	}
-	device := filepath.Join(root, "image", "device.vifimg")
+	device := filepath.Join(root, "image", "device.aimg")
 	if err := os.Symlink(os.DevNull, device); err != nil {
 		t.Skipf("symlink: %v", err)
 	}
-	if _, err := resources.Files.Open("image", "device.vifimg"); err == nil {
+	if _, err := resources.Files.Open("image", "device.aimg"); err == nil {
 		t.Fatal("a device opened as an image")
 	}
 }

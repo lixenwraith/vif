@@ -550,7 +550,7 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 	})
 }
 
-// handlePatternSpawn loads a .vifimg pattern and spawns it as a composite wall.
+// handlePatternSpawn loads an .aimg pattern and spawns it as a composite wall.
 func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPayload) {
 	file, err := s.world.Resources.Files.Open(paths.ImageDirName, payload.Path)
 	if err != nil {

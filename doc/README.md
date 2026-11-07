@@ -70,8 +70,10 @@ Focused references:
   own, covers its commands and keys; [its
   design](https://github.com/lixenwraith/stapes/blob/main/doc/stapes.md) covers its verbs and files, and [Rip
   design](https://github.com/lixenwraith/stapes/blob/main/doc/rip-design.md) where the rip is going.
-- [Ascimage reference](../cmd/ascimage/README.md) covers terminal-image
-  conversion and viewing.
+- [Ascimage](../pkg/ascimage/README.md), a module of its own nested in
+  `pkg/ascimage` until it moves to its repository, covers terminal-image
+  conversion, [the .aimg format](../pkg/ascimage/doc/format.md) and its
+  browser and viewer.
 - [vif-router](../tool/vif-router/README.md) covers the website-to-K3s
   session router and its routes.
 - [vif-log](../tool/vif-log/README.md) covers the session log and journal viewer.

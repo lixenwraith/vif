@@ -1,14 +1,14 @@
-// Package pattern turns an authored .vifimg into wall cells. It is the one
+// Package pattern turns an authored .aimg into wall cells. It is the one
 // path from image asset to ECS entity; nothing here draws to the terminal.
 package pattern
 
 import (
 	"io"
 
+	"github.com/lixenwraith/ascimage"
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
-	"github.com/lixenwraith/vif/pkg/ascimage"
 )
 
 // PatternCell holds visual data + offset for one cell
@@ -110,7 +110,7 @@ func fromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode
 	}
 }
 
-// ReadDualModePattern decodes a .vifimg supplied by an external file
+// ReadDualModePattern decodes an .aimg supplied by an external file
 // capability. The pattern package does not discover or open host paths.
 func ReadDualModePattern(r io.Reader, colorMode terminal.ColorMode) (PatternResult, error) {
 	img, err := ascimage.ReadDualMode(r)

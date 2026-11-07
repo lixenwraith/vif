@@ -110,7 +110,7 @@ render abstraction, while the orchestrator owns the presentation's surface.
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
 | `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and the `vif.toml` settings, the one file it reads. |
 | `internal/resource` | Resolve the scenario, keymap, corpus, audio overrides and bot graphs against the config-root precedence rule; read a scenario whole into the digested canonical form a session serves a joiner; and validate what those paths resolve to, every bot graph in the roots and embedded included, for `-check`. |
-| `internal/pattern` | Convert a dual-mode `.vifimg` asset into wall spawn cells, and stone art: a rock cell's glyph and colours as a pure integer function of a preset, a seed and the cell. It reads no world and draws into no buffer. |
+| `internal/pattern` | Convert a dual-mode `.aimg` asset into wall spawn cells, and stone art: a rock cell's glyph and colours as a pure integer function of a preset, a seed and the cell. It reads no world and draws into no buffer. |
 | `internal/prof` | Profiler: per-module wall time on the tick, event and render paths, process CPU/memory/GC/I/O sampling, and pprof CPU, heap and mutex profiles and execution-trace captures. Publishes into the status registry; three atomic loads per timed call while off. |
 | `internal/probe` | The supervised run's HTTP endpoint: `/health` and `/metrics`. Standard library and `internal/status` only, and stateless — a snapshot function supplies the run's answer and a status registry supplies the metrics, so the run decides what its words mean and this decides only how to say them. |
 | `internal/profile` | Per-kind tables indexed by kind: the combat attack matrix and species contact damage, collision, homing and mass profiles, and the code species' drop tables a scenario's tables fall back to. |
@@ -132,7 +132,6 @@ flowchart TD
     Game --> Link["pkg/linkpace"]
     Game --> Machine["pkg/machine"]
     Game --> Network["pkg/network"]
-    Game --> Image["pkg/ascimage"]
     Game --> Glyph["pkg/glyph"]
     Game --> Window["pkg/window"]
     Game --> Browser["pkg/browser"]
@@ -143,7 +142,6 @@ flowchart TD
 | Package | Public purpose | Important coupling |
 |---|---|---|
 | `pkg/position` | A map's spatial index and the geometry over it: the dense grid of cells, two classes to a cell, the blocks (cells an occupant blocks for a mask, a plane of bits a mask) and the surfaces (a height a column with a solid side) a query answers from, the log of the cells whose answer changed, and the free-area, line-of-sight and ray searches ([Position package](position-package.md)). | `pkg/vmath` only; the entity is a type parameter, and the cell aspect and which occupant is a block come from the caller (`engine.Position`, whose walls and rock they are). |
-| `pkg/ascimage` | Convert images to terminal cells and read/write dual-mode `.vifimg` assets. | External terminal/color types only. The interactive viewer lives in `cmd/ascimage` because it needs the in-repo render buffer. |
 | `pkg/glyph` | Parse the bitmap font atlas and draw a frame of terminal cells into RGBA, changed cells only: the reference drawer of a graphical host. The protocol a drawer in another runtime paints from: the atlas as one texture (`Texture`), frames as the cells changed since the one it holds (`Frames`), and the probe that checks such a drawer against the raster. | External terminal, color and TOML modules and `pkg/vmath` only; the atlas comes from the caller (`internal/asset`). |
 | `pkg/window` | A desktop window that draws a cell grid: Xlib, EGL and GLES 2 loaded at run time with purego, keys and pointer posted as terminal events. Built on Linux and FreeBSD; `cmd/vif` links it unless `vif_nogui` or `vif_headless`, and `vif_gui` opens it by default. | `pkg/glyph` draws the frame; external terminal module and purego. |
 | `pkg/browser` | A web page as the screen and speakers on `js/wasm`: frames handed to the page one at a time as the cells changed since the one it holds, the mixer's PCM posted to the page (`Speaker`), keys, text, the pointer and resizes taken back as terminal events. | `pkg/glyph` encodes the frames; external terminal module and `syscall/js`. The page is `web/`. |
@@ -222,13 +220,14 @@ The practical dependency rules are:
 
 | External module | Used by | What remains in vif |
 |---|---|---|
-| `lixenwraith/terminal` | app, service, input, mode (`tui` forms), render and renderers, ascimage, cmds and tools; core's crash reset and a few attribute and color-mode types in component, engine, pattern and system | Game-specific input semantics, compositor, renderers, and layout. |
+| `lixenwraith/terminal` | app, service, input, mode (`tui` forms), render and renderers, cmds and tools; core's crash reset and a few attribute and color-mode types in component, engine, pattern and system | Game-specific input semantics, compositor, renderers, and layout. |
 | `lixenwraith/toml` | content, FSM and its dialect kernel, bot graphs, keymaps, commands, journal scripts, `vif.toml` settings, resource checks, event payload text, audio specs, the router; its `macro` package expands the macros scenarios, bot graphs and audio documents define ([TOML macros](toml-macros.md)) | Schemas, validation policy, semantic models, and application resolution. |
-| `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, ascimage, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
+| `lixenwraith/color` | components, engine, events, render and renderers, visual parameters, pattern, systems, cmds and tools | Layering, masks, game palettes, effects, and render scheduling. |
 | `lixenwraith/genetic` | `GeneticSystem` and `engine.GeneticResource`, which evolve eye types through the registry, and the genetic tunables in `parameter` ([AI and evolution §3](ai-physics-and-evolution.md#3-genetic-library)) | The game adapter: species declarations, probe bins, eye fitness, and the capture's genetic carrier (D-19). |
 | `lixenwraith/audio` | `internal/service`'s audio adapter, which runs the engine over the `bank` package's sounds and music and the overrides; the engine's audio resource, the audio systems' requests, the events' audio values (`model`) and the audio tuning in `parameter`; and `-check`'s audio documents in `resource` ([its design](https://github.com/lixenwraith/audio/blob/main/doc/audio.md)) | Game policy: the adaptive conductor, sfx levels and sound shapes, the overrides' resolution, the speakers' host and telemetry ([Audio](audio.md)). |
 | `lixenwraith/log` | `internal/vlog` only in normal builds | Scopes, game correlation fields, crash/runtime capture integration, status snapshots. |
 | `ebitengine/purego` | `pkg/window` only | The window's Xlib, EGL and GLES 2 bindings, frame upload and event mapping. |
+| `lixenwraith/ascimage` | `internal/pattern`, which reads `.aimg` walls through `ReadDualMode`, and the logo renderer's `FitQuadrant` | The wall's reading of an image's cells: transparency skipped, a color mode chosen, offsets laid. |
 
 Stapes (formerly soundlab), the audio authoring tool, is a sibling module,
 [`lixenwraith/stapes`](https://github.com/lixenwraith/stapes). It stands on
@@ -236,6 +235,11 @@ Stapes (formerly soundlab), the audio authoring tool, is a sibling module,
 the rip's learned front end, the audio module's `ripmodel` over
 `lixenwraith/transformer`, so vif's `go.mod` names no transformer. vif imports
 none of it, and it imports nothing of vif ([Audio §4](audio.md#4-stapes)).
+
+Ascimage, the image converter, viewer and the `.aimg` format, is a module of
+its own nested in [`pkg/ascimage`](../pkg/ascimage/README.md) until it moves to
+`lixenwraith/ascimage`; vif's `go.mod` and the Android module's take it through
+a `replace` until then. It imports nothing of vif.
 
 The pinned revisions are in `go.mod`; this document intentionally avoids
 duplicating version strings that would become stale.
@@ -245,7 +249,6 @@ duplicating version strings that would become stale.
 | Area | Contents |
 |---|---|
 | `android/` | The Android host, a module of its own: `game`, the Go library `gomobile bind` wraps around `app.Run` (the view as a `Presentation`, the speakers), and the Java app that presents it ([android/README.md](../android/README.md)). |
-| `cmd/ascimage` | Supported image converter/viewer command. |
 | `script/*` | `test.sh`, the end-to-end checks no Go test makes ([script/README.md](../script/README.md)), and the sparring pair: authored `vif -script` schedules that play a fixed host or guest against a person. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-atlas` | Render the embedded font atlas from a monospace TrueType; Python, so the rasterizer stays out of the module. |

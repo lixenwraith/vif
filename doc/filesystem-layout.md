@@ -24,7 +24,7 @@ wad/                            internal/asset/
 ├── scenario/   one directory    ├── scenario/  fallback scenario
 │               per scenario     ├── content/   fallback corpus
 ├── content/    typing corpus    ├── input/     default keymap
-└── image/      .vifimg assets   ├── bot/       shipped bot graphs
+└── image/      .aimg assets     ├── bot/       shipped bot graphs
                                  ├── font/      cell font atlas
                                  ├── vif.toml   default settings
                                  ├── version.txt source-archive stamp
@@ -56,7 +56,7 @@ vif/
 ├── input/       keymap.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
-├── image/       .vifimg wall assets
+├── image/       .aimg wall assets
 └── bot/         bot graphs, one <name>.toml each
 ```
 
@@ -68,7 +68,7 @@ it; `behavior/` is where the shipped `vanguard` keeps its raiders' programs
 `audio/` is empty until a user or stapes (formerly soundlab), the audio authoring
 tool, writes an override: stapes reads and writes the user root's `audio/`
 documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-stapes)).
-`image/` is the discovery category for `.vifimg` assets named by a
+`image/` is the discovery category for `.aimg` and `.aimgz` assets named by a
 `WallPatternSpawnRequest`.
 
 ## 3. Resolution policy
@@ -98,7 +98,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
 | Content | `content/` | embedded tutorial corpus |
-| Wall image | `image/<name>.vifimg` | none; failure is reported in the game status |
+| Wall image | `image/<name>.aimg`, or `.aimgz` | none; failure is reported in the game status |
 | Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |
 
 An explicit scenario directory means one whose entry is directly at
