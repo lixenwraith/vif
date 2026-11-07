@@ -36,12 +36,12 @@ func TestVimtutorALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
 	}
 	a.Tick(10)
 	first := rows()
-	if first[18] != 1 || first[13] == 0 || first[8] == 0 {
-		t.Fatalf("the first lesson laid %v, want its x on row 18, notes from row 8 and a practice line on 13", first)
+	if first[16] == 0 || first[14] == 0 || first[8] == 0 {
+		t.Fatalf("the first lesson laid %v, want notes from row 8 and a practice block on 14 to 16", first)
 	}
 
-	inject(t, a, &input.Intent{Type: input.IntentMotion, Motion: input.MotionRight, Count: 36},
-		&input.Intent{Type: input.IntentMotion, Motion: input.MotionDown, Count: 5})
+	inject(t, a, &input.Intent{Type: input.IntentMotion, Motion: input.MotionRight, Count: 17},
+		&input.Intent{Type: input.IntentMotion, Motion: input.MotionDown, Count: 2})
 	a.Tick(2)
 	second := rows()
 	var state string
@@ -50,10 +50,10 @@ func TestVimtutorALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
 		state = w.Resources.Status.Strings.Get("fsm.state").Load()
 		cursor, _ = w.Positions.GetPosition(w.Resources.Player.Entity)
 	})
-	if state != "Words" || second[18] != 0 || second[13] == first[13] || second[8] == first[8] {
+	if state != "Words" || second[16] != 0 || second[14] == first[14] || second[8] == first[8] {
 		t.Fatalf("on the x the tutor stands in %s with glyphs %v, want Words with the first lesson's gone and its own laid", state, second)
 	}
-	if cursor != (component.PositionComponent{X: 4, Y: 13}) {
-		t.Fatalf("the cursor stands at %v, want the practice line's first glyph (4, 13)", cursor)
+	if cursor != (component.PositionComponent{X: 4, Y: 14}) {
+		t.Fatalf("the cursor stands at %v, want the practice line's first glyph (4, 14)", cursor)
 	}
 }
