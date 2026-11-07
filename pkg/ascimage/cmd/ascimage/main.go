@@ -44,16 +44,16 @@ screen. An image opens full screen, its directory behind it. ? lists the keys.`,
 		{
 			name: "convert", args: "[flags] <input> <output> | <input>... <dir>", summary: "write images as .aimg files or ANSI text",
 			long: `Write an input to the output its extension names: .aimg holds the cells in
-true color and 256 colors at once, any other name (- for stdout) ANSI text in
--c's depth. Several inputs, or a directory as the output, land in it under
-their own names, as .aimg or, with -ansi, as .ans. An .aimg input keeps its
-cells: it writes to ANSI, or to .aimg with new anchors.`,
+true color and 256 colors at once, .aimgz the same gzipped, any other name
+(- for stdout) ANSI text in -c's depth. Several inputs, or a directory as the
+output, land in it under their own names, in the form -to names. An .aimg
+input keeps its cells: it writes to ANSI, or to .aimg with new anchors.`,
 			setup: func(fs *flag.FlagSet, o *opts) {
 				renderFlags(fs, o)
 				fs.IntVar(&o.width, "w", 80, "output width in `cells`")
 				fs.IntVar(&o.ax, "ax", 0, "anchor x an .aimg carries")
 				fs.IntVar(&o.ay, "ay", 0, "anchor y an .aimg carries")
-				fs.BoolVar(&o.ansi, "ansi", false, "write into a directory as .ans ANSI text, not .aimg")
+				fs.StringVar(&o.to, "to", "aimg", "the `form` written into a directory: aimg, aimgz or ans")
 			},
 			run: cmdConvert,
 		},
@@ -97,8 +97,9 @@ func find(name string) *command {
 type opts struct {
 	mode, depth, zoom string
 	aspect            float64
+	to                string
 	width, ax, ay     int
-	ansi, noStatus    bool
+	noStatus          bool
 	set               map[string]bool // the flags the command line gave
 }
 
@@ -287,19 +288,18 @@ func cmdConvert(o *opts, args []string) error {
 		if err != nil || !fi.IsDir() {
 			return usageError(last + ": several inputs are written into a directory")
 		}
-		ext := ascimage.Extension
-		if o.ansi {
-			ext = ".ans"
+		if o.to != "aimg" && o.to != "aimgz" && o.to != "ans" {
+			return usageError(fmt.Sprintf("-to %q: want aimg, aimgz or ans", o.to))
 		}
 		outs = outs[:0]
 		for _, in := range inputs {
 			base := filepath.Base(in)
-			outs = append(outs, filepath.Join(last, strings.TrimSuffix(base, filepath.Ext(base))+ext))
+			outs = append(outs, filepath.Join(last, strings.TrimSuffix(base, filepath.Ext(base))+"."+o.to))
 		}
-	} else if o.ansi {
-		return usageError("-ansi names a directory's outputs; a file's extension names its own")
-	} else if ext := filepath.Ext(last); listed(last) && !strings.EqualFold(ext, ascimage.Extension) {
-		return usageError(last + ": ascimage writes .aimg files and ANSI text, not " + strings.ToUpper(ext[1:]))
+	} else if o.set["to"] {
+		return usageError("-to names a directory's outputs; a file's extension names its own")
+	} else if ext := filepath.Ext(last); listed(last) && !isAIMG(last) {
+		return usageError(last + ": ascimage writes .aimg and .aimgz files and ANSI text, not " + strings.ToUpper(ext[1:]))
 	}
 
 	p := inline.New(os.Stderr)
@@ -350,7 +350,7 @@ func convertOne(o *opts, in, out string, mode ascimage.RenderMode, depth termina
 		}
 	}
 
-	if strings.EqualFold(filepath.Ext(out), ascimage.Extension) {
+	if isAIMG(out) {
 		d := src.dual
 		if d == nil {
 			d = ascimage.ConvertImageDual(src.img, o.width, mode, o.aspect)
@@ -367,7 +367,7 @@ func convertOne(o *opts, in, out string, mode ascimage.RenderMode, depth termina
 		if err := ascimage.SaveDualMode(out, d); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%dx%d cells, %s", d.Width, d.Height, strings.ToLower(d.RenderMode.String())), nil
+		return fmt.Sprintf("%dx%d cells, %s, %s", d.Width, d.Height, strings.ToLower(d.RenderMode.String()), fileSize(out)), nil
 	}
 
 	var img *ascimage.ConvertedImage
@@ -379,7 +379,20 @@ func convertOne(o *opts, in, out string, mode ascimage.RenderMode, depth termina
 	if err := writeANSI(img, out); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%dx%d cells of ANSI text", img.Width, img.Height), nil
+	return fmt.Sprintf("%dx%d cells of ANSI text, %s", img.Width, img.Height, fileSize(out)), nil
+}
+
+// isAIMG reports whether a name asks for an .aimg, plain or gzipped
+func isAIMG(name string) bool {
+	ext := filepath.Ext(name)
+	return strings.EqualFold(ext, ascimage.Extension) || strings.EqualFold(ext, ascimage.ExtensionGzip)
+}
+
+func fileSize(path string) string {
+	if fi := statOf(path); fi != nil {
+		return humanSize(fi.Size())
+	}
+	return "size unknown"
 }
 
 func statOf(path string) os.FileInfo {

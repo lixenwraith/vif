@@ -23,13 +23,13 @@ const maxPixels = 1 << 27
 
 // extensions are the names the browser lists and a bare path opens in view;
 // what a file holds is read from its bytes
-var extensions = []string{".png", ".jpg", ".jpeg", ".gif", ascimage.Extension}
+var extensions = []string{".png", ".jpg", ".jpeg", ".gif", ascimage.Extension, ascimage.ExtensionGzip}
 
 // source is one input: a raster to convert, or an .aimg's cells
 type source struct {
 	path   string
 	size   int64  // file bytes
-	format string // png, jpeg, gif or aimg
+	format string // png, jpeg, gif, aimg or aimgz
 	w, h   int    // a raster's pixels, an .aimg's cells
 	img    image.Image
 	dual   *ascimage.DualModeImage
@@ -40,7 +40,7 @@ func (s *source) dims() (int, int) { return s.w, s.h }
 func (s *source) describe() string {
 	w, h := s.dims()
 	if s.dual != nil {
-		return fmt.Sprintf(".aimg, %dx%d cells, %s, anchor %d,%d, %s",
+		return fmt.Sprintf(".%s, %dx%d cells, %s, anchor %d,%d, %s", s.format,
 			w, h, strings.ToLower(s.dual.RenderMode.String()), s.dual.AnchorX, s.dual.AnchorY, humanSize(s.size))
 	}
 	return fmt.Sprintf("%s, %dx%d pixels, %s", strings.ToUpper(s.format), w, h, humanSize(s.size))
@@ -65,7 +65,8 @@ func listed(name string) bool {
 	return false
 }
 
-// load reads a source, an .aimg by its magic and a raster otherwise
+// load reads a source by its bytes, whatever its name: an .aimg by its magic,
+// an .aimgz by gzip's, a raster otherwise
 func load(path string) (*source, error) { return open(path, true) }
 
 // probe reads a raster's header alone, and an .aimg whole
@@ -86,8 +87,12 @@ func open(path string, decode bool) (*source, error) {
 	}
 	s := &source{path: path, size: fi.Size()}
 	br := bufio.NewReader(f)
-	if head, _ := br.Peek(len("ASCIMG\n")); bytes.Equal(head, []byte("ASCIMG\n")) {
+	head, _ := br.Peek(len("ASCIMG\n"))
+	if gz := ascimage.Gzipped(head); gz || bytes.Equal(head, []byte("ASCIMG\n")) {
 		s.format = "aimg"
+		if gz {
+			s.format = "aimgz"
+		}
 		if s.dual, err = ascimage.ReadDualMode(br); err != nil {
 			return nil, wrap(path, err)
 		}
@@ -116,7 +121,7 @@ func open(path string, decode bool) (*source, error) {
 
 func decodeError(err error) error {
 	if errors.Is(err, image.ErrFormat) {
-		return errors.New("not a PNG, JPEG, GIF or .aimg")
+		return errors.New("not a PNG, JPEG, GIF, .aimg or .aimgz")
 	}
 	return err
 }

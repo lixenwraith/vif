@@ -2,12 +2,13 @@ package ascimage
 
 import (
 	"bufio"
-	"compress/zlib"
+	"compress/gzip"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -15,8 +16,12 @@ import (
 	lcolor "github.com/lixenwraith/color"
 )
 
-// Extension names an .aimg file, the format doc/format.md specifies
-const Extension = ".aimg"
+// Extension names a plain .aimg and ExtensionGzip one gzipped whole, the
+// forms doc/format.md specifies; a reader tells them apart by their bytes
+const (
+	Extension     = ".aimg"
+	ExtensionGzip = ".aimgz"
+)
 
 // MaxSide and MaxCells bound a grid: ReadDualMode refuses a header past them
 // before it allocates, and WriteDualMode never writes a file it would refuse
@@ -28,7 +33,6 @@ const (
 const (
 	magic               = "ASCIMG"
 	formatVersion       = 1
-	codecZlib           = "zlib"
 	cellFlagTransparent = 1 << 0
 	cellBytes           = 13 // rune 4, true fg 3, true bg 3, 256 fg 1, 256 bg 1, flags 1
 	maxHeaderLine       = 64
@@ -36,16 +40,14 @@ const (
 )
 
 // headerKeys are the keys a version 1 header must hold; ax and ay may be left out
-var headerKeys = []string{"v", "c", "w", "h", "m", "n"}
+var headerKeys = []string{"v", "w", "h", "m"}
 
-// WriteDualMode writes img as an .aimg: the text header, then the cells under
-// zlib at BestSpeed, which keeps most of what the slower levels save: on
-// vif's 140x39 sample, 70,980 plain bytes take 26,778
+// WriteDualMode writes img as a plain .aimg, the text header and then its cells
 func WriteDualMode(w io.Writer, img *DualModeImage) error {
 	if img == nil {
 		return errors.New("aimg: nil image")
 	}
-	cellCount, plainBytes, err := bodySize(img.Width, img.Height)
+	cellCount, err := gridCells(img.Width, img.Height)
 	if err != nil {
 		return err
 	}
@@ -56,20 +58,11 @@ func WriteDualMode(w io.Writer, img *DualModeImage) error {
 	if img.RenderMode > ModeQuadrant {
 		return fmt.Errorf("aimg: unknown render mode %d", img.RenderMode)
 	}
-
 	bw := bufio.NewWriter(w)
-	fmt.Fprintf(bw, "%s\nv:%d\nc:%s\nw:%d\nh:%d\nm:%d\nax:%d\nay:%d\nn:%d\n\n",
-		magic, formatVersion, codecZlib, img.Width, img.Height, img.RenderMode,
-		img.AnchorX, img.AnchorY, plainBytes)
-	zw, err := zlib.NewWriterLevel(bw, zlib.BestSpeed)
-	if err != nil {
-		return fmt.Errorf("aimg: %w", err)
-	}
-	if err := writeCells(zw, img.Cells); err != nil {
+	fmt.Fprintf(bw, "%s\nv:%d\nw:%d\nh:%d\nm:%d\nax:%d\nay:%d\n\n",
+		magic, formatVersion, img.Width, img.Height, img.RenderMode, img.AnchorX, img.AnchorY)
+	if err := writeCells(bw, img.Cells); err != nil {
 		return err
-	}
-	if err := zw.Close(); err != nil {
-		return fmt.Errorf("aimg: compress: %w", err)
 	}
 	if err := bw.Flush(); err != nil {
 		return fmt.Errorf("aimg: %w", err)
@@ -101,11 +94,26 @@ func writeCells(w io.Writer, cells []DualCell) error {
 	return nil
 }
 
-// ReadDualMode reads an .aimg, refusing all that version 1 does not define:
-// another magic or version, a header past its limits or missing a key, and
-// cells that fail the body's checksum, outrun its size or hold no rune
+// Gzipped reports whether bytes that open a file are gzip's, an .aimgz's
+func Gzipped(head []byte) bool {
+	return len(head) >= 2 && head[0] == 0x1f && head[1] == 0x8b
+}
+
+// ReadDualMode reads an .aimg, plain or gzipped, as its bytes say whatever
+// its name, refusing all that version 1 does not define: another magic or
+// version, a header past its limits or missing a key, cells that hold no
+// rune or that are fewer or more than it names, a gzip stream that fails
 func ReadDualMode(r io.Reader) (*DualModeImage, error) {
 	br := bufio.NewReader(r)
+	if head, _ := br.Peek(2); Gzipped(head) {
+		zr, err := gzip.NewReader(br)
+		if err != nil {
+			return nil, fmt.Errorf("aimg: gzip: %w", err)
+		}
+		defer zr.Close()
+		br = bufio.NewReader(zr)
+	}
+
 	line, err := headerLine(br)
 	if err != nil {
 		return nil, fmt.Errorf("aimg: %w", err)
@@ -113,10 +121,8 @@ func ReadDualMode(r io.Reader) (*DualModeImage, error) {
 	if line != magic {
 		return nil, fmt.Errorf("aimg: not an .aimg file (magic %q)", line)
 	}
-
 	img := &DualModeImage{}
-	var version, plain int
-	var codec string
+	var version int
 	seen := make(map[string]bool, len(headerKeys)+2)
 	for n := 0; ; n++ {
 		if n == maxHeaderLines {
@@ -139,8 +145,6 @@ func ReadDualMode(r io.Reader) (*DualModeImage, error) {
 		switch key {
 		case "v":
 			version, err = headerInt(key, val)
-		case "c":
-			codec = val
 		case "w":
 			img.Width, err = headerInt(key, val)
 		case "h":
@@ -156,8 +160,6 @@ func ReadDualMode(r io.Reader) (*DualModeImage, error) {
 			img.AnchorX, err = headerInt(key, val)
 		case "ay":
 			img.AnchorY, err = headerInt(key, val)
-		case "n":
-			plain, err = headerInt(key, val)
 		}
 		if err != nil {
 			return nil, err
@@ -171,33 +173,19 @@ func ReadDualMode(r io.Reader) (*DualModeImage, error) {
 	if version != formatVersion {
 		return nil, fmt.Errorf("aimg: unsupported version %d", version)
 	}
-	if codec != codecZlib {
-		return nil, fmt.Errorf("aimg: unsupported codec %q", codec)
-	}
-	cellCount, plainBytes, err := bodySize(img.Width, img.Height)
+	cellCount, err := gridCells(img.Width, img.Height)
 	if err != nil {
 		return nil, err
 	}
-	if plain != plainBytes {
-		return nil, fmt.Errorf("aimg: body names %d plain bytes, %dx%d cells take %d",
-			plain, img.Width, img.Height, plainBytes)
-	}
-
-	zr, err := zlib.NewReader(br)
-	if err != nil {
-		return nil, fmt.Errorf("aimg: body: %w", err)
-	}
-	defer zr.Close()
-	if img.Cells, err = readCells(zr, cellCount); err != nil {
+	if img.Cells, err = readCells(br, cellCount); err != nil {
 		return nil, err
 	}
-	// Reading on to the stream's end checks its Adler-32; a body that expands
-	// past its size leaves the rest of its stream, as trailing bytes would
-	if _, err := io.Copy(io.Discard, io.LimitReader(zr, 1)); err != nil {
-		return nil, fmt.Errorf("aimg: body: %w", err)
-	}
+	// A gzip stream checks its CRC-32 and length as it ends
 	if _, err := br.ReadByte(); err != io.EOF {
-		return nil, errors.New("aimg: data follows the declared body")
+		if err == nil {
+			err = errors.New("data follows the cells")
+		}
+		return nil, fmt.Errorf("aimg: %w", err)
 	}
 	return img, nil
 }
@@ -251,22 +239,30 @@ func headerInt(key, value string) (int, error) {
 	return n, nil
 }
 
-// bodySize is a grid's cell count and plain body bytes, inside the limits
-func bodySize(width, height int) (cellCount, plainBytes int, err error) {
+// gridCells is a grid's cell count, inside the limits
+func gridCells(width, height int) (int, error) {
 	if width < 1 || height < 1 || width > MaxSide || height > MaxSide || width*height > MaxCells {
-		return 0, 0, fmt.Errorf("aimg: %dx%d cells: a side is 1 to %d and a grid at most %d",
+		return 0, fmt.Errorf("aimg: %dx%d cells: a side is 1 to %d and a grid at most %d",
 			width, height, MaxSide, MaxCells)
 	}
-	return width * height, width * height * cellBytes, nil
+	return width * height, nil
 }
 
-// SaveDualMode writes img to path; a failed write removes the file it began
+// SaveDualMode writes img to path, gzipped at gzip's default level when the
+// path ends in ExtensionGzip; a failed write removes the file it began
 func SaveDualMode(path string, img *DualModeImage) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	err = WriteDualMode(f, img)
+	if strings.EqualFold(filepath.Ext(path), ExtensionGzip) {
+		zw := gzip.NewWriter(f)
+		if err = WriteDualMode(zw, img); err == nil {
+			err = zw.Close()
+		}
+	} else {
+		err = WriteDualMode(f, img)
+	}
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -276,7 +272,7 @@ func SaveDualMode(path string, img *DualModeImage) error {
 	return err
 }
 
-// LoadDualMode reads the .aimg at path
+// LoadDualMode reads the .aimg at path, plain or gzipped
 func LoadDualMode(path string) (*DualModeImage, error) {
 	f, err := os.Open(path)
 	if err != nil {
