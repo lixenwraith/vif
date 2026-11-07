@@ -77,6 +77,7 @@ type GlyphSystem struct {
 
 	// Reused placement scratch
 	placement []glyphPlacement
+	cleared   []core.Entity // the glyphs a clear removes, reused between clears
 
 	// Lines still entering across an upwind edge while glyphs drift
 	entering []engine.EntryLine
@@ -154,6 +155,7 @@ func (s *GlyphSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaSystemCommandRequest,
 		event.EventGlyphLineRequest,
+		event.EventGlyphClearRequest,
 	}
 }
 
@@ -178,7 +180,30 @@ func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.GlyphLinePayload); ok {
 			s.placeLineAt(payload)
 		}
+
+	case event.EventGlyphClearRequest:
+		if payload, ok := ev.Payload.(*event.GlyphClearPayload); ok {
+			s.clear(payload)
+		}
 	}
+}
+
+// clear removes the player glyphs in the payload's rectangle, every one for an
+// empty rectangle, at once: a lesson cleared this way leaves no dust to hide the next
+func (s *GlyphSystem) clear(p *event.GlyphClearPayload) {
+	s.cleared = s.cleared[:0]
+	s.world.Components.Glyph.Each(func(e core.Entity, _ *component.GlyphComponent) bool {
+		if e.Domain() != core.DomainPlayer {
+			return true
+		}
+		pos, ok := s.world.Positions.GetPosition(e)
+		if !ok || p.Width > 0 && p.Height > 0 && (pos.X < p.X || pos.X >= p.X+p.Width || pos.Y < p.Y || pos.Y >= p.Y+p.Height) {
+			return true
+		}
+		s.cleared = append(s.cleared, e)
+		return true
+	})
+	s.world.DestroyEntitiesBatch(s.cleared)
 }
 
 // Update runs the spawn system logic
@@ -317,7 +342,8 @@ func (s *GlyphSystem) nextGlyphToSpawn() GlyphKey {
 	}
 }
 
-// spawnGlyphs pulls the next content block and places its lines
+// spawnGlyphs pulls the next content block and places it: whole where a slot holds
+// it, so a bracket pair or a paragraph reads across its rows, else a line at a time
 func (s *GlyphSystem) spawnGlyphs() {
 	res := s.world.Resources.Content
 	if res == nil || res.Provider == nil {
@@ -332,9 +358,67 @@ func (s *GlyphSystem) spawnGlyphs() {
 	s.updateCensus()
 	key := s.nextGlyphToSpawn()
 
+	if s.placeBlock(block.Lines, key.Type, key.Level) {
+		return
+	}
 	for _, line := range block.Lines {
 		s.placeLine(line, key.Type, key.Level)
 	}
+}
+
+// crop reads line in place, a rune a column, as far as width columns: a try that
+// places nothing allocates nothing
+func crop(line string, width int) (text string, length int) {
+	for i := range line {
+		if length == width {
+			return line[:i], length
+		}
+		length++
+	}
+	return line, length
+}
+
+// placeBlock lays a block's lines on consecutive rows from one column, in the
+// open and in one batch; a block of one line, one taller than the map, or one no
+// slot holds in MaxPlacementTries is not placed, and glyphs drifting enter line by line
+func (s *GlyphSystem) placeBlock(lines []string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
+	config := s.world.Resources.Config
+	if len(lines) < 2 || len(lines) > config.MapHeight || s.statDriftActive.Load() || s.world.Resources.Player.Count() == 0 {
+		return false
+	}
+	width := 0
+	for _, line := range lines {
+		_, length := crop(line, config.MapWidth)
+		width = max(width, length)
+	}
+	if width == 0 {
+		return false
+	}
+
+	for range parameter.MaxPlacementTries {
+		row := s.rng.Intn(config.MapHeight - len(lines) + 1)
+		startCol := s.rng.Intn(config.MapWidth - width + 1)
+		clear := true
+		for i, line := range lines {
+			if _, length := crop(line, width); s.nearCursor(row+i, startCol, length) || s.blocked(row+i, startCol, length) {
+				clear = false
+				break
+			}
+		}
+		if !clear {
+			continue
+		}
+		s.placement = s.placement[:0]
+		for i, line := range lines {
+			text, _ := crop(line, width)
+			s.stage(text, startCol, row+i)
+		}
+		// Text placed under a scenery drift is scenery for life
+		if s.commit(glyphType, glyphLevel, s.statDriftScenery.Load(), false) {
+			return true
+		}
+	}
+	return false
 }
 
 // placeLine attempts to place a single line on the map, or while glyphs drift starts
@@ -342,16 +426,7 @@ func (s *GlyphSystem) spawnGlyphs() {
 // width is the only crop policy.
 func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
 	config := s.world.Resources.Config
-
-	// Read in place, a rune a column, so a try that places nothing allocates nothing
-	text, lineLength := line, 0
-	for i := range line {
-		if lineLength == config.MapWidth {
-			text = line[:i]
-			break
-		}
-		lineLength++
-	}
+	text, lineLength := crop(line, config.MapWidth)
 	if lineLength == 0 || s.world.Resources.Player.Count() == 0 {
 		return false
 	}
@@ -365,8 +440,10 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		if s.nearCursor(row, startCol, lineLength) || s.blocked(row, startCol, lineLength) {
 			continue
 		}
+		s.placement = s.placement[:0]
+		s.stage(text, startCol, row)
 		// Text placed under a scenery drift is scenery for life
-		if s.lay(text, startCol, row, glyphType, glyphLevel, s.statDriftScenery.Load()) {
+		if s.commit(glyphType, glyphLevel, s.statDriftScenery.Load(), false) {
 			return true
 		}
 	}
@@ -375,31 +452,30 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 }
 
 // placeLineAt lays a scenario's line from its cell, cropped at the map's right edge
-// as a corpus line is; one that starts off the map, or meets a wall or rock, is
-// dropped whole
+// as a corpus line is; one that starts off the map, or meets a wall, rock or glyph,
+// is dropped whole. A cursor or an effect on a cell is no obstacle: the line is
+// laid for the cursor to stand on.
 func (s *GlyphSystem) placeLineAt(p *event.GlyphLinePayload) bool {
 	config := s.world.Resources.Config
 	if p.X < 0 || p.X >= config.MapWidth || p.Y < 0 || p.Y >= config.MapHeight {
 		return false
 	}
-	text, length := p.Text, 0
-	for i := range p.Text {
-		if p.X+length == config.MapWidth {
-			text = p.Text[:i]
-			break
-		}
-		length++
-	}
+	text, length := crop(p.Text, config.MapWidth-p.X)
 	if length == 0 || s.blocked(p.Y, p.X, length) {
 		return false
 	}
-	return s.lay(text, p.X, p.Y, p.Type, p.Level, p.Scenery)
+	for i := range length {
+		if _, held := s.world.Positions.TopGlyphAt(p.X+i, p.Y); held {
+			return false
+		}
+	}
+	s.placement = s.placement[:0]
+	s.stage(text, p.X, p.Y)
+	return s.commit(p.Type, p.Level, p.Scenery, true)
 }
 
-// lay stages text's runes from a cell, skipping spaces, and commits them as one
-// batch: a cell any entity holds drops the whole line
-func (s *GlyphSystem) lay(text string, x, y int, glyphType component.GlyphType, glyphLevel component.GlyphLevel, scenery bool) bool {
-	s.placement = s.placement[:0]
+// stage lays text's runes out from a cell, skipping spaces, for the next commit
+func (s *GlyphSystem) stage(text string, x, y int) {
 	col := x
 	for _, r := range text {
 		if r != ' ' {
@@ -411,13 +487,20 @@ func (s *GlyphSystem) lay(text string, x, y int, glyphType component.GlyphType, 
 		}
 		col++
 	}
+}
+
+// commit places every staged glyph as one batch: a cell any entity holds drops them
+// all, unless over says the cells were checked and whatever else stands there stays
+func (s *GlyphSystem) commit(glyphType component.GlyphType, glyphLevel component.GlyphLevel, scenery, over bool) bool {
 	s.buffers.Observe(0, len(s.placement))
 
 	batch := s.world.Positions.BeginBatch(len(s.placement))
 	for _, gp := range s.placement {
 		batch.Add(gp.entity, gp.pos)
 	}
-	if err := batch.Commit(); err != nil {
+	if over {
+		batch.CommitForce()
+	} else if err := batch.Commit(); err != nil {
 		for _, gp := range s.placement {
 			s.world.DestroyEntity(gp.entity)
 		}

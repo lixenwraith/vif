@@ -30,7 +30,8 @@ func Check(o Options, w io.Writer) error {
 	}
 	event.EnsureRegistry()
 
-	if err := checkScenario(o, w); err != nil {
+	sc, err := checkScenario(o, w)
+	if err != nil {
 		return err
 	}
 	if err := checkKeymap(o, w); err != nil {
@@ -39,7 +40,7 @@ func Check(o Options, w io.Writer) error {
 	if err := checkAudio(o, w); err != nil {
 		return err
 	}
-	if err := checkContent(o, w); err != nil {
+	if err := checkContent(o, sc, w); err != nil {
 		return err
 	}
 	return checkBots(o, w)
@@ -100,14 +101,14 @@ func ValidateScenario(o Options) (Scenario, error) {
 
 // checkScenario reports what a peer would compare: the name, the digest, and
 // where it came from, and the players it runs with.
-func checkScenario(o Options, w io.Writer) error {
+func checkScenario(o Options, w io.Writer) (Scenario, error) {
 	sc, err := ValidateScenario(o)
 	if err != nil {
-		return err
+		return Scenario{}, err
 	}
 	source, err := ScenarioPath(o)
 	if err != nil {
-		return err
+		return Scenario{}, err
 	}
 	if source == "" {
 		source = "embedded main"
@@ -117,11 +118,11 @@ func checkScenario(o Options, w io.Writer) error {
 	fmt.Fprintln(w, "systems ok")
 	programs, err := sc.Behaviors()
 	if err != nil {
-		return err
+		return Scenario{}, err
 	}
 	loot, err := sc.Loot()
 	if err != nil {
-		return err
+		return Scenario{}, err
 	}
 	kinds, _ := loot["loot"].(map[string]any)
 	tables, _ := loot["drops"].(map[string]any)
@@ -139,7 +140,7 @@ func checkScenario(o Options, w io.Writer) error {
 		}
 		fmt.Fprintln(w)
 	}
-	return nil
+	return sc, nil
 }
 
 // checkSystems validates every system name the config references, then every
@@ -237,8 +238,8 @@ func checkSystemDependencies(m *fsm.Machine[*engine.World], profiles []manifest.
 }
 
 // checkContent loads the corpus and reports accepted and rejected files
-func checkContent(o Options, w io.Writer) error {
-	src, err := Corpus(o)
+func checkContent(o Options, sc Scenario, w io.Writer) error {
+	src, err := Corpus(o, sc)
 	if err != nil {
 		return fmt.Errorf("content path: %w", err)
 	}

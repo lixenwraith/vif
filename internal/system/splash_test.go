@@ -121,7 +121,8 @@ func TestATextStandsAtItsOriginUntilReplacedOrCleared(t *testing.T) {
 	if len(entities) != 1 {
 		t.Fatalf("texts at one origin = %d, want the second in place of the first", len(entities))
 	}
-	c, _ := w.Components.Splash.GetComponent(entities[0])
+	first := entities[0]
+	c, _ := w.Components.Splash.GetComponent(first)
 	if got := string(c.Content[:c.Length]); got != "press w" || c.Slot != component.SlotText || c.Font != component.SplashSmall {
 		t.Fatalf("text = %q slot %d face %d, want \"press w\" as a small text", got, c.Slot, c.Font)
 	}
@@ -130,8 +131,13 @@ func TestATextStandsAtItsOriginUntilReplacedOrCleared(t *testing.T) {
 	}
 
 	write("")
-	if n := countEvents(w.Resources.Event.Queue.Consume(), event.EventDeathBatch); n != 1 {
-		t.Fatalf("clearing the text raised %d deaths, want 1", n)
+	write("press e")
+	entities = w.Components.Splash.Entities()
+	if len(entities) != 1 || entities[0] == first {
+		t.Fatalf("texts after a clear and a write = %v, want one new entity, the cleared one gone at once", entities)
+	}
+	if n := countEvents(w.Resources.Event.Queue.Consume(), event.EventDeathBatch); n != 0 {
+		t.Fatalf("clearing the text raised %d deaths, want it gone at once", n)
 	}
 }
 

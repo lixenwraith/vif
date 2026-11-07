@@ -78,7 +78,7 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	if got, err := Keymap(o); err != nil || got != keymap {
 		t.Fatalf("keymap = %q, %v; want %q", got, err, keymap)
 	}
-	if got, err := Corpus(o); err != nil || got.Dir != content {
+	if got, err := Corpus(o, Scenario{}); err != nil || got.Dir != content {
 		t.Fatalf("content = %+v, %v; want %q", got, err, content)
 	}
 	if got, err := Audio(o); err != nil || got.MusicPath != music || got.SoundPath != sounds {

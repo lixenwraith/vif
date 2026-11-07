@@ -33,12 +33,15 @@ the parser testable without constructing an ECS world.
 A scenario can take printable ASCII keys away from the play grammar, for a game
 whose buttons are keys. An FSM state emits `EventKeyCaptureRequest { keys = "12345" }`
 (empty `keys` releases them; `entity` scopes the capture to one cursor's instance;
-`releases = true` asks a console keyboard for releases too) and `MetaSystem` stores
-the set in `GameContext.KeyCapture`, which the parser reads without the world lock.
-In Normal, Visual and Insert a captured key cancels any pending count or operator
-and becomes `IntentKeyPress`, its release `IntentKeyRelease` in any mode, and its
-repeat nothing while it is held. Search and Command text, Escape and other special
-keys are untouched, and a reset releases the capture.
+`modes` names the play modes it holds in, every one when unset; `idle = true`
+leaves a key to a count, operator or prefix already pending; `releases = true`
+asks a console keyboard for releases too) and `MetaSystem` stores the set in
+`GameContext.KeyCapture`, which the parser reads without the world lock. In the
+modes the capture holds in, a captured key cancels any pending count or operator,
+unless the capture is idle, and becomes `IntentKeyPress`, its release
+`IntentKeyRelease` in any mode, and its repeat nothing while it is held. Search
+and Command text, Escape and other special keys are untouched, and a reset
+releases the capture.
 
 A captured key is the scenario's one input hook, whatever produces it:
 

@@ -15,9 +15,12 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// ContentSource selects where the corpus is read from.
-// An empty Dir selects the embedded corpus; Pin restricts the walk to one file.
+// ContentSource selects where the corpus is read from: FS, labelled Label, is
+// the corpus a scenario carries; else Dir, and an empty Dir selects the embedded
+// corpus. Pin restricts the walk to one file.
 type ContentSource struct {
+	FS       fs.FS
+	Label    string
 	Dir      string
 	Pin      string
 	Explicit bool
@@ -146,7 +149,10 @@ func (s *ContentService) Pin() string { return s.src.Pin }
 
 // open returns the corpus filesystem and a telemetry label
 func (s *ContentService) open() (fs.FS, string) {
-	if s.src.Dir == "" {
+	switch {
+	case s.src.FS != nil:
+		return s.src.FS, s.src.Label
+	case s.src.Dir == "":
 		return asset.DefaultContent, "embedded"
 	}
 	return os.DirFS(s.src.Dir), s.src.Dir

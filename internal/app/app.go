@@ -270,7 +270,7 @@ func (a *App) initServices() error {
 	}
 	_ = a.hub.Register(service.NewFileService(resource.Files(a.cfg.Resources)))
 
-	contentSrc, err := resource.Corpus(a.cfg.Resources)
+	contentSrc, err := resource.Corpus(a.cfg.Resources, a.scenario)
 	if err != nil {
 		return fmt.Errorf("content path: %w", err)
 	}
