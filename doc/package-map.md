@@ -236,11 +236,6 @@ the rip's learned front end, the audio module's `ripmodel` over
 `lixenwraith/transformer`, so vif's `go.mod` names no transformer. vif imports
 none of it, and it imports nothing of vif ([Audio §4](audio.md#4-stapes)).
 
-Ascimage, the image converter, viewer and the `.aimg` format, is a module of
-its own nested in [`pkg/ascimage`](../pkg/ascimage/README.md) until it moves to
-`lixenwraith/ascimage`; vif's `go.mod` and the Android module's take it through
-a `replace` until then. It imports nothing of vif.
-
 The pinned revisions are in `go.mod`; this document intentionally avoids
 duplicating version strings that would become stale.
 

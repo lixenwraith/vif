@@ -28,7 +28,6 @@ jobs:
         cache-dependency-path: |
           go.sum
           android/go.sum
-          pkg/ascimage/go.sum
 
     - name: Download dependencies
       run: go mod download
@@ -73,12 +72,4 @@ jobs:
       run: go test -race ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
       env:
         # Halt on the first race; its report prints beside the failing package.
-        GORACE: "halt_on_error=1"
-
-    # ascimage is a module of its own, nested here until it moves to its
-    # repository; the root's ./... leaves it out, though vif imports its package.
-    - name: Vet and test the ascimage module
-      working-directory: pkg/ascimage
-      run: go vet ./... && go test -race ./... 2>&1 | { grep -Ev '^(ok|\?) ' || true; }
-      env:
         GORACE: "halt_on_error=1"
