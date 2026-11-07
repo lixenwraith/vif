@@ -395,3 +395,152 @@ func (v *Viewer) NeedsPanning(termW, termH int) bool {
 	}
 	return v.converted.Width > termW || v.converted.Height > availH
 }
+
+func runViewer(viewer *Viewer, colorMode terminal.ColorMode) error {
+	term := terminal.New(colorMode)
+
+	if err := term.Init(); err != nil {
+		return fmt.Errorf("terminal init: %w", err)
+	}
+	defer term.Fini()
+
+	termW, termH := term.Size()
+	buf := make([]terminal.Cell, termW*termH)
+
+	viewer.Update(termW, termH)
+	renderFrame(viewer, buf, term, termW, termH)
+
+	for {
+		ev := term.PollEvent()
+
+		switch ev.Type {
+		case terminal.EventKey:
+			action := handleKey(ev, viewer, termW, termH)
+			if action == actionQuit {
+				return nil
+			}
+			if action == actionRedraw {
+				viewer.ForceUpdate(termW, termH)
+			}
+
+		case terminal.EventResize:
+			termW, termH = ev.Width, ev.Height
+			buf = make([]terminal.Cell, termW*termH)
+			viewer.Update(termW, termH)
+
+		case terminal.EventError, terminal.EventClosed:
+			return nil
+		}
+
+		renderFrame(viewer, buf, term, termW, termH)
+	}
+}
+
+type keyAction int
+
+const (
+	actionNone keyAction = iota
+	actionQuit
+	actionRedraw
+)
+
+func handleKey(ev terminal.Event, viewer *Viewer, termW, termH int) keyAction {
+	smallStep := 1
+	largeStep := 10
+	pageStep := termH / 2
+
+	switch ev.Key {
+	case terminal.KeyEscape, terminal.KeyCtrlC, terminal.KeyCtrlD:
+		return actionQuit
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 'q', 'Q':
+			return actionQuit
+		case 'f', 'F':
+			viewer.ToggleViewMode()
+			return actionRedraw
+		case 'm', 'M':
+			viewer.ToggleRenderMode()
+			return actionRedraw
+		case 'c', 'C':
+			viewer.ToggleColorMode()
+			return actionRedraw
+		case 's', 'S':
+			viewer.ShowStatus = !viewer.ShowStatus
+			return actionNone
+		case '+', '=':
+			viewer.AdjustZoom(10)
+			return actionRedraw
+		case '-', '_':
+			viewer.AdjustZoom(-10)
+			return actionRedraw
+		case '0':
+			viewer.ZoomLevel = 100
+			viewer.ViewMode = ViewCustom
+			return actionRedraw
+		case 'h':
+			viewer.Pan(-smallStep, 0, termW, termH)
+		case 'l':
+			viewer.Pan(smallStep, 0, termW, termH)
+		case 'j':
+			viewer.Pan(0, smallStep, termW, termH)
+		case 'k':
+			viewer.Pan(0, -smallStep, termW, termH)
+		case 'H':
+			viewer.Pan(-largeStep, 0, termW, termH)
+		case 'L':
+			viewer.Pan(largeStep, 0, termW, termH)
+		case 'J':
+			viewer.Pan(0, largeStep, termW, termH)
+		case 'K':
+			viewer.Pan(0, -largeStep, termW, termH)
+		case 'g':
+			viewer.PanTo(0, 0, termW, termH)
+		case 'G':
+			viewer.PanTo(0, 999999, termW, termH)
+		}
+
+	case terminal.KeyLeft:
+		step := smallStep
+		if ev.Modifiers&terminal.ModShift != 0 {
+			step = largeStep
+		}
+		viewer.Pan(-step, 0, termW, termH)
+	case terminal.KeyRight:
+		step := smallStep
+		if ev.Modifiers&terminal.ModShift != 0 {
+			step = largeStep
+		}
+		viewer.Pan(step, 0, termW, termH)
+	case terminal.KeyUp:
+		step := smallStep
+		if ev.Modifiers&terminal.ModShift != 0 {
+			step = largeStep
+		}
+		viewer.Pan(0, -step, termW, termH)
+	case terminal.KeyDown:
+		step := smallStep
+		if ev.Modifiers&terminal.ModShift != 0 {
+			step = largeStep
+		}
+		viewer.Pan(0, step, termW, termH)
+	case terminal.KeyPageUp:
+		viewer.Pan(0, -pageStep, termW, termH)
+	case terminal.KeyPageDown:
+		viewer.Pan(0, pageStep, termW, termH)
+	case terminal.KeyHome:
+		viewer.PanTo(0, viewer.ViewportY, termW, termH)
+	case terminal.KeyEnd:
+		viewer.PanTo(999999, viewer.ViewportY, termW, termH)
+	}
+
+	return actionNone
+}
+
+// renderFrame draws a frame on the backdrop a cell nothing drew shows
+func renderFrame(viewer *Viewer, buf []terminal.Cell, term terminal.Terminal, termW, termH int) {
+	root := tui.NewRegion(buf, termW, 0, 0, termW, termH)
+	root.Fill(lcolor.Gunmetal)
+	viewer.Render(root, termW, termH)
+	term.Flush(buf, termW, termH)
+}

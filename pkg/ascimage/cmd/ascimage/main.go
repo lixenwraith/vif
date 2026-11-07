@@ -1,380 +1,393 @@
+// Command ascimage turns images into terminal cells: it writes them as .aimg
+// files or ANSI text, prints and describes them, and browses and views them
+// full screen, converting rasters live at the size shown.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/lixenwraith/ascimage"
-	lcolor "github.com/lixenwraith/color"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/terminal/tui"
+	"github.com/lixenwraith/terminal/inline"
 )
+
+// command is a row of the command table
+type command struct {
+	name, args, summary, long string
+	setup                     func(fs *flag.FlagSet, o *opts)
+	run                       func(o *opts, args []string) error
+}
+
+var commands []command
+
+func init() {
+	commands = []command{
+		{
+			name: "view", args: "[flags] [dir | image]", summary: "browse a directory, or view an image (the default)",
+			long: `Browse a directory, the working one when none is named: its images and
+folders, and a preview of the one under the cursor; Enter shows it full
+screen. An image opens full screen, its directory behind it. ? lists the keys.`,
+			setup: func(fs *flag.FlagSet, o *opts) {
+				renderFlags(fs, o)
+				fs.StringVar(&o.zoom, "z", "fit", "the zoom an image starts at: fit, or a `percentage` of 1:1")
+				fs.BoolVar(&o.noStatus, "no-status", false, "start without the status bar")
+			},
+			run: cmdView,
+		},
+		{
+			name: "convert", args: "[flags] <input> <output> | <input>... <dir>", summary: "write images as .aimg files or ANSI text",
+			long: `Write an input to the output its extension names: .aimg holds the cells in
+true color and 256 colors at once, any other name (- for stdout) ANSI text in
+-c's depth. Several inputs, or a directory as the output, land in it under
+their own names, as .aimg or, with -ansi, as .ans. An .aimg input keeps its
+cells: it writes to ANSI, or to .aimg with new anchors.`,
+			setup: func(fs *flag.FlagSet, o *opts) {
+				renderFlags(fs, o)
+				fs.IntVar(&o.width, "w", 80, "output width in `cells`")
+				fs.IntVar(&o.ax, "ax", 0, "anchor x an .aimg carries")
+				fs.IntVar(&o.ay, "ay", 0, "anchor y an .aimg carries")
+				fs.BoolVar(&o.ansi, "ansi", false, "write into a directory as .ans ANSI text, not .aimg")
+			},
+			run: cmdConvert,
+		},
+		{
+			name: "print", args: "[flags] <input>...", summary: "print images, fitted to the terminal",
+			long: `Print each input as ANSI text, as large as fits the terminal, or -w cells
+wide; out of a terminal, 80 cells wide. An .aimg prints as it is. Several
+inputs print each under its name.`,
+			setup: func(fs *flag.FlagSet, o *opts) {
+				renderFlags(fs, o)
+				fs.IntVar(&o.width, "w", 0, "width in `cells`; 0 fits the terminal")
+			},
+			run: cmdPrint,
+		},
+		{
+			name: "info", args: "<input>...", summary: "describe images and .aimg files",
+			long: `Describe each input: a raster's format and pixels, an .aimg's cells, render
+mode and anchor, and the file's size. An .aimg is read whole, so a file info
+describes is one ascimage opens.`,
+			setup: func(*flag.FlagSet, *opts) {},
+			run:   cmdInfo,
+		},
+		{
+			name: "help", args: "[command]", summary: "show the usage of ascimage or a command",
+			setup: func(*flag.FlagSet, *opts) {},
+			run:   cmdHelp,
+		},
+	}
+}
+
+func find(name string) *command {
+	for i := range commands {
+		if commands[i].name == name {
+			return &commands[i]
+		}
+	}
+	return nil
+}
+
+// opts are the flags the commands share; each command sets up those it reads
+type opts struct {
+	mode, depth, zoom string
+	aspect            float64
+	width, ax, ay     int
+	ansi, noStatus    bool
+	set               map[string]bool // the flags the command line gave
+}
+
+func renderFlags(fs *flag.FlagSet, o *opts) {
+	fs.StringVar(&o.mode, "m", "quadrant", "render `mode`: quadrant, or bg for a background color a cell")
+	fs.StringVar(&o.depth, "c", "auto", "color `depth`: auto, true, 256 or 16")
+	fs.Float64Var(&o.aspect, "aspect", ascimage.DefaultAspect, "a cell's `width` over its height on the display")
+}
+
+func (o *opts) renderMode() (ascimage.RenderMode, error) {
+	switch o.mode {
+	case "quadrant", "q":
+		return ascimage.ModeQuadrant, nil
+	case "bg", "background":
+		return ascimage.ModeBackgroundOnly, nil
+	}
+	return 0, usageError(fmt.Sprintf("-m %q: want quadrant or bg", o.mode))
+}
+
+func (o *opts) colorMode() (terminal.ColorMode, error) {
+	switch o.depth {
+	case "auto":
+		return terminal.DetectColorMode(), nil
+	case "true", "truecolor", "24":
+		return terminal.ColorModeTrueColor, nil
+	case "256":
+		return terminal.ColorMode256, nil
+	case "16":
+		return terminal.ColorMode16, nil
+	}
+	return 0, usageError(fmt.Sprintf("-c %q: want auto, true, 256 or 16", o.depth))
+}
+
+// render is the mode, depth and aspect the render flags give
+func (o *opts) render() (ascimage.RenderMode, terminal.ColorMode, error) {
+	mode, err := o.renderMode()
+	if err != nil {
+		return 0, 0, err
+	}
+	depth, err := o.colorMode()
+	if err != nil {
+		return 0, 0, err
+	}
+	if !(o.aspect >= 0.1 && o.aspect <= 4) {
+		return 0, 0, usageError(fmt.Sprintf("-aspect %g: want 0.1 to 4", o.aspect))
+	}
+	return mode, depth, nil
+}
+
+// usageError is a command called wrong: exit status 2, and a pointer to its usage
+type usageError string
+
+func (e usageError) Error() string { return string(e) }
 
 func main() {
-	var (
-		modeStr    string
-		colorStr   string
-		width      int
-		output     string
-		dualOutput string
-		fitMode    bool
-		noStatus   bool
-		zoomLevel  int
-		anchorX    int
-		anchorY    int
-		aspect     float64
-	)
-
-	flag.StringVar(&modeStr, "m", "quadrant", "Render mode: 'bg' or 'quadrant'")
-	flag.StringVar(&colorStr, "c", "auto", "Color depth: 'auto', 'true', or '256'")
-	flag.IntVar(&width, "w", 0, "Output width (file mode only, 0 = 80)")
-	flag.StringVar(&dualOutput, "dual", "", "Output a dual-mode .aimg file")
-	flag.StringVar(&output, "o", "", "Output ANSI to file ('-' for stdout), omit for interactive")
-	flag.BoolVar(&fitMode, "fit", true, "Start in fit-to-screen mode (interactive only)")
-	flag.BoolVar(&noStatus, "no-status", false, "Hide status bar (interactive only)")
-	flag.IntVar(&zoomLevel, "z", 100, "Initial zoom level percent (interactive only)")
-	flag.IntVar(&anchorX, "ax", 0, "Anchor X offset (dual-mode output)")
-	flag.IntVar(&anchorY, "ay", 0, "Anchor Y offset (dual-mode output)")
-	flag.Float64Var(&aspect, "aspect", ascimage.DefaultAspect, "Cell width over height of the target display")
-	flag.Parse()
-
-	if flag.NArg() < 1 {
-		printUsage()
-		os.Exit(1)
-	}
-
-	inputPath := flag.Arg(0)
-	colorMode := parseColorMode(colorStr)
-
-	if isAIMG(inputPath) {
-		runAIMGInput(inputPath, colorMode, output, noStatus)
-	} else {
-		runImageInput(inputPath, modeStr, colorMode, width, output, dualOutput,
-			fitMode, noStatus, zoomLevel, anchorX, anchorY, aspect)
-	}
+	os.Exit(run(os.Args[1:]))
 }
 
-func isAIMG(path string) bool {
-	return strings.EqualFold(filepath.Ext(path), ascimage.Extension)
-}
-
-func runAIMGInput(path string, colorMode terminal.ColorMode, output string, noStatus bool) {
-	dual, err := ascimage.LoadDualMode(path)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading aimg: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Fprintf(os.Stderr, "Loaded: %s (%dx%d, %s)\n",
-		path, dual.Width, dual.Height, dual.RenderMode.String())
-
-	if output != "" {
-		conv := dual.ToConvertedImage(colorMode)
-		if err := writeANSI(conv, output); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
-			os.Exit(1)
+func run(args []string) int {
+	cmd, rest := find("view"), args
+	if len(args) > 0 {
+		switch a := args[0]; {
+		case a == "-h" || a == "-help" || a == "--help":
+			usage(os.Stdout)
+			return 0
+		case find(a) != nil:
+			cmd, rest = find(a), args[1:]
+		case strings.HasPrefix(a, "-") || openable(a):
+			// view's flags, a directory or an image: view is the default
+		default:
+			fmt.Fprintf(os.Stderr, "ascimage: %q is not a command, a directory or an image; run ascimage help\n", a)
+			return 2
 		}
-		return
 	}
+	o := &opts{set: map[string]bool{}}
+	fs := flagSet(cmd, o, os.Stderr)
+	if err := fs.Parse(rest); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	fs.Visit(func(f *flag.Flag) { o.set[f.Name] = true })
+	if err := cmd.run(o, fs.Args()); err != nil {
+		fmt.Fprintf(os.Stderr, "ascimage %s: %v\n", cmd.name, err)
+		if errors.As(err, new(usageError)) {
+			fmt.Fprintf(os.Stderr, "run ascimage help %s for its usage\n", cmd.name)
+			return 2
+		}
+		return 1
+	}
+	return 0
+}
 
-	viewer := NewViewerFromDual(dual)
-	viewer.ColorMode = colorMode
-	viewer.ShowStatus = !noStatus
+func flagSet(cmd *command, o *opts, out io.Writer) *flag.FlagSet {
+	fs := flag.NewFlagSet("ascimage "+cmd.name, flag.ContinueOnError)
+	fs.SetOutput(out)
+	cmd.setup(fs, o)
+	fs.Usage = func() { commandUsage(fs.Output(), cmd, fs) }
+	return fs
+}
 
-	if err := runViewer(viewer, colorMode); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+func usage(w io.Writer) {
+	fmt.Fprint(w, `ascimage turns images into terminal cells: .aimg files and ANSI text, printed
+or shown full screen.
+
+Usage:
+  ascimage [view flags] [dir | image]
+  ascimage <command> [flags] [args]
+
+Commands:
+`)
+	for _, c := range commands {
+		fmt.Fprintf(w, "  %-8s %s\n", c.name, c.summary)
+	}
+	fmt.Fprint(w, `
+Images are PNG, JPEG and GIF, and .aimg, the cells ascimage writes. A directory
+or an image given without a command opens in view. Flags come before paths.
+Run ascimage help <command> for a command's flags.
+`)
+}
+
+func commandUsage(w io.Writer, cmd *command, fs *flag.FlagSet) {
+	fmt.Fprintf(w, "Usage: ascimage %s %s\n", cmd.name, cmd.args)
+	if cmd.long != "" {
+		fmt.Fprintf(w, "\n%s\n", cmd.long)
+	}
+	n := 0
+	fs.VisitAll(func(*flag.Flag) { n++ })
+	if n > 0 {
+		fmt.Fprint(w, "\nFlags:\n")
+		fs.PrintDefaults()
 	}
 }
 
-func runImageInput(path, modeStr string, colorMode terminal.ColorMode, width int,
-	output, dualOutput string, fitMode, noStatus bool, zoomLevel, anchorX, anchorY int, aspect float64) {
+func cmdHelp(_ *opts, args []string) error {
+	switch len(args) {
+	case 0:
+		usage(os.Stdout)
+		return nil
+	case 1:
+		cmd := find(args[0])
+		if cmd == nil {
+			return usageError(fmt.Sprintf("no command %q", args[0]))
+		}
+		commandUsage(os.Stdout, cmd, flagSet(cmd, &opts{}, os.Stdout))
+		return nil
+	}
+	return usageError("help takes one command at most")
+}
 
-	img, err := loadImage(path)
+// fitWidth is the width at which a raster's cells fill a box of cells without
+// passing it, at least 1; a box of no height bounds the width alone
+func fitWidth(srcW, srcH, boxW, boxH int, aspect float64) int {
+	w := max(1, boxW)
+	if _, h := ascimage.CalculateOutputSize(srcW, srcH, w, aspect); boxH > 0 && h > boxH {
+		w = max(1, int(float64(boxH)*float64(srcW)/(float64(srcH)*aspect)))
+	}
+	return min(w, ascimage.MaxSide)
+}
+
+// gridFits refuses a width whose grid passes the limits an .aimg keeps, which
+// bound what a conversion may allocate too
+func gridFits(srcW, srcH, width int, aspect float64) error {
+	w, h := ascimage.CalculateOutputSize(srcW, srcH, width, aspect)
+	if w > ascimage.MaxSide || h > ascimage.MaxSide || w*h > ascimage.MaxCells {
+		return fmt.Errorf("%dx%d cells: a side is at most %d and a grid %d", w, h, ascimage.MaxSide, ascimage.MaxCells)
+	}
+	return nil
+}
+
+func cmdConvert(o *opts, args []string) error {
+	mode, depth, err := o.render()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading image: %v\n", err)
-		os.Exit(1)
+		return err
+	}
+	if len(args) < 2 {
+		return usageError("want an input and an output, or inputs and a directory")
+	}
+	if o.width < 1 || o.width > ascimage.MaxSide {
+		return usageError(fmt.Sprintf("-w %d: want 1 to %d cells", o.width, ascimage.MaxSide))
+	}
+	inputs, last := args[:len(args)-1], args[len(args)-1]
+	outs := []string{last}
+	if fi, err := os.Stat(last); len(inputs) > 1 || err == nil && fi.IsDir() {
+		if err != nil || !fi.IsDir() {
+			return usageError(last + ": several inputs are written into a directory")
+		}
+		ext := ascimage.Extension
+		if o.ansi {
+			ext = ".ans"
+		}
+		outs = outs[:0]
+		for _, in := range inputs {
+			base := filepath.Base(in)
+			outs = append(outs, filepath.Join(last, strings.TrimSuffix(base, filepath.Ext(base))+ext))
+		}
+	} else if o.ansi {
+		return usageError("-ansi names a directory's outputs; a file's extension names its own")
+	} else if ext := filepath.Ext(last); listed(last) && !strings.EqualFold(ext, ascimage.Extension) {
+		return usageError(last + ": ascimage writes .aimg files and ANSI text, not " + strings.ToUpper(ext[1:]))
 	}
 
-	bounds := img.Bounds()
-	fmt.Fprintf(os.Stderr, "Loaded: %s (%dx%d)\n", path, bounds.Dx(), bounds.Dy())
-
-	renderMode := parseRenderMode(modeStr)
-
-	if dualOutput != "" {
-		runDualOutput(img, renderMode, width, dualOutput, anchorX, anchorY, aspect)
-	} else if output != "" {
-		runFileOutput(img, renderMode, colorMode, width, output, aspect)
-	} else {
-		runInteractive(img, renderMode, colorMode, fitMode, noStatus, zoomLevel, aspect)
-	}
-}
-
-func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, output string, anchorX, anchorY int, aspect float64) {
-	if width <= 0 {
-		width = 80
-	}
-
-	dual := ascimage.ConvertImageDual(img, width, renderMode, aspect)
-	dual.AnchorX = anchorX
-	dual.AnchorY = anchorY
-
-	fmt.Fprintf(os.Stderr, "Dual-mode output: %dx%d cells\n", dual.Width, dual.Height)
-
-	if err := ascimage.SaveDualMode(output, dual); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing dual-mode output: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: ascimage [options] <image|file.aimg>")
-	fmt.Fprintln(os.Stderr, "\nSupported formats: PNG, JPEG, GIF (input), .aimg (view/convert)")
-	fmt.Fprintln(os.Stderr, "\nOptions:")
-	flag.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "\nModes:")
-	fmt.Fprintln(os.Stderr, "  Image input:")
-	fmt.Fprintln(os.Stderr, "    Dual-mode (-dual): write .aimg for terminal games and tools")
-	fmt.Fprintln(os.Stderr, "    File output (-o):  write ANSI sequences to file")
-	fmt.Fprintln(os.Stderr, "    Interactive:        view image with zoom/pan controls (default)")
-	fmt.Fprintln(os.Stderr, "  .aimg input:")
-	fmt.Fprintln(os.Stderr, "    File output (-o):  convert .aimg to ANSI sequences")
-	fmt.Fprintln(os.Stderr, "    Interactive:        view with color mode toggle (default)")
-	fmt.Fprintln(os.Stderr, "\nInteractive controls:")
-	fmt.Fprintln(os.Stderr, "  q, Esc, Ctrl+C    Quit")
-	fmt.Fprintln(os.Stderr, "  f                 Toggle fit/actual size (image only)")
-	fmt.Fprintln(os.Stderr, "  m                 Toggle render mode (image only)")
-	fmt.Fprintln(os.Stderr, "  c                 Toggle color mode")
-	fmt.Fprintln(os.Stderr, "  +/-               Zoom in/out (image only)")
-	fmt.Fprintln(os.Stderr, "  Arrow keys, hjkl  Pan viewport")
-	fmt.Fprintln(os.Stderr, "  s                 Toggle status bar")
-}
-
-func loadImage(path string) (image.Image, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	img, _, err := image.Decode(f)
-	return img, err
-}
-
-func parseRenderMode(s string) ascimage.RenderMode {
-	switch s {
-	case "bg", "background":
-		return ascimage.ModeBackgroundOnly
-	case "quadrant", "q":
-		return ascimage.ModeQuadrant
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown mode: %s, using quadrant\n", s)
-		return ascimage.ModeQuadrant
-	}
-}
-
-func parseColorMode(s string) terminal.ColorMode {
-	switch s {
-	case "auto":
-		return terminal.DetectColorMode()
-	case "true", "truecolor", "24":
-		return terminal.ColorModeTrueColor
-	case "256", "8":
-		return terminal.ColorMode256
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown color mode: %s, using auto\n", s)
-		return terminal.DetectColorMode()
-	}
-}
-
-func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, width int, output string, aspect float64) {
-	if width <= 0 {
-		width = 80
-	}
-
-	converted := ascimage.ConvertImage(img, width, renderMode, colorMode, aspect)
-	fmt.Fprintf(os.Stderr, "Output: %dx%d cells\n", converted.Width, converted.Height)
-
-	if err := writeANSI(converted, output); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runInteractive(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, fitMode, noStatus bool, zoomLevel int, aspect float64) {
-	viewer := NewViewer(img, aspect)
-	viewer.RenderMode = renderMode
-	viewer.ColorMode = colorMode
-	viewer.ShowStatus = !noStatus
-
-	if !fitMode {
-		viewer.ViewMode = ViewActual
-	}
-	if zoomLevel != 100 {
-		viewer.ViewMode = ViewCustom
-		viewer.ZoomLevel = zoomLevel
-	}
-
-	if err := runViewer(viewer, colorMode); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runViewer(viewer *Viewer, colorMode terminal.ColorMode) error {
-	term := terminal.New(colorMode)
-
-	if err := term.Init(); err != nil {
-		return fmt.Errorf("terminal init: %w", err)
-	}
-	defer term.Fini()
-
-	termW, termH := term.Size()
-	buf := make([]terminal.Cell, termW*termH)
-
-	viewer.Update(termW, termH)
-	renderFrame(viewer, buf, term, termW, termH)
-
-	for {
-		ev := term.PollEvent()
-
-		switch ev.Type {
-		case terminal.EventKey:
-			action := handleKey(ev, viewer, termW, termH)
-			if action == actionQuit {
-				return nil
+	p := inline.New(os.Stderr)
+	failed := 0
+	for i, in := range inputs {
+		if len(inputs) > 1 {
+			p.Update(fmt.Sprintf("%s %d/%d %s", inline.Spinner(i), i+1, len(inputs), in))
+		}
+		what, err := convertOne(o, in, outs[i], mode, depth)
+		if err != nil {
+			if len(inputs) == 1 {
+				p.Done()
+				return err
 			}
-			if action == actionRedraw {
-				viewer.ForceUpdate(termW, termH)
-			}
-
-		case terminal.EventResize:
-			termW, termH = ev.Width, ev.Height
-			buf = make([]terminal.Cell, termW*termH)
-			viewer.Update(termW, termH)
-
-		case terminal.EventError, terminal.EventClosed:
-			return nil
+			p.Log("%s %v", p.Paint("failed:", inline.FgANSI(color.ANSIRed).Bold()), err)
+			failed++
+			continue
 		}
-
-		renderFrame(viewer, buf, term, termW, termH)
+		if outs[i] != "-" {
+			p.Log("wrote %s: %s", outs[i], what)
+		}
 	}
+	p.Done()
+	if failed > 0 {
+		return fmt.Errorf("%d of %d inputs failed", failed, len(inputs))
+	}
+	return nil
 }
 
-type keyAction int
-
-const (
-	actionNone keyAction = iota
-	actionQuit
-	actionRedraw
-)
-
-func handleKey(ev terminal.Event, viewer *Viewer, termW, termH int) keyAction {
-	smallStep := 1
-	largeStep := 10
-	pageStep := termH / 2
-
-	switch ev.Key {
-	case terminal.KeyEscape, terminal.KeyCtrlC, terminal.KeyCtrlD:
-		return actionQuit
-	case terminal.KeyRune:
-		switch ev.Rune {
-		case 'q', 'Q':
-			return actionQuit
-		case 'f', 'F':
-			viewer.ToggleViewMode()
-			return actionRedraw
-		case 'm', 'M':
-			viewer.ToggleRenderMode()
-			return actionRedraw
-		case 'c', 'C':
-			viewer.ToggleColorMode()
-			return actionRedraw
-		case 's', 'S':
-			viewer.ShowStatus = !viewer.ShowStatus
-			return actionNone
-		case '+', '=':
-			viewer.AdjustZoom(10)
-			return actionRedraw
-		case '-', '_':
-			viewer.AdjustZoom(-10)
-			return actionRedraw
-		case '0':
-			viewer.ZoomLevel = 100
-			viewer.ViewMode = ViewCustom
-			return actionRedraw
-		case 'h':
-			viewer.Pan(-smallStep, 0, termW, termH)
-		case 'l':
-			viewer.Pan(smallStep, 0, termW, termH)
-		case 'j':
-			viewer.Pan(0, smallStep, termW, termH)
-		case 'k':
-			viewer.Pan(0, -smallStep, termW, termH)
-		case 'H':
-			viewer.Pan(-largeStep, 0, termW, termH)
-		case 'L':
-			viewer.Pan(largeStep, 0, termW, termH)
-		case 'J':
-			viewer.Pan(0, largeStep, termW, termH)
-		case 'K':
-			viewer.Pan(0, -largeStep, termW, termH)
-		case 'g':
-			viewer.PanTo(0, 0, termW, termH)
-		case 'G':
-			viewer.PanTo(0, 999999, termW, termH)
+// convertOne writes one input to one output and says what it wrote
+func convertOne(o *opts, in, out string, mode ascimage.RenderMode, depth terminal.ColorMode) (string, error) {
+	src, err := load(in)
+	if err != nil {
+		return "", err
+	}
+	if src.dual != nil && (o.set["w"] || o.set["m"]) {
+		return "", fmt.Errorf("%s: an .aimg keeps its own cells, so -w and -m do not apply", in)
+	}
+	if out != "-" {
+		if a, b := statOf(in), statOf(out); a != nil && b != nil && os.SameFile(a, b) {
+			return "", fmt.Errorf("%s: would write over its own input", out)
 		}
-
-	case terminal.KeyLeft:
-		step := smallStep
-		if ev.Modifiers&terminal.ModShift != 0 {
-			step = largeStep
+	}
+	if src.dual == nil {
+		w, h := src.dims()
+		if err := gridFits(w, h, o.width, o.aspect); err != nil {
+			return "", fmt.Errorf("%s at -w %d: %w", in, o.width, err)
 		}
-		viewer.Pan(-step, 0, termW, termH)
-	case terminal.KeyRight:
-		step := smallStep
-		if ev.Modifiers&terminal.ModShift != 0 {
-			step = largeStep
-		}
-		viewer.Pan(step, 0, termW, termH)
-	case terminal.KeyUp:
-		step := smallStep
-		if ev.Modifiers&terminal.ModShift != 0 {
-			step = largeStep
-		}
-		viewer.Pan(0, -step, termW, termH)
-	case terminal.KeyDown:
-		step := smallStep
-		if ev.Modifiers&terminal.ModShift != 0 {
-			step = largeStep
-		}
-		viewer.Pan(0, step, termW, termH)
-	case terminal.KeyPageUp:
-		viewer.Pan(0, -pageStep, termW, termH)
-	case terminal.KeyPageDown:
-		viewer.Pan(0, pageStep, termW, termH)
-	case terminal.KeyHome:
-		viewer.PanTo(0, viewer.ViewportY, termW, termH)
-	case terminal.KeyEnd:
-		viewer.PanTo(999999, viewer.ViewportY, termW, termH)
 	}
 
-	return actionNone
+	if strings.EqualFold(filepath.Ext(out), ascimage.Extension) {
+		d := src.dual
+		if d == nil {
+			d = ascimage.ConvertImageDual(src.img, o.width, mode, o.aspect)
+		} else {
+			kept := *d
+			d = &kept
+		}
+		if src.dual == nil || o.set["ax"] {
+			d.AnchorX = o.ax
+		}
+		if src.dual == nil || o.set["ay"] {
+			d.AnchorY = o.ay
+		}
+		if err := ascimage.SaveDualMode(out, d); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%dx%d cells, %s", d.Width, d.Height, strings.ToLower(d.RenderMode.String())), nil
+	}
+
+	var img *ascimage.ConvertedImage
+	if src.dual != nil {
+		img = src.dual.ToConvertedImage(depth)
+	} else {
+		img = ascimage.ConvertImage(src.img, o.width, mode, depth, o.aspect)
+	}
+	if err := writeANSI(img, out); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%dx%d cells of ANSI text", img.Width, img.Height), nil
 }
 
-// renderFrame draws a frame on the backdrop a cell nothing drew shows
-func renderFrame(viewer *Viewer, buf []terminal.Cell, term terminal.Terminal, termW, termH int) {
-	root := tui.NewRegion(buf, termW, 0, 0, termW, termH)
-	root.Fill(lcolor.Gunmetal)
-	viewer.Render(root, termW, termH)
-	term.Flush(buf, termW, termH)
+func statOf(path string) os.FileInfo {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	return fi
 }
 
 // writeANSI writes img as ANSI text to a file, or to stdout for "-"
@@ -391,4 +404,123 @@ func writeANSI(img *ascimage.ConvertedImage, output string) error {
 		return err
 	}
 	return f.Close()
+}
+
+func cmdPrint(o *opts, args []string) error {
+	mode, depth, err := o.render()
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		return usageError("want an image to print")
+	}
+	if o.width < 0 || o.width > ascimage.MaxSide {
+		return usageError(fmt.Sprintf("-w %d: want 0 to %d cells", o.width, ascimage.MaxSide))
+	}
+	p := inline.New(os.Stdout)
+	boxW, boxH := 80, 0
+	if p.IsTerminal() {
+		boxW, boxH = p.Size()
+		boxH-- // the prompt's row
+		if len(args) > 1 {
+			boxH-- // the name's
+		}
+	}
+	failed := 0
+	for _, in := range args {
+		if err := printOne(o, p, in, len(args) > 1, mode, depth, boxW, boxH); err != nil {
+			fmt.Fprintf(os.Stderr, "ascimage print: %v\n", err)
+			failed++
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d inputs failed", failed, len(args))
+	}
+	return nil
+}
+
+func printOne(o *opts, p *inline.Printer, in string, named bool, mode ascimage.RenderMode, depth terminal.ColorMode, boxW, boxH int) error {
+	src, err := load(in)
+	if err != nil {
+		return err
+	}
+	var img *ascimage.ConvertedImage
+	if src.dual != nil {
+		if o.set["w"] || o.set["m"] {
+			return fmt.Errorf("%s: an .aimg keeps its own cells, so -w and -m do not apply", in)
+		}
+		img = src.dual.ToConvertedImage(depth)
+	} else {
+		w, h := src.dims()
+		width := o.width
+		if width == 0 {
+			width = fitWidth(w, h, boxW, boxH, o.aspect)
+		}
+		if err := gridFits(w, h, width, o.aspect); err != nil {
+			return fmt.Errorf("%s at -w %d: %w", in, width, err)
+		}
+		img = ascimage.ConvertImage(src.img, width, mode, depth, o.aspect)
+	}
+	if named {
+		fmt.Println(p.Paint(in, inline.Style{}.Bold()))
+	}
+	return ascimage.WriteANSI(os.Stdout, img)
+}
+
+func cmdInfo(_ *opts, args []string) error {
+	if len(args) == 0 {
+		return usageError("want an image to describe")
+	}
+	failed := 0
+	for _, in := range args {
+		src, err := probe(in)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ascimage info: %v\n", err)
+			failed++
+			continue
+		}
+		fmt.Printf("%s: %s\n", in, src.describe())
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d inputs failed", failed, len(args))
+	}
+	return nil
+}
+
+func cmdView(o *opts, args []string) error {
+	mode, depth, err := o.render()
+	if err != nil {
+		return err
+	}
+	if len(args) > 1 {
+		return usageError("view takes one directory or image")
+	}
+	path := "."
+	if len(args) == 1 {
+		path = args[0]
+	}
+	if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+		return errors.New("browsing a directory is not built yet")
+	}
+	src, err := load(path)
+	if err != nil {
+		return err
+	}
+	var viewer *Viewer
+	if src.dual != nil {
+		viewer = NewViewerFromDual(src.dual)
+	} else {
+		viewer = NewViewer(src.img, o.aspect)
+		viewer.RenderMode = mode
+		if o.zoom != "fit" {
+			var pct int
+			if _, err := fmt.Sscan(o.zoom, &pct); err != nil || pct < 10 || pct > 400 {
+				return usageError(fmt.Sprintf("-z %q: want fit, or 10 to 400", o.zoom))
+			}
+			viewer.ViewMode, viewer.ZoomLevel = ViewCustom, pct
+		}
+	}
+	viewer.ColorMode = depth
+	viewer.ShowStatus = !o.noStatus
+	return runViewer(viewer, depth)
 }
