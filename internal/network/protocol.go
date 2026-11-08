@@ -116,9 +116,12 @@ const (
 	MsgStart     link.MessageType = 0x24 // Live: host releases a joiner into the capture that follows
 	MsgReady     link.MessageType = 0x25 // Live: joiner confirms it received the start gate
 
-	// Reserved, unused: authentication.
-	MsgAuthRequest  link.MessageType = 0x30
-	MsgAuthResponse link.MessageType = 0x31
+	// Admission (admission.go): the door's question, its nonce and the methods it
+	// takes, then its SCRAM steps and its verdict; and the dialer's answer, a key's
+	// proof with a pass, a ticket or a passphrase step. Defined; nothing sends them
+	// yet, and the handshake still asks claims.
+	MsgAuthRequest  link.MessageType = 0x30 // Defined: the dialer's admission answer
+	MsgAuthResponse link.MessageType = 0x31 // Defined: the door's admission question and verdict
 
 	// A door published through the router (tunnel.go): a run publishes on the front
 	// door and holds the stream as its control connection; the router names the door

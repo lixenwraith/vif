@@ -634,17 +634,20 @@ func askClaims(conn net.Conn, timeout time.Duration) ([]string, error) {
 type RefusalCode uint8
 
 const (
-	RefusalFull      RefusalCode = iota + 1 // no room for another participant
-	RefusalStarting                         // the lobby is closing on its roster
-	RefusalHandoff                          // the session is electing an authority
-	RefusalEnding                           // the session is draining or has expired
-	RefusalIdentity                         // another build, or another session
-	RefusalBudget                           // this address has joined too often
-	RefusalBehind                           // the join could not catch up with the session
-	RefusalUnknown                          // no such session at this address
-	RefusalYielding                         // full, and a Wraith is giving up its place
-	RefusalReturning                        // the claimed place is still linked or already coming back
-	RefusalUnpressed                        // the dialer's player did not press within the ready period
+	RefusalFull       RefusalCode = iota + 1 // no room for another participant
+	RefusalStarting                          // the lobby is closing on its roster
+	RefusalHandoff                           // the session is electing an authority
+	RefusalEnding                            // the session is draining or has expired
+	RefusalIdentity                          // another build, or another session
+	RefusalBudget                            // this address has joined too often
+	RefusalBehind                            // the join could not catch up with the session
+	RefusalUnknown                           // no such session at this address
+	RefusalYielding                          // full, and a Wraith is giving up its place
+	RefusalReturning                         // the claimed place is still linked or already coming back
+	RefusalUnpressed                         // the dialer's player did not press within the ready period
+	RefusalSignIn                            // the door admits a pass, a ticket or a passphrase, and the dial showed none
+	RefusalCredential                        // what the dial showed was refused: a bad proof, pass, ticket or passphrase
+	RefusalDropped                           // the authority dropped this participant, and its key or account stays out
 )
 
 // Retry is what a refused dialer can do about it.
@@ -662,17 +665,20 @@ var refusals = [...]struct {
 	retry  Retry
 	advice string
 }{
-	RefusalFull:      {RetryLater, "retry when a player leaves"},
-	RefusalStarting:  {RetrySoon, "retry in a moment"},
-	RefusalHandoff:   {RetrySoon, "retry in a moment"},
-	RefusalEnding:    {RetryNever, ""},
-	RefusalIdentity:  {RetryNever, ""},
-	RefusalBudget:    {RetryLater, "retry in a minute"},
-	RefusalBehind:    {RetrySoon, "retry in a moment"},
-	RefusalUnknown:   {RetryNever, ""},
-	RefusalYielding:  {RetrySoon, "retry in a moment"},
-	RefusalReturning: {RetrySoon, "retry in a moment"},
-	RefusalUnpressed: {RetrySoon, "press again to join"},
+	RefusalFull:       {RetryLater, "retry when a player leaves"},
+	RefusalStarting:   {RetrySoon, "retry in a moment"},
+	RefusalHandoff:    {RetrySoon, "retry in a moment"},
+	RefusalEnding:     {RetryNever, ""},
+	RefusalIdentity:   {RetryNever, ""},
+	RefusalBudget:     {RetryLater, "retry in a minute"},
+	RefusalBehind:     {RetrySoon, "retry in a moment"},
+	RefusalUnknown:    {RetryNever, ""},
+	RefusalYielding:   {RetrySoon, "retry in a moment"},
+	RefusalReturning:  {RetrySoon, "retry in a moment"},
+	RefusalUnpressed:  {RetrySoon, "press again to join"},
+	RefusalSignIn:     {RetryLater, "sign in, or ask the host for the passphrase, then retry"},
+	RefusalCredential: {RetryNever, ""},
+	RefusalDropped:    {RetryNever, ""},
 }
 
 // Refusal is a join turned away. Code is the kind and Reason what the player

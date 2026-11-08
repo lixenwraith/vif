@@ -259,6 +259,18 @@ comment now states, and link that instead.
   `RunSafe`, so a goroutine that reads the run's config off the world lock (the
   drive loop, a bot seat) reads the copy it started with instead.
 
+## Networking
+
+- `io.Copy` between two sockets reaches Go's kernel `splice(2)` path only when both
+  ends are a `*net.TCPConn` or `*net.UnixConn` themselves: a wrapper that renews a
+  deadline on each write (the router's `stallBounded`) hides `ReadFrom`, so each
+  direction copies through a 32 KiB user buffer. Put the deadline on the socket, not
+  on a wrapper, before reading a splice's memory.
+- `encoding/json` compacts a `json.RawMessage` when it marshals one, so a signature
+  over raw JSON bytes survives a round trip only when the signer emitted compact JSON,
+  which `json.Marshal` does; a token re-encoded with whitespace by another writer
+  fails its signature, which is the intended refusal, not a bug to relax.
+
 ## Position
 
 - [Position](position-package.md) states the index's rules: bounds that are the
