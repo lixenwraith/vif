@@ -671,9 +671,10 @@ By phase:
   - The identity service runs on the node as a system user of its own with its own
     unit and state directory (the decoy key, 0600), bound to loopback twice: the
     `/vif/api/auth/` listener the router forwards to, and the introspection listener
-    the forward never reaches. No new public port and no filter change; the service's
-    own `deploy/update-identity.sh` updates it without the empty-fleet gate, since
-    its restart pauses only sign-ins and account tickets.
+    the forward never reaches. No new public port and no filter change; the
+    service's own deploy steps (its `deploy/README.md`) install and update it
+    without the empty-fleet gate, since its restart pauses only sign-ins and
+    account tickets.
   - Its store is the jail's PostgreSQL (D9): a database and schema of the service's
     name, a role for it with a SCRAM-SHA-256 password read from a 0600 file, reached
     over the host's internal network with `hostssl` in `pg_hba.conf` and the jail's
