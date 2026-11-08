@@ -444,6 +444,19 @@ const (
 	NetworkAdmitBurst   = 6
 	NetworkAdmitTracked = 1024
 
+	// AuthNonceBytes is the randomness in a door's admission nonce: past guessing for
+	// the seconds a dial's proof is good. TicketLifetime is how long an admission
+	// ticket admits, one dial's worth: it is spent at its door, and SpentTicketsKept
+	// bounds the ids a door remembers for that long. PassLifetime caps a session
+	// pass, which a redial renews past half of; a session shorter than it caps it
+	// sooner. AuthClockLeeway is the skew a token's window allows either way, so a
+	// phone's clock a half-minute off is still admitted.
+	AuthNonceBytes   = 16
+	TicketLifetime   = time.Minute
+	SpentTicketsKept = 4096
+	PassLifetime     = 24 * time.Hour
+	AuthClockLeeway  = 30 * time.Second
+
 	// NetworkStreamLevel is the deflate level each link's stream runs at. Levels 1-6
 	// drop their history on any flushed block under 128 bytes, which is most bursts;
 	// 7 is the cheapest that keeps it, a third of level 1's bytes on recorded traffic.
