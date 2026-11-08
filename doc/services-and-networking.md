@@ -459,9 +459,13 @@ takes and the session's first authority key) and the dialer answers with its pro
 places it keeps, at most `PlacesKept`, with the pass it holds for that authority key
 if any, before anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths));
 a proof or a pass that fails is refused `RefusalCredential`, a key the session keeps
-out `RefusalDropped`, a door that takes no bare key `RefusalSignIn`. It is asked rather than sent with the route, so a front door that
-refuses the route has read all the dialer sent and its refusal arrives whole, and so
-the nonce is the door's. 0x06, which carried claims, is retired.
+out `RefusalDropped`, a door that takes no bare key `RefusalSignIn`. A door with a
+passphrase names `scram` in place of `key`: the dial's answer opens the exchange, a
+second 0x31 carries the challenge, a second 0x30 the proof and a third 0x31 the
+door's final, verified before the dial reads on; a pass shown skips the three. It is
+asked rather than sent with the route, so a front door that refuses the route has
+read all the dialer sent and its refusal arrives whole, and so the nonce is the
+door's. 0x06, which carried claims, is retired.
 The coordinator then previews the session (`MsgJoinPreview`, 0x07): the offer a seat
 would carry, naming nobody, after the checks a seat makes that allocate nothing
 (`Coordinator.Preview`); a full session previews only for a dialer one of whose

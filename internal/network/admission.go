@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -15,7 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/auth"
 	"github.com/lixenwraith/vif/internal/parameter"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // Admission is what a door asks of a dial after the route frame and the address
@@ -225,6 +228,201 @@ func (k Key) SignProof(nonce string, binding []byte) []byte {
 // VerifyProof checks proof as key's signature over the same message a dialer signs.
 func VerifyProof(key, proof []byte, nonce string, binding []byte) bool {
 	return ValidPublicKey(key) && ed25519.Verify(ed25519.PublicKey(key), signable("proof", []byte(nonce), binding), proof)
+}
+
+// doorUser is the SCRAM name a passphrase door's one credential is under: the
+// exchange needs a name, and a door's names the door, not a person.
+const doorUser = "door"
+
+// PassphraseDoor is what a host with a passphrase serves at every door of its own:
+// one credential derived from it once (auth.NewCredential, Argon2id at the door's
+// cost) and the server that runs the exchange. A door without one for a gated
+// session, a relay's, admits a pass alone (Coordinator.Gated).
+type PassphraseDoor struct {
+	server *auth.ScramServer
+}
+
+// NewPassphraseDoor derives the door's credential, the KDF once, and starts its
+// server, which Close stops.
+func NewPassphraseDoor(phrase string) (*PassphraseDoor, error) {
+	if err := CheckPassphrase(phrase); err != nil {
+		return nil, err
+	}
+	cred, err := auth.NewCredential(doorUser, phrase, auth.WithMemory(parameter.DoorArgonMemory),
+		auth.WithTime(parameter.DoorArgonTime), auth.WithThreads(parameter.DoorArgonThreads))
+	if err != nil {
+		return nil, err
+	}
+	server := auth.NewScramServer()
+	if err := server.AddCredential(cred); err != nil {
+		server.Stop()
+		return nil, err
+	}
+	return &PassphraseDoor{server: server}, nil
+}
+
+// Close stops the server's sweep of abandoned exchanges; nil closes nothing.
+func (d *PassphraseDoor) Close() {
+	if d != nil && d.server != nil {
+		d.server.Stop()
+	}
+}
+
+// serve runs the exchange a dial opened with first, over conn: the challenge out,
+// the proof in, the door's final out. What fails refuses the dial for what it
+// showed, saying no more than that.
+func (d *PassphraseDoor) serve(conn net.Conn, first json.RawMessage, binding []byte) error {
+	var open auth.ClientFirstRequest
+	if json.Unmarshal(first, &open) != nil {
+		return &Refusal{Code: RefusalCredential, Reason: "the passphrase exchange opened in another form"}
+	}
+	challenge, err := d.server.ProcessClientFirstMessage(open.Username, open.ClientNonce)
+	if err != nil {
+		return &Refusal{Code: RefusalCredential, Reason: "the passphrase exchange was refused"}
+	}
+	if err := writeAuth(conn, AuthResponse{Scram: rawJSON(challenge)}); err != nil {
+		d.server.Abandon(challenge.FullNonce)
+		return err
+	}
+	msg, err := link.DecodeWithin(conn, MaxAuthFrame)
+	if err != nil {
+		d.server.Abandon(challenge.FullNonce)
+		return err
+	}
+	var ans AuthRequest
+	var proof auth.ClientFinalRequest
+	if msg.Type != MsgAuthRequest || json.Unmarshal(msg.Payload, &ans) != nil ||
+		json.Unmarshal(ans.Scram, &proof) != nil || proof.FullNonce != challenge.FullNonce {
+		d.server.Abandon(challenge.FullNonce)
+		return &Refusal{Code: RefusalCredential, Reason: "the passphrase proof came in another form"}
+	}
+	final, err := d.server.ProcessClientFinalMessage(proof.FullNonce, proof.ClientProof, bindingOption(binding)...)
+	if err != nil {
+		return &Refusal{Code: RefusalCredential, Reason: "the passphrase was refused"}
+	}
+	return writeAuth(conn, AuthResponse{Scram: rawJSON(final)})
+}
+
+// finishPassphrase is the dial's half of the exchange past its first step: the
+// challenge in, the proof out, the door's final in and verified, then the frame the
+// door answers with. The KDF runs here, once a join, at the cost the door names, no
+// lower than the dial's own; a refusal in place of any step comes back as it is.
+func finishPassphrase(conn net.Conn, client *auth.ScramClient, msg *link.Message, binding []byte) (*link.Message, error) {
+	if msg.Type != MsgAuthResponse {
+		return msg, nil
+	}
+	var step AuthResponse
+	if err := json.Unmarshal(msg.Payload, &step); err != nil {
+		return nil, fmt.Errorf("passphrase challenge: %w", err)
+	}
+	if err := step.Refused(); err != nil {
+		return nil, err
+	}
+	var challenge auth.ServerFirstMessage
+	if err := json.Unmarshal(step.Scram, &challenge); err != nil {
+		return nil, fmt.Errorf("passphrase challenge: %w", err)
+	}
+	proof, err := client.ProcessServerFirstMessage(challenge, bindingOption(binding)...)
+	if err != nil {
+		return nil, &Refusal{Code: RefusalCredential, Reason: "the door's passphrase challenge was refused: " + err.Error()}
+	}
+	body, err := json.Marshal(AuthRequest{Scram: rawJSON(proof)})
+	if err != nil {
+		return nil, err
+	}
+	if err := link.NewMessage(MsgAuthRequest, body).Encode(conn); err != nil {
+		return nil, err
+	}
+	if msg, err = link.Decode(conn); err != nil || msg.Type != MsgAuthResponse {
+		return msg, err
+	}
+	var done AuthResponse
+	if err := json.Unmarshal(msg.Payload, &done); err != nil {
+		return nil, fmt.Errorf("passphrase final: %w", err)
+	}
+	if err := done.Refused(); err != nil {
+		return nil, err
+	}
+	var final auth.ServerFinalMessage
+	if json.Unmarshal(done.Scram, &final) != nil || client.VerifyServerFinalMessage(final) != nil {
+		return nil, &Refusal{Code: RefusalCredential, Reason: "the door did not prove it holds the passphrase"}
+	}
+	return link.Decode(conn)
+}
+
+// bindingOption binds an exchange's proof step to a TLS door's leaf, none over a
+// plain stream: an empty binding is auth's error, not its unbound.
+func bindingOption(binding []byte) []auth.ExchangeOption {
+	if len(binding) == 0 {
+		return nil
+	}
+	return []auth.ExchangeOption{auth.WithChannelBinding(binding)}
+}
+
+// writeAuth sends one question or step of the door's.
+func writeAuth(conn net.Conn, r AuthResponse) error {
+	body, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	return link.NewMessage(MsgAuthResponse, body).Encode(conn)
+}
+
+// rawJSON is v as a frame carries it; plain data cannot fail to encode.
+func rawJSON(v any) json.RawMessage {
+	b, _ := json.Marshal(v)
+	return b
+}
+
+// CheckPassphrase refuses a phrase under eight bytes, as auth does, or past its
+// bound, before a door is derived from it or a dial shows it.
+func CheckPassphrase(phrase string) error {
+	switch {
+	case len(phrase) < 8:
+		return errors.New("a passphrase is at least 8 bytes; new makes one")
+	case len(phrase) > auth.MaxPasswordLen:
+		return fmt.Errorf("a passphrase is at most %d bytes", auth.MaxPasswordLen)
+	}
+	return nil
+}
+
+// GeneratePassphrase is a door's made secret: 16 characters of crypto/rand's text
+// alphabet, 80 bits, shown once by the host that made it.
+func GeneratePassphrase() string { return rand.Text()[:16] }
+
+// LeafBinding is the binding a TLS door's exchange is bound to, over the certificate
+// cfg serves; nil for a door that serves none.
+func LeafBinding(cfg *tls.Config) []byte {
+	if cfg == nil || len(cfg.Certificates) == 0 || len(cfg.Certificates[0].Certificate) == 0 {
+		return nil
+	}
+	return ChannelBinding(cfg.Certificates[0].Certificate[0])
+}
+
+// tlsOf is the TLS stream under conn, a websocket's unwrapped; nil over plain tcp.
+func tlsOf(conn net.Conn) *tls.Conn {
+	for conn != nil {
+		if t, ok := conn.(*tls.Conn); ok {
+			return t
+		}
+		w, ok := conn.(interface{ NetConn() net.Conn })
+		if !ok {
+			return nil
+		}
+		conn = w.NetConn()
+	}
+	return nil
+}
+
+// bindingOf is the binding a dial computes for conn: the leaf the door showed it
+// over TLS, nil over a plain stream.
+func bindingOf(conn net.Conn) []byte {
+	if t := tlsOf(conn); t != nil {
+		if cs := t.ConnectionState(); len(cs.PeerCertificates) > 0 {
+			return ChannelBinding(cs.PeerCertificates[0].Raw)
+		}
+	}
+	return nil
 }
 
 // ChannelBinding is the binding a wss door and its dialer agree on: the SHA-256 of

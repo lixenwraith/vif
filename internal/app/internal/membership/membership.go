@@ -94,7 +94,13 @@ type Membership struct {
 	// keepOut is the keys and accounts the session keeps out, oldest first and
 	// parameter.KeepOutKept at most: the offer's or the record's, then each drop of
 	// the host's as its departure applies here, so every door holds the same list.
-	keepOut []string
+	// keptOutSlots is the slot each key this run saw dropped held, for the refusal.
+	keepOut      []string
+	keptOutSlots map[string]uint8
+
+	// door is the credential this run's doors take a passphrase against, derived
+	// from cfg.Passphrase when the first door opens; nil opens them.
+	door *network.PassphraseDoor
 
 	// midRunPort is the socket a solo run opened for itself, with :host or with no
 	// listener for its bots. A run started with -host takes its endpoint from

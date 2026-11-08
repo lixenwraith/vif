@@ -73,6 +73,11 @@ type Membership struct {
 	// join the session the run is in, and a run in none opens one with no listener.
 	Bots []string
 
+	// Passphrase is what this run's own doors take, -passphrase or :host's, derived
+	// once into the credential every door serves, and what its dials show a door
+	// that takes one, :join's. Empty opens its doors and shows none.
+	Passphrase string
+
 	// PlaceStore keeps the places this process comes back to its sessions with past
 	// its own life: a page's across a reload, a terminal's or a phone's across a
 	// restart or a crash; nil keeps them while it runs.

@@ -325,10 +325,10 @@ func (a *App) Loop() (*restartRequest, error) {
 func (a *App) showDoorError(err error) {
 	var refused *network.Refusal
 	if errors.As(err, &refused) {
-		a.ctx.SetStatusMessage("Join refused: "+refused.Reason, parameter.StatusAlert)
+		a.ctx.SetStatusMessage("Refused a join: "+refused.Reason, parameter.StatusAlert)
 		return
 	}
-	a.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
+	a.ctx.SetStatusMessage("A join failed: "+err.Error(), parameter.StatusAlert)
 }
 
 // takeEvent passes a presentation's event down the dumb pipe: key event → machine →

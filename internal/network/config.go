@@ -24,6 +24,10 @@ type Config struct {
 	// it shows the one for the session the door names (ChoosePass), or none.
 	Passes []*Signed
 
+	// Passphrase is what the dial shows a door that takes one and no bare key, in the
+	// SCRAM exchange whose KDF runs here; empty shows none, and such a door refuses it.
+	Passphrase string
+
 	// Identity is the build half of what this peer is (wire contract, manifest and
 	// layout schemas), compared against the offer before a world is built from it.
 	// A zero Protocol disables the check, so a harness can dial a hand-built fixture.

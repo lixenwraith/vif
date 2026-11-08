@@ -184,6 +184,13 @@ func main() {
 	if sessionErr == nil && flagSession.ca != "" {
 		sessionTrust, sessionErr = link.TrustTLS(flagSession.ca)
 	}
+	if sessionErr == nil && flagSession.passphrase == "new" {
+		flagSession.passphrase = network.GeneratePassphrase()
+		fmt.Printf("-passphrase: the doors take %s; :session shows it, and a joiner gives it with -passphrase or :join <target> <passphrase>\n", flagSession.passphrase)
+	}
+	if sessionErr == nil && flagSession.passphrase != "" {
+		sessionErr = network.CheckPassphrase(flagSession.passphrase)
+	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
 	}
@@ -428,6 +435,7 @@ func buildConfig() app.Config {
 	cfg.Membership.ListenAddress = endpoint(flagSession.listen).Addr
 	cfg.Membership.RelayAddress = relayTarget(flagSession.relay)
 	cfg.Membership.TLS, cfg.Membership.Trust = sessionTLS, sessionTrust
+	cfg.Membership.Passphrase = flagSession.passphrase
 
 	if flagSession.serve != "" {
 		cfg.Membership.HostAddress = doorList(flagSession.serve)
@@ -576,6 +584,7 @@ type sessionFlags struct {
 	cert, key   string
 	selfsign    bool
 	ca          string
+	passphrase  string
 
 	// slow is the eviction policy a host applies to a participant that cannot keep
 	// up, and shed what it drops when it cannot keep its own tick; see
@@ -611,6 +620,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.key, "key", "", "The certificate's private key, a PEM file; default the -cert file")
 	fs.BoolVar(&f.selfsign, "selfsign", false, "Serve wss:// with a certificate made for this run, in place of -cert: encrypted, and taken as it is by a terminal that joins")
 	fs.StringVar(&f.ca, "ca", "", "What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or sha256:<hex> pinning the certificate itself")
+	fs.StringVar(&f.passphrase, "passphrase", "", "The passphrase this run's doors take (Argon2-SCRAM), or new for one made and printed; with -join, the one shown to a door that asks")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.DurationVar(&f.firstJoin, "first-join", 0,

@@ -1122,17 +1122,37 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 		setCommandError(ctx, sessionsUnavailable)
 		return CommandResult{Continue: true}
 	}
-	if len(args) != 1 && len(args) != 2 {
-		setCommandError(ctx, "Usage: :host <doors> [host|migrate]  (e.g. :host :7777 migrate, :host :7777,wss://:7778)")
+	const usage = "Usage: :host <doors> [host|migrate] [passphrase [<phrase>]]  (e.g. :host :7777 migrate, :host :7777,wss://:7778 passphrase)"
+	if len(args) < 1 || len(args) > 4 {
+		setCommandError(ctx, usage)
 		return CommandResult{Continue: true}
 	}
-	authority := ""
-	if len(args) == 2 {
-		authority = args[1]
+	authority, rest := "", args[1:]
+	if len(rest) > 0 && (rest[0] == "host" || rest[0] == "migrate") {
+		authority, rest = rest[0], rest[1:]
+	}
+	shown := ""
+	if len(rest) > 0 {
+		if rest[0] != "passphrase" || len(rest) > 2 {
+			setCommandError(ctx, usage)
+			return CommandResult{Continue: true}
+		}
+		phrase := "new"
+		if len(rest) == 2 {
+			phrase = rest[1]
+		}
+		var err error
+		if shown, err = ctx.SessionCtl.SetPassphrase(phrase); err != nil {
+			setCommandError(ctx, sentence(err))
+			return CommandResult{Continue: true}
+		}
 	}
 	if err := ctx.SessionCtl.BeginHosting(args[0], authority); err != nil {
 		setCommandError(ctx, sentence(err))
 		return CommandResult{Continue: true}
+	}
+	if shown != "" {
+		ctx.SetStatusMessage("Doors take the passphrase "+shown+"; :session shows it", parameter.StatusNotice)
 	}
 	return CommandResult{Continue: true}
 }
@@ -1159,9 +1179,15 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 		setCommandError(ctx, sessionsUnavailable)
 		return CommandResult{Continue: true}
 	}
-	if len(args) != 1 {
-		setCommandError(ctx, "Usage: :join <target>  (e.g. :join host:7777, a ws(s):// URL, or an https:// site for a new session)")
+	if len(args) != 1 && len(args) != 2 {
+		setCommandError(ctx, "Usage: :join <target> [passphrase]  (e.g. :join host:7777, a ws(s):// URL, or an https:// site for a new session)")
 		return CommandResult{Continue: true}
+	}
+	if len(args) == 2 {
+		if _, err := ctx.SessionCtl.SetPassphrase(args[1]); err != nil {
+			setCommandError(ctx, "Join: "+sentence(err))
+			return CommandResult{Continue: true}
+		}
 	}
 	if err := ctx.SessionCtl.Join(args[0]); err != nil {
 		setCommandError(ctx, "Join: "+err.Error())

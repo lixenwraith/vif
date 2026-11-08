@@ -370,6 +370,9 @@ func noEOF(err error) error {
 	return err
 }
 
+// NetConn is the stream under the websocket, a TLS one's state read through it.
+func (c *Conn) NetConn() net.Conn { return c.conn }
+
 // noDelay sets TCP_NODELAY on the socket under conn, TLS or not. It is Go's default;
 // stating it keeps a changed default from bringing back delayed-ACK stalls.
 func noDelay(conn net.Conn) {

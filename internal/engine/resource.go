@@ -1244,9 +1244,9 @@ type NetworkResource struct {
 	// acquisition waits behind.
 	OnDeparture func(participant uint32, final bool)
 	OnDismissed func(shed, dropped bool)
-	// OnDropped takes the key of a participant the host dropped, which the session
-	// keeps out from the tick the departure applies, on every instance alike.
-	OnDropped func(key string)
+	// OnDropped takes the key and slot of a participant the host dropped, which the
+	// session keeps out from the tick the departure applies, on every instance alike.
+	OnDropped func(key string, slot uint8)
 
 	// OnCorrection hands one reassembled authoritative correction to the session
 	// layer, under the world lock from the tick that drained its last chunk, so it

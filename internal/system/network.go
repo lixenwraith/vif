@@ -706,15 +706,18 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 		if c.Holder != 0 {
 			who = "bot"
 		}
-		why := ""
+		why, by := "", "The host dropped"
 		if p.Shed {
 			why = " to keep its tick"
 		}
+		if s.isCoordinator() {
+			by = "Dropped"
+		}
 		s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
-			Message: fmt.Sprintf("The host dropped the %s in slot %X%s", who, p.Slot, why), Alert: true})
+			Message: fmt.Sprintf("%s the %s in slot %X%s", by, who, p.Slot, why), Alert: true})
 	}
 	if r := s.world.Resources.Network; r != nil && r.OnDropped != nil && p.Dropped && held && c.Key != "" {
-		r.OnDropped(c.Key)
+		r.OnDropped(c.Key, p.Slot)
 	}
 	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
 		// A participant with no cursor has nothing to wait in, so it leaves for good.
@@ -1654,6 +1657,12 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound
 // until a succession settles. It reports whether the link was a seat this run
 // dropped.
 func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) (dropped bool) {
+	// A host that drops this run closes its link as it applies the drop, ahead of
+	// this run applying it: the loss is the dismissal's, nothing to redial for.
+	if s.dismissalScheduled() {
+		s.world.Log().Info("net", "msg", "link closed ahead of this run's dismissal", "peer", peerID)
+		return false
+	}
 	authorityLost := peerID == s.authorityParticipant() && !s.isCoordinator()
 	message := fmt.Sprintf("Participant %d disconnected", peerID)
 	if peerID == s.relay && !authorityLost {
@@ -1682,6 +1691,25 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) (dropped 
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{Message: message, Alert: true})
 	s.world.Log().Warn("net", "msg", "peer link lost", "peer", peerID,
 		"authority_lost", authorityLost, "remaining_peers", remaining)
+	return false
+}
+
+// dismissalScheduled reports a departure dismissing this instance among the
+// crossings waiting for their tick.
+func (s *NetworkSystem) dismissalScheduled() bool {
+	local := s.participantID()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range s.scheduled {
+		if a.frame.Event != event.EventParticipantDeparted || a.void {
+			continue
+		}
+		if v, err := a.frame.Decode(); err == nil {
+			if p, ok := v.(*event.ParticipantDepartedPayload); ok && p.Participant == local && p.Dismissed {
+				return true
+			}
+		}
+	}
 	return false
 }
 

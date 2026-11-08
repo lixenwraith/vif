@@ -5,6 +5,7 @@ complete -c vif -o serve -x -d 'Bind a headless session with no local cursor at 
 complete -c vif -o cert -x -d 'Certificate chain a wss:// door serves, PEM; for -host, -serve or :host'
 complete -c vif -o key -x -d 'The certificate\'s private key, PEM; default the -cert file'
 complete -c vif -o selfsign -d 'Serve wss:// with a certificate made for this run, in place of -cert: encrypted, and taken as it is by a terminal that joins'
+complete -c vif -o passphrase -x -d 'Doors take this passphrase (Argon2-SCRAM), or one made now and printed; with -join, the one shown to a door that asks'
 complete -c vif -o ca -x -d 'What a wss:// host\'s certificate is trusted by when joining, beyond the system\'s roots and a self-signed one taken as it is: a PEM file of its issuer, or the certificate\'s own fingerprint'
 complete -c vif -o join -x -d 'Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given'
 complete -c vif -o name -x -d 'Name this host answers to, so one address can serve several sessions'

@@ -462,6 +462,14 @@ const (
 	// giving way: a list every offer and handoff record carries whole.
 	KeepOutKept = 256
 
+	// DoorArgonMemory (KiB), DoorArgonTime and DoorArgonThreads are the Argon2id cost
+	// a passphrase door's credential is derived at, and the least a dial accepts in
+	// a challenge: 64 MiB three times over, on one lane, since a page and a phone run
+	// one and the work is the same. A dial pays it once a join; a pass spares it.
+	DoorArgonMemory  = 64 * 1024
+	DoorArgonTime    = 3
+	DoorArgonThreads = 1
+
 	// NetworkStreamLevel is the deflate level each link's stream runs at. Levels 1-6
 	// drop their history on any flushed block under 128 bytes, which is most bursts;
 	// 7 is the cheapest that keeps it, a third of level 1's bytes on recorded traffic.
