@@ -230,7 +230,7 @@ state, peer count and connected state.
 | Role | Behavior |
 |---|---|
 | `RoleNone` | Disabled/no-op. |
-| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer's claims and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a claim takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `Membership.midRunGate` serialises. |
+| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, asks the dialer to prove its keys and previews the session, then, at the dialer's seat, allocates a participant identity and slot, or the place a key takes back, and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `Membership.midRunGate` serialises. |
 | `RolePeer` | The dialled (or preconnected) stream to the coordinator, or to the holder a guest's bot joins through, admitted after the join and start gates. With `AcceptPeer` set it also listens, on a port the caller bound or `ListenAddress`, for the participants the succession chain sends to it, and runs `AcceptSession` there for a join, which the opening frame tells from a peer link and the app admits once this participant hosts; `DialPeer` opens a link to one of them. A bind that fails leaves it a leaf rather than failing the run. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with others behind it — its bots, people who joined at its `-relay` address — which carries their raw artifacts up, the authority's artifacts down to them and retains what it forwards so it can answer their selective requests. The transport starts it exactly as `RolePeer`, because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, behind)` is what the protocol reads. |
 
@@ -452,16 +452,19 @@ none. A front door places the connection on it where one address serves several
 sessions, the fleet's router among them ([fleet
 §9](kubernetes-fleet.md#9-the-session-routes)); the session it reaches refuses a name
 that is not its own; and a port that takes peer links too tells a join from one by
-it, a peer link opening with `MsgConnect`. Once the dialer is admitted, the
-coordinator asks which places it can come back to (`MsgJoinClaims`, 0x06) and the
-dialer answers with the tokens of the claims it keeps, at most `ClaimsKept`, before
-anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths)). It is asked
-rather than sent with the route, so a front door that refuses the route has read
-all the dialer sent and its refusal arrives whole.
+it, a peer link opening with `MsgConnect`. Once the dialer is admitted, the door
+asks it to prove its keys (`MsgAuthResponse`, 0x31: a nonce and the methods the door
+takes) and the dialer answers with its proofs (`MsgAuthRequest`, 0x30), a fresh key
+for the place it may be given and then the places it keeps, at most `PlacesKept`,
+before anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths)); a
+proof that fails is refused `RefusalCredential`, a door that takes no bare key
+`RefusalSignIn`. It is asked rather than sent with the route, so a front door that
+refuses the route has read all the dialer sent and its refusal arrives whole, and so
+the nonce is the door's. 0x06, which carried claims, is retired.
 The coordinator then previews the session (`MsgJoinPreview`, 0x07): the offer a seat
 would carry, naming nobody, after the checks a seat makes that allocate nothing
 (`Coordinator.Preview`); a full session previews only for a dialer one of whose
-claims names a place there, or while a player who left holds one, and whether that
+keys holds a place there, or while a player who left holds one, and whether that
 place is taken back or given up is the seat's to settle. On the preview the dialer
 checks the build identity, asks for the scenario it lacks, builds and checks its
 world, and says it is ready (`MsgJoinPrepared`, 0x08), which opens its **ready
@@ -477,7 +480,7 @@ and seats at once ([Multiplayer §5](multi-player.md#5-membership-topology-and-a
 A join refused before an identity is allocated — a name that is not this
 session's, a dialling host past its admission budget, a session electing a new
 authority, closing its lobby, ending, full, full while a Wraith gives up its place
-for this dial, a claimed place still linked or already coming back, or a seat
+for this dial, a kept place still linked or already coming back, or a seat
 asked for past its ready period — is answered
 with a `MsgJoinReply` carrying its kind and reason (`network.Refusal`) rather than
 by closing the stream. The dialer acts on
@@ -491,9 +494,13 @@ epoch and `MsgStateSync` for one owner-authored cursor snapshot. Authority trave
 `MsgStateManifest`/`MsgStateRequest`/`MsgStateShard` exchange below, with
 `MsgStateUnserved` (0x2B) as the answer a retention holder gives to a request it
 cannot produce pages for. `MsgAuthorityReport` (0x2C) and `MsgAuthorityHandoff`
-(0x2E) carry the succession; 0x2D is retired rather than reused. `MsgPeerList`
-(0x20) is the address map and `MsgConnect`/`MsgAck` (0x02/0x04) open a peer link
-([Multiplayer](multi-player.md) §5.3). The port packs the epochs and syncs a link
+(0x2E) carry the succession, each signed by the participant it names as author and
+checked against the roster's key for it; 0x2D is retired rather than reused.
+`MsgPeerList` (0x20) is the address map and `MsgConnect`/`MsgAck` (0x02/0x04) open
+a peer link ([Multiplayer](multi-player.md) §5.3): a hello with the dialer's nonce,
+a welcome with the acceptor's proof over it and a nonce of its own, the dialer's
+proof over that, and the acceptor's verdict, each end proving the roster's key for
+itself. The port packs the epochs and syncs a link
 is sent (`MessageType.Bundles`) into one `MsgBundle` (0x19) while they fit a frame
 and releases each link's when a drain ends and when the tick closes: raw epochs go
 up and committed copies down with the sender's own, a frame or two a link a tick
@@ -960,9 +967,10 @@ What the operator surface does not cover:
   turn runs the next succession among those still linked. Partition merging is
   not built, and refusing to merge is what happens instead: a fork that meets a
   higher term refuses it and reports it;
-- the succession is unauthenticated. A peer that claims another participant's
-  identity can make itself the successor; the structural checks bound races rather
-  than hostility;
+- the succession's reports and handoff records are signed and a peer link is
+  proved both ways (§8), so a stranger takes no term, but a participant
+  admitted to the session is trusted within it: nothing bounds a hostile member
+  who lies about what it saw;
 - no cross-version compatibility negotiation: the coordinator refuses a joiner
   whose build or session identity (§7.2) is not an exact match;
 - sequence/ack fields detect ordering but do not retransmit, and a frame refused

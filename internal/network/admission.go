@@ -22,9 +22,10 @@ import (
 // session pass, an admission ticket or a passphrase exchange. The frames, the tokens
 // and the proofs are defined here; doc/auth-session-design.md §7 is the design.
 
-// MaxAuthFrame bounds either admission frame's payload: a pass or a ticket is a few
-// hundred bytes, a SCRAM step under a kilobyte.
-const MaxAuthFrame = 4096
+// MaxAuthFrame bounds either admission frame's payload: the keys a run proves at
+// their most (PlacesKept), a pass or a ticket of a few hundred bytes, a SCRAM step
+// under a kilobyte.
+const MaxAuthFrame = 8192
 
 // AdmissionKind is what an admission is for. A pass and a ticket each carry one.
 type AdmissionKind uint8
@@ -84,18 +85,68 @@ type AuthResponse struct {
 	refusalField
 }
 
-// AuthRequest is the MsgAuthRequest body: the dialer's answer. Key is the public
-// half of the participant key it proves, Proof that key's signature over the door's
-// nonce (SignProof). Pass or Ticket admits the key; neither does at an open door.
+// AuthRequest is the MsgAuthRequest body: the dialer's answer. Keys are the
+// participant keys it proves over the door's nonce, the first its own for a new
+// place and the rest the places it may come back to; the door seats it in the place
+// one of them holds. Pass or Ticket admits a key; neither does at an open door.
 // SignIn is a sign-in token the router alone reads, and strips, on its TLS front door.
 type AuthRequest struct {
-	Key    []byte          `json:"key,omitempty"`
-	Proof  []byte          `json:"proof,omitempty"`
+	Keys   []Proof         `json:"keys,omitempty"`
 	Pass   *Signed         `json:"pass,omitempty"`
 	Ticket *Signed         `json:"ticket,omitempty"`
 	SignIn string          `json:"sign_in,omitempty"`
 	Scram  json.RawMessage `json:"scram,omitempty"`
 }
+
+// Proof is one key a dial proves: the public half and its signature over the door's
+// nonce and the door's channel binding (SignProof).
+type Proof struct {
+	Key []byte `json:"key"`
+	Sig []byte `json:"sig"`
+}
+
+// Prove is k's proof for one dial.
+func (k Key) Prove(nonce string, binding []byte) Proof {
+	return Proof{Key: k.Public(), Sig: k.SignProof(nonce, binding)}
+}
+
+// VerifyProofs checks every proof a dial named against the door's nonce and returns
+// the keys they prove, in the dial's order and as the roster carries them: none, too
+// many, a malformed one or one whose signature fails refuses the dial whole.
+func VerifyProofs(proofs []Proof, nonce string, binding []byte) ([]string, error) {
+	if len(proofs) == 0 || len(proofs) > parameter.PlacesKept {
+		return nil, &Refusal{Code: RefusalCredential, Reason: fmt.Sprintf("a dial proves 1 to %d keys, not %d", parameter.PlacesKept, len(proofs))}
+	}
+	keys := make([]string, len(proofs))
+	for i, p := range proofs {
+		if !VerifyProof(p.Key, p.Sig, nonce, binding) {
+			return nil, &Refusal{Code: RefusalCredential, Reason: "the dial could not prove a key it named"}
+		}
+		keys[i] = EncodeKey(p.Key)
+	}
+	return keys, nil
+}
+
+// EncodeKey is a public key as the roster and a cursor carry it, 44 characters of
+// base64, the form the JSON of a []byte takes; DecodeKey reads one back, nil for a
+// string of another form. A roster compares keys as strings.
+func EncodeKey(pub []byte) string {
+	if !ValidPublicKey(pub) {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(pub)
+}
+
+func DecodeKey(s string) []byte {
+	pub, err := base64.StdEncoding.Strict().DecodeString(s)
+	if err != nil || !ValidPublicKey(pub) {
+		return nil
+	}
+	return pub
+}
+
+// ValidKeyString reports a string of a public key's form.
+func ValidKeyString(s string) bool { return DecodeKey(s) != nil }
 
 // NewNonce is the challenge a door writes into its question: random bytes no two
 // dials share, so a proof read off one link is good on no other.
@@ -132,6 +183,9 @@ func (k Key) Public() []byte {
 // Valid reports a key that can sign.
 func (k Key) Valid() bool { return len(k.private) == ed25519.PrivateKeySize }
 
+// ID is the public half as the roster carries it (EncodeKey), "" for an empty key.
+func (k Key) ID() string { return EncodeKey(k.Public()) }
+
 // MarshalJSON keeps the 32-byte seed, what a keeper stores; the public half is
 // derived from it when read back.
 func (k Key) MarshalJSON() ([]byte, error) {
@@ -157,15 +211,16 @@ func (k *Key) UnmarshalJSON(data []byte) error {
 func ValidPublicKey(key []byte) bool { return len(key) == ed25519.PublicKeySize }
 
 // SignProof is a dialer's proof for one dial: the key's signature over the door's
-// nonce, the session's name and, on a wss door, the SHA-256 of the leaf certificate
-// (binding), nil elsewhere. A proof is good at one door for one nonce.
-func (k Key) SignProof(nonce, session string, binding []byte) []byte {
-	return ed25519.Sign(k.private, signable("proof", []byte(nonce), []byte(session), binding))
+// nonce and, on a wss door, the SHA-256 of the leaf certificate (binding), nil
+// elsewhere. A proof is good at one door for one nonce; the session's name is not
+// signed, since a front door rewrites it on the way to the door that chose the nonce.
+func (k Key) SignProof(nonce string, binding []byte) []byte {
+	return ed25519.Sign(k.private, signable("proof", []byte(nonce), binding))
 }
 
 // VerifyProof checks proof as key's signature over the same message a dialer signs.
-func VerifyProof(key, proof []byte, nonce, session string, binding []byte) bool {
-	return ValidPublicKey(key) && ed25519.Verify(ed25519.PublicKey(key), signable("proof", []byte(nonce), []byte(session), binding), proof)
+func VerifyProof(key, proof []byte, nonce string, binding []byte) bool {
+	return ValidPublicKey(key) && ed25519.Verify(ed25519.PublicKey(key), signable("proof", []byte(nonce), binding), proof)
 }
 
 // ChannelBinding is the binding a wss door and its dialer agree on: the SHA-256 of

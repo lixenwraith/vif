@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -17,17 +18,16 @@ import (
 func TestAProofIsGoodAtOneDoorForOneNonce(t *testing.T) {
 	k, other := NewKey(), NewKey()
 	nonce, binding := NewNonce(), ChannelBinding([]byte("a leaf certificate"))
-	proof := k.SignProof(nonce, "0123456789abcdef", binding)
-	if !VerifyProof(k.Public(), proof, nonce, "0123456789abcdef", binding) {
+	proof := k.SignProof(nonce, binding)
+	if !VerifyProof(k.Public(), proof, nonce, binding) {
 		t.Fatal("a proof is refused at the door it was made for")
 	}
 	for name, ok := range map[string]bool{
-		"another nonce":     VerifyProof(k.Public(), proof, NewNonce(), "0123456789abcdef", binding),
-		"another session":   VerifyProof(k.Public(), proof, nonce, "fedcba9876543210", binding),
-		"an unbound door":   VerifyProof(k.Public(), proof, nonce, "0123456789abcdef", nil),
-		"another key":       VerifyProof(other.Public(), proof, nonce, "0123456789abcdef", binding),
-		"no key":            VerifyProof(nil, proof, nonce, "0123456789abcdef", binding),
-		"a truncated proof": VerifyProof(k.Public(), proof[:len(proof)-1], nonce, "0123456789abcdef", binding),
+		"another nonce":     VerifyProof(k.Public(), proof, NewNonce(), binding),
+		"an unbound door":   VerifyProof(k.Public(), proof, nonce, nil),
+		"another key":       VerifyProof(other.Public(), proof, nonce, binding),
+		"no key":            VerifyProof(nil, proof, nonce, binding),
+		"a truncated proof": VerifyProof(k.Public(), proof[:len(proof)-1], nonce, binding),
 	} {
 		if ok {
 			t.Errorf("%s verifies", name)
@@ -86,7 +86,7 @@ func TestAPassAdmitsItsKeyUntilItExpires(t *testing.T) {
 		t.Errorf("a kind travels by name: %s", pass.Body)
 	}
 	// Through the frame it travels in, and back.
-	doc, _ := json.Marshal(AuthRequest{Key: participant.Public(), Pass: pass})
+	doc, _ := json.Marshal(AuthRequest{Keys: []Proof{participant.Prove(NewNonce(), nil)}, Pass: pass})
 	var req AuthRequest
 	if err := json.Unmarshal(doc, &req); err != nil {
 		t.Fatal(err)
@@ -190,9 +190,9 @@ func TestATicketAdmitsItsSubjectOnceWithinItsMinute(t *testing.T) {
 	}
 }
 
-// TestAnAdmissionFrameFitsItsBound: a dialer's answer carrying a key, a proof, a
-// pass and a ticket at their largest, and a door's question or refusal, encode
-// under MaxAuthFrame; a refusal crosses as its kind.
+// TestAnAdmissionFrameFitsItsBound: a dialer's answer carrying every key it may
+// prove, a pass and a ticket at their largest, and a door's question or refusal,
+// encode under MaxAuthFrame; a refusal crosses as its kind.
 func TestAnAdmissionFrameFitsItsBound(t *testing.T) {
 	authority, participant := NewKey(), NewKey()
 	now := time.Now()
@@ -207,8 +207,13 @@ func TestAnAdmissionFrameFitsItsBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, _ := json.Marshal(AuthRequest{Key: participant.Public(), Proof: participant.SignProof(NewNonce(), long, ChannelBinding([]byte{1})),
-		Pass: pass, Ticket: ticket, SignIn: strings.Repeat("t", 64), Scram: json.RawMessage(`{"full_nonce":"` + strings.Repeat("n", 512) + `"}`)})
+	nonce := NewNonce()
+	proofs := make([]Proof, parameter.PlacesKept)
+	for i := range proofs {
+		proofs[i] = NewKey().Prove(nonce, ChannelBinding([]byte{1}))
+	}
+	req, _ := json.Marshal(AuthRequest{Keys: proofs, Pass: pass, Ticket: ticket, SignIn: strings.Repeat("t", 64),
+		Scram: json.RawMessage(`{"full_nonce":"` + strings.Repeat("n", 512) + `"}`)})
 	var refused AuthResponse
 	refused.Refuse(&Refusal{Code: RefusalSignIn, Reason: "this door admits a pass, a ticket or a passphrase"})
 	ans, _ := json.Marshal(refused)
@@ -274,3 +279,58 @@ func FuzzASignedTokenIsOpenedWholeOrRefused(f *testing.F) {
 
 // second is the error of a verification whose body a refusal test does not read.
 func second[T any](_ T, err error) error { return err }
+
+// TestADialProvesEveryKeyItNamesOrNone: the keys a dial proves over the door's nonce
+// come back in its order as the roster carries them; one it cannot prove, none, or
+// more than it may keep refuses the dial as a bad credential.
+func TestADialProvesEveryKeyItNamesOrNone(t *testing.T) {
+	a, b := NewKey(), NewKey()
+	nonce := NewNonce()
+	proofs := []Proof{a.Prove(nonce, nil), b.Prove(nonce, nil)}
+	keys, err := VerifyProofs(proofs, nonce, nil)
+	if err != nil || len(keys) != 2 || keys[0] != a.ID() || keys[1] != b.ID() || !ValidKeyString(keys[0]) {
+		t.Fatalf("proved %v, %v", keys, err)
+	}
+	if !bytes.Equal(DecodeKey(keys[0]), a.Public()) || DecodeKey("not a key") != nil || EncodeKey([]byte{1}) != "" {
+		t.Fatal("a key does not read back from its roster form")
+	}
+	forged := []Proof{proofs[0], {Key: b.Public(), Sig: proofs[0].Sig}}
+	for name, bad := range map[string][]Proof{
+		"a forged proof": forged,
+		"another nonce":  []Proof{a.Prove(NewNonce(), nil)},
+		"another door":   []Proof{a.Prove(nonce, ChannelBinding([]byte("another leaf")))},
+		"no key":         nil,
+		"too many":       slices.Repeat(proofs[:1], parameter.PlacesKept+1),
+	} {
+		if _, err := VerifyProofs(bad, nonce, nil); !errors.Is(err, &Refusal{Code: RefusalCredential}) {
+			t.Errorf("%s verifies: %v", name, err)
+		}
+	}
+}
+
+// TestASuccessionMessageIsItsAuthorsAlone: a report and a handoff record verify
+// under the key of the participant they name as author, as encoded and decoded, and
+// under no other key, altered, or unsigned.
+func TestASuccessionMessageIsItsAuthorsAlone(t *testing.T) {
+	author, other := NewKey(), NewKey()
+	rep := AuthorityReport{Term: FirstTerm, From: 3, Lost: 1, Via: 2}.Sign(author)
+	body, _ := EncodeAuthorityReport(rep)
+	back, err := DecodeAuthorityReport(body)
+	if err != nil || !back.Verify(author.ID()) {
+		t.Fatalf("a signed report does not verify after the wire: %v", err)
+	}
+	back.Lost = 2
+	if back.Verify(author.ID()) || rep.Verify(other.ID()) || rep.Verify("") || (AuthorityReport{From: 3}).Verify(author.ID()) {
+		t.Fatal("an altered, another's or an unsigned report verifies")
+	}
+	rec := HandoffRecord{Term: FirstTerm + 1, Authority: 2, Predecessor: 1, Roster: []RosterEntry{{ID: 2, Slot: 1, Key: author.ID()}}}.Sign(author)
+	raw, _ := EncodeHandoff(rec)
+	got, err := DecodeHandoff(raw)
+	if err != nil || !got.Verify(author.ID()) {
+		t.Fatalf("a signed record does not verify after the wire: %v", err)
+	}
+	got.Authority = 3
+	if got.Verify(author.ID()) || rec.Verify(other.ID()) {
+		t.Fatal("an altered or another's record verifies")
+	}
+}

@@ -461,8 +461,8 @@ a migrate session each guest but a bot or a browser binds a port of its own unle
 moves the session and not only its authorship; see
 [Multiplayer](multi-player.md) §5.3.
 
-Remaining limitations include unauthenticated links, plaintext wherever no TLS
-edge terminates them, and no merge for explicit minority forks. Remote crossing
+Remaining limitations include a door that admits any key, plaintext wherever no
+TLS edge terminates the links, and no merge for explicit minority forks. Remote crossing
 fences record the highest applied sequence rather than a contiguous prefix, a
 bounded trade-off described in [Multiplayer](multi-player.md) §3.2. The domain
 boundary, event classification, wire protocol, their enforcing tests, and an

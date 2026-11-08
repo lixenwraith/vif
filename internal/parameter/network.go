@@ -143,15 +143,16 @@ const (
 	// session ages nobody's wait, and two minutes covers a reload or a reconnect.
 	WraithTimeout = 2 * time.Minute
 
-	// ClaimsKept is how many claims a process keeps to come back to its sessions
-	// with: a player and every bot it can hold, twice, so one joined since still
-	// leaves the last session's places to return to.
-	ClaimsKept = 2 * MaxPlayers
+	// PlacesKept is how many places a process keeps the keys of to come back to its
+	// sessions with: a player and every bot it can hold, twice, so one joined since
+	// still leaves the last session's places to return to. A dial proves at most
+	// this many keys.
+	PlacesKept = 2 * MaxPlayers
 
-	// ClaimStoreInterval is how often at most a page writes its claims to the tab's
-	// storage as its cursors sync, so a reload brings back a record that old at
-	// worst; issuing or giving one up writes at once. Wall time: a reload is.
-	ClaimStoreInterval = time.Second
+	// PlaceStoreInterval is how often at most a run writes its places to their store
+	// as its cursors sync, so a restart brings back a record that old at worst;
+	// taking or giving up a place writes at once. Wall time: a restart is.
+	PlaceStoreInterval = time.Second
 
 	// SessionRejoinWindow and SessionRejoinInterval bound a participant redialling
 	// the coordinator that told it the session is rebuilding on another scenario. The

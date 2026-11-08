@@ -572,7 +572,7 @@ func (a *App) Close() {
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}
-	a.membership.LeaveClaim()
+	a.membership.LeavePlace()
 	a.membership.ClosePendingJoin()
 	if a.corrections != nil {
 		a.corrections.Close()

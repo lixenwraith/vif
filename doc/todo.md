@@ -623,8 +623,8 @@ An instance marks a participant departed the moment its own link to it drops
 it stands `receiveAuthority` and `receiveDeparture` drop whatever that participant
 sends. A reopened link clears nothing: `admitPeerLink` admits any roster member, a
 Wraith included, so the link stands and the succession hears nothing on it. A person
-whose link to its host drops is unaffected, since its redial is a claim and the
-claim's arrival clears the mark. Two cases are not:
+whose link to its host drops is unaffected, since its redial proves its key and
+the key's arrival clears the mark. Two cases are not:
 - Two guests' warm link (§5.3 item 3) drops and reopens while the host lives.
   Neither end coordinates, so nothing crosses and nothing clears, and each ignores
   the other for the rest of the session. When the host goes, the candidate takes
@@ -667,7 +667,7 @@ A link lost within a lead of a reset loses its departure: the reset clears the
 barrier (`NetworkSystem.Init` drops `scheduled` and `departed`) before the
 departure crossed for it applies, and the next game rebuilds that participant's
 cursor from the roster as a live one nobody drives, which never turns Wraith, never
-times out and holds the slot its claim comes back for: a player who quits as its
+times out and holds the slot its key comes back for: a player who quits as its
 defeat ends the game can leave one. `TestTwoLiveParticipantsConvergeOverTCP` shows
 it once its scripted defeat's reset is moved into the disconnect's lead. What would
 close it: after a reset the authority crosses, once, the departure of every
@@ -845,7 +845,7 @@ target's. What is new:
   watching off, moves the view to the next allowed cursor.
 - Consent: a game option ("Let others watch", on by default for now) on the
   Multiplayer page, saved with the rest of `Play` and carried on the roster entry
-  as `Claim` is, so the authority and every spectator read the same answer. Seats
+  as `Key` is, so the authority and every spectator read the same answer. Seats
   take their holder's.
 - Capacity: spectators cost the authority a link and its corrections each, so a
   `-spectators N` ceiling, reported in the router's listing; relay doors can fan
@@ -949,7 +949,7 @@ an identity.
 ### Keep a Wraith's stats in the session
 
 - Priority: P2
-- Affected files: `internal/app/internal/membership/claim.go`, `identity.go`,
+- Affected files: `internal/app/internal/membership/place.go`, `identity.go`,
   `host.go`, `internal/system/cursor.go`, `internal/system/network.go`
 - Guide: [Multi-player](multi-player.md#54-wraiths) §5.4
 
@@ -972,7 +972,7 @@ at its departure tick, is outside the hash and the repair (D-13), so nothing hol
 the instances' copies equal.
 
 The record is built to be replaced: one type, made in one place
-(`NetworkResource.OnOwnState` into the claim keeper) and read in one
+(`NetworkResource.OnOwnState` into the place keeper) and read in one
 (`CursorSystem.restore`), carried by the arrival crossing the coordinator fills
 (`ParticipantJoinedPayload.Record`). What would close it: decide which values the
 session holds, have the coordinator fill the arrival from its own world instead of
