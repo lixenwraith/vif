@@ -334,3 +334,63 @@ func TestASuccessionMessageIsItsAuthorsAlone(t *testing.T) {
 		t.Fatal("an altered or another's record verifies")
 	}
 }
+
+// TestADialShowsThePassForTheDoorsAuthority: among the passes a dial holds, the one
+// shown names the door's first authority key, is within its window and is over a key
+// the dial proves; the rest, and a door naming no authority, show none.
+func TestADialShowsThePassForTheDoorsAuthority(t *testing.T) {
+	authority, participant, stranger := NewKey(), NewKey(), NewKey()
+	now := time.Unix(1_800_000_000, 0)
+	sign := func(auth, key Key, at time.Time) *Signed {
+		s, err := SignPass(auth, PassBody{Authority: auth.Public(), Key: key.Public(), Kind: AdmitPlay, Term: FirstTerm}, at, time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	good, stale := sign(authority, participant, now), sign(authority, participant, now.Add(-2*time.Hour))
+	foreign, unproved := sign(NewKey(), participant, now), sign(authority, stranger, now)
+	keys := []Key{participant}
+	if got := ChoosePass([]*Signed{stale, foreign, unproved, good}, authority.ID(), keys, now); got != good {
+		t.Fatal("the dial did not show the one pass good for this door")
+	}
+	if ChoosePass([]*Signed{stale, foreign, unproved}, authority.ID(), keys, now) != nil || ChoosePass([]*Signed{good}, "", keys, now) != nil {
+		t.Fatal("a pass was shown that the door would refuse, or to a door naming no authority")
+	}
+	if _, ok := PeekPass(&Signed{Body: []byte(`{"term":0}`)}); ok {
+		t.Fatal("a body naming no term peeked as a pass")
+	}
+	terms := []string{authority.ID(), "", stranger.ID()}
+	if !bytes.Equal(TermKey(terms, FirstTerm), authority.Public()) || TermKey(terms, FirstTerm+1) != nil ||
+		!bytes.Equal(TermKey(terms, FirstTerm+2), stranger.Public()) || TermKey(terms, FirstTerm+3) != nil || TermKey(terms, 0) != nil {
+		t.Fatal("TermKey reads the wrong term")
+	}
+}
+
+// TestAHandoffRecordNamesAKeyATerm: a record that names term keys names one for
+// every term up to its own, its author's last, and keeps out no more than a session
+// holds; one naming none is a fixture's, taken as it is.
+func TestAHandoffRecordNamesAKeyATerm(t *testing.T) {
+	first, author := NewKey(), NewKey()
+	roster := []RosterEntry{{ID: 1, Slot: 0, Key: first.ID()}, {ID: 2, Slot: 1, Key: author.ID()}, {ID: 3, Slot: 2}}
+	chain := SuccessionChain{{ID: 2, Addr: "a"}, {ID: 3, Addr: "b"}}
+	rec := HandoffRecord{Term: FirstTerm + 1, Authority: 2, Predecessor: 1, Roster: roster, Chain: chain}
+	for name, tt := range map[string]struct {
+		keys    []string
+		keepOut int
+		ok      bool
+	}{
+		"none":              {nil, 0, true},
+		"one a term":        {[]string{first.ID(), author.ID()}, parameter.KeepOutKept, true},
+		"a term short":      {[]string{author.ID()}, 0, false},
+		"not the author's":  {[]string{first.ID(), first.ID()}, 0, false},
+		"too many kept out": {[]string{first.ID(), author.ID()}, parameter.KeepOutKept + 1, false},
+	} {
+		r := rec
+		r.TermKeys = tt.keys
+		r.KeepOut = make([]string, tt.keepOut)
+		if err := r.Validate(roster, chain, FirstTerm); (err == nil) != tt.ok {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

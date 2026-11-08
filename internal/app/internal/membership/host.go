@@ -88,7 +88,7 @@ func (m *Membership) dropPlayerLocked(entity core.Entity) error {
 		return errors.New("use :leave to leave the session")
 	}
 	m.world.PushEventFull(event.EventParticipantDeparted,
-		&event.ParticipantDepartedPayload{Participant: p.PeerID, Slot: p.Slot, Dismissed: true},
+		&event.ParticipantDepartedPayload{Participant: p.PeerID, Slot: p.Slot, Dismissed: true, Dropped: true},
 		event.OriginSession, core.DomainPlayer)
 	return nil
 }
@@ -534,6 +534,7 @@ func (m *Membership) openSessionLocked(kept []network.RosterEntry) error {
 	self.Key = m.ownKey()
 	m.sessionRoster = append([]network.RosterEntry{self}, kept...)
 	m.sessionOffer = network.SessionOffer{}
+	m.keepOut = nil
 	m.openAwayLocked(kept)
 	roster := slices.Clone(m.sessionRoster)
 	m.sessionMu.Unlock()

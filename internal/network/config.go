@@ -20,6 +20,10 @@ type Config struct {
 	// keeps a place under is offered that place. A dial with none makes one.
 	Keys []Key
 
+	// Passes are the session passes the dial holds for its Keys, one a place at most;
+	// it shows the one for the session the door names (ChoosePass), or none.
+	Passes []*Signed
+
 	// Identity is the build half of what this peer is (wire contract, manifest and
 	// layout schemas), compared against the offer before a world is built from it.
 	// A zero Protocol disables the check, so a harness can dial a hand-built fixture.

@@ -358,7 +358,7 @@ The threats, and the part that meets each:
 
 ### 7.0 What is built
 
-Phases 0 and 1 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
+Phases 0 to 2 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
 Ed25519 key pair kept as its 32-byte seed in JSON, with `Prove`/`VerifyProof` over a
 door's nonce, the session's name and a channel binding (`ChannelBinding`, the SHA-256
 of a leaf certificate), `VerifyProofs` over a dial's list and `EncodeKey`/`DecodeKey`,
@@ -376,7 +376,12 @@ the 0x31 and 0x30 bodies, `MaxAuthFrame` their bound, the methods `key`, `pass`,
 `RefusalCredential` and `RefusalDropped` (no retry). And what §7.1 and §7.2 describe,
 live: the handshake asks and the dial proves, the roster carries keys, the keeper
 keeps them on every host, peer links challenge both ways, reports and handoffs are
-signed, a relay carries proofs over its authority's challenge. Tests, one a rule, and
+signed, a relay carries proofs over its authority's challenge. And §7.3, live: the
+seat's offer carries a pass, the keeper keeps it beside the key, a dial shows the one
+for the first authority key the door names and every door checks it under the key of
+the term it names, the term keys and the keep-out list riding the offer and the
+handoff record whole; a drop keeps the dropped key out at every door through its
+departure crossing, and the dropped person plays on alone. Tests, one a rule, and
 fuzz targets over the token forms, the join handshake and the peer link.
 
 ### 7.1 Participant keys
@@ -400,9 +405,8 @@ Cost, as designed: 32 bytes a roster entry, two round trips a peer link, and a
 signature of tens of microseconds a link, a dial and a succession message, nothing
 a tick. No new dependency.
 
-Not yet: a handoff record naming each term's authority key for passes (§7.3), a
-signed redirect for a merge or a split, and a binding on a wss door's proof, which a
-page cannot compute and which §7.4 brings with the SCRAM exchange.
+Not yet: a signed redirect for a merge or a split, and a binding on a wss door's
+proof, which a page cannot compute and which §7.4 brings with the SCRAM exchange.
 
 ### 7.2 The admission exchange
 
@@ -438,34 +442,53 @@ ticket. Today it splices them unread.
 
 ### 7.3 Session passes
 
-§7.1 already brings a participant back to its own place with one signature while
-the roster keeps the place, a Wraith's 2 minutes. A pass carries the admission past
-that, past the door that made it, and past the process that held it (D1): a phone
-the system suspended, a laptop that slept, a game that crashed, a machine rebooted
-or a page reopened comes back without its gate, no passphrase prompt, no KDF, no
-ticket from the site.
+Landed; [Multiplayer §5.4](multi-player.md#54-wraiths) states it. §7.1 brings a
+participant back to its own place with one signature while the roster keeps the
+place, a Wraith's 2 minutes. A pass carries the admission past that, past the door
+that made it, and past the process that held it (D1): a phone the system suspended,
+a laptop that slept, a game that crashed, a machine rebooted or a page reopened
+comes back without its gate, no passphrase prompt, no KDF, no ticket from the site.
 
-- **Issued** at every admission: the offer carries it, signed by the authority with
-  its own participant key (a fleet pod's is the session key it makes at start). It
-  names the session, the first term's authority key, so a later session under the
-  same name refuses it, the participant's key, the kind, the account and name when a
-  ticket named one, the term and an expiry (`PassBody`).
-- **Checked** at any door of the session: the authority, a successor, which holds
-  every term's authority key from the handoff records, and a relay, which checks it
-  before it carries the dial on. The door verifies the pass against that term's key
-  and the clock (`VerifyPass`), then the session's keep-out list, then the proof
-  against the key it names: one round trip and two signature checks, about a hundred
-  microseconds on a desktop core.
+- **Issued** at every seat: the offer carries it (`SessionOffer.Pass`), signed by the
+  authority with its own participant key (a fleet pod's is the key it makes at
+  start). It names the session, the first term's authority key, so a later session
+  under the same name refuses it, the participant's key, the kind, the account and
+  name when a ticket named one, the term and an expiry (`PassBody`, `PassLifetime`).
+  A redial showing a pass still under half its life takes none in its offer
+  (`Renewable`); any other seat takes a fresh one.
+- **Shown** by the dial the door asks: the door's question names the session's
+  first authority key (`AuthResponse.Authority`), not its name, which the router
+  rewrites along a published route, and the dial shows the pass it keeps for that
+  key over a key it proves (`ChoosePass`), or none.
+- **Checked** at every door of the session (`Coordinator.Pass`): the authority, a
+  successor and a relay, each holding the authority key of every term from the
+  offer or the handoff record (`SessionOffer.TermKeys`, `HandoffRecord.TermKeys`,
+  `network.TermKey`; a record naming another key for a term the receiver lived
+  through is refused). The door verifies the pass against that term's key and the
+  clock (`VerifyPass`), then the first authority key, then that the key it names is
+  among those the dial proved, then the keep-out list: one round trip and two
+  signature checks, about a hundred microseconds on a desktop core. A relay checks
+  before it carries the dial on, and the authority checks again (`RelayJoin.Pass`).
 - **Placed** by its key: back in the place the key holds, or a new place once the
-  Wraith was dismissed. A redial past half the pass's life takes a fresh one in its
-  offer (`Renewable`).
-- **Revoked** by a drop, which puts the key, and the account when the pass names one,
-  on a keep-out list that crosses as shared state, and by the session's end.
-- **Kept** beside its key, where claims are kept now and on every host (§7.1).
+  Wraith was dismissed. At an open door it buys nothing yet; §7.4 and §7.5 put the
+  gate it skips in front of it.
+- **Revoked** by a drop (`:player drop`), which puts the key, and the account when
+  the pass names one, on the keep-out list, and by the session's end. The list is
+  session state as the roster and the chain are: the offer and the handoff record
+  carry it whole (`KeepOut`, `KeepOutKept`), and the drop's departure crossing adds
+  to it on every instance alike (`ParticipantDepartedPayload.Dropped`,
+  `NetworkResource.OnDropped`), so a successor's and a relay's doors refuse what the
+  authority's does, `RefusalDropped`. A dropped person plays on alone, as after
+  `:leave`, told why; a dropped bot's run ends. A fresh key is admitted still: the
+  session name is a routing key, and the identity a drop would hold is §7.5's.
+- **Kept** beside its key (`place.Pass`), where the keys are kept, on every host.
 
 A pass stolen alone is nothing: every use signs a fresh nonce with the key it
 names. A pass and its key stolen together, from a page's storage or a device, are
-the participant until the session drops it or ends.
+the participant until the session drops it or ends. Cost: one signature a seat and
+two checks a dial that shows one, about 400 bytes a pass in the offer and in the
+keeper's file, and the term keys and the keep-out list in each offer and record, 44
+bytes an entry.
 
 ### 7.4 Passphrase doors
 
@@ -528,7 +551,8 @@ the same cookie.
 ### 7.6 Phases
 
 Each a PR, in this order; each bumps `ProtocolVersion` where it changes a frame,
-and phase 1 bumps `snapshot.Schema` and `event.JournalSchema` with the roster.
+phase 1 bumps `snapshot.Schema` and `event.JournalSchema` with the roster, and
+phase 2 `event.JournalSchema` with the departure.
 
 - **Phase 0, the direct route goes** (D3): landed. The Service is `ClusterIP`, the
   fleet's size `-sessions-max`, the game port admitted from the node alone.
@@ -537,7 +561,10 @@ and phase 1 bumps `snapshot.Schema` and `event.JournalSchema` with the roster.
   messages are signed, the keeper persists keys on every host behind `[session]
   resume_after_restart`. The router splices the new frames unread; the fleet runs
   open doors still.
-- **Phase 2, passes** (§7.3) and keep-out, with [Let an authority drop a participant](todo.md#let-an-authority-drop-a-participant).
+- **Phase 2, passes and keep-out** (§7.3): landed. The seat's offer carries a pass,
+  every door checks one shown, the term keys and the keep-out list ride the offer
+  and the handoff record, `:player drop` keeps the dropped key out and the dropped
+  person plays on alone; the router's route for a drop waits for phase 6.
 - **Phase 3, passphrase doors** (§7.4): auth enters the game binary; native, wasm
   and Android sizes read before and after (D18); the Argon2 cost measured on a page
   and a phone.

@@ -3,6 +3,7 @@ package membership
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/event"
@@ -38,7 +39,7 @@ func ids(keys []network.Key) []string {
 // an offer of a place one of them holds hands that place to the run.
 func TestADialProvesTheKeysNoRunHoldsOfItsKind(t *testing.T) {
 	k := NewPlaceKeeper(nil)
-	person, bot := k.issue(false, network.NewKey()), k.issue(true, network.Key{})
+	person, bot := k.issue(false, network.NewKey(), nil), k.issue(true, network.Key{}, nil)
 	if !bot.Key.Valid() {
 		t.Fatal("a place issued with no key holds none")
 	}
@@ -68,7 +69,7 @@ func TestADialProvesTheKeysNoRunHoldsOfItsKind(t *testing.T) {
 // is in its session under it, and what the last one held once the run leaves.
 func TestAPlayerBringsBackWhatItLeftWith(t *testing.T) {
 	k := NewPlaceKeeper(nil)
-	p := k.issue(false, network.NewKey())
+	p := k.issue(false, network.NewKey(), nil)
 	left := event.CursorRecord{Energy: 500, Heat: 3, HitPoints: 61}
 	k.keep(p, event.CursorRecord{Energy: 100})
 	k.keep(p, left)
@@ -85,7 +86,7 @@ func TestAPlayerBringsBackWhatItLeftWith(t *testing.T) {
 // stood. Only a place a run gave up is carried.
 func TestAPlaceCarriedOnKeepsTheRecordItLeftWith(t *testing.T) {
 	k := NewPlaceKeeper(nil)
-	left := k.issue(true, network.NewKey())
+	left := k.issue(true, network.NewKey(), nil)
 	k.keep(left, event.CursorRecord{Energy: 500, Charges: []int{2, 1}})
 	if k.carry(left.id()) != nil {
 		t.Fatal("a place its run still holds was carried")
@@ -114,7 +115,7 @@ func TestAPlaceCarriedOnKeepsTheRecordItLeftWith(t *testing.T) {
 func TestAStoreKeepsItsPlacesAcrossARestart(t *testing.T) {
 	store := &memoryPlaces{}
 	k := NewPlaceKeeper(store)
-	bot := k.issue(true, network.NewKey())
+	bot := k.issue(true, network.NewKey(), nil)
 	k.keep(bot, event.CursorRecord{Energy: 77})
 	k.release(bot)
 	reloaded := NewPlaceKeeper(store)
@@ -133,9 +134,9 @@ func TestAStoreKeepsItsPlacesAcrossARestart(t *testing.T) {
 		}
 	}
 
-	held := k.issue(false, network.NewKey())
+	held := k.issue(false, network.NewKey(), nil)
 	for range parameter.PlacesKept {
-		k.release(k.issue(false, network.Key{}))
+		k.release(k.issue(false, network.Key{}, nil))
 	}
 	if len(k.places) != parameter.PlacesKept || k.places[0] != held || slices.Contains(k.places, bot) {
 		t.Fatalf("the keeper holds %d places, first held %t, oldest kept %t; want %d, the held one kept, the oldest given way",
@@ -152,7 +153,7 @@ func TestAForkLetsItsPlaceGo(t *testing.T) {
 	for _, mode := range []config.Mode{config.ModePlay, config.ModeHeadless} {
 		m := wraithWorld()()
 		m.run, m.places = stubRun{mode: mode}, NewPlaceKeeper(nil)
-		p := m.places.issue(false, network.NewKey())
+		p := m.places.issue(false, network.NewKey(), nil)
 		m.place.Store(p)
 		m.forked(nil, 2)
 		if proved := slices.Contains(ids(m.places.keys(false)), p.id()); m.place.Load() != nil || !proved {
@@ -162,5 +163,53 @@ func TestAForkLetsItsPlaceGo(t *testing.T) {
 		if loop := mode == config.ModePlay; m.leaving.Load() != loop {
 			t.Errorf("a %s fork asks its loop to take it on %t; want %t", mode, m.leaving.Load(), loop)
 		}
+	}
+}
+
+// TestAPlaceKeepsThePassItsSeatGave: the pass an offer carries for a place's key is
+// kept with the place, past the process, and shown for the kind's kept places; one
+// for another key, or signed by no key the offer names for its term, is not.
+func TestAPlaceKeepsThePassItsSeatGave(t *testing.T) {
+	store := &memoryPlaces{}
+	k := NewPlaceKeeper(store)
+	authority := network.NewKey()
+	p := k.issue(false, network.NewKey(), nil)
+	k.release(p)
+	pass := func(key, signer network.Key) *network.Signed {
+		body := network.PassBody{Authority: authority.Public(), Key: key.Public(), Kind: network.AdmitPlay, Term: network.FirstTerm}
+		s, err := network.SignPass(signer, body, time.Now(), time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	o := offerOf(p)
+	o.TermKeys = []string{authority.ID()}
+	o.Pass = pass(network.NewKey(), authority)
+	if k.take(o, false) != p || p.Pass != nil {
+		t.Fatal("a pass over another key was kept")
+	}
+	k.release(p)
+	o.Pass = pass(p.Key, network.NewKey())
+	if k.take(o, false) != p || p.Pass != nil {
+		t.Fatal("a pass no term key of the offer's signed was kept")
+	}
+	k.release(p)
+	o.Pass = pass(p.Key, authority)
+	if k.take(o, false) != p || p.Pass != o.Pass {
+		t.Fatal("the pass the seat gave was not kept")
+	}
+	if got := k.passes(false); len(got) != 0 {
+		t.Fatal("a held place's pass was shown")
+	}
+	k.release(p)
+	if got := k.passes(false); len(got) != 1 || got[0] != o.Pass || len(k.passes(true)) != 0 {
+		t.Fatal("a kept place's pass is shown for its kind alone")
+	}
+	if got := NewPlaceKeeper(store).passes(false); len(got) != 1 || !slices.Equal(got[0].Sig, o.Pass.Sig) {
+		t.Fatal("the pass did not outlive the keeper")
+	}
+	if k.issue(false, network.NewKey(), o.Pass).Pass != o.Pass || k.issue(false, network.Key{}, o.Pass).Pass != nil {
+		t.Fatal("issue keeps the pass given for a proved key, none for a key made here")
 	}
 }

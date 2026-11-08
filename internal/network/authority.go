@@ -10,6 +10,7 @@ import (
 	link "github.com/lixenwraith/vif/pkg/network"
 
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // AuthorityTerm is the authority generation. Term zero is "no session"; a session
@@ -75,6 +76,12 @@ type HandoffRecord struct {
 	// Chain is the candidate list the successor is taking over with, moved whole
 	// for the same reason the roster is.
 	Chain SuccessionChain `json:"chain,omitempty"`
+
+	// TermKeys is the authority key of every term up to this one, the successor's
+	// last, and KeepOut the keys and accounts the session keeps out; both moved
+	// whole, as the chain is, so a successor's doors verify every pass issued so far.
+	TermKeys []string `json:"term_keys,omitempty"`
+	KeepOut  []string `json:"keep_out,omitempty"`
 
 	// EvidenceTick is the newest retained authoritative tick the successor holds.
 	// It is reported rather than enforced: a receiver reads how far back the world
@@ -144,6 +151,18 @@ func (h HandoffRecord) Validate(roster []RosterEntry, chain SuccessionChain, hel
 	if want := candidates[h.Term-held-1]; h.Authority != want {
 		return fmt.Errorf("handoff names participant %d for term %d; this roster's candidate for it is %d",
 			h.Authority, h.Term, want)
+	}
+	// A record from a hand-built fixture names no term keys; one that names them
+	// names one a term, its author's last, since that is the key its passes bear.
+	if n := int(h.Term-FirstTerm) + 1; len(h.TermKeys) != 0 && len(h.TermKeys) != n {
+		return fmt.Errorf("handoff names the authority keys of %d terms; term %d is the %dth", len(h.TermKeys), h.Term, n)
+	}
+	if i := slices.IndexFunc(h.Roster, func(p RosterEntry) bool { return p.ID == h.Authority }); i >= 0 &&
+		len(h.TermKeys) != 0 && h.Roster[i].Key != "" && h.TermKeys[len(h.TermKeys)-1] != h.Roster[i].Key {
+		return errors.New("handoff names an authority key for its term that is not its author's")
+	}
+	if len(h.KeepOut) > parameter.KeepOutKept {
+		return fmt.Errorf("handoff keeps out %d keys; a session keeps %d at most", len(h.KeepOut), parameter.KeepOutKept)
 	}
 	return nil
 }

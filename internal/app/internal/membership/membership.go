@@ -53,10 +53,11 @@ type Membership struct {
 	authority   *converge.Authority
 	reach       *converge.Reach
 
-	dismissed atomic.Bool // this run was dismissed from its session; the next one is what replaces it
-	shed      atomic.Bool // the dismissal was its host keeping its tick
-	dialling  atomic.Bool // a :join is being dialled while this run plays on
-	leaving   atomic.Bool // a :leave or a fork is waiting for Loop, or being served by it
+	dismissed  atomic.Bool // this run was dismissed from its session; the next one is what replaces it
+	shed       atomic.Bool // the dismissal was its host keeping its tick
+	wasDropped atomic.Bool // the dismissal was the host's drop, which keeps this run's key out
+	dialling   atomic.Bool // a :join is being dialled while this run plays on
+	leaving    atomic.Bool // a :leave or a fork is waiting for Loop, or being served by it
 
 	pendingJoin *network.PendingJoin
 	// landingHeld and landingStart are the hold the world a join installs lands in,
@@ -89,6 +90,11 @@ type Membership struct {
 	// relayNonces are the challenges this coordinator issued to its relays' doors,
 	// each good for one dial's proofs; guarded by sessionMu.
 	relayNonces map[string]relayNonce
+
+	// keepOut is the keys and accounts the session keeps out, oldest first and
+	// parameter.KeepOutKept at most: the offer's or the record's, then each drop of
+	// the host's as its departure applies here, so every door holds the same list.
+	keepOut []string
 
 	// midRunPort is the socket a solo run opened for itself, with :host or with no
 	// listener for its bots. A run started with -host takes its endpoint from
@@ -322,10 +328,12 @@ func (m *Membership) GuestDoor() (accept func(net.Conn) (link.PeerID, error), ad
 // Control is the membership's half of the operator's session surface.
 func (m *Membership) Control() Control { return Control{m} }
 
-// Dismissed reports whether this run was dismissed from its session, and Shed
-// whether its host did so to keep its tick: the next run is what replaces it.
+// Dismissed reports whether this run was dismissed from its session, Shed whether
+// its host did so to keep its tick, and Dropped whether the host dropped it, which
+// keeps its key out: the run goes on alone, as after :leave.
 func (m *Membership) Dismissed() bool { return m.dismissed.Load() }
 func (m *Membership) Shed() bool      { return m.shed.Load() }
+func (m *Membership) Dropped() bool   { return m.wasDropped.Load() }
 
 // Leaving reports whether a :leave or a fork waits for the run's loop (LeaveSession).
 func (m *Membership) Leaving() bool { return m.leaving.Load() }

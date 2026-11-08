@@ -300,7 +300,7 @@ box, requests a session from an HTTP(S) vif-router site with a player count and
 scenario, leaves the session, and relays for others. Player count 0 and a blank
 scenario use server defaults. Current session status heads the page. Hosts drop
 a player with its bots, or one bot, under Players; :player lists slots and
-:player drop <slot> removes one. Bots adds local bots by count and policy graph,
+:player drop <slot> removes one and keeps it out. Bots adds local bots by count and policy graph,
 and removes this run's bots by cursor slot or cancels a joining bot; :bot drop
 <slot> removes your bot, or any bot when hosting. Slots accept decimal 10,
 hexadecimal A or 0xA for the cursor marked A. Host before adding bots to solo
@@ -352,7 +352,8 @@ System configuration roots, in that order;
 names others in their place, separated by colons.
 .TP
 .I $XDG_STATE_HOME/vif
-Logs, journals and music recordings, normally
+Logs, journals, music recordings and the places a run comes back to its sessions
+with, normally
 .IR ~/.local/state/vif .
 .SH SEE ALSO
 https://lixen.com/vif/, https://github.com/lixenwraith/vif

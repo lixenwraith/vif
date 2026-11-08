@@ -806,13 +806,31 @@ terminal's in `places.json` under the user's state directory and Android's in th
 app's files, so a restart, a crash or a reboot comes back to them, unless
 `[session] resume_after_restart` is off. When the door asks (`MsgAuthResponse`, a
 nonce), before it assigns a place, a dial proves its keys over the nonce and the
-session's name (`MsgAuthRequest`): a fresh one first for the place it may be given,
-then those it keeps of its kind, a seat its bots' and a player its own. A key an
+door's channel binding (`MsgAuthRequest`): a fresh one first for the place it may be
+given, then those it keeps of its kind, a seat its bots' and a player its own. A key an
 away entry carries takes that place back, a full session's too: the same identity,
 slot and cursor, held for that dial until its arrival crosses, so no newcomer is
 given it and no wait runs out on it (`NetworkResource.WraithKept`). A join that does
 not complete gives it back to the Wraith. A holder's bots come back the same way
 once it seats them again.
+
+**The pass.** The seat's offer carries a **session pass** (`SessionOffer.Pass`): the
+authority's signed word, under its own key for its term, that this key was admitted
+to this session, naming the session's first authority key so no other session takes
+it, good for `PassLifetime` and renewed by a redial past half of it. The keeper keeps
+it beside the key (`place.Pass`); a dial shows the one for the first authority key
+the door's question names (`network.ChoosePass`), and every door checks it under the
+key of the term it names, which the offer and the handoff record carry for every
+term (`TermKeys`), then the proof over the key it names, then the keep-out list
+(`Membership.checkPass`); a relay checks before it carries the dial on, and the
+authority again. At an open door it buys nothing yet: it is what a later gate, a
+passphrase or the site's ticket, lets a returning player skip. `:player drop` keeps
+the dropped participant's key out (`KeepOut`, carried by the offer and the record
+and fed by the departure crossing on every instance, `KeepOutKept` at most), so its
+redial is refused `RefusalDropped` at the authority's door, a successor's and a
+relay's; the dropped person plays on alone, as after `:leave`, and a dropped bot's
+run ends. A fresh key is admitted: the session name is a routing key, not an
+identity, which [the auth design](auth-session-design.md) §7.5 brings.
 
 A player brings back what its cursor held when it left (`event.CursorRecord`: energy,
 heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnState`).
