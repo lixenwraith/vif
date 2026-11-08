@@ -685,9 +685,13 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 	for i := range parameter.MaxPlayers {
 		roster = append(roster, network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i)})
 	}
+	successor := network.NewKey()
+	for i := range roster {
+		roster[i].Key = network.NewKey().ID()
+	}
 	reportBody, err := network.EncodeAuthorityReport(network.AuthorityReport{
 		Term: network.FirstTerm, From: 2, Lost: 1,
-	})
+	}.Sign(successor))
 	if err != nil {
 		t.Fatalf("report encode: %v", err)
 	}
@@ -695,7 +699,7 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1,
 		Roster: roster, Anchor: a.JoinAnchor(),
 		EvidenceTick: base.Header.Tick,
-	})
+	}.Sign(successor))
 	if err != nil {
 		t.Fatalf("handoff encode: %v", err)
 	}

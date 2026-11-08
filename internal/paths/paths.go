@@ -6,7 +6,9 @@ package paths
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -26,6 +28,7 @@ const (
 	LogDirName       = "log"
 	JournalDirName   = "journal"
 	MusicDirName     = "music"
+	PlacesFileName   = "places.json"
 
 	ScenarioFile     = "scenario.toml"
 	KeymapConfigFile = "keymap.toml"
@@ -153,6 +156,33 @@ func DefaultJournalDir() string { return stateDir(JournalDirName) }
 
 // DefaultMusicDir returns where a recorded run's music is written, beside its logs.
 func DefaultMusicDir() string { return stateDir(MusicDirName) }
+
+// PlacesFile is where a run keeps the places it comes back to its sessions with,
+// the key each is held under, beside its logs; a file for the user alone.
+func PlacesFile() string { return filepath.Join(stateDir(""), PlacesFileName) }
+
+// PlaceFile is the places document at Path: one not there yet reads as none, and a
+// write replaces it whole under a mode the user alone reads, by rename.
+type PlaceFile struct{ Path string }
+
+func (f PlaceFile) Load() ([]byte, error) {
+	data, err := os.ReadFile(f.Path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return data, err
+}
+
+func (f PlaceFile) Store(data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(f.Path), 0o700); err != nil {
+		return err
+	}
+	tmp := f.Path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, f.Path)
+}
 
 func stateDir(kind string) string {
 	base := "."

@@ -220,13 +220,13 @@ A joined page hidden for five minutes (`LEAVE_HIDDEN_MS` in `web/terminal.js`)
 leaves: the page ends its Worker, the session sees the link close and the cursor
 waits as a Wraith ([Multiplayer §5.4](multi-player.md#54-wraiths)), dismissed after
 `WraithTimeout`, so a session nobody else plays empties and ends on its grace. Shown
-again after that long hidden, the page reloads, which rejoins with the tab's claim
+again after that long hidden, the page reloads, which rejoins with the tab's key
 while the place waits and as a new player after; a shorter absence costs the others
 nothing and resumes where it was. A browser that freezes the tab instead, as Chrome
 may under its energy or memory saving and mobile browsers readily do, stops the
 Worker, so nothing reads the socket: the session drops the participant after
 `NetworkLinkDeadAfter` (5 s) of silence, as it drops any silent peer, and on return
-the Worker redials its host under its claim ([Multiplayer §5.1](multi-player.md#51-succession))
+the Worker redials its host under its key ([Multiplayer §5.1](multi-player.md#51-succession))
 and takes its place back while the Wraith waits; a tab frozen past the five minutes
 reloads as a hidden one does.
 
@@ -386,9 +386,9 @@ keymap, and CLI arguments alone cannot give it the editable `wad/` tree a native
 build resolves. What a native run writes back to `vif.toml`'s `[play]` the page
 keeps in the site's storage (`localStorage`, handed to the Worker at the start,
 since a Worker has none), so each visit starts as the last was left; a private
-window, or a site whose storage is blocked, keeps them to the run. The claims a run
-comes back to its session with live in the tab's own storage (`sessionStorage`), so
-a reload takes back the place it left ([Multiplayer §5.4](multi-player.md#54-wraiths)).
+window, or a site whose storage is blocked, keeps them to the run. The participant
+keys a run comes back to its session with live in the tab's own storage
+(`sessionStorage`), so a reload takes back the place it left ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 
 A guest already receives custom maps. When the scenario it resolves does not have
 the session's digest, the coordinator serves it during the join, between the offer

@@ -611,17 +611,28 @@ func (u *Authority) sendReport() {
 	u.report(rep)
 }
 
-// report records and floods one report of this instance's own.
+// report records and floods one report of this instance's own, signed as its own.
 func (u *Authority) report(rep network.AuthorityReport) {
 	if rep.Term == 0 || rep.From == 0 {
 		return
 	}
+	rep = rep.Sign(u.inst.LocalKey())
 	u.recordReport(rep)
 	body, err := network.EncodeAuthorityReport(rep)
 	if err != nil {
 		return
 	}
 	u.flood(network.MsgAuthorityReport, 0, body)
+}
+
+// keyOf is the roster's key for one participant, "" for one the roster does not hold.
+func (u *Authority) keyOf(id link.PeerID) string {
+	for _, p := range u.currentRoster() {
+		if p.ID == id {
+			return p.Key
+		}
+	}
+	return ""
 }
 
 // currentRoster is the closed roster as the world holds it rather than as the offer
@@ -887,6 +898,7 @@ func (u *Authority) trySucceed(now time.Time) {
 		EvidenceTick: evidenceTick,
 	}
 	u.mu.Unlock()
+	rec = rec.Sign(u.inst.LocalKey())
 
 	if err := u.adopt(rec, 0); err != nil {
 		u.log.Error("session", "msg", "succession could not adopt its own record", "error", err.Error())
@@ -1194,6 +1206,12 @@ func (u *Authority) onReport(from uint32, body []byte) {
 	if err != nil || rep.From == 0 {
 		return
 	}
+	// A report is its author's or nobody's: one forged for another participant
+	// could make a survivor walk, or hand a term's group a member it never had.
+	if !rep.Verify(u.keyOf(rep.From)) {
+		u.statRefused.Add(1)
+		return
+	}
 	// A survivor that follows its host through this instance names it, and the
 	// host's artifacts flow on down to it from here.
 	if rep.Via != 0 && rep.Via == u.Local() && from == uint32(rep.From) {
@@ -1228,7 +1246,7 @@ func (u *Authority) onReport(from uint32, body []byte) {
 
 // takeBack gives a survivor whose membership report at this term reached the host it
 // authors after the floor its place back, with its seats', over the link it already
-// holds, as a claim's return would: the floor sent it away for a report still on its
+// holds, as a key's return would: the floor sent it away for a report still on its
 // way, a dial that outlasted the window or a hop more than the floor allowed.
 func (u *Authority) takeBack(rep network.AuthorityReport) {
 	u.mu.Lock()
@@ -1276,6 +1294,15 @@ func (u *Authority) answer(to uint32) {
 func (u *Authority) onHandoff(from uint32, body []byte) {
 	rec, err := network.DecodeHandoff(body)
 	if err != nil || u.linked(rec.Predecessor) {
+		return
+	}
+	// The successor's word or nobody's: a record another participant wrote in its
+	// name would move the term to whoever forged it.
+	if !rec.Verify(u.keyOf(rec.Authority)) {
+		u.statRefused.Add(1)
+		u.log.Warn("session", "msg", "handoff refused",
+			"peer", from, "term", uint64(rec.Term), "authority", uint64(rec.Authority),
+			"error", "the record is not signed by the participant it names")
 		return
 	}
 	if err := u.adopt(rec, from); err != nil {

@@ -78,7 +78,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the first candidate. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never a candidate (§5.1, §5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. `-authority host` (default on `-serve`): nobody takes it, and every survivor continues alone once its redial ends. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
-| Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`). |
+| Trust | Links are plaintext and the door admits any key by decision; what a participant proves is the key its place waits under (§5.4), and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`). |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial as ending (`RefusalEnding`), distinct from the retryable `errSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
@@ -581,7 +581,7 @@ The procedure on each survivor is:
    survivor two links away opens the same walk from the notice, which names the lost
    term.
 2. **Redial the host.** A person's run with a link of its own to its host redials
-   it under the claim its place waits under (§5.4), the first host at the door the
+   it under the key its place waits under (§5.4), the first host at the door the
    run came in by and a host that took the session over where the chain says: a link
    that dropped on its side alone leaves a place the host's Wraith gives back, and
    the run admitted back replaces this one, as `:join` does. It waits up to a
@@ -635,7 +635,7 @@ host, and a relay still running admits it back into its place; refused, nothing
 answering, or past the window, it walks every candidate for one that carries it and
 forks after a walk down the whole list (`Reach.cutOff`, `Authority.redialRelay`).
 A guest whose own link to a host still running dropped, and whose redial cannot
-reach that host, rejoins under its claim through the candidates it walks to
+reach that host, rejoins under its key through the candidates it walks to
 (`Membership.rejoinThrough`): the port of one relaying for others takes the join as
 its `-relay` door would and asks the host, which gives the place its Wraith keeps
 back, and the guest plays on behind that candidate; a port not relaying refuses, as
@@ -661,7 +661,7 @@ group resumes, every independent participant that reported no membership at its
 term departs the same way, its bots with it: a survivor that followed another host,
 or forked. The floor comes after play resumes rather than at once, so a survivor
 still arriving through a relay hop is not sent away. One whose report reaches the
-host after the floor is given its place back, with its bots', as a claim's return
+host after the floor is given its place back, with its bots', as a key's return
 gives one (`Authority.takeBack`, `Instance.CrossReturns`): the floor is the deadline
 for the report, not for the survivor.
 
@@ -796,38 +796,45 @@ closed is only ever away. A Wraith counts as a guest, so a dedicated host stays
 occupied and its clock runs while one waits, which is what lets its wait run out.
 A defeat is the players left: a Wraith neither loses nor holds one up.
 
-**Coming back.** Each place is joined under a **claim**: a random token the
-participant's process keeps (`ClaimKeeper`; a page in its tab's `sessionStorage`,
-so a reload keeps it and another tab is another player; a terminal for the
-process's life) and whose digest the roster entry and the cursor carry, so a
-successor's roster carries it too. The host's own entry carries one. When the
-coordinator asks (`MsgJoinClaims`), before it assigns a place, a dial names the
-tokens it keeps of its kind, a seat its bots' and a player its own. A token whose
-digest an away entry carries takes that place back, a full session's too: the same
-identity, slot and cursor, held for that dial until its arrival crosses, so no
-newcomer is given it and no wait runs out on it (`NetworkResource.WraithKept`). A
-join that does not complete gives it back to the Wraith. A holder's bots come back
-the same way once it seats them again.
+**Coming back.** Each place is held under a **participant key**: an Ed25519 pair the
+participant's process makes for it (`PlaceKeeper`, `network.Key`) and whose public
+half the roster entry and the cursor carry, so a successor's roster carries it too.
+The host's own entry carries one, and signs its succession messages with it. The
+keeper keeps its places past the process (`PlaceStore`): a page's in its tab's
+`sessionStorage`, so a reload keeps them and another tab is another player; a
+terminal's in `places.json` under the user's state directory and Android's in the
+app's files, so a restart, a crash or a reboot comes back to them, unless
+`[session] resume_after_restart` is off. When the door asks (`MsgAuthResponse`, a
+nonce), before it assigns a place, a dial proves its keys over the nonce and the
+session's name (`MsgAuthRequest`): a fresh one first for the place it may be given,
+then those it keeps of its kind, a seat its bots' and a player its own. A key an
+away entry carries takes that place back, a full session's too: the same identity,
+slot and cursor, held for that dial until its arrival crosses, so no newcomer is
+given it and no wait runs out on it (`NetworkResource.WraithKept`). A join that does
+not complete gives it back to the Wraith. A holder's bots come back the same way
+once it seats them again.
 
 A player brings back what its cursor held when it left (`event.CursorRecord`: energy,
 heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnState`).
 The record stops once the run is out of the session: it closed, or plays on after a
 fork (`converge.Instance.Forked`), its own bots still linked or not, while a
 successor carrying the session keeps its own; a run redialling the host it lost
-stops it at the drop and keeps it again if it stays; a dismissal forgets the claim. The
+stops it at the drop and keeps it again if it stays; a dismissal forgets the place. The
 arrival crossing carries it, and `CursorSystem.reclaim` writes it over the template
 at the free cell nearest the one the Wraith held, on every instance. A Wraith is
 driven by nobody, its own participant included, until that arrival.
 
-A claim whose place is still linked, which the host has not yet seen go, closes that
+A key whose place is still linked, which the host has not yet seen go, closes that
 link (`Membership.closeStaleLink`): its departure crosses as any lost link's does, and the
 dial is refused `RefusalReturning`, which it retries in a moment into the place. A
 place held through a relay waits for the relay to see its link go, and one another
-dial is taking back is refused the same way. The roster carries digests alone and a
-dial names its tokens only on its way to the coordinator, through the `-relay` it
-joins by if any, which carries all its traffic anyway, so no other peer can take its
-place; the port is unauthenticated by decision, so a claim is no credential against
-the wire.
+dial is taking back is refused the same way. The roster carries public keys alone
+and a proof is good for one nonce at one door, so no other peer can take a place
+from what it reads; a relay carries a dial's proofs to the authority over a
+challenge it asked the authority for (`RelayNonce`), so it can take none either. A
+proof whose signature fails is refused `RefusalCredential`. The link stays plaintext
+by decision ([Auth and session design](auth-session-design.md)), so what the key
+does not stop is whoever is on the path taking the stream after the proof.
 
 ### 5.5 Leaving a session
 
@@ -856,13 +863,13 @@ its crossings still scheduled and its journal all name that identity, and nobody
 leaves behind holds it, so the departures it produces for them cannot remove its
 own cursor, as they would if it took the coordinator's usual first identity. The
 new term puts anything still carrying the old one behind the term it holds, where
-every authoritative artifact is ignored. The claim it was in the left session under
-is given up with its record as it stood, so it can still take its Wraith back
-there (§5.4), and the session it opens issues its own.
+every authoritative artifact is ignored. The place it was in the left session is
+given up with its record as it stood, so it can still take its Wraith back there
+(§5.4), and the session it opens issues its own key.
 
 Its bots leave first, as they do when it quits, though as lost links rather than
 dropped seats, so the session left keeps their places too. The session it opens
-keeps them as well, each under a claim of its own (`ClaimKeeper.carry`: a new token
+keeps them as well, each under a key of its own (`PlaceKeeper.carry`: a new key
 over a copy of the record the bot left with, which stays the left session's for a
 return there), and once the old door is shut each bot is seated again and takes
 its place back; a bot's journal closes with its seat. In between, the run's loop
@@ -1035,20 +1042,21 @@ could make the netcode cheaper in [Netcode design](netcode-design.md).
 
 ### Deferred by decision
 
-1. **Authentication and confidentiality.** Links are plaintext and a session is
-   reached by its address alone. Participant claims, loss notices, handoff records
-   and peer links are structurally checked but not authenticated; the rules prevent
-   races, not a hostile peer. The deployed fleet accepts this and hardens the open
-   port instead; see the [session fleet](kubernetes-fleet.md#4-security-posture)
-   for what bounds a stranger today and what does not.
+1. **Confidentiality.** Links are plaintext until the front door of
+   [the auth design](auth-session-design.md) carries them, and a session is reached
+   by its address alone. A participant proves its key at admission, peer links are
+   proved both ways and reports and handoff records are signed (§5.4); loss
+   notices are structurally checked alone. The deployed fleet hardens the open port
+   meanwhile; see the [session fleet](kubernetes-fleet.md#4-security-posture) for
+   what bounds a stranger today and what does not.
 
    §5.3 enlarges the surface and is stated as such rather than partly mitigated. A
    migrate session has one listening port per participant rather than one per
    session, and the addresses of all of them are published inside it. Everything on
-   those ports is refused unless it names a participant the receiver's own roster
-   holds and a term not behind the one it holds — which is the same structural
-   check the rest of the protocol makes, and the same non-answer to a peer that can
-   claim another's identity. `-no-advertise` is the setting for a participant that
+   those ports is refused unless it proves the key of a participant the receiver's
+   own roster holds and names a term not behind the one it holds, so a stranger
+   who learns the addresses still holds no participant's key and opens no link.
+   `-no-advertise` is the setting for a participant that
    would rather be a leaf, and `-authority host` for a session that would rather
    have one port.
 

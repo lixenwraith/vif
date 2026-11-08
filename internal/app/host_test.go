@@ -439,18 +439,18 @@ func joinDeadline(d time.Duration) <-chan os.Signal {
 	return ch
 }
 
-// dialSession dials until the coordinator answers with an offer, naming the claims a
-// run that kept them names. Both things it retries past are the protocol's own: a
+// dialSession dials until the coordinator answers with an offer, proving the keys a
+// run that kept them proves. Both things it retries past are the protocol's own: a
 // host binding on its own goroutine is not listening yet, and a refusal — a lobby
 // mid-close, a Wraith giving up its place — is the answer the design tells a dialer to
 // retry on. A refusal spends the address's admission budget, so it is retried at a
 // rejoin's pace.
-func dialSession(t *testing.T, addr string, claims ...string) (*network.PendingJoin, network.SessionOffer) {
+func dialSession(t *testing.T, addr string, keys ...network.Key) (*network.PendingJoin, network.SessionOffer) {
 	t.Helper()
 	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
 	var last error
 	for time.Now().Before(deadline) {
-		pending, offered, err := dialOnce(addr, claims...)
+		pending, offered, err := dialOnce(addr, keys...)
 		if err == nil {
 			return pending, offered
 		}
@@ -465,10 +465,11 @@ func dialSession(t *testing.T, addr string, claims ...string) (*network.PendingJ
 	return nil, network.SessionOffer{}
 }
 
-// dialOnce is one dial that seats at once, naming claims: what its host answers.
-func dialOnce(addr string, claims ...string) (*network.PendingJoin, network.SessionOffer, error) {
+// dialOnce is one dial that seats at once, proving a fresh key and then keys: what
+// its host answers.
+func dialOnce(addr string, keys ...network.Key) (*network.PendingJoin, network.SessionOffer, error) {
 	cfg := network.DebugConfig(link.RolePeer, "")
-	cfg.Claims = claims
+	cfg.Keys = append([]network.Key{network.NewKey()}, keys...)
 	return network.DialSession(addr, cfg)
 }
 
@@ -2160,12 +2161,12 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 // pinned host left, is taken on as :leave takes it: a session of its own under the
 // identity it had and the next term, :host and :join open to it, and the loss said
 // as one. The host's place stays, its cursor a Wraith the fork gives back to the
-// claim it waits under.
+// key it waits under.
 func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	store := &keptClaims{}
+	store := &keptPlaces{}
 	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
-		Resources: resource.Options{Embedded: true}, Membership: Membership{ClaimStore: store}})
+		Resources: resource.Options{Embedded: true}, Membership: Membership{PlaceStore: store}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2184,7 +2185,7 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	})
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	id, term, token := guest.membership.LocalParticipant(), guest.authority.Term(), store.token(t)
+	id, term, key := guest.membership.LocalParticipant(), guest.authority.Term(), store.key(t)
 	held := places(guest, everyone)
 
 	leaveAs(t, host)
@@ -2223,10 +2224,10 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	}
 	stopGuest = tickInBackground(guest)
 	defer stopGuest()
-	back, offered := dialSession(t, guest.HostAddr(), token)
+	back, offered := dialSession(t, guest.HostAddr(), key)
 	defer back.Close()
 	if uint64(offered.Assigned) != held[0][1] || assignedSlot(offered) != 0 {
-		t.Fatalf("the host's claim was given %d on slot %d; want its own place, %d on slot 0", offered.Assigned, assignedSlot(offered), held[0][1])
+		t.Fatalf("the host's key was given %d on slot %d; want its own place, %d on slot 0", offered.Assigned, assignedSlot(offered), held[0][1])
 	}
 }
 
@@ -2268,17 +2269,17 @@ func TestAForkKeepsTheHoldItsLostHostSet(t *testing.T) {
 // TestASessionARunOpensHasNobodyAwayFromIt: who was away from the session a run
 // left, or on the way back to it, stays with that session, so the next one hands an
 // identity out as somebody new: nobody there is dismissed or brought back. The host
-// leaves while a full session gives a newcomer one Wraith's place and a claim takes
+// leaves while a full session gives a newcomer one Wraith's place and a key takes
 // another's back, its return waiting in the start gate.
 func TestASessionARunOpensHasNobodyAwayFromIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHosting(t, Membership{Participants: 3})
 	stop := tickInBackground(host)
 	defer stop()
-	stores := []*keptClaims{{}, {}}
+	stores := []*keptPlaces{{}, {}}
 	var ids []link.PeerID
 	for _, store := range stores {
-		guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.ClaimStore = store })
+		guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.PlaceStore = store })
 		id, slot := arrival(t, host, guest)
 		_ = port.Close()
 		guest.Close()
@@ -2289,10 +2290,10 @@ func TestASessionARunOpensHasNobodyAwayFromIt(t *testing.T) {
 	if _, _, err := dialOnce(host.HostAddr()); !errors.Is(err, &network.Refusal{Code: network.RefusalYielding}) {
 		t.Fatalf("a newcomer to the full session was answered %v; want a place being given up", err)
 	}
-	back, offered := dialSession(t, host.HostAddr(), stores[1].token(t))
+	back, offered := dialSession(t, host.HostAddr(), stores[1].key(t))
 	defer back.Close()
 	if offered.Assigned != ids[1] {
-		t.Fatalf("the claim took %d; want participant %d's place", offered.Assigned, ids[1])
+		t.Fatalf("the key took %d; want participant %d's place", offered.Assigned, ids[1])
 	}
 	if err := back.Complete(nil, network.JoinerReport{Identity: offered.Identity, Width: 120, Height: 40}); err != nil {
 		t.Fatalf("the returning player's reply: %v", err)
@@ -2394,8 +2395,11 @@ func TestAnAbandonedRelayedIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.
 	relay := takePlace(t, pending, offered, network.JoinerReport{Width: 120, Height: 40})
 	stop() // the host takes its ticks as this test gives them from here
 
-	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayAssign, Nonce: 1})
-	leaf := relayAnswer(t, relay, 1).Offer.Assigned
+	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayNonce, Nonce: 1})
+	challenge := relayAnswer(t, relay, 1).Challenge
+	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayAssign, Nonce: 2,
+		Keys: []network.Proof{network.NewKey().Prove(challenge, nil)}, Challenge: challenge})
+	leaf := relayAnswer(t, relay, 2).Offer.Assigned
 	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayAbandon, Leaf: leaf})
 	next, between := dialSession(t, host.HostAddr())
 	defer next.Close()
@@ -2547,8 +2551,17 @@ func relayStep(host *App, holder link.PeerID, req network.RelayJoin) {
 }
 
 // relayAnswer is the coordinator's answer to the step a holder asked under nonce, as
-// the holder's port receives it.
+// the holder's port receives it; relayAnswerAny takes a refusal too.
 func relayAnswer(t *testing.T, holder *link.SocketPort, nonce uint32) network.RelayAdmit {
+	t.Helper()
+	ans := relayAnswerAny(t, holder, nonce)
+	if err := ans.Refused(); err != nil {
+		t.Fatalf("the relayed step %d was refused: %v", nonce, err)
+	}
+	return ans
+}
+
+func relayAnswerAny(t *testing.T, holder *link.SocketPort, nonce uint32) network.RelayAdmit {
 	t.Helper()
 	in := make([]link.Inbound, 64)
 	for deadline := time.Now().Add(socketWait); time.Now().Before(deadline); {
@@ -2556,9 +2569,6 @@ func relayAnswer(t *testing.T, holder *link.SocketPort, nonce uint32) network.Re
 			var ans network.RelayAdmit
 			if m.Msg == nil || m.Msg.Type != network.MsgRelayAdmit || json.Unmarshal(m.Msg.Payload, &ans) != nil || ans.Nonce != nonce {
 				continue
-			}
-			if err := ans.Refused(); err != nil {
-				t.Fatalf("the relayed step %d was refused: %v", nonce, err)
 			}
 			return ans
 		}
@@ -2571,67 +2581,71 @@ func relayAnswer(t *testing.T, holder *link.SocketPort, nonce uint32) network.Re
 	return network.RelayAdmit{}
 }
 
-// keptClaims is a ClaimStore a test reads: the claims document as a process last
-// stored it, as a page's storage or a claims file holds it.
-type keptClaims struct {
+// keptPlaces is a PlaceStore a test reads: the places document as a process last
+// stored it, as a page's storage or a places file holds it.
+type keptPlaces struct {
 	mu  sync.Mutex
 	doc []byte
 }
 
-func (s *keptClaims) Load() ([]byte, error) {
+func (s *keptPlaces) Load() ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.doc), nil
 }
 
-func (s *keptClaims) Store(doc []byte) error {
+func (s *keptPlaces) Store(doc []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.doc = slices.Clone(doc)
 	return nil
 }
 
-// token is the newest claim the document keeps for a person's place: the one the
-// last run of its process to join a session joined under.
-func (s *keptClaims) token(t *testing.T) string {
+// key is the newest place the document keeps for a person: the key the last run of
+// its process to join a session joined under.
+func (s *keptPlaces) key(t *testing.T) network.Key {
 	t.Helper()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var kept []struct {
-		Token string `json:"token"`
-		Bot   bool   `json:"bot,omitempty"`
+		Key network.Key `json:"key"`
+		Bot bool        `json:"bot,omitempty"`
 	}
 	if err := json.Unmarshal(s.doc, &kept); err != nil {
-		t.Fatalf("the claims document %q: %v", s.doc, err)
+		t.Fatalf("the places document %q: %v", s.doc, err)
 	}
 	for _, c := range slices.Backward(kept) {
 		if !c.Bot {
-			return c.Token
+			return c.Key
 		}
 	}
-	t.Fatalf("the claims document %q keeps no person's claim", s.doc)
-	return ""
+	t.Fatalf("the places document %q keeps no person's place", s.doc)
+	return network.Key{}
 }
 
-// away is a full session of two whose guest left under the claim its run joined
+// away is a full session of two whose guest left under the key its run joined
 // with, its cursor waiting as a Wraith: the host, ticking until stop; the guest's
-// participant and slot; and the claim's token, as its process's store kept it.
+// participant and slot; and the key, as its process's store kept it.
 type away struct {
-	host  *App
-	id    link.PeerID
-	slot  uint8
-	token string
-	stop  func()
+	host *App
+	id   link.PeerID
+	slot uint8
+	key  network.Key
+	stop func()
 }
 
-func awayGuest(t *testing.T) away {
+func awayGuest(t *testing.T, cfg ...Membership) away {
 	t.Helper()
-	host := mustHosting(t, Membership{Participants: 2})
+	hosting := Membership{Participants: 2}
+	if len(cfg) > 0 {
+		hosting = cfg[0]
+	}
+	host := mustHosting(t, hosting)
 	stop := tickInBackground(host)
 	t.Cleanup(stop)
-	store := &keptClaims{}
-	guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.ClaimStore = store })
-	a := away{host: host, token: store.token(t), stop: stop}
+	store := &keptPlaces{}
+	guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.PlaceStore = store })
+	a := away{host: host, key: store.key(t), stop: stop}
 	a.id, a.slot = arrival(t, host, guest)
 	_ = port.Close()
 	guest.Close()
@@ -2639,14 +2653,14 @@ func awayGuest(t *testing.T) away {
 	return a
 }
 
-// TestAFullSessionTakesBackAPlayerWhoseWraithKeepsItsPlace: a dial naming the claim
-// a Wraith waits under is given that place at once, a full session's too, and no
+// TestAFullSessionTakesBackAPlayerWhoseWraithKeepsItsPlace: a dial proving the key a
+// Wraith waits under is given that place at once, a full session's too, and no
 // newcomer is meanwhile; its arrival takes the cursor back with what its player
 // brought of the game it left.
 func TestAFullSessionTakesBackAPlayerWhoseWraithKeepsItsPlace(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	a := awayGuest(t)
-	back, offered := dialSession(t, a.host.HostAddr(), network.NewClaimToken(), a.token)
+	back, offered := dialSession(t, a.host.HostAddr(), network.NewKey(), a.key)
 	if offered.Assigned != a.id || assignedSlot(offered) != a.slot {
 		t.Fatalf("the returning player was given %d on slot %d; want its own place, %d on slot %d",
 			offered.Assigned, assignedSlot(offered), a.id, a.slot)
@@ -2655,7 +2669,7 @@ func TestAFullSessionTakesBackAPlayerWhoseWraithKeepsItsPlace(t *testing.T) {
 		t.Fatalf("a newcomer was answered %v while the place came back; want the session full", err)
 	}
 	record := &event.CursorRecord{Energy: 4321, HitPoints: 37}
-	takePlace(t, back, offered, network.JoinerReport{Width: 120, Height: 40, Claim: "ignored", Record: record})
+	takePlace(t, back, offered, network.JoinerReport{Width: 120, Height: 40, Record: record})
 	a.stop()
 	// Read on the tick the arrival applies, the first the cursor is no Wraith on.
 	var energy int64
@@ -2677,32 +2691,46 @@ func TestAFullSessionTakesBackAPlayerWhoseWraithKeepsItsPlace(t *testing.T) {
 	}
 }
 
-// TestAReturnThatDoesNotCompleteLeavesItsWraithWaiting: a place a claim took back
+// TestAReturnThatDoesNotCompleteLeavesItsWraithWaiting: a place a key took back
 // goes back to its Wraith when the join fails, directly or through a relay, its
-// wait no longer held off; the claim takes it again.
+// wait no longer held off; the key takes it again. A relay carries the dial's proofs
+// over a challenge it asked the coordinator for, and proofs over none are refused.
 func TestAReturnThatDoesNotCompleteLeavesItsWraithWaiting(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	a := awayGuest(t)
+	a := awayGuest(t, Membership{Participants: 3})
+	relay, relayPort := mustSocketJoiner(t, a.host.HostAddr(), fixtureSeed, 120, 40)
+	relayID, _ := arrival(t, a.host, relay)
 	kept := func() (held bool) {
 		a.host.world.RunSafe(func() { held = a.host.world.Resources.Network.WraithKept(uint32(a.id)) })
 		return held
 	}
 	took := func() *network.PendingJoin {
 		t.Helper()
-		pending, back := dialSession(t, a.host.HostAddr(), a.token)
+		pending, back := dialSession(t, a.host.HostAddr(), a.key)
 		if back.Assigned != a.id || !kept() {
-			t.Fatalf("the claim took %d, its Wraith's wait held off %t; want participant %d's place, held off", back.Assigned, kept(), a.id)
+			t.Fatalf("the key took %d, its Wraith's wait held off %t; want participant %d's place, held off", back.Assigned, kept(), a.id)
 		}
 		return pending
 	}
 	_ = took().Close() // gone before its reply
 	waitUntil(t, func() bool { return !kept() }, "the place a dial left given back to its Wraith")
 
-	relayStep(a.host, engine.CoordinatorParticipant, network.RelayJoin{Step: network.RelayAssign, Claims: []string{a.token}})
-	if !kept() {
-		t.Fatal("a claim a relay named did not take its place back")
+	// Through a relay: the challenge first, then the dial's proofs over it.
+	relayStep(a.host, relayID, network.RelayJoin{Step: network.RelayNonce, Nonce: 7})
+	challenge := relayAnswer(t, relayPort, 7).Challenge
+	if challenge == "" {
+		t.Fatal("the coordinator issued its relay no challenge")
 	}
-	relayStep(a.host, engine.CoordinatorParticipant, network.RelayJoin{Step: network.RelayAbandon, Leaf: a.id})
+	proofs := []network.Proof{network.NewKey().Prove(challenge, nil), a.key.Prove(challenge, nil)}
+	relayStep(a.host, relayID, network.RelayJoin{Step: network.RelayAssign, Nonce: 8, Keys: proofs, Challenge: "not issued"})
+	if ans := relayAnswerAny(t, relayPort, 8); !errors.Is(ans.Refused(), &network.Refusal{Code: network.RefusalCredential}) || kept() {
+		t.Fatalf("proofs over a challenge the coordinator never issued were answered %v, the place held %t", ans.Refused(), kept())
+	}
+	relayStep(a.host, relayID, network.RelayJoin{Step: network.RelayAssign, Nonce: 9, Keys: proofs, Challenge: challenge})
+	if ans := relayAnswer(t, relayPort, 9); ans.Offer.Assigned != a.id || !kept() {
+		t.Fatalf("the key a relay carried took %d, the place held %t; want participant %d's place, held", ans.Offer.Assigned, kept(), a.id)
+	}
+	relayStep(a.host, relayID, network.RelayJoin{Step: network.RelayAbandon, Leaf: a.id})
 	from := a.host.Position().Tick
 	waitUntil(t, func() bool { return a.host.Position().Tick > from+parameter.NetworkBarrierDelayTicks+1 }, "a playout lead past the abandonment")
 	if kept() || !wraithIn(a.host, a.slot) {
@@ -2712,27 +2740,27 @@ func TestAReturnThatDoesNotCompleteLeavesItsWraithWaiting(t *testing.T) {
 	_ = took().Close()
 }
 
-// TestAClaimOnAPlaceStillLinkedClosesTheLinkItLeft: a dial naming the claim of a
+// TestAKeyOnAPlaceStillLinkedClosesTheLinkItLeft: a dial proving the key of a
 // place whose link the host still holds is told to retry in a moment, and that link
 // is closed, so its departure crosses and the retry takes the place back.
-func TestAClaimOnAPlaceStillLinkedClosesTheLinkItLeft(t *testing.T) {
+func TestAKeyOnAPlaceStillLinkedClosesTheLinkItLeft(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHosting(t, Membership{})
 	stop := tickInBackground(host)
 	defer stop()
-	store := &keptClaims{}
-	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.ClaimStore = store })
+	store := &keptPlaces{}
+	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.PlaceStore = store })
 	id, slot := arrival(t, host, guest)
 
-	_, _, err := dialOnce(host.HostAddr(), store.token(t))
+	_, _, err := dialOnce(host.HostAddr(), store.key(t))
 	if !errors.Is(err, &network.Refusal{Code: network.RefusalReturning}) || network.RetryOf(err) != network.RetrySoon {
-		t.Fatalf("a claim on a place still linked was answered %v; want a refusal to retry soon", err)
+		t.Fatalf("a key on a place still linked was answered %v; want a refusal to retry soon", err)
 	}
 	if portOf(t, host).Connected(uint32(id)) {
 		t.Fatal("the link the returning player left is still open")
 	}
 	waitUntil(t, func() bool { return wraithIn(host, slot) }, "the closed link's departure")
-	back, offered := dialSession(t, host.HostAddr(), store.token(t))
+	back, offered := dialSession(t, host.HostAddr(), store.key(t))
 	defer back.Close()
 	if offered.Assigned != id || assignedSlot(offered) != slot {
 		t.Fatalf("the retry was given %d on slot %d; want participant %d's place on slot %d", offered.Assigned, assignedSlot(offered), id, slot)

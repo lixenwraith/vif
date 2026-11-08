@@ -50,6 +50,7 @@ func (a *App) JoinAt(j event.JoinAnchor) error { return a.membership.JoinAt(j) }
 func (a *App) JoinSession(o network.SessionOffer) error {
 	return a.membership.JoinSession(o)
 }
+func (a *App) HoldKey(k network.Key) { a.membership.HoldKey(k) }
 func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture, bytes int) error {
 	return a.membership.JoinSessionAt(o, cap, bytes)
 }
@@ -339,7 +340,11 @@ func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 	// names an address the session can reach it at.
 	var listener net.Listener
 	var declared string
-	gate := &converge.PeerLinkGate{}
+	gate, _ := cfg.wiring.membership.Links.(*converge.PeerLinkGate)
+	if gate == nil {
+		gate = &converge.PeerLinkGate{}
+		cfg.wiring.membership.Links = gate
+	}
 	if !offer.FixedAuthority && !cfg.Membership.NoAdvertise && config.SocketNetwork &&
 		(offer.Relay == 0 || cfg.Membership.ListenAddress != "") {
 		listener, declared = converge.BindAdvertised(cfg.Membership.ListenAddress, cfg.Membership.JoinAddress)
@@ -353,6 +358,7 @@ func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 			Local:    gate.Local,
 			Identity: membership.IdentityFromAnchor(offer.Anchor),
 			Admit:    gate.Admit,
+			Keys:     gate,
 		}, cfg.wiring.networkConfig.ConnectTimeout)
 	}
 	a, err := newApp(cfg)

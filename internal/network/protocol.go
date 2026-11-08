@@ -14,11 +14,8 @@ const (
 	// a routing key, not a credential: the port is unauthenticated by decision.
 	MsgSessionRoute link.MessageType = 0x05 // Live: the session name a dialer is holding
 
-	// MsgJoinClaims is the coordinator asking a dialer, before it assigns a place,
-	// which places it can come back to, and the dialer's answer: the token of each
-	// claim it keeps. Asked rather than sent with the route, so a door that refuses
-	// the route has read all a dialer sent and its refusal arrives whole.
-	MsgJoinClaims link.MessageType = 0x06 // Live: the claims a dialer comes back with
+	// 0x06 carried the claims a dialer came back with; retired rather than reused,
+	// since the admission exchange (0x30, 0x31) asks and answers in its place.
 
 	// Preparing holds nothing in the session. A preview is the offer an assignment
 	// would make, with no identity in it, which the dialer builds its world on.
@@ -116,12 +113,13 @@ const (
 	MsgStart     link.MessageType = 0x24 // Live: host releases a joiner into the capture that follows
 	MsgReady     link.MessageType = 0x25 // Live: joiner confirms it received the start gate
 
-	// Admission (admission.go): the door's question, its nonce and the methods it
-	// takes, then its SCRAM steps and its verdict; and the dialer's answer, a key's
-	// proof with a pass, a ticket or a passphrase step. Defined; nothing sends them
-	// yet, and the handshake still asks claims.
-	MsgAuthRequest  link.MessageType = 0x30 // Defined: the dialer's admission answer
-	MsgAuthResponse link.MessageType = 0x31 // Defined: the door's admission question and verdict
+	// Admission (admission.go), asked after the route frame and the address budget,
+	// so a door that refuses the route has read all a dialer sent: the door's
+	// question, its nonce and the methods it takes, then its SCRAM steps and its
+	// verdict; and the dialer's answer, the keys it proves with a pass, a ticket or
+	// a passphrase step.
+	MsgAuthRequest  link.MessageType = 0x30 // Live: the dialer's admission answer
+	MsgAuthResponse link.MessageType = 0x31 // Live: the door's admission question and verdict
 
 	// A door published through the router (tunnel.go): a run publishes on the front
 	// door and holds the stream as its control connection; the router names the door

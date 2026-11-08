@@ -186,7 +186,7 @@ func (m *Membership) seatConfigLocked() (SeatPlay, error) {
 			StatTicks: -1, RecTicks: -1, Membership: config.Membership{NoAdvertise: true, JoinAddress: seatJoin,
 				SessionName: m.cfg.SessionName}},
 		Wiring: Wiring{Holder: link.PeerID(m.world.LocalParticipant()),
-			Relay: m.seatLink, Claims: m.claims},
+			Relay: m.seatLink, Places: m.places},
 	}, nil
 }
 

@@ -442,7 +442,7 @@ type pendingPointer struct {
 // cursor. Every participant stores the same slots and peer IDs, but marks only
 // its own assignment non-remote.
 type CursorRosterEntry struct {
-	Claim   string // digest of the token its participant comes back with
+	Key     string // the participant key its participant comes back with
 	Holder  uint32
 	Slot    uint8
 	Control component.ControlKind

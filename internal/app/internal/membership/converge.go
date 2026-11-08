@@ -57,7 +57,7 @@ func (m *Membership) worldRosterLocked() []network.RosterEntry {
 		}
 		out = append(out, network.RosterEntry{
 			ID: link.PeerID(c.PeerID), Slot: uint8(slot), Holder: link.PeerID(c.Holder),
-			Away: w.Components.Wraith.HasEntity(e), Claim: c.Claim,
+			Away: w.Components.Wraith.HasEntity(e), Key: c.Key,
 		})
 	}
 	slices.SortFunc(out, func(a, b network.RosterEntry) int { return int(a.ID) - int(b.ID) })
@@ -193,7 +193,7 @@ func (m *Membership) CrossDepartures(away []network.RosterEntry) {
 }
 
 // CrossReturns gives back the places the floor took from survivors whose membership
-// reports came late, each crossed as a claim's return is: the arrival puts the
+// reports came late, each crossed as a key's return is: the arrival puts the
 // participant back in its slot, and its next sync brings its cursor with it.
 func (m *Membership) CrossReturns(back []network.RosterEntry) {
 	for _, p := range back {
@@ -439,20 +439,20 @@ func (m *Membership) thawLocked() (held bool) {
 	return m.ctx.TimeCtl.Held()
 }
 
-// forked goes on with a run its session gave up. The claim it was in that session
+// forked goes on with a run its session gave up. The place it was in that session
 // under keeps its record as it stood, whatever links it still holds: what a fork
 // plays is not what its player brings back. A play run's loop takes it into a
 // session of its own (LeaveSession), keeping every other player's place for
 // whoever hosts next; a run with no loop drops them and plays on as the fork.
 func (m *Membership) forked(roster []network.RosterEntry, local link.PeerID) {
 	if m.run.Mode() == config.ModePlay {
-		// Leaving before the claim goes, as a redial holds its claim again before it
-		// reads leaving: whichever of the two runs second lets the claim go.
+		// Leaving before the place goes, as a redial holds its place again before it
+		// reads leaving: whichever of the two runs second lets the place go.
 		m.leaving.Store(true)
-		m.LeaveClaim()
+		m.LeavePlace()
 		return
 	}
-	m.LeaveClaim()
+	m.LeavePlace()
 	m.dropAbandonedCursors(roster, local)
 	m.world.RunSafe(func() { m.thawLocked() })
 }
@@ -462,9 +462,9 @@ var errRedialEnded = errors.New("the run went on without this host")
 
 // redial takes this run back to the host it lost, which it had a link of its own
 // to: a link that dropped on this side alone leaves a place that host's Wraith gives
-// back, under the claim the run joined with. The chain names where each host but the
+// back, under the key the run joined with. The chain names where each host but the
 // first is dialled; the first is at the door this run came in by. Only a person's run
-// redials. The claim is let go for the dial to name, its record as the drop left it.
+// redials. The place is let go for the dial to prove, its record as the drop left it.
 func (m *Membership) redial(lost link.PeerID) bool {
 	var (
 		cfg  config.Membership
@@ -487,11 +487,11 @@ func (m *Membership) redial(lost link.PeerID) bool {
 	if a, ok := m.authority.Chain().Lookup(lost); ok && !relay {
 		addr = a
 	}
-	c := m.claim.Swap(nil)
+	c := m.place.Swap(nil)
 	if c == nil {
 		return false
 	}
-	m.claims.release(c)
+	m.places.release(c)
 	if relay {
 		m.log.Info("session", "msg", "redialling the lost relay", "relay", uint64(lost), "dial", link.Shown(addr))
 	} else {
@@ -505,8 +505,8 @@ func (m *Membership) redial(lost link.PeerID) bool {
 // it. Admitted back into its own place, the run is replaced by the one admitted; a
 // refusal no retry helps, a door nothing answers at, or a place that is not this
 // run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
-// A run that stays in its session holds its claim again.
-func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBase, addr string, lost link.PeerID, c *claim, relay bool) {
+// A run that stays in its session holds its place again.
+func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBase, addr string, lost link.PeerID, c *place, relay bool) {
 	dial := cfg
 	dial.JoinAddress = addr
 	notice := "Host connection restored"
@@ -529,12 +529,12 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 			continue
 		}
 		back := &RestartAsk{Notice: notice, Dialled: d}
-		if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
+		if d.place == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 			m.log.Info("session", "msg", "the redial admitted this run back", "peer", uint64(lost))
 			return
 		}
 		d.Abandon(errRedialEnded)
-		if d.claim != c {
+		if d.place != c {
 			m.log.Info("session", "msg", "the redial found no place for this run", "peer", uint64(lost))
 			m.authority.RedialRefused(lost)
 		}
@@ -543,13 +543,13 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 		return
 	}
 	m.world.RunSafe(func() {
-		if m.cfg.JoinAddress != cfg.JoinAddress || !m.claims.hold(c) {
+		if m.cfg.JoinAddress != cfg.JoinAddress || !m.places.hold(c) {
 			return
 		}
 		// Held before leaving is read, the other way round from forked.
-		if !m.claim.CompareAndSwap(nil, c) ||
-			(m.leaving.Load() || m.run.Replacing()) && m.claim.CompareAndSwap(c, nil) {
-			m.claims.release(c)
+		if !m.place.CompareAndSwap(nil, c) ||
+			(m.leaving.Load() || m.run.Replacing()) && m.place.CompareAndSwap(c, nil) {
+			m.places.release(c)
 		}
 	})
 }
@@ -559,7 +559,7 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 // door would: the host still runs, with this run's Wraith, and only this run's
 // link went. Reports whether one took it, the run then replaced by the one
 // admitted; one that refuses outright, or a host with no place, is not dialled again.
-func (m *Membership) rejoinThrough(cfg config.Membership, wire Wiring, base JoinBase, lost link.PeerID, c *claim) bool {
+func (m *Membership) rejoinThrough(cfg config.Membership, wire Wiring, base JoinBase, lost link.PeerID, c *place) bool {
 	dial := cfg
 	done := make(map[link.PeerID]bool)
 	for {
@@ -591,12 +591,12 @@ func (m *Membership) rejoinThrough(cfg config.Membership, wire Wiring, base Join
 				continue
 			}
 			back := &RestartAsk{Notice: "Host connection restored", Dialled: d}
-			if d.claim == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
+			if d.place == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 				m.log.Info("session", "msg", "a candidate took this run back to its host", "candidate", uint64(id), "authority", uint64(lost))
 				return true
 			}
 			d.Abandon(errRedialEnded)
-			if d.claim != c {
+			if d.place != c {
 				m.log.Info("session", "msg", "the host holds no place for this run", "candidate", uint64(id))
 				return false
 			}

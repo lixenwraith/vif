@@ -29,22 +29,22 @@ const eventQueue = 256
 // to the page's thread, so only a page that never answers runs out of it
 const fitWait = time.Second
 
-// The Worker's side of the bridge, web/worker.js: vifGrid, vifSettings and vifClaims
-// hold the grid the page measured at the start and the settings and claims it kept;
-// vifAtlas, vifZoom, vifFrame, vifPointer, vifAudio, vifKeepSettings, vifKeepClaims
+// The Worker's side of the bridge, web/worker.js: vifGrid, vifSettings and vifPlaces
+// hold the grid the page measured at the start and the settings and places it kept;
+// vifAtlas, vifZoom, vifFrame, vifPointer, vifAudio, vifKeepSettings, vifKeepPlaces
 // and vifMenu post the texture, the zoom and the bar's rows, a frame, the pointer mode,
-// PCM, settings and claims to keep, and the menu; goEvent takes what the page sends
+// PCM, settings and places to keep, and the menu; goEvent takes what the page sends
 const (
 	jsGrid       = "vifGrid"
 	jsSettings   = "vifSettings"
-	jsClaims     = "vifClaims"
+	jsPlaces     = "vifPlaces"
 	jsAtlas      = "vifAtlas"
 	jsZoom       = "vifZoom"
 	jsFrame      = "vifFrame"
 	jsPointer    = "vifPointer"
 	jsAudio      = "vifAudio"
 	jsKeep       = "vifKeepSettings"
-	jsKeepClaims = "vifKeepClaims"
+	jsKeepPlaces = "vifKeepPlaces"
 	jsMenu       = "vifMenu"
 	jsEvent      = "goEvent"
 )
@@ -308,11 +308,11 @@ func Settings() []byte { return kept(jsSettings) }
 // KeepSettings hands the page the settings document to keep for the next visit
 func KeepSettings(doc []byte) { keep(jsKeep, doc) }
 
-// Claims is the claims document the tab kept from before a reload, nil for none
-func Claims() []byte { return kept(jsClaims) }
+// Places is the places document the tab kept from before a reload, nil for none
+func Places() []byte { return kept(jsPlaces) }
 
-// KeepClaims hands the page the claims document to keep for as long as its tab
-func KeepClaims(doc []byte) { keep(jsKeepClaims, doc) }
+// KeepPlaces hands the page the places document to keep for as long as its tab
+func KeepPlaces(doc []byte) { keep(jsKeepPlaces, doc) }
 
 // kept is the document the page handed over under name, nil for none
 func kept(name string) []byte {

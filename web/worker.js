@@ -48,12 +48,12 @@ globalThis.vifZoom = function(cell, least, most, step, bar) {
     postMessage({ type: 'zoom', cell: cell, least: least, most: most, step: step, bar: bar });
 };
 // A Worker has no localStorage: the page reads and keeps the settings document,
-// and the claims its runs come back to their sessions with.
+// and the places its runs come back to their sessions with.
 globalThis.vifKeepSettings = function(text) {
     postMessage({ type: 'settings', text: text });
 };
-globalThis.vifKeepClaims = function(text) {
-    postMessage({ type: 'claims', text: text });
+globalThis.vifKeepPlaces = function(text) {
+    postMessage({ type: 'places', text: text });
 };
 // The configuration menu as the page draws it, JSON; empty once it closed.
 globalThis.vifMenu = function(json) {
@@ -72,7 +72,7 @@ async function start(msg) {
     }
     globalThis.vifGrid = { cols: msg.cols, rows: msg.rows };
     globalThis.vifSettings = msg.settings || '';
-    globalThis.vifClaims = msg.claims || '';
+    globalThis.vifPlaces = msg.places || '';
     const go = new Go();
     go.argv = msg.argv;
     go.exit = function(code) {

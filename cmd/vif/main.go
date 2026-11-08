@@ -387,14 +387,14 @@ func logRuntimeReport(r core.RuntimeReport) {
 // makes it the desktop window, nil without one; windowByDefault opens it unless
 // -g=false, windowMaximized and windowFullscreen the state it opens in. pageSettings
 // is where a browser, which has no vif.toml, reads and writes its settings, and
-// pageClaims where it keeps the claims its runs return with, across a reload.
+// pagePlaces where it keeps the places its runs return to, across a reload.
 var (
 	platformHost                      app.Host
 	openWindow                        func()
 	windowByDefault                   bool
 	windowMaximized, windowFullscreen bool
 	pageSettings                      func(*paths.Settings) (paths.SettingsStore, paths.UnknownKeys)
-	pageClaims                        app.ClaimStore
+	pagePlaces                        app.PlaceStore
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 )
 
@@ -450,7 +450,13 @@ func buildConfig() app.Config {
 	cfg.Membership.Bots, _ = app.BotSpecs(flagSession.bot)
 
 	cfg.Play, cfg.Settings, cfg.Notice = settings.Play, settingsStore, settingsNotice
-	cfg.Membership.ClaimStore = pageClaims
+	// A page keeps its places for its tab; a terminal or a window keeps them past the
+	// process in the user's state directory while [session] resume_after_restart says.
+	// A dedicated host has no place to come back to, and a pod's filesystem is read-only.
+	cfg.Membership.PlaceStore = pagePlaces
+	if pagePlaces == nil && settings.Session.ResumeAfterRestart && flagSession.serve == "" {
+		cfg.Membership.PlaceStore = paths.PlaceFile{Path: paths.PlacesFile()}
+	}
 	// -mute either way names both channels for this run, and -nw the wait; unset,
 	// [play] stands, and a value set here is never written back
 	flag.Visit(func(f *flag.Flag) {

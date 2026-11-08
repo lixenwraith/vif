@@ -562,22 +562,22 @@ void main() {
         }
     }
 
-    /* The claims a run comes back to its session with, kept for this tab alone: a
-       reload takes back the place a player left, and another tab is another player.
-       Storage refused, they last the run. */
-    const CLAIMS_KEY = 'vif.claims';
+    /* The places a run comes back to its session with, the keys it holds them under,
+       kept for this tab alone: a reload takes back the place a player left, and
+       another tab is another player. Storage refused, they last the run. */
+    const PLACES_KEY = 'vif.places';
 
-    function keptClaims() {
+    function keptPlaces() {
         try {
-            return sessionStorage.getItem(CLAIMS_KEY) || '';
+            return sessionStorage.getItem(PLACES_KEY) || '';
         } catch (err) {
             return '';
         }
     }
 
-    function keepClaims(text) {
+    function keepPlaces(text) {
         try {
-            sessionStorage.setItem(CLAIMS_KEY, text);
+            sessionStorage.setItem(PLACES_KEY, text);
         } catch (err) {
             /* nothing to tell: the run keeps them */
         }
@@ -690,8 +690,8 @@ void main() {
             case 'settings':
                 keepSettings(msg.text);
                 break;
-            case 'claims':
-                keepClaims(msg.text);
+            case 'places':
+                keepPlaces(msg.text);
                 break;
             case 'menu':
                 applyMenu(msg.json);
@@ -709,7 +709,7 @@ void main() {
         // Resolved here: the worker would resolve a relative name against its own URL.
         program.postMessage({ type: 'start', exec: new URL(EXEC_PATH, document.baseURI).href,
             bytes: bytes.buffer, argv: argv, cols: cols, rows: rows, settings: keptSettings(),
-            claims: keptClaims() }, [bytes.buffer]);
+            places: keptPlaces() }, [bytes.buffer]);
         document.addEventListener('visibilitychange', function() {
             if (program) program.postMessage({ type: 'visibility', hidden: document.hidden || away });
             if (document.hidden) {

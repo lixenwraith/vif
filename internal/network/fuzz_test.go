@@ -47,11 +47,11 @@ func frames(msgs ...any) []byte {
 }
 
 // FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits: whatever a dialer sends, it is
-// asked first for its claims or told why it is not, nothing is assigned it before it
-// asks for its seat, and the identity Assign gave it is either admitted and reported
-// once, or released once.
+// asked first to prove its keys or told why it is not, nothing is assigned it before
+// it asks for its seat, and the identity Assign gave it is either admitted and
+// reported once, or released once.
 func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
-	const name, digest = "0123456789abcdef", "sha256:2604b13fd259"
+	const name, digest, nonce = "0123456789abcdef", "sha256:2604b13fd259", "a-fixed-challenge"
 	ours := sampleIdentity()
 	other := ours
 	other.Protocol++
@@ -60,20 +60,32 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 	reply := sessionReply{Identity: ours, Width: 120, Height: 40}
 	refusal := sessionReply{}
 	refusal.Refuse(errors.New("join mismatch"))
-	// prepared is a dialer naming no claims, then sending msgs while it prepares;
-	// answered is one that seats at once, then sends msgs.
-	prepared := func(msgs ...any) []byte { return frames(append([]any{MsgJoinClaims, []string{}}, msgs...)...) }
+	// proven answers the door's fixed challenge; prepared
+	// is a dialer proving one key, then sending msgs while it prepares; answered is
+	// one that seats at once, then sends msgs.
+	proven := func(keys ...Key) AuthRequest {
+		var a AuthRequest
+		for _, k := range keys {
+			a.Keys = append(a.Keys, k.Prove(nonce, nil))
+		}
+		return a
+	}
+	prepared := func(msgs ...any) []byte {
+		return frames(append([]any{MsgAuthRequest, proven(NewKey())}, msgs...)...)
+	}
 	answered := func(msgs ...any) []byte { return prepared(append([]any{MsgJoinSeat, []byte{}}, msgs...)...) }
 	whole := answered(MsgJoinReply, reply)
 	f.Add(whole, false, true, true, true)
-	f.Add(frames(MsgSessionRoute, []byte(name), MsgJoinClaims, []string{}, MsgJoinReply, reply), true, true, true, true)
-	f.Add(frames(MsgSessionRoute, []byte("another"), MsgJoinClaims, []string{}, MsgJoinReply, reply), true, true, true, true)
+	f.Add(frames(MsgSessionRoute, []byte(name), MsgAuthRequest, proven(NewKey()), MsgJoinSeat, []byte{}, MsgJoinReply, reply), true, true, true, true)
+	f.Add(frames(MsgSessionRoute, []byte(name), MsgAuthRequest, proven(NewKey()), MsgJoinReply, reply), true, true, true, true)
+	f.Add(frames(MsgSessionRoute, []byte("another"), MsgAuthRequest, proven(NewKey()), MsgJoinReply, reply), true, true, true, true)
 	f.Add(frames(MsgSessionRoute, bytes.Repeat([]byte{'n'}, MaxSessionName+1)), true, true, true, true)
-	f.Add(frames(MsgJoinClaims, []string{NewClaimToken()}, MsgJoinReply, reply), false, true, true, true)
-	f.Add(frames(MsgJoinClaims, slices.Repeat([]string{NewClaimToken()}, parameter.ClaimsKept+1), MsgJoinReply, reply),
+	f.Add(frames(MsgAuthRequest, proven(NewKey(), NewKey()), MsgJoinSeat, []byte{}, MsgJoinReply, reply), false, true, true, true)
+	f.Add(frames(MsgAuthRequest, proven(slices.Repeat([]Key{NewKey()}, parameter.PlacesKept+1)...), MsgJoinReply, reply),
 		false, true, true, true)
-	f.Add(frames(MsgJoinClaims, []string{"not a token"}, MsgJoinReply, reply), false, true, true, true)
-	f.Add(frames(MsgJoinClaims, []byte("not a list"), MsgJoinReply, reply), false, true, true, true)
+	f.Add(frames(MsgAuthRequest, AuthRequest{Keys: []Proof{{Key: []byte("not a key"), Sig: []byte("nor a signature")}}}, MsgJoinReply, reply), false, true, true, true)
+	f.Add(frames(MsgAuthRequest, AuthRequest{}, MsgJoinReply, reply), false, true, true, true)
+	f.Add(frames(MsgAuthRequest, []byte("not an answer"), MsgJoinReply, reply), false, true, true, true)
 	f.Add(frames(MsgJoinReply, reply), false, true, true, true)
 	f.Add(answered(MsgScenarioRequest, []byte(digest), MsgJoinReply, reply), false, true, true, true)
 	f.Add(answered(MsgScenarioRequest, []byte(digest), MsgScenarioRequest, []byte(digest)), false, true, true, true)
@@ -108,13 +120,13 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 		var assigned, released, reported []link.PeerID
 		previewed := false
 		c := Coordinator{
-			Preview: func([]string) (SessionOffer, error) {
+			Preview: func(Admission) (SessionOffer, error) {
 				previewed = true
 				preview := offer
 				preview.Assigned = 0
 				return preview, nil
 			},
-			Assign: func([]string) (SessionOffer, error) {
+			Assign: func(Admission) (SessionOffer, error) {
 				if !previewed {
 					t.Fatal("assigned before the preview")
 				}
@@ -147,6 +159,7 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 		if named {
 			c.Name = name
 		}
+		c.Nonce = func() (string, error) { return nonce, nil }
 		conn := &scripted{in: bytes.NewReader(script)}
 		id, err := HostAcceptor(c, time.Second)(conn)
 
@@ -157,7 +170,7 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 			t.Fatalf("the dialer was not answered: %v", derr)
 		case first.Type == MsgJoinReply && (json.Unmarshal(first.Payload, &answer) != nil || answer.Refused() == nil):
 			t.Fatalf("the dialer was refused with no reason: %q", first.Payload)
-		case first.Type != MsgJoinReply && first.Type != MsgJoinClaims:
+		case first.Type != MsgJoinReply && first.Type != MsgAuthResponse:
 			t.Fatalf("the dialer was answered with message %#x", first.Type)
 		}
 		switch {
@@ -172,25 +185,31 @@ func FuzzAJoinHandshakeHoldsOnlyTheIdentityItAdmits(f *testing.F) {
 }
 
 // FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant: whatever a dialer sends, a link
-// opens only for a participant the gate admits, and a dialer that said who it is
-// is answered with one ack, refusing exactly the links that did not open.
+// opens only for a participant the gate admits that proved its key over the nonce
+// the gate chose, which no script written in advance can; a dialer that said who it
+// is is answered with one welcome, and one that went on with a second ack, every
+// one of them refusing, since the link never opened.
 func FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant(f *testing.F) {
 	ours := sampleIdentity()
 	other := ours
 	other.Simulation = "deadbeef"
-	f.Add(frames(MsgConnect, peerHello{From: 3, Identity: ours}))
+	keys := testPeerKeys(2, 3, 4)
+	bind := peerBind{Proof: peerProof(keys.keys[3], "a-guessed-nonce", 3, 2)}
+	f.Add(frames(MsgConnect, peerHello{From: 3, Identity: ours, Nonce: "n"}))
+	f.Add(frames(MsgConnect, peerHello{From: 3, Identity: ours, Nonce: "n"}, MsgConnect, bind))
 	f.Add(frames(MsgConnect, peerHello{From: 9, Identity: ours}))
 	f.Add(frames(MsgConnect, peerHello{From: 2, Identity: ours}))
 	f.Add(frames(MsgConnect, peerHello{Identity: ours}))
 	f.Add(frames(MsgConnect, peerHello{From: 3, Identity: other}))
 	f.Add(frames(MsgConnect, peerHello{From: 3, Identity: ours}, MsgConnect, peerHello{From: 4, Identity: ours}))
+	f.Add(frames(MsgConnect, peerHello{From: 3, Identity: ours}, MsgConnect, []byte(`{"proof":"AAAA"}`)))
 	f.Add(frames(MsgConnect, []byte(`{"from":3,`)))
 	f.Add(frames(MsgJoinReply, peerHello{From: 3, Identity: ours}))
 	f.Add([]byte{byte(MsgConnect), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff})
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, script []byte) {
 		admitted := []link.PeerID{3, 4}
-		gate := PeerGate{Local: func() link.PeerID { return 2 }, Identity: ours, Admit: func(from link.PeerID) error {
+		gate := PeerGate{Local: func() link.PeerID { return 2 }, Identity: ours, Keys: keys, Admit: func(from link.PeerID) error {
 			if !slices.Contains(admitted, from) {
 				return errors.New("peer link: participant is not in this session")
 			}
@@ -198,23 +217,19 @@ func FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant(f *testing.F) {
 		}}
 		conn := &scripted{in: bytes.NewReader(script)}
 		id, err := PeerAcceptor(gate, time.Second)(conn)
-		if (err == nil) != slices.Contains(admitted, id) || (err != nil && id != 0) {
-			t.Fatalf("opened as %d (%v)", id, err)
-		}
-		if conn.out.Len() == 0 {
-			if err == nil {
-				t.Fatalf("opened a link for %d without answering it", id)
-			}
-			return
+		if err == nil || id != 0 {
+			t.Fatalf("a script opened a link as %d", id)
 		}
 		out := bytes.NewReader(conn.out.Bytes())
-		ack, derr := link.Decode(out)
-		var welcome peerWelcome
-		if derr != nil || ack.Type != MsgAck || json.Unmarshal(ack.Payload, &welcome) != nil || out.Len() != 0 {
-			t.Fatalf("answered with %q", conn.out.Bytes())
-		}
-		if welcome.From != gate.Local() || (welcome.Refused() == nil) != (err == nil) {
-			t.Fatalf("answered as %d refusing %v a link that opened: %t", welcome.From, welcome.Refused(), err == nil)
+		for acks := 0; out.Len() > 0; acks++ {
+			ack, derr := link.Decode(out)
+			var welcome peerWelcome
+			if derr != nil || ack.Type != MsgAck || json.Unmarshal(ack.Payload, &welcome) != nil || acks > 1 {
+				t.Fatalf("answered with %q", conn.out.Bytes())
+			}
+			if welcome.From != gate.Local() || acks == 1 && welcome.Refused() == nil {
+				t.Fatalf("answered as %d, a verdict refusing %v", welcome.From, welcome.Refused())
+			}
 		}
 	})
 }

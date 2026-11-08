@@ -3,7 +3,11 @@
 package converge
 
 import (
+	"bytes"
 	"cmp"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -30,6 +34,7 @@ type stub struct {
 	frozen bool
 	held   bool
 	local  uint32
+	key    network.Key
 	seated bool
 	roster []network.RosterEntry
 	port   engine.NetworkPort
@@ -108,6 +113,8 @@ func (s *stub) setHeld(held bool) {
 }
 
 func (s *stub) LocalParticipant() uint32 { return s.local }
+
+func (s *stub) LocalKey() network.Key { return s.key }
 
 func (s *stub) Seated() bool { return s.seated }
 
@@ -355,6 +362,7 @@ func newRun(t *testing.T, local uint32, port engine.NetworkPort, roster []networ
 	w := &stub{
 		stamp:  event.Stamp{Run: 1, Tick: 1},
 		local:  local,
+		key:    keyOf(link.PeerID(local)),
 		roster: roster,
 		port:   port,
 		world:  capture(1, 0),
@@ -374,13 +382,35 @@ func (r *run) open(host link.PeerID, chain network.SuccessionChain, fixed bool) 
 
 func (r *run) stat(key string) int64 { return r.reg.Ints.Get(key).Load() }
 
-// roster is the closed membership every participant in these criteria holds.
+// roster is the closed membership every participant in these criteria holds, each
+// under the key keyOf gives its identity.
 func roster(n int) []network.RosterEntry {
 	out := make([]network.RosterEntry, 0, n)
 	for i := range n {
-		out = append(out, network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i)})
+		out = append(out, network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i), Key: keyOf(link.PeerID(i + 1)).ID()})
 	}
 	return out
+}
+
+// keyOf is participant id's key in every criterion, derived from its identity so
+// a run and the rosters naming it agree without passing keys around; read back
+// through the keeper's form, a 32-byte seed.
+func keyOf(id link.PeerID) network.Key {
+	seed := bytes.Repeat([]byte{byte(id), byte(id >> 8)}, 16)
+	var k network.Key
+	if err := json.Unmarshal(fmt.Appendf(nil, "%q", base64.StdEncoding.EncodeToString(seed)), &k); err != nil {
+		panic(err)
+	}
+	return k
+}
+
+// signed is one report as participant rep.From would flood it.
+func signed(rep network.AuthorityReport) []byte {
+	body, err := network.EncodeAuthorityReport(rep.Sign(keyOf(rep.From)))
+	if err != nil {
+		panic(err)
+	}
+	return body
 }
 
 // captureRows is how many placements the fixture world holds. It is many manifest

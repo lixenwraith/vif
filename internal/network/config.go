@@ -15,9 +15,10 @@ type Config struct {
 	// serves several sessions. Empty dials an address that serves one.
 	SessionName string
 
-	// Claims are the tokens a dial names when the coordinator asks which places it
-	// can come back to: one a Wraith keeps a place under is offered that place.
-	Claims []string
+	// Keys are the participant keys a dial proves when the door asks: the first its
+	// own for a new place, the rest the places it may come back to, and one a Wraith
+	// keeps a place under is offered that place. A dial with none makes one.
+	Keys []Key
 
 	// Identity is the build half of what this peer is (wire contract, manifest and
 	// layout schemas), compared against the offer before a world is built from it.

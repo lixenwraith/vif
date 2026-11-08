@@ -92,7 +92,7 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 	offer.Identity = ours
 	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
-	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func([]string) (SessionOffer, error) { return offer, nil }}, time.Second)
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func(Admission) (SessionOffer, error) { return offer, nil }}, time.Second)
 	host := link.NewSocketPort(&hostCfg.Config)
 	defer host.Close()
 	if err := host.Start(); err != nil {
@@ -115,7 +115,8 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 		t.Fatal("the host never refused the joiner")
 	}
 
-	accept := PeerAcceptor(PeerGate{Local: func() link.PeerID { return 2 }, Identity: ours}, time.Second)
+	keys := testPeerKeys(2, 3)
+	accept := PeerAcceptor(PeerGate{Local: func() link.PeerID { return 2 }, Identity: ours, Keys: keys}, time.Second)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +136,7 @@ func TestARefusalIsToldInItsReadersTerms(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	_, err = PeerDialer(theirs, time.Second)(conn, 3)
+	_, err = PeerDialer(theirs, keys.as(3), time.Second)(conn, 3)
 	check("dialler", err, readsTheirs)
 	check("acceptor", <-accepted, readsOurs)
 }

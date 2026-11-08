@@ -83,11 +83,7 @@ func TestASurvivorFollowsOneRecordPerLoss(t *testing.T) {
 func TestLossReportsCannotReplaceALinkedAuthority(t *testing.T) {
 	t.Parallel()
 	guest := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
-	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm, From: 2, Lost: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	guest.u.Receive(uint8(network.MsgAuthorityReport), 2, body)
+	guest.u.Receive(uint8(network.MsgAuthorityReport), 2, signed(network.AuthorityReport{Term: network.FirstTerm, From: 2, Lost: 1}))
 	if guest.u.Migrating() || guest.u.Term() != network.FirstTerm {
 		t.Fatal("a neighbour's loss report displaced the connected authority")
 	}
@@ -187,11 +183,7 @@ func TestTheHostResumesOnceItsGroupIsIn(t *testing.T) {
 	if waiting.world.thawed != 0 {
 		t.Fatal("the host resumed before participant 3's membership reached it")
 	}
-	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 3, Lost: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	waiting.u.Receive(uint8(network.MsgAuthorityReport), 3, body)
+	waiting.u.Receive(uint8(network.MsgAuthorityReport), 3, signed(network.AuthorityReport{Term: network.FirstTerm + 1, From: 3, Lost: 1}))
 	waiting.u.driveResume()
 	if waiting.world.thawed != 1 {
 		t.Fatalf("with its group in the host resumed %d times, want once", waiting.world.thawed)
@@ -356,11 +348,7 @@ func TestTheWalkWaitsOnARedial(t *testing.T) {
 	refused := lose()
 	refused.u.RedialRefused(1)
 	told := lose()
-	body, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm, From: 3, Lost: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	told.u.Receive(uint8(network.MsgAuthorityReport), 3, body)
+	told.u.Receive(uint8(network.MsgAuthorityReport), 3, signed(network.AuthorityReport{Term: network.FirstTerm, From: 3, Lost: 1}))
 	timed := lose()
 	rewind(timed, parameter.NetworkSuccessionWindow)
 	timed.u.drive()
@@ -489,10 +477,7 @@ func TestALateSurvivorIsTakenBack(t *testing.T) {
 		t.Fatalf("at the floor the host kept %v as Wraiths; want the far survivor alone", host.world.departed)
 	}
 
-	late, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 4, Lost: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
+	late := signed(network.AuthorityReport{Term: network.FirstTerm + 1, From: 4, Lost: 1})
 	host.u.onReport(3, late)
 	if len(host.world.returned) != 1 || len(host.world.returned[0]) != 1 || host.world.returned[0][0].ID != 4 {
 		t.Fatalf("the late report gave back %v; want the far survivor's place", host.world.returned)
@@ -501,11 +486,7 @@ func TestALateSurvivorIsTakenBack(t *testing.T) {
 		t.Fatal("given back, the far survivor is still away")
 	}
 	host.u.onReport(3, late)
-	kept, err := network.EncodeAuthorityReport(network.AuthorityReport{Term: network.FirstTerm + 1, From: 3, Lost: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	host.u.onReport(3, kept)
+	host.u.onReport(3, signed(network.AuthorityReport{Term: network.FirstTerm + 1, From: 3, Lost: 1}))
 	if len(host.world.returned) != 1 {
 		t.Fatalf("reports that give nothing back gave back %v", host.world.returned[1:])
 	}

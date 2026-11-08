@@ -531,7 +531,7 @@ func (m *Membership) openSessionLocked(kept []network.RosterEntry) error {
 
 	m.sessionMu.Lock()
 	m.midRunPort = port
-	self.Claim = m.ownClaim()
+	self.Key = m.ownKey()
 	m.sessionRoster = append([]network.RosterEntry{self}, kept...)
 	m.sessionOffer = network.SessionOffer{}
 	m.openAwayLocked(kept)
@@ -687,17 +687,17 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
 	local := link.PeerID(m.world.LocalParticipant())
 	// A leave keeps its bots' places, and a run its session gave up every place, for
-	// whoever hosts next to give back. A bot of this run's goes on under a claim of
-	// its own over the record it left with, which stays the left session's.
+	// whoever hosts next to give back. A bot of this run's goes on under a key of its
+	// own over the record it left with, which stays the left session's.
 	var kept []network.RosterEntry
-	var carried []*claim
+	var carried []*place
 	for _, p := range roster {
 		if p.ID == local || !lost && p.Holder != local {
 			continue
 		}
 		if p.Holder == local {
-			if c := m.claims.carry(p.Claim); c != nil {
-				p.Claim = network.ClaimDigest(c.Token)
+			if c := m.places.carry(p.Key); c != nil {
+				p.Key = c.id()
 				carried = append(carried, c)
 			}
 		}
@@ -708,19 +708,19 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	// nor the name the next one would answer to, nor the ceiling it was opened with.
 	cfg, wire := *m.cfg, *m.wiring
 	m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers = "", "", "", 0
-	// The claim the run left under keeps its record as it stands, for a return to
-	// that session; the one it opens issues its own.
-	prior := m.claim.Swap(nil)
+	// The place the run left keeps its record as it stands, for a return to that
+	// session; the one it opens issues its own.
+	prior := m.place.Swap(nil)
 	if err := m.openSessionLocked(kept); err != nil {
-		m.claim.Store(prior)
+		m.place.Store(prior)
 		*m.cfg, *m.wiring = cfg, wire
 		for _, c := range carried {
-			m.claims.forget(c)
+			m.places.forget(c)
 		}
 		return nil, err
 	}
 	if prior != nil {
-		m.claims.release(prior)
+		m.places.release(prior)
 	}
 	for _, sys := range m.world.Systems() {
 		if s, ok := sys.(interface{ LeaveSession() }); ok {
@@ -1081,7 +1081,7 @@ func (m *Membership) crossParticipantArrival(id link.PeerID, slot uint8) {
 }
 
 // crossArrivalLocked is crossParticipantArrival under the world lock. A participant
-// back in a place its claim took back is no longer away from here, and brings the
+// back in a place its key took back is no longer away from here, and brings the
 // record it left with. Caller MUST hold updateMutex.
 func (m *Membership) crossArrivalLocked(id link.PeerID, slot uint8) {
 	m.sessionMu.Lock()
@@ -1091,7 +1091,7 @@ func (m *Membership) crossArrivalLocked(id link.PeerID, slot uint8) {
 		return
 	}
 	p := &event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot,
-		Holder: uint32(m.sessionRoster[i].Holder), Claim: m.sessionRoster[i].Claim, Record: m.returning[id].record}
+		Holder: uint32(m.sessionRoster[i].Holder), Key: m.sessionRoster[i].Key, Record: m.returning[id].record}
 	delete(m.returning, id)
 	m.sessionRoster[i].Away = false
 	m.awayOrder = slices.DeleteFunc(m.awayOrder, func(away link.PeerID) bool { return away == id })

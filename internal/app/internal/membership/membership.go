@@ -1,5 +1,5 @@
 // Package membership keeps a run's place in its session: it hosts and joins, holds
-// the lobby and the start gates, admits and relays, keeps the roster, the claims a
+// the lobby and the start gates, admits and relays, keeps the roster, the keys a
 // player comes back under and the Wraiths of whoever is away, seats the run's bots,
 // and answers the half of converge.Instance the authority protocol moves. It reads
 // the run through Run alone, which also plays its seats and replaces it.
@@ -27,7 +27,7 @@ import (
 )
 
 // Membership is the run's place in its session: hosting and joining, the roster and
-// the offer, the seats it holds, the claims it comes back with, the relay desk and
+// the offer, the seats it holds, the keys it comes back with, the relay desk and
 // the authority it follows or holds. It is the half of converge.Instance the
 // protocol moves. It holds the session half of the run's Config (cfg) and of its
 // wiring (wiring), and reads the rest of the run through Run alone.
@@ -76,15 +76,19 @@ type Membership struct {
 	yielding      link.PeerID
 	dismissWraith atomic.Uint32
 
-	// returning is each place a dial took back with its claim until its arrival
+	// returning is each place a dial took back with its key until its arrival
 	// crosses, the entry as it waited, for a join that fails to give back, and the
 	// record its player brought; no wait runs out on its Wraith meanwhile.
 	returning map[link.PeerID]returnPlace
 
-	// claims is what this process comes back to its sessions with, and claim the one
+	// places is what this process comes back to its sessions with, and place the one
 	// this run is in its session under: nil before it is in one, and once it has left.
-	claims *ClaimKeeper
-	claim  atomic.Pointer[claim]
+	places *PlaceKeeper
+	place  atomic.Pointer[place]
+
+	// relayNonces are the challenges this coordinator issued to its relays' doors,
+	// each good for one dial's proofs; guarded by sessionMu.
+	relayNonces map[string]relayNonce
 
 	// midRunPort is the socket a solo run opened for itself, with :host or with no
 	// listener for its bots. A run started with -host takes its endpoint from
@@ -209,17 +213,21 @@ type JoinBase interface {
 }
 
 // Wiring is the session half of a run's wiring, which the membership holds
-// beside Membership: the seat a bot's run is, the claims the process comes back with,
-// the ceiling of a session it joined, the doors Run bound for it, and the press its
-// join waits for.
+// beside Membership: the seat a bot's run is, the places the process comes back
+// with, the ceiling of a session it joined, the doors Run bound for it, and the
+// press its join waits for.
 type Wiring struct {
 	// Holder is the participant whose bot this run is, zero for any other run.
 	Holder link.PeerID
 	Relay  func() (net.Conn, error) // a bot's stream to its holder; see seatLink
 
-	// Claims is the process's claim keeper, which every run Run builds and every seat
+	// Places is the process's place keeper, which every run Run builds and every seat
 	// they hold shares; Normalize gives a run built another way one of its own.
-	Claims *ClaimKeeper
+	Places *PlaceKeeper
+
+	// Links signs this run's peer links and checks the far end's against the roster,
+	// bound to the run's reach once it is built (converge.PeerLinkGate).
+	Links network.PeerKeys
 
 	// SessionPlayers is the -players of the session this run joined, which it holds
 	// to should it take that session over; Participants is a host's own.
@@ -286,7 +294,7 @@ func CloseDoors(lns []net.Listener) {
 func (m *Membership) Open(run Run, cfg *config.Membership, wire *Wiring, scenario *resource.Scenario, log *vlog.Log, glue *corrector.Corrector, life *lifecycle.Controller) {
 	m.run, m.cfg, m.wiring, m.scenario, m.log, m.glue, m.life = run, cfg, wire, scenario, log, glue, life
 	m.admissions = network.NewAdmissionLimiter()
-	m.claims = wire.Claims
+	m.places = wire.Places
 }
 
 // Bind wires the run's world and its game context once both exist.

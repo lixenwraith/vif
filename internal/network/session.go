@@ -2,9 +2,6 @@ package network
 
 import (
 	"cmp"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,13 +22,14 @@ import (
 // drives. NoPlayerSlot means it drives none, which is what a dedicated coordinator
 // holds: in the roster, and not one of the session's participants. Away is one that
 // left and has a Wraith waiting in its slot: both stay taken, and nothing waits on it.
-// Claim is the digest of the token its participant comes back with (ClaimDigest).
+// Key is the public half of its participant key (EncodeKey), which a dial proves to
+// come back to the place and a peer link or a succession message is signed with.
 type RosterEntry struct {
 	ID     link.PeerID `json:"id"`
 	Slot   uint8       `json:"slot"`
 	Holder link.PeerID `json:"holder,omitempty"`
 	Away   bool        `json:"away,omitempty"`
-	Claim  string      `json:"claim,omitempty"`
+	Key    string      `json:"key,omitempty"`
 }
 
 // SessionOffer carries the replay identity and the coordinator-owned roster.
@@ -115,7 +113,6 @@ type sessionReply struct {
 	Listen string      `json:"listen,omitempty"`
 	Holder link.PeerID `json:"holder,omitempty"`
 
-	Claim  string              `json:"claim,omitempty"`
 	Record *event.CursorRecord `json:"record,omitempty"`
 }
 
@@ -139,10 +136,8 @@ type JoinerReport struct {
 	Listen string
 	Remote string
 
-	// Claim is the digest of a new token this participant will come back with; one
-	// coming back keeps the claim it returned under. Record is what one coming back
-	// brings of the game it left, and nothing for a new place.
-	Claim  string
+	// Record is what a participant coming back to its place brings of the game it
+	// left, and nothing for a new place.
 	Record *event.CursorRecord
 }
 
@@ -158,26 +153,32 @@ const (
 	RelayReady                        // the participant installed the relay's world: cross its arrival
 	RelayAbandon                      // the join failed: retire the participant, unanswered
 	RelayDoor                         // the relay's door is open at Door: name it in the chain, unanswered
+	RelayNonce                        // a challenge for the dial the relay's door is about to ask
 )
 
 // RelayJoin is a relay's request. Nonce pairs it with its answer; Leaf names the
 // participant once Assign has. RelayReady carries what the participant reported,
 // its identity checked against the offer as a coordinator checks a dial's reply;
-// Assign carries the tokens it named, as a dial names them to a coordinator; Door
-// is where the relay admits people, completed from its connection as a port is.
+// Assign carries the keys the dial proved over Challenge, the nonce RelayNonce was
+// answered with, so the coordinator checks the proofs itself and the relay can take
+// nobody's place; Door is where the relay admits people, completed from its
+// connection as a port is.
 type RelayJoin struct {
-	Step   RelayStep    `json:"step"`
-	Nonce  uint32       `json:"nonce"`
-	Leaf   link.PeerID  `json:"leaf,omitempty"`
-	Claims []string     `json:"claims,omitempty"`
-	Report JoinerReport `json:"report,omitzero"`
-	Door   string       `json:"door,omitempty"`
+	Step      RelayStep    `json:"step"`
+	Nonce     uint32       `json:"nonce"`
+	Leaf      link.PeerID  `json:"leaf,omitempty"`
+	Keys      []Proof      `json:"keys,omitempty"`
+	Challenge string       `json:"challenge,omitempty"`
+	Report    JoinerReport `json:"report,omitzero"`
+	Door      string       `json:"door,omitempty"`
 }
 
-// RelayAdmit answers one RelayJoin: the offer Assign allocated, or why not.
+// RelayAdmit answers one RelayJoin: the offer Assign allocated, the challenge
+// RelayNonce asked for, or why not.
 type RelayAdmit struct {
-	Nonce uint32       `json:"nonce"`
-	Offer SessionOffer `json:"offer,omitzero"`
+	Nonce     uint32       `json:"nonce"`
+	Offer     SessionOffer `json:"offer,omitzero"`
+	Challenge string       `json:"challenge,omitempty"`
 	refusalField
 }
 
@@ -272,19 +273,24 @@ func (o SessionOffer) ParticipantCount() int {
 
 // Coordinator is the host side of the startup handshake. Assign allocates the next
 // participant identity and returns the offer carrying it, or the place one of the
-// dialer's claim tokens comes back to; Release returns that identity to the pool, or
+// keys the dialer proved comes back to; Release returns that identity to the pool, or
 // that place to its Wraith, when the handshake does not complete, so a rejected or
 // abandoned connection does not consume a roster slot. Assign runs at the dialer's
 // seat, never before: a dialer prepares on a preview, which holds nothing.
 type Coordinator struct {
-	Assign  func(claims []string) (SessionOffer, error)
+	Assign  func(a Admission) (SessionOffer, error)
 	Release func(link.PeerID)
 
-	// Preview is the session as a dialer naming claims would be offered it, with no
+	// Preview is the session as a dialer proving keys would be offered it, with no
 	// identity assigned: the offer Assign would make, or the refusal it would give,
 	// with nothing allocated or asked for. Nil previews nothing, which only a dialer
 	// that seats at once (DialSession) can join on.
-	Preview func(claims []string) (SessionOffer, error)
+	Preview func(a Admission) (SessionOffer, error)
+
+	// Nonce is the challenge the door asks a dial to prove its keys over; nil makes
+	// one here. A relay asks its authority for one, so the proofs it carries on are
+	// good at the authority once.
+	Nonce func() (string, error)
 
 	// PressWindow is the ready period a prepared dialer has to seat in; zero is
 	// parameter.NetworkJoinPressWindow.
@@ -344,15 +350,15 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (link.Pee
 				return 0, fmt.Errorf("%s: %w", conn.RemoteAddr(), err)
 			}
 		}
-		claims, err := askClaims(conn, timeout)
+		adm, err := askAdmission(conn, c, timeout)
 		if err != nil {
 			return 0, err
 		}
 		h := hostHandshake{c: c, conn: conn, timeout: timeout}
-		if err = h.awaitSeat(claims); err != nil {
+		if err = h.awaitSeat(adm); err != nil {
 			return 0, err
 		}
-		o, err := c.Assign(claims)
+		o, err := c.Assign(adm)
 		if err != nil {
 			// Return the admission reason so a dialer can distinguish retryable handoff.
 			RefuseJoin(conn, err, timeout)
@@ -414,8 +420,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (link.Pee
 		if c.Report != nil {
 			if err = c.Report(o.Assigned, JoinerReport{
 				Width: reply.Width, Height: reply.Height, Listen: reply.Listen,
-				Remote: conn.RemoteAddr().String(), Holder: reply.Holder,
-				Claim: reply.Claim, Record: reply.Record,
+				Remote: conn.RemoteAddr().String(), Holder: reply.Holder, Record: reply.Record,
 			}); err != nil {
 				refuse(err)
 				return 0, err
@@ -437,11 +442,11 @@ type hostHandshake struct {
 // for its seat: at once, or after it prepared and its player pressed within the
 // ready period. Preparing is a world build, bounded as the frames around it are; the
 // ready period is a person's, and running out of it drops the candidate.
-func (h *hostHandshake) awaitSeat(claims []string) error {
+func (h *hostHandshake) awaitSeat(a Admission) error {
 	var preview SessionOffer
 	if h.c.Preview != nil {
 		var err error
-		if preview, err = h.c.Preview(claims); err != nil {
+		if preview, err = h.c.Preview(a); err != nil {
 			RefuseJoin(h.conn, err, h.timeout)
 			return err
 		}
@@ -571,62 +576,93 @@ func ReadSessionRoute(r io.Reader) (string, error) {
 	return string(msg.Payload), nil
 }
 
-// claimTokenBytes is a claim token's randomness, and its digest's length: past
-// guessing for as long as any Wraith waits.
-const claimTokenBytes = sha256.Size
-
-// maxClaimsFrame bounds a dialer's claims answer: ClaimsKept tokens as JSON.
-const maxClaimsFrame = parameter.ClaimsKept*(2*claimTokenBytes+3) + 2
-
-// NewClaimToken is a token a participant comes back to its place with. The roster
-// carries its digest alone, so a peer reading the roster cannot take another's
-// place; only the participant names the token, on its way to the coordinator. The
-// port is unauthenticated by decision: this keeps a place from another player, and
-// is no credential against the wire.
-func NewClaimToken() string {
-	b := make([]byte, claimTokenBytes)
-	_, _ = rand.Read(b) // crypto/rand.Read does not fail
-	return hex.EncodeToString(b)
+// Admission is what a dial proved at the door: the nonce it was asked and the keys
+// it answered with, the first its own for a new place. A relay carries both on to
+// its authority, which checks the proofs itself.
+type Admission struct {
+	Nonce  string
+	Proofs []Proof
 }
 
-// ClaimDigest is the digest a roster entry carries for its participant's token.
-func ClaimDigest(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
+// Keys is the roster form of the keys proved, in the dial's order.
+func (a Admission) Keys() []string {
+	out := make([]string, len(a.Proofs))
+	for i, p := range a.Proofs {
+		out[i] = EncodeKey(p.Key)
+	}
+	return out
 }
 
-// ValidClaim reports whether s has the form a token and a digest share.
-func ValidClaim(s string) bool {
-	_, err := hex.DecodeString(s)
-	return err == nil && len(s) == 2*claimTokenBytes
-}
-
-// askClaims asks a dialer which places it can come back to and reads the tokens it
-// keeps. Asked before a place is assigned, so a full session still takes back a
-// player whose Wraith keeps one.
-func askClaims(conn net.Conn, timeout time.Duration) ([]string, error) {
+// askAdmission asks a dial to prove its keys over a nonce and reads the proofs it
+// answers with, before a place is assigned, so a full session still takes back a
+// player whose Wraith keeps one. A dial that proves none, or one it cannot, is
+// refused with its reason.
+func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admission, error) {
 	if timeout > 0 {
 		_ = conn.SetDeadline(time.Now().Add(timeout))
 		defer conn.SetDeadline(time.Time{})
 	}
-	if err := link.NewMessage(MsgJoinClaims, nil).Encode(conn); err != nil {
+	nonce := NewNonce()
+	if c.Nonce != nil {
+		var err error
+		if nonce, err = c.Nonce(); err != nil {
+			RefuseJoin(conn, err, timeout)
+			return Admission{}, err
+		}
+	}
+	body, err := json.Marshal(AuthResponse{Methods: []string{MethodKey}, Nonce: nonce})
+	if err != nil {
+		return Admission{}, err
+	}
+	if err := link.NewMessage(MsgAuthResponse, body).Encode(conn); err != nil {
+		return Admission{}, err
+	}
+	msg, err := link.DecodeWithin(conn, MaxAuthFrame)
+	if err != nil {
+		return Admission{}, err
+	}
+	if msg.Type != MsgAuthRequest {
+		return Admission{}, fmt.Errorf("join handshake: got message %#x, want an admission answer", msg.Type)
+	}
+	var ans AuthRequest
+	if err := json.Unmarshal(msg.Payload, &ans); err != nil {
+		return Admission{}, fmt.Errorf("join handshake admission: %w", err)
+	}
+	if _, err := VerifyProofs(ans.Keys, nonce, nil); err != nil {
+		RefuseJoin(conn, err, timeout)
+		return Admission{}, err
+	}
+	return Admission{Nonce: nonce, Proofs: ans.Keys}, nil
+}
+
+// answerAdmission proves this dial's keys over the door's nonce and reads the frame
+// the door answers them with. A door that takes no bare key asks for a credential
+// this build has none of yet.
+func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link.Message, error) {
+	var ask AuthResponse
+	if err := json.Unmarshal(question.Payload, &ask); err != nil {
+		return nil, fmt.Errorf("join handshake question: %w", err)
+	}
+	if err := ask.Refused(); err != nil {
 		return nil, err
 	}
-	msg, err := link.DecodeWithin(conn, maxClaimsFrame)
+	if !slices.Contains(ask.Methods, MethodKey) || ask.Nonce == "" {
+		return nil, &Refusal{Code: RefusalSignIn, Reason: "this door asks for a credential this build cannot show"}
+	}
+	proofs := make([]Proof, 0, len(base.Keys))
+	for _, k := range base.Keys {
+		if k.Valid() {
+			proofs = append(proofs, k.Prove(ask.Nonce, nil))
+		}
+	}
+	body, err := json.Marshal(AuthRequest{Keys: proofs})
 	if err != nil {
 		return nil, err
 	}
-	if msg.Type != MsgJoinClaims {
-		return nil, fmt.Errorf("join handshake: got message %#x, want claims", msg.Type)
+	if err := link.NewMessage(MsgAuthRequest, body).Encode(conn); err != nil {
+		return nil, err
 	}
-	var tokens []string
-	if err := json.Unmarshal(msg.Payload, &tokens); err != nil {
-		return nil, fmt.Errorf("join handshake claims: %w", err)
-	}
-	if len(tokens) > parameter.ClaimsKept || slices.ContainsFunc(tokens, func(t string) bool { return !ValidClaim(t) }) {
-		return nil, errors.New("join handshake: the dialer named claims of another form")
-	}
-	return tokens, nil
+	return link.Decode(conn)
 }
 
 // RefusalCode is the kind of a join refusal, which a dialer acts on rather than on
@@ -813,6 +849,15 @@ func (p *PendingJoin) RequestScenario(digest string) ([]byte, error) {
 		return nil, err
 	}
 	return body, nil
+}
+
+// Key is the participant key a new place this dial is given takes: the first it
+// proved, made for the dial when its configuration named none.
+func (p *PendingJoin) Key() Key {
+	if len(p.base.Keys) == 0 {
+		return Key{}
+	}
+	return p.base.Keys[0]
 }
 
 // Deferred returns the session traffic read off the stream during the gate, oldest
@@ -1003,6 +1048,11 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 		base = &copy
 	}
 	base.Role, base.Address = link.RolePeer, addr
+	// A dial proves a key for the new place it may be given, made here when its
+	// configuration named none; a keeper names its kept ones after it.
+	if len(base.Keys) == 0 {
+		base.Keys = []Key{NewKey()}
+	}
 	conn, err := link.Dial(addr, &base.Config)
 	if err != nil && base.Dial == nil && base.SessionName != "" && !link.RouteAnswered(err) {
 		conn, err = dialListed(base, err)
@@ -1021,12 +1071,15 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 		return nil, err
 	}
 	msg, err := link.Decode(conn)
-	if err == nil && msg.Type == MsgJoinClaims {
-		msg, err = answerClaims(conn, base.Claims)
+	if err == nil && msg.Type == MsgAuthResponse {
+		msg, err = answerAdmission(conn, base, msg)
 	}
 	_ = conn.SetDeadline(time.Time{})
 	if err != nil {
 		_ = conn.Close()
+		if errors.As(err, new(*Refusal)) {
+			return nil, err
+		}
 		return nil, link.PlainError{Text: "connected, but no vif session answered there", Cause: err}
 	}
 	if msg.Type == MsgJoinReply {
@@ -1119,19 +1172,6 @@ func (p *PendingJoin) Seat() (SessionOffer, error) {
 	return offer, nil
 }
 
-// answerClaims names the tokens this dial comes back with and reads the frame the
-// coordinator answers them with.
-func answerClaims(conn net.Conn, tokens []string) (*link.Message, error) {
-	body, err := json.Marshal(tokens)
-	if err != nil {
-		return nil, err
-	}
-	if err := link.NewMessage(MsgJoinClaims, body).Encode(conn); err != nil {
-		return nil, err
-	}
-	return link.Decode(conn)
-}
-
 // dialListed dials base's session by another link its site lists, once nothing
 // answered at its own address: a player may hold the link another kind of client
 // joins by. With no site answering, the failure of the address it was given stands.
@@ -1198,7 +1238,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 		reply.Width, reply.Height = report.Width, report.Height
 		reply.Identity = report.Identity
 		reply.Listen, reply.Holder = report.Listen, report.Holder
-		reply.Claim, reply.Record = report.Claim, report.Record
+		reply.Record = report.Record
 	}
 	body, err := json.Marshal(reply)
 	if err == nil {

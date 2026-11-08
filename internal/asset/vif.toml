@@ -67,3 +67,10 @@ wait = true
 max_fps = 0
 pause_menu = true
 pause_command = true
+
+# Whether a run keeps the places it holds in its sessions past the process, so a
+# restart, a crash or a reboot comes back to the place its Wraith kept for it: the
+# key each place is held under, in $XDG_STATE_HOME/vif/places.json, readable by
+# you alone. false keeps them for the run; a page keeps them for its tab either way.
+[session]
+resume_after_restart = true

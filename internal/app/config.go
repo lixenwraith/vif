@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/app/internal/membership"
+	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/resource"
@@ -34,13 +35,13 @@ const (
 	ModeServer   = config.ModeServer
 )
 
-// Config, its session half Membership and the ClaimStore that keeps a process's
-// claims are config's, aliased for the callers that build a Config: cmd/vif from its
+// Config, its session half Membership and the PlaceStore that keeps a process's
+// places are config's, aliased for the callers that build a Config: cmd/vif from its
 // flags, and the Android host and the headless harness with no flag set.
 type (
 	Config     = config.Config
 	Membership = config.Membership
-	ClaimStore = config.ClaimStore
+	PlaceStore = config.PlaceStore
 )
 
 // runConfig is a run's Config with what the run is built with beside it: host, the
@@ -209,10 +210,14 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 }
 
 // Normalize is Config's, noting a size it supplied (geometryDefaulted), and gives a
-// run with no claim keeper one of its own.
+// run with no place keeper one of its own, and one with no peer-link gate one that
+// its reach binds once built.
 func (c *runConfig) Normalize() {
-	if c.wiring.membership.Claims == nil {
-		c.wiring.membership.Claims = membership.NewClaimKeeper(c.Membership.ClaimStore)
+	if c.wiring.membership.Places == nil {
+		c.wiring.membership.Places = membership.NewPlaceKeeper(c.Membership.PlaceStore)
+	}
+	if c.wiring.membership.Links == nil {
+		c.wiring.membership.Links = &converge.PeerLinkGate{}
 	}
 	width, height := c.Width, c.Height
 	if c.Config.Normalize(); c.Width != width || c.Height != height {

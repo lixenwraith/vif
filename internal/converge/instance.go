@@ -27,10 +27,13 @@ type Instance interface {
 	Rate() engine.TimeScale
 	TickInterval() time.Duration
 
-	// LocalParticipant is this instance's session identity, zero outside a session.
-	// Seated marks a bot's run, which shares its holder's fate: the run's own word,
-	// since its world holds no entry for it until its arrival crosses there.
+	// LocalParticipant is this instance's session identity, zero outside a session,
+	// and LocalKey the participant key it holds its place under, which signs its peer
+	// links and succession messages; an empty key before it is in one. Seated marks
+	// a bot's run, which shares its holder's fate: the run's own word, since its
+	// world holds no entry for it until its arrival crosses there.
 	LocalParticipant() uint32
+	LocalKey() network.Key
 	Seated() bool
 
 	// WorldRoster is the roster as the cursors hold it: the same list on every
@@ -92,12 +95,12 @@ type Instance interface {
 	AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID)
 	CrossDepartures(away []network.RosterEntry)
 	// CrossReturns gives back the places of participants the floor sent away whose
-	// membership reports reached the host late, each as a claim's return is crossed.
+	// membership reports reached the host late, each as a key's return is crossed.
 	CrossReturns(back []network.RosterEntry)
 	Forked(roster []network.RosterEntry, local link.PeerID)
 
 	// Redial starts this run's redial of the authority it lost, at the door it came
-	// in by with the claim its place waits under, and reports whether one started.
+	// in by with the key its place waits under, and reports whether one started.
 	// It dials while Authority.Redialing, replaces the run once RedialAdmitted, and
 	// reports a door that turned it away through RedialRefused.
 	Redial(lost link.PeerID) bool

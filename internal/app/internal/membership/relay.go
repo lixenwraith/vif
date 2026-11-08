@@ -104,17 +104,23 @@ func (m *Membership) CloseDoor() {
 func (m *Membership) relayAcceptor(admit func(net.Addr) error) func(net.Conn) (link.PeerID, error) {
 	local := func() link.PeerID { return link.PeerID(m.localParticipant()) }
 	return network.HostAcceptor(network.Coordinator{
-		Preview: func(claims []string) (network.SessionOffer, error) {
+		Preview: func(a network.Admission) (network.SessionOffer, error) {
 			if m.relayDoorHosts() {
-				return m.previewParticipant(claims)
+				return m.previewParticipant(a)
 			}
 			return m.relayPreview(local())
 		},
-		Assign: func(claims []string) (network.SessionOffer, error) {
+		Assign: func(a network.Admission) (network.SessionOffer, error) {
 			if m.relayDoorHosts() {
-				return m.assignParticipant(claims)
+				return m.assignParticipant(a)
 			}
-			return m.relayAssign(local(), claims)
+			return m.relayAssign(local(), a)
+		},
+		Nonce: func() (string, error) {
+			if m.relayDoorHosts() {
+				return network.NewNonce(), nil
+			}
+			return m.relayNonce()
 		},
 		Release: func(id link.PeerID) {
 			if m.relayDoorHosts() {
@@ -162,10 +168,24 @@ func (m *Membership) relayPreview(local link.PeerID) (network.SessionOffer, erro
 	return o, nil
 }
 
+// relayNonce asks the authority for the challenge the door's dial proves its keys
+// over, so the proofs this run carries on are checked there and not here alone.
+func (m *Membership) relayNonce() (string, error) {
+	ans, err := m.askAuthority(network.RelayJoin{Step: network.RelayNonce})
+	if err != nil {
+		return "", err
+	}
+	if ans.Challenge == "" {
+		return "", errors.New("the session's authority issued no challenge for a relayed join")
+	}
+	return ans.Challenge, nil
+}
+
 // relayAssign asks the authority for an identity this run holds, or the place one of
-// the joiner's claims takes back, and names this run as the far end of its stream.
-func (m *Membership) relayAssign(local link.PeerID, claims []string) (network.SessionOffer, error) {
-	ans, err := m.askAuthority(network.RelayJoin{Step: network.RelayAssign, Claims: claims})
+// the keys the joiner proved takes back, and names this run as the far end of its
+// stream. The proofs and the challenge they answer travel whole.
+func (m *Membership) relayAssign(local link.PeerID, a network.Admission) (network.SessionOffer, error) {
+	ans, err := m.askAuthority(network.RelayJoin{Step: network.RelayAssign, Keys: a.Proofs, Challenge: a.Nonce})
 	if err != nil {
 		return network.SessionOffer{}, err
 	}
@@ -356,11 +376,16 @@ func (m *Membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 	switch {
 	case !coordinator:
 		err = errSessionHandoff
+	case req.Step == network.RelayNonce:
+		ans.Challenge = m.issueRelayNonce(relay)
 	case req.Step == network.RelayAssign && !m.lateJoins.Load():
 		err = errSessionStarting
 	case req.Step == network.RelayAssign:
-		ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, req.Claims)
-		m.closeStaleLink(err, m.sessionTransportLocked())
+		var keys []string
+		if keys, err = m.relayedKeys(relay, req); err == nil {
+			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, keys)
+			m.closeStaleLink(err, m.sessionTransportLocked())
+		}
 	case req.Step == network.RelayReady:
 		err = m.admitRelayedLocked(relay, req.Leaf, req.Report)
 	default:
@@ -373,6 +398,61 @@ func (m *Membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 	if r := m.world.Resources.Network; r != nil && r.Port != nil {
 		r.Port.Send(uint32(relay), uint8(network.MsgRelayAdmit), out)
 	}
+}
+
+// relayNonce is one challenge issued to a relay's door, good for one dial's proofs
+// for relayNonceLife, so a relay that carries a dial proves nothing itself.
+type relayNonce struct {
+	relay  link.PeerID
+	issued time.Time // [wall] a handshake's bound
+}
+
+// relayNonceLife is how long a challenge waits for its proofs: a dial's connect and
+// its ready period; relayNoncesKept bounds the challenges outstanding at once.
+const (
+	relayNonceLife  = parameter.NetworkJoinConnectTimeout + parameter.NetworkJoinPressWindow
+	relayNoncesKept = 64
+)
+
+// issueRelayNonce makes the challenge a relay's door asks its next dial, sweeping
+// the ones that ran out; past the bound the oldest gives way.
+func (m *Membership) issueRelayNonce(relay link.PeerID) string {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	now := time.Now() // [wall]
+	if m.relayNonces == nil {
+		m.relayNonces = make(map[string]relayNonce)
+	}
+	for n, r := range m.relayNonces {
+		if now.Sub(r.issued) > relayNonceLife {
+			delete(m.relayNonces, n)
+		}
+	}
+	for len(m.relayNonces) >= relayNoncesKept {
+		oldest, at := "", now
+		for n, r := range m.relayNonces {
+			if r.issued.Before(at) {
+				oldest, at = n, r.issued
+			}
+		}
+		delete(m.relayNonces, oldest)
+	}
+	nonce := network.NewNonce()
+	m.relayNonces[nonce] = relayNonce{relay: relay, issued: now}
+	return nonce
+}
+
+// relayedKeys checks the proofs a relay carried on against the challenge this
+// coordinator issued its door, spent here, and returns the keys they prove.
+func (m *Membership) relayedKeys(relay link.PeerID, req network.RelayJoin) ([]string, error) {
+	m.sessionMu.Lock()
+	r, ok := m.relayNonces[req.Challenge]
+	delete(m.relayNonces, req.Challenge)
+	m.sessionMu.Unlock()
+	if !ok || r.relay != relay || time.Since(r.issued) > relayNonceLife { // [wall]
+		return nil, &network.Refusal{Code: network.RefusalCredential, Reason: "the relayed dial answered no challenge of this session's"}
+	}
+	return network.VerifyProofs(req.Keys, req.Challenge, nil)
 }
 
 // relayedSlot is the slot of a participant joining through relay, if it is one.

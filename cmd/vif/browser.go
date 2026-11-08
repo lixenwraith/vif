@@ -25,7 +25,7 @@ func init() {
 	}
 	platformHost = app.Host{Presentation: pres, Audio: browser.Speaker(), Pressed: true, StartScreen: true}
 	pageSettings = keptSettings
-	pageClaims = tabClaims{}
+	pagePlaces = tabPlaces{}
 }
 
 // keptSettings reads the settings document the page kept from an earlier visit
@@ -55,13 +55,13 @@ func (p *pageStore) Store(doc []byte) error {
 	return nil
 }
 
-// tabClaims is the claims document as the tab keeps it, across a reload
-type tabClaims struct{}
+// tabPlaces is the places document as the tab keeps it, across a reload
+type tabPlaces struct{}
 
-func (tabClaims) Load() ([]byte, error) { return browser.Claims(), nil }
+func (tabPlaces) Load() ([]byte, error) { return browser.Places(), nil }
 
-func (tabClaims) Store(doc []byte) error {
-	browser.KeepClaims(doc)
+func (tabPlaces) Store(doc []byte) error {
+	browser.KeepPlaces(doc)
 	return nil
 }
 

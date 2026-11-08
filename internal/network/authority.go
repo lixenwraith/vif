@@ -1,6 +1,7 @@
 package network
 
 import (
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +29,31 @@ type AuthorityReport struct {
 	From link.PeerID   `json:"from"`
 	Lost link.PeerID   `json:"lost"`
 	Via  link.PeerID   `json:"via,omitempty"`
+	// Sig is From's signature over the rest (Sign), so a forwarded report is still
+	// its author's; a receiver checks it against the roster's key for From.
+	Sig []byte `json:"sig,omitempty"`
+}
+
+// Sign makes r its author's, under key.
+func (r AuthorityReport) Sign(key Key) AuthorityReport {
+	r.Sig = nil
+	if key.Valid() {
+		r.Sig = ed25519.Sign(key.private, r.signable())
+	}
+	return r
+}
+
+// Verify reports that r's signature is From's, whose roster key is given.
+func (r AuthorityReport) Verify(key string) bool {
+	pub := DecodeKey(key)
+	sig := r.Sig
+	r.Sig = nil
+	return pub != nil && ed25519.Verify(ed25519.PublicKey(pub), r.signable(), sig)
+}
+
+func (r AuthorityReport) signable() []byte {
+	body, _ := json.Marshal(r) // plain data cannot fail to encode
+	return signable("report", body)
 }
 
 // HandoffRecord is the evidence a receiver needs before it will adopt a term it
@@ -55,6 +81,33 @@ type HandoffRecord struct {
 	// it is about to adopt was last proved authoritative, which is the number that
 	// says whether the handoff cost it anything.
 	EvidenceTick uint64 `json:"evidence_tick"`
+
+	// Sig is Authority's signature over the rest (Sign), so a forwarded record is
+	// still the successor's; a receiver checks it against the roster's key for
+	// Authority before it adopts the term.
+	Sig []byte `json:"sig,omitempty"`
+}
+
+// Sign makes h its successor's, under key.
+func (h HandoffRecord) Sign(key Key) HandoffRecord {
+	h.Sig = nil
+	if key.Valid() {
+		h.Sig = ed25519.Sign(key.private, h.signable())
+	}
+	return h
+}
+
+// Verify reports that h's signature is Authority's, whose roster key is given.
+func (h HandoffRecord) Verify(key string) bool {
+	pub := DecodeKey(key)
+	sig := h.Sig
+	h.Sig = nil
+	return pub != nil && ed25519.Verify(ed25519.PublicKey(pub), h.signable(), sig)
+}
+
+func (h HandoffRecord) signable() []byte {
+	body, _ := json.Marshal(h) // plain data cannot fail to encode
+	return signable("handoff", body)
 }
 
 // Validate refuses a handoff record the succession rule could not have produced from

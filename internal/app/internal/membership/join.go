@@ -120,6 +120,13 @@ func (m *Membership) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCa
 	return m.bindSessionControl(o, o.Assigned)
 }
 
+// HoldKey holds this run's place under k, for a harness that adopts a session with
+// no handshake to prove a key in (JoinSession, HostSession); a dial's seat holds its
+// own (bindSeat) and a host its first roster entry's (ownKey).
+func (m *Membership) HoldKey(k network.Key) {
+	m.place.Store(m.places.issue(m.wiring.Holder != 0, k))
+}
+
 // HostSession applies the same map and roster sequence after a guest accepts.
 func (m *Membership) HostSession(o network.SessionOffer) error {
 	if err := m.validateSessionOffer(o, o.Host); err != nil {
@@ -246,8 +253,8 @@ func (m *Membership) bindSessionControl(o network.SessionOffer, local link.PeerI
 // bindCursorOwnersLocked writes each slot's owning participant onto its cursor, and
 // which of them this instance drives: a slot no roster attributes is a participant
 // a succession cannot see leave. A Wraith keeps the owner it left with, driven by
-// nobody, under the claim the roster names, which a session a run opens names
-// afresh for its bots. Caller MUST hold updateMutex.
+// nobody, under the key the roster names, which a session a run opens names afresh
+// for its bots. Caller MUST hold updateMutex.
 func (m *Membership) bindCursorOwnersLocked(participants []network.RosterEntry, local link.PeerID) {
 	roster := m.world.Resources.Player
 	for _, p := range participants {
@@ -260,10 +267,10 @@ func (m *Membership) bindCursorOwnersLocked(participants []network.RosterEntry, 
 		case !ok:
 		case m.world.Components.Wraith.HasEntity(e):
 			if c.PeerID == uint32(p.ID) {
-				c.Claim = p.Claim
+				c.Key = p.Key
 			}
 		default:
-			c.PeerID, c.Holder, c.Claim = uint32(p.ID), uint32(p.Holder), p.Claim
+			c.PeerID, c.Holder, c.Key = uint32(p.ID), uint32(p.Holder), p.Key
 			c.Control = component.ControlRemote
 			if p.ID == local {
 				c.Control = component.ControlLocal
@@ -333,9 +340,9 @@ func (m *Membership) BindSessionHooks(r *engine.NetworkResource) {
 			m.shed.Store(shed)
 			m.dismissed.Store(true)
 			m.HaltSeats(false)
-			// The place is gone, and the claim with it.
-			if c := m.claim.Swap(nil); c != nil {
-				m.claims.forget(c)
+			// The place is gone, and its key with it.
+			if p := m.place.Swap(nil); p != nil {
+				m.places.forget(p)
 			}
 		}
 	}
@@ -400,15 +407,15 @@ func (m *Membership) wraithKept(participant uint32) bool {
 // keepRecord keeps what this run's own cursor holds as its sync sends it, which is
 // what its player brings back should the run leave the session.
 func (m *Membership) keepRecord(p *event.CursorStatePayload) {
-	if c := m.claim.Load(); c != nil {
-		m.claims.keep(c, p.Record())
+	if c := m.place.Load(); c != nil {
+		m.places.keep(c, p.Record())
 	}
 }
 
-// LeaveClaim gives up the claim this run is in its session under, which keeps the
+// LeavePlace gives up the place this run is in its session under, which keeps the
 // record its last sync left.
-func (m *Membership) LeaveClaim() {
-	if c := m.claim.Swap(nil); c != nil {
-		m.claims.release(c)
+func (m *Membership) LeavePlace() {
+	if p := m.place.Swap(nil); p != nil {
+		m.places.release(p)
 	}
 }

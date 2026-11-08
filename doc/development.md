@@ -304,7 +304,7 @@ that opened a session keeps its bounds — which `:session` names rather than th
 status bar, along with the peers, the tick and how many succession candidates the
 chain holds. For a LAN, bind `:7777` and join the host's reachable address.
 Public-internet routing uses the same socket code, but a direct tcp link is
-plaintext and unauthenticated, so it is for trusted peers only.
+plaintext and admits any key, so it is for trusted peers only.
 
 ### Authored headless scripts
 

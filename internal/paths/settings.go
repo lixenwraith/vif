@@ -47,7 +47,16 @@ type Settings struct {
 		Cell         float64 `toml:"cell"`
 		TmuxFrameCap bool    `toml:"tmux_frame_cap"`
 	} `toml:"presentation"`
-	Play Play `toml:"play"`
+	Play    Play    `toml:"play"`
+	Session Session `toml:"session"`
+}
+
+// Session is the [session] table: how a run keeps its place in a session past the
+// process. ResumeAfterRestart keeps the keys its places are held under in the
+// user's state directory (PlacesFile), so a restart, a crash or a reboot comes back
+// to the place its Wraith kept; off, they last the run.
+type Session struct {
+	ResumeAfterRestart bool `toml:"resume_after_restart"`
 }
 
 // Play is the [play] table: how a run starts, and what the configuration menu

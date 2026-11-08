@@ -411,6 +411,25 @@ func (g *PeerLinkGate) Local() link.PeerID {
 	return link.PeerID(r.inst.LocalParticipant())
 }
 
+// LocalKey is the key this participant signs its peer links with: empty until the
+// run is bound and holds its place.
+func (g *PeerLinkGate) LocalKey() network.Key {
+	r := g.reach.Load()
+	if r == nil {
+		return network.Key{}
+	}
+	return r.inst.LocalKey()
+}
+
+// KeyOf is the roster's key for id, "" for a participant the roster does not hold.
+func (g *PeerLinkGate) KeyOf(id link.PeerID) string {
+	r := g.reach.Load()
+	if r == nil {
+		return ""
+	}
+	return r.authority.keyOf(id)
+}
+
 // admit is the acceptor hook: it answers nothing until the run is bound.
 func (g *PeerLinkGate) Admit(from link.PeerID) error {
 	r := g.reach.Load()

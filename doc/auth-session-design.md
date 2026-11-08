@@ -3,14 +3,14 @@
 Who a vif player is, what admits a dial to a session, how a participant comes back
 after a dropped link, a crash or a reboot without authenticating again, and how a
 host and its participants prove themselves to each other. The decisions are settled
-(§0); what they ask of the code is a plan in phases, each a PR (§7); what is built is
-the admission primitives in `internal/network/admission.go` (§7.0), which nothing
-sends yet. §2 states what authenticates today, §3 the open work this serves, §4 and
-§5 what `lixenwraith/auth`, `lixenwraith/logwisp` and `lixenwraith/chess` give and
-what vif takes, §6 the requirements and threats, §8 what the plan asks of the router
-and the deployment, §9 the router's budget for ten thousand routed players, §10 the
-questions still to decide and §11 the files an implementation reads and changes. As
-each phase lands its part moves into the reference documents ([Multiplayer](multi-player.md),
+(§0); what they ask of the code is a plan in phases, each a PR (§7), of which the
+direct route's removal and the participant keys with their admission exchange have
+landed (§7.0). §2 states what authenticates today, §3 the open work this serves, §4
+and §5 what `lixenwraith/auth`, `lixenwraith/logwisp` and `lixenwraith/chess` give
+and what vif takes, §6 the requirements and threats, §8 what the plan asks of the
+router and the deployment, §9 the router's budget for ten thousand routed players
+and §10 the files an implementation reads and changes. As each phase lands its part
+moves into the reference documents ([Multiplayer](multi-player.md),
 [Services and networking](services-and-networking.md),
 [The session fleet](kubernetes-fleet.md),
 [Deploying the session fleet](kube-docker-deploy.md)) and leaves this one.
@@ -27,7 +27,7 @@ each phase lands its part moves into the reference documents ([Multiplayer](mult
   a terminal's in a 0600 file under the user's state directory, Android's in the
   app's private files, so a crash, a restart or a reboot brings the player back to
   its Wraith's place, at the same host or a successor's, with one signature and no
-  prompt. `[play] keep_places = false` keeps nothing past the process.
+  prompt. `[session] resume_after_restart = false` keeps nothing past the process.
 - **D2. Keys and passes replace claims.** One mechanism: the claim token, its
   digest, `MsgJoinClaims` and `ClaimKeeper`'s tokens go; the keeper holds keys and
   passes where it held tokens, and the per-address budgets stay for anonymous dials.
@@ -39,11 +39,11 @@ each phase lands its part moves into the reference documents ([Multiplayer](mult
   node alone. The pod's own per-address limiter then budgets a player's doors alone;
   a fleet pod budgets by a ticket's subject.
 - **D4. TLS on the front door.** The native fleet link is `vifs://<site>:7777/<id>`.
-  TLS ends at the site's edge, which hands the router each connection under PROXY
-  protocol v2 so the dialer's address still keys its budgets; where no edge stands
-  the router terminates it with `-route-cert`/`-route-key`. Plaintext `vif://` stays
-  for a player's own tcp doors, where a passphrase door (D14) authenticates them.
-  Asked of the edge in §10, Q1.
+  On this deployment TLS ends at the site's edge, which hands the router each
+  connection under PROXY protocol so the dialer's address still keys its budgets;
+  the router can end it itself for a deployment with no such edge
+  (`-route-cert`/`-route-key`, off unless given). Plaintext `vif://` stays for a
+  player's own tcp doors, where a passphrase door (D14) authenticates them.
 - **D5. The router admits in band.** After the route frame and the address budget
   the router dials the pod, or opens the door, relays the door's question to the
   dialer and reads one answer. A pass is forwarded unread. A sign-in token, or
@@ -60,22 +60,26 @@ each phase lands its part moves into the reference documents ([Multiplayer](mult
   under an Ed25519 signature with a domain tag (`network.Signed`), two hundred bytes
   and the standard library alone. Their only verifiers are vif's own doors, so
   `lixenwraith/auth` is taken for Argon2id and SCRAM and nothing in vif reads a JWT.
-- **D8. Accounts live in an identity service of their own.** Registration, sign-in
-  by Argon2-SCRAM, sign-ins per device, their revocation, and one loopback question
-  for the router, which account does this token name. Generic, in a repository of
-  its own, so chess can take it as its account service later and the game binary
-  never names a database driver. The router forwards `/vif/api/auth/` to it byte for
-  byte, as it forwards the log stream.
+- **D8. Accounts live in an identity service of their own**, `lixenwraith/identity`,
+  a public repository: registration, sign-in by Argon2-SCRAM, sign-ins per device,
+  their revocation, and one loopback question for the router, which account does
+  this token name. Generic, so chess adopts it as its account service in a session
+  of its own once vif runs on it, and the game binary never names a database driver.
+  The router forwards `/vif/api/auth/` to it byte for byte, as it forwards the log
+  stream.
 - **D9. The store is PostgreSQL 18 in a FreeBSD jail**, reached from the bhyve guest
   the router runs in over the host's internal network, by a role that may reach the
   service's database alone, with SCRAM-SHA-256 and TLS on the hop. Backed up by
-  `pg_dump` as chess's is. The driver is Q2.
+  `pg_dump` as chess's is. The client is the service's own, on the standard library
+  (`crypto/pbkdf2`, `crypto/hmac`, `crypto/tls`): the simple and extended query
+  protocol, SCRAM-SHA-256 and text results, for a schema of two tables; pgx's dozen
+  modules are what chess carries and this service does not need.
 - **D10. The KDF runs on the player.** Argon2-SCRAM wherever a password is proven: a
   sign-in and a passphrase door. Registration sends the derived credential, so the
   service runs no Argon2 at any rate of sign-ins or registrations, and the deployment
-  pins one KDF profile for every account (64 MiB, 3 passes, 4 lanes until measured on
-  a phone and a page). The one server-side Argon2 is the operator's CLI, resetting a
-  password.
+  pins one KDF profile for every account: 64 MiB, 3 passes and 4 lanes, read again
+  on a phone and a page once vif's implementation is deployed. The one server-side
+  Argon2 is the operator's CLI, resetting a password.
 - **D11. A sign-in is opaque**, 32 random bytes whose SHA-256 the service stores, one
   per device, named and revocable one by one, sliding over 30 days and renewed past
   half its life. A page holds it in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie
@@ -157,26 +161,31 @@ surface checks:
   the door's name for `NetworkTunnelResumeWindow` (10 min) after a lost control
   connection; `-doors-per-address`, and the join budget per publication. Plaintext.
 - **The join handshake** (`network.HostAcceptor`): route, budget
-  (`Coordinator.Admit`), claims (`MsgJoinClaims`), preview and seat, `Assign`, the
-  offer, then the joiner's `PeerIdentity`, a build and session match
+  (`Coordinator.Admit`), the admission exchange (§7.2: the door's nonce, the dial's
+  proven keys), preview and seat, `Assign`, the offer, then the joiner's
+  `PeerIdentity`, a build and session match
   ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
-  It identifies a binary and a world, never a person.
-- **A claim** (`network.NewClaimToken`): 32 random bytes whose SHA-256 the roster
-  carries; a dial names the token in clear to the coordinator, through its relay if
-  it has one. A page keeps its claims in the tab's `sessionStorage`; a terminal and
-  Android keep them for the process's life. A claim keeps a place from another player
-  for `WraithTimeout` (2 min of game time), and is no credential against the wire
-  ([Multiplayer §5.4](multi-player.md#54-wraiths)).
-- **A peer link** (`network.PeerAcceptor`, `converge.Reach.admitPeerLink`):
-  `MsgConnect` names its sender's participant identity, and the acceptor admits any
-  roster member but itself, so whoever reaches a participant's port can open a link
-  as any participant it holds no link to, and act as that participant's cursor
-  through `crossingActors` ([Services §10](services-and-networking.md#10-timeouts-limits-and-security)).
-  A fleet pod runs `-authority host`, one port; a player's session every participant
-  that advertises a port.
-- `MsgAuthRequest` (0x30) and `MsgAuthResponse` (0x31) are defined
-  (`AuthRequest`, `AuthResponse`) and sent by nothing; `NetworkSystem` counts one as
-  a drop.
+  It identifies a binary, a world and a key, never a person.
+- **A participant key** (`network.Key`): the Ed25519 pair a run holds each place
+  under, whose public half the roster, the cursor and every capture carry; a dial
+  proves it over the door's nonce, through its relay if it has one, which carries
+  the proofs to the authority with the challenge it asked for them. A page keeps
+  its places in the tab's `sessionStorage`, a terminal in `places.json` under the
+  user's state directory, Android in the app's files, each as `[session]
+  resume_after_restart` says. A key keeps a place from another player for
+  `WraithTimeout` (2 min of game time); on a plaintext link anyone on the path can
+  take the stream after the proof ([Multiplayer §5.4](multi-player.md#54-wraiths)).
+- **A peer link** (`network.PeerAcceptor`, `converge.Reach.admitPeerLink`): a
+  challenge both ways, each end proving the roster's key for itself over the
+  other's nonce and the session, so a name alone opens nothing; the acceptor admits
+  any roster member but itself. A fleet pod runs `-authority host`, one port; a
+  player's session every participant that advertises a port.
+- **Succession messages** (`MsgAuthorityReport`, `MsgAuthorityHandoff`) carry
+  their author's signature, which a receiver checks against the roster's key for
+  the participant they name before it acts; `MsgPeerList` is unsigned, and a forged
+  chain costs a dial that no key answers.
+- `MsgAuthRequest` (0x30) and `MsgAuthResponse` (0x31) carry the exchange; a pass,
+  a ticket and a passphrase step are defined in them and sent by nothing yet.
 
 Confidentiality exists only on TLS, the browser route as far as the site's edge and
 a player's wss doors. On vif:// and ws, a claim, a resume token and every frame can
@@ -251,11 +260,11 @@ takes:
   credential instead.
 
 What vif does not take: the JWT managers (D7) and `SimpleTokenValidator` (a sign-in
-has an expiry and a store). What auth gains for vif, in the PR beside this one:
-`ScramServer.Abandon(fullNonce)`, which frees a handshake whose dialer dropped after
-the challenge without running the proof path, the call logwisp made through
-`ProcessClientFinalMessage(nonce, "")`; and its README and package doc no longer
-cite an audit document the repository does not hold.
+has an expiry and a store). v0.5.2 added for vif `ScramServer.Abandon(fullNonce)`,
+which frees a handshake whose dialer dropped after the challenge without running
+the proof path, the call logwisp made through `ProcessClientFinalMessage(nonce, "")`
+until v0.39.2; its README and package doc no longer cite an audit document the
+repository does not hold.
 
 logwisp v0.39 is the consumer to copy, not chess: `internal/authz/scram.go` runs the
 whole exchange on TCP (a hello carrying the client first, one JSON line a step) and
@@ -349,89 +358,83 @@ The threats, and the part that meets each:
 
 ### 7.0 What is built
 
-`internal/network/admission.go`, sent by nothing yet:
-
-- `Key`: an Ed25519 key pair, `NewKey`, `Public`, kept as its 32-byte seed in JSON;
-  `SignProof`/`VerifyProof` over a door's nonce, the session's name and a channel
-  binding (`ChannelBinding`, the SHA-256 of a leaf certificate); `NewNonce`,
-  `parameter.AuthNonceBytes` of randomness.
-- `Signed`: the body as signed and the signature, under a domain tag (`signable`:
-  `vif <domain>\0`, then each field behind its length), so a proof, a pass and a
-  ticket under one key never stand in for each other.
-- `PassBody`, `SignPass`, `VerifyPass` (the term's key looked up by the term the
-  body names, `PassLifetime` the cap, `Renewable` past half-life) and `TicketBody`,
-  `SignTicket`, `VerifyTicket` (`TicketLifetime`, a fresh `jti`), both with
-  `AuthClockLeeway` of skew either way; `SpentTickets`, bounded by
-  `SpentTicketsKept`; `AdmissionKind` (play, watch, create, publish), by name on the
-  wire; `SubjectOf` an address as the budgets key it.
-- `AuthResponse` and `AuthRequest`, the 0x31 and 0x30 bodies, `MaxAuthFrame` their
-  bound, the methods `key`, `pass`, `ticket` and `scram`; the refusal kinds
-  `RefusalSignIn` (retry after signing in), `RefusalCredential` and
-  `RefusalDropped` (no retry).
-- Tests, one a rule, and `FuzzASignedTokenIsOpenedWholeOrRefused`.
+Phases 0 and 1 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
+Ed25519 key pair kept as its 32-byte seed in JSON, with `Prove`/`VerifyProof` over a
+door's nonce, the session's name and a channel binding (`ChannelBinding`, the SHA-256
+of a leaf certificate), `VerifyProofs` over a dial's list and `EncodeKey`/`DecodeKey`,
+the roster form; `Signed`, the body as signed and the signature under a domain tag
+(`signable`: `vif <domain>\0`, then each field behind its length), so a proof, a
+pass, a ticket, a peer link and a succession message under one key never stand in
+for each other; `PassBody`, `SignPass`, `VerifyPass` (the term's key looked up by the
+term the body names, `PassLifetime` the cap, `Renewable` past half-life) and
+`TicketBody`, `SignTicket`, `VerifyTicket` (`TicketLifetime`, a fresh `jti`), both
+with `AuthClockLeeway` of skew either way; `SpentTickets`, bounded by
+`SpentTicketsKept`; `AdmissionKind` (play, watch, create, publish), by name on the
+wire; `SubjectOf` an address as the budgets key it; `AuthResponse` and `AuthRequest`,
+the 0x31 and 0x30 bodies, `MaxAuthFrame` their bound, the methods `key`, `pass`,
+`ticket` and `scram`; the refusal kinds `RefusalSignIn` (retry after signing in),
+`RefusalCredential` and `RefusalDropped` (no retry). And what §7.1 and §7.2 describe,
+live: the handshake asks and the dial proves, the roster carries keys, the keeper
+keeps them on every host, peer links challenge both ways, reports and handoffs are
+signed, a relay carries proofs over its authority's challenge. Tests, one a rule, and
+fuzz targets over the token forms, the join handshake and the peer link.
 
 ### 7.1 Participant keys
 
-A participant makes a `Key` for its place and its first admission request carries
-the public half with a proof over the door's nonce. The coordinator records it on
-the roster entry (`RosterEntry.Key`, replacing `Claim`); the arrival crosses it, so
-every instance and every capture holds it. Then:
+Landed; [Multiplayer §5.4](multi-player.md#54-wraiths) states it. A run makes a `Key`
+for each place as it takes it (`PlaceKeeper`, `place.go`) and its dial proves a fresh
+one first, then every kept place of its kind no run holds; the coordinator records
+the key on the roster entry (`RosterEntry.Key`), the arrival crosses it, so every
+instance, cursor and capture holds it. A peer link is a challenge both ways, signed
+over the nonce, both identities and the session; a report and a handoff record carry
+their author's signature (`Sign`, `Verify`), checked against the roster's key for
+the participant they name. A returning dial proves its key and is seated in the
+place that key holds, whatever gate the door keeps; a relay asks the authority for
+the challenge its door asks (`RelayNonce`) and carries the proofs on, so it can take
+nobody's place. The keeper's store is every host's: a page's `sessionStorage`, a
+terminal's `places.json` under the user's state directory (`paths.PlacesFile`, a
+file for the user alone), Android's in the app's files, each behind `[session]
+resume_after_restart`, on by default.
 
-- A peer link is a challenge: the acceptor answers `MsgConnect` with a nonce, the
-  dialer signs the session, both identities and the nonce, and the acceptor verifies
-  against the roster, as the dialer does the acceptor's. A name alone opens nothing.
-- Succession notices and handoff records (`MsgAuthorityReport`,
-  `MsgAuthorityHandoff`) carry their author's signature, so a forwarded one is still
-  its author's. A handoff record names each term's authority key, which a pass is
-  checked against (§7.3). A redirect, for a merge or a split, is signed by the
-  term's authority.
-- A claim becomes possession of the key: an away entry keeps the key, and a
-  returning dial signs the door's nonce instead of naming a token, so the door seats
-  it in the place that key holds, whatever gate the door keeps. The token,
-  `ClaimDigest` and `MsgJoinClaims` go; the keeper holds private keys where it held
-  tokens, and a relay that carries a dial can no longer take its place.
-- The keeper's store becomes every host's (D1): `ClaimStore` stays the interface,
-  a page's `sessionStorage` document as today, a terminal's a 0600 file
-  `places.json` under `paths.stateDir`, written as claims are written now
-  (`ClaimStoreInterval`), Android's in the app's files. `keep_places` names it.
+Cost, as designed: 32 bytes a roster entry, two round trips a peer link, and a
+signature of tens of microseconds a link, a dial and a succession message, nothing
+a tick. No new dependency.
 
-Cost: 32 bytes a roster entry, a round trip a peer link, and a signature of tens of
-microseconds a link and a succession message, nothing a tick. It needs no
-infrastructure and no new dependency.
+Not yet: a handoff record naming each term's authority key for passes (§7.3), a
+signed redirect for a merge or a split, and a binding on a wss door's proof, which a
+page cannot compute and which §7.4 brings with the SCRAM exchange.
 
 ### 7.2 The admission exchange
 
-The door asks after the route frame and the address budget, in place of today's
-claims step, so an open door pays no round trip it does not pay now:
+The door asks after the route frame and the address budget, in place of the claims
+step it replaced, so an open door pays no round trip it did not pay before:
 
 ```
 dialer                                   door
 MsgSessionRoute                          -->
                                          <--  MsgAuthResponse{methods, nonce}
-MsgAuthRequest{key, proof, pass}         -->  a returning participant: done
-MsgAuthRequest{key, proof, ticket}       -->  a fleet join: done
-MsgAuthRequest{key, proof}               -->  a new joiner at an open door: done
-MsgAuthRequest{key, proof, scram first}  -->  a passphrase door:
+MsgAuthRequest{keys}                     -->  an open door: done        (live)
+MsgAuthRequest{keys, pass}               -->  a returning participant: done
+MsgAuthRequest{keys, ticket}             -->  a fleet join: done
+MsgAuthRequest{keys, scram first}        -->  a passphrase door:
                                          <--  MsgAuthResponse{scram challenge}
 MsgAuthRequest{scram proof}              -->
                                          <--  MsgAuthResponse{scram final}, or a refusal
                                          <--  the preview, the seat and the offer as today
 ```
 
-Every answer carries the key and its proof; a pass or a ticket says what admits it.
-A pass names its key and a key names its place, so nothing is left to claim. A
-refusal is `RefusalSignIn` when the door takes no bare key, `RefusalCredential` for
-what was shown, `RefusalDropped` for a key or account on the keep-out list; a page
-shows its reason as it shows every refusal. Both frames are bounded
-(`MaxAuthFrame`) and join the handshake's fuzz target. A relay asks the authority
-for the nonce it hands a dialer, so a proof it carries is good once.
+Every answer carries the keys the dial proves (`Proof`), the first its own for a new
+place and the rest the places it may come back to, at most `PlacesKept`; a pass or a
+ticket will say what admits one of them. A key on the roster names its place, so
+nothing is left to claim. A refusal is `RefusalSignIn` when the door takes no bare
+key, `RefusalCredential` for what was shown, `RefusalDropped` for a key or account
+on the keep-out list; a page shows its reason as it shows every refusal. Both frames
+are bounded (`MaxAuthFrame`) and the join handshake's fuzz target scripts them.
 
-Through the router (D5) the same frames run end to end, the router placing itself
-between the question and the answer for one frame each way: it reads the dialer's
-answer, forwards a pass whole, and turns a sign-in or nothing into a ticket. Its
-own refusals (`RefusalSignIn` when a session is for accounts alone,
-`RefusalCredential` for a token the identity service does not know) are the join
-reply the dialer reads today.
+Through the router (D5) the same frames will run end to end, the router placing
+itself between the question and the answer for one frame each way: it reads the
+dialer's answer, forwards a pass whole, and turns a sign-in or nothing into a
+ticket. Today it splices them unread.
 
 ### 7.3 Session passes
 
@@ -527,25 +530,22 @@ the same cookie.
 Each a PR, in this order; each bumps `ProtocolVersion` where it changes a frame,
 and phase 1 bumps `snapshot.Schema` and `event.JournalSchema` with the roster.
 
-- **Phase 0, the direct route goes** (D3): `tool/vif-router` drops the NodePort
-  Service and pool for `-sessions-max`; `direct_target` and `port` leave the API;
-  `deploy/k3s` (the policy admits the game port from the node alone, `session.sh`
-  and `render-session.sh` stop allocating ports), `nftables.conf`, the fleet,
-  deploy and router docs and the term index follow; the host's 31700–31709 forward
-  went with it.
-- **Phase 1, keys and the exchange** (§7.1, §7.2 on player hosts): keys replace
-  claims, the exchange replaces `MsgJoinClaims`, peer links and succession messages
-  are signed, the keeper persists keys on every host behind `keep_places`. The
-  router splices the new frames unread; the fleet runs open doors still.
+- **Phase 0, the direct route goes** (D3): landed. The Service is `ClusterIP`, the
+  fleet's size `-sessions-max`, the game port admitted from the node alone.
+- **Phase 1, keys and the exchange** (§7.1, §7.2 on player hosts): landed. Keys
+  replaced claims, the exchange replaced `MsgJoinClaims`, peer links and succession
+  messages are signed, the keeper persists keys on every host behind `[session]
+  resume_after_restart`. The router splices the new frames unread; the fleet runs
+  open doors still.
 - **Phase 2, passes** (§7.3) and keep-out, with [Let an authority drop a participant](todo.md#let-an-authority-drop-a-participant).
 - **Phase 3, passphrase doors** (§7.4): auth enters the game binary; native, wasm
   and Android sizes read before and after (D18); the Argon2 cost measured on a page
   and a phone.
 - **Phase 4, the router's TLS front door, in-band admission and anonymous tickets**
-  (D4, D5, D6, §7.5 first half): `vifs://`, PROXY protocol v2 on the front door, the
+  (D4, D5, D6, §7.5 first half): `vifs://`, PROXY protocol on the front door, the
   ticket key and `keygen`, the pod's `-admit ticket`, `GET /vif/api/keys`, the edge's
   stream block.
-- **Phase 5, accounts**: the identity service in its own repository (§10, Q2, Q3),
+- **Phase 5, accounts**: the identity service in its own repository (D8, D9),
   PostgreSQL in the jail, the router's forward and introspection, the cookie on the
   upgrade, `:login`/`:logout`, names on the roster (D15).
 - **Phase 6, the account's reach**: publish and create tickets, budgets by account,
@@ -555,12 +555,6 @@ and phase 1 bumps `snapshot.Schema` and `event.JournalSchema` with the roster.
 
 By phase:
 
-- **Phase 0**: the Service becomes `ClusterIP`, kept for the EndpointSlice readiness
-  the allocator reads; the pool and `isNodePortConflict` go, `-sessions-max` (10)
-  stands in beside the quota's `count/jobs`; `fleetLimits.SessionsMax` reads it.
-  `20-networkpolicy.yaml`'s game ingress takes an `ipBlock` of the node's address on
-  the pod network, a placeholder the deploy renders, so a pod is reachable from the
-  router alone; the host forwards 7777 and nothing else.
 - **Phases 1–3**: nothing. The router places by the route frame and splices the
   rest unread, so the door's question and the dialer's answer cross it as bytes. A
   router update waits for an empty fleet, so a fleet player never redials across one;
@@ -570,11 +564,12 @@ By phase:
   resume sign the router's nonce.
 - **Phase 4**:
   - The edge terminates TLS for 7777 in an nginx `stream` block and forwards to the
-    node's 7777 with `proxy_protocol on`; the router reads one PROXY v2 header before
-    the route frame (`-route-proxy-protocol`, refusing a connection without one) and
-    keys its budgets on the address it names. Without an edge, `-route-cert` and
-    `-route-key` make the router the TLS end. The game's `vifs://` dials TLS with
-    the system's roots, as a wss door is dialled.
+    node's 7777 with `proxy_protocol on`; the router reads one PROXY header before
+    the route frame (`-route-proxy-protocol`, refusing a connection without one), the
+    v1 text line nginx writes or the v2 binary header HAProxy does, and
+    keys its budgets on the address it names. A deployment with no such edge gives
+    the router `-route-cert` and `-route-key`, off by default, and it ends TLS itself.
+    The game's `vifs://` dials TLS with the system's roots, as a wss door is dialled.
   - The ticket key is a file in `/etc/vif-router`, `root:vif-router` 0640 as
     `router.env` is, made once on the node by `update-vif-router.sh` when absent
     (`vif-router keygen`) and named by `-ticket-key` in `vif-router.env`, so the
@@ -615,7 +610,7 @@ By phase:
   loopback listener of the router's own (D16).
 
 What the site's edge then provides, beside [Deploying §12](kube-docker-deploy.md#12-the-sites-edge):
-a `stream` server on 7777 ending TLS and forwarding with PROXY protocol v2 to the
+a `stream` server on 7777 ending TLS and forwarding with PROXY protocol to the
 node (phase 4); `/vif/api/auth/` and `GET /vif/api/keys` published to 9080, with
 `Cookie` and `Authorization` passed through untouched and kept out of its access
 log, nothing cached under `/vif/api/auth/` (phase 5); and the 31700–31709 forward
@@ -668,35 +663,7 @@ door on a second process, RSS and CPU of the router before and after the splice
 change, and the admission exchange's cost per connection; `-route-max` and
 `routePlacing` tuned from them. A projection is not a result.
 
-## 10. Questions still to decide
-
-Each needs the user, since it names the host, the site or a repository.
-
-- **Q1. The edge and the host** (D4). Add an nginx `stream` server ending TLS on
-  7777 with `proxy_protocol on` to the node's 7777, and the `/vif/api/auth/` and `/vif/api/keys` locations with `Cookie` and
-  `Authorization` passed through. Both are outside this repository, where the
-  31700–31709 forward is already gone (D3). Without the
-  stream block the router terminates TLS itself from a certificate it is given, or
-  phase 4 falls back to minting tickets over `POST /vif/api/sessions/<id>/tickets`
-  and the front door stays plaintext, carrying only the one-minute ticket.
-- **Q2. The PostgreSQL driver** for the identity service. `jackc/pgx/v5` as `pgconn`
-  alone, the protocol, SCRAM-SHA-256 and TLS without `database/sql` (the driver
-  chess uses, a dozen modules); or a client of our own on the standard library
-  (`crypto/pbkdf2`, `crypto/hmac`, `crypto/tls`), the simple and extended query
-  protocol, SCRAM-SHA-256 and text results, about a thousand lines in a repository
-  of its own, for a service whose whole schema is two tables. The leaning is the
-  client of our own, behind the service's store interface so either fits.
-- **Q3. The identity service's repository and name**, and whether chess adopts it
-  (D8): `lixenwraith/identity`, one binary, a loopback API and a CLI, with vif the
-  first consumer and chess's accounts importable by a `MigrateFromPHC` run the
-  user types a password into; or vif-specific under `tool/`, which puts a database
-  driver in vif's module.
-- **Q4. The settings name** for D1, `[play] keep_places`, and the Android app's
-  storage for it.
-- **Q5. The KDF profile** pinned for accounts (D10), after the wasm and phone
-  readings of phase 3: 64 MiB and 3 passes, or less on the phone's evidence.
-
-## 11. File catalog
+## 10. File catalog
 
 What an implementation reads and changes, by area. Paths are from each
 repository's root.
@@ -705,20 +672,21 @@ The session layer, `internal/network`:
 
 - `admission.go`: the keys, proofs, tokens, frames and spent set (§7.0).
 - `protocol.go`: the kinds, `MsgAuthRequest`, `MsgAuthResponse`, `MsgSessionRoute`,
-  `MsgJoinClaims` (to go), `MsgConnect`/`MsgAck`, the tunnel's kinds.
+  `MsgConnect`/`MsgAck`, the tunnel's kinds.
 - `session.go`: `RosterEntry`, `SessionOffer`, `JoinerReport`, `Coordinator`,
-  `HostAcceptor`, `readSessionName`, `askClaims`, `NewClaimToken`, `ClaimDigest`,
-  `RefusalCode` and its table, `openJoinStream`, `answerClaims`,
+  `Admission`, `HostAcceptor`, `readSessionName`, `askAdmission`, `answerAdmission`,
+  `RefusalCode` and its table, `openJoinStream`, `RelayJoin` and its steps,
   `AdmissionLimiter`.
-- `reach.go`: `PeerAcceptor`, `PeerDialer`, `peerHello`, `peerWelcome`,
-  `SuccessionChain`.
-- `authority.go`: `AuthorityReport`, `HandoffRecord`, which §7.1 signs and §7.3
-  reads term keys from.
+- `reach.go`: `PeerKeys`, `PeerAcceptor`, `PeerDialer`, `peerHello`, `peerWelcome`,
+  `peerBind`, `SuccessionChain`.
+- `authority.go`: `AuthorityReport` and `HandoffRecord` with their `Sign` and
+  `Verify`; §7.3 reads term keys from the record.
 - `identity.go`: `ProtocolVersion`, `PeerIdentity`.
 - `tunnel.go`: `PublishRequest`, `Published`, `TunnelHub`, `DoorTunnel`, the resume
   token.
-- `config.go`: `Config.Claims`, `Config.Identity`, `RequestSession`.
-- `fuzz_test.go` and `admission_test.go`: the handshake and token fuzz targets.
+- `config.go`: `Config.Keys`, `Config.Identity`, `RequestSession`.
+- `fuzz_test.go` and `admission_test.go`: the handshake, peer link and token fuzz
+  targets.
 
 The link, `pkg/network`:
 
@@ -736,45 +704,46 @@ The protocol and the run:
   handoffs are flooded and forwarded.
 - `internal/system/network.go`: `crossingActors`, `admissibleFromSource`,
   `stateInRange`.
-- `internal/event/payload.go`: `ParticipantJoinedPayload`, which carries a
-  participant's key.
+- `internal/event/payload.go`: `ParticipantJoinedPayload` and
+  `CursorSpawnRequestPayload`, which carry a participant's key; `component.Cursor.Key`.
 - `internal/snapshot/capture.go`: `Schema`.
 
 Membership, `internal/app/internal/membership`:
 
-- `claim.go`: `ClaimKeeper`, which keeps keys and passes.
+- `place.go`: `PlaceKeeper`, which keeps keys and will keep passes.
 - `identity.go`: `buildIdentity`, `joinerReport`.
-- `session.go`: the coordinator's `HostAcceptor` wiring, `claimedLocked`,
-  `closeStaleLink`, `yieldLocked`, `redialSeat`.
-- `relay.go`: a relay's acceptor, and the claims it carries to the authority.
+- `session.go`: the coordinator's `HostAcceptor` wiring, `keyedLocked`, `ownKey`,
+  `LocalKey`, `closeStaleLink`, `yieldLocked`, `redialSeat`.
+- `relay.go`: a relay's acceptor, `relayNonce`, and the proofs it carries to the
+  authority, which `issueRelayNonce` and `relayedKeys` check.
 - `converge.go`: `redial`, `redialDoor`, where a pass is shown.
-- `host.go`, `join.go` and `seat.go`: hosting, dialling, and a seat's claims.
-- `internal/app/internal/config/membership.go`: `Membership`, `ClaimStore`.
+- `host.go`, `join.go` and `seat.go`: hosting, dialling, and a seat's places.
+- `internal/app/internal/config/membership.go`: `Membership`, `PlaceStore`.
 
 Parameters, paths, settings and commands:
 
-- `internal/parameter/network.go`: `ClaimsKept`, `ClaimStoreInterval`,
+- `internal/parameter/network.go`: `PlacesKept`, `PlaceStoreInterval`,
   `WraithTimeout`, `NetworkAdmitWindow`, `NetworkAdmitBurst`,
   `NetworkAdmitTracked`, `NetworkTunnelResumeWindow`,
   `NetworkSessionRequestTimeout`, `AuthNonceBytes`, `TicketLifetime`,
   `SpentTicketsKept`, `PassLifetime`, `AuthClockLeeway`.
-- `internal/paths/paths.go` (`stateDir`, where a terminal keeps its places and its
-  sign-in) and `settings.go` (`Play`, where `keep_places` goes).
+- `internal/paths/paths.go` (`PlacesFile`, `PlaceFile`, and `stateDir`, where a
+  terminal's sign-in would go) and `settings.go` (`Session`, `resume_after_restart`).
 - `internal/mode/commands.go`, `config_menu.go` and `config_form.go`: `:host`,
   `:join`, `:session`, the Multiplayer page and its request form, where `:login`
   and a passphrase prompt go.
 - `cmd/vif/main.go` and `usage.go`: the `-host`, `-serve`, `-join`, `-name`,
   `-cert`, `-key`, `-selfsign`, `-ca`, `-relay`, `-authority`, `-passphrase` and
   `-admit` flags and the help table the manual is made from; `cmd/vif/browser.go`:
-  a page's `ClaimStore`.
+  a page's `PlaceStore`.
 
 Hosts:
 
-- `web/terminal.js` and `web/worker.js`: the tab's claims in `sessionStorage`, the
+- `web/terminal.js` and `web/worker.js`: the tab's places in `sessionStorage`, the
   launch arguments.
 - `android/game/game.go`, and `StartScreen.java` and `MainActivity.java` under
-  `android/app/src/main/java/com/lixen/vif`: the Android run, which keeps no claims
-  past its process yet.
+  `android/app/src/main/java/com/lixen/vif`: the Android run, whose places are in
+  the app's files.
 
 The router, `tool/vif-router`:
 

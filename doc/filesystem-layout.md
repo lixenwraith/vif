@@ -204,6 +204,7 @@ separate:
 | Session logs, snapshots, recorder files, runtime stderr capture, profiles and traces | `$XDG_STATE_HOME/vif/log/` | `-l=DIR`, `paths.log` |
 | Replay journals | `$XDG_STATE_HOME/vif/journal/` | `-j=DIR`, `paths.journal` |
 | Music recordings | `$XDG_STATE_HOME/vif/music/` | `-mw=DIR`, `paths.music` |
+| The places a run comes back to its sessions with, the key each is held under, for the user alone (mode 0600) | `$XDG_STATE_HOME/vif/places.json` | `[session] resume_after_restart = false` keeps none |
 
 On macOS and Windows the platform user-cache directory is the base. Only when no
 user location can be resolved does a stream fall back to `./vif/<stream>/` in the

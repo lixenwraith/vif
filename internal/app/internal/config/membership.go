@@ -10,7 +10,7 @@ import (
 
 // Membership is the session half of Config: the session this run hosts or joins and
 // the rules it opens one with, how the run is reached and relays for others, the bots
-// it seats and the claims it comes back with. It is all of Config the membership holds.
+// it seats and the keys it comes back with. It is all of Config the membership holds.
 type Membership struct {
 	// HostAddress is the address this run hosts a session on. An interactive run
 	// opens it once its clock runs, as :host does; a scripted, bot-driven or
@@ -73,14 +73,16 @@ type Membership struct {
 	// join the session the run is in, and a run in none opens one with no listener.
 	Bots []string
 
-	// ClaimStore keeps the claims this process comes back to its sessions with past
-	// its own life, which a page's reload needs; nil keeps them while it runs.
-	ClaimStore ClaimStore
+	// PlaceStore keeps the places this process comes back to its sessions with past
+	// its own life: a page's across a reload, a terminal's or a phone's across a
+	// restart or a crash; nil keeps them while it runs.
+	PlaceStore PlaceStore
 }
 
-// ClaimStore keeps a process's claims past the process: a page's, across a reload,
-// in the tab's own storage. Without one they last as long as the process does.
-type ClaimStore interface {
+// PlaceStore keeps a process's places, the keys it holds them under, past the
+// process: a page's in the tab's own storage, a terminal's in a file of the user's
+// state directory. Without one they last as long as the process does.
+type PlaceStore interface {
 	Load() ([]byte, error)
 	Store([]byte) error
 }
