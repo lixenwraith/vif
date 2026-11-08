@@ -30,7 +30,10 @@ type place struct {
 	Key    network.Key         `json:"key"`
 	Bot    bool                `json:"bot,omitempty"`
 	Record *event.CursorRecord `json:"record,omitempty"`
-	held   bool
+	// Pass is the admission the place's last seat gave it, shown at a door that
+	// names its session's first authority key (network.ChoosePass).
+	Pass *network.Signed `json:"pass,omitempty"`
+	held bool
 }
 
 // id is the place's key as the roster carries it.
@@ -79,6 +82,10 @@ func (k *PlaceKeeper) take(o network.SessionOffer, bot bool) *place {
 	for _, p := range k.places {
 		if p.Bot == bot && !p.held && p.id() == entry.Key {
 			p.held = true
+			if s := passFor(o, p.Key); s != nil {
+				p.Pass = s
+				k.storeLocked()
+			}
 			return p
 		}
 	}
@@ -86,16 +93,45 @@ func (k *PlaceKeeper) take(o network.SessionOffer, bot bool) *place {
 }
 
 // issue holds a new place under key, the one the dial proved for it, or a key made
-// here when it proved none this keeper holds.
-func (k *PlaceKeeper) issue(bot bool, key network.Key) *place {
+// here when it proved none this keeper holds; pass is the offer's for that key
+// (passFor), none for a key made here.
+func (k *PlaceKeeper) issue(bot bool, key network.Key, pass *network.Signed) *place {
 	if !key.Valid() {
-		key = network.NewKey()
+		key, pass = network.NewKey(), nil
 	}
-	p := &place{Key: key, Bot: bot, held: true}
+	p := &place{Key: key, Bot: bot, Pass: pass, held: true}
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.addLocked(p)
 	return p
+}
+
+// passes is what a dial of the kind shows beside its keys: the pass of each kept
+// place of the kind no run holds, for the door to pick from (network.ChoosePass).
+func (k *PlaceKeeper) passes(bot bool) []*network.Signed {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	var out []*network.Signed
+	for _, p := range k.places {
+		if p.Bot == bot && !p.held && p.Pass != nil {
+			out = append(out, p.Pass)
+		}
+	}
+	return out
+}
+
+// passFor is the pass an offer gives the place key holds: the offer's, when it
+// names that key and holds under the authority key the offer carries for its term.
+func passFor(o network.SessionOffer, key network.Key) *network.Signed {
+	if o.Pass == nil || !key.Valid() {
+		return nil
+	}
+	termKey := func(t network.AuthorityTerm) []byte { return network.TermKey(o.TermKeys, t) }
+	body, err := network.VerifyPass(o.Pass, termKey, time.Now()) // [wall] the pass's window
+	if err != nil || !slices.Equal(body.Key, key.Public()) {
+		return nil
+	}
+	return o.Pass
 }
 
 // carry is the place a bot's seat goes on under in the session its run opens next: a

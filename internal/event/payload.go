@@ -152,9 +152,11 @@ type ParticipantDepartedPayload struct {
 	// Dismissed removes the cursor for good, as the host's drop, a holder's seat drop
 	// and an expired or yielded Wraith do. Any other departure turns the cursor
 	// Wraith, to wait for the participant's return. Shed marks a dismissal the host
-	// made to keep its tick, which every participant and the dropped one are told.
+	// made to keep its tick, which every participant and the dropped one are told;
+	// Dropped the host's drop, whose key the session keeps out from then on.
 	Dismissed   bool   `toml:"dismissed"`
 	Shed        bool   `toml:"shed"`
+	Dropped     bool   `toml:"dropped"`
 	Participant uint32 `toml:"participant"`
 	Slot        uint8  `toml:"slot"`
 }

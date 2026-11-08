@@ -1093,3 +1093,39 @@ func TestOnlyTheParticipantThatStaysLateIsEvicted(t *testing.T) {
 		t.Fatalf("evicted %v, want only the late participant 2", host.world.dropped)
 	}
 }
+
+// TestASuccessorCarriesEveryTermsKey: an instance holds the authority key of each
+// term, the offer's then each record's; a record naming another key for a term it
+// lived through is refused, and one naming none for its own fills its author's in.
+func TestASuccessorCarriesEveryTermsKey(t *testing.T) {
+	t.Parallel()
+	guest := session(t, 3, [][2]int{{1, 2}, {1, 3}, {2, 3}})[2]
+	first := guest.u.TermKeys()
+	if len(first) != 1 || first[0] == "" {
+		t.Fatalf("an opened session holds its first term's key alone: %q", first)
+	}
+	rec := record(guest.u, network.FirstTerm+1, 2, 1)
+	rec.Chain = guest.u.Chain()
+	rec.TermKeys = []string{first[0] + "x", rosterKey(rec.Roster, 2)}
+	if err := guest.u.adopt(rec, 0); err == nil {
+		t.Fatal("a record naming another key for the first term was adopted")
+	}
+	rec.TermKeys = nil
+	if err := guest.u.adopt(rec, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := guest.u.TermKeys(); !slices.Equal(got, []string{first[0], rosterKey(rec.Roster, 2)}) {
+		t.Fatalf("the second term's key is its author's: %q", got)
+	}
+	next := record(guest.u, network.FirstTerm+2, 3, 2)
+	next.TermKeys = []string{first[0], rosterKey(rec.Roster, 2), rosterKey(rec.Roster, 3)}
+	if err := guest.u.adopt(next, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := guest.u.TermKeys(); !slices.Equal(got, next.TermKeys) {
+		t.Fatalf("the record's keys were not taken whole: %q", got)
+	}
+	if got := extendTermKeys([]string{"a"}, network.FirstTerm+2, "c"); !slices.Equal(got, []string{"a", "", "c"}) {
+		t.Fatalf("a skipped term is left empty: %q", got)
+	}
+}

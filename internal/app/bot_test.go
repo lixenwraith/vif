@@ -1111,6 +1111,7 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 	if botSlot == 0 || guestSlot == 0 {
 		t.Fatal("guest bot ownership absent from the host roster")
 	}
+	dropped := guest.membership.LocalKey()
 	guest.world.RunSafe(func() {
 		if err := guest.ctx.SessionCtl.DropPlayer(0); err == nil {
 			t.Error("guest dropped the host")
@@ -1136,6 +1137,13 @@ func TestHostDropsOneBotOrItsWholeHolderGroup(t *testing.T) {
 	}
 	if !guest.membership.Dismissed() {
 		t.Fatal("dropped guest did not receive dismissal")
+	}
+	// Its key stays out: a dial coming back under it is refused for good, where a
+	// fresh key is admitted, since the session name is a routing key and no identity.
+	cfg := network.DebugConfig(link.RolePeer, "")
+	cfg.Keys = []network.Key{dropped}
+	if _, _, err := network.DialSession(addr, cfg); !errors.Is(err, &network.Refusal{Code: network.RefusalDropped}) || network.RetryOf(err) != network.RetryNever {
+		t.Fatalf("the dropped key dialled again: %v", err)
 	}
 }
 
@@ -1607,4 +1615,47 @@ on_enter = [
 	if !slices.Equal(got, want) {
 		t.Fatalf("crossed %q, want %q", got, want)
 	}
+}
+
+// TestADroppedPersonPlaysOnAloneAndStaysOut: a person the host drops leaves the
+// session as :leave would, told why, rather than starting over, and the key it
+// held its place under is refused at the door for good, where a fresh key is not.
+func TestADroppedPersonPlaysOnAloneAndStaysOut(t *testing.T) {
+	addr := freeAddress(t)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{DefaultBotGraph}}}, DefaultBotGraph, nil)
+	waitForCursors(t, host, 2)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, DefaultBotGraph, nil)
+	waitForCursors(t, host, 3)
+	waitForCursors(t, guest, 3)
+	id, dropped := guest.membership.LocalParticipant(), guest.membership.LocalKey()
+	var slot int
+	host.world.RunSafe(func() {
+		for _, p := range host.ctx.SessionCtl.Participants() {
+			if c, _ := host.world.Components.Cursor.GetComponent(p.Entity); c.PeerID == id {
+				slot = int(p.Slot)
+			}
+		}
+	})
+	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose run a drop leaves playing
+	host.world.RunSafe(func() {
+		if err := host.ctx.SessionCtl.DropPlayer(slot); err != nil {
+			t.Fatal(err)
+		}
+	})
+	waitUntil(t, func() bool { return guest.membership.Leaving() || guest.membership.Dismissed() }, "the dropped guest to react")
+	if guest.membership.Dismissed() || !guest.membership.Dropped() {
+		t.Fatalf("a dropped person was dismissed (%v) rather than left playing (dropped %v)", guest.membership.Dismissed(), guest.membership.Dropped())
+	}
+	waitForCursors(t, host, 2)
+	cfg := network.DebugConfig(link.RolePeer, "")
+	cfg.Keys = []network.Key{dropped}
+	if _, _, err := network.DialSession(addr, cfg); !errors.Is(err, &network.Refusal{Code: network.RefusalDropped}) {
+		t.Fatalf("the dropped key dialled again: %v", err)
+	}
+	cfg.Keys = nil
+	pending, _, err := network.DialSession(addr, cfg)
+	if err != nil {
+		t.Fatalf("a fresh key was refused: %v", err)
+	}
+	_ = pending.Close()
 }

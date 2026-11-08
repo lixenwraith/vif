@@ -935,16 +935,16 @@ removing one; `:merge`/`:split` for whole sessions.
 
 ### Let an authority drop a participant
 
-- Priority: P2
-- Affected files: `internal/network`, `internal/app`, `internal/mode/commands.go`,
-  `tool/vif-router`
+- Priority: P3
+- Affected files: `tool/vif-router`
+- Guide: [Auth and session design §7.3](auth-session-design.md#73-session-passes)
 
-`:player drop <slot>` lets a host drop a player with its bots, or one bot, and the
-dropped person starts a new local game. What remains: a reason the dropped client
-prints, playing on alone as after `:leave` instead of starting over, and an
-operator route on the router, since a dedicated host has no console. Keeping a
-dropped player out is a separate decision: the session name is a routing key, not
-an identity.
+`:player drop <slot>` drops a player with its bots, or one bot, keeps the dropped
+keys out of the session at every door and tells the dropped person, who plays on
+alone as after `:leave`. What remains is an operator route on the router, since a
+dedicated host has no console, which the design's phase 6 brings with the rest of
+the operator's loopback routes; keeping a dropped *person* out, past the keys it
+held, takes the account that phase 5 brings.
 
 ### Keep a Wraith's stats in the session
 

@@ -116,6 +116,8 @@ func (s *stub) LocalParticipant() uint32 { return s.local }
 
 func (s *stub) LocalKey() network.Key { return s.key }
 
+func (s *stub) KeepOut() []string { return nil }
+
 func (s *stub) Seated() bool { return s.seated }
 
 func (s *stub) WorldRoster() []network.RosterEntry {

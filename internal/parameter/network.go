@@ -458,6 +458,10 @@ const (
 	PassLifetime     = 24 * time.Hour
 	AuthClockLeeway  = 30 * time.Second
 
+	// KeepOutKept bounds the keys and accounts a session keeps out, the oldest drop
+	// giving way: a list every offer and handoff record carries whole.
+	KeepOutKept = 256
+
 	// NetworkStreamLevel is the deflate level each link's stream runs at. Levels 1-6
 	// drop their history on any flushed block under 128 bytes, which is most bursts;
 	// 7 is the cheapest that keeps it, a third of level 1's bytes on recorded traffic.

@@ -917,3 +917,87 @@ func TestASelfSignedDoorIsJoinedAsItIs(t *testing.T) {
 		t.Fatal("a short fingerprint was accepted")
 	}
 }
+
+// TestADoorAdmitsThePassItsAuthorityIssued: a door names the session's first
+// authority key, the dial shows the pass it holds for that key alone, and the door's
+// Pass hook has it verified; a pass shown to a door that takes none, one forged, or
+// one over a key the dial did not prove turns the dial away for what it showed.
+func TestADoorAdmitsThePassItsAuthorityIssued(t *testing.T) {
+	authority, participant, stranger := NewKey(), NewKey(), NewKey()
+	now := time.Now()
+	issued, err := SignPass(authority, PassBody{Authority: authority.Public(), Key: participant.Public(), Kind: AdmitPlay, Term: FirstTerm}, now, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign := NewKey()
+	other, _ := SignPass(foreign, PassBody{Authority: foreign.Public(), Key: participant.Public(), Kind: AdmitPlay, Term: FirstTerm}, now, time.Hour)
+	offer := testOffer()
+	seen := make(chan Admission, 1)
+	check := func(shown *Signed, keys []string) (*PassBody, error) {
+		body, err := VerifyPass(shown, func(AuthorityTerm) []byte { return authority.Public() }, time.Now())
+		if err != nil {
+			return nil, &Refusal{Code: RefusalCredential, Reason: err.Error()}
+		}
+		if !slices.Contains(keys, EncodeKey(body.Key)) {
+			return nil, &Refusal{Code: RefusalCredential, Reason: "the pass names a key the dial did not prove"}
+		}
+		return &body, nil
+	}
+	assign := func(a Admission) (SessionOffer, error) {
+		seen <- a
+		return offer, nil
+	}
+	accept := HostAcceptor(Coordinator{Assign: assign, Authority: func() string { return authority.ID() }, Pass: check}, time.Second)
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = accept
+	host := link.NewSocketPort(&hostCfg.Config)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	for name, tt := range map[string]struct {
+		passes []*Signed
+		shown  bool
+	}{
+		"the pass for this authority": {[]*Signed{other, issued}, true},
+		"a pass for another":          {[]*Signed{other}, false},
+		"none":                        {nil, false},
+	} {
+		cfg := DebugConfig(link.RolePeer, "")
+		cfg.Keys = []Key{participant}
+		cfg.Passes = tt.passes
+		pending, _, err := DialSession(host.Addr().String(), cfg)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		a := <-seen
+		_ = pending.Close()
+		if (a.Pass != nil) != tt.shown || (a.Shown != nil) != tt.shown {
+			t.Fatalf("%s: the door saw a pass %v and the frame %v, want %v", name, a.Pass != nil, a.Shown != nil, tt.shown)
+		}
+		if tt.shown && !bytes.Equal(a.Pass.Key, participant.Public()) {
+			t.Fatalf("%s: the pass seen names another key", name)
+		}
+	}
+
+	const nonce = "a-fixed-challenge"
+	fixed := func() (string, error) { return nonce, nil }
+	withPass := HostAcceptor(Coordinator{Assign: assign, Nonce: fixed, Authority: func() string { return authority.ID() }, Pass: check}, time.Second)
+	noPass := HostAcceptor(Coordinator{Assign: assign, Nonce: fixed}, time.Second)
+	forged := &Signed{Body: issued.Body, Sig: slices.Clone(issued.Sig)}
+	forged.Sig[0] ^= 1
+	for name, tt := range map[string]struct {
+		accept func(net.Conn) (link.PeerID, error)
+		answer AuthRequest
+	}{
+		"a forged pass":                    {withPass, AuthRequest{Keys: []Proof{participant.Prove(nonce, nil)}, Pass: forged}},
+		"a pass over a key not proved":     {withPass, AuthRequest{Keys: []Proof{stranger.Prove(nonce, nil)}, Pass: issued}},
+		"a pass at a door that takes none": {noPass, AuthRequest{Keys: []Proof{participant.Prove(nonce, nil)}, Pass: issued}},
+	} {
+		conn := &scripted{in: bytes.NewReader(frames(MsgSessionRoute, []byte{}, MsgAuthRequest, tt.answer))}
+		if _, err := tt.accept(conn); !errors.Is(err, &Refusal{Code: RefusalCredential}) || len(seen) != 0 {
+			t.Fatalf("%s: %v, assigned %d", name, err, len(seen))
+		}
+	}
+}

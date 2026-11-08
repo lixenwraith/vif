@@ -3,6 +3,7 @@ package membership
 import (
 	"errors"
 	"fmt"
+	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"slices"
 
 	"github.com/lixenwraith/vif/internal/app/internal/corrector"
@@ -124,7 +125,7 @@ func (m *Membership) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCa
 // no handshake to prove a key in (JoinSession, HostSession); a dial's seat holds its
 // own (bindSeat) and a host its first roster entry's (ownKey).
 func (m *Membership) HoldKey(k network.Key) {
-	m.place.Store(m.places.issue(m.wiring.Holder != 0, k))
+	m.place.Store(m.places.issue(m.wiring.Holder != 0, k, nil))
 }
 
 // HostSession applies the same map and roster sequence after a guest accepts.
@@ -336,15 +337,24 @@ func (m *Membership) BindSessionHooks(r *engine.NetworkResource) {
 	r.OnDeparture = m.participantDeparted
 	// Replays and staging worlds apply roster changes without ending their viewer.
 	if _, live := r.Port.(engine.PeerDroppingPort); live {
-		r.OnDismissed = func(shed bool) {
+		r.OnDismissed = func(shed, dropped bool) {
 			m.shed.Store(shed)
-			m.dismissed.Store(true)
+			m.wasDropped.Store(dropped)
 			m.HaltSeats(false)
 			// The place is gone, and its key with it.
 			if p := m.place.Swap(nil); p != nil {
 				m.places.forget(p)
 			}
+			// A person the host dropped plays on alone, as after :leave; any other
+			// run ends with its session, and a dropped bot's holder is told.
+			if dropped && m.run.Mode() == config.ModePlay {
+				m.ctx.SetStatusMessage("Dropped by the host; playing on alone", parameter.StatusAlert)
+				m.leaving.Store(true)
+				return
+			}
+			m.dismissed.Store(true)
 		}
+		r.OnDropped = m.keepOutKey
 	}
 	// The correction queue takes bytes and nothing else: this runs inside a tick,
 	// and decoding or installing a correction here would do both under the lock the

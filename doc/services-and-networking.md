@@ -453,12 +453,13 @@ sessions, the fleet's router among them ([fleet
 §9](kubernetes-fleet.md#9-the-session-routes)); the session it reaches refuses a name
 that is not its own; and a port that takes peer links too tells a join from one by
 it, a peer link opening with `MsgConnect`. Once the dialer is admitted, the door
-asks it to prove its keys (`MsgAuthResponse`, 0x31: a nonce and the methods the door
-takes) and the dialer answers with its proofs (`MsgAuthRequest`, 0x30), a fresh key
-for the place it may be given and then the places it keeps, at most `PlacesKept`,
-before anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths)); a
-proof that fails is refused `RefusalCredential`, a door that takes no bare key
-`RefusalSignIn`. It is asked rather than sent with the route, so a front door that
+asks it to prove its keys (`MsgAuthResponse`, 0x31: a nonce, the methods the door
+takes and the session's first authority key) and the dialer answers with its proofs
+(`MsgAuthRequest`, 0x30), a fresh key for the place it may be given and then the
+places it keeps, at most `PlacesKept`, with the pass it holds for that authority key
+if any, before anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths));
+a proof or a pass that fails is refused `RefusalCredential`, a key the session keeps
+out `RefusalDropped`, a door that takes no bare key `RefusalSignIn`. It is asked rather than sent with the route, so a front door that
 refuses the route has read all the dialer sent and its refusal arrives whole, and so
 the nonce is the door's. 0x06, which carried claims, is retired.
 The coordinator then previews the session (`MsgJoinPreview`, 0x07): the offer a seat
@@ -495,7 +496,10 @@ epoch and `MsgStateSync` for one owner-authored cursor snapshot. Authority trave
 `MsgStateUnserved` (0x2B) as the answer a retention holder gives to a request it
 cannot produce pages for. `MsgAuthorityReport` (0x2C) and `MsgAuthorityHandoff`
 (0x2E) carry the succession, each signed by the participant it names as author and
-checked against the roster's key for it; 0x2D is retired rather than reused.
+checked against the roster's key for it; a record carries the authority key of every
+term and the keep-out list whole, as the offer does (`TermKeys`, `KeepOut`), so a
+successor's door verifies every pass the session issued; 0x2D is retired rather
+than reused.
 `MsgPeerList` (0x20) is the address map and `MsgConnect`/`MsgAck` (0x02/0x04) open
 a peer link ([Multiplayer](multi-player.md) §5.3): a hello with the dialer's nonce,
 a welcome with the acceptor's proof over it and a nonce of its own, the dialer's
@@ -531,9 +535,7 @@ length, a fixed array whole, a nested struct inline. A receiver refuses a body t
 encoder could not have written: an event outside the registry, a domain or flag
 outside the enum, a count or length past the bytes, a payload with bytes its codec
 does not read. Representative complete-frame budgets are pinned by
-`TestWireEncodingBudget`. Only the
-authentication codes 0x30 and 0x31 are reserved placeholders, which nothing sends
-and `NetworkSystem` counts as drops. Raw participant input has no code: 0x10 stays
+`TestWireEncodingBudget`. Raw participant input has no code: 0x10 stays
 reserved, since a peer sends the
 resolved D-3 artifact, never the keystroke that produced it.
 

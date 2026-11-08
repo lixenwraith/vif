@@ -281,6 +281,12 @@ comment now states, and link that instead.
   `RosterEntry` is compared with `slices.Equal` (`SameRoster`), a payload field is
   TOML a scenario could name, and the generated capture codec has string and slice
   kinds and no bytes kind. Decode at the boundary that verifies.
+- A door that takes a pass names the session's first authority key, never its
+  name: names differ along a route (the router rewrites a published door's; a
+  relay's `SessionName` is the route it dialled), keys do not. Match passes by key.
+- The term keys and the keep-out list are membership state, carried whole by the
+  offer and the handoff record and fed by the departure crossing, not a captured
+  resource: every door holds them with no snapshot schema or codec change.
 
 ## Position
 

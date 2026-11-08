@@ -82,6 +82,8 @@ func (m *Membership) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) 
 		Report:      m.noteJoinerReport,
 		Prepared:    m.showJoinerPrepared,
 		Name:        m.cfg.SessionName,
+		Authority:   m.firstTermKey,
+		Pass:        m.checkPass,
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)
@@ -393,6 +395,7 @@ func joinNetConfig(cfg config.Membership, wire Wiring) *network.Config {
 	netCfg.Dial = wire.Relay
 	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
 	netCfg.Keys = wire.Places.keys(wire.Holder != 0)
+	netCfg.Passes = wire.Places.passes(wire.Holder != 0)
 	netCfg.TLS = cfg.Trust
 	netCfg.ConnectPeer = network.PeerDialer(netCfg.Identity, wire.Links, netCfg.ConnectTimeout)
 	return netCfg
@@ -439,6 +442,7 @@ func (m *Membership) TakeDial(d *JoinDial) error {
 	pending, offer := d.pending, d.offer
 	m.pendingJoin = pending
 	m.sessionOffer = offer
+	m.keepOut = slices.Clone(offer.KeepOut)
 	// Identity now, world and roster at the start gate: a mismatched joiner must be
 	// refused before the host spends a seat or the rest of the lobby on it. The
 	// position is deliberately not checked — the gate carries the host's world, so
@@ -559,12 +563,13 @@ func (m *Membership) bindSeat(pending *network.PendingJoin, offer network.Sessio
 		return err
 	}
 	if p == nil {
-		p = m.places.issue(m.wiring.Holder != 0, pending.Key())
+		p = m.places.issue(m.wiring.Holder != 0, pending.Key(), passFor(offer, pending.Key()))
 	}
 	// The latch reads it when the first tick opens, as it would have read it from New.
 	m.world.RunSafe(func() { m.world.Resources.Network.ParticipantID = uint32(offer.Assigned) })
 	m.sessionMu.Lock()
 	m.pendingJoin, m.sessionOffer = pending, offer
+	m.adoptKeepOutLocked(offer.KeepOut)
 	m.sessionMu.Unlock()
 	m.place.Store(p)
 	if err := pending.Complete(nil, m.joinerReport()); err != nil {
@@ -616,6 +621,9 @@ func (m *Membership) previewParticipant(a network.Admission) (network.SessionOff
 	if err := m.refusedLocked(); err != nil {
 		return network.SessionOffer{}, err
 	}
+	if m.keptOutLocked(a.Keys()) {
+		return network.SessionOffer{}, errDropped
+	}
 	// Counted as the seat counts it, the coordinator's own entry among them, with no
 	// roster opened for a dial that may never seat (openRosterLocked).
 	if max(len(m.sessionRoster), 1) > m.SessionCapacity() && !m.holdsPlaceLocked(a.Keys()) && !m.mayYieldLocked() {
@@ -629,7 +637,7 @@ func (m *Membership) previewParticipant(a network.Admission) (network.SessionOff
 // connection: the roster is the lobby so far, and the roster a participant actually
 // builds from arrives later, at the start gate.
 func (m *Membership) assignParticipant(a network.Admission) (network.SessionOffer, error) {
-	o, err := m.assignFor(m.JoinAnchor(), 0, a.Keys())
+	o, err := m.assignFor(m.JoinAnchor(), 0, a.Keys(), a.Pass)
 	m.closeStaleLink(err, m.SessionTransport())
 	return o, err
 }
@@ -664,11 +672,14 @@ func (m *Membership) closeStaleLink(err error, port engine.NetworkPort) {
 // recorded now because the bot never reports to this instance. A key among those
 // proved takes back the place its Wraith keeps, a full session's too; the first is
 // the one a new place is held under. Caller must not hold sessionMu.
-func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys []string) (network.SessionOffer, error) {
+func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys []string, shown *network.PassBody) (network.SessionOffer, error) {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
 	if err := m.refusedLocked(); err != nil {
 		return network.SessionOffer{}, err
+	}
+	if m.keptOutLocked(keys) {
+		return network.SessionOffer{}, errDropped
 	}
 
 	limit := m.SessionCapacity() + 1
@@ -684,7 +695,9 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys
 			return network.SessionOffer{}, err
 		}
 		m.sessionOffer = m.offerLocked(anchor, entry.ID)
-		return m.sessionOffer, m.sessionOffer.Validate()
+		offer := m.sessionOffer
+		offer.Pass = m.issuePassLocked(entry, shown)
+		return offer, offer.Validate()
 	}
 	if len(m.sessionRoster) >= limit {
 		if m.yieldLocked() {
@@ -701,7 +714,124 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys
 	m.sessionRoster = append(m.sessionRoster, assigned)
 
 	m.sessionOffer = m.offerLocked(anchor, assigned.ID)
-	return m.sessionOffer, m.sessionOffer.Validate()
+	offer := m.sessionOffer
+	offer.Pass = m.issuePassLocked(assigned, shown)
+	return offer, offer.Validate()
+}
+
+// errDropped refuses a dial over a key the host dropped, and every pass over one.
+var errDropped = &network.Refusal{Code: network.RefusalDropped, Reason: "the host dropped this player from the session"}
+
+// keptOutLocked reports a key the session keeps out among those a dial proved.
+// Caller holds sessionMu.
+func (m *Membership) keptOutLocked(keys []string) bool {
+	return slices.ContainsFunc(keys, func(k string) bool { return k != "" && slices.Contains(m.keepOut, k) })
+}
+
+// keepOutKey keeps one more key out, the host's drop as its departure applies here
+// (NetworkResource.OnDropped); past the bound the oldest gives way.
+func (m *Membership) keepOutKey(key string) {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	m.keepOut = addKeepOut(m.keepOut, key)
+}
+
+// adoptKeepOutLocked takes the list an offer or a record carries, keeping what this
+// run saw dropped that the list lacks. Caller holds sessionMu.
+func (m *Membership) adoptKeepOutLocked(list []string) {
+	kept := slices.Clone(list)
+	for _, k := range m.keepOut {
+		kept = addKeepOut(kept, k)
+	}
+	m.keepOut = kept
+}
+
+// addKeepOut is list with key once, the oldest giving way past parameter.KeepOutKept.
+func addKeepOut(list []string, key string) []string {
+	if key == "" || slices.Contains(list, key) {
+		return list
+	}
+	list = append(list, key)
+	if n := len(list) - parameter.KeepOutKept; n > 0 {
+		list = slices.Delete(list, 0, n)
+	}
+	return list
+}
+
+// termKeysLocked is the authority key of each term since the first, as the session
+// carries them; before its first offer, the one this run opens it under. Caller
+// holds sessionMu.
+func (m *Membership) termKeysLocked() []string {
+	if m.authority != nil {
+		if keys := m.authority.TermKeys(); len(keys) != 0 {
+			return keys
+		}
+	}
+	host := m.authorityID()
+	if i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.ID == host }); i >= 0 && m.sessionRoster[i].Key != "" {
+		return []string{m.sessionRoster[i].Key}
+	}
+	return nil
+}
+
+// firstTermKey is the session's identity a pass names, its first authority key as
+// the roster carries it (Coordinator.Authority); empty before a session has one,
+// which is a door that takes no pass.
+func (m *Membership) firstTermKey() string {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	if keys := m.termKeysLocked(); len(keys) != 0 {
+		return keys[0]
+	}
+	return ""
+}
+
+// checkPass is the door's answer to a pass a dial showed (Coordinator.Pass): good
+// under the key of the term it names, this session's, over a key the dial proved
+// and not kept out; or the refusal, which says no more than the dial showed.
+func (m *Membership) checkPass(shown *network.Signed, keys []string) (*network.PassBody, error) {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	termKeys := m.termKeysLocked()
+	termKey := func(t network.AuthorityTerm) []byte { return network.TermKey(termKeys, t) }
+	body, err := network.VerifyPass(shown, termKey, time.Now()) // [wall] the pass's window
+	if err != nil {
+		return nil, &network.Refusal{Code: network.RefusalCredential, Reason: "the pass shown was refused: " + err.Error()}
+	}
+	key := network.EncodeKey(body.Key)
+	switch {
+	case len(termKeys) == 0 || network.EncodeKey(body.Authority) != termKeys[0]:
+		return nil, &network.Refusal{Code: network.RefusalCredential, Reason: "the pass shown is another session's"}
+	case !slices.Contains(keys, key):
+		return nil, &network.Refusal{Code: network.RefusalCredential, Reason: "the pass shown names a key the dial did not prove"}
+	case slices.Contains(m.keepOut, key) || body.Account != "" && slices.Contains(m.keepOut, "acct:"+body.Account):
+		return nil, errDropped
+	}
+	return &body, nil
+}
+
+// issuePassLocked is the pass the seat gives the dial for entry's place, signed
+// under this term by the key this run holds; none when the dial showed one for it
+// still fresh (Renewable), or when this run has nothing to sign with. Caller holds
+// sessionMu.
+func (m *Membership) issuePassLocked(entry network.RosterEntry, shown *network.PassBody) *network.Signed {
+	termKeys := m.termKeysLocked()
+	term := max(m.authorityTerm(), network.FirstTerm)
+	now := time.Now() // [wall] the pass's window
+	switch {
+	case entry.Key == "" || len(termKeys) == 0:
+		return nil
+	case shown != nil && shown.Term == term && network.EncodeKey(shown.Key) == entry.Key && !shown.Renewable(now):
+		return nil
+	}
+	body := network.PassBody{Session: m.cfg.SessionName, Authority: network.DecodeKey(termKeys[0]),
+		Key: network.DecodeKey(entry.Key), Kind: network.AdmitPlay, Term: term}
+	s, err := network.SignPass(m.LocalKey(), body, now, 0)
+	if err != nil {
+		m.log.Warn("session", "msg", "pass not issued", "peer", uint64(entry.ID), "error", err.Error())
+		return nil
+	}
+	return s
 }
 
 // refusedLocked is why this session takes no dial now, whoever dials: what a preview
@@ -821,7 +951,7 @@ func (m *Membership) openRosterLocked() {
 func (m *Membership) ownKey() string {
 	p := m.place.Load()
 	if p == nil {
-		p = m.places.issue(m.wiring.Holder != 0, network.Key{})
+		p = m.places.issue(m.wiring.Holder != 0, network.Key{}, nil)
 		m.place.Store(p)
 	}
 	return p.id()
@@ -1035,8 +1165,11 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		Assigned: assigned,
 		Term:     term,
 		Roster:   slices.Clone(m.sessionRoster),
-		// A joiner adopts the chain whole: candidate list and address book in one.
+		// A joiner adopts the chain whole: candidate list and address book in one,
+		// and the term keys and keep-out list with it, as a successor's doors need.
 		Chain:          m.sessionChain(),
+		TermKeys:       m.termKeysLocked(),
+		KeepOut:        slices.Clone(m.keepOut),
 		FixedAuthority: m.cfg.FixedAuthority,
 		Players:        m.playersSet(),
 		// Derived from the anchor this offer carries rather than read again, so
@@ -1250,6 +1383,7 @@ func (m *Membership) StartJoinSession(signals <-chan os.Signal) error {
 		return err
 	}
 	m.sessionOffer = final
+	m.keepOut = slices.Clone(final.KeepOut)
 	if !final.CarriesSnapshot() {
 		return fmt.Errorf("join start gate carries no capture; host is running an older build")
 	}

@@ -35,6 +35,9 @@ type Instance interface {
 	LocalParticipant() uint32
 	LocalKey() network.Key
 	Seated() bool
+	// KeepOut is the keys and accounts the session keeps out, as its doors hold
+	// them, which the record this instance authors carries to its successors.
+	KeepOut() []string
 
 	// WorldRoster is the roster as the cursors hold it: the same list on every
 	// instance, because arrivals and departures are barrier-bound crossings. Empty

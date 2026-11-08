@@ -465,7 +465,7 @@ func TestDismissalCannotAnnounceClosingLinksAsDepartures(t *testing.T) {
 	w.Resources.Network = engine.NewNetworkResource(guest)
 	w.RunSafe(w.LatchSession)
 	dismissed, lost := false, false
-	w.Resources.Network.OnDismissed = func(bool) { dismissed = true }
+	w.Resources.Network.OnDismissed = func(bool, bool) { dismissed = true }
 	w.Resources.Network.OnPeerLost = func(uint32) bool { lost = true; return false }
 	net := ready(NewNetworkSystem(w)).(*NetworkSystem)
 	net.receiveDeparture(3, mustJSON(t, event.ParticipantDepartedPayload{Participant: 1, Slot: 0}))

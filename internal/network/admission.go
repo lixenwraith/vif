@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -76,20 +77,23 @@ const (
 )
 
 // AuthResponse is the MsgAuthResponse body: the door's question, the nonce every
-// proof of this dial signs and the methods it takes; then a SCRAM step; then the
-// refusal, when the dial is turned away for what it showed.
+// proof of this dial signs and the methods it takes, with the session's first
+// authority key a pass must name, so the dialer shows the pass it holds for this
+// session and no other, whatever name the route gave it; then a SCRAM step; then
+// the refusal, when the dial is turned away for what it showed.
 type AuthResponse struct {
-	Methods []string        `json:"methods,omitempty"`
-	Nonce   string          `json:"nonce,omitempty"`
-	Scram   json.RawMessage `json:"scram,omitempty"`
+	Methods   []string        `json:"methods,omitempty"`
+	Nonce     string          `json:"nonce,omitempty"`
+	Authority string          `json:"authority,omitempty"`
+	Scram     json.RawMessage `json:"scram,omitempty"`
 	refusalField
 }
 
 // AuthRequest is the MsgAuthRequest body: the dialer's answer. Keys are the
 // participant keys it proves over the door's nonce, the first its own for a new
-// place and the rest the places it may come back to; the door seats it in the place
-// one of them holds. Pass or Ticket admits a key; neither does at an open door.
-// SignIn is a sign-in token the router alone reads, and strips, on its TLS front door.
+// place, the rest the places it may come back to, one of which the door seats it in.
+// Pass is the one it holds for the session the question named (ChoosePass); it or
+// Ticket admits a key, neither at an open door. SignIn the router reads and strips.
 type AuthRequest struct {
 	Keys   []Proof         `json:"keys,omitempty"`
 	Pass   *Signed         `json:"pass,omitempty"`
@@ -345,6 +349,46 @@ func VerifyPass(s *Signed, termKey func(AuthorityTerm) []byte, now time.Time) (P
 // Renewable reports a pass past half its life, which a redial takes a fresh one for.
 func (b PassBody) Renewable(now time.Time) bool {
 	return now.Unix()-b.Issued >= (b.Expires-b.Issued)/2
+}
+
+// PeekPass reads a pass's body without checking its signature: what a dialer picks
+// a pass by, and a keeper records one under. Whether it is good is the door's to say.
+func PeekPass(s *Signed) (PassBody, bool) {
+	var body PassBody
+	if s == nil || len(s.Body) == 0 || len(s.Body) > maxSignedBody || json.Unmarshal(s.Body, &body) != nil {
+		return PassBody{}, false
+	}
+	return body, body.Term >= FirstTerm && ValidPublicKey(body.Key) && ValidPublicKey(body.Authority)
+}
+
+// ChoosePass is the pass a dial shows a door that named its first authority key:
+// the first held that names it, is within its window and is over a key the dial
+// proves. Nil shows none, which an open door admits all the same.
+func ChoosePass(passes []*Signed, authority string, keys []Key, now time.Time) *Signed {
+	if authority == "" {
+		return nil
+	}
+	for _, s := range passes {
+		body, ok := PeekPass(s)
+		if !ok || EncodeKey(body.Authority) != authority || checkToken(body.Issued, body.Expires, now) != nil {
+			continue
+		}
+		if slices.ContainsFunc(keys, func(k Key) bool { return k.Valid() && slices.Equal(k.Public(), body.Key) }) {
+			return s
+		}
+	}
+	return nil
+}
+
+// TermKey is the authority key of a term among the keys a session carries, the
+// first term's first (SessionOffer.TermKeys); nil for a term they do not reach or
+// one no authority held, which a pass of that term is refused against.
+func TermKey(keys []string, term AuthorityTerm) []byte {
+	i := int(term - FirstTerm)
+	if term < FirstTerm || i >= len(keys) {
+		return nil
+	}
+	return DecodeKey(keys[i])
 }
 
 // TicketBody is an admission ticket: the router's statement that Subject may enter
