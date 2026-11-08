@@ -75,9 +75,11 @@ type SessionOffer struct {
 	// signed by the authority under Term; none when the dial showed one still fresh.
 	Pass *Signed `json:"pass,omitempty"`
 
-	// Gated says the session's doors take a passphrase or a pass, never a bare key,
-	// so a door that holds no credential, a relay's, admits a pass alone.
-	Gated bool `json:"gated,omitempty"`
+	// Gated says the session's doors take a passphrase or a pass, never a bare key;
+	// Door is the passphrase's verifier (DoorVerifier), which a relay's and a
+	// successor's doors serve the exchange from. Gated with no Door admits a pass alone.
+	Gated bool          `json:"gated,omitempty"`
+	Door  *DoorVerifier `json:"door,omitempty"`
 
 	// Relay is the participant on the far end of the joiner's stream when that is not
 	// the host: the holder a bot joined through. Zero on a dial to the coordinator.
@@ -323,6 +325,10 @@ type Coordinator struct {
 	Passphrase *PassphraseDoor
 	Gated      func() bool
 	Binding    []byte
+
+	// Ticket verifies the site's ticket a dial carried, for a fleet pod's doors,
+	// which then take no bare key (TicketGate.Admit); nil takes none.
+	Ticket func(shown *Signed, keys []string) (*TicketBody, error)
 
 	// PressWindow is the ready period a prepared dialer has to seat in; zero is
 	// parameter.NetworkJoinPressWindow.
@@ -616,8 +622,10 @@ type Admission struct {
 	Proofs []Proof
 	// Shown is the pass the dial showed, for a relay to carry on, and Pass its body
 	// once the door's Pass hook verified it; a dial that showed none has nil for both.
-	Shown *Signed
-	Pass  *PassBody
+	// Ticket is the router's ticket the dial carried, verified; nil without one.
+	Shown  *Signed
+	Pass   *PassBody
+	Ticket *TicketBody
 }
 
 // Keys is the roster form of the keys proved, in the dial's order.
@@ -647,13 +655,17 @@ func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admissio
 		}
 	}
 	// What the door takes: a bare key where it is open, the exchange where it holds
-	// the passphrase, a pass alone where it holds none for a gated session.
-	open := c.Passphrase == nil && (c.Gated == nil || !c.Gated())
+	// the passphrase, the site's ticket on a fleet pod, a pass alone where it holds
+	// neither for a gated session.
+	open := c.Passphrase == nil && c.Ticket == nil && (c.Gated == nil || !c.Gated())
 	question := AuthResponse{Nonce: nonce}
-	switch {
-	case c.Passphrase != nil:
-		question.Methods = []string{MethodScram}
-	case open:
+	if c.Passphrase != nil {
+		question.Methods = append(question.Methods, MethodScram)
+	}
+	if c.Ticket != nil {
+		question.Methods = append(question.Methods, MethodTicket)
+	}
+	if open {
 		question.Methods = []string{MethodKey}
 	}
 	if c.Authority != nil {
@@ -697,16 +709,20 @@ func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admissio
 	if !open && adm.Pass == nil {
 		var err error
 		switch {
-		case c.Passphrase == nil:
-			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes a pass alone; the host's door takes the passphrase"}
-		case len(ans.Scram) == 0:
-			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes a passphrase, and the dial showed none"}
-		default:
+		case c.Ticket != nil && ans.Ticket != nil:
+			adm.Ticket, err = c.Ticket(ans.Ticket, keys)
+		case c.Passphrase != nil && len(ans.Scram) != 0:
 			var binding []byte
 			if tlsOf(conn) != nil {
 				binding = c.Binding
 			}
 			err = c.Passphrase.serve(conn, ans.Scram, binding)
+		case c.Ticket != nil:
+			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes the site's ticket, and the dial came with none"}
+		case c.Passphrase != nil:
+			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes a passphrase, and the dial showed none"}
+		default:
+			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes a pass alone; the host's door takes the passphrase"}
 		}
 		if err != nil {
 			RefuseJoin(conn, err, timeout)
@@ -740,8 +756,11 @@ func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link
 	if slices.Contains(ask.Methods, MethodPass) {
 		answer.Pass = ChoosePass(base.Passes, ask.Authority, base.Keys, time.Now()) // [wall] the pass's window
 	}
+	// A door that takes the site's ticket is answered with the keys alone: the
+	// router between adds the ticket, and a dial that reached it by another way is
+	// refused there.
 	var client *auth.ScramClient
-	if !slices.Contains(ask.Methods, MethodKey) && answer.Pass == nil {
+	if !slices.Contains(ask.Methods, MethodKey) && !slices.Contains(ask.Methods, MethodTicket) && answer.Pass == nil {
 		switch {
 		case !slices.Contains(ask.Methods, MethodScram):
 			return nil, &Refusal{Code: RefusalSignIn, Reason: "this door takes a pass alone; the host's door takes the passphrase"}

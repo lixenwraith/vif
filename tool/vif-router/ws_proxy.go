@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lixenwraith/vif/pkg/websocket"
 )
@@ -98,12 +97,11 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 		s.log.Warn("session socket upgrade failed", "session", id, "error", err)
 		return
 	}
-	upstream, release, at := s.ws.route.place(client, s.clientAddr(r))
+	from := s.clientAddr(r)
+	upstream, release, at := s.ws.route.place(client, from)
 	if upstream == nil {
 		return
 	}
 	defer release()
-	started := time.Now()
-	in, out := splice(client, upstream)
-	s.ws.route.closed(at, in, out, started)
+	s.ws.route.carry(client, upstream, at, from)
 }

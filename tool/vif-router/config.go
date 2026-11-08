@@ -60,14 +60,20 @@ func checkSize(size string) error {
 var sessionLogLevels = []string{"trace", "debug", "info", "warn", "error"}
 
 type runtimeConfig struct {
-	Listen         string
-	RouteListen    string
-	KubeAPI        string
-	KubeCAFile     string
-	KubeTokenFile  string
-	LogStreamURL   string
-	RequestTimeout time.Duration
-	Allocator      allocatorConfig
+	Listen      string
+	RouteListen string
+	// RouteProxyProtocol reads an edge's PROXY header before each dial on the front
+	// door; RouteCert and RouteKey end TLS there, for a deployment with no edge to;
+	// TicketKeyFile holds the seed admission tickets are signed with.
+	RouteProxyProtocol  bool
+	RouteCert, RouteKey string
+	TicketKeyFile       string
+	KubeAPI             string
+	KubeCAFile          string
+	KubeTokenFile       string
+	LogStreamURL        string
+	RequestTimeout      time.Duration
+	Allocator           allocatorConfig
 }
 
 func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
@@ -82,6 +88,15 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&cfg.Listen, "listen", ":9080", "the HTTP API and probes")
 	set.StringVar(&cfg.RouteListen, "route-listen", ":7777",
 		"native front door: one TCP port for every session, whose port join_target names")
+	set.BoolVar(&cfg.RouteProxyProtocol, "route-proxy-protocol", false,
+		"the front door is reached through an edge that writes a PROXY protocol header, version 1 or 2, before each dial; a dial without one is closed")
+	set.StringVar(&cfg.RouteCert, "route-cert", "",
+		"certificate chain the front door ends TLS with, a PEM file; empty ends none, which is the edge's to end")
+	set.StringVar(&cfg.RouteKey, "route-key", "", "the certificate's private key, a PEM file; default the -route-cert file")
+	set.BoolVar(&cfg.Allocator.RouteSecure, "route-secure", false,
+		"the front door is reached over TLS, ended at the edge or by -route-cert, so the links players are handed read vifs://")
+	set.StringVar(&cfg.TicketKeyFile, "ticket-key", "",
+		"file holding the Ed25519 seed admission tickets are signed with (vif-router keygen writes one); empty mints none, and sessions run open")
 	set.StringVar(&cfg.KubeAPI, "kube-api", "https://127.0.0.1:6443", "Kubernetes API URL")
 	set.StringVar(&cfg.KubeCAFile, "kube-ca", "/etc/vif-router/server-ca.crt", "Kubernetes CA certificate")
 	set.StringVar(&cfg.KubeTokenFile, "kube-token", "/etc/vif-router/token", "rotated ServiceAccount token file")
@@ -135,6 +150,9 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	cfg.Allocator.Workload.FirstJoin = firstJoin
 	cfg.Allocator.Workload.Empty = empty
 	cfg.Allocator.Workload.Drain = drain
+	if cfg.RouteCert != "" {
+		cfg.Allocator.RouteSecure = true
+	}
 	if cfg.Allocator.PlayersMax == 0 {
 		cfg.Allocator.PlayersMax = cfg.Allocator.Workload.Players
 	}
@@ -178,6 +196,9 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if port := cfg.Allocator.RoutePort; port < 1 || port > 65535 {
 		return fmt.Errorf("-route-listen %q must name a port, e.g. :7777", cfg.RouteListen)
+	}
+	if cfg.RouteKey != "" && cfg.RouteCert == "" {
+		return fmt.Errorf("-route-key names a key for no -route-cert")
 	}
 	if cfg.Allocator.Tunnels < 0 || cfg.Allocator.Tunnels > 64 {
 		return fmt.Errorf("-tunnels %d must be 0 to 64", cfg.Allocator.Tunnels)

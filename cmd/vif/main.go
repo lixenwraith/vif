@@ -185,11 +185,22 @@ func main() {
 		sessionTrust, sessionErr = link.TrustTLS(flagSession.ca)
 	}
 	if sessionErr == nil && flagSession.passphrase == "new" {
-		flagSession.passphrase = network.GeneratePassphrase()
-		fmt.Printf("-passphrase: the doors take %s; :session shows it, and a joiner gives it with -passphrase or :join <target> <passphrase>\n", flagSession.passphrase)
+		if flagSession.join != "" {
+			sessionErr = errors.New("-passphrase new makes a host's passphrase; a joiner gives the host's")
+		} else {
+			flagSession.passphrase = network.GeneratePassphrase()
+			fmt.Printf("-passphrase: the doors take %s; :session shows it, and a joiner gives it with -passphrase or :join <target> <passphrase>\n", flagSession.passphrase)
+		}
 	}
 	if sessionErr == nil && flagSession.passphrase != "" {
 		sessionErr = network.CheckPassphrase(flagSession.passphrase)
+	}
+	if sessionErr == nil && flagSession.admit != "" && flagSession.admit != "open" {
+		if spec, ok := strings.CutPrefix(flagSession.admit, "ticket:"); ok {
+			sessionTickets, sessionErr = network.ParseTicketKeys(spec)
+		} else {
+			sessionErr = fmt.Errorf("-admit %q: open, or ticket:<key>", flagSession.admit)
+		}
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
@@ -403,6 +414,7 @@ var (
 	pageSettings                      func(*paths.Settings) (paths.SettingsStore, paths.UnknownKeys)
 	pagePlaces                        app.PlaceStore
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
+	sessionTickets                    [][]byte    // the router's public keys -admit ticket names
 )
 
 // buildConfig translates parsed flags into the runtime configuration
@@ -436,6 +448,7 @@ func buildConfig() app.Config {
 	cfg.Membership.RelayAddress = relayTarget(flagSession.relay)
 	cfg.Membership.TLS, cfg.Membership.Trust = sessionTLS, sessionTrust
 	cfg.Membership.Passphrase = flagSession.passphrase
+	cfg.Membership.TicketKeys = sessionTickets
 
 	if flagSession.serve != "" {
 		cfg.Membership.HostAddress = doorList(flagSession.serve)
@@ -585,6 +598,7 @@ type sessionFlags struct {
 	selfsign    bool
 	ca          string
 	passphrase  string
+	admit       string
 
 	// slow is the eviction policy a host applies to a participant that cannot keep
 	// up, and shed what it drops when it cannot keep its own tick; see
@@ -621,6 +635,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.BoolVar(&f.selfsign, "selfsign", false, "Serve wss:// with a certificate made for this run, in place of -cert: encrypted, and taken as it is by a terminal that joins")
 	fs.StringVar(&f.ca, "ca", "", "What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or sha256:<hex> pinning the certificate itself")
 	fs.StringVar(&f.passphrase, "passphrase", "", "The passphrase this run's doors take (Argon2-SCRAM), or new for one made and printed; with -join, the one shown to a door that asks")
+	fs.StringVar(&f.admit, "admit", "", "What a -host or -serve door admits beside a pass: open (default), or ticket:<key>[,<key>], the site's tickets under the router's public key(s) and no bare key")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.DurationVar(&f.firstJoin, "first-join", 0,

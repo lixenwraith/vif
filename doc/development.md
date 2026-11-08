@@ -165,6 +165,7 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 | `-shed-window <dur>` | A host's shedding when it cannot keep its own tick: past a tenth of the ticks it owed dropped over the window, it dismisses its newest bot, then its newest player, one a window. `0` never sheds. See [Multiplayer](multi-player.md) §3.5. |
 | `-listen <addr>`, `-no-advertise` | With `-join`, the address the other participants reach this one at in a migrate session, or none at all, which keeps it a leaf, never a candidate ([Multiplayer](multi-player.md) §5.3). |
 | `-passphrase <phrase\|new>` | With `-host` or `-serve`, the passphrase the doors take through an Argon2-SCRAM exchange, or `new` for one made and printed; with `-join`, the one shown to a door that asks. Eight bytes at least; `:session` shows a host's ([Multiplayer](multi-player.md) §5.4). |
+| `-admit <open\|ticket:key>` | What a `-host` or `-serve` door admits beside a pass: `open`, any key; or the site's tickets under the router's public key(s), comma-separated, and no bare key, which a fleet pod's Job sets ([fleet design §4](kubernetes-fleet.md#4-security-posture)). |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first person's terminal sizes the session, or a bot's 120x40 when the server seats bots of its own. |
 | `-probe <addr>` | Serve `/health` and `/metrics`; `-serve` only. |
 | `-first-join <dur>` | End a `-serve` run if no guest has connected within `dur`; zero waits forever. |

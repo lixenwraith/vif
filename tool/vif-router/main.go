@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,13 +11,13 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 func main() {
@@ -28,9 +29,31 @@ func main() {
 }
 
 func run(args []string, logger *slog.Logger) error {
+	// keygen writes the seed -ticket-key names, once, for the updater to install.
+	if len(args) == 1 && args[0] == "keygen" {
+		fmt.Println(network.NewKey().Seed())
+		return nil
+	}
 	cfg, err := parseConfig(args, os.Stderr)
 	if err != nil {
 		return err
+	}
+	var ticket network.Key
+	if cfg.TicketKeyFile != "" {
+		text, err := os.ReadFile(cfg.TicketKeyFile)
+		if err != nil {
+			return fmt.Errorf("ticket key: %w", err)
+		}
+		if ticket, err = network.ParseKeySeed(string(text)); err != nil {
+			return fmt.Errorf("ticket key %s: %w", cfg.TicketKeyFile, err)
+		}
+		cfg.Allocator.Workload.TicketKey = ticket.ID()
+	}
+	var routeTLS *tls.Config
+	if cfg.RouteCert != "" {
+		if routeTLS, err = link.LoadTLS(cfg.RouteCert, cfg.RouteKey); err != nil {
+			return err
+		}
 	}
 	kube, err := newKubeClient(
 		cfg.KubeAPI,
@@ -67,12 +90,11 @@ func run(args []string, logger *slog.Logger) error {
 	// address, by the name the router gives them, as a pod is.
 	var tunnels *network.TunnelHub
 	if cfg.Allocator.Tunnels > 0 {
-		tunnels = network.NewTunnelHub(func(id string) string {
-			return "vif://" + net.JoinHostPort(cfg.Allocator.JoinHost, strconv.Itoa(cfg.Allocator.RoutePort)) + "/" + id
-		}, cfg.Allocator.Tunnels, cfg.Allocator.DoorsPerAddress)
+		tunnels = network.NewTunnelHub(cfg.Allocator.joinTarget, cfg.Allocator.Tunnels, cfg.Allocator.DoorsPerAddress)
 	}
 	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator, held, joins)
 	handler.routeDoors(tunnels)
+	handler.admitWith(ticket)
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           handler,
@@ -106,11 +128,13 @@ func run(args []string, logger *slog.Logger) error {
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("router listening", "address", cfg.Listen, "route", cfg.RouteListen,
-			"image", cfg.Allocator.Workload.Image)
+			"image", cfg.Allocator.Workload.Image, "proxy_protocol", cfg.RouteProxyProtocol,
+			"route_tls", routeTLS != nil, "tickets", ticket.Valid())
 		errCh <- server.Serve(listener)
 	}()
 	frontDoor := newTCPRouter(controller, held, joins, logger)
 	frontDoor.tunnels = tunnels
+	frontDoor.ticket, frontDoor.proxyProtocol, frontDoor.tls = ticket, cfg.RouteProxyProtocol, routeTLS
 	go frontDoor.serve(routeListener)
 	notifyReady(logger)
 

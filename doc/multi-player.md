@@ -841,9 +841,9 @@ Argon2id once, 64 MiB over three passes, proves the phrase and verifies that the
 door holds it too, and only then reads the preview. A dial without one is refused
 with the advice to join with it; a wrong one is refused, saying no more. Over a
 wss door both ends bind the exchange to the certificate the door serves, so a
-self-signed door is proved both ways. A pass spares the phrase on every redial. A
-relay's door, and a successor's, holds no credential and admits a pass alone; a
-newcomer there is sent to the host's door ([todo](todo.md#passphrase-doors-at-a-relay-and-a-successor)).
+self-signed door is proved both ways. A pass spares the phrase on every redial. The
+offer carries the credential's verifier, never the phrase, so a relay's door and a
+successor's serve the same exchange, and a newcomer joins there as at the host's.
 
 A player brings back what its cursor held when it left (`event.CursorRecord`: energy,
 heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnState`).

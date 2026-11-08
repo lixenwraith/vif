@@ -12,7 +12,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -193,6 +195,24 @@ func (k Key) Valid() bool { return len(k.private) == ed25519.PrivateKeySize }
 // ID is the public half as the roster carries it (EncodeKey), "" for an empty key.
 func (k Key) ID() string { return EncodeKey(k.Public()) }
 
+// Seed is the key as a file keeps it, the 32-byte seed in base64, what MarshalJSON
+// writes; ParseKeySeed reads one back. An empty key has none.
+func (k Key) Seed() string {
+	if !k.Valid() {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(k.private.Seed())
+}
+
+// ParseKeySeed is the key a file holds (Seed), its surrounding space ignored.
+func ParseKeySeed(text string) (Key, error) {
+	seed, err := base64.StdEncoding.DecodeString(strings.TrimSpace(text))
+	if err != nil || len(seed) != ed25519.SeedSize {
+		return Key{}, errors.New("a key file holds a 32-byte seed in base64")
+	}
+	return Key{private: ed25519.NewKeyFromSeed(seed)}, nil
+}
+
 // MarshalJSON keeps the 32-byte seed, what a keeper stores; the public half is
 // derived from it when read back.
 func (k Key) MarshalJSON() ([]byte, error) {
@@ -240,25 +260,68 @@ const doorUser = "door"
 // session, a relay's, admits a pass alone (Coordinator.Gated).
 type PassphraseDoor struct {
 	server *auth.ScramServer
+	cred   *auth.Credential
+}
+
+// DoorVerifier is a passphrase door's credential without the phrase: the salt, the
+// cost and the two keys the host derived, which every participant proved, so the
+// offer carries it and a relay's or a successor's door serves the exchange from it.
+type DoorVerifier struct {
+	Salt      []byte `json:"salt"`
+	Time      uint32 `json:"time"`
+	Memory    uint32 `json:"memory"`
+	Threads   uint8  `json:"threads"`
+	StoredKey []byte `json:"stored_key"`
+	ServerKey []byte `json:"server_key"`
 }
 
 // NewPassphraseDoor derives the door's credential, the KDF once, and starts its
-// server, which Close stops.
+// server, which Close stops. The KDF's memory is returned to the system at once
+// rather than left to the next collection, so a door costs no lasting footprint.
 func NewPassphraseDoor(phrase string) (*PassphraseDoor, error) {
 	if err := CheckPassphrase(phrase); err != nil {
 		return nil, err
 	}
 	cred, err := auth.NewCredential(doorUser, phrase, auth.WithMemory(parameter.DoorArgonMemory),
 		auth.WithTime(parameter.DoorArgonTime), auth.WithThreads(parameter.DoorArgonThreads))
+	debug.FreeOSMemory()
 	if err != nil {
 		return nil, err
 	}
+	return openDoor(cred)
+}
+
+// OpenDoor serves the exchange from a verifier the offer carried: no KDF, since
+// the host ran it, and no phrase, which a relay never learns from it.
+func OpenDoor(v *DoorVerifier) (*PassphraseDoor, error) {
+	if v == nil {
+		return nil, errors.New("no door verifier")
+	}
+	cred := &auth.Credential{Username: doorUser, Salt: v.Salt, ArgonTime: v.Time, ArgonMemory: v.Memory,
+		ArgonThreads: v.Threads, StoredKey: v.StoredKey, ServerKey: v.ServerKey}
+	if err := cred.Validate(); err != nil {
+		return nil, err
+	}
+	return openDoor(cred)
+}
+
+func openDoor(cred *auth.Credential) (*PassphraseDoor, error) {
 	server := auth.NewScramServer()
 	if err := server.AddCredential(cred); err != nil {
 		server.Stop()
 		return nil, err
 	}
-	return &PassphraseDoor{server: server}, nil
+	return &PassphraseDoor{server: server, cred: cred}, nil
+}
+
+// Verifier is the door's credential without the phrase, for the offer; nil's is nil.
+func (d *PassphraseDoor) Verifier() *DoorVerifier {
+	if d == nil || d.cred == nil {
+		return nil
+	}
+	c := d.cred
+	return &DoorVerifier{Salt: c.Salt, Time: c.ArgonTime, Memory: c.ArgonMemory, Threads: c.ArgonThreads,
+		StoredKey: c.StoredKey, ServerKey: c.ServerKey}
 }
 
 // Close stops the server's sweep of abandoned exchanges; nil closes nothing.
@@ -323,6 +386,7 @@ func finishPassphrase(conn net.Conn, client *auth.ScramClient, msg *link.Message
 		return nil, fmt.Errorf("passphrase challenge: %w", err)
 	}
 	proof, err := client.ProcessServerFirstMessage(challenge, bindingOption(binding)...)
+	debug.FreeOSMemory() // the KDF's memory, garbage now, goes back at once
 	if err != nil {
 		return nil, &Refusal{Code: RefusalCredential, Reason: "the door's passphrase challenge was refused: " + err.Error()}
 	}
@@ -642,6 +706,57 @@ func VerifyTicket(s *Signed, routerKey []byte, now time.Time) (TicketBody, error
 		return TicketBody{}, errors.New("the ticket names nobody")
 	}
 	return body, nil
+}
+
+// TicketGate is what a fleet pod's doors take in place of a bare key (-admit
+// ticket): the router's public keys, the current and the previous through a
+// rotation, the session the pod answers to, and the ids it spent. A ticket admits
+// the key it names once, within its minute.
+type TicketGate struct {
+	Keys    [][]byte
+	Session string
+	spent   SpentTickets
+}
+
+// Admit is the door's answer to a ticket a dial carried (Coordinator.Ticket): good
+// under one of the router's keys, this session's, admitting a player, over a key the
+// dial proved and unspent; or the refusal, which says no more than the dial showed.
+func (g *TicketGate) Admit(shown *Signed, keys []string) (*TicketBody, error) {
+	now := time.Now() // [wall] the ticket's window
+	var body TicketBody
+	err := errors.New("the door holds no key to check it against")
+	for _, key := range g.Keys {
+		if body, err = VerifyTicket(shown, key, now); err == nil {
+			break
+		}
+	}
+	switch {
+	case err != nil:
+		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket was refused: " + err.Error()}
+	case body.Session != g.Session:
+		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket is another session's"}
+	case body.Kind != AdmitPlay:
+		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket admits no player"}
+	case body.Key == nil || !slices.Contains(keys, EncodeKey(body.Key)):
+		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket names a key the dial did not prove"}
+	case !g.spent.Spend(body, now):
+		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket was spent"}
+	}
+	return &body, nil
+}
+
+// ParseTicketKeys reads the router's public keys as -admit ticket:<key>[,<key>]
+// names them, each as EncodeKey writes it.
+func ParseTicketKeys(spec string) ([][]byte, error) {
+	var keys [][]byte
+	for _, s := range strings.Split(spec, ",") {
+		k := DecodeKey(strings.TrimSpace(s))
+		if k == nil {
+			return nil, fmt.Errorf("%q is no public key", s)
+		}
+		keys = append(keys, k)
+	}
+	return keys, nil
 }
 
 // checkToken reads a token's window against the clock, AuthClockLeeway either way

@@ -459,8 +459,12 @@ takes and the session's first authority key) and the dialer answers with its pro
 places it keeps, at most `PlacesKept`, with the pass it holds for that authority key
 if any, before anything is assigned ([Multiplayer §5.4](multi-player.md#54-wraiths));
 a proof or a pass that fails is refused `RefusalCredential`, a key the session keeps
-out `RefusalDropped`, a door that takes no bare key `RefusalSignIn`. A door with a
-passphrase names `scram` in place of `key`: the dial's answer opens the exchange, a
+out `RefusalDropped`, a door that takes no bare key `RefusalSignIn`. A fleet pod's
+door names `ticket` in place of `key`: the router between runs this exchange through
+itself and puts the ticket it mints in the dial's answer (`AuthRequest.Ticket`), which
+the pod verifies under the router's key, spends and checks the proof against
+(`TicketGate`); a dial that reaches the pod by another way carries none and is
+refused. A door with a passphrase names `scram` in place of `key`: the dial's answer opens the exchange, a
 second 0x31 carries the challenge, a second 0x30 the proof and a third 0x31 the
 door's final, verified before the dial reads on; a pass shown skips the three. It is
 asked rather than sent with the route, so a front door that refuses the route has

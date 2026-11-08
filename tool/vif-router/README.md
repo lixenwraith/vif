@@ -201,6 +201,19 @@ with the browser route), a session unknown, unready or full, and one holding
 each connection placed, on a pod or a door, is accounted for as it closes
 (`session route closed`: the session, whether a door, the bytes each way, the seconds).
 
+## Admission
+
+With `-ticket-key` the router admits in band ([auth design D5, D6](../../doc/auth-session-design.md#0-decisions)):
+after placing a connection it reads the door's question, sends it to the dialer,
+reads the dialer's answer, checks the proofs over the door's nonce and, where the
+answer shows no pass, adds a ticket under its key naming the dialer's address and
+the first key it proved; every frame after is spliced. Each session's Job carries
+the router's public key (`-admit ticket:<key>`), so its doors take that ticket and no
+bare key, and `GET /vif/api/keys` lists the key for a host that admits the site's
+players by it. Behind an edge that ends TLS for 7777, `-route-proxy-protocol` reads
+the edge's PROXY header first and `-route-secure` has the links read `vifs://`; a
+deployment with no such edge gives `-route-cert` and the router ends TLS itself.
+
 ## Doors
 
 A run that joined a session and relays for people who cannot reach the host can
@@ -234,6 +247,10 @@ their defaults; `vif-router -h` lists every flag.
 | Flag | Default | What it sets |
 |---|---|---|
 | `-listen`, `-route-listen` | `:9080`, `:7777` | the HTTP API and probes; the front door |
+| `-route-proxy-protocol` | off | the front door is reached through an edge that writes a PROXY header, version 1 or 2, before each dial, whose address then keys the budgets and the tickets; a dial without one is closed |
+| `-route-cert`, `-route-key` | empty | end TLS on the front door here, for a deployment with no edge to; the key defaults to the certificate's file |
+| `-route-secure` | off, on with `-route-cert` | the front door is reached over TLS, so `join_target` and door links read `vifs://` |
+| `-ticket-key` | empty | the file holding the Ed25519 seed admission tickets are signed with, which `vif-router keygen` writes; empty mints none and sessions run open |
 | `-join-host` | required | the host every `join_target` names |
 | `-web-origin` | empty | the one origin the browser route answers and `ws_url` is built from; empty publishes no browser route |
 | `-image` | required | the session image; `update-vif-image.sh` writes it on the node |

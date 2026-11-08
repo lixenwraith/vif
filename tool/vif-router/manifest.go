@@ -25,6 +25,7 @@ type workloadConfig struct {
 	FirstJoin string
 	Empty     string
 	Drain     string
+	TicketKey string // the router's public key, whose tickets the pod's doors take; empty runs open
 }
 
 // wadCategories are the resource directories a session reads from the node's
@@ -71,6 +72,11 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 	// (adoptLobbyGeometry).
 	if cfg.Size != sizeFirst {
 		args = append(args, "-size", cfg.Size)
+	}
+	// A public key is no secret: in the arguments, where the pod's doors read it and
+	// take the router's tickets in place of a bare key.
+	if cfg.TicketKey != "" {
+		args = append(args, "-admit", "ticket:"+cfg.TicketKey)
 	}
 	perBot := func(base, step int) string { return strconv.Itoa(base + step*cfg.Bots) }
 	containerSecurity := map[string]any{

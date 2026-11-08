@@ -358,7 +358,7 @@ The threats, and the part that meets each:
 
 ### 7.0 What is built
 
-Phases 0 to 3 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
+Phases 0 to 4 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
 Ed25519 key pair kept as its 32-byte seed in JSON, with `Prove`/`VerifyProof` over a
 door's nonce, the session's name and a channel binding (`ChannelBinding`, the SHA-256
 of a leaf certificate), `VerifyProofs` over a dial's list and `EncodeKey`/`DecodeKey`,
@@ -385,6 +385,11 @@ departure crossing, and the dropped person plays on alone. And §7.4, live: a ho
 with a passphrase serves its credential's exchange at every door of its own, a dial
 given the phrase runs it and verifies the door, bound to the leaf over TLS, a pass
 spares it, and a door with no credential in a gated session admits a pass alone.
+And §7.5's first half, live: the router reads the edge's PROXY header and ends TLS
+where no edge does, runs the door's exchange through itself and mints an anonymous
+ticket for the key the dial proved under `-ticket-key`, lists its public half at
+`GET /vif/api/keys`, and hands out `vifs://` links where TLS fronts the door; a pod
+run with `-admit ticket` takes the router's tickets and no bare key (`TicketGate`).
 Tests, one a rule, and fuzz targets over the token forms, the join handshake and the
 peer link.
 
@@ -516,10 +521,14 @@ refusal is the prompt, a dial retries with the phrase. A wrong one is refused
 On a TLS door both ends bind the exchange to the leaf certificate the door serves
 (`LeafBinding` on the door, the handshake's peer certificate on the dial, under a
 websocket too), so a self-signed door is authenticated both ways; on tcp and ws it
-authenticates the handshake alone. A door that holds no credential in a gated
-session, a relay's or a successor's, admits a pass alone (`SessionOffer.Gated`,
-`Coordinator.Gated`): a newcomer there is sent to the host's door, which [the
-todo](todo.md#passphrase-doors-at-a-relay-and-a-successor) leaves open.
+authenticates the handshake alone. The offer carries the credential's verifier
+(`SessionOffer.Door`, `DoorVerifier`: the salt, the cost and the two keys, never
+the phrase), which every participant proved, so a relay's door and a successor's
+serve the exchange from it (`OpenDoor`) and a newcomer joins there as at the host's;
+the KDF's memory is returned to the system as each derivation ends. A gated door
+with no verifier, a fixture's, admits a pass alone (`Coordinator.Gated`). What a
+participant is trusted with, the verifier among it, is [the todo's](todo.md#tighten-what-a-relay-and-a-successor-are-trusted-with)
+to tighten once the phases are done.
 
 A machine in the middle that answers for the door receives a proof it can test
 passphrases against offline, at Argon2's cost a guess: a generated code is past
@@ -541,10 +550,18 @@ player's host may verify the site's tickets too, from `GET /vif/api/keys`, for a
 session open to the site's accounts alone. A ticket admits once; the pass it is
 exchanged for admits every redial after.
 
-Anonymous tickets come first: their subject is the dial's address (`SubjectOf`),
-so the router names the player to the pod, and a pod run with `-admit ticket`
-refuses a new admission that went around the router, which D3 leaves no route for.
-Accounts follow, in the identity service (D8):
+Anonymous tickets come first, and are landed: their subject is the dial's address
+(`SubjectOf`), so the router names the player to the pod, and a pod run with
+`-admit ticket` refuses a new admission that went around the router, which D3 leaves
+no route for. The router intercepts one frame each way (`tcpRouter.exchange`): the
+door's question goes to the dialer, the dialer's answer comes back, its proofs are
+checked over the door's nonce, a dial showing no pass is given a ticket, and every
+frame after is spliced, a passphrase door's steps among them. The front door reads
+the edge's PROXY header, version 1 or 2, when `-route-proxy-protocol` says an edge
+fronts it, and ends TLS itself under `-route-cert`; `-route-secure`, implied by the
+latter, has every link read `vifs://`, which the game dials with the system's roots
+or `-ca`. `vif-router keygen` writes the seed `-ticket-key` names; `GET /vif/api/keys`
+lists the public key. Accounts follow, in the identity service (D8):
 
 - `POST /vif/api/auth/register`: a name and a derived credential
   (`Credential.Export`), checked against the deployment's one KDF profile and a name
@@ -592,9 +609,11 @@ phase 2 `event.JournalSchema` with the departure.
   binary grew under one percent (D18); the Argon2 cost on a page and a phone is
   measured at deployment.
 - **Phase 4, the router's TLS front door, in-band admission and anonymous tickets**
-  (D4, D5, D6, §7.5 first half): `vifs://`, PROXY protocol on the front door, the
-  ticket key and `keygen`, the pod's `-admit ticket`, `GET /vif/api/keys`, the edge's
-  stream block.
+  (D4, D5, D6, §7.5 first half): landed. `vifs://`, the PROXY header on the front
+  door, TLS ended there where no edge does, the ticket key and `keygen`, the pod's
+  `-admit ticket`, `GET /vif/api/keys`, the edge's stream block in the reference
+  edge; the deployment turns the edge on with `VIF_ROUTER_ROUTE_PROXY_PROTOCOL` and
+  `VIF_ROUTER_ROUTE_SECURE` once the stream block fronts 7777.
 - **Phase 5, accounts**: the identity service in its own repository (D8, D9),
   PostgreSQL in the jail, the router's forward and introspection, the cookie on the
   upgrade, `:login`/`:logout`, names on the roster (D15).

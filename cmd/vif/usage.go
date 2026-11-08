@@ -38,6 +38,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"key"}, arg: "<file>", hint: "The certificate's private key, PEM; default the -cert file"},
 			{names: []string{"selfsign"}, hint: "Serve wss:// with a certificate made for this run, in place of -cert: encrypted, and taken as it is by a terminal that joins"},
 			{names: []string{"passphrase"}, arg: "<phrase|new>", hint: "Doors take this passphrase (Argon2-SCRAM), or one made now and printed; with -join, the one shown to a door that asks"},
+			{names: []string{"admit"}, arg: "<open|ticket:key>", hint: "What a -host or -serve door admits beside a pass: open, or the site's tickets under the router's public key(s), comma-separated, and no bare key"},
 			{names: []string{"ca"}, arg: "<file|sha256:hex>", hint: "What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint"},
 			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given"},
 			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},

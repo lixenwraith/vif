@@ -85,6 +85,7 @@ func (m *Membership) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) 
 		Authority:   m.firstTermKey,
 		Pass:        m.checkPass,
 		Passphrase:  m.passphraseDoor(),
+		Ticket:      m.ticketHook(),
 		Gated:       m.gated,
 		Binding:     network.LeafBinding(m.cfg.TLS),
 		Scenario:    m.scenarioBody,
@@ -1190,6 +1191,7 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		TermKeys:       m.termKeysLocked(),
 		KeepOut:        slices.Clone(m.keepOut),
 		Gated:          m.gatedLocked(),
+		Door:           m.doorVerifierLocked(),
 		FixedAuthority: m.cfg.FixedAuthority,
 		Players:        m.playersSet(),
 		// Derived from the anchor this offer carries rather than read again, so
