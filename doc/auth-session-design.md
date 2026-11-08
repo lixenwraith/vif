@@ -144,10 +144,9 @@ surface checks:
 - **The front door**, TCP 7777 (`tcpRouter.place`): the first frame,
   `MsgSessionRoute`, places the connection by the session name, a routing key every
   link carries in clear; `-client-joins` a minute per address and `-route-max`
-  connections a session. Plaintext.
-- **A session's own NodePort** (31700–31709), which D3 removes: the pod's
-  `AdmissionLimiter`, 6 joins a minute per address (an IPv6 /64), 1024 addresses
-  tracked, and `MaxHandshakes` (8) in flight.
+  connections a session. Plaintext. A pod admits its game port from the node alone,
+  so every dial crosses this or the browser route, and the pod's own
+  `AdmissionLimiter` sees one address, the node's.
 - **A player's doors**, `-host` and `-serve` at tcp, ws and wss. A wss door serves
   `-cert`/`-key` or a `-selfsign` certificate; a dialer trusts the system's roots, a
   self-signed certificate as it is, or what `-ca` names: an issuer's PEM, or
@@ -194,8 +193,6 @@ Authentication itself:
   play without transport faults, applies to all of §7.
 - [Publish a player's session at the router](todo.md#publish-a-players-session-at-the-router)
   (P3): a publish ticket (D12) and accounting keyed by the account: phase 6.
-- [Drop the direct NodePort route](todo.md#drop-the-direct-nodeport-route) (P1,
-  D3): phase 0, which every later phase assumes.
 
 Waiting on an identity:
 
@@ -534,8 +531,8 @@ and phase 1 bumps `snapshot.Schema` and `event.JournalSchema` with the roster.
   Service and pool for `-sessions-max`; `direct_target` and `port` leave the API;
   `deploy/k3s` (the policy admits the game port from the node alone, `session.sh`
   and `render-session.sh` stop allocating ports), `nftables.conf`, the fleet,
-  deploy and router docs and the term index follow. The host's 31700–31709 forward
-  is asked of the user (§10, Q1).
+  deploy and router docs and the term index follow; the host's 31700–31709 forward
+  went with it.
 - **Phase 1, keys and the exchange** (§7.1, §7.2 on player hosts): keys replace
   claims, the exchange replaces `MsgJoinClaims`, peer links and succession messages
   are signed, the keeper persists keys on every host behind `keep_places`. The
@@ -675,10 +672,10 @@ change, and the admission exchange's cost per connection; `-route-max` and
 
 Each needs the user, since it names the host, the site or a repository.
 
-- **Q1. The edge and the host** (D3, D4). Remove the 31700–31709 forward; add an
-  nginx `stream` server ending TLS on 7777 with `proxy_protocol on` to the node's
-  7777, and the `/vif/api/auth/` and `/vif/api/keys` locations with `Cookie` and
-  `Authorization` passed through. Both are outside this repository. Without the
+- **Q1. The edge and the host** (D4). Add an nginx `stream` server ending TLS on
+  7777 with `proxy_protocol on` to the node's 7777, and the `/vif/api/auth/` and `/vif/api/keys` locations with `Cookie` and
+  `Authorization` passed through. Both are outside this repository, where the
+  31700–31709 forward is already gone (D3). Without the
   stream block the router terminates TLS itself from a certificate it is given, or
   phase 4 falls back to minting tickets over `POST /vif/api/sessions/<id>/tickets`
   and the front door stays plaintext, carrying only the one-minute ticket.

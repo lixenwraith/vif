@@ -120,8 +120,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"joins one player address may make per minute, over the front door and the browser route together")
 	set.IntVar(&cfg.Allocator.ClientCreates, "client-creates", 1,
 		"sessions one player address may create per -first-join window; a refused or full-fleet request spends none")
-	set.IntVar(&cfg.Allocator.PortFirst, "port-first", 31700, "first allocatable NodePort")
-	set.IntVar(&cfg.Allocator.PortLast, "port-last", 31709, "last allocatable NodePort")
+	set.IntVar(&cfg.Allocator.SessionsMax, "sessions-max", 10,
+		"sessions the fleet holds at once, counted as its quota counts them (1 to 64)")
 	set.DurationVar(&cfg.Allocator.ReadyTimeout, "ready-timeout", 75*time.Second, "session readiness deadline")
 	set.DurationVar(&cfg.Allocator.PollInterval, "poll-interval", time.Second, "session readiness polling interval")
 	cfg.Allocator.CleanupTimeout = 10 * time.Second
@@ -248,8 +248,8 @@ func validateConfig(cfg runtimeConfig) error {
 	if err := validateWebRoute(cfg.Allocator); err != nil {
 		return err
 	}
-	if cfg.Allocator.PortFirst < 1 || cfg.Allocator.PortLast > 65535 || cfg.Allocator.PortFirst > cfg.Allocator.PortLast {
-		return fmt.Errorf("invalid NodePort range %d-%d", cfg.Allocator.PortFirst, cfg.Allocator.PortLast)
+	if n := cfg.Allocator.SessionsMax; n < 1 || n > 64 {
+		return fmt.Errorf("-sessions-max %d must be 1 to 64", n)
 	}
 	if cfg.RequestTimeout <= 0 || cfg.Allocator.ReadyTimeout <= 0 || cfg.Allocator.PollInterval <= 0 {
 		return fmt.Errorf("timeouts and poll interval must be positive")

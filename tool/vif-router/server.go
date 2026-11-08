@@ -197,7 +197,7 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.forgetFleet()
-		s.log.Info("session created", "session", created.ID, "port", created.Port,
+		s.log.Info("session created", "session", created.ID,
 			"players", request.Players, "bots", request.Bots, "log_level", request.LogLevel,
 			"scenario", request.Scenario, "size", request.Size)
 		writeJSON(w, http.StatusCreated, created)
@@ -334,7 +334,7 @@ func (s *apiServer) writeCreateError(w http.ResponseWriter, err error) {
 		writeAPIError(w, http.StatusBadRequest, "invalid_request", capitalize(unwrapRefusal(err)))
 	case errors.Is(err, errFleetFull):
 		w.Header().Set("Retry-After", "10")
-		writeAPIError(w, http.StatusServiceUnavailable, "fleet_full", "All session ports are allocated")
+		writeAPIError(w, http.StatusServiceUnavailable, "fleet_full", "The fleet is full")
 	case errors.Is(err, errSessionNotReady):
 		s.log.Error("session readiness failed", "error", err)
 		writeAPIError(w, http.StatusGatewayTimeout, "session_not_ready", "The session did not become ready and was removed")

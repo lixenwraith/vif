@@ -51,6 +51,19 @@ show() {
 	return "$rc"
 }
 sudo_copy() { sudo cat "$1" >"$2" 2>/dev/null || : >"$2"; }
+# pod_address reads the node's address on the pod network, flannel's cni0, the first
+# address of the node's pod CIDR, where every connection the router places on a pod
+# comes from; object NAME renders it into a k3s object as ${NODE_POD_ADDRESS}.
+pod_address() {
+	cidr=$(kube get nodes -o jsonpath='{.items[0].spec.podCIDR}')
+	case $cidr in
+		*.*.*.*/*) ;;
+		*) die "the node has no IPv4 pod CIDR: '$cidr'" ;;
+	esac
+	network=${cidr%/*}
+	node_pod_address=${network%.*}.$((${network##*.} + 1))
+}
+object() { sed "s|\${NODE_POD_ADDRESS}|$node_pod_address|g" "$repo_root/deploy/k3s/$1.yaml"; }
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/vif-update.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
@@ -70,9 +83,10 @@ check_objects() {
 		return 1
 	fi
 	status=0
+	pod_address
 	for name in 00-namespace 10-quota 20-networkpolicy 40-router-rbac; do
 		rc=0
-		out=$(kube diff -f "$repo_root/deploy/k3s/$name.yaml" 2>&1) || rc=$?
+		out=$(object "$name" | kube diff -f - 2>&1) || rc=$?
 		case $rc in
 			0) ;;
 			1) printf '%s\n' "$out" | paint; status=1 ;;
@@ -177,8 +191,9 @@ apply_filter() {
 	sudo nft -f /etc/nftables.conf
 }
 apply_objects() {
+	pod_address
 	for name in 00-namespace 10-quota 20-networkpolicy 40-router-rbac; do
-		kube apply -f "$repo_root/deploy/k3s/$name.yaml"
+		object "$name" | kube apply -f -
 	done
 }
 apply_wad() { "$guest/update-vif-wad.sh"; }

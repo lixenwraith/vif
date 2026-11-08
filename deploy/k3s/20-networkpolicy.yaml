@@ -15,11 +15,11 @@ spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
 ---
-# The game port, from anywhere. A player's address is one no selector can identify,
-# so this does not authenticate: it confines the reachable surface to one port on
-# one workload, keeping the rest of the namespace unreachable even from a source
-# allowed to play. Who may reach 7777 is the firewall's job at the host forward and
-# on the node (doc/kube-docker-deploy.md §2).
+# The game port, from the node alone: every player reaches a pod through the router,
+# which dials it from the node's address on the pod network, flannel's cni0, the
+# first address of the node's pod CIDR. The repository names no machine, so
+# deploy/update.sh renders ${NODE_POD_ADDRESS} from the cluster. Who may play is
+# then the router's question (doc/kubernetes-fleet.md §9), and no other pod's.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -32,7 +32,10 @@ spec:
       app.kubernetes.io/component: session
   policyTypes: [Ingress]
   ingress:
-    - ports:
+    - from:
+        - ipBlock:
+            cidr: ${NODE_POD_ADDRESS}/32
+      ports:
         - protocol: TCP
           port: game
 ---

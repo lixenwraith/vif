@@ -204,7 +204,9 @@ func buildJob(id string, cfg workloadConfig) map[string]any {
 	}
 }
 
-func buildService(id, jobUID string, nodePort int, namespace string) map[string]any {
+// buildService is the Service nothing dials: its EndpointSlice is how the allocator
+// reads that the pod is ready, and the router dials the pod's own address.
+func buildService(id, jobUID, namespace string) map[string]any {
 	return map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Service",
@@ -224,17 +226,15 @@ func buildService(id, jobUID string, nodePort int, namespace string) map[string]
 			},
 		},
 		"spec": map[string]any{
-			"type": "NodePort",
+			"type": "ClusterIP",
 			"selector": map[string]string{
 				labelSession: id,
 			},
-			"externalTrafficPolicy": "Local",
 			"ports": []any{
 				map[string]any{
 					"name":       "game",
 					"port":       7777,
 					"targetPort": "game",
-					"nodePort":   nodePort,
 					"protocol":   "TCP",
 				},
 			},

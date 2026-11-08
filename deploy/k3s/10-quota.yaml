@@ -22,7 +22,6 @@ spec:
     count/jobs.batch: "10"
     # One Service per session, plus headroom for a fixed one an operator adds.
     count/services: "12"
-    count/services.nodeports: "12"
     requests.cpu: 1000m
     requests.memory: 960Mi
     limits.cpu: "5"

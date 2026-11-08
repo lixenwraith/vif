@@ -1,14 +1,15 @@
 # vif-router
 
 `vif-router` is the narrow boundary between the vif website and the `vif`
-namespace, and the router on two of a session's three routes. Kubernetes still
-schedules, isolates, limits, terminates and
-garbage-collects every session. The allocator only performs the fixed transaction
-that Kubernetes has no anonymous endpoint for:
+namespace, and the router every session is reached through. Kubernetes still
+schedules, isolates, limits, terminates and garbage-collects every session. The
+allocator only performs the fixed transaction that Kubernetes has no anonymous
+endpoint for:
 
-1. reserve a free NodePort from 31700–31709;
+1. count the fleet's Jobs as the quota does and refuse past `-sessions-max`;
 2. create one non-retryable Job, whose pod answers to the session's identifier;
-3. read its UID and create the owner-referenced Service;
+3. read its UID and create the owner-referenced ClusterIP Service, which nothing
+   dials: its EndpointSlice is how the pod's readiness is read;
 4. wait for a ready EndpointSlice and `live=true ready=true` from `/health`;
 5. return the session's join targets and health-derived state.
 
@@ -50,18 +51,16 @@ atomically without restarting the router. See
 
 An error is `{"error":{"code":"…","message":"…"}}`. A create can also answer
 `413 request_too_large` for a body over 1 KiB, `415 content_type` for one not sent
-as `application/json`, `503 fleet_full` with `Retry-After: 10` when no port is free,
-`504 session_not_ready` or `408 request_canceled` (the session was removed either
-way), and `502 kubernetes_error`.
+as `application/json`, `503 fleet_full` with `Retry-After: 10` when the fleet holds
+`-sessions-max` sessions, `504 session_not_ready` or `408 request_canceled` (the
+session was removed either way), and `502 kubernetes_error`.
 
 One session row has this shape:
 
 ```json
 {
   "id": "3c3a8eec0cbb6f17",
-  "port": 31700,
   "join_target": "vif://play.example.com:7777/3c3a8eec0cbb6f17",
-  "direct_target": "vif://play.example.com:31700/3c3a8eec0cbb6f17",
   "ws_url": "wss://play.example.com/vif/ws/3c3a8eec0cbb6f17",
   "scenario": "td",
   "size": "first",
@@ -151,11 +150,11 @@ drain or the Job's one-hour `activeDeadlineSeconds` ends it.
 `LimitRange`.
 
 `id` is the session's stable public identifier and the name its pod answers to.
-`join_target`, `direct_target` and `ws_url` are opaque strings this router
-produces, and no caller may rebuild one from `port`: `join_target` is the front
-door below, `direct_target` the session's own NodePort. `ws_url` is absent where the
-deployment publishes no browser route, which is what a page keyed on it reads as
-"this fleet is for native clients".
+`join_target` and `ws_url` are opaque strings this router produces: `join_target`
+is the front door below, the one address every session is dialled at, since a pod
+is reached from the node alone. `ws_url` is absent where the deployment publishes
+no browser route, which is what a page keyed on it reads as "this fleet is for
+native clients".
 
 `-web-origin` is one origin, not a list, and `ws_url` is built from it. A site
 answering several hostnames must therefore canonicalize: a page loaded from another
@@ -235,7 +234,7 @@ their defaults; `vif-router -h` lists every flag.
 | Flag | Default | What it sets |
 |---|---|---|
 | `-listen`, `-route-listen` | `:9080`, `:7777` | the HTTP API and probes; the front door |
-| `-join-host` | required | the host every `join_target` and `direct_target` names |
+| `-join-host` | required | the host every `join_target` names |
 | `-web-origin` | empty | the one origin the browser route answers and `ws_url` is built from; empty publishes no browser route |
 | `-image` | required | the session image; `update-vif-image.sh` writes it on the node |
 | `-log-stream-url` | required | the loopback LogWisp stream `/vif/api/logs` proxies |
@@ -250,5 +249,5 @@ their defaults; `vif-router -h` lists every flag.
 | `-doors-per-address` | `4` | doors one address may publish at once (0–64); 0 leaves it to `-tunnels` |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |
 | `-client-joins`, `-client-creates` | `6`, `1` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
-| `-port-first`, `-port-last` | `31700`, `31709` | the NodePort pool, and so the fleet's size |
+| `-sessions-max` | `10` | the sessions the fleet holds at once, counted as its quota counts them, a finished one until its TTL collects it (1–64) |
 | `-ready-timeout`, `-poll-interval` | `75s`, `1s` | how long a create waits for readiness, and how often it looks |
