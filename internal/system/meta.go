@@ -438,7 +438,7 @@ func (s *MetaSystem) handleGameReset(purge, wait bool) {
 	for i := range parameter.MaxPlayers {
 		e := s.world.Resources.Player.Slot(uint8(i))
 		if c, ok := s.world.Components.Cursor.GetComponent(e); ok {
-			entry := engine.CursorRosterEntry{Slot: c.Slot, Control: c.Control, PeerID: c.PeerID, Holder: c.Holder, Key: c.Key}
+			entry := engine.CursorRosterEntry{Slot: c.Slot, Control: c.Control, PeerID: c.PeerID, Holder: c.Holder, Key: c.Key, Name: c.Name}
 			if w, away := s.world.Components.Wraith.GetComponent(e); away {
 				entry.Wraith, entry.Waited = true, w.Waited
 			}

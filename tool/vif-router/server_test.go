@@ -173,7 +173,7 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 	backend := &fakeSessionAllocator{created: session{ID: "abc", JoinTarget: "vif://site.example:7777/abc"}}
 	site := httptest.NewServer(testServer(backend))
 	defer site.Close()
-	got, err := network.RequestSession(site.URL, 2, "main")
+	got, _, err := network.RequestSession(site.URL, 2, "main")
 	if err != nil || got != backend.created.JoinTarget {
 		t.Fatalf("RequestSession = %q, %v; want %q", got, err, backend.created.JoinTarget)
 	}
@@ -181,7 +181,7 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 		t.Fatalf("the allocator was asked for %+v", backend.requested)
 	}
 	backend.createErr = errFleetFull
-	if _, err := network.RequestSession(site.URL, 0, ""); err == nil || err.Error() != "The fleet is full" {
+	if _, _, err := network.RequestSession(site.URL, 0, ""); err == nil || err.Error() != "The fleet is full" {
 		t.Fatalf("a refusal returned %v", err)
 	}
 }

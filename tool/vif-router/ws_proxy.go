@@ -103,5 +103,7 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer release()
-	s.ws.route.carry(client, upstream, at, from)
+	// The page's sign-in rides the upgrade as the cookie the identity service set on
+	// this origin, which the Origin check above made the page's own.
+	s.ws.route.carry(client, upstream, at, from, signInOf(r))
 }

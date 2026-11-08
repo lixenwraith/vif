@@ -212,7 +212,19 @@ the router's public key (`-admit ticket:<key>`), so its doors take that ticket a
 bare key, and `GET /vif/api/keys` lists the key for a host that admits the site's
 players by it. Behind an edge that ends TLS for 7777, `-route-proxy-protocol` reads
 the edge's PROXY header first and `-route-secure` has the links read `vifs://`; a
-deployment with no such edge gives `-route-cert` and the router ends TLS itself.
+deployment with no such edge gives `-route-cert`, or `-route-selfsign` for a
+certificate made at each start, and the router ends TLS itself; with `-route-selfsign`
+each session's `door_fingerprint` is what a dial pins, so a machine with no root
+certificates still joins privately.
+
+With `-identity-url` and `-introspect-url` the router publishes the identity
+service's routes (`/vif/api/auth/*`, byte for byte, the player's address in
+`-client-address-header`) and, in the exchange above, asks the service which account
+a sign-in names: the token a native dial sent over TLS (`sign_in` in its answer) or
+the `vif_sign_in` cookie a page's upgrade carried, from the one origin the browser
+route answers. The ticket then names the account (`acct:<id>`) and its name, which
+the pod copies onto the roster; the token is stripped before the pod, and a token the
+service does not know, or a service that does not answer, mints an anonymous ticket.
 
 ## Doors
 
@@ -251,6 +263,8 @@ their defaults; `vif-router -h` lists every flag.
 | `-route-cert`, `-route-key` | empty | end TLS on the front door here, for a deployment with no edge to; the key defaults to the certificate's file |
 | `-route-secure` | off, on with `-route-cert` | the front door is reached over TLS, so `join_target` and door links read `vifs://` |
 | `-ticket-key` | empty | the file holding the Ed25519 seed admission tickets are signed with, which `vif-router keygen` writes; empty mints none and sessions run open |
+| `-route-selfsign` | off | end TLS on the front door with a certificate made for this run, in place of `-route-cert`; the sessions API carries its fingerprint (`door_fingerprint`), which a dial pins |
+| `-identity-url`, `-introspect-url` | empty | the identity service's two loopback listeners: `/vif/api/auth/` is forwarded to the first byte for byte, the second is asked which account a sign-in names; empty publishes no accounts |
 | `-join-host` | required | the host every `join_target` names |
 | `-web-origin` | empty | the one origin the browser route answers and `ws_url` is built from; empty publishes no browser route |
 | `-image` | required | the session image; `update-vif-image.sh` writes it on the node |

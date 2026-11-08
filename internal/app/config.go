@@ -219,6 +219,9 @@ func (c *runConfig) Normalize() {
 	if c.wiring.membership.Links == nil {
 		c.wiring.membership.Links = &converge.PeerLinkGate{}
 	}
+	if c.wiring.membership.SignIns == nil {
+		c.wiring.membership.SignIns = membership.NewSignInKeeper(c.Membership.SignInStore)
+	}
 	width, height := c.Width, c.Height
 	if c.Config.Normalize(); c.Width != width || c.Height != height {
 		c.wiring.geometryDefaulted = true

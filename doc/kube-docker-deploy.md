@@ -359,6 +359,7 @@ the edge in front of 9080:
 | Keep any idle-connection bound on the TLS path above a second | A browser session holds one connection for the whole match; the link probe crosses it every 200 ms each way, and the game drops a link silent for five seconds. |
 | Where the edge ends TLS for 7777, a `stream` server on 7777 with the site's certificate, forwarding to the node's 7777 with `proxy_protocol on`; then `VIF_ROUTER_ROUTE_PROXY_PROTOCOL=true` and `VIF_ROUTER_ROUTE_SECURE=true` | The router reads the edge's PROXY header (version 1, the one nginx writes) ahead of the route frame and budgets the player's address; without it the edge's address would be every player's. The links it hands out then read `vifs://`. |
 | Publish `GET /vif/api/keys` | The public key the router's tickets verify under, for a host that admits the site's players by them. |
+| Publish `/vif/api/auth/*` to 9080, `Cookie` and `Authorization` passed through untouched, nothing cached | The identity service's routes, forwarded by the router byte for byte: registration, the two-step sign-in, logout, the account's view. The sign-in a page gets is a cookie on this origin, which the browser route's upgrade carries. |
 
 The page that opens the socket must permit it; `connect-src 'self'` does.
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is a

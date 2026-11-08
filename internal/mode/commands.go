@@ -40,6 +40,7 @@ var commandNames = []string{
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
 	"host", "join", "leave", "relay", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps",
+	"register", "login", "logout",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -148,6 +149,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleRelayCommand(ctx, args)
 	case "session":
 		return handleSessionCommand(ctx)
+	case "register", "login", "logout":
+		return handleAccountCommand(ctx, cmd, args)
 	case "journal":
 		return handleJournalCommand(ctx, args)
 	case "bot":
@@ -1271,6 +1274,38 @@ func handleSessionCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: true}
 }
 
+// handleAccountCommand runs a site's account exchange in the background: a register
+// or a login takes the site, the name and the password, a logout the site alone.
+// Usage: :register <site> <name> <password> | :login <site> <name> <password> | :logout <site>
+func handleAccountCommand(ctx *engine.GameContext, cmd string, args []string) CommandResult {
+	result := CommandResult{Continue: true}
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, sessionsUnavailable)
+		return result
+	}
+	var err error
+	switch {
+	case cmd == "logout" && len(args) == 1:
+		err = ctx.SessionCtl.Logout(args[0])
+	case cmd == "logout":
+		setCommandError(ctx, "Usage: :logout <site>")
+		return result
+	case len(args) != 3:
+		setCommandError(ctx, "Usage: :"+cmd+" <site> <name> <password>  (e.g. :"+cmd+" https://example.com alice ...)")
+		return result
+	case cmd == "register":
+		err = ctx.SessionCtl.Register(args[0], args[1], args[2])
+	default:
+		err = ctx.SessionCtl.Login(args[0], args[1], args[2])
+	}
+	if err != nil {
+		setCommandError(ctx, sentence(err))
+		return result
+	}
+	ctx.SetStatusMessage("Asking "+args[0]+"...", parameter.StatusNotice)
+	return result
+}
+
 // handleBotCommand lists, seats or drops the bots this run holds. Outside the
 // live-session guard, like :host: a bot joins the session as any participant does.
 // Usage: :bot | :bot add [N[:graph]|graph] | :bot drop <slot>
@@ -1341,6 +1376,9 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 		var names []string
 		for _, p := range participants {
 			name := fmt.Sprintf("%X player", p.Slot)
+			if p.Name != "" {
+				name = fmt.Sprintf("%X %s", p.Slot, p.Name)
+			}
 			if p.Holder != 0 {
 				name = fmt.Sprintf("%X bot", p.Slot)
 				if holder, ok := slots[p.Holder]; ok {

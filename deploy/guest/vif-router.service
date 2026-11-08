@@ -21,6 +21,9 @@ ExecStart=/usr/local/bin/vif-router \
     -route-proxy-protocol=${VIF_ROUTER_ROUTE_PROXY_PROTOCOL} \
     -route-secure=${VIF_ROUTER_ROUTE_SECURE} \
     -ticket-key ${VIF_ROUTER_TICKET_KEY} \
+    -route-selfsign=${VIF_ROUTER_ROUTE_SELFSIGN} \
+    -identity-url ${VIF_ROUTER_IDENTITY_URL} \
+    -introspect-url ${VIF_ROUTER_INTROSPECT_URL} \
     -image ${VIF_ROUTER_IMAGE} \
     -join-host ${VIF_ROUTER_JOIN_HOST} \
     -players-max ${VIF_ROUTER_PLAYERS_MAX} \

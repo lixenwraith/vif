@@ -25,8 +25,10 @@ type CursorComponent struct {
 	Holder uint32 // Participant whose process holds this bot; zero for independent players.
 
 	// Key is the public half of the participant key its participant comes back with
-	// and signs under, which the roster a successor takes over reads from here.
-	Key string
+	// and signs under, which the roster a successor takes over reads from here. Name
+	// is the account's, attested by the site's ticket; empty keeps the slot's label.
+	Key  string
+	Name string
 }
 
 // WraithComponent marks a cursor whose participant is away. It keeps its slot and is

@@ -46,6 +46,37 @@ location = /vif/api/sessions {
     proxy_send_timeout 30s;
 }
 
+# The account service behind the router: a sign-in is two POSTs, a registration
+# one; bodies are small and carry credentials, so nothing is cached, compressed or
+# logged with its headers (the default log format carries none). Two locations, so
+# the credential exchange has its own, stricter rate.
+location ~ "^/vif/api/auth/(?:register|login)$" {
+    limit_except POST { deny all; }
+    proxy_pass http://vif_router;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header X-Real-IP $proxy_protocol_addr;
+
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 15s;
+    proxy_send_timeout 15s;
+    proxy_buffering off;
+    client_max_body_size 4k;
+}
+
+location ~ "^/vif/api/auth/(?:logout|me|sign-ins/[A-Za-z0-9_-]{1,64})$" {
+    proxy_pass http://vif_router;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header X-Real-IP $proxy_protocol_addr;
+
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 15s;
+    proxy_send_timeout 15s;
+    proxy_buffering off;
+    client_max_body_size 4k;
+}
+
 # The public key the router's tickets verify under: a finite GET, cacheable for a
 # minute at most, since a rotation rides a router update.
 location = /vif/api/keys {

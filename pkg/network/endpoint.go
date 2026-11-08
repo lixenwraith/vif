@@ -99,6 +99,16 @@ func ParseEndpoint(target string) (Endpoint, error) {
 	return e, nil
 }
 
+// Dialable is the address Dial takes for e: a host:port, under vifs:// where the
+// dial runs TLS, a WebSocket route's URL, a site's origin. The name a link carries
+// travels apart, as Config.SessionName.
+func (e Endpoint) Dialable() string {
+	if e.Scheme == SchemeTCP && e.TLS {
+		return secureLinkScheme + e.Addr
+	}
+	return e.Addr
+}
+
 // Secure reports a wss:// endpoint: a WebSocket under TLS, which a page served over
 // https can open and a host serves only with a certificate.
 func (e Endpoint) Secure() bool {
@@ -427,18 +437,18 @@ func (a wsAddr) String() string  { return string(a) }
 // returns the link this build joins it by. players and scenario choose from what the
 // site advertises, zero for its defaults; a refusal, an unauthorised one included, is
 // its message.
-func RequestSession(site string, players int, scenario string, timeout time.Duration) (string, error) {
+func RequestSession(site string, players int, scenario string, timeout time.Duration) (target, fingerprint string, err error) {
 	body, err := json.Marshal(struct {
 		Players  int    `json:"players,omitempty"`
 		Scenario string `json:"scenario,omitempty"`
 	}{players, scenario})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Post(site+"/vif/api/sessions", "application/json", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 	var reply struct {
@@ -448,14 +458,14 @@ func RequestSession(site string, players int, scenario string, timeout time.Dura
 	decoded := json.NewDecoder(io.LimitReader(resp.Body, siteReplyBytes)).Decode(&reply) == nil
 	switch {
 	case resp.StatusCode != http.StatusCreated && decoded && reply.Error.Message != "":
-		return "", errors.New(reply.Error.Message)
+		return "", "", errors.New(reply.Error.Message)
 	case resp.StatusCode != http.StatusCreated:
-		return "", fmt.Errorf("%s answered %s", site, resp.Status)
+		return "", "", fmt.Errorf("%s answered %s", site, resp.Status)
 	}
 	if links := sessionLinks(reply.JoinTarget, reply.WSURL); len(links) > 0 {
-		return links[0], nil
+		return links[0], reply.DoorFingerprint, nil
 	}
-	return "", fmt.Errorf("%s created a session this build has no route to", site)
+	return "", "", fmt.Errorf("%s created a session this build has no route to", site)
 }
 
 // sessionLinks are the routes to a site's session this build can take, best first:
@@ -468,11 +478,14 @@ func sessionLinks(joinTarget, wsURL string) []string {
 	return slices.DeleteFunc(links, func(link string) bool { return link == "" })
 }
 
-// siteSession is a session as its site describes it: the links each client takes.
+// siteSession is a session as its site describes it: the links each client takes,
+// and the fingerprint of the front door's certificate where the router made one,
+// which a dial pins as -ca would.
 type siteSession struct {
-	ID         string `json:"id"`
-	JoinTarget string `json:"join_target"`
-	WSURL      string `json:"ws_url"`
+	ID              string `json:"id"`
+	JoinTarget      string `json:"join_target"`
+	DoorFingerprint string `json:"door_fingerprint"`
+	WSURL           string `json:"ws_url"`
 }
 
 // siteReplyBytes bounds how much of a site's answer is read.

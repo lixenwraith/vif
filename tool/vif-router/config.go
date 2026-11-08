@@ -67,13 +67,17 @@ type runtimeConfig struct {
 	// TicketKeyFile holds the seed admission tickets are signed with.
 	RouteProxyProtocol  bool
 	RouteCert, RouteKey string
+	RouteSelfSign       bool
 	TicketKeyFile       string
-	KubeAPI             string
-	KubeCAFile          string
-	KubeTokenFile       string
-	LogStreamURL        string
-	RequestTimeout      time.Duration
-	Allocator           allocatorConfig
+	// IdentityURL is the identity service's listener /vif/api/auth/ is forwarded to,
+	// and IntrospectURL the one asked which account a sign-in names; both loopback.
+	IdentityURL, IntrospectURL string
+	KubeAPI                    string
+	KubeCAFile                 string
+	KubeTokenFile              string
+	LogStreamURL               string
+	RequestTimeout             time.Duration
+	Allocator                  allocatorConfig
 }
 
 func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
@@ -93,6 +97,12 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	set.StringVar(&cfg.RouteCert, "route-cert", "",
 		"certificate chain the front door ends TLS with, a PEM file; empty ends none, which is the edge's to end")
 	set.StringVar(&cfg.RouteKey, "route-key", "", "the certificate's private key, a PEM file; default the -route-cert file")
+	set.BoolVar(&cfg.RouteSelfSign, "route-selfsign", false,
+		"end TLS on the front door with a certificate made for this run, in place of -route-cert: encrypted, taken as it is by a dial, and pinned by the fingerprint the sessions API carries")
+	set.StringVar(&cfg.IdentityURL, "identity-url", "",
+		"loopback URL of the identity service's /vif/api/auth/ listener, forwarded to byte for byte; empty publishes no accounts")
+	set.StringVar(&cfg.IntrospectURL, "introspect-url", "",
+		"loopback URL the identity service answers which account a sign-in names at, e.g. http://127.0.0.1:9083/introspect; empty mints anonymous tickets alone")
 	set.BoolVar(&cfg.Allocator.RouteSecure, "route-secure", false,
 		"the front door is reached over TLS, ended at the edge or by -route-cert, so the links players are handed read vifs://")
 	set.StringVar(&cfg.TicketKeyFile, "ticket-key", "",
@@ -150,7 +160,7 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 	cfg.Allocator.Workload.FirstJoin = firstJoin
 	cfg.Allocator.Workload.Empty = empty
 	cfg.Allocator.Workload.Drain = drain
-	if cfg.RouteCert != "" {
+	if cfg.RouteCert != "" || cfg.RouteSelfSign {
 		cfg.Allocator.RouteSecure = true
 	}
 	if cfg.Allocator.PlayersMax == 0 {
@@ -199,6 +209,20 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if cfg.RouteKey != "" && cfg.RouteCert == "" {
 		return fmt.Errorf("-route-key names a key for no -route-cert")
+	}
+	if cfg.RouteSelfSign && cfg.RouteCert != "" {
+		return fmt.Errorf("-route-selfsign and -route-cert name two certificates for one door")
+	}
+	for name, raw := range map[string]string{"-identity-url": cfg.IdentityURL, "-introspect-url": cfg.IntrospectURL} {
+		if raw == "" {
+			continue
+		}
+		if err := validateLoopbackURL(raw); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	if (cfg.IdentityURL == "") != (cfg.IntrospectURL == "") {
+		return fmt.Errorf("-identity-url and -introspect-url are given together")
 	}
 	if cfg.Allocator.Tunnels < 0 || cfg.Allocator.Tunnels > 64 {
 		return fmt.Errorf("-tunnels %d must be 0 to 64", cfg.Allocator.Tunnels)
@@ -295,6 +319,26 @@ func validateWebRoute(cfg allocatorConfig) error {
 	}
 	if origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" || origin.User != nil {
 		return fmt.Errorf("-web-origin must be a bare scheme://host[:port] origin")
+	}
+	return nil
+}
+
+// validateLoopbackURL admits an absolute http URL on a loopback address with a port
+// and nothing a caller could smuggle: the identity service's two listeners.
+func validateLoopbackURL(raw string) error {
+	target, err := url.Parse(raw)
+	if err != nil || target.Scheme != "http" || target.Host == "" {
+		return fmt.Errorf("%q must be an absolute http URL", raw)
+	}
+	if target.User != nil || target.RawQuery != "" || target.Fragment != "" {
+		return fmt.Errorf("%q must not contain credentials, a query, or a fragment", raw)
+	}
+	host, port, err := net.SplitHostPort(target.Host)
+	if err != nil || port == "" {
+		return fmt.Errorf("%q must name a port", raw)
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("%q must name a loopback address", raw)
 	}
 	return nil
 }

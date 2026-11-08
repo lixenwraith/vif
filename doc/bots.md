@@ -86,7 +86,7 @@ into the session it joins, and `:leave` takes them out of one with the run.
 | `:bot` | List this run's bots: slot, graph, joining or leaving. |
 | `:bot add [N[:graph]\|graph]` | Seat more bots; a solo run first opens a session only they can join. A count of 0 is refused. |
 | `:bot drop <slot>` | Drop one of your bots, or as host any bot. |
-| `:player` | List the slots: `3 player`, `4 bot of 3`, or `5 player (away)` for one who left. |
+| `:player` | List the slots: `3 player`, `3 alice` for a signed-in player, `4 bot of 3`, or `5 player (away)` for one who left. |
 | `:player drop <slot>` | Host only: drop a player and its bots, or one bot. |
 
 Slots accept `10`, `A` or `0xA` for the cursor marked `A`. The

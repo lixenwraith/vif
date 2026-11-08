@@ -443,6 +443,7 @@ type pendingPointer struct {
 // its own assignment non-remote.
 type CursorRosterEntry struct {
 	Key     string // the participant key its participant comes back with
+	Name    string // the account's, attested; empty keeps the slot's label
 	Holder  uint32
 	Slot    uint8
 	Control component.ControlKind

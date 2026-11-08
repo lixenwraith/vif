@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -587,5 +588,72 @@ func TestTheFrontDoorReadsTheEdgesHeaderAndEndsTLS(t *testing.T) {
 	<-pod.keys
 	if err := join(secure, routedID); err == nil || errors.As(err, new(*network.Refusal)) {
 		t.Fatalf("a plain dial at the TLS door ended %v, want no vif answer", err)
+	}
+}
+
+// TestASignInNamesTheTicketsAccountOverTLSAlone: a dial that holds a site's sign-in
+// shows it to a TLS front door, the router asks the identity service which account
+// it names and the ticket names that account; over a plain stream the dial keeps the
+// token back and the ticket names the address; a token the service does not know
+// names the address too, and the pod never sees the token.
+func TestASignInNamesTheTicketsAccountOverTLSAlone(t *testing.T) {
+	router := network.NewKey()
+	pod := startAskingPod(t, router)
+	identity := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Token string }
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.Token == "tok" {
+			_, _ = w.Write([]byte(`{"account":{"id":"7","name":"alice"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"account":null}`))
+	}))
+	t.Cleanup(identity.Close)
+	accounts, err := newIdentityClient(identity.URL+"/vif/api/auth/", identity.URL+"/introspect", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	serve := func(serverTLS bool) string {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = listener.Close() })
+		door := newTCPRouter(&fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(4), network.NewAdmissionLimiter(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+		_, door.game, _ = net.SplitHostPort(pod.addr)
+		door.ticket, door.accounts = router, accounts
+		if serverTLS {
+			if door.tls, err = link.SelfSignedTLS([]string{"127.0.0.1"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		go door.serve(listener)
+		return listener.Addr().String()
+	}
+	dial := func(addr, token string) error {
+		cfg := network.DebugConfig(link.RolePeer, "")
+		cfg.SessionName, cfg.SignIn = routedID, token
+		pending, _, err := network.DialSession(addr, cfg)
+		if err == nil {
+			_ = pending.Close()
+		}
+		return err
+	}
+	secure, plain := serve(true), serve(false)
+	for name, tt := range map[string]struct {
+		addr, token, subject, who string
+	}{
+		"a sign-in over TLS":        {"vifs://" + secure, "tok", "acct:7", "alice"},
+		"a sign-in over plain tcp":  {plain, "tok", "addr:127.0.0.1", ""},
+		"an unknown token over TLS": {"vifs://" + secure, "stale", "addr:127.0.0.1", ""},
+	} {
+		if err := dial(tt.addr, tt.token); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+			t.Fatalf("%s: the dial ended %v", name, err)
+		}
+		ticket := <-pod.tickets
+		<-pod.keys
+		if ticket.Subject != tt.subject || ticket.Name != tt.who {
+			t.Fatalf("%s: the ticket names %q as %q, want %q as %q", name, ticket.Subject, ticket.Name, tt.subject, tt.who)
+		}
 	}
 }

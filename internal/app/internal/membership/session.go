@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/app/internal/config"
@@ -401,6 +402,7 @@ func joinNetConfig(cfg config.Membership, wire Wiring) *network.Config {
 	netCfg.Keys = wire.Places.keys(wire.Holder != 0)
 	netCfg.Passes = wire.Places.passes(wire.Holder != 0)
 	netCfg.Passphrase = cfg.Passphrase
+	netCfg.SignIn = wire.SignIns.Token(cfg.JoinAddress)
 	netCfg.TLS = cfg.Trust
 	netCfg.ConnectPeer = network.PeerDialer(netCfg.Identity, wire.Links, netCfg.ConnectTimeout)
 	return netCfg
@@ -642,7 +644,7 @@ func (m *Membership) previewParticipant(a network.Admission) (network.SessionOff
 // connection: the roster is the lobby so far, and the roster a participant actually
 // builds from arrives later, at the start gate.
 func (m *Membership) assignParticipant(a network.Admission) (network.SessionOffer, error) {
-	o, err := m.assignFor(m.JoinAnchor(), 0, a.Keys(), a.Pass)
+	o, err := m.assignFor(m.JoinAnchor(), 0, a.Keys(), a.Pass, a.Ticket)
 	m.closeStaleLink(err, m.SessionTransport())
 	return o, err
 }
@@ -677,7 +679,7 @@ func (m *Membership) closeStaleLink(err error, port engine.NetworkPort) {
 // recorded now because the bot never reports to this instance. A key among those
 // proved takes back the place its Wraith keeps, a full session's too; the first is
 // the one a new place is held under. Caller must not hold sessionMu.
-func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys []string, shown *network.PassBody) (network.SessionOffer, error) {
+func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys []string, shown *network.PassBody, ticket *network.TicketBody) (network.SessionOffer, error) {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
 	if err := m.refusedLocked(); err != nil {
@@ -685,6 +687,10 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys
 	}
 	if k := m.keptOutLocked(keys); k != "" {
 		return network.SessionOffer{}, m.droppedRefusalLocked(k)
+	}
+	account, name := accountOf(shown, ticket)
+	if account != "" && slices.Contains(m.keepOut, "acct:"+account) {
+		return network.SessionOffer{}, &network.Refusal{Code: network.RefusalDropped, Reason: "this account was dropped from the session"}
 	}
 
 	limit := m.SessionCapacity() + 1
@@ -699,6 +705,10 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys
 		if err != nil {
 			return network.SessionOffer{}, err
 		}
+		if i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.ID == entry.ID }); i >= 0 && account != "" {
+			m.sessionRoster[i].Account, m.sessionRoster[i].Name = account, name
+			entry = m.sessionRoster[i]
+		}
 		m.sessionOffer = m.offerLocked(anchor, entry.ID)
 		offer := m.sessionOffer
 		offer.Pass = m.issuePassLocked(entry, shown)
@@ -712,7 +722,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys
 		return network.SessionOffer{}, m.fullLocked()
 	}
 	assigned := m.nextParticipantLocked()
-	assigned.Holder = holder
+	assigned.Holder, assigned.Account, assigned.Name = holder, account, name
 	if len(keys) > 0 {
 		assigned.Key = keys[0]
 	}
@@ -745,7 +755,8 @@ func (m *Membership) droppedRefusalLocked(key string) error {
 }
 
 // keepOutKey keeps one more key out, the host's drop as its departure applies here
-// (NetworkResource.OnDropped); past the bound the oldest gives way.
+// (NetworkResource.OnDropped), and the account the roster holds for it, so a fresh
+// key under the same account is kept out too; past the bound the oldest gives way.
 func (m *Membership) keepOutKey(key string, slot uint8) {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
@@ -754,6 +765,21 @@ func (m *Membership) keepOutKey(key string, slot uint8) {
 		m.keptOutSlots = make(map[string]uint8)
 	}
 	m.keptOutSlots[key] = slot
+	if i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.Key == key }); i >= 0 && m.sessionRoster[i].Account != "" {
+		m.keepOut = addKeepOut(m.keepOut, "acct:"+m.sessionRoster[i].Account)
+	}
+}
+
+// accountOf is the account and name an admission attests: the ticket's, the site's
+// word, else the pass's, which carried a ticket's on; none for an anonymous dial.
+func accountOf(shown *network.PassBody, ticket *network.TicketBody) (account, name string) {
+	switch {
+	case ticket != nil && strings.HasPrefix(ticket.Subject, "acct:"):
+		return strings.TrimPrefix(ticket.Subject, "acct:"), ticket.Name
+	case shown != nil && shown.Account != "":
+		return shown.Account, shown.Name
+	}
+	return "", ""
 }
 
 // adoptKeepOutLocked takes the list an offer or a record carries, keeping what this
@@ -845,7 +871,7 @@ func (m *Membership) issuePassLocked(entry network.RosterEntry, shown *network.P
 		return nil
 	}
 	body := network.PassBody{Session: m.cfg.SessionName, Authority: network.DecodeKey(termKeys[0]),
-		Key: network.DecodeKey(entry.Key), Kind: network.AdmitPlay, Term: term}
+		Key: network.DecodeKey(entry.Key), Kind: network.AdmitPlay, Term: term, Account: entry.Account, Name: entry.Name}
 	s, err := network.SignPass(m.LocalKey(), body, now, 0)
 	if err != nil {
 		m.log.Warn("session", "msg", "pass not issued", "peer", uint64(entry.ID), "error", err.Error())

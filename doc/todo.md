@@ -319,25 +319,6 @@ though the router has already budgeted each player. Close it when a session
 that busy appears, by exempting the node's address at the pod or by having the
 router name the player to it.
 
-### Add browser admission authentication
-
-- Priority: P2
-- Affected files: `internal/network` (`admission.go`, `session.go`), `tool/vif-router`,
-  `internal/app/internal/membership`, `web/`
-- Prerequisite: every route carries real play without transport faults, the
-  built-in WebSocket included; no auth layer goes in while that is being settled
-- Guide: [Auth and session design](auth-session-design.md) §0, §7.6
-
-Settled by the design's decisions: a participant key and its proof on every
-admission, a session pass for every redial, an admission ticket the router mints in
-band on its TLS front door and the pod verifies, accounts in an identity service
-and a sign-in cookie on the browser route's upgrade. Phases 0 to 4 are landed: a
-fleet pod takes the router's ticket and no bare key; the phases, each a PR, are
-the design's §7.6, and this item closes with phase 5. A browser trusts a self-signed door only by
-being told to: pinning from a page needs WebTransport's `serverCertificateHashes`,
-which the route does not speak, so a page joins a player's door over the site or
-by a passphrase bound to that door's certificate.
-
 ### Fetch a content-addressed bundle over HTTP
 
 - Priority: P1
@@ -977,8 +958,8 @@ plug the holes found, one PR each.
 keys out of the session at every door and tells the dropped person, who plays on
 alone as after `:leave`. What remains is an operator route on the router, since a
 dedicated host has no console, which the design's phase 6 brings with the rest of
-the operator's loopback routes; keeping a dropped *person* out, past the keys it
-held, takes the account that phase 5 brings.
+the operator's loopback routes; a dropped *person* who signed in is kept out by the
+account its ticket names, past the keys it held, an anonymous one by its keys alone.
 
 ### Keep a Wraith's stats in the session
 

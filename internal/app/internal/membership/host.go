@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -136,6 +137,88 @@ func (m *Membership) doorVerifierLocked() *network.DoorVerifier {
 	return m.passphraseDoorLocked().Verifier()
 }
 
+// Register, Login and Logout run a site's account exchange in the background: the
+// KDF and the requests take seconds the world lock cannot wait, so the status line
+// says how it went. A native run keeps the sign-in for the site's front door; a page
+// asks for the cookie its browser keeps, and the router reads it on the upgrade.
+func (c Control) Register(site, name, password string) error {
+	site, err := accountSite(site)
+	if err != nil {
+		return err
+	}
+	go func() {
+		if err := network.Register(site, name, password, parameter.NetworkSessionRequestTimeout); err != nil {
+			c.m.ctx.SetStatusMessage("Registration at "+siteHost(site)+" failed: "+err.Error(), parameter.StatusAlert)
+			return
+		}
+		c.m.ctx.SetStatusMessage("Registered "+name+" at "+siteHost(site)+"; :login signs in", parameter.StatusNotice)
+	}()
+	return nil
+}
+
+func (c Control) Login(site, name, password string) error {
+	site, err := accountSite(site)
+	if err != nil {
+		return err
+	}
+	cookie := !paths.ExternalFiles()
+	go func() {
+		token, err := network.SignIn(site, name, password, deviceName(), cookie, parameter.NetworkSessionRequestTimeout)
+		if err != nil {
+			c.m.ctx.SetStatusMessage("Sign-in to "+siteHost(site)+" failed: "+err.Error(), parameter.StatusAlert)
+			return
+		}
+		if !cookie {
+			c.m.wiring.SignIns.Set(site, token)
+		}
+		c.m.ctx.SetStatusMessage("Signed in to "+siteHost(site)+" as "+name, parameter.StatusNotice)
+	}()
+	return nil
+}
+
+func (c Control) Logout(site string) error {
+	site, err := accountSite(site)
+	if err != nil {
+		return err
+	}
+	token := c.m.wiring.SignIns.Forget(site)
+	if token == "" && paths.ExternalFiles() {
+		return errors.New("not signed in to " + siteHost(site))
+	}
+	go func() {
+		if err := network.SignOut(site, token, parameter.NetworkSessionRequestTimeout); err != nil {
+			c.m.ctx.SetStatusMessage("Sign-out from "+siteHost(site)+" failed: "+err.Error(), parameter.StatusAlert)
+			return
+		}
+		c.m.ctx.SetStatusMessage("Signed out from "+siteHost(site), parameter.StatusNotice)
+	}()
+	return nil
+}
+
+// accountSite is the site an account command names, as an https origin: a bare
+// host is one, and a link to one of its sessions names it too.
+func accountSite(target string) (string, error) {
+	e, err := link.ParseEndpoint(target)
+	if err != nil {
+		return "", err
+	}
+	if e.Scheme == link.SchemeSite {
+		return e.Addr, nil
+	}
+	if host := siteHost(target); host != "" {
+		return "https://" + host, nil
+	}
+	return "", errors.New("a site is an https:// origin or its host")
+}
+
+// deviceName is what a sign-in is listed under among the account's: this machine's.
+func deviceName() string {
+	if name, err := os.Hostname(); err == nil && name != "" {
+		return name
+	}
+	return "vif"
+}
+
 func (c Control) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {
 		return errors.New("invalid player slot")
@@ -152,7 +235,7 @@ func (c Control) Participants() []engine.SessionParticipant {
 	for slot := range parameter.MaxPlayers {
 		e := c.m.world.Resources.Player.Slot(uint8(slot))
 		if p, ok := c.m.world.Components.Cursor.GetComponent(e); ok {
-			out = append(out, engine.SessionParticipant{Entity: e, Slot: p.Slot, Holder: p.Holder,
+			out = append(out, engine.SessionParticipant{Entity: e, Slot: p.Slot, Holder: p.Holder, Name: p.Name,
 				Local: c.m.world.SimulatesLocally(e), Away: c.m.world.Components.Wraith.HasEntity(e)})
 		}
 	}
@@ -401,11 +484,17 @@ func (m *Membership) joinSessionLocked(target string, players int, scenario stri
 		defer m.dialling.Store(false)
 		door, err := target, error(nil)
 		if site.Scheme == link.SchemeSite {
-			if door, err = network.RequestSession(site.Addr, players, scenario); err == nil {
+			var fingerprint string
+			if door, fingerprint, err = network.RequestSession(site.Addr, players, scenario); err == nil {
 				m.ctx.SetStatusMessage("Joining "+link.Shown(door)+"...", parameter.StatusProgress)
 				if next, err = Joining(next, door); err == nil {
 					err = base.ValidateWith(next)
 				}
+			}
+			// A door the router made its own certificate for is pinned by the
+			// fingerprint the site handed out with the link, where -ca named nothing.
+			if err == nil && fingerprint != "" && next.Trust == nil {
+				next.Trust, err = link.TrustTLS(fingerprint)
 			}
 		}
 		var d *JoinDial
@@ -1182,8 +1271,8 @@ func (m *Membership) crossArrivalLocked(id link.PeerID, slot uint8) {
 		m.sessionMu.Unlock()
 		return
 	}
-	p := &event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot,
-		Holder: uint32(m.sessionRoster[i].Holder), Key: m.sessionRoster[i].Key, Record: m.returning[id].record}
+	p := &event.ParticipantJoinedPayload{Participant: uint32(id), Slot: slot, Holder: uint32(m.sessionRoster[i].Holder),
+		Key: m.sessionRoster[i].Key, Name: m.sessionRoster[i].Name, Record: m.returning[id].record}
 	delete(m.returning, id)
 	m.sessionRoster[i].Away = false
 	m.awayOrder = slices.DeleteFunc(m.awayOrder, func(away link.PeerID) bool { return away == id })

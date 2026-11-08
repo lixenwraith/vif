@@ -80,8 +80,10 @@ checks the dialer's proofs and mints a ticket naming the dialer's address and ke
 which the pod verifies, spends once and checks the proof against
 ([auth design §7.5](auth-session-design.md#75-admission-tickets-and-accounts)). Anyone
 who reaches the router can still join a session and influence its Shared world, by
-name, within the budgets below; accounts and sign-ins are the design's phase 5. What
-is not accepted is a stranger being able to do anything *worse* than play.
+name, within the budgets below; a signed-in player's ticket names the account the
+identity service vouches for, so a drop keeps the account out and the roster shows
+its name, but no budget is keyed by account yet (the design's phase 6). What is not
+accepted is a stranger being able to do anything *worse* than play.
 
 What bounds a stranger:
 

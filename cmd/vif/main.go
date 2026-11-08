@@ -296,9 +296,16 @@ func requestSiteSession(scenario string) error {
 		return nil
 	}
 	fmt.Printf("requesting a session from %s\n", site.Addr)
-	target, err := network.RequestSession(site.Addr, flagSession.players, scenario)
+	target, fingerprint, err := network.RequestSession(site.Addr, flagSession.players, scenario)
 	if err != nil {
 		return fmt.Errorf("-join %s: %w", site.Addr, err)
+	}
+	// A front door the router made its own certificate for is pinned by the
+	// fingerprint the site handed out with the link, as -ca would pin it.
+	if fingerprint != "" && sessionTrust == nil {
+		if sessionTrust, err = link.TrustTLS(fingerprint); err != nil {
+			return fmt.Errorf("-join %s: the door's fingerprint %q: %w", site.Addr, fingerprint, err)
+		}
 	}
 	fmt.Printf("joining %s, the link others join by\n", target)
 	flagSession.join, flagSession.players = target, 0
@@ -440,7 +447,7 @@ func buildConfig() app.Config {
 	// joiner has no -name of its own.
 	if flagSession.join != "" {
 		join := endpoint(flagSession.join)
-		cfg.Membership.JoinAddress = join.Addr
+		cfg.Membership.JoinAddress = join.Dialable()
 		cfg.Membership.SessionName = cmp.Or(join.Name, cfg.Membership.SessionName)
 	}
 	cfg.Membership.HostAddress = doorList(flagSession.host)
@@ -475,6 +482,9 @@ func buildConfig() app.Config {
 	// process in the user's state directory while [session] resume_after_restart says.
 	// A dedicated host has no place to come back to, and a pod's filesystem is read-only.
 	cfg.Membership.PlaceStore = pagePlaces
+	if pagePlaces == nil && paths.ExternalFiles() {
+		cfg.Membership.SignInStore = paths.PlaceFile{Path: paths.SignInsFile()}
+	}
 	if pagePlaces == nil && settings.Session.ResumeAfterRestart && flagSession.serve == "" {
 		cfg.Membership.PlaceStore = paths.PlaceFile{Path: paths.PlacesFile()}
 	}

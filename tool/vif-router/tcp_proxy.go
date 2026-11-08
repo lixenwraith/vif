@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -65,6 +66,9 @@ type tcpRouter struct {
 	ticket        network.Key
 	proxyProtocol bool
 	tls           *tls.Config
+	// accounts asks which account a sign-in names, so a ticket names the account
+	// in place of the address; nil mints anonymous tickets alone.
+	accounts *identityClient
 }
 
 func newTCPRouter(sessions sessionAllocator, held *holds, joins *network.AdmissionLimiter, logger *slog.Logger) *tcpRouter {
@@ -95,7 +99,7 @@ func (r *tcpRouter) serve(listener net.Listener) {
 				return
 			}
 			defer release()
-			r.carry(conn, upstream, at, from)
+			r.carry(conn, upstream, at, from, "")
 		}()
 	}
 }
@@ -130,11 +134,12 @@ func (r *tcpRouter) accept(conn net.Conn) (net.Conn, net.Addr, bool) {
 }
 
 // carry runs the admission through the router where it mints tickets, then splices
-// and accounts for the connection as it ends.
-func (r *tcpRouter) carry(client, upstream net.Conn, at placement, from net.Addr) {
+// and accounts for the connection as it ends. signIn is the token a browser's
+// upgrade carried, which the exchange reads where the dial itself sent none.
+func (r *tcpRouter) carry(client, upstream net.Conn, at placement, from net.Addr, signIn string) {
 	started := time.Now()
 	if r.ticket.Valid() {
-		if err := r.exchange(client, upstream, at, from); err != nil {
+		if err := r.exchange(client, upstream, at, from, signIn); err != nil {
 			r.log.Info("session route admission ended", "session", at.id, "error", err)
 			_ = client.Close()
 			_ = upstream.Close()
@@ -145,12 +150,13 @@ func (r *tcpRouter) carry(client, upstream net.Conn, at placement, from net.Addr
 	r.closed(at, in, out, started)
 }
 
-// exchange runs the door's exchange through the router: the question goes to the dialer,
-// its answer comes back, its proofs are checked over the door's nonce, and a dial
-// showing no pass is given a ticket naming the address it came from and the first
-// key it proved, under the router's key; everything after is spliced. A door that
-// asked nothing, or refused, has its frame passed on as it is.
-func (r *tcpRouter) exchange(client, upstream net.Conn, at placement, from net.Addr) error {
+// exchange runs the door's exchange through the router: the question goes to the
+// dialer, its answer comes back, its proofs are checked over the door's nonce, and a
+// dial showing no pass is given a ticket under the router's key naming the first key
+// it proved and its subject: the account a sign-in names, asked of the identity
+// service, else the address it came from. The sign-in never reaches the door;
+// everything after is spliced. A door that asked nothing has its frame passed on.
+func (r *tcpRouter) exchange(client, upstream net.Conn, at placement, from net.Addr, signIn string) error {
 	deadline := time.Now().Add(routeTimeout)
 	_ = client.SetDeadline(deadline)
 	_ = upstream.SetDeadline(deadline)
@@ -192,10 +198,14 @@ func (r *tcpRouter) exchange(client, upstream net.Conn, at placement, from net.A
 			subject = network.SubjectOf(client.RemoteAddr())
 		}
 		body := network.TicketBody{Session: at.name, Kind: network.AdmitPlay, Subject: subject, Key: ans.Keys[0].Key}
+		if who := r.accounts.whose(context.Background(), cmp.Or(ans.SignIn, signIn)); who != nil {
+			body.Subject, body.Name = "acct:"+who.ID, who.Name
+		}
 		if ans.Ticket, err = network.SignTicket(r.ticket, body, time.Now()); err != nil {
 			return err
 		}
 	}
+	ans.SignIn = ""
 	payload, err := json.Marshal(ans)
 	if err != nil {
 		return err
