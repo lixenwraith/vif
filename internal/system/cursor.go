@@ -161,7 +161,7 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 			q.Slot = entry.Slot
 			q.Auto = false
 			q.Control = uint8(entry.Control)
-			q.PeerID, q.Holder, q.Key = entry.PeerID, entry.Holder, entry.Key
+			q.PeerID, q.Holder, q.Key, q.Name = entry.PeerID, entry.Holder, entry.Key, entry.Name
 			s.spawnOne(&q)
 			if entry.Wraith {
 				s.wraith(entry.Slot, entry.Waited)
@@ -360,7 +360,7 @@ func (s *CursorSystem) build(slot uint8, p *event.CursorSpawnRequestPayload) cor
 	w := s.world
 	e := w.CreateEntity(core.DomainShared)
 	w.Components.Cursor.SetComponent(e, component.CursorComponent{
-		Slot: slot, Control: component.ControlKind(p.Control), PeerID: p.PeerID, Holder: p.Holder, Key: p.Key})
+		Slot: slot, Control: component.ControlKind(p.Control), PeerID: p.PeerID, Holder: p.Holder, Key: p.Key, Name: p.Name})
 	w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll})
 	return e
 }

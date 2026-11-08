@@ -42,6 +42,12 @@ type SessionController interface {
 	// Empty authority keeps the run's policy.
 	BeginHosting(addr, authority string) error
 	Join(target string) error
+	// Register, Login and Logout run against a site's account service in the
+	// background and report on the status line; a native run keeps the sign-in for
+	// the site's front door, a page's browser keeps the cookie the site set.
+	Register(site, name, password string) error
+	Login(site, name, password string) error
+	Logout(site string) error
 	// SetPassphrase sets what this run's doors take and its dials show, the phrase
 	// given or one made for "new", and returns it to be shown once.
 	SetPassphrase(phrase string) (string, error)
@@ -82,6 +88,7 @@ type SessionParticipant struct {
 	Entity core.Entity
 	Slot   uint8
 	Holder uint32
+	Name   string // the account's, attested by the site; empty for an anonymous player
 	Local  bool
 	Away   bool // a Wraith waits in the slot for the participant's return
 }

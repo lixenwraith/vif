@@ -83,8 +83,8 @@ moves into the reference documents ([Multiplayer](multi-player.md),
 - **D11. A sign-in is opaque**, 32 random bytes whose SHA-256 the service stores, one
   per device, named and revocable one by one, sliding over 30 days and renewed past
   half its life. A page holds it in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie
-  scoped to `/vif/api/`; a terminal in a 0600 file, refused wider; Android in private
-  storage.
+  scoped to `/vif/`, so the browser route's upgrade at `/vif/ws/` carries it; a
+  terminal in a 0600 file, refused wider; Android in private storage.
 - **D12. Anonymous play stays.** An account adds to what a player can do and its
   absence refuses nothing by default; an anonymous ticket names the dialer's address.
   An account is required only for what needs a lasting name: a roster name, keep-out
@@ -197,9 +197,9 @@ From [the todo list](todo.md), each with what it needs here.
 
 Authentication itself:
 
-- [Add browser admission authentication](todo.md#add-browser-admission-authentication)
-  (P2): met by phases 2, 4 and 5 (§7.6). Its prerequisite, every route carrying real
-  play without transport faults, applies to all of §7.
+- Browser admission authentication, the item phases 2, 4 and 5 met (§7.6) and
+  closed with phase 5. Its prerequisite, every route carrying real play without
+  transport faults, applies to all of §7.
 - [Publish a player's session at the router](todo.md#publish-a-players-session-at-the-router)
   (P3): a publish ticket (D12) and accounting keyed by the account: phase 6.
 
@@ -358,7 +358,7 @@ The threats, and the part that meets each:
 
 ### 7.0 What is built
 
-Phases 0 to 4 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
+Phases 0 to 5 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
 Ed25519 key pair kept as its 32-byte seed in JSON, with `Prove`/`VerifyProof` over a
 door's nonce, the session's name and a channel binding (`ChannelBinding`, the SHA-256
 of a leaf certificate), `VerifyProofs` over a dial's list and `EncodeKey`/`DecodeKey`,
@@ -390,8 +390,15 @@ where no edge does, runs the door's exchange through itself and mints an anonymo
 ticket for the key the dial proved under `-ticket-key`, lists its public half at
 `GET /vif/api/keys`, and hands out `vifs://` links where TLS fronts the door; a pod
 run with `-admit ticket` takes the router's tickets and no bare key (`TicketGate`).
-Tests, one a rule, and fuzz targets over the token forms, the join handshake and the
-peer link.
+And §7.5's second half, live: the router forwards the identity service's routes and
+asks it which account a sign-in names (`identityClient`), from a native dial's
+answer over TLS (`AuthRequest.SignIn`, `Config.SignIn`) or a page's cookie, and the
+ticket names the account; the game registers, signs in and out (`network.Register`,
+`SignIn`, `SignOut`; `:register`, `:login`, `:logout`), keeps the sign-in per site
+(`SignInKeeper`, `signins.json`) and shows it to a TLS door alone; the account and
+its name ride the roster entry, the cursor and the pass (D15), and a drop keeps the
+account out. Tests, one a rule, and fuzz targets over the token forms, the join
+handshake and the peer link.
 
 ### 7.1 Participant keys
 
@@ -561,7 +568,8 @@ the edge's PROXY header, version 1 or 2, when `-route-proxy-protocol` says an ed
 fronts it, and ends TLS itself under `-route-cert`; `-route-secure`, implied by the
 latter, has every link read `vifs://`, which the game dials with the system's roots
 or `-ca`. `vif-router keygen` writes the seed `-ticket-key` names; `GET /vif/api/keys`
-lists the public key. Accounts follow, in the identity service (D8):
+lists the public key. Accounts are landed too, in the identity service (D8), whose
+routes and introspection are these:
 
 - `POST /vif/api/auth/register`: a name and a derived credential
   (`Credential.Export`), checked against the deployment's one KDF profile and a name
@@ -614,9 +622,13 @@ phase 2 `event.JournalSchema` with the departure.
   `-admit ticket`, `GET /vif/api/keys`, the edge's stream block in the reference
   edge; the deployment turns the edge on with `VIF_ROUTER_ROUTE_PROXY_PROTOCOL` and
   `VIF_ROUTER_ROUTE_SECURE` once the stream block fronts 7777.
-- **Phase 5, accounts**: the identity service in its own repository (D8, D9),
-  PostgreSQL in the jail, the router's forward and introspection, the cookie on the
-  upgrade, `:login`/`:logout`, names on the roster (D15).
+- **Phase 5, accounts** (D8, D9, D15): landed. The identity service in its own
+  repository on PostgreSQL in the jail; the router forwards its routes and asks it
+  which account a sign-in names, from a native dial's answer over TLS or a page's
+  cookie on the upgrade, and the ticket names the account; `:register`, `:login` and
+  `:logout` on every host, the sign-in kept per site in `signins.json` or the
+  browser's cookie; the account's name on the roster, the cursor and the pass; a
+  drop keeps the account out. Budgets by account are phase 6's.
 - **Phase 6, the account's reach**: publish and create tickets, budgets by account,
   the operator's loopback routes (D16), spectators.
 
@@ -659,9 +671,9 @@ By phase:
   - The identity service runs on the node as a system user of its own with its own
     unit and state directory (the decoy key, 0600), bound to loopback twice: the
     `/vif/api/auth/` listener the router forwards to, and the introspection listener
-    the forward never reaches. No new public port and no filter change; `update.sh`
-    gains it as a component, updated without the empty-fleet gate, since its restart
-    pauses only sign-ins and account tickets.
+    the forward never reaches. No new public port and no filter change; the service's
+    own `deploy/update-identity.sh` updates it without the empty-fleet gate, since
+    its restart pauses only sign-ins and account tickets.
   - Its store is the jail's PostgreSQL (D9): a database and schema of the service's
     name, a role for it with a SCRAM-SHA-256 password read from a 0600 file, reached
     over the host's internal network with `hostssl` in `pg_hba.conf` and the jail's
@@ -671,8 +683,8 @@ By phase:
     migrations and the backup script.
   - The router forwards `/vif/api/auth/` byte for byte (`log_proxy.go`'s shape) and
     asks introspection once per account ticket. A page's sign-in is a cookie scoped
-    to `/vif/api/`, and the router mints from a cookie only on a request whose
-    `Origin` is `-web-origin`.
+    to `/vif/`, which the `/vif/ws/` upgrade carries, and the router mints from a
+    cookie only on a request whose `Origin` is `-web-origin`.
   - The public log stream carries the sessions' logs, which name a participant by
     slot, never by account; the service's logs stay off it and hold no credential.
 - **Phase 6**: the operator routes, dropping a participant and draining, on a

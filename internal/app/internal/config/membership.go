@@ -83,6 +83,11 @@ type Membership struct {
 	// door does.
 	TicketKeys [][]byte
 
+	// SignInStore keeps the sign-ins this process holds, one a site, past its life, a
+	// file for the user alone; nil for a page, whose browser keeps the cookie, and
+	// for a run that keeps none.
+	SignInStore PlaceStore
+
 	// PlaceStore keeps the places this process comes back to its sessions with past
 	// its own life: a page's across a reload, a terminal's or a phone's across a
 	// restart or a crash; nil keeps them while it runs.

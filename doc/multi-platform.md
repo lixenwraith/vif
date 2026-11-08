@@ -267,9 +267,9 @@ trust by opening `https://host:7778` once, which the door answers with a line sa
 so), and its page's `connect-src` must allow the host's origin. A terminal joins it
 with `-join wss://host:7778/<name>`: a certificate the system's roots vouch for, or
 a self-signed one taken as it is, encrypted and naming nobody, open to a man in the
-middle until the handshake planned in
-[todo](todo.md#add-browser-admission-authentication) binds to it; `-ca` names an
-issuer's PEM file or pins the certificate's own fingerprint, `sha256:<hex>`, which
+middle unless a passphrase bound to that door's certificate rules one out
+([Auth and session design §7.4](auth-session-design.md#74-passphrase-doors)); `-ca`
+names an issuer's PEM file or pins the certificate's own fingerprint, `sha256:<hex>`, which
 the host prints at startup and `:session` reads, for a player who wants that
 authentication now.
 
@@ -300,8 +300,10 @@ For a page served over HTTPS the endpoint must be `wss://`: browsers block
 `ws://` as active mixed content. The route is same-origin with the page, so a
 `connect-src 'self'` policy permits it; a terminal's own `wss://` door is another
 origin, which that policy must name (`connect-src 'self' wss:`) before the page can
-join it. Ordinary CORS headers are not a substitute for the `Origin` check. Browser admission credentials, short-lived and
-session-scoped, are [open work](todo.md#add-browser-admission-authentication).
+join it. Ordinary CORS headers are not a substitute for the `Origin` check. A browser's
+admission credentials are the router's ticket, minted in the exchange it runs on the
+upgrade, and, signed in, the `vif_sign_in` cookie that upgrade carries
+([Auth and session design §7.5](auth-session-design.md#75-admission-tickets-and-accounts)).
 
 Native clients use raw TCP through the router's front door
 ([fleet §9](kubernetes-fleet.md#9-the-session-routes)), or this route where a
@@ -657,8 +659,9 @@ release checks should include a real terminal; audio-capable artifacts also need
 least one real or `null`/WAV backend smoke test. Windows is played by hand, not
 certified on the release path; its known issues are in §4.
 
-Two policy decisions stay separate from transport, and both are open in todo:
-[browser admission](todo.md#add-browser-admission-authentication), with whether the
-router stays its credential boundary, and the publisher trust, allowed origins
-and cache policy of [a fetched container](todo.md#fetch-a-content-addressed-bundle-over-http)
-(§7).
+Two policy decisions stay separate from transport: browser admission, settled with
+the router as the credential boundary
+([Auth and session design D4, D5](auth-session-design.md#0-decisions)), and the
+publisher trust, allowed origins and cache policy of
+[a fetched container](todo.md#fetch-a-content-addressed-bundle-over-http) (§7),
+still open in todo.

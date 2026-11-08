@@ -57,7 +57,7 @@ func (m *Membership) worldRosterLocked() []network.RosterEntry {
 		}
 		out = append(out, network.RosterEntry{
 			ID: link.PeerID(c.PeerID), Slot: uint8(slot), Holder: link.PeerID(c.Holder),
-			Away: w.Components.Wraith.HasEntity(e), Key: c.Key,
+			Away: w.Components.Wraith.HasEntity(e), Key: c.Key, Name: c.Name,
 		})
 	}
 	slices.SortFunc(out, func(a, b network.RosterEntry) int { return int(a.ID) - int(b.ID) })

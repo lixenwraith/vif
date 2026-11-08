@@ -31,6 +31,10 @@ type RosterEntry struct {
 	Holder link.PeerID `json:"holder,omitempty"`
 	Away   bool        `json:"away,omitempty"`
 	Key    string      `json:"key,omitempty"`
+	// Account and Name are the site's, copied from a verified ticket or the pass that
+	// carried them on; an anonymous participant has neither and keeps the slot's label.
+	Account string `json:"account,omitempty"`
+	Name    string `json:"name,omitempty"`
 }
 
 // SessionOffer carries the replay identity and the coordinator-owned roster.
@@ -759,6 +763,11 @@ func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link
 	// A door that takes the site's ticket is answered with the keys alone: the
 	// router between adds the ticket, and a dial that reached it by another way is
 	// refused there.
+	// A sign-in crosses TLS alone: the router reads it on its front door and never
+	// passes it on, and a plain stream would show it to whoever listens.
+	if base.SignIn != "" && tlsOf(conn) != nil {
+		answer.SignIn = base.SignIn
+	}
 	var client *auth.ScramClient
 	if !slices.Contains(ask.Methods, MethodKey) && !slices.Contains(ask.Methods, MethodTicket) && answer.Pass == nil {
 		switch {

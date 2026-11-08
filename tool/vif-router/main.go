@@ -50,8 +50,22 @@ func run(args []string, logger *slog.Logger) error {
 		cfg.Allocator.Workload.TicketKey = ticket.ID()
 	}
 	var routeTLS *tls.Config
-	if cfg.RouteCert != "" {
+	switch {
+	case cfg.RouteCert != "":
 		if routeTLS, err = link.LoadTLS(cfg.RouteCert, cfg.RouteKey); err != nil {
+			return err
+		}
+	case cfg.RouteSelfSign:
+		// A certificate for this run alone, as vif -selfsign makes one: a dial takes
+		// it as it is, or pins the fingerprint the sessions API hands out with each link.
+		if routeTLS, err = link.SelfSignedTLS([]string{cfg.Allocator.JoinHost}); err != nil {
+			return err
+		}
+		cfg.Allocator.DoorFingerprint = link.Fingerprint(routeTLS)
+	}
+	var accounts *identityClient
+	if cfg.IdentityURL != "" {
+		if accounts, err = newIdentityClient(cfg.IdentityURL, cfg.IntrospectURL, logger); err != nil {
 			return err
 		}
 	}
@@ -95,6 +109,7 @@ func run(args []string, logger *slog.Logger) error {
 	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator, held, joins)
 	handler.routeDoors(tunnels)
 	handler.admitWith(ticket)
+	handler.serveAccounts(accounts)
 	server := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           handler,
@@ -129,12 +144,14 @@ func run(args []string, logger *slog.Logger) error {
 	go func() {
 		logger.Info("router listening", "address", cfg.Listen, "route", cfg.RouteListen,
 			"image", cfg.Allocator.Workload.Image, "proxy_protocol", cfg.RouteProxyProtocol,
-			"route_tls", routeTLS != nil, "tickets", ticket.Valid())
+			"route_tls", routeTLS != nil, "door_fingerprint", cfg.Allocator.DoorFingerprint,
+			"tickets", ticket.Valid(), "accounts", accounts != nil)
 		errCh <- server.Serve(listener)
 	}()
 	frontDoor := newTCPRouter(controller, held, joins, logger)
 	frontDoor.tunnels = tunnels
 	frontDoor.ticket, frontDoor.proxyProtocol, frontDoor.tls = ticket, cfg.RouteProxyProtocol, routeTLS
+	frontDoor.accounts = accounts
 	go frontDoor.serve(routeListener)
 	notifyReady(logger)
 

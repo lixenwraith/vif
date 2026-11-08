@@ -50,8 +50,9 @@ type apiServer struct {
 	mux       *http.ServeMux
 
 	clientHeader string
-	ticketKeys   []string    // the public keys the router's tickets verify under, current first
-	unattributed atomic.Bool // warned once that the edge sent no address
+	ticketKeys   []string        // the public keys the router's tickets verify under, current first
+	accounts     *identityClient // the identity service, forwarded to and asked; nil publishes no accounts
+	unattributed atomic.Bool     // warned once that the edge sent no address
 	creates      *network.AdmissionLimiter
 	list         fleetList
 }

@@ -515,6 +515,7 @@ func (p *ParticipantJoinedPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecParticipantJoinedPayload = structCodec{size: unsafe.Sizeof(ParticipantJoinedPayload{}), fields: []field{
 	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Record), kind: kindPtr, sub: &codecCursorRecord, new: func(p unsafe.Pointer) { *(**CursorRecord)(p) = new(CursorRecord) }},
 	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Key), kind: kindString},
+	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Name), kind: kindString},
 	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Holder), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Participant), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(ParticipantJoinedPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
@@ -1276,6 +1277,7 @@ func (p *CursorSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecCursorSpawnRequestPayload = structCodec{size: unsafe.Sizeof(CursorSpawnRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Record), kind: kindPtr, sub: &codecCursorRecord, new: func(p unsafe.Pointer) { *(**CursorRecord)(p) = new(CursorRecord) }},
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Key), kind: kindString},
+	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Name), kind: kindString},
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Holder), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},

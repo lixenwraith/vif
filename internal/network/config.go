@@ -28,6 +28,11 @@ type Config struct {
 	// SCRAM exchange whose KDF runs here; empty shows none, and such a door refuses it.
 	Passphrase string
 
+	// SignIn is the site's sign-in the dial shows a front door reached over TLS
+	// (AuthRequest.SignIn), which the router between reads and strips; over a plain
+	// stream it is kept back. Empty dials anonymously.
+	SignIn string
+
 	// Identity is the build half of what this peer is (wire contract, manifest and
 	// layout schemas), compared against the offer before a world is built from it.
 	// A zero Protocol disables the check, so a harness can dial a hand-built fixture.
@@ -85,6 +90,6 @@ func NewLoopbackPair(a, b link.PeerID) (*link.MeshPort, *link.MeshPort) {
 // RequestSession asks site's router for a new session and returns the link this
 // build joins it by. players and scenario choose from what the site advertises,
 // zero for its defaults; a refusal, an unauthorised one included, is its message.
-func RequestSession(site string, players int, scenario string) (string, error) {
+func RequestSession(site string, players int, scenario string) (target, fingerprint string, err error) {
 	return link.RequestSession(site, players, scenario, parameter.NetworkSessionRequestTimeout)
 }
