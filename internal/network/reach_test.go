@@ -2,6 +2,7 @@ package network
 
 import (
 	"errors"
+	"maps"
 	"net"
 	"slices"
 	"testing"
@@ -129,17 +130,40 @@ func TestADoorListsWithoutMakingACandidate(t *testing.T) {
 	}
 }
 
+// peerKeys is a session's keys as a test holds them: every participant's own, read
+// as the roster's by both ends, and the one it dials or answers as.
+type peerKeys struct {
+	local link.PeerID
+	keys  map[link.PeerID]Key
+}
+
+func testPeerKeys(ids ...link.PeerID) peerKeys {
+	k := peerKeys{local: ids[0], keys: make(map[link.PeerID]Key)}
+	for _, id := range ids {
+		k.keys[id] = NewKey()
+	}
+	return k
+}
+
+func (k peerKeys) as(id link.PeerID) peerKeys  { k.local = id; return k }
+func (k peerKeys) LocalKey() Key               { return k.keys[k.local] }
+func (k peerKeys) KeyOf(id link.PeerID) string { return k.keys[id].ID() }
+
 // TestPeerLinkAdmitsOnlyAParticipant covers the handshake two participants use on
-// each other: it names the far end and refuses anyone the gate does not know.
+// each other: it names the far end, each proving the roster's key for itself over
+// the other's nonce, and refuses anyone the gate does not know or that holds another
+// key than the roster's.
 func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 	// The gate holds the whole identity and the dial carries only the build half,
 	// which is what a live session does: verifying more than the build refused
 	// every peer link there was.
+	keys := testPeerKeys(2, 3, 4)
 	accept := PeerAcceptor(PeerGate{
 		Local:    func() link.PeerID { return 2 },
 		Identity: PeerIdentity{Protocol: ProtocolVersion, Seed: 42, Session: 7},
+		Keys:     keys,
 		Admit: func(from link.PeerID) error {
-			if from != 3 {
+			if from != 3 && from != 4 {
 				return errors.New("not in this session")
 			}
 			return nil
@@ -165,16 +189,15 @@ func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 		}
 	}()
 
-	connect := PeerDialer(PeerIdentity{Protocol: ProtocolVersion}, time.Second)
-	dial := func(local link.PeerID) (link.PeerID, error) {
+	dial := func(local link.PeerID, with PeerKeys) (link.PeerID, error) {
 		conn, err := net.Dial("tcp", ln.Addr().String())
 		if err != nil {
 			t.Fatalf("dial: %v", err)
 		}
 		defer conn.Close()
-		return connect(conn, local)
+		return PeerDialer(PeerIdentity{Protocol: ProtocolVersion, Session: 7}, with, time.Second)(conn, local)
 	}
-	from, err := dial(3)
+	from, err := dial(3, keys.as(3))
 	if err != nil || from != 2 {
 		t.Fatalf("peer link = (%d, %v), want participant 2", from, err)
 	}
@@ -182,8 +205,23 @@ func TestPeerLinkAdmitsOnlyAParticipant(t *testing.T) {
 		t.Fatalf("the acceptor refused a participant it knows: %v", err)
 	}
 
-	if _, err = dial(4); err == nil {
+	if _, err = dial(9, keys.as(9)); err == nil {
 		t.Fatal("a participant the gate does not know opened a link")
+	}
+	<-results
+	// Participant 4 is in the session, but this dialer holds another key for itself
+	// than the roster's: the acceptor's verdict refuses it, and reaches it.
+	forged := peerKeys{local: 4, keys: maps.Clone(keys.keys)}
+	forged.keys[4] = NewKey()
+	if _, err = dial(4, forged); !errors.Is(err, ErrPeerUnproven) {
+		t.Fatalf("a dialer holding another key than the roster's was answered %v", err)
+	}
+	if err := <-results; !errors.Is(err, ErrPeerUnproven) {
+		t.Fatalf("the acceptor refused an unproven dialer with %v", err)
+	}
+	// Whose roster names another key for the acceptor: the dialer refuses it first.
+	if _, err = dial(3, testPeerKeys(3, 2)); !errors.Is(err, ErrPeerUnproven) {
+		t.Fatalf("a dialer took an acceptor that proved another key: %v", err)
 	}
 	<-results
 }
@@ -197,6 +235,7 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 	offer := testOffer()
 	offer.Host, offer.Assigned = 2, 4
 	offer.Roster = []RosterEntry{{ID: 2, Slot: 0}, {ID: 3, Slot: 1}, {ID: 4, Slot: 2}}
+	keys := testPeerKeys(2, 3, 4)
 	admitted := make(chan link.PeerID, 4)
 	port := func(bind string, local link.PeerID, gate func(link.PeerID) error) *link.SocketPort {
 		ln, err := link.BindPeer(bind)
@@ -206,10 +245,10 @@ func TestAParticipantsPortTakesPeerLinksAndJoins(t *testing.T) {
 		cfg := DebugConfig(link.RolePeer, "")
 		cfg.ParticipantID = local
 		cfg.PreboundListener = ln
-		cfg.AcceptPeer = PeerAcceptor(PeerGate{Local: func() link.PeerID { return local }, Admit: gate}, time.Second)
-		cfg.ConnectPeer = PeerDialer(cfg.Identity, time.Second)
+		cfg.AcceptPeer = PeerAcceptor(PeerGate{Local: func() link.PeerID { return local }, Admit: gate, Keys: keys.as(local)}, time.Second)
+		cfg.ConnectPeer = PeerDialer(cfg.Identity, keys.as(local), time.Second)
 		cfg.AcceptSession = HostAcceptor(Coordinator{
-			Assign: func([]string) (SessionOffer, error) { return offer, nil },
+			Assign: func(Admission) (SessionOffer, error) { return offer, nil },
 		}, time.Second)
 		cfg.OnAdmit = func(id link.PeerID) { admitted <- id }
 		p := link.NewSocketPort(&cfg.Config)

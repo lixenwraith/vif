@@ -132,11 +132,12 @@ type NetworkConnectPayload struct {
 // ParticipantJoinedPayload names the roster slot a participant arriving mid-run
 // takes. Like a departure it is a crossing rather than a local reaction: every
 // instance has to add the cursor at the same tick or their shared entity creation
-// order diverges (D-11). Claim is the digest the cursor carries for its participant's
-// return; Record is what one coming back to its Wraith brings of the game it left.
+// order diverges (D-11). Key is the participant key the cursor carries for its
+// participant's return; Record is what one coming back to its Wraith brings of the
+// game it left.
 type ParticipantJoinedPayload struct {
 	Record      *CursorRecord `toml:"record"`
-	Claim       string        `toml:"claim,omitempty"`
+	Key         string        `toml:"key,omitempty"`
 	Holder      uint32        `toml:"holder"`
 	Participant uint32        `toml:"participant"`
 	Slot        uint8         `toml:"slot"`
@@ -872,7 +873,7 @@ func (p *CursorStatePayload) Record() CursorRecord {
 // and with Record over the template.
 type CursorSpawnRequestPayload struct {
 	Record  *CursorRecord `toml:"record"`
-	Claim   string        `toml:"claim,omitempty"` // digest of the token its participant returns with
+	Key     string        `toml:"key,omitempty"` // the participant key its participant returns with
 	Holder  uint32        `toml:"holder"`
 	X       int           `toml:"x"`
 	Y       int           `toml:"y"`

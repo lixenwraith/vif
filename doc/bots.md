@@ -334,7 +334,7 @@ unattended.
   through the world it reads next.
 - A guest's bot has no link of its own, so it shows no throughput and is not
   evicted as slow; what it sends counts against its holder's ingress budget.
-- Links are unauthenticated, and every participant needs the same build.
+- The door admits any key, and every participant needs the same build.
 
 ## Troubleshooting
 

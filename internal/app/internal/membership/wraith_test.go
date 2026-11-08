@@ -17,7 +17,7 @@ import (
 )
 
 // wraithWorld is a membership over a bare world whose cursors stand in the slots
-// named, each the participant and claim given, a Wraith that has waited as long as
+// named, each the participant and key given, a Wraith that has waited as long as
 // waited says, or no Wraith for a negative wait.
 func wraithWorld(cursors ...component.CursorComponent) func(waited ...time.Duration) *Membership {
 	return func(waited ...time.Duration) *Membership {
@@ -35,14 +35,14 @@ func wraithWorld(cursors ...component.CursorComponent) func(waited ...time.Durat
 	}
 }
 
-// TestAWraithWaitsUnderTheClaimItsRosterNames: a Wraith keeps the participant and
-// holder it left with and takes the claim the roster names it under, as a session a
+// TestAWraithWaitsUnderTheKeyItsRosterNames: a Wraith keeps the participant and
+// holder it left with and takes the key the roster names it under, as a session a
 // run opens names its bots' afresh; an entry naming somebody else leaves it as it was.
-func TestAWraithWaitsUnderTheClaimItsRosterNames(t *testing.T) {
+func TestAWraithWaitsUnderTheKeyItsRosterNames(t *testing.T) {
 	t.Parallel()
 	const slot, id = 1, 2
-	left := network.ClaimDigest(network.NewClaimToken())
-	m := wraithWorld(component.CursorComponent{Slot: slot, PeerID: id, Claim: left})(time.Second)
+	left := network.NewKey().ID()
+	m := wraithWorld(component.CursorComponent{Slot: slot, PeerID: id, Key: left})(time.Second)
 	cursor := func() component.CursorComponent {
 		c, _ := m.world.Components.Cursor.GetComponent(m.world.Resources.Player.Slot(slot))
 		return c
@@ -51,16 +51,16 @@ func TestAWraithWaitsUnderTheClaimItsRosterNames(t *testing.T) {
 		m.bindCursorOwnersLocked([]network.RosterEntry{p}, engine.CoordinatorParticipant)
 	}
 
-	bind(network.RosterEntry{ID: id + 1, Slot: slot, Claim: network.ClaimDigest(network.NewClaimToken())})
-	if c := cursor(); c.Claim != left || c.PeerID != id {
-		t.Fatalf("an entry naming somebody else left the Wraith as participant %d under %q; want %d under its own claim", c.PeerID, c.Claim, id)
+	bind(network.RosterEntry{ID: id + 1, Slot: slot, Key: network.NewKey().ID()})
+	if c := cursor(); c.Key != left || c.PeerID != id {
+		t.Fatalf("an entry naming somebody else left the Wraith as participant %d under %q; want %d under its own key", c.PeerID, c.Key, id)
 	}
-	carried := network.ClaimDigest(network.NewClaimToken())
-	bind(network.RosterEntry{ID: id, Slot: slot, Holder: 9, Claim: carried})
+	carried := network.NewKey().ID()
+	bind(network.RosterEntry{ID: id, Slot: slot, Holder: 9, Key: carried})
 	waiting := m.world.Components.Wraith.HasEntity(m.world.Resources.Player.Slot(slot))
-	if c := cursor(); c.Claim != carried || c.PeerID != id || c.Holder != 0 || !waiting {
+	if c := cursor(); c.Key != carried || c.PeerID != id || c.Holder != 0 || !waiting {
 		t.Fatalf("the Wraith is participant %d held by %d under %q, a Wraith %t; want %d held by nobody under %q, still waiting",
-			c.PeerID, c.Holder, c.Claim, waiting, id, carried)
+			c.PeerID, c.Holder, c.Key, waiting, id, carried)
 	}
 }
 

@@ -43,9 +43,13 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...lin
 		Term:     network.FirstTerm,
 		Chain:    meshChain(chain),
 	}
+	// A key a participant, as a handshake would have proved: the roster names each,
+	// and each run holds its own, so succession messages and peer links verify.
+	keys := make([]network.Key, n)
 	for i := range n {
+		keys[i] = network.NewKey()
 		offer.Roster = append(offer.Roster,
-			network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i)})
+			network.RosterEntry{ID: link.PeerID(i + 1), Slot: uint8(i), Key: keys[i].ID()})
 	}
 
 	apps := make([]*App, n)
@@ -54,6 +58,7 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...lin
 		if err != nil {
 			t.Fatalf("headless: %v", err)
 		}
+		a.HoldKey(keys[i])
 		apps[i] = a
 	}
 	t.Cleanup(func() {

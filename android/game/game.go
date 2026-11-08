@@ -93,6 +93,11 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	cfg := app.Config{Play: settings.Play, Settings: paths.SettingsFor("", file),
 		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
+	// The app's private files, where the state root was put above: the system ends
+	// a backgrounded process, and its places come back with the next.
+	if settings.Session.ResumeAfterRestart {
+		cfg.Membership.PlaceStore = paths.PlaceFile{Path: paths.PlacesFile()}
+	}
 	if unknown != nil {
 		cfg.Notice = paths.DropUnknown(cfg.Settings, unknown)
 	}

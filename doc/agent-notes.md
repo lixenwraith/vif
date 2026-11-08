@@ -271,6 +271,17 @@ comment now states, and link that instead.
   which `json.Marshal` does; a token re-encoded with whitespace by another writer
   fails its signature, which is the intended refusal, not a bug to relax.
 
+## Admission
+
+- A challenge-response handshake cannot be fuzzed from a static script past its
+  challenge: a proof over a random nonce is never in the corpus. The join target
+  pins the nonce through `Coordinator.Nonce` and seeds proofs over it; the peer
+  link target asserts instead that no script ever opens a link.
+- A public key travels as its base64 string (`network.EncodeKey`), not `[]byte`:
+  `RosterEntry` is compared with `slices.Equal` (`SameRoster`), a payload field is
+  TOML a scenario could name, and the generated capture codec has string and slice
+  kinds and no bytes kind. Decode at the boundary that verifies.
+
 ## Position
 
 - [Position](position-package.md) states the index's rules: bounds that are the

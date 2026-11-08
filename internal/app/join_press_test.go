@@ -240,9 +240,9 @@ func TestAJoinerLandsInAGameWaitingForItsHostsStart(t *testing.T) {
 // given up, and neither is begun until then.
 func TestAPreviewRefusesOnlyWhatItsSeatWould(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	preview := func(addr string, claims ...string) (network.SessionOffer, error) {
+	preview := func(addr string, keys ...network.Key) (network.SessionOffer, error) {
 		cfg := network.DebugConfig(link.RolePeer, "")
-		cfg.Claims = claims
+		cfg.Keys = keys
 		pending, o, err := network.PreviewSession(addr, cfg)
 		if err == nil {
 			_ = pending.Close()
@@ -259,10 +259,10 @@ func TestAPreviewRefusesOnlyWhatItsSeatWould(t *testing.T) {
 	a := awayGuest(t)
 	a.stop() // a yield begun is the next tick's to act on
 	before := a.host.membership.GuestCount()
-	for _, claims := range [][]string{nil, {a.token}} {
-		o, err := preview(a.host.HostAddr(), claims...)
+	for _, keys := range [][]network.Key{nil, {a.key}} {
+		o, err := preview(a.host.HostAddr(), keys...)
 		if err != nil || o.ValidatePreview() != nil {
-			t.Fatalf("a full session a player left previewed claims %v with %+v, %v", claims, o, err)
+			t.Fatalf("a full session a player left previewed %d kept keys with %+v, %v", len(keys), o, err)
 		}
 	}
 	var dismiss uint32

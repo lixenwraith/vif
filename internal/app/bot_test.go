@@ -256,13 +256,13 @@ func places(a *App, match func(component.CursorComponent) bool) map[uint8][2]uin
 	return out
 }
 
-// claimOn is the claim the cursor on slot waits or plays under.
-func claimOn(a *App, slot uint8) (claim string) {
+// keyOn is the key the cursor on slot waits or plays under.
+func keyOn(a *App, slot uint8) (key string) {
 	a.world.RunSafe(func() {
 		c, _ := a.world.Components.Cursor.GetComponent(a.world.Resources.Player.Slot(slot))
-		claim = c.Claim
+		key = c.Key
 	})
-	return claim
+	return key
 }
 
 // everyone is every cursor, for places.
@@ -821,10 +821,10 @@ func TestAGuestsBotsComeAlongWhenItLeaves(t *testing.T) {
 		t.Fatalf("after the leave the guest's bot holds %v (entity, participant by slot); want the place it had, %v", got, left)
 	}
 	waitForWraiths(t, host, 2)
-	// Under a claim of its own in the session it went on in, so the record it left
+	// Under a key of its own in the session it went on in, so the record it left
 	// the host's with stays there
-	if waits, plays := claimOn(host, again.Slot), claimOn(guest, again.Slot); waits == "" || waits == plays {
-		t.Fatalf("the bot waits on the host under %q and plays on under %q; want a claim of its own", waits, plays)
+	if waits, plays := keyOn(host, again.Slot), keyOn(guest, again.Slot); waits == "" || waits == plays {
+		t.Fatalf("the bot waits on the host under %q and plays on under %q; want a key of its own", waits, plays)
 	}
 	var e core.Entity
 	guest.world.RunSafe(func() { e = guest.world.Resources.Player.Slot(again.Slot) })
@@ -926,7 +926,7 @@ func TestDefaultTypesWhatItReaches(t *testing.T) {
 }
 
 // TestAPlayerComingBackTakesBackItsWraithAndItsBots: a guest whose run left joins
-// again from the same process, naming the claims it left under, and it and its bot
+// again from the same process, proving the keys it left under, and it and its bot
 // are given their own places back, the cursors their Wraiths kept.
 func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
@@ -945,7 +945,7 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
 	cfg := runConfig{Config: Config{Membership: Membership{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}},
-		wiring: wiring{membership: membership.Wiring{Claims: membership.NewClaimKeeper(nil)}}}
+		wiring: wiring{membership: membership.Wiring{Places: membership.NewPlaceKeeper(nil)}}}
 	_, leave := driveRun(t, "bot", cfg, "patrol", nil)
 	waitForCursors(t, host, 3)
 	left := places(host, everyone)
