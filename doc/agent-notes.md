@@ -3,8 +3,9 @@
 What agents working on this repository learned that no rule in
 [AGENTS.md](../AGENTS.md) and no design document states: facts that cost a session
 an hour to rediscover, and how to check them. Read it before starting. When a task
-teaches you one, add it in the same PR, one bullet under its topic; delete a note
-that proves wrong or that a document now states, and link the document instead.
+teaches you one, add it in the same PR, one bullet under its topic. Keep it short:
+delete a note that proves wrong, whose trap is gone, or that a document or a code
+comment now states, and link that instead.
 
 ## Toolchain
 
@@ -23,34 +24,16 @@ that proves wrong or that a document now states, and link the document instead.
   Google's mirror (`maven-central.storage-download.googleapis.com/maven2/`), passed
   with `-I`, builds the APKs in about four minutes.
 - The Java app type-checks without an SDK: `javac --release 17 -cp android-all.jar`
-  (Robolectric's `org.robolectric:android-all` from Maven Central, the release
+  (Robolectric's `org.robolectric:android-all` from Maven Central, at the release
   `compileSdk` names: `16-robolectric-13921718` for `android-36.1`) over
   `android/app/src/main/java` and stubs for `R` and the bound `Game`, `Speaker` and
-  `Listener`; the jar's `UnsupportedAppUsage` annotation warnings are noise to
-  filter. Maven Central answers a shared egress 429 at times, its listing too: fetch
-  the jar by its full path and retry after a pause.
-- The emulator runs without KVM: `emulator -avd <name> -no-window -no-audio
-  -no-boot-anim -gpu swiftshader_indirect -accel off -memory 2048 -cores 2
-  -no-snapshot` on the `android-36` default x86_64 image boots in about 14 minutes
-  on 4 vCPUs and takes `adb install`, `am start`, `input tap`, `input swipe x y x
-  y 3000` (a held press) and `exec-out screencap -p`. It is some 30x slower than a
-  phone, so the app, the launcher and system apps hit Android's 5 s input limit:
-  an "isn't responding" dialog swallows every tap until its Wait is tapped (read
-  its place from `dumpsys window windows`), `settings put global
-  hide_error_dialogs 1` hides them but then kills the app at its first ANR, and
-  `setprop ro.hw_timeout_multiplier 10` as root followed by `stop; start` (a
-  minute) multiplies the limits for the next framework. Even so a press and its
-  release can reach the app together after a stall, which no hold survives: the
-  menu's device pass belongs on a phone or an accelerated emulator. The
-  navigation bar takes the screen's bottom 126 px, so a hold on the game's status
-  bar lands about 150 px above the screen's foot; the vanguard game restarts
-  itself when nobody plays it, which looks like a reset the test caused.
-- `adb shell input` taps one finger only, and the emulator's user image refuses
-  `sendevent` (SELinux). `adb shell uinput -` registers a touchscreen from JSON and
-  injects multi-touch frames with millisecond delays, about 3 s after it starts. Its
-  first frame is stamped with the register's time, so inject one with no finger
-  down first, or a first tap reads as a 3 s press. `dumpsys window` puts
-  `visibleFrame=` between the keyboard inset's `frame=` and `visible=`.
+  `Listener`; the jar's `UnsupportedAppUsage` warnings are noise.
+- The emulator boots without KVM (`-no-window -gpu swiftshader_indirect -accel
+  off`, about 14 minutes on 4 vCPUs) but runs some 30x slower than a phone, so
+  Android's 5 s input limit swallows taps behind "isn't responding" dialogs: a
+  device pass belongs on a phone or an accelerated emulator. `adb shell input` taps
+  one finger; `adb shell uinput -` injects multi-touch from JSON, after one frame
+  with no finger down, or the first tap reads as a 3 s press.
 - After bumping `lixenwraith/terminal`, build `./...`, not only `./cmd/vif`: the
   tools and sandboxes break on a change the game does not use.
 - `deploy/docker/Dockerfile` pins the Go image's index digest: HEAD
@@ -58,7 +41,6 @@ that proves wrong or that a document now states, and link the document instead.
   pull token and the OCI index Accept header, and read `Docker-Content-Digest`. HEAD
   the current pin first, which must match. Docker Hub answers a shared egress 429
   at times: retry after a pause.
-- Every shipped target is 64-bit, and `internal/core/arch32.go` refuses the rest.
 - A session's scratchpad can sit on a `/tmp` that a reboot empties (a tmpfs on a
   development machine): keep a long task's notes and working files in the
   checkout's `tmp/`, which `.gitignore` holds.
@@ -82,6 +64,10 @@ that proves wrong or that a document now states, and link the document instead.
   event stops the generator on the stale use of it ("type-check ...: has no field",
   "undefined"): delete those lines from `payload_gen.go` and `registry_gen.go`
   first, and the run writes them anew.
+- A change to a package's API is compiled against every test file by
+  `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
+  nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
+  package the change never touched.
 - Go 1.27 takes a promoted field as a struct literal's key, though not through an
   embedded pointer, so fields moved into an embedded struct keep every literal,
   selector and method call compiling.
@@ -113,7 +99,8 @@ that proves wrong or that a document now states, and link the document instead.
   first sees them in its next `Update`. A consumer that must act on it inside the
   same tick, before its own motion, reads a derived resource the producer writes
   instead, as the particle system reads `CaveResource` and the glyph spawner
-  `DriftResource`.
+  `DriftResource`, or makes the thing itself, as a mount creates the pulse it fires
+  in its own `Update`.
 - A derived resource is created in `engine.newGameContext`, rewritten by its owner
   every tick and never captured, so it bumps no schema. Systems run in ascending
   `Priority`, so only a later system reads it the same tick.
@@ -122,14 +109,6 @@ that proves wrong or that a document now states, and link the document instead.
   after the tick. The barrier's are the exception, stamped as the body's (settle
   group 0), which a replay queues for its own tick (`ReplayTarget.PushBody`,
   `EventQueue.Defer`) instead of settling before it.
-- `NetworkSystem.localTick` is the completed tick count, not the queue stamp's
-  tick: `Receive` runs inside the body, where the stamp names the tick being made,
-  and reading it there judged every on-time crossing a tick late and raised the
-  guest's lead by two on every shape of the divergence harness.
-- A mount creates the pulse it fires in its own `Update` rather than by request, as
-  missiles are: a request dispatches in the tick's settle, a tick behind the machine
-  that armed the mount, and the pulse, which holds with that machine, falls out of
-  step with it and lingers into the cooldown.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
   `crossingActors` (`internal/system/network.go`); without one, a misbound or
   modified participant can act as another's cursor through it.
@@ -147,8 +126,6 @@ that proves wrong or that a document now states, and link the document instead.
 - `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
   the game resets near tick 35; a session test that waits a fixed count of ticks
   past that reads the reset. Wait for the condition, bounded.
-- `Config.Validate` refuses a rate on a driven run that is neither a script nor a
-  bot: a harness's or a replay's clock takes one through `TimeCtl` instead.
 - A run's tick is `World.TickInterval`, which its host may choose (`-tick`);
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
   reads the run's, as tests may keep the constant.
@@ -251,37 +228,20 @@ that proves wrong or that a document now states, and link the document instead.
   more under `-race` or load: a relay-join hold and a mid-session journal test. A
   failure there takes about 16.5 s, a 15 s socket wait running out. Before calling
   one a regression, run it alone in fresh processes, alternating main's binary and
-  the branch's under the same load. `TestAClaimOnAPlaceStillLinkedClosesTheLinkItLeft`
-  failed once in 0.12 s ("the link the returning player left is still open") while
-  deadcode ran beside the suite, and passed 32 loaded runs on both binaries after.
+  the branch's under the same load.
 - A race only CI saw: build once with `go test -race -c`, then run the test in
   several processes at once; load exposes it, quiet runs do not. Keep it near twice
   the CPU count: at five times, a socket join's catch-up is refused ("behind the
   session ... retry in a moment"), the harness's host ticking every 10 ms faster
   than the loaded joiner closes the gap, a refusal a production seat retries.
-- A race between a test's write and another goroutine's read reproduces at will:
-  sleep that goroutine before its read and move the write ahead of the sleep. Print
-  from neither side, as two writes to `os.Stderr` order them and hide the race.
 - `internal/app` tests start no log sink, so a socket test that times out says
   nothing of why: put `fmt.Fprintf(os.Stderr, ...)` probes in a `git worktree`
   copy, build its race binary there and run it under the same load, keeping the
   branch clean.
-- In a CI log a `--- FAIL` line sits inside its package's block, not at the end:
-  save the whole log and search it. For a hang, find `panic: test timed out` and
-  match the goroutines blocked in `sync.Mutex.Lock` against what each holds.
 - A closed listener's port is no refusing address: under `go test ./...` another
   package's listener can be given it and answer. Dial the near end of a held
   connection instead, which stays bound with nothing listening (vif-router's
   `TestEitherRouteRefusesBeforeDialling`).
-
-## Audio
-
-- The library is `github.com/lixenwraith/audio`: a change to it lands there,
-  under its own `AGENTS.md` and `doc/agent-notes.md`, and vif takes its tag.
-- Stapes (formerly soundlab), the authoring tool over the same engine, is
-  `github.com/lixenwraith/stapes`: a change to it lands there, under its own
-  `AGENTS.md` and [agent notes](https://github.com/lixenwraith/stapes/blob/main/doc/agent-notes.md), which keep its verbs, the rip and
-  the model's training.
 
 ## Locks
 
@@ -301,50 +261,19 @@ that proves wrong or that a document now states, and link the document instead.
 
 ## Position
 
-- The index's bounds are its grid's: every writer of `Config.MapWidth` resizes the
-  grid before a query runs (`SetupLevel`, the reset, a crop, `CopyIn`), and a new
-  writer must too, or every wall query and bounds check answers for the old map.
-- An indirect call on a per-cell probe shows: reading the bounds through an
-  interface on each `Blocks` cost `BenchmarkGlyphRender` a quarter, and an
-  interface over the wall entities a tenth more. Measure a probe path with the
-  renderer's benches, not only the tick's.
-- The game reads the package's types by the package's names (`position.Scope`,
-  `position.Pattern`), never through an engine alias: a method cannot be declared
-  on an alias, and a second name sends a reader to two docs. A scope selects a
-  class through `engine.EntityClass(e)`, which the two guard arrays in
-  `internal/engine/position.go` hold to the domain numbering.
+- [Position](position-package.md) states the index's rules: bounds that are the
+  grid's, the package's names, flat and `Point3` queries, the planes
+  `BlockChangedAt` keeps, `WallBlockAll`. What it leaves out:
 - `pkg/position` knows no entity: a test over walls or glyphs needs a world and
   stays in `internal/engine`; a grid-only test goes to the package with a test id
   whose class is its top byte.
-- A block's kinds are its mask bits, and the engine reports a wall's box style as
-  two of them (`component.BoxKind`) beside the movers it stops, so `WallBlockAll`
-  is the four mover kinds and never `0xFF`: a query with it must not match a
-  styled wall that stops nothing.
-- The flat queries (`Blocks`, `EntitiesAt`, the searches) answer for the first layer
-  and the `Point3` forms (`BlocksAt`, `EntitiesIn`) for any, so a flat game's call
-  sites never gain a layer argument, and the mutators take a `Point3` the binding
-  makes with `Point.Layer(0)`; the planes' and the presence bits' rows are
-  the layers' in turn, so a cell's grid index `i` is `(i%Width, i/Width)` in them
-  whatever its layer.
-- `World.Positions` embeds the index, so the grid's writes (`Set`, `RemoveEntityAt`,
-  `Load`, `Reorder`) are reachable from every system and move no row: a placement
-  goes through `SetPosition`, `Move` or `Shift`; `Resize` and `Clear` are the
-  binding's, placing the rows again or dropping them with the rock.
-- A wall plane is brought to a cell when `BlockChangedAt` runs, so the binding
-  calls `wallMoved` only once the grid holds the move: a wall logged before its
-  insert leaves its bit stale, which no test but the fuzz test's oracle, a scan of
-  the cell's own wall components, catches, since every other reader asks the plane.
-- A change to a package's API is compiled against every test file by
-  `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
-  nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
-  package the change never touched.
 - A body's size is one `vmath.Footprint`, its header offset inside it, and a
   species' is read through `Resource.Footprint`, never as four ints or a parallel
   parameter: the searches, line of sight, passability tiers and a materialize take
   the struct, and an event's or a component's cell names the header, never the
   top-left.
 
-## Glyphs and colours
+## Glyphs and widgets
 
 - A new non-ASCII rune in a drawing package or a shipped scenario's TOML needs the
   desktop font atlas regenerated (`tool/font-atlas/README.md`), and only
@@ -353,29 +282,6 @@ that proves wrong or that a document now states, and link the document instead.
   every string in `internal/mode`, `app`, `help` and `prof` too, so a key nobody
   sees stays ASCII, and a comment after code on its line as code, so that comment
   does too.
-- Linux console fonts (console-setup's Uni and Lat sets) have █ ░ ▒ and single box
-  lines but no ▀ ▄ ▌ ▐, quadrants or ▓, and draw double lines single; the 256 tier
-  uses only what they have.
-- The 256 tier's entries 0–15 take an emulator's theme, so no contrast between two
-  of them is promised; a colour, or 15, on entry 0 is safe. UI that must read in an
-  emulator keeps its rectangle exact (`KeepExact`), as the overlay and status bar do.
-- On the Linux console the 256 tier shows sixteen colours: a pale tint over a rim
-  falls to the rim's own, so a glow that must read there is near white, as the
-  Wraith field's is.
-- A text console has eight backgrounds: a white one lands on the grey the overlay's
-  text box takes, so a cursor there needs a hue (the orange's yellow) to show.
-- A terminal cell is about twice as tall as it is wide, so a bitmap drawn a cell a
-  pixel reads tall and narrow (the large splash face), and one drawn two pixel rows
-  a cell with `▀` and `▄` reads in square pixels (the small face). Preview a face by
-  rendering its rows in pairs, as `tool/font-editor`'s preview does; a glyph's
-  ends fall on half cells whichever rows it keeps to, so put the digits' eight rows
-  on four cell pairs (rows 2-9) rather than reaching for whole cells.
-- The splash system reads `Config.TextConsole` to size a box, a host fact no other
-  system reads: nothing compares a splash's offsets (`snapshot/surface.go` denies
-  `splash.`), so a journal replays across tiers.
-
-## Widgets
-
 - `tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
   a one-row text box (the menu's) passes `tui.LineNone` or draws nothing.
 
@@ -408,15 +314,6 @@ that proves wrong or that a document now states, and link the document instead.
   rows is the finger that opens the menu; `page.keyboard.press('Control+g')` is
   the desktop's. `pkg/browser`'s tests run under node with
   `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"`.
-- The scheduler loop's cadence is read with a probe system whose `Update` records
-  `time.Now()` and sleeps on one tick, under a goroutine that answers each
-  `updateDone` with a `frameReady` after a frame's delay (`NewScheduler`, `Start`);
-  the gaps between starts around the slow tick show what a late frame does.
-- Whether a motion reads smooth is a frame question, not a tick one: render each of
-  a tick's three frames with the context's `GameTime` set that far past
-  `Time.PaceTime` and count the cells the layer moved. A pace off a multiple of
-  twenty a second, drawn only where its tick left it, moves in uneven steps however
-  fast it is.
 
 ## Measuring
 
@@ -429,19 +326,15 @@ that proves wrong or that a document now states, and link the document instead.
 - Benchmarks in a cloud container move a fifth between runs, and benchstat is not
   installed: build main's and the branch's test binaries (`go test -c` in a `git
   worktree` of main) and compare medians of alternating runs.
-- A bench whose first call builds a once-per-process table reads high under a
-  fixed `-benchtime Nx`: `color.RGBTo256`'s lookup table, built on a 256-colour
-  frame's first conversion in about 180 ms, adds 9 µs a frame to a 20000x run. Use
-  a time-based `-benchtime`, which the warm-up rounds absorb.
 - A renderer's first call in a live frame runs about twice its hot-bench time,
   its tables and code gone cold under the frame's other work: the ember paints in
   9-12 µs when repeated at once and 20-26 µs as the frame's first. Read a gain
   live, with `:d prof` under `:log on` (`prof.top` lines) or a `time.Now` probe
   round the call in a scratch build, before calling a bench gain felt.
-- A frame diff of a renderer compares each cell's `BackgroundAt` with a sentinel
-  fallback, not the theme background: a write that leaves a cell's colour as it
-  was still marks it drawn and adds the layer's mask, which dim, grayout, strobe
-  and a later `SetBgScreen` base read.
+- An indirect call on a per-cell probe shows: reading the bounds through an
+  interface on each `Blocks` cost `BenchmarkGlyphRender` a quarter, and an
+  interface over the wall entities a tenth more. Measure a probe path with the
+  renderer's benches, not only the tick's.
 - Navigation's cost in vanguard depends on how the ship is flown: one that keeps
   still keeps sight of the raiders and shows little of it. Measure as a player
   flies, headless under `:god` with auto-fire, the ship sweeping between the map's
@@ -455,15 +348,6 @@ that proves wrong or that a document now states, and link the document instead.
   turns hundreds of cells a step. A cost per changed cell shows in the second
   alone, a cost per row or per map in the first alone, at the largest map; read
   both before calling a change to `applyWalls` or `CompositePassability` neutral.
-- Vanguard's fourth-rank raiders fly 4.5 cells a second, so a raider that moved two
-  cells in half a second is not stuck; read a stuck raider as one out of sight a full
-  second that moved less than a cell in it.
-- `sandbox/termbench encode -capture` reads frames as they leave
-  `RenderBuffer.FlushToTerminal` (a little-endian uint16 width and height, then the
-  cells as they lie in memory); nothing in the tree dumps them, so a scratch hook
-  there writes the file. Under tmux the frame rate is floored at 24 a second
-  (rendering §1), so a frame captured there carries more change than one at 60:
-  compare bytes a frame only between captures of one shape.
 - tmux can throw frames away while vif sees nothing: it reads a pane at once, so
   writes return and held frames stay near zero. Attach a client (Alacritty under
   Xvfb, or a Python pty reader sized with `TIOCSWINSZ`) and poll `tmux list-clients
@@ -528,18 +412,13 @@ that proves wrong or that a document now states, and link the document instead.
 - Materialize names the materialize effect alone; a teleport's or a charge's line is
   a line, never a beam.
 
-## Ascimage
+## Libraries
 
-- The image converter, viewer and `.aimg` format are
-  `github.com/lixenwraith/ascimage`: a change to it lands there, under its own
-  `AGENTS.md` and [agent notes](https://github.com/lixenwraith/ascimage/blob/main/doc/agent-notes.md), and vif
-  takes its tag. `make tools` builds its command from the version `go.mod`
-  requires.
-
-## Genetic
-
-- The library is `github.com/lixenwraith/genetic`: a change to it lands there,
-  under its own `AGENTS.md` and `doc/agent-notes.md`, and vif takes its tag.
+- audio, stapes (formerly soundlab), genetic and ascimage are repositories of their
+  own ([package map §8](package-map.md#8-external-module-boundary)): a change to
+  one lands there, under its own `AGENTS.md` and agent notes, and vif takes its
+  tag. Stapes keeps its verbs, the rip and the model's training; `make tools`
+  builds ascimage's command from the version `go.mod` requires.
 - The capture carries `registry.SpeciesState`, which embeds the streaming
   engine's checkpoint, so a change to `genetic.StreamingState`'s layout bumps
   `snapshot.Schema` beside `StreamingStateVersion`.
