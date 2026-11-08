@@ -41,11 +41,14 @@ type allocatorConfig struct {
 	JoinHost    string
 	RoutePort   int
 	RouteSecure bool // the front door is reached over TLS, so links read vifs://
-	SessionsMax int  // sessions the fleet holds at once, counted as its quota counts them
-	PlayersMax  int
-	BotsMax     int
-	LogLevels   []string
-	WadDir      string
+	// DoorFingerprint is the SHA-256 of the certificate the front door serves when
+	// the router ends TLS itself, for a dial to pin; empty where the edge ends it.
+	DoorFingerprint string
+	SessionsMax     int // sessions the fleet holds at once, counted as its quota counts them
+	PlayersMax      int
+	BotsMax         int
+	LogLevels       []string
+	WadDir          string
 
 	// WebOrigin is the one origin the browser route answers, and publishing it is
 	// what turns that route on; see doc/kubernetes-fleet.md §9.
@@ -118,8 +121,10 @@ type fleetLimits struct {
 type session struct {
 	ID string `json:"id"`
 	// JoinTarget is the front door, one address for every session, carrying the
-	// name the pod answers to.
-	JoinTarget string `json:"join_target"`
+	// name the pod answers to. DoorFingerprint is the certificate the door serves
+	// where the router made it (sha256:<hex>), which a dial pins as -ca does.
+	JoinTarget      string `json:"join_target"`
+	DoorFingerprint string `json:"door_fingerprint,omitempty"`
 	// WebSocketURL is the same session reached from a browser. Absent where the
 	// deployment publishes no browser route, which is what a page keyed on it reads
 	// as "this fleet is for native clients".
@@ -767,14 +772,15 @@ func (a *allocator) cleanup(created createdObjects) error {
 
 func (a *allocator) sessionRecord(id string, job objectMeta, routable bool, state sessionHealth) session {
 	return session{
-		ID:           id,
-		JoinTarget:   a.cfg.joinTarget(id),
-		WebSocketURL: a.webSocketURL(id),
-		Scenario:     job.Annotations[annotationScenario],
-		Size:         job.Annotations[annotationSize],
-		CreatedAt:    job.CreationTimestamp,
-		Routable:     routable,
-		State:        state,
+		ID:              id,
+		JoinTarget:      a.cfg.joinTarget(id),
+		DoorFingerprint: a.cfg.DoorFingerprint,
+		WebSocketURL:    a.webSocketURL(id),
+		Scenario:        job.Annotations[annotationScenario],
+		Size:            job.Annotations[annotationSize],
+		CreatedAt:       job.CreationTimestamp,
+		Routable:        routable,
+		State:           state,
 	}
 }
 

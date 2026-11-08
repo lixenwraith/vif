@@ -29,6 +29,7 @@ const (
 	JournalDirName   = "journal"
 	MusicDirName     = "music"
 	PlacesFileName   = "places.json"
+	SignInsFileName  = "signins.json"
 
 	ScenarioFile     = "scenario.toml"
 	KeymapConfigFile = "keymap.toml"
@@ -160,6 +161,10 @@ func DefaultMusicDir() string { return stateDir(MusicDirName) }
 // PlacesFile is where a run keeps the places it comes back to its sessions with,
 // the key each is held under, beside its logs; a file for the user alone.
 func PlacesFile() string { return filepath.Join(stateDir(""), PlacesFileName) }
+
+// SignInsFile is where a run keeps the sign-ins it holds, one a site, beside its
+// places; a file for the user alone, since each is the account until it is revoked.
+func SignInsFile() string { return filepath.Join(stateDir(""), SignInsFileName) }
 
 // PlaceFile is the places document at Path: one not there yet reads as none, and a
 // write replaces it whole under a mode the user alone reads, by rename.

@@ -967,9 +967,9 @@ What the operator surface does not cover:
 - trusted plaintext peers over tcp and `ws`; no authentication, and a `wss://`
   door's certificate names the host to a browser, not the player to the host. A
   self-signed door encrypts and names nobody: a native join takes it as it is, open
-  to a man in the middle until a later handshake bound to that certificate
-  authenticates both ends ([todo](todo.md#add-browser-admission-authentication)),
-  unless `-ca` pins it now;
+  to a man in the middle unless `-ca` pins it or a passphrase bound to that
+  certificate authenticates both ends
+  ([Auth and session design §7.4](auth-session-design.md#74-passphrase-doors));
 - host loss hands the term down the succession list (§8), and every survivor
   that reaches no candidate, or every survivor when the session pinned its
   authority, goes on apart: a person's run in a session of its own that keeps every

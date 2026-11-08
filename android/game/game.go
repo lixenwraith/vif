@@ -97,6 +97,7 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	// a backgrounded process, and its places come back with the next.
 	if settings.Session.ResumeAfterRestart {
 		cfg.Membership.PlaceStore = paths.PlaceFile{Path: paths.PlacesFile()}
+		cfg.Membership.SignInStore = paths.PlaceFile{Path: paths.SignInsFile()}
 	}
 	if unknown != nil {
 		cfg.Notice = paths.DropUnknown(cfg.Settings, unknown)

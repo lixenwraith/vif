@@ -391,7 +391,7 @@ func (m *Membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 			pass, err = m.checkPass(req.Pass, keys)
 		}
 		if err == nil {
-			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, keys, pass)
+			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, keys, pass, nil)
 			m.closeStaleLink(err, m.sessionTransportLocked())
 		}
 	case req.Step == network.RelayReady:

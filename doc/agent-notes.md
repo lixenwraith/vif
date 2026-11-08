@@ -302,6 +302,16 @@ comment now states, and link that instead.
 - nginx's `proxy_protocol on` writes a version 1 header and nothing else; the
   router reads version 2 too for other edges. A probe of the front door behind the
   edge writes the header first or is closed unanswered.
+- A join address keeps its `vifs://` scheme (`Endpoint.Dialable`): `Joining` and the
+  flags once stored the bare host:port, which dialled a TLS door in the clear. A
+  sign-in is shown over TLS alone (`tlsOf`), whatever the door asks.
+- An account command runs its KDF and requests in a goroutine and reports on the
+  status line: a `SessionController` method runs under the world lock, which cannot
+  wait on a site.
+- A browser trusts a self-signed door only by being told to: pinning from a page
+  needs WebTransport's `serverCertificateHashes`, which the route does not speak,
+  so a page joins a player's door over the site or by a passphrase bound to that
+  door's certificate; a native run pins the fingerprint the sessions API carries.
 
 ## Position
 

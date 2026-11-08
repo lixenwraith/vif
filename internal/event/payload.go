@@ -138,6 +138,7 @@ type NetworkConnectPayload struct {
 type ParticipantJoinedPayload struct {
 	Record      *CursorRecord `toml:"record"`
 	Key         string        `toml:"key,omitempty"`
+	Name        string        `toml:"name,omitempty"` // the account's, attested by the site's ticket
 	Holder      uint32        `toml:"holder"`
 	Participant uint32        `toml:"participant"`
 	Slot        uint8         `toml:"slot"`
@@ -875,7 +876,8 @@ func (p *CursorStatePayload) Record() CursorRecord {
 // and with Record over the template.
 type CursorSpawnRequestPayload struct {
 	Record  *CursorRecord `toml:"record"`
-	Key     string        `toml:"key,omitempty"` // the participant key its participant returns with
+	Key     string        `toml:"key,omitempty"`  // the participant key its participant returns with
+	Name    string        `toml:"name,omitempty"` // the account's name, attested; empty keeps the slot's label
 	Holder  uint32        `toml:"holder"`
 	X       int           `toml:"x"`
 	Y       int           `toml:"y"`

@@ -239,6 +239,10 @@ type Wiring struct {
 	// they hold shares; Normalize gives a run built another way one of its own.
 	Places *PlaceKeeper
 
+	// SignIns is the process's sign-ins by site, which a dial to a site's front door
+	// shows over TLS; every run of the process shares one.
+	SignIns *SignInKeeper
+
 	// Links signs this run's peer links and checks the far end's against the roster,
 	// bound to the run's reach once it is built (converge.PeerLinkGate).
 	Links network.PeerKeys
@@ -266,7 +270,7 @@ func Joining(s config.Membership, target string) (config.Membership, error) {
 		return s, err
 	}
 	s.HostAddress, s.Participants, s.FixedAuthority = "", 0, false
-	s.JoinAddress, s.SessionName = e.Addr, e.Name
+	s.JoinAddress, s.SessionName = e.Dialable(), e.Name
 	return s, nil
 }
 
