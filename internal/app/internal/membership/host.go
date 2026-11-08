@@ -52,6 +52,52 @@ func (c Control) JoinError() error          { return c.m.joinErrorLocked() }
 func (c Control) Leave() error              { return c.m.leaveLocked() }
 func (c Control) LeaveError() error         { return c.m.leaveErrorLocked() }
 
+// SetPassphrase sets what this run's doors take and its dials show: the phrase
+// given, or one made for "new" or none, returned to be shown once. A door derived
+// already is derived again at its next open.
+func (c Control) SetPassphrase(phrase string) (string, error) {
+	if phrase == "" || phrase == "new" {
+		phrase = network.GeneratePassphrase()
+	}
+	if err := network.CheckPassphrase(phrase); err != nil {
+		return "", err
+	}
+	c.m.sessionMu.Lock()
+	defer c.m.sessionMu.Unlock()
+	c.m.cfg.Passphrase = phrase
+	c.m.door.Close()
+	c.m.door = nil
+	return phrase, nil
+}
+
+// passphraseDoor is the credential this run's own doors take, derived from the
+// passphrase at the first door's open; nil opens them. One that cannot be derived
+// leaves the doors gated rather than open, since cfg.Passphrase stands.
+func (m *Membership) passphraseDoor() *network.PassphraseDoor {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	if m.door == nil && m.cfg.Passphrase != "" {
+		d, err := network.NewPassphraseDoor(m.cfg.Passphrase)
+		if err != nil {
+			m.log.Error("session", "msg", "passphrase door not derived", "error", err.Error())
+			return nil
+		}
+		m.door = d
+	}
+	return m.door
+}
+
+// gated reports a session whose doors take no bare key: this run's passphrase, or
+// its host's, which the offer says (Coordinator.Gated).
+func (m *Membership) gated() bool {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	return m.gatedLocked()
+}
+
+// gatedLocked is gated for a caller holding sessionMu.
+func (m *Membership) gatedLocked() bool { return m.cfg.Passphrase != "" || m.sessionOffer.Gated }
+
 func (c Control) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {
 		return errors.New("invalid player slot")
@@ -687,6 +733,10 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	}
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
 	local := link.PeerID(m.world.LocalParticipant())
+	m.sessionMu.Lock()
+	m.door.Close()
+	m.door = nil
+	m.sessionMu.Unlock()
 	// A leave keeps its bots' places, and a run its session gave up every place, for
 	// whoever hosts next to give back. A bot of this run's goes on under a key of its
 	// own over the record it left with, which stays the left session's.
@@ -790,6 +840,9 @@ func (m *Membership) sessionSummaryLocked() string {
 	}
 	if fp := link.Fingerprint(m.cfg.TLS); fp != "" && !m.sessionRoleLocked().joined() {
 		where += " (certificate " + fp + ")"
+	}
+	if m.cfg.Passphrase != "" && !m.sessionRoleLocked().joined() {
+		where += " (passphrase " + m.cfg.Passphrase + ")"
 	}
 	slot := m.world.Resources.Player.LocalSlot()
 	cursor := fmt.Sprintf("slot %d", slot)

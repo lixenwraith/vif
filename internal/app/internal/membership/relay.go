@@ -140,6 +140,7 @@ func (m *Membership) relayAcceptor(admit func(net.Addr) error) func(net.Conn) (l
 		Name:        m.cfg.SessionName,
 		Authority:   m.firstTermKey,
 		Pass:        m.checkPass,
+		Gated:       m.gated,
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)

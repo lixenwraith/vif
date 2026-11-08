@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/auth"
 	link "github.com/lixenwraith/vif/pkg/network"
 
 	"github.com/lixenwraith/vif/internal/event"
@@ -73,6 +74,10 @@ type SessionOffer struct {
 	// Pass is the admission the seat gives the dial to come back with (PassBody),
 	// signed by the authority under Term; none when the dial showed one still fresh.
 	Pass *Signed `json:"pass,omitempty"`
+
+	// Gated says the session's doors take a passphrase or a pass, never a bare key,
+	// so a door that holds no credential, a relay's, admits a pass alone.
+	Gated bool `json:"gated,omitempty"`
 
 	// Relay is the participant on the far end of the joiner's stream when that is not
 	// the host: the holder a bot joined through. Zero on a dial to the coordinator.
@@ -310,6 +315,14 @@ type Coordinator struct {
 	// why not. Either nil is a door that takes no pass, and its question says so.
 	Authority func() string
 	Pass      func(shown *Signed, keys []string) (*PassBody, error)
+
+	// Passphrase is the credential this door takes the exchange against, a host's
+	// own doors'; Gated says the session's doors take no bare key, for a door with
+	// none to check, which then admits a pass alone; Binding is the leaf this door
+	// serves over TLS (LeafBinding), which the exchange is bound to there.
+	Passphrase *PassphraseDoor
+	Gated      func() bool
+	Binding    []byte
 
 	// PressWindow is the ready period a prepared dialer has to seat in; zero is
 	// parameter.NetworkJoinPressWindow.
@@ -633,18 +646,23 @@ func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admissio
 			return Admission{}, err
 		}
 	}
-	question := AuthResponse{Methods: []string{MethodKey}, Nonce: nonce}
+	// What the door takes: a bare key where it is open, the exchange where it holds
+	// the passphrase, a pass alone where it holds none for a gated session.
+	open := c.Passphrase == nil && (c.Gated == nil || !c.Gated())
+	question := AuthResponse{Nonce: nonce}
+	switch {
+	case c.Passphrase != nil:
+		question.Methods = []string{MethodScram}
+	case open:
+		question.Methods = []string{MethodKey}
+	}
 	if c.Authority != nil {
 		question.Authority = c.Authority()
 	}
 	if c.Pass != nil && question.Authority != "" {
 		question.Methods = append(question.Methods, MethodPass)
 	}
-	body, err := json.Marshal(question)
-	if err != nil {
-		return Admission{}, err
-	}
-	if err := link.NewMessage(MsgAuthResponse, body).Encode(conn); err != nil {
+	if err := writeAuth(conn, question); err != nil {
 		return Admission{}, err
 	}
 	msg, err := link.DecodeWithin(conn, MaxAuthFrame)
@@ -676,6 +694,25 @@ func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admissio
 		}
 		adm.Shown = ans.Pass
 	}
+	if !open && adm.Pass == nil {
+		var err error
+		switch {
+		case c.Passphrase == nil:
+			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes a pass alone; the host's door takes the passphrase"}
+		case len(ans.Scram) == 0:
+			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes a passphrase, and the dial showed none"}
+		default:
+			var binding []byte
+			if tlsOf(conn) != nil {
+				binding = c.Binding
+			}
+			err = c.Passphrase.serve(conn, ans.Scram, binding)
+		}
+		if err != nil {
+			RefuseJoin(conn, err, timeout)
+			return Admission{}, err
+		}
+	}
 	return adm, nil
 }
 
@@ -690,7 +727,7 @@ func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link
 	if err := ask.Refused(); err != nil {
 		return nil, err
 	}
-	if !slices.Contains(ask.Methods, MethodKey) || ask.Nonce == "" {
+	if ask.Nonce == "" {
 		return nil, &Refusal{Code: RefusalSignIn, Reason: "this door asks for a credential this build cannot show"}
 	}
 	proofs := make([]Proof, 0, len(base.Keys))
@@ -703,6 +740,21 @@ func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link
 	if slices.Contains(ask.Methods, MethodPass) {
 		answer.Pass = ChoosePass(base.Passes, ask.Authority, base.Keys, time.Now()) // [wall] the pass's window
 	}
+	var client *auth.ScramClient
+	if !slices.Contains(ask.Methods, MethodKey) && answer.Pass == nil {
+		switch {
+		case !slices.Contains(ask.Methods, MethodScram):
+			return nil, &Refusal{Code: RefusalSignIn, Reason: "this door takes a pass alone; the host's door takes the passphrase"}
+		case base.Passphrase == "":
+			return nil, &Refusal{Code: RefusalSignIn, Reason: "this door takes a passphrase, and this dial has none"}
+		}
+		client = auth.NewScramClient(doorUser, base.Passphrase, auth.WithMinArgonCost(parameter.DoorArgonTime, parameter.DoorArgonMemory))
+		first, err := client.StartAuthentication()
+		if err != nil {
+			return nil, err
+		}
+		answer.Scram = rawJSON(first)
+	}
 	body, err := json.Marshal(answer)
 	if err != nil {
 		return nil, err
@@ -710,7 +762,11 @@ func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link
 	if err := link.NewMessage(MsgAuthRequest, body).Encode(conn); err != nil {
 		return nil, err
 	}
-	return link.Decode(conn)
+	msg, err := link.Decode(conn)
+	if err != nil || client == nil {
+		return msg, err
+	}
+	return finishPassphrase(conn, client, msg, bindingOf(conn))
 }
 
 // RefusalCode is the kind of a join refusal, which a dialer acts on rather than on

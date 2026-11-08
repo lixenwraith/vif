@@ -84,6 +84,9 @@ func (m *Membership) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) 
 		Name:        m.cfg.SessionName,
 		Authority:   m.firstTermKey,
 		Pass:        m.checkPass,
+		Passphrase:  m.passphraseDoor(),
+		Gated:       m.gated,
+		Binding:     network.LeafBinding(m.cfg.TLS),
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)
@@ -396,6 +399,7 @@ func joinNetConfig(cfg config.Membership, wire Wiring) *network.Config {
 	netCfg.ConnectTimeout = parameter.NetworkJoinConnectTimeout
 	netCfg.Keys = wire.Places.keys(wire.Holder != 0)
 	netCfg.Passes = wire.Places.passes(wire.Holder != 0)
+	netCfg.Passphrase = cfg.Passphrase
 	netCfg.TLS = cfg.Trust
 	netCfg.ConnectPeer = network.PeerDialer(netCfg.Identity, wire.Links, netCfg.ConnectTimeout)
 	return netCfg
@@ -621,8 +625,8 @@ func (m *Membership) previewParticipant(a network.Admission) (network.SessionOff
 	if err := m.refusedLocked(); err != nil {
 		return network.SessionOffer{}, err
 	}
-	if m.keptOutLocked(a.Keys()) {
-		return network.SessionOffer{}, errDropped
+	if k := m.keptOutLocked(a.Keys()); k != "" {
+		return network.SessionOffer{}, m.droppedRefusalLocked(k)
 	}
 	// Counted as the seat counts it, the coordinator's own entry among them, with no
 	// roster opened for a dial that may never seat (openRosterLocked).
@@ -678,8 +682,8 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys
 	if err := m.refusedLocked(); err != nil {
 		return network.SessionOffer{}, err
 	}
-	if m.keptOutLocked(keys) {
-		return network.SessionOffer{}, errDropped
+	if k := m.keptOutLocked(keys); k != "" {
+		return network.SessionOffer{}, m.droppedRefusalLocked(k)
 	}
 
 	limit := m.SessionCapacity() + 1
@@ -719,21 +723,36 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys
 	return offer, offer.Validate()
 }
 
-// errDropped refuses a dial over a key the host dropped, and every pass over one.
-var errDropped = &network.Refusal{Code: network.RefusalDropped, Reason: "the host dropped this player from the session"}
+// keptOutLocked is the first key the session keeps out among those a dial proved,
+// empty for none. Caller holds sessionMu.
+func (m *Membership) keptOutLocked(keys []string) string {
+	for _, k := range keys {
+		if k != "" && slices.Contains(m.keepOut, k) {
+			return k
+		}
+	}
+	return ""
+}
 
-// keptOutLocked reports a key the session keeps out among those a dial proved.
-// Caller holds sessionMu.
-func (m *Membership) keptOutLocked(keys []string) bool {
-	return slices.ContainsFunc(keys, func(k string) bool { return k != "" && slices.Contains(m.keepOut, k) })
+// droppedRefusalLocked refuses a dial over a key the host dropped, naming the slot
+// it was dropped from where this run saw the drop. Caller holds sessionMu.
+func (m *Membership) droppedRefusalLocked(key string) error {
+	if slot, ok := m.keptOutSlots[key]; ok {
+		return &network.Refusal{Code: network.RefusalDropped, Reason: fmt.Sprintf("this player was dropped from slot %X", slot)}
+	}
+	return &network.Refusal{Code: network.RefusalDropped, Reason: "this player was dropped from the session"}
 }
 
 // keepOutKey keeps one more key out, the host's drop as its departure applies here
 // (NetworkResource.OnDropped); past the bound the oldest gives way.
-func (m *Membership) keepOutKey(key string) {
+func (m *Membership) keepOutKey(key string, slot uint8) {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
 	m.keepOut = addKeepOut(m.keepOut, key)
+	if m.keptOutSlots == nil {
+		m.keptOutSlots = make(map[string]uint8)
+	}
+	m.keptOutSlots[key] = slot
 }
 
 // adoptKeepOutLocked takes the list an offer or a record carries, keeping what this
@@ -805,7 +824,7 @@ func (m *Membership) checkPass(shown *network.Signed, keys []string) (*network.P
 	case !slices.Contains(keys, key):
 		return nil, &network.Refusal{Code: network.RefusalCredential, Reason: "the pass shown names a key the dial did not prove"}
 	case slices.Contains(m.keepOut, key) || body.Account != "" && slices.Contains(m.keepOut, "acct:"+body.Account):
-		return nil, errDropped
+		return nil, m.droppedRefusalLocked(key)
 	}
 	return &body, nil
 }
@@ -1170,6 +1189,7 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		Chain:          m.sessionChain(),
 		TermKeys:       m.termKeysLocked(),
 		KeepOut:        slices.Clone(m.keepOut),
+		Gated:          m.gatedLocked(),
 		FixedAuthority: m.cfg.FixedAuthority,
 		Players:        m.playersSet(),
 		// Derived from the anchor this offer carries rather than read again, so

@@ -358,7 +358,7 @@ The threats, and the part that meets each:
 
 ### 7.0 What is built
 
-Phases 0 to 2 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
+Phases 0 to 3 (§7.6). The primitives in `internal/network/admission.go`: `Key`, an
 Ed25519 key pair kept as its 32-byte seed in JSON, with `Prove`/`VerifyProof` over a
 door's nonce, the session's name and a channel binding (`ChannelBinding`, the SHA-256
 of a leaf certificate), `VerifyProofs` over a dial's list and `EncodeKey`/`DecodeKey`,
@@ -381,8 +381,12 @@ seat's offer carries a pass, the keeper keeps it beside the key, a dial shows th
 for the first authority key the door names and every door checks it under the key of
 the term it names, the term keys and the keep-out list riding the offer and the
 handoff record whole; a drop keeps the dropped key out at every door through its
-departure crossing, and the dropped person plays on alone. Tests, one a rule, and
-fuzz targets over the token forms, the join handshake and the peer link.
+departure crossing, and the dropped person plays on alone. And §7.4, live: a host
+with a passphrase serves its credential's exchange at every door of its own, a dial
+given the phrase runs it and verifies the door, bound to the leaf over TLS, a pass
+spares it, and a door with no credential in a gated session admits a pass alone.
+Tests, one a rule, and fuzz targets over the token forms, the join handshake and the
+peer link.
 
 ### 7.1 Participant keys
 
@@ -492,22 +496,39 @@ bytes an entry.
 
 ### 7.4 Passphrase doors
 
-`-passphrase` and `:host` take a passphrase or make one (D14), which `:session`
-shows. The host provisions one SCRAM credential (`auth.NewCredential`, once) and
-serves a `ScramServer` at every door; a joiner asks its player for the passphrase
-when the door's methods name `scram` alone, and verifies the server final before it
-reads an offer. On a wss door both ends bind the exchange to the SHA-256 of the leaf
-certificate, the digest `network.Fingerprint` prints: a self-signed door is then
-authenticated both ways, and `-ca` stays for a pin without a passphrase. On tcp and
-ws the exchange authenticates the handshake alone. The pass it ends with spares the
-joiner the passphrase on every redial.
+Landed; [Multiplayer §5.4](multi-player.md#54-wraiths) states it. `-passphrase` and
+`:host ... passphrase` take a passphrase or make one (D14: `GeneratePassphrase`, 16
+characters of `crypto/rand`'s text alphabet, 80 bits, printed once and shown by
+`:session`), eight bytes at least (`CheckPassphrase`). The host derives one SCRAM
+credential from it when its first door opens (`PassphraseDoor`, `auth.NewCredential`
+under the fixed name `door`, Argon2id at `parameter.DoorArgon*`: 64 MiB, three
+passes, one lane, which a page and a phone run as a desktop does) and serves its
+`ScramServer` at every door of its own; the question names `scram` alone, with
+`pass`. A dial given the passphrase (`-passphrase`, `:join <target> <passphrase>`)
+opens the exchange in its answer beside its proofs, the challenge comes back in the
+door's second question, the proof in the dial's second answer and the door's final in
+a third question, which the dial verifies before it reads the preview; the dial's
+KDF runs once a join, at the door's cost and no lower than its own (`WithMinArgonCost`).
+One with none is refused `RefusalSignIn`, whose advice names the passphrase: the
+refusal is the prompt, a dial retries with the phrase. A wrong one is refused
+`RefusalCredential`, saying no more. A pass spares the exchange on every redial.
+
+On a TLS door both ends bind the exchange to the leaf certificate the door serves
+(`LeafBinding` on the door, the handshake's peer certificate on the dial, under a
+websocket too), so a self-signed door is authenticated both ways; on tcp and ws it
+authenticates the handshake alone. A door that holds no credential in a gated
+session, a relay's or a successor's, admits a pass alone (`SessionOffer.Gated`,
+`Coordinator.Gated`): a newcomer there is sent to the host's door, which [the
+todo](todo.md#passphrase-doors-at-a-relay-and-a-successor) leaves open.
 
 A machine in the middle that answers for the door receives a proof it can test
-passphrases against offline, at Argon2's cost a guess: a generated code of about 80
-bits is past guessing, a chosen phrase must be long. A door published through the
-router is reached over the router's TLS to the site's edge and plaintext on the
-tunnel, so its exchange runs unbound there (§8). The KDF runs on the joiner, 64 MiB
-once a join, a page's and a phone's too: measure it there before the cost is chosen.
+passphrases against offline, at Argon2's cost a guess: a generated code is past
+guessing, a chosen phrase must be long. A door published through the router is
+reached over the router's TLS to the site's edge and plaintext on the tunnel, so its
+exchange runs unbound there (§8). The cost on a page and a phone is still to be
+measured (D18); the sizes were: `auth` adds 166 KiB to the native binary (21.73 to
+21.89 MB, stripped) and 220 KiB to the wasm (37.23 to 37.45 MB), under one percent,
+so the module stays whole.
 
 ### 7.5 Admission tickets and accounts
 
@@ -565,9 +586,11 @@ phase 2 `event.JournalSchema` with the departure.
   every door checks one shown, the term keys and the keep-out list ride the offer
   and the handoff record, `:player drop` keeps the dropped key out and the dropped
   person plays on alone; the router's route for a drop waits for phase 6.
-- **Phase 3, passphrase doors** (§7.4): auth enters the game binary; native, wasm
-  and Android sizes read before and after (D18); the Argon2 cost measured on a page
-  and a phone.
+- **Phase 3, passphrase doors** (§7.4): landed. `-passphrase`, `:host ...
+  passphrase` and `:join <target> <passphrase>`; the exchange in the admission
+  frames, bound over TLS; a pass spares it; relays' and successors' doors gated. The
+  binary grew under one percent (D18); the Argon2 cost on a page and a phone is
+  measured at deployment.
 - **Phase 4, the router's TLS front door, in-band admission and anonymous tickets**
   (D4, D5, D6, §7.5 first half): `vifs://`, PROXY protocol on the front door, the
   ticket key and `keygen`, the pod's `-admit ticket`, `GET /vif/api/keys`, the edge's
