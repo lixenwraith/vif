@@ -138,6 +138,8 @@ func (m *Membership) relayAcceptor(admit func(net.Addr) error) func(net.Conn) (l
 		},
 		Prepared:    m.showJoinerPrepared,
 		Name:        m.cfg.SessionName,
+		Authority:   m.firstTermKey,
+		Pass:        m.checkPass,
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
 	}, network.DefaultConfig().ConnectTimeout)
@@ -185,7 +187,7 @@ func (m *Membership) relayNonce() (string, error) {
 // the keys the joiner proved takes back, and names this run as the far end of its
 // stream. The proofs and the challenge they answer travel whole.
 func (m *Membership) relayAssign(local link.PeerID, a network.Admission) (network.SessionOffer, error) {
-	ans, err := m.askAuthority(network.RelayJoin{Step: network.RelayAssign, Keys: a.Proofs, Challenge: a.Nonce})
+	ans, err := m.askAuthority(network.RelayJoin{Step: network.RelayAssign, Keys: a.Proofs, Pass: a.Shown, Challenge: a.Nonce})
 	if err != nil {
 		return network.SessionOffer{}, err
 	}
@@ -382,8 +384,12 @@ func (m *Membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 		err = errSessionStarting
 	case req.Step == network.RelayAssign:
 		var keys []string
-		if keys, err = m.relayedKeys(relay, req); err == nil {
-			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, keys)
+		var pass *network.PassBody
+		if keys, err = m.relayedKeys(relay, req); err == nil && req.Pass != nil {
+			pass, err = m.checkPass(req.Pass, keys)
+		}
+		if err == nil {
+			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, keys, pass)
 			m.closeStaleLink(err, m.sessionTransportLocked())
 		}
 	case req.Step == network.RelayReady:

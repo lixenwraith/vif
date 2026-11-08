@@ -184,6 +184,14 @@ func (m *Membership) AuthorityChanged(rec network.HandoffRecord, mine bool, via 
 	m.applyAuthorityChange(rec, mine, via)
 }
 
+// KeepOut is the keys and accounts this session keeps out, as its doors hold them,
+// for the record this run authors should it take the session over.
+func (m *Membership) KeepOut() []string {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	return slices.Clone(m.keepOut)
+}
+
 // CrossDepartures keeps the places of the participants a new host's group does not
 // hold: each departs as a Wraith, as any departure does.
 func (m *Membership) CrossDepartures(away []network.RosterEntry) {
@@ -355,6 +363,9 @@ func (m *Membership) applyAuthorityChange(rec network.HandoffRecord, mine bool, 
 	m.sessionOffer.Term = rec.Term
 	m.sessionOffer.Anchor = rec.Anchor
 	m.sessionOffer.Roster = slices.Clone(rec.Roster)
+	m.sessionOffer.TermKeys = slices.Clone(rec.TermKeys)
+	m.adoptKeepOutLocked(rec.KeepOut)
+	m.sessionOffer.KeepOut = slices.Clone(m.keepOut)
 	m.sessionMu.Unlock()
 
 	m.publishAuthorityResource()

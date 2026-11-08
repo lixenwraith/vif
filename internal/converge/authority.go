@@ -63,6 +63,10 @@ type Authority struct {
 	chain    network.SuccessionChain
 	chainDue bool
 
+	// termKeys is the authority key of each term since the first, the offer's then
+	// each record's, which doors verify passes against and a record carries on.
+	termKeys []string
+
 	// record is the handoff this instance is authoring under, kept so a survivor
 	// that links up after the record was flooded can be told who took the term.
 	record network.HandoffRecord
@@ -385,6 +389,10 @@ func (u *Authority) Open(o network.SessionOffer, local link.PeerID) {
 	u.roster = slices.Clone(o.Roster)
 	u.anchor = o.Anchor
 	u.chain = slices.Clone(o.Chain)
+	u.termKeys = slices.Clone(o.TermKeys)
+	if len(u.termKeys) == 0 {
+		u.termKeys = extendTermKeys(nil, u.term, rosterKey(o.Roster, o.Host))
+	}
 	u.fixed = o.FixedAuthority
 	u.direct, u.relay = o.Relay == 0 && o.Host != local, o.Relay
 	u.fork = false
@@ -880,14 +888,22 @@ func (u *Authority) trySucceed(now time.Time) {
 		return
 	}
 
+	// Read before the lock: the membership's tables take their own, under which an
+	// offer reads this instance's term.
+	own, keepOut := u.inst.LocalKey(), u.inst.KeepOut()
+	ownKey := ""
+	if own.Valid() {
+		ownKey = network.EncodeKey(own.Public())
+	}
 	u.mu.Lock()
 	if u.contested != held || u.published {
 		u.mu.Unlock()
 		return
 	}
 	u.published = true
+	term := held + network.AuthorityTerm(k)
 	rec := network.HandoffRecord{
-		Term:        held + network.AuthorityTerm(k),
+		Term:        term,
 		Authority:   local,
 		Predecessor: lost,
 		Roster:      roster,
@@ -895,10 +911,12 @@ func (u *Authority) trySucceed(now time.Time) {
 		// The predecessor's identity returns to the pool, so its entry describes
 		// nobody now.
 		Chain:        u.chain.Without(lost),
+		TermKeys:     extendTermKeys(u.termKeys, term, ownKey),
+		KeepOut:      keepOut,
 		EvidenceTick: evidenceTick,
 	}
 	u.mu.Unlock()
-	rec = rec.Sign(u.inst.LocalKey())
+	rec = rec.Sign(own)
 
 	if err := u.adopt(rec, 0); err != nil {
 		u.log.Error("session", "msg", "succession could not adopt its own record", "error", err.Error())
@@ -974,10 +992,23 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 		u.mu.Unlock()
 		return err
 	}
+	// The keys of the terms this instance lived through are its own knowledge: a
+	// record that names others for them would move those terms' passes to a forger.
+	for i, k := range u.termKeys {
+		if k != "" && i < len(rec.TermKeys) && rec.TermKeys[i] != "" && rec.TermKeys[i] != k {
+			u.mu.Unlock()
+			return fmt.Errorf("handoff names another authority key for term %d", network.FirstTerm+network.AuthorityTerm(i))
+		}
+	}
 	u.term, u.holder = rec.Term, rec.Authority
 	u.roster = slices.Clone(rec.Roster)
 	u.anchor = rec.Anchor
 	u.chain = slices.Clone(rec.Chain)
+	if len(rec.TermKeys) != 0 {
+		u.termKeys = slices.Clone(rec.TermKeys)
+	} else {
+		u.termKeys = extendTermKeys(u.termKeys, rec.Term, rosterKey(rec.Roster, rec.Authority))
+	}
 	u.record = rec
 	u.accepted[rec.Term] = rec
 	// An instance the record reaches before any notice sees its authority go only now.
@@ -1037,6 +1068,35 @@ func (u *Authority) Chain() network.SuccessionChain {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return slices.Clone(u.chain)
+}
+
+// TermKeys is the authority key of each term since the first, which a door verifies
+// a pass against (network.TermKey) and an offer carries to a joiner whole.
+func (u *Authority) TermKeys() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.Clone(u.termKeys)
+}
+
+// extendTermKeys is keys with term's authority key in its place, any term between
+// the last known and it, which no authority held, left empty.
+func extendTermKeys(keys []string, term network.AuthorityTerm, key string) []string {
+	n := int(max(term, network.FirstTerm)-network.FirstTerm) + 1
+	out := slices.Clone(keys)
+	for len(out) < n {
+		out = append(out, "")
+	}
+	out = out[:n]
+	out[n-1] = key
+	return out
+}
+
+// rosterKey is the key the roster's entry for id carries, empty for none.
+func rosterKey(roster []network.RosterEntry, id link.PeerID) string {
+	if i := slices.IndexFunc(roster, func(p network.RosterEntry) bool { return p.ID == id }); i >= 0 {
+		return roster[i].Key
+	}
+	return ""
 }
 
 // followed is the authority this instance follows through another participant's

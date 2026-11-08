@@ -63,6 +63,17 @@ type SessionOffer struct {
 	// more than it would have.
 	Players int `json:"players,omitempty"`
 
+	// TermKeys is the authority key of every term since the first, the session's
+	// identity across its successors, which a pass is verified against (TermKey);
+	// KeepOut the keys and accounts the authority dropped, refused at every door.
+	// Both move whole, as the chain does, so a joiner holds what a successor needs.
+	TermKeys []string `json:"term_keys,omitempty"`
+	KeepOut  []string `json:"keep_out,omitempty"`
+
+	// Pass is the admission the seat gives the dial to come back with (PassBody),
+	// signed by the authority under Term; none when the dial showed one still fresh.
+	Pass *Signed `json:"pass,omitempty"`
+
 	// Relay is the participant on the far end of the joiner's stream when that is not
 	// the host: the holder a bot joined through. Zero on a dial to the coordinator.
 	Relay link.PeerID `json:"relay,omitempty"`
@@ -168,6 +179,7 @@ type RelayJoin struct {
 	Nonce     uint32       `json:"nonce"`
 	Leaf      link.PeerID  `json:"leaf,omitempty"`
 	Keys      []Proof      `json:"keys,omitempty"`
+	Pass      *Signed      `json:"pass,omitempty"`
 	Challenge string       `json:"challenge,omitempty"`
 	Report    JoinerReport `json:"report,omitzero"`
 	Door      string       `json:"door,omitempty"`
@@ -291,6 +303,13 @@ type Coordinator struct {
 	// one here. A relay asks its authority for one, so the proofs it carries on are
 	// good at the authority once.
 	Nonce func() (string, error)
+
+	// Authority is the session's first authority key as the roster carries it, which
+	// a pass must name; Pass verifies one a dial showed against the term it names,
+	// this session and the keep-out list, given the keys the dial proved, and says
+	// why not. Either nil is a door that takes no pass, and its question says so.
+	Authority func() string
+	Pass      func(shown *Signed, keys []string) (*PassBody, error)
 
 	// PressWindow is the ready period a prepared dialer has to seat in; zero is
 	// parameter.NetworkJoinPressWindow.
@@ -582,6 +601,10 @@ func ReadSessionRoute(r io.Reader) (string, error) {
 type Admission struct {
 	Nonce  string
 	Proofs []Proof
+	// Shown is the pass the dial showed, for a relay to carry on, and Pass its body
+	// once the door's Pass hook verified it; a dial that showed none has nil for both.
+	Shown *Signed
+	Pass  *PassBody
 }
 
 // Keys is the roster form of the keys proved, in the dial's order.
@@ -610,7 +633,14 @@ func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admissio
 			return Admission{}, err
 		}
 	}
-	body, err := json.Marshal(AuthResponse{Methods: []string{MethodKey}, Nonce: nonce})
+	question := AuthResponse{Methods: []string{MethodKey}, Nonce: nonce}
+	if c.Authority != nil {
+		question.Authority = c.Authority()
+	}
+	if c.Pass != nil && question.Authority != "" {
+		question.Methods = append(question.Methods, MethodPass)
+	}
+	body, err := json.Marshal(question)
 	if err != nil {
 		return Admission{}, err
 	}
@@ -628,16 +658,30 @@ func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admissio
 	if err := json.Unmarshal(msg.Payload, &ans); err != nil {
 		return Admission{}, fmt.Errorf("join handshake admission: %w", err)
 	}
-	if _, err := VerifyProofs(ans.Keys, nonce, nil); err != nil {
+	keys, err := VerifyProofs(ans.Keys, nonce, nil)
+	if err != nil {
 		RefuseJoin(conn, err, timeout)
 		return Admission{}, err
 	}
-	return Admission{Nonce: nonce, Proofs: ans.Keys}, nil
+	adm := Admission{Nonce: nonce, Proofs: ans.Keys}
+	if ans.Pass != nil {
+		if c.Pass == nil || question.Authority == "" {
+			err = &Refusal{Code: RefusalCredential, Reason: "this door takes no pass"}
+		} else {
+			adm.Pass, err = c.Pass(ans.Pass, keys)
+		}
+		if err != nil {
+			RefuseJoin(conn, err, timeout)
+			return Admission{}, err
+		}
+		adm.Shown = ans.Pass
+	}
+	return adm, nil
 }
 
-// answerAdmission proves this dial's keys over the door's nonce and reads the frame
-// the door answers them with. A door that takes no bare key asks for a credential
-// this build has none of yet.
+// answerAdmission proves this dial's keys over the door's nonce, shows the pass it
+// holds for the session the door named, and reads the frame the door answers them
+// with. A door that takes no bare key asks for a credential this build has none of yet.
 func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link.Message, error) {
 	var ask AuthResponse
 	if err := json.Unmarshal(question.Payload, &ask); err != nil {
@@ -655,7 +699,11 @@ func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link
 			proofs = append(proofs, k.Prove(ask.Nonce, nil))
 		}
 	}
-	body, err := json.Marshal(AuthRequest{Keys: proofs})
+	answer := AuthRequest{Keys: proofs}
+	if slices.Contains(ask.Methods, MethodPass) {
+		answer.Pass = ChoosePass(base.Passes, ask.Authority, base.Keys, time.Now()) // [wall] the pass's window
+	}
+	body, err := json.Marshal(answer)
 	if err != nil {
 		return nil, err
 	}

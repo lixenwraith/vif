@@ -677,7 +677,7 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	if r := s.world.Resources.Network; r != nil && p.Dismissed && p.Participant == r.ParticipantID && r.OnDismissed != nil {
 		// A dismissed instance must not relay its closing links as fresh departures.
 		s.enabled = false
-		r.OnDismissed(p.Shed)
+		r.OnDismissed(p.Shed, p.Dropped)
 	}
 	// One crossing retires the whole holder group at the same simulation boundary,
 	// in the same way: a holder's bots wait with it, or go with it.
@@ -685,7 +685,7 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	for _, e := range s.world.Components.Cursor.Entities() {
 		c, ok := s.world.Components.Cursor.GetComponent(e)
 		if ok && c.Holder == p.Participant {
-			children = append(children, event.ParticipantDepartedPayload{Participant: c.PeerID, Slot: c.Slot, Dismissed: p.Dismissed})
+			children = append(children, event.ParticipantDepartedPayload{Participant: c.PeerID, Slot: c.Slot, Dismissed: p.Dismissed, Dropped: p.Dropped})
 		}
 	}
 	for i := range children {
@@ -701,13 +701,20 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	}
 	c, held := s.world.Components.Cursor.GetComponent(cursor)
 	held = held && c.PeerID == p.Participant
-	if p.Shed && held && p.Participant != s.world.Session().Participant {
+	if (p.Shed || p.Dropped) && held && p.Participant != s.world.Session().Participant {
 		who := "player"
 		if c.Holder != 0 {
 			who = "bot"
 		}
+		why := ""
+		if p.Shed {
+			why = " to keep its tick"
+		}
 		s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
-			Message: fmt.Sprintf("The host dropped the %s in slot %X to keep its tick", who, p.Slot), Alert: true})
+			Message: fmt.Sprintf("The host dropped the %s in slot %X%s", who, p.Slot, why), Alert: true})
+	}
+	if r := s.world.Resources.Network; r != nil && r.OnDropped != nil && p.Dropped && held && c.Key != "" {
+		r.OnDropped(c.Key)
 	}
 	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
 		// A participant with no cursor has nothing to wait in, so it leaves for good.
@@ -748,6 +755,9 @@ func (s *NetworkSystem) forgetParticipant(participant uint32) {
 // any more, barrier-bound or not, and no roster change still scheduled is this
 // session's. Its own crossings still apply. Caller holds the world lock.
 func (s *NetworkSystem) LeaveSession() {
+	// A run its host dropped left this off (removeParticipant), for the links then
+	// closing; the session it plays on in, or joins next, has it on again.
+	s.enabled = true
 	s.states = s.states[:0] // owner syncs are other participants'; an own one is only forwarded
 	s.mu.Lock()
 	defer s.mu.Unlock()
