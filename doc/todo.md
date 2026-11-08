@@ -686,8 +686,8 @@ rostered participant it neither links nor carries.
 A run publishes its `-relay` door through the router's reverse tunnel and is
 reached at the site; a host's door published the same way is a player's own session
 reached there, the router neither allocating nor authoring. The deployment this
-leads to serves as many pods as the node has resources for (`-port-first`/`-port-last`,
-ten today) and routes every session beyond them, with accounting and
+leads to serves as many pods as the node has resources for (`-sessions-max`, ten
+today) and routes every session beyond them, with accounting and
 authentication added later. The tunnel carries a door already, and the foundation
 stands: a name is resumed only by the run it was issued to, within
 `NetworkTunnelResumeWindow`, so no published name shadows a pod's; one address

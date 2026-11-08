@@ -92,10 +92,10 @@ spec:
             - ":7777"
             - "-probe"
             - ":7778"
-            # The name every route carries: the router's front door places a
-            # player by it, and this session refuses a link that named another, so
-            # a reused NodePort or a stale link is a refusal rather than a seat in a
-            # stranger's match. See doc/kubernetes-fleet.md §9.
+            # The name every route carries: the router places a player by it, and
+            # this session refuses a link that named another, so a stale link is a
+            # refusal rather than a seat in a stranger's match. See
+            # doc/kubernetes-fleet.md §9.
             - "-name"
             - "${SESSION_ID}"
             # Stated rather than inherited from the -serve default: losing this pod
@@ -211,8 +211,10 @@ spec:
             claimName: vif-fleet-wad
             readOnly: true
 ---
-# The session's endpoint, one per session: players of one match must reach one
-# process. The probe port stays off it, reachable only inside the cluster through
+# The session's Service, one per session, which nothing dials: the router reads its
+# EndpointSlice for the pod's readiness and places every player on the pod's own
+# address, from the node. No NodePort, so a session is reached only through the
+# router. The probe port stays off it, reachable only inside the cluster through
 # the pod IP (the kubelet, Prometheus and the node's router).
 apiVersion: v1
 kind: Service
@@ -227,8 +229,8 @@ metadata:
     app.kubernetes.io/part-of: vif-fleet
     vif.lixenwraith.dev/session: "${SESSION_ID}"
   # Set by the router to the Job's UID, so deleting the Job removes this with
-  # it. A Service that outlived its session would hold a node port against the
-  # quota and advertise a match that no longer exists.
+  # it. A Service that outlived its session would count against the quota and
+  # advertise a match that no longer exists.
   ownerReferences:
     - apiVersion: batch/v1
       kind: Job
@@ -237,16 +239,11 @@ metadata:
       controller: true
       blockOwnerDeletion: true
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     vif.lixenwraith.dev/session: "${SESSION_ID}"
-  # No SNAT on the way in, so the pod sees the player's address rather than the
-  # node's. That is what the per-address admission limiter is keyed on, and with
-  # one pod behind this Service it is the whole of what the setting buys.
-  externalTrafficPolicy: Local
   ports:
     - name: game
       port: 7777
       targetPort: game
-      nodePort: ${GAME_NODEPORT}
       protocol: TCP

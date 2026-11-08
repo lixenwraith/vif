@@ -21,8 +21,8 @@ func TestParseConfigUsesFleetDefaults(t *testing.T) {
 		cfg.RouteListen != ":7777" || cfg.Allocator.RoutePort != 7777 {
 		t.Fatalf("unexpected listener configuration: %+v", cfg)
 	}
-	if cfg.Allocator.PortFirst != 31700 || cfg.Allocator.PortLast != 31709 {
-		t.Fatalf("unexpected port range: %d-%d", cfg.Allocator.PortFirst, cfg.Allocator.PortLast)
+	if cfg.Allocator.SessionsMax != 10 {
+		t.Fatalf("sessions-max = %d, want the quota's ten", cfg.Allocator.SessionsMax)
 	}
 	if cfg.Allocator.Workload.FirstJoin != "90s" ||
 		cfg.Allocator.Workload.Empty != "90s" ||
@@ -101,6 +101,7 @@ func TestRequestBoundsFailClosed(t *testing.T) {
 		{"-log-level-min", "shout"},
 		{"-log-level", "trace"},
 		{"-size", "1x1"},
+		{"-sessions-max", "0"},
 	} {
 		args := append(append([]string{}, base...), extra...)
 		if _, err := parseConfig(args, io.Discard); err == nil {

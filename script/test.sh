@@ -188,7 +188,7 @@ load)
 	sessions=${2:-2} bots=${3:-2} secs=${4:-60}
 	guest_bots=${GUEST_BOTS:-0}
 	want=$((bots + 1 + guest_bots))
-	pod=$(BOTS=$bots deploy/k3s/render-session.sh load 31700 vif:dev "$want") || fail "no pod renders for $bots bot(s)"
+	pod=$(BOTS=$bots deploy/k3s/render-session.sh load vif:dev "$want") || fail "no pod renders for $bots bot(s)"
 	limit=${LIMIT_MB:-$(printf '%s\n' "$pod" | sed -n 's/^ *memory: \([0-9]*\)Mi$/\1/p' | tail -1)}
 	gomem=${GOMEMLIMIT:-$(printf '%s\n' "$pod" | sed -n '/name: GOMEMLIMIT/{n;s/^ *value: "\(.*\)"$/\1/p;}')}
 	rate=20 # ticks a second: parameter.GameUpdateInterval
@@ -390,7 +390,7 @@ fleet)
 	command -v go >/dev/null 2>&1 || fail "go not found"
 	# Three bots, the envelope TestBuildJobUsesFixedSessionShape pins for the router.
 	rendered=$(SCENARIO=td LOG_LEVEL=debug PLAYERS=4 BOTS=3 \
-		./deploy/k3s/render-session.sh fleetcheck 31700 vif:dev 4 120x40)
+		./deploy/k3s/render-session.sh fleetcheck vif:dev 4 120x40)
 	for want in \
 		'"-name"' '"-config-dir"' '"-s"' '"td"' '"debug"' \
 		'claimName: vif-fleet-wad' 'subPath: scenario' 'subPath: image' \

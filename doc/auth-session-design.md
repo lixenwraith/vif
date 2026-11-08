@@ -51,11 +51,9 @@ surface checks:
 - **The front door**, TCP 7777 (`tcpRouter.place`): the first frame,
   `MsgSessionRoute`, places the connection by the session name, a routing key every
   link carries in clear; `-client-joins` a minute per address and `-route-max`
-  connections a session. Plaintext.
-- **A session's own NodePort** (31700–31709): the pod's `AdmissionLimiter`, 6 joins
-  a minute per address (an IPv6 /64), 1024 addresses tracked, and `MaxHandshakes`
-  (8) in flight. A routed dial reaches it from the node, so it budgets only the
-  direct route.
+  connections a session. Plaintext. A pod admits its game port from the node alone,
+  so every dial crosses this or the browser route, and the pod's own
+  `AdmissionLimiter` sees one address, the node's.
 - **A player's doors**, `-host` and `-serve` at tcp, ws and wss. A wss door serves
   `-cert`/`-key` or a `-selfsign` certificate; a dialer trusts the system's roots, a
   self-signed certificate as it is, or what `-ca` names: an issuer's PEM, or
@@ -477,8 +475,8 @@ By part:
 
 - **Keys, the exchange and passes** (§7.1–§7.3): nothing. The router places a dial
   by its route frame and splices the rest unread, so the door's question and the
-  dialer's pass cross it as bytes; the front door, the browser route and the
-  NodePort forward stay as they are. A router update already waits for an empty
+  dialer's pass cross it as bytes; the front door and the browser route stay as
+  they are. A router update already waits for an empty
   fleet (`update.sh`), so a fleet player never redials across one. It does drop
   published doors' tunnels, and their players come back through the resumed
   publication with their passes. The publication's `Resume` token is then the last
@@ -561,8 +559,7 @@ Each gives its options with what follows from them, then a leaning.
 - Open, as today: nothing changes for a player, and a leaked link admits anyone.
 - An anonymous ticket for every new admission: a request to the site before each
   join, so a native `vif://` link needs its site; the router names every player to
-  its pod, and the NodePort route no longer goes around its budget. Redials show
-  passes and ask the site nothing.
+  its pod. Redials show passes and ask the site nothing.
 - An account to create, anyone to join: the fleet's capacity is spent by players
   the site knows, and a newcomer still joins a friend's link.
 
@@ -570,11 +567,10 @@ Leaning: anonymous tickets first, accounts optional, and an account required onl
 for what needs a lasting name.
 
 **Q2. The credential boundary.**
-- The router mints and alone verifies: pods trust a spliced stream, so the public
-  NodePort forward has to close, every native join goes through the front door,
-  and the front door parses the exchange.
-- The router mints and pods verify: a public key in every Job's arguments, the
-  NodePort route stays, and the router reads nothing past the route frame.
+- The router mints and alone verifies: pods trust a spliced stream, and the front
+  door parses the exchange.
+- The router mints and pods verify: a public key in every Job's arguments, and the
+  router reads nothing past the route frame.
 - A separate admission service: the router stays a router, at the cost of another
   process on the node and another hop before every join.
 
