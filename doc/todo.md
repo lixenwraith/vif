@@ -933,6 +933,21 @@ and solo play is a session of one. Commands then move participants between sessi
 session's authority; `:join`/`:leave` for a participant; `:drop` for an authority
 removing one; `:merge`/`:split` for whole sessions.
 
+### Passphrase doors at a relay and a successor
+
+- Priority: P2
+- Affected files: `internal/network/session.go`, `internal/network/admission.go`,
+  `internal/app/internal/membership/session.go`, `relay.go`
+- Guide: [Auth and session design §7.4](auth-session-design.md#74-passphrase-doors)
+
+A relay's door and a successor's hold no credential for the passphrase the host
+set, so in a gated session they admit a pass alone and a newcomer is sent to the
+host's door. Every participant of such a session proved the phrase, so the offer and
+the handoff record could carry the credential's verifier (`auth.Credential` without
+the phrase) as they carry the term keys, and every door would serve the exchange;
+the alternative is the relay forwarding the exchange's steps to the authority as it
+forwards the challenge (`RelayNonce`). Decide, then do one.
+
 ### Let an authority drop a participant
 
 - Priority: P3

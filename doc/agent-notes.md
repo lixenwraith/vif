@@ -287,6 +287,14 @@ comment now states, and link that instead.
 - The term keys and the keep-out list are membership state, carried whole by the
   offer and the handoff record and fed by the departure crossing, not a captured
   resource: every door holds them with no snapshot schema or codec change.
+- `auth`'s SCRAM client refuses a challenge below the cost it was built with, and
+  an empty channel binding is its error, not its unbound: pass `WithChannelBinding`
+  only over TLS (`bindingOption`), and read the leaf from under a websocket
+  (`tlsOf`), since `*tls.Conn` has a `NetConn` of its own to stop at.
+- A host that drops a run closes the link as the drop applies on its side, before
+  the dropped run applies it; the dropped run reads the loss as its dismissal's
+  (`NetworkSystem.dismissalScheduled`) rather than as a host lost, or it would
+  redial under the key just kept out.
 
 ## Position
 

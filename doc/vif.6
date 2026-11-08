@@ -43,6 +43,9 @@ The certificate's private key, PEM; default the \-cert file
 .B \-selfsign
 Serve wss:// with a certificate made for this run, in place of \-cert: encrypted, and taken as it is by a terminal that joins
 .TP
+.B \-passphrase <phrase|new>
+Doors take this passphrase (Argon2\-SCRAM), or one made now and printed; with \-join, the one shown to a door that asks
+.TP
 .B \-ca <file|sha256:hex>
 What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self\-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint
 .TP

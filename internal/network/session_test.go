@@ -1001,3 +1001,137 @@ func TestADoorAdmitsThePassItsAuthorityIssued(t *testing.T) {
 		}
 	}
 }
+
+// TestAPassphraseDoorAdmitsTheDialThatShowsIt: a door holding a passphrase names
+// the exchange alone, admits the dial that proves the phrase, refuses a wrong one for
+// what it showed and a dial with none for showing nothing, and lets a pass skip the
+// exchange; a door of a gated session with no credential admits a pass alone.
+func TestAPassphraseDoorAdmitsTheDialThatShowsIt(t *testing.T) {
+	door, err := NewPassphraseDoor("correct horse battery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer door.Close()
+	if _, err := NewPassphraseDoor("short"); err == nil {
+		t.Fatal("a seven-byte passphrase derived a door")
+	}
+	if made := GeneratePassphrase(); len(made) != 16 || CheckPassphrase(made) != nil {
+		t.Fatalf("a made passphrase reads %q", made)
+	}
+	authority, participant := NewKey(), NewKey()
+	issued, _ := SignPass(authority, PassBody{Authority: authority.Public(), Key: participant.Public(), Kind: AdmitPlay, Term: FirstTerm}, time.Now(), time.Hour)
+	check := func(shown *Signed, keys []string) (*PassBody, error) {
+		body, err := VerifyPass(shown, func(AuthorityTerm) []byte { return authority.Public() }, time.Now())
+		if err != nil {
+			return nil, &Refusal{Code: RefusalCredential, Reason: err.Error()}
+		}
+		return &body, nil
+	}
+	offer := testOffer()
+	seen := make(chan Admission, 1)
+	serve := func(c Coordinator) (*link.SocketPort, string) {
+		c.Assign = func(a Admission) (SessionOffer, error) {
+			seen <- a
+			return offer, nil
+		}
+		c.Authority, c.Pass = func() string { return authority.ID() }, check
+		hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
+		hostCfg.ParticipantID = offer.Host
+		hostCfg.AcceptSession = HostAcceptor(c, 5*time.Second)
+		host := link.NewSocketPort(&hostCfg.Config)
+		if err := host.Start(); err != nil {
+			t.Fatal(err)
+		}
+		return host, host.Addr().String()
+	}
+	dial := func(addr, phrase string, pass *Signed) error {
+		cfg := DebugConfig(link.RolePeer, "")
+		cfg.Keys, cfg.Passphrase = []Key{participant}, phrase
+		if pass != nil {
+			cfg.Passes = []*Signed{pass}
+		}
+		pending, _, err := DialSession(addr, cfg)
+		if err == nil {
+			_ = pending.Close()
+		}
+		return err
+	}
+	host, addr := serve(Coordinator{Passphrase: door})
+	defer host.Close()
+	if err := dial(addr, "correct horse battery", nil); err != nil {
+		t.Fatalf("the passphrase was refused: %v", err)
+	}
+	if a := <-seen; a.Pass != nil {
+		t.Fatal("an exchange admitted a pass nobody showed")
+	}
+	if err := dial(addr, "wrong horse battery", nil); !errors.Is(err, &Refusal{Code: RefusalCredential}) || len(seen) != 0 {
+		t.Fatalf("a wrong passphrase: %v, assigned %d", err, len(seen))
+	}
+	if err := dial(addr, "", nil); !errors.Is(err, &Refusal{Code: RefusalSignIn}) || len(seen) != 0 {
+		t.Fatalf("no passphrase: %v, assigned %d", err, len(seen))
+	}
+	if err := dial(addr, "", issued); err != nil {
+		t.Fatalf("a pass did not spare the passphrase: %v", err)
+	}
+	if a := <-seen; a.Pass == nil {
+		t.Fatal("the pass shown was not the admission")
+	}
+
+	gated, addr := serve(Coordinator{Gated: func() bool { return true }})
+	defer gated.Close()
+	if err := dial(addr, "correct horse battery", nil); !errors.Is(err, &Refusal{Code: RefusalSignIn}) || len(seen) != 0 {
+		t.Fatalf("a bare key at a gated door without a credential: %v, assigned %d", err, len(seen))
+	}
+	if err := dial(addr, "", issued); err != nil {
+		t.Fatalf("a pass at a gated door: %v", err)
+	}
+	<-seen
+}
+
+// TestAWssPassphraseDoorBindsItsExchange: over a wss door both ends bind the
+// exchange to the certificate the door serves, so the dial that trusts it and holds
+// the passphrase is admitted, and the binding each computed was the same one.
+func TestAWssPassphraseDoorBindsItsExchange(t *testing.T) {
+	dir := t.TempDir()
+	certFile, caFile := filepath.Join(dir, "host.pem"), filepath.Join(dir, "ca.pem")
+	writeIssued(t, certFile, caFile)
+	serverTLS, err := link.LoadTLS(certFile, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if LeafBinding(serverTLS) == nil || LeafBinding(nil) != nil {
+		t.Fatal("LeafBinding reads the served certificate alone")
+	}
+	door, err := NewPassphraseDoor("open sesame now")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer door.Close()
+	offer := testOffer()
+	hostCfg := DebugConfig(link.RoleHost, "wss://127.0.0.1:0")
+	hostCfg.TLS = serverTLS
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{
+		Assign:     func(Admission) (SessionOffer, error) { return offer, nil },
+		Passphrase: door,
+		Binding:    LeafBinding(serverTLS),
+	}, 5*time.Second)
+	host := link.NewSocketPort(&hostCfg.Config)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := DebugConfig(link.RolePeer, "")
+	if cfg.TLS, err = link.TrustTLS(caFile); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Passphrase = "open sesame now"
+	pending, got, err := DialSession(host.Addr().String()+"/", cfg)
+	if err != nil {
+		t.Fatalf("the bound exchange failed: %v", err)
+	}
+	_ = pending.Close()
+	if got.Assigned != offer.Assigned {
+		t.Fatalf("the dial was offered %+v", got)
+	}
+}
