@@ -40,7 +40,7 @@ moves into the reference documents ([Multiplayer](multi-player.md),
   a fleet pod budgets by a ticket's subject.
 - **D4. TLS on the front door.** The native fleet link is `vifs://<site>:7777/<id>`.
   On this deployment TLS ends at the site's edge, which hands the router each
-  connection under PROXY protocol v2 so the dialer's address still keys its budgets;
+  connection under PROXY protocol so the dialer's address still keys its budgets;
   the router can end it itself for a deployment with no such edge
   (`-route-cert`/`-route-key`, off unless given). Plaintext `vif://` stays for a
   player's own tcp doors, where a passphrase door (D14) authenticates them.
@@ -542,7 +542,7 @@ and phase 1 bumps `snapshot.Schema` and `event.JournalSchema` with the roster.
   and Android sizes read before and after (D18); the Argon2 cost measured on a page
   and a phone.
 - **Phase 4, the router's TLS front door, in-band admission and anonymous tickets**
-  (D4, D5, D6, §7.5 first half): `vifs://`, PROXY protocol v2 on the front door, the
+  (D4, D5, D6, §7.5 first half): `vifs://`, PROXY protocol on the front door, the
   ticket key and `keygen`, the pod's `-admit ticket`, `GET /vif/api/keys`, the edge's
   stream block.
 - **Phase 5, accounts**: the identity service in its own repository (D8, D9),
@@ -564,8 +564,9 @@ By phase:
   resume sign the router's nonce.
 - **Phase 4**:
   - The edge terminates TLS for 7777 in an nginx `stream` block and forwards to the
-    node's 7777 with `proxy_protocol on`; the router reads one PROXY v2 header before
-    the route frame (`-route-proxy-protocol`, refusing a connection without one) and
+    node's 7777 with `proxy_protocol on`; the router reads one PROXY header before
+    the route frame (`-route-proxy-protocol`, refusing a connection without one), the
+    v1 text line nginx writes or the v2 binary header HAProxy does, and
     keys its budgets on the address it names. A deployment with no such edge gives
     the router `-route-cert` and `-route-key`, off by default, and it ends TLS itself.
     The game's `vifs://` dials TLS with the system's roots, as a wss door is dialled.
@@ -609,7 +610,7 @@ By phase:
   loopback listener of the router's own (D16).
 
 What the site's edge then provides, beside [Deploying §12](kube-docker-deploy.md#12-the-sites-edge):
-a `stream` server on 7777 ending TLS and forwarding with PROXY protocol v2 to the
+a `stream` server on 7777 ending TLS and forwarding with PROXY protocol to the
 node (phase 4); `/vif/api/auth/` and `GET /vif/api/keys` published to 9080, with
 `Cookie` and `Authorization` passed through untouched and kept out of its access
 log, nothing cached under `/vif/api/auth/` (phase 5); and the 31700–31709 forward
