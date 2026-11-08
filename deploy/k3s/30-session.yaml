@@ -140,6 +140,11 @@ spec:
             # above so the process, not the kubelet, decides when the match ends.
             - "-drain"
             - "20s"
+            # What the doors admit beside a pass: open, or ticket:<key> under the
+            # router's public key, so a player reaches this session through the
+            # router alone and never around it (doc/auth-session-design.md D6).
+            - "-admit"
+            - "${ADMIT}"
           ports:
             - name: game
               containerPort: 7777

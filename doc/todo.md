@@ -331,9 +331,9 @@ router name the player to it.
 Settled by the design's decisions: a participant key and its proof on every
 admission, a session pass for every redial, an admission ticket the router mints in
 band on its TLS front door and the pod verifies, accounts in an identity service
-and a sign-in cookie on the browser route's upgrade. The primitives are built
-(`internal/network/admission.go`); the phases, each a PR, are the design's §7.6,
-and this item closes with phase 5. A browser trusts a self-signed door only by
+and a sign-in cookie on the browser route's upgrade. Phases 0 to 4 are landed: a
+fleet pod takes the router's ticket and no bare key; the phases, each a PR, are
+the design's §7.6, and this item closes with phase 5. A browser trusts a self-signed door only by
 being told to: pinning from a page needs WebTransport's `serverCertificateHashes`,
 which the route does not speak, so a page joins a player's door over the site or
 by a passphrase bound to that door's certificate.
@@ -933,20 +933,39 @@ and solo play is a session of one. Commands then move participants between sessi
 session's authority; `:join`/`:leave` for a participant; `:drop` for an authority
 removing one; `:merge`/`:split` for whole sessions.
 
-### Passphrase doors at a relay and a successor
+### A passphrase prompt in the TUI and the launcher
 
-- Priority: P2
-- Affected files: `internal/network/session.go`, `internal/network/admission.go`,
-  `internal/app/internal/membership/session.go`, `relay.go`
+- Priority: P3, in a session of its own once the auth design's phases are done
+- Affected files: `internal/mode`, `internal/app/loop.go`, `web/terminal.js`,
+  `web/index.html`
 - Guide: [Auth and session design §7.4](auth-session-design.md#74-passphrase-doors)
 
-A relay's door and a successor's hold no credential for the passphrase the host
-set, so in a gated session they admit a pass alone and a newcomer is sent to the
-host's door. Every participant of such a session proved the phrase, so the offer and
-the handoff record could carry the credential's verifier (`auth.Credential` without
-the phrase) as they carry the term keys, and every door would serve the exchange;
-the alternative is the relay forwarding the exchange's steps to the authority as it
-forwards the challenge (`RelayNonce`). Decide, then do one.
+A dial that meets a passphrase door with none is refused with the advice to join
+with one, and a player retries with `:join <target> <passphrase>`: the refusal is
+the prompt. A prompt proper would ask in place, in the command line's form on a
+terminal and in the launcher's join row on a page, and dial again with the answer;
+the same form later takes a sign-in (§7.5).
+
+### Tighten what a relay and a successor are trusted with
+
+- Priority: P2, in a session of its own, and not before the auth design's phases
+  (§7.6) are all landed: each adds to what is trusted, and the audit is of the whole
+- Affected files: `internal/network`, `internal/app/internal/membership`,
+  `internal/converge`, `tool/vif-router`
+- Guide: [Auth and session design §7.4](auth-session-design.md#74-passphrase-doors),
+  [Multiplayer §5](multi-player.md#5-membership-topology-and-authority-continuity)
+
+The premise: a participant, once admitted, is trusted with the session. A relay
+carries others' crossings and runs the admission exchange for newcomers; a successor
+takes the term, signs the handoff record and issues passes; both hold the passphrase
+door's verifier, with which a participant can test guesses offline at Argon2's cost
+and stand in for the door to others. A host that took over through a router-published
+door cannot publish again through the router, so its session is reached through
+relays alone. The scope: list what each role can do that the admission did not grant
+it, decide which of it needs a check (the authority confirming a relay's admission,
+a successor's record carrying no more than the roster lets it, the verifier's reach),
+which needs a limit, and which is accepted as the price of play without a server; then
+plug the holes found, one PR each.
 
 ### Let an authority drop a participant
 

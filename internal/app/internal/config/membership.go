@@ -78,6 +78,11 @@ type Membership struct {
 	// that takes one, :join's. Empty opens its doors and shows none.
 	Passphrase string
 
+	// TicketKeys are the router's public keys a dedicated host's doors take the site's
+	// tickets under (-admit ticket), in place of a bare key; none admits keys as any
+	// door does.
+	TicketKeys [][]byte
+
 	// PlaceStore keeps the places this process comes back to its sessions with past
 	// its own life: a page's across a reload, a terminal's or a phone's across a
 	// restart or a crash; nil keeps them while it runs.

@@ -70,21 +70,37 @@ func (c Control) SetPassphrase(phrase string) (string, error) {
 	return phrase, nil
 }
 
-// passphraseDoor is the credential this run's own doors take, derived from the
-// passphrase at the first door's open; nil opens them. One that cannot be derived
-// leaves the doors gated rather than open, since cfg.Passphrase stands.
+// passphraseDoor is the credential this run's doors take: the session's verifier
+// where it joined one (SessionOffer.Door), else one derived from its own passphrase
+// at the first door's open, once; nil opens them. One that cannot be had leaves the
+// doors gated rather than open, since what gates them stands.
 func (m *Membership) passphraseDoor() *network.PassphraseDoor {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
-	if m.door == nil && m.cfg.Passphrase != "" {
-		d, err := network.NewPassphraseDoor(m.cfg.Passphrase)
-		if err != nil {
-			m.log.Error("session", "msg", "passphrase door not derived", "error", err.Error())
-			return nil
-		}
-		m.door = d
+	return m.passphraseDoorLocked()
+}
+
+// passphraseDoorLocked is passphraseDoor for a caller holding sessionMu.
+func (m *Membership) passphraseDoorLocked() *network.PassphraseDoor {
+	if m.door != nil {
+		return m.door
 	}
-	return m.door
+	var d *network.PassphraseDoor
+	var err error
+	switch {
+	case m.sessionOffer.Door != nil:
+		d, err = network.OpenDoor(m.sessionOffer.Door)
+	case m.cfg.Passphrase != "":
+		d, err = network.NewPassphraseDoor(m.cfg.Passphrase)
+	default:
+		return nil
+	}
+	if err != nil {
+		m.log.Error("session", "msg", "passphrase door not opened", "error", err.Error())
+		return nil
+	}
+	m.door = d
+	return d
 }
 
 // gated reports a session whose doors take no bare key: this run's passphrase, or
@@ -96,7 +112,29 @@ func (m *Membership) gated() bool {
 }
 
 // gatedLocked is gated for a caller holding sessionMu.
-func (m *Membership) gatedLocked() bool { return m.cfg.Passphrase != "" || m.sessionOffer.Gated }
+func (m *Membership) gatedLocked() bool {
+	return m.cfg.Passphrase != "" || len(m.cfg.TicketKeys) != 0 || m.sessionOffer.Gated
+}
+
+// ticketHook is the door's check of the site's ticket, for a host whose doors take
+// them (-admit ticket); nil for doors that take none.
+func (m *Membership) ticketHook() func(*network.Signed, []string) (*network.TicketBody, error) {
+	if len(m.cfg.TicketKeys) == 0 {
+		return nil
+	}
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	if m.tickets == nil {
+		m.tickets = &network.TicketGate{Keys: m.cfg.TicketKeys, Session: m.cfg.SessionName}
+	}
+	return m.tickets.Admit
+}
+
+// doorVerifierLocked is the verifier an offer of this run's carries, the session's
+// or its own door's; nil where its doors are open. Caller holds sessionMu.
+func (m *Membership) doorVerifierLocked() *network.DoorVerifier {
+	return m.passphraseDoorLocked().Verifier()
+}
 
 func (c Control) DropPlayer(slot int) error {
 	if slot < 0 || slot >= parameter.MaxPlayers {

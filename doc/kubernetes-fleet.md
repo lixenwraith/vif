@@ -21,10 +21,10 @@ in [`script/`](../script/README.md).
 | Trigger | `tool/vif-router`, a hardened node service, is the website-facing control-plane boundary. A caller selects roster size, the session's own bots, log level and scenario from what it advertises in `limits`; everything else in the workload is the deployment's. `deploy/k3s/session.sh` drives it from a shell and can also render the template directly. No session pod runs between requests. |
 | Image | `scratch` plus the static `vif_headless` binary (about 14 MiB), non-root, read-only root filesystem, no shell. Its one scenario is the embedded `main` fallback; the rest come off a node volume, so what else the fleet serves changes without a rebuild. |
 | Scenario | Chosen per session from the router's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap are the image's embedded ones, player domain that is never compared with a guest's; a guest is served the session's scenario at the join, so it needs none of the node's files. |
-| Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the router terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Unauthenticated (§4). |
-| Reached by | Its name, through the router alone, on two routes (§9): `vif://<site>:7777/<session>` at the front door and `wss://<site>/vif/ws/<session>` through the site's edge; both reach the pod from the node, the only source its game port admits. |
+| Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the router terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Admitted by the router's ticket (§4). |
+| Reached by | Its name, through the router alone, on two routes (§9): `vif://<site>:7777/<session>` at the front door, `vifs://` where the edge ends TLS for it, and `wss://<site>/vif/ws/<session>` through the site's edge; both reach the pod from the node, the only source its game port admits. |
 | Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, built from upstream LogWisp `main`, has a read-only view and a loopback-only listener; the router reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
-| Public API | Exactly `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>`, over TLS through the site's edge. `/healthz`, `/readyz` and every node port but the front door's stay unreachable from outside. |
+| Public API | Exactly `/vif/api/sessions`, `/vif/api/logs`, `/vif/api/keys` and `/vif/ws/<session>`, over TLS through the site's edge. `/healthz`, `/readyz` and every node port but the front door's stay unreachable from outside. |
 
 ```mermaid
 flowchart LR
@@ -73,11 +73,15 @@ loose for a player whose link drops and comes back; one NAT is one address.
 
 ## 4. Security posture
 
-The game port is **open and unauthenticated**. Anyone who can reach it can join a
-session and influence its Shared world, and so can anyone who can open the browser
-route. Browser admission authentication is open work
-([todo](todo.md#add-browser-admission-authentication)); without it, what is not
-accepted is a stranger being able to do anything *worse* than play.
+A fleet pod's doors take **the router's ticket and no bare key** (`-admit ticket`,
+the router's public key in the Job's arguments): the router runs each dial's
+admission exchange through itself, on the front door and the browser route alike,
+checks the dialer's proofs and mints a ticket naming the dialer's address and key,
+which the pod verifies, spends once and checks the proof against
+([auth design §7.5](auth-session-design.md#75-admission-tickets-and-accounts)). Anyone
+who reaches the router can still join a session and influence its Shared world, by
+name, within the budgets below; accounts and sign-ins are the design's phase 5. What
+is not accepted is a stranger being able to do anything *worse* than play.
 
 What bounds a stranger:
 
@@ -316,9 +320,9 @@ alone, so no dial goes around the router's checks.
 
 | Route | Link | Path | Refuses a bad dial |
 |---|---|---|---|
-| Front door | `vif://<site>:7777/<id>` | host forward, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialler past its budget (§4), a session unknown, unready or full, one at `-route-max` |
+| Front door | `vif://<site>:7777/<id>`, `vifs://` where the edge ends TLS | host forward, or the edge's stream server under a PROXY header, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialler past its budget (§4), a session unknown, unready or full, one at `-route-max`; then, in the exchange it runs through itself, a proof that fails |
 | Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the router, the pod's 7777 | the router: another origin before the upgrade, the rest as the front door does (below) |
-| Tunnel | `vif://<site>:7777/<id>`, a door's | host forward, the router on the node, the control connection the door's run holds open to it, the run's door | the router: as the front door, then a run that opens no connection back within the route timeout |
+| Tunnel | `vif://<site>:7777/<id>`, a door's, `vifs://` as the front door's | as the front door, then the control connection the door's run holds open to the router, the run's door | the router: as the front door, then a run that opens no connection back within the route timeout |
 
 Any of these links joins from either client. A browser cannot dial a `vif://` link,
 and a link can be typed onto another route's port, so a client that no route answers

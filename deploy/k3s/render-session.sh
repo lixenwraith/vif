@@ -7,8 +7,8 @@ set -eu
 
 usage() {
 	echo "usage: $0 SESSION_ID [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
-	echo "       SCENARIO, LOG_LEVEL, BOTS, FIRST_JOIN, EMPTY_GRACE and JOB_UID override" >&2
-	echo "       the defaults from the environment" >&2
+	echo "       SCENARIO, LOG_LEVEL, BOTS, FIRST_JOIN, EMPTY_GRACE, ADMIT and JOB_UID" >&2
+	echo "       override the defaults from the environment" >&2
 	exit 2
 }
 
@@ -23,6 +23,7 @@ EMPTY_GRACE=${EMPTY_GRACE:-90s}
 SCENARIO=${SCENARIO:-main}
 LOG_LEVEL=${LOG_LEVEL:-info}
 BOTS=${BOTS:-0}
+ADMIT=${ADMIT:-open}
 JOB_UID=${JOB_UID:-}
 
 case "$SESSION_ID" in
@@ -42,6 +43,14 @@ case "$BOTS" in
 esac
 case "$PLAYERS" in
 	'' | *[!0-9]* ) echo "$0: PLAYERS must be a number" >&2; exit 2 ;;
+esac
+# open, or the router's public key in base64, which the session takes tickets under
+case "$ADMIT" in
+	open ) ;;
+	ticket:* ) case "${ADMIT#ticket:}" in
+		'' | *[!A-Za-z0-9+/=]* ) echo "$0: ADMIT must be open or ticket:<base64 key>" >&2; exit 2 ;;
+	esac ;;
+	* ) echo "$0: ADMIT must be open or ticket:<base64 key>" >&2; exit 2 ;;
 esac
 # The router's bound: a bot is a roster guest, and six fill the LimitRange
 most=$((PLAYERS - 1))
@@ -75,6 +84,7 @@ rendered=$(sed \
 	-e "s|\${EMPTY_GRACE}|$EMPTY_GRACE|g" \
 	-e "s|\${SCENARIO}|$SCENARIO|g" \
 	-e "s|\${LOG_LEVEL}|$LOG_LEVEL|g" \
+	-e "s|\${ADMIT}|$ADMIT|g" \
 	-e "s|\${JOB_UID}|$JOB_UID|g" \
 	"$template")
 

@@ -18,6 +18,9 @@ EnvironmentFile=/etc/vif-router/router.env
 ExecStart=/usr/local/bin/vif-router \
     -listen ${VIF_ROUTER_LISTEN} \
     -route-listen ${VIF_ROUTER_ROUTE_LISTEN} \
+    -route-proxy-protocol=${VIF_ROUTER_ROUTE_PROXY_PROTOCOL} \
+    -route-secure=${VIF_ROUTER_ROUTE_SECURE} \
+    -ticket-key ${VIF_ROUTER_TICKET_KEY} \
     -image ${VIF_ROUTER_IMAGE} \
     -join-host ${VIF_ROUTER_JOIN_HOST} \
     -players-max ${VIF_ROUTER_PLAYERS_MAX} \

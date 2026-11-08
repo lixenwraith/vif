@@ -50,6 +50,7 @@ type apiServer struct {
 	mux       *http.ServeMux
 
 	clientHeader string
+	ticketKeys   []string    // the public keys the router's tickets verify under, current first
 	unattributed atomic.Bool // warned once that the edge sent no address
 	creates      *network.AdmissionLimiter
 	list         fleetList
@@ -106,6 +107,7 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 	server.mux.HandleFunc("/readyz", server.handleReady)
 	server.mux.HandleFunc("/vif/api/sessions", server.handleSessions)
 	server.mux.HandleFunc("/vif/api/logs", server.handleLogs)
+	server.mux.HandleFunc("/vif/api/keys", server.handleKeys)
 	server.mux.HandleFunc(wsRoutePrefix, server.handleSessionSocket)
 	return server
 }
@@ -117,6 +119,36 @@ func (s *apiServer) routeDoors(tunnels *network.TunnelHub) {
 	if s.ws != nil {
 		s.ws.route.tunnels = tunnels
 	}
+}
+
+// admitWith has the browser route mint tickets under key as the front door does,
+// and lists its public half; an empty key mints none.
+func (s *apiServer) admitWith(key network.Key) {
+	if !key.Valid() {
+		return
+	}
+	s.ticketKeys = []string{key.ID()}
+	if s.ws != nil {
+		s.ws.route.ticket = key
+	}
+}
+
+// handleKeys lists the public keys the router's tickets verify under, the current
+// first, for a host that admits the site's players by them (-admit ticket).
+func (s *apiServer) handleKeys(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodHead)
+		return
+	}
+	if len(s.ticketKeys) == 0 {
+		writeAPIError(w, http.StatusNotFound, "no_ticket_key", "This router signs no tickets")
+		return
+	}
+	keys := make([]map[string]string, 0, len(s.ticketKeys))
+	for _, k := range s.ticketKeys {
+		keys = append(keys, map[string]string{"key": k})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
 func (s *apiServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -29,7 +29,7 @@ this repository; §2 and §12 state only what they must provide.
 | D3 | **Cluster commands run through `sudo kubectl`.** K3s's kubeconfig stays root-readable (mode `0640`); never copy it to a login user. |
 | D4 | **The vif JSON line is the log contract.** Records originate in `internal/vlog` and every hop preserves those bytes; nothing reads a Kubernetes pod log. |
 | D5 | **The router runs on the node.** It needs the K3s API and node-local access to the pod probes; port 6443 never leaves the node. |
-| D6 | **The session transports are unauthenticated.** Anyone who can reach the front door or the browser route can join; the router's budgets and the application limits are the controls ([fleet design §4](kubernetes-fleet.md#4-security-posture)). |
+| D6 | **The router admits in band.** A fleet pod's doors take the router's ticket and no bare key: the router runs each dial's admission exchange through itself, over the edge's TLS and PROXY header on the front door and the site's TLS on the browser route, and mints a ticket naming the player's address and key; a stranger reaches a pod by no other way ([fleet design §4](kubernetes-fleet.md#4-security-posture), [auth design D5, D6](auth-session-design.md#0-decisions)). |
 | D7 | **A session is reached only through the router.** No NodePort: a pod admits its game port from the node alone, the host forwards 7777 and nothing else, and `-sessions-max` bounds the fleet beside the quota ([fleet design §9](kubernetes-fleet.md#9-the-session-routes)). |
 
 ## 1. The shape
@@ -55,7 +55,7 @@ reaches the pod from the node:
 
 | String | What it is | Who reads it |
 |---|---|---|
-| `vif://<site-host>:7777/<id>` | `join_target`: the router's front door, one address for every session. | `vif -join`, and `vif -join https://<site-host>`, which creates the session first. |
+| `vif://<site-host>:7777/<id>`, `vifs://` where the edge ends TLS for 7777 | `join_target`: the router's front door, one address for every session. | `vif -join`, and `vif -join https://<site-host>`, which creates the session first. |
 | `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site to the router, which answers the WebSocket and splices it to the pod. | The WASM build, or `vif -join` where 7777 is blocked. |
 
 Every route sends the name before the handshake, and the pod runs `-name <id>`, so a
@@ -71,8 +71,8 @@ exists at the edge. What it must provide:
 
 | Requirement | Why |
 |---|---|
-| Forward TCP 7777, and only it, to the node | The whole player-facing native surface, the router's front door; a session's own port never leaves the pod network. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
-| Do not rewrite the source address | The front door keys its admission budgets on the dialling address. |
+| Forward TCP 7777, and only it, to the node: raw, or ended at the edge as TLS and forwarded under a PROXY header (§12) | The whole player-facing native surface, the router's front door; a session's own port never leaves the pod network. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
+| Do not rewrite the source address, or name it in the PROXY header | The front door keys its admission budgets and its tickets on the dialling address. |
 | Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and probes it every 200 ms each way. |
 | Admit the site host to the node's 9080 | The router's API and browser route, reached only through the site's nginx (§12). |
 
@@ -357,6 +357,8 @@ the edge in front of 9080:
 | Pass `/vif/api/logs` unbuffered, with an hour-long read timeout | It is one long-lived SSE response; a buffer or a short timeout stalls or truncates it. |
 | Overwrite the header `VIF_ROUTER_CLIENT_ADDRESS_HEADER` names with the player's address | It keys the per-player join and creation budgets; with no header named, the API and browser routes charge none. |
 | Keep any idle-connection bound on the TLS path above a second | A browser session holds one connection for the whole match; the link probe crosses it every 200 ms each way, and the game drops a link silent for five seconds. |
+| Where the edge ends TLS for 7777, a `stream` server on 7777 with the site's certificate, forwarding to the node's 7777 with `proxy_protocol on`; then `VIF_ROUTER_ROUTE_PROXY_PROTOCOL=true` and `VIF_ROUTER_ROUTE_SECURE=true` | The router reads the edge's PROXY header (version 1, the one nginx writes) ahead of the route frame and budgets the player's address; without it the edge's address would be every player's. The links it hands out then read `vifs://`. |
+| Publish `GET /vif/api/keys` | The public key the router's tickets verify under, for a host that admits the site's players by them. |
 
 The page that opens the socket must permit it; `connect-src 'self'` does.
 [`deploy/website/vif.nginx.example`](../deploy/website/vif.nginx.example) is a
