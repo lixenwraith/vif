@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/auth"
@@ -23,10 +25,27 @@ const (
 	accountDevice = 64
 )
 
+// The site stores a name in lowercase and keys the SCRAM credential by that exact
+// spelling, so both exchanges spell it the same way, and a name the site would
+// refuse is refused here before any KDF runs.
+var accountNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+
+func accountName(name string) (string, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !accountNamePattern.MatchString(name) {
+		return "", errors.New("an account name is 1 to 32 of a-z, 0-9, _ and -, starting with a letter")
+	}
+	return name, nil
+}
+
 // Register creates an account at site for name: the credential is derived here at
 // the library's cost, the site's one profile, and holds the salt and the two keys
 // alone (auth.Credential.Export).
 func Register(site, name, password string, timeout time.Duration) error {
+	name, err := accountName(name)
+	if err != nil {
+		return err
+	}
 	cred, err := auth.NewCredential(name, password)
 	debug.FreeOSMemory()
 	if err != nil {
@@ -46,6 +65,13 @@ func Register(site, name, password string, timeout time.Duration) error {
 func SignIn(site, name, password, device string, cookie bool, timeout time.Duration) (string, error) {
 	if len(device) > accountDevice {
 		device = device[:accountDevice]
+	}
+	if device == "" {
+		device = "vif"
+	}
+	name, err := accountName(name)
+	if err != nil {
+		return "", err
 	}
 	client := auth.NewScramClient(name, password)
 	first, err := client.StartAuthentication()
