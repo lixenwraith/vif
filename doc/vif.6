@@ -46,6 +46,9 @@ Serve wss:// with a certificate made for this run, in place of \-cert: encrypted
 .B \-passphrase <phrase|new>
 Doors take this passphrase (Argon2\-SCRAM), or one made now and printed; with \-join, the one shown to a door that asks
 .TP
+.B \-admit <open|ticket:key>
+What a \-host or \-serve door admits beside a pass: open, or the site's tickets under the router's public key(s), comma\-separated, and no bare key
+.TP
 .B \-ca <file|sha256:hex>
 What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self\-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint
 .TP

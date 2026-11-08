@@ -8,6 +8,7 @@ _vif() {
 	-cert) ;;
 	-key) ;;
 	-passphrase) ;;
+	-admit) ;;
 	-ca) ;;
 	-join) ;;
 	-name) ;;
@@ -43,7 +44,7 @@ _vif() {
 	-lt|-log-stat) ;;
 	-lr|-log-recorder) ;;
 	-log-session-id) ;;
-	*) mapfile -t COMPREPLY < <(compgen -W '-host -serve -cert -key -selfsign -passphrase -ca -join -name -players -bot -authority -slow-window -slow-late -slow-bytes -shed-window -listen -no-advertise -relay -size -probe -first-join -empty -drain -d -config-embedded -config-dir -s -config-scenario -f -config-content -k -config-keymap -config-music -config-sounds -color -g -gui -cli -maximized -fullscreen -scale -mute -ab -audio-backend -nw -no-wait -seed -speed -tick -script -headless -watch -r -replay -check -schema -l -log -lv -log-level -ls -log-scope -lt -log-stat -lr -log-recorder -log-session-id -log-stdout -j -journal -mw -music-wav -dev -h -help -version' -- "$cur") ;;
+	*) mapfile -t COMPREPLY < <(compgen -W '-host -serve -cert -key -selfsign -passphrase -admit -ca -join -name -players -bot -authority -slow-window -slow-late -slow-bytes -shed-window -listen -no-advertise -relay -size -probe -first-join -empty -drain -d -config-embedded -config-dir -s -config-scenario -f -config-content -k -config-keymap -config-music -config-sounds -color -g -gui -cli -maximized -fullscreen -scale -mute -ab -audio-backend -nw -no-wait -seed -speed -tick -script -headless -watch -r -replay -check -schema -l -log -lv -log-level -ls -log-scope -lt -log-stat -lr -log-recorder -log-session-id -log-stdout -j -journal -mw -music-wav -dev -h -help -version' -- "$cur") ;;
 	esac
 }
 complete -F _vif vif

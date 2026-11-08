@@ -40,7 +40,8 @@ type allocatorConfig struct {
 	Workload    workloadConfig
 	JoinHost    string
 	RoutePort   int
-	SessionsMax int // sessions the fleet holds at once, counted as its quota counts them
+	RouteSecure bool // the front door is reached over TLS, so links read vifs://
+	SessionsMax int  // sessions the fleet holds at once, counted as its quota counts them
 	PlayersMax  int
 	BotsMax     int
 	LogLevels   []string
@@ -64,6 +65,16 @@ type allocatorConfig struct {
 	ReadyTimeout   time.Duration
 	PollInterval   time.Duration
 	CleanupTimeout time.Duration
+}
+
+// joinTarget is the link a player is handed for the session or door named id: the
+// front door's address under vif://, or vifs:// where TLS fronts it.
+func (c allocatorConfig) joinTarget(id string) string {
+	scheme := "vif://"
+	if c.RouteSecure {
+		scheme = "vifs://"
+	}
+	return scheme + net.JoinHostPort(c.JoinHost, strconv.Itoa(c.RoutePort)) + "/" + id
 }
 
 // sessionRequest is what a caller may choose about the session it is asking for.
@@ -757,7 +768,7 @@ func (a *allocator) cleanup(created createdObjects) error {
 func (a *allocator) sessionRecord(id string, job objectMeta, routable bool, state sessionHealth) session {
 	return session{
 		ID:           id,
-		JoinTarget:   "vif://" + net.JoinHostPort(a.cfg.JoinHost, strconv.Itoa(a.cfg.RoutePort)) + "/" + id,
+		JoinTarget:   a.cfg.joinTarget(id),
 		WebSocketURL: a.webSocketURL(id),
 		Scenario:     job.Annotations[annotationScenario],
 		Size:         job.Annotations[annotationSize],

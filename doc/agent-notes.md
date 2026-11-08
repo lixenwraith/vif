@@ -295,6 +295,13 @@ comment now states, and link that instead.
   the dropped run applies it; the dropped run reads the loss as its dismissal's
   (`NetworkSystem.dismissalScheduled`) rather than as a host lost, or it would
   redial under the key just kept out.
+- The router intercepts exactly one frame each way of the admission exchange, the
+  door's question and the dial's answer, and splices everything after, so a
+  passphrase door's later steps pass through it untouched; a stand-in pod in a test
+  hands its connection to `HostAcceptor` whole, which reads the route frame itself.
+- nginx's `proxy_protocol on` writes a version 1 header and nothing else; the
+  router reads version 2 too for other edges. A probe of the front door behind the
+  edge writes the header first or is closed unanswered.
 
 ## Position
 

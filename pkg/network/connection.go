@@ -731,6 +731,9 @@ func Dial(target string, cfg *Config) (net.Conn, error) {
 		err = errors.New("TCP unavailable in a browser")
 	default:
 		conn, err = (&net.Dialer{Timeout: cfg.ConnectTimeout}).Dial("tcp", e.Addr)
+		if err == nil && e.TLS {
+			conn, err = secureClient(conn, e.Addr, cmp.Or(cfg.TLS, dialTLS()), cfg.ConnectTimeout)
+		}
 	}
 	return conn, plainNetError(err)
 }

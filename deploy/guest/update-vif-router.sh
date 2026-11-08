@@ -94,6 +94,16 @@ render_env >"$stage_root/router.env.next"
 make -C "$repo_root" router
 [ -x "$repo_root/bin/vif-router" ]
 
+# The ticket key: made once by the binary just built, readable by the router alone,
+# and never in the repository. A lost key is a new one; the fleet is empty at an
+# update, so no pod holds the old public key.
+ticket_key=$(sed -n 's/^VIF_ROUTER_TICKET_KEY=//p' "$source_env")
+if [ -n "$ticket_key" ] && ! sudo test -f "$ticket_key"; then
+	"$repo_root/bin/vif-router" keygen |
+		sudo install -o root -g vif-router -m 0640 /dev/stdin "$ticket_key"
+	echo "made the ticket key $ticket_key"
+fi
+
 if ! "$repo_root/deploy/k3s/session.sh" blockers; then
 	echo "$0: the fleet must be empty before the router update" >&2
 	exit 1
@@ -130,11 +140,17 @@ if [ -n "$(sed -n 's/^VIF_ROUTER_WEB_ORIGIN=//p' "$source_env")" ]; then
 	curl --connect-timeout 2 --max-time 5 -sS \
 		http://127.0.0.1:9080/vif/ws/0000000000000000 | grep -q not_an_upgrade
 fi
-# The front door looks up a name no session holds and says so in a join reply.
+# The front door looks up a name no session holds and says so in a join reply; behind
+# the edge it reads the edge's PROXY line first, so the probe writes one.
 route_port=$(sed -n 's/^VIF_ROUTER_ROUTE_LISTEN=.*:\([0-9]*\)$/\1/p' "$source_env")
+proxy_line=
+if [ "$(sed -n 's/^VIF_ROUTER_ROUTE_PROXY_PROTOCOL=//p' "$source_env")" = true ]; then
+	proxy_line='PROXY TCP4 127.0.0.1 127.0.0.1 40000 7777\r\n'
+fi
 bash -c 'exec 3<>"/dev/tcp/127.0.0.1/$1" &&
+	printf "$2" >&3 &&
 	printf "\005\000\000\000\000\000\000\000\000\000\000\020%s" 0000000000000000 >&3 &&
-	timeout 5 cat <&3' _ "${route_port:-7777}" | grep -aq 'no such session'
+	timeout 5 cat <&3' _ "${route_port:-7777}" "$proxy_line" | grep -aq 'no such session'
 
 rollback_required=false
 router_stopped=false

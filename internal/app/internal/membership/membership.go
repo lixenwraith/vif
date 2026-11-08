@@ -99,8 +99,10 @@ type Membership struct {
 	keptOutSlots map[string]uint8
 
 	// door is the credential this run's doors take a passphrase against, derived
-	// from cfg.Passphrase when the first door opens; nil opens them.
-	door *network.PassphraseDoor
+	// from cfg.Passphrase when the first door opens; nil opens them. tickets is the
+	// gate a fleet pod's doors take the site's tickets at; nil takes none.
+	door    *network.PassphraseDoor
+	tickets *network.TicketGate
 
 	// midRunPort is the socket a solo run opened for itself, with :host or with no
 	// listener for its bots. A run started with -host takes its endpoint from

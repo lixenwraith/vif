@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -39,6 +40,7 @@ var errRouteBusy = &network.Refusal{Code: network.RefusalFull,
 // published under the session's name.
 type placement struct {
 	id   string
+	name string // the name sent upstream: the pod's, or the one a door answers to
 	door bool
 }
 
@@ -56,6 +58,13 @@ type tcpRouter struct {
 	log      *slog.Logger
 	game     string // the pod port dialled; a test points it at a stand-in
 	placing  chan struct{}
+
+	// ticket signs the admission tickets the router mints in band; an empty key
+	// mints none and splices from the first byte. proxyProtocol reads an edge's
+	// header before each dial, and tls ends TLS here, both off unless configured.
+	ticket        network.Key
+	proxyProtocol bool
+	tls           *tls.Config
 }
 
 func newTCPRouter(sessions sessionAllocator, held *holds, joins *network.AdmissionLimiter, logger *slog.Logger) *tcpRouter {
@@ -77,16 +86,121 @@ func (r *tcpRouter) serve(listener net.Listener) {
 			continue
 		}
 		go func() {
-			upstream, release, at := r.place(conn, conn.RemoteAddr())
+			conn, from, ok := r.accept(conn)
+			if !ok {
+				return
+			}
+			upstream, release, at := r.place(conn, from)
 			if upstream == nil {
 				return
 			}
 			defer release()
-			started := time.Now()
-			in, out := splice(conn, upstream)
-			r.closed(at, in, out, started)
+			r.carry(conn, upstream, at, from)
 		}()
 	}
+}
+
+// accept reads what an edge put before the dialer's bytes, the PROXY header naming
+// the player's address, and ends the TLS the front door ends itself; false closed
+// the connection, which said nothing a reply would reach.
+func (r *tcpRouter) accept(conn net.Conn) (net.Conn, net.Addr, bool) {
+	from := conn.RemoteAddr()
+	if r.proxyProtocol {
+		_ = conn.SetReadDeadline(time.Now().Add(routeTimeout))
+		src, err := readProxyHeader(conn)
+		if err != nil {
+			r.log.Info("front door connection without a PROXY header", "peer", from.String(), "error", err)
+			_ = conn.Close()
+			return nil, nil, false
+		}
+		from = src
+	}
+	if r.tls != nil {
+		secure := tls.Server(conn, r.tls)
+		ctx, cancel := context.WithTimeout(context.Background(), routeTimeout)
+		err := secure.HandshakeContext(ctx)
+		cancel()
+		if err != nil {
+			_ = conn.Close()
+			return nil, nil, false
+		}
+		conn = secure
+	}
+	return conn, from, true
+}
+
+// carry runs the admission through the router where it mints tickets, then splices
+// and accounts for the connection as it ends.
+func (r *tcpRouter) carry(client, upstream net.Conn, at placement, from net.Addr) {
+	started := time.Now()
+	if r.ticket.Valid() {
+		if err := r.exchange(client, upstream, at, from); err != nil {
+			r.log.Info("session route admission ended", "session", at.id, "error", err)
+			_ = client.Close()
+			_ = upstream.Close()
+			return
+		}
+	}
+	in, out := splice(client, upstream)
+	r.closed(at, in, out, started)
+}
+
+// exchange runs the door's exchange through the router: the question goes to the dialer,
+// its answer comes back, its proofs are checked over the door's nonce, and a dial
+// showing no pass is given a ticket naming the address it came from and the first
+// key it proved, under the router's key; everything after is spliced. A door that
+// asked nothing, or refused, has its frame passed on as it is.
+func (r *tcpRouter) exchange(client, upstream net.Conn, at placement, from net.Addr) error {
+	deadline := time.Now().Add(routeTimeout)
+	_ = client.SetDeadline(deadline)
+	_ = upstream.SetDeadline(deadline)
+	defer func() {
+		_ = client.SetDeadline(time.Time{})
+		_ = upstream.SetDeadline(time.Time{})
+	}()
+	question, err := link.DecodeWithin(upstream, network.MaxAuthFrame)
+	if err != nil {
+		return err
+	}
+	if err := question.Encode(client); err != nil || question.Type != network.MsgAuthResponse {
+		return err
+	}
+	var ask network.AuthResponse
+	if err := json.Unmarshal(question.Payload, &ask); err != nil {
+		return err
+	}
+	answer, err := link.DecodeWithin(client, network.MaxAuthFrame)
+	if err != nil {
+		return err
+	}
+	if answer.Type != network.MsgAuthRequest {
+		return answer.Encode(upstream) // the door's to refuse
+	}
+	var ans network.AuthRequest
+	if err := json.Unmarshal(answer.Payload, &ans); err != nil {
+		return err
+	}
+	if _, err := network.VerifyProofs(ans.Keys, ask.Nonce, nil); err != nil {
+		network.RefuseJoin(client, err, routeTimeout)
+		return err
+	}
+	if ans.Pass == nil {
+		// The subject names the player as the budgets key it, or the connection's
+		// peer where the edge named no player: the router can name no better.
+		subject := network.SubjectOf(from)
+		if subject == network.SubjectOf(nil) {
+			subject = network.SubjectOf(client.RemoteAddr())
+		}
+		body := network.TicketBody{Session: at.name, Kind: network.AdmitPlay, Subject: subject, Key: ans.Keys[0].Key}
+		if ans.Ticket, err = network.SignTicket(r.ticket, body, time.Now()); err != nil {
+			return err
+		}
+	}
+	payload, err := json.Marshal(ans)
+	if err != nil {
+		return err
+	}
+	return link.NewMessage(network.MsgAuthRequest, payload).Encode(upstream)
 }
 
 // closed accounts for one placed connection as it ends: what passed through it and
@@ -177,7 +291,7 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 	}
 	_ = client.SetDeadline(time.Time{})
 	r.log.Info("session route opened", "session", id)
-	return upstream, release, placement{id: id}
+	return upstream, release, placement{id: id, name: id}
 }
 
 // placeDoor places a dial on a door a run published: the run opens a connection
@@ -203,7 +317,7 @@ func (r *tcpRouter) placeDoor(client net.Conn, id string, refuse func(error) (ne
 	}
 	_ = client.SetDeadline(time.Time{})
 	r.log.Info("door route opened", "session", id)
-	return upstream, release, placement{id: id, door: true}
+	return upstream, release, placement{id: id, name: session, door: true}
 }
 
 // tunnel takes a run's frame on the front door: a publication, which the run's

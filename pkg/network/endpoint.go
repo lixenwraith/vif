@@ -3,6 +3,7 @@ package network
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -47,11 +48,18 @@ type Endpoint struct {
 	Scheme Scheme
 	Addr   string // host:port; a WebSocket route's whole URL; a site's origin
 	Name   string
+	// TLS marks a vifs:// endpoint: TCP under TLS to the door, whose certificate is
+	// verified as a wss door's is, by the system's roots or Config.TLS.
+	TLS bool
 }
 
 // linkScheme prefixes the link a player is handed, so one string is both a thing to
-// click and a thing to paste after -join. It is TCP.
-const linkScheme = "vif://"
+// click and a thing to paste after -join. It is TCP; secureLinkScheme the same under
+// TLS, a site's front door.
+const (
+	linkScheme       = "vif://"
+	secureLinkScheme = "vifs://"
+)
 
 // ParseEndpoint reads [tcp://|vif://]host:port[/name] or a ws(s):// URL, whose last
 // path segment is the name as a vif:// path is; one ending in '/' names none. An
@@ -78,9 +86,10 @@ func ParseEndpoint(target string) (Endpoint, error) {
 	}
 	e, rest := Endpoint{Scheme: SchemeTCP}, target
 	if scheme, after, ok := strings.Cut(rest, "://"); ok {
-		if scheme+"://" != linkScheme && scheme != "tcp" {
-			return Endpoint{}, fmt.Errorf("%q: unknown scheme %q; use tcp, vif, ws(s) or http(s)", target, scheme)
+		if scheme+"://" != linkScheme && scheme+"://" != secureLinkScheme && scheme != "tcp" {
+			return Endpoint{}, fmt.Errorf("%q: unknown scheme %q; use tcp, vif, vifs, ws(s) or http(s)", target, scheme)
 		}
+		e.TLS = scheme+"://" == secureLinkScheme
 		rest = after
 	}
 	e.Addr, e.Name, _ = strings.Cut(rest, "/")
@@ -168,6 +177,9 @@ func Shown(target string) string {
 func (e Endpoint) Listenable() error {
 	switch e.Scheme {
 	case SchemeTCP:
+		if e.TLS {
+			return errors.New("vifs:// is dialled, never bound: a tcp door under TLS is a router's")
+		}
 		return nil
 	case SchemeSite:
 		return errors.New("a site is asked for a session, not bound")
@@ -280,6 +292,31 @@ func dialTLS() *tls.Config {
 			return PlainError{"the host's certificate is not one this machine trusts; -ca names what to trust it by", err}
 		},
 	}
+}
+
+// secureClient is the TLS a vifs:// dial runs over its socket: the door's name is
+// the address's host, verified as a wss door's is, within the connect timeout.
+func secureClient(raw net.Conn, addr string, cfg *tls.Config, timeout time.Duration) (net.Conn, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	c := cfg.Clone()
+	if c.ServerName == "" {
+		c.ServerName = host
+	}
+	conn := tls.Client(raw, c)
+	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	if err := conn.HandshakeContext(ctx); err != nil {
+		_ = raw.Close()
+		return nil, err
+	}
+	return conn, nil
 }
 
 // selfSigned reports a certificate that is its own issuer: no authority stands

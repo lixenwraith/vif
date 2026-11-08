@@ -1077,6 +1077,21 @@ func TestAPassphraseDoorAdmitsTheDialThatShowsIt(t *testing.T) {
 		t.Fatal("the pass shown was not the admission")
 	}
 
+	opened, err := OpenDoor(door.Verifier())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	relay, addr := serve(Coordinator{Passphrase: opened})
+	defer relay.Close()
+	if err := dial(addr, "correct horse battery", nil); err != nil {
+		t.Fatalf("a door opened from the verifier refused the passphrase: %v", err)
+	}
+	<-seen
+	if _, err := OpenDoor(&DoorVerifier{Salt: []byte("short")}); err == nil {
+		t.Fatal("a verifier of another form opened a door")
+	}
+
 	gated, addr := serve(Coordinator{Gated: func() bool { return true }})
 	defer gated.Close()
 	if err := dial(addr, "correct horse battery", nil); !errors.Is(err, &Refusal{Code: RefusalSignIn}) || len(seen) != 0 {

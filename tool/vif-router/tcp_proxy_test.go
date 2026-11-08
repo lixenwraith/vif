@@ -414,3 +414,178 @@ func TestAPlacedConnectionIsAccountedForAsItCloses(t *testing.T) {
 		t.Fatalf("the accounting line names the dialler: %q", line)
 	}
 }
+
+// askingPod stands in for a pod that takes the site's tickets: it asks every dial
+// for a ticket, verifies the one the router minted under the router's key and
+// records it, then refuses the dial so its test can read the result.
+type askingPod struct {
+	addr    string
+	tickets chan network.TicketBody
+	keys    chan []string
+	gate    *network.TicketGate
+}
+
+func startAskingPod(t *testing.T, router network.Key) *askingPod {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	pod := &askingPod{addr: listener.Addr().String(), tickets: make(chan network.TicketBody, 8), keys: make(chan []string, 8),
+		gate: &network.TicketGate{Keys: [][]byte{router.Public()}, Session: routedID}}
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				c := network.Coordinator{
+					Name: routedID,
+					Ticket: func(shown *network.Signed, keys []string) (*network.TicketBody, error) {
+						body, err := pod.gate.Admit(shown, keys)
+						if err == nil {
+							pod.tickets <- *body
+							pod.keys <- keys
+						}
+						return body, err
+					},
+					Assign: func(network.Admission) (network.SessionOffer, error) {
+						return network.SessionOffer{}, &network.Refusal{Code: network.RefusalFull, Reason: "the stand-in seats nobody"}
+					},
+				}
+				_, _ = network.HostAcceptor(c, 2*time.Second)(conn)
+			}()
+		}
+	}()
+	return pod
+}
+
+// TestTheFrontDoorMintsATicketForTheKeyTheDialProves: the pod's question reaches
+// the dialer through the router, the dialer's proofs come back, and the pod receives
+// a ticket under the router's key naming the dialer's address and first key, which
+// its gate admits once; a dial that reaches the pod by another way gets none.
+func TestTheFrontDoorMintsATicketForTheKeyTheDialProves(t *testing.T) {
+	router := network.NewKey()
+	pod := startAskingPod(t, router)
+	sessions := &fakeSessionAllocator{podIP: "127.0.0.1"}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	door := newTCPRouter(sessions, newHolds(2), network.NewAdmissionLimiter(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, door.game, _ = net.SplitHostPort(pod.addr)
+	door.ticket = router
+	go door.serve(listener)
+
+	cfg := network.DebugConfig(link.RolePeer, "")
+	cfg.SessionName = routedID
+	err = join(listener.Addr().String(), routedID)
+	if !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+		t.Fatalf("the dial through the router ended %v, want the stand-in's refusal past its ticket", err)
+	}
+	ticket, keys := <-pod.tickets, <-pod.keys
+	if ticket.Subject != "addr:127.0.0.1" || ticket.Session != routedID || network.EncodeKey(ticket.Key) != keys[0] {
+		t.Fatalf("the ticket names %+v for keys %q", ticket, keys)
+	}
+	if err := join(pod.addr, routedID); !errors.Is(err, &network.Refusal{Code: network.RefusalSignIn}) {
+		t.Fatalf("a dial straight at the pod ended %v, want it sent to the router", err)
+	}
+
+	// The browser route mints the same ticket, for the address it sees.
+	server := httptest.NewUnstartedServer(nil)
+	api := newAPIServer(sessions, slog.New(slog.NewTextHandler(io.Discard, nil)), nil,
+		allocatorConfig{WebOrigin: "http://" + server.Listener.Addr().String()}, newHolds(2), nil)
+	_, api.ws.route.game, _ = net.SplitHostPort(pod.addr)
+	api.admitWith(router)
+	server.Config.Handler = api
+	server.Start()
+	t.Cleanup(server.Close)
+	cfg = network.DebugConfig(link.RolePeer, "")
+	cfg.SessionName = routedID
+	cfg.Dial = func() (net.Conn, error) {
+		return websocket.Dial(t.Context(), "ws://"+server.Listener.Addr().String()+wsRoutePrefix+routedID, nil)
+	}
+	pending, _, err := network.DialSession("ws://unused/", cfg)
+	if err == nil {
+		_ = pending.Close()
+	}
+	if !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+		t.Fatalf("the browser route ended %v", err)
+	}
+	if ticket := <-pod.tickets; ticket.Subject != "addr:127.0.0.1" {
+		t.Fatalf("the browser route's ticket names %q", ticket.Subject)
+	}
+	<-pod.keys
+	resp, err := http.Get(server.URL + "/vif/api/keys")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), router.ID()) {
+		t.Fatalf("/vif/api/keys answered %d %s", resp.StatusCode, body)
+	}
+}
+
+// TestTheFrontDoorReadsTheEdgesHeaderAndEndsTLS: with -route-proxy-protocol the
+// dialer's address is the header's, a connection without one is closed, and with
+// -route-cert the door ends TLS, which a vifs:// dial opens.
+func TestTheFrontDoorReadsTheEdgesHeaderAndEndsTLS(t *testing.T) {
+	router := network.NewKey()
+	pod := startAskingPod(t, router)
+	sessions := &fakeSessionAllocator{podIP: "127.0.0.1"}
+	serve := func(proxy bool, serverTLS bool) string {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = listener.Close() })
+		door := newTCPRouter(sessions, newHolds(4), network.NewAdmissionLimiter(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+		_, door.game, _ = net.SplitHostPort(pod.addr)
+		door.ticket, door.proxyProtocol = router, proxy
+		if serverTLS {
+			if door.tls, err = link.SelfSignedTLS([]string{"127.0.0.1"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		go door.serve(listener)
+		return listener.Addr().String()
+	}
+
+	behindEdge := serve(true, false)
+	cfg := network.DebugConfig(link.RolePeer, "")
+	cfg.SessionName = routedID
+	cfg.Dial = func() (net.Conn, error) {
+		conn, err := net.Dial("tcp", behindEdge)
+		if err == nil {
+			_, err = conn.Write([]byte("PROXY TCP4 203.0.113.9 10.0.0.1 40000 7777\r\n"))
+		}
+		return conn, err
+	}
+	if _, _, err := network.DialSession("vif://unused:1/", cfg); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+		t.Fatalf("the dial behind the edge ended %v", err)
+	}
+	if ticket := <-pod.tickets; ticket.Subject != "addr:203.0.113.9" {
+		t.Fatalf("the ticket names %q, want the header's address", ticket.Subject)
+	}
+	<-pod.keys
+	if err := join(behindEdge, routedID); err == nil || errors.As(err, new(*network.Refusal)) {
+		t.Fatalf("a dial with no header ended %v, want it closed unanswered", err)
+	}
+
+	secure := serve(false, true)
+	if err := join("vifs://"+secure, routedID); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+		t.Fatalf("the vifs:// dial ended %v", err)
+	}
+	if ticket := <-pod.tickets; ticket.Subject != "addr:127.0.0.1" {
+		t.Fatalf("the TLS door's ticket names %q", ticket.Subject)
+	}
+	<-pod.keys
+	if err := join(secure, routedID); err == nil || errors.As(err, new(*network.Refusal)) {
+		t.Fatalf("a plain dial at the TLS door ended %v, want no vif answer", err)
+	}
+}
