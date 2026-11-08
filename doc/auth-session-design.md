@@ -680,6 +680,9 @@ By phase:
     over the host's internal network with `hostssl` in `pg_hba.conf` and the jail's
     certificate pinned or signed by an issuer the service is given; `statement_timeout`
     and its siblings on the role as chess sets them; `pg_dump` nightly on the jail.
+    A deployment too small for a jail, or a test node, gives it `-store-file`
+    instead: one JSON file under its state directory, the same operator commands,
+    the same routes to the router.
     The database is the host's to provision; the service ships the SQL, the schema
     migrations and the backup script.
   - The router forwards `/vif/api/auth/` byte for byte (`log_proxy.go`'s shape) and
