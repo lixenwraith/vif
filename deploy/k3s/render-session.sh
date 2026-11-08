@@ -6,19 +6,18 @@
 set -eu
 
 usage() {
-	echo "usage: $0 SESSION_ID GAME_NODEPORT [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
+	echo "usage: $0 SESSION_ID [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
 	echo "       SCENARIO, LOG_LEVEL, BOTS, FIRST_JOIN, EMPTY_GRACE and JOB_UID override" >&2
 	echo "       the defaults from the environment" >&2
 	exit 2
 }
 
-[ $# -ge 2 ] && [ $# -le 5 ] || usage
+[ $# -ge 1 ] && [ $# -le 4 ] || usage
 
 SESSION_ID=$1
-GAME_NODEPORT=$2
-IMAGE=${3:-vif:dev}
-PLAYERS=${4:-4}
-MAP_SIZE=${5:-120x40}
+IMAGE=${2:-vif:dev}
+PLAYERS=${3:-4}
+MAP_SIZE=${4:-120x40}
 FIRST_JOIN=${FIRST_JOIN:-90s}
 EMPTY_GRACE=${EMPTY_GRACE:-90s}
 SCENARIO=${SCENARIO:-main}
@@ -28,9 +27,6 @@ JOB_UID=${JOB_UID:-}
 
 case "$SESSION_ID" in
 	'' | *[!a-z0-9-]* ) echo "$0: SESSION_ID must be lowercase alphanumeric or '-'" >&2; exit 2 ;;
-esac
-case "$GAME_NODEPORT" in
-	'' | *[!0-9]* ) echo "$0: GAME_NODEPORT must be a number" >&2; exit 2 ;;
 esac
 # A scenario name is a single path element the resolver looks up under scenario/;
 # anything else would be an operator asking this template to reach off the volume.
@@ -54,10 +50,6 @@ if [ "$BOTS" -gt "$most" ]; then
 	echo "$0: bots must be between 0 and $most for $PLAYERS players" >&2
 	exit 2
 fi
-if [ "$GAME_NODEPORT" -lt 31700 ] || [ "$GAME_NODEPORT" -gt 31709 ]; then
-	echo "$0: GAME_NODEPORT $GAME_NODEPORT is outside the fleet range 31700-31709" >&2
-	exit 2
-fi
 # The router's envelope: each bot adds a seat's cost (tool/vif-router/manifest.go).
 CPU_REQUEST=$((100 + 64 * BOTS))m
 MEMORY_REQUEST=$((96 + 32 * BOTS))Mi
@@ -71,7 +63,6 @@ template=$(dirname "$0")/30-session.yaml
 # expand anything else in the file that happens to look like a variable.
 rendered=$(sed \
 	-e "s|\${SESSION_ID}|$SESSION_ID|g" \
-	-e "s|\${GAME_NODEPORT}|$GAME_NODEPORT|g" \
 	-e "s|\${IMAGE}|$IMAGE|g" \
 	-e "s|\${PLAYERS}|$PLAYERS|g" \
 	-e "s|\${BOTS}|$BOTS|g" \

@@ -57,8 +57,8 @@ It deletes every fleet Job and Service, waits up to 60 seconds for the
 background-cascaded pods, removes the session log files, and fails loudly if
 anything survives. `--force` then abandons the surviving pods with a zero grace
 period: nothing replaces them, because their Jobs are already gone, but a
-container can outlive its object until the kubelet reaps it and its NodePort
-frees only then. **Either form destroys retained log evidence** — snapshot
+container can outlive its object until the kubelet reaps it, and the fleet
+counts it until then. **Either form destroys retained log evidence** — snapshot
 first if a gate still needs it:
 
 ```sh
@@ -76,8 +76,8 @@ verdict — so read the session's JSONL before running it, not after:
 ## Ask for a session
 
 The path a player takes, from the node. It prints the identity on stdout and the
-join and direct targets on stderr, with the browser link where one is published, so
-a shell can capture one and a person can read the other:
+join target on stderr, with the browser link where one is published, so a shell can
+capture one and a person can read the other:
 
 ```sh
 SESSION_ID=$(./deploy/k3s/session.sh allocate)       # deployment defaults
@@ -151,9 +151,10 @@ sudo journalctl \
 ## Who dialled a session
 
 The accepted socket's address is recorded on the node and dropped from the
-published stream, so this answers "where did that player come from" and the SSE
-never can. Only a direct join names the player: one through the front door or the
-browser route is recorded at the node's address, since the router dials the pod.
+published stream. Every player reaches a pod through the router, which dials it
+from the node, so the record names the node's address, and the router's own log
+names the session and never the dialler: a player's address is the site's edge's
+to know, in its access log for the browser route, and nobody's for the front door.
 
 ```sh
 sudo jq -c 'select(.sub == "admit")' '/var/log/vif-fleet/<session-id>.jsonl'

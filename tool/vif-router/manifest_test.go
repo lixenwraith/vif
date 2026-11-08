@@ -84,8 +84,10 @@ func TestBuildJobUsesFixedSessionShape(t *testing.T) {
 	}
 }
 
-func TestBuildServiceOwnsJobAndPreservesSource(t *testing.T) {
-	object := buildService("abc123", "job-uid", 31703, "vif")
+// The Service is owned by its Job and reaches no further than the pod network: no
+// NodePort, so a session is dialled only through the router.
+func TestBuildServiceOwnsJobInsideTheCluster(t *testing.T) {
+	object := buildService("abc123", "job-uid", "vif")
 	encoded, err := json.Marshal(object)
 	if err != nil {
 		t.Fatal(err)
@@ -96,11 +98,14 @@ func TestBuildServiceOwnsJobAndPreservesSource(t *testing.T) {
 		`"uid":"job-uid"`,
 		`"controller":true`,
 		`"blockOwnerDeletion":true`,
-		`"externalTrafficPolicy":"Local"`,
-		`"nodePort":31703`,
+		`"type":"ClusterIP"`,
+		`"targetPort":"game"`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Service JSON does not contain %s", want)
 		}
+	}
+	if strings.Contains(text, "nodePort") || strings.Contains(text, "externalTrafficPolicy") {
+		t.Errorf("Service JSON reaches outside the cluster: %s", text)
 	}
 }

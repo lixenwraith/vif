@@ -106,14 +106,12 @@ func (f *fakeKube) createService(_ context.Context, object map[string]any) (serv
 			}},
 		},
 		Spec: serviceSpec{
-			Type:                  spec["type"].(string),
-			Selector:              spec["selector"].(map[string]string),
-			ExternalTrafficPolicy: spec["externalTrafficPolicy"].(string),
+			Type:     spec["type"].(string),
+			Selector: spec["selector"].(map[string]string),
 			Ports: []servicePort{{
 				Name:       portObject["name"].(string),
 				Port:       portObject["port"].(int),
 				TargetPort: portObject["targetPort"],
-				NodePort:   portObject["nodePort"].(int),
 				Protocol:   portObject["protocol"].(string),
 			}},
 		},
@@ -208,8 +206,7 @@ func testAllocatorConfig(t *testing.T) allocatorConfig {
 		},
 		JoinHost:       "play.example.com",
 		RoutePort:      7777,
-		PortFirst:      31700,
-		PortLast:       31709,
+		SessionsMax:    10,
 		PlayersMax:     8,
 		BotsMax:        3,
 		LogLevels:      []string{"debug", "info", "warn", "error"},
@@ -220,10 +217,8 @@ func testAllocatorConfig(t *testing.T) allocatorConfig {
 	}
 }
 
-func TestCreateSessionReservesPortAndOwnsService(t *testing.T) {
-	kube := &fakeKube{
-		services: []service{{Spec: serviceSpec{Ports: []servicePort{{NodePort: 31700}}}}},
-	}
+func TestCreateSessionOwnsItsService(t *testing.T) {
+	kube := &fakeKube{}
 	controller := newAllocator(kube, fakeHealth{state: sessionHealth{
 		Live: true, Ready: true, Capacity: 4, Phase: "waiting",
 	}}, testAllocatorConfig(t))
@@ -233,12 +228,8 @@ func TestCreateSessionReservesPortAndOwnsService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ID != "abc123" || created.Port != 31701 || !created.Routable {
+	if created.ID != "abc123" || !created.Routable || created.JoinTarget != "vif://play.example.com:7777/abc123" {
 		t.Fatalf("unexpected session: %+v", created)
-	}
-	if created.JoinTarget != "vif://play.example.com:7777/abc123" ||
-		created.DirectTarget != "vif://play.example.com:31701/abc123" {
-		t.Fatalf("unexpected links: %+v", created)
 	}
 	if len(kube.svcObjects) != 1 {
 		t.Fatalf("created %d Services, want 1", len(kube.svcObjects))
@@ -250,19 +241,26 @@ func TestCreateSessionReservesPortAndOwnsService(t *testing.T) {
 	}
 }
 
+// A finished Job counts until its TTL collects it, as the quota counts it; a Job
+// that is not the fleet's does not.
 func TestCreateSessionRefusesFullFleetBeforeCreatingJob(t *testing.T) {
-	kube := &fakeKube{}
-	for port := 31700; port <= 31709; port++ {
-		kube.services = append(kube.services, service{Spec: serviceSpec{Ports: []servicePort{{NodePort: port}}}})
+	kube := &fakeKube{jobs: []job{{Metadata: objectMeta{Name: "vif-other"}}}}
+	for i := range 9 {
+		id := fmt.Sprintf("%016x", i)
+		kube.jobs = append(kube.jobs, job{Metadata: objectMeta{Name: sessionPrefix + id, Labels: sessionLabels(id)}})
 	}
 	controller := newAllocator(kube, fakeHealth{}, testAllocatorConfig(t))
+	if _, err := controller.createTransaction(context.Background(), controller.cfg.Workload); err != nil {
+		t.Fatalf("the tenth session was refused: %v", err)
+	}
+	kube.jobs[len(kube.jobs)-1].Status.Succeeded = 1
 
 	_, err := controller.createSession(context.Background(), sessionRequest{})
 	if !errors.Is(err, errFleetFull) {
 		t.Fatalf("got %v, want fleet full", err)
 	}
-	if len(kube.jobObjects) != 0 {
-		t.Fatal("allocator created a Job for a full fleet")
+	if len(kube.jobObjects) != 1 {
+		t.Fatalf("allocator created %d Jobs, want the tenth alone", len(kube.jobObjects))
 	}
 }
 
@@ -310,12 +308,9 @@ func TestReconcileDeletesPartialAndOrphanObjects(t *testing.T) {
 				Name: "vif-session-valid", Namespace: "vif", Labels: sessionLabels("valid"),
 				OwnerReferences: []ownerReference{{APIVersion: "batch/v1", Kind: "Job", Name: "vif-session-valid", UID: "uid-valid", Controller: &truth, BlockOwnerDeletion: &truth}},
 			}, Spec: serviceSpec{
-				Type:                  "NodePort",
-				Selector:              map[string]string{labelSession: "valid"},
-				ExternalTrafficPolicy: "Local",
-				Ports: []servicePort{{
-					Name: "game", Port: 7777, TargetPort: "game", NodePort: 31700, Protocol: "TCP",
-				}},
+				Type:     "ClusterIP",
+				Selector: map[string]string{labelSession: "valid"},
+				Ports:    []servicePort{{Name: "game", Port: 7777, TargetPort: "game", Protocol: "TCP"}},
 			}},
 			{Metadata: objectMeta{Name: "vif-session-orphan", Labels: sessionLabels("orphan")}},
 		},

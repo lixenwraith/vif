@@ -259,12 +259,3 @@ func isAPIStatus(err error, status int) bool {
 	var target *apiError
 	return errors.As(err, &target) && target.StatusCode == status
 }
-
-func isNodePortConflict(err error) bool {
-	var target *apiError
-	if !errors.As(err, &target) || (target.StatusCode != http.StatusConflict && target.StatusCode != http.StatusUnprocessableEntity) {
-		return false
-	}
-	message := strings.ToLower(target.Message)
-	return strings.Contains(message, "nodeport") || strings.Contains(message, "provided port is already allocated")
-}

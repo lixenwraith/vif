@@ -58,7 +58,7 @@ func testWebServer(allocator sessionAllocator) *apiServer {
 }
 
 func TestPostSession(t *testing.T) {
-	backend := &fakeSessionAllocator{created: session{ID: "abc", Port: 31700, Routable: true}}
+	backend := &fakeSessionAllocator{created: session{ID: "abc", JoinTarget: "vif://play.example.com:7777/abc", Routable: true}}
 	request := httptest.NewRequest(http.MethodPost, "/vif/api/sessions", strings.NewReader("{}"))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -68,7 +68,8 @@ func TestPostSession(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `"id":"abc"`) || !strings.Contains(response.Body.String(), `"port":31700`) {
+	if !strings.Contains(response.Body.String(), `"id":"abc"`) ||
+		!strings.Contains(response.Body.String(), `"join_target":"vif://play.example.com:7777/abc"`) {
 		t.Fatalf("unexpected body: %s", response.Body.String())
 	}
 }
@@ -150,7 +151,7 @@ func TestGetSessionsNamesScenarioDescriptionsBesideTheList(t *testing.T) {
 // field the allocator dropped would be a session silently unlike the one the page
 // offered, which is worse than a refusal.
 func TestPostSessionCarriesTheChoicesItNames(t *testing.T) {
-	backend := &fakeSessionAllocator{created: session{ID: "abc", Port: 31700}}
+	backend := &fakeSessionAllocator{created: session{ID: "abc"}}
 	request := httptest.NewRequest(http.MethodPost, "/vif/api/sessions",
 		strings.NewReader(`{"players":2,"bots":1,"log_level":"debug","size":"160x48"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -180,7 +181,7 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 		t.Fatalf("the allocator was asked for %+v", backend.requested)
 	}
 	backend.createErr = errFleetFull
-	if _, err := network.RequestSession(site.URL, 0, ""); err == nil || err.Error() != "All session ports are allocated" {
+	if _, err := network.RequestSession(site.URL, 0, ""); err == nil || err.Error() != "The fleet is full" {
 		t.Fatalf("a refusal returned %v", err)
 	}
 }
@@ -192,7 +193,7 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 // one that started nothing (a full fleet) gives it back, and a refusal names the
 // seconds left in the window.
 func TestSessionCreationIsBudgetedPerAddress(t *testing.T) {
-	backend := &fakeSessionAllocator{created: session{ID: "abc", Port: 31700}}
+	backend := &fakeSessionAllocator{created: session{ID: "abc"}}
 	api := newAPIServer(backend, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{
 		Workload: workloadConfig{FirstJoin: "90s"}, ClientAddressHeader: "X-Real-IP", ClientCreates: 1,
 	}, nil, nil)
@@ -230,7 +231,7 @@ func TestSessionCreationIsBudgetedPerAddress(t *testing.T) {
 // four lists and every pod a probe, and every open lobby page polls, so one reading
 // answers every list while fresh; a create makes the next list read the fleet anew.
 func TestOneReadingAnswersEveryListUntilACreate(t *testing.T) {
-	backend := &fakeSessionAllocator{created: session{ID: "abc", Port: 31700}}
+	backend := &fakeSessionAllocator{created: session{ID: "abc"}}
 	api := testServer(backend)
 	list := func() {
 		response := httptest.NewRecorder()

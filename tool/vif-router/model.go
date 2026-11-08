@@ -68,17 +68,15 @@ type service struct {
 }
 
 type serviceSpec struct {
-	Type                  string            `json:"type,omitempty"`
-	Selector              map[string]string `json:"selector,omitempty"`
-	ExternalTrafficPolicy string            `json:"externalTrafficPolicy,omitempty"`
-	Ports                 []servicePort     `json:"ports"`
+	Type     string            `json:"type,omitempty"`
+	Selector map[string]string `json:"selector,omitempty"`
+	Ports    []servicePort     `json:"ports"`
 }
 
 type servicePort struct {
 	Name       string `json:"name,omitempty"`
 	Port       int    `json:"port,omitempty"`
 	TargetPort any    `json:"targetPort,omitempty"`
-	NodePort   int    `json:"nodePort,omitempty"`
 	Protocol   string `json:"protocol,omitempty"`
 }
 
@@ -158,15 +156,6 @@ func ownedByJob(meta objectMeta, owner job) bool {
 		}
 	}
 	return false
-}
-
-func firstNodePort(item service) (int, bool) {
-	for _, port := range item.Spec.Ports {
-		if port.NodePort != 0 {
-			return port.NodePort, true
-		}
-	}
-	return 0, false
 }
 
 func podReady(item pod) bool {

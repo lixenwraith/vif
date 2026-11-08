@@ -29,7 +29,8 @@ this repository; §2 and §12 state only what they must provide.
 | D3 | **Cluster commands run through `sudo kubectl`.** K3s's kubeconfig stays root-readable (mode `0640`); never copy it to a login user. |
 | D4 | **The vif JSON line is the log contract.** Records originate in `internal/vlog` and every hop preserves those bytes; nothing reads a Kubernetes pod log. |
 | D5 | **The router runs on the node.** It needs the K3s API and node-local access to the pod probes; port 6443 never leaves the node. |
-| D6 | **The session transports are unauthenticated.** Anyone who can reach a forwarded port or the browser route can join; the forwarded surface and the application limits are the controls ([fleet design §4](kubernetes-fleet.md#4-security-posture)). |
+| D6 | **The session transports are unauthenticated.** Anyone who can reach the front door or the browser route can join; the router's budgets and the application limits are the controls ([fleet design §4](kubernetes-fleet.md#4-security-posture)). |
+| D7 | **A session is reached only through the router.** No NodePort: a pod admits its game port from the node alone, the host forwards 7777 and nothing else, and `-sessions-max` bounds the fleet beside the quota ([fleet design §9](kubernetes-fleet.md#9-the-session-routes)). |
 
 ## 1. The shape
 
@@ -42,21 +43,19 @@ flowchart TD
     Alloc -->|"health, and each socket's payload"| Pod
     Term["Player's vif -join"] -->|"raw TCP, no nginx"| Fwd["host forward"]
     Fwd -->|"7777"| Alloc -->|"route frame, then bytes"| Pod
-    Fwd -->|"NodePort"| NP["NodePort"] --> Pod
     Pod -->|"JSONL through PVC"| Log["Capped tmpfs"]
     Log -->|"read-only files"| Wisp["LogWisp, loopback only"]
     Wisp -->|"SSE bytes"| Alloc
 ```
 
 The native game transport is raw framed TCP, not HTTP, so it never enters nginx. A
-session is a thing that ends, so it is a Job, not a Deployment. The router
-hands a player three opaque strings, each naming the session, and nothing may
-rebuild one from a port:
+session is a thing that ends, so it is a Job, not a Deployment. The router hands a
+player two opaque strings, each naming the session, and every dial on either
+reaches the pod from the node:
 
 | String | What it is | Who reads it |
 |---|---|---|
 | `vif://<site-host>:7777/<id>` | `join_target`: the router's front door, one address for every session. | `vif -join`, and `vif -join https://<site-host>`, which creates the session first. |
-| `vif://<site-host>:31703/<id>` | `direct_target`: the session's own forwarded NodePort. | `vif -join`. |
 | `wss://<site-host>/vif/ws/<id>` | `ws_url`: the browser route, through the site to the router, which answers the WebSocket and splices it to the pod. | The WASM build, or `vif -join` where 7777 is blocked. |
 
 Every route sends the name before the handshake, and the pod runs `-name <id>`, so a
@@ -65,16 +64,19 @@ link that names another session is refused rather than seated in it
 
 ## 2. The public edge
 
-Site configuration, kept outside this repository. What it must provide:
+Site configuration, kept outside this repository. A player reaches a session by
+the two URLs the router hands out, `vif://<site-host>:7777/<id>` and
+`wss://<site-host>/vif/ws/<id>`, and by nothing else: no port of a session's own
+exists at the edge. What it must provide:
 
 | Requirement | Why |
 |---|---|
-| Forward TCP 7777 and 31700–31709, and only those, to the node | The whole player-facing native surface: the front door and each session's direct port. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
-| Do not rewrite the source address | Services use `externalTrafficPolicy: Local`, and the front door and the session key their admission budgets on the dialling address. |
+| Forward TCP 7777, and only it, to the node | The whole player-facing native surface, the router's front door; a session's own port never leaves the pod network. 7778 and 8081 are unauthenticated operational data and 6443 is the cluster API; none leaves the node. |
+| Do not rewrite the source address | The front door keys its admission budgets on the dialling address. |
 | Keep established TCP mappings for a whole match | A session holds one long-lived connection per player, up to the Job's one-hour ceiling, and probes it every 200 ms each way. |
 | Admit the site host to the node's 9080 | The router's API and browser route, reached only through the site's nginx (§12). |
 
-Test the public ports from a machine off the host: host-originated traffic can
+Test the public port from a machine off the host: host-originated traffic can
 bypass the forward and return an RST that looks like a filter rejection.
 
 ## 3. Node prerequisites
@@ -125,11 +127,11 @@ sudo systemctl disable --now docker.service docker.socket containerd.service
 
 That is the baseline the image and LogWisp builds restore (D2); Docker's store keeps
 their bases and caches between builds, up to 3 GB (§8). Docker sets the
-`FORWARD` policy to `DROP` on start, which severs NodePort traffic, and a stop does
-not undo it; the helpers set it back to `ACCEPT`. A host whose Docker is already
-running, as on a development machine, keeps it: the helpers build with it and leave
-it running and `FORWARD` as it is, so NodePorts there rely on that host's own
-forwarding rules. After any manual Docker use:
+`FORWARD` policy to `DROP` on start, which severs the pod network's forwarded
+traffic, and a stop does not undo it; the helpers set it back to `ACCEPT`. A host
+whose Docker is already running, as on a development machine, keeps it: the helpers
+build with it and leave it running and `FORWARD` as it is, so pod traffic there
+relies on that host's own forwarding rules. After any manual Docker use:
 
 ```sh
 sudo iptables -S FORWARD | head -1         # expect: -P FORWARD ACCEPT
@@ -142,16 +144,14 @@ curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.6+k3s1 sh -s - \
     --write-kubeconfig-mode 0640 \
     --disable traefik \
     --disable servicelb \
-    --secrets-encryption \
-    --kube-apiserver-arg=service-node-port-range=31700-31709
+    --secrets-encryption
 sudo k3s check-config
 sudo kubectl get nodes -o wide
 ```
 
-Traefik and servicelb have nothing to route: sessions are raw TCP on NodePorts. The
-NodePort range is exactly the ten ports §2 forwards, so the API server refuses a
-session anywhere else. Network policy stays enabled — `20-networkpolicy.yaml` is
-load bearing.
+Traefik and servicelb have nothing to route: a session is raw TCP the router places
+on its pod from the node, and nothing but the front door is forwarded. Network
+policy stays enabled — `20-networkpolicy.yaml` is load bearing.
 
 ## 6. The node's own filter
 
@@ -181,10 +181,10 @@ sudo systemctl stop nft-rollback.timer     # from the second connection
 
 `sudo nft list ruleset | grep '^table'` must show `inet vif` and the tables K3s
 installed, and no `inet filter`: stock Arch can ship one with a `forward` hook and
-`policy drop`, which blackholes NodePort traffic while everything else keeps
-working. Treat an Arch `/etc/nftables.conf.pacnew` as hostile. The table admits the
-front door's 7777 from anywhere; §11 adds 9080 to `operator_ports`. Later changes to
-the file ship with `./deploy/update.sh filter`.
+`policy drop`, which blackholes the pod network's forwarded traffic while
+everything else keeps working. Treat an Arch `/etc/nftables.conf.pacnew` as
+hostile. The table admits the front door's 7777 from anywhere; §11 adds 9080 to
+`operator_ports`. Later changes to the file ship with `./deploy/update.sh filter`.
 
 ## 7. The node's log tmpfs
 
@@ -243,7 +243,10 @@ tag, or that image is missing or unpinned.
 
 On a cluster without the `vif` namespace the script reports every object pending
 without a diff, since nothing can be dry-run against a namespace that does not
-exist, and applies them in order, the namespace first.
+exist, and applies them in order, the namespace first. The network policy admits
+the game port from `${NODE_POD_ADDRESS}` alone, the node's address on the pod
+network, which the script renders from the node's pod CIDR (flannel's `cni0` is
+its first address); applied unrendered, the file is refused.
 
 The two local volumes are pinned to this node (`nodeAffinity` is immutable), so
 `update.sh` reports a change to them and never applies one. Create them once:
@@ -377,13 +380,12 @@ bin/vif -join '<join target>'                    # on the second machine, at onc
 ./deploy/k3s/session.sh state "$SESSION_ID"     # phase=occupied, guests>=1
 ```
 
-From a third terminal on that machine, the direct target seats a second guest, and
-the front door refuses what it must before dialling a pod:
+From a third terminal on that machine, the front door seats a second guest, and
+refuses what it must before dialling a pod:
 
 ```sh
-bin/vif -join '<direct target>'                           # guests>=2
+bin/vif -join '<join target>'                             # guests>=2
 bin/vif -join 'vif://<site-host>:7777/0000000000000000'     # no such session
-bin/vif -join 'vif://<site-host>:<its port>/0000000000000000' # not serving the session that was dialled
 ```
 
 Where the browser route is published, check it in the same window, from off the
@@ -414,10 +416,11 @@ sudo kubectl -n default run np-probe --rm -i --restart=Never --image=busybox --q
   --command -- sh -c "for p in 7777 7778; do nc -zw2 $POD_IP \$p && echo \$p open || echo \$p refused; done" </dev/null
 ```
 
-Expect the node line, then `7777 open` and `7778 refused`. Both open means
-NetworkPolicy is not enforced; the node line failing means node traffic is not
-exempt, and the router, which reads each pod's `/health` from the node (D5),
-cannot place a session.
+Expect the node line, then `7777 refused` and `7778 refused`: a pod admits its game
+port from the node alone (D7). Either open means NetworkPolicy is not enforced; the
+node line failing means node traffic is not exempt, and the router, which reads
+each pod's `/health` and places every player from the node (D5), cannot place a
+session.
 
 Quit the client, read the session's file before it goes, then delete:
 
@@ -430,10 +433,10 @@ sudo jq -s -e --arg id "$SESSION_ID" 'map(select(.sub != null)) | length > 0 and
 
 If it fails, separate the router from the workload: `session.sh create` renders
 the same template without the router, and the pod answers to the name it was
-given, on its NodePort only (`bin/vif -join 'vif://<site-host>:31700/s1'`).
+given, from the node on its own address (`bin/vif -join "vif://$POD_IP:7777/s1"`).
 
 ```sh
-FIRST_JOIN=20m EMPTY_GRACE=20m ./deploy/k3s/session.sh create s1 31700 \
+FIRST_JOIN=20m EMPTY_GRACE=20m ./deploy/k3s/session.sh create s1 \
   "docker.io/library/vif:$(git rev-parse --short=8 HEAD)"
 ./deploy/k3s/session.sh delete s1
 ```
@@ -610,16 +613,14 @@ CLUSTER_IP=$(sudo kubectl -n vif get svc "$SERVICE" -o jsonpath='{.spec.clusterI
 
 bash -c "</dev/tcp/$POD_IP/7777"          # pod route and policy
 bash -c "</dev/tcp/$CLUSTER_IP/7777"      # Service DNAT
-bash -c "</dev/tcp/127.0.0.1/31700"       # local NodePort
-bash -c "</dev/tcp/192.0.2.20/31700"      # node address and NodePort
 bash -c "</dev/tcp/192.0.2.20/7777"       # the front door and the node filter
 ```
 
-From the host that forwards to the node, test `192.0.2.20:31700` and
-`192.0.2.20:7777`. Test the public address only from an off-box machine (§2). A
-join through 7777 that times out while the direct target works is the host's
-forward, or a node filter older than its rule (`./deploy/update.sh --diff filter`);
-a refusal in words is the front door answering, and
+From the host that forwards to the node, test `192.0.2.20:7777`. Test the public
+address only from an off-box machine (§2). A join through 7777 that times out while
+the pod answers from the node is the host's forward, or a node filter older than
+its rule (`./deploy/update.sh --diff filter`); a refusal in words is the front door
+answering, and
 [fleet design §9](kubernetes-fleet.md#9-the-session-routes) names each.
 
 When a step does not answer, take counter snapshots immediately before and after
@@ -635,7 +636,7 @@ sudo nft list ruleset > /tmp/nft.after
 diff -u /tmp/iptables.before /tmp/iptables.after
 diff -u /tmp/nft.before /tmp/nft.after
 
-sudo conntrack -L -p tcp | grep 31700
+sudo conntrack -L -p tcp | grep 7777
 sudo tcpdump -ni cni0 'tcp port 7777'
 ```
 
@@ -643,15 +644,13 @@ Each row below is a dead end until its meaning is known:
 
 | Observation | What it means |
 |---|---|
-| A log rule added to the node's `input` chain sees nothing. | Expected for a NodePort SYN: kube-proxy DNATs it in `prerouting`, then routing sends it through `forward`, not `input`. |
 | Every rule in `iptables-save -c` accepts, but the connection still fails. | Another nftables table can drop on the same hook. Only `nft list ruleset` shows every table — usually a surviving `table inet filter` with `policy drop` (§6). |
 | One before/after attempt changes a counter. | The last moving rule identifies the component that handled the packet; take both `iptables-save -c` and `nft list ruleset` around one attempt. |
 | Forward counters move but the tuple has no conntrack entry. | The packet was accepted for forwarding and dropped by another hook before the routing decision completed. |
 | Traffic is visible on `cni0`. | It reached the pod side of routing. A moving `KUBE-POD-FW-*` counter proves the NetworkPolicy path ran. |
-| A finished session first refuses and later times out. | While its Service exists with no endpoint, kube-proxy rejects; after Job TTL garbage-collects the Service, the node filter drops an unassigned port. |
 | A create answers `504 session_not_ready` and the pod never leaves `Init`. | The config check could not start. `kubectl -n vif describe pod` names the image it could not pull, usually an unpinned one the kubelet deleted at 85% disk: `./deploy/update.sh` imports it again, pinned. |
 | The handshake answers `400` with no `Upgrade` reaching the router. | An edge that dropped the hop-by-hop headers; the browser route needs `Upgrade` and `Connection` forwarded (§12). |
-| A NodePort that answered before does not now. | `FORWARD` policy is `DROP`. Docker sets it and a stop does not restore it (§4). |
+| Pod traffic that crossed the node before does not now. | `FORWARD` policy is `DROP`. Docker sets it and a stop does not restore it (§4). |
 | A LogWisp or hand-run Docker build cannot resolve DNS. | A node filter older than its `docker0` rule (`./deploy/update.sh --diff filter`). The session image builds with `--network host` and never crosses `docker0`. |
 | `kubectl auth can-i get pods/log` answers `yes`. | Positional `pods/log` parses as `TYPE/NAME`. Use `--subresource=log`, as the RBAC check above does. |
 | LogWisp shows no lines written before it started. | A watcher seeks to end-of-file on discovery. The source needs `from = "start"` (§10). |

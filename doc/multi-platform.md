@@ -303,9 +303,9 @@ origin, which that policy must name (`connect-src 'self' wss:`) before the page 
 join it. Ordinary CORS headers are not a substitute for the `Origin` check. Browser admission credentials, short-lived and
 session-scoped, are [open work](todo.md#add-browser-admission-authentication).
 
-Native clients use raw TCP, through the router's front door or the session's
-own NodePort ([fleet §9](kubernetes-fleet.md#9-the-session-routes)), or this
-route where a network blocks those; a native client's `Origin` is the URL's own.
+Native clients use raw TCP through the router's front door
+([fleet §9](kubernetes-fleet.md#9-the-session-routes)), or this route where a
+network blocks it; a native client's `Origin` is the URL's own.
 The router owns routing and admission as well as allocation; keep those duties
 behind explicit interfaces so the process can be renamed or split without moving
 Kubernetes lifecycle code into the game.

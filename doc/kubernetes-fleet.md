@@ -13,8 +13,8 @@ in [`script/`](../script/README.md).
 
 | Property | Value |
 |---|---|
-| Session unit | One `vif -serve` process, one pod, one Job, one Service. |
-| Concurrency ceiling | 10, enforced by namespace `ResourceQuota`; the router also refuses before attempting an eleventh. |
+| Session unit | One `vif -serve` process, one pod, one Job, one ClusterIP Service nothing dials, whose EndpointSlice is the router's readiness signal. |
+| Concurrency ceiling | 10, enforced by namespace `ResourceQuota`; the router's `-sessions-max` refuses before attempting an eleventh. |
 | First-guest window | 90 s. A session nobody reaches exits 0 and is removed. |
 | Empty grace | 90 s after the last guest leaves; also the window a dropped player has to reclaim their slot. |
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. A second signal exits at once. |
@@ -22,9 +22,9 @@ in [`script/`](../script/README.md).
 | Image | `scratch` plus the static `vif_headless` binary (about 14 MiB), non-root, read-only root filesystem, no shell. Its one scenario is the embedded `main` fallback; the rest come off a node volume, so what else the fleet serves changes without a rebuild. |
 | Scenario | Chosen per session from the router's advertised list, served from a read-only node directory (`/var/db/vif/wad`) mounted `scenario/` and `image/` only. The corpus and keymap are the image's embedded ones, player domain that is never compared with a guest's; a guest is served the session's scenario at the join, so it needs none of the node's files. |
 | Transport | Raw framed TCP, for every participant. A WebSocket route carries the same bytes for a browser, or for a terminal whose network blocks 7777: the router terminates it with the repository's standard-library `pkg/websocket` and splices it to the pod (§9). Unauthenticated (§4). |
-| Reached by | Its name, on three routes (§9): `vif://<site>:7777/<session>` through the router's front door, `vif://<site>:<nodeport>/<session>` straight to the session's forwarded NodePort, and `wss://<site>/vif/ws/<session>` through the site's edge and the router to the pod. |
+| Reached by | Its name, through the router alone, on two routes (§9): `vif://<site>:7777/<session>` at the front door and `wss://<site>/vif/ws/<session>` through the site's edge; both reach the pod from the node, the only source its game port admits. |
 | Logs and metrics | Each Job writes `<session-id>.jsonl` through a Bound local PVC onto a 256 MiB node tmpfs. One standalone LogWisp node service, built from upstream LogWisp `main`, has a read-only view and a loopback-only listener; the router reverse-proxies its SSE bytes at `/vif/api/logs` without parsing a record. |
-| Public API | Exactly `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>`, over TLS through the site's edge. `/healthz`, `/readyz` and every node port but the game's stay unreachable from outside. |
+| Public API | Exactly `/vif/api/sessions`, `/vif/api/logs` and `/vif/ws/<session>`, over TLS through the site's edge. `/healthz`, `/readyz` and every node port but the front door's stay unreachable from outside. |
 
 ```mermaid
 flowchart LR
@@ -35,7 +35,6 @@ flowchart LR
     Site -->|"vif:// and wss:// links"| Player
     Player -->|"vif -join, TCP 7777"| Alloc
     Alloc -->|"route frame, then bytes"| Pod
-    Player -->|"vif -join, TCP NodePort"| NP["NodePort"] --> Pod
     Alloc -->|"WSS payload, TCP 7777"| Pod
     Pod -->|"JSONL through PVC"| Logs["capped node tmpfs"]
     Logs -->|"read-only files"| Wisp["LogWisp, loopback"]
@@ -85,11 +84,11 @@ What bounds a stranger:
 - at most `NetworkAdmitBurst` (6) admissions per address in each
   `NetworkAdmitWindow` (1 minute), tracked for at most `NetworkAdmitTracked` (1024)
   addresses, past which a new one is refused, so the defence cannot become the
-  exhaustion. It is keyed on the player's own address: the pod applies it on the
-  NodePort route, which preserves that address, and the router before its lookup
-  on both proxied routes as one budget per address (`-client-joins`), the front
+  exhaustion. It is keyed on the player's own address at the router, before its
+  lookup on both routes, as one budget per address (`-client-joins`), the front
   door's from the dialler and the browser route's from `-client-address-header`. At
-  the pod, proxied players share the node's address and so a budget per session;
+  the pod every player arrives from the node's address, so its own budget is one
+  per session;
 - at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine within
   `ConnectTimeout` (5 s), and every admitted stream closed after
   `NetworkLinkDeadAfter` (5 s) without a frame;
@@ -113,8 +112,9 @@ What bounds a stranger:
   never reaches Assign. It is a routing key rather than a credential — it is in
   every player's link and travels in clear — so what it bounds is a session being
   walked into, not one whose link leaked;
-- the network policy: the game port reachable, the probe port only from the node and
-  the `monitoring` namespace, everything else denied, no egress;
+- the network policy: the game port reachable from the node alone, where the router
+  places every player, the probe port from the node and the `monitoring` namespace,
+  everything else denied, no egress;
 - the router's published surface: exactly the create/list, log-stream and
   session-socket routes and the front door, bounded by the ten-session quota, the
   90-second first-join expiry, `-client-creates` sessions per address (an IPv6
@@ -138,9 +138,8 @@ What bounds a stranger:
   reason to want the other shape.
 
 The firewall requirements in [Deployment §2](kube-docker-deploy.md#2-the-public-edge)
-are what stand in front of the rest: the forwarded surface is the ten-port NodePort
-range and the front door's 7777, and the probe, log-stream and cluster API ports
-never leave the node.
+are what stand in front of the rest: the forwarded surface is the front door's 7777
+alone, and the probe, log-stream and cluster API ports never leave the node.
 
 ## 5. Late-crossing ordering
 
@@ -261,11 +260,12 @@ What a cluster has not yet been put through is
   router believes is one a router bug removes.
 - **A Job per session.** The process is meant to exit; a Deployment would restart it
   into a session nobody is in.
-- **One address for every session, and a NodePort per session beside it.** The
-  front door places a join by its name, so every link has one shape and a stale one
-  is refused. The ten-port pool stays each session's direct route and the fleet's
-  concurrency bound; the page advertises only the front door and the browser route,
-  so a deployment need not expose the direct one.
+- **One address for every session, and no route around the router.** The front
+  door places a join by its name, so every link has one shape and a stale one is
+  refused. The direct NodePort each session once had beside it is gone: a pod admits
+  its game port from the node alone, so every budget is keyed where the player's
+  address is known, the host forwards one port, and `-sessions-max` bounds the fleet
+  beside the quota in the pool's place.
 - **The front door is the router's, and reads one frame.** Placing a join needs
   the lookup the browser route already makes; past the route frame it copies bytes.
 - **Admission is the router's.** Per-player budgets and rate limits for every
@@ -309,13 +309,14 @@ What a cluster has not yet been put through is
 
 ## 9. The session routes
 
-A session is reached by its name on three routes, and its pod answers to that name
-on all of them, so no route can seat a player in a match their link did not name.
+A session is reached by its name through the router alone, on two routes, and a
+published door on a third; its pod answers to that name on each, so no route can
+seat a player in a match their link did not name, and its game port admits the node
+alone, so no dial goes around the router's checks.
 
 | Route | Link | Path | Refuses a bad dial |
 |---|---|---|---|
 | Front door | `vif://<site>:7777/<id>` | host forward, the router on the node, the pod's 7777 | the router, before any dial: a first frame that is not a route, an identifier that is not 16 hex, a dialler past its budget (§4), a session unknown, unready or full, one at `-route-max` |
-| Direct | `vif://<site>:<nodeport>/<id>` | host forward, the session's NodePort, the pod's 7777 | the pod itself, on the name, its roster and its per-address budget |
 | Browser | `wss://<site>/vif/ws/<id>` | the site's edge, the router, the pod's 7777 | the router: another origin before the upgrade, the rest as the front door does (below) |
 | Tunnel | `vif://<site>:7777/<id>`, a door's | host forward, the router on the node, the control connection the door's run holds open to it, the run's door | the router: as the front door, then a run that opens no connection back within the route timeout |
 
@@ -348,10 +349,9 @@ re-encodes the name to it and splices the two sockets with half-close, Go settin
 `TCP_NODELAY` on both. A direction ends when its peer closes or a write stalls ten
 seconds, and the other then has ten seconds. A stream that does not open with a
 route frame is closed unanswered; every other refusal is a `MsgJoinReply` whose
-reason `vif -join` prints. The cost is the browser route's: native play through it
-depends on the router process, and the pod sees each such player at the node's
-address, so its `admit` record names the node and the per-address budget is the
-router's (§4).
+reason `vif -join` prints. The cost is the browser route's: native play depends on
+the router process, and the pod sees every player at the node's address, so its
+`admit` record names the node and the per-address budget is the router's (§4).
 
 **Where the browser route's layers stop.** Nginx terminates TLS and forwards the
 `Upgrade`; it never looks at a frame. `vif-router` checks method, identifier
@@ -368,8 +368,8 @@ as the name inside the stream, which the router places and the pod checks, so
 the protocol, bounds and handshake are a native client's.
 
 **What it costs.** The pod sees browsers at the node's address, as it sees
-front-door players, so its budget is one per session for every proxied player and
-the router keys the per-player one in its place (§4). The router unmasks
+front-door players, so its budget is one per session and the router keys the
+per-player one in its place (§4). The router unmasks
 and frames the bytes. Measured on loopback against a pod pushing every 50 ms and a
 client pinging every 20 ms, an echo took 78 µs through the router's end and 72 µs
 through the front door, and nginx with TLS added about 0.3 ms; in the field a native

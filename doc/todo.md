@@ -513,27 +513,6 @@ operator's.
 The design and what it cost are in [The session fleet](kubernetes-fleet.md), and
 the procedure in [Fleet deploy](kube-docker-deploy.md).
 
-### Drop the direct NodePort route
-
-- Priority: P1
-- Affected files: `tool/vif-router` (`allocator.go`, `manifest.go`, `config.go`,
-  `server.go`, `README.md`), `deploy/k3s/20-networkpolicy.yaml`, `30-session.yaml`,
-  `render-session.sh`, `session.sh`, `deploy/guest/nftables.conf`,
-  `doc/kubernetes-fleet.md` §1, §4, §8 and §9, `doc/kube-docker-deploy.md` §0 and §2,
-  `doc/term-index.md` (direct route)
-- Guide: [Auth and session design](auth-session-design.md) D3, §7.6 phase 0
-
-Every fleet dial crosses the router, by the front door or the browser route, so one
-placement, one budget and one admission apply to all of them; the NodePort was the
-debugging route and bounds the design instead. The Service becomes `ClusterIP`,
-kept for the EndpointSlice readiness the allocator reads; the 31700–31709 pool,
-`isNodePortConflict`, `-port-first`/`-port-last`, `direct_target` and `port` go,
-and `-sessions-max` (10) stands in beside the quota's `count/jobs`. The network
-policy admits the game port from the node's address on the pod network alone, a
-placeholder the deploy renders; the host's forward of the range is removed outside
-this repository. Done when a session is reached only through the router and the
-pod's per-address limiter counts nothing but a player's own doors.
-
 ### Hand off a deployment a stranger can install
 
 - Priority: P1
@@ -704,10 +683,11 @@ rostered participant it neither links nor carries.
 A run publishes its `-relay` door through the router's reverse tunnel and is
 reached at the site; a host's door published the same way is a player's own session
 reached there, the router neither allocating nor authoring. The deployment this
-leads to serves as many pods as the node has resources for (`-sessions-max` once
-[the direct route goes](#drop-the-direct-nodeport-route), ten today) and routes
-every session beyond them, with accounting and authentication added in the auth
-design's phase 6 ([Auth and session design §7.6](auth-session-design.md#76-phases)). The tunnel carries a door already, and the foundation
+leads to serves as many pods as the node has resources for (`-sessions-max`, ten
+today) and routes every session beyond them, with accounting and authentication
+added in the auth design's phase 6
+([Auth and session design §7.6](auth-session-design.md#76-phases)). The tunnel
+carries a door already, and the foundation
 stands: a name is resumed only by the run it was issued to, within
 `NetworkTunnelResumeWindow`, so no published name shadows a pod's; one address
 holds at most `-doors-per-address` doors; every connection placed is accounted for

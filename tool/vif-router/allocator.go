@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	errFleetFull         = errors.New("all session ports are allocated")
+	errFleetFull         = errors.New("the fleet is full")
 	errSessionNotReady   = errors.New("session did not become ready")
 	errRequestRefused    = errors.New("session request refused")
 	errSessionUnknown    = &network.Refusal{Code: network.RefusalUnknown, Reason: "no such session"}
@@ -37,15 +37,14 @@ var (
 )
 
 type allocatorConfig struct {
-	Workload   workloadConfig
-	JoinHost   string
-	RoutePort  int
-	PortFirst  int
-	PortLast   int
-	PlayersMax int
-	BotsMax    int
-	LogLevels  []string
-	WadDir     string
+	Workload    workloadConfig
+	JoinHost    string
+	RoutePort   int
+	SessionsMax int // sessions the fleet holds at once, counted as its quota counts them
+	PlayersMax  int
+	BotsMax     int
+	LogLevels   []string
+	WadDir      string
 
 	// WebOrigin is the one origin the browser route answers, and publishing it is
 	// what turns that route on; see doc/kubernetes-fleet.md §9.
@@ -97,7 +96,7 @@ type fleetLimits struct {
 	FixedMaps       map[string]string `json:"scenario_fixed_maps,omitempty"`
 	MinPlayers      map[string]int    `json:"scenario_min_players,omitempty"`
 	MaxPlayers      map[string]int    `json:"scenario_max_players,omitempty"`
-	// SessionsMax is the fleet's size, its NodePort pool; Doors and DoorsMax the doors
+	// SessionsMax is the fleet's size (-sessions-max); Doors and DoorsMax the doors
 	// runs publish through the router and the most it carries, for a page to say
 	// what the site has room for.
 	SessionsMax int `json:"sessions_max"`
@@ -106,12 +105,10 @@ type fleetLimits struct {
 }
 
 type session struct {
-	ID   string `json:"id"`
-	Port int    `json:"port"`
-	// JoinTarget is the front door, one address for every session; DirectTarget is
-	// this session's own NodePort. Both carry the name the pod answers to.
-	JoinTarget   string `json:"join_target"`
-	DirectTarget string `json:"direct_target"`
+	ID string `json:"id"`
+	// JoinTarget is the front door, one address for every session, carrying the
+	// name the pod answers to.
+	JoinTarget string `json:"join_target"`
 	// WebSocketURL is the same session reached from a browser. Absent where the
 	// deployment publishes no browser route, which is what a page keyed on it reads
 	// as "this fleet is for native clients".
@@ -140,7 +137,6 @@ type allocator struct {
 
 type createdObjects struct {
 	id      string
-	port    int
 	job     job
 	service service
 }
@@ -153,7 +149,7 @@ func (a *allocator) limits() fleetLimits {
 	w := a.cfg.Workload
 	out := fleetLimits{PlayersMax: a.cfg.PlayersMax, PlayersDefault: w.Players, BotsMax: a.cfg.BotsMax,
 		LogLevels: a.cfg.LogLevels, LogLevelDefault: w.LogLevel, SizeDefault: w.Size,
-		Scenarios: a.scenarios(), SessionsMax: a.cfg.PortLast - a.cfg.PortFirst + 1}
+		Scenarios: a.scenarios(), SessionsMax: a.cfg.SessionsMax}
 	a.describe(&out)
 	return out
 }
@@ -386,19 +382,18 @@ func (a *allocator) createSession(ctx context.Context, req sessionRequest) (sess
 		return session{}, errors.Join(fmt.Errorf("%w: %w", errSessionNotReady, err), cleanupErr)
 	}
 
-	return a.sessionRecord(created.id, created.port, created.job.Metadata, true, state), nil
+	return a.sessionRecord(created.id, created.job.Metadata, true, state), nil
 }
 
 func (a *allocator) createTransaction(ctx context.Context, workload workloadConfig) (createdObjects, error) {
 	a.createMu.Lock()
 	defer a.createMu.Unlock()
 
-	services, err := a.kube.listServices(ctx)
+	jobs, err := a.kube.listJobs(ctx)
 	if err != nil {
-		return createdObjects{}, fmt.Errorf("list Services: %w", err)
+		return createdObjects{}, fmt.Errorf("list Jobs: %w", err)
 	}
-	ports := a.availablePorts(services)
-	if len(ports) == 0 {
+	if fleetSize(jobs) >= a.cfg.SessionsMax {
 		return createdObjects{}, errFleetFull
 	}
 
@@ -430,28 +425,28 @@ func (a *allocator) createTransaction(ctx context.Context, workload workloadConf
 	}
 
 	created := createdObjects{id: id, job: createdJob}
-	for _, port := range ports {
-		createdService, createErr := a.kube.createService(
-			ctx,
-			buildService(id, createdJob.Metadata.UID, port, a.cfg.Workload.Namespace),
-		)
-		if createErr == nil {
-			created.port = port
-			created.service = createdService
-			return created, nil
-		}
-		if isNodePortConflict(createErr) {
-			continue
-		}
+	createdService, err := a.kube.createService(ctx,
+		buildService(id, createdJob.Metadata.UID, a.cfg.Workload.Namespace))
+	if err != nil {
 		// As with Job creation, clean the known name in case only the API
 		// response was lost. The owned Service is deleted before its Job.
 		created.service.Metadata.Name = sessionPrefix + id
-		cleanupErr := a.cleanup(created)
-		return createdObjects{}, errors.Join(fmt.Errorf("create Service: %w", createErr), cleanupErr)
+		return createdObjects{}, errors.Join(fmt.Errorf("create Service: %w", err), a.cleanup(created))
 	}
+	created.service = createdService
+	return created, nil
+}
 
-	cleanupErr := a.cleanup(created)
-	return createdObjects{}, errors.Join(errFleetFull, cleanupErr)
+// fleetSize counts the Jobs as the quota does, finished ones included until their
+// TTL collects them, so the router refuses where the API server would.
+func fleetSize(jobs []job) int {
+	n := 0
+	for _, item := range jobs {
+		if isManaged(item.Metadata.Labels) {
+			n++
+		}
+	}
+	return n
 }
 
 func (a *allocator) waitForReady(ctx context.Context, id, serviceName string) (sessionHealth, error) {
@@ -541,7 +536,6 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 	type candidate struct {
 		id          string
 		serviceName string
-		port        int
 		job         job
 		pods        []pod
 	}
@@ -558,14 +552,9 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 		if !ok || !a.validService(service, item) {
 			continue
 		}
-		port, ok := firstNodePort(service)
-		if !ok {
-			continue
-		}
 		candidates = append(candidates, candidate{
 			id:          id,
 			serviceName: service.Metadata.Name,
-			port:        port,
 			job:         item,
 			pods:        podsByID[id],
 		})
@@ -599,15 +588,15 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 				}
 				state.Reason = "health unavailable: " + probeErr.Error()
 			}
-			result[i] = a.sessionRecord(item.id, item.port, item.job.Metadata, routable, state)
+			result[i] = a.sessionRecord(item.id, item.job.Metadata, routable, state)
 		}()
 	}
 	wg.Wait()
 	sort.Slice(result, func(i, j int) bool {
-		if result[i].Port == result[j].Port {
+		if result[i].CreatedAt == result[j].CreatedAt {
 			return result[i].ID < result[j].ID
 		}
-		return result[i].Port < result[j].Port
+		return result[i].CreatedAt < result[j].CreatedAt
 	})
 	return result, nil
 }
@@ -731,24 +720,6 @@ func (a *allocator) ready(ctx context.Context) error {
 	return err
 }
 
-func (a *allocator) availablePorts(services []service) []int {
-	used := make(map[int]bool)
-	for _, item := range services {
-		for _, port := range item.Spec.Ports {
-			if port.NodePort != 0 {
-				used[port.NodePort] = true
-			}
-		}
-	}
-	var available []int
-	for port := a.cfg.PortFirst; port <= a.cfg.PortLast; port++ {
-		if !used[port] {
-			available = append(available, port)
-		}
-	}
-	return available
-}
-
 func (a *allocator) validService(item service, owner job) bool {
 	if item.Metadata.DeletionTimestamp != nil || item.Metadata.Namespace != a.cfg.Workload.Namespace {
 		return false
@@ -758,20 +729,12 @@ func (a *allocator) validService(item service, owner job) bool {
 	if !jobOK || !serviceOK || jobID != serviceID || !ownedByJob(item.Metadata, owner) {
 		return false
 	}
-	if item.Spec.Type != "NodePort" || item.Spec.ExternalTrafficPolicy != "Local" ||
-		item.Spec.Selector[labelSession] != jobID {
-		return false
-	}
-	if len(item.Spec.Ports) != 1 {
+	if item.Spec.Type != "ClusterIP" || item.Spec.Selector[labelSession] != jobID || len(item.Spec.Ports) != 1 {
 		return false
 	}
 	servicePort := item.Spec.Ports[0]
-	if servicePort.Name != "game" || servicePort.Port != 7777 ||
-		servicePort.TargetPort != "game" || servicePort.Protocol != "TCP" {
-		return false
-	}
-	port := servicePort.NodePort
-	return port >= a.cfg.PortFirst && port <= a.cfg.PortLast
+	return servicePort.Name == "game" && servicePort.Port == 7777 &&
+		servicePort.TargetPort == "game" && servicePort.Protocol == "TCP"
 }
 
 func (a *allocator) cleanup(created createdObjects) error {
@@ -791,15 +754,10 @@ func (a *allocator) cleanup(created createdObjects) error {
 	return joined
 }
 
-func (a *allocator) sessionRecord(id string, port int, job objectMeta, routable bool, state sessionHealth) session {
-	link := func(port int) string {
-		return "vif://" + net.JoinHostPort(a.cfg.JoinHost, strconv.Itoa(port)) + "/" + id
-	}
+func (a *allocator) sessionRecord(id string, job objectMeta, routable bool, state sessionHealth) session {
 	return session{
 		ID:           id,
-		Port:         port,
-		JoinTarget:   link(a.cfg.RoutePort),
-		DirectTarget: link(port),
+		JoinTarget:   "vif://" + net.JoinHostPort(a.cfg.JoinHost, strconv.Itoa(a.cfg.RoutePort)) + "/" + id,
 		WebSocketURL: a.webSocketURL(id),
 		Scenario:     job.Annotations[annotationScenario],
 		Size:         job.Annotations[annotationSize],
