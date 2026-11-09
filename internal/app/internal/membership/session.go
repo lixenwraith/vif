@@ -62,7 +62,7 @@ func (m *Membership) HostNetworkConfig() *link.Config {
 	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = m.SessionCapacity()
 	netCfg.OnError = logSessionError
-	netCfg.AcceptSession = m.sessionAcceptor(m.admissions.Admit)
+	netCfg.AcceptSession = m.sessionAcceptor(m.joinBudget())
 	// Every host outlives its guests, so every host admits a dial after its lobby
 	// closed: a dropped participant comes back through the one gate a reconnect has
 	// ever had. The hook answers nothing until the run arms it, because until then

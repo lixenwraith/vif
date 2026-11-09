@@ -22,6 +22,7 @@ flowchart TD
     App --> Audio["System audio process or sink"]
     App --> Files["TOML, text, logs, and optional WAV files"]
     App <--> Peers["Other vif instances, directly or through the fleet router"]
+    App --> Site["The site's router and identity service: sessions and accounts"]
 ```
 
 The application owns gameplay and orchestration. It delegates terminal
@@ -54,7 +55,7 @@ The main architectural planes are:
 | Authority and convergence | `internal/converge`, `internal/snapshot` | Hold the session's authority term and run its succession, publish the correction cadence, answer the selective manifest exchange, install what arrives, and keep the links a handoff needs. `converge` reads and writes the live world only through the seam the composition root supplies; `snapshot` is the capture wire model and comparison surface. |
 | Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the presentation's surface. |
-| I/O boundaries | `internal/service`, `internal/content`, `internal/network` over `pkg/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed TCP or WebSocket sessions. |
+| I/O boundaries | `internal/service`, `internal/content`, `internal/network` over `pkg/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed TCP, TLS or WebSocket sessions with their admission: a participant's key proven at every door, the pass that brings it back, the router's ticket, a passphrase door's Argon2-SCRAM exchange, and the account exchange with the site's identity service ([Auth and session design](auth-session-design.md)). |
 | Supervision and diagnostics | `internal/lifecycle`, `internal/probe`, `internal/vlog`, `internal/status`, `internal/prof` | An allocated session's lifetime and `/health`/`/metrics` endpoint; the log sink, metric registry, flight recorder and profiler. |
 | Reusable algorithms | `pkg/*` | Audio, float64 math/physics, navigation, maze generation, evolution, link pacing, TOML macros, WebSocket framing, and terminal-image conversion. |
 
@@ -386,9 +387,12 @@ desktop window too, which `-g` opens (`make gui` opens it by default).
 `make headless` builds the `vif_headless` profile, which removes terminal
 presentation and audio code while keeping TCP and WebSocket sessions. It is what
 the K3s fleet runs: one `-serve` container per session, which
-`tool/vif-router` creates on request and routes joins to ([Session
-fleet](kubernetes-fleet.md)). A headless script or bot has no terminal or audio,
-but may attach the network service with `-host`/`-join`.
+`tool/vif-router` creates on request and routes joins to over its TLS front door
+and the browser route, running each dial's admission exchange through itself and
+handing the pod a ticket that names the player, by address or by the account the
+site's identity service vouches for ([Session fleet](kubernetes-fleet.md),
+[Auth and session design](auth-session-design.md)). A headless script or bot has
+no terminal or audio, but may attach the network service with `-host`/`-join`.
 
 A WASM build runs in a Worker behind the bundled page, which draws its cell
 frames on a WebGL canvas (`pkg/browser`), uses embedded FSM/content/keymap
@@ -398,8 +402,10 @@ the same-origin route `wss://<site>/vif/ws/<session>`: the page's own WebSocket
 wrapped as a `net.Conn`, carrying the protocol unchanged through the router
 to the session's game port. `-host`, `-serve` and a join by anything but a
 WebSocket link are rejected, because a browser can bind nothing and dial nothing
-else. The page can supply ordinary arguments through `Go.argv`, but external
-`wad/` content needs an HTTP-backed resource provider rather than a file
+else. The page keeps its participant keys and passes in the site's storage, one
+tab holding them, so a closed tab is come back to, and its sign-in as the identity
+service's cookie. The page can supply ordinary arguments through `Go.argv`, but
+external `wad/` content needs an HTTP-backed resource provider rather than a file
 argument. The Makefile also contains an explicitly experimental Windows
 cross-build. The exact profile and browser extension strategy are in [Build
 profiles and platform boundaries](multi-platform.md).
@@ -411,10 +417,18 @@ anchor before the joining world is constructed, the roster every instance builds
 from arrives with the start gate, a server's scheduler stays at tick zero until
 its lobby's first guest while an interactive host plays from its first tick, and
 the manifest-registered `NetworkSystem` drains framed input only at the
-simulation's poll boundary. Trusted-peer is a statement about authentication
-and nothing else: a dial is budgeted per address, the handshake is bounded and off
-the accept path, and every buffer an arriving frame can reach is capped, but
-nothing proves who the peer is. The artifact barrier exchanges crossings without
+simulation's poll boundary. Every participant holds an Ed25519 key for its place,
+proven over the door's nonce at every dial and carried on the roster, so a redial,
+a peer link and a succession message are the participant's own; a session pass
+brings it back after a crash or a reboot without its gate; a door is open to any
+key, gated by a passphrase (Argon2-SCRAM, bound to the door's certificate over
+TLS) or, on the fleet, by the router's ticket, and a drop keeps a key and its
+account out. A dial is budgeted per address, or per account where a sign-in names
+one, the handshake is bounded and off the accept path, and every buffer an
+arriving frame can reach is capped. Trusted-peer now means what admission grants:
+a participant once admitted is trusted with the session, which
+[the todo](todo.md#tighten-what-a-relay-and-a-successor-are-trusted-with) is to
+audit. The artifact barrier exchanges crossings without
 a synchronous per-tick round trip, and because every artifact names the absolute
 tick it applies at, the authority commits each one and relays it, so a participant
 reaches instances its producer never linked to. A participant stamps its own
@@ -461,8 +475,10 @@ a migrate session each guest but a bot or a browser binds a port of its own unle
 moves the session and not only its authorship; see
 [Multiplayer](multi-player.md) §5.3.
 
-Remaining limitations include a door that admits any key, plaintext wherever no
-TLS edge terminates the links, and no merge for explicit minority forks. Remote crossing
+Remaining limitations include plaintext on a player's own tcp and ws doors and on
+the router's tunnels to published doors, where a passphrase door authenticates the
+handshake and not the channel, a published door's bearer resume token, and no merge
+for explicit minority forks. Remote crossing
 fences record the highest applied sequence rather than a contiguous prefix, a
 bounded trade-off described in [Multiplayer](multi-player.md) §3.2. The domain
 boundary, event classification, wire protocol, their enforcing tests, and an

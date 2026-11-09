@@ -78,7 +78,7 @@ the router's public key in the Job's arguments): the router runs each dial's
 admission exchange through itself, on the front door and the browser route alike,
 checks the dialer's proofs and mints a ticket naming the dialer's address and key,
 which the pod verifies, spends once and checks the proof against
-([auth design §7.5](auth-session-design.md#75-admission-tickets-and-accounts)). Anyone
+([auth design §3.6](auth-session-design.md#36-admission-tickets-and-accounts)). Anyone
 who reaches the router can still join a session and influence its Shared world, by
 name, within the budgets below; a signed-in player's ticket names the account the
 identity service vouches for, so a drop keeps the account out, the roster shows its
@@ -95,8 +95,9 @@ What bounds a stranger:
   lookup on both routes, as one budget per address (`-client-joins`), the front
   door's from the dialler and the browser route's from `-client-address-header`; a
   dial whose sign-in names an account is moved to that account's budget once the
-  exchange names it. At the pod every player arrives from the node's address, so its
-  own budget is one per session;
+  exchange names it. At the pod every player arrives from the node's address, so a
+  pod run with `-admit ticket` spends no address budget and charges the player the
+  ticket names, as the router did;
 - at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine within
   `ConnectTimeout` (5 s), and every admitted stream closed after
   `NetworkLinkDeadAfter` (5 s) without a frame;
