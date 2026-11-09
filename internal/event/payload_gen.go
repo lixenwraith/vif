@@ -1585,6 +1585,7 @@ var codecLightningUpdateRequestPayload = structCodec{size: unsafe.Sizeof(Lightni
 	{off: unsafe.Offsetof(LightningUpdateRequestPayload{}.Owner), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 	{off: unsafe.Offsetof(LightningUpdateRequestPayload{}.TargetX), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(LightningUpdateRequestPayload{}.TargetY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(LightningUpdateRequestPayload{}.TargetEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
 }}
 
 func (p *LightningDespawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
