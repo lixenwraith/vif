@@ -268,7 +268,7 @@ so), and its page's `connect-src` must allow the host's origin. A terminal joins
 with `-join wss://host:7778/<name>`: a certificate the system's roots vouch for, or
 a self-signed one taken as it is, encrypted and naming nobody, open to a man in the
 middle unless a passphrase bound to that door's certificate rules one out
-([Auth and session design §7.4](auth-session-design.md#74-passphrase-doors)); `-ca`
+([Auth and session design §3.5](auth-session-design.md#35-passphrase-doors)); `-ca`
 names an issuer's PEM file or pins the certificate's own fingerprint, `sha256:<hex>`, which
 the host prints at startup and `:session` reads, for a player who wants that
 authentication now.
@@ -303,7 +303,7 @@ origin, which that policy must name (`connect-src 'self' wss:`) before the page 
 join it. Ordinary CORS headers are not a substitute for the `Origin` check. A browser's
 admission credentials are the router's ticket, minted in the exchange it runs on the
 upgrade, and, signed in, the `vif_sign_in` cookie that upgrade carries
-([Auth and session design §7.5](auth-session-design.md#75-admission-tickets-and-accounts)).
+([Auth and session design §3.6](auth-session-design.md#36-admission-tickets-and-accounts)).
 
 Native clients use raw TCP through the router's front door
 ([fleet §9](kubernetes-fleet.md#9-the-session-routes)), or this route where a
