@@ -401,6 +401,14 @@ comment now states, and link that instead.
   interface on each `Blocks` cost `BenchmarkGlyphRender` a quarter, and an
   interface over the wall entities a tenth more. Measure a probe path with the
   renderer's benches, not only the tick's.
+- Find an allocation before removing it: `-memprofile` with `-memprofilerate 1`,
+  then `pprof -sample_index=alloc_objects`. A concatenation that does not escape
+  (`-gcflags=-m`) and fits 32 bytes stays on the stack: the overlay's titles a todo
+  blamed never allocated, while `tui`'s box edges did.
+- A renderer bench reusing one `RenderBuffer` calls its `Clear` each iteration, as
+  a frame does, or `KeepExact`'s rects pile up as bytes with no allocation behind
+  them. A bare `engine.NewWorld` draws as an emulator in 256 colors, `ColorMode`'s
+  zero value.
 - Navigation's cost in vanguard depends on how the ship is flown: one that keeps
   still keeps sight of the raiders and shows little of it. Measure as a player
   flies, headless under `:god` with auto-fire, the ship sweeping between the map's

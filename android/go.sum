@@ -14,8 +14,8 @@ github.com/lixenwraith/genetic v0.1.0 h1:Qbm9UKIHk7J/9YyrJYn6tssvAHlzwgglQlYmJYu
 github.com/lixenwraith/genetic v0.1.0/go.mod h1:ND17YfR1ldULc+1bItbP9zxg4juSnOl4iBaRFpSXwAU=
 github.com/lixenwraith/log v0.1.13 h1:qVs4wFVAvYllffB0UVrKA3Eqa9jPOJh/xuFdqwgAM/8=
 github.com/lixenwraith/log v0.1.13/go.mod h1:EE8i5nSAW2yZBTytKuhdgehmgzrby6kW1k5DyH1SvBg=
-github.com/lixenwraith/terminal v0.6.6 h1:4T+oWm7pD9OHnc45kI3vCAnu4tMu1Cybbw6oShq9q+I=
-github.com/lixenwraith/terminal v0.6.6/go.mod h1:E51pXeR6FgFu28C3bX0DEWx33epGnHaqLCnV4dop/P0=
+github.com/lixenwraith/terminal v0.6.7 h1:c4VEzpgzE6lS2Fl4kRaFIT4v8uJ/HVFHhlPRK05YHJk=
+github.com/lixenwraith/terminal v0.6.7/go.mod h1:E51pXeR6FgFu28C3bX0DEWx33epGnHaqLCnV4dop/P0=
 github.com/lixenwraith/toml v0.5.0 h1:2B2S7u45TSP6EUN3rLzcqbnFZeeREeS5V+OQ3jKuLJc=
 github.com/lixenwraith/toml v0.5.0/go.mod h1:itcT/Vt5mwmX9KVGCMsWZr6vbU/JgZ24wV/I0J5cMt0=
 golang.org/x/crypto v0.57.0 h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=

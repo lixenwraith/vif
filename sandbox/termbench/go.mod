@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/lixenwraith/color v0.1.5
-	github.com/lixenwraith/terminal v0.6.5
+	github.com/lixenwraith/terminal v0.6.7
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
 )

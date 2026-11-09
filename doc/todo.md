@@ -1311,18 +1311,6 @@ own, so another program renders in a browser or on Android through the same
 pipeline without wrapping vif; vif then takes them from terminal. For its own
 session.
 
-### Spare the overlay cards their per-frame titles
-
-- Priority: P3
-- Affected files: `internal/render/renderer/overlay.go`
-
-The help and telemetry overlays run with the game live, and `renderCard` builds
-each visible card's padded title string every frame, a dozen small allocations
-a frame. Keeping the titles beside the masonry items at relayout, where the
-layout is already cached, removes them. The menu and form overlays allocate
-likewise but show while `PauseForInput` holds the simulation, so they cost play
-nothing.
-
 ## Audio
 
 The audio library's own items are in [its todo](https://github.com/lixenwraith/audio/blob/main/doc/todo.md),
