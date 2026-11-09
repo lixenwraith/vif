@@ -584,7 +584,11 @@ The relative row and column gutters number only the rows and columns the
 playfield covers and mark the rest with the void color, so the chrome agrees
 with the margin it borders rather than numbering cells no motion can reach.
 
-The overlay renderer adapts help/about/telemetry content into buffer cells. The
+The overlay renderer adapts help/about/telemetry content into buffer cells. Help
+and telemetry draw with the game live and allocate nothing a frame: `tui` draws a
+box's edges as runs of cells, not a string per edge, which took fourteen telemetry
+cards in a 160×50 window from 30 allocations (3.9 KB) a frame to none and from
+149 to 122 µs; a card's title, under 32 bytes and not escaping, never allocated. The
 about window draws the lixen mark from its shape (`logoCells`): in truecolor as
 quadrant glyphs fitted to anti-aliased samples (`ascimage.FitQuadrant`), as an
 emulator in 256 colors does too, on a text console as whole blocks in the entry
