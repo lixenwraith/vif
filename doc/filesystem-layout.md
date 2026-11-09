@@ -204,15 +204,21 @@ make uninstall                                       # what install put under PR
 ```
 
 Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
-every shipped file and keeps files a player added; the keymap and `vif.toml` are
-the player's settings and are written only when absent. `CLEAN=1` first removes
-the shipped categories (`content/`, `image/`, `bot/`, and of `scenario/` its
-`base/` and the copies of shipped scenarios an install from before `base/` left
-at its top, which would shadow them) and those two files, so the root holds only
-the fresh install plus `audio/`, a player's own scenarios and anything else a
-player put beside them. `install` adds the binary, licence, manual, desktop
-entry and icons, completion and documentation under `PREFIX` with the wad at
-`$(SYSCONFDIR)/vif`.
+every shipped file and keeps files a player added. The keymap and `vif.toml` are
+the player's settings: the keymap is written only when absent, and a `vif.toml`
+already there is brought up to this build's (`tool/vif-settings`,
+`paths.UpgradeSettings`), with the player's lines, comments and values kept. A
+key this build does not take and a value it refuses go, each with its own
+comments, and each key the shipped file sets that the player's lacks comes with
+the comments the shipped file gives it (toml `Document.Fill`); a renamed key so
+starts at its default. The install names each change; it needs Go on `PATH` and
+keeps a file it cannot read as it is. `CLEAN=1` first removes the shipped
+categories (`content/`, `image/`, `bot/`, and of `scenario/` its `base/` and the
+copies of shipped scenarios an install from before `base/` left at its top, which
+would shadow them) and those two files, so the root holds only the fresh install
+plus `audio/`, a player's own scenarios and anything else a player put beside
+them. `install` adds the binary, licence, manual, desktop entry and icons,
+completion and documentation under `PREFIX` with the wad at `$(SYSCONFDIR)/vif`.
 A user who cannot write `/usr/local/bin` gets, unstaged, `PREFIX=~/.local` and the
 user root as the defaults; `sudo make install` installs system-wide, and `make
 help` prints the values in effect. `install` writes nothing until it can write
