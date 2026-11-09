@@ -43,6 +43,12 @@ unless the capture is idle, and becomes `IntentKeyPress`, its release
 and Command text, Escape and other special keys are untouched, and a reset
 releases the capture.
 
+A held key repeats. Where the keyboard reports releases (the Release item below),
+a repeat redoes a motion, text, fire or scroll but no toggle: the mute cycle,
+auto-fire, pause, the menu, help, `q`, `v` and an overlay's activate act once a
+press (`Machine.processKey`). Elsewhere a repeat is a press, so a toggle held past
+the keyboard's repeat delay flips again at its rate.
+
 A captured key is the scenario's one input hook, whatever produces it:
 
 - **Sources.** A typed key, a press of the left or right button, a finger or a

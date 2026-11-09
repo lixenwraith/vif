@@ -74,6 +74,33 @@ func TestOnlyACapturedKeyReleases(t *testing.T) {
 	}
 }
 
+// TestAToggleActsOncePerPress: a held toggle's repeats are nothing, in the mode its
+// press opened too, while the same key's repeat that types still types.
+func TestAToggleActsOncePerPress(t *testing.T) {
+	m := NewMachine()
+	key := func(k terminal.Key, r rune, action terminal.KeyAction) *Intent {
+		return m.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r, Action: action})
+	}
+
+	if in := key(terminal.KeyCtrlS, 0, terminal.KeyPress); in == nil || in.Type != IntentToggleAudioCycle {
+		t.Fatalf("Ctrl+S press = %+v, want the mute cycle", in)
+	}
+	if in := key(terminal.KeyCtrlS, 0, terminal.KeyRepeat); in != nil {
+		t.Fatalf("Ctrl+S repeat = %+v, want nothing", in)
+	}
+	if in := key(terminal.KeyRune, 'a', terminal.KeyRepeat); in != nil {
+		t.Fatalf("a repeat = %+v, want nothing", in)
+	}
+	m.SetMode(ModeOverlay)
+	if in := key(terminal.KeyCtrlG, 0, terminal.KeyRepeat); in != nil {
+		t.Fatalf("Ctrl+G repeat over the menu it opened = %+v, want nothing", in)
+	}
+	m.SetMode(ModeInsert)
+	if in := key(terminal.KeyRune, 'a', terminal.KeyRepeat); in == nil || in.Type != IntentTextChar {
+		t.Fatalf("a repeat in Insert = %+v, want the typed character", in)
+	}
+}
+
 // TestControlKeysReachAnOverlay: quit, the mute cycle and the macro stop are
 // global, so an open overlay must not swallow them.
 func TestControlKeysReachAnOverlay(t *testing.T) {

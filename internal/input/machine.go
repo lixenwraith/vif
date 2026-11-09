@@ -154,6 +154,28 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 		}
 		return nil
 	}
+	intent := m.pressKey(ev)
+	if ev.Action == terminal.KeyRepeat && intent != nil && intent.toggles() {
+		return nil // a toggle flips once a press; motion, text and fire repeat
+	}
+	return intent
+}
+
+// toggles reports an intent that flips a state each time it acts, so a held key's
+// repeats would leave it wherever the release caught it
+func (i *Intent) toggles() bool {
+	switch i.Type {
+	case IntentToggleAudioCycle, IntentToggleAutoFire, IntentPause, IntentConfigMenu, IntentHelp,
+		IntentMacroRecordToggle, IntentOverlayActivate:
+		return true
+	case IntentModeSwitch:
+		return i.ModeTarget == ModeTargetVisual
+	}
+	return false
+}
+
+// pressKey parses a key going down, or repeating, in the machine's mode
+func (m *Machine) pressKey(ev terminal.Event) *Intent {
 	switch m.mode {
 	case ModeNormal, ModeVisual, ModeInsert:
 		// A captured key outranks any pending grammar, unless its capture is idle

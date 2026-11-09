@@ -361,6 +361,10 @@ comment now states, and link that instead.
 - `-l <dir>` is `-l=<dir>`: with a space the log lands under `~/.local/state/vif/log`.
 - Xvfb, Alacritty and xdotool install in an Ubuntu container for real key and mouse
   input: `xdotool key` types, and tmux inside the window reads the screen back.
+  Alacritty 0.13 from apt also needs `libxkbcommon-x11-0` and runs under
+  `LIBGL_ALWAYS_SOFTWARE=1`; it speaks the key protocol, and Xvfb autorepeats a
+  key held by `xdotool keydown` (660 ms, then 25 Hz), so presses, repeats and
+  releases reach vif as from a desk. tmux in between drops the protocol.
   Alacritty also needs `libxkbcommon-x11-0` and `LIBGL_ALWAYS_SOFTWARE=1`, and with
   no window manager `xdotool windowfocus`, not `windowactivate`, gives it the keys.
   `ffmpeg -f x11grab` records the window to set against a probe's wall-clock lines.
