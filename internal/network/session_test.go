@@ -621,6 +621,34 @@ func TestAdmissionSpendsABudgetPerDiallingHost(t *testing.T) {
 // TestAdmissionIgnoresWhatADialerChangesFreely pins the key: the port, and an IPv6
 // address's low half, cost a dialer nothing to change, so counting them would
 // count nothing.
+// An account's dials count under its own key and burst, beside the address they
+// come from, which is given its charge back once the account is named.
+func TestAdmissionCountsAnAccountBesideItsAddress(t *testing.T) {
+	l := NewAdmissionLimiterOf(time.Minute, 1)
+	addr := &net.TCPAddr{IP: net.IPv4(198, 51, 100, 7), Port: 4000}
+	if err := l.Admit(addr); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.AdmitKeyBurst("acct:7", 2); err != nil {
+		t.Fatalf("the account's first: %v", err)
+	}
+	l.Refund(addr)
+	if err := l.Admit(addr); err != nil {
+		t.Fatalf("the address after its refund: %v", err)
+	}
+	if err := l.AdmitKeyBurst("acct:7", 2); err != nil {
+		t.Fatalf("the account's second: %v", err)
+	}
+	err := l.AdmitKeyBurst("acct:7", 2)
+	var refused *Refusal
+	if !errors.As(err, &refused) || refused.Code != RefusalBudget || !strings.Contains(refused.Reason, "this account") {
+		t.Fatalf("the account's third: %v", err)
+	}
+	if l.WaitKey("acct:7") == 0 || l.AdmitKey("") != nil || AdmissionKey(addr) != "198.51.100.7" {
+		t.Fatal("the wait, the empty key or the address's key")
+	}
+}
+
 func TestAdmissionIgnoresWhatADialerChangesFreely(t *testing.T) {
 	t.Parallel()
 	for _, hosts := range [][2]string{{"10.0.0.3", "10.0.0.3"}, {"2001:db8:1:2::a", "2001:db8:1:2:ffff::b"}} {

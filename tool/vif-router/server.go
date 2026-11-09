@@ -50,10 +50,11 @@ type apiServer struct {
 	mux       *http.ServeMux
 
 	clientHeader string
-	ticketKeys   []string        // the public keys the router's tickets verify under, current first
-	accounts     *identityClient // the identity service, forwarded to and asked; nil publishes no accounts
-	unattributed atomic.Bool     // warned once that the edge sent no address
-	creates      *network.AdmissionLimiter
+	ticketKeys   []string                  // the public keys the router's tickets verify under, current first
+	accounts     *identityClient           // the identity service, forwarded to and asked; nil publishes no accounts
+	unattributed atomic.Bool               // warned once that the edge sent no address
+	creates      *network.AdmissionLimiter // per address, and per account under its own burst
+	accountBurst int
 	list         fleetList
 }
 
@@ -100,9 +101,10 @@ func newAPIServer(allocator sessionAllocator, logger *slog.Logger, logStreamURL 
 		server.ws = &wsRouter{origin: cfg.WebOrigin, route: newTCPRouter(allocator, held, joins, logger)}
 	}
 	// A session nobody joins expires after -first-join, so this bounds how many of
-	// the fleet's unclaimed sessions one address can hold.
+	// the fleet's unclaimed sessions one address, or one account, can hold.
 	if window, err := time.ParseDuration(cfg.Workload.FirstJoin); err == nil && cfg.ClientCreates > 0 {
 		server.creates = network.NewAdmissionLimiterOf(window, cfg.ClientCreates)
+		server.accountBurst = cfg.AccountCreates
 	}
 	server.mux.HandleFunc("/healthz", server.handleHealth)
 	server.mux.HandleFunc("/readyz", server.handleReady)
@@ -211,26 +213,26 @@ func (s *apiServer) handleSessions(w http.ResponseWriter, r *http.Request) {
 				"Request body must be a JSON object naming only players, bots, log_level, scenario and size")
 			return
 		}
-		from := s.clientAddr(r)
-		if s.creates != nil && s.creates.Admit(from) != nil {
-			wait := s.creates.Wait(from)
+		key, holder := s.creator(r)
+		if err := s.admitCreate(key); err != nil {
+			wait := s.creates.WaitKey(key)
 			w.Header().Set("Retry-After", strconv.Itoa(max(1, int((wait+time.Second-1)/time.Second))))
 			writeAPIError(w, http.StatusTooManyRequests, "create_budget",
-				"This address has created as many sessions as it may for now; join one or try again later")
+				"This "+holder+" has created as many sessions as it may for now; join one or try again later")
 			return
 		}
 		created, err := s.allocator.createSession(r.Context(), request)
 		if err != nil {
-			// Charged first, so one address has one create under way; a refused one
+			// Charged first, so one creator has one create under way; a refused one
 			// started nothing and is given back, so a full fleet's retries cost none.
 			if s.creates != nil && (errors.Is(err, errRequestRefused) || errors.Is(err, errFleetFull)) {
-				s.creates.Refund(from)
+				s.creates.RefundKey(key)
 			}
 			s.writeCreateError(w, err)
 			return
 		}
 		s.forgetFleet()
-		s.log.Info("session created", "session", created.ID,
+		s.log.Info("session created", "session", created.ID, "by", holder,
 			"players", request.Players, "bots", request.Bots, "log_level", request.LogLevel,
 			"scenario", request.Scenario, "size", request.Size)
 		writeJSON(w, http.StatusCreated, created)
@@ -306,6 +308,28 @@ func aged(sessions []session, age time.Duration) []session {
 		}
 	}
 	return out
+}
+
+// creator is what a create is charged to: the account the request's sign-in names,
+// a bearer a native run sent over the site's TLS or the page's cookie, else the
+// address the edge wrote; the holder is how a refusal names it.
+func (s *apiServer) creator(r *http.Request) (key, holder string) {
+	if who := s.accounts.whose(r.Context(), signInOfRequest(r)); who != nil && s.accountBurst > 0 {
+		return "acct:" + who.ID, "account"
+	}
+	return network.AdmissionKey(s.clientAddr(r)), "address"
+}
+
+// admitCreate charges one create to key: an account under -account-creates, an
+// address under -client-creates, both within the -first-join window.
+func (s *apiServer) admitCreate(key string) error {
+	if s.creates == nil {
+		return nil
+	}
+	if strings.HasPrefix(key, "acct:") {
+		return s.creates.AdmitKeyBurst(key, s.accountBurst)
+	}
+	return s.creates.AdmitKey(key)
 }
 
 // clientAddr is the player's address as the edge wrote it, nil when no header is

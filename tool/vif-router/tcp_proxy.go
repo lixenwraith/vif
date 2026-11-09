@@ -199,6 +199,13 @@ func (r *tcpRouter) exchange(client, upstream net.Conn, at placement, from net.A
 		}
 		body := network.TicketBody{Session: at.name, Kind: network.AdmitPlay, Subject: subject, Key: ans.Keys[0].Key}
 		if who := r.accounts.whose(context.Background(), cmp.Or(ans.SignIn, signIn)); who != nil {
+			// A signed-in player's dials count against the account, not the address
+			// it shares, so the address's charge at the route frame is given back.
+			if err := r.admit.AdmitKey("acct:" + who.ID); err != nil {
+				network.RefuseJoin(client, err, routeTimeout)
+				return err
+			}
+			r.admit.Refund(from)
 			body.Subject, body.Name = "acct:"+who.ID, who.Name
 		}
 		if ans.Ticket, err = network.SignTicket(r.ticket, body, time.Now()); err != nil {

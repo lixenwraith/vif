@@ -225,6 +225,11 @@ the `vif_sign_in` cookie a page's upgrade carried, from the one origin the brows
 route answers. The ticket then names the account (`acct:<id>`) and its name, which
 the pod copies onto the roster; the token is stripped before the pod, and a token the
 service does not know, or a service that does not answer, mints an anonymous ticket.
+A sign-in also moves the budgets: a signed-in dial's join is charged to the account
+and the address's charge at the route frame given back, and a create carrying the
+sign-in (`Authorization: Bearer`, which a native run sends to an https site alone, or
+the page's cookie) is charged to the account under `-account-creates`, so a player
+behind a shared address is held to its own budget, not its neighbours'.
 
 ## Doors
 
@@ -280,5 +285,6 @@ their defaults; `vif-router -h` lists every flag.
 | `-doors-per-address` | `4` | doors one address may publish at once (0–64); 0 leaves it to `-tunnels` |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |
 | `-client-joins`, `-client-creates` | `6`, `1` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
+| `-account-creates` | `4` | sessions per signed-in account per `-first-join` window, charged in place of the address's budget; an account's joins count under the account at `-client-joins`; 0 budgets every create by address |
 | `-sessions-max` | `10` | the sessions the fleet holds at once, counted as its quota counts them, a finished one until its TTL collects it (1–64) |
 | `-ready-timeout`, `-poll-interval` | `75s`, `1s` | how long a create waits for readiness, and how often it looks |

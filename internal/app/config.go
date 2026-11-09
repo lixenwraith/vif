@@ -212,6 +212,12 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 // Normalize is Config's, noting a size it supplied (geometryDefaulted), and gives a
 // run with no place keeper one of its own, and one with no peer-link gate one that
 // its reach binds once built.
+// SignInFor is the sign-in the process keeps for target's site, read from store as a
+// run's keeper reads it, for a request made before any run is built.
+func SignInFor(store config.PlaceStore, target string) string {
+	return membership.NewSignInKeeper(store).Token(target)
+}
+
 func (c *runConfig) Normalize() {
 	if c.wiring.membership.Places == nil {
 		c.wiring.membership.Places = membership.NewPlaceKeeper(c.Membership.PlaceStore)
