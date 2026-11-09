@@ -11,8 +11,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// LightningSystem manages lightning visual effect lifecycle
-// Supports both timed (auto-despawnLightning) and tracked (manual despawnLightning) modes
+// LightningSystem keeps the transient bolts: a zap on a fixed lifetime, a tracked
+// bolt on a lease its owner renews
 type LightningSystem struct {
 	world *engine.World
 
@@ -33,7 +33,6 @@ func (s *LightningSystem) Init() {
 	s.enabled = true
 }
 
-// Name returns system's name
 func (s *LightningSystem) Name() string {
 	return "lightning"
 }
@@ -100,7 +99,6 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) {
 	e := s.world.CreateEntity(core.DomainPlayer)
 
-	// Generate seed if not provided
 	pathSeed := p.PathSeed
 	if pathSeed == 0 {
 		pathSeed = s.rng.Next()
@@ -132,7 +130,6 @@ func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) 
 }
 
 func (s *LightningSystem) updateTarget(p *event.LightningUpdateRequestPayload) {
-	// Find lightning by owner
 	lightnings := s.world.Components.Lightning
 	for _, e := range lightnings.Entities() {
 		lc, ok := lightnings.GetPtr(e)
@@ -141,11 +138,37 @@ func (s *LightningSystem) updateTarget(p *event.LightningUpdateRequestPayload) {
 		}
 		lc.TargetX = p.TargetX
 		lc.TargetY = p.TargetY
+		lc.TargetEntity = p.TargetEntity
 		if lc.Tracked {
 			armTimer(s.world, e, component.TimerLifetime, parameter.LightningTrackedLease)
 		}
 		return
 	}
+}
+
+// pushDrainBolt draws a drain's zap on its owner's instance, from one entity to
+// another, which the renderer follows; the cells are where it stays if one goes.
+// Gold, or purple while the owner's energy is below zero.
+func pushDrainBolt(w *engine.World, owner, from core.Entity, fromX, fromY int, to core.Entity) {
+	toPos, ok := w.Positions.GetPosition(to)
+	if !ok {
+		return
+	}
+	colorType := component.LightningGold
+	if energy, ok := w.Components.Energy.GetPtr(owner); ok && energy.Current < 0 {
+		colorType = component.LightningPurple
+	}
+	w.PushLocal(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
+		Owner:        owner,
+		OriginX:      fromX,
+		OriginY:      fromY,
+		TargetX:      toPos.X,
+		TargetY:      toPos.Y,
+		OriginEntity: from,
+		TargetEntity: to,
+		ColorType:    colorType,
+		Duration:     parameter.LightningZapDuration,
+	})
 }
 
 // despawnLightning removes lightning matching criteria

@@ -186,10 +186,11 @@ own footprint test for its hundreds of cells.
 | Any hit on a drain | local; drains are Player-domain |
 
 Follow-ups are derived, never transported (D-5). The tracer's impact chains into
-a lightning direct attack whose energy-drain effect spawns the zap from the
-cursor, which is why the tracer's bolt starts at the cursor and the rod's at its
-orb; a charged pulse's area hit chains one burn request per hit entity, the same
-on every instance.
+a lightning direct attack whose energy-drain effect draws the zap from the cursor
+as it lands; a charged pulse's area hit chains one burn request per hit entity,
+the same on every instance. A rod draws its bolt from its orb as it fires, and an
+arc's from the struck target, since on a guest the hit lands a playout lead later
+(D-18); the hit's drain then pays and draws nothing.
 
 ## 6. Presentation
 
@@ -202,8 +203,10 @@ ring of ripples over what it strikes, a glow under the species that carries it,
 whose hostile colour is the storm's green, or nothing when hidden. Rays are drawn straight
 from their `RayComponent`: a white core, sides in the palette where the ray widens,
 a mount's warning as its core line alone. Missiles and bullets draw hostile colours
-from their `Hostile` flag; lightning uses its colour table. Each has a 256-colour
-path.
+from their `Hostile` flag; lightning uses its colour table. A bolt's ends name
+entities, each drawn this frame where its entity is, the local cursor at its D-18
+prediction, and a spawn's cells only once the entity is gone. Each has a
+256-colour path.
 
 ## 7. Tick order
 

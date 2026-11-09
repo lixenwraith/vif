@@ -535,7 +535,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 	// Apply effects
 	if attack.EffectMask&component.CombatEffectEnergyDrain != 0 {
-		if s.applyEnergyDrain(payload.OwnerEntity, payload.HitEntity, originX, originY, hasOriginPos) {
+		if s.applyEnergyDrain(payload.OwnerEntity, payload.HitEntity, originX, originY, hasOriginPos, payload.ChainDepth > 0) {
 			s.statEffectEnergyDrain.Add(1)
 			resolved = true
 		}
@@ -829,46 +829,22 @@ func (s *CombatSystem) chainOrigin(owner core.Entity, x, y int, has bool) (int, 
 	return x, y, has
 }
 
-// The zap stays local because only the player-domain owner renders it.
-func (s *CombatSystem) applyEnergyDrain(ownerEntity, targetEntity core.Entity, originX, originY int, hasOrigin bool) bool {
-	energyComp, ok := s.world.Components.Energy.GetPtr(ownerEntity)
-	if !ok {
+// applyEnergyDrain pays the drain's reward. A chained drain's zap runs from the
+// owner to the hit, drawn on the owner's instance; a direct hit's bolt is its
+// weapon's, drawn as it fired, since on a guest the hit lands a playout lead later.
+func (s *CombatSystem) applyEnergyDrain(ownerEntity, targetEntity core.Entity, originX, originY int, hasOrigin, chained bool) bool {
+	if !s.world.Components.Energy.HasEntity(ownerEntity) {
 		return false
 	}
-	currentEnergy := energyComp.Current
-
-	// Energy reward to the draining cursor
 	s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 		Entity:     ownerEntity,
 		Delta:      parameter.LightningEnergyDrainReward,
 		Percentage: false,
 		Type:       component.EnergyDeltaReward,
 	})
-
-	if !hasOrigin || !s.world.Resources.Player.IsLocal(ownerEntity) {
-		return true
+	if chained && hasOrigin && s.world.Resources.Player.IsLocal(ownerEntity) {
+		pushDrainBolt(s.world, ownerEntity, ownerEntity, originX, originY, targetEntity)
 	}
-	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
-	if !ok {
-		return true
-	}
-
-	lightningColor := component.LightningGold
-	if currentEnergy < 0 {
-		lightningColor = component.LightningPurple
-	}
-
-	s.world.PushLocal(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
-		Owner:        ownerEntity,
-		OriginX:      originX,
-		OriginY:      originY,
-		TargetX:      targetPos.X,
-		TargetY:      targetPos.Y,
-		TargetEntity: targetEntity,
-		ColorType:    lightningColor,
-		Duration:     parameter.LightningZapDuration,
-		Tracked:      false,
-	})
 	return true
 }
 

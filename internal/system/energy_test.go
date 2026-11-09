@@ -33,7 +33,8 @@ func TestEnergyRewardKeepsPolarityUntilDrainReachesZero(t *testing.T) {
 
 // TestChainedEnergyDrainZapsBetweenOwnerAndTarget pins the geometry a tracer hit
 // produces: the chain is authored by the cursor, so the zap spans cursor to
-// species instead of collapsing onto the projectile's impact cell.
+// species instead of collapsing onto the projectile's impact cell, and names the
+// cursor, so it follows the cell the cursor is drawn at.
 func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	combat := ready(NewCombatSystem(w)).(*CombatSystem)
@@ -77,9 +78,9 @@ func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if p.OriginX != cursorPos.X || p.OriginY != cursorPos.Y || p.TargetEntity != target {
-			t.Fatalf("zap = (%d,%d)->entity %d, want cursor (%d,%d)->species %d",
-				p.OriginX, p.OriginY, p.TargetEntity, cursorPos.X, cursorPos.Y, target)
+		if p.OriginEntity != cursor || p.OriginX != cursorPos.X || p.OriginY != cursorPos.Y || p.TargetEntity != target {
+			t.Fatalf("zap = entity %d (%d,%d)->entity %d, want cursor %d (%d,%d)->species %d",
+				p.OriginEntity, p.OriginX, p.OriginY, p.TargetEntity, cursor, cursorPos.X, cursorPos.Y, target)
 		}
 		lightning := ready(NewLightningSystem(w)).(*LightningSystem)
 		lightning.HandleEvent(ev)
@@ -101,4 +102,47 @@ func TestChainedEnergyDrainZapsBetweenOwnerAndTarget(t *testing.T) {
 		return
 	}
 	t.Fatal("energy drain spawned no zap")
+}
+
+// TestARodDrawsItsBoltAsItFires: the bolt leaves from the emitter it names, which
+// the renderer follows, when the rod fires; the hit it sends lands a playout lead
+// later on a guest and pays the drain without drawing a second bolt.
+func TestARodDrawsItsBoltAsItFires(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	weapon := ready(NewWeaponSystem(w)).(*WeaponSystem)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
+	orb := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(orb, component.PositionComponent{X: 7, Y: 5})
+	target := capTarget(w, 12, 5)
+
+	weapon.fireLightning(cursor, orb, 7, 5, component.CombatAttackLightning,
+		[]TargetAssignment{{Target: target, Hit: target}}, 0)
+	var hit *event.CombatAttackDirectRequestPayload
+	bolts := 0
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		switch p := ev.Payload.(type) {
+		case *event.CombatAttackDirectRequestPayload:
+			hit = p
+		case *event.LightningSpawnRequestPayload:
+			bolts++
+			if p.OriginEntity != orb || p.TargetEntity != target {
+				t.Fatalf("bolt = entity %d->%d, want orb %d->target %d", p.OriginEntity, p.TargetEntity, orb, target)
+			}
+		}
+	}
+	if hit == nil || bolts != 1 {
+		t.Fatalf("fire pushed hit %v and %d bolts, want a hit and one bolt", hit != nil, bolts)
+	}
+
+	combat.HandleEvent(event.GameEvent{Type: event.EventCombatAttackDirectRequest, Payload: hit})
+	paid := false
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if ev.Type == event.EventLightningSpawnRequest {
+			t.Fatal("the rod's hit drew a second bolt")
+		}
+		paid = paid || ev.Type == event.EventEnergyAddRequest
+	}
+	if !paid {
+		t.Fatal("the rod's hit paid no drain")
+	}
 }

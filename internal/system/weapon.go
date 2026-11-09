@@ -869,7 +869,11 @@ func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.Wea
 			if capped {
 				arcRange = spec.ArcRange
 			}
-			fired = s.fireLightning(cursor, x, y, spec.Attack, assignments, arcRange)
+			emitter := orbs[wt]
+			if emitter == 0 {
+				emitter = cursor
+			}
+			fired = s.fireLightning(cursor, emitter, x, y, spec.Attack, assignments, arcRange)
 		case component.DeliveryMissile:
 			fired = s.fireMissiles(cursor, x, y, charges, assignments)
 		case component.DeliveryPulse:
@@ -898,8 +902,10 @@ func (s *WeaponSystem) fireLoadout(cursor core.Entity, weaponComp *component.Wea
 }
 
 // fireLightning strikes each unique assigned target from the emitter cell, and
-// arcs each hit on within arcRange; assignments repeat under overflow, a bolt does not
-func (s *WeaponSystem) fireLightning(cursor core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment, arcRange float64) bool {
+// arcs each hit on within arcRange; assignments repeat under overflow, a bolt does
+// not. The bolt is drawn as it fires, from the emitter the player sees (D-18), and
+// the hit crosses.
+func (s *WeaponSystem) fireLightning(cursor, emitter core.Entity, x, y int, attack component.CombatAttackType, assignments []TargetAssignment, arcRange float64) bool {
 	var arced []core.Entity
 	for i, a := range assignments {
 		if slices.ContainsFunc(assignments[:i], func(b TargetAssignment) bool { return b.Target == a.Target }) {
@@ -916,6 +922,7 @@ func (s *WeaponSystem) fireLightning(cursor core.Entity, x, y int, attack compon
 			OriginX:      x,
 			OriginY:      y,
 		}, a.Target.Domain())
+		pushDrainBolt(s.world, cursor, emitter, x, y, a.Hit)
 		if arcRange > 0 {
 			arced = s.arcLightning(cursor, a, assignments, arced, attack, arcRange)
 		}
@@ -960,6 +967,7 @@ func (s *WeaponSystem) arcLightning(cursor core.Entity, from TargetAssignment, a
 			OriginX:      pos.X,
 			OriginY:      pos.Y,
 		}, best.Target.Domain())
+		pushDrainBolt(s.world, cursor, from.Hit, pos.X, pos.Y, best.Hit)
 		return append(arced, best.Target)
 	}
 	return arced
