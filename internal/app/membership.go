@@ -327,6 +327,9 @@ func newJoiningApp(cfg runConfig) (*App, error) {
 func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 	offer := d.Offer()
 	cfg.Resources, cfg.wiring.networkConfig = d.Resources(), d.TransportConfig()
+	if notice := d.Notice(); notice != "" {
+		cfg.Notice = joinNotice(cfg.Notice, notice)
+	}
 	cfg, err := configForJoin(cfg, offer)
 	if err != nil {
 		d.Abandon(err)

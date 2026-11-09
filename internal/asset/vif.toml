@@ -18,6 +18,9 @@ music = ""
 scenario = ""
 content = ""
 keymap = ""
+# Where [session] save_downloads saves the scenarios sessions' hosts send.
+# Default scenario/downloads in the user root, where -s and the menu find them.
+downloads = ""
 
 [audio]
 # Mixer period and output latency, in milliseconds: a multiple of 10 from 10
@@ -74,3 +77,9 @@ pause_command = true
 # you alone. false keeps them for the run; a page keeps them for its tab either way.
 [session]
 resume_after_restart = true
+# Whether a scenario a session's host sends, because no root here holds its exact
+# bytes, is saved in [paths] downloads as <name>-<digest>: a later join reads it
+# there instead of downloading it again, and -s, :n and the menu's list offer it
+# by that name. Its contents are the host's, not yours; false keeps it for the
+# run alone. A browser saves none.
+save_downloads = false

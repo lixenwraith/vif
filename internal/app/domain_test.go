@@ -89,7 +89,7 @@ func scenarioTrees(t *testing.T) map[string]func() (map[string]any, error) {
 			return fsm.ResolveScenario(asset.MainScenario, asset.MainScenarioEntry)
 		},
 	}
-	for _, dir := range []string{"scenario/td", "scenario/blank", "scenario/simon", "scenario/vanguard", "scenario/dummy"} {
+	for _, dir := range []string{"scenario/base/td", "scenario/base/blank", "scenario/base/simon", "scenario/base/vanguard", "scenario/base/dummy"} {
 		d := filepath.Join(root, "wad", dir)
 		if _, err := os.Stat(filepath.Join(d, "scenario.toml")); err != nil {
 			continue
@@ -177,7 +177,7 @@ func TestFSMTriggersAreReplicated(t *testing.T) {
 					}
 				}
 			}
-			// wad/scenario/blank declares no transitions at all, so a per-tree floor
+			// wad/scenario/base/blank declares no transitions at all, so a per-tree floor
 			// would fail it; the suite-wide floor below is what keeps the check
 			// from passing vacuously.
 			totalChecked += checked

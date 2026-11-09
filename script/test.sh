@@ -329,7 +329,7 @@ scenario)
 	# `:n <name>` rebuilds the run, so the only honest witness is a real terminal
 	# going through it.
 	need_bin
-	[ -d wad/scenario/td ] || fail "wad/scenario/td is not in this checkout"
+	[ -d wad/scenario/base/td ] || fail "wad/scenario/base/td is not in this checkout"
 	pty_ok || { echo "SKIP scenario: no usable script(1) for a pty" >&2; exit 0; }
 	LOG=$(mktemp -d)
 	KEYS=$(keyfile "sleep 1" "printf ':n td\\r'" "sleep 3" "printf ':n main\\r'" "sleep 3" "printf ':q\\r'" "sleep 1")
@@ -350,7 +350,7 @@ follow)
 	# The guest's root is empty, so the scenario it ends on can only have come off
 	# the wire — which is the whole of what a session scenario change has to do.
 	need_bin
-	[ -d wad/scenario/blank ] || fail "wad/scenario/blank is not in this checkout"
+	[ -d wad/scenario/base/blank ] || fail "wad/scenario/base/blank is not in this checkout"
 	pty_ok || { echo "SKIP follow: no usable script(1) for a pty" >&2; exit 0; }
 	HL=$(mktemp -d); GL=$(mktemp -d); ROOT=$(mktemp -d)
 	HK=$(keyfile "sleep 7" "printf ':n blank\\r'" "sleep 12" "printf ':q\\r'" "sleep 2")
@@ -429,14 +429,14 @@ deploy)
 	chmod +x "$stub/sudo"
 	bad=$(mktemp -d)/wad
 	cp -a wad "$bad"
-	printf '\n[regions.broken]\nfile = "nope.toml"\n' >>"$bad/scenario/blank/scenario.toml"
+	printf '\n[regions.broken]\nfile = "nope.toml"\n' >>"$bad/scenario/base/blank/scenario.toml"
 	node=$(mktemp -d)/wad
 	if PATH="$stub:$PATH" VIF_WAD_ROOT=$node ./deploy/guest/update-vif-wad.sh "$bad" \
 		>"$headless/bad" 2>&1
 	then
 		fail "the installer accepted a scenario that does not load"
 	fi
-	grep -q 'scenario blank does not load' "$headless/bad" \
+	grep -q 'scenario base/blank does not load' "$headless/bad" \
 		|| fail "the refusal did not name the scenario: $headless/bad"
 	[ ! -e "$node" ] && [ ! -e "$node.new" ] || fail "a refused tree reached the node: $node"
 	rm -rf "$stub" "$(dirname "$bad")" "$(dirname "$node")"
@@ -454,7 +454,7 @@ deploy)
 	cp -a wad/scenario wad/image "$mount/"
 	pod "$headless/vif" -check -config-dir "$mount" -s td >"$headless/check" \
 		|| fail "the init container's check does not resolve through the mount"
-	grep -q "^scenario ok: $mount/scenario/td/" "$headless/check" \
+	grep -q "^scenario ok: $mount/scenario/base/td/" "$headless/check" \
 		|| fail "no scenario off the mount: $headless/check"
 	# A pod reads no corpus: glyphs are player domain and a dedicated host spawns
 	# none, so an installed content/ would be a category nothing asked for.

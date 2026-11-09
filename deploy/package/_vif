@@ -28,7 +28,7 @@ _arguments \
   '-drain[How long a termination signal waits for an empty roster; -serve only, 0 exits at once]:dur: ' \
   '(-d -config-embedded)'{-d,-config-embedded}'[Use the embedded scenario and content; refuses -s and -f and ignores vif.toml'\''s scenario and content]' \
   '-config-dir[Configuration root holding scenario/ input/ audio/ content/ image/ bot/]:dir:_files -/' \
-  '(-s -config-scenario)'{-s,-config-scenario}'[Installed scenario name, scenario.toml, or a scenario directory]:path:_files' \
+  '(-s -config-scenario)'{-s,-config-scenario}'[Installed scenario name or path below scenario/, scenario.toml, or a scenario directory]:path:_files' \
   '(-f -config-content)'{-f,-config-content}'[Content directory, or a single content file]:path:_files' \
   '(-k -config-keymap)'{-k,-config-keymap}'[Keymap TOML]:path:_files' \
   '-config-music[Music pattern override TOML]:path:_files' \

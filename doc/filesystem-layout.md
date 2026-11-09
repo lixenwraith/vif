@@ -21,11 +21,11 @@ edits are one source.
 
 ```text
 wad/                            internal/asset/
-├── scenario/   one directory    ├── scenario/  fallback scenario
-│               per scenario     ├── content/   fallback corpus
-├── content/    typing corpus    ├── input/     default keymap
-└── image/      .aimg assets     ├── bot/       shipped bot graphs
-                                 ├── font/      cell font atlas
+├── scenario/                    ├── scenario/  fallback scenario
+│   └── base/   the shipped      ├── content/   fallback corpus
+│               scenarios        ├── input/     default keymap
+├── content/    typing corpus    ├── bot/       shipped bot graphs
+└── image/      .aimg assets     ├── font/      cell font atlas
                                  ├── vif.toml   default settings
                                  ├── version.txt source-archive stamp
                                  └── splash_font.go
@@ -34,8 +34,8 @@ wad/                            internal/asset/
 The main campaign lives only in `internal/asset/scenario/`. Native, headless,
 and browser builds embed that same tree; `-s main` falls back to it when no
 external override exists. To author a variant, copy that directory into a
-configuration root as `scenario/<name>/`. A `scenario/main/` in any root takes
-precedence, a copy an earlier release installed included.
+configuration root's `scenario/` under a name of its own. A scenario named `main`
+in any root takes precedence, a copy an earlier release installed included.
 
 ## 2. Installed configuration tree
 
@@ -50,9 +50,11 @@ Unix-like targets `internal/paths` lists, not on macOS or Windows.
 ```text
 vif/
 ├── vif.toml     settings: flag defaults (§3)
-├── scenario/    named scenarios, each rooted at scenario.toml
+├── scenario/    scenarios, each rooted at scenario.toml, in groups
+│   ├── base/    the shipped ones; vanguard/behavior/ holds its programs
+│   ├── downloads/  what sessions' hosts sent, when the player saves it
 │   ├── main/    optional default override
-│   └── vanguard/behavior/  behavior programs its scenario.toml lists
+│   └── test/puzzle/tic-tac-toe/  a player's own, filed as they like
 ├── input/       keymap.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
@@ -60,11 +62,25 @@ vif/
 └── bot/         bot graphs, one <name>.toml each
 ```
 
-An optional `scenario/main/` override is the automatically discovered scenario. The other directories
-under `scenario/` are selected by name (`-s td`) or explicit path. A scenario's
-region, macro and behavior program files sit beside its `scenario.toml` or below
-it; `behavior/` is where the shipped `vanguard` keeps its raiders' programs
-([FSM reference](fsm-reference.md#behavior-programs)).
+A directory under `scenario/` holding `scenario.toml` is a scenario, and what lies
+below it is its own: its region, macro and behavior program files sit beside the
+entry or below it, as the shipped `vanguard` keeps its raiders' programs in
+`behavior/` ([FSM reference](fsm-reference.md#behavior-programs)). Any other
+directory is a group of scenarios and groups, to any depth, so a player can file
+their own as `test/puzzle/tic-tac-toe/`. A name beginning with a dot is passed
+over, and a link counts as a scenario but is not read as a group. A scenario is
+selected by name (`-s td`), by its path below `scenario/` or by an explicit path
+(§3); an optional one named `main` is the automatically discovered scenario.
+
+`downloads/` (`[paths] downloads`) holds a scenario a session's host sent when
+`[session] save_downloads` asks for it, named for it and its digest
+(`td-3f2a9c1b0e7d`): no name a host sends climbs out, hides, or takes one a
+player's own could have. A later join reads it there by digest instead of
+downloading it again, and `-s` and the menu play it by that name; a copy the
+player edits answers no join and is never written over. Saving is off by default,
+since the host, not the player, chose what it holds, and a run that cannot write
+there plays on and says why on its status line. `make install-config` creates the
+directory empty and `CLEAN=1` leaves it.
 `audio/` is empty until a user or stapes (formerly soundlab), the audio authoring
 tool, writes an override: stapes reads and writes the user root's `audio/`
 documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-stapes)).
@@ -75,9 +91,11 @@ documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-s
 
 An individual resource flag (`-s`, `-f`, `-k`, `-config-music`, or
 `-config-sounds`) is strict and always wins. `-s` first accepts an existing
-`scenario.toml` path or scenario directory; a single name such as `td` then
-resolves as `scenario/td/scenario.toml` through the roots below. Without an override, every
-resource walks the same roots in order:
+`scenario.toml` path or scenario directory; a name such as `td` then resolves
+through the roots below to the shallowest directory of that name under
+`scenario/`, the first in path order among equals, and a path below `scenario/`,
+such as `test/td`, to that one alone. Without an override, every resource walks
+the same roots in order:
 
 1. `-config-dir <root>`;
 2. the user configuration root;
@@ -93,7 +111,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 
 | Resource | Path in each root | Final fallback |
 |---|---|---|
-| Scenario | `scenario/main/scenario.toml` | embedded scenario |
+| Scenario | `scenario/**/main/scenario.toml`, as `-s main` finds it | embedded scenario |
 | Keymap | `input/keymap.toml` | embedded keymap |
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
@@ -102,8 +120,10 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |
 
 An explicit scenario directory means one whose entry is directly at
-`<directory>/scenario.toml`. A named scenario is searched under
-`scenario/<name>/` in root priority order. An explicit content file pins delivery to that file. For a wall
+`<directory>/scenario.toml`. A named scenario is searched root by root, each
+root's whole tree before the next, so a user root's `test/td` shadows a system
+root's `td`; the menu's list names a scenario its name does not reach by its path
+instead, and one a higher root holds at the same path not at all. An explicit content file pins delivery to that file. For a wall
 image, the event's path is a logical name below each root's `image/` directory,
 opened only as a regular file there; it may include nested directories but not
 `..`, and a host path, absolute or relative, is never opened, since the scenario
@@ -114,9 +134,10 @@ the built-in `main` are errors; absent discovered overrides are normal.
 Keymap, audio and bot-graph overrides remain local participant preferences and
 retain their ordinary resolution.
 
-A joiner that does not resolve the session's scenario to the same digest is served
-the coordinator's during the join and holds it in memory only; nothing is written to
-a root ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
+A joiner that does not resolve the session's scenario to the same digest, from its
+roots or its downloads, is served the coordinator's during the join and holds it in
+memory, writing it nowhere but its downloads, and there only when asked
+([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
 
 A fleet node carries a partial root. `/var/db/vif/wad` holds `scenario/` and
 `image/` and nothing else, mounted read-only at `/wad` in every session pod, so a
@@ -128,8 +149,11 @@ the join.
 
 `vif.toml` at the top of a root holds what a flag would otherwise say on every run:
 `[paths]` names another root (`root`, read as `-config-dir` is), the log,
-journal and music directories, and the scenario, content and keymap `-s`, `-f` and `-k`
-take; `[audio] buffer_ms` sets the mixer period; `[presentation] window = true` opens
+journal and music directories, the scenario, content and keymap `-s`, `-f` and `-k`
+take, and the downloads (`downloads`, default the user root's
+`scenario/downloads`); `[session]` what a run keeps of its sessions past the
+process, its places (§5) and with `save_downloads` the scenarios hosts send;
+`[audio] buffer_ms` sets the mixer period; `[presentation] window = true` opens
 the desktop window by default, as `-g` does, and `maximized` or `fullscreen` the
 state it opens in, `cell` is the zoom Android and a browser open at, and
 `tmux_frame_cap` (true) draws the terminal at most 24 frames a second inside tmux
@@ -143,7 +167,8 @@ whether the menu or the command line pauses a game that can pause (`pause_menu`,
 system roots; the first file wins whole, a key it omits keeps the embedded
 default, and the `vif.toml` inside its own `root` is not read. Every key is a default: a flag given on the command line wins, and `-d`
 still takes the embedded scenario and content. A relative path is relative to the
-file (a bare scenario name stays a name the roots resolve), `~/` is the home
+file (a scenario name, or a path below `scenario/` such as `base/td`, stays a
+name the roots resolve, as `-s` takes it; `./` makes it a path), `~/` is the home
 directory. A key this build does not know is dropped: the run reads every key it
 knows, removes each line setting another and each table another heads from the
 document it writes back to, with the comments that are theirs (a comment group
@@ -181,9 +206,11 @@ make uninstall                                       # what install put under PR
 Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
 every shipped file and keeps files a player added; the keymap and `vif.toml` are
 the player's settings and are written only when absent. `CLEAN=1` first removes
-the shipped categories (`scenario/`, `content/`, `image/`, `bot/`) and those two
-files, so the root holds only the fresh install plus `audio/` and anything else
-a player put beside them. `install` adds the binary, licence, manual, desktop
+the shipped categories (`content/`, `image/`, `bot/`, and of `scenario/` its
+`base/` and the copies of shipped scenarios an install from before `base/` left
+at its top, which would shadow them) and those two files, so the root holds only
+the fresh install plus `audio/`, a player's own scenarios and anything else a
+player put beside them. `install` adds the binary, licence, manual, desktop
 entry and icons, completion and documentation under `PREFIX` with the wad at
 `$(SYSCONFDIR)/vif`.
 A user who cannot write `/usr/local/bin` gets, unstaged, `PREFIX=~/.local` and the

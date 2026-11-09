@@ -111,7 +111,7 @@ Use the embedded scenario and content; refuses \-s and \-f and ignores vif.toml'
 Configuration root holding scenario/ input/ audio/ content/ image/ bot/
 .TP
 .B \-s, \-config\-scenario <name|path>
-Installed scenario name, scenario.toml, or a scenario directory
+Installed scenario name or path below scenario/, scenario.toml, or a scenario directory
 .TP
 .B \-f, \-config\-content <path>
 Content directory, or a single content file
@@ -245,7 +245,8 @@ Game pauses the game until Resume, as :pause (:p) or p does, restarts it from it
 scenario's first tick, as :n does, and sets its speed; in a session only the host
 can, and every participant follows at the same tick. A replay adds its restart.
 .PP
-Scenarios lists the scenarios the configuration roots hold, the running one
+Scenarios lists the scenarios the configuration roots hold, each by its name,
+or by its path below scenario/ where the name reaches another, the running one
 marked current: Enter or a press marks one, and Start starts a game of it. Other
 scenario is a text box on its row for a name or path the list does not hold. In
 a session only the host can, and its participants rejoin.
@@ -293,9 +294,15 @@ User configuration root, normally
 .TP
 .I vif.toml
 Settings at the top of a configuration root: another root, the log, journal,
-music, scenario, content and keymap paths, the audio mixer buffer, whether the
-desktop window opens and how, the zoom Android and a browser keep, and the [play]
-settings the menu writes back.
+music, scenario, content, keymap and downloads paths, the audio mixer buffer,
+whether the desktop window opens and how, the zoom Android and a browser keep, the
+[play] settings the menu writes back, and what a run keeps of its sessions.
+.TP
+.I scenario/
+Scenarios, each a directory holding scenario.toml, in groups to any depth:
+base/ holds the shipped ones, downloads/ the scenarios sessions' hosts sent
+when [session] save_downloads saves them, and a player files their own as they
+like.
 .TP
 .I bot/<name>.toml
 Bot graphs that \-bot and :bot add name; a path also works. The default

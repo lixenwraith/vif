@@ -5,7 +5,7 @@ still to lay, and the decisions it waits on. The todo item points here.
 
 ## 1. What it is
 
-A scenario, `wad/scenario/vimtutor`, that teaches vim's motions the way `:Tutor`
+A scenario, `wad/scenario/base/vimtutor`, that teaches vim's motions the way `:Tutor`
 does: one lesson at a time on a responsive map, combat off. Each lesson is laid
 out the same way, top to bottom:
 
@@ -28,7 +28,7 @@ re-laid when the state is entered again.
 
 ## 2. The first round
 
-`wad/scenario/vimtutor` runs eleven lessons and a free practice; `vif -s vimtutor`
+`wad/scenario/base/vimtutor` runs eleven lessons and a free practice; `vif -s vimtutor`
 plays it, `vif -s vimtutor -check` validates it with its corpus. What it stands on:
 
 - Two splash faces (`asset.SplashFaces`): the large one as before, and a small one

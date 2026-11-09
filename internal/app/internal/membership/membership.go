@@ -223,7 +223,7 @@ type RestartAsk struct {
 // checked against it (ValidateWith) and a session's scenario prepared on it (Prepare).
 type JoinBase interface {
 	ValidateWith(s config.Membership) error
-	Prepare(s config.Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error)
+	Prepare(s config.Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, string, error)
 }
 
 // Wiring is the session half of a run's wiring, which the membership holds

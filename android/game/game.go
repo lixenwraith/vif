@@ -91,7 +91,8 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 		v.setAway(true) // before the run reads its reports, so it never starts going
 	}
 	cfg := app.Config{Play: settings.Play, Settings: paths.SettingsFor("", file),
-		Resources:   resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap},
+		Resources: resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap,
+			Downloads: cmp.Or(p.Downloads, paths.DefaultDownloadsDir()), SaveDownloads: settings.Session.SaveDownloads},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
 	// The app's private files, where the state root was put above: the system ends
 	// a backgrounded process, and its places come back with the next.

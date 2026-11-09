@@ -604,7 +604,7 @@ func TestShippedConfigsSpawnTowersThatOwnThemselves(t *testing.T) {
 		// it inside a test-length run.
 		spawn bool
 	}{
-		{"td", "../../wad/scenario/td", false},
+		{"td", "../../wad/scenario/base/td", false},
 		{"main", soakScenarioDir, true},
 	}
 	for _, tc := range cases {

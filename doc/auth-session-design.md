@@ -702,8 +702,7 @@ Each in [the todo list](todo.md), with what it needs from here:
   a passphrase door authenticates the host a beacon names.
 
 Adjacent, and out of scope: [Fetch a content-addressed bundle over HTTP](todo.md#fetch-a-content-addressed-bundle-over-http)
-(P1), [Cache a received scenario to the user root](todo.md#cache-a-received-scenario-to-the-user-root)
-(P3), [Promote verified images to the node](todo.md#promote-verified-images-to-the-node)
+(P1), [Promote verified images to the node](todo.md#promote-verified-images-to-the-node)
 (P2) and [Sign the Android build with a release key](todo.md#sign-the-android-build-with-a-release-key)
 (P2) sign content and builds, not people; a publisher's key can reuse the Ed25519
 code here. The identity service's own open items are in its repository's todo.

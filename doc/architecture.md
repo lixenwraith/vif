@@ -247,7 +247,7 @@ imported variables, and every release precedes every acquisition. Delayed work i
 restored by a deterministic compiled-action identity rather than a queue index.
 
 The embedded scenario runs foreground gameplay regions alongside a background
-monitor. Alternate scenarios live under `wad/scenario/`.
+monitor. Alternate scenarios live under `wad/scenario/base/`.
 
 Species conduct is the level below. The swarm, the quasar and the storm circles
 step a per-entity state machine (`pkg/machine`) their component carries as plain

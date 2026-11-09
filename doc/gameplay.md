@@ -570,7 +570,7 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    roster is rearmed. Every shipped scenario uses this defeat rule; tower defense
    also retains its objective-failure and victory conditions.
 
-`wad/scenario/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
+`wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
 scaffold, `simon` is a memory game, `dummy` is a weapon range, `vimtutor` teaches
 the motions a lesson at a time, and `vanguard` is a side-scroller whose raiders are
 species its own behavior programs define. Each entry has a short `description` for
@@ -735,7 +735,7 @@ Each entry declares a domain profile and its dependencies in
 | Environment effects | `internal/system/environment.go`, `internal/parameter/environment.go`, `internal/profile/mass.go` |
 | System behavior | Matching files in `internal/system` |
 | Main campaign | `internal/asset/scenario/*.toml` |
-| External scenarios | `wad/scenario/*` |
+| External scenarios | `wad/scenario/base/*` |
 
 Changing a number in `parameter` changes a mechanic; changing a transition in
 TOML changes when that mechanic is invoked. Keep that distinction intact when

@@ -27,7 +27,7 @@ complete -c vif -o empty -x -d 'Exit this long after the last guest leaves; -ser
 complete -c vif -o drain -x -d 'How long a termination signal waits for an empty roster; -serve only, 0 exits at once'
 complete -c vif -o d -o config-embedded -d 'Use the embedded scenario and content; refuses -s and -f and ignores vif.toml\'s scenario and content'
 complete -c vif -o config-dir -x -a '(__fish_complete_directories)' -d 'Configuration root holding scenario/ input/ audio/ content/ image/ bot/'
-complete -c vif -o s -o config-scenario -r -F -d 'Installed scenario name, scenario.toml, or a scenario directory'
+complete -c vif -o s -o config-scenario -r -F -d 'Installed scenario name or path below scenario/, scenario.toml, or a scenario directory'
 complete -c vif -o f -o config-content -r -F -d 'Content directory, or a single content file'
 complete -c vif -o k -o config-keymap -r -F -d 'Keymap TOML'
 complete -c vif -o config-music -r -F -d 'Music pattern override TOML'

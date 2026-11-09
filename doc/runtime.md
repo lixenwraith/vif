@@ -162,7 +162,7 @@ First rather than smallest, and the difference is the mid-run gate: guests arriv
 throughout the run, so sizing from the smallest would mean shrinking the map under
 participants already playing on it, which D-14 forbids for the same reason a
 terminal may not crop a shared map. An explicit `-size` still wins, and a scenario
-that fixes its own bounds (`crop_on_resize = false`, as `wad/scenario/td` does) is left
+that fixes its own bounds (`crop_on_resize = false`, as `wad/scenario/base/td` does) is left
 alone: those bounds are the scenario's statement rather than a stand-in for a
 terminal nobody has.
 

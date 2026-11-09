@@ -5,9 +5,9 @@
 Entry config search order:
 
 1. `-s <path-or-name>`, or `[paths] scenario` in `vif.toml` — file, directory
-   containing `scenario.toml`, or a name resolved as `scenario/<name>/scenario.toml`
-   under the configured roots;
-2. `scenario/main/scenario.toml` under `-config-dir <root>`;
+   containing `scenario.toml`, or a name, at any depth below `scenario/`, or a
+   path below it, resolved under the configured roots;
+2. a scenario named `main` under `-config-dir <root>`;
 3. the same under the user root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
    `/usr/local/etc/vif` and `/etc/vif`;
@@ -21,32 +21,35 @@ graph is written in this dialect with its own actions and guards
 ([Bots](bots.md#writing-a-graph)).
 
 The embedded main campaign is the only shipped source of `main`; `-s main`
-falls back to it. A `scenario/main/` directory is an optional user override.
+falls back to it. A scenario named `main` in a root is an optional user override.
 
 Region `file`, `macro_files` and behavior program `file` references resolve
 relative to the entry config's directory and cannot climb out of it. A region file
 holds only `[states]`, and a state defined twice across files fails the load. A
 scenario is at most 64 `.toml` files, 256 KiB each and 1 MiB in all. A joiner
 plays the coordinator's exact bytes: its own copy when the digests match, else the
-coordinator's, sent under the same bounds and held in memory. Installed layout:
+coordinator's, sent under the same bounds, held in memory and saved in its
+`downloads/` when `[session] save_downloads` asks. Installed layout:
 
 ```text
 ~/.config/vif/
 ├── scenario/
-│   ├── main/              # optional override: a copy of internal/asset/scenario/
-│   ├── blank/scenario.toml
-│   ├── simon/scenario.toml
-│   ├── vimtutor/
-│   │   ├── scenario.toml
-│   │   └── lessons.toml   # the corpus the scenario carries
-│   ├── td/
-│   │   ├── scenario.toml
-│   │   ├── td_macros.toml # macro library
-│   │   └── td_*.toml      # region files
-│   └── vanguard/
-│       ├── scenario.toml
-│       ├── macros.toml
-│       └── behavior/strata/scarab.toml  # a behavior program, one per raider type
+│   ├── main/                  # optional override: a copy of internal/asset/scenario/
+│   ├── downloads/             # what sessions' hosts sent, as td-3f2a9c1b0e7d/
+│   └── base/                  # the shipped scenarios
+│       ├── blank/scenario.toml
+│       ├── simon/scenario.toml
+│       ├── vimtutor/
+│       │   ├── scenario.toml
+│       │   └── lessons.toml   # the corpus the scenario carries
+│       ├── td/
+│       │   ├── scenario.toml
+│       │   ├── td_macros.toml # macro library
+│       │   └── td_*.toml      # region files
+│       └── vanguard/
+│           ├── scenario.toml
+│           ├── macros.toml
+│           └── behavior/strata/scarab.toml  # a behavior program, one per raider type
 └── input/
     └── keymap.toml
 ```
@@ -124,7 +127,7 @@ TdGwTL = { macro = "Gateway", group = 3, count = "l_p1n", next = "TdP1TR" }
 ```
 
 Types, defaults, splicing into arrays, `each` and the rules are in
-[TOML macros](toml-macros.md); `wad/scenario/td/td_macros.toml` is a full library.
+[TOML macros](toml-macros.md); `wad/scenario/base/td/td_macros.toml` is a full library.
 
 ---
 
@@ -471,7 +474,7 @@ Scripts read the status registry and never write it. `StatusToVar` marks where a
 count starts, and `StatusIntCompare` with `since = "storm_mark"` compares the value
 minus that mark, so a scenario counts kills since its own escalation while
 `kills.*` keeps the game's totals. The mark can be any variable: the solo
-`wad/scenario/dummy` finds its cursor inside a box by comparing `player.0.x` and
+`wad/scenario/base/dummy` finds its cursor inside a box by comparing `player.0.x` and
 `player.0.y` with the box's edges, variables its layout sets from the map's size
 (its `CursorIn` macro).
 
@@ -522,7 +525,7 @@ owner-authored ones (energy, heat, boost, shield, weapon; D-13) act only on a cu
 this instance owns, the rest (move, ping, typing, gold jump, tower) on any live one.
 A captured entity names the first cursor on every instance, so to set each
 participant's own heat, energy and ember emit `EventCursorArmRequest { heat, energy,
-ember }`, which acts on the cursor this instance drives, as `wad/scenario/simon` does.
+ember }`, which acts on the cursor this instance drives, as `wad/scenario/base/simon` does.
 
 ---
 
@@ -730,7 +733,7 @@ release, so a machine judges a press and never plays its tone.
 in the row, counted from 1, with its sound; a spawn on a key that already has a
 button is refused. A button shows its key in the splash font once it is about ten
 cells square, so a scenario sets a `[map]` floor that leaves room for its row.
-`wad/scenario/simon` is the worked example.
+`wad/scenario/base/simon` is the worked example.
 
 ### Splash text and glyph lines
 
@@ -759,7 +762,7 @@ lesson leaves no dust behind: dust-all turns text into dust that orbits the curs
 and hides what is laid next. The glyph system lays and clears whether or not it is
 enabled, so a scenario that wants no corpus text disables the system and lays its
 own. All three are player-domain presentation each instance makes for itself, as a
-status message is. `wad/scenario/vimtutor` is the worked example.
+status message is. `wad/scenario/base/vimtutor` is the worked example.
 
 ### PayloadSpeciesIn
 
@@ -919,7 +922,7 @@ no program of the scenario fails the load where it is authored, and one arriving
 otherwise raises nothing (`behavior.unknown_program_rejects`), nor one finding no
 room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
 removes instances and the materializes still bringing them, every program's when
-it names none. `wad/scenario/vanguard` is the worked example: its raider types,
+it names none. `wad/scenario/base/vanguard` is the worked example: its raider types,
 materializing in, fly one attack cycle, a chase, a lock, then a charge or a
 teleport, as thirty-two programs over one macro (`RaiderStates` in its
 `macros.toml`). Each program file is one invocation of its rank's macro

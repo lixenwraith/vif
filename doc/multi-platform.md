@@ -399,7 +399,9 @@ the session's digest, the coordinator serves it during the join, between the off
 and the reply: the canonical `resource.Scenario` container (at most 64 files, 256 KiB a
 file, 1 MiB in all), deflated, verified against the digest and held in memory for
 the run ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
-A browser guest takes it the same way. Content never travels on the
+A browser guest takes it the same way and holds it for the run alone: a page has
+no downloads to save it in ([todo](todo.md#manage-the-downloads-from-the-menu-and-the-command-line)).
+Content never travels on the
 tick/correction channel, where it would couple simulation latency, frame bounds and
 content size.
 

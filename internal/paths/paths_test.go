@@ -76,7 +76,7 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 		}
 	}
 	write(system, "[audio]\nbuffer_ms = 100\n")
-	write(user, "[paths]\nlog = \"logs\"\nscenario = \"td\"\nkeymap = \"~/k.toml\"\n")
+	write(user, "[paths]\nlog = \"logs\"\nscenario = \"base/td\"\nkeymap = \"~/k.toml\"\n")
 
 	s, path, err := LoadSettings("")
 	if err != nil {
@@ -86,7 +86,7 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 	for _, c := range []struct{ name, got, want string }{
 		{"file", path, filepath.Join(userRoot, SettingsFile)},
 		{"log", s.Paths.Log, filepath.Join(userRoot, "logs")},
-		{"scenario", s.Paths.Scenario, "td"},
+		{"scenario", s.Paths.Scenario, "base/td"},
 		{"keymap", s.Paths.Keymap, filepath.Join(home, "k.toml")},
 		{"journal", s.Paths.Journal, ""},
 	} {

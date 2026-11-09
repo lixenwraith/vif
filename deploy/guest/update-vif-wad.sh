@@ -47,16 +47,19 @@ note() { echo "== $*"; }
 cleanup() { [ -z "$layout" ] || rm -rf "$layout"; }
 trap cleanup EXIT INT TERM
 
+# The scenarios below a scenario/ directory, by their paths there, as the game
+# walks it: a directory holding scenario.toml is one, any other a group.
+scenarios_in() {
+	find "$1" -mindepth 1 -name '.*' -prune -o \
+		-type d -exec test -f '{}/scenario.toml' ';' -printf '%P\n' -prune | sort
+}
+
 for name in $categories; do
 	[ -d "$source_wad/$name" ] || die "$source_wad has no $name/ directory"
 done
 
-scenarios=$(find "$source_wad/scenario" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+scenarios=$(scenarios_in "$source_wad/scenario")
 [ -n "$scenarios" ] || die "$source_wad/scenario holds no scenarios"
-for name in $scenarios; do
-	[ -r "$source_wad/scenario/$name/scenario.toml" ] \
-		|| die "scenario/$name has no scenario.toml"
-done
 note "scenarios found: $(echo "$scenarios" | tr '\n' ' ')"
 
 # Built here rather than run from a container: the node keeps Docker stopped
@@ -102,6 +105,6 @@ fi
 sudo mv "$staging" "$wad_root"
 
 note "installed:"
-sudo find "$wad_root/scenario" -mindepth 2 -maxdepth 2 -name scenario.toml -printf '  %h\n' | sort
+scenarios_in "$wad_root/scenario" | sed "s|^|  $wad_root/scenario/|"
 [ -d "$previous" ] && echo "  (previous tree retained at $previous)"
 echo "done. Sessions already running keep the scenarios they started on."

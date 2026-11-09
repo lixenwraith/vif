@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -44,8 +45,13 @@ type Options struct {
 	// Provided is a scenario already in hand rather than one to find: the bytes a
 	// session coordinator sent because no root here held them. It wins over every
 	// other selector, since a run holding one has already agreed to simulate
-	// exactly those bytes, and it is never written to disk.
+	// exactly those bytes.
 	Provided *Scenario
+
+	// Downloads is where scenarios sessions' hosts sent are found by digest, empty
+	// for nowhere; SaveDownloads saves there one this run is sent.
+	Downloads     string
+	SaveDownloads bool
 }
 
 // Validate reports conflicts between the overrides themselves.
@@ -95,7 +101,7 @@ func ScenarioPath(o Options) (string, error) {
 		switch {
 		case !errors.Is(err, os.ErrNotExist):
 			return "", fmt.Errorf("scenario %q: %w", o.Scenario, err)
-		case !isScenarioName(o.Scenario):
+		case !paths.IsScenarioName(o.Scenario):
 			return "", fmt.Errorf("scenario %q not found", o.Scenario)
 		}
 		if p := newResolver(o).scenario(o.Scenario); p != "" {
@@ -112,35 +118,30 @@ func ScenarioPath(o Options) (string, error) {
 }
 
 // Scenarios names every scenario a run with these options starts by name: the main
-// one, which the embedded copy answers for when no root holds it, then each
-// scenario/<name>/scenario.toml under the roots, sorted; a lower root never hides one.
+// one, which the embedded copy answers for when no root holds it, then every one the
+// roots' scenario/ trees hold, sorted. Each goes by its directory's name, or by its
+// path below scenario/ where that name reaches another first; one a higher root
+// holds at the same path is not named, since no name reaches it.
 func Scenarios(o Options) []string {
 	names := []string{paths.MainScenarioName}
 	if o.Embedded {
 		return names
 	}
+	seen := map[string]bool{}
 	for _, root := range newResolver(o).roots {
-		entries, err := os.ReadDir(filepath.Join(root, paths.ScenarioDirName))
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			name := e.Name()
-			if e.IsDir() && !slices.Contains(names, name) &&
-				fileExists(filepath.Join(root, paths.ScenarioDirName, name, paths.ScenarioFile)) {
+		paths.WalkScenarios(root, func(rel, _ string) bool {
+			switch name := path.Base(rel); {
+			case !seen[name] && name != paths.MainScenarioName:
 				names = append(names, name)
+			case seen[name] && !seen[rel]:
+				names = append(names, rel)
 			}
-		}
+			seen[path.Base(rel)], seen[rel] = true, true
+			return true
+		})
 	}
 	slices.Sort(names[1:])
 	return names
-}
-
-// isScenarioName distinguishes the installed shorthand from an explicit path.
-// A path always wins when it exists; only a single clean path element falls
-// back to scenario/<name>/scenario.toml under the configured roots.
-func isScenarioName(name string) bool {
-	return name != "." && name != ".." && filepath.Base(name) == name
 }
 
 // Keymap returns the external keymap path. An empty path selects the embedded
@@ -158,7 +159,7 @@ func BotGraph(o Options, spec string) ([]byte, string, error) {
 		data, err := os.ReadFile(spec)
 		return data, strings.TrimSuffix(filepath.Base(spec), ".toml"), err
 	}
-	if spec == "" || !isScenarioName(spec) && paths.ExternalFiles() {
+	if spec == "" || (!paths.IsScenarioName(spec) || filepath.Base(spec) != spec) && paths.ExternalFiles() {
 		return nil, "", fmt.Errorf("bot graph %q not found", spec)
 	}
 	file := spec + ".toml"
@@ -233,8 +234,29 @@ func Audio(o Options) (service.AudioSource, error) {
 	return service.AudioSource{MusicPath: music, SoundPath: sounds}, nil
 }
 
+// scenario finds name below each root's scenario/ in turn: a path exactly, a bare
+// name as the first directory of that name WalkScenarios reaches.
 func (r resolver) scenario(name string) string {
-	return paths.FindFile(r.roots, filepath.Join(paths.ScenarioDirName, name), paths.ScenarioFile)
+	bare := filepath.Base(name) == name
+	for _, root := range r.roots {
+		found := filepath.Join(root, paths.ScenarioDirName, name, paths.ScenarioFile)
+		if fileExists(found) {
+			return found
+		}
+		found = ""
+		if bare {
+			paths.WalkScenarios(root, func(rel, dir string) bool {
+				if path.Base(rel) == name {
+					found = filepath.Join(dir, paths.ScenarioFile)
+				}
+				return found == ""
+			})
+		}
+		if found != "" {
+			return found
+		}
+	}
+	return ""
 }
 
 func (r resolver) dir(category string) string {
