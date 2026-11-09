@@ -357,6 +357,5 @@ own instance logs under `instance` `seat N`; a watched or headless bot logs
 - [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots)
 - [Expose a bot difficulty knob](todo.md#expose-a-bot-difficulty-knob)
 - [Let a watched holder pause with only its own bots](todo.md#let-a-watched-holder-pause-with-only-its-own-bots)
-- [Name participants beyond their slot](todo.md#name-participants-beyond-their-slot)
 - [Train bot graphs offline](todo.md#train-bot-graphs-offline)
 - [Adapt bots to the session's players](todo.md#adapt-bots-to-the-sessions-players)

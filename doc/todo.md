@@ -163,16 +163,6 @@ ignores pause keys. A person's run pauses with only its own bots; the viewer's p
 key could start the session hold `:pause` starts when the holder is its session's
 host, which already stops its seats at one tick.
 
-### Name participants beyond their slot
-
-- Priority: P3
-- Affected files: `internal/network/session.go`, `internal/snapshot`,
-  `internal/render/renderer`
-
-A hexadecimal slot identifies a cursor for one session, and participants have no
-names. A label needs a roster and join-reply field, a capture schema change to
-reach late joiners, and a trust decision, since each peer would choose its own.
-
 ### Train bot graphs offline
 
 - Priority: P3
@@ -305,19 +295,6 @@ and macros, `d` with a motion, `v`, lays a lesson again on a resize, centres fro
 the map's edge, and cues a lesson cleared.
 
 ## Browser sessions
-
-### Budget a fleet pod's joins per player
-
-- Priority: P3
-- Affected files: `internal/network/session.go` (`AdmissionLimiter`),
-  `tool/vif-router`
-
-A pod sees every player the router splices at the node's address, so its own
-budget of 6 joins a minute is one per session rather than one per player: a
-seventh join into one session within a minute is refused, whoever makes it,
-though the router has already budgeted each player. Close it when a session
-that busy appears, by exempting the node's address at the pod or by having the
-router name the player to it.
 
 ### Fetch a content-addressed bundle over HTTP
 
@@ -665,16 +642,16 @@ A run publishes its `-relay` door through the router's reverse tunnel and is
 reached at the site; a host's door published the same way is a player's own session
 reached there, the router neither allocating nor authoring. The deployment this
 leads to serves as many pods as the node has resources for (`-sessions-max`, ten
-today) and routes every session beyond them, with accounting and authentication
-added in the auth design's phase 6
-([Auth and session design §7.6](auth-session-design.md#76-phases)). The tunnel
-carries a door already, and the foundation
-stands: a name is resumed only by the run it was issued to, within
+today) and routes every session beyond them. The tunnel carries a door already, and
+the foundation stands: a name is resumed only by the run it was issued to, within
 `NetworkTunnelResumeWindow`, so no published name shadows a pod's; one address
 holds at most `-doors-per-address` doors; every connection placed is accounted for
 as it closes (`session route closed`: session, door or pod, bytes each way,
 seconds); and the listing's `limits` carry `sessions_max`, `doors` and `doors_max`,
 so the site can say when the fleet is full and offer a hosted session instead.
+Joins and creates are budgeted by account where a sign-in names one; a publication
+is budgeted by address alone, and its `Resume` token is the last bearer secret on
+the wire ([Auth and session design §2](auth-session-design.md#2-what-authenticates)).
 
 What the feature itself needs, best shaped by deploying it step by step:
 - `-host vif://<site>:7777` opening the door through the router rather than binding
@@ -684,10 +661,16 @@ What the feature itself needs, best shaped by deploying it step by step:
 - The session's row in `/vif/api/sessions`, with a `kind` beside the pods', its
   lifetime (the control connection's, plus the resume window), and the create
   budget charged to the publisher's address as a pod's is.
-- A publish ticket in the publish frame (`PublishRequest` is JSON, so a field is
-  added without a protocol change), the run's key in place of the bearer `Resume`
-  token, and accounting keyed by the account rather than the address, over the
-  per-connection lines above ([Auth and session design §8](auth-session-design.md#8-what-it-asks-of-vif-router-and-the-deployment)).
+- The publish ticket: the publish frame carries the run's key and, over TLS, its
+  sign-in (`PublishRequest` is JSON, so a field is added without a protocol change);
+  the router asks which account the sign-in names and refuses a publication by none
+  (D12: publishing a door takes an account), budgets doors by account beside
+  `-doors-per-address`, and a resume signs the router's nonce with the run's key in
+  place of presenting the bearer `Resume` token, so no bearer secret is left on the
+  wire ([Auth and session design §3.6](auth-session-design.md#36-admission-tickets-and-accounts),
+  [§3.7](auth-session-design.md#37-budgets)). Implication: a `-relay` or hosted
+  publication needs `:login` first; an anonymous run still joins through a published
+  door.
 - The front door's `-tunnels` ceiling split between relay doors and hosted
   sessions, or one budget for both, decided from how the first deployments fill.
 - A page as the publisher. `DoorTunnel` dials through `link.Dial`, which speaks
@@ -739,7 +722,8 @@ redesign rather than a domain-boundary fix.
 Build it once the join refactor lands and its join matrix passes. Android opens on
 a start screen with one choice, "Tap to start", a solo run; the site is reached only
 from inside the run, through the menu's Multiplayer page (join a link, or request a
-session from `https://lixen.com`, its default). Put a second choice beside the tap:
+session from `https://lixen.com`, its default; `:register` and `:login` keep a
+sign-in in the app's files, which a request to the site sends). Put a second choice beside the tap:
 host a game at the site, as that request does, and/or join one of the running games
 the site lists (`GET /vif/api/sessions`), so `game.Start` takes a join target. The
 page needs nothing: the site's lobby (`/vif/lobby/`) is its choice, and its Play
@@ -831,6 +815,16 @@ target's. What is new:
 - Capacity: spectators cost the authority a link and its corrections each, so a
   `-spectators N` ceiling, reported in the router's listing; relay doors can fan
   them out ([Multi-player §5.6](multi-player.md#56-relay-doors-and-the-router)).
+- Admission, as the auth design left it: `AdmissionKind` already names `watch`
+  beside `play`, on the wire by name, so a ticket's and a pass's kind tells a
+  spectator from a player at every door, the router mints a `watch` ticket for a
+  dial that asks (an `AuthRequest` field, the same frames), `TicketGate` admits the
+  kind the door allows, and the pass a spectator is issued spares its redials the
+  gate as a player's does; the keep-out list, the budgets by address and account,
+  and the roster entry's `Account` and `Name` apply unchanged, and a dropped
+  spectator is kept out as a player is
+  ([Auth and session design §3.1](auth-session-design.md#31-primitives),
+  [§3.4](auth-session-design.md#34-session-passes)).
 
 A spectator sees the shared world, what any remote participant sees, centred on
 the target: Player-domain state is never rebuilt on another instance (D-2), so the
@@ -916,24 +910,27 @@ removing one; `:merge`/`:split` for whole sessions.
 
 ### A passphrase prompt in the TUI and the launcher
 
-- Priority: P3, in a session of its own once the auth design's phases are done
+- Priority: P3, in a session of its own
 - Affected files: `internal/mode`, `internal/app/loop.go`, `web/terminal.js`,
   `web/index.html`
-- Guide: [Auth and session design §7.4](auth-session-design.md#74-passphrase-doors)
+- Guide: [Auth and session design §3.5](auth-session-design.md#35-passphrase-doors),
+  [§3.6](auth-session-design.md#36-admission-tickets-and-accounts)
 
 A dial that meets a passphrase door with none is refused with the advice to join
 with one, and a player retries with `:join <target> <passphrase>`: the refusal is
 the prompt. A prompt proper would ask in place, in the command line's form on a
 terminal and in the launcher's join row on a page, and dial again with the answer;
-the same form later takes a sign-in (§7.5).
+the same form takes `:login`'s name and password, which today ride the command
+line and so the terminal's history. Implication: the account commands become
+usable on a page, where a password on the command line is not.
 
 ### Tighten what a relay and a successor are trusted with
 
-- Priority: P2, in a session of its own, and not before the auth design's phases
-  (§7.6) are all landed: each adds to what is trusted, and the audit is of the whole
+- Priority: P2, in a session of its own; every mechanism it audits is in place
 - Affected files: `internal/network`, `internal/app/internal/membership`,
   `internal/converge`, `tool/vif-router`
-- Guide: [Auth and session design §7.4](auth-session-design.md#74-passphrase-doors),
+- Guide: [Auth and session design §3.4](auth-session-design.md#34-session-passes),
+  [§3.5](auth-session-design.md#35-passphrase-doors),
   [Multiplayer §5](multi-player.md#5-membership-topology-and-authority-continuity)
 
 The premise: a participant, once admitted, is trusted with the session. A relay
@@ -948,18 +945,81 @@ a successor's record carrying no more than the roster lets it, the verifier's re
 which needs a limit, and which is accepted as the price of play without a server; then
 plug the holes found, one PR each.
 
-### Let an authority drop a participant
+### Drop a participant and drain from the router
 
 - Priority: P3
-- Affected files: `tool/vif-router`
-- Guide: [Auth and session design §7.3](auth-session-design.md#73-session-passes)
+- Affected files: `tool/vif-router` (a loopback listener, `allocator.go`),
+  `internal/app/internal/membership/host.go`, the pod's `/health` neighbour,
+  `deploy/guest/vif-router.env`, `deploy/update.sh`
+- Guide: [Auth and session design D16](auth-session-design.md#0-decisions),
+  [§3.4](auth-session-design.md#34-session-passes),
+  [Session fleet §9](kubernetes-fleet.md#9-the-session-routes)
 
 `:player drop <slot>` drops a player with its bots, or one bot, keeps the dropped
-keys out of the session at every door and tells the dropped person, who plays on
-alone as after `:leave`. What remains is an operator route on the router, since a
-dedicated host has no console, which the design's phase 6 brings with the rest of
-the operator's loopback routes; a dropped *person* who signed in is kept out by the
-account its ticket names, past the keys it held, an anonymous one by its keys alone.
+keys and account out of the session at every door and tells the dropped person, who
+plays on alone as after `:leave`; a dedicated host has no console to type it on. The
+operator's authority is a loopback listener of the router's (`-operator-listen`),
+reached over ssh and nothing else: the sessions with their participants by slot and
+subject; a drop of one by slot, key or account, carried to the pod on an operator
+port the network policy admits from the node alone, where the pod runs the drop
+its console would; and a drain that stops creates, lets the sessions end and
+reports when the fleet is empty, which `update.sh`'s empty-fleet gate reads
+instead of polling the listing. Implication: no operator account exists, so the
+listener binds loopback and takes no credential; its routes are not under
+`/vif/api/` and the edge never publishes them.
+
+### Name a fleet session's creator to its pod
+
+- Priority: P3
+- Affected files: `tool/vif-router/server.go`, `tcp_proxy.go`,
+  `internal/network/admission.go` (`AdmitCreate`), `internal/app/internal/membership`
+- Guide: [Auth and session design D12, D16](auth-session-design.md#0-decisions),
+  [§3.6](auth-session-design.md#36-admission-tickets-and-accounts)
+
+A fleet session is created by whoever posts to `/vif/api/sessions`, and the pod
+knows nothing of them: on a dedicated host nobody may `:player drop`. The create
+ticket: when an account creates a session, the router mints a ticket of kind
+`create` naming the account and hands it out with the link; the creator's first
+dial shows it beside its play ticket, the pod records the account as the session's
+owner on the roster entry, and the owner may drop a participant, as a host's console
+can, and nothing more. An anonymous create names no owner, and the operator's
+route (above) stays the only other authority. Open: whether an owner's right
+outlives its own departure, and whether a later `:login` can claim an unowned
+session.
+
+### Take the auth readings
+
+- Priority: P2
+- Affected files: `tool/vif-router/tcp_proxy.go` (`splice`, `stallBounded`),
+  `script/`, `doc/auth-session-design.md` §8
+- Guide: [Auth and session design §4](auth-session-design.md#8-ten-thousand-routed-players-on-one-machine),
+  [D10](auth-session-design.md#0-decisions)
+
+What the design projects and has not measured: the router holding 10,000
+connections through a stand-in door on a second process, its RSS and CPU before
+and after moving the splice's stall deadline off the writer so TCP-to-TCP copies
+take the kernel's `splice(2)` path, the admission exchange's cost per connection,
+and `-route-max` and `routePlacing` tuned from them; the passphrase door's Argon2
+(64 MiB, three passes, one lane) timed on a page and a phone, since a dial pays it
+once a join; the Android binary's growth from `lixenwraith/auth`, which the native
+and wasm readings put under one percent. The identity service's own readings (RSS at
+10,000 verifiers, the launch-day introspection rate) are its repository's todo.
+Implication: the budget in §8 stands as a projection until these are in; a reading
+that misses it changes `-route-max`, `MemoryMax` or the splice before anything else.
+
+### Refresh the architecture and development documents
+
+- Priority: P2
+- Affected files: `doc/architecture.md`, `doc/development.md`
+
+Both were last read whole before the netcode, kinetics, audio and menu work; the
+session layer's parts were brought current with the auth design. The rest wants a
+pass against the code: the containers and control flow in `architecture.md` §2 to
+§11 against `package-map.md`, and in `development.md` the build workflow, the
+generated code, the CLI tables against `cmd/vif/usage.go`, the validation sweep
+against `Makefile` and `script/test.sh`, the platform matrix and the source map.
+Implication: a newcomer reads these two first, so a stale claim there costs more
+than one in a reference document.
 
 ### Keep a Wraith's stats in the session
 

@@ -969,7 +969,7 @@ What the operator surface does not cover:
   self-signed door encrypts and names nobody: a native join takes it as it is, open
   to a man in the middle unless `-ca` pins it or a passphrase bound to that
   certificate authenticates both ends
-  ([Auth and session design §7.4](auth-session-design.md#74-passphrase-doors));
+  ([Auth and session design §3.5](auth-session-design.md#35-passphrase-doors));
 - host loss hands the term down the succession list (§8), and every survivor
   that reaches no candidate, or every survivor when the session pinned its
   authority, goes on apart: a person's run in a session of its own that keeps every

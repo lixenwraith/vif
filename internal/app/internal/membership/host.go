@@ -118,7 +118,9 @@ func (m *Membership) gatedLocked() bool {
 }
 
 // ticketHook is the door's check of the site's ticket, for a host whose doors take
-// them (-admit ticket); nil for doors that take none.
+// them (-admit ticket); nil for doors that take none. Every dial reaches such a
+// host from the router's address, so the join budget is charged to the player the
+// ticket names, the address or account the router budgeted, and not to the address.
 func (m *Membership) ticketHook() func(*network.Signed, []string) (*network.TicketBody, error) {
 	if len(m.cfg.TicketKeys) == 0 {
 		return nil
@@ -128,7 +130,26 @@ func (m *Membership) ticketHook() func(*network.Signed, []string) (*network.Tick
 	if m.tickets == nil {
 		m.tickets = &network.TicketGate{Keys: m.cfg.TicketKeys, Session: m.cfg.SessionName}
 	}
-	return m.tickets.Admit
+	return func(shown *network.Signed, keys []string) (*network.TicketBody, error) {
+		body, err := m.tickets.Admit(shown, keys)
+		if err != nil {
+			return nil, err
+		}
+		if err := m.admissions.AdmitKey(body.Subject); err != nil {
+			return nil, err
+		}
+		return body, nil
+	}
+}
+
+// joinBudget is what a dial spends before anything is allocated for it: the
+// dialer's address, or nothing at a door that takes tickets, which charges the
+// ticket's subject instead once the dial shows one.
+func (m *Membership) joinBudget() func(net.Addr) error {
+	if len(m.cfg.TicketKeys) != 0 {
+		return nil
+	}
+	return m.admissions.Admit
 }
 
 // doorVerifierLocked is the verifier an offer of this run's carries, the session's

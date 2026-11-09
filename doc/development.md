@@ -17,6 +17,7 @@ The modules it requires:
 | `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing. |
 | `github.com/lixenwraith/log` | Asynchronous structured file logger behind `internal/vlog`. |
 | `github.com/lixenwraith/audio` | Synthesis, mixing, the sequencer, MIDI, the rip and the shipped banks. |
+| `github.com/lixenwraith/auth` | Argon2id-SCRAM for a passphrase door and an account sign-in: the credential a player derives, the exchange both ends run. Its JWT half is unused ([Auth and session design D7](auth-session-design.md#0-decisions)). |
 | `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window, with cgo off. |
 | `golang.org/x/sys`; `x/term` (indirect) | The desktop window's Unix calls; terminal support for the terminal module. |
 
@@ -524,7 +525,9 @@ hand, not a supported release target, and its known issues are in [Build profile
 Tests cover `cmd/vif`, the headless/replay application harness
 (seeded soak, mutation, bisect, reset, journal density, replay, operator-state
 comparison, staged corrections, hosting, joins, migration, mesh reach and the
-dedicated host), the network protocol and handshake, convergence, snapshots, clocks,
+dedicated host), the network protocol and handshake, the admission tokens and
+fuzz targets over every frame a stranger's bytes reach, the router's in-band
+exchange, the account exchange against a stand-in service, convergence, snapshots, clocks,
 scheduler and time control, event journaling and authored scripts,
 input/help/mode commands, FSM staging and local-lifecycle reconciliation, the
 session lifecycle and probe, parameters, profiling, audio, genetics, vectors and
@@ -809,6 +812,8 @@ across instances is the invariant the domain model rests on.
 | CI | `.github/workflows/test.yml`, `release.yml` |
 | End-to-end checks | `script/test.sh`, `script/*.toml` |
 | Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css`, `web/fonts/` |
+| Session admission, passes, passphrase doors and accounts | `internal/network/admission.go`, `account.go`, `session.go`, `internal/app/internal/membership/place.go`, `signin.go`, `host.go`, `session.go`; [Auth and session design](auth-session-design.md) |
+| Fleet router and the identity service's forward | `tool/vif-router`, `deploy/guest`, `deploy/k3s`, `deploy/website/vif.nginx.example`; the service itself is `lixenwraith/identity` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |
 | Journal, replay, fuzz, and authored scripts | `internal/event/journal*.go`, `origin.go`, `internal/journal`, `internal/app/replay.go`, `play.go`, `script.go`, `internal/app/internal/scribe` |
