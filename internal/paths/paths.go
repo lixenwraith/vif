@@ -21,6 +21,7 @@ const (
 
 	ScenarioDirName  = "scenario"
 	MainScenarioName = "main"
+	DownloadsDirName = "downloads"
 	InputDirName     = "input"
 	AudioDirName     = "audio"
 	ContentDirName   = "content"
@@ -89,6 +90,16 @@ func UserRoot() string {
 		return ""
 	}
 	return filepath.Join(base, AppDirName)
+}
+
+// DefaultDownloadsDir is where a run saves the scenarios its sessions' hosts send,
+// and finds them again: the user root's scenario/downloads, "" without one.
+func DefaultDownloadsDir() string {
+	user := UserRoot()
+	if user == "" {
+		return ""
+	}
+	return filepath.Join(user, ScenarioDirName, DownloadsDirName)
 }
 
 // checkoutRoot is the wad/ beside the bin/ holding this binary, so a build plays

@@ -281,7 +281,8 @@ INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >
 	for src in $(BOT_DIR)/*.toml; do put 0644 "$$src" "$$root/bot/$${src\#\#*/}"; done; \
 	keep 0644 $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
 	keep 0644 $(SETTINGS_SRC) "$$root/vif.toml"; \
-	[ -d "$$root/audio" ] || install -d -m 0755 "$$root/audio"
+	[ -d "$$root/audio" ] || install -d -m 0755 "$$root/audio"; \
+	[ -d "$$root/scenario/downloads" ] || install -d -m 0755 "$$root/scenario/downloads"
 
 install-config:
 	@set -eu; $(INSTALL_FUNCS); root='$(VIF_CONFIG_DIR)'; $(INSTALL_ROOT)

@@ -45,8 +45,13 @@ type Options struct {
 	// Provided is a scenario already in hand rather than one to find: the bytes a
 	// session coordinator sent because no root here held them. It wins over every
 	// other selector, since a run holding one has already agreed to simulate
-	// exactly those bytes, and it is never written to disk.
+	// exactly those bytes.
 	Provided *Scenario
+
+	// Downloads is where scenarios sessions' hosts sent are found by digest, empty
+	// for nowhere; SaveDownloads saves there one this run is sent.
+	Downloads     string
+	SaveDownloads bool
 }
 
 // Validate reports conflicts between the overrides themselves.

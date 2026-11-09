@@ -396,6 +396,43 @@ func writeScenario(t *testing.T, root, name, description string) string {
 	return dir
 }
 
+// TestAJoinerSavesTheHostsScenarioWhereItCan: a joiner that asks saves the
+// scenario it is served in its downloads, where a join finds it by digest, and one
+// whose downloads cannot be written plays the session all the same.
+func TestAJoinerSavesTheHostsScenarioWhereItCan(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
+	hostRoot, blocked := t.TempDir(), filepath.Join(t.TempDir(), "file")
+	writeScenario(t, hostRoot, "duel", "The session's duel.")
+	script := filepath.Join(t.TempDir(), "idle.toml")
+	for path, body := range map[string]string{blocked: "", script: "schema = 1\nticks = 3\nwidth = 80\nheight = 24\n"} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	host := Config{Seed: 0x5C72, Resources: resource.Options{Dir: hostRoot, Scenario: "duel"}}
+	served, err := resource.LoadScenario(host.Resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, downloads string
+		saved           bool
+	}{
+		{"downloads it can write", filepath.Join(t.TempDir(), "downloads"), true},
+		{"downloads under a file", filepath.Join(blocked, "downloads"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			guest := Config{Resources: resource.Options{Downloads: tc.downloads, SaveDownloads: true}}
+			if _, stats := runScriptPair(t, host, script, guest, script); stats.Ticks != 3 {
+				t.Fatalf("guest stats = %+v", stats)
+			}
+			if _, ok := resource.FindDownload(tc.downloads, served.Digest()); ok != tc.saved {
+				t.Fatalf("the served scenario saved: %t, want %t", ok, tc.saved)
+			}
+		})
+	}
+}
+
 // TestAJoinerPlaysTheHostsScenarioWhateverItsRootsHold: a joiner whose roots lack
 // the session's scenario, hold other bytes under its name, or are skipped by -d is
 // served the coordinator's bytes. The coordinator admits a joiner only on an equal

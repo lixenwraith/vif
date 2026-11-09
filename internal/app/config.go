@@ -150,14 +150,15 @@ func (c runConfig) ValidateWith(s Membership) error {
 
 // Prepare is the resources a dial of s's session builds its world on, settled on
 // its preview: this configuration as the session makes it, checked, with the
-// session's scenario resolved.
-func (c runConfig) Prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, error) {
+// session's scenario resolved, and what resolving it said for the status line.
+func (c runConfig) Prepare(s Membership, pending *network.PendingJoin, preview network.SessionOffer) (resource.Options, string, error) {
 	c.Membership = s
 	var err error
+	notice := ""
 	if c, err = configForJoin(c, preview); err == nil {
-		err = membership.ResolveJoinScenario(&c.Config, pending, preview)
+		notice, err = membership.ResolveJoinScenario(&c.Config, pending, preview)
 	}
-	return c.Resources, err
+	return c.Resources, notice, err
 }
 
 // joinNotice adds one line to what the next run's status line opens with.

@@ -482,6 +482,8 @@ func buildConfig() app.Config {
 	cfg.Membership.Bots, _ = app.BotSpecs(flagSession.bot)
 
 	cfg.Play, cfg.Settings, cfg.Notice = settings.Play, settingsStore, settingsNotice
+	cfg.Resources.Downloads = cmp.Or(settings.Paths.Downloads, paths.DefaultDownloadsDir())
+	cfg.Resources.SaveDownloads = settings.Session.SaveDownloads
 	// A page keeps its places for its tab; a terminal or a window keeps them past the
 	// process in the user's state directory while [session] resume_after_restart says.
 	// A dedicated host has no place to come back to, and a pod's filesystem is read-only.
@@ -582,7 +584,7 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 		short, long, hint string
 		into              *string
 	}{
-		{"s", "config-scenario", "Installed scenario name, scenario.toml, or a scenario directory", &f.scenario},
+		{"s", "config-scenario", "Installed scenario name or path below scenario/, scenario.toml, or a scenario directory", &f.scenario},
 		{"f", "config-content", "Content directory, or a single content file", &f.content},
 		{"k", "config-keymap", "Keymap TOML", &f.keymap},
 	} {

@@ -317,7 +317,26 @@ own scenario, picked or dropped on the start screen or carried in a link's
 fragment, which no server sees (about 17 KB for `vanguard`), and whether one from
 a stranger may run; a native `-s https://…`, which needs an index at a fixed path,
 and from another origin a publisher's signature; any cache by digest beyond
-HTTP's own.
+HTTP's own, which a native run has in its downloads.
+
+### Manage the downloads from the menu and the command line
+
+- Priority: P2
+- Affected files: `internal/mode` (`config_menu.go`, `commands.go`),
+  `internal/resource` (`SaveDownload`), `cmd/vif/browser.go`, `web/terminal.js`
+- Guide: [Filesystem layout §2](filesystem-layout.md#2-installed-configuration-tree)
+
+`[session] save_downloads` keeps every scenario a host sends in
+`scenario/downloads/`, and only a file manager removes one, so a player who joins
+many sessions collects them, up to 1 MiB each. The Scenarios page would list the
+downloads apart from the player's own, with size and age, and remove one or all
+behind a confirm, as a command would (`:downloads`, `:downloads rm <name>`); a
+Settings row would turn saving on where `vif.toml` is out of reach, as on Android.
+A browser saves none: a page has only the site's storage, a few MiB that the
+settings and places share, so saving there waits on these controls, a cap in
+bytes that evicts the oldest, and the digest as the key (IndexedDB). A save cut
+off mid-write leaves a hidden `.<name>.*` directory beside them for the same
+clean-up.
 
 ### Launch the page and Android without their start screen
 
@@ -432,17 +451,6 @@ key's press and release once asked with DECSET 9001, as `CSI Vk;Sc;Uc;Kd;Cs;Rc _
 as the protocol source asks for the key protocol, answer presses where the host
 lacks it, and pair releases through `KeyHolds`. Decide first whether holds on
 Windows are worth it.
-
-### Cache a received scenario to the user root
-
-- Priority: P3
-- Affected files: `internal/resource`, `internal/app/internal/membership/session.go`
-
-A scenario received from a coordinator lives in memory and is dropped at exit, so
-rejoining the same session downloads it again. Writing it under the user root
-behind an explicit opt-in would keep it, and needs a trust decision first: the
-bytes came from a peer, and nothing about a plaintext link says they are the
-operator's.
 
 ## Fleet
 

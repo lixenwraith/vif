@@ -52,6 +52,7 @@ vif/
 ├── vif.toml     settings: flag defaults (§3)
 ├── scenario/    scenarios, each rooted at scenario.toml, in groups
 │   ├── base/    the shipped ones; vanguard/behavior/ holds its programs
+│   ├── downloads/  what sessions' hosts sent, when the player saves it
 │   ├── main/    optional default override
 │   └── test/puzzle/tic-tac-toe/  a player's own, filed as they like
 ├── input/       keymap.toml
@@ -70,6 +71,16 @@ their own as `test/puzzle/tic-tac-toe/`. A name beginning with a dot is passed
 over, and a link counts as a scenario but is not read as a group. A scenario is
 selected by name (`-s td`), by its path below `scenario/` or by an explicit path
 (§3); an optional one named `main` is the automatically discovered scenario.
+
+`downloads/` (`[paths] downloads`) holds a scenario a session's host sent when
+`[session] save_downloads` asks for it, named for it and its digest
+(`td-3f2a9c1b0e7d`): no name a host sends climbs out, hides, or takes one a
+player's own could have. A later join reads it there by digest instead of
+downloading it again, and `-s` and the menu play it by that name; a copy the
+player edits answers no join and is never written over. Saving is off by default,
+since the host, not the player, chose what it holds, and a run that cannot write
+there plays on and says why on its status line. `make install-config` creates the
+directory empty and `CLEAN=1` leaves it.
 `audio/` is empty until a user or stapes (formerly soundlab), the audio authoring
 tool, writes an override: stapes reads and writes the user root's `audio/`
 documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-stapes)).
@@ -123,9 +134,10 @@ the built-in `main` are errors; absent discovered overrides are normal.
 Keymap, audio and bot-graph overrides remain local participant preferences and
 retain their ordinary resolution.
 
-A joiner that does not resolve the session's scenario to the same digest is served
-the coordinator's during the join and holds it in memory only; nothing is written to
-a root ([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
+A joiner that does not resolve the session's scenario to the same digest, from its
+roots or its downloads, is served the coordinator's during the join and holds it in
+memory, writing it nowhere but its downloads, and there only when asked
+([Services §7.2](services-and-networking.md#72-join-identity-and-who-decides-it)).
 
 A fleet node carries a partial root. `/var/db/vif/wad` holds `scenario/` and
 `image/` and nothing else, mounted read-only at `/wad` in every session pod, so a
@@ -137,8 +149,11 @@ the join.
 
 `vif.toml` at the top of a root holds what a flag would otherwise say on every run:
 `[paths]` names another root (`root`, read as `-config-dir` is), the log,
-journal and music directories, and the scenario, content and keymap `-s`, `-f` and `-k`
-take; `[audio] buffer_ms` sets the mixer period; `[presentation] window = true` opens
+journal and music directories, the scenario, content and keymap `-s`, `-f` and `-k`
+take, and the downloads (`downloads`, default the user root's
+`scenario/downloads`); `[session]` what a run keeps of its sessions past the
+process, its places (§5) and with `save_downloads` the scenarios hosts send;
+`[audio] buffer_ms` sets the mixer period; `[presentation] window = true` opens
 the desktop window by default, as `-g` does, and `maximized` or `fullscreen` the
 state it opens in, `cell` is the zoom Android and a browser open at, and
 `tmux_frame_cap` (true) draws the terminal at most 24 frames a second inside tmux

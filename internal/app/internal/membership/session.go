@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
 	"github.com/lixenwraith/vif/internal/vlog"
@@ -361,6 +362,7 @@ type JoinDial struct {
 	pending   *network.PendingJoin
 	offer     network.SessionOffer // the preview, then the offer its seat assigned
 	resources resource.Options     // the session's scenario, as this instance resolved it
+	notice    string               // what the run built on it opens its status line with
 
 	// place is the one the offer gives back, nil for a new place, held from places
 	// until the run built on this dial takes it.
@@ -382,12 +384,12 @@ func DialJoin(cfg config.Membership, wire Wiring, base JoinBase) (*JoinDial, err
 		return nil, fmt.Errorf("join %s: %w", link.Shown(cfg.JoinAddress), err)
 	}
 	d := &JoinDial{pending: pending, offer: preview, places: wire.Places}
-	resources, err := base.Prepare(cfg, pending, preview)
+	resources, notice, err := base.Prepare(cfg, pending, preview)
 	if err != nil {
 		d.Abandon(err)
 		return nil, err
 	}
-	d.resources = resources
+	d.resources, d.notice = resources, notice
 	return d, nil
 }
 
@@ -425,10 +427,11 @@ func (d *JoinDial) seat(bot bool) error {
 func (d *JoinDial) seated() bool { return d.offer.Assigned != 0 }
 
 // Offer is the dial's preview, then the offer its seat assigned; Resources is the
-// session's scenario as this instance resolved it, and TransportConfig the transport
-// a run built on the dial plays over.
+// session's scenario as this instance resolved it, Notice what resolving it said,
+// and TransportConfig the transport a run built on the dial plays over.
 func (d *JoinDial) Offer() network.SessionOffer   { return d.offer }
 func (d *JoinDial) Resources() resource.Options   { return d.resources }
+func (d *JoinDial) Notice() string                { return d.notice }
 func (d *JoinDial) TransportConfig() *link.Config { return d.pending.TransportConfig() }
 
 // Abandon refuses the offer, which releases the identity the host assigned, or
@@ -586,34 +589,60 @@ func (m *Membership) bindSeat(pending *network.PendingJoin, offer network.Sessio
 }
 
 // ResolveJoinScenario makes this run hold the exact scenario the coordinator is
-// playing, before it builds a world the coordinator would refuse. A root that
-// already has those bytes is used as it stands, whatever it calls them; otherwise
-// the coordinator is asked for them and they are held in memory for the life of the
-// run and never written to disk.
-func ResolveJoinScenario(cfg *config.Config, pending *network.PendingJoin, o network.SessionOffer) error {
-	want := o.Anchor.Anchor.ScenarioDigest
+// playing, before it builds a world the coordinator would refuse: the copy a root or
+// the downloads hold with those bytes, whatever it is called, else the coordinator's,
+// held in memory for the run and saved in the downloads when the player asked. It
+// returns what the run's status line says of that save.
+func ResolveJoinScenario(cfg *config.Config, pending *network.PendingJoin, o network.SessionOffer) (string, error) {
+	want, name := o.Anchor.Anchor.ScenarioDigest, o.Anchor.Anchor.ScenarioID
 	if want == "" {
-		return nil // nothing to match against; the identity check is the verdict
+		return "", nil // nothing to match against; the identity check is the verdict
 	}
 	if local, err := resource.LoadScenario(cfg.Resources); err == nil && local.Digest() == want {
-		return nil
+		return "", nil
+	}
+	if sc, ok := resource.FindDownload(cfg.Resources.Downloads, want); ok {
+		sc.Name, cfg.Resources.Provided = name, &sc
+		vlog.Info("app", "msg", "scenario found in downloads", "scenario", name, "digest", sc.Short())
+		return "", nil
 	}
 	body, err := pending.RequestScenario(want)
 	if err != nil {
-		return fmt.Errorf("scenario transfer: %w", err)
+		return "", fmt.Errorf("scenario transfer: %w", err)
 	}
-	sc, err := resource.UnmarshalScenarioCompressed(o.Anchor.Anchor.ScenarioID, body)
+	sc, err := resource.UnmarshalScenarioCompressed(name, body)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if sc.Digest() != want {
-		return fmt.Errorf("scenario transfer: arrived as %s, the offer named %s",
+		return "", fmt.Errorf("scenario transfer: arrived as %s, the offer named %s",
 			sc.Short(), shortDigest(want))
 	}
 	cfg.Resources.Provided = &sc
 	vlog.Info("app", "msg", "scenario received",
 		"scenario", sc.Name, "digest", sc.Short(), "files", sc.Files(), "bytes", len(body))
-	return nil
+	if !cfg.Resources.SaveDownloads {
+		return "", nil
+	}
+	return saveDownload(cfg.Resources.Downloads, sc), nil
+}
+
+// saveDownload saves sc in dir, saying where or why not; a run that cannot still
+// plays it, as one that was never asked to
+func saveDownload(dir string, sc resource.Scenario) string {
+	switch {
+	case !paths.ExternalFiles():
+		return "Saving downloads unavailable in a browser"
+	case dir == "":
+		return "Saving downloads unavailable in this run"
+	}
+	at, err := resource.SaveDownload(dir, sc)
+	if err != nil {
+		vlog.Warn("app", "msg", "scenario not saved", "scenario", sc.Name, "digest", sc.Short(), "error", err.Error())
+		return "Scenario " + sc.Name + " not saved: " + err.Error()
+	}
+	vlog.Info("app", "msg", "scenario saved", "scenario", sc.Name, "digest", sc.Short(), "path", at)
+	return "Scenario " + sc.Name + " saved to " + at
 }
 
 // previewParticipant is what a dial is shown while it prepares: the offer its seat

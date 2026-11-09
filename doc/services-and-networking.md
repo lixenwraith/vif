@@ -337,8 +337,8 @@ where it goes. It is taken only from the participant the term names,
 because one that could make its peers tear down and redial on demand could empty a
 session. See [Runtime and concurrency](runtime.md) for the restart itself.
 
-A joiner whose own roots hold no scenario with that digest asks the coordinator
-for one while it prepares, on the preview and before its seat: `MsgScenarioRequest`
+A joiner whose own roots and downloads hold no scenario with that digest asks
+the coordinator for one while it prepares, on the preview and before its seat: `MsgScenarioRequest`
 names the digest, `MsgScenarioBody` carries the deflated canonical form in
 capture-sized chunks. It sits there so the participant is running the session's
 scenario before it reports an identity that would otherwise be refused, and before
@@ -347,8 +347,11 @@ at once makes it between the offer and the reply instead. The coordinator serves
 only the digest it is playing, refusing anything else rather than acting as a file
 service.
 
-The received scenario is held in memory for the life of the run and never written
-to disk, including into the staging world a correction resolves against. The whole
+The received scenario is held in memory for the life of the run, the staging
+world a correction resolves against included, and reaches disk only in the
+player's downloads when `[session] save_downloads` asks, in a directory named for
+its digest that the next join reads instead of asking
+([Filesystem layout §2](filesystem-layout.md#2-installed-configuration-tree)). The whole
 container is one deflate stream rather than one per file, because the files are
 near-identical TOML and a shared window is most of the saving; the container is
 length-prefixed rather than delimited, so a file that is truncated, malformed or

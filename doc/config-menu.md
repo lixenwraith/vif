@@ -99,9 +99,9 @@ the reason. **Restart game** starts the game over from its scenario's first tick
 ### Scenarios
 
 One row per scenario `:n <name>` would start: `main` and every scenario the
-configuration roots' `scenario/` trees hold, each by its name, or by its path
-below `scenario/` where its name reaches another first, the running one marked
-`current`. Enter or a press marks one `(*)`; **Start &lt;name&gt;** below
+configuration roots' `scenario/` trees hold, the saved downloads among them, each
+by its name, or by its path below `scenario/` where its name reaches another
+first, the running one marked `current`. Enter or a press marks one `(*)`; **Start &lt;name&gt;** below
 starts a game of it, or starts the current one over, so a phone needs no name to
 type. **Other scenario** is a text box for what `-s` takes, a name or a path, for
 one the list does not hold. In a session only the host can start either, and its

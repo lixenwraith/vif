@@ -111,8 +111,7 @@ Use the embedded scenario and content; refuses \-s and \-f and ignores vif.toml'
 Configuration root holding scenario/ input/ audio/ content/ image/ bot/
 .TP
 .B \-s, \-config\-scenario <name|path>
-Installed scenario name or path below scenario/, scenario.toml, or a scenario
-directory
+Installed scenario name or path below scenario/, scenario.toml, or a scenario directory
 .TP
 .B \-f, \-config\-content <path>
 Content directory, or a single content file
@@ -295,13 +294,15 @@ User configuration root, normally
 .TP
 .I vif.toml
 Settings at the top of a configuration root: another root, the log, journal,
-music, scenario, content and keymap paths, the audio mixer buffer, whether the
-desktop window opens and how, the zoom Android and a browser keep, and the [play]
-settings the menu writes back.
+music, scenario, content, keymap and downloads paths, the audio mixer buffer,
+whether the desktop window opens and how, the zoom Android and a browser keep, the
+[play] settings the menu writes back, and what a run keeps of its sessions.
 .TP
 .I scenario/
 Scenarios, each a directory holding scenario.toml, in groups to any depth:
-base/ holds the shipped ones, and a player files their own as they like.
+base/ holds the shipped ones, downloads/ the scenarios sessions' hosts sent
+when [session] save_downloads saves them, and a player files their own as they
+like.
 .TP
 .I bot/<name>.toml
 Bot graphs that \-bot and :bot add name; a path also works. The default

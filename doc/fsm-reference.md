@@ -28,12 +28,14 @@ relative to the entry config's directory and cannot climb out of it. A region fi
 holds only `[states]`, and a state defined twice across files fails the load. A
 scenario is at most 64 `.toml` files, 256 KiB each and 1 MiB in all. A joiner
 plays the coordinator's exact bytes: its own copy when the digests match, else the
-coordinator's, sent under the same bounds and held in memory. Installed layout:
+coordinator's, sent under the same bounds, held in memory and saved in its
+`downloads/` when `[session] save_downloads` asks. Installed layout:
 
 ```text
 ~/.config/vif/
 ├── scenario/
 │   ├── main/                  # optional override: a copy of internal/asset/scenario/
+│   ├── downloads/             # what sessions' hosts sent, as td-3f2a9c1b0e7d/
 │   └── base/                  # the shipped scenarios
 │       ├── blank/scenario.toml
 │       ├── simon/scenario.toml
