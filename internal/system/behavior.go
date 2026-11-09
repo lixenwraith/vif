@@ -133,15 +133,16 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 	switch payload := ev.Payload.(type) {
 	case *event.BehaviorSpawnRequestPayload:
 		i, ok := s.set.Lookup(payload.Program)
+		x, y := payload.Cell(s.world.Positions.Width, s.world.Positions.Height)
 		switch {
 		case !ok:
 			s.statUnknown.Add(1)
 		case !s.enabled:
 			s.programs[i].lifecycle.spawnFailures.Add(1)
 		case s.set.Prototypes()[i].Entrance == component.EntranceMaterialize:
-			s.enter(i, payload.X, payload.Y)
+			s.enter(i, x, y)
 		default:
-			s.spawn(i, payload.X, payload.Y)
+			s.spawn(i, x, y)
 		}
 
 	case *event.SpeciesLandRequestPayload:

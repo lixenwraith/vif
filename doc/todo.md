@@ -47,18 +47,6 @@ The materialize is Shared, so the entering state's clock and probe must run alik
 on every instance and a capture mid-materialize must restore them
 (`snapshot.Schema`).
 
-#### Name a spawn's cell from the map's edge
-
-- Priority: P3
-- Affected files: `internal/event/payload.go` (`BehaviorSpawnRequestPayload`),
-  `wad/scenario/base/vanguard/scenario.toml` (`RaidSpawn`)
-
-Vanguard's raid spends seven actions naming its spawn's cell, the column past the
-right edge on a row drawn two inside the top and bottom: two `ConfigToVar`,
-`DecrementVar`, two `IncrementVar`, `RandomVar` and `ModuloVar`, the draw's index
-bumped by hand. A map-relative anchor on the request (an edge and an inset) or a
-draw advancing its own index would shorten it.
-
 ### Position, blocking and navigation
 
 The move into `pkg/position` is done ([Position](position-package.md)); what

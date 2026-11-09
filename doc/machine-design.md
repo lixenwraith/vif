@@ -673,13 +673,14 @@ smaller part of it.
 - **Composite routing.** A data species' header carries `component.BehaviorData`;
   the behavior system handles `EventCompositeIntegrityBreach` for it, and
   `handleEmptyComposite`'s default destroys the head.
-- **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y}` (bus,
+- **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y, edge, inset}` (bus,
   and barrier-bound, since a crossed one allocates shared identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
   cancel; an empty program cancels every data species). A program no entry
   defines fails the authored payload's load (`event.Programmed`); one arriving
   otherwise is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
   immediate unless the prototype names an entrance (§4.4), its footprint searched over the whole map, since a scenario
-  names a cell blind to the walls. A scenario registers a data species with genetics through
+  names a cell blind to the walls; an edge is resolved to its cell on each instance from the grid
+  (`BehaviorSpawnRequestPayload.Cell`). A scenario registers a data species with genetics through
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`
   component, sampled once the spawn has its place, where `Param` reads them.
 - **Telemetry.** `behavior.*`, and per program `behavior.<program>.count` and the
