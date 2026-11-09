@@ -615,6 +615,28 @@ What would close it:
 - A test per case on the probe's shape, with `meshSession` handing back its mesh:
   participant 3 follows 2 at term 2, and no Wraith but the lost host's remains.
 
+### Refuse a combat crossing that acts as another cursor or emitter
+
+- Priority: P1
+- Affected files: `internal/system/network.go` (`crossingActors`,
+  `admissibleFromSource`), `internal/system/combat.go` (`applyHitDirect`,
+  `applyHitArea`), `internal/app/correction_test.go`
+- Guide: [Multiplayer §2](multi-player.md#2-current-contract) (Trust)
+
+`crossingActors` holds no row for `EventCombatAttackDirectRequest`, so a modified
+participant's rod, tracer or bullet hit may name another participant's cursor as
+its `OwnerEntity`: every instance then spends that cursor's immunity allowance
+against the target (its own hits are refused for the window), credits it the kill,
+and its own instance pays it the drain reward. Neither combat crossing checks
+`OriginEntity`, the area crossing's row reading the owner alone, yet both resolve
+the attacker's profile from it: an area crossing naming an eye with
+`CombatAttackSelfDestruct` deals the eye's 5 against a Shared species where a
+cursor weapon deals 1. Every legitimate combat crossing names its own cursor as
+both, since a Player-domain emitter is never named and a Shared one (an eye, a
+mount) never crosses. What would close it: a row for the direct request on its
+owner, and on both requests an emitter that is zero or the owner; a refusal test
+for each beside the `network.artifacts_refused` ones.
+
 ### Cross a departure a reset dropped
 
 - Priority: P2

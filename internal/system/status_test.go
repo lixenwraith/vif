@@ -22,6 +22,44 @@ func pulseAt(w *engine.World, combat *CombatSystem, owner, target core.Entity, c
 	}
 }
 
+// TestAChainStartsWhereItsHitLanded: a follow-up's origin is the struck member's
+// cell, whichever hit chains it, direct or area, never the owner's cell or the
+// parent's emitter, so what a chain does from its origin starts at the impact.
+func TestAChainStartsWhereItsHitLanded(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	combat := ready(NewCombatSystem(w)).(*CombatSystem)
+	target := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(target, component.PositionComponent{X: 12, Y: 9})
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity: target, CombatEntityType: component.CombatEntitySwarm, HitPoints: 100,
+	})
+	chainOrigin := func() (int, int, bool) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.CombatAttackDirectRequestPayload); ok && p.ChainDepth > 0 {
+				return p.OriginX, p.OriginY, p.HasOrigin
+			}
+		}
+		t.Fatal("the hit chained nothing")
+		return 0, 0, false
+	}
+
+	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+		AttackType: component.CombatAttackTracer, OwnerEntity: cursor, OriginEntity: cursor,
+		TargetEntity: target, HitEntity: target, HasOrigin: true, OriginX: 2, OriginY: 2,
+	})
+	if x, y, ok := chainOrigin(); !ok || x != 12 || y != 9 {
+		t.Fatalf("direct hit's chain starts at (%d,%d) set %v, want the hit's cell (12,9)", x, y, ok)
+	}
+	combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
+		AttackType: component.CombatAttackPulse, OwnerEntity: cursor, OriginEntity: cursor,
+		TargetEntity: target, HitEntities: []core.Entity{target}, Charged: true,
+		HasOrigin: true, OriginX: 2, OriginY: 2,
+	})
+	if x, y, ok := chainOrigin(); !ok || x != 12 || y != 9 {
+		t.Fatalf("area hit's chain starts at (%d,%d) set %v, want the hit's cell (12,9)", x, y, ok)
+	}
+}
+
 // TestChargedPulseLeavesABurnCreditedToItsLastRefresher: only a charged pulse
 // burns; a second player's charged pulse refreshes the burn and takes its credit;
 // the burn ticks BurnDamage every BurnPeriod for BurnDuration, then clears.
