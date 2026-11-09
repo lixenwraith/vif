@@ -11,7 +11,7 @@ require (
 	github.com/lixenwraith/genetic v0.1.0
 	github.com/lixenwraith/log v0.1.13
 	github.com/lixenwraith/terminal v0.6.7
-	github.com/lixenwraith/toml v0.5.0
+	github.com/lixenwraith/toml v0.6.0
 	golang.org/x/sys v0.49.0
 )
 
