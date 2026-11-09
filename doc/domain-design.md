@@ -380,7 +380,8 @@ A value selected by this participant's input is reflected locally at once. The
 local cursor prediction is a bounded FIFO of requested absolute cells not yet
 announced by Shared simulation. Input, camera, rendering and the weapons read it
 through `World.CursorCell` — shots and orbs leave the cell the player sees, and
-what they hit crosses as Shared events like any other; Shared systems do not.
+what they hit crosses as Shared events like any other; Shared systems do not. A
+shot is drawn as it fires, never by the hit that lands a lead later.
 
 `World.PushCursorMove` advances prediction and emits the crossing atomically from
 the producer's perspective. A pointer places the cursor on every cell it names, but

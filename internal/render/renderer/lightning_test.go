@@ -39,3 +39,17 @@ func TestBoltMeetsItsEndCellsOnTheSideItComesFrom(t *testing.T) {
 		}
 	}
 }
+
+// TestABoltEndsWhereTheLocalCursorIsDrawn: an end naming this instance's cursor is
+// drawn at its D-18 prediction, which the cursor is drawn at, not at the stored cell
+// a playout lead behind it on a guest.
+func TestABoltEndsWhereTheLocalCursorIsDrawn(t *testing.T) {
+	t.Parallel()
+	gameCtx, cursors := peerWorld(t, 1)
+	w := gameCtx.World
+	w.PushCursorMove(cursors[0], 9, 3)
+	r := &LightningRenderer{gameCtx: gameCtx}
+	if x, y := r.endpoint(cursors[0], 0, 0); x != 9 || y != 3 {
+		t.Fatalf("bolt end = (%d,%d), want the drawn cursor at (9,3)", x, y)
+	}
+}

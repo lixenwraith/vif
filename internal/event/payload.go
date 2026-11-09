@@ -1109,11 +1109,12 @@ type LightningSpawnRequestPayload struct {
 	Tracked      bool                         `toml:"tracked"` // If true, entity persists and target can be updated
 }
 
-// LightningUpdateRequestPayload updates target position for tracked lightning
+// LightningUpdateRequestPayload retargets a tracked bolt
 type LightningUpdateRequestPayload struct {
-	Owner   core.Entity `toml:"owner"`
-	TargetX int         `toml:"target_x"`
-	TargetY int         `toml:"target_y"`
+	Owner        core.Entity `toml:"owner"`
+	TargetX      int         `toml:"target_x"`
+	TargetY      int         `toml:"target_y"`
+	TargetEntity core.Entity `toml:"target_entity"` // 0 = TargetX/Y as static
 }
 
 // LightningDespawnRequestPayload specifies lightning removal criteria

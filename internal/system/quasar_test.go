@@ -191,6 +191,35 @@ func TestQuasarFirstSpeedIncreaseAfterTwentyMovementTicks(t *testing.T) {
 	}
 }
 
+// TestQuasarZapNamesTheCursorItAims: the bolt's spawn and each retarget name the
+// cursor, so its end is drawn where that cursor is drawn rather than at a cell.
+func TestQuasarZapNamesTheCursorItAims(t *testing.T) {
+	w, s, header, cursor := newQuasarWorld(t)
+	lightning := ready(NewLightningSystem(w)).(*LightningSystem)
+	settle := func() {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			lightning.HandleEvent(ev)
+		}
+	}
+	q, _ := w.Components.Quasar.GetPtr(header)
+	s.ctx = quasarCtx{entity: header, quasar: q}
+	if !s.probeZap(&s.ctx) {
+		t.Fatal("the probe found no cursor to aim at")
+	}
+	s.enterZapping(&s.ctx)
+	settle()
+	bolt, ok := w.Components.Lightning.GetPtr(lightningEntity(w))
+	if !ok || bolt.TargetEntity != cursor {
+		t.Fatalf("spawned bolt %+v, want one aimed at cursor %d", bolt, cursor)
+	}
+	bolt.TargetEntity = 0
+	s.updateZapTarget(header)
+	settle()
+	if bolt.TargetEntity != cursor {
+		t.Fatalf("retargeted bolt aims at %d, want cursor %d", bolt.TargetEntity, cursor)
+	}
+}
+
 type quasarChange struct {
 	from, to component.QuasarState
 	cause    machine.Cause

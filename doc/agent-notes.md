@@ -120,6 +120,11 @@ comment now states, and link that instead.
   (`Instance.Seated`), never read off its roster entry. Its `LocalSlot` stays
   `NoPlayerSlot` until then, which takes the joiner's own ticks: a test waiting on it
   ticks the joiner (`arrival` in `host_test.go`).
+- A guest's own crossings apply a lead after it produced them even with host and
+  guest on one machine: the default lead plus the relay slack is four ticks. What a
+  crossing's resolution draws (a hit's zap) shows that late on its producer, so a
+  cell the producer captured is stale by then; draw a shot as it fires, its ends
+  naming entities (`pushDrainBolt`).
 - `NetworkSystem.Flush` runs at the tick's close under the world lock, after the
   tick's settle, so a hold it releases at a crossing's apply tick sees everything
   that crossing paid in that tick (`NetworkSystem.crossSettled`).
@@ -356,6 +361,9 @@ comment now states, and link that instead.
 - `-l <dir>` is `-l=<dir>`: with a space the log lands under `~/.local/state/vif/log`.
 - Xvfb, Alacritty and xdotool install in an Ubuntu container for real key and mouse
   input: `xdotool key` types, and tmux inside the window reads the screen back.
+  Alacritty also needs `libxkbcommon-x11-0` and `LIBGL_ALWAYS_SOFTWARE=1`, and with
+  no window manager `xdotool windowfocus`, not `windowactivate`, gives it the keys.
+  `ffmpeg -f x11grab` records the window to set against a probe's wall-clock lines.
 - A headless probe in `internal/app` drives a scenario by intents
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A vanguard crush
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe

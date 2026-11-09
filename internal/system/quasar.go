@@ -71,6 +71,7 @@ type quasarCtx struct {
 	// The zap probe's resolution: the header and the cursor the lightning aims at
 	originX, originY int
 	targetX, targetY int
+	target           core.Entity
 }
 
 // newQuasarGraph builds the quasar's machine: homing, a timed charge while the
@@ -577,12 +578,12 @@ func (s *QuasarSystem) probeZap(c *quasarCtx) bool {
 	if !ok {
 		return false
 	}
-	_, cursorX, cursorY, ok := ClosestCursor(s.world, headerPos.X, headerPos.Y)
+	cursor, cursorX, cursorY, ok := ClosestCursor(s.world, headerPos.X, headerPos.Y)
 	if !ok {
 		return false
 	}
 	c.originX, c.originY = headerPos.X, headerPos.Y
-	c.targetX, c.targetY = cursorX, cursorY
+	c.targetX, c.targetY, c.target = cursorX, cursorY, cursor
 	return true
 }
 
@@ -595,6 +596,7 @@ func (s *QuasarSystem) enterZapping(c *quasarCtx) {
 		TargetX:      c.targetX,
 		TargetY:      c.targetY,
 		OriginEntity: c.entity,
+		TargetEntity: c.target,
 		ColorType:    component.LightningCyan,
 		Duration:     parameter.QuasarZapDuration,
 		Tracked:      true,
@@ -626,9 +628,10 @@ func (s *QuasarSystem) updateZapTarget(headerEntity core.Entity) core.Entity {
 	}
 
 	s.world.PushEvent(event.EventLightningUpdateRequest, &event.LightningUpdateRequestPayload{
-		Owner:   headerEntity,
-		TargetX: cursorX,
-		TargetY: cursorY,
+		Owner:        headerEntity,
+		TargetX:      cursorX,
+		TargetY:      cursorY,
+		TargetEntity: cursorEntity,
 	})
 	return cursorEntity
 }

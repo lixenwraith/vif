@@ -40,10 +40,13 @@ func TestCappedRodArcsToTheNearestOtherTargetInRange(t *testing.T) {
 
 	requests := func(assignments ...TargetAssignment) map[core.Entity][2]int {
 		w.Resources.Event.Queue.Consume()
-		weapon.fireLightning(cursor, 5, 5, component.CombatAttackLightning, assignments, parameter.LightningArcRange)
+		weapon.fireLightning(cursor, cursor, 5, 5, component.CombatAttackLightning, assignments, parameter.LightningArcRange)
 		origins := map[core.Entity][2]int{}
 		for _, ev := range w.Resources.Event.Queue.Consume() {
-			p := ev.Payload.(*event.CombatAttackDirectRequestPayload)
+			p, ok := ev.Payload.(*event.CombatAttackDirectRequestPayload)
+			if !ok {
+				continue
+			}
 			if _, dup := origins[p.TargetEntity]; dup {
 				t.Fatalf("%d struck twice in one volley", p.TargetEntity)
 			}

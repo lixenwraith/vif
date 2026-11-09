@@ -61,21 +61,8 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			return true
 		}
 
-		// Resolve origin position (map coords)
-		originX, originY := l.OriginX, l.OriginY
-		if l.OriginEntity != 0 {
-			if pos, ok := r.gameCtx.World.Positions.GetPosition(l.OriginEntity); ok {
-				originX, originY = pos.X, pos.Y
-			}
-		}
-
-		// Resolve target position (map coords)
-		targetX, targetY := l.TargetX, l.TargetY
-		if l.TargetEntity != 0 {
-			if pos, ok := r.gameCtx.World.Positions.GetPosition(l.TargetEntity); ok {
-				targetX, targetY = pos.X, pos.Y
-			}
-		}
+		originX, originY := r.endpoint(l.OriginEntity, l.OriginX, l.OriginY)
+		targetX, targetY := r.endpoint(l.TargetEntity, l.TargetX, l.TargetY)
 
 		// Deterministic path per PathSeed and AnimFrame
 		rng := vmath.NewFastRand(vmath.MixChain(l.PathSeed, uint64(l.AnimFrame)))
@@ -88,6 +75,17 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		r.renderLightning(ctx, buf, points, l.ColorType, parameter.LightningAlpha)
 		return true
 	})
+}
+
+// endpoint is where a bolt's end is drawn this frame: its entity's cell, the local
+// cursor's being the D-18 prediction the cursor is drawn at, else the spawn's cell
+func (r *LightningRenderer) endpoint(e core.Entity, x, y int) (int, int) {
+	if e != 0 {
+		if pos, ok := r.gameCtx.World.CursorCell(e); ok {
+			return pos.X, pos.Y
+		}
+	}
+	return x, y
 }
 
 // generateFractalPath creates a jagged lightning path by midpoint displacement in
