@@ -915,7 +915,8 @@ naming `entrance = "materialize"`, a materialize in its own style plays over tha
 footprint for the prototype's `entrance_ms`, the style's whole when that is 0 or
 absent, and the instance
 lands as it ends, beside any rock that came over the footprint meanwhile; `behavior.count` counts it from the request. A request naming
-no program raises nothing (`behavior.unknown_program_rejects`), nor one finding no
+no program of the scenario fails the load where it is authored, and one arriving
+otherwise raises nothing (`behavior.unknown_program_rejects`), nor one finding no
 room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
 removes instances and the materializes still bringing them, every program's when
 it names none. `wad/scenario/vanguard` is the worked example: its raider types,

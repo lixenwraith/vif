@@ -1026,9 +1026,15 @@ type BehaviorSpawnRequestPayload struct {
 	Y       int    `toml:"y"`
 }
 
+func (p *BehaviorSpawnRequestPayload) NamedProgram() (string, bool) { return p.Program, true }
+
 // BehaviorCancelRequestPayload names the program cancelled; empty names every program
 type BehaviorCancelRequestPayload struct {
 	Program string `toml:"program"`
+}
+
+func (p *BehaviorCancelRequestPayload) NamedProgram() (string, bool) {
+	return p.Program, p.Program != ""
 }
 
 // --- Environment ---

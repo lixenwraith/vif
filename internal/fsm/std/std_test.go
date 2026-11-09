@@ -340,7 +340,7 @@ initial = "Say"
 [states.Say]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { y = 3 }, payload_vars = { x = "v" }, pick = { field = "program", var = "v", from = ["invader", "scarab", "construct"] } },
+    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { y = 3 }, payload_vars = { x = "v" }, pick = { field = "program", var = "v", from = ["invader", "scarab", "wraith"] } },
     { action = "EmitEvent", event = "EventGeneticRegisterSpecies", pick = { field = "species", var = "v", from = ["eye", "invader"] } },
     { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5 }, pick = { field = "visual.box_style", var = "v", from = ["single", "double"] } },
 ]
@@ -355,7 +355,7 @@ transitions = [{ trigger = "Tick", target = "Say" }]
 	m := fsm.NewMachine[struct{}]()
 	std.Register(m, std.Host[struct{}]{
 		Emit:  func(_ struct{}, _ event.EventType, p any) { sent = append(sent, p) },
-		Names: event.PayloadNames(component.Declared{Programs: []string{"invader"}}),
+		Names: event.PayloadNames(component.Declared{Programs: []string{"invader", "scarab", "wraith"}}),
 	})
 	if err := m.LoadScenario([]byte(doc)); err != nil {
 		t.Fatal(err)
@@ -378,11 +378,11 @@ transitions = [{ trigger = "Tick", target = "Say" }]
 	}{
 		{"invader", eye, single},
 		{"scarab", invader, double},
-		{"construct", eye, single},
+		{"wraith", eye, single},
 		{"invader", invader, double},
 		{"scarab", invader, double},
-		{"construct", invader, double},
-		{"construct", eye, single},
+		{"wraith", invader, double},
+		{"wraith", eye, single},
 	}
 	if len(sent) != 3*len(want) {
 		t.Fatalf("sent %d payloads, want %d", len(sent), 3*len(want))
@@ -433,7 +433,7 @@ func TestAPickIsCheckedAtLoad(t *testing.T) {
 		m := fsm.NewMachine[struct{}]()
 		std.Register(m, std.Host[struct{}]{
 			Emit:  func(struct{}, event.EventType, any) {},
-			Names: event.PayloadNames(component.Declared{}),
+			Names: event.PayloadNames(component.Declared{Programs: []string{"invader"}}),
 		})
 		err := m.LoadScenario([]byte(`
 [regions.r]

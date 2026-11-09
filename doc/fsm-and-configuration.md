@@ -603,9 +603,10 @@ states, transitions and actions against their config structs, and arguments and
 payloads through `internal/fsm/dialect`. The payload field a payload guard or `Own`
 reads, or a `capture_vars` key, resolves against its trigger's event and a
 `payload_vars` key against the decoded payload, each of a kind it reads or writes
-(`event 'EventSpeciesKilled' carries no number field 'specie'`). Every load
-checks, at startup, on a mid-run scenario change and for a scenario received on
-joining; nothing is checked per event.
+(`event 'EventSpeciesKilled' carries no number field 'specie'`), and a behavior
+spawn or cancel request's `program` names one of the scenario's programs. Every
+load checks, at startup, on a mid-run scenario change and for a scenario received
+on joining; nothing is checked per event.
 
 State compilation accumulates multiple per-state errors where practical, so
 `-check` is more useful than fail-on-first-error parsing. It does not execute a
