@@ -502,8 +502,9 @@ actions included (`state 'A': unknown key "on_entr"`). A top-level key is its
 embedder's to check: `resource.entryKeys` for a scenario entry, `bot` for a graph.
 `Machine.Vocabulary` lists a machine's entries, and `-schema` prints the
 scenario's, a bot graph's and the behavior vocabulary under `vocabularies`. The
-payload fields a guard, `capture_vars` or `payload_vars` names are not yet checked
-at load ([todo](todo.md#check-payload-field-names-against-their-event-at-load)).
+payload field a guard or `capture_vars` names resolves against its trigger's event,
+and a `payload_vars` key against the decoded payload
+([FSM §12](fsm-and-configuration.md#12-validation-rules-and-diagnostics)).
 
 ## 6. Data species
 
@@ -675,7 +676,8 @@ smaller part of it.
 - **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y}` (bus,
   and barrier-bound, since a crossed one allocates shared identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
   cancel; an empty program cancels every data species). A program no entry
-  defines is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
+  defines fails the authored payload's load (`event.Programmed`); one arriving
+  otherwise is counted (`behavior.unknown_program_rejects`) and dropped. A spawn is
   immediate unless the prototype names an entrance (§4.4), its footprint searched over the whole map, since a scenario
   names a cell blind to the walls. A scenario registers a data species with genetics through
   `EventGeneticRegisterSpecies` and its ID; the genes land in the `Genotype`

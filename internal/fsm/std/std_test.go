@@ -235,6 +235,56 @@ transitions = [{ trigger = "Tick", target = "Say" }]
 	}
 }
 
+// TestAPayloadFieldIsOneItsEventCarries: a payload guard's field, a capture_vars
+// key and a payload_vars key resolve at load against what their event carries, of
+// a kind they read or write, or the load fails naming it; a Tick transition and an
+// action guard see no payload.
+func TestAPayloadFieldIsOneItsEventCarries(t *testing.T) {
+	event.EnsureRegistry()
+	for _, c := range []struct{ state, want string }{
+		{`transitions = [{ trigger = "EventInputPressed", target = "B", guard = "PayloadIntCompare", guard_args = { field = "tik", value = 1 } }]`,
+			"guard 'PayloadIntCompare': event 'EventInputPressed' carries no number field 'tik'"},
+		{`transitions = [{ trigger = "EventInputPressed", target = "B", guard = "PayloadBoolEquals", guard_args = { field = "tick" } }]`,
+			"event 'EventInputPressed' carries no bool field 'tick'"},
+		{`transitions = [{ trigger = "Tick", target = "B", guard = "Not", guard_args = { guard = { name = "PayloadStringEquals", args = { field = "message" } } } }]`,
+			"guard 'Not': guard 'PayloadStringEquals': field 'message': Tick carries no payload"},
+		{`on_enter = [{ action = "SetVar", payload = { name = "v" }, guard = "PayloadIntCompare", guard_args = { field = "tick" } }]`,
+			"field 'tick': an action guard sees no payload"},
+		{`transitions = [{ trigger = "EventSpeciesKilled", target = "B", capture_vars = { xx = "v" } }]`,
+			"capture_vars: event 'EventSpeciesKilled' carries no number or bool field 'xx'"},
+		{`transitions = [{ trigger = "EventStormCancelRequest", target = "B", capture_vars = { x = "v" } }]`,
+			"capture_vars: field 'x': EventStormCancelRequest carries no payload"},
+		{`on_enter = [{ action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload_vars = { mesage = "v" } }]`,
+			"payload_vars: event 'EventMetaStatusMessageRequest' carries no field 'mesage' a variable can set"},
+		{`on_enter = [{ action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { rooms = [{ width = 3 }] }, payload_vars = { "rooms.1.width" = "v" } }]`,
+			"carries no field 'rooms.1.width' a variable can set"},
+		{`on_enter = [{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { xx = "v" }, pick = { field = "program", var = "v", from = ["invader"] } }]`,
+			"pick: from[0]: payload_vars: event 'EventBehaviorSpawnRequest' carries no field 'xx'"},
+		{`on_enter = [{ action = "EmitEvent", event = "EventStormCancelRequest", payload_vars = { x = "v" } }]`,
+			"payload_vars: event 'EventStormCancelRequest' carries no payload"},
+	} {
+		m := fsm.NewMachine[struct{}]()
+		std.Register(m, std.Host[struct{}]{
+			Emit:  func(struct{}, event.EventType, any) {},
+			Names: event.PayloadNames(component.Declared{Programs: []string{"invader"}}),
+		})
+		err := m.LoadScenario([]byte(`
+[regions.r]
+initial = "A"
+
+[states.A]
+parent = "Root"
+` + c.state + `
+
+[states.B]
+parent = "Root"
+`))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s:\nerror %v, want it to hold %q", c.state, err, c.want)
+		}
+	}
+}
+
 // TestAnEmittedPayloadSpellsItsEnumsByName: EmitEvent decodes a payload as the
 // host's names spell its enums, a sub-type by its species and a program as its data
 // species, and a name its type lacks fails the load.
@@ -290,7 +340,7 @@ initial = "Say"
 [states.Say]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { y = 3 }, payload_vars = { x = "v" }, pick = { field = "program", var = "v", from = ["invader", "scarab", "construct"] } },
+    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { y = 3 }, payload_vars = { x = "v" }, pick = { field = "program", var = "v", from = ["invader", "scarab", "wraith"] } },
     { action = "EmitEvent", event = "EventGeneticRegisterSpecies", pick = { field = "species", var = "v", from = ["eye", "invader"] } },
     { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5 }, pick = { field = "visual.box_style", var = "v", from = ["single", "double"] } },
 ]
@@ -305,7 +355,7 @@ transitions = [{ trigger = "Tick", target = "Say" }]
 	m := fsm.NewMachine[struct{}]()
 	std.Register(m, std.Host[struct{}]{
 		Emit:  func(_ struct{}, _ event.EventType, p any) { sent = append(sent, p) },
-		Names: event.PayloadNames(component.Declared{Programs: []string{"invader"}}),
+		Names: event.PayloadNames(component.Declared{Programs: []string{"invader", "scarab", "wraith"}}),
 	})
 	if err := m.LoadScenario([]byte(doc)); err != nil {
 		t.Fatal(err)
@@ -328,11 +378,11 @@ transitions = [{ trigger = "Tick", target = "Say" }]
 	}{
 		{"invader", eye, single},
 		{"scarab", invader, double},
-		{"construct", eye, single},
+		{"wraith", eye, single},
 		{"invader", invader, double},
 		{"scarab", invader, double},
-		{"construct", invader, double},
-		{"construct", eye, single},
+		{"wraith", invader, double},
+		{"wraith", eye, single},
 	}
 	if len(sent) != 3*len(want) {
 		t.Fatalf("sent %d payloads, want %d", len(sent), 3*len(want))
@@ -383,7 +433,7 @@ func TestAPickIsCheckedAtLoad(t *testing.T) {
 		m := fsm.NewMachine[struct{}]()
 		std.Register(m, std.Host[struct{}]{
 			Emit:  func(struct{}, event.EventType, any) {},
-			Names: event.PayloadNames(component.Declared{}),
+			Names: event.PayloadNames(component.Declared{Programs: []string{"invader"}}),
 		})
 		err := m.LoadScenario([]byte(`
 [regions.r]

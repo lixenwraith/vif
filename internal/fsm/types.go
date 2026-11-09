@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lixenwraith/vif/internal/event"
@@ -167,10 +168,33 @@ type ActionFunc[T any] func(ctx T, args any)
 type StateResolver func(name string) (StateID, bool)
 
 // guardEntry is a registered guard: its args for -schema, and build, which
-// decodes its guard_args and makes the guard once at load
+// decodes its guard_args and makes the guard once at load for its trigger
 type guardEntry[T any] struct {
 	args  []dialect.Field
-	build func(args map[string]any) (GuardFunc[T], error)
+	build func(args map[string]any, t Trigger) (GuardFunc[T], error)
+}
+
+// Trigger is what a guard or a capture reads a payload field of at load: its
+// transition's event and that event's zero payload, nil where none reaches it, as
+// on Tick and for an action guard, whose Event is ""
+type Trigger struct {
+	Event   string
+	Payload any
+}
+
+// Reads refuses a payload field that read finds no value of in what t carries;
+// kind names what read takes
+func (t Trigger) Reads[V any](field, kind string, read func(payload any, field string) (V, bool)) error {
+	if _, ok := read(t.Payload, field); ok {
+		return nil
+	}
+	switch {
+	case t.Payload != nil:
+		return fmt.Errorf("event '%s' carries no %s field '%s'", t.Event, kind, field)
+	case t.Event == "":
+		return fmt.Errorf("field '%s': an action guard sees no payload", field)
+	}
+	return fmt.Errorf("field '%s': %s carries no payload", field, t.Event)
 }
 
 // actionEntry is a registered action: the keys of its table it reads and its

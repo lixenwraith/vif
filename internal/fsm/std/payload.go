@@ -3,12 +3,14 @@ package std
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/fsm"
 )
 
@@ -19,44 +21,57 @@ import (
 // Keys resolve against toml struct tags first, then Go field names, at each level
 // Returns a modified copy; the original payload is unchanged
 func ApplyPayloadVars[T any](m *fsm.Machine[T], payload any, vars map[string]string) any {
+	out, _ := applyPayloadVars(payload, vars, m.GetVar)
+	return out
+}
+
+// applyPayloadVars is ApplyPayloadVars over value, which reads a variable, and the
+// keys it found no field to write
+func applyPayloadVars(payload any, vars map[string]string, value func(string) int64) (any, []string) {
 	if payload == nil || len(vars) == 0 {
-		return payload
+		return payload, nil
 	}
 
 	pv := reflect.ValueOf(payload)
-	if pv.Kind() != reflect.Ptr || pv.IsNil() {
-		return payload
+	if pv.Kind() != reflect.Ptr || pv.IsNil() || pv.Elem().Kind() != reflect.Struct {
+		return payload, slices.Collect(maps.Keys(vars))
 	}
 
-	elem := pv.Elem()
-	if elem.Kind() != reflect.Struct {
-		return payload
-	}
-
-	copied := reflect.New(elem.Type()).Elem()
-	copied.Set(elem)
+	copied := reflect.New(pv.Elem().Type()).Elem()
+	copied.Set(pv.Elem())
 
 	// Track deep-copied slices by path prefix to avoid redundant copies
 	copiedSlices := make(map[string]bool)
 
+	var missed []string
 	for key, varName := range vars {
-		varValue := m.GetVar(varName)
 		segments := strings.Split(key, ".")
-
 		parent := walkPayloadPath(copied, segments[:len(segments)-1], copiedSlices)
-		if !parent.IsValid() {
-			continue
-		}
-
 		field := fsm.FieldByTag(parent, segments[len(segments)-1])
-		if !field.IsValid() || !field.CanSet() {
-			continue
+		if !field.CanSet() || !setPayloadVar(field, value(varName)) {
+			missed = append(missed, key)
 		}
-
-		setPayloadVar(field, varValue)
 	}
 
-	return copied.Addr().Interface()
+	return copied.Addr().Interface(), missed
+}
+
+// checkPayloadVars refuses a payload_vars key naming no field of the payload that
+// a variable can set, an entry past a list's end among them
+func checkPayloadVars(et event.EventType, payload any, vars map[string]string) error {
+	if len(vars) == 0 {
+		return nil
+	}
+	if payload == nil {
+		return fmt.Errorf("payload_vars: event '%s' carries no payload", event.GetEventName(et))
+	}
+	_, missed := applyPayloadVars(payload, vars, func(string) int64 { return 0 })
+	if len(missed) > 0 {
+		slices.Sort(missed)
+		return fmt.Errorf("payload_vars: event '%s' carries no field '%s' a variable can set",
+			event.GetEventName(et), strings.Join(missed, "', '"))
+	}
+	return nil
 }
 
 // pickIndex is the entry of an n-entry pick that v names: v modulo n, a negative v
@@ -112,9 +127,10 @@ func walkPayloadPath(current reflect.Value, segments []string, copiedSlices map[
 	return current
 }
 
-// setPayloadVar writes an FSM variable value into a field; a string takes its decimal
-// form in place of each "{}", so a message can carry a count
-func setPayloadVar(field reflect.Value, value int64) {
+// setPayloadVar writes an FSM variable value into a field, false for a field of a
+// kind it cannot; a string takes its decimal form in place of each "{}", so a
+// message can carry a count
+func setPayloadVar(field reflect.Value, value int64) bool {
 	switch field.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		field.SetInt(value)
@@ -128,15 +144,21 @@ func setPayloadVar(field reflect.Value, value int64) {
 		field.SetBool(value != 0)
 	case reflect.String:
 		field.SetString(strings.ReplaceAll(field.String(), "{}", strconv.FormatInt(value, 10)))
+	default:
+		return false
 	}
+	return true
 }
 
 // === Payload Guards ===
 
 func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
-	m.RegisterGuard("PayloadIntCompare", func(a *fieldCompareArgs) (fsm.GuardFunc[T], error) {
+	m.RegisterPayloadGuard("PayloadIntCompare", func(a *fieldCompareArgs, t fsm.Trigger) (fsm.GuardFunc[T], error) {
 		if a.Field == "" {
 			return nil, errors.New("requires 'field'")
+		}
+		if err := t.Reads(a.Field, "number", ExtractIntField); err != nil {
+			return nil, err
 		}
 		return func(_ T, _ *fsm.RegionState, payload any) bool {
 			v, ok := ExtractIntField(payload, a.Field)
@@ -146,9 +168,12 @@ func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
 
 	// PayloadIntCompareVar compares a payload field with an FSM variable, as an input's
 	// tick with the marks a window took
-	m.RegisterGuard("PayloadIntCompareVar", func(a *fieldCompareVarArgs) (fsm.GuardFunc[T], error) {
+	m.RegisterPayloadGuard("PayloadIntCompareVar", func(a *fieldCompareVarArgs, t fsm.Trigger) (fsm.GuardFunc[T], error) {
 		if a.Field == "" || a.Var == "" {
 			return nil, errors.New("requires 'field' and 'var'")
+		}
+		if err := t.Reads(a.Field, "number", ExtractIntField); err != nil {
+			return nil, err
 		}
 		return func(_ T, _ *fsm.RegionState, payload any) bool {
 			v, ok := ExtractIntField(payload, a.Field)
@@ -156,9 +181,12 @@ func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
 		}, nil
 	})
 
-	m.RegisterGuard("PayloadBoolEquals", func(a *fieldBoolArgs) (fsm.GuardFunc[T], error) {
+	m.RegisterPayloadGuard("PayloadBoolEquals", func(a *fieldBoolArgs, t fsm.Trigger) (fsm.GuardFunc[T], error) {
 		if a.Field == "" {
 			return nil, errors.New("requires 'field'")
+		}
+		if err := t.Reads(a.Field, "bool", ExtractBoolField); err != nil {
+			return nil, err
 		}
 		expected := a.Value == nil || *a.Value
 		return func(_ T, _ *fsm.RegionState, payload any) bool {
@@ -167,9 +195,12 @@ func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
 		}, nil
 	})
 
-	m.RegisterGuard("PayloadStringEquals", func(a *fieldStringArgs) (fsm.GuardFunc[T], error) {
+	m.RegisterPayloadGuard("PayloadStringEquals", func(a *fieldStringArgs, t fsm.Trigger) (fsm.GuardFunc[T], error) {
 		if a.Field == "" {
 			return nil, errors.New("requires 'field'")
+		}
+		if err := t.Reads(a.Field, "string", ExtractStringField); err != nil {
+			return nil, err
 		}
 		return func(_ T, _ *fsm.RegionState, payload any) bool {
 			v, ok := ExtractStringField(payload, a.Field)
@@ -180,9 +211,12 @@ func registerPayloadGuards[T any](m *fsm.Machine[T], h Host[T]) {
 	// PayloadSpeciesIn passes when a payload's species is one of names, resolved at
 	// load, so a program that sorts before another, which renumbers it, retargets
 	// nothing; a name no species holds fails the load
-	m.RegisterGuard("PayloadSpeciesIn", func(a *fieldSpeciesArgs) (fsm.GuardFunc[T], error) {
+	m.RegisterPayloadGuard("PayloadSpeciesIn", func(a *fieldSpeciesArgs, t fsm.Trigger) (fsm.GuardFunc[T], error) {
 		if a.Field == "" || len(a.Names) == 0 {
 			return nil, errors.New("requires 'field' and 'names'")
+		}
+		if err := t.Reads(a.Field, "number", ExtractIntField); err != nil {
+			return nil, err
 		}
 		ids := make([]int64, len(a.Names))
 		for i, name := range a.Names {

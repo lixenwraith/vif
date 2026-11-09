@@ -141,7 +141,7 @@ var (
 )
 
 // compileEmitEvent resolves the event type and decodes its payload at load, its
-// enum fields as names spell them
+// enum fields as names spell them, and resolves the fields its payload_vars set
 func compileEmitEvent(names *dialect.Names) func(fsm.ActionConfig, fsm.StateResolver) (*EmitEventArgs, error) {
 	return func(cfg fsm.ActionConfig, _ fsm.StateResolver) (*EmitEventArgs, error) {
 		if cfg.Event == "" {
@@ -153,6 +153,9 @@ func compileEmitEvent(names *dialect.Names) func(fsm.ActionConfig, fsm.StateReso
 		}
 		if cfg.Pick == nil {
 			payload, err := event.AuthoredPayload(names, et, cfg.Payload)
+			if err == nil {
+				err = checkPayloadVars(et, payload, cfg.PayloadVars)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -170,7 +173,7 @@ func compileEmitEvent(names *dialect.Names) func(fsm.ActionConfig, fsm.StateReso
 
 // compilePick decodes the payload once per entry of the pick's list, the entry
 // written at its field, so each entry is checked as that field's value is: its
-// type, and its names where the field is an enum
+// type, and its names where the field is an enum, and payload_vars against it
 func compilePick(names *dialect.Names, et event.EventType, cfg fsm.ActionConfig) ([]any, error) {
 	p := cfg.Pick
 	switch {
@@ -189,7 +192,10 @@ func compilePick(names *dialect.Names, et event.EventType, cfg fsm.ActionConfig)
 		if err != nil {
 			return nil, fmt.Errorf("field '%s': %w", p.Field, err)
 		}
-		if picks[i], err = event.AuthoredPayload(names, et, raw); err != nil {
+		if picks[i], err = event.AuthoredPayload(names, et, raw); err == nil {
+			err = checkPayloadVars(et, picks[i], cfg.PayloadVars)
+		}
+		if err != nil {
 			return nil, fmt.Errorf("from[%d]: %w", i, err)
 		}
 	}

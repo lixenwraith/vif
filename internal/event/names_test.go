@@ -85,3 +85,27 @@ func TestALootFieldTakesAScenariosKinds(t *testing.T) {
 		t.Error("the code's names took a scenario's kind")
 	}
 }
+
+// TestABehaviorRequestNamesAProgramOfItsScenario: a spawn names one of the
+// scenario's programs, never a code species or none, and a cancel one or none, which
+// cancels every program; any other name fails the payload where it is authored.
+func TestABehaviorRequestNamesAProgramOfItsScenario(t *testing.T) {
+	names := event.PayloadNames(component.Declared{Programs: []string{"warden"}})
+	for _, c := range []struct {
+		et  event.EventType
+		raw map[string]any
+		ok  bool
+	}{
+		{event.EventBehaviorSpawnRequest, map[string]any{"program": "warden"}, true},
+		{event.EventBehaviorSpawnRequest, map[string]any{"program": "wardn"}, false},
+		{event.EventBehaviorSpawnRequest, map[string]any{"program": "eye"}, false},
+		{event.EventBehaviorSpawnRequest, nil, false},
+		{event.EventBehaviorCancelRequest, map[string]any{"program": "warden"}, true},
+		{event.EventBehaviorCancelRequest, map[string]any{"program": "wardn"}, false},
+		{event.EventBehaviorCancelRequest, nil, true},
+	} {
+		if _, err := event.AuthoredPayload(names, c.et, c.raw); (err == nil) != c.ok {
+			t.Errorf("%s %v: error %v, want ok %t", event.GetEventName(c.et), c.raw, err, c.ok)
+		}
+	}
+}

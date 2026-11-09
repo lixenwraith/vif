@@ -21,8 +21,7 @@ follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
 ### Machine follow-ups
 
 What vanguard met in the machine and is still open, its certain faults having
-landed. One open item elsewhere it meets:
-[payload field names at load](#check-payload-field-names-against-their-event-at-load).
+landed.
 
 #### Give a program's entrance an entering state
 
@@ -191,27 +190,6 @@ for the session and dropped at its end, and a bandit over trained genomes. Decid
 what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
-
-### Check payload field names against their event at load
-
-- Priority: P2
-- Affected files: `internal/fsm/loader.go`, `internal/fsm/std/payload.go`,
-  `internal/fsm/std/args.go`, `internal/bot/mind.go`, `internal/resource/check.go`
-
-A payload guard's `field` (bot's `Own` too), a transition's `capture_vars` and an
-`EmitEvent`'s `payload_vars` name payload fields looked up only when an event
-arrives, so a misspelt one fails its guard or is skipped while `-check` prints
-`scenario ok` (verified on a td copy with `field = "specie"` and
-`capture_vars = { xx = "dead_x" }`). Shipped scenarios and the default bot graph
-name only fields their events carry (a scratch scan of all 174 names). The smallest
-fix resolves each name with `fsm.FieldByTag` at load: against the trigger's payload
-prototype where `compileTransitions` resolves the trigger, which the payload guard
-builders then take, and against the decoded payload in `compileEmitEvent`; a payload
-guard on a `Tick` transition or as an action guard, which see no payload, fails too.
-A behavior spawn or cancel request naming no program of the scenario is the same
-gap one level down: the behavior system drops it and counts
-`behavior.unknown_program_rejects`. `ValidateScenario`, which holds the machine and
-the compiled programs, can resolve each request's `program` against `[behaviors]`.
 
 ### Build the map and scenario editor
 

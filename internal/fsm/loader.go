@@ -292,7 +292,7 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 
 		var guard GuardFunc[T]
 		if cfg.Guard != "" {
-			if guard, err = m.guard(cfg.Guard, cfg.GuardArgs); err != nil {
+			if guard, err = m.guard(cfg.Guard, cfg.GuardArgs, Trigger{}); err != nil {
 				return nil, fmt.Errorf("action '%s': %w", cfg.Action, err)
 			}
 		}
@@ -352,11 +352,17 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 			}
 			eventType = et
 		}
+		trigger := Trigger{Event: event.GetEventName(eventType), Payload: event.NewPayloadStruct(eventType)}
+		for _, key := range slices.Sorted(maps.Keys(cfg.CaptureVars)) {
+			if err := trigger.Reads(key, "number or bool", capturedField); err != nil {
+				return fmt.Errorf("capture_vars: %w", err)
+			}
+		}
 
 		var guard GuardFunc[T]
 		if cfg.Guard != "" {
 			var err error
-			if guard, err = m.guard(cfg.Guard, cfg.GuardArgs); err != nil {
+			if guard, err = m.guard(cfg.Guard, cfg.GuardArgs, trigger); err != nil {
 				return err
 			}
 		}
@@ -379,13 +385,16 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 	return nil
 }
 
+// capturedField is captured over a payload, as Trigger.Reads takes it
+func capturedField(payload any, key string) (int64, bool) { return captured(StructValue(payload), key) }
+
 // guard makes the guard name and args spell from the registered guards and the
-// dialect tree's And, Or and Not over them
-func (m *Machine[T]) guard(name string, args map[string]any) (GuardFunc[T], error) {
+// dialect tree's And, Or and Not over them, each leaf built for t
+func (m *Machine[T]) guard(name string, args map[string]any, t Trigger) (GuardFunc[T], error) {
 	return dialect.Tree[GuardFunc[T]]{
 		Leaf: func(name string) (func(map[string]any) (GuardFunc[T], error), bool) {
 			g, ok := m.guardReg[name]
-			return g.build, ok
+			return func(args map[string]any) (GuardFunc[T], error) { return g.build(args, t) }, ok
 		},
 		All: allOf[T],
 		Any: anyOf[T],
