@@ -265,11 +265,16 @@ INSTALL_FUNCS = umask 022; put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3
 # The wad is the whole external payload and mirrors the installed layout, so a
 # copy is the install: shipped files are replaced, files a player added kept,
 # and vif.toml and the keymap, the player's settings, written only when absent.
-# CLEAN=1 first removes every shipped category and those two. A variable, not
-# a sub-make, which make -n would run: install and wad-archive share it.
+# CLEAN=1 first removes every shipped category and those two, of scenario/ only
+# base/ and the copies an install before base/ left beside it, so a player's own
+# groups stay. A variable, not a sub-make, which make -n would run: install and
+# wad-archive share it.
 INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
 	if [ '$(CLEAN)' = 1 ]; then \
-		for dir in $(WAD_DIR)/*/ bot/; do dir=$${dir%/}; rm -rf "$$root/$${dir\#\#*/}"; echo "remove  $$root/$${dir\#\#*/}"; done; \
+		for dir in $(WAD_DIR)/*/ bot/ $(WAD_DIR)/scenario/base/ $(WAD_DIR)/scenario/base/*/; do \
+			dir=$${dir%/}; case $$dir in $(WAD_DIR)/scenario) continue ;; $(WAD_DIR)/scenario/*) dir=scenario/$${dir\#\#*/} ;; *) dir=$${dir\#\#*/} ;; esac; \
+			[ ! -e "$$root/$$dir" ] || { rm -rf "$$root/$$dir"; echo "remove  $$root/$$dir"; }; \
+		done; \
 		rm -f "$$root/input/keymap.toml" "$$root/vif.toml"; \
 	fi; \
 	for src in $$(find $(WAD_DIR) -type f); do put 0644 "$$src" "$$root/$${src\#$(WAD_DIR)/}"; done; \

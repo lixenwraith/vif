@@ -435,7 +435,7 @@ comment now states, and link that instead.
 
 - A payload's untagged fields decode by their Go names: a wall batch's cells take
   `OffsetX`, `OffsetY` and `WallVisualConfig = { ... }`, and a rune field such as
-  `char` takes the character's code, `43` for `+` (`wad/scenario/dummy`'s pads).
+  `char` takes the character's code, `43` for `+` (`wad/scenario/base/dummy`'s pads).
 - An event drop belongs to a cursor, so drops a scenario lays before
   `EventCursorSpawned` go to nobody: lay them on that event.
 - A payload's `duration` is nanoseconds (`3000000000` for three seconds), where a

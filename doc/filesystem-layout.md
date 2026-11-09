@@ -21,11 +21,11 @@ edits are one source.
 
 ```text
 wad/                            internal/asset/
-├── scenario/   one directory    ├── scenario/  fallback scenario
-│               per scenario     ├── content/   fallback corpus
-├── content/    typing corpus    ├── input/     default keymap
-└── image/      .aimg assets     ├── bot/       shipped bot graphs
-                                 ├── font/      cell font atlas
+├── scenario/                    ├── scenario/  fallback scenario
+│   └── base/   the shipped      ├── content/   fallback corpus
+│               scenarios        ├── input/     default keymap
+├── content/    typing corpus    ├── bot/       shipped bot graphs
+└── image/      .aimg assets     ├── font/      cell font atlas
                                  ├── vif.toml   default settings
                                  ├── version.txt source-archive stamp
                                  └── splash_font.go
@@ -50,9 +50,10 @@ Unix-like targets `internal/paths` lists, not on macOS or Windows.
 ```text
 vif/
 ├── vif.toml     settings: flag defaults (§3)
-├── scenario/    named scenarios, each rooted at scenario.toml
+├── scenario/    scenarios, each rooted at scenario.toml, in groups
+│   ├── base/    the shipped ones; vanguard/behavior/ holds its programs
 │   ├── main/    optional default override
-│   └── vanguard/behavior/  behavior programs its scenario.toml lists
+│   └── test/puzzle/tic-tac-toe/  a player's own, filed as they like
 ├── input/       keymap.toml
 ├── audio/       music.toml, sounds.toml (optional overrides)
 ├── content/     .txt and .toml typing corpus
@@ -189,9 +190,11 @@ make uninstall                                       # what install put under PR
 Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
 every shipped file and keeps files a player added; the keymap and `vif.toml` are
 the player's settings and are written only when absent. `CLEAN=1` first removes
-the shipped categories (`scenario/`, `content/`, `image/`, `bot/`) and those two
-files, so the root holds only the fresh install plus `audio/` and anything else
-a player put beside them. `install` adds the binary, licence, manual, desktop
+the shipped categories (`content/`, `image/`, `bot/`, and of `scenario/` its
+`base/` and the copies of shipped scenarios an install from before `base/` left
+at its top, which would shadow them) and those two files, so the root holds only
+the fresh install plus `audio/`, a player's own scenarios and anything else a
+player put beside them. `install` adds the binary, licence, manual, desktop
 entry and icons, completion and documentation under `PREFIX` with the wad at
 `$(SYSCONFDIR)/vif`.
 A user who cannot write `/usr/local/bin` gets, unstaged, `PREFIX=~/.local` and the

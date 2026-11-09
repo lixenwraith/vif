@@ -24,7 +24,7 @@ import (
 // the one cycle. It returns the raider's states by name.
 func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, map[string]component.BehaviorState) {
 	t.Helper()
-	const dir = "../../wad/scenario/vanguard"
+	const dir = "../../wad/scenario/base/vanguard"
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("vanguard scenario not present: %v", err)
 	}
@@ -218,7 +218,7 @@ func vanguardBehaviors(t *testing.T) (*BehaviorSet, map[string]map[string]any) {
 // vanguardScenario is vanguardBehaviors with the expanded scenario beside them
 func vanguardScenario(t *testing.T) (*BehaviorSet, map[string]map[string]any, map[string]any) {
 	t.Helper()
-	const dir = "../../wad/scenario/vanguard"
+	const dir = "../../wad/scenario/base/vanguard"
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("vanguard scenario not present: %v", err)
 	}

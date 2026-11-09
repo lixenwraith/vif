@@ -108,7 +108,7 @@ band of cells its test admits rather than the box, since its radius spans the ma
 A map smaller than the viewport is centered inside it, and the margin that
 leaves belongs to no cell any entity, effect, or field can occupy. It appears
 whenever the render area outgrows the simulation: a `crop_on_resize = false`
-scenario such as `wad/scenario/td`, a multi-participant session whose bounds were
+scenario such as `wad/scenario/base/td`, a multi-participant session whose bounds were
 latched by the first person to join, or a tmux pane zoomed after the map was fixed.
 
 Four rectangles describe it, all derived from `RenderContext`:

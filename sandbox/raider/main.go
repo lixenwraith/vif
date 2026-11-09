@@ -129,7 +129,7 @@ type app struct {
 }
 
 func main() {
-	dir := flag.String("s", "wad/scenario/vanguard", "the scenario directory whose raiders to show")
+	dir := flag.String("s", "wad/scenario/base/vanguard", "the scenario directory whose raiders to show")
 	flag.Parse()
 	caves, err := load(*dir)
 	if err != nil {

@@ -658,5 +658,5 @@ event counter plus an outer tick transition.
 | Ops, strict argument decode, guard trees, vocabulary entries | `internal/fsm/dialect` |
 | Game host adapter, config fields, `-schema` | `internal/manifest/fsm_bridge.go`, `internal/engine/config_access.go`, `internal/manifest/schema.go` |
 | Current embedded campaign | `internal/asset/scenario/*.toml` |
-| External examples | `wad/scenario/*` |
+| External examples | `wad/scenario/base/*` |
 | Extended syntax examples | `doc/fsm-reference.md` |

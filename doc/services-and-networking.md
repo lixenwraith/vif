@@ -614,7 +614,7 @@ reassembled wire size is capped at `MaxSnapshotBytes` and the declared plain siz
 at `MaxSnapshotPlainBytes`, which is eight times it. The two differ because the
 ratio is large and world-dependent: the storm high water compresses from about
 299 KiB to 16.1 KiB, and the largest map the grid holds — 500x250 walled, which
-`wad/scenario/td` approaches — from 24.3 MiB to 1.1 MiB. One cap for both would
+`wad/scenario/base/td` approaches — from 24.3 MiB to 1.1 MiB. One cap for both would
 refuse at the encoder a world whose bytes fit on the wire four times over.
 
 The wire cap is a sanity bound rather than the defence. A declared length is a claim

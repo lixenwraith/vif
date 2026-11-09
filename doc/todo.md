@@ -51,7 +51,7 @@ on every instance and a capture mid-materialize must restore them
 
 - Priority: P3
 - Affected files: `internal/event/payload.go` (`BehaviorSpawnRequestPayload`),
-  `wad/scenario/vanguard/scenario.toml` (`RaidSpawn`)
+  `wad/scenario/base/vanguard/scenario.toml` (`RaidSpawn`)
 
 Vanguard's raid spends seven actions naming its spawn's cell, the column past the
 right edge on a row drawn two inside the top and bottom: two `ConfigToVar`,
@@ -239,7 +239,7 @@ map layer and point markers; root `[[expand]]` blocks and library copies.
 
 - Priority: P3
 - Affected files: `internal/input/machine.go`, `actionnames.go`,
-  `internal/asset/input/keymap.toml`, `wad/scenario/vimtutor/scenario.toml`
+  `internal/asset/input/keymap.toml`, `wad/scenario/base/vimtutor/scenario.toml`
 - Guide: [Vim tutorial](vim-tutorial.md), [Input and modes
   §4](input-and-modes.md#4-default-bindings)
 
@@ -263,7 +263,7 @@ would be a second mechanism beside the key table and the capture; not that.
 ### Grow the vim tutor
 
 - Priority: P3
-- Affected files: `wad/scenario/vimtutor/`
+- Affected files: `wad/scenario/base/vimtutor/`
 - Guide: [Vim tutorial §3](vim-tutorial.md#3-the-next-round)
 
 The first round teaches `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x` then
@@ -470,7 +470,7 @@ number from [Measure a full roster](#measure-a-full-roster).
 
 Drive nine sessions with headless joiners for the fleet-level readings (CPU,
 memory, tmpfs, log rate, rotations), plus one real four-player session over real
-links, through a tower and a storm and on `wad/scenario/td`, for the hour the
+links, through a tower and a storm and on `wad/scenario/base/td`, for the hour the
 Job's deadline allows, which tick slips and correction magnitude need. Requests,
 limits and the quota totals then come from that measurement rather than from
 single-guest history and estimates. It passes with no OOM, liveness restart,
@@ -1095,7 +1095,7 @@ transferred world instead of a scenario.
 
 - Priority: P3
 - Affected files: `internal/app/internal/membership/session.go`,
-  `internal/app/serve.go`, `wad/scenario/td`
+  `internal/app/serve.go`, `wad/scenario/base/td`
 - Guide: [FSM and configuration](fsm-and-configuration.md#3-root-schema) §3
 
 `min_players = 0` is accepted and, like 1, waits for one player. A game that runs

@@ -809,7 +809,7 @@ func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 // rank of that cave's types.
 func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) {
 	t.Parallel()
-	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/vanguard"), "scenario.toml")
+	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/base/vanguard"), "scenario.toml")
 	if err != nil {
 		t.Skipf("vanguard scenario not present: %v", err)
 	}

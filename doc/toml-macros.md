@@ -8,7 +8,7 @@ today, and the map editor is meant to.
 ## 1. Decision
 
 **Context.** Scenario regions repeat whole shapes with a few values changed. Before
-this change `wad/scenario/td` spent 716 region lines on about a dozen shapes: a
+this change `wad/scenario/base/td` spent 716 region lines on about a dozen shapes: a
 spawn request awaited with a capture and a timeout fallback (fifteen states), a
 gateway attach (nine), guarded retargets on a tower's loss (fourteen actions), and
 flank escalation mirrored per side. Copies drift, and a reviewer cannot tell a deliberate
@@ -133,19 +133,19 @@ block library carries a copy.
 
 ## 6. Shipped scenarios
 
-`wad/scenario/td` keeps its blocks in `td_macros.toml`: spawn-and-await states for
+`wad/scenario/base/td` keeps its blocks in `td_macros.toml`: spawn-and-await states for
 towers and pylons, corner and flank gateways, flank escalation and its closing
 state, tower-loss retargeting, kill-or-left-the-map exits, announcements and
 resets. A flank's counters share a prefix (`l_dead`, `r_p2_done`), so one `side`
 parameter names them. The embedded campaign's `macros.toml` holds the tower
 region's corner pylon and gateway pair and the quasar and storm regions'
-left-the-map exit. `wad/scenario/vanguard`'s `macros.toml` holds the raiders' one
+left-the-map exit. `wad/scenario/base/vanguard`'s `macros.toml` holds the raiders' one
 attack cycle (`RaiderStates`) and the stun edge (`RaiderStun`), `Raider`, which
 makes a whole program of a look, stats and timings, the four tiers that invoke it
 with their stats, and each cave's palette and console colour, which `Raider`
 invokes by name (`{ macro = "${theme}Fg" }`). A raider type's program file is one
 invocation at its root: its tier's macro with its cave and its look, frames given
-as `[[frames]]`. `wad/scenario/simon` is one document that defines its own.
+as `[[frames]]`. `wad/scenario/base/simon` is one document that defines its own.
 
 ## 7. Rejected alternatives
 
