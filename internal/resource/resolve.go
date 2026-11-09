@@ -101,7 +101,7 @@ func ScenarioPath(o Options) (string, error) {
 		switch {
 		case !errors.Is(err, os.ErrNotExist):
 			return "", fmt.Errorf("scenario %q: %w", o.Scenario, err)
-		case !isScenarioName(o.Scenario):
+		case !paths.IsScenarioName(o.Scenario):
 			return "", fmt.Errorf("scenario %q not found", o.Scenario)
 		}
 		if p := newResolver(o).scenario(o.Scenario); p != "" {
@@ -144,15 +144,6 @@ func Scenarios(o Options) []string {
 	return names
 }
 
-// isScenarioName distinguishes a name the roots resolve from an explicit path. A
-// path always wins when it exists; otherwise a clean relative path, none of its
-// elements hidden, is looked up below each root's scenario/.
-func isScenarioName(name string) bool {
-	slash := filepath.ToSlash(name)
-	return filepath.IsLocal(name) && slash == path.Clean(slash) &&
-		!strings.HasPrefix(slash, ".") && !strings.Contains(slash, "/.")
-}
-
 // Keymap returns the external keymap path. An empty path selects the embedded
 // default keymap.
 func Keymap(o Options) (string, error) {
@@ -168,7 +159,7 @@ func BotGraph(o Options, spec string) ([]byte, string, error) {
 		data, err := os.ReadFile(spec)
 		return data, strings.TrimSuffix(filepath.Base(spec), ".toml"), err
 	}
-	if spec == "" || (!isScenarioName(spec) || filepath.Base(spec) != spec) && paths.ExternalFiles() {
+	if spec == "" || (!paths.IsScenarioName(spec) || filepath.Base(spec) != spec) && paths.ExternalFiles() {
 		return nil, "", fmt.Errorf("bot graph %q not found", spec)
 	}
 	file := spec + ".toml"

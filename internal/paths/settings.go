@@ -196,14 +196,14 @@ func ParseSettings(data []byte) (Settings, error) {
 	return s, nil
 }
 
-// resolve makes each path what it names from a file in dir; a bare scenario stays
-// a name the roots resolve, not a file beside the one read.
+// resolve makes each path what it names from a file in dir; a scenario name, bare or
+// a path below scenario/, stays a name the roots resolve, as -s takes it.
 func (s *Settings) resolve(dir string) {
 	p := &s.Paths
 	for _, v := range []*string{&p.Root, &p.Log, &p.Journal, &p.Music, &p.Content, &p.Keymap, &p.Downloads} {
 		*v = settingsPath(dir, *v)
 	}
-	if filepath.Base(p.Scenario) != p.Scenario || strings.HasPrefix(p.Scenario, "~") {
+	if !IsScenarioName(p.Scenario) || strings.HasPrefix(p.Scenario, "~") {
 		p.Scenario = settingsPath(dir, p.Scenario)
 	}
 }

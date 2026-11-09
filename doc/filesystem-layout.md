@@ -167,7 +167,8 @@ whether the menu or the command line pauses a game that can pause (`pause_menu`,
 system roots; the first file wins whole, a key it omits keeps the embedded
 default, and the `vif.toml` inside its own `root` is not read. Every key is a default: a flag given on the command line wins, and `-d`
 still takes the embedded scenario and content. A relative path is relative to the
-file (a bare scenario name stays a name the roots resolve), `~/` is the home
+file (a scenario name, or a path below `scenario/` such as `base/td`, stays a
+name the roots resolve, as `-s` takes it; `./` makes it a path), `~/` is the home
 directory. A key this build does not know is dropped: the run reads every key it
 knows, removes each line setting another and each table another heads from the
 document it writes back to, with the comments that are theirs (a comment group

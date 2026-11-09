@@ -142,6 +142,15 @@ func FindFile(roots []string, category, name string) string {
 	return ""
 }
 
+// IsScenarioName reports whether name is one the roots resolve below scenario/
+// rather than a path on its own: clean, relative and staying below, with no element
+// hidden. A bare name is found at any depth, a longer one is that path exactly.
+func IsScenarioName(name string) bool {
+	slash := filepath.ToSlash(name)
+	return filepath.IsLocal(name) && slash == path.Clean(slash) &&
+		!strings.HasPrefix(slash, ".") && !strings.Contains(slash, "/.")
+}
+
 // WalkScenarios visits each scenario below root's scenario/, by its slash-separated
 // path there and its directory, shallowest first and in path order among equals,
 // until visit returns false. A directory holding scenario.toml is a scenario and
