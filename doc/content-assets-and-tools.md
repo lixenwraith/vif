@@ -303,6 +303,7 @@ drops the shipped sample into a running game as a backdrop.
 | `tool/hierarchy-map` | Select Go file subsets as LLM context by annotation, local import dependency and symbol-level coupling. |
 | `tool/http-server` | Minimal static file server used by the WASM development target. |
 | `tool/vif-log` | Terminal viewer for the JSONL session log and replay journal, separately or merged. See its README. |
+| `tool/vif-settings` | Bring a `vif.toml` an earlier build left up to this build's in place, as `make install` and `install-config` do ([Filesystem §4](filesystem-layout.md#4-installation)). |
 | `tool/vif-router` | Host service that turns website session requests into fixed K3s Jobs and Services, and routes the front-door TCP and browser WebSocket connections to their pods. |
 | `sandbox/*` | Standalone visual/interaction prototypes and random/render benchmarks, intentionally outside application assembly. |
 

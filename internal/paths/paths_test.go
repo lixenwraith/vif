@@ -177,6 +177,40 @@ func TestDroppingUnknownKeysKeepsEveryOtherLine(t *testing.T) {
 	}
 }
 
+// TestUpgradingSettingsKeepsThePlayersLines: an older file loses the keys this
+// build does not take and the values it refuses, each with its own comments, and
+// gains what the embedded document sets that it lacks, comments included; every
+// other line stays. The result, like the embedded document, upgrades to itself.
+func TestUpgradingSettingsKeepsThePlayersLines(t *testing.T) {
+	old := "# my settings\n\n[paths]\nlog = \"~/logs\" # mine\n\n[play]\nsfx = false\n# the old name\neffects = false\nauto_fire = true\nmouse = false\n"
+	out, notes, err := UpgradeSettings([]byte(old))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone := []string{"# the old name", "effects = false", "auto_fire = true"}
+	for _, line := range strings.Split(strings.TrimSpace(old), "\n") {
+		if kept := slices.Contains(strings.Split(string(out), "\n"), line); kept == slices.Contains(gone, line) {
+			t.Errorf("line %q kept %v", line, kept)
+		}
+	}
+	if _, session, _ := strings.Cut(string(asset.DefaultSettings), "\n\n# Whether a run keeps"); !strings.Contains(string(out), "# Whether a run keeps"+session) {
+		t.Errorf("[session] came without its comments:\n%s", out)
+	}
+	if len(notes) != 3 || !strings.HasPrefix(notes[0], `dropped unknown key "play.effects"`) ||
+		!strings.Contains(notes[1], "play.auto_fire") || !strings.HasPrefix(notes[2], `added keys "paths.root"`) {
+		t.Errorf("notes %q", notes)
+	}
+	s, err := ParseSettings(out)
+	if err != nil || s.Play.Sfx || s.Play.Mouse || s.Play.AutoFire != "on" || s.Paths.Log != "~/logs" {
+		t.Errorf("reads %+v, %v", s, err)
+	}
+	for _, doc := range [][]byte{out, asset.DefaultSettings} {
+		if again, notes, err := UpgradeSettings(doc); err != nil || len(notes) > 0 || string(again) != string(doc) {
+			t.Errorf("an up-to-date document changed, %q, %v:\n%s", notes, err, again)
+		}
+	}
+}
+
 // TestSavePlayWritesTheChangedKeysAlone: a file not there yet starts as the
 // embedded one; in a file holding [play] the line of each key that changed is
 // replaced and a key it lacks goes after its last, every other line kept, comments

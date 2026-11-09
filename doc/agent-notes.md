@@ -47,11 +47,12 @@ comment now states, and link that instead.
 - `qemu-user-static` from apt runs a test binary built for another architecture
   (`GOARCH=arm64 go test -c`, then `qemu-aarch64-static ./x.test`): arm64's NEON
   path under `GOEXPERIMENT=simd`, and a big-endian `s390x` build, run that way.
-- A bump to a dependency's untagged release builds through a `go.work` whose
-  `replace` names the checkout (a `use` still fetches the tag's `go.mod`). Its
-  `go.sum` lines come from `golang.org/x/mod`'s `zip.CreateFromVCS` and
-  `dirhash.HashZip` over the commit the tag will name, and verify once a squash
-  merge keeps that tree.
+- A bump to a dependency's untagged release: serve the commit the tag will name
+  from a file `GOPROXY` (`golang.org/x/mod`'s `zip.CreateFromVCS` writes
+  `<module>/@v/<v>.zip`; `<v>.mod`, `<v>.info` and `list` beside it), listed first
+  with `GONOSUMDB` naming the module and a scratch `GOMODCACHE`. `go get`, then
+  `go mod tidy` and `go -C android mod tidy`, write the `go.sum` lines, which
+  verify against the tag once a squash merge keeps that tree.
 - `bindGo` strips the Android library (`-s -w`), so `go tool nm` reads nothing in
   it: bind with `-ldflags=-w` to sum `go tool nm -size` by package. A generic over
   component structs compiles once per component, and each copy's name spells the

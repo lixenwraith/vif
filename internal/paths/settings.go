@@ -166,15 +166,97 @@ func dropUnknown(s SettingsStore, keys UnknownKeys) error {
 	if err != nil {
 		return err
 	}
-	for _, k := range keys {
-		if _, err := doc.Delete(k); err != nil {
-			return err
-		}
+	if err := drop(doc, keys); err != nil {
+		return err
 	}
 	if _, err := ParseSettings(doc.Bytes()); err != nil {
 		return err
 	}
 	return s.Store(doc.Bytes())
+}
+
+// drop removes keys from doc, each with the comments that are its own
+func drop(doc *toml.Document, keys []toml.Key) error {
+	for _, k := range keys {
+		if _, err := doc.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// UpgradeSettings brings a settings document an earlier build left up to this
+// build's, as an install does the vif.toml it finds: each key this build does not
+// take, or whose value it refuses, goes with the comments that are its own, then
+// each key the embedded document sets that it lacks comes with its comments
+// (toml Document.Fill). Every other line stays. It names each change it made.
+func UpgradeSettings(data []byte) ([]byte, []string, error) {
+	doc, err := toml.ParseDocument(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	shipped, err := toml.ParseDocument(asset.DefaultSettings)
+	if err != nil {
+		return nil, nil, err
+	}
+	var base Settings
+	if err := shipped.Decode(&base); err != nil {
+		return nil, nil, err
+	}
+	var notes []string
+	if unknown := UnknownKeys(doc.Unmapped(&base)); len(unknown) > 0 {
+		if err := drop(doc, unknown); err != nil {
+			return nil, nil, err
+		}
+		notes = append(notes, "dropped "+unknown.Error())
+	}
+	reset := make(map[string]bool)
+	// the embedded document's tables say where a value is a table to walk
+	var refused func(tree, shape map[string]any, at toml.Key) error
+	refused = func(tree, shape map[string]any, at toml.Key) error {
+		for _, k := range slices.Sorted(maps.Keys(tree)) {
+			key := append(slices.Clip(at), k)
+			sub, table := tree[k].(map[string]any)
+			if want, ok := shape[k].(map[string]any); table && ok {
+				if err := refused(sub, want, key); err != nil {
+					return err
+				}
+			} else if why := base.refuses(key, tree[k]); why != nil {
+				if err := drop(doc, []toml.Key{key}); err != nil {
+					return err
+				}
+				reset[key.String()] = true
+				notes = append(notes, "reset to the default: "+why.Error())
+			}
+		}
+		return nil
+	}
+	if err := refused(doc.Tree(), shipped.Tree(), nil); err != nil {
+		return nil, nil, err
+	}
+	added, err := doc.Fill(shipped)
+	if err != nil {
+		return nil, nil, err
+	}
+	if added = slices.DeleteFunc(added, func(k toml.Key) bool { return reset[k.String()] }); len(added) > 0 {
+		notes = append(notes, "added "+strings.TrimPrefix(UnknownKeys(added).Error(), "unknown "))
+	}
+	if _, err := ParseSettings(doc.Bytes()); err != nil {
+		return nil, nil, err
+	}
+	return doc.Bytes(), notes, nil
+}
+
+// refuses reports why s would refuse value at key, read alone over s
+func (s Settings) refuses(key toml.Key, value any) error {
+	tree := map[string]any{key[len(key)-1]: value}
+	for i := len(key) - 2; i >= 0; i-- {
+		tree = map[string]any{key[i]: tree}
+	}
+	if err := toml.Decode(tree, &s); err != nil {
+		return err
+	}
+	return s.check()
 }
 
 // ParseSettings reads a settings document over the embedded one, as LoadSettings
@@ -242,16 +324,21 @@ func decodeSettings(data []byte, s *Settings) error {
 	if err := doc.Decode(s); err != nil {
 		return err
 	}
-	if c := s.Presentation.Cell; c != 0 && (c < parameter.CellLeast || c > parameter.CellMost) {
-		return fmt.Errorf("presentation.cell %g is not 0 or between %g and %g", c, parameter.CellLeast, parameter.CellMost)
-	}
-	if err := s.Play.check(); err != nil {
+	if err := s.check(); err != nil {
 		return err
 	}
 	if keys := doc.Unmapped(s); len(keys) > 0 {
 		return UnknownKeys(keys)
 	}
 	return nil
+}
+
+// check refuses a value outside what its key takes
+func (s *Settings) check() error {
+	if c := s.Presentation.Cell; c != 0 && (c < parameter.CellLeast || c > parameter.CellMost) {
+		return fmt.Errorf("presentation.cell %g is not 0 or between %g and %g", c, parameter.CellLeast, parameter.CellMost)
+	}
+	return s.Play.check()
 }
 
 // SettingsStore holds the settings document a run writes back for the next run to
