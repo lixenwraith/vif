@@ -145,3 +145,12 @@ func signInOf(r *http.Request) string {
 	}
 	return ""
 }
+
+// signInOfRequest is the sign-in a request carries: a bearer, which a native run
+// sends to a site over TLS alone, or a page's cookie.
+func signInOfRequest(r *http.Request) string {
+	if scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " "); ok && strings.EqualFold(scheme, "Bearer") {
+		return strings.TrimSpace(token)
+	}
+	return signInOf(r)
+}

@@ -145,6 +145,8 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"joins one player address may make per minute, over the front door and the browser route together")
 	set.IntVar(&cfg.Allocator.ClientCreates, "client-creates", 1,
 		"sessions one player address may create per -first-join window; a refused or full-fleet request spends none")
+	set.IntVar(&cfg.Allocator.AccountCreates, "account-creates", 4,
+		"sessions one signed-in account may create per -first-join window, in place of its address's budget; 0 budgets the address")
 	set.IntVar(&cfg.Allocator.SessionsMax, "sessions-max", 10,
 		"sessions the fleet holds at once, counted as its quota counts them (1 to 64)")
 	set.DurationVar(&cfg.Allocator.ReadyTimeout, "ready-timeout", 75*time.Second, "session readiness deadline")
@@ -241,6 +243,9 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if cfg.Allocator.ClientCreates < 1 || cfg.Allocator.ClientCreates > 16 {
 		return fmt.Errorf("-client-creates must be between 1 and 16")
+	}
+	if n := cfg.Allocator.AccountCreates; n < 0 || n > 16 {
+		return fmt.Errorf("-account-creates %d must be 0 to 16", n)
 	}
 	if !dnsLabelPattern.MatchString(cfg.Allocator.Workload.Namespace) {
 		return fmt.Errorf("invalid -namespace %q", cfg.Allocator.Workload.Namespace)

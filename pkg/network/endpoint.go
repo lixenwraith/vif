@@ -436,17 +436,15 @@ func (a wsAddr) String() string  { return string(a) }
 // RequestSession asks site's router for a new session, within timeout, and
 // returns the link this build joins it by. players and scenario choose from what the
 // site advertises, zero for its defaults; a refusal, an unauthorised one included, is
-// its message.
-func RequestSession(site string, players int, scenario string, timeout time.Duration) (target, fingerprint string, err error) {
-	body, err := json.Marshal(struct {
-		Players  int    `json:"players,omitempty"`
-		Scenario string `json:"scenario,omitempty"`
-	}{players, scenario})
+// its message. signIn is the process's sign-in for the site, shown to an https site
+// alone, so the site budgets the account rather than the address.
+func RequestSession(site string, players int, scenario, signIn string, timeout time.Duration) (target, fingerprint string, err error) {
+	req, err := siteRequest(site, players, scenario, signIn)
 	if err != nil {
 		return "", "", err
 	}
 	client := &http.Client{Timeout: timeout}
-	resp, err := client.Post(site+"/vif/api/sessions", "application/json", bytes.NewReader(body))
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", "", err
 	}
@@ -466,6 +464,28 @@ func RequestSession(site string, players int, scenario string, timeout time.Dura
 		return links[0], reply.DoorFingerprint, nil
 	}
 	return "", "", fmt.Errorf("%s created a session this build has no route to", site)
+}
+
+// siteRequest is the create a site's router reads, the sign-in as a bearer when the
+// site is reached over TLS: over plain http it would cross in the clear, and a page
+// sends its cookie instead.
+func siteRequest(site string, players int, scenario, signIn string) (*http.Request, error) {
+	body, err := json.Marshal(struct {
+		Players  int    `json:"players,omitempty"`
+		Scenario string `json:"scenario,omitempty"`
+	}{players, scenario})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, site+"/vif/api/sessions", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if signIn != "" && strings.HasPrefix(strings.ToLower(site), "https://") {
+		req.Header.Set("Authorization", "Bearer "+signIn)
+	}
+	return req, nil
 }
 
 // sessionLinks are the routes to a site's session this build can take, best first:

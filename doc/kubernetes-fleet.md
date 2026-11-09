@@ -81,9 +81,10 @@ which the pod verifies, spends once and checks the proof against
 ([auth design §7.5](auth-session-design.md#75-admission-tickets-and-accounts)). Anyone
 who reaches the router can still join a session and influence its Shared world, by
 name, within the budgets below; a signed-in player's ticket names the account the
-identity service vouches for, so a drop keeps the account out and the roster shows
-its name, but no budget is keyed by account yet (the design's phase 6). What is not
-accepted is a stranger being able to do anything *worse* than play.
+identity service vouches for, so a drop keeps the account out, the roster shows its
+name, and its joins and creates are budgeted by account rather than by the address
+it shares. What is not accepted is a stranger being able to do anything *worse*
+than play.
 
 What bounds a stranger:
 
@@ -92,9 +93,10 @@ What bounds a stranger:
   addresses, past which a new one is refused, so the defence cannot become the
   exhaustion. It is keyed on the player's own address at the router, before its
   lookup on both routes, as one budget per address (`-client-joins`), the front
-  door's from the dialler and the browser route's from `-client-address-header`. At
-  the pod every player arrives from the node's address, so its own budget is one
-  per session;
+  door's from the dialler and the browser route's from `-client-address-header`; a
+  dial whose sign-in names an account is moved to that account's budget once the
+  exchange names it. At the pod every player arrives from the node's address, so its
+  own budget is one per session;
 - at most `MaxHandshakes` (8) handshakes in flight, each on its own goroutine within
   `ConnectTimeout` (5 s), and every admitted stream closed after
   `NetworkLinkDeadAfter` (5 s) without a frame;

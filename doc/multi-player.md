@@ -800,9 +800,11 @@ A defeat is the players left: a Wraith neither loses nor holds one up.
 participant's process makes for it (`PlaceKeeper`, `network.Key`) and whose public
 half the roster entry and the cursor carry, so a successor's roster carries it too.
 The host's own entry carries one, and signs its succession messages with it. The
-keeper keeps its places past the process (`PlaceStore`): a page's in its tab's
-`sessionStorage`, so a reload keeps them and another tab is another player; a
-terminal's in `places.json` under the user's state directory and Android's in the
+keeper keeps its places past the process (`PlaceStore`): a page's in the site's
+`localStorage`, held by the first tab on the site under a Web Lock released when it
+closes, so a reload or a new tab after a closed one comes back to them, while a tab
+beside the first is another player with places of its own in its `sessionStorage`;
+a terminal's in `places.json` under the user's state directory and Android's in the
 app's files, so a restart, a crash or a reboot comes back to them, unless
 `[session] resume_after_restart` is off. When the door asks (`MsgAuthResponse`, a
 nonce), before it assigns a place, a dial proves its keys over the nonce and the

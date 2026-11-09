@@ -562,14 +562,48 @@ void main() {
         }
     }
 
-    /* The places a run comes back to its session with, the keys it holds them under,
-       kept for this tab alone: a reload takes back the place a player left, and
-       another tab is another player. Storage refused, they last the run. */
+    /* The places a run comes back to its session with, the keys it holds them under.
+       The first tab on this site holds the site's places (localStorage) under a lock
+       released when it closes, so a closed tab is come back to from a new one, as a
+       terminal comes back to places.json; a tab beside it is another player, its
+       places its own (sessionStorage), and so is every tab where locks are not
+       offered. Storage refused, they last the run. */
     const PLACES_KEY = 'vif.places';
+    const PLACES_LOCK = 'vif.places';
+    let placesStorage = null;
+
+    function storageOf(name) {
+        try {
+            return window[name] || null;
+        } catch (err) {
+            return null;
+        }
+    }
+
+    function claimPlaces() {
+        return new Promise(function(resolve) {
+            const settle = function(storage) {
+                if (placesStorage === null) placesStorage = storage || storageOf('sessionStorage');
+                resolve();
+            };
+            if (!navigator.locks || typeof navigator.locks.request !== 'function') {
+                settle(null);
+                return;
+            }
+            navigator.locks.request(PLACES_LOCK, { ifAvailable: true }, function(lock) {
+                if (!lock) {
+                    settle(null);
+                    return undefined;
+                }
+                settle(storageOf('localStorage'));
+                return new Promise(function() {}); /* held until the tab closes */
+            }).catch(function() { settle(null); });
+        });
+    }
 
     function keptPlaces() {
         try {
-            return sessionStorage.getItem(PLACES_KEY) || '';
+            return (placesStorage && placesStorage.getItem(PLACES_KEY)) || '';
         } catch (err) {
             return '';
         }
@@ -577,7 +611,7 @@ void main() {
 
     function keepPlaces(text) {
         try {
-            sessionStorage.setItem(PLACES_KEY, text);
+            if (placesStorage) placesStorage.setItem(PLACES_KEY, text);
         } catch (err) {
             /* nothing to tell: the run keeps them */
         }
@@ -599,6 +633,7 @@ void main() {
         : (received / MB).toFixed(1) + ' MB';
 
     async function loadWasm() {
+        await claimPlaces();
         const loading = document.getElementById('loading');
         let argv, bytes;
 

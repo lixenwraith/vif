@@ -89,7 +89,8 @@ func NewLoopbackPair(a, b link.PeerID) (*link.MeshPort, *link.MeshPort) {
 
 // RequestSession asks site's router for a new session and returns the link this
 // build joins it by. players and scenario choose from what the site advertises,
-// zero for its defaults; a refusal, an unauthorised one included, is its message.
-func RequestSession(site string, players int, scenario string) (target, fingerprint string, err error) {
-	return link.RequestSession(site, players, scenario, parameter.NetworkSessionRequestTimeout)
+// zero for its defaults; signIn, the process's sign-in for the site, is shown over
+// TLS alone; a refusal, an unauthorised one included, is its message.
+func RequestSession(site string, players int, scenario, signIn string) (target, fingerprint string, err error) {
+	return link.RequestSession(site, players, scenario, signIn, parameter.NetworkSessionRequestTimeout)
 }

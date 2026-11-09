@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -173,7 +175,7 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 	backend := &fakeSessionAllocator{created: session{ID: "abc", JoinTarget: "vif://site.example:7777/abc"}}
 	site := httptest.NewServer(testServer(backend))
 	defer site.Close()
-	got, _, err := network.RequestSession(site.URL, 2, "main")
+	got, _, err := network.RequestSession(site.URL, 2, "main", "")
 	if err != nil || got != backend.created.JoinTarget {
 		t.Fatalf("RequestSession = %q, %v; want %q", got, err, backend.created.JoinTarget)
 	}
@@ -181,7 +183,7 @@ func TestATerminalIsHandedTheLinkItAskedFor(t *testing.T) {
 		t.Fatalf("the allocator was asked for %+v", backend.requested)
 	}
 	backend.createErr = errFleetFull
-	if _, _, err := network.RequestSession(site.URL, 0, ""); err == nil || err.Error() != "The fleet is full" {
+	if _, _, err := network.RequestSession(site.URL, 0, "", ""); err == nil || err.Error() != "The fleet is full" {
 		t.Fatalf("a refusal returned %v", err)
 	}
 }
@@ -225,6 +227,68 @@ func TestSessionCreationIsBudgetedPerAddress(t *testing.T) {
 			t.Errorf("request %d was told to wait %q, want the window's seconds left", i+1, response.Header().Get("Retry-After"))
 		}
 	}
+}
+
+// A sign-in, a bearer or the page's cookie, has a create charged to its account
+// under -account-creates, in place of the address it shares; an unknown token is
+// the address's. A refusal names what it budgeted.
+func TestSessionCreationIsBudgetedByTheAccountASignInNames(t *testing.T) {
+	backend := &fakeSessionAllocator{created: session{ID: "abc"}}
+	api := newAPIServer(backend, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, allocatorConfig{
+		Workload: workloadConfig{FirstJoin: "90s"}, ClientAddressHeader: "X-Real-IP", ClientCreates: 1, AccountCreates: 2,
+	}, nil, nil)
+	api.accounts = introspecting(t, map[string]string{"tok": "7", "cookie-tok": "8"})
+	for i, tc := range []struct {
+		bearer, cookie string
+		want           int
+		holder         string
+	}{
+		{"", "", http.StatusCreated, ""},
+		{"", "", http.StatusTooManyRequests, "address"},
+		{"tok", "", http.StatusCreated, ""},
+		{"tok", "", http.StatusCreated, ""},
+		{"tok", "", http.StatusTooManyRequests, "account"},
+		{"", "cookie-tok", http.StatusCreated, ""},
+		{"stale", "", http.StatusTooManyRequests, "address"},
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/vif/api/sessions", nil)
+		request.Header.Set("X-Real-IP", "192.0.2.9")
+		if tc.bearer != "" {
+			request.Header.Set("Authorization", "Bearer "+tc.bearer)
+		}
+		if tc.cookie != "" {
+			request.AddCookie(&http.Cookie{Name: signInCookie, Value: tc.cookie})
+		}
+		response := httptest.NewRecorder()
+		api.ServeHTTP(response, request)
+		if response.Code != tc.want {
+			t.Fatalf("request %d answered %d, want %d: %s", i+1, response.Code, tc.want, response.Body.String())
+		}
+		if tc.holder != "" && !strings.Contains(response.Body.String(), "This "+tc.holder) {
+			t.Fatalf("request %d was refused as %s", i+1, response.Body.String())
+		}
+	}
+}
+
+// introspecting is an identity service stand-in naming the account of each token
+// in accounts, and none for any other.
+func introspecting(t *testing.T, accounts map[string]string) *identityClient {
+	t.Helper()
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Token string }
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if id, ok := accounts[req.Token]; ok {
+			fmt.Fprintf(w, `{"account":{"id":%q,"name":"player%s"}}`, id, id)
+			return
+		}
+		_, _ = w.Write([]byte(`{"account":null}`))
+	}))
+	t.Cleanup(service.Close)
+	client, err := newIdentityClient(service.URL+"/vif/api/auth/", service.URL+"/introspect", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
 }
 
 // TestOneReadingAnswersEveryListUntilACreate: each reading costs the API server

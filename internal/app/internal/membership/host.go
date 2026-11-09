@@ -485,7 +485,7 @@ func (m *Membership) joinSessionLocked(target string, players int, scenario stri
 		door, err := target, error(nil)
 		if site.Scheme == link.SchemeSite {
 			var fingerprint string
-			if door, fingerprint, err = network.RequestSession(site.Addr, players, scenario); err == nil {
+			if door, fingerprint, err = network.RequestSession(site.Addr, players, scenario, m.wiring.SignIns.Token(site.Addr)); err == nil {
 				m.ctx.SetStatusMessage("Joining "+link.Shown(door)+"...", parameter.StatusProgress)
 				if next, err = Joining(next, door); err == nil {
 					err = base.ValidateWith(next)
