@@ -1019,14 +1019,74 @@ type KrakenSpawnRequestPayload struct {
 
 // --- Behavior ---
 
-// BehaviorSpawnRequestPayload names the program whose species spawns at the cell
+// BehaviorSpawnRequestPayload names the program whose species spawns at the cell,
+// or, with an edge, on that edge of the map (Cell)
 type BehaviorSpawnRequestPayload struct {
-	Program string `toml:"program"`
-	X       int    `toml:"x"`
-	Y       int    `toml:"y"`
+	Program string  `toml:"program"`
+	X       int     `toml:"x"`
+	Y       int     `toml:"y"`
+	Edge    MapEdge `toml:"edge"`
+	Inset   int     `toml:"inset"`
 }
 
 func (p *BehaviorSpawnRequestPayload) NamedProgram() (string, bool) { return p.Program, true }
+
+// Cell is the cell the request names on a width by height map. An edge holds it on
+// that edge's line; along the edge it counts from the inset, wrapping over the cells
+// the insets at both ends leave, so a draw over any range lands on one of them.
+func (p *BehaviorSpawnRequestPayload) Cell(width, height int) (int, int) {
+	if p.Edge == MapEdgeNone || int(p.Edge) >= len(mapEdgeSpecs) {
+		return p.X, p.Y
+	}
+	e := mapEdgeSpecs[p.Edge]
+	if e.vertical {
+		return edgeLine(e.far, width), alongEdge(p.Y, p.Inset, height)
+	}
+	return alongEdge(p.X, p.Inset, width), edgeLine(e.far, height)
+}
+
+// MapEdge anchors a cell to an edge of the map; MapEdgeNone names the cell as given
+type MapEdge uint8
+
+const (
+	MapEdgeNone MapEdge = iota
+	MapEdgeLeft
+	MapEdgeRight
+	MapEdgeTop
+	MapEdgeBottom
+)
+
+// mapEdgeSpec is what an edge fixes: the column (vertical) or the row, and the last
+// one (far) or the first
+type mapEdgeSpec struct {
+	name     string
+	vertical bool
+	far      bool
+}
+
+var mapEdgeSpecs = [...]mapEdgeSpec{
+	MapEdgeNone:   {name: "none"},
+	MapEdgeLeft:   {name: "left", vertical: true},
+	MapEdgeRight:  {name: "right", vertical: true, far: true},
+	MapEdgeTop:    {name: "top"},
+	MapEdgeBottom: {name: "bottom", far: true},
+}
+
+// edgeLine is the first or the last of n lines
+func edgeLine(far bool, n int) int {
+	if far {
+		return n - 1
+	}
+	return 0
+}
+
+// alongEdge is v counted from the inset and wrapped over the n cells less the inset
+// at both ends; an inset past the middle keeps the middle cell or two
+func alongEdge(v, inset, n int) int {
+	lo := max(0, min(inset, (n-1)/2))
+	span := max(1, n-2*lo)
+	return lo + (v%span+span)%span
+}
 
 // BehaviorCancelRequestPayload names the program cancelled; empty names every program
 type BehaviorCancelRequestPayload struct {

@@ -337,6 +337,9 @@ comment now states, and link that instead.
   parameter: the searches, line of sight, passability tiers and a materialize take
   the struct, and an event's or a component's cell names the header, never the
   top-left.
+- `engine.NewGameContextWithClock(w, 80, 40, ...)` takes the terminal's size; the
+  map is what the status bar and rulers leave of it (79x36 there), so a test of a
+  cell at an edge reads `Positions.Width` and `Height`.
 
 ## Glyphs and widgets
 

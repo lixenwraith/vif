@@ -1492,6 +1492,8 @@ var codecBehaviorSpawnRequestPayload = structCodec{size: unsafe.Sizeof(BehaviorS
 	{off: unsafe.Offsetof(BehaviorSpawnRequestPayload{}.Program), kind: kindString},
 	{off: unsafe.Offsetof(BehaviorSpawnRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(BehaviorSpawnRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(BehaviorSpawnRequestPayload{}.Edge), kind: kindUint, size: unsafe.Sizeof(MapEdge(0))},
+	{off: unsafe.Offsetof(BehaviorSpawnRequestPayload{}.Inset), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
 func (p *BehaviorCancelRequestPayload) codec() (*structCodec, unsafe.Pointer) {

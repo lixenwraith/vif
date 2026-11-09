@@ -292,7 +292,7 @@ same boundary.
 { action = "EmitEvent", event = "EventName" }
 { action = "EmitEvent", event = "EventName", payload = { field = value, ... } }
 { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 0 }, payload_vars = { entity = "player_entity", delta = "bonus" } }
-{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { x = "raid_x", y = "raid_y" }, pick = { field = "program", var = "raid_type", from = ["scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle", "scorpion"] } }
+{ action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { edge = "right", inset = 2 }, payload_vars = { y = "raid_y" }, pick = { field = "program", var = "raid_type", from = ["scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle", "scorpion"] } }
 ```
 
 The event name and payload are compiled at load: an unknown event, a payload key
@@ -913,7 +913,11 @@ A scenario raises an instance with `EventBehaviorSpawnRequest { program, x, y }`
 its header at that cell or the nearest place its footprint fits, searched over the
 whole map. A cell on an edge or past it searches from the footprint flush against
 that edge, on the row or column it names, so a request names an edge blind to the
-body's size and header offset. The instance stands at once, or, its prototype
+body's size and header offset. With `edge` (`left`, `right`, `top`, `bottom`) the
+request names the map's edge instead of a cell on it: the other coordinate counts
+from `inset` and wraps over the cells the insets at both ends leave, so a
+`RandomVar` draw over any range lands on one, with no arithmetic on `map_width`
+or `map_height`. The instance stands at once, or, its prototype
 naming `entrance = "materialize"`, a materialize in its own style plays over that
 footprint for the prototype's `entrance_ms`, the style's whole when that is 0 or
 absent, and the instance

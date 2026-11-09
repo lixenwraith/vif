@@ -164,10 +164,10 @@ on_enter = [
 
 # A raider materializes at the right edge every two seconds while fewer than three
 # fly or materialize, every data species being a raider, on a row drawn inside the
-# two rows a wall keeps at its thinnest. The request names the map's width, a column
-# past its right edge, and the materialize stands each footprint flush against that
-# edge whatever its size; it searches the whole map from there, so rock on that row
-# sends it to the nearest open rows, and the raider lands as it ends, beside any
+# two rows a wall keeps at its thinnest. The request names the right edge with that
+# inset, the draw its row, and the materialize stands each footprint flush against
+# that edge whatever its size; it searches the whole map from there, so rock on that
+# row sends it to the nearest open rows, and the raider lands as it ends, beside any
 # rock that came over it meanwhile. The type is drawn between the two of the ramp's
 # rank in the cave's eight: eight times the cave's stone art, as the Cave macro's
 # pick takes it, is the first of its types in the pick's list, which runs the arts
@@ -187,13 +187,8 @@ transitions = [
 [states.RaidSpawn]
 parent = "Root"
 on_enter = [
-    { action = "ConfigToVar", payload = { field = "map_width", name = "raid_x" } },
-    { action = "ConfigToVar", payload = { field = "map_height", name = "raid_rows" } },
-    { action = "DecrementVar", payload = { name = "raid_rows", delta = 4 } },
     { action = "IncrementVar", payload = { name = "raid_index" } },
     { action = "RandomVar", payload = { name = "raid_y", min = 0, max = 1048575, index_var = "raid_index" } },
-    { action = "ModuloVar", payload = { name = "raid_y", source_var = "raid_rows" } },
-    { action = "IncrementVar", payload = { name = "raid_y", delta = 2 } },
     { action = "SetVar", payload = { name = "raid_type_seed", value = 1 } },
     { action = "RandomVar", payload = { name = "raid_type", min = 0, max = 1048575, seed_var = "raid_type_seed", index_var = "raid_index" } },
     { action = "ModuloVar", payload = { name = "raid_type", delta = 2 } },
@@ -206,7 +201,7 @@ on_enter = [
 ]
 transitions = [
     { trigger = "Tick", target = "RaidWait", guard = "VarCompare", guard_args = { var = "raid_boss", op = "eq", value = 0 }, actions = [
-        { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload_vars = { x = "raid_x", y = "raid_y" }, pick = { field = "program", var = "raid_type", from = [
+        { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { edge = "right", inset = 2 }, payload_vars = { y = "raid_y" }, pick = { field = "program", var = "raid_type", from = [
             "scarab", "crawler", "crab", "hornet", "spider", "mantis", "beetle",
             "scorpion",
             "gremlin", "chomper", "imp", "slime", "ghost", "skull", "wraith", "demon",

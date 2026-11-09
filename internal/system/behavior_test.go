@@ -71,8 +71,8 @@ const (
 
 const wardenX, wardenY = 20, 10
 
-// newWardenWorld spawns one warden at (20, 10) of an 80x40 world whose target group
-// holds one target at (x, y). The spawn's events are consumed.
+// newWardenWorld spawns one warden at (20, 10) of an 80x40 terminal's world whose
+// target group holds one target at (x, y). The spawn's events are consumed.
 func newWardenWorld(t *testing.T, x, y int) (*engine.GameContext, *BehaviorSystem, core.Entity) {
 	t.Helper()
 	return newProgramWorld(t, wardenProgram, x, y)
@@ -441,6 +441,43 @@ func TestALandRequestStandsTheDataSpeciesItNames(t *testing.T) {
 	}
 	if pos, _ := w.Positions.GetPosition(headers[0]); pos.X != wardenX || pos.Y != wardenY {
 		t.Fatalf("the warden stands at (%d, %d), want (%d, %d)", pos.X, pos.Y, wardenX, wardenY)
+	}
+}
+
+// TestAnEdgeRequestStandsOnThatEdgeBetweenItsInsets: a request naming an edge
+// stands on that edge, and along it counts from the inset and wraps over the cells
+// the insets leave, an inset past the middle keeping the middle
+func TestAnEdgeRequestStandsOnThatEdgeBetweenItsInsets(t *testing.T) {
+	ctx, s, first := newWardenWorld(t, wardenX+4, wardenY)
+	w := ctx.World
+	width, height := w.Positions.Width, w.Positions.Height
+	seen := map[core.Entity]bool{first: true}
+	// The warden is 4x2 with its header on the top row, one column in
+	for _, c := range []struct {
+		req  event.BehaviorSpawnRequestPayload
+		x, y int
+	}{
+		{event.BehaviorSpawnRequestPayload{Edge: event.MapEdgeRight, Inset: 2, Y: height - 4 + 3}, width - 3, 5},
+		{event.BehaviorSpawnRequestPayload{Edge: event.MapEdgeLeft, Inset: 2, Y: -1}, 1, height - 3},
+		{event.BehaviorSpawnRequestPayload{Edge: event.MapEdgeBottom, X: 30}, 30, height - 2},
+		{event.BehaviorSpawnRequestPayload{Edge: event.MapEdgeTop, Inset: width}, (width - 1) / 2, 0},
+	} {
+		c.req.Program = "warden"
+		s.HandleEvent(event.GameEvent{Type: event.EventBehaviorSpawnRequest, Payload: &c.req})
+		var stood []core.Entity
+		for _, header := range w.Components.Behavior.Entities() {
+			if !seen[header] {
+				seen[header] = true
+				stood = append(stood, header)
+			}
+		}
+		if len(stood) != 1 {
+			t.Fatalf("%+v stood %d wardens, want one", c.req, len(stood))
+		}
+		if pos, _ := w.Positions.GetPosition(stood[0]); pos.X != c.x || pos.Y != c.y {
+			t.Fatalf("%+v on a %dx%d map stands the warden at (%d, %d), want (%d, %d)",
+				c.req, width, height, pos.X, pos.Y, c.x, c.y)
+		}
 	}
 }
 
