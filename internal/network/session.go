@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -1484,8 +1485,9 @@ func (p *PendingJoin) Close() error {
 	return p.conn.Close()
 }
 
-// AdmissionLimiter bounds expensive joins with a per-address fixed window.
-// Addresses share a budget behind NAT; participant identities can be reused.
+// AdmissionLimiter bounds expensive joins with a fixed window per key: an address's
+// host, which dialers share behind NAT, or an account where a router names one
+// (AdmitKey), so a signed-in player's dials count against the account alone.
 type AdmissionLimiter struct {
 	mu     sync.Mutex
 	window time.Duration
@@ -1515,8 +1517,22 @@ func NewAdmissionLimiterOf(window time.Duration, burst int) *AdmissionLimiter {
 
 // Admit records one dial from addr and reports whether it may proceed.
 func (l *AdmissionLimiter) Admit(addr net.Addr) error {
-	key := admissionKey(addr)
-	if key == "" {
+	return l.AdmitKey(admissionKey(addr))
+}
+
+// AdmitKey records one admission under key, an account's or an address's; an empty
+// key is nothing to attribute a budget to and proceeds, as does a nil limiter.
+func (l *AdmissionLimiter) AdmitKey(key string) error {
+	if l == nil || key == "" {
+		return nil
+	}
+	return l.AdmitKeyBurst(key, l.burst)
+}
+
+// AdmitKeyBurst admits under key with a burst of its own in the limiter's window:
+// an account's budget beside the addresses'.
+func (l *AdmissionLimiter) AdmitKeyBurst(key string, burst int) error {
+	if l == nil || key == "" {
 		return nil // nothing to attribute a budget to; the transport is not a socket
 	}
 	now := time.Now() // [wall] a rate over real time, not a game one
@@ -1541,8 +1557,8 @@ func (l *AdmissionLimiter) Admit(addr net.Addr) error {
 		l.seen[key] = entry
 	}
 
-	if entry.count >= l.burst {
-		return &Refusal{Code: RefusalBudget, Reason: "this address has joined too often"}
+	if entry.count >= burst {
+		return &Refusal{Code: RefusalBudget, Reason: keyHolder(key) + " has joined too often"}
 	}
 	entry.count++
 	return nil
@@ -1550,7 +1566,13 @@ func (l *AdmissionLimiter) Admit(addr net.Addr) error {
 
 // Refund takes back one admission of addr, for a dial that started nothing.
 func (l *AdmissionLimiter) Refund(addr net.Addr) {
-	key := admissionKey(addr)
+	l.RefundKey(admissionKey(addr))
+}
+
+func (l *AdmissionLimiter) RefundKey(key string) {
+	if l == nil || key == "" {
+		return
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if entry, ok := l.seen[key]; ok && entry.count > 0 {
@@ -1560,7 +1582,13 @@ func (l *AdmissionLimiter) Refund(addr net.Addr) {
 
 // Wait is how long until addr may be admitted again, zero when it may now.
 func (l *AdmissionLimiter) Wait(addr net.Addr) time.Duration {
-	key := admissionKey(addr)
+	return l.WaitKey(admissionKey(addr))
+}
+
+func (l *AdmissionLimiter) WaitKey(key string) time.Duration {
+	if l == nil || key == "" {
+		return 0
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	entry, ok := l.seen[key]
@@ -1580,6 +1608,20 @@ func (l *AdmissionLimiter) sweepLocked(now time.Time) {
 		}
 	}
 }
+
+// keyHolder names a key's holder to the dialer refused: the account where the key
+// is one, else the address.
+func keyHolder(key string) string {
+	if strings.HasPrefix(key, "acct:") {
+		return "this account"
+	}
+	return "this address"
+}
+
+// AdmissionKey is what a budget counts an address under, for a limiter keyed by
+// string beside accounts: the host half of the address, an IPv6 host's /64, empty
+// for no address or an in-process one.
+func AdmissionKey(addr net.Addr) string { return admissionKey(addr) }
 
 // admissionKey is the host half of a network address, an IPv6 host's /64. The port
 // and an IPv6 address's low half are what a dialer changes for free, so counting

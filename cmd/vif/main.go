@@ -296,7 +296,11 @@ func requestSiteSession(scenario string) error {
 		return nil
 	}
 	fmt.Printf("requesting a session from %s\n", site.Addr)
-	target, fingerprint, err := network.RequestSession(site.Addr, flagSession.players, scenario)
+	var signIn string
+	if paths.ExternalFiles() {
+		signIn = app.SignInFor(paths.PlaceFile{Path: paths.SignInsFile()}, site.Addr)
+	}
+	target, fingerprint, err := network.RequestSession(site.Addr, flagSession.players, scenario, signIn)
 	if err != nil {
 		return fmt.Errorf("-join %s: %w", site.Addr, err)
 	}

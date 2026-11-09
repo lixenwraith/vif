@@ -596,6 +596,54 @@ func TestTheFrontDoorReadsTheEdgesHeaderAndEndsTLS(t *testing.T) {
 // it names and the ticket names that account; over a plain stream the dial keeps the
 // token back and the ticket names the address; a token the service does not know
 // names the address too, and the pod never sees the token.
+// The route frame charges the address; a sign-in moves the charge to the account,
+// which has a budget of its own, so the address keeps only its anonymous dials.
+func TestASignedInJoinIsChargedToTheAccountNotTheAddress(t *testing.T) {
+	router := network.NewKey()
+	pod := startAskingPod(t, router)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	door := newTCPRouter(&fakeSessionAllocator{podIP: "127.0.0.1"}, newHolds(8), network.NewAdmissionLimiterOf(time.Minute, 2),
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, door.game, _ = net.SplitHostPort(pod.addr)
+	door.ticket, door.accounts = router, introspecting(t, map[string]string{"tok": "7"})
+	if door.tls, err = link.SelfSignedTLS([]string{"127.0.0.1"}); err != nil {
+		t.Fatal(err)
+	}
+	go door.serve(listener)
+	dial := func(token string) error {
+		cfg := network.DebugConfig(link.RolePeer, "")
+		cfg.SessionName, cfg.SignIn = routedID, token
+		pending, _, err := network.DialSession("vifs://"+listener.Addr().String(), cfg)
+		if err == nil {
+			_ = pending.Close()
+		}
+		return err
+	}
+	admitted := func(step string, err error) {
+		t.Helper()
+		if !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+			t.Fatalf("%s: %v", step, err)
+		}
+		<-pod.tickets
+		<-pod.keys
+	}
+	admitted("the account's first dial", dial("tok"))
+	admitted("the account's second dial", dial("tok"))
+	if err := dial("tok"); !errors.Is(err, &network.Refusal{Code: network.RefusalBudget}) || !strings.Contains(err.Error(), "this account") {
+		t.Fatalf("the account's third dial in the window: %v", err)
+	}
+	// Three signed-in dials later the address has spent one of its two: the refused
+	// dial's, which it keeps, since the route frame and the pod's question were spent.
+	admitted("an anonymous dial beside them", dial(""))
+	if err := dial(""); !errors.Is(err, &network.Refusal{Code: network.RefusalBudget}) || !strings.Contains(err.Error(), "this address") {
+		t.Fatalf("the address's dial past its own budget: %v", err)
+	}
+}
+
 func TestASignInNamesTheTicketsAccountOverTLSAlone(t *testing.T) {
 	router := network.NewKey()
 	pod := startAskingPod(t, router)

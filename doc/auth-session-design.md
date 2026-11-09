@@ -589,11 +589,15 @@ routes and introspection are these:
 - Limits per client address, believed from the router's loopback address alone:
   registration, sign-in and deletion as chess bounds them; a `-max-accounts` cap.
 
-Then the router budgets creates, joins and doors by account where it mints; the
-coordinator copies the account's id and name onto the roster entry and the pass
-(D15); a revoked sign-in stops new tickets; `:login <site>` and `:logout` run the
-exchange from the game on every host (`auth.ScramClient`), the lobby page reading
-the same cookie.
+The router budgets creates and joins by account where it mints (landed): a dial
+whose sign-in names an account is charged to the account and the address's charge
+at the route frame given back, and a create carrying the sign-in, a bearer a native
+run sends to an https site alone or the page's cookie, is charged to the account
+under `-account-creates`. Doors follow with the publish ticket. The coordinator
+copies the account's id and name onto the roster entry and the pass (D15); a
+revoked sign-in stops new tickets; `:login <site>` and `:logout` run the exchange
+from the game on every host (`auth.ScramClient`), the lobby page reading the same
+cookie.
 
 ### 7.6 Phases
 
@@ -630,8 +634,16 @@ phase 2 `event.JournalSchema` with the departure.
   `:logout` on every host, the sign-in kept per site in `signins.json` or the
   browser's cookie; the account's name on the roster, the cursor and the pass; a
   drop keeps the account out. Budgets by account are phase 6's.
-- **Phase 6, the account's reach**: publish and create tickets, budgets by account,
-  the operator's loopback routes (D16), spectators.
+- **Phase 6, the account's reach**, in parts, each a PR:
+  - budgets by account: landed. Joins and creates charged to the account a sign-in
+    names, `-account-creates` beside `-client-creates`, the sign-in on a session
+    request over https;
+  - publish and create tickets: a publication carries the run's key and its sign-in,
+    an account is what may publish (D12), a resume signs the router's nonce in place
+    of the bearer `Resume` token, doors budgeted by account; a create ticket names
+    the account that created a fleet session, so the pod knows its owner;
+  - the operator's loopback routes (D16): dropping a participant and draining;
+  - spectators ([todo](todo.md#watch-a-session-as-a-spectator)).
 
 ## 8. What it asks of vif-router and the deployment
 

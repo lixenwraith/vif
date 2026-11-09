@@ -60,10 +60,12 @@ type allocatorConfig struct {
 	// browser route together; see holds.
 	RouteMax int
 	// ClientAddressHeader is the header the site's edge overwrites with the player's
-	// address; ClientJoins and ClientCreates are that address's budgets.
+	// address; ClientJoins and ClientCreates are that address's budgets, and
+	// AccountCreates the budget of an account a sign-in names in place of them.
 	ClientAddressHeader string
 	ClientJoins         int
 	ClientCreates       int
+	AccountCreates      int
 
 	ReadyTimeout   time.Duration
 	PollInterval   time.Duration
