@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -251,6 +252,58 @@ func TestCheckReportsTheProgramsAndLootItCompiled(t *testing.T) {
 		var out strings.Builder
 		if _, err := checkScenario(Options{Scenario: dir}, &out); err != nil || !strings.HasSuffix(out.String(), want) {
 			t.Errorf("check printed %q, %v; want it to end %q", out.String(), err, want)
+		}
+	}
+}
+
+// TestASavedDownloadIsFoundByItsDigestUntilEdited: a scenario saved in the
+// downloads, nested files and all, is found by its digest and by no other; once the
+// player edits it, it answers no join, and a later save leaves the edit standing.
+func TestASavedDownloadIsFoundByItsDigestUntilEdited(t *testing.T) {
+	sc := read(t, writePrograms(t, map[string]string{"scout": "[prototype]\n"}))
+	dir := filepath.Join(t.TempDir(), "downloads")
+	at, err := SaveDownload(dir, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := FindDownload(dir, sc.Digest()); !ok || got.Digest() != sc.Digest() || got.Files() != sc.Files() {
+		t.Fatalf("the saved scenario was not found by its digest: %t, %d files", ok, got.Files())
+	}
+	if _, ok := FindDownload(dir, strings.Repeat("0", len(sc.Digest()))); ok {
+		t.Fatal("a download answered another digest")
+	}
+	edited := filepath.Join(at, "main.toml")
+	if err := os.WriteFile(edited, []byte(scenarioRegion+"# mine\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := FindDownload(dir, sc.Digest()); ok {
+		t.Fatal("an edited download answered the digest it was saved under")
+	}
+	if _, err := SaveDownload(dir, sc); err == nil {
+		t.Fatal("a save over an edited download succeeded")
+	}
+	if body, _ := os.ReadFile(edited); !strings.Contains(string(body), "# mine") {
+		t.Fatal("a save replaced the player's edit")
+	}
+}
+
+// TestNoNameAHostSendsLeavesTheDownloads: a download is named for its scenario and
+// digest whatever name its host sent, so none climbs out of the directory, hides,
+// reads as a flag, or takes a name the player's own scenarios could have.
+func TestNoNameAHostSendsLeavesTheDownloads(t *testing.T) {
+	sc := read(t, writeScenario(t, filepath.Join(t.TempDir(), "td"), scenarioRegion))
+	dir := t.TempDir()
+	safe := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,47}-` + sc.Short() + `$`)
+	for name, want := range map[string]string{
+		"../../escape": "escape", "/etc/vif": "etc_vif", ".hidden": "hidden", "-s": "s",
+		"日本語": "scenario", strings.Repeat("x", 300): strings.Repeat("x", 48),
+		EmbeddedLabel: "main", "td-" + sc.Short(): "td",
+	} {
+		sc.Name = name
+		at, err := SaveDownload(dir, sc)
+		if err != nil || filepath.Dir(at) != dir || !safe.MatchString(filepath.Base(at)) ||
+			filepath.Base(at) != want+"-"+sc.Short() {
+			t.Errorf("%q saved as %q, %v; want %s-%s in %s", name, at, err, want, sc.Short(), dir)
 		}
 	}
 }

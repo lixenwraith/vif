@@ -20,9 +20,9 @@ var (
 	dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 	headerPattern   = regexp.MustCompile(`^[A-Za-z0-9][-A-Za-z0-9]*$`)
 	sizePattern     = regexp.MustCompile(`^([1-9][0-9]{0,4})x([1-9][0-9]{0,4})$`)
-	// A scenario name is one path element the game looks up under scenario/ on the
-	// read-only volume. Anything with a separator in it would be a caller choosing
-	// a path, which is not a choice this router offers.
+	// A scenario name is one path element the game looks up at any depth under
+	// scenario/ on the read-only volume. Anything with a separator in it would be a
+	// caller choosing a path, which is not a choice this router offers.
 	scenarioPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 )
 

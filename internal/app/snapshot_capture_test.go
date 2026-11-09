@@ -684,7 +684,7 @@ func withUnregisterableGeneticState(t *testing.T, cap snapshot.SharedCapture) sn
 // Every one of them must derive the same species seeds, or the install is refused.
 func TestAGAScenarioStagesAcrossAReset(t *testing.T) {
 	t.Parallel()
-	td := resource.Options{Scenario: "../../wad/scenario/td"}
+	td := resource.Options{Scenario: "../../wad/scenario/base/td"}
 	if _, err := os.Stat(filepath.Join(td.Scenario, paths.ScenarioFile)); err != nil {
 		t.Skipf("external scenario %s not present", td.Scenario)
 	}

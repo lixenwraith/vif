@@ -90,6 +90,10 @@ comment now states, and link that instead.
   stub's mirrors of live functions.
 - A cloud checkout is shallow, about 50 commits: `git log -S` names the boundary
   commit as a line's origin. `git fetch --deepen=3000 origin main` reaches the rest.
+- Claude Code's Bash safety check refuses any command whose text holds `rm -rf` on
+  a variable, a heredoc that only edits the Makefile's install recipe included:
+  edit that recipe with the Edit tool, and read what `CLEAN=1` would remove with
+  `make -n install-config CLEAN=1 VIF_CONFIG_DIR=<any path>`, never by running it.
 
 ## Ticks and events
 
@@ -433,9 +437,13 @@ comment now states, and link that instead.
 
 ## Scenario TOML
 
+- A test that reads a shipped scenario skips, not fails, when it is missing (an
+  `os.Stat` or `ScenarioPath` guard), so moving one under `wad/scenario/` passes
+  green while testing nothing: run those tests with `-v` and read the SKIP lines,
+  and search the `filepath.Join(..., "scenario", ...)` form beside the slash one.
 - A payload's untagged fields decode by their Go names: a wall batch's cells take
   `OffsetX`, `OffsetY` and `WallVisualConfig = { ... }`, and a rune field such as
-  `char` takes the character's code, `43` for `+` (`wad/scenario/dummy`'s pads).
+  `char` takes the character's code, `43` for `+` (`wad/scenario/base/dummy`'s pads).
 - An event drop belongs to a cursor, so drops a scenario lays before
   `EventCursorSpawned` go to nobody: lay them on that event.
 - A payload's `duration` is nanoseconds (`3000000000` for three seconds), where a

@@ -39,9 +39,10 @@ The result is a strict policy/mechanism split:
 The scenario entry is resolved in this order:
 
 1. `-s <path-or-name>`, defaulting to `[paths] scenario` in `vif.toml`, where a
-   path is an entry file or a directory holding `scenario.toml`, and a name
-   resolves under `scenario/<name>/` in the configured roots;
-2. `scenario/main/scenario.toml` under a root passed with `-config-dir` (or
+   path is an entry file or a directory holding `scenario.toml`, and a name, at
+   any depth below `scenario/`, or a path below it resolves in the configured
+   roots ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy));
+2. a scenario named `main` under a root passed with `-config-dir` (or
    `[paths] root`);
 3. the same under the user config root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
@@ -657,5 +658,5 @@ event counter plus an outer tick transition.
 | Ops, strict argument decode, guard trees, vocabulary entries | `internal/fsm/dialect` |
 | Game host adapter, config fields, `-schema` | `internal/manifest/fsm_bridge.go`, `internal/engine/config_access.go`, `internal/manifest/schema.go` |
 | Current embedded campaign | `internal/asset/scenario/*.toml` |
-| External examples | `wad/scenario/*` |
+| External examples | `wad/scenario/base/*` |
 | Extended syntax examples | `doc/fsm-reference.md` |

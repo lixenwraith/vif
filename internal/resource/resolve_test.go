@@ -121,17 +121,32 @@ func TestCheckRefusesABrokenBotGraph(t *testing.T) {
 	}
 }
 
-func TestGameNameResolvesInsideConfigurationRoots(t *testing.T) {
+// TestAScenarioNameResolvesAtAnyDepthAndAPathExactly: a bare name finds the
+// shallowest directory of that name below scenario/, the first in path order among
+// equals, never one inside another scenario or a hidden group; a path below
+// scenario/ names its scenario whatever shadows its name.
+func TestAScenarioNameResolvesAtAnyDepthAndAPathExactly(t *testing.T) {
 	root := t.TempDir()
-	td := filepath.Join(root, paths.ScenarioDirName, "td", paths.ScenarioFile)
-	writeFixture(t, td)
-
-	got, err := ScenarioPath(Options{Dir: root, Scenario: "td"})
-	if err != nil || got != td {
-		t.Fatalf("named scenario = %q, %v; want %q", got, err, td)
+	entry := func(rel string) string {
+		p := filepath.Join(root, paths.ScenarioDirName, filepath.FromSlash(rel), paths.ScenarioFile)
+		writeFixture(t, p)
+		return p
 	}
-	if _, err := ScenarioPath(Options{Dir: root, Scenario: "missing"}); err == nil {
-		t.Fatal("missing named scenario accepted")
+	td, puzzle := entry("base/td"), entry("a/puzzle/td")
+	entry("zz/td")
+	entry("base/vanguard")
+	entry("base/vanguard/behavior/inner")
+	entry(".trash/old")
+
+	for name, want := range map[string]string{"td": td, "a/puzzle/td": puzzle} {
+		if got, err := ScenarioPath(Options{Dir: root, Scenario: name}); err != nil || got != want {
+			t.Errorf("%s = %q, %v; want %q", name, got, err, want)
+		}
+	}
+	for _, name := range []string{"missing", "inner", "old", ".trash/old", "base/../zz/td"} {
+		if got, err := ScenarioPath(Options{Dir: root, Scenario: name}); err == nil {
+			t.Errorf("%s resolved to %q", name, got)
+		}
 	}
 }
 
@@ -166,20 +181,23 @@ func TestOptionsRejectUnusableOverrides(t *testing.T) {
 }
 
 // TestScenariosListsMainThenEveryRootsScenario: main leads whether or not a root
-// holds it, the roots' scenario directories follow sorted and named once, and a
-// directory without an entry file or -d lists nothing beyond main.
+// holds it, then every scenario of every group, sorted, each by the name -s reaches
+// it by: its own, or its path where that name reaches another. A directory without
+// an entry file, one a higher root holds at the same path, or -d lists nothing.
 func TestScenariosListsMainThenEveryRootsScenario(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	user := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", user)
 	t.Setenv(paths.SystemRootsEnv, "")
 	dir := t.TempDir()
-	for _, name := range []string{"td", "blank", paths.MainScenarioName} {
-		writeFixture(t, filepath.Join(dir, paths.ScenarioDirName, name, paths.ScenarioFile))
+	for _, rel := range []string{"base/td", "base/blank", paths.MainScenarioName, "test/td"} {
+		writeFixture(t, filepath.Join(dir, paths.ScenarioDirName, filepath.FromSlash(rel), paths.ScenarioFile))
 	}
+	writeFixture(t, filepath.Join(user, paths.AppDirName, paths.ScenarioDirName, "base", "td", paths.ScenarioFile))
 	if err := os.MkdirAll(filepath.Join(dir, paths.ScenarioDirName, "notes"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	got := Scenarios(Options{Dir: dir})
-	if want := []string{paths.MainScenarioName, "blank", "td"}; strings.Join(got, " ") != strings.Join(want, " ") {
+	if want := []string{paths.MainScenarioName, "blank", "td", "test/td"}; strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("scenarios = %v, want %v", got, want)
 	}
 	if got := Scenarios(Options{Dir: dir, Embedded: true}); len(got) != 1 || got[0] != paths.MainScenarioName {

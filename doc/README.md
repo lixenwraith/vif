@@ -95,8 +95,8 @@ changing a subsystem, update the source that actually owns its shape.
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
 | Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/internal/corrector/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `snapshot_pages_gen.go`, `internal/app/internal/corrector/snapshot_stage.go`, `pkg/network/snapshot.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
-| Main encounter progression | `internal/asset/scenario/*.toml`, embedded; a configuration root's `scenario/main/` overrides it | `internal/fsm`, `internal/engine.Scheduler` |
-| Alternate scenarios | `wad/scenario/*` | selected by name or path with `-s` |
+| Main encounter progression | `internal/asset/scenario/*.toml`, embedded; a scenario named `main` in a configuration root overrides it | `internal/fsm`, `internal/engine.Scheduler` |
+| Alternate scenarios | `wad/scenario/base/*` | selected by name or path with `-s` |
 | Gameplay tuning | `internal/parameter` and `internal/parameter/visual` | systems and renderers |
 | Embedded fallback corpus | `internal/asset/content/*.toml` | content service |
 | Built-in sound and music banks | the audio module's `bank/*.toml` ([`lixenwraith/audio/bank`](https://github.com/lixenwraith/audio/tree/main/bank)) | `bank.Sounds`/`bank.Patterns`, `AudioConfig.BaseSounds`/`BaseVoices`/`BasePatterns` |

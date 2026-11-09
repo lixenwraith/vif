@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,6 +21,7 @@ const (
 
 	ScenarioDirName  = "scenario"
 	MainScenarioName = "main"
+	DownloadsDirName = "downloads"
 	InputDirName     = "input"
 	AudioDirName     = "audio"
 	ContentDirName   = "content"
@@ -90,6 +92,16 @@ func UserRoot() string {
 	return filepath.Join(base, AppDirName)
 }
 
+// DefaultDownloadsDir is where a run saves the scenarios its sessions' hosts send,
+// and finds them again: the user root's scenario/downloads, "" without one.
+func DefaultDownloadsDir() string {
+	user := UserRoot()
+	if user == "" {
+		return ""
+	}
+	return filepath.Join(user, ScenarioDirName, DownloadsDirName)
+}
+
 // checkoutRoot is the wad/ beside the bin/ holding this binary, so a build plays
 // its checkout's scenarios uninstalled; "" for a binary anywhere else.
 func checkoutRoot() string {
@@ -128,6 +140,48 @@ func FindFile(roots []string, category, name string) string {
 		}
 	}
 	return ""
+}
+
+// IsScenarioName reports whether name is one the roots resolve below scenario/
+// rather than a path on its own: clean, relative and staying below, with no element
+// hidden. A bare name is found at any depth, a longer one is that path exactly.
+func IsScenarioName(name string) bool {
+	slash := filepath.ToSlash(name)
+	return filepath.IsLocal(name) && slash == path.Clean(slash) &&
+		!strings.HasPrefix(slash, ".") && !strings.Contains(slash, "/.")
+}
+
+// WalkScenarios visits each scenario below root's scenario/, by its slash-separated
+// path there and its directory, shallowest first and in path order among equals,
+// until visit returns false. A directory holding scenario.toml is a scenario and
+// what is below it its own; any other is a group, read at any depth unless it is a
+// link. Names beginning with a dot are passed over.
+func WalkScenarios(root string, visit func(rel, dir string) bool) {
+	level := []string{""}
+	for len(level) > 0 {
+		var next []string
+		for _, group := range level {
+			entries, err := os.ReadDir(filepath.Join(root, ScenarioDirName, filepath.FromSlash(group)))
+			if err != nil {
+				continue
+			}
+			for _, e := range entries {
+				if strings.HasPrefix(e.Name(), ".") {
+					continue
+				}
+				rel := path.Join(group, e.Name())
+				dir := filepath.Join(root, ScenarioDirName, filepath.FromSlash(rel))
+				if info, err := os.Stat(filepath.Join(dir, ScenarioFile)); err == nil && !info.IsDir() {
+					if !visit(rel, dir) {
+						return
+					}
+				} else if e.IsDir() {
+					next = append(next, rel)
+				}
+			}
+		}
+		level = next
+	}
 }
 
 // ConfigFile resolves one optional document: an explicit path wins and must be a

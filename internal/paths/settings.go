@@ -25,13 +25,14 @@ const SettingsFile = "vif.toml"
 // each reads as its flag's value would.
 type Settings struct {
 	Paths struct {
-		Root     string `toml:"root"`
-		Log      string `toml:"log"`
-		Journal  string `toml:"journal"`
-		Music    string `toml:"music"`
-		Scenario string `toml:"scenario"`
-		Content  string `toml:"content"`
-		Keymap   string `toml:"keymap"`
+		Root      string `toml:"root"`
+		Log       string `toml:"log"`
+		Journal   string `toml:"journal"`
+		Music     string `toml:"music"`
+		Scenario  string `toml:"scenario"`
+		Content   string `toml:"content"`
+		Keymap    string `toml:"keymap"`
+		Downloads string `toml:"downloads"`
 	} `toml:"paths"`
 	Audio struct {
 		BufferMs int `toml:"buffer_ms"`
@@ -51,12 +52,14 @@ type Settings struct {
 	Session Session `toml:"session"`
 }
 
-// Session is the [session] table: how a run keeps its place in a session past the
+// Session is the [session] table: what a run keeps of its sessions past the
 // process. ResumeAfterRestart keeps the keys its places are held under in the
 // user's state directory (PlacesFile), so a restart, a crash or a reboot comes back
-// to the place its Wraith kept; off, they last the run.
+// to the place its Wraith kept; off, they last the run. SaveDownloads keeps a
+// scenario a host sends in [paths] downloads; off, it lasts the run.
 type Session struct {
 	ResumeAfterRestart bool `toml:"resume_after_restart"`
+	SaveDownloads      bool `toml:"save_downloads"`
 }
 
 // Play is the [play] table: how a run starts, and what the configuration menu
@@ -193,14 +196,14 @@ func ParseSettings(data []byte) (Settings, error) {
 	return s, nil
 }
 
-// resolve makes each path what it names from a file in dir; a bare scenario stays
-// a name the roots resolve, not a file beside the one read.
+// resolve makes each path what it names from a file in dir; a scenario name, bare or
+// a path below scenario/, stays a name the roots resolve, as -s takes it.
 func (s *Settings) resolve(dir string) {
 	p := &s.Paths
-	for _, v := range []*string{&p.Root, &p.Log, &p.Journal, &p.Music, &p.Content, &p.Keymap} {
+	for _, v := range []*string{&p.Root, &p.Log, &p.Journal, &p.Music, &p.Content, &p.Keymap, &p.Downloads} {
 		*v = settingsPath(dir, *v)
 	}
-	if filepath.Base(p.Scenario) != p.Scenario || strings.HasPrefix(p.Scenario, "~") {
+	if !IsScenarioName(p.Scenario) || strings.HasPrefix(p.Scenario, "~") {
 		p.Scenario = settingsPath(dir, p.Scenario)
 	}
 }

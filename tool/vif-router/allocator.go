@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -167,34 +168,33 @@ func (a *allocator) limits() fleetLimits {
 	w := a.cfg.Workload
 	out := fleetLimits{PlayersMax: a.cfg.PlayersMax, PlayersDefault: w.Players, BotsMax: a.cfg.BotsMax,
 		LogLevels: a.cfg.LogLevels, LogLevelDefault: w.LogLevel, SizeDefault: w.Size,
-		Scenarios: a.scenarios(), SessionsMax: a.cfg.SessionsMax}
-	a.describe(&out)
+		SessionsMax: a.cfg.SessionsMax}
+	var dirs map[string]string
+	out.Scenarios, dirs = a.scenarios()
+	a.describe(&out, dirs)
 	return out
 }
 
-// scenarios is what the node's volume holds, read per request rather than kept
-// from start-up: the tree is replaced by rename while this runs, so a list taken
-// at boot would advertise what was installed before the last swap. The default is
-// always offered, so a volume that cannot be read still yields a session — and a
-// name that is there but broken is the init container's to refuse, not this.
-func (a *allocator) scenarios() []string {
-	root := filepath.Join(a.cfg.WadDir, paths.ScenarioDirName)
-	out := []string{a.cfg.Workload.Scenario}
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return out
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if !entry.IsDir() || name == a.cfg.Workload.Scenario ||
-			!scenarioPattern.MatchString(name) {
-			continue
+// scenarios is what the node's volume holds, by name with each one's directory,
+// read per request rather than kept from start-up: the tree is replaced by rename
+// while this runs, so a list taken at boot would advertise what was installed
+// before the last swap. A name is the first directory of it the game's walk
+// reaches, as a session's -s finds it. The default is always offered, so a volume
+// that cannot be read still yields a session — and a name that is there but broken
+// is the init container's to refuse, not this.
+func (a *allocator) scenarios() ([]string, map[string]string) {
+	out, dirs := []string{a.cfg.Workload.Scenario}, map[string]string{}
+	paths.WalkScenarios(a.cfg.WadDir, func(rel, dir string) bool {
+		name := path.Base(rel)
+		if _, seen := dirs[name]; !seen && scenarioPattern.MatchString(name) {
+			dirs[name] = dir
+			if name != a.cfg.Workload.Scenario {
+				out = append(out, name)
+			}
 		}
-		if _, err := os.Stat(filepath.Join(root, name, paths.ScenarioFile)); err == nil {
-			out = append(out, name)
-		}
-	}
-	return out
+		return true
+	})
+	return out, dirs
 }
 
 // describeScan bounds what is read of an entry file for its description, player
@@ -203,17 +203,19 @@ func (a *allocator) scenarios() []string {
 const describeScan = 4 << 10
 
 // describe fills each of limits' scenarios' description, player range and [map]
-// fixed from its entry file, per request for the reason the names are. A main the
-// volume does not hold is the game's embedded fallback, so it is described by that
-// one. An unreadable or malformed entry is left undescribed: describing is not this
-// service's check to fail.
-func (a *allocator) describe(limits *fleetLimits) {
-	root := filepath.Join(a.cfg.WadDir, paths.ScenarioDirName)
+// fixed from its entry file in dirs, per request for the reason the names are. A
+// main the volume does not hold is the game's embedded fallback, so it is described
+// by that one. An unreadable or malformed entry is left undescribed: describing is
+// not this service's check to fail.
+func (a *allocator) describe(limits *fleetLimits, dirs map[string]string) {
 	limits.Descriptions, limits.FixedMaps = map[string]string{}, map[string]string{}
 	limits.MinPlayers, limits.MaxPlayers = map[string]int{}, map[string]int{}
 	players := map[string]map[string]int{"min_players": limits.MinPlayers, "max_players": limits.MaxPlayers}
 	for _, name := range limits.Scenarios {
-		head, err := readHead(filepath.Join(root, name, paths.ScenarioFile), describeScan)
+		head, err := []byte(nil), error(fs.ErrNotExist)
+		if dir, ok := dirs[name]; ok {
+			head, err = readHead(filepath.Join(dir, paths.ScenarioFile), describeScan)
+		}
 		if errors.Is(err, fs.ErrNotExist) && name == paths.MainScenarioName {
 			head, err = fs.ReadFile(asset.MainScenario, asset.MainScenarioEntry)
 		}

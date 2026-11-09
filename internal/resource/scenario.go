@@ -23,6 +23,7 @@ import (
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/pkg/position"
 )
 
@@ -86,6 +87,92 @@ func LoadScenario(o Options) (Scenario, error) {
 	return ReadScenario(filepath.Base(dir), os.DirFS(dir), filepath.Base(entry))
 }
 
+// FindDownload returns the scenario saved in dir with this digest, the bytes a
+// session's host would send again; false when dir holds none, or holds it edited,
+// which is then the player's own and answers no join.
+func FindDownload(dir, digest string) (Scenario, bool) {
+	if dir == "" || len(digest) != 2*sha256.Size {
+		return Scenario{}, false
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), "-"+digest[:shortDigest]) {
+			sc, err := readDownload(filepath.Join(dir, e.Name()))
+			if err == nil && sc.Digest() == digest {
+				return sc, true
+			}
+		}
+	}
+	return Scenario{}, false
+}
+
+// SaveDownload writes sc into dir as a scenario, named for it and its digest so no
+// name a host sends leaves dir or takes another scenario's, and returns where. The
+// files land whole or not at all, and whatever holds that name already stays.
+func SaveDownload(dir string, sc Scenario) (string, error) {
+	at := filepath.Join(dir, downloadName(sc.Name, sc.Short()))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return at, err
+	}
+	if _, err := os.Lstat(at); err == nil {
+		if held, err := readDownload(at); err == nil && held.Digest() == sc.Digest() {
+			return at, nil
+		}
+		return at, errors.New(at + " holds another scenario")
+	}
+	// Hidden while it fills, so neither a join nor a scenario list reads it half written.
+	tmp, err := os.MkdirTemp(dir, "."+filepath.Base(at)+".")
+	if err != nil {
+		return at, err
+	}
+	root, err := os.OpenRoot(tmp)
+	if err == nil {
+		for _, f := range sc.files {
+			name := filepath.FromSlash(f.name)
+			if err = root.MkdirAll(filepath.Dir(name), 0o755); err == nil {
+				err = root.WriteFile(name, f.data, 0o644)
+			}
+			if err != nil {
+				break
+			}
+		}
+		root.Close()
+	}
+	if err == nil {
+		err = os.Rename(tmp, at)
+	}
+	if err != nil {
+		os.RemoveAll(tmp)
+		if held, rerr := readDownload(at); rerr == nil && held.Digest() == sc.Digest() {
+			return at, nil // another run saved the same bytes first
+		}
+	}
+	return at, err
+}
+
+// downloadName is name, the embedded label read as main, kept to letters, digits,
+// '-' and '_' and at most 48 of them ("scenario" when none are left), then a dash
+// and the digest prefix, which a name already ending in it is not given twice
+func downloadName(name, short string) string {
+	if name == EmbeddedLabel {
+		name = paths.MainScenarioName
+	}
+	safe := strings.Map(func(r rune) rune {
+		if 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, strings.TrimSuffix(name, "-"+short))
+	if safe = strings.TrimLeft(safe[:min(len(safe), 48)], "-_"); safe == "" {
+		safe = "scenario"
+	}
+	return safe + "-" + short
+}
+
+func readDownload(dir string) (Scenario, error) {
+	return ReadScenario(filepath.Base(dir), os.DirFS(dir), paths.ScenarioFile)
+}
+
 // ReadScenario reads a scenario from any filesystem. The file set is the loader's
 // own, so a copy holds what the loader would read and nothing that sits beside it.
 func ReadScenario(name string, fsys fs.FS, entry string) (Scenario, error) {
@@ -114,12 +201,16 @@ func (s Scenario) Entry() string { return s.entry }
 // Digest is the hex SHA-256 of the canonical form. Empty on the zero value.
 func (s Scenario) Digest() string { return s.digest }
 
+// shortDigest is how much of a digest a status line, a log record or a download's
+// directory name carries.
+const shortDigest = 12
+
 // Short is the digest prefix a status line or a log record carries.
 func (s Scenario) Short() string {
-	if len(s.digest) < 12 {
+	if len(s.digest) < shortDigest {
 		return s.digest
 	}
-	return s.digest[:12]
+	return s.digest[:shortDigest]
 }
 
 // Behaviors resolves the entry and returns its behavior programs by name, each

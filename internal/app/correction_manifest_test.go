@@ -1016,7 +1016,7 @@ func BenchmarkKeyframeEncodeTDMoving(b *testing.B) {
 // tdCapture is td's shared world 300 ticks in, with its maze built and its waves out.
 func tdCapture(b *testing.B) (*App, snapshot.SharedCapture) {
 	b.Helper()
-	if _, err := os.Stat(filepath.Join(soakRoot, "scenario", "td")); err != nil {
+	if _, err := os.Stat(filepath.Join(soakRoot, "scenario", "base", "td")); err != nil {
 		b.Skip("the td scenario is not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Width: 200, Height: 60, Resources: resource.Options{Dir: soakRoot, Scenario: "td"}})
