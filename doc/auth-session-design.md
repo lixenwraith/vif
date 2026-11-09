@@ -170,9 +170,9 @@ surface checks:
   under, whose public half the roster, the cursor and every capture carry; a dial
   proves it over the door's nonce, through its relay if it has one, which carries
   the proofs to the authority with the challenge it asked for them. A page keeps
-  its places in the tab's `sessionStorage`, a terminal in `places.json` under the
-  user's state directory, Android in the app's files, each as `[session]
-  resume_after_restart` says. A key keeps a place from another player for
+  its places in the site's `localStorage`, held by one tab at a time under a Web
+  Lock, a terminal in `places.json` under the user's state directory, Android in
+  the app's files, each as `[session] resume_after_restart` says. A key keeps a place from another player for
   `WraithTimeout` (2 min of game time); on a plaintext link anyone on the path can
   take the stream after the proof ([Multiplayer §5.4](multi-player.md#54-wraiths)).
 - **A peer link** (`network.PeerAcceptor`, `converge.Reach.admitPeerLink`): a
@@ -412,7 +412,8 @@ their author's signature (`Sign`, `Verify`), checked against the roster's key fo
 the participant they name. A returning dial proves its key and is seated in the
 place that key holds, whatever gate the door keeps; a relay asks the authority for
 the challenge its door asks (`RelayNonce`) and carries the proofs on, so it can take
-nobody's place. The keeper's store is every host's: a page's `sessionStorage`, a
+nobody's place. The keeper's store is every host's: a page's `localStorage`, held
+by the first tab on the site, a tab beside it keeping its own in `sessionStorage`, a
 terminal's `places.json` under the user's state directory (`paths.PlacesFile`, a
 file for the user alone), Android's in the app's files, each behind `[session]
 resume_after_restart`, on by default.
@@ -824,8 +825,8 @@ Parameters, paths, settings and commands:
 
 Hosts:
 
-- `web/terminal.js` and `web/worker.js`: the tab's places in `sessionStorage`, the
-  launch arguments.
+- `web/terminal.js` and `web/worker.js`: the site's places in `localStorage` under
+  a Web Lock, a second tab's in `sessionStorage`, the launch arguments.
 - `android/game/game.go`, and `StartScreen.java` and `MainActivity.java` under
   `android/app/src/main/java/com/lixen/vif`: the Android run, whose places are in
   the app's files.
