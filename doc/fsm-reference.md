@@ -172,7 +172,7 @@ Extract event payload fields into FSM variables when a transition matches:
   capture_vars = { entity = "pylon_entity" } }
 ```
 
-`capture_vars` maps payload field names to FSM variable names. Fields resolve by `toml` struct tag first, then Go field name. Captured values are set **before** the target state's `on_enter` executes.
+`capture_vars` maps payload field names to FSM variable names. Fields resolve by `toml` struct tag first, then Go field name, at load against the trigger's payload, which a `Tick` transition has none of; a payload guard's `field` resolves alike. Captured values are set **before** the target state's `on_enter` executes.
 
 Supported field kinds: all signed and unsigned integer widths (including
 `core.Entity`), `float32`, `float64`, and `bool` (`true` = 1, `false` = 0).
@@ -295,7 +295,8 @@ same boundary.
 The event name and payload are compiled at load: an unknown event, a payload key
 its type lacks, a value of the wrong type, or a payload on an event that carries
 none fails it. Without `payload` the event carries its payload type zero-valued.
-`payload_vars` injects an FSM variable's value into a payload field at runtime.
+`payload_vars` injects an FSM variable's value into a payload field at runtime;
+each key resolves at load against the decoded payload, or the load fails.
 Supported field kinds: all signed and unsigned integer widths, `float32`,
 `float64`, `bool`, and `string`; a negative value is ignored for an unsigned field.
 A string takes the value's decimal form in place of each `{}`, so
