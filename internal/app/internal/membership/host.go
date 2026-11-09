@@ -318,13 +318,18 @@ func (c Control) ChangeScenario(name string) (bool, error) {
 	return c.m.changeScenarioLocked(name)
 }
 
-// The embedded scenario answers to the main name, which is how a row restarts it.
+// The embedded scenario answers to the main name, which is how a row restarts it,
+// and one started by a path below scenario/ to that path, as the list names it.
 func (c Control) Scenarios() ([]string, string) {
-	current := c.m.scenario.Name
-	if current == resource.EmbeddedLabel {
+	o := c.m.run.Resources()
+	names, current := resource.Scenarios(o), c.m.scenario.Name
+	switch {
+	case current == resource.EmbeddedLabel:
 		current = paths.MainScenarioName
+	case o.Provided == nil && slices.Contains(names, o.Scenario):
+		current = o.Scenario
 	}
-	return resource.Scenarios(c.m.run.Resources()), current
+	return names, current
 }
 
 // Validate before teardown; a different scenario needs a new run and metric set.

@@ -531,7 +531,8 @@ func TestWhatAScenarioStatesComesFromItsEntry(t *testing.T) {
 
 // TestScenariosFollowTheVolume is why the list is not configuration: the node's
 // tree is replaced by rename under a running allocator, so what is offered has to
-// be read when asked. The default is offered whatever the volume says.
+// be read when asked, a group's included. The default is offered whatever the
+// volume says.
 func TestScenariosFollowTheVolume(t *testing.T) {
 	cfg := testAllocatorConfig(t)
 	controller := newAllocator(&fakeKube{}, fakeHealth{}, cfg)
@@ -539,13 +540,13 @@ func TestScenariosFollowTheVolume(t *testing.T) {
 		t.Fatalf("scenarios = %v; want the volume's two", got)
 	}
 
-	if err := os.MkdirAll(filepath.Join(cfg.WadDir, "scenario", "added"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(cfg.WadDir, "scenario", "base", "added"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if got := controller.limits().Scenarios; slices.Contains(got, "added") {
 		t.Errorf("a directory with no %s was offered: %v", "scenario.toml", got)
 	}
-	if err := os.WriteFile(filepath.Join(cfg.WadDir, "scenario", "added", "scenario.toml"),
+	if err := os.WriteFile(filepath.Join(cfg.WadDir, "scenario", "base", "added", "scenario.toml"),
 		[]byte("[regions]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

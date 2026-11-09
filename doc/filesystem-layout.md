@@ -34,8 +34,8 @@ wad/                            internal/asset/
 The main campaign lives only in `internal/asset/scenario/`. Native, headless,
 and browser builds embed that same tree; `-s main` falls back to it when no
 external override exists. To author a variant, copy that directory into a
-configuration root as `scenario/<name>/`. A `scenario/main/` in any root takes
-precedence, a copy an earlier release installed included.
+configuration root's `scenario/` under a name of its own. A scenario named `main`
+in any root takes precedence, a copy an earlier release installed included.
 
 ## 2. Installed configuration tree
 
@@ -60,11 +60,15 @@ vif/
 └── bot/         bot graphs, one <name>.toml each
 ```
 
-An optional `scenario/main/` override is the automatically discovered scenario. The other directories
-under `scenario/` are selected by name (`-s td`) or explicit path. A scenario's
-region, macro and behavior program files sit beside its `scenario.toml` or below
-it; `behavior/` is where the shipped `vanguard` keeps its raiders' programs
-([FSM reference](fsm-reference.md#behavior-programs)).
+A directory under `scenario/` holding `scenario.toml` is a scenario, and what lies
+below it is its own: its region, macro and behavior program files sit beside the
+entry or below it, as the shipped `vanguard` keeps its raiders' programs in
+`behavior/` ([FSM reference](fsm-reference.md#behavior-programs)). Any other
+directory is a group of scenarios and groups, to any depth, so a player can file
+their own as `test/puzzle/tic-tac-toe/`. A name beginning with a dot is passed
+over, and a link counts as a scenario but is not read as a group. A scenario is
+selected by name (`-s td`), by its path below `scenario/` or by an explicit path
+(§3); an optional one named `main` is the automatically discovered scenario.
 `audio/` is empty until a user or stapes (formerly soundlab), the audio authoring
 tool, writes an override: stapes reads and writes the user root's `audio/`
 documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-stapes)).
@@ -75,9 +79,11 @@ documents and keeps its own files in a root of its own ([Audio §4](audio.md#4-s
 
 An individual resource flag (`-s`, `-f`, `-k`, `-config-music`, or
 `-config-sounds`) is strict and always wins. `-s` first accepts an existing
-`scenario.toml` path or scenario directory; a single name such as `td` then
-resolves as `scenario/td/scenario.toml` through the roots below. Without an override, every
-resource walks the same roots in order:
+`scenario.toml` path or scenario directory; a name such as `td` then resolves
+through the roots below to the shallowest directory of that name under
+`scenario/`, the first in path order among equals, and a path below `scenario/`,
+such as `test/td`, to that one alone. Without an override, every resource walks
+the same roots in order:
 
 1. `-config-dir <root>`;
 2. the user configuration root;
@@ -93,7 +99,7 @@ the checkout first. A resource absent from every root uses the embedded fallback
 
 | Resource | Path in each root | Final fallback |
 |---|---|---|
-| Scenario | `scenario/main/scenario.toml` | embedded scenario |
+| Scenario | `scenario/**/main/scenario.toml`, as `-s main` finds it | embedded scenario |
 | Keymap | `input/keymap.toml` | embedded keymap |
 | Music | `audio/music.toml` | built-in patterns |
 | Sounds | `audio/sounds.toml` | built-in sound bank and voices |
@@ -102,8 +108,10 @@ the checkout first. A resource absent from every root uses the embedded fallback
 | Bot graph | `bot/<name>.toml`, or the path `-bot` names | the embedded graph of that name |
 
 An explicit scenario directory means one whose entry is directly at
-`<directory>/scenario.toml`. A named scenario is searched under
-`scenario/<name>/` in root priority order. An explicit content file pins delivery to that file. For a wall
+`<directory>/scenario.toml`. A named scenario is searched root by root, each
+root's whole tree before the next, so a user root's `test/td` shadows a system
+root's `td`; the menu's list names a scenario its name does not reach by its path
+instead, and one a higher root holds at the same path not at all. An explicit content file pins delivery to that file. For a wall
 image, the event's path is a logical name below each root's `image/` directory,
 opened only as a regular file there; it may include nested directories but not
 `..`, and a host path, absolute or relative, is never opened, since the scenario

@@ -179,7 +179,7 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 |---|---|
 | `-d`, `-config-embedded` | Use the embedded scenario and content; mutually exclusive with `-s` and `-f`. |
 | `-config-dir <dir>` | Search one categorized config root (`scenario/ input/ audio/ content/ image/ bot/`) before the user and system roots. |
-| `-s`, `-config-scenario <name-or-path>` | Installed scenario name, a `scenario.toml`, or a directory containing one. |
+| `-s`, `-config-scenario <name-or-path>` | Installed scenario name or path below `scenario/`, a `scenario.toml`, or a directory containing one. |
 | `-f`, `-config-content <path>` | Content directory, or a single pinned `.txt`/`.toml` file. |
 | `-k`, `-config-keymap <path>` | Keymap override TOML. |
 | `-config-music <path>` | Music pattern override TOML; strict optional. |

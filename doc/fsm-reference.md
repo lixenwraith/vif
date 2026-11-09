@@ -5,9 +5,9 @@
 Entry config search order:
 
 1. `-s <path-or-name>`, or `[paths] scenario` in `vif.toml` — file, directory
-   containing `scenario.toml`, or a name resolved as `scenario/<name>/scenario.toml`
-   under the configured roots;
-2. `scenario/main/scenario.toml` under `-config-dir <root>`;
+   containing `scenario.toml`, or a name, at any depth below `scenario/`, or a
+   path below it, resolved under the configured roots;
+2. a scenario named `main` under `-config-dir <root>`;
 3. the same under the user root, normally `~/.config/vif`;
 4. the same under the checkout's `wad/` for a binary in its `bin/`, then under
    `/usr/local/etc/vif` and `/etc/vif`;
@@ -21,7 +21,7 @@ graph is written in this dialect with its own actions and guards
 ([Bots](bots.md#writing-a-graph)).
 
 The embedded main campaign is the only shipped source of `main`; `-s main`
-falls back to it. A `scenario/main/` directory is an optional user override.
+falls back to it. A scenario named `main` in a root is an optional user override.
 
 Region `file`, `macro_files` and behavior program `file` references resolve
 relative to the entry config's directory and cannot climb out of it. A region file
