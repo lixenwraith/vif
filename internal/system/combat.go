@@ -511,7 +511,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	// Emit chain attack if present
 	if chainAttack := attack.Chain; chainAttack != nil {
 		depth := payload.ChainDepth + 1
-		chainX, chainY, chainHasOrigin := s.chainOrigin(payload.OwnerEntity, originX, originY, hasOriginPos)
+		chainX, chainY, chainHasOrigin := s.chainOrigin(payload.HitEntity, originX, originY, hasOriginPos)
 		// The class is per-event: a hit on a shared target is shared simulation, one
 		// on a player target is this instance's alone (D-10).
 		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
@@ -535,7 +535,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 	// Apply effects
 	if attack.EffectMask&component.CombatEffectEnergyDrain != 0 {
-		if s.applyEnergyDrain(payload.OwnerEntity, payload.HitEntity, originX, originY, hasOriginPos, payload.ChainDepth > 0) {
+		if s.applyEnergyDrain(payload.OwnerEntity, payload.HitEntity, payload.ChainDepth > 0) {
 			s.statEffectEnergyDrain.Add(1)
 			resolved = true
 		}
@@ -746,9 +746,8 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 // chainArea emits one direct follow-up per hit entity of an area attack
 func (s *CombatSystem) chainArea(payload *event.CombatAttackAreaRequestPayload, targetEntity core.Entity, hits []core.Entity, chain *profile.AttackProfile, weapon component.CombatAttackType) {
 	depth := payload.ChainDepth + 1
-	chainX, chainY, chainHasOrigin := s.chainOrigin(payload.OwnerEntity,
-		payload.OriginX, payload.OriginY, payload.HasOrigin)
 	for _, hitEntity := range hits {
+		chainX, chainY, chainHasOrigin := s.chainOrigin(hitEntity, payload.OriginX, payload.OriginY, payload.HasOrigin)
 		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 			CrossingID:     payload.CrossingID,
 			AttackType:     chain.AttackType,
@@ -819,11 +818,11 @@ func (s *CombatSystem) tickStatus(e core.Entity, c *component.CombatComponent, s
 	s.statBurnTicks.Add(1)
 }
 
-// chainOrigin is the emitter geometry of a chained attack. The chain declares the
-// owner as its emitter, so its geometry is the owner's: a tracer's impact cell is
-// the target's own cell, and a drain zap drawn from it has no length.
-func (s *CombatSystem) chainOrigin(owner core.Entity, x, y int, has bool) (int, int, bool) {
-	if pos, ok := s.world.Positions.GetPosition(owner); ok {
+// chainOrigin is where a chained attack starts: the cell its hit landed on, read
+// as the hit resolves, else the parent's origin. A chain is the hit seen one step on
+// (D-5), so what it does starts at the impact, never at the owner or the emitter.
+func (s *CombatSystem) chainOrigin(hit core.Entity, x, y int, has bool) (int, int, bool) {
+	if pos, ok := s.world.Positions.GetPosition(hit); ok {
 		return pos.X, pos.Y, true
 	}
 	return x, y, has
@@ -832,7 +831,7 @@ func (s *CombatSystem) chainOrigin(owner core.Entity, x, y int, has bool) (int, 
 // applyEnergyDrain pays the drain's reward. A chained drain's zap runs from the
 // owner to the hit, drawn on the owner's instance; a direct hit's bolt is its
 // weapon's, drawn as it fired, since on a guest the hit lands a playout lead later.
-func (s *CombatSystem) applyEnergyDrain(ownerEntity, targetEntity core.Entity, originX, originY int, hasOrigin, chained bool) bool {
+func (s *CombatSystem) applyEnergyDrain(ownerEntity, targetEntity core.Entity, chained bool) bool {
 	if !s.world.Components.Energy.HasEntity(ownerEntity) {
 		return false
 	}
@@ -842,8 +841,11 @@ func (s *CombatSystem) applyEnergyDrain(ownerEntity, targetEntity core.Entity, o
 		Percentage: false,
 		Type:       component.EnergyDeltaReward,
 	})
-	if chained && hasOrigin && s.world.Resources.Player.IsLocal(ownerEntity) {
-		pushDrainBolt(s.world, ownerEntity, ownerEntity, originX, originY, targetEntity)
+	if !chained || !s.world.Resources.Player.IsLocal(ownerEntity) {
+		return true
+	}
+	if pos, ok := s.world.Positions.GetPosition(ownerEntity); ok {
+		pushDrainBolt(s.world, ownerEntity, ownerEntity, pos.X, pos.Y, targetEntity)
 	}
 	return true
 }

@@ -185,10 +185,11 @@ own footprint test for its hundreds of cells.
 | Ray on a Shared target, each tick it covers it | area crossing: target, member set, owner, scale |
 | Any hit on a drain | local; drains are Player-domain |
 
-Follow-ups are derived, never transported (D-5). The tracer's impact chains into
-a lightning direct attack whose energy-drain effect draws the zap from the cursor
-as it lands; a charged pulse's area hit chains one burn request per hit entity,
-the same on every instance. A rod draws its bolt from its orb as it fires, and an
+Follow-ups are derived, never transported (D-5). A chain starts at the cell its hit
+landed on, read as the hit resolves, so whatever a follow-up does from its origin
+starts at the impact. The tracer's impact chains into a lightning direct attack
+whose energy-drain effect draws the zap from the cursor as it lands; a charged
+pulse's area hit chains one burn request per hit entity, the same on every instance. A rod draws its bolt from its orb as it fires, and an
 arc's from the struck target, since on a guest the hit lands a playout lead later
 (D-18); the hit's drain then pays and draws nothing.
 
