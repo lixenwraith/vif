@@ -490,9 +490,12 @@ func register(m *fsm.Machine[*mind]) {
 	m.RegisterGuard("Idle", func(*struct{}) (fsm.GuardFunc[*mind], error) {
 		return func(m *mind, _ *fsm.RegionState, _ any) bool { return m.queue.n == 0 }, nil
 	})
-	m.RegisterGuard("Own", func(a *ownArgs) (fsm.GuardFunc[*mind], error) {
+	m.RegisterPayloadGuard("Own", func(a *ownArgs, t fsm.Trigger) (fsm.GuardFunc[*mind], error) {
 		if a.Field == "" {
 			return nil, errors.New("field must name a payload field")
+		}
+		if err := t.Reads(a.Field, "number", std.ExtractIntField); err != nil {
+			return nil, err
 		}
 		return func(m *mind, _ *fsm.RegionState, payload any) bool { return m.owns(payload, a.Field) }, nil
 	})

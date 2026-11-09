@@ -43,9 +43,16 @@ func styleNames() []string {
 	return namesOf(component.MaterializeStyles[:], func(s component.MaterializeStyle) string { return s.Name })
 }
 
+// Programmed is implemented by a payload naming a behavior program, which the
+// behavior system drops when the scenario has no such program; named is false
+// where the payload names none on purpose
+type Programmed interface {
+	NamedProgram() (name string, named bool)
+}
+
 // AuthoredPayload makes event et's payload from raw, a table an author wrote, as
-// names spell its enum fields; a nil raw is the zero payload, and an event that
-// carries no payload takes none
+// names spell its enum fields and a program among the programs they hold; a nil
+// raw is the zero payload, and an event that carries no payload takes none
 func AuthoredPayload(names *dialect.Names, et EventType, raw any) (any, error) {
 	payload := NewPayloadStruct(et)
 	switch {
@@ -56,6 +63,14 @@ func AuthoredPayload(names *dialect.Names, et EventType, raw any) (any, error) {
 	}
 	if err := names.DecodeInto(raw, payload); err != nil {
 		return nil, fmt.Errorf("payload for event '%s': %w", GetEventName(et), err)
+	}
+	if p, ok := payload.(Programmed); ok {
+		if name, named := p.NamedProgram(); named {
+			if s, ok := names.Value[component.SpeciesType](name); !ok || s < component.SpeciesDataFirst {
+				return nil, fmt.Errorf("payload for event '%s': program %q is not one of the scenario's behavior programs",
+					GetEventName(et), name)
+			}
+		}
 	}
 	return payload, nil
 }

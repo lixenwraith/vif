@@ -36,14 +36,20 @@ func NewMachine[T any]() *Machine[T] {
 // RegisterGuard registers name as a guard whose guard_args decode strictly into A,
 // which build makes the guard of once at load; an A of no fields takes none
 func (m *Machine[T]) RegisterGuard[A any](name string, build func(*A) (GuardFunc[T], error)) {
+	m.RegisterPayloadGuard(name, func(a *A, _ Trigger) (GuardFunc[T], error) { return build(a) })
+}
+
+// RegisterPayloadGuard registers a guard that reads its trigger's payload, whose
+// build resolves each field it names against the trigger at load
+func (m *Machine[T]) RegisterPayloadGuard[A any](name string, build func(*A, Trigger) (GuardFunc[T], error)) {
 	m.guardReg[name] = guardEntry[T]{
 		args: dialect.Fields[A](),
-		build: func(args map[string]any) (GuardFunc[T], error) {
+		build: func(args map[string]any, t Trigger) (GuardFunc[T], error) {
 			a, err := dialect.Decode[A](args)
 			if err != nil {
 				return nil, err
 			}
-			return build(a)
+			return build(a, t)
 		},
 	}
 }
@@ -536,29 +542,32 @@ func payloadVars(payload any, captureVars map[string]string) []event.FSMVar {
 	}
 	vars := make([]event.FSMVar, 0, len(captureVars))
 	for key, varName := range captureVars {
-		field := FieldByTag(v, key)
-		if !field.IsValid() {
-			continue
+		if value, ok := captured(v, key); ok {
+			vars = append(vars, event.FSMVar{Name: varName, Value: value})
 		}
-		var value int64
-		switch field.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			value = field.Int()
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			value = int64(field.Uint())
-		case reflect.Float32, reflect.Float64:
-			value = int64(field.Float())
-		case reflect.Bool:
-			if field.Bool() {
-				value = 1
-			}
-		default:
-			continue
-		}
-		vars = append(vars, event.FSMVar{Name: varName, Value: value})
 	}
 	slices.SortFunc(vars, func(a, b event.FSMVar) int { return strings.Compare(a.Name, b.Name) })
 	return vars
+}
+
+// captured is the value capture_vars takes from payload v's field key: a number,
+// or a bool as 1 or 0
+func captured(v reflect.Value, key string) (int64, bool) {
+	field := FieldByTag(v, key)
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return field.Int(), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int64(field.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return int64(field.Float()), true
+	case reflect.Bool:
+		if field.Bool() {
+			return 1, true
+		}
+		return 0, true
+	}
+	return 0, false
 }
 
 // transitionRegion performs state change within a specific region

@@ -182,6 +182,8 @@ comment now states, and link that instead.
 - `TestNoOrderDependentMapRange` matches a ranged identifier by name against every
   map-typed name in `internal/system`: a local slice named `drains` trips on
   `ParticleSystem`'s map field. Rename the local, or allowlist it with its reason.
+  It lints `internal/fsm`, `fsm/std`, `engine`, `event` and others too (`lintDirs`),
+  keyed by function name, so renaming an allowlisted function there fails it.
 - The divergence harness
   ([netcode design §3.5](netcode-design.md#35-the-divergence-harness)) compares two
   binaries: `git worktree add` main, build `go test -c ./internal/app` in each tree,

@@ -294,8 +294,10 @@ transitions declared on ancestors remain active for every descendant.
   capture_vars = { entity = "anchor_id" } }
 ```
 
-Fields resolve by TOML tag and then Go field name. Signed/unsigned integers,
-entity IDs, floats, and booleans are converted to `int64` (boolean true is 1).
+Fields resolve by TOML tag and then Go field name, at load against the trigger's
+payload: a field it lacks or cannot convert, or any on `Tick`, fails the load.
+Signed/unsigned integers, entity IDs, floats, and booleans are converted to
+`int64` (boolean true is 1).
 Capture precedes exit/transition/enter actions, so the target state's
 `on_enter` can use the value.
 
@@ -303,8 +305,8 @@ Capture precedes exit/transition/enter actions, so the target state's
 
 Actions can appear in `on_enter`, `on_update`, `on_exit`, or a transition. Every
 action supports an optional guard and `delay_ms`. An action guard sees no event
-payload and is checked when the action is reached; a delayed action runs unguarded
-when its delay elapses.
+payload, so a payload guard there fails the load, and is checked when the action
+is reached; a delayed action runs unguarded when its delay elapses.
 
 | Group | Actions |
 |---|---|
@@ -598,8 +600,13 @@ A key the loader does not read fails the load, named by where it sits
 `action 'Text' takes no payload_vars`), as does a value its field cannot hold. The
 entry's top-level keys are checked against those it reads, `[systems]`, regions,
 states, transitions and actions against their config structs, and arguments and
-payloads through `internal/fsm/dialect`. The payload fields a payload guard,
-`capture_vars` or `payload_vars` names are not checked against the trigger's event.
+payloads through `internal/fsm/dialect`. The payload field a payload guard or `Own`
+reads, or a `capture_vars` key, resolves against its trigger's event and a
+`payload_vars` key against the decoded payload, each of a kind it reads or writes
+(`event 'EventSpeciesKilled' carries no number field 'specie'`), and a behavior
+spawn or cancel request's `program` names one of the scenario's programs. Every
+load checks, at startup, on a mid-run scenario change and for a scenario received
+on joining; nothing is checked per event.
 
 State compilation accumulates multiple per-state errors where practical, so
 `-check` is more useful than fail-on-first-error parsing. It does not execute a
