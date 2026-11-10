@@ -17,7 +17,8 @@ import (
 // TestEffectBatchesFadeBetweenTicks: a batch's cells are drawn as far through the
 // fade as its deadline stands at the frame's moment, part of a tick past the tick
 // that aged it: a flash's glyph in the removal flash's color, a fadeout's cell in
-// its own colors, its glyph alone where the cell is not solid
+// its own colors over the background, its glyph alone where the cell is not solid,
+// and its ground alone under a flash's glyph, which keeps its color
 func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
 	w, game := glyphWorld()
 	tick := engine.SimEpoch.Add(time.Second)
@@ -25,7 +26,7 @@ func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
 	red, green, blue := color.RGB{R: 200}, color.RGB{G: 200}, color.RGB{B: 100}
 
 	flash, fadeout := w.CreateEntity(core.DomainPlayer), w.CreateEntity(core.DomainPlayer)
-	w.Components.Flash.SetComponent(flash, component.FlashComponent{Cells: []component.EffectCell{{X: 3, Y: 4, Rune: 'f'}}})
+	w.Components.Flash.SetComponent(flash, component.FlashComponent{Cells: []component.EffectCell{{X: 3, Y: 4, Rune: 'f'}, {X: 6, Y: 4, Rune: 'h'}}})
 	w.Components.Fadeout.SetComponent(fadeout, component.FadeoutComponent{Cells: []component.EffectCell{
 		{X: 5, Y: 4, Rune: 'w', Fg: red, Bg: blue, Solid: true},
 		{X: 6, Y: 4, Bg: blue, Solid: true},
@@ -49,14 +50,15 @@ func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
 
 		// A frame stands a tick past its tick at most
 		opacity := 1 - float64(elapsed+min(since, 50*time.Millisecond))/float64(duration)
+		flashed, ground := color.Scale(visual.RgbRemovalFlash, opacity), color.Blend(visual.RgbBackground, color.Scale(blue, opacity), opacity)
 		for _, want := range []struct {
 			x      int
 			r      rune
 			fg, bg color.RGB
 		}{
-			{3, 'f', color.Scale(visual.RgbRemovalFlash, opacity), color.RGB{}},
-			{5, 'w', color.Blend(color.RGB{}, color.Scale(red, opacity), opacity), color.Blend(color.RGB{}, color.Scale(blue, opacity), opacity)},
-			{6, 0, color.RGB{}, color.Blend(color.RGB{}, color.Scale(blue, opacity), opacity)},
+			{3, 'f', flashed, color.RGB{}},
+			{5, 'w', color.Blend(color.RGB{}, color.Scale(red, opacity), opacity), ground},
+			{6, 'h', flashed, ground},
 			{7, 'g', color.Scale(green, opacity), color.RGB{}},
 		} {
 			if got := buf.CellAt(want.x, 4); got.Rune != want.r || got.Fg != want.fg || got.Bg != want.bg {

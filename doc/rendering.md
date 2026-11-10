@@ -232,7 +232,7 @@ Blend mode is encoded as an operation plus foreground/background flags.
 | Operation | Typical visual use |
 |---|---|
 | Replace | Opaque glyphs, UI, and hard field cells. |
-| Alpha | Fades and translucent overlays. |
+| Alpha | Fades and translucent overlays. A background blended onto a cell nothing painted starts from the one that cell would leave with, so a fade ends in it and not in black. |
 | Add | Energy glows, explosions, storm/pylon fields. |
 | Max | Retain the brightest participant when fields overlap. |
 | Soft light | Subtle shield glow. |

@@ -421,13 +421,16 @@ A species' end names the effect by why it ends:
   own: an effect loads no cell's occupant budget, however many cells it draws.
 - Their renderers draw a batch as far through its fade as the deadline stands at
   the frame's moment, the time since the tick included (`deadlineProgress`), so a
-  fade steps on every frame.
+  fade steps on every frame. A fading ground lies over the background its cell
+  would show and under the glyph a flash lights there: an alpha blend onto a cell
+  nothing painted starts from that background (`RenderBuffer.Set`), not from
+  black, and a ground alone blends the background only.
 - Measured by `BenchmarkDeathEffects` on a bare world, medians of five alternating
   runs against an entity a cell: a 5x3 body dying every tick costs the tick 0.5 µs
   where it cost 3.9 µs as a flash and 4.0 µs as a fadeout, and 600 cells every ten
   ticks cost 0.4 to 0.5 µs a tick where they cost 13.7 and 14.1 µs. A tick's three
   frames of the bodies fall from 8.6 to 5.7 µs for the flash and from 10.7 to
-  8.0 µs for the fadeout, the frames of the 600 cells from 32 to 18 µs and from 42
+  8.2 µs for the fadeout, the frames of the 600 cells from 32 to 18 µs and from 42
   to 29 µs. Neither form allocates. Holding the cells outside any entity could
   save no more than the 0.5 µs a tick that is left, and would need a capture,
   reset and staging path of its own.
@@ -450,8 +453,8 @@ A species' end names the effect by why it ends:
   every tick costs the tick 3.0 µs with its scatter where its silent end cost
   2.2 µs, and an eye 4.2 µs with its flash and fading grounds where it cost
   3.0 µs; most of either is destroying the body's entities. Their three frames
-  cost 2.3 µs and 13.5 µs. 75 swarms ending at once every ten ticks cost a tick
-  11.4 µs and three frames 10.6 µs, 40 eyes 9.9 µs and 48.7 µs. The read
+  cost 2.3 µs and 12.5 µs. 75 swarms ending at once every ten ticks cost a tick
+  11.4 µs and three frames 10.6 µs, 40 eyes 9.9 µs and 44.8 µs. The read
   allocates nothing, where a composite's end allocated its member list (64 B a
   swarm, 192 B an eye).
 

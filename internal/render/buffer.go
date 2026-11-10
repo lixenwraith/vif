@@ -263,6 +263,10 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg color.RGB, mode Blend
 		case opReplace:
 			dst.Bg = bg
 		case opAlpha:
+			// A cell nothing painted shows through as the background it would leave with
+			if !b.touched[idx] {
+				dst.Bg = b.untouchedBg()
+			}
 			dst.Bg = color.Blend(dst.Bg, bg, alpha)
 		case opAdd:
 			dst.Bg = color.Add(dst.Bg, bg, alpha)

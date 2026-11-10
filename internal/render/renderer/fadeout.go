@@ -51,7 +51,8 @@ func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			case cell.Rune != 0:
 				buf.Set(screenX, screenY, cell.Rune, fg, bg, render.BlendAlpha, opacity, terminal.AttrNone)
 			default:
-				buf.Set(screenX, screenY, 0, visual.RgbBlack, bg, render.BlendAlpha, opacity, terminal.AttrNone)
+				// A ground alone: over the background, which keeps the cell's glyph
+				buf.Set(screenX, screenY, 0, visual.RgbBlack, bg, render.BlendAlphaBg, opacity, terminal.AttrNone)
 			}
 		}
 		return true
