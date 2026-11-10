@@ -166,7 +166,7 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 			if b, ok := s.world.Components.Behavior.GetComponent(payload.HeaderEntity); ok && int(b.Program) < len(s.programs) {
 				s.programs[b.Program].lifecycle.despawned.Add(1)
 			}
-			s.terminate(payload.HeaderEntity)
+			s.terminate(payload.HeaderEntity, component.DeathSilent)
 		}
 	}
 }
@@ -210,12 +210,12 @@ func (s *BehaviorSystem) Update() {
 				X:            killX,
 				Y:            killY,
 			})
-			s.terminate(header)
+			s.terminate(header, c.proto.Death)
 			continue
 		}
 		if timer, ok := s.world.Components.Timer.GetPtr(header); ok && timer.Expired(component.TimerDeadline) {
 			s.programs[b.Program].lifecycle.killedLifecycle.Add(1)
-			s.terminate(header)
+			s.terminate(header, component.DeathFadeout)
 			continue
 		}
 
@@ -458,18 +458,20 @@ func (s *BehaviorSystem) cancel(program string) {
 			continue
 		}
 		s.programs[b.Program].lifecycle.despawned.Add(1)
-		s.terminate(header)
+		s.terminate(header, component.DeathSilent)
 	}
 }
 
-// terminate ends an instance: its state's exit, then the composite
-func (s *BehaviorSystem) terminate(header core.Entity) {
+// terminate ends an instance: its state's exit, then the composite, leaving effect
+// of its body
+func (s *BehaviorSystem) terminate(header core.Entity, effect component.DeathEffect) {
 	// The exit ends what the state started, a telegraph above all
 	if b, ok := s.world.Components.Behavior.GetPtr(header); ok && s.fill(header, b, 0) {
 		s.set.Graph(int(b.Program)).Stop(&b.Machine, &s.ctx)
 	}
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: header,
+		Effect:       effect,
 	})
 }
 

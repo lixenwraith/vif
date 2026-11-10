@@ -298,8 +298,11 @@ offset puts off the map, tombstones members whose `Member` component is gone,
 and compacts the list. It emits integrity-breach events instead of silently
 leaving broken backlinks, and destroys an emptied header unless it carries
 `Combat` at zero hit points, the ablative case its owner retires. A destroy
-request sends the living members through one death batch with its effect and
-destroys the header. Species systems own formation motion and lifecycle.
+request sends the living members through one death batch and destroys the
+header; where the kind draws a body, the system first reads what the members
+showed and sends it to the effect the request names
+([Death effects](#death-effects)). Species systems own formation motion and
+lifecycle.
 
 A breach reports a loss, not a death: an ablative owner retires the composite
 only on `RemainingCount == 0`, because a partial loss is what ablative damage is.
@@ -354,16 +357,43 @@ The effect is a `component.DeathEffect`, which a death batch, a composite destro
 request and a footprint sweep all name the same way, and a document by its name:
 
 - `DeathSilent` (`none`): nothing is drawn.
-- `DeathFlash` (`flash`): each glyph, sigil or glyph-only wall lit at its cell in
-  the removal flash's color.
-- `DeathFadeout` (`fadeout`): each wall's cell fading out in its own colors.
+- `DeathFlash` (`flash`): each glyph lit at its cell in the removal flash's color.
+- `DeathFadeout` (`fadeout`): each cell fading out in its own colors, glyph and
+  background.
+- `DeathScatter` (`scatter`): each glyph thrown out from the middle of the cells
+  that died together, fading in its own color, drawn under whatever stands there.
 - `DeathParticle` (`particle`): each glyph a decay, blossom or dust particle, as
   `EmitParticleDeath` names it.
 
 An effect draws the cells a death leaves, never the entities that died: each cell
 is read as a `component.EffectCell` (its cell, glyph, colors and whether it has a
-background) before the batch is destroyed, and the cells go to the effect's system
-as one pooled batch.
+background) before the dead are destroyed, and the cells go to the effect's system
+as one pooled batch, on this instance alone. Two systems do the reading:
+
+- `DeathSystem` reads an entity that draws itself (`shown`): a glyph's or a
+  sigil's rune in its own color, a wall's glyph and background. Every effect but
+  the particle takes any of them; a particle is a glyph or a sigil.
+- `CompositeSystem` reads a composite whose members draw one body (`bodyOf`): a
+  swarm's, a quasar's and a snake head's glyph tables, an eye's and a data
+  species' look at the frame it shows, in the color its renderer draws at rest
+  (enraged or not, never the hit flash), and an ablative kind's cells as one
+  ground. A flash or a scatter takes the glyphs while the grounds under them fade
+  out; a fadeout takes each cell whole. The members then die silently. A wall's
+  and a gold's members are glyphs of their own, which go to `DeathSystem` with
+  the effect, and a kraken's body is its renderer's.
+
+A species' end names the effect by why it ends:
+
+- A kill leaves the species' own, `component.KillEffects`: a scatter for the
+  swarm, the quasar and the snake's head, a flash for the drain and the eye. A
+  data species names its own with its prototype's `death` key, a scatter where it
+  names none.
+- An expiry (a swarm's charges or lifetime, a data species' lifetime) fades the
+  body out, and a cancel or an integrity breach leaves nothing.
+- A member an ablative owner finds dead (a pylon's, a tower's, a storm circle's,
+  a snake body's) fades out where it stood, in the color its kind goes critical
+  in, one pooled cell a member; its renderer draws it until then. A killed
+  snake's body fades the same way behind its head.
 
 - `FlashSystem` and `FadeoutSystem` hold the cells a tick sends as one Player
   entity, whose component carries them in a slice under one deadline. A batch
@@ -399,6 +429,14 @@ as one pooled batch.
   turn and light are now worked out once a flight. A scattered 5x3 body every
   tick costs the tick 0.8 µs and its three frames 3.4 µs, 600 cells every ten
   ticks 1.2 µs and 10.6 µs, and a scatter allocates nothing.
+- A whole body's end, standing it left out, medians of three runs: a swarm ending
+  every tick costs the tick 3.0 µs with its scatter where its silent end cost
+  2.2 µs, and an eye 4.2 µs with its flash and fading grounds where it cost
+  3.0 µs; most of either is destroying the body's entities. Their three frames
+  cost 2.3 µs and 13.5 µs. 75 swarms ending at once every ten ticks cost a tick
+  11.4 µs and three frames 10.6 µs, 40 eyes 9.9 µs and 48.7 µs. The read
+  allocates nothing, where a composite's end allocated its member list (64 B a
+  swarm, 192 B an eye).
 
 ### Timers
 

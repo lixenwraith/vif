@@ -141,14 +141,14 @@ func (s *SnakeSystem) Update() {
 		// Validate head exists
 		if !s.world.Components.Header.HasEntity(snakeComp.HeadEntity) {
 			s.lifecycle.despawned.Add(1)
-			s.terminateSnake(rootEntity)
+			s.terminateSnake(rootEntity, component.DeathSilent)
 			continue
 		}
 
 		headComp, ok := s.world.Components.SnakeHead.GetPtr(snakeComp.HeadEntity)
 		if !ok {
 			s.lifecycle.despawned.Add(1)
-			s.terminateSnake(rootEntity)
+			s.terminateSnake(rootEntity, component.DeathSilent)
 			continue
 		}
 
@@ -926,7 +926,7 @@ func (s *SnakeSystem) handleSnakeDeath(rootEntity core.Entity, snakeComp *compon
 		Y:            posY,
 	})
 
-	s.terminateSnake(rootEntity)
+	s.terminateSnake(rootEntity, component.KillEffects[component.SpeciesSnake])
 }
 
 func (s *SnakeSystem) handleIntegrityBreach(payload *event.CompositeIntegrityBreachPayload) {
@@ -948,7 +948,9 @@ func (s *SnakeSystem) handleIntegrityBreach(payload *event.CompositeIntegrityBre
 	}
 }
 
-func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
+// terminateSnake ends a snake: its head leaves effect and its body fades out
+// behind it, or both leave nothing where effect is none
+func (s *SnakeSystem) terminateSnake(rootEntity core.Entity, effect component.DeathEffect) {
 	snakeComp, ok := s.world.Components.Snake.GetComponent(rootEntity)
 	if !ok {
 		return
@@ -956,9 +958,13 @@ func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
 
 	// Destroy body composite
 	if snakeComp.BodyEntity != 0 {
+		bodyEffect := component.DeathFadeout
+		if effect == component.DeathSilent {
+			bodyEffect = component.DeathSilent
+		}
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 			HeaderEntity: snakeComp.BodyEntity,
-			Effect:       component.DeathFlash,
+			Effect:       bodyEffect,
 		})
 	}
 
@@ -966,7 +972,7 @@ func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
 	if snakeComp.HeadEntity != 0 {
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 			HeaderEntity: snakeComp.HeadEntity,
-			Effect:       component.DeathFlash,
+			Effect:       effect,
 		})
 	}
 
@@ -978,7 +984,7 @@ func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
 
 func (s *SnakeSystem) terminateAll() {
 	for _, entity := range s.world.Components.Snake.Entities() {
-		s.terminateSnake(entity)
+		s.terminateSnake(entity, component.DeathSilent)
 	}
 }
 

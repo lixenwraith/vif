@@ -64,6 +64,23 @@ var SpeciesDomains = [SpeciesCount]core.Domain{
 	SpeciesKraken: core.DomainShared,
 }
 
+// KillEffects are the visual each code species' kill leaves; an expiry fades the
+// body out, and a cancel leaves nothing. A storm's is each circle's, and a snake's
+// its head's, the body fading behind it. A data species names its own in its
+// prototype.
+var KillEffects = [SpeciesCount]DeathEffect{
+	SpeciesNone:   DeathSilent,
+	SpeciesDrain:  DeathFlash,
+	SpeciesSwarm:  DeathScatter,
+	SpeciesQuasar: DeathScatter,
+	SpeciesStorm:  DeathScatter,
+	SpeciesPylon:  DeathScatter,
+	SpeciesSnake:  DeathScatter,
+	SpeciesEye:    DeathFlash,
+	SpeciesTower:  DeathScatter,
+	SpeciesKraken: DeathSilent, // its renderer burns it away
+}
+
 // Footprints are each code species' body around its header, from its parameters: a
 // pylon's and a tower's at their default radii, which a request may change, a
 // snake's its head, a storm's one circle and a kraken's its body without its legs.

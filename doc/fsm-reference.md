@@ -952,6 +952,7 @@ contact = { energy = 1000, heat = 10 }  # A touched shield's energy, a bare curs
 lifetime_ms = 35000                 # 0 lives until killed or cancelled (optional)
 entrance = "materialize"            # Lands as a materialize over its footprint ends; none stands at once (optional)
 entrance_ms = 250                   # How long that materialize plays; 0 plays its style's whole (optional)
+death = "scatter"                   # What a kill leaves of its body: none, flash, fadeout or scatter, the default (optional)
 frames = [                          # Each frame a string per row, height rows of width cells
     { glyphs = ["╔oo╗", "╚══╝"], fg = ["0110", "1001"], attr = [" BB ", "    "] },
     { glyphs = ["┌--┐", "└──┘"] },  # fg, bg and attr are each optional
@@ -1011,6 +1012,10 @@ target = "Roam"
   palette, and shows a hit by reversing the glyph; without the pair it draws the
   palettes' nearest colours. The hit flash, then `Enraged`, tints every glyph. The
   eye's types are drawn from the same look.
+- The death: a kill leaves `death` of the body where it stood, a scatter of its
+  glyphs unless the prototype names `none`, `flash` or `fadeout`; a lifetime's end
+  fades the body out and a cancel leaves nothing
+  ([ECS §7](ecs-and-events.md#death-effects)).
 - The physics: a key `[prototype.physics]` leaves out keeps its default, the
   `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
   steering, the homing's half-cell snap and restitution 0.5.

@@ -108,6 +108,7 @@ type prototypeDoc struct {
 	PatternMs  int        `toml:"pattern_ms"`
 	Entrance   string     `toml:"entrance"`
 	EntranceMs int        `toml:"entrance_ms"`
+	Death      string     `toml:"death"`
 
 	// Its own rows: what an attack family does to it, keyed by family, and the
 	// materialize style its entrance plays
@@ -249,6 +250,16 @@ func (d *prototypeDoc) prototype(name string, species component.SpeciesType, loo
 		fail("entrance_ms %d is negative", d.EntranceMs)
 	case d.EntranceMs > 0 && d.Entrance == "":
 		fail("entrance_ms %d times no entrance: the species stands at once", d.EntranceMs)
+	}
+	// A kill leaves an effect of the body, which none of its cells is a particle of
+	bodyEffects := component.DeathEffectNames[:component.DeathParticle]
+	switch i := slices.Index(bodyEffects, d.Death); {
+	case d.Death == "":
+		p.Death = component.DeathScatter
+	case i >= 0:
+		p.Death = component.DeathEffect(i)
+	default:
+		fail("death %q is not one of %s", d.Death, strings.Join(bodyEffects, ", "))
 	}
 
 	if i := slices.IndexFunc(combatRows, func(r component.CombatEntityType) bool {

@@ -228,7 +228,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		headerEntities := s.world.Components.Swarm.Entities()
 		s.lifecycle.despawned.Add(int64(len(headerEntities)))
 		for _, headerEntity := range headerEntities {
-			s.despawnSwarm(headerEntity)
+			s.despawnSwarm(headerEntity, component.DeathSilent)
 		}
 		s.statCount.Store(0)
 		s.statActive.Store(false)
@@ -240,7 +240,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 				if s.world.Components.Swarm.HasEntity(payload.HeaderEntity) {
 					s.lifecycle.despawned.Add(1)
 				}
-				s.despawnSwarm(payload.HeaderEntity)
+				s.despawnSwarm(payload.HeaderEntity, component.DeathSilent)
 			}
 		}
 	}
@@ -283,14 +283,14 @@ func (s *SwarmSystem) Update() {
 				Y:            killY,
 			})
 
-			s.despawnSwarm(headerEntity)
+			s.despawnSwarm(headerEntity, component.KillEffects[component.SpeciesSwarm])
 			continue
 		}
 
 		// Charges check → despawn
 		if swarmComp.ChargesCompleted >= parameter.SwarmMaxCharges {
 			s.lifecycle.killedLifecycle.Add(1)
-			s.despawnSwarm(headerEntity)
+			s.despawnSwarm(headerEntity, component.DeathFadeout)
 			continue
 		}
 
@@ -298,7 +298,7 @@ func (s *SwarmSystem) Update() {
 		// alone would leave its members behind
 		if timer, ok := s.world.Components.Timer.GetPtr(headerEntity); ok && timer.Expired(component.TimerDeadline) {
 			s.lifecycle.killedLifecycle.Add(1)
-			s.despawnSwarm(headerEntity)
+			s.despawnSwarm(headerEntity, component.DeathFadeout)
 			continue
 		}
 
@@ -693,13 +693,14 @@ func (s *SwarmSystem) syncMemberPositions(headerEntity core.Entity, headerX, hea
 }
 
 // despawnSwarm ends a swarm: its state's exit, then the composite, which
-// CompositeSystem destroys
-func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity) {
+// CompositeSystem destroys, leaving effect of its body
+func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity, effect component.DeathEffect) {
 	if swarmComp, ok := s.world.Components.Swarm.GetPtr(headerEntity); ok {
 		s.ctx = swarmCtx{entity: headerEntity, swarm: swarmComp}
 		s.graph.Stop(&swarmComp.Machine, &s.ctx)
 	}
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
+		Effect:       effect,
 	})
 }

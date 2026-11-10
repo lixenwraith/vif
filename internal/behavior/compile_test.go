@@ -185,6 +185,24 @@ func TestAPrototypeLooksAsItsFramesSay(t *testing.T) {
 	}
 }
 
+// A kill leaves the effect a prototype's death names of its body, a scatter where
+// it names none
+func TestAPrototypesDeathNamesWhatAKillLeaves(t *testing.T) {
+	for death, want := range map[string]component.DeathEffect{
+		"": component.DeathScatter, `death = "none"`: component.DeathSilent, `death = "flash"`: component.DeathFlash,
+		`death = "fadeout"`: component.DeathFadeout, `death = "scatter"`: component.DeathScatter,
+	} {
+		src := strings.Replace(warden, "mass = 2.0", "mass = 2.0\n"+death, 1)
+		set, err := Compile(testVocabulary(), map[string]map[string]any{"warden": parse(t, src)}, nil)
+		if err != nil {
+			t.Fatalf("%q: %v", death, err)
+		}
+		if got := set.Prototypes()[0].Death; got != want {
+			t.Errorf("%q: a kill leaves effect %d, want %d", death, got, want)
+		}
+	}
+}
+
 // A program's physics keys replace the default one by one: a program naming none
 // flies the default, and one naming a few keeps the rest of it
 func TestAProgramsPhysicsKeysReplaceTheDefaultOneByOne(t *testing.T) {
@@ -322,6 +340,7 @@ func TestACompileErrorNamesProgramPlaceAndKey(t *testing.T) {
 		{"entrance", `mass = 2.0`, "mass = 2.0\nentrance = \"fly\"", `program 'warden': prototype: entrance "fly" is not one of materialize`, 1},
 		{"negative entrance", `mass = 2.0`, "mass = 2.0\nentrance = \"materialize\"\nentrance_ms = -5", `program 'warden': prototype: entrance_ms -5 is negative`, 1},
 		{"entrance duration alone", `mass = 2.0`, "mass = 2.0\nentrance_ms = 250", `program 'warden': prototype: entrance_ms 250 times no entrance: the species stands at once`, 1},
+		{"death", `mass = 2.0`, "mass = 2.0\ndeath = \"particle\"", `program 'warden': prototype: death "particle" is not one of none, flash, fadeout, scatter`, 1},
 		{"glyph width", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀", "▀▄▄▀"] }, {`, `program 'warden': prototype: frames[0]: glyphs[0] "▄▀▀" has 3 cells, want width 4`, 1},
 		{"frame height", `{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, {`, `{ glyphs = ["▄▀▀▄"] }, {`, `program 'warden': prototype: frames[0]: glyphs has 1 rows, want height 2`, 1},
 		{"no frame", `frames = [{ glyphs = ["▄▀▀▄", "▀▄▄▀"] }, { glyphs = ["▀▄▄▀", "▄▀▀▄"] }]`, `frames = []`, `program 'warden': prototype: no frame`, 1},

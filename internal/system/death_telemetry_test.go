@@ -92,6 +92,55 @@ func TestDeathBatchesParticleEffectWithBehavior(t *testing.T) {
 	}
 }
 
+// TestGlyphsLeaveTheColorsTheyStoodIn: a glyph and a sigil dying with the scatter
+// are thrown, and with the fadeout fade, in their own colors; a wall's glyph is
+// thrown too, and one with no glyph leaves the scatter nothing
+func TestGlyphsLeaveTheColorsTheyStoodIn(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	deaths := ready(NewDeathSystem(w)).(*DeathSystem)
+	red, blue := color.RGB{R: 200}, color.RGB{B: 90}
+	green := visual.GlyphColorLUT[component.GlyphGreen][component.GlyphBright]
+	stand := func() []core.Entity {
+		entities := make([]core.Entity, 4)
+		for i := range entities {
+			entities[i] = w.CreateEntity(core.DomainPlayer)
+			w.Positions.SetPosition(entities[i], component.PositionComponent{X: 2 + i, Y: 3})
+		}
+		w.Components.Glyph.SetComponent(entities[0], component.GlyphComponent{Rune: 'g', Type: component.GlyphGreen, Level: component.GlyphBright})
+		w.Components.Sigil.SetComponent(entities[1], component.SigilComponent{Rune: 's', Color: red})
+		w.Components.Wall.SetComponent(entities[2], component.WallComponent{Rune: '#', FgColor: red, BgColor: blue, RenderFg: true, RenderBg: true})
+		w.Components.Wall.SetComponent(entities[3], component.WallComponent{BgColor: blue, RenderBg: true})
+		return entities
+	}
+	for _, c := range []struct {
+		effect component.DeathEffect
+		batch  event.EventType
+		stat   string
+		want   []component.EffectCell
+	}{
+		{component.DeathScatter, event.EventSpiritScatterRequest, "death.batch_scatter", []component.EffectCell{
+			{X: 2, Y: 3, Rune: 'g', Fg: green}, {X: 3, Y: 3, Rune: 's', Fg: red}, {X: 4, Y: 3, Rune: '#', Fg: red}}},
+		{component.DeathFadeout, event.EventFadeoutSpawnBatch, "death.batch_fadeout", []component.EffectCell{
+			{X: 2, Y: 3, Rune: 'g', Fg: green}, {X: 3, Y: 3, Rune: 's', Fg: red},
+			{X: 4, Y: 3, Rune: '#', Fg: red, Bg: blue, Solid: true}, {X: 5, Y: 3, Bg: blue, Solid: true}}},
+	} {
+		p := event.AcquireDeathRequest(c.effect)
+		p.Entities = append(p.Entities, stand()...)
+		deaths.HandleEvent(event.GameEvent{Type: event.EventDeathBatch, Payload: p})
+		events := w.Resources.Event.Queue.Consume()
+		if len(events) != 1 || events[0].Type != c.batch || events[0].Domain != core.DomainPlayer {
+			t.Fatalf("effect %d sent %+v, want one batch of this instance's alone", c.effect, events)
+		}
+		if got := events[0].Payload.(*event.BatchPayload[component.EffectCell]).Entries; !slices.Equal(got, c.want) {
+			t.Fatalf("effect %d drew %+v, want %+v", c.effect, got, c.want)
+		}
+		if n := w.Positions.CountEntities(); n != 0 || w.Resources.Status.Ints.Get(c.stat).Load() != 1 {
+			t.Fatalf("effect %d: %d entities outlived the batch %s counts %d of", c.effect, n, c.stat, w.Resources.Status.Ints.Get(c.stat).Load())
+		}
+	}
+}
+
 // TestWallsLeaveTheCellsTheyDrew: a wall dying with the flash lights the glyph it
 // drew alone, and one dying with the fadeout fades what it drew: its background,
 // under its glyph where it drew one, in the colors a palette wall names by index

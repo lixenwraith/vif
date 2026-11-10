@@ -32,4 +32,7 @@ type EyeComponent struct {
 	Type           EyeType
 	FrameIndex     int
 	FrameRemaining time.Duration
+	// Dying latches an eye whose composite goes at the tick's settle: it steps no
+	// more and is killed once, and keeps the look its death leaves
+	Dying bool
 }

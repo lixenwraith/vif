@@ -16,8 +16,7 @@ import (
 // EyeSystem manages eye composite entity lifecycle
 // Eyes are 5×3 composites that home toward an assigned target group and self-destruct on contact
 type EyeSystem struct {
-	world   *engine.World
-	headers []core.Entity // the tick's eyes, detached: despawnEye removes mid-iteration
+	world *engine.World
 
 	// Telemetry
 	statCount           *atomic.Int64
@@ -104,20 +103,16 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventEyeCancelRequest:
-		// despawnEye removes from Eye immediately.
-		headerEntities := s.world.Components.Eye.GetAllEntities()
-		s.lifecycle.despawned.Add(int64(len(headerEntities)))
-		for _, headerEntity := range headerEntities {
-			s.despawnEye(headerEntity)
+		for _, headerEntity := range s.world.Components.Eye.Entities() {
+			if s.despawnEye(headerEntity, component.DeathSilent) {
+				s.lifecycle.despawned.Add(1)
+			}
 		}
 
 	case event.EventCompositeIntegrityBreach:
 		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
-			if payload.Behavior == component.BehaviorEye {
-				if s.world.Components.Eye.HasEntity(payload.HeaderEntity) {
-					s.lifecycle.despawned.Add(1)
-				}
-				s.despawnEye(payload.HeaderEntity)
+			if payload.Behavior == component.BehaviorEye && s.despawnEye(payload.HeaderEntity, component.DeathSilent) {
+				s.lifecycle.despawned.Add(1)
 			}
 		}
 	}
@@ -130,12 +125,11 @@ func (s *EyeSystem) Update() {
 
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), parameter.MaxSimulationDeltaSeconds)
 
-	s.headers = append(s.headers[:0], s.world.Components.Eye.Entities()...)
 	activeCount := 0
 
-	for _, headerEntity := range s.headers {
+	for _, headerEntity := range s.world.Components.Eye.Entities() {
 		eyeComp, ok := s.world.Components.Eye.GetPtr(headerEntity)
-		if !ok {
+		if !ok || eyeComp.Dying {
 			continue
 		}
 
@@ -163,7 +157,7 @@ func (s *EyeSystem) Update() {
 				X:            killX,
 				Y:            killY,
 			})
-			s.despawnEye(headerEntity)
+			s.despawnEye(headerEntity, component.KillEffects[component.SpeciesEye])
 			continue
 		}
 
@@ -203,7 +197,8 @@ func (s *EyeSystem) Update() {
 				Y:       killY,
 			})
 			combatComp.HitPoints = 0
-			s.despawnEye(headerEntity)
+			// The explosion is what this death leaves
+			s.despawnEye(headerEntity, component.DeathSilent)
 			activeCount++
 			continue
 		}
@@ -594,16 +589,18 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 
 // === Lifecycle ===
 
-func (s *EyeSystem) despawnEye(headerEntity core.Entity) {
-	if !s.world.Components.Eye.HasEntity(headerEntity) {
-		return
+// despawnEye ends an eye once, leaving effect: it steps no more, and its composite
+// goes at the tick's settle, where its look is still read
+func (s *EyeSystem) despawnEye(headerEntity core.Entity, effect component.DeathEffect) bool {
+	eye, ok := s.world.Components.Eye.GetPtr(headerEntity)
+	if !ok || eye.Dying {
+		return false
 	}
-
-	// Latch: destruction waits for the tick's closing settle; drop the tag so a
-	// re-entrant Update cannot emit SpeciesKilled twice.
-	s.world.Components.Eye.RemoveEntity(headerEntity)
+	eye.Dying = true
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
+		Effect:       effect,
 	})
+	return true
 }

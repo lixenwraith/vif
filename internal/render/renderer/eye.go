@@ -1,8 +1,6 @@
 package renderer
 
 import (
-	"fmt"
-
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -11,18 +9,6 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 )
-
-// eyeLooks are the eye types' looks, compiled once
-var eyeLooks = func() (looks [parameter.EyeTypeCount]component.Look) {
-	for i := range looks {
-		look, err := visual.CompileLook(parameter.EyeWidth, parameter.EyeHeight, visual.EyeTypeVisuals[i])
-		if err != nil {
-			panic(fmt.Sprintf("eye type %d: %v", i, err))
-		}
-		looks[i] = look
-	}
-	return looks
-}()
 
 // EyeRenderer draws eye composite entities
 type EyeRenderer struct {
@@ -59,7 +45,7 @@ func (r *EyeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 			return true
 		}
 
-		look := &eyeLooks[typeIdx]
+		look := &visual.EyeLooks[typeIdx]
 		frame := look.Frames[eyeComp.FrameIndex%len(look.Frames)]
 
 		var flash color.RGB

@@ -13,6 +13,7 @@ const (
 	DeathSilent   DeathEffect = iota
 	DeathFlash                // each glyph lit at its cell in the removal flash's color
 	DeathFadeout              // each cell fading out in its own colors
+	DeathScatter              // each glyph thrown out from the body's middle, fading
 	DeathParticle             // each glyph a particle, of the behavior its request names
 	DeathEffectCount
 )
@@ -22,6 +23,7 @@ var DeathEffectNames = [DeathEffectCount]string{
 	DeathSilent:   "none",
 	DeathFlash:    "flash",
 	DeathFadeout:  "fadeout",
+	DeathScatter:  "scatter",
 	DeathParticle: "particle",
 }
 

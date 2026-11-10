@@ -405,6 +405,14 @@ formation-specific movement and spawning; common damage is delegated to
 `CombatSystem`, common movement math to `pkg/vmath/physics`, and path selection
 to `pkg/navigation`.
 
+A killed species leaves a visual of its body where it stood, on each player's own
+screen. A swarm, a quasar, a snake's head and a data species scatter: their glyphs
+fly out from the body's middle and fade, under whatever else stands there. An eye
+and a drain flash. A body whose time ran out (a swarm's charges or lifetime, a
+data species' lifetime) fades out, a cancelled one leaves nothing, and a cell an
+attack takes off a pylon, a tower, a storm circle or a snake's body fades out
+where it stood ([ECS §7](ecs-and-events.md#death-effects)).
+
 ## 9. Walls, maps, navigation, and environment
 
 Walls are grid entities with a block mask (cursor, kinetic movers, particles,

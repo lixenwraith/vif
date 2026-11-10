@@ -3540,6 +3540,9 @@ func encodeColumnsEye(dst []byte, rows []StoreEntry[component.EyeComponent]) []b
 	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.FrameRemaining)
 	}
+	for i := range rows {
+		dst = appendBool(dst, rows[i].Value.Dying)
+	}
 	return dst
 }
 
@@ -3558,6 +3561,9 @@ func decodeColumnsEye(r *columnReader) []StoreEntry[component.EyeComponent] {
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.FrameRemaining, r)
+	}
+	for i := range rows {
+		readBool(&rows[i].Value.Dying, r)
 	}
 	return rows
 }

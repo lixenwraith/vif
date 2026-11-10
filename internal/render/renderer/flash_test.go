@@ -145,3 +145,51 @@ func TestFlightsTravelBetweenTicks(t *testing.T) {
 		t.Fatalf("a flight about to end drew %q on its target", got.Rune)
 	}
 }
+
+// TestAnAblativeMemberDrawsUntilItsOwnerDestroysIt: a pylon's, a tower's and a
+// snake body's member with no hit points left still draws, in the color its kind
+// shows at none, so its cell stays lit until its fade takes it over
+func TestAnAblativeMemberDrawsUntilItsOwnerDestroysIt(t *testing.T) {
+	w, game := glyphWorld()
+	config := w.Resources.Config
+	ctx := render.RenderContext{MapWidth: config.MapWidth, MapHeight: config.MapHeight,
+		ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight, CellAspect: vmath.RefAspect}
+	// stand is a one-member composite at (x, 4), its member overkilled
+	stand := func(x int) (core.Entity, *component.HeaderComponent, core.Entity) {
+		header, member := w.CreateEntity(core.DomainShared), w.CreateEntity(core.DomainShared)
+		w.Positions.SetPosition(header, component.PositionComponent{X: x, Y: 4})
+		w.Positions.SetPosition(member, component.PositionComponent{X: x, Y: 4})
+		w.Components.Combat.SetComponent(member, component.CombatComponent{HitPoints: -3})
+		w.Components.Header.SetComponent(header, component.HeaderComponent{
+			Type: component.CompositeTypeAblative, MemberEntries: []component.MemberEntry{{Entity: member}}})
+		h, _ := w.Components.Header.GetPtr(header)
+		return header, h, member
+	}
+	lit := func(name string, x int, want color.RGB, draw func(buf *render.RenderBuffer)) {
+		t.Helper()
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+		draw(buf)
+		if got := buf.CellAt(x, 4); got.Bg != want {
+			t.Fatalf("%s member with no hit points left drew %v, want %v", name, got.Bg, want)
+		}
+	}
+
+	_, pylonHeader, _ := stand(3)
+	pylon := &component.PylonComponent{SpawnX: 3, SpawnY: 4, RadiusX: 2, RadiusY: 1, MinHP: 5, MaxHP: 10}
+	lit("a pylon's", 3, visual.RgbPylonCriticalBright, func(buf *render.RenderBuffer) {
+		NewPylonRenderer(game).renderMembersTrueColor(ctx, buf, pylon, pylonHeader)
+	})
+
+	_, towerHeader, _ := stand(8)
+	tower := &component.TowerComponent{SpawnX: 8, SpawnY: 4, RadiusX: 2, RadiusY: 1, MinHP: 5, MaxHP: 10, Type: component.TowerGold}
+	lit("a tower's", 8, visual.TowerTypes[component.TowerGold].CriticalBright, func(buf *render.RenderBuffer) {
+		NewTowerRenderer(game).renderMembersTrueColor(ctx, buf, tower, towerHeader, int(component.TowerGold))
+	})
+
+	body, _, segment := stand(13)
+	w.Components.SnakeBody.SetComponent(body, component.SnakeBodyComponent{Segments: []component.SnakeSegment{{Connected: true}}})
+	w.Components.SnakeMember.SetComponent(segment, component.SnakeMemberComponent{MaxHitPoints: 10})
+	lit("a snake body's", 13, color.Scale(visual.RgbSnakeBodyBright, 0.3), func(buf *render.RenderBuffer) {
+		NewSnakeRenderer(game).renderBodyTrueColor(ctx, buf, body)
+	})
+}

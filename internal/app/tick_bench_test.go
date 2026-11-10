@@ -208,6 +208,7 @@ func newEffectRig(tb testing.TB) *effectRig {
 	r := &effectRig{w: w, handlers: map[event.EventType][]event.Handler{}}
 	for _, build := range []func(*engine.World) engine.System{
 		system.NewTimerSystem, system.NewSpiritSystem, system.NewFlashSystem, system.NewFadeoutSystem, system.NewDeathSystem,
+		system.NewCompositeSystem,
 	} {
 		s := build(w)
 		s.Init()
@@ -254,16 +255,38 @@ func (r *effectRig) frames() {
 	}
 }
 
+// standBody stands a composite of the kind with its header at (x, y), a member a
+// cell of the kind's footprint, which the composite system reads as it ends
+func (r *effectRig) standBody(species component.SpeciesType, kind component.Behavior, x, y int) core.Entity {
+	w, foot := r.w, component.Footprints[species]
+	header := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: x, Y: y})
+	h := component.HeaderComponent{Behavior: kind, MemberEntries: make([]component.MemberEntry, 0, foot.Width*foot.Height)}
+	for row := range foot.Height {
+		for col := range foot.Width {
+			m := w.CreateEntity(core.DomainShared)
+			offX, offY := col-foot.HeaderX, row-foot.HeaderY
+			w.Positions.SetPosition(m, component.PositionComponent{X: x + offX, Y: y + offY})
+			w.Components.Member.SetComponent(m, component.MemberComponent{HeaderEntity: header})
+			h.MemberEntries = append(h.MemberEntries, component.MemberEntry{Entity: m, OffsetX: offX, OffsetY: offY})
+		}
+	}
+	w.Components.Header.SetComponent(header, h)
+	return header
+}
+
 // BenchmarkDeathEffects measures the effects a death leaves and the converging
 // spirit, on a bare world: "tick" is one tick's share of spawning, ageing and ending
 // them, "frames" a tick's three frames of drawing them. bodies is a 5x3 body dying
-// every tick, storm 600 cells going at once every ten ticks.
+// every tick, storm 600 cells going at once every ten ticks. swarm and eye are
+// whole bodies ending through the composite system, standing them left untimed: a
+// swarm scattering or an eye flashing every tick, 75 or 40 of them at once.
 func BenchmarkDeathEffects(b *testing.B) {
 	loads := []struct {
 		name         string
 		cells, every int
 	}{{"bodies", 15, 1}, {"storm", 600, 10}}
-	for _, effect := range []string{"flash", "fadeout", "spirit", "scatter"} {
+	for _, effect := range []string{"flash", "fadeout", "spirit", "scatter", "swarm", "eye"} {
 		for _, load := range loads {
 			for _, frames := range []bool{false, true} {
 				name := "tick"
@@ -307,26 +330,48 @@ func BenchmarkDeathEffects(b *testing.B) {
 									Fg: color.RGB{R: 200, G: 100, B: 50}})
 							}
 							r.w.PushLocal(event.EventSpiritScatterRequest, batch)
+						case "swarm", "eye":
+							species, kind, kill := component.SpeciesSwarm, component.BehaviorSwarm, component.KillEffects[component.SpeciesSwarm]
+							if effect == "eye" {
+								species, kind, kill = component.SpeciesEye, component.BehaviorEye, component.KillEffects[component.SpeciesEye]
+							}
+							foot := component.Footprints[species]
+							for range max(load.cells/(foot.Width*foot.Height), 1) {
+								header := r.standBody(species, kind, x0+rng.Intn(30), y0+rng.Intn(15))
+								if effect == "eye" {
+									r.w.Components.Eye.SetComponent(header, component.EyeComponent{})
+								} else {
+									r.w.Components.Swarm.SetComponent(header, component.SwarmComponent{})
+								}
+								r.w.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{HeaderEntity: header, Effect: kill})
+							}
 						}
 					}
-					step := func(i int) {
+					standing := effect == "swarm" || effect == "eye"
+					step := func(i int, timed bool) {
 						if i%load.every == 0 {
+							if timed && standing {
+								b.StopTimer()
+							}
 							spawn()
+							if timed && standing {
+								b.StartTimer()
+							}
 						}
 						r.tick()
 					}
 					for i := range 40 { // to the steady state
-						step(i)
+						step(i, false)
 					}
 					b.ReportAllocs()
 					b.ResetTimer()
 					for i := range b.N {
 						if !frames {
-							step(i)
+							step(i, true)
 							continue
 						}
 						b.StopTimer()
-						step(i)
+						step(i, false)
 						r.buf.Clear()
 						b.StartTimer()
 						r.frames()

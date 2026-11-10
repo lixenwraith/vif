@@ -23,7 +23,9 @@ type pylonColorEntry struct {
 // pylonRenderFunc defines the render strategy signature, selected at initialization
 type pylonRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer)
 
-// PylonRenderer draws pylon entities with health-based coloring
+// PylonRenderer draws pylon entities with health-based coloring. A member with no
+// hit points left draws, critical, until its owner destroys it, where its fade
+// takes the cell over.
 type PylonRenderer struct {
 	gameCtx *engine.GameContext
 
@@ -229,7 +231,7 @@ func (r *PylonRenderer) renderMembersTrueColor(
 		}
 
 		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
-		if !ok || combatComp.HitPoints <= 0 {
+		if !ok {
 			continue
 		}
 
@@ -335,7 +337,7 @@ func (r *PylonRenderer) renderMembers256Color(
 		}
 
 		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
-		if !ok || combatComp.HitPoints <= 0 {
+		if !ok {
 			continue
 		}
 

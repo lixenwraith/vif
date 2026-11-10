@@ -337,7 +337,7 @@ func (s *DrainSystem) processDrainStates() {
 		// Termination check
 		if entry.combatComp.HitPoints <= 0 {
 			entry.dying = true
-			event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFlash, entry.entity)
+			event.EmitDeath(s.world.Resources.Event.Queue, component.KillEffects[component.SpeciesDrain], entry.entity)
 
 			// A positionless drain yields no death coordinate; -1 marks it absent
 			killX, killY := entry.killPos()

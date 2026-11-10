@@ -180,14 +180,14 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		entities := s.world.Components.Quasar.Entities()
 		s.lifecycle.despawned.Add(int64(len(entities)))
 		for _, entity := range entities {
-			s.terminateQuasar(entity)
+			s.terminateQuasar(entity, component.DeathSilent)
 		}
 
 	case event.EventCompositeIntegrityBreach:
 		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
 			if s.world.Components.Quasar.HasEntity(payload.HeaderEntity) {
 				s.lifecycle.despawned.Add(1)
-				s.terminateQuasar(payload.HeaderEntity)
+				s.terminateQuasar(payload.HeaderEntity, component.DeathSilent)
 			}
 		}
 	}
@@ -215,7 +215,7 @@ func (s *QuasarSystem) Update() {
 		quasarComp, ok := quasars.GetPtr(headerEntity)
 		if !ok {
 			s.lifecycle.despawned.Add(1)
-			s.terminateQuasar(headerEntity)
+			s.terminateQuasar(headerEntity, component.DeathSilent)
 			continue
 		}
 		quasarComp.ZapRadius = currentRadius
@@ -239,7 +239,7 @@ func (s *QuasarSystem) Update() {
 				X:            killX,
 				Y:            killY,
 			})
-			s.terminateQuasar(headerEntity)
+			s.terminateQuasar(headerEntity, component.KillEffects[component.SpeciesQuasar])
 			continue
 		}
 
@@ -682,8 +682,9 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 	s.sweep.emit(s.world, component.DeathFlash)
 }
 
-// terminateQuasar ends a specific quasar: its state's exit, then the composite
-func (s *QuasarSystem) terminateQuasar(headerEntity core.Entity) {
+// terminateQuasar ends a specific quasar: its state's exit, then the composite,
+// leaving effect of its body
+func (s *QuasarSystem) terminateQuasar(headerEntity core.Entity, effect component.DeathEffect) {
 	if headerEntity == 0 {
 		return
 	}
@@ -701,5 +702,6 @@ func (s *QuasarSystem) terminateQuasar(headerEntity core.Entity) {
 	// Delegate composite destruction to CompositeSystem
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
+		Effect:       effect,
 	})
 }
