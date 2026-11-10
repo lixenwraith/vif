@@ -82,8 +82,9 @@ func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
 
 // TestFlightsTravelBetweenTicks: a flight's parts are drawn as far along as its
 // deadline stands at the frame's moment. A scattered part runs fast and slows,
-// dimming in its own color, and passes under a glyph already drawn; a converging
-// part sets off from its start cell alone and is on its target as the flight ends
+// dimming in its own color, crosses the blank a crosshair leaves and passes under
+// a glyph already drawn; a converging part sets off from its start cell alone and
+// is on its target as the flight ends
 func TestFlightsTravelBetweenTicks(t *testing.T) {
 	w, game := glyphWorld()
 	tick := engine.SimEpoch.Add(time.Second)
@@ -92,6 +93,10 @@ func TestFlightsTravelBetweenTicks(t *testing.T) {
 	config := w.Resources.Config
 	draw := func(since time.Duration) *render.RenderBuffer {
 		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+		// The cursor's row as its crosshair leaves it, and a glyph on it
+		for x := range config.MapWidth {
+			buf.Set(x, 4, ' ', visual.RgbBackground, visual.RgbPingLineNormal, render.BlendReplace, 1.0, terminal.AttrNone)
+		}
 		buf.SetFgOnly(20, 4, 'G', green, terminal.AttrNone)
 		NewSpiritRenderer(game).Render(render.RenderContext{GameTime: tick.Add(since), MapWidth: config.MapWidth,
 			MapHeight: config.MapHeight, ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight,

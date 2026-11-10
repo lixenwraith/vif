@@ -442,20 +442,21 @@ A species' end names the effect by why it ends:
   ([behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)).
   A scatter request is a body's cells as one pooled batch: each glyph's way out
   from the body's middle is worked out once as it joins the tick's flight, and a
-  part is one buffer write a frame, left out where a glyph is already drawn.
+  part is one foreground write a frame, left out where a glyph is already drawn;
+  the blank a crosshair or a grid line leaves is none.
 - Measured the same way against a spirit entity a part: 15 converging spirits
   every tick cost the tick 2.7 µs where they cost 5.2 µs and a tick's three frames
   70 µs where they cost 111 µs, 600 every ten ticks 4.8 µs from 17.6 µs and 284 µs
   from 465 µs; the frames' cost is the ten trail segments a part draws, whose
   turn and light are now worked out once a flight. A scattered 5x3 body every
-  tick costs the tick 0.8 µs and its three frames 3.4 µs, 600 cells every ten
-  ticks 1.2 µs and 10.6 µs, and a scatter allocates nothing.
+  tick costs the tick 0.8 µs and its three frames 3.3 µs, 600 cells every ten
+  ticks 1.2 µs and 8.9 µs, and a scatter allocates nothing.
 - A whole body's end, standing it left out, medians of three runs: a swarm ending
   every tick costs the tick 3.0 µs with its scatter where its silent end cost
   2.2 µs, and an eye 4.2 µs with its flash and fading grounds where it cost
   3.0 µs; most of either is destroying the body's entities. Their three frames
-  cost 2.3 µs and 12.5 µs. 75 swarms ending at once every ten ticks cost a tick
-  11.4 µs and three frames 10.6 µs, 40 eyes 9.9 µs and 44.8 µs. The read
+  cost 1.9 µs and 12.5 µs. 75 swarms ending at once every ten ticks cost a tick
+  11.4 µs and three frames 9.8 µs, 40 eyes 9.9 µs and 44.8 µs. The read
   allocates nothing, where a composite's end allocated its member list (64 B a
   swarm, 192 B an eye).
 
