@@ -103,27 +103,6 @@ func (x *Index[E]) IsOutOfBounds(px, py int) bool {
 	return px < 0 || px >= x.Width || py < 0 || py >= x.Height
 }
 
-// CheckBlockedBatch reports for each point whether it is outside the map or a wall
-// matching mask, aligned with the points
-func (x *Index[E]) CheckBlockedBatch(points []vmath.Point, mask Mask) []bool {
-	result := make([]bool, len(points))
-	for i, pt := range points {
-		result[i] = x.IsBlocked(pt.X, pt.Y, mask)
-	}
-	return result
-}
-
-// IsAnyBlockedInSet reports whether any point is outside the map or a wall
-// matching mask
-func (x *Index[E]) IsAnyBlockedInSet(points []vmath.Point, mask Mask) bool {
-	for _, pt := range points {
-		if x.IsBlocked(pt.X, pt.Y, mask) {
-			return true
-		}
-	}
-	return false
-}
-
 // HasLineOfSight reports whether no cell strictly between (x0, y0) and (x1, y1) on
 // the Bresenham line is a wall matching mask
 func (x *Index[E]) HasLineOfSight(x0, y0, x1, y1 int, mask Mask) bool {

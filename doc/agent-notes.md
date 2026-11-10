@@ -348,6 +348,12 @@ comment now states, and link that instead.
 - The probe path lives on the inliner's budget: `go build -gcflags=-m=2
   ./pkg/position` prints each function's cost against 80, and `probe` stands at
   79. A table of indices beside a stale flag cost it 88 and a call a probe.
+- A row's wall flag (`Position.wall`) is read when the row is made, on
+  `WallChanged`, and for every row once rows are written whole (`readWalls`, in
+  `CopyIn` and the order install). A new path writing `dense` and `entities`
+  whole calls it; the fuzz test's invariant fails one that does not.
+- `BeginBatch` returns the store's one batch, begun again: commit it before the
+  next begins, and hold none across a call that may begin one.
 
 ## Glyphs and widgets
 
@@ -410,7 +416,9 @@ comment now states, and link that instead.
   installed: build main's and the branch's test binaries (`go test -c` in a `git
   worktree` of main) and compare medians of alternating runs. A bench file the
   branch adds is copied into the worktree, kept on main's API where the branch
-  changed one.
+  changed one. A tick reads in two modes, one binary 22 µs in a round and 28 to
+  32 in the next: for a few percent, read the minimum of seven to nine rounds
+  beside the median.
 - B/op can rise as retained memory falls: a smaller heap collects sooner, and
   each collection empties the event batch `sync.Pool`s, which then allocate
   again. Read both sides with `GOGC=off` before blaming an allocation: td's

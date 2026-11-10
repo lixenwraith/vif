@@ -101,6 +101,7 @@ func (w *World) CopyIn(c *WorldCopy) {
 	for i, e := range p.entities {
 		p.slots.set(e, int32(i))
 	}
+	p.readWalls()
 	p.Index.Resize(c.gridW, c.gridH, c.gridD)
 	at := 0
 	for _, oc := range c.cells {

@@ -373,14 +373,9 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 	// 2. Collision handling based on mode
 	switch payload.CollisionMode {
 	case event.WallBatchSkipBlocked:
-		points := make([]vmath.Point, len(resolved))
-		for i, rc := range resolved {
-			points[i] = vmath.Point{X: rc.x, Y: rc.y}
-		}
-		blocked := s.world.Positions.CheckBlockedBatch(points, component.WallBlockAll)
 		filtered := resolved[:0]
-		for i, rc := range resolved {
-			if !blocked[i] {
+		for _, rc := range resolved {
+			if !s.world.Positions.IsBlocked(rc.x, rc.y, component.WallBlockAll) {
 				filtered = append(filtered, rc)
 			}
 		}
@@ -404,12 +399,10 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		}
 
 	case event.WallBatchFailIfBlocked:
-		points := make([]vmath.Point, len(resolved))
-		for i, rc := range resolved {
-			points[i] = vmath.Point{X: rc.x, Y: rc.y}
-		}
-		if s.world.Positions.IsAnyBlockedInSet(points, component.WallBlockAll) {
-			return result
+		for _, rc := range resolved {
+			if s.world.Positions.IsBlocked(rc.x, rc.y, component.WallBlockAll) {
+				return result
+			}
 		}
 	}
 

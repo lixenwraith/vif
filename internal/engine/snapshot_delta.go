@@ -415,6 +415,7 @@ func (p *Position) reorder(order []core.Entity, cells []position.CellOrder[core.
 	if err := reorderRows(&p.slots, p.dense, p.entities, order); err != nil {
 		return err
 	}
+	p.readWalls()
 	return p.Index.Reorder(cells, EntityClass)
 }
 

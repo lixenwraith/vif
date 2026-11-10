@@ -33,9 +33,9 @@ In `pkg/position`:
   change, so a point is a bit and an area a few words a row; the surfaces; the
   block log; `BlockBits`, the plane's words with the surfaces' solid cells for a
   reader deriving whole; and the searches: free area by spiral, by pattern and
-  around an exclusion, point and area line of sight, rays, batches, the closest
-  occupant in a direction. A query taking a column and a row answers for the
-  first layer, as a flat game's do; one taking a `Point3` (`BlocksAt`, `BlocksBox`,
+  around an exclusion, point and area line of sight, rays, the closest occupant
+  in a direction. A query taking a column and a row answers for the first
+  layer, as a flat game's do; one taking a `Point3` (`BlocksAt`, `BlocksBox`,
   `IsBlockedAt`, `EntitiesIn`, `HasAnyEntityIn`, `HasLineOfSightBetween`,
   `HasBoxLineOfSight`) for any, a line through the volume walking `vmath.Line3`;
   the mutators take a `Point3`, a flat caller placing on the first layer.
@@ -78,12 +78,12 @@ In `engine`:
 - `Position`: embeds the index, so its queries are `World.Positions`'s own, and
   keeps what the rows, the components or the rock need: the rows and their sparse
   index (shared with `Store`), `SetPosition` and its kin over rows and grid,
-  `Shift`, batches, `Resize` and `Clear`, which place the rows again or drop them,
-  the mask upkeep that tells the index which moves are a wall's, once the grid
-  holds the move, `wallOf` over `Components.Wall` as the index's `blockOf`, the
-  typing queries (`TopGlyphAt`, `IsTypeable`, `IsScenery`), telemetry, and the
-  rock: `RockField`, the two surfaces with their columns. `component.WallBlockMask`
-  is the package's `Mask`.
+  `Shift`, the batch, `Resize` and `Clear`, which place the rows again or drop
+  them, the wall flag beside each row that tells the index which moves are a
+  wall's, once the grid holds the move, `wallOf` over `Components.Wall` as the
+  index's `blockOf`, the typing queries (`TopGlyphAt`, `IsTypeable`,
+  `IsScenery`), telemetry, and the rock: `RockField`, the two surfaces with their
+  columns. `component.WallBlockMask` is the package's `Mask`.
 - The names the game reads are the package's: `position.Scope` with `ScopeShared`,
   `ScopePrivate` and `ScopeAll`, `position.Pattern` and its kinds,
   `position.Exclusion`, `position.Rect` (the ping's bounds embed one),
@@ -195,7 +195,14 @@ Each names the choice taken and what the other would have cost.
 - Rows, in `engine`: the sparse index is `Store`'s, and the row type is
   `component.PositionComponent`, `vmath.Point` by alias, the flat cell of two
   ints; the binding places it on the first layer at the index boundary
-  (`Point.Layer`), which inlines.
+  (`Point.Layer`), which inlines. A flag beside each row says its entity is a
+  wall, read from the wall store when the row is made, when the wall's component
+  comes, goes or is rewritten (`WallChanged`) and when rows are written whole (a
+  copy in, an order installed), so a move tests a byte of the row it holds where
+  it looked the entity up in the world's component masks, a map. A destroy
+  empties the wall store before the row goes, and the flag still names the wall
+  whose cell the log takes. A store keeps one batch, begun again in its own
+  storage, whose commit sorts the additions' cells to find two on one cell.
 - Names: the package's classes are shared and private, the game's shared and
   player; the game reads the package's types by the package's names, never
   through an engine alias, since a method cannot be declared on an alias and a
@@ -281,11 +288,12 @@ What the index keeps, across multiplayer, netcode and interactions:
 ## 5. Costs
 
 Benchmarks in a cloud container move a fifth between runs, so a change is read
-as main's and the branch's test binaries alternated five rounds on one container,
-medians compared, the branch's bench files on both; td's tick is
+as main's and the branch's test binaries alternated five rounds or more on one
+container, medians compared, the branch's bench files on both; td's tick is
 `TestTickProfileTD16`, 500×250 with sixteen cursors over 5,000 ticks on one core.
 A difference inside the band is noise, and a reading that holds in every round is
-not. The package's own benches (`pkg/position` `bench_test.go`) read each
+not; a tick reads in two modes there, a third apart, so a few percent is read by
+the minimum of seven rounds beside the median. The package's own benches (`pkg/position` `bench_test.go`) read each
 operation on a scrolling level's map and on the ceiling's with a maze's walls.
 What each change read, against the main it landed on:
 
@@ -328,6 +336,14 @@ What each change read, against the main it landed on:
   the surfaces cost it taken back; the cave, navigation and route benches inside
   the band or under; the world copy 3 to 5% under. A td world's grid holds 2.1
   MB where it held 32, its crowds 64 kB of that.
+- The rows' wall flag, a shift keeping each entity's row between its phases and
+  the one batch, on `BenchmarkPlacements` at 200×60 against the cells above: a
+  shared body's move 45 to 32 ns, a wall's 10 to 18% under, a layer's shift of
+  1,800 glyphs 2 to 4% under, a batch of ten half the time, its 760 B in six
+  allocations gone. In the game the headless tick allocates four times where it
+  did six on main and eight where ten on td, a fifth to three tenths fewer bytes,
+  and the maze spawn 24 times where 27; the ticks' time reads 1 to 4% under by
+  the minimum, inside the band.
 
 Across the changes td's tick read from 0.40 ms before the move to 0.29 ms, each
 step against its own main, and 0.13 to 0.11 ms with the cells; the tables each PR
