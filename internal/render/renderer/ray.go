@@ -103,7 +103,7 @@ func (r *RayRenderer) drawRay(ctx render.RenderContext, buf *render.RenderBuffer
 		for across := -half; across <= half; across++ {
 			x, y := b.Ray.Cell(i, across)
 			if x < 0 || y < 0 || x >= ctx.MapWidth || y >= ctx.MapHeight ||
-				positions.BlocksCarried(x, y, carry, component.WallBlockKinetic) {
+				positions.BlocksCarried(vmath.Point{X: x, Y: y}, carry, component.WallBlockKinetic) {
 				continue
 			}
 			screenX, screenY, visible := ctx.MapToScreen(x, y)

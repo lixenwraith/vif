@@ -790,7 +790,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 
 	// Handle collisions at materialize spawn position
 	var entitiesAtSpawn [parameter.MaxEntitiesPerCell]core.Entity
-	count := copy(entitiesAtSpawn[:], s.world.Positions.EntitiesAt(spawnX, spawnY, position.ScopeAll))
+	count := copy(entitiesAtSpawn[:], s.world.Positions.EntitiesAt(vmath.Point{X: spawnX, Y: spawnY}, position.ScopeAll))
 
 	s.world.Positions.SetPosition(entity, pos)
 	s.world.Components.Drain.SetComponent(entity, drainComp)
@@ -998,7 +998,7 @@ func (s *DrainSystem) handleEntityCollisions() {
 			continue
 		}
 
-		count := copy(targets[:], s.world.Positions.EntitiesAt(entry.pos.X, entry.pos.Y, position.ScopeAll))
+		count := copy(targets[:], s.world.Positions.EntitiesAt(entry.pos, position.ScopeAll))
 		for j := range count {
 			target := targets[j]
 			if target == 0 || target == entry.entity || s.world.Components.Cursor.HasEntity(target) {
@@ -1104,7 +1104,7 @@ func (s *DrainSystem) updateDrainMovement() {
 				continue
 			}
 
-			if s.world.Positions.Blocks(x, y, component.WallBlockKinetic) {
+			if s.world.Positions.Blocks(vmath.Point{X: x, Y: y}, component.WallBlockKinetic) {
 				s.statWallCollisions.Add(1)
 				s.reflectOffWall(&kineticComp.Kinetic, lastSafeX, lastSafeY, x, y)
 				hitWall = true
@@ -1114,7 +1114,7 @@ func (s *DrainSystem) updateDrainMovement() {
 			lastSafeX, lastSafeY = x, y
 
 			// Entity-Entity Collision
-			count := copy(collisionBuf[:], s.world.Positions.EntitiesAt(x, y, position.ScopeAll))
+			count := copy(collisionBuf[:], s.world.Positions.EntitiesAt(vmath.Point{X: x, Y: y}, position.ScopeAll))
 			for j := range count {
 				target := collisionBuf[j]
 				if target == 0 || target == drainEntity || s.world.Components.Cursor.HasEntity(target) {

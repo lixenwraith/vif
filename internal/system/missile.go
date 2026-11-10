@@ -139,7 +139,7 @@ func (s *MissileSystem) Update() {
 		gridX, gridY := physics.GridPos(&kineticComp.Kinetic)
 
 		// OOB check only (wall collision handled in traversal)
-		if s.world.Positions.IsOutOfBounds(gridX, gridY) {
+		if !s.world.Positions.InBounds(vmath.Point{X: gridX, Y: gridY}) {
 			s.statBoundaryHits.Add(1)
 			toDestroy = append(toDestroy, missileEntity)
 			s.statExpired.Add(1)
@@ -262,7 +262,7 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, m *com
 		}
 
 		// Wall collision
-		if s.world.Positions.Blocks(currX, currY, component.WallBlockKinetic) {
+		if s.world.Positions.Blocks(vmath.Point{X: currX, Y: currY}, component.WallBlockKinetic) {
 			s.statWallCollisions.Add(1)
 			return lastSafeX, lastSafeY, impactWall
 		}

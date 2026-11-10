@@ -239,14 +239,14 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 	}
 
 	// The footprint the request names, pulled inside the map, or the nearest free one
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(payload.X, payload.Y, component.Footprints[component.SpeciesEye], component.WallBlockSpawn, 0)
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: payload.X, Y: payload.Y}, component.Footprints[component.SpeciesEye], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		s.abandonEval(payload)
 		return
 	}
-	headerX := topLeftX + parameter.EyeHeaderOffsetX
-	headerY := topLeftY + parameter.EyeHeaderOffsetY
+	headerX := corner.X + parameter.EyeHeaderOffsetX
+	headerY := corner.Y + parameter.EyeHeaderOffsetY
 
 	s.clearSpawnArea(headerX, headerY)
 	s.createEyeComposite(headerX, headerY, payload.Type, payload.TargetGroupID, payload.RouteGraphID, payload.RouteID, payload.EvalID, payload.Genes)
@@ -432,8 +432,7 @@ func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *comp
 
 	wallCheck := func(topLeftX, topLeftY int) bool {
 		return s.world.Positions.BlocksArea(
-			topLeftX, topLeftY,
-			parameter.EyeWidth, parameter.EyeHeight,
+			vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.EyeWidth, Height: parameter.EyeHeight},
 			component.WallBlockKinetic,
 		)
 	}

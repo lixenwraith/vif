@@ -836,7 +836,7 @@ func glyphRun(t *testing.T, a *App, runes string) {
 		var buf [parameter.MaxEntitiesPerCell]core.Entity
 		for i, r := range runes {
 			cell := component.PositionComponent{X: pos.X + i, Y: pos.Y}
-			n := copy(buf[:], w.Positions.EntitiesAt(cell.X, cell.Y, position.ScopeAll))
+			n := copy(buf[:], w.Positions.EntitiesAt(cell, position.ScopeAll))
 			for _, e := range buf[:n] {
 				if !w.Components.Glyph.HasEntity(e) {
 					continue

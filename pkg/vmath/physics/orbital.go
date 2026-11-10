@@ -84,3 +84,34 @@ func OrbitalEquilibrium(dx, dy, targetRadius, stiffness float64) (ax, ay float64
 
 	return dirX * forceMag, dirY * forceMag
 }
+
+// OrbitalInsert3D returns the velocity for circular orbit insertion at d from
+// the center, turning about axis by the right hand: about z as OrbitalInsert
+// counter-clockwise. Zero where d is, or lies along the axis.
+func OrbitalInsert3D(d, axis vmath.Vec3, attraction float64) vmath.Vec3 {
+	tangent := vmath.V3Normalize(vmath.V3Cross(axis, d))
+	return vmath.V3Scale(tangent, OrbitalVelocity(attraction, vmath.V3Mag(d)))
+}
+
+// OrbitalAttraction3D returns linear acceleration toward center for orbital motion
+func OrbitalAttraction3D(d vmath.Vec3, attraction float64) vmath.Vec3 {
+	return vmath.V3Scale(vmath.V3Normalize(vmath.V3Scale(d, -1)), attraction)
+}
+
+// OrbitalDamp3D applies damping to circularize an elliptical orbit: the radial
+// part of v shrinks by damping a second
+func OrbitalDamp3D(v, d vmath.Vec3, damping, dt float64) vmath.Vec3 {
+	radial := vmath.V3Normalize(d)
+	radialSpeed := vmath.V3Dot(v, radial)
+	return vmath.V3Add(v, vmath.V3Scale(radial, radialSpeed*max(1.0-damping*dt, 0)-radialSpeed))
+}
+
+// OrbitalEquilibrium3D returns acceleration toward the target orbit radius:
+// inward outside it, outward inside, and along x at the center
+func OrbitalEquilibrium3D(d vmath.Vec3, targetRadius, stiffness float64) vmath.Vec3 {
+	dist := vmath.V3Mag(d)
+	if dist == 0 {
+		return vmath.Vec3{X: stiffness}
+	}
+	return vmath.V3Scale(d, -(dist-targetRadius)*stiffness/dist)
+}

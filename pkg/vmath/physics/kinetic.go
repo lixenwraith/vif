@@ -1,6 +1,10 @@
 package physics
 
-import "github.com/lixenwraith/vif/pkg/vmath"
+import (
+	"math"
+
+	"github.com/lixenwraith/vif/pkg/vmath"
+)
 
 // Kinetic is a 2D point-mass state in float64.
 // Position is a sub-cell coordinate in cells; grid cells are vmath.Point.
@@ -35,39 +39,36 @@ func SetImpulse(k *Kinetic, vx, vy float64) {
 	k.VelY = vy
 }
 
+// reflectCell is one axis of a bounds reflection over the cells lo..hi, both
+// inclusive: a coordinate past either lands on the centre of the edge cell it
+// passed, its velocity flipped. It returns the coordinate's cell either way.
+func reflectCell(pos, vel *float64, lo, hi int) (cell int, reflected bool) {
+	cell = int(math.Floor(*pos))
+	if cell < lo {
+		cell = lo
+	} else if cell > hi {
+		cell = hi
+	} else {
+		return cell, false
+	}
+	*pos = float64(cell) + vmath.CellCenter
+	*vel = -*vel
+	return cell, true
+}
+
 // ReflectBoundsX handles horizontal boundary collision over the cells minX..maxX,
 // both inclusive, returns true if reflection occurred: a position past either is
 // clamped to the centre of the edge cell it passed
 func ReflectBoundsX(k *Kinetic, minX, maxX int) bool {
-	p := vmath.PointAt(k.PreciseX, k.PreciseY)
-	if p.X < minX {
-		k.PreciseX, _ = (vmath.Point{X: minX}).Center()
-		k.VelX = -k.VelX
-		return true
-	}
-	if p.X > maxX {
-		k.PreciseX, _ = (vmath.Point{X: maxX}).Center()
-		k.VelX = -k.VelX
-		return true
-	}
-	return false
+	_, reflected := reflectCell(&k.PreciseX, &k.VelX, minX, maxX)
+	return reflected
 }
 
 // ReflectBoundsY handles vertical boundary collision over the cells minY..maxY,
 // both inclusive, returns true if reflection occurred
 func ReflectBoundsY(k *Kinetic, minY, maxY int) bool {
-	p := vmath.PointAt(k.PreciseX, k.PreciseY)
-	if p.Y < minY {
-		_, k.PreciseY = (vmath.Point{Y: minY}).Center()
-		k.VelY = -k.VelY
-		return true
-	}
-	if p.Y > maxY {
-		_, k.PreciseY = (vmath.Point{Y: maxY}).Center()
-		k.VelY = -k.VelY
-		return true
-	}
-	return false
+	_, reflected := reflectCell(&k.PreciseY, &k.VelY, minY, maxY)
+	return reflected
 }
 
 // ReflectBounds handles both axis boundary collisions over a width×height grid,
@@ -87,4 +88,37 @@ func GridPos(k *Kinetic) (x, y int) {
 // SetGridPos sets precise position from integer grid coordinates (centered)
 func SetGridPos(k *Kinetic, x, y int) {
 	k.PreciseX, k.PreciseY = vmath.Point{X: x, Y: y}.Center()
+}
+
+// Kinetic3D is Kinetic in a volume: a point mass's position in cells, velocity in
+// cells per second and acceleration in cells per second squared. Its cell is
+// vmath.PointAt3(k.Pos) and a cell's centre p.Center(); what is one vector
+// expression has no function here: an impulse is V3Add onto Vel, a speed cap
+// V3ClampMagnitude.
+type Kinetic3D struct {
+	Pos, Vel, Accel vmath.Vec3
+}
+
+// Integrate3D performs physics integration: v = v + a*dt; p = p + v*dt
+func Integrate3D(k *Kinetic3D, dt float64) vmath.Point3 {
+	k.Vel = vmath.V3Add(k.Vel, vmath.V3Scale(k.Accel, dt))
+	return IntegratePosition3D(k, dt)
+}
+
+// ReflectBounds3D handles boundary collision on each axis over a box of cells,
+// the reflected velocity scaled by restitution, returns true if any reflected
+func ReflectBounds3D(k *Kinetic3D, bounds vmath.Box, restitution float64) bool {
+	_, rx := reflectCell(&k.Pos.X, &k.Vel.X, bounds.X, bounds.X+bounds.Width-1)
+	_, ry := reflectCell(&k.Pos.Y, &k.Vel.Y, bounds.Y, bounds.Y+bounds.Height-1)
+	_, rz := reflectCell(&k.Pos.Z, &k.Vel.Z, bounds.Z, bounds.Z+bounds.Depth-1)
+	if rx {
+		k.Vel.X *= restitution
+	}
+	if ry {
+		k.Vel.Y *= restitution
+	}
+	if rz {
+		k.Vel.Z *= restitution
+	}
+	return rx || ry || rz
 }

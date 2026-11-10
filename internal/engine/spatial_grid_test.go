@@ -9,14 +9,14 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/position"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // FuzzWallTestAnswersAsHasBlockingWallAt: the grid a derivation reads is the live
-// query cell for cell — any mask, either domain, soft-clipped walls, out of bounds
-// — and one reused across storms that destroy, move, remask, respawn, clip, shift
-// and re-index walls, reconcile them to a capture, or lay, shift and lift a rock
-// field, sees every change; so does a reader of the wall log re-testing only the
-// cells it names, and an area query is the cells' queries joined.
+// query cell for cell, for any mask, either domain, clipped walls and out of
+// bounds, and one reused across storms of every kind a wall, a capture, an order
+// or the rock changes by sees each change; so does a reader of the wall log
+// re-testing only its cells, and an area query is the cells' queries joined.
 func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 	for seed := range uint64(16) {
 		f.Add(seed)
@@ -63,7 +63,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 				return RockColumn{Ceil: rng.IntN(cfg.MapHeight+2) - 1, Floor: rng.IntN(cfg.MapHeight+2) - 1}
 			}
 			if round%2 == 1 { // a storm of one kind between two derivations, so none hides another
-				kind := rng.IntN(16)
+				kind := rng.IntN(17)
 				for _, e := range walls {
 					if rng.IntN(3) != 0 {
 						continue
@@ -111,7 +111,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						if !ok {
 							break
 						}
-						for _, o := range slices.Clone(w.Positions.EntitiesAt(pos.X, pos.Y, position.ScopeAll)) {
+						for _, o := range slices.Clone(w.Positions.EntitiesAt(pos, position.ScopeAll)) {
 							if o != e && !w.Components.Wall.HasEntity(o) {
 								w.Positions.Move(o, component.PositionComponent{X: -1, Y: -1})
 							}
@@ -160,6 +160,18 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					w.Positions.ShiftRock(rockColumn())
 				case 15:
 					w.Positions.SetRock(0, 0, nil)
+				case 16: // an install's order, the rows turned end for end
+					order := w.CaptureOrder()
+					slices.Reverse(order.Positions)
+					if err := w.InstallOrder(order); err != nil {
+						t.Fatalf("round %d: the reversed order: %v", round, err)
+					}
+				}
+			}
+			// Each row knows whether its entity's moves are a wall's, however it was written
+			for i, e := range w.Positions.entities {
+				if want := e.Domain() != core.DomainPlayer && w.Components.Wall.HasEntity(e); w.Positions.wall[i] != want {
+					t.Fatalf("round %d: row %d of %d holds wall %t, the wall store says %t", round, i, len(w.Positions.wall), w.Positions.wall[i], want)
 				}
 			}
 			// The planes answer as the cells' own wall components do, cell by cell
@@ -172,7 +184,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 						return true
 					}
 				}
-				for _, e := range w.Positions.EntitiesAt(x, y, position.ScopeShared) {
+				for _, e := range w.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeShared) {
 					if wall, ok := w.Components.Wall.GetComponent(e); ok &&
 						(mask == 0 || (wall.BlockMask&component.WallBlockAll|component.BoxKind(wall.BoxStyle))&mask != 0) {
 						return true
@@ -183,7 +195,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 			for _, mask := range masks {
 				for y := -1; y <= cfg.MapHeight; y++ {
 					for x := -1; x <= cfg.MapWidth; x++ {
-						if got, want := w.Positions.Blocks(x, y, mask), oracle(x, y, mask); got != want {
+						if got, want := w.Positions.Blocks(position.Point{X: x, Y: y}, mask), oracle(x, y, mask); got != want {
 							t.Fatalf("round %d mask %d at (%d,%d): HasBlockingWallAt %t, the cell's walls say %t", round, mask, x, y, got, want)
 						}
 					}
@@ -197,16 +209,16 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 				if !logged || readers[i] == nil {
 					readers[i] = make([]bool, cfg.MapWidth*cfg.MapHeight)
 					for c := range readers[i] {
-						readers[i][c] = w.Positions.Blocks(c%cfg.MapWidth, c/cfg.MapWidth, mask)
+						readers[i][c] = w.Positions.Blocks(position.Point{X: c % cfg.MapWidth, Y: c / cfg.MapWidth}, mask)
 					}
 				}
 				for _, c := range cells {
 					if c.X >= 0 && c.Y >= 0 && c.X < cfg.MapWidth && c.Y < cfg.MapHeight {
-						readers[i][c.Y*cfg.MapWidth+c.X] = w.Positions.Blocks(c.X, c.Y, mask)
+						readers[i][c.Y*cfg.MapWidth+c.X] = w.Positions.Blocks(c, mask)
 					}
 				}
 				for c, got := range readers[i] {
-					if x, y := c%cfg.MapWidth, c/cfg.MapWidth; got != w.Positions.Blocks(x, y, mask) {
+					if x, y := c%cfg.MapWidth, c/cfg.MapWidth; got != w.Positions.Blocks(position.Point{X: x, Y: y}, mask) {
 						t.Fatalf("round %d mask %d at (%d,%d): the wall log's reader holds %t", round, mask, x, y, got)
 					}
 				}
@@ -217,7 +229,7 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 				for y := -1; y <= cfg.MapHeight; y++ {
 					for x := -1; x <= cfg.MapWidth; x++ {
 						got := x >= 0 && y >= 0 && x < cfg.MapWidth && y < cfg.MapHeight && bits.Bit(x, y)
-						if want := w.Positions.Blocks(x, y, mask); got != want {
+						if want := w.Positions.Blocks(position.Point{X: x, Y: y}, mask); got != want {
 							t.Fatalf("round %d mask %d at (%d,%d): WallBits %t, HasBlockingWallAt %t", round, mask, x, y, got, want)
 						}
 					}
@@ -228,10 +240,10 @@ func FuzzWallTestAnswersAsHasBlockingWallAt(f *testing.F) {
 					want := false
 					for cy := y; cy < y+ah; cy++ {
 						for cx := x; cx < x+aw; cx++ {
-							want = want || w.Positions.Blocks(cx, cy, mask)
+							want = want || w.Positions.Blocks(position.Point{X: cx, Y: cy}, mask)
 						}
 					}
-					if got := w.Positions.BlocksArea(x, y, aw, ah, mask); got != want {
+					if got := w.Positions.BlocksArea(vmath.Area{X: x, Y: y, Width: aw, Height: ah}, mask); got != want {
 						t.Fatalf("round %d mask %d area (%d,%d) %dx%d: %t, cells say %t", round, mask, x, y, aw, ah, got, want)
 					}
 				}
@@ -260,7 +272,7 @@ func TestShiftMovesARigidGroupThroughFullCells(t *testing.T) {
 	}
 	full := parameter.ReservedPlayerPerCell
 	for _, c := range []struct{ x, want int }{{3, 0}, {4, full}, {5, full}} {
-		if got := len(w.Positions.Index.EntitiesAt(c.x, 3, position.ScopePrivate)); got != c.want {
+		if got := len(w.Positions.Index.EntitiesAt(position.Point{X: c.x, Y: 3}, position.ScopePrivate)); got != c.want {
 			t.Fatalf("cell %d holds %d player entities, want %d", c.x, got, c.want)
 		}
 	}
@@ -273,6 +285,49 @@ func TestShiftMovesARigidGroupThroughFullCells(t *testing.T) {
 	}
 	if pos, _ := w.Positions.GetPosition(lone); pos.X != 5 {
 		t.Fatalf("refused mover at x=%d, want its destination 5", pos.X)
+	}
+}
+
+// TestABatchPlacesAllOrNone: a batch places every addition or none of them: a cell
+// its scope finds held refuses it, as do two additions on one cell, on the map or
+// off it; a shared commit passes over a private occupant, and a forced one over any.
+func TestABatchPlacesAllOrNone(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 40, 24, NewManualClock())
+	at := func(x, y int) component.PositionComponent { return component.PositionComponent{X: x, Y: y} }
+	held := w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(held, at(5, 5))
+	for _, tt := range []struct {
+		name   string
+		cells  []component.PositionComponent
+		commit func(*PositionBatch) error
+		placed bool
+	}{
+		{"free cells", []component.PositionComponent{at(1, 1), at(2, 1), at(1, 2)}, (*PositionBatch).Commit, true},
+		{"a held cell", []component.PositionComponent{at(8, 1), at(5, 5)}, (*PositionBatch).Commit, false},
+		{"a private occupant under a shared commit", []component.PositionComponent{at(9, 1), at(5, 5)}, (*PositionBatch).CommitShared, true},
+		{"one cell twice", []component.PositionComponent{at(3, 7), at(4, 7), at(3, 7)}, (*PositionBatch).Commit, false},
+		{"one cell off the map twice", []component.PositionComponent{at(-2, 7), at(-2, 7)}, (*PositionBatch).CommitShared, false},
+		{"one cell twice, forced", []component.PositionComponent{at(6, 9), at(6, 9)},
+			func(b *PositionBatch) error { b.CommitForce(); return nil }, true},
+	} {
+		var added []core.Entity
+		batch := w.Positions.BeginBatch(len(tt.cells))
+		for _, c := range tt.cells {
+			added = append(added, w.CreateEntity(core.DomainShared))
+			batch.Add(added[len(added)-1], c)
+		}
+		if err := tt.commit(batch); (err == nil) != tt.placed {
+			t.Fatalf("%s: commit returned %v, want placed %t", tt.name, err, tt.placed)
+		}
+		for i, e := range added {
+			if pos, ok := w.Positions.GetPosition(e); ok != tt.placed || ok && pos != tt.cells[i] {
+				t.Fatalf("%s: addition %d placed %t at %v, want %t at %v", tt.name, i, ok, pos, tt.placed, tt.cells[i])
+			}
+		}
+		if batch.Commit() == nil {
+			t.Fatalf("%s: a committed batch committed again", tt.name)
+		}
 	}
 }
 
@@ -321,7 +376,7 @@ func TestTopGlyphPassesOverScenery(t *testing.T) {
 	}
 	drawn := func(want core.Entity) {
 		t.Helper()
-		for _, e := range w.Positions.EntitiesAt(at.X, at.Y, position.ScopeAll) {
+		for _, e := range w.Positions.EntitiesAt(at, position.ScopeAll) {
 			if got := w.Positions.TopGlyphIs(e, at.X, at.Y); got != (e == want) {
 				t.Fatalf("TopGlyphIs(%v) = %v, want %v drawn", e, got, want)
 			}
@@ -339,4 +394,68 @@ func TestTopGlyphPassesOverScenery(t *testing.T) {
 		t.Fatalf("top glyph = %v, want the typeable %v under nearer scenery", top, typeable)
 	}
 	drawn(typeable)
+}
+
+// BenchmarkPlacements reads the binding's writes on a scrolling level's map: a
+// layer of glyphs shifted a column, one shared body and one wall moved a cell, and
+// a batch of ten placed and taken back.
+func BenchmarkPlacements(b *testing.B) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 200, 60, NewManualClock())
+	width, height := w.Positions.Width, w.Positions.Height
+	rng := rand.New(rand.NewPCG(3, 5))
+	cell := func() component.PositionComponent { // the first row is the batch's
+		return component.PositionComponent{X: rng.IntN(width), Y: 1 + rng.IntN(height-1)}
+	}
+	var layer, bodies, walls []core.Entity
+	for range 1800 {
+		layer = append(layer, w.CreateEntity(core.DomainPlayer))
+		w.Positions.SetPosition(layer[len(layer)-1], cell())
+	}
+	for range 600 {
+		bodies = append(bodies, w.CreateEntity(core.DomainShared))
+		w.Positions.SetPosition(bodies[len(bodies)-1], cell())
+		walls = append(walls, w.CreateEntity(core.DomainShared))
+		w.Components.Wall.SetComponent(walls[len(walls)-1], component.WallComponent{BlockMask: component.WallBlockAll})
+		w.Positions.SetPosition(walls[len(walls)-1], cell())
+	}
+	w.Positions.Blocks(position.Point{X: 0, Y: 0}, component.WallBlockAll)
+	move := func(b *testing.B, entities []core.Entity) {
+		i := 0
+		for b.Loop() {
+			e := entities[i%len(entities)]
+			pos, _ := w.Positions.GetPosition(e)
+			w.Positions.Move(e, component.PositionComponent{X: (pos.X + 1) % width, Y: pos.Y})
+			i++
+		}
+	}
+	b.Run("shift", func(b *testing.B) {
+		var unplaced []core.Entity
+		step := 1
+		for b.Loop() { // a column there and back, so no glyph leaves the map
+			unplaced = w.Positions.Shift(layer, step, 0, unplaced[:0])
+			step = -step
+		}
+	})
+	b.Run("body", func(b *testing.B) { move(b, bodies) })
+	b.Run("wall", func(b *testing.B) { move(b, walls) })
+	b.Run("batch", func(b *testing.B) {
+		b.ReportAllocs()
+		var placed [10]core.Entity
+		for i := range placed {
+			placed[i] = w.CreateEntity(core.DomainShared)
+		}
+		for b.Loop() {
+			batch := w.Positions.BeginBatch(len(placed))
+			for i, e := range placed {
+				batch.Add(e, component.PositionComponent{X: 3 + i})
+			}
+			if err := batch.CommitShared(); err != nil {
+				b.Fatal(err)
+			}
+			for _, e := range placed {
+				w.Positions.RemoveEntity(e)
+			}
+		}
+	})
 }

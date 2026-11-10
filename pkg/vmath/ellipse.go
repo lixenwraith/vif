@@ -34,6 +34,32 @@ func EllipseAlpha(dx, dy, invRxSq, invRySq, maxAlpha float64) float64 {
 	return distSq * maxAlpha
 }
 
+// EllipsoidInvRadiiSq precomputes inverse squared radii for repeated checks
+func EllipsoidInvRadiiSq(rx, ry, rz float64) Vec3 {
+	inv := Vec3{}
+	inv.X, inv.Y = EllipseInvRadiiSq(rx, ry)
+	if rz != 0 {
+		inv.Z = 1.0 / (rz * rz)
+	}
+	return inv
+}
+
+// EllipsoidDistSq returns normalized squared distance for ellipsoid containment
+// Result <= 1.0 means the offset d is inside the ellipsoid
+func EllipsoidDistSq(d, invRadiiSq Vec3) float64 {
+	return d.X*d.X*invRadiiSq.X + d.Y*d.Y*invRadiiSq.Y + d.Z*d.Z*invRadiiSq.Z
+}
+
+// EllipsoidContains returns true if offset d is inside or on the ellipsoid boundary
+func EllipsoidContains(d, invRadiiSq Vec3) bool {
+	return EllipsoidDistSq(d, invRadiiSq) <= 1.0
+}
+
+// EllipsoidContainsPoint checks if cell p is inside the ellipsoid centered at cell c
+func EllipsoidContainsPoint(p, c Point3, invRadiiSq Vec3) bool {
+	return EllipsoidContains(Vec3{float64(p.X - c.X), float64(p.Y - c.Y), float64(p.Z - c.Z)}, invRadiiSq)
+}
+
 // CircleDistSq returns squared distance for circular containment
 func CircleDistSq(dx, dy float64) float64 {
 	return dx*dx + dy*dy

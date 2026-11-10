@@ -17,7 +17,7 @@ func cellContent(gameCtx *engine.GameContext, x, y int) (glyph, sigil core.Entit
 		return glyph, 0
 	}
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := copy(entities[:], gameCtx.World.Positions.EntitiesAt(x, y, position.ScopeAll))
+	count := copy(entities[:], gameCtx.World.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeAll))
 	for i := range count {
 		if gameCtx.World.Components.Sigil.HasEntity(entities[i]) {
 			return 0, entities[i]

@@ -41,7 +41,7 @@ func TestASpeciesAskedForAtAMapCornerStandsWholeInsideIt(t *testing.T) {
 				t.Fatalf("%s asked for at %v: nothing stood", kind.name, corner)
 			}
 			for _, e := range w.Positions.Entities() {
-				if pos, _ := w.Positions.GetPosition(e); w.Positions.IsOutOfBounds(pos.X, pos.Y) {
+				if pos, _ := w.Positions.GetPosition(e); !w.Positions.InBounds(pos) {
 					t.Fatalf("%s asked for at %v: a cell stands at (%d, %d), past the %dx%d map", kind.name, corner, pos.X, pos.Y, width, height)
 				}
 			}

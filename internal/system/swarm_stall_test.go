@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/pkg/machine"
+	"github.com/lixenwraith/vif/pkg/vmath"
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
@@ -334,7 +335,7 @@ func TestATeleportArrivesBesideRockThatTookItsLanding(t *testing.T) {
 	}
 	pos, _ := w.Positions.GetPosition(header)
 	left, top := pos.X-parameter.SwarmHeaderOffsetX, pos.Y-parameter.SwarmHeaderOffsetY
-	if !w.Positions.IsAreaFree(left, top, parameter.SwarmWidth, parameter.SwarmHeight, component.WallBlockSpawn) {
+	if !w.Positions.IsAreaFree(vmath.Area{X: left, Y: top, Width: parameter.SwarmWidth, Height: parameter.SwarmHeight}, component.WallBlockSpawn) {
 		t.Fatalf("arrived at %+v, whose footprint holds rock", pos)
 	}
 	if kin, _ := w.Components.Kinetic.GetComponent(header); kin.VelX != 0 || kin.VelY != 0 ||

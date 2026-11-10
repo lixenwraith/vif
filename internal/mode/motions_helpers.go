@@ -48,13 +48,13 @@ func getCharacterTypeAt(ctx *engine.GameContext, x, y int) CharType {
 
 // isCursorBlocked returns true if position blocks cursor movement (OOB or wall)
 func isCursorBlocked(ctx *engine.GameContext, x, y int) bool {
-	return ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor)
+	return ctx.World.Positions.IsBlocked(position.Point{X: x, Y: y}, component.WallBlockCursor)
 }
 
 // validatePosition ensures cursor position is within bounds and not wall-blocked
 // Returns clamped position; if final position is wall-blocked, returns original
 func validatePosition(ctx *engine.GameContext, x, y int) (int, int) {
-	if ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor) {
+	if ctx.World.Positions.IsBlocked(position.Point{X: x, Y: y}, component.WallBlockCursor) {
 		return x, y
 	}
 	config := ctx.World.Resources.Config
@@ -72,7 +72,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		rowEmpty := true
 		// Scan row; stop early if any typeable glyph is found
 		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
-			count := copy(buf[:], ctx.World.Positions.EntitiesAt(x, y, position.ScopeAll))
+			count := copy(buf[:], ctx.World.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeAll))
 			for i := range count {
 				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					rowEmpty = false
@@ -96,7 +96,7 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		rowEmpty := true
 		// Scan row; stop early if any typeable glyph is found
 		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
-			count := copy(buf[:], ctx.World.Positions.EntitiesAt(x, y, position.ScopeAll))
+			count := copy(buf[:], ctx.World.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeAll))
 			for i := range count {
 				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					rowEmpty = false
@@ -310,7 +310,7 @@ func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBoun
 
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
 		for x := ctx.World.Resources.Config.MapWidth - 1; x >= 0; x-- {
-			count := copy(buf[:], ctx.World.Positions.EntitiesAt(x, y, position.ScopeAll))
+			count := copy(buf[:], ctx.World.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeAll))
 			for i := range count {
 				if buf[i] != 0 && ctx.World.Positions.IsTypeable(buf[i]) {
 					if x > rightmost {

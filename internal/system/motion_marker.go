@@ -188,11 +188,11 @@ func (s *MotionMarkerSystem) regenerateBaseMarkers(cursorX, cursorY int) {
 
 	for _, dir := range directions {
 		// Markers must enumerate exactly what the motions enumerate: player glyphs and shared gold
-		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorX, cursorY, dir[0], dir[1], bounds.Rect, position.ScopeAll, glyphFilter)
+		_, cell, found := s.world.Positions.FindClosestEntityInDirection(vmath.Point{X: cursorX, Y: cursorY}, dir[0], dir[1], bounds.Rect, position.ScopeAll, glyphFilter)
 
 		if found {
-			s.spawnMarker(x, y, &s.baseMarkers)
-			s.basePositions = append(s.basePositions, vmath.Point{X: x, Y: y})
+			s.spawnMarker(cell.X, cell.Y, &s.baseMarkers)
+			s.basePositions = append(s.basePositions, cell)
 		}
 	}
 	s.buffers.Observe(0, len(s.baseMarkers))
@@ -225,10 +225,10 @@ func (s *MotionMarkerSystem) showColoredMarkers(dx, dy int) {
 		}
 
 		// Use the consolidated search logic from engine
-		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorPos.X, cursorPos.Y, dx, dy, bounds.Rect, position.ScopeAll, filter)
+		_, cell, found := s.world.Positions.FindClosestEntityInDirection(cursorPos, dx, dy, bounds.Rect, position.ScopeAll, filter)
 
 		if found {
-			s.spawnMarker(x, y, &s.coloredMarkers)
+			s.spawnMarker(cell.X, cell.Y, &s.coloredMarkers)
 		}
 	}
 	s.buffers.Observe(2, len(s.coloredMarkers))
@@ -253,10 +253,10 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 	expectedCount := 0
 
 	for i, dir := range directions {
-		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorPos.X, cursorPos.Y, dir[0], dir[1], bounds.Rect, position.ScopeAll, glyphFilter)
+		_, cell, found := s.world.Positions.FindClosestEntityInDirection(cursorPos, dir[0], dir[1], bounds.Rect, position.ScopeAll, glyphFilter)
 		expectedFound[i] = found
 		if found {
-			expectedPositions[i] = vmath.Point{X: x, Y: y}
+			expectedPositions[i] = cell
 			expectedCount++
 		}
 	}

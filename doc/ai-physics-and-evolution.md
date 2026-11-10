@@ -169,7 +169,7 @@ does not restart evolution from the scored archive.
 | Collision | profile-based impulses, additive/override modes, mass ratio, angle/magnitude variance, offset influence for multi-cell hits |
 | Shapes | ellipse containment with a radial push direction (`CheckSoftCollision`) over `vmath` ellipse/circle tests |
 | Orbital | circular-orbit insertion and attraction, radial damping, equilibrium radius |
-| 3D | gravity with soft repulsion, elastic collision, overlap separation and axis reflection on `vmath.Vec3` |
+| 3D | `Kinetic3D`, a body in a volume, and a twin of each row above: `Integrate3D`, bounds and the swept bounce over a `vmath.Box` (`ReflectBounds3D`, `IntegrateWithBounce3D`), the drags, turn severity and spring, `ApplyHoming3D`, the collision forms with a cone for the angle spread, the orbits about an axis. Beside them, on bare `vmath.Vec3`: gravity with soft repulsion, elastic collision, overlap separation and axis reflection |
 
 `IntegrateWithBounce` limits a substep to roughly 0.45 cells to reduce wall
 tunneling, applies acceleration once before selecting the step count, moves one
@@ -177,6 +177,15 @@ axis at a time, restores the prior axis position on a wall, and scales reflected
 velocity by restitution. Its bounds are the first and last cells a body may hold,
 both inclusive. Projectiles with stricter swept collision needs use grid
 traversal in their owning system rather than relying only on final-cell overlap.
+It keeps the body's cell across the moves and floors one coordinate a move where
+it floored four: `BenchmarkIntegrateWithBounce` 28 to 23 ns a body, the same
+state bit for bit over twelve million random steps.
+
+A 3D form held to one plane steers, drags, reflects, strikes and moves a body as
+its flat form, and treats its three axes alike; both are tested. Two things part
+by design: a collision's angle spread turns about an axis drawn round the
+direction, a cone where the flat spread is an arc, and a body sunk in a wall
+tests it once an axis a sub-step, three times where the flat one tests twice.
 
 Homing separates desired cruise speed, acceleration, overspeed drag, arrival
 radius, near-target drag/acceleration, and a snap dead zone. The profiles in
@@ -229,10 +238,36 @@ folded from several values (`MixChain`). `pkg/vmath/physics.Kinetic` stores
 precise position in cells, velocity in cells per second, and acceleration in
 cells per second squared, all as `float64`.
 
-Integer `Point` and `Area` values describe discrete grid cells; they are not a
-fixed-point representation. `Point.Center` is the sanctioned grid-to-precise
-conversion and adds the half-cell offset, while `PointAt` uses floor so
-negative precise coordinates map to the correct cell. Cell aspect correction
+A flat form has its twin through a volume beside it, bar the arcs and `Ray`:
+`Point3`, `Box` and `Footprint3` for `Point`, `Area` and `Footprint`; `Line3`
+and `GridTraverser3` for the two walks; the `V3` operations on `Vec3`, cross,
+reflection and rotation about an axis among them; the ellipsoid tests. A twin
+held to one plane answers as its flat form, which its tests pin.
+
+`Sin`, `Cos` and the two rotations read a 1,024-bin table at the floor of the
+angle's bin (`lutIndex`), a rotation reading the bin once. On amd64 at its
+default level a `math.Floor` is a CPU feature test with a call behind it, and
+inlined in a loop it makes each sine wait on the one before; there the index
+truncates and steps down past a negative fraction by a borrow, the same bin on
+every input, a NaN and an angle past an int's range among them. Other targets
+and an amd64 build at `GOAMD64=v2` keep the floor, one instruction, which reads
+a sine in 0.8 ns (`floorChecked`). A call in a loop, before and after:
+
+```
+Sin                      5.5 ns   1.2 ns   (math.Sin 5.4 ns)
+RotateVector             7.5 ns   2.5 ns
+Sin and Cos of an angle  7.8 ns   2.3 ns
+```
+
+A collision, which rotates once outside any loop, reads level at 9 ns, and so
+do the game's tick and renderer benchmarks: none draws the ember or the storm,
+whose loops call the sine.
+
+Integer `Point` and `Area` values, `Point3` and `Box` in a volume, describe
+discrete grid cells; they are not a fixed-point representation. `Point.Center`
+(`Point3.Center`) is the sanctioned grid-to-precise conversion and adds the
+half-cell offset, while `PointAt` (`PointAt3`) uses floor so negative precise
+coordinates map to the correct cell. Cell aspect correction
 remains explicit (`vmath.Aspect`) in Y radii, weighted distances and projection
 rather than being encoded in the numeric type.
 

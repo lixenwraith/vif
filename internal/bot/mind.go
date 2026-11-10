@@ -332,7 +332,7 @@ func (m *mind) aimButton(p pointArgs, minX, minY, maxX, maxY int) (int, int, boo
 // move and the bot would re-queue it every update; it then takes the shown open cell
 // nearest the goal.
 func (m *mind) land(x, y, goalX, goalY int) (int, int, bool) {
-	if !m.ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor) {
+	if !m.ctx.World.Positions.IsBlocked(vmath.Point{X: x, Y: y}, component.WallBlockCursor) {
 		return x, y, true
 	}
 	return m.openCell(func(cx, cy int) int { return dist2(cx-goalX, cy-goalY) })
@@ -345,7 +345,7 @@ func (m *mind) openCell(rank func(x, y int) int) (x, y int, found bool) {
 	best := 0
 	for cy := minY; cy <= maxY; cy++ {
 		for cx := minX; cx <= maxX; cx++ {
-			if r := rank(cx, cy); (!found || r < best) && !m.ctx.World.Positions.IsBlocked(cx, cy, component.WallBlockCursor) {
+			if r := rank(cx, cy); (!found || r < best) && !m.ctx.World.Positions.IsBlocked(vmath.Point{X: cx, Y: cy}, component.WallBlockCursor) {
 				x, y, best, found = cx, cy, r, true
 			}
 		}

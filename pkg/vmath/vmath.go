@@ -85,10 +85,23 @@ func (p Point3) Add(q Point3) Point3 { return Point3{X: p.X + q.X, Y: p.Y + q.Y,
 // Sub returns the component-wise difference
 func (p Point3) Sub(q Point3) Point3 { return Point3{X: p.X - q.X, Y: p.Y - q.Y, Z: p.Z - q.Z} }
 
+// Center returns the float64 position of the cell's center, a layer a cell deep
+func (p Point3) Center() Vec3 {
+	return Vec3{X: float64(p.X) + CellCenter, Y: float64(p.Y) + CellCenter, Z: float64(p.Z) + CellCenter}
+}
+
+// Flat is the cell's column and row, on whichever layer
+func (p Point3) Flat() Point { return Point{X: p.X, Y: p.Y} }
+
 // PointAt returns the cell containing the float64 position
 // Floor preserves cell mapping for negative coordinates.
 func PointAt(px, py float64) Point {
 	return Point{X: int(math.Floor(px)), Y: int(math.Floor(py))}
+}
+
+// PointAt3 is PointAt in a volume
+func PointAt3(v Vec3) Point3 {
+	return Point3{X: int(math.Floor(v.X)), Y: int(math.Floor(v.Y)), Z: int(math.Floor(v.Z))}
 }
 
 // Area is a rectangular grid region anchored at its top-left cell
@@ -133,6 +146,53 @@ func (a Area) DistributePoint(index int, rng *FastRand) Point {
 	return Point{X: a.X + index%a.Width, Y: a.Y + index/a.Width}
 }
 
+// Layer is the area on layer z of a volume, one layer deep
+func (a Area) Layer(z int) Box {
+	return Box{X: a.X, Y: a.Y, Z: z, Width: a.Width, Height: a.Height, Depth: 1}
+}
+
+// Box is a region of a volume's cells anchored at its corner nearest the origin
+type Box struct {
+	X, Y, Z              int // The corner nearest the origin
+	Width, Height, Depth int // Dimensions (minimum 1x1x1)
+}
+
+// Center returns the center cell of the box
+func (b Box) Center() Point3 {
+	return Point3{X: b.X + b.Width/2, Y: b.Y + b.Height/2, Z: b.Z + b.Depth/2}
+}
+
+// Contains reports whether the cell lies inside the box
+func (b Box) Contains(x, y, z int) bool {
+	return x >= b.X && x < b.X+b.Width && y >= b.Y && y < b.Y+b.Height && z >= b.Z && z < b.Z+b.Depth
+}
+
+// ContainsPoint reports whether the point lies inside the box
+func (b Box) ContainsPoint(p Point3) bool { return b.Contains(p.X, p.Y, p.Z) }
+
+// Flat is the box's columns and rows, on whichever layers
+func (b Box) Flat() Area { return Area{X: b.X, Y: b.Y, Width: b.Width, Height: b.Height} }
+
+// RandomPoint returns a random cell within the box, drawing as Area does and
+// then for the layer, so a box one layer deep draws what its area draws
+func (b Box) RandomPoint(rng *FastRand) Point3 {
+	p := b.Flat().RandomPoint(rng).Layer(b.Z)
+	if b.Depth > 1 {
+		p.Z += rng.Intn(b.Depth)
+	}
+	return p
+}
+
+// DistributePoint returns the cell at index in row-major order, layer by layer
+// Falls back to a random cell when index is out of range
+func (b Box) DistributePoint(index int, rng *FastRand) Point3 {
+	layer := b.Width * b.Height
+	if capacity := layer * b.Depth; capacity <= 1 || index < 0 || index >= capacity {
+		return b.RandomPoint(rng)
+	}
+	return Point3{X: b.X + index%b.Width, Y: b.Y + index%layer/b.Width, Z: b.Z + index/layer}
+}
+
 // Footprint is a body's cells around the header it stands and moves by: Width×Height
 // cells, the header HeaderX, HeaderY from the top-left
 type Footprint struct {
@@ -160,4 +220,40 @@ func (f Footprint) Valid() bool {
 func (f Footprint) Covers(o Footprint) bool {
 	return f.HeaderX >= o.HeaderX && f.HeaderY >= o.HeaderY &&
 		f.Width-f.HeaderX >= o.Width-o.HeaderX && f.Height-f.HeaderY >= o.Height-o.HeaderY
+}
+
+// Deep is the body in a volume, depth layers deep from its header's layer
+func (f Footprint) Deep(depth int) Footprint3 {
+	return Footprint3{Width: f.Width, Height: f.Height, Depth: depth, HeaderX: f.HeaderX, HeaderY: f.HeaderY}
+}
+
+// Footprint3 is a body's cells in a volume around its header: Width×Height×Depth
+// cells, the header HeaderX, HeaderY, HeaderZ from the corner nearest the origin
+type Footprint3 struct {
+	Width   int `toml:"width"`
+	Height  int `toml:"height"`
+	Depth   int `toml:"depth"`
+	HeaderX int `toml:"header_x"`
+	HeaderY int `toml:"header_y"`
+	HeaderZ int `toml:"header_z"`
+}
+
+// Flat is the body's columns and rows around its header
+func (f Footprint3) Flat() Footprint {
+	return Footprint{Width: f.Width, Height: f.Height, HeaderX: f.HeaderX, HeaderY: f.HeaderY}
+}
+
+// At returns the box the body covers with its header on the cell
+func (f Footprint3) At(p Point3) Box {
+	return Box{X: p.X - f.HeaderX, Y: p.Y - f.HeaderY, Z: p.Z - f.HeaderZ, Width: f.Width, Height: f.Height, Depth: f.Depth}
+}
+
+// Valid reports whether the footprint is a body: a cell or more, its header in it
+func (f Footprint3) Valid() bool {
+	return f.Flat().Valid() && f.Depth >= 1 && f.HeaderZ >= 0 && f.HeaderZ < f.Depth
+}
+
+// Covers reports whether f's cells around a header hold o's around the same header
+func (f Footprint3) Covers(o Footprint3) bool {
+	return f.Flat().Covers(o.Flat()) && f.HeaderZ >= o.HeaderZ && f.Depth-f.HeaderZ >= o.Depth-o.HeaderZ
 }

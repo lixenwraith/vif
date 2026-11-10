@@ -510,7 +510,7 @@ func (s *ParticleSystem) vortex(p *event.ParticleVortexPayload) {
 // behind them, where no conversion reaches
 func (s *ParticleSystem) behindWall(e core.Entity) bool {
 	pos, ok := s.world.Positions.GetPosition(e)
-	return ok && s.world.Positions.Blocks(pos.X, pos.Y, component.WallBlockSpawn)
+	return ok && s.world.Positions.Blocks(pos, component.WallBlockSpawn)
 }
 
 // carry moves every particle no anchor holds left with the cave's steps, the cell it
@@ -642,7 +642,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 				if x == particle.LastIntX && y == particle.LastIntY {
 					continue
 				}
-				if s.world.Positions.IsOutOfBounds(x, y) {
+				if !s.world.Positions.InBounds(vmath.Point{X: x, Y: y}) {
 					if prof.bounce == 0 {
 						state.statBoundaryHits.Add(1)
 						destroyParticle = true
@@ -650,7 +650,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 					}
 					continue // bound reflection already holds a bouncing particle in
 				}
-				if s.world.Positions.Blocks(x, y, component.WallBlockParticle) {
+				if s.world.Positions.Blocks(vmath.Point{X: x, Y: y}, component.WallBlockParticle) {
 					state.statWallCollisions.Add(1)
 					if prof.bounce == 0 {
 						destroyParticle = true
@@ -843,7 +843,7 @@ func (s *ParticleSystem) touch(behavior component.ParticleBehavior, state *parti
 	}
 	state.processedGridCells[flatIdx] = true
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
-	targets := collisionBuf[:copy(collisionBuf[:], s.world.Positions.EntitiesAt(x, y, position.ScopeAll))]
+	targets := collisionBuf[:copy(collisionBuf[:], s.world.Positions.EntitiesAt(vmath.Point{X: x, Y: y}, position.ScopeAll))]
 	if behavior == component.ParticleDecay {
 		return s.processDecayTargets(state, entity, targets)
 	}

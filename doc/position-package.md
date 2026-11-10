@@ -17,12 +17,15 @@ In `pkg/position`:
 
 - `Grid[E]`: the cells, a volume of `Depth` layers, one on a flat map, each two
   halves (`ClassShared` from the front, `ClassPrivate` from the back within
-  `PrivateBudget`), indexed `(z*Height+y)*Width+x`; `Scope`; the occupied list,
-  each cell knowing its slot so one that empties is swapped out in constant time;
-  the presence bits of each class (`Present`), the layers' rows in turn, by which
-  a probe passes an empty cell on a word that stays in cache and a scan passes
-  empty cells a word at a time; `Clamp` and `ClampVolume` under the one cell
-  ceiling; stats; and the load and reorder a world copy and an install use.
+  `PrivateBudget`), indexed `(z*Height+y)*Width+x`; `Scope`; a cell of sixteen
+  bytes that holds its occupant while that is one, and a crowd of up to
+  `CellCapacity` for a cell of two or more; the presence bits of each class
+  (`Present`), the layers' rows in turn, by which a probe passes an empty cell on
+  a word that stays in cache, a scan passes empty cells a word at a time, and a
+  copy, a clear and the planes visit only the cells that hold anything
+  (`EachOccupied`); `Clamp` and `ClampVolume` under the one cell ceiling; the
+  gauges, counted as cells fill; and the load and reorder a world copy and an
+  install use.
 - `Index[E]`: the grid, whose dimensions are the bounds every query answers
   within; the `Frame` it reads the cell aspect through; `blockOf`, the caller's
   word on which shared occupant is a block and its kinds (a `Mask`, 0 asking for
@@ -30,24 +33,24 @@ In `pkg/position`:
   change, so a point is a bit and an area a few words a row; the surfaces; the
   block log; `BlockBits`, the plane's words with the surfaces' solid cells for a
   reader deriving whole; and the searches: free area by spiral, by pattern and
-  around an exclusion, point and area line of sight, rays, batches, the closest
-  occupant in a direction. A query taking a column and a row answers for the
-  first layer, as a flat game's do; one taking a `Point3` (`BlocksAt`, `BlocksBox`,
-  `IsBlockedAt`, `EntitiesIn`, `HasAnyEntityIn`, `HasLineOfSightBetween`,
-  `HasBoxLineOfSight`) for any, a line through the volume walking `vmath.Line3`;
-  the mutators take a `Point3`, a flat caller placing on the first layer.
+  around an exclusion, point and area line of sight, rays, the closest occupant
+  in a direction. Each query and mutator takes its cell as either point
+  (`Coord`): a `Point`, its cell on the first layer, which a flat game passes
+  as it holds it, or a `Point3`, a cell of the volume; a region is a
+  `vmath.Area` or a `Box` (`Region`), a body a `Footprint` or a `Footprint3`
+  (`Body`). A search answers in the point it was asked in, on its origin's
+  layer, with the zero point and false where it finds nothing.
 - `Bits`: the grid of bits the planes and navigation share, each row starting on
   a word: a point a bit, an area a few words a row, a row shifted a column in a
   word, two grids diffed by XOR.
-- `Surface`: a boundary no entity holds on the first layer, a height for each
+- `Surface`: a boundary no entity holds on the layer it names, a height for each
   column with the cells on one `Side` of it solid (`Above`, a ceiling; `Below`, a
   floor), blocking its mask as a block does; laid from its writer's record,
   shifted a column at a time with the heights ahead of it for a frame drawn
-  between shifts. The surfaces of one mask are merged for the probes into a
-  ceiling and a floor per column and the bits those make, laid again on the first
-  probe after a lay, and moved a column once every surface of the mask has
-  shifted, so a cell is one bit whatever their number, answered before the cell's
-  occupants.
+  between shifts. The surfaces of one mask are merged for the probes into bits
+  sized as a plane's, laid again on the first probe after a lay, a layer's moved
+  a column once every surface of the mask on it has shifted, so a cell is one
+  bit whatever their number, answered before the cell's occupants.
 
 The terms, the package's and the game's:
 
@@ -75,12 +78,12 @@ In `engine`:
 - `Position`: embeds the index, so its queries are `World.Positions`'s own, and
   keeps what the rows, the components or the rock need: the rows and their sparse
   index (shared with `Store`), `SetPosition` and its kin over rows and grid,
-  `Shift`, batches, `Resize` and `Clear`, which place the rows again or drop them,
-  the mask upkeep that tells the index which moves are a wall's, once the grid
-  holds the move, `wallOf` over `Components.Wall` as the index's `blockOf`, the
-  typing queries (`TopGlyphAt`, `IsTypeable`, `IsScenery`), telemetry, and the
-  rock: `RockField`, the two surfaces with their columns. `component.WallBlockMask`
-  is the package's `Mask`.
+  `Shift`, the batch, `Resize` and `Clear`, which place the rows again or drop
+  them, the wall flag beside each row that tells the index which moves are a
+  wall's, once the grid holds the move, `wallOf` over `Components.Wall` as the
+  index's `blockOf`, the typing queries (`TopGlyphAt`, `IsTypeable`,
+  `IsScenery`), telemetry, and the rock: `RockField`, the two surfaces with their
+  columns. `component.WallBlockMask` is the package's `Mask`.
 - The names the game reads are the package's: `position.Scope` with `ScopeShared`,
   `ScopePrivate` and `ScopeAll`, `position.Pattern` and its kinds,
   `position.Exclusion`, `position.Rect` (the ping's bounds embed one),
@@ -111,16 +114,31 @@ Each names the choice taken and what the other would have cost.
   renderer, which asks a wall per scenery glyph a frame, a quarter of its time; a
   writer that does not resize the grid is a bug, and `TestSetupLevelRecordsOnlyBoundsTheGridHolds`
   pins the pair.
-- Blocks, a plane of bits per mask asked: the surfaces answer first, then the
-  bit. A plane is built from the cells on the first query of its mask and brought
-  to a cell's shared occupants by `BlockChangedAt`, which the binding calls once
-  the grid holds a wall's move, so a storm's hundreds of walls cost a cell scan
-  each; a resize, a copy loaded or masks rewritten wholesale mark every plane
-  stale, and the next query rebuilds them from the occupied cells. Scanning the
-  cell's occupants on every probe through a predicate put the area test,
-  navigation's direct-path probe over a footprint, at a sixth of td's tick, most
-  of it cell reads of 256 bytes each. The walls stay entities, which species move
-  and break; the planes are derived, never captured.
+- Blocks, a plane of bits per mask asked, read with the bits of the merged
+  surfaces that stop the mask: a probe tests one pointer, which says the plane is
+  current, and reads the plane's word joined with the surfaces', so a point, an
+  area and each step of a line cost the same loads with surfaces laid or none. A
+  plane is built from the cells on the first query of its mask and brought to a
+  cell's shared occupants by `BlockChangedAt`, which the binding calls once the
+  grid holds a wall's move, so a storm's hundreds of walls cost a cell scan each;
+  a resize, a copy loaded, masks rewritten wholesale or a surface laid leave work
+  the next probe does first (`spoil`). Scanning the cell's occupants on every
+  probe through a predicate put the area test, navigation's direct-path probe
+  over a footprint, at a sixth of td's tick. The walls stay entities, which
+  species move and break; the planes are derived, never captured.
+- Cells, sixteen bytes with the crowds apart: a cell holds its occupant inline
+  while it holds one, as 94 to 99.8% of the occupied cells of main, td and
+  vanguard do in play, and a cell of two or more keeps them in a 256-byte crowd
+  from a slab that reuses its places, a few hundred at most in those games. The
+  map ceiling costs 2 MB of cells where it cost 32, and a move reads a cell and a
+  presence word where it read a 256-byte cell and the occupied list. Each cell's
+  order is what one run of 31 made it, held against a model
+  (`TestGridHoldsEachCellAsItsRulesMakeIt`), so `WorldOrder.Cells` and every
+  enumeration read as before. A four-byte slot a cell over a dense slab of the
+  held cells read moves and installs lower still but an occupant probe at the
+  ceiling half again over main, a second load waiting on the first, and its
+  swap-removal let a view of one cell show another's occupants after a move
+  elsewhere.
 - Kinds, the mask's bits: a block's kinds are what its `blockOf` names, in the
   game the movers a wall stops and the box style it draws in (`component.BoxKind`,
   two bits no `BlockMask` carries), so the box characters' neighbour test reads a
@@ -128,29 +146,36 @@ Each names the choice taken and what the other would have cost.
   wall up. `WallBlockAll` is the four mover kinds, never every bit, so a query
   with it matches no styled wall that stops nothing. A second word of kinds
   beside the mask would have doubled the planes' key for two bits.
-- Surfaces, heights with a side, merged per mask for the probes: a shift moves a
-  slice of heights and logs the rows crossed, and the mask's merged bits move a
-  column once every surface of the mask has shifted, the last column laid from
-  their last heights; a lay, an add or a removal lays the merged heights and bits
-  again on the first probe after it. A probe is one bit a mask, as the rock's was
-  when the package held the rock itself. Three shapes read worse: each surface
-  tested on its own, by its heights, read the glyph renderer a tenth slower at
-  400×120; a merge of the heights on every shift, allocating, read the cave step
-  at twice main's; the merged heights compared on each probe, without bits, still
-  read the glyph renderer a tenth slower. Typing's reads of a glyph's own cell
-  (`TopGlyphIs`) take the cell without the presence test, since the cell holds
-  the glyph. The game's rock is two surfaces that move together; a floor alone or
-  a ceiling alone is one. The surfaces lie on the first layer; a volume's is a
-  heightfield, not laid.
+- Surfaces, heights with a side on a layer, merged per mask for the probes: a
+  shift moves a slice of heights and logs the cells crossed, and once every
+  surface of the mask on that layer has shifted the layer's merged bits move a
+  column and each lays the column it brought in, whatever their widths; a lay,
+  an add or a removal lays the bits again from the heights on the first probe
+  after it, and so does a probe that finds a surface a column ahead of the rest
+  (`staleShift`), so no answer waits on the order of the shifts. A plane holds
+  the words of the merged bits that stop its mask (`plane.solid`), sized as its
+  own and bound again at each merge, so a probe reads them with its own. A
+  surface keeps no origin: its writer's record does, as `RockField`'s. Four
+  shapes read worse: each surface tested on its own, by
+  its heights, read the glyph renderer a tenth slower at 400×120; a merge of the
+  heights on every shift, allocating, read the cave step at twice main's; the
+  merged heights compared on each probe, without bits, still read the glyph
+  renderer a tenth slower; and the merged bits of every mask tested in turn
+  before the plane's, which the plane's own words replaced, read it 9 to 12%
+  slower at 120×40 and 200×60. Typing's reads of a glyph's own cell (`TopGlyphIs`)
+  take the cell without the presence test, since the cell holds the glyph. The
+  game's rock is two surfaces that move together on the first layer; a floor
+  alone or a ceiling alone is one.
 - The mask, the package's: `component.WallBlockMask` is `position.Mask` by alias,
   since the package names no game type and the game's constants stay where they
   are, passed to the package's methods unchanged.
 - Presence bits, a `Bits` a class kept by the grid as cells fill and empty: an
   occupant probe (`EntitiesAt`, `HasAnyEntityAt`) tests the bit before it reads
   the cell, so the empty cells a sweep, a particle or a shot asks about cost a
-  word in cache rather than 256 bytes out of it, and the directional scan the
-  motions make passes an empty row or column on one word. An occupied cell pays
-  one more load, inside the band.
+  word in cache rather than a cell out of it, and the directional scan the
+  motions make reads the rows' words alone, the band's joined for a scan along a
+  row, and visits the cells whose bit is set. An occupied cell pays one more
+  load, inside the band.
 - Navigation reads words: a composite passability is a bit a header, each row the
   OR of the walls' words under the footprint's rows shifted to the header's column
   (`CompositePassability.Compute`), and a change derives again the header rows
@@ -173,7 +198,14 @@ Each names the choice taken and what the other would have cost.
 - Rows, in `engine`: the sparse index is `Store`'s, and the row type is
   `component.PositionComponent`, `vmath.Point` by alias, the flat cell of two
   ints; the binding places it on the first layer at the index boundary
-  (`Point.Layer`), which inlines.
+  (`Point.Layer`), which inlines. A flag beside each row says its entity is a
+  wall, read from the wall store when the row is made, when the wall's component
+  comes, goes or is rewritten (`WallChanged`) and when rows are written whole (a
+  copy in, an order installed), so a move tests a byte of the row it holds where
+  it looked the entity up in the world's component masks, a map. A destroy
+  empties the wall store before the row goes, and the flag still names the wall
+  whose cell the log takes. A store keeps one batch, begun again in its own
+  storage, whose commit sorts the additions' cells to find two on one cell.
 - Names: the package's classes are shared and private, the game's shared and
   player; the game reads the package's types by the package's names, never
   through an engine alias, since a method cannot be declared on an alias and a
@@ -205,21 +237,45 @@ serves a flat map as a volume one cell deep, at no cost to it.
   queries take, and `Point.Layer` places a flat cell on a layer. One point with a
   Z of zero on a flat map cost every row, log entry and capture column a third
   more for nothing, and read as a 3D type among 2D functions. `Vec3` stays the
-  float vector of a body's physics. A generic index over the coordinate type is
-  the todo's [item](todo.md#a-generic-index-over-the-coordinate-type) for when
-  vmath and the physics go to three axes.
+  float vector of a body's physics.
+- One index for both, its methods generic over the point: `Index[E]` keeps its
+  depth as a value, and a query is a generic method over `Coord`, `Region` or
+  `Body`, so the one `World` every game shares asks one index, a flat system
+  with the `Point` its rows hold and a volume's with a `Point3`, and a volume
+  can come up a system at a time. The form is read from the type's size, a
+  constant in each instantiation (`at`, `as`, `box`, `body`: the package's one
+  use of `unsafe`, held at compile time to two forms that differ in size), so
+  the flat instantiation compiles to the flat function's instructions; a type
+  switch on the parameter read a probe 10 to 20% slower and a constraint with
+  methods a quarter. A box or a deep footprint comes back from those helpers in
+  parts: six fields leave the registers four stay in, which cost the area probe
+  half again to twice. What it costs: no interface can hold a generic method,
+  every signature carries a type parameter, and nothing at compile time stops a
+  `Point3` on a flat map, where a layer past the first is outside it. An index
+  typed by its coordinate, `Index[E, P]`, which the compiler would hold to one
+  point, is the todo's [item](todo.md#an-index-typed-by-its-coordinate-indexe-p)
+  for when flat and volume games run on the engine together.
 - The grid: `Depth` layers, one on a flat map, the cells indexed
   `(z*Height+y)*Width+x`, the planes and the presence bits each one `Bits` whose
   rows are the layers' in turn, so a cell's index names its row and a flat query
   costs what it did. The one ceiling bounds the volume's cells as the map's
   (`ClampVolume`), so a volume stays small while every cell is dense, 100×50×25
   at most.
-- The queries: one taking a column and a row answers for the first layer, so no
-  call site of a flat game moves; one taking a `Point` answers for any; a line of
-  sight walks `vmath.Line3`, the axis of the longest span stepping every cell and
-  in one plane the cells `Line` walks; a body of depth tests a box a step. The
-  placement searches, spiral, pattern and exclusion, stay a layer's, as placing
-  on a floor.
+- The queries: a `Point` is its cell on the first layer and a `Point3` answers
+  in its own; a line of sight through a volume walks `vmath.Line3` in place, the
+  axis of the longest span stepping every cell and in one plane the cells `Line`
+  walks; a body of depth is tested through the layers it spans (`plane.deep`),
+  one layer being one probe. Every search, the spiral, the pattern, the
+  exclusion and the directional scan, works the layer its origin names, as
+  placing on a floor: what a layer means, a storey or a slice of depth, is the
+  game's, so a search crossing layers is the todo's
+  [item](todo.md#placement-searches-that-cross-a-volumes-layers) for a game
+  that needs one.
+- Surfaces: one lies on the layer it names, a height a column within that
+  layer's rows, so a surface a layer is a field over columns and layers; the
+  merged bits cover the volume and a shift moves its own layer's rows. A height
+  for each column and row, solid through the layers under it, is not laid: it
+  is the [volume item](todo.md#play-a-volume-the-third-axiss-remaining-foundation)'s.
 - A body with a height on a flat map, the storm: its circles keep a float `Pos3D`
   and `Vel3D` for their physics, and their Z, which picks the half drawn in
   front, never reaches their position. A body's continuous height belongs in its
@@ -259,11 +315,15 @@ What the index keeps, across multiplayer, netcode and interactions:
 ## 5. Costs
 
 Benchmarks in a cloud container move a fifth between runs, so a change is read
-as main's and the branch's test binaries alternated five rounds on one container,
-medians compared, the branch's bench files on both; td's tick is
+as main's and the branch's test binaries alternated five rounds or more on one
+container, medians compared, the branch's bench files on both; td's tick is
 `TestTickProfileTD16`, 500×250 with sixteen cursors over 5,000 ticks on one core.
 A difference inside the band is noise, and a reading that holds in every round is
-not. What each change read, against the main it landed on:
+not; a tick reads in two modes there, a third apart, so a few percent is read by
+the minimum of seven rounds beside the median. The package's own benches
+(`pkg/position` `bench_test.go`) read each operation on a scrolling level's map
+and on the ceiling's with a maze's walls. What each change read, against the
+main it landed on:
 
 - The move itself, the grid and the geometry behind the binding: parity, once the
   bounds were the grid's and the wall test a predicate rather than an interface.
@@ -276,8 +336,7 @@ not. What each change read, against the main it landed on:
   navigation 6 to 15% under, the presence bits alone a quarter off the step on
   the largest map; the glyph renderer 8% over at 200×60 and 400×120, 3 to 7 µs a
   frame, its probe reading the merged surfaces through a slice where it read the
-  rock's bits from a field. That is the price of several surfaces behind one
-  probe; a fixed array for the first few masks would take it back.
+  rock's bits from a field, which the plane holding their words took back below.
 - The call sites and the binding, and the volume: parity, the compiler inlining
   the promoted calls as it inlined the forwarders, and a flat query's body and a
   cell's index unchanged at one layer.
@@ -293,5 +352,48 @@ not. What each change read, against the main it landed on:
   zeros; the world copy at the map limit 8% under main fresh and 3% reused, td's
   headless ticks 6% under, td's tick with sixteen cursors at parity.
 
+- Sixteen-byte cells, the plane read with its surfaces, and the scan over the
+  presence words, on the package's benches at 200×60 and at the ceiling: a probe
+  41% under main, under two surfaces 20 and 26%, a body's area 8 and 21%, its
+  line of sight 17 and 23%, an occupant probe 6 to 8%; a move 28 and 50%, a
+  layer's shift 33 and 48%, a wall's move 26 and 31%; the directional scan 46 and
+  52%; an install 77 and 70%; the gauges 1.6 and 301 µs to 20 ns. In the game:
+  td's tick with sixteen cursors 0.129 to 0.108 ms; headless ticks 9% under on
+  main, 11% on td and 20% on vanguard; the maze spawn 9 to 13% under; the glyph
+  renderer 12 and 9% under at 120×40 and 200×60 and at parity at 400×120, the 8%
+  the surfaces cost it taken back; the cave, navigation and route benches inside
+  the band or under; the world copy 3 to 5% under. A td world's grid holds 2.1
+  MB where it held 32, its crowds 64 kB of that.
+- The rows' wall flag, a shift keeping each entity's row between its phases and
+  the one batch, on `BenchmarkPlacements` at 200×60 against the cells above: a
+  shared body's move 45 to 32 ns, a wall's 10 to 18% under, a layer's shift of
+  1,800 glyphs 2 to 4% under, a batch of ten half the time, its 760 B in six
+  allocations gone. In the game the headless tick allocates four times where it
+  did six on main and eight where ten on td, a fifth to three tenths fewer bytes,
+  and the maze spawn 24 times where 27; the ticks' time reads 1 to 4% under by
+  the minimum, inside the band.
+- The volume's line walk, its axes kept from the longest span's on and stepped
+  in place (`Line3.Advance`) where each step copied the walk out and back, on a
+  100×50×25 volume with no wall, segments some forty cells long: a line of sight
+  800 to 230 ns, a 3×3×2 body's 1.05 to 0.8 µs; `vmath`'s `BenchmarkLine3` 68 to
+  10 µs.
+- One index generic over the point, against the line walk above: a flat probe,
+  area, line of sight, occupant read, move, shift and scan compile to the
+  instructions they had and read level on the package's benches and the game's.
+  What read over was link layout: the gauges and an occupant probe at the
+  ceiling 12 to 17% over in one build, their instructions the same, and the
+  glyph renderer at 200×60 10% over in one and level across six
+  (`-ldflags=-randlayout`), the earlier build's own six 18% apart. The placement
+  searches on a flat map read under, the spiral 4 to 8% and the pattern search
+  6 to 12%, a candidate being one area test where it bounded itself and then
+  asked `IsAreaFree`; the exclusion search level on an open map and 28% under
+  in a maze, its last resort counting a slot's cells off one plane. A lone
+  `IsAreaFree` reads half a nanosecond over, its layers bounded at run time.
+- Surfaces on any layer, against the generic index above: the probes, the glyph
+  and rock renderers and the cave start level; the cave step 2 to 3% under by
+  the minimum at its three sizes, the merged heights it copied a column each
+  step gone.
+
 Across the changes td's tick read from 0.40 ms before the move to 0.29 ms, each
-step against its own main; the tables each PR carried are in the git history.
+step against its own main, and 0.13 to 0.11 ms with the cells; the tables each PR
+carried are in the git history.

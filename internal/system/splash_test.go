@@ -79,7 +79,7 @@ func TestACountdownIsPlacedByItsInk(t *testing.T) {
 			t.Fatalf("the countdown took face %d in a corridor its large digits fit", c.Font)
 		}
 		for _, cell := range countdownInk(w, c) {
-			if w.Positions.Blocks(cell.X, cell.Y, component.WallBlockAll) {
+			if w.Positions.Blocks(cell, component.WallBlockAll) {
 				t.Fatalf("the digit inks (%d, %d), a wall, in a corridor of rows %d to %d", cell.X, cell.Y, ceiling+1, floor-1)
 			}
 		}
@@ -95,7 +95,7 @@ func TestACountdownWithNoRoomTakesTheSmallFace(t *testing.T) {
 		t.Fatalf("the countdown kept face %d in a corridor of six rows", c.Font)
 	}
 	for _, cell := range countdownInk(w, c) {
-		if w.Positions.Blocks(cell.X, cell.Y, component.WallBlockAll) {
+		if w.Positions.Blocks(cell, component.WallBlockAll) {
 			t.Fatalf("the small digit inks (%d, %d), a wall, in a corridor of rows %d to %d", cell.X, cell.Y, ceiling+1, floor-1)
 		}
 	}

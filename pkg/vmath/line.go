@@ -60,52 +60,78 @@ func (l Line) Steps() int { return int(l.walk.steps) }
 // Line3 walks a segment's cells through a volume, start and end included: the axis
 // of the longest span steps every cell, and each other axis when its error term,
 // started at twice its span less the longest, stands above zero. A segment in one
-// plane walks the cells Line does.
+// plane walks the cells Line does. The axes are kept from the longest span's on in
+// turn, so a step indexes nothing; the walk is too large for registers.
 type Line3 struct {
-	cell, step, span [3]int32
-	err              [2]int32 // the cross axes' error terms, the axes after drive in turn
-	steps            int32
-	drive            uint8 // the axis of the longest span
+	a, b, c       int32 // the cell, from the axis of the longest span on
+	sa, sb, sc    int32 // the unit steps
+	da, db, dc    int32 // twice the spans
+	eb, ec, steps int32 // the cross axes' error terms and the steps left
+	drive         uint8 // the axis of the longest span: x, y, z
 }
 
-// NewLine3 starts a walk on a toward b
-func NewLine3(a, b Point3) Line3 {
-	l := Line3{cell: [3]int32{int32(a.X), int32(a.Y), int32(a.Z)}}
-	for i, d := range [3]int{b.X - a.X, b.Y - a.Y, b.Z - a.Z} {
-		l.step[i], l.span[i] = 1, int32(d)
-		if d < 0 {
-			l.step[i], l.span[i] = -1, int32(-d)
-		}
-		if l.span[i] > l.span[l.drive] {
-			l.drive = uint8(i)
-		}
+// NewLine3 starts a walk on p toward q; of equal spans the first axis drives
+func NewLine3(p, q Point3) Line3 {
+	x, y, z := int32(p.X), int32(p.Y), int32(p.Z)
+	dx, dy, dz := int32(q.X-p.X), int32(q.Y-p.Y), int32(q.Z-p.Z)
+	sx, sy, sz := int32(1), int32(1), int32(1)
+	if dx < 0 {
+		dx, sx = -dx, -1
 	}
-	c1, c2 := (l.drive+1)%3, (l.drive+2)%3
-	l.err = [2]int32{2*l.span[c1] - l.span[l.drive], 2*l.span[c2] - l.span[l.drive]}
-	l.steps = l.span[l.drive]
-	return l
+	if dy < 0 {
+		dy, sy = -dy, -1
+	}
+	if dz < 0 {
+		dz, sz = -dz, -1
+	}
+	switch {
+	case dx >= dy && dx >= dz:
+		return Line3{a: x, b: y, c: z, sa: sx, sb: sy, sc: sz, da: 2 * dx, db: 2 * dy, dc: 2 * dz,
+			eb: 2*dy - dx, ec: 2*dz - dx, steps: dx}
+	case dy >= dz:
+		return Line3{a: y, b: z, c: x, sa: sy, sb: sz, sc: sx, da: 2 * dy, db: 2 * dz, dc: 2 * dx,
+			eb: 2*dz - dy, ec: 2*dx - dy, steps: dy, drive: 1}
+	}
+	return Line3{a: z, b: x, c: y, sa: sz, sb: sx, sc: sy, da: 2 * dz, db: 2 * dx, dc: 2 * dy,
+		eb: 2*dx - dz, ec: 2*dy - dz, steps: dz, drive: 2}
+}
+
+// Advance steps the walk one cell on in place, or leaves it on its end: what a
+// loop over a walk calls, Next copying the walk out and back
+func (l *Line3) Advance() {
+	if l.steps == 0 {
+		return
+	}
+	l.steps--
+	l.a += l.sa
+	if l.eb > 0 {
+		l.b += l.sb
+		l.eb -= l.da
+	}
+	l.eb += l.db
+	if l.ec > 0 {
+		l.c += l.sc
+		l.ec -= l.da
+	}
+	l.ec += l.dc
 }
 
 // Next returns the walk one cell on, or the same walk on its end
 func (l Line3) Next() Line3 {
-	if l.steps == 0 {
-		return l
-	}
-	l.steps--
-	d := l.drive
-	l.cell[d] += l.step[d]
-	for k, c := range [2]uint8{(d + 1) % 3, (d + 2) % 3} {
-		if l.err[k] > 0 {
-			l.cell[c] += l.step[c]
-			l.err[k] -= 2 * l.span[d]
-		}
-		l.err[k] += 2 * l.span[c]
-	}
+	l.Advance()
 	return l
 }
 
 // Point is the current cell
-func (l Line3) Point() Point3 { return Point3{X: int(l.cell[0]), Y: int(l.cell[1]), Z: int(l.cell[2])} }
+func (l Line3) Point() Point3 {
+	switch l.drive {
+	case 0:
+		return Point3{X: int(l.a), Y: int(l.b), Z: int(l.c)}
+	case 1:
+		return Point3{X: int(l.c), Y: int(l.a), Z: int(l.b)}
+	}
+	return Point3{X: int(l.b), Y: int(l.c), Z: int(l.a)}
+}
 
 // AtEnd reports whether the current cell is the end
 func (l Line3) AtEnd() bool { return l.steps == 0 }

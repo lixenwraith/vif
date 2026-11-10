@@ -88,13 +88,13 @@ func (p *Position) SetRock(mask component.WallBlockMask, origin int64, cols []Ro
 	r.ahead = r.ahead[:0]
 	ceil, floor := r.split(cols)
 	if r.ceiling == nil {
-		r.ceiling = p.Index.AddSurface(mask, position.Above, origin, ceil)
-		r.floor = p.Index.AddSurface(mask, position.Below, origin, floor)
+		r.ceiling = p.Index.AddSurface(mask, position.Above, 0, ceil)
+		r.floor = p.Index.AddSurface(mask, position.Below, 0, floor)
 		return
 	}
 	r.ceiling.Mask, r.floor.Mask = mask, mask
-	p.Index.LaySurface(r.ceiling, origin, ceil)
-	p.Index.LaySurface(r.floor, origin, floor)
+	p.Index.LaySurface(r.ceiling, ceil)
+	p.Index.LaySurface(r.floor, floor)
 }
 
 // liftRock takes the rock and its surfaces out

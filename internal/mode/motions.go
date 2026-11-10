@@ -502,13 +502,13 @@ func MotionEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 	// Check if target is blocked, find nearest valid
 	if isCursorBlocked(ctx, rightX, botY) {
-		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
-			rightX, botY, 1, 1,
+		free, found := ctx.World.Positions.FindFreeFromPattern(
+			position.Point{X: rightX, Y: botY}, 1, 1,
 			position.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
-			rightX, botY = newX, newY
+			rightX, botY = free.X, free.Y
 		} else {
 			return MotionResult{StartX: x, StartY: y, EndX: x, EndY: y, Valid: false}
 		}
@@ -528,13 +528,13 @@ func MotionCenter(ctx *engine.GameContext, x, y, count int) MotionResult {
 	midY := ctx.World.Resources.Config.MapHeight / 2
 
 	if isCursorBlocked(ctx, midX, midY) {
-		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
-			midX, midY, 1, 1,
+		free, found := ctx.World.Positions.FindFreeFromPattern(
+			position.Point{X: midX, Y: midY}, 1, 1,
 			position.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
-			midX, midY = newX, newY
+			midX, midY = free.X, free.Y
 		} else {
 			return MotionResult{StartX: x, StartY: y, EndX: x, EndY: y, Valid: false}
 		}
@@ -553,13 +553,13 @@ func MotionOrigin(ctx *engine.GameContext, x, y, count int) MotionResult {
 	originX, originY := 0, 0
 
 	if isCursorBlocked(ctx, originX, originY) {
-		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
-			originX, originY, 1, 1,
+		free, found := ctx.World.Positions.FindFreeFromPattern(
+			position.Point{X: originX, Y: originY}, 1, 1,
 			position.PatternCardinalFirst, 1, parameter.MotionJumpSearchMaxRadius, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
-			originX, originY = newX, newY
+			originX, originY = free.X, free.Y
 		} else {
 			return MotionResult{StartX: x, StartY: y, EndX: x, EndY: y, Valid: false}
 		}
@@ -815,11 +815,11 @@ func motionScanDirectional(ctx *engine.GameContext, x, y, count, dx, dy int) Mot
 
 	for range count {
 		// Both domains: glyphs are player, gold members are shared and carry one
-		_, nextX, nextY, found := ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds.Rect, position.ScopeAll, filter)
+		_, next, found := ctx.World.Positions.FindClosestEntityInDirection(position.Point{X: endX, Y: endY}, dx, dy, bounds.Rect, position.ScopeAll, filter)
 		if !found {
 			break
 		}
-		endX, endY = nextX, nextY
+		endX, endY = next.X, next.Y
 	}
 
 	return MotionResult{
@@ -866,16 +866,14 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 	found := false
 
 	for range count {
-		var nextX, nextY int
-		var ok bool
 		// Both domains: the color filter narrows the result, the scope must not
-		_, nextX, nextY, ok = positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds.Rect, position.ScopeAll, filter)
+		_, next, ok := positions.FindClosestEntityInDirection(position.Point{X: endX, Y: endY}, dx, dy, bounds.Rect, position.ScopeAll, filter)
 
 		if !ok {
 			// If not found in sequence, stop at last valid
 			break
 		}
-		endX, endY = nextX, nextY
+		endX, endY = next.X, next.Y
 		found = true
 	}
 

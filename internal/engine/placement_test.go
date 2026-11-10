@@ -38,7 +38,7 @@ func TestAPlacementWithNoClearSlotTakesTheOneOverlappingTheLeast(t *testing.T) {
 		}
 	}
 
-	dx, dy, found := w.Positions.FindPlacementAroundExclusion(ax, ay, objW, objH, exclusion, padding,
+	dx, dy, found := w.Positions.FindPlacementAroundExclusion(vmath.Point{X: ax, Y: ay}, objW, objH, exclusion, padding,
 		position.PatternCardinalFirst, component.WallBlockAll, nil)
 	if found || ax+dx != topX || ay+dy != topY {
 		t.Fatalf("placed at (%d, %d) found %v, want the top slot (%d, %d) with one wall, not found",
@@ -71,13 +71,12 @@ func TestAFreeAreaInsideSearchesFromTheEdgeItsOriginPassed(t *testing.T) {
 		{"bottom", col, cfg.MapHeight - 1, col - anchorX, bottom},
 		{"corner", -3, cfg.MapHeight + 3, 0, bottom},
 	} {
-		left, top, found := w.Positions.FindFreeAreaInside(tc.x, tc.y, foot, component.WallBlockAll, 0)
-		if !found || left != tc.wantLeft || top != tc.wantTop {
-			t.Errorf("%s: (%d,%d) found %v at (%d,%d), want the area at (%d,%d)",
-				tc.edge, tc.x, tc.y, found, left, top, tc.wantLeft, tc.wantTop)
+		corner, found := w.Positions.FindFreeAreaInside(vmath.Point{X: tc.x, Y: tc.y}, foot, component.WallBlockAll, 0)
+		if want := (vmath.Point{X: tc.wantLeft, Y: tc.wantTop}); !found || corner != want {
+			t.Errorf("%s: (%d,%d) found %v at %v, want the area at %v", tc.edge, tc.x, tc.y, found, corner, want)
 		}
 	}
-	if _, _, found := w.Positions.FindFreeAreaInside(col, row, vmath.Footprint{Width: cfg.MapWidth + 1, Height: height}, component.WallBlockAll, -1); found {
+	if _, found := w.Positions.FindFreeAreaInside(vmath.Point{X: col, Y: row}, vmath.Footprint{Width: cfg.MapWidth + 1, Height: height}, component.WallBlockAll, -1); found {
 		t.Error("an area wider than the map found a place")
 	}
 }

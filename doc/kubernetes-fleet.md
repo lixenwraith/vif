@@ -219,7 +219,8 @@ config-check init container counts only against its own peak.
 Historical baseline worth keeping: server in lobby 12.0 MB RSS; embedded game with
 one guest 61.75 MB peak; server after a guest left 40.1 MB; headless joiner with a
 staging world 95.5 MB peak; two staggered guests 63.5 MB plateau; spatial grid about
-30.5 MiB per world, which the grid reserves only on a ceiling-sized map. Repeated
+30.5 MiB per world on a ceiling-sized map, 2 MiB since its cells went to 16 bytes
+([Position §5](position-package.md#5-costs)). Repeated
 resets plateaued rather than growing, so the RSS lag was runtime scavenging, not a
 per-match leak.
 

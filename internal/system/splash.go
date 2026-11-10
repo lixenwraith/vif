@@ -443,12 +443,12 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
 	}
 
-	clear := func(absX, absY, w, h int) bool {
-		return !s.collides(BBox{X: absX, Y: absY, W: w, H: h}, -1)
+	clear := func(topLeft position.Point, w, h int) bool {
+		return !s.collides(BBox{X: topLeft.X, Y: topLeft.Y, W: w, H: h}, -1)
 	}
 
-	absX, absY, found := s.world.Positions.FindFreeFromPattern(
-		cursorX, cursorY,
+	topLeft, found := s.world.Positions.FindFreeFromPattern(
+		position.Point{X: cursorX, Y: cursorY},
 		splashW, splashH,
 		position.PatternDiagonalFirst,
 		parameter.SplashMinDistance,
@@ -459,7 +459,7 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 	)
 
 	if found {
-		return absX, absY
+		return topLeft.X, topLeft.Y
 	}
 
 	anchorX := max(0, min(cursorX-splashW/2, config.MapWidth-splashW))
@@ -516,8 +516,8 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 		}
 	}
 
-	clear := func(absX, absY, w, h int) bool {
-		return !s.collides(BBox{X: absX, Y: absY, W: w, H: h}, self)
+	clear := func(topLeft position.Point, w, h int) bool {
+		return !s.collides(BBox{X: topLeft.X, Y: topLeft.Y, W: w, H: h}, self)
 	}
 
 	exclusion := position.Exclusion{
@@ -528,7 +528,7 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 	}
 
 	offsetX, offsetY, found := s.world.Positions.FindPlacementAroundExclusion(
-		anchorX, anchorY,
+		position.Point{X: anchorX, Y: anchorY},
 		ink.W, ink.H,
 		exclusion,
 		parameter.SplashTimerPadding,

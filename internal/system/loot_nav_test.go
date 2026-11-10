@@ -18,7 +18,7 @@ func TestLootSurvivesAnEncounterClearAndMapShrinkUntilReset(t *testing.T) {
 	w.SetupLevel(20, 12, true, false, true)
 	loot.Update()
 	pos, ok := w.Positions.GetPosition(drop)
-	if !ok || !w.Components.Loot.HasEntity(drop) || w.Positions.IsOutOfBounds(pos.X, pos.Y) {
+	if !ok || !w.Components.Loot.HasEntity(drop) || !w.Positions.InBounds(pos) {
 		t.Fatal("encounter cleanup lost its uncollected loot")
 	}
 	if flight := flyLoot(t, w, drop, owner, 300); flight.ticks < 0 {
@@ -203,10 +203,10 @@ func TestLootRoutesToItsOwnCursorNotTheNearestOne(t *testing.T) {
 	if drop == 0 {
 		t.Fatal("the drop was not created")
 	}
-	if !w.Positions.HasLineOfSight(13, 5, 15, 5, component.WallBlockKinetic) {
+	if !w.Positions.HasLineOfSight(vmath.Point{X: 13, Y: 5}, vmath.Point{X: 15, Y: 5}, component.WallBlockKinetic) {
 		t.Fatal("the drop can not see the wrong cursor; the case it reproduces is gone")
 	}
-	if w.Positions.HasLineOfSight(13, 5, 5, 5, component.WallBlockKinetic) {
+	if w.Positions.HasLineOfSight(vmath.Point{X: 13, Y: 5}, vmath.Point{X: 5, Y: 5}, component.WallBlockKinetic) {
 		t.Fatal("the drop can see its own cursor; the barrier does not separate them")
 	}
 	_ = other
@@ -324,7 +324,7 @@ func TestLootReachesItsOwnerAcrossAMaze(t *testing.T) {
 	drops := make([]core.Entity, 0, 32)
 	for range 40 {
 		x, y := rng.Intn(120), rng.Intn(40)
-		if w.Positions.IsBlocked(x, y, component.WallBlockKinetic) {
+		if w.Positions.IsBlocked(vmath.Point{X: x, Y: y}, component.WallBlockKinetic) {
 			continue
 		}
 		if e := dropLoot(w, loot, x, y, owner); e != 0 {

@@ -28,7 +28,7 @@ func (s *cellSweep) reset() {
 
 // collect appends the occupants of one cell that clearable admits
 func (s *cellSweep) collect(w *engine.World, x, y int, clearable func(core.Entity) bool) {
-	n := copy(s.buf[:], w.Positions.EntitiesAt(x, y, position.ScopeAll))
+	n := copy(s.buf[:], w.Positions.EntitiesAt(position.Point{X: x, Y: y}, position.ScopeAll))
 	for i := range n {
 		e := s.buf[i]
 		if e == 0 || !clearable(e) {

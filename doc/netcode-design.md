@@ -1013,8 +1013,9 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
   order and the page hash, nothing per row beside a four-byte index; the manifest
   rows a repair or an audit reads are materialised from them on request. A page
   whose cells and bytes are the last section's keeps its hash unhashed
-  (`samePage`), which is what reuse used to buy by copying every row. The grid is
-  [its own item](todo.md#shrink-the-spatial-grid-on-ceiling-sized-maps).
+  (`samePage`), which is what reuse used to buy by copying every row. The grid
+  went to 16-byte cells since, 2 MB a world for 30
+  ([Position §5](position-package.md#5-costs)).
 - Measured after (§3.7): `newStoreSection` holds 1.0 MB in use against 23.4 over
   the same td-2 run, the heap after a collection 190 MiB against 218; what the
   retained indexes still hold is the row encoders' `[]StoreRow` slices they stand

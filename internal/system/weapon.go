@@ -605,54 +605,44 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 		return
 	}
 
-	// Collect active orbs in STABLE order (sort by weapon type)
-	type orbEntry struct {
-		entity core.Entity
-		weapon component.WeaponType
-	}
-	var entries []orbEntry
-	for weapon, orbEntity := range orbs {
-		if orbEntity == 0 {
-			continue
+	// The slots run in weapon order, which is each orb's place in the spacing
+	var entryBuf [component.WeaponCount]core.Entity
+	entries := entryBuf[:0]
+	for _, orbEntity := range orbs {
+		if orbEntity != 0 && s.world.Components.Orb.HasEntity(orbEntity) {
+			entries = append(entries, orbEntity)
 		}
-		if s.world.Components.Orb.HasEntity(orbEntity) {
-			entries = append(entries, orbEntry{entity: orbEntity, weapon: component.WeaponType(weapon)})
-		}
-	}
-
-	if len(entries) == 0 {
-		s.statOrbs.Store(slot, 0)
-		return
 	}
 	s.statOrbs.Store(slot, int64(len(entries)))
-
-	// Sort by weapon type for deterministic index assignment
-	slices.SortFunc(entries, func(a, b orbEntry) int {
-		return int(a.weapon) - int(b.weapon)
-	})
+	if len(entries) == 0 {
+		return
+	}
 
 	// Use first orb's radius (all of one owner's orbs share the same orbit).
-	firstOrb, ok := s.world.Components.Orb.GetPtr(entries[0].entity)
+	firstOrb, ok := s.world.Components.Orb.GetPtr(entries[0])
 	if !ok {
 		return
 	}
 	radiusX := firstOrb.OrbitRadiusX
 	radiusY := firstOrb.OrbitRadiusY
 
-	// Sample orbital ellipse for blockage
-	samplePoints := vmath.SampleEllipseGrid(cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
-	blocked := make([]bool, len(samplePoints))
-	for i, pt := range samplePoints {
-		blocked[i] = s.world.Positions.IsBlocked(pt[0], pt[1], component.WallBlockKinetic)
+	// Sample orbital ellipse for blockage, on the stack: it is read every tick
+	var cellBuf [vmath.EllipseSampleCount][2]int
+	var blocked [vmath.EllipseSampleCount]bool
+	cells := vmath.AppendEllipseGrid(cellBuf[:0], cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
+	for i, pt := range cells {
+		blocked[i] = s.world.Positions.IsBlocked(vmath.Point{X: pt[0], Y: pt[1]}, component.WallBlockKinetic)
 	}
 
-	// Find available arcs
-	arcs := vmath.FindUnblockedArcs(blocked)
+	// Find available arcs: runs of free samples, so half the samples at most
+	var arcBuf [vmath.EllipseSampleCount / 2]vmath.ArcSegment
+	arcs := vmath.AppendUnblockedArcs(arcBuf[:0], blocked[:])
 	fullCircle := vmath.IsFullCircle(arcs)
 
 	// Distribute target angles
-	targetAngles := vmath.DistributeAngles(arcs, len(entries))
-	if targetAngles == nil {
+	var angleBuf [component.WeaponCount]float64
+	targetAngles := vmath.AppendDistributedAngles(angleBuf[:0], arcs, len(entries))
+	if len(targetAngles) == 0 {
 		// Fully blocked - orbs stay in place
 		return
 	}
@@ -660,24 +650,23 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 	// Hysteresis threshold to prevent jitter (~11 degrees)
 	const angleThreshold = vmath.TwoPi / 32
 	redistribute := false
-	for i, entry := range entries {
-		orb, _ := s.world.Components.Orb.GetPtr(entry.entity)
+	for i, orbEntity := range entries {
+		orb, _ := s.world.Components.Orb.GetPtr(orbEntity)
 		if orb.TargetAngle < 0 || vmath.Abs(vmath.AngleDiff(orb.TargetAngle, targetAngles[i])) > angleThreshold {
 			redistribute = true
 			break
 		}
 	}
 	freeOrbit := fullCircle && !redistribute
-	for _, entry := range entries {
-		orb, _ := s.world.Components.Orb.GetPtr(entry.entity)
+	for _, orbEntity := range entries {
+		orb, _ := s.world.Components.Orb.GetPtr(orbEntity)
 		freeOrbit = freeOrbit && orb.RedistributeRemaining <= 0
 	}
 	phase := firstOrb.OrbitAngle + firstOrb.OrbitSpeed*dt.Seconds()
 	spacing := vmath.TwoPi / float64(len(entries))
 
 	// Update each orb
-	for i := range entries {
-		orbEntity := entries[i].entity
+	for i, orbEntity := range entries {
 		orb, ok := s.world.Components.Orb.GetPtr(orbEntity)
 		if !ok {
 			continue
@@ -719,10 +708,10 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 		currentPos, hasPos := s.world.Positions.GetPosition(orbEntity)
 
 		// Validate target cell is actually free (sample resolution may miss edge cases)
-		targetValid := !s.world.Positions.IsBlocked(targetGridX, targetGridY, component.WallBlockKinetic)
+		targetValid := !s.world.Positions.IsBlocked(vmath.Point{X: targetGridX, Y: targetGridY}, component.WallBlockKinetic)
 		if !targetValid {
 			// Target blocked - stay at current if valid
-			if hasPos && !s.world.Positions.IsBlocked(currentPos.X, currentPos.Y, component.WallBlockKinetic) {
+			if hasPos && !s.world.Positions.IsBlocked(currentPos, component.WallBlockKinetic) {
 				targetGridX, targetGridY = currentPos.X, currentPos.Y
 			} else {
 				// Both invalid - skip position update, keep component state
@@ -731,8 +720,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 		} else if hasPos && (currentPos.X != targetGridX || currentPos.Y != targetGridY) {
 			// Check if orb is isolated (can't reach target)
 			pathBlocked := !s.world.Positions.HasLineOfSight(
-				currentPos.X, currentPos.Y,
-				targetGridX, targetGridY,
+				currentPos, vmath.Point{X: targetGridX, Y: targetGridY},
 				component.WallBlockKinetic,
 			)
 			if pathBlocked {
@@ -742,7 +730,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 				targetGridX, targetGridY = vmath.AngleToGridPos(targetAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
 
 				// Re-validate teleport destination
-				if s.world.Positions.IsBlocked(targetGridX, targetGridY, component.WallBlockKinetic) {
+				if s.world.Positions.IsBlocked(vmath.Point{X: targetGridX, Y: targetGridY}, component.WallBlockKinetic) {
 					// Teleport destination also blocked - stay put
 					if hasPos {
 						targetGridX, targetGridY = currentPos.X, currentPos.Y
@@ -1202,8 +1190,7 @@ func (s *WeaponSystem) fireTracers(cursor core.Entity, originX, originY int, vol
 				vy, sx, sy, tx, ty = -parameter.TracerVerticalSpeed, ox+off, oy, ox+off, minFlightY
 			}
 			start := vmath.PointAt(sx, sy)
-			if s.world.Positions.IsOutOfBounds(start.X, start.Y) ||
-				s.world.Positions.Blocks(start.X, start.Y, component.WallBlockKinetic) {
+			if s.world.Positions.IsBlocked(start, component.WallBlockKinetic) {
 				continue
 			}
 			s.spawnTracer(cursor, palette, start, vx, vy, sx, sy, tx, ty)
@@ -1302,7 +1289,7 @@ func (s *WeaponSystem) advanceTracers() {
 					continue
 				}
 
-				if s.world.Positions.Blocks(x, y, component.WallBlockKinetic) {
+				if s.world.Positions.Blocks(vmath.Point{X: x, Y: y}, component.WallBlockKinetic) {
 					s.statTracerWalls.Add(1)
 					blocked = true
 					blockGridX, blockGridY = x, lastValidY
@@ -1339,7 +1326,7 @@ func (s *WeaponSystem) advanceTracers() {
 					continue
 				}
 
-				if s.world.Positions.Blocks(x, y, component.WallBlockKinetic) {
+				if s.world.Positions.Blocks(vmath.Point{X: x, Y: y}, component.WallBlockKinetic) {
 					s.statTracerWalls.Add(1)
 					blocked = true
 					blockGridX, blockGridY = lastValidX, y
@@ -1473,7 +1460,7 @@ func tracerFlightBounds(size int) (negative, positive float64) {
 // Returns true if a combat entity was hit (blocks the tracer's head)
 func (s *WeaponSystem) tracerStrike(x, y int, selfEntity, owner core.Entity, velX, velY float64, palette component.WeaponPalette) bool {
 	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
-	n := copy(entityBuf[:], s.world.Positions.EntitiesAt(x, y, position.ScopeAll))
+	n := copy(entityBuf[:], s.world.Positions.EntitiesAt(vmath.Point{X: x, Y: y}, position.ScopeAll))
 	if n == 0 {
 		return false
 	}

@@ -131,14 +131,14 @@ func (s *FuseSystem) fuse(shared bool, p *event.FuseRequestPayload) {
 	}
 
 	foot := s.world.Resources.Footprint(p.Target)
-	left, top, found := s.world.Positions.FindFreeAreaInside(x, y, foot, component.WallBlockSpawn, 0)
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: x, Y: y}, foot, component.WallBlockSpawn, 0)
 	if !found {
 		s.statSpawnFailures.Add(1)
 		return
 	}
 	s.consume(composites)
 	s.killDrains(drains)
-	s.fuseInto(p.Target, p.Effect, sources, left+foot.HeaderX, top+foot.HeaderY, carrier)
+	s.fuseInto(p.Target, p.Effect, sources, corner.X+foot.HeaderX, corner.Y+foot.HeaderY, carrier)
 }
 
 // lands reports a species a land request stands: one with a body, in the Shared domain

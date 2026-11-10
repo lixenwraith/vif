@@ -41,16 +41,38 @@ func TestSinCosUnitCircle(t *testing.T) {
 	}
 }
 
-func TestSinCosFloorNegativeAngles(t *testing.T) {
+// TestSinCosReadTheBinOfAnAnglesFloor holds the table index to the floor of the
+// angle's bin on every input: a negative angle takes the bin before it, and a
+// NaN, an infinity and an angle past an int's range the bin they always took
+func TestSinCosReadTheBinOfAnAnglesFloor(t *testing.T) {
+	check := func(a float64) {
+		t.Helper()
+		want := int(math.Floor(a*radToIndex)) & LUTMask
+		x, y := RotateVector(1, 0, a)
+		v := V3Rotate(Vec3{X: 1}, Vec3{Z: 1}, a)
+		if got := lutIndex(a); got != want || Sin(a) != SinLUT[want] || Cos(a) != CosLUT[want] ||
+			x != CosLUT[want] || y != SinLUT[want] || v.X != x || v.Y != y {
+			t.Fatalf("angle %v (bits %#x) reads bin %d, want %d; rotations (%v,%v) and %v", a, math.Float64bits(a), got, want, x, y, v)
+		}
+	}
 	step := TwoPi / float64(LUTSize)
-	for _, angle := range []float64{-0.25 * step, -0.75 * step, -1.25 * step} {
-		wantIdx := int(math.Floor(angle*radToIndex)) & LUTMask
-		if got := Sin(angle); got != SinLUT[wantIdx] {
-			t.Errorf("Sin(%v) = %v, want LUT[%d] = %v", angle, got, wantIdx, SinLUT[wantIdx])
-		}
-		if got := Cos(angle); got != CosLUT[wantIdx] {
-			t.Errorf("Cos(%v) = %v, want LUT[%d] = %v", angle, got, wantIdx, CosLUT[wantIdx])
-		}
+	for _, a := range []float64{-0.25 * step, -0.75 * step, -1.25 * step, 0, math.Copysign(0, -1), step, -step,
+		math.SmallestNonzeroFloat64, -math.SmallestNonzeroFloat64, 1e-30, -1e-30, 0x1p52, -0x1p52, 0x1p62, -0x1p62,
+		0x1p63 / radToIndex, -0x1p63 / radToIndex, 0x1p64, -0x1p64, math.MaxFloat64, -math.MaxFloat64,
+		math.Inf(1), math.Inf(-1), math.NaN(), math.Copysign(math.NaN(), -1)} {
+		check(a)
+		check(math.Nextafter(a, math.Inf(1)))
+		check(math.Nextafter(a, math.Inf(-1)))
+	}
+	rng := NewFastRand(0x51C0)
+	for range 300_000 {
+		check(math.Float64frombits(rng.Next()))
+		a := (rng.Float64() - 0.5) * math.Ldexp(1, rng.Intn(70))
+		edge := math.Round(a*radToIndex) / radToIndex
+		check(a)
+		check(edge)
+		check(math.Nextafter(edge, math.Inf(1)))
+		check(math.Nextafter(edge, math.Inf(-1)))
 	}
 }
 
