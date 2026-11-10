@@ -182,7 +182,7 @@ what is modelled and whether players see it; nothing is persisted.
 ### Build the map and scenario editor
 
 - Priority: P2
-- Affected files: `pkg/tomlmacro`, `internal/fsm`, `internal/manifest/schema.go`,
+- Affected files: `lixenwraith/toml/macro`, `internal/fsm`, `internal/manifest/schema.go`,
   `internal/mode`, `internal/render/renderer`, `internal/resource`
 - Design: [TOML macros](toml-macros.md)
 
@@ -199,7 +199,7 @@ time knows an editor made it.
   placed as a state (`Name = { macro = ... }`) is a node the graph view draws. A
   block from a shared library is copied into the scenario's macro files on first
   use, since expansion reads nothing outside the scenario.
-- **Macro metadata still needed**, each additive to `pkg/tomlmacro`: reference kinds
+- **Macro metadata still needed**, each additive to `lixenwraith/toml/macro`: reference kinds
   (`state`, `region`, `var`, `event`, `status`) the expander checks as strings, so
   the editor offers pickers and draws an edge per `state` argument; a `point` kind
   the map canvas shows as a draggable marker for pylons, towers and spawns;
@@ -222,6 +222,23 @@ time knows an editor made it.
 In order: reference kinds, order and provenance; a read-only graph of a scenario's
 regions, states and blocks; placing and editing blocks into editor-owned files; the
 map layer and point markers; root `[[expand]]` blocks and library copies.
+
+### Write a macro as another with arguments fixed
+
+- Priority: P3
+- Affected files: `lixenwraith/toml/macro`, `wad/scenario/base/vanguard/macros.toml`,
+  `wad/scenario/base/td/td_macros.toml`
+- Design: [TOML macros](toml-macros.md)
+
+Eight of the shipped scenarios' macros are one invocation of another: vanguard's
+four ranks over `Raider`, and td's `Tower`, `QuadrantTower` and `Pylon` over
+`SpawnAwait` and `FlankGateway` over `Gateway`. Each declares again the parameters
+it passes through and forwards them one by one, 34 arguments written
+`x = "${x}"`, so a parameter added to `Raider` is four more edits. The expander
+could take a definition that names its base and the arguments it fixes, every
+other parameter of the base staying one with its type and default. The form is
+the TOML module's to add, and the audio bank waits on the same one for nine of
+its nineteen macros.
 
 ### Add the cheap vim keys, and let the tutor override the game's
 
