@@ -570,8 +570,8 @@ func (w *World) copyComponentsIn(c componentCopies) {
 
 // parseEvents derives the registry from the event package's EventType const block.
 // A doc comment annotation names the payload: "// EventFoo (FooPayload) ...". One
-// containing '[' or '.' (BatchPayload[T], core.Entity) is a pooled or scalar
-// payload that is not TOML-decodable, and registers as nil.
+// containing '[' or '.' (BatchPayload[T], core.Entity, component.KrakenBurn) is a
+// pooled payload or another package's type, not TOML-decodable, and registers as nil.
 func parseEvents(dir string) EventDefs {
 	files, names := parsePackage(dir)
 
@@ -727,7 +727,7 @@ func collectEvents(block *ast.GenDecl, structs map[string]bool) EventDefs {
 			case payload == "":
 				defs = append(defs, EventDef{Name: name, Class: class})
 			case strings.ContainsAny(payload, "[."):
-				// Pooled generic or scalar: opaque to TOML, registers as nil
+				// Pooled generic or another package's type: opaque to TOML, registers as nil
 				defs = append(defs, EventDef{Name: name, Class: class})
 			case !structs[payload]:
 				errs = append(errs, fmt.Sprintf("%s: annotated payload %s is not a struct in package event", name, payload))

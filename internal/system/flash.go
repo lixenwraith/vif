@@ -8,9 +8,14 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// FlashSystem manages the lifecycle of visual flash effects
+// FlashSystem holds the cells flashing away. The cells a tick sends flash together
+// as one batch, which ends at its deadline.
 type FlashSystem struct {
 	world *engine.World
+
+	ended []core.Entity
+	// spare is the storage of the batches that ended, which the next ones fill
+	spare [][]component.EffectCell
 
 	toggle
 }
@@ -51,39 +56,60 @@ func (s *FlashSystem) HandleEvent(ev event.GameEvent) {
 				s.enabled = payload.Enabled
 			}
 		}
+		return
 	}
 
 	if !s.enabled {
 		return
 	}
 
-	if ev.Type == event.EventFlashSpawnOneRequest {
+	switch ev.Type {
+	case event.EventFlashSpawnOneRequest:
 		if payload, ok := ev.Payload.(*event.FlashRequestPayload); ok {
-			s.spawnDestructionFlash(payload.X, payload.Y, payload.Char)
+			s.flash(component.EffectCell{X: payload.X, Y: payload.Y, Rune: payload.Char})
 		}
-	}
 
-	if ev.Type == event.EventFlashSpawnBatchRequest {
-		if batch, ok := ev.Payload.(*event.BatchPayload[event.FlashSpawnEntry]); ok {
-			for i := range batch.Entries {
-				e := &batch.Entries[i]
-				s.spawnDestructionFlash(e.X, e.Y, e.Char)
-			}
-			event.FlashBatchPool.Release(batch)
+	case event.EventFlashSpawnBatchRequest:
+		if batch, ok := ev.Payload.(*event.BatchPayload[component.EffectCell]); ok {
+			s.flash(batch.Entries...)
+			event.EffectBatchPool.Release(batch)
 		}
 	}
 }
 
-// Update is empty: a flash's lifetime timer ends it
-func (s *FlashSystem) Update() {}
+// Update ends the batches whose flash has run, a disabled system's too
+func (s *FlashSystem) Update() {
+	s.ended = s.ended[:0]
+	s.world.Components.Flash.Each(func(e core.Entity, f *component.FlashComponent) bool {
+		if !timerRunning(s.world, e, component.TimerDeadline) {
+			s.spare = append(s.spare, f.Cells[:0])
+			s.ended = append(s.ended, e)
+		}
+		return true
+	})
+	s.world.DestroyEntitiesBatch(s.ended)
+}
 
-// spawnDestructionFlash creates a flash effect at the given position
-func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
-	entity := s.world.CreateEntity(core.DomainPlayer)
-	s.world.Components.Flash.SetComponent(entity, component.FlashComponent{Rune: char})
-	armTimer(s.world, entity, component.TimerLifetime, parameter.DestructionFlashDuration)
-	s.world.Positions.SetPosition(entity,
-		component.PositionComponent{X: x, Y: y})
-	s.world.Components.Protection.SetComponent(entity,
-		component.ProtectionComponent{Mask: component.ProtectFromParticle})
+// flash adds cells to the batch this tick opened, opening it with the first of them
+func (s *FlashSystem) flash(cells ...component.EffectCell) {
+	flashes, timers := s.world.Components.Flash, s.world.Components.Timer
+	for _, e := range flashes.Entities() {
+		// A deadline no tick has aged yet is this tick's
+		timer, ok := timers.GetPtr(e)
+		if !ok || timer.Slots[component.TimerDeadline].Remaining != parameter.DestructionFlashDuration {
+			continue
+		}
+		if f, ok := flashes.GetPtr(e); ok {
+			f.Cells = append(f.Cells, cells...)
+			return
+		}
+	}
+
+	var kept []component.EffectCell
+	if n := len(s.spare); n > 0 {
+		kept, s.spare = s.spare[n-1], s.spare[:n-1]
+	}
+	e := s.world.CreateEntity(core.DomainPlayer)
+	flashes.SetComponent(e, component.FlashComponent{Cells: append(kept, cells...)})
+	armTimer(s.world, e, component.TimerDeadline, parameter.DestructionFlashDuration)
 }

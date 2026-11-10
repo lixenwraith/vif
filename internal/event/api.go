@@ -5,25 +5,21 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 )
 
-// EmitDeath requests destruction of one or more entities with an optional effect.
-// The variadic arguments do not escape; the pooled payload owns a copy after return.
-//
-// The record carries the domain of the entities dying rather than the caller's
-// ambient domain, which is what lets EmitDeath bypass World.PushEvent and still
-// stamp correctly. A shared system claiming cells kills occupants of both domains
-// (D-12), so mixed input is split into one batch per domain: a shared death record
-// never names a player entity.
-func EmitDeath(q *EventQueue, effect EventType, entities ...core.Entity) {
+// EmitDeath asks for the entities' destruction, leaving effect where each stood.
+// The arguments do not escape: the pooled payload owns a copy. A record carries
+// the domain of its entities, not the caller's, and mixed input is split into one
+// batch a domain (D-12), so a shared death record never names a player entity.
+func EmitDeath(q *EventQueue, effect component.DeathEffect, entities ...core.Entity) {
 	emitDeath(q, effect, component.ParticleNone, entities...)
 }
 
-// EmitParticleDeath requests destruction followed by a particle effect. The
-// behavior travels beside the unified particle event discriminator.
+// EmitParticleDeath asks for the entities' destruction, each glyph becoming a
+// particle of the behavior
 func EmitParticleDeath(q *EventQueue, behavior component.ParticleBehavior, entities ...core.Entity) {
-	emitDeath(q, EventParticleSpawnOne, behavior, entities...)
+	emitDeath(q, component.DeathParticle, behavior, entities...)
 }
 
-func emitDeath(q *EventQueue, effect EventType, behavior component.ParticleBehavior, entities ...core.Entity) {
+func emitDeath(q *EventQueue, effect component.DeathEffect, behavior component.ParticleBehavior, entities ...core.Entity) {
 	if len(entities) == 0 {
 		return
 	}
@@ -42,7 +38,7 @@ func emitDeath(q *EventQueue, effect EventType, behavior component.ParticleBehav
 
 // pushDeathBatch emits one domain-pure batch, selecting members when the caller
 // mixed domains. An empty selection returns its payload rather than pushing.
-func pushDeathBatch(q *EventQueue, effect EventType, behavior component.ParticleBehavior, domain core.Domain, entities []core.Entity, filter bool) {
+func pushDeathBatch(q *EventQueue, effect component.DeathEffect, behavior component.ParticleBehavior, domain core.Domain, entities []core.Entity, filter bool) {
 	p := AcquireDeathRequest(effect)
 	p.Behavior = behavior
 	if filter {
@@ -65,19 +61,3 @@ func pushDeathBatch(q *EventQueue, effect EventType, behavior component.Particle
 		Domain:  domain,
 	})
 }
-
-// Pattern 1: Individual Kill (e.g., TypingSystem, NuggetSystem)
-// event.EmitDeath(s.res.Event.Queue, 0, entity)
-//
-// Pattern 2: Individual Kill with Flash Effect (e.g., Typing correct char)
-// event.EmitDeath(s.res.Event.Queue, event.EventFlashSpawnOneRequest, entity)
-//
-// Pattern 3: Batch Kill (e.g., a tracer's red glyphs, particle row)
-// 'toDestroy' is prepared []core.Entity slice
-// event.EmitDeath(s.res.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy...)
-//
-// Pattern 4: Particle Effect
-// event.EmitParticleDeath(s.res.Event.Queue, component.ParticleBlossom, toDestroy...)
-//
-// Pattern 5: Silent Batch (e.g., Range delete)
-// event.EmitDeath(s.res.Event.Queue, 0, toDestroy...)

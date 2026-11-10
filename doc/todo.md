@@ -1205,6 +1205,63 @@ drains energy, so a mounted shield guards nothing yet.
 
 ## Species
 
+### Play test the death visuals
+
+- Priority: P1
+- Affected files: `internal/parameter/effect.go`, `internal/parameter/kraken.go`,
+  `internal/parameter/visual/spirit.go`, `internal/parameter/visual/kraken.go`,
+  `internal/system/composite.go` (`bodyOf`, `leaveBody`, `burstShell`),
+  `internal/system/transient.go` (`updateKrakenBurns`)
+- Design: [ECS §7](ecs-and-events.md#death-effects)
+
+A species' end leaves an effect, and none has been judged in play. What to look at,
+each with the smallest change that would answer it:
+
+- A correction inside an effect. An effect is its instance's alone and outlives
+  what raised it, so a species a correction brings back stands again while its
+  scatter, flash or fade runs on under it, for half a second at most. Only a
+  Kraken's burn ends as its Kraken returns (`KrakenBurn.Entity`). Play a fight over
+  the divergence harness's four link shapes. If a body back over its own effect
+  reads badly, a body's cells need a batch of their own naming the dead header,
+  which the effect's system drops once that entity stands again, as
+  `updateKrakenBurns` does.
+- The timings, each a constant: a scatter's 350 ms and reach
+  (`SpiritScatterDuration`, `SpiritScatter*`), the Kraken's burn of a second and
+  how hard its legs thrash, draw in, crinkle and swing (`KrakenBurn*`), and how
+  far apart a burst's shards stand (`ShellShardSpacing`).
+- A chipped cell fades in the color its kind goes critical in, not the color it
+  showed, so a healthy cell an attack takes whole turns that color as it goes.
+  `bodyOf` reads one ground for the body, because a member's own shade is its
+  renderer's (hit points, gradient, dither); reading it would take that shading as
+  a shared read, as a Kraken's shape is.
+- A tower's burst is in its type's glow color whether or not the tower was active.
+- A glyph fading alone, a flash and a scattered part dim toward black and not
+  toward what is under them, so their last frames are darker than the background.
+  Mixing toward `RenderBuffer.BackgroundAt` would end them in it.
+- A storm circle's end was offered a collapse instead of the burst: the dying
+  circle shrinking to a bright core, about 40 lines in the storm renderer, with
+  nothing for a pylon or a tower. The burst was chosen as one mechanism for all
+  three. The collapse is worth building if a circle's burst reads too much like a
+  pylon's.
+- A cell still flashing or fading no longer holds off what is placed there. Each
+  was an entity standing in its cell, which a glyph line's and a nugget's
+  placement refuses (`PositionBatch.Commit`), so nothing landed on a dead glyph
+  for the half second of its flash; the cells a batch holds stand nowhere. A line
+  can now land on one, most often after a clear of the whole field, and shows the
+  dead glyph's letter until the flash ends, as text drifting through a flash
+  always did. No effect then decides where anything spawns. Two other forms were
+  not built:
+  - Holding the cells as before: a count a cell that the flash and fadeout
+    systems keep and placement reads, built again after a world copy and a
+    resize. A body that now flashes or fades (an eye, an expired swarm, a chipped
+    cell) would hold its cells too, where a dead body held none. Worth building
+    if lines landing in a field still flashing refill it too fast.
+  - A glyph standing in a cell drawn over the effect there: one read a cell in
+    the flash and fadeout renderers, as a scatter's part makes. The letter shown
+    is then always the live one, but a body's flash goes unseen where text
+    stands and a ploughed trail's flashes go out as text drifts under them.
+    Worth building if the letter under a flash misleads typing.
+
 ### Show a species' machine state in a debug overlay
 
 - Priority: P3

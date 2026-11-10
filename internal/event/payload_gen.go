@@ -169,7 +169,6 @@ var payloadNew = [EventTypeCount]func() any{
 	EventWallMaskChangeRequest:           func() any { return new(WallMaskChangeRequestPayload) },
 	EventWallSpawned:                     func() any { return new(WallSpawnedPayload) },
 	EventWallDespawned:                   func() any { return new(WallDespawnedPayload) },
-	EventFadeoutSpawnOne:                 func() any { return new(FadeoutSpawnPayload) },
 	EventPylonSpawnRequest:               func() any { return new(PylonSpawnRequestPayload) },
 	EventSnakeSpawnRequest:               func() any { return new(SnakeSpawnRequestPayload) },
 	EventTargetGroupUpdate:               func() any { return new(TargetGroupUpdatePayload) },
@@ -343,7 +342,6 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventWallMaskChangeRequest:           &codecWallMaskChangeRequestPayload,
 	EventWallSpawned:                     &codecWallSpawnedPayload,
 	EventWallDespawned:                   &codecWallDespawnedPayload,
-	EventFadeoutSpawnOne:                 &codecFadeoutSpawnPayload,
 	EventPylonSpawnRequest:               &codecPylonSpawnRequestPayload,
 	EventSnakeSpawnRequest:               &codecSnakeSpawnRequestPayload,
 	EventTargetGroupUpdate:               &codecTargetGroupUpdatePayload,
@@ -1234,7 +1232,7 @@ func (p *DeathRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 
 var codecDeathRequestPayload = structCodec{size: unsafe.Sizeof(DeathRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(DeathRequestPayload{}.Entities), kind: kindSlice, elem: &field{kind: kindUint, size: unsafe.Sizeof(core.Entity(0))}, stride: unsafe.Sizeof(core.Entity(0)), make: func(p unsafe.Pointer, n int) { *(*[]core.Entity)(p) = make([]core.Entity, n) }},
-	{off: unsafe.Offsetof(DeathRequestPayload{}.EffectEvent), kind: kindInt, size: unsafe.Sizeof(EventType(0))},
+	{off: unsafe.Offsetof(DeathRequestPayload{}.Effect), kind: kindUint, size: unsafe.Sizeof(component.DeathEffect(0))},
 	{off: unsafe.Offsetof(DeathRequestPayload{}.Behavior), kind: kindUint, size: unsafe.Sizeof(component.ParticleBehavior(0))},
 }}
 
@@ -1267,7 +1265,7 @@ func (p *CompositeDestroyRequestPayload) codec() (*structCodec, unsafe.Pointer) 
 
 var codecCompositeDestroyRequestPayload = structCodec{size: unsafe.Sizeof(CompositeDestroyRequestPayload{}), fields: []field{
 	{off: unsafe.Offsetof(CompositeDestroyRequestPayload{}.HeaderEntity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
-	{off: unsafe.Offsetof(CompositeDestroyRequestPayload{}.Effect), kind: kindInt, size: unsafe.Sizeof(EventType(0))},
+	{off: unsafe.Offsetof(CompositeDestroyRequestPayload{}.Effect), kind: kindUint, size: unsafe.Sizeof(component.DeathEffect(0))},
 }}
 
 func (p *CursorSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {
@@ -1941,18 +1939,6 @@ var codecWallDespawnedPayload = structCodec{size: unsafe.Sizeof(WallDespawnedPay
 	{off: unsafe.Offsetof(WallDespawnedPayload{}.Width), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(WallDespawnedPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(WallDespawnedPayload{}.Count), kind: kindInt, size: unsafe.Sizeof(int(0))},
-}}
-
-func (p *FadeoutSpawnPayload) codec() (*structCodec, unsafe.Pointer) {
-	return &codecFadeoutSpawnPayload, unsafe.Pointer(p)
-}
-
-var codecFadeoutSpawnPayload = structCodec{size: unsafe.Sizeof(FadeoutSpawnPayload{}), fields: []field{
-	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
-	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.FgColor), kind: kindStruct, sub: &codecColorRGB},
-	{off: unsafe.Offsetof(FadeoutSpawnPayload{}.BgColor), kind: kindStruct, sub: &codecColorRGB},
 }}
 
 func (p *PylonSpawnRequestPayload) codec() (*structCodec, unsafe.Pointer) {

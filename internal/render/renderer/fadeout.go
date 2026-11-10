@@ -10,7 +10,7 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// FadeoutRenderer draws fadeout effects for wall destruction
+// FadeoutRenderer draws the cells fading out
 type FadeoutRenderer struct {
 	gameCtx *engine.GameContext
 }
@@ -21,45 +21,39 @@ func NewFadeoutRenderer(gameCtx *engine.GameContext) *FadeoutRenderer {
 	}
 }
 
+// Render draws each batch's cells in their own colors, fading as one
 func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	fadeouts := r.gameCtx.World.Components.Fadeout
+	world := r.gameCtx.World
+	fadeouts := world.Components.Fadeout
 	if fadeouts.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	timers := r.gameCtx.World.Components.Timer
-	fadeouts.Each(func(fadeoutEntity core.Entity, fadeoutComp *component.FadeoutComponent) bool {
-		timer, ok := timers.GetPtr(fadeoutEntity)
-		if !ok || timer.Slots[component.TimerLifetime].Remaining <= 0 {
-			return true
-		}
-
-		posComp, ok := r.gameCtx.World.Positions.GetPosition(fadeoutEntity)
+	fadeouts.Each(func(e core.Entity, fadeout *component.FadeoutComponent) bool {
+		progress, ok := deadlineProgress(ctx, world, e)
 		if !ok {
 			return true
 		}
-
-		// Transform map coords to screen coords with visibility check
-		screenX, screenY, visible := ctx.MapToScreen(posComp.X, posComp.Y)
-		if !visible {
-			return true
-		}
-
-		// Opacity fades from 1.0 to 0.0 over duration
-		opacity := 1 - timer.Progress(component.TimerLifetime)
-
-		// Scale colors by opacity
-		scaledBg := color.Scale(fadeoutComp.BgColor, opacity)
-
-		if fadeoutComp.Char != 0 {
-			// Fg + Bg fadeout
-			scaledFg := color.Scale(fadeoutComp.FgColor, opacity)
-			buf.Set(screenX, screenY, fadeoutComp.Char, scaledFg, scaledBg, render.BlendAlpha, opacity, terminal.AttrNone)
-		} else {
-			// Bg-only fadeout
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledBg, render.BlendAlpha, opacity, terminal.AttrNone)
+		opacity := 1 - progress
+		for i := range fadeout.Cells {
+			cell := &fadeout.Cells[i]
+			screenX, screenY, visible := ctx.MapToScreen(cell.X, cell.Y)
+			if !visible {
+				continue
+			}
+			fg, bg := color.Scale(cell.Fg, opacity), color.Scale(cell.Bg, opacity)
+			switch {
+			case !cell.Solid:
+				// A glyph alone: additive on the foreground, which keeps the cell's background
+				buf.Set(screenX, screenY, cell.Rune, fg, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
+			case cell.Rune != 0:
+				buf.Set(screenX, screenY, cell.Rune, fg, bg, render.BlendAlpha, opacity, terminal.AttrNone)
+			default:
+				// A ground alone: over the background, which keeps the cell's glyph
+				buf.Set(screenX, screenY, 0, visual.RgbBlack, bg, render.BlendAlphaBg, opacity, terminal.AttrNone)
+			}
 		}
 		return true
 	})

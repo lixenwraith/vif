@@ -24,7 +24,9 @@ type snakeBodyColorEntry struct {
 // snakeRenderFunc defines the render strategy signature
 type snakeRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer)
 
-// SnakeRenderer draws snake entities with body gradients and shield glow
+// SnakeRenderer draws snake entities with body gradients and shield glow. A body
+// member with no hit points left draws, at its dimmest, until its owner destroys
+// it, where its fade takes the cell over.
 type SnakeRenderer struct {
 	gameCtx *engine.GameContext
 
@@ -217,7 +219,7 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 			}
 
 			combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(memberEntity)
-			if !ok || combatComp.HitPoints <= 0 {
+			if !ok {
 				continue
 			}
 
@@ -244,10 +246,7 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 			if snakeMemberComp, ok := r.gameCtx.World.Components.SnakeMember.GetPtr(memberEntity); ok && snakeMemberComp.MaxHitPoints > 0 {
 				maxHP = snakeMemberComp.MaxHitPoints
 			}
-			healthRatio := float64(combatComp.HitPoints) / float64(maxHP)
-			if healthRatio > 1.0 {
-				healthRatio = 1.0
-			}
+			healthRatio := min(max(float64(combatComp.HitPoints)/float64(maxHP), 0), 1)
 			c := color.Scale(baseColor, 0.3+0.7*healthRatio)
 
 			// Hit flash
@@ -371,11 +370,6 @@ func (r *SnakeRenderer) renderBody256Color(ctx render.RenderContext, buf *render
 				continue
 			}
 
-			combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(memberEntity)
-			if !ok || combatComp.HitPoints <= 0 {
-				continue
-			}
-
 			pos, ok := r.gameCtx.World.Positions.GetPosition(memberEntity)
 			if !ok {
 				continue
@@ -412,8 +406,7 @@ func (r *SnakeRenderer) renderHead256Color(ctx render.RenderContext, buf *render
 			continue
 		}
 
-		// Solid in the foreground, which takes bright colors where backgrounds cannot
-		buf.SetFgOnly(screenX, screenY, '█', color.RGB{R: visual.Snake256Head}, terminal.AttrFg256)
+		buf.SetFgOnly(screenX, screenY, visual.SnakeHeadChar256, color.RGB{R: visual.Snake256Head}, terminal.AttrFg256)
 	}
 }
 

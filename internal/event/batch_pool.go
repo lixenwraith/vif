@@ -1,6 +1,10 @@
 package event
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/lixenwraith/vif/internal/component"
+)
 
 // BatchPayload is the canonical pooled payload for batch effect events
 type BatchPayload[T any] struct {
@@ -44,7 +48,7 @@ func (p *BatchPool[T]) Release(bp *BatchPayload[T]) {
 // --- Pool instances ---
 
 var (
-	FlashBatchPool    = NewBatchPool[FlashSpawnEntry](512)
+	// EffectBatchPool recycles the cell batches of the flash and the fadeout
+	EffectBatchPool   = NewBatchPool[component.EffectCell](512)
 	ParticleBatchPool = NewBatchPool[ParticleSpawnEntry](2048)
-	FadeoutBatchPool  = NewBatchPool[FadeoutSpawnEntry](512)
 )

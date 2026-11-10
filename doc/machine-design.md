@@ -233,8 +233,9 @@ A host is the species system that steps a graph. Its contract:
   without the runtime importing `status`. Nothing reads `Graph.Flags` or
   `Graph.States` yet ([todo](todo.md#show-a-species-machine-state-in-a-debug-overlay)).
 - **Footprint effects.** A host that clears the cells under a footprint names the
-  effect each victim leaves. A move or a landing leaves
-  `EventFlashSpawnOneRequest`, each dead glyph's rune drawn for
+  effect each victim leaves, a `component.DeathEffect`
+  ([ECS and events §7](ecs-and-events.md#death-effects)). A move or a landing
+  leaves `DeathFlash`, each dead glyph's rune drawn for
   `DestructionFlashDuration` in the particle layer under the species, so the body
   covers it: the quasar's and the storm circles' moves, a program's `Teleport`,
   and the gold every composite breaks (`breakGoldUnder`). A spawn clears its
@@ -382,8 +383,8 @@ its edges, then what its host does around the step.
 A deferred spawn rides the entrance that shows it, so the spawn, the entrance's
 timer and its visual end on one tick. A spawn out of nothing rides a
 materialize, `MaterializeComponent.Species` naming the species it carries; a
-drain pair's swarm rides the spirits its drains fly in, the first's
-`SpiritComponent.Species` naming it. As the carrier ends, its system sends
+drain pair's swarm rides the spirits its drains fly in, the first a flight of its
+own whose `SpiritComponent.Species` names it. As the carrier ends, its system sends
 `EventSpeciesLandRequest` with the species and its header cell, which the
 species' own system answers as its spawn request: Shared for a Shared carrier,
 which every instance ran and lands alike, and stamped player for a personal one,
@@ -406,8 +407,8 @@ the style's fill, hold and recede over.
   raises on every instance, takes: each instance consumes them alike, unrewarded,
   and places the target at their centroid. The sources fly in as spirits, a
   composite's from its header, the first carrying the target, which lands on the
-  tick the spirits draw their arrival frame, its deadline running the half-second
-  flight; a request asking for the materialize (`FuseEffectMaterialize`), or one
+  tick the flights end, their deadline running the half-second flight; a request
+  asking for the materialize (`FuseEffectMaterialize`), or one
   with no source, plays a materialize carrying it instead, in its style. A fusion
   taking composites has a Shared carrier, so every instance lands its own copy; one
   of drains alone is the elected cursor's instance's, and its landing crosses. The

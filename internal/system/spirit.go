@@ -1,21 +1,31 @@
 package system
 
 import (
+	"slices"
+	"time"
+
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// SpiritSystem manages converging visual effect entities
-// Spirits travel from start to target position over their lifetime timer, which
-// ends them after the arrival frame; EventSpiritDespawn provides safety cleanup.
-// A spirit naming a species lands it as it arrives, so the spawn rides its spirit.
-// Stamped: spirits are created in the requesting event's domain (D-7)
+// SpiritSystem flies glyphs as light. The parts a tick sends travel as one flight,
+// which ends at its deadline: converging ones spiral in to their targets, where a
+// flight naming a species lands it, so the spawn rides its spirit, and scattered
+// ones are a body thrown out from where it stood.
+// Stamped: a converging flight is created in the requesting event's domain (D-7)
 type SpiritSystem struct {
 	world *engine.World
+
+	ended []core.Entity
+	// spare is the storage of the flights that ended, which the next ones fill
+	spare [][]component.SpiritPart
+	// rng throws a scattered body's parts, reseeded for each body
+	rng vmath.FastRand
 
 	toggle
 }
@@ -43,62 +53,67 @@ func (s *SpiritSystem) Priority() int {
 func (s *SpiritSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSpiritSpawnRequest,
+		event.EventSpiritScatterRequest,
 		event.EventSpiritDespawnRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
 
 func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
-
-	if ev.Type == event.EventMetaSystemCommandRequest {
-		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
-			if payload.SystemName == s.Name() {
-				s.enabled = payload.Enabled
-			}
-		}
-	}
-
-	if !s.enabled {
-		return
-	}
-
 	switch ev.Type {
+	case event.EventMetaSystemCommandRequest:
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok && payload.SystemName == s.Name() {
+			s.enabled = payload.Enabled
+		}
+
 	case event.EventSpiritSpawnRequest:
-		if payload, ok := ev.Payload.(*event.SpiritSpawnRequestPayload); ok {
-			s.spawnSpirit(payload, ev.Domain)
+		if payload, ok := ev.Payload.(*event.SpiritSpawnRequestPayload); ok && s.enabled {
+			s.converge(payload, ev.Domain)
+		}
+
+	case event.EventSpiritScatterRequest:
+		if batch, ok := ev.Payload.(*event.BatchPayload[component.EffectCell]); ok {
+			if s.enabled {
+				s.scatter(batch.Entries)
+			}
+			event.EffectBatchPool.Release(batch)
 		}
 
 	case event.EventSpiritDespawnRequest:
-		s.destroyAllSpirits()
+		if s.enabled {
+			// Batch destruction mutates the live spirit slice, so detach it first
+			s.world.DestroyEntitiesBatch(s.world.Components.Spirit.GetAllEntities())
+		}
 	}
 }
 
-// Update lands the species each spirit naming one carries, the tick its deadline
-// ends its flight; its lifetime timer drives and ends the flight's frames
+// Update ends the flights whose deadline has run, landing the species each one
+// carried; a disabled system's end and land nothing
 func (s *SpiritSystem) Update() {
-	if !s.enabled {
-		return
-	}
-
 	spirits := s.world.Components.Spirit
-	if spirits.CountEntities() == 0 {
-		return
-	}
+	s.ended = s.ended[:0]
 	for _, e := range spirits.Entities() {
-		spirit, ok := spirits.GetPtr(e)
-		if !ok || spirit.Species == component.SpeciesNone {
-			continue
+		if !timerRunning(s.world, e, component.TimerDeadline) {
+			s.ended = append(s.ended, e)
 		}
-		if timer, ok := s.world.Components.Timer.GetPtr(e); !ok || !timer.Expired(component.TimerDeadline) {
-			continue
-		}
-		s.land(e.Domain(), &event.SpeciesLandRequestPayload{Species: spirit.Species, X: spirit.LandX, Y: spirit.LandY})
-		// Landed: the arrival frame still draws, and nothing lands twice
-		spirit.Species = component.SpeciesNone
 	}
+	// Store order may differ between instances after a correction (D-8); the
+	// landings must not carry that difference into spawn order
+	slices.Sort(s.ended)
+	for _, e := range s.ended {
+		spirit, ok := spirits.GetPtr(e)
+		if !ok {
+			continue
+		}
+		if s.enabled && spirit.Species != component.SpeciesNone {
+			s.land(e.Domain(), &event.SpeciesLandRequestPayload{Species: spirit.Species, X: spirit.LandX, Y: spirit.LandY})
+		}
+		s.spare = append(s.spare, spirit.Parts[:0])
+	}
+	s.world.DestroyEntitiesBatch(s.ended)
 }
 
-// land asks for the species a spirit carried: a Shared one flew on every instance,
+// land asks for the species a flight carried: a Shared one flew on every instance,
 // each landing its own copy, and a player one flew here alone, so its landing is
 // the D-3 artifact that crosses
 func (s *SpiritSystem) land(domain core.Domain, p *event.SpeciesLandRequestPayload) {
@@ -109,48 +124,92 @@ func (s *SpiritSystem) land(domain core.Domain, p *event.SpeciesLandRequestPaylo
 	s.world.PushCrossing(event.EventSpeciesLandRequest, p)
 }
 
-// spawnSpirit creates spirit entities and their components in the requesting domain, without position store registration (vfx only, no world interaction)
-func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload, domain core.Domain) {
-	entity := s.world.CreateEntity(domain)
+// converge flies one part from its start cell to its target, every part one time
+// so they arrive together
+func (s *SpiritSystem) converge(p *event.SpiritSpawnRequestPayload, domain core.Domain) {
+	part := component.SpiritPart{Rune: p.Char}
+	part.FromX, part.FromY = (vmath.Point{X: p.StartX, Y: p.StartY}).Center()
+	part.ToX, part.ToY = (vmath.Point{X: p.TargetX, Y: p.TargetY}).Center()
 
-	// Calculate spin: 1.5 rotations in radians.
-	// Alternating direction based on position parity to create chaotic implosion
-	spinMag := 1.5 * vmath.TwoPi
-	if (p.StartX^p.StartY)&1 != 0 {
-		spinMag = -spinMag
+	flight := s.flight(component.SpiritComponent{
+		Color:   p.BaseColor,
+		Species: p.Species,
+		LandX:   p.LandX,
+		LandY:   p.LandY,
+	}, domain, parameter.SpiritAnimationDuration)
+	flight.Parts = append(flight.Parts, part)
+}
+
+// scatter throws a body's glyphs out from its middle on this tick's scatter flight:
+// each away from the middle, turned and carried on by draws of its own
+func (s *SpiritSystem) scatter(cells []component.EffectCell) {
+	if len(cells) == 0 {
+		return
 	}
+	left, top, right, bottom := cells[0].X, cells[0].Y, cells[0].X, cells[0].Y
+	for i := range cells {
+		left, right = min(left, cells[i].X), max(right, cells[i].X)
+		top, bottom = min(top, cells[i].Y), max(bottom, cells[i].Y)
+	}
+	// The middle and the reach are measured with heights in the units of a width,
+	// so a body is thrown as far up as across on the screen
+	aspect := s.world.Resources.Config.CellAspect
+	midX, midY := float64(left+right+1)/2, float64(top+bottom+1)/2
+	reach := visual.SpiritScatterReach +
+		visual.SpiritScatterGrowth*vmath.Magnitude(midX-float64(left), aspect.Circular(midY-float64(top)))
 
-	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectAll ^ component.ProtectFromDeath,
-	})
-
-	startX, startY := (vmath.Point{X: p.StartX, Y: p.StartY}).Center()
-	targetX, targetY := (vmath.Point{X: p.TargetX, Y: p.TargetY}).Center()
-
-	s.world.Components.Spirit.SetComponent(entity, component.SpiritComponent{
-		StartX:    startX,
-		StartY:    startY,
-		TargetX:   targetX,
-		TargetY:   targetY,
-		Spin:      spinMag,
-		Rune:      p.Char,
-		BaseColor: p.BaseColor,
-		Species:   p.Species,
-		LandX:     p.LandX,
-		LandY:     p.LandY,
-	})
-	// One flight time for every spirit so they arrive together; Lerp handles
-	// distance. The lifetime holds one tick past arrival so the arrival frame draws
-	// before the tick that expires it settles the death batch.
-	armTimer(s.world, entity, component.TimerLifetime, parameter.SpiritAnimationDuration+s.world.TickInterval())
-	// The deadline ends the flight on the arrival frame's tick, which lands the species
-	if p.Species != component.SpeciesNone {
-		armTimer(s.world, entity, component.TimerDeadline, parameter.SpiritAnimationDuration)
+	s.rng.Reseed(vmath.MixChain(uint64(left), uint64(top), s.world.Resources.Game.State.GetGameTicks()))
+	flight := s.flight(component.SpiritComponent{Pattern: component.SpiritScatter}, core.DomainPlayer, parameter.SpiritScatterDuration)
+	for i := range cells {
+		cell := &cells[i]
+		if cell.Rune == 0 {
+			continue
+		}
+		fromX, fromY := (vmath.Point{X: cell.X, Y: cell.Y}).Center()
+		dirX, dirY := vmath.Normalize2D(fromX-midX, aspect.Circular(fromY-midY))
+		turn := visual.SpiritScatterTurn
+		if dirX == 0 && dirY == 0 {
+			// The middle cell has no way out of its own: any way is its way
+			dirX, turn = 1, vmath.TwoPi/2
+		}
+		dirX, dirY = vmath.RotateVector(dirX, dirY, (2*s.rng.Float64()-1)*turn)
+		throw := reach + s.rng.Float64()*visual.SpiritScatterSpread
+		flight.Parts = append(flight.Parts, component.SpiritPart{
+			FromX: fromX,
+			FromY: fromY,
+			ToX:   fromX + dirX*throw,
+			ToY:   fromY + aspect.FromCircular(dirY*throw),
+			Rune:  cell.Rune,
+			Color: cell.Fg,
+		})
 	}
 }
 
-func (s *SpiritSystem) destroyAllSpirits() {
-	// Batch destruction mutates the live spirit slice, so detach it first.
-	entities := s.world.Components.Spirit.GetAllEntities()
-	s.world.DestroyEntitiesBatch(entities)
+// flight is the flight parts like these join: the one this tick opened for their
+// pattern, color and domain, or a new one. A flight naming a species is its own,
+// being the pending spawn a capture carries.
+func (s *SpiritSystem) flight(like component.SpiritComponent, domain core.Domain, d time.Duration) *component.SpiritComponent {
+	spirits, timers := s.world.Components.Spirit, s.world.Components.Timer
+	if like.Species == component.SpeciesNone {
+		for _, e := range spirits.Entities() {
+			spirit, ok := spirits.GetPtr(e)
+			if !ok || e.Domain() != domain || spirit.Pattern != like.Pattern || spirit.Color != like.Color ||
+				spirit.Species != component.SpeciesNone {
+				continue
+			}
+			// A deadline no tick has aged yet is this tick's
+			if timer, ok := timers.GetPtr(e); ok && timer.Slots[component.TimerDeadline].Remaining == d {
+				return spirit
+			}
+		}
+	}
+
+	if n := len(s.spare); n > 0 {
+		like.Parts, s.spare = s.spare[n-1], s.spare[:n-1]
+	}
+	e := s.world.CreateEntity(domain)
+	spirits.SetComponent(e, like)
+	armTimer(s.world, e, component.TimerDeadline, d)
+	spirit, _ := spirits.GetPtr(e)
+	return spirit
 }

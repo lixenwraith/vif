@@ -1,5 +1,11 @@
 package component
 
+import (
+	"slices"
+
+	"github.com/lixenwraith/color"
+)
+
 type SpiritColor int
 
 // Colors
@@ -26,42 +32,40 @@ var SpiritColorNames = [...]string{
 	SpiritWhite:   "white",
 }
 
-type SpiritPattern int
+// SpiritPattern is how a flight's parts travel
+type SpiritPattern uint8
 
 const (
-	SpiritPatternSpiral SpiritPattern = iota // Current behavior
-	SpiritPatternLinear                      // Direct line with fade
-	SpiritPatternWave                        // Sinusoidal oscillation
-	SpiritPatternBounce                      // Damped oscillation toward target
-	SpiritPatternOrbit                       // Partial orbit before converging
+	SpiritConverge SpiritPattern = iota // spiralling in to their targets, trailing light
+	SpiritScatter                       // thrown out from where they stood, fading there
 )
 
-// SpiritComponent represents a converging visual effect entity
-// Positions presence is at StartX/StartY to avoid target saturation
-// Actual render position is calculated via Lerp from Start to Target at the
-// progress of its lifetime timer
+// SpiritPart is one glyph of a flight, travelling between two precise positions in
+// cells. Color is a scattered part's own; a converging one cycles its flight's.
+type SpiritPart struct {
+	FromX, FromY float64
+	ToX, ToY     float64
+	Rune         rune
+	Color        color.RGB
+}
+
+// SpiritComponent is one flight: the parts that set off on one tick and travel as
+// one, timed by the flight's deadline
 type SpiritComponent struct {
-	// Starting precise position in cells (where the spirit spawned)
-	StartX, StartY float64
+	Pattern SpiritPattern
+	// Color is the gradient a converging flight's parts cycle through
+	Color SpiritColor
+	Parts []SpiritPart
 
-	// Target precise position in cells (convergence point)
-	TargetX, TargetY float64
-
-	Pattern   SpiritPattern
-	Amplitude float64 // Wave/bounce magnitude in cells
-	Frequency float64 // Oscillation rate
-
-	// Total rotation angle in radians
-	// Positive = CW, Negative = CCW
-	Spin float64
-
-	// Visual properties
-	Rune       rune
-	BaseColor  SpiritColor
-	BlinkColor SpiritColor
-
-	// Species is the species the spirit's arrival lands, its header on LandX, LandY;
+	// Species is the species the flight's arrival lands, its header on LandX, LandY;
 	// SpeciesNone lands nothing
 	Species      SpeciesType
 	LandX, LandY int
+}
+
+// DetachSnapshot returns a copy whose parts share no storage with this one;
+// SpiritSystem appends to them in place. See HeaderComponent.DetachSnapshot.
+func (s SpiritComponent) DetachSnapshot() SpiritComponent {
+	s.Parts = slices.Clone(s.Parts)
+	return s
 }

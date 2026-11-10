@@ -35,13 +35,12 @@ type EventType int
 // EventType comments generate the registry: EventFoo (FooPayload) [class] description.
 // Keep matching event/payload stems; omit the annotation only for nil payloads.
 // Generic or qualified payload types register nil; authorable fields need TOML tags.
-// Values are contiguous and never serialized. EventNone stays zero for FSM ticks
-// and the no-effect sentinel; regenerate instead of editing registry_gen.go.
+// Values are contiguous and never serialized. EventNone stays zero for FSM ticks;
+// regenerate instead of editing registry_gen.go.
 
 const (
 	// EventNone is the zero value, reserved so that no real event aliases the FSM
-	// tick sentinel (fsm.Transition.Event == 0) or the no-effect sentinel a field
-	// such as a death batch's EffectEvent leaves unset.
+	// tick sentinel (fsm.Transition.Event == 0)
 	EventNone EventType = iota
 
 	// --- Level ---
@@ -286,7 +285,7 @@ const (
 
 	// EventFlashSpawnOneRequest (FlashRequestPayload) [local] signals a request to spawn a destruction flash effect
 	EventFlashSpawnOneRequest
-	// EventFlashSpawnBatchRequest (BatchPayload[FlashSpawnEntry]) [local] signals batch spawn of destruction flash effects
+	// EventFlashSpawnBatchRequest (BatchPayload[component.EffectCell]) [local] flashes a batch of cells away together
 	EventFlashSpawnBatchRequest
 
 	// --- Explosion ---
@@ -413,6 +412,8 @@ const (
 	EventKrakenSpawnFailed
 	// EventKrakenCancelRequest [shared] removes all Kraken composites
 	EventKrakenCancelRequest
+	// EventKrakenBurnRequest (component.KrakenBurn) [local] burns a killed Kraken away from the pose it died in
+	EventKrakenBurnRequest
 
 	// --- Behavior ---
 
@@ -443,9 +444,11 @@ const (
 
 	// --- Spirit ---
 
-	// EventSpiritSpawnRequest (SpiritSpawnRequestPayload) [stamped] signals intent to spawn a spirit entity
+	// EventSpiritSpawnRequest (SpiritSpawnRequestPayload) [stamped] flies a spirit in to its target, landing the species it names
 	EventSpiritSpawnRequest
-	// EventSpiritDespawnRequest [stamped] signals force-clear of all spirit entities
+	// EventSpiritScatterRequest (BatchPayload[component.EffectCell]) [local] throws a body's glyphs out from its middle as fading spirits
+	EventSpiritScatterRequest
+	// EventSpiritDespawnRequest [stamped] signals force-clear of all spirit flights
 	EventSpiritDespawnRequest
 
 	// --- Lightning ---
@@ -546,9 +549,7 @@ const (
 
 	// --- Fadeout ---
 
-	// EventFadeoutSpawnOne (FadeoutSpawnPayload) [local] signals intent to spawn a single fadeout effect
-	EventFadeoutSpawnOne
-	// EventFadeoutSpawnBatch (BatchPayload[FadeoutSpawnEntry]) [local] signals intent to spawn multiple fadeout effects
+	// EventFadeoutSpawnBatch (BatchPayload[component.EffectCell]) [local] fades a batch of cells out together
 	EventFadeoutSpawnBatch
 
 	// --- Pylon ---

@@ -42,6 +42,10 @@ const (
 const (
 	// SpiritAnimationDuration is the time for spirits to converge to target
 	SpiritAnimationDuration = 500 * time.Millisecond
+
+	// SpiritScatterDuration is the time a scattered body's glyphs fly and fade: short,
+	// so the deaths of a busy screen never take it over
+	SpiritScatterDuration = 350 * time.Millisecond
 )
 
 // Explosion Field

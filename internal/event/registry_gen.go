@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 207
+const EventTypeCount = 208
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -151,6 +151,7 @@ func InitRegistry() {
 	RegisterType("EventKrakenSpawnRequest", EventKrakenSpawnRequest)
 	RegisterType("EventKrakenSpawnFailed", EventKrakenSpawnFailed)
 	RegisterType("EventKrakenCancelRequest", EventKrakenCancelRequest)
+	RegisterType("EventKrakenBurnRequest", EventKrakenBurnRequest)
 	RegisterType("EventBehaviorSpawnRequest", EventBehaviorSpawnRequest)
 	RegisterType("EventBehaviorCancelRequest", EventBehaviorCancelRequest)
 	RegisterType("EventWindStart", EventWindStart)
@@ -161,6 +162,7 @@ func InitRegistry() {
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd)
 	RegisterType("EventStrobeRequest", EventStrobeRequest)
 	RegisterType("EventSpiritSpawnRequest", EventSpiritSpawnRequest)
+	RegisterType("EventSpiritScatterRequest", EventSpiritScatterRequest)
 	RegisterType("EventSpiritDespawnRequest", EventSpiritDespawnRequest)
 	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest)
 	RegisterType("EventLightningUpdateRequest", EventLightningUpdateRequest)
@@ -195,7 +197,6 @@ func InitRegistry() {
 	RegisterType("EventWallSpawned", EventWallSpawned)
 	RegisterType("EventWallDespawned", EventWallDespawned)
 	RegisterType("EventWallDespawnAll", EventWallDespawnAll)
-	RegisterType("EventFadeoutSpawnOne", EventFadeoutSpawnOne)
 	RegisterType("EventFadeoutSpawnBatch", EventFadeoutSpawnBatch)
 	RegisterType("EventPylonSpawnRequest", EventPylonSpawnRequest)
 	RegisterType("EventPylonSpawnFailed", EventPylonSpawnFailed)
@@ -364,6 +365,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventKrakenSpawnRequest:              ClassShared,
 	EventKrakenSpawnFailed:               ClassShared,
 	EventKrakenCancelRequest:             ClassShared,
+	EventKrakenBurnRequest:               ClassLocal,
 	EventBehaviorSpawnRequest:            ClassBus,
 	EventBehaviorCancelRequest:           ClassShared,
 	EventWindStart:                       ClassShared,
@@ -374,6 +376,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventGrayoutEnd:                      ClassLocal,
 	EventStrobeRequest:                   ClassLocal,
 	EventSpiritSpawnRequest:              ClassStamped,
+	EventSpiritScatterRequest:            ClassLocal,
 	EventSpiritDespawnRequest:            ClassStamped,
 	EventLightningSpawnRequest:           ClassLocal,
 	EventLightningUpdateRequest:          ClassLocal,
@@ -408,7 +411,6 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventWallSpawned:                     ClassShared,
 	EventWallDespawned:                   ClassShared,
 	EventWallDespawnAll:                  ClassShared,
-	EventFadeoutSpawnOne:                 ClassLocal,
 	EventFadeoutSpawnBatch:               ClassLocal,
 	EventPylonSpawnRequest:               ClassShared,
 	EventPylonSpawnFailed:                ClassShared,

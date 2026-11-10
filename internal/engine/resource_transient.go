@@ -4,16 +4,20 @@ import (
 	"time"
 
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
-// TransientResource holds player-domain spatial explosion presentation.
-// Systems write, renderers read. All fields are render-frame stable.
+// TransientResource holds player-domain spatial presentation: explosion centers
+// and the Krakens burning away. Systems write, renderers read. All fields are
+// render-frame stable.
 type TransientResource struct {
 	// Fixed backing, zero alloc
 	ExplosionBacking [parameter.ExplosionCenterCap]ExplosionCenter
 	ExplosionCount   int
+	BurnBacking      [parameter.KrakenBurnCap]component.KrakenBurn
+	BurnCount        int
 }
 
 // ViewResource holds player-domain screen-space effect state; never replicated.
@@ -80,7 +84,12 @@ func (r *TransientResource) ExplosionCenters() []ExplosionCenter {
 	return r.ExplosionBacking[:r.ExplosionCount]
 }
 
-// Clear drops every explosion center
+// KrakenBurns returns active slice view (no allocation)
+func (r *TransientResource) KrakenBurns() []component.KrakenBurn {
+	return r.BurnBacking[:r.BurnCount]
+}
+
+// Clear drops every explosion center and every burn
 func (r *TransientResource) Clear() {
-	r.ExplosionCount = 0
+	r.ExplosionCount, r.BurnCount = 0, 0
 }

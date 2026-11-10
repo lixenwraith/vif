@@ -49,8 +49,8 @@ func TestEmitParticleDeathCarriesBehavior(t *testing.T) {
 	if ev.Type != EventDeathBatch || ev.Domain != core.DomainPlayer {
 		t.Fatalf("event = type %v domain %s, want EventDeathBatch/player", ev.Type, ev.Domain)
 	}
-	if p.EffectEvent != EventParticleSpawnOne || p.Behavior != component.ParticleBlossom {
-		t.Fatalf("particle death = effect %v behavior %v", p.EffectEvent, p.Behavior)
+	if p.Effect != component.DeathParticle || p.Behavior != component.ParticleBlossom {
+		t.Fatalf("particle death = effect %v behavior %v", p.Effect, p.Behavior)
 	}
 	if len(p.Entities) != 1 || p.Entities[0] != entity {
 		t.Fatalf("entities = %v, want [%v]", p.Entities, entity)
