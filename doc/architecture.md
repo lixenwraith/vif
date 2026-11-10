@@ -57,7 +57,7 @@ The main architectural planes are:
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the presentation's surface. |
 | I/O boundaries | `internal/service`, `internal/content`, `internal/network` over `pkg/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed TCP, TLS or WebSocket sessions with their admission: a participant's key proven at every door, the pass that brings it back, the router's ticket, a passphrase door's Argon2-SCRAM exchange, and the account exchange with the site's identity service ([Auth and session design](auth-session-design.md)). |
 | Supervision and diagnostics | `internal/lifecycle`, `internal/probe`, `internal/vlog`, `internal/status`, `internal/prof` | An allocated session's lifetime and `/health`/`/metrics` endpoint; the log sink, metric registry, flight recorder and profiler. |
-| Reusable algorithms | `pkg/*` | Audio, float64 math/physics, navigation, maze generation, evolution, link pacing, TOML macros, WebSocket framing, and terminal-image conversion. |
+| Reusable algorithms | `pkg/*` | float64 math/physics, the map's spatial index, navigation, maze and cave generation, per-entity state machines, link pacing, framed TCP and WebSocket messages, and a graphical host's window, browser page and glyph drawer. |
 
 See [Package map](package-map.md) for the medium-level dependency view.
 

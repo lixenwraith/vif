@@ -35,7 +35,8 @@ between parsing and `toml.Decode`:
   equal graphs on every peer, and no identity field is added.
 - Errors name the invocation path through every macro involved, for example
   `td_main.toml: states.TdSpawnQ1: macro "QuadrantTower": body.fallback_actions[0]:
-  macro "Retarget": unknown argument "x"`.
+  macro "Retarget": unknown argument "x"`. A key no bare key spells is quoted, and
+  what an error repeats of a file is cut to 32 bytes and its path to 64 steps.
 - An editor reads and writes macros and invocations as ordinary tables with the
   same parser and encoder, and needs to understand expansion only to preview it.
 - The expander lives in the TOML module (`lixenwraith/toml/macro`): it needs only
@@ -109,10 +110,27 @@ length; arguments outside it are shared by every expansion, and `each` outside a
 array is an error.
 
 Bodies may invoke other macros, and arguments may be invocations: arguments are
-expanded where they are written, then bound, then the body is substituted and
-expanded in turn. A macro reached again through its own expansion is an error, as
-is nesting deeper than 32 or producing more than 2^18 values through one set.
-Those bounds exist because a scenario can arrive from a peer.
+expanded where they are written, then bound, then the body is instantiated. A
+default expands where it is used, so one that invokes is written as a `table` or
+`any` parameter's.
+
+A scenario can arrive from a peer, so expansion is bounded and passing a bound is
+an error:
+
+- a macro reached again through its own expansion, and invocations nested deeper
+  than 32;
+- more than 2^18 values written through one set: each value a body writes, a
+  copied argument's or default's among them, so a scenario's files share one
+  budget (td spends 1830, vanguard 6281);
+- a file or a result nested deeper than 1000 levels;
+- a macro of more than 64 parameters.
+
+A body is compiled when its macro is defined and instantiated in one pass, and an
+error's path is built only when one is shown, so an expansion costs what it reads
+and writes. Parsed and expanded, td (28 KB in 8 files) takes 1.09 ms where it took
+2.73 ms, and vanguard (55 KB in 34 files) 2.17 ms where it took 7.7 ms; what the
+bounds are for is the file that took seconds: a 196 KB file of one long key over
+a long array took 6.1 s with no macro in it, and takes 1.5 ms.
 
 ## 5. Where macros live
 

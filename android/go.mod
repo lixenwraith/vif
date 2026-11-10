@@ -15,7 +15,7 @@ require (
 	github.com/lixenwraith/color v0.1.5 // indirect
 	github.com/lixenwraith/genetic v0.1.0 // indirect
 	github.com/lixenwraith/log v0.1.13 // indirect
-	github.com/lixenwraith/toml v0.6.0 // indirect
+	github.com/lixenwraith/toml v0.7.0 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/mobile v0.0.0-20261011034528-197770444867 // indirect
 	golang.org/x/mod v0.42.0 // indirect
