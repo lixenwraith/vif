@@ -1361,6 +1361,23 @@ user root's `audio/` as a rip of a file is ([Rip design
 The smallest close: the stream over a file first, in stapes, measured against
 the offline rip of the same recording.
 
+The live view is to show the rip being made: a scrollable stack with the
+recording's spectrum on top, each stage under it (the planes the models are
+given, the pitches, strikes and drums they hear, the instrument, what the
+decoder keeps and drops, the open bars) and the note lines at the bottom. The
+stream gives the bottom lane alone (`Bars`): its frames sit in a private window,
+the open bars' notes go after each read and the decoder's choices are never
+kept, so the view waits on three reads from the library: the frames heard since
+a frame, the open bars as last decoded, and a read's candidates with what became
+of each. Measured through the trained models on twelve recordings (stapes'
+audit of 9 November): the stream finds 95 in a hundred of the offline rip's
+notes, but reads its bar grid on three recordings only, since tempo, meter and
+phase hold from the first six bars (five read at another tempo, a rubato piano
+take keeps 5 to 38 in a hundred of the offline downbeats, Billie Jean's intro
+sits half a bar off); it costs three times the offline rip, each model run
+three times over where its half-second steps overlap, and its worst block took
+a second of CPU, so it runs off the audio thread.
+
 ### Render a conductor timeline offline
 
 - Priority: P3
