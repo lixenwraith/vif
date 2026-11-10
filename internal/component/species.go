@@ -65,9 +65,9 @@ var SpeciesDomains = [SpeciesCount]core.Domain{
 }
 
 // KillEffects are the visual each code species' kill leaves; an expiry fades the
-// body out, and a cancel leaves nothing. A storm's is each circle's, and a snake's
-// its head's, the body fading behind it. A data species names its own in its
-// prototype.
+// body out, and a cancel leaves nothing. A storm's is each circle's, whose scatter
+// bursts its shell as a pylon's and a tower's do, and a snake's its head's, the
+// body fading behind it. A data species names its own in its prototype.
 var KillEffects = [SpeciesCount]DeathEffect{
 	SpeciesNone:   DeathSilent,
 	SpeciesDrain:  DeathFlash,

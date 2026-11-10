@@ -427,26 +427,18 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 		Y:       towerComp.SpawnY,
 	})
 
+	// Its cells fell one by one; what is left to leave is its shell
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
+		Effect:       component.KillEffects[component.SpeciesTower],
 	})
 }
 
-func (s *TowerSystem) terminateTower(headerEntity core.Entity) {
-	if !s.world.Components.Tower.HasEntity(headerEntity) {
-		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
-			HeaderEntity: headerEntity,
-		})
-		return
-	}
-
-	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
-		HeaderEntity: headerEntity,
-	})
-}
-
+// terminateAll ends every tower for a cancel, which leaves nothing of them
 func (s *TowerSystem) terminateAll() {
 	for _, entity := range s.world.Components.Tower.Entities() {
-		s.terminateTower(entity)
+		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+			HeaderEntity: entity,
+		})
 	}
 }

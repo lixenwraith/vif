@@ -156,8 +156,9 @@ func (s *CompositeSystem) countLiving(header *component.HeaderComponent) int {
 }
 
 // destroyComposite ends a composite: its members die and its head goes. A kind
-// with a body leaves the effect of what it showed, its members dying silently, and
-// another's members leave it one by one, as the death system reads them.
+// with a body leaves the effect of what it showed, a scatter bursting its shell,
+// its members dying silently, and another's members leave it one by one, as the
+// death system reads them.
 func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect component.DeathEffect) {
 	header, ok := s.world.Components.Header.GetPtr(headerEntity)
 	if !ok {
@@ -175,6 +176,9 @@ func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect comp
 	case component.DeathFlash, component.DeathFadeout, component.DeathScatter:
 		if body, ok := s.bodyOf(headerEntity, header); ok {
 			s.leaveBody(effect, header.MemberEntries, &body)
+			if effect == component.DeathScatter {
+				s.burstShell(headerEntity, &body)
+			}
 			effect = component.DeathSilent
 		}
 	}
@@ -221,6 +225,14 @@ type bodyLook struct {
 	tinted  bool
 	ground  bool
 	console bool // a 256-color host shows a console look's pair
+	shell   bodyShell
+}
+
+// bodyShell is the outline an ablative kind's glow stands on, round cells it
+// loses one by one: its radii in cells and the glow's color. No radius is no shell.
+type bodyShell struct {
+	radiusX, radiusY float64
+	color            color.RGB
 }
 
 func swarmGlyph(frame, row, col int) rune    { return visual.SwarmPatternChars[frame][row][col] }
@@ -235,11 +247,13 @@ func snakeHeadGlyph256(_, _, _ int) rune     { return visual.SnakeHeadChar256 }
 func (s *CompositeSystem) bodyOf(headerEntity core.Entity, header *component.HeaderComponent) (b bodyLook, ok bool) {
 	c := &s.world.Components
 	b.console = s.world.Resources.Config.ColorMode == terminal.ColorMode256
-	// ground is an ablative kind's cells, in the color they go critical in
-	ground := func(tc color.RGB, console uint8) (bodyLook, bool) {
-		b.ground, b.color = true, tc
+	// ground is an ablative kind's cells, in the color they go critical in, and its
+	// shell. A console draws no glow: its shell is the color of the cells.
+	ground := func(tc color.RGB, console uint8, shell bodyShell) (bodyLook, bool) {
+		b.ground, b.color, b.shell = true, tc, shell
 		if b.console {
 			b.color = visual.Palette256RGB(console)
+			b.shell.color = b.color
 		}
 		return b, true
 	}
@@ -280,7 +294,7 @@ func (s *CompositeSystem) bodyOf(headerEntity core.Entity, header *component.Hea
 	case component.BehaviorSnake:
 		switch {
 		case c.SnakeBody.HasEntity(headerEntity):
-			return ground(visual.RgbSnakeBodyBright, visual.Snake256Body)
+			return ground(visual.RgbSnakeBodyBright, visual.Snake256Body, bodyShell{})
 		case !c.SnakeHead.HasEntity(headerEntity):
 			return b, false
 		}
@@ -293,17 +307,25 @@ func (s *CompositeSystem) bodyOf(headerEntity core.Entity, header *component.Hea
 		if !ok {
 			return b, false
 		}
-		return ground(visual.StormCircleColors[circle.Index%len(visual.StormCircleColors)],
-			visual.Storm256Bodies[circle.Index%len(visual.Storm256Bodies)])
+		tc := visual.StormCircleColors[circle.Index%len(visual.StormCircleColors)]
+		radiusY := s.world.Resources.Config.CellAspect.Y(parameter.StormCircleRadiusY)
+		return ground(tc, visual.Storm256Bodies[circle.Index%len(visual.Storm256Bodies)],
+			bodyShell{parameter.StormCircleRadiusX, radiusY, tc})
 	case component.BehaviorPylon:
-		return ground(visual.RgbPylonCriticalBright, visual.Pylon256Critical)
+		pylon, ok := c.Pylon.GetPtr(headerEntity)
+		if !ok {
+			return b, false
+		}
+		return ground(visual.RgbPylonCriticalBright, visual.Pylon256Critical,
+			bodyShell{float64(pylon.RadiusX), float64(pylon.RadiusY), visual.RgbPylonGlow})
 	case component.BehaviorTower:
 		tower, ok := c.Tower.GetPtr(headerEntity)
 		if !ok || int(tower.Type) >= len(visual.TowerTypes) {
 			return b, false
 		}
 		colors := &visual.TowerTypes[tower.Type]
-		return ground(colors.CriticalBright, colors.Palette256Critical)
+		return ground(colors.CriticalBright, colors.Palette256Critical,
+			bodyShell{float64(tower.RadiusX), float64(tower.RadiusY), colors.GlowColor})
 	default:
 		return b, false
 	}
@@ -391,6 +413,32 @@ func (s *CompositeSystem) pushCells(eventType event.EventType, cells *event.Batc
 		return
 	}
 	s.world.PushLocal(eventType, cells)
+}
+
+// burstShell throws shards out from a killed body's shell, in the glow's color:
+// an ablative kind has lost its last cell as it dies, and its glow goes with it
+func (s *CompositeSystem) burstShell(headerEntity core.Entity, body *bodyLook) {
+	center, ok := s.world.Positions.GetPosition(headerEntity)
+	shell := &body.shell
+	if !ok || shell.radiusX <= 0 || shell.radiusY <= 0 {
+		return
+	}
+	glyphs := visual.DensityChars[:]
+	if body.console {
+		glyphs = visual.Density256Chars[:]
+	}
+	// The outline's length is measured with heights in the units of a width
+	aspect := s.world.Resources.Config.CellAspect
+	count := int(vmath.TwoPi * (shell.radiusX + aspect.Circular(shell.radiusY)) / 2 / visual.ShellShardSpacing)
+	centerX, centerY := (vmath.Point{X: center.X, Y: center.Y}).Center()
+
+	shards := event.EffectBatchPool.Acquire()
+	for i := range count {
+		angle := vmath.TwoPi * float64(i) / float64(count)
+		at := vmath.PointAt(centerX+shell.radiusX*vmath.Cos(angle), centerY+shell.radiusY*vmath.Sin(angle))
+		shards.Entries = append(shards.Entries, component.EffectCell{X: at.X, Y: at.Y, Rune: glyphs[i%len(glyphs)], Fg: shell.color})
+	}
+	s.pushCells(event.EventSpiritScatterRequest, shards)
 }
 
 // syncMembers updates member positions and validates liveness

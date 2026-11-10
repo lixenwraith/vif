@@ -411,7 +411,9 @@ fly out from the body's middle and fade, under whatever else stands there. An ey
 and a drain flash. A body whose time ran out (a swarm's charges or lifetime, a
 data species' lifetime) fades out, a cancelled one leaves nothing, and a cell an
 attack takes off a pylon, a tower, a storm circle or a snake's body fades out
-where it stood ([ECS §7](ecs-and-events.md#death-effects)).
+where it stood. As the last cell of a pylon, a tower or a storm circle falls, its
+shell bursts: shards fly out from the outline its glow stood on
+([ECS §7](ecs-and-events.md#death-effects)).
 
 ## 9. Walls, maps, navigation, and environment
 

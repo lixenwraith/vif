@@ -308,6 +308,96 @@ func TestAnAblativeBodyFadesCellByCell(t *testing.T) {
 	}
 }
 
+// TestAKilledShellBurstsFromItsOutline: a pylon, a tower and a storm circle killed
+// throw shards from the outline their glow stood on, in the glow's color and a
+// console's in the color of its cells, as the cells left fade out; a body without
+// a shell, and any other end, throws none
+func TestAKilledShellBurstsFromItsOutline(t *testing.T) {
+	const radiusX, radiusY = 6, 3
+	stand := func(console bool, kind component.Behavior, foot vmath.Footprint) (*engine.World, *CompositeSystem, core.Entity) {
+		w, composites := compositeWorld()
+		if console {
+			w.Resources.Config.ColorMode = terminal.ColorMode256
+		}
+		header := standBody(w, kind, foot)
+		switch kind {
+		case component.BehaviorPylon:
+			w.Components.Pylon.SetComponent(header, component.PylonComponent{RadiusX: radiusX, RadiusY: radiusY})
+		case component.BehaviorTower:
+			w.Components.Tower.SetComponent(header, component.TowerComponent{RadiusX: radiusX, RadiusY: radiusY, Type: component.TowerViolet})
+		case component.BehaviorStorm:
+			w.Components.StormCircle.SetComponent(header, component.StormCircleComponent{Index: int(component.StormCircleRed)})
+		case component.BehaviorSnake:
+			w.Components.SnakeBody.SetComponent(header, component.SnakeBodyComponent{})
+		}
+		return w, composites, header
+	}
+	// ring checks that shards stand round the body's middle on an outline of the
+	// radii, a spacing apart, in one color and the shade glyphs
+	ring := func(name string, shards []component.EffectCell, rx, ry float64, c color.RGB, glyphs []rune) {
+		t.Helper()
+		if want := int(vmath.TwoPi * (rx + vmath.RefAspect.Circular(ry)) / 2 / visual.ShellShardSpacing); len(shards) != want || want == 0 {
+			t.Fatalf("%s: %d shards, want %d", name, len(shards), want)
+		}
+		invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
+		left, right, top, bottom := bodyX, bodyX, bodyY, bodyY
+		for _, shard := range shards {
+			// A cell holding a point of the outline is within half a cell of it either way
+			if d := vmath.EllipseDistSq(float64(shard.X-bodyX), float64(shard.Y-bodyY), invRxSq, invRySq); d < 0.6 || d > 1.5 {
+				t.Fatalf("%s: shard %+v stands %.2f of the way out, want it on the outline", name, shard, d)
+			}
+			if shard.Fg != c || !slices.Contains(glyphs, shard.Rune) || shard.Solid {
+				t.Fatalf("%s: shard %+v, want a glyph of %q in %v", name, shard, string(glyphs), c)
+			}
+			left, right, top, bottom = min(left, shard.X), max(right, shard.X), min(top, shard.Y), max(bottom, shard.Y)
+		}
+		// The scatter throws from the middle of what it is sent, which is the body's
+		if left+right != 2*bodyX || top+bottom != 2*bodyY {
+			t.Fatalf("%s: shards span (%d, %d) to (%d, %d), want them round (%d, %d)", name, left, top, right, bottom, bodyX, bodyY)
+		}
+	}
+
+	w, composites, header := stand(false, component.BehaviorPylon, vmath.Footprint{})
+	end := endBody(t, w, composites, header, component.DeathScatter)
+	if len(end.cells) != 1 {
+		t.Fatalf("a killed pylon sent %+v, want its burst alone", end.cells)
+	}
+	ring("pylon", end.cells[event.EventSpiritScatterRequest], radiusX, radiusY, visual.RgbPylonGlow, visual.DensityChars[:])
+
+	w, composites, header = stand(false, component.BehaviorTower, vmath.Footprint{})
+	end = endBody(t, w, composites, header, component.DeathScatter)
+	ring("tower", end.cells[event.EventSpiritScatterRequest], radiusX, radiusY, visual.TowerTypes[component.TowerViolet].GlowColor, visual.DensityChars[:])
+
+	// A circle ended with cells left: they fade out under its burst
+	w, composites, header = stand(false, component.BehaviorStorm, vmath.Footprint{Width: 2, Height: 1})
+	end = endBody(t, w, composites, header, component.DeathScatter)
+	red := visual.StormCircleColors[component.StormCircleRed]
+	ring("storm circle", end.cells[event.EventSpiritScatterRequest], parameter.StormCircleRadiusX, parameter.StormCircleRadiusY, red, visual.DensityChars[:])
+	if want := []component.EffectCell{{X: bodyX, Y: bodyY, Bg: red, Solid: true}, {X: bodyX + 1, Y: bodyY, Bg: red, Solid: true}}; !slices.Equal(end.cells[event.EventFadeoutSpawnBatch], want) || end.died != 2 || end.effect != component.DeathSilent {
+		t.Fatalf("a circle's cells left ended as %+v with %d deaths of effect %d, want %+v fading and both silent", end.cells[event.EventFadeoutSpawnBatch], end.died, end.effect, want)
+	}
+
+	w, composites, header = stand(true, component.BehaviorPylon, vmath.Footprint{})
+	end = endBody(t, w, composites, header, component.DeathScatter)
+	ring("a console's pylon", end.cells[event.EventSpiritScatterRequest], radiusX, radiusY, visual.Palette256RGB(visual.Pylon256Critical), visual.Density256Chars[:])
+
+	for _, c := range []struct {
+		name   string
+		kind   component.Behavior
+		effect component.DeathEffect
+	}{
+		{"a cancelled pylon", component.BehaviorPylon, component.DeathSilent},
+		{"a fading pylon", component.BehaviorPylon, component.DeathFadeout},
+		{"a flashing pylon", component.BehaviorPylon, component.DeathFlash},
+		{"a snake's body", component.BehaviorSnake, component.DeathScatter},
+	} {
+		w, composites, header = stand(false, c.kind, vmath.Footprint{})
+		if end = endBody(t, w, composites, header, c.effect); len(end.cells) != 0 {
+			t.Fatalf("%s sent %+v, want nothing", c.name, end.cells)
+		}
+	}
+}
+
 // endsAsked steps the system a tick and returns the composite ends it asked for and
 // the kills it published
 func endsAsked(w *engine.World, s engine.System) (ends []event.CompositeDestroyRequestPayload, kills int) {
@@ -327,6 +417,15 @@ func endsIn(w *engine.World) (ends []event.CompositeDestroyRequestPayload, kills
 		}
 	}
 	return ends, kills
+}
+
+// fell takes the last hit point of every member an ablative composite has
+func fell(w *engine.World, header core.Entity) {
+	h, _ := w.Components.Header.GetPtr(header)
+	for _, m := range h.MemberEntries {
+		combat, _ := w.Components.Combat.GetPtr(m.Entity)
+		combat.HitPoints = 0
+	}
 }
 
 // TestEachSpeciesEndLeavesItsEffect: a kill asks the composite's end with the
@@ -368,6 +467,8 @@ func TestEachSpeciesEndLeavesItsEffect(t *testing.T) {
 		expiry bool
 		// latched is a species that holds its own end, whatever becomes of the request
 		latched bool
+		// chipped is an ablative kind, killed as its last member is found dead
+		chipped bool
 	}{
 		{name: "swarm", kill: component.DeathScatter, expiry: true,
 			stand: stand(NewSwarmSystem, event.GameEvent{Type: event.EventSwarmSpawnRequest, Payload: &event.SwarmSpawnRequestPayload{X: 40, Y: 20}},
@@ -381,6 +482,14 @@ func TestEachSpeciesEndLeavesItsEffect(t *testing.T) {
 			stand: stand(NewEyeSystem, event.GameEvent{Type: event.EventEyeSpawnRequest, Payload: &event.EyeSpawnRequestPayload{X: 40, Y: 20, RouteID: -1}},
 				func(w *engine.World) []core.Entity { return w.Components.Eye.Entities() }),
 			cancel: event.GameEvent{Type: event.EventEyeCancelRequest}},
+		{name: "pylon", kill: component.DeathScatter, chipped: true,
+			stand: stand(NewPylonSystem, event.GameEvent{Type: event.EventPylonSpawnRequest, Payload: &event.PylonSpawnRequestPayload{X: 40, Y: 20}},
+				func(w *engine.World) []core.Entity { return w.Components.Pylon.Entities() }),
+			cancel: event.GameEvent{Type: event.EventPylonCancelRequest}},
+		{name: "tower", kill: component.DeathScatter, chipped: true,
+			stand: stand(NewTowerSystem, event.GameEvent{Type: event.EventTowerSpawnRequest, Payload: &event.TowerSpawnRequestPayload{X: 40, Y: 20}},
+				func(w *engine.World) []core.Entity { return w.Components.Tower.Entities() }),
+			cancel: event.GameEvent{Type: event.EventTowerCancelRequest}},
 		{name: "a data species naming no death", kill: component.DeathScatter, expiry: true, stand: warden(""),
 			cancel: event.GameEvent{Type: event.EventBehaviorCancelRequest, Payload: &event.BehaviorCancelRequestPayload{}}},
 		{name: "a data species naming the flash", kill: component.DeathFlash, expiry: true, stand: warden("death = \"flash\"\n"),
@@ -388,8 +497,12 @@ func TestEachSpeciesEndLeavesItsEffect(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			b := c.stand(t)
-			combat, _ := b.w.Components.Combat.GetPtr(b.header)
-			combat.HitPoints = 0
+			if c.chipped {
+				fell(b.w, b.header)
+			} else {
+				combat, _ := b.w.Components.Combat.GetPtr(b.header)
+				combat.HitPoints = 0
+			}
 			if ends, kills := endsAsked(b.w, b.s); kills != 1 || !slices.Equal(ends, one(b.header, c.kill)) {
 				t.Fatalf("a kill published %d kills and asked %+v, want one and %+v", kills, ends, one(b.header, c.kill))
 			}
@@ -455,5 +568,45 @@ func TestAKilledSnakesHeadLeavesItsEffectAsItsBodyFades(t *testing.T) {
 	want = asked(snake, root, component.DeathSilent, component.DeathSilent)
 	if ends, kills := endsIn(w); kills != 0 || !slices.Equal(ends, want) {
 		t.Fatalf("a cancelled snake published %d kills and asked %+v, want %+v", kills, ends, want)
+	}
+}
+
+// TestAKilledStormCircleLeavesItsEffect: a circle whose last member is found dead
+// ends with the storm's kill effect, the storm killed with its last circle; a
+// cancel leaves nothing of any
+func TestAKilledStormCircleLeavesItsEffect(t *testing.T) {
+	stand := func() (*engine.World, *StormSystem, [component.StormCircleCount]core.Entity) {
+		w := engine.NewWorld()
+		engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
+		s := ready(NewStormSystem(w)).(*StormSystem)
+		s.HandleEvent(event.GameEvent{Type: event.EventStormSpawnRequest})
+		w.Resources.Event.Queue.Consume()
+		storm, ok := w.Components.Storm.GetPtr(s.rootEntity)
+		if !ok {
+			t.Fatal("no storm stood")
+		}
+		return w, s, storm.Circles
+	}
+	kill := component.KillEffects[component.SpeciesStorm]
+
+	w, s, circles := stand()
+	fell(w, circles[component.StormCircleRed])
+	want := []event.CompositeDestroyRequestPayload{{HeaderEntity: circles[component.StormCircleRed], Effect: kill}}
+	if ends, kills := endsAsked(w, s); kills != 0 || !slices.Equal(ends, want) {
+		t.Fatalf("a killed circle published %d kills and asked %+v, want none and %+v", kills, ends, want)
+	}
+	fell(w, circles[component.StormCircleGreen])
+	fell(w, circles[component.StormCircleBlue])
+	want = []event.CompositeDestroyRequestPayload{{HeaderEntity: circles[component.StormCircleGreen], Effect: kill},
+		{HeaderEntity: circles[component.StormCircleBlue], Effect: kill}}
+	if ends, kills := endsAsked(w, s); kills != 1 || !slices.Equal(ends, want) {
+		t.Fatalf("the last circles published %d kills and asked %+v, want one and %+v", kills, ends, want)
+	}
+
+	w, s, _ = stand()
+	s.HandleEvent(event.GameEvent{Type: event.EventStormCancelRequest})
+	ends, kills := endsIn(w)
+	if kills != 0 || len(ends) != component.StormCircleCount+1 || slices.ContainsFunc(ends, func(p event.CompositeDestroyRequestPayload) bool { return p.Effect != component.DeathSilent }) {
+		t.Fatalf("a cancelled storm published %d kills and asked %+v, want its circles and its root ended silently", kills, ends)
 	}
 }

@@ -388,6 +388,12 @@ A species' end names the effect by why it ends:
   swarm, the quasar and the snake's head, a flash for the drain and the eye. A
   data species names its own with its prototype's `death` key, a scatter where it
   names none.
+- A pylon, a tower and a storm circle are killed as their last cell falls, so
+  their scatter has no glyph to throw: it bursts the shell instead
+  (`burstShell`), shards of shade glyphs standing `ShellShardSpacing` apart on
+  the outline the glow stood on, in the glow's color (a console's in the color
+  of the cells), 18 for a body of the default radii and 31 for a storm circle.
+  Nothing strobes: a strobe is a scenario's signal.
 - An expiry (a swarm's charges or lifetime, a data species' lifetime) fades the
   body out, and a cancel or an integrity breach leaves nothing.
 - A member an ablative owner finds dead (a pylon's, a tower's, a storm circle's,

@@ -24,4 +24,8 @@ const (
 	SpiritScatterGrowth = 0.4 // and this much more per cell of the body's half-diagonal
 	SpiritScatterSpread = 2.5 // and up to this much more by its own draw
 	SpiritScatterTurn   = 0.5 // radians its way out turns by its own draw, either way
+
+	// ShellShardSpacing is the length of a killed body's shell each shard of its
+	// burst stands for
+	ShellShardSpacing = 2.0
 )

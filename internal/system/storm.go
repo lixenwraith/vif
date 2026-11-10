@@ -1034,9 +1034,10 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 	// Mark as dead
 	stormComp.CirclesAlive[index] = false
 
-	// Destroy circle header via composite system
+	// Its cells fell one by one; what is left to leave is its shell
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: circleEntity,
+		Effect:       component.KillEffects[component.SpeciesStorm],
 	})
 
 	// Check if all dead
