@@ -88,6 +88,69 @@ func TestGridTraverserInvariants(t *testing.T) {
 	}
 }
 
+// TestGridTraverser3VisitsTheCellsASegmentPasses: a traversal through a volume
+// starts and ends on the segment's cells, each step a cell on toward the end on
+// an axis or more, every cell one the segment passes; in one plane it visits
+// GridTraverser's cells, and through a corner the axes that meet there step as one.
+func TestGridTraverser3VisitsTheCellsASegmentPasses(t *testing.T) {
+	corner := NewGridTraverser3(Vec3{0.5, 0.5, 0.5}, Vec3{3.5, 3.5, 3.5})
+	for i := range 4 {
+		if !corner.Next() || corner.Pos() != (Point3{X: i, Y: i, Z: i}) {
+			t.Fatalf("the diagonal's cell %d is %v", i, corner.Pos())
+		}
+	}
+	if corner.Next() {
+		t.Fatalf("the diagonal goes on to %v", corner.Pos())
+	}
+	rng := NewFastRand(0x6218)
+	for i := range 5000 {
+		a := Vec3{randFloat(rng, 48), randFloat(rng, 48), randFloat(rng, 12)}
+		b := Vec3{randFloat(rng, 48), randFloat(rng, 48), randFloat(rng, 12)}
+		if i%2 == 0 {
+			b.Z = a.Z
+		}
+		start, target := PointAt3(a), PointAt3(b)
+		var cells []Point3
+		for tr := NewGridTraverser3(a, b); tr.Next() && len(cells) < traceCap; {
+			cells = append(cells, tr.Pos())
+		}
+		if len(cells) == 0 || cells[0] != start || cells[len(cells)-1] != target {
+			t.Fatalf("%v→%v visits %v", a, b, cells)
+		}
+		d := V3Sub(b, a)
+		for j, c := range cells {
+			if j > 0 {
+				s := c.Sub(cells[j-1])
+				if s == (Point3{}) || s.X*s.X > 1 || s.Y*s.Y > 1 || s.Z*s.Z > 1 ||
+					float64(s.X)*d.X < 0 || float64(s.Y)*d.Y < 0 || float64(s.Z)*d.Z < 0 {
+					t.Fatalf("%v→%v steps from %v to %v", a, b, cells[j-1], c)
+				}
+			}
+			// The segment's stretch inside the cell's slab on each axis: one stretch holds all three
+			lo, hi := 0.0, 1.0
+			for _, ax := range [3][3]float64{{a.X, d.X, float64(c.X)}, {a.Y, d.Y, float64(c.Y)}, {a.Z, d.Z, float64(c.Z)}} {
+				if ax[1] == 0 {
+					continue
+				}
+				t0, t1 := (ax[2]-ax[0])/ax[1], (ax[2]+1-ax[0])/ax[1]
+				lo, hi = max(lo, min(t0, t1)), min(hi, max(t0, t1))
+			}
+			if lo > hi+1e-9 {
+				t.Fatalf("%v→%v visits %v, a cell it does not pass", a, b, c)
+			}
+		}
+		if b.Z != a.Z {
+			continue
+		}
+		flat := collectIter(a.X, a.Y, b.X, b.Y)
+		for j, c := range cells {
+			if len(flat) != len(cells) || flat[j] != [2]int{c.X, c.Y} || c.Z != start.Z {
+				t.Fatalf("%v→%v in one plane visits %v, GridTraverser %v", a, b, cells, flat)
+			}
+		}
+	}
+}
+
 func TestGridConversionsUseCellCentersAndFloor(t *testing.T) {
 	for _, p := range []Point{{X: 0, Y: 0}, {X: 3, Y: -4}, {X: -9, Y: 9}} {
 		x, y := CenteredFromGrid(p.X, p.Y)

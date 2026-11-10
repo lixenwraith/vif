@@ -355,6 +355,28 @@ comment now states, and link that instead.
 - `BeginBatch` returns the store's one batch, begun again: commit it before the
   next begins, and hold none across a call that may begin one.
 
+## Math and physics
+
+- `pkg/vmath` names a flat form's twin through a volume with a 3 (`Point3`,
+  `Line3`, `Footprint3`, `PointAt3`, `GridTraverser3`) and a vector operation
+  `V3...`; a twin is tested held to one plane against its flat form, exactly
+  where no table rounds an angle.
+- The compiler keeps a struct in registers only up to 32 bytes, four fields a
+  level and no array, which is `Line`'s eight int32s in four pairs. A larger
+  walk steps in place through a pointer method and names its fields:
+  `Line3` read 68 µs over the bench segments as arrays stepped by value, 106 as
+  named fields by value and 10 as named fields in place (`Advance`).
+- A helper's scratch of a known ceiling lives on its caller's stack: an `Append`
+  form leaks `dst` only to its result, so `var buf [N]T` passed as `buf[:0]`
+  allocates nothing, as `updateOrbs` samples its orbit. `-gcflags=-m` printing no
+  `moved to heap` for the buffer confirms it.
+- Appending a two-int array a sample read twice the time of growing the slice
+  once and writing each element in place (`AppendEllipseGrid`, 620 to 310 ns for
+  64 samples).
+- The sine tables hold `math.Sin` and `math.Cos` at `TwoPi*i/LUTSize`, the very
+  angles a sample count dividing `LUTSize` asks for: reading them there gives
+  the computed cells bit for bit. `Sin` and `Cos` floor any other angle to a bin.
+
 ## Glyphs and widgets
 
 - A new non-ASCII rune in a drawing package or a shipped scenario's TOML needs the

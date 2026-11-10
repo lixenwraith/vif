@@ -605,54 +605,44 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 		return
 	}
 
-	// Collect active orbs in STABLE order (sort by weapon type)
-	type orbEntry struct {
-		entity core.Entity
-		weapon component.WeaponType
-	}
-	var entries []orbEntry
-	for weapon, orbEntity := range orbs {
-		if orbEntity == 0 {
-			continue
+	// The slots run in weapon order, which is each orb's place in the spacing
+	var entryBuf [component.WeaponCount]core.Entity
+	entries := entryBuf[:0]
+	for _, orbEntity := range orbs {
+		if orbEntity != 0 && s.world.Components.Orb.HasEntity(orbEntity) {
+			entries = append(entries, orbEntity)
 		}
-		if s.world.Components.Orb.HasEntity(orbEntity) {
-			entries = append(entries, orbEntry{entity: orbEntity, weapon: component.WeaponType(weapon)})
-		}
-	}
-
-	if len(entries) == 0 {
-		s.statOrbs.Store(slot, 0)
-		return
 	}
 	s.statOrbs.Store(slot, int64(len(entries)))
-
-	// Sort by weapon type for deterministic index assignment
-	slices.SortFunc(entries, func(a, b orbEntry) int {
-		return int(a.weapon) - int(b.weapon)
-	})
+	if len(entries) == 0 {
+		return
+	}
 
 	// Use first orb's radius (all of one owner's orbs share the same orbit).
-	firstOrb, ok := s.world.Components.Orb.GetPtr(entries[0].entity)
+	firstOrb, ok := s.world.Components.Orb.GetPtr(entries[0])
 	if !ok {
 		return
 	}
 	radiusX := firstOrb.OrbitRadiusX
 	radiusY := firstOrb.OrbitRadiusY
 
-	// Sample orbital ellipse for blockage
-	samplePoints := vmath.SampleEllipseGrid(cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
-	blocked := make([]bool, len(samplePoints))
-	for i, pt := range samplePoints {
+	// Sample orbital ellipse for blockage, on the stack: it is read every tick
+	var cellBuf [vmath.EllipseSampleCount][2]int
+	var blocked [vmath.EllipseSampleCount]bool
+	cells := vmath.AppendEllipseGrid(cellBuf[:0], cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
+	for i, pt := range cells {
 		blocked[i] = s.world.Positions.IsBlocked(pt[0], pt[1], component.WallBlockKinetic)
 	}
 
-	// Find available arcs
-	arcs := vmath.FindUnblockedArcs(blocked)
+	// Find available arcs: runs of free samples, so half the samples at most
+	var arcBuf [vmath.EllipseSampleCount / 2]vmath.ArcSegment
+	arcs := vmath.AppendUnblockedArcs(arcBuf[:0], blocked[:])
 	fullCircle := vmath.IsFullCircle(arcs)
 
 	// Distribute target angles
-	targetAngles := vmath.DistributeAngles(arcs, len(entries))
-	if targetAngles == nil {
+	var angleBuf [component.WeaponCount]float64
+	targetAngles := vmath.AppendDistributedAngles(angleBuf[:0], arcs, len(entries))
+	if len(targetAngles) == 0 {
 		// Fully blocked - orbs stay in place
 		return
 	}
@@ -660,24 +650,23 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, slot uint8, orbs orbSlots)
 	// Hysteresis threshold to prevent jitter (~11 degrees)
 	const angleThreshold = vmath.TwoPi / 32
 	redistribute := false
-	for i, entry := range entries {
-		orb, _ := s.world.Components.Orb.GetPtr(entry.entity)
+	for i, orbEntity := range entries {
+		orb, _ := s.world.Components.Orb.GetPtr(orbEntity)
 		if orb.TargetAngle < 0 || vmath.Abs(vmath.AngleDiff(orb.TargetAngle, targetAngles[i])) > angleThreshold {
 			redistribute = true
 			break
 		}
 	}
 	freeOrbit := fullCircle && !redistribute
-	for _, entry := range entries {
-		orb, _ := s.world.Components.Orb.GetPtr(entry.entity)
+	for _, orbEntity := range entries {
+		orb, _ := s.world.Components.Orb.GetPtr(orbEntity)
 		freeOrbit = freeOrbit && orb.RedistributeRemaining <= 0
 	}
 	phase := firstOrb.OrbitAngle + firstOrb.OrbitSpeed*dt.Seconds()
 	spacing := vmath.TwoPi / float64(len(entries))
 
 	// Update each orb
-	for i := range entries {
-		orbEntity := entries[i].entity
+	for i, orbEntity := range entries {
 		orb, ok := s.world.Components.Orb.GetPtr(orbEntity)
 		if !ok {
 			continue

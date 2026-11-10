@@ -245,10 +245,10 @@ serves a flat map as a volume one cell deep, at no cost to it.
   at most.
 - The queries: one taking a column and a row answers for the first layer, so no
   call site of a flat game moves; one taking a `Point` answers for any; a line of
-  sight walks `vmath.Line3`, the axis of the longest span stepping every cell and
-  in one plane the cells `Line` walks; a body of depth tests a box a step. The
-  placement searches, spiral, pattern and exclusion, stay a layer's, as placing
-  on a floor.
+  sight walks `vmath.Line3` in place, the axis of the longest span stepping every
+  cell and in one plane the cells `Line` walks; a body of depth tests a box a
+  step. The placement searches, spiral, pattern and exclusion, stay a layer's, as
+  placing on a floor.
 - A body with a height on a flat map, the storm: its circles keep a float `Pos3D`
   and `Vel3D` for their physics, and their Z, which picks the half drawn in
   front, never reaches their position. A body's continuous height belongs in its
@@ -293,9 +293,10 @@ container, medians compared, the branch's bench files on both; td's tick is
 `TestTickProfileTD16`, 500×250 with sixteen cursors over 5,000 ticks on one core.
 A difference inside the band is noise, and a reading that holds in every round is
 not; a tick reads in two modes there, a third apart, so a few percent is read by
-the minimum of seven rounds beside the median. The package's own benches (`pkg/position` `bench_test.go`) read each
-operation on a scrolling level's map and on the ceiling's with a maze's walls.
-What each change read, against the main it landed on:
+the minimum of seven rounds beside the median. The package's own benches
+(`pkg/position` `bench_test.go`) read each operation on a scrolling level's map
+and on the ceiling's with a maze's walls. What each change read, against the
+main it landed on:
 
 - The move itself, the grid and the geometry behind the binding: parity, once the
   bounds were the grid's and the wall test a predicate rather than an interface.
@@ -344,6 +345,11 @@ What each change read, against the main it landed on:
   did six on main and eight where ten on td, a fifth to three tenths fewer bytes,
   and the maze spawn 24 times where 27; the ticks' time reads 1 to 4% under by
   the minimum, inside the band.
+- The volume's line walk, its axes kept from the longest span's on and stepped
+  in place (`Line3.Advance`) where each step copied the walk out and back, on a
+  100×50×25 volume with no wall, segments some forty cells long: a line of sight
+  800 to 230 ns, a 3×3×2 body's 1.05 to 0.8 µs; `vmath`'s `BenchmarkLine3` 68 to
+  10 µs.
 
 Across the changes td's tick read from 0.40 ms before the move to 0.29 ms, each
 step against its own main, and 0.13 to 0.11 ms with the cells; the tables each PR

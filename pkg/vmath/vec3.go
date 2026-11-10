@@ -43,6 +43,32 @@ func V3Dot(a, b Vec3) float64 {
 	return a.X*b.X + a.Y*b.Y + a.Z*b.Z
 }
 
+// V3Cross returns the cross product: perpendicular to both by the right hand, its
+// length the area they span, so x cross y is z
+func V3Cross(a, b Vec3) Vec3 {
+	return Vec3{a.Y*b.Z - a.Z*b.Y, a.Z*b.X - a.X*b.Z, a.X*b.Y - a.Y*b.X}
+}
+
+// V3Lerp performs linear interpolation between a and b, t in [0.0, 1.0]
+func V3Lerp(a, b Vec3, t float64) Vec3 {
+	return Vec3{a.X + (b.X-a.X)*t, a.Y + (b.Y-a.Y)*t, a.Z + (b.Z-a.Z)*t}
+}
+
+// V3Reflect returns velocity reflected off a surface with the given unit normal
+func V3Reflect(v, normal Vec3) Vec3 {
+	d := 2.0 * V3Dot(v, normal)
+	return Vec3{v.X - d*normal.X, v.Y - d*normal.Y, v.Z - d*normal.Z}
+}
+
+// V3Rotate rotates v about a unit axis by angle in radians, by the right hand:
+// about z it turns the plane as RotateVector does
+func V3Rotate(v, axis Vec3, angleRad float64) Vec3 {
+	cos, sin := Cos(angleRad), Sin(angleRad)
+	c := V3Cross(axis, v)
+	k := V3Dot(axis, v) * (1.0 - cos)
+	return Vec3{v.X*cos + c.X*sin + axis.X*k, v.Y*cos + c.Y*sin + axis.Y*k, v.Z*cos + c.Z*sin + axis.Z*k}
+}
+
 // V3XY extracts X,Y components for 2D projection
 func V3XY(v Vec3) (x, y float64) {
 	return v.X, v.Y

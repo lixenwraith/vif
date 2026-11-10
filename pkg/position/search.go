@@ -118,8 +118,8 @@ func (x *Index[E]) HasLineOfSight(x0, y0, x1, y1 int, mask Mask) bool {
 // HasLineOfSightBetween is HasLineOfSight through the volume: no cell strictly
 // between a and b on the line is blocked for mask
 func (x *Index[E]) HasLineOfSightBetween(a, b Point3, mask Mask) bool {
-	plane := x.probe(mask)
-	for line := vmath.NewLine3(a, b).Next(); !line.AtEnd(); line = line.Next() {
+	plane, line := x.probe(mask), vmath.NewLine3(a, b)
+	for line.Advance(); !line.AtEnd(); line.Advance() {
 		if p := line.Point(); x.InBounds(p) && plane.blocked(p.X, x.row(p)) {
 			return false
 		}
@@ -167,7 +167,8 @@ func (x *Index[E]) HasBoxLineOfSight(a, b Point3, width, height, depth int, anch
 	if width <= 1 && height <= 1 && depth <= 1 {
 		return x.HasLineOfSightBetween(a, b, mask)
 	}
-	for line := vmath.NewLine3(a, b).Next(); !line.AtEnd(); line = line.Next() {
+	line := vmath.NewLine3(a, b)
+	for line.Advance(); !line.AtEnd(); line.Advance() {
 		c := line.Point()
 		box := Point3{X: c.X - anchor.X, Y: c.Y - anchor.Y, Z: c.Z - anchor.Z}
 		if box.X < 0 || box.Y < 0 || box.Z < 0 ||

@@ -229,10 +229,17 @@ folded from several values (`MixChain`). `pkg/vmath/physics.Kinetic` stores
 precise position in cells, velocity in cells per second, and acceleration in
 cells per second squared, all as `float64`.
 
-Integer `Point` and `Area` values describe discrete grid cells; they are not a
-fixed-point representation. `Point.Center` is the sanctioned grid-to-precise
-conversion and adds the half-cell offset, while `PointAt` uses floor so
-negative precise coordinates map to the correct cell. Cell aspect correction
+A flat form has its twin through a volume beside it, bar the arcs and `Ray`:
+`Point3`, `Box` and `Footprint3` for `Point`, `Area` and `Footprint`; `Line3`
+and `GridTraverser3` for the two walks; the `V3` operations on `Vec3`, cross,
+reflection and rotation about an axis among them; the ellipsoid tests. A twin
+held to one plane answers as its flat form, which its tests pin.
+
+Integer `Point` and `Area` values, `Point3` and `Box` in a volume, describe
+discrete grid cells; they are not a fixed-point representation. `Point.Center`
+(`Point3.Center`) is the sanctioned grid-to-precise conversion and adds the
+half-cell offset, while `PointAt` (`PointAt3`) uses floor so negative precise
+coordinates map to the correct cell. Cell aspect correction
 remains explicit (`vmath.Aspect`) in Y radii, weighted distances and projection
 rather than being encoded in the numeric type.
 

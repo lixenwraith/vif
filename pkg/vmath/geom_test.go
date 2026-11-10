@@ -75,6 +75,76 @@ func TestV3Operations(t *testing.T) {
 	}
 }
 
+// TestV3TurnsAndMirrorsAboutAnAxis: a cross product stands square to both by the
+// right hand; a turn about an axis keeps a vector's length and its part along the
+// axis and undoes by the opposite turn; a mirror flips the part along the normal.
+func TestV3TurnsAndMirrorsAboutAnAxis(t *testing.T) {
+	if got := V3Cross(Vec3{X: 1}, Vec3{Y: 1}); got != (Vec3{Z: 1}) {
+		t.Fatalf("x cross y = %v, want z", got)
+	}
+	if got := V3Lerp(Vec3{-3, 0, 8}, Vec3{11, 4, -8}, 0.25); got != (Vec3{0.5, 1, 4}) {
+		t.Fatalf("V3Lerp a quarter along = %v", got)
+	}
+	rng := NewFastRand(0x7a)
+	vec := func() Vec3 {
+		return Vec3{rng.Float64()*20 - 10, rng.Float64()*20 - 10, rng.Float64()*20 - 10}
+	}
+	for range 5000 {
+		v, w, axis := vec(), vec(), V3Normalize(vec())
+		c := V3Cross(v, w)
+		if math.Abs(V3Dot(c, v)) > 1e-9 || math.Abs(V3Dot(c, w)) > 1e-9 || V3Cross(w, v) != V3Scale(c, -1) {
+			t.Fatalf("%v cross %v = %v, not square to both or not antisymmetric", v, w, c)
+		}
+		angle := rng.Float64()*2*TwoPi - TwoPi
+		r := V3Rotate(v, axis, angle)
+		// The tables step a 1024th of a turn, so a turn is exact to that step's sine
+		if math.Abs(V3Mag(r)-V3Mag(v)) > 0.01*V3Mag(v) || math.Abs(V3Dot(r, axis)-V3Dot(v, axis)) > 0.01*V3Mag(v) {
+			t.Fatalf("%v turned %v about %v is %v", v, angle, axis, r)
+		}
+		if back := V3Rotate(r, axis, -angle); V3Mag(V3Sub(back, v)) > 0.02*V3Mag(v) {
+			t.Fatalf("%v turned %v about %v and back is %v", v, angle, axis, back)
+		}
+		m := V3Reflect(v, axis)
+		if math.Abs(V3Dot(m, axis)+V3Dot(v, axis)) > 1e-9 || V3Mag(V3Sub(V3Reflect(m, axis), v)) > 1e-9 {
+			t.Fatalf("%v mirrored in %v is %v", v, axis, m)
+		}
+	}
+}
+
+// TestThreeAxesInOnePlaneAreTwo: a vector with no depth turns about z, mirrors
+// in a flat normal and lies in an ellipsoid exactly as its two parts do in the plane.
+func TestThreeAxesInOnePlaneAreTwo(t *testing.T) {
+	rng := NewFastRand(0x2d)
+	for range 5000 {
+		x, y := rng.Float64()*40-20, rng.Float64()*40-20
+		angle := rng.Float64()*2*TwoPi - TwoPi
+		rx, ry := RotateVector(x, y, angle)
+		if got := V3Rotate(Vec3{X: x, Y: y}, Vec3{Z: 1}, angle); got != (Vec3{X: rx, Y: ry}) {
+			t.Fatalf("(%v, %v) turned %v about z is %v, the plane's (%v, %v)", x, y, angle, got, rx, ry)
+		}
+		nx, ny := Normalize2D(rng.Float64()*2-1, rng.Float64()*2-1)
+		mx, my := Reflect(x, y, nx, ny)
+		if got := V3Reflect(Vec3{X: x, Y: y}, Vec3{X: nx, Y: ny}); got != (Vec3{X: mx, Y: my}) {
+			t.Fatalf("(%v, %v) mirrored in (%v, %v) is %v, the plane's (%v, %v)", x, y, nx, ny, got, mx, my)
+		}
+		radiusX, radiusY := rng.Float64()*12, rng.Float64()*12
+		invX, invY := EllipseInvRadiiSq(radiusX, radiusY)
+		inv := EllipsoidInvRadiiSq(radiusX, radiusY, rng.Float64()*12)
+		if EllipsoidDistSq(Vec3{X: x, Y: y}, inv) != EllipseDistSq(x, y, invX, invY) {
+			t.Fatalf("(%v, %v) lies %v into the ellipsoid and %v into its ellipse", x, y,
+				EllipsoidDistSq(Vec3{X: x, Y: y}, inv), EllipseDistSq(x, y, invX, invY))
+		}
+		px, py, cx, cy := rng.Intn(40), rng.Intn(40), rng.Intn(40), rng.Intn(40)
+		if EllipsoidContainsPoint(Point3{X: px, Y: py, Z: 3}, Point3{X: cx, Y: cy, Z: 3}, inv) != EllipseContainsPoint(px, py, cx, cy, invX, invY) {
+			t.Fatalf("cell (%d, %d) around (%d, %d) parts the ellipsoid from its ellipse", px, py, cx, cy)
+		}
+	}
+	inv := EllipsoidInvRadiiSq(4, 2, 3)
+	if !EllipsoidContains(Vec3{Z: 3}, inv) || EllipsoidContains(Vec3{Z: 3.01}, inv) || EllipsoidContains(Vec3{X: 3, Y: 1.5, Z: 2}, inv) {
+		t.Fatal("an ellipsoid ends on its depth radius, and a corner of its box lies outside")
+	}
+}
+
 func TestEllipseContainsPointSymmetric(t *testing.T) {
 	fInvRx, fInvRy := EllipseInvRadiiSq(4, 2)
 	const cx, cy = 20, 20
@@ -144,6 +214,12 @@ func TestFindUnblockedArcsUniform(t *testing.T) {
 }
 
 func TestDistributeAnglesWithinSegments(t *testing.T) {
+	// Over the whole orbit they stand evenly, the first half a spacing in
+	for i, angle := range DistributeAngles(FindUnblockedArcs(make([]bool, EllipseSampleCount)), 4) {
+		if want := TwoPi/8 + float64(i)*TwoPi/4; math.Abs(angle-want) > 1e-12 {
+			t.Fatalf("angle %d of four round the orbit = %v, want %v", i, angle, want)
+		}
+	}
 	blocked := make([]bool, EllipseSampleCount)
 	for i := range blocked {
 		blocked[i] = i%3 == 0
