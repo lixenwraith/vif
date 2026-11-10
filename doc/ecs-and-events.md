@@ -419,7 +419,11 @@ A species' end names the effect by why it ends:
   deadline runs out and keeps the slice for a later batch, so a steady stream of
   deaths allocates nothing.
 - The cells are in no position index and carry no timer or protection of their
-  own: an effect loads no cell's occupant budget, however many cells it draws.
+  own: an effect loads no cell's occupant budget, however many cells it draws,
+  and holds no cell. A glyph line or a nugget, whose placement refuses a cell any
+  entity holds (`PositionBatch.Commit`), lands on one still flashing or fading,
+  where a flash's glyph is drawn over it until the flash ends, as over text
+  drifting through.
 - Their renderers draw a batch as far through its fade as the deadline stands at
   the frame's moment, the time since the tick included (`deadlineProgress`), so a
   fade steps on every frame. A fading ground lies over the background its cell
@@ -428,11 +432,11 @@ A species' end names the effect by why it ends:
   black, and a ground alone blends the background only.
 - Measured by `BenchmarkDeathEffects` on a bare world, medians of five alternating
   runs against an entity a cell: a 5x3 body dying every tick costs the tick 0.5 µs
-  where it cost 3.9 µs as a flash and 4.0 µs as a fadeout, and 600 cells every ten
-  ticks cost 0.4 to 0.5 µs a tick where they cost 13.7 and 14.1 µs. A tick's three
-  frames of the bodies fall from 8.6 to 5.7 µs for the flash and from 10.7 to
-  8.2 µs for the fadeout, the frames of the 600 cells from 32 to 18 µs and from 42
-  to 29 µs. Neither form allocates. Holding the cells outside any entity could
+  where it cost 3.8 µs as a flash and 3.6 µs as a fadeout, and 600 cells every ten
+  ticks cost 0.4 µs a tick where they cost 13.2 and 14.8 µs. A tick's three
+  frames of the bodies fall from 8.7 to 5.8 µs for the flash and from 10.6 to
+  8.4 µs for the fadeout, the frames of the 600 cells from 32 to 19 µs and from 44
+  to 30 µs. Neither form allocates. Holding the cells outside any entity could
   save no more than the 0.5 µs a tick that is left, and would need a capture,
   reset and staging path of its own.
 - `SpiritSystem` holds its flights the same way: the parts a tick sends that
@@ -445,20 +449,20 @@ A species' end names the effect by why it ends:
   part is one foreground write a frame, left out where a glyph is already drawn;
   the blank a crosshair or a grid line leaves is none.
 - Measured the same way against a spirit entity a part: 15 converging spirits
-  every tick cost the tick 2.7 µs where they cost 5.2 µs and a tick's three frames
-  70 µs where they cost 111 µs, 600 every ten ticks 4.8 µs from 17.6 µs and 284 µs
-  from 465 µs; the frames' cost is the ten trail segments a part draws, whose
+  every tick cost the tick 2.9 µs where they cost 5.1 µs and a tick's three frames
+  76 µs where they cost 120 µs, 600 every ten ticks 4.8 µs from 18.7 µs and 284 µs
+  from 485 µs; the frames' cost is the ten trail segments a part draws, whose
   turn and light are now worked out once a flight. A scattered 5x3 body every
-  tick costs the tick 0.8 µs and its three frames 3.3 µs, 600 cells every ten
-  ticks 1.2 µs and 8.9 µs, and a scatter allocates nothing.
-- A whole body's end, standing it left out, medians of three runs: a swarm ending
-  every tick costs the tick 3.0 µs with its scatter where its silent end cost
-  2.2 µs, and an eye 4.2 µs with its flash and fading grounds where it cost
-  3.0 µs; most of either is destroying the body's entities. Their three frames
-  cost 1.9 µs and 12.5 µs. 75 swarms ending at once every ten ticks cost a tick
-  11.4 µs and three frames 9.8 µs, 40 eyes 9.9 µs and 44.8 µs. The read
-  allocates nothing, where a composite's end allocated its member list (64 B a
-  swarm, 192 B an eye).
+  tick costs the tick 0.7 µs and its three frames 2.9 µs, 600 cells every ten
+  ticks 1.2 µs and 9.1 µs, and a scatter allocates nothing.
+- A whole body's end, standing it left out, measured the same way: a swarm ending
+  every tick costs the tick 2.9 µs with its scatter where its silent end cost
+  2.4 µs, and an eye 4.0 µs with its flash and fading grounds where it cost
+  2.9 µs; most of either is destroying the body's entities. Their three frames
+  cost 1.9 µs and 13.4 µs. 75 swarms ending at once every ten ticks cost a tick
+  10.8 µs where they cost 8.8 µs and three frames 9.3 µs, 40 eyes 9.4 µs from
+  7.2 µs and 44.2 µs. The read allocates nothing, where a composite's end
+  allocated its member list (64 B a swarm, 192 B an eye).
 
 ### Timers
 

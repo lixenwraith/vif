@@ -1243,6 +1243,24 @@ each with the smallest change that would answer it:
   nothing for a pylon or a tower. The burst was chosen as one mechanism for all
   three. The collapse is worth building if a circle's burst reads too much like a
   pylon's.
+- A cell still flashing or fading no longer holds off what is placed there. Each
+  was an entity standing in its cell, which a glyph line's and a nugget's
+  placement refuses (`PositionBatch.Commit`), so nothing landed on a dead glyph
+  for the half second of its flash; the cells a batch holds stand nowhere. A line
+  can now land on one, most often after a clear of the whole field, and shows the
+  dead glyph's letter until the flash ends, as text drifting through a flash
+  always did. No effect then decides where anything spawns. Two other forms were
+  not built:
+  - Holding the cells as before: a count a cell that the flash and fadeout
+    systems keep and placement reads, built again after a world copy and a
+    resize. A body that now flashes or fades (an eye, an expired swarm, a chipped
+    cell) would hold its cells too, where a dead body held none. Worth building
+    if lines landing in a field still flashing refill it too fast.
+  - A glyph standing in a cell drawn over the effect there: one read a cell in
+    the flash and fadeout renderers, as a scatter's part makes. The letter shown
+    is then always the live one, but a body's flash goes unseen where text
+    stands and a ploughed trail's flashes go out as text drifts under them.
+    Worth building if the letter under a flash misleads typing.
 
 ### Show a species' machine state in a debug overlay
 
