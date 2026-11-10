@@ -297,7 +297,7 @@ func (s *NavigationSystem) applyWalls() {
 			if c.X < 0 || c.Y < 0 || c.X >= ww || c.Y >= wh {
 				continue
 			}
-			if blocked := s.world.Positions.Blocks(c.X, c.Y, component.WallBlockKinetic); blocked != s.walls.Bit(c.X, c.Y) {
+			if blocked := s.world.Positions.Blocks(c.Flat(), component.WallBlockKinetic); blocked != s.walls.Bit(c.X, c.Y) {
 				s.walls.Put(c.X, c.Y, blocked)
 				turned(c.X, c.Y, blocked)
 			}

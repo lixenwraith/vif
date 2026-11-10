@@ -483,7 +483,7 @@ func (s *EnvironmentSystem) stepLayer(layer []core.Entity, stepX, stepY int) {
 		if !ok {
 			continue
 		}
-		if positions.IsOutOfBounds(pos.X+stepX, pos.Y+stepY) || !s.passesWalls(e) && s.wayBlocked(pos, stepX, stepY) {
+		if !positions.InBounds(vmath.Point{X: pos.X + stepX, Y: pos.Y + stepY}) || !s.passesWalls(e) && s.wayBlocked(pos, stepX, stepY) {
 			s.driftDoomed = append(s.driftDoomed, e)
 		} else {
 			movers = append(movers, e)
@@ -505,12 +505,12 @@ func (s *EnvironmentSystem) wayBlocked(pos component.PositionComponent, stepX, s
 		dy = -1
 	}
 	for range vmath.IntAbs(stepX) {
-		if pos.X += dx; s.world.Positions.Blocks(pos.X, pos.Y, component.WallBlockSpawn) {
+		if pos.X += dx; s.world.Positions.Blocks(pos, component.WallBlockSpawn) {
 			return true
 		}
 	}
 	for range vmath.IntAbs(stepY) {
-		if pos.Y += dy; s.world.Positions.Blocks(pos.X, pos.Y, component.WallBlockSpawn) {
+		if pos.Y += dy; s.world.Positions.Blocks(pos, component.WallBlockSpawn) {
 			return true
 		}
 	}

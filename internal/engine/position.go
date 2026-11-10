@@ -1,7 +1,9 @@
 package engine
 
 import (
-	"fmt"
+	"cmp"
+	"errors"
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -29,8 +31,11 @@ type Position struct {
 	slots    sparseIndex
 	dense    []component.PositionComponent
 	entities []core.Entity // Dense array for cache-friendly iteration
+	wall     []bool        // beside dense: the row's entity is a wall the planes follow
 	bit      uint64        // Component bit mask
 	rock     *RockField    // the cave's rock, two surfaces of the index, or nil
+	batch    PositionBatch // the one batch, begun again once committed
+	rows     []int32       // Shift's dense rows between its two phases
 
 	statCellSaturations *atomic.Int64
 	statCellOverflows   *atomic.Int64
@@ -127,44 +132,48 @@ func (p *Position) PublishTelemetry() {
 // insertion. Multiple entities at one position are allowed, overflow silently ignored.
 func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	countSaturation := true
-	if i, ok := p.slots.get(e); ok {
+	i, ok := p.slots.get(e)
+	if ok {
 		old := p.dense[i]
-		if old == pos && p.Index.Holds(e, EntityClass(e), old.Layer(0)) {
+		if old == pos && p.Index.Holds(e, EntityClass(e), old) {
 			return
 		}
 		countSaturation = old != pos
-		p.Index.RemoveEntityAt(e, old.Layer(0))
-		p.wallMoved(e, old)
+		p.Index.RemoveEntityAt(e, old)
+		p.wallMoved(i, old)
 		p.dense[i] = pos
 	} else {
-		p.insert(e, pos)
+		i = p.insert(e, pos)
 	}
 	p.setGrid(e, pos, countSaturation)
-	p.wallMoved(e, pos)
+	p.wallMoved(i, pos)
 }
 
-// insert places an entity new to the store, leaving the spatial index to the caller.
-func (p *Position) insert(e core.Entity, pos component.PositionComponent) {
-	p.slots.set(e, int32(len(p.dense)))
+// insert gives an entity new to the store its row, leaving the spatial index to
+// the caller.
+func (p *Position) insert(e core.Entity, pos component.PositionComponent) int32 {
+	i := int32(len(p.dense))
+	p.slots.set(e, i)
 	p.dense = append(p.dense, pos)
 	p.entities = append(p.entities, e)
+	p.wall = append(p.wall, p.isWall(e))
 	p.world.AddComponentMask(e, p.bit)
 	storeAtomicMax(p.statPositionsHWM, int64(len(p.entities)))
+	return i
 }
 
 // setGrid preserves soft clipping while exposing saturation, budget rejection, and
 // data loss; it reports whether the cell took the entity.
 func (p *Position) setGrid(e core.Entity, pos component.PositionComponent, countSaturation bool) bool {
 	class := EntityClass(e)
-	cell := p.Index.CellAt(pos.Layer(0))
-	if cell == nil {
-		return p.Index.Set(e, class, pos.Layer(0))
-	}
-	before := cell.Count
-	playerBefore := cell.Count - cell.SharedCount
-	if !p.Index.Set(e, class, pos.Layer(0)) {
-		// A player insert stopped by its own budget is not cell exhaustion
-		if class == position.ClassPrivate && playerBefore >= position.PrivateBudget {
+	held := p.Index.Set(e, class, pos)
+	if held == 0 {
+		// Off the map is no cell's refusal, and a player insert stopped by its own
+		// budget is not cell exhaustion
+		if !p.Index.InBounds(pos) {
+			return false
+		}
+		if class == position.ClassPrivate && len(p.Index.EntitiesAt(pos, position.ScopePrivate)) >= position.PrivateBudget {
 			if p.statPlayerRejects != nil {
 				p.statPlayerRejects.Add(1)
 			}
@@ -174,9 +183,9 @@ func (p *Position) setGrid(e core.Entity, pos component.PositionComponent, count
 		return false
 	}
 	if p.statOccupancyHWM != nil {
-		storeAtomicMax(p.statOccupancyHWM, int64(before+1))
+		storeAtomicMax(p.statOccupancyHWM, int64(held))
 	}
-	if countSaturation && before+1 == position.CellCapacity && p.statCellSaturations != nil {
+	if countSaturation && held == position.CellCapacity && p.statCellSaturations != nil {
 		p.statCellSaturations.Add(1)
 	}
 	return true
@@ -207,11 +216,11 @@ func (p *Position) removeAt(i int32) {
 	last := int32(len(p.dense) - 1)
 	if i != last {
 		moved := p.entities[last]
-		p.dense[i] = p.dense[last]
+		p.dense[i], p.wall[i] = p.dense[last], p.wall[last]
 		p.entities[i] = moved
 		p.slots.set(moved, i)
 	}
-	p.dense = p.dense[:last]
+	p.dense, p.wall = p.dense[:last], p.wall[:last]
 	p.entities = p.entities[:last]
 	p.slots.del(e)
 }
@@ -222,12 +231,20 @@ func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 	if !ok {
 		return
 	}
-	pos := p.dense[i]
-	p.Index.RemoveEntityAt(e, pos.Layer(0))
-	p.removeAt(i)
-	p.wallMoved(e, pos)
+	p.remove(e, i)
 	if len(skipMask) == 0 || !skipMask[0] {
 		p.world.RemoveComponentMask(e, p.bit)
+	}
+}
+
+// remove takes e, row i, out of the grid and the rows, a wall's cell logged once
+// the grid has let it go
+func (p *Position) remove(e core.Entity, i int32) {
+	pos, wall := p.dense[i], p.wall[i]
+	p.Index.RemoveEntityAt(e, pos)
+	p.removeAt(i)
+	if wall {
+		p.Index.BlockChangedAt(pos)
 	}
 }
 
@@ -242,10 +259,7 @@ func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 		if !ok {
 			continue
 		}
-		pos := p.dense[i]
-		p.Index.RemoveEntityAt(e, pos.Layer(0))
-		p.removeAt(i)
-		p.wallMoved(e, pos)
+		p.remove(e, i)
 		if clearMask {
 			p.world.RemoveComponentMask(e, p.bit)
 		}
@@ -294,7 +308,7 @@ func (p *Position) CountEntities() int {
 func (p *Position) Clear() {
 	// Component mask will be removed centrally by wipeAll()
 	p.slots.clear()
-	p.dense = p.dense[:0]
+	p.dense, p.wall = p.dense[:0], p.wall[:0]
 	p.entities = p.entities[:0]
 	p.Index.Clear()
 	p.rock = nil
@@ -302,20 +316,35 @@ func (p *Position) Clear() {
 
 // --- Wall ---
 
-// WallChanged logs the cell of e, a wall a writer no store sees rewrote: a
-// BlockMask set in place, or a wall component overwritten.
+// WallChanged logs the cell of e, whose wall component came, went or was rewritten
+// by a writer no store sees: a BlockMask set in place, a component overwritten.
 func (p *Position) WallChanged(e core.Entity) {
 	if i, ok := p.slots.get(e); ok {
-		p.Index.BlockChangedAt(p.dense[i].Layer(0))
+		p.wall[i] = p.isWall(e)
+		p.Index.BlockChangedAt(p.dense[i])
 	}
 }
 
-// wallMoved logs pos once e, a wall a grid can hold, has left or entered it in
-// the grid. The mask, not the wall store, names a wall: a destroy empties the
-// store first.
-func (p *Position) wallMoved(e core.Entity, pos component.PositionComponent) {
-	if e.Domain() != core.DomainPlayer && p.world.componentMask[e]&WallBit != 0 {
-		p.Index.BlockChangedAt(pos.Layer(0))
+// isWall reports whether e's moves are a wall's: a shared entity the wall store
+// holds. A row keeps the answer from when it was made or its wall last changed,
+// since a destroy empties the wall store before the row goes.
+func (p *Position) isWall(e core.Entity) bool {
+	return e.Domain() != core.DomainPlayer && p.world.Components.Wall.HasEntity(e)
+}
+
+// readWalls sets every row's wall flag again, after rows were written whole
+func (p *Position) readWalls() {
+	p.wall = p.wall[:0]
+	for _, e := range p.entities {
+		p.wall = append(p.wall, p.isWall(e))
+	}
+}
+
+// wallMoved logs pos once the wall of row i, if it is one, has left or entered it
+// in the grid
+func (p *Position) wallMoved(i int32, pos component.PositionComponent) {
+	if p.wall[i] {
+		p.Index.BlockChangedAt(pos)
 	}
 }
 
@@ -327,12 +356,12 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 		return
 	}
 	old := p.dense[i]
-	p.Index.RemoveEntityAt(e, old.Layer(0))
-	p.wallMoved(e, old)
+	p.Index.RemoveEntityAt(e, old)
+	p.wallMoved(i, old)
 	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
 	p.setGrid(e, newPos, old != newPos)
-	p.wallMoved(e, newPos)
+	p.wallMoved(i, newPos)
 }
 
 // Shift translates every entity by (dx, dy) in two phases, all leaving their cells
@@ -343,22 +372,29 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 	if dx == 0 && dy == 0 {
 		return unplaced
 	}
+	rows := p.rows[:0]
 	for _, e := range entities {
-		if i, ok := p.slots.get(e); ok {
+		i, ok := p.slots.get(e)
+		if ok {
 			old := p.dense[i]
-			p.Index.RemoveEntityAt(e, old.Layer(0))
-			p.wallMoved(e, old)
+			p.Index.RemoveEntityAt(e, old)
+			p.wallMoved(i, old)
 			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
+		} else {
+			i = -1
 		}
+		rows = append(rows, i)
 	}
-	for _, e := range entities {
-		if i, ok := p.slots.get(e); ok {
-			if !p.setGrid(e, p.dense[i], true) {
-				unplaced = append(unplaced, e)
-			}
-			p.wallMoved(e, p.dense[i])
+	for k, i := range rows {
+		if i < 0 {
+			continue
 		}
+		if !p.setGrid(entities[k], p.dense[i], true) {
+			unplaced = append(unplaced, entities[k])
+		}
+		p.wallMoved(i, p.dense[i])
 	}
+	p.rows = rows
 	return unplaced
 }
 
@@ -373,7 +409,7 @@ func (p *Position) TopGlyphAt(x, y int) (core.Entity, bool) {
 // TopGlyphIs reports whether typeable e is the glyph drawn at (x, y), the one
 // typing acts on. Alone in its cell it is, which spares the lookup.
 func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
-	if cell := p.Index.Occupants(x, y, position.ScopeAll); len(cell) == 1 {
+	if cell := p.Index.Occupants(component.PositionComponent{X: x, Y: y}, position.ScopeAll); len(cell) == 1 {
 		return cell[0] == e
 	}
 	return p.topGlyph(x, y) == e
@@ -397,7 +433,7 @@ func (p *Position) topGlyph(x, y int) core.Entity {
 	glyphs := p.world.Components.Glyph
 	var top core.Entity
 	var topLevel component.GlyphLevel
-	for _, e := range p.Index.Occupants(x, y, position.ScopeAll) {
+	for _, e := range p.Index.Occupants(component.PositionComponent{X: x, Y: y}, position.ScopeAll) {
 		g, ok := glyphs.GetPtr(e)
 		if !ok || p.IsScenery(e) {
 			continue
@@ -413,9 +449,12 @@ func (p *Position) topGlyph(x, y int) core.Entity {
 
 // --- Batch Implementation ---
 
+// PositionBatch stages placements to check and apply together. A store keeps one,
+// in storage it reuses: a batch is committed before the next begins.
 type PositionBatch struct {
 	store     *Position
 	additions []positionAddition
+	cells     []component.PositionComponent // commit's: the additions' cells, sorted
 	committed bool
 }
 
@@ -424,12 +463,17 @@ type positionAddition struct {
 	pos    component.PositionComponent
 }
 
-// BeginBatch starts a batch with room for n additions.
+var (
+	errBatchCommitted = errors.New("batch already committed")
+	errBatchOccupied  = errors.New("position is occupied")
+	errBatchConflict  = errors.New("batch conflict at position")
+)
+
+// BeginBatch starts the store's batch again, with room for n additions.
 func (p *Position) BeginBatch(n int) *PositionBatch {
-	return &PositionBatch{
-		store:     p,
-		additions: make([]positionAddition, 0, n),
-	}
+	b := &p.batch
+	b.store, b.additions, b.committed = p, slices.Grow(b.additions[:0], n), false
+	return b
 }
 
 func (pb *PositionBatch) Add(e core.Entity, pos component.PositionComponent) {
@@ -450,24 +494,28 @@ func (pb *PositionBatch) CommitShared() error {
 // commit validates every addition against the occupants in scope, then applies the batch
 func (pb *PositionBatch) commit(scope position.Scope) error {
 	if pb.committed {
-		return fmt.Errorf("batch already committed")
+		return errBatchCommitted
 	}
 	pb.committed = true
 	storeAtomicMax(pb.store.statBatchSizeHWM, int64(len(pb.additions)))
 
-	// Every addition against the world and against the rest of the batch
-	batchOccupied := make(map[int]map[int]bool)
+	// Every addition against the world, then against the rest of the batch: two on
+	// one cell sort together
+	cells := pb.cells[:0]
 	for _, add := range pb.additions {
-		if pb.store.HasAnyEntityAt(add.pos.X, add.pos.Y, scope) {
-			return fmt.Errorf("position is occupied")
+		if pb.store.HasAnyEntityAt(add.pos, scope) {
+			return errBatchOccupied
 		}
-		if batchOccupied[add.pos.Y] == nil {
-			batchOccupied[add.pos.Y] = make(map[int]bool)
+		cells = append(cells, add.pos)
+	}
+	pb.cells = cells
+	slices.SortFunc(cells, func(a, b component.PositionComponent) int {
+		return cmp.Or(cmp.Compare(a.Y, b.Y), cmp.Compare(a.X, b.X))
+	})
+	for i := 1; i < len(cells); i++ {
+		if cells[i] == cells[i-1] {
+			return errBatchConflict
 		}
-		if batchOccupied[add.pos.Y][add.pos.X] {
-			return fmt.Errorf("batch conflict at position")
-		}
-		batchOccupied[add.pos.Y][add.pos.X] = true
 	}
 
 	for _, add := range pb.additions {

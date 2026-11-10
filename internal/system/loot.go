@@ -228,7 +228,7 @@ func (s *LootSystem) Update() {
 			continue
 		}
 		// A transition or correction can shrink the shared map under private loot.
-		if s.world.Positions.IsOutOfBounds(curX, curY) {
+		if !s.world.Positions.InBounds(vmath.Point{X: curX, Y: curY}) {
 			curX, curY = min(max(curX, 0), config.MapWidth-1), min(max(curY, 0), config.MapHeight-1)
 			kineticComp.PreciseX, kineticComp.PreciseY = (vmath.Point{X: curX, Y: curY}).Center()
 			kineticComp.VelX, kineticComp.VelY = 0, 0
@@ -236,7 +236,7 @@ func (s *LootSystem) Update() {
 		}
 		// A wall that arrived without displacing the drop — a correction installs
 		// shared walls under player-domain loot — claims the cell as a spawn would.
-		if s.world.Positions.IsBlocked(curX, curY, component.WallBlockKinetic) {
+		if s.world.Positions.IsBlocked(vmath.Point{X: curX, Y: curY}, component.WallBlockKinetic) {
 			if x, y, moved := s.world.PushEntityFromBlocked(lootEntity, component.WallBlockKinetic); moved {
 				curX, curY = x, y
 			}
@@ -285,7 +285,7 @@ func (s *LootSystem) Update() {
 			0, config.MapHeight-1,
 			parameter.LootRestitution,
 			func(tx, ty int) bool {
-				return s.world.Positions.IsBlocked(tx, ty, component.WallBlockKinetic)
+				return s.world.Positions.IsBlocked(vmath.Point{X: tx, Y: ty}, component.WallBlockKinetic)
 			},
 		)
 		s.motion.Record(motion)
@@ -315,7 +315,7 @@ func (s *LootSystem) homingTarget(
 	}
 
 	ownerCenterX, ownerCenterY := vmath.Point{X: ownerPos.X, Y: ownerPos.Y}.Center()
-	if s.world.Positions.HasLineOfSight(curX, curY, ownerPos.X, ownerPos.Y, component.WallBlockKinetic) {
+	if s.world.Positions.HasLineOfSight(vmath.Point{X: curX, Y: curY}, ownerPos, component.WallBlockKinetic) {
 		lootComp.FlowX, lootComp.FlowY = 0, 0
 		return ownerCenterX, ownerCenterY, true
 	}
@@ -423,14 +423,14 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owne
 		if !s.isValidSpawnPos(spawnX, spawnY) {
 			spawnX, spawnY = cx, cy
 			if !s.isValidSpawnPos(spawnX, spawnY) {
-				if freeX, freeY, found := s.world.Positions.FindFreeFromPattern(
-					cx, cy, 1, 1,
+				if free, found := s.world.Positions.FindFreeFromPattern(
+					vmath.Point{X: cx, Y: cy}, 1, 1,
 					position.PatternCardinalFirst,
 					1, 5, true,
 					component.WallBlockKinetic, nil,
 				); found {
-					spawnX, spawnY = freeX, freeY
-					burstDirX, burstDirY = freeX-cx, freeY-cy
+					spawnX, spawnY = free.X, free.Y
+					burstDirX, burstDirY = free.X-cx, free.Y-cy
 				} else {
 					continue
 				}
@@ -488,7 +488,7 @@ func (s *LootSystem) isValidSpawnPos(x, y int) bool {
 	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
 		return false
 	}
-	return !s.world.Positions.IsBlocked(x, y, component.WallBlockKinetic)
+	return !s.world.Positions.IsBlocked(vmath.Point{X: x, Y: y}, component.WallBlockKinetic)
 }
 
 // rollDropTable rolls a species' tiers for one cursor with pity and fallback

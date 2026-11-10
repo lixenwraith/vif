@@ -1,6 +1,9 @@
 package vmath
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 // ArcSegment represents a contiguous unblocked arc on an ellipse in radians
 type ArcSegment struct {
@@ -14,75 +17,75 @@ func SampleEllipseGrid(centerX, centerY int, radiusX, radiusY float64, count int
 	if count <= 0 {
 		return nil
 	}
+	return AppendEllipseGrid(make([][2]int, 0, count), centerX, centerY, radiusX, radiusY, count)
+}
 
-	points := make([][2]int, count)
-	angleStep := TwoPi / float64(count)
-	cx, cy := (Point{X: centerX, Y: centerY}).Center()
-
-	for i := range count {
-		angle := float64(i) * angleStep
-		px := cx + math.Cos(angle)*radiusX
-		py := cy + math.Sin(angle)*radiusY
-		p := PointAt(px, py)
-		points[i] = [2]int{p.X, p.Y}
+// AppendEllipseGrid is SampleEllipseGrid after what dst holds, in its storage: for
+// a caller sampling every tick. A count dividing the sine table samples the
+// table's own angles, so it reads their sines there.
+func AppendEllipseGrid(dst [][2]int, centerX, centerY int, radiusX, radiusY float64, count int) [][2]int {
+	if count <= 0 {
+		return dst
 	}
-	return points
+	cx, cy := (Point{X: centerX, Y: centerY}).Center()
+	n := len(dst)
+	dst = slices.Grow(dst, count)[:n+count]
+	cells := dst[n:]
+	stride, angleStep, table := LUTSize/count, TwoPi/float64(count), LUTSize%count == 0
+	for i := range cells {
+		var cos, sin float64
+		if table {
+			cos, sin = CosLUT[i*stride], SinLUT[i*stride]
+		} else {
+			cos, sin = math.Cos(float64(i)*angleStep), math.Sin(float64(i)*angleStep)
+		}
+		cells[i][0], cells[i][1] = int(math.Floor(cx+cos*radiusX)), int(math.Floor(cy+sin*radiusY))
+	}
+	return dst
 }
 
 // FindUnblockedArcs converts blocked bitmap to contiguous unblocked segments
-func FindUnblockedArcs(blocked []bool) []ArcSegment {
+func FindUnblockedArcs(blocked []bool) []ArcSegment { return AppendUnblockedArcs(nil, blocked) }
+
+// AppendUnblockedArcs is FindUnblockedArcs into dst's storage
+func AppendUnblockedArcs(dst []ArcSegment, blocked []bool) []ArcSegment {
 	n := len(blocked)
-	if n == 0 {
-		return nil
-	}
-
-	angleStep := TwoPi / float64(n)
-
-	allBlocked, allFree := true, true
-	for _, b := range blocked {
-		if b {
-			allFree = false
-		} else {
-			allBlocked = false
-		}
-	}
-
-	if allBlocked {
-		return nil
-	}
-	if allFree {
-		return []ArcSegment{{StartAngle: 0, EndAngle: TwoPi, Length: TwoPi}}
-	}
-
-	firstBlocked := 0
+	firstBlocked, free := -1, 0
 	for i, b := range blocked {
-		if b {
+		if !b {
+			free++
+		} else if firstBlocked < 0 {
 			firstBlocked = i
-			break
 		}
 	}
+	if free == 0 {
+		return dst
+	}
+	if firstBlocked < 0 {
+		return append(dst, ArcSegment{StartAngle: 0, EndAngle: TwoPi, Length: TwoPi})
+	}
 
-	var segments []ArcSegment
+	// From the first blocked sample round, so no segment wraps the walk's end
+	angleStep := TwoPi / float64(n)
 	inSegment := false
 	segStart := 0
-
 	for offset := range n {
-		i := (firstBlocked + offset) % n
-
+		i := firstBlocked + offset
+		if i >= n {
+			i -= n
+		}
 		if !blocked[i] && !inSegment {
 			segStart = i
 			inSegment = true
 		} else if blocked[i] && inSegment {
-			segments = append(segments, buildSegment(segStart, i, angleStep))
+			dst = append(dst, buildSegment(segStart, i, angleStep))
 			inSegment = false
 		}
 	}
-
 	if inSegment {
-		segments = append(segments, buildSegment(segStart, firstBlocked, angleStep))
+		dst = append(dst, buildSegment(segStart, firstBlocked, angleStep))
 	}
-
-	return segments
+	return dst
 }
 
 func buildSegment(start, end int, angleStep float64) ArcSegment {
@@ -135,21 +138,26 @@ func DistributeAngles(segments []ArcSegment, count int) []float64 {
 	if count <= 0 || len(segments) == 0 {
 		return nil
 	}
+	return AppendDistributedAngles(make([]float64, 0, count), segments, count)
+}
 
-	totalArc := TotalArcLength(segments)
-	if totalArc <= 0 {
-		return make([]float64, count)
+// AppendDistributedAngles is DistributeAngles into dst's storage, appending nothing
+// for no segments
+func AppendDistributedAngles(dst []float64, segments []ArcSegment, count int) []float64 {
+	if len(segments) == 0 {
+		return dst
 	}
-
+	totalArc := TotalArcLength(segments)
 	spacing := totalArc / float64(count)
 	startOffset := spacing / 2.0
-
-	angles := make([]float64, count)
 	for i := range count {
-		arcPos := math.Mod(startOffset+float64(i)*spacing, totalArc)
-		angles[i] = arcPositionToAngle(segments, arcPos)
+		angle := 0.0
+		if totalArc > 0 {
+			angle = arcPositionToAngle(segments, math.Mod(startOffset+float64(i)*spacing, totalArc))
+		}
+		dst = append(dst, angle)
 	}
-	return angles
+	return dst
 }
 
 func arcPositionToAngle(segments []ArcSegment, pos float64) float64 {

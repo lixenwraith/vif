@@ -42,8 +42,8 @@ func ClampMagnitude(x, y, maxMag float64) (float64, float64) {
 
 // RotateVector rotates vector by angle in radians
 func RotateVector(x, y, angleRad float64) (float64, float64) {
-	cos := Cos(angleRad)
-	sin := Sin(angleRad)
+	i := lutIndex(angleRad)
+	cos, sin := CosLUT[i], SinLUT[i]
 	return x*cos - y*sin, x*sin + y*cos
 }
 

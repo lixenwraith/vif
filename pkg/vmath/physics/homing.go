@@ -23,27 +23,33 @@ const homingSettleSpeedSq = 0.25 // (0.5 cells/sec)²
 // homingDefaultDeadZone is the snap radius when the profile leaves DeadZone unset
 const homingDefaultDeadZone = 0.5
 
+// arrival returns the acceleration, overspeed drag and cruise speed a body homes
+// with at dist from its target: inside ArrivalRadius the first and last ramp
+// down and the drag up
+func (p *HomingProfile) arrival(dist, speedMultiplier float64) (accel, drag, cruise float64) {
+	accel, drag, cruise = p.HomingAccel*speedMultiplier, p.Drag, p.BaseSpeed*speedMultiplier
+	if p.ArrivalRadius > 0 && dist < p.ArrivalRadius {
+		factor := dist / p.ArrivalRadius
+		accel *= vmath.Lerp(p.ArrivalAccelMin, 1.0, factor)
+		// Cruise speed ramps to zero at the target so drag engages below BaseSpeed;
+		// without this the actor orbits at cruise speed forever
+		cruise *= factor
+		if p.ArrivalDragBoost > 0 {
+			drag *= 1.0 + p.ArrivalDragBoost*(1.0-factor)
+		}
+	}
+	return accel, drag, cruise
+}
+
 // ApplyHoming updates velocity to home toward target position
 // Returns true if entity is within settling distance (near-stationary at target)
 func ApplyHoming(k *Kinetic, targetX, targetY float64, profile *HomingProfile, dt float64) bool {
-	return applyHomingInternal(k, targetX, targetY, profile, 1.0, dt, true)
+	return ApplyHomingScaled(k, targetX, targetY, profile, 1.0, dt, true)
 }
 
 // ApplyHomingScaled applies homing with speed multiplier (for progressive difficulty)
 // applyDrag: if false, skip drag application (for immunity-gated drag)
 func ApplyHomingScaled(
-	k *Kinetic,
-	targetX, targetY float64,
-	profile *HomingProfile,
-	speedMultiplier float64,
-	dt float64,
-	applyDrag bool,
-) bool {
-	return applyHomingInternal(k, targetX, targetY, profile, speedMultiplier, dt, applyDrag)
-}
-
-// applyHomingInternal is the shared implementation
-func applyHomingInternal(
 	k *Kinetic,
 	targetX, targetY float64,
 	profile *HomingProfile,
@@ -60,11 +66,9 @@ func applyHomingInternal(
 		deadZone = homingDefaultDeadZone
 	}
 
-	// Squared comparison: avoids a sqrt on the settle check
-	// Do not let the controller's dead-zone snap erase a concurrent external
-	// acceleration. The owning integrator applies that acceleration later in the
-	// tick; settling here would otherwise pin a body against any modest steady
-	// field (such as wind) by resetting its displacement and velocity every tick.
+	// The snap leaves a body under an external acceleration alone: its integrator
+	// applies that later in the tick, and settling here would pin the body against
+	// any steady field, such as wind, by resetting it every tick
 	if dist < deadZone && vmath.MagnitudeSq(k.VelX, k.VelY) < homingSettleSpeedSq &&
 		k.AccelX == 0 && k.AccelY == 0 {
 		k.PreciseX = targetX
@@ -74,46 +78,61 @@ func applyHomingInternal(
 		return true
 	}
 
-	effectiveAccel := profile.HomingAccel * speedMultiplier
-	effectiveDrag := profile.Drag
-	effectiveBaseSpeed := profile.BaseSpeed * speedMultiplier
+	accel, drag, cruise := profile.arrival(dist, speedMultiplier)
 
-	// Arrival steering: ramp down accel and cruise speed, ramp up drag
-	if profile.ArrivalRadius > 0 && dist < profile.ArrivalRadius {
-		factor := dist / profile.ArrivalRadius
-
-		effectiveAccel *= vmath.Lerp(profile.ArrivalAccelMin, 1.0, factor)
-
-		// Cruise speed ramps to zero at the target so drag engages below BaseSpeed;
-		// Without this the actor orbits at cruise speed forever
-		effectiveBaseSpeed *= factor
-
-		if profile.ArrivalDragBoost > 0 {
-			effectiveDrag *= 1.0 + profile.ArrivalDragBoost*(1.0-factor)
-		}
-	}
-
-	// Apply homing acceleration; dist is already the magnitude, so reuse it
-	// instead of paying a second sqrt inside Normalize2D
+	// dist is already the magnitude, so reuse it instead of a second sqrt
 	if dist > 0 {
 		dirX, dirY := dx/dist, dy/dist
-		k.VelX += dirX * effectiveAccel * dt
-		k.VelY += dirY * effectiveAccel * dt
+		k.VelX += dirX * accel * dt
+		k.VelY += dirY * accel * dt
 	}
 
 	if applyDrag {
-		currentSpeed := vmath.Magnitude(k.VelX, k.VelY)
-
-		if currentSpeed > effectiveBaseSpeed && currentSpeed > 0 {
-			excess := currentSpeed - effectiveBaseSpeed
-			dragScale := excess / currentSpeed
+		if speed := vmath.Magnitude(k.VelX, k.VelY); speed > cruise && speed > 0 {
 			// Clamp drag to prevent overshoot
-			dragAmount := min(effectiveDrag*dt*dragScale, 1.0)
-
-			k.VelX -= k.VelX * dragAmount
-			k.VelY -= k.VelY * dragAmount
+			amount := min(drag*dt*((speed-cruise)/speed), 1.0)
+			k.VelX -= k.VelX * amount
+			k.VelY -= k.VelY * amount
 		}
 	}
 
+	return false
+}
+
+// ApplyHoming3D is ApplyHoming in a volume
+func ApplyHoming3D(k *Kinetic3D, target vmath.Vec3, profile *HomingProfile, dt float64) bool {
+	return ApplyHomingScaled3D(k, target, profile, 1.0, dt, true)
+}
+
+// ApplyHomingScaled3D is ApplyHomingScaled in a volume
+func ApplyHomingScaled3D(
+	k *Kinetic3D,
+	target vmath.Vec3,
+	profile *HomingProfile,
+	speedMultiplier float64,
+	dt float64,
+	applyDrag bool,
+) bool {
+	d := vmath.V3Sub(target, k.Pos)
+	dist := vmath.V3Mag(d)
+
+	deadZone := profile.DeadZone
+	if deadZone == 0 {
+		deadZone = homingDefaultDeadZone
+	}
+	if dist < deadZone && vmath.V3MagSq(k.Vel) < homingSettleSpeedSq && k.Accel == (vmath.Vec3{}) {
+		k.Pos, k.Vel = target, vmath.Vec3{}
+		return true
+	}
+
+	accel, drag, cruise := profile.arrival(dist, speedMultiplier)
+	if dist > 0 {
+		k.Vel = vmath.V3Add(k.Vel, vmath.V3Scale(d, accel*dt/dist))
+	}
+	if applyDrag {
+		if speed := vmath.V3Mag(k.Vel); speed > cruise && speed > 0 {
+			k.Vel = vmath.V3Scale(k.Vel, 1.0-min(drag*dt*((speed-cruise)/speed), 1.0))
+		}
+	}
 	return false
 }

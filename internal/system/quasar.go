@@ -294,13 +294,13 @@ func (s *QuasarSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
 // spawnQuasar stands a quasar with its header at the cell, its footprint pulled
 // inside the map, or on the nearest footprint free of walls a spawn is kept from
 func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(targetX, targetY, component.Footprints[component.SpeciesQuasar], component.WallBlockSpawn, 0)
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: targetX, Y: targetY}, component.Footprints[component.SpeciesQuasar], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		return
 	}
-	headerX := topLeftX + parameter.QuasarHeaderOffsetX
-	headerY := topLeftY + parameter.QuasarHeaderOffsetY
+	headerX := corner.X + parameter.QuasarHeaderOffsetX
+	headerY := corner.Y + parameter.QuasarHeaderOffsetY
 
 	// Clear area and create composite
 	s.clearQuasarSpawnArea(headerX, headerY)
@@ -521,8 +521,7 @@ func (s *QuasarSystem) home(c *quasarCtx) {
 	// Wall query to capture the specific mask and dimensions
 	wallCheck := func(topLeftX, topLeftY int) bool {
 		return s.world.Positions.BlocksArea(
-			topLeftX, topLeftY,
-			parameter.QuasarWidth, parameter.QuasarHeight,
+			vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight},
 			component.WallBlockKinetic,
 		)
 	}

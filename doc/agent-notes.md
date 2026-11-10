@@ -328,7 +328,7 @@ comment now states, and link that instead.
 ## Position
 
 - [Position](position-package.md) states the index's rules: bounds that are the
-  grid's, the package's names, flat and `Point3` queries, the planes
+  grid's, the package's names, the point a query takes, the planes
   `BlockChangedAt` keeps, `WallBlockAll`. What it leaves out:
 - `pkg/position` knows no entity: a test over walls or glyphs needs a world and
   stays in `internal/engine`; a grid-only test goes to the package with a test id
@@ -341,6 +341,98 @@ comment now states, and link that instead.
 - `engine.NewGameContextWithClock(w, 80, 40, ...)` takes the terminal's size; the
   map is what the status bar and rulers leave of it (79x36 there), so a test of a
   cell at an edge reads `Positions.Width` and `Height`.
+- A cell's view (`EntitiesAt`, `Occupants`, `EachOccupied`) is the cell's own
+  storage or its crowd's, and a cell going from one occupant to two, or back,
+  moves them: copy a view before writing its cell, as every call site does
+  (`copy(buf[:], ...)`).
+- The probe path lives on the inliner's budget: `go build -gcflags=-m=2
+  ./pkg/position` prints each function's cost against 80, and `probe` stands at
+  79. A table of indices beside a stale flag cost it 88 and a call a probe.
+- A row's wall flag (`Position.wall`) is read when the row is made, on
+  `WallChanged`, and for every row once rows are written whole (`readWalls`, in
+  `CopyIn` and the order install). A new path writing `dense` and `entities`
+  whole calls it; the fuzz test's invariant fails one that does not.
+- `BeginBatch` returns the store's one batch, begun again: commit it before the
+  next begins, and hold none across a call that may begin one.
+- A query is a generic method over its point (`Blocks[P Coord]`), the form read
+  by size in `at`, `as`, `box` and `body`, a constant in each instantiation: a
+  flat instantiation must keep the flat function's instructions, which `go tool
+  objdump -s 'Index.*\.Blocks' <test binary>` counts for both. A helper that
+  returns six fields (a `Box`, a `Footprint3`) goes through memory: return the
+  four-field form and two ints. A local named `at` shadows the helper.
+- A search names the zero point with false where it finds nothing: the swarm's
+  `findRoom` and the storm's attack landing keep the point without reading
+  `found`, and what they build from it is in the digests.
+- A loop around a call spills every live value before its first pass, so a
+  helper that calls once in the common case takes it straight (`clear`'s one
+  layer) and loops in a function of its own (`plane.deep`).
+- The volume tests hold a layer against a flat map through the same code, so
+  they see no flat rule broken: a flat rule needs a model of its own, as
+  `placedAround` is the exclusion search's. The block log is lost past
+  `cells/8+64` entries, so a test reads it before that many changes.
+- Two builds with the same instructions can read 15% apart on one probe by link
+  layout alone: rebuild both with `-ldflags=-randlayout=N` for a few N and
+  compare the spreads before believing either, or, where the hot function did
+  not change, diff its `go tool objdump -s` in both with the addresses masked.
+- A surface a column ahead of the others of its mask and layer leaves
+  `staleShift`, so a probe lays the surfaces again; a scroll of every one leaves
+  `stale` clear, which the surface test holds and `BenchmarkCaveStep` shows. A
+  test that probes after each change never lets a scroll finish: change in
+  batches, as that test does.
+
+## Math and physics
+
+- `pkg/vmath` names a flat form's twin through a volume with a 3 (`Point3`,
+  `Line3`, `Footprint3`, `PointAt3`, `GridTraverser3`) and a vector operation
+  `V3...`; a twin is tested held to one plane against its flat form, exactly
+  where no table rounds an angle.
+- The compiler keeps a struct in registers only up to 32 bytes, four fields a
+  level and no array, which is `Line`'s eight int32s in four pairs. A larger
+  walk steps in place through a pointer method and names its fields:
+  `Line3` read 68 µs over the bench segments as arrays stepped by value, 106 as
+  named fields by value and 10 as named fields in place (`Advance`).
+- A helper's scratch of a known ceiling lives on its caller's stack: an `Append`
+  form leaks `dst` only to its result, so `var buf [N]T` passed as `buf[:0]`
+  allocates nothing, as `updateOrbs` samples its orbit. `-gcflags=-m` printing no
+  `moved to heap` for the buffer confirms it.
+- Appending a two-int array a sample read twice the time of growing the slice
+  once and writing each element in place (`AppendEllipseGrid`, 620 to 310 ns for
+  64 samples).
+- The sine tables hold `math.Sin` and `math.Cos` at `TwoPi*i/LUTSize`, the very
+  angles a sample count dividing `LUTSize` asks for: reading them there gives
+  the computed cells bit for bit. `Sin` and `Cos` floor any other angle to a bin.
+- A benchmark that feeds a pure function constants measures nothing: the call
+  folds at compile time, and `vmath`'s older benches read 0.9 ns for a sine that
+  costs 5.5. Feed package variables, and read a loop over varied inputs beside
+  the lone call, since inlining and what one iteration waits on differ there.
+- On amd64 at its default level `math.Floor`, `Ceil` and `Trunc` compile to a CPU
+  feature test with a call for the fallback. Inlined in a loop the rounding also
+  waits on its output register's last value, chaining the iterations: the table
+  sine read 5.5 ns, a rotation 7.5. `lutIndex` truncates and steps down by a
+  borrow (`bits.Sub64`); the same step as an `if` compiled to a branch in some
+  callers and missed on angles of either sign (a collision 9 to 18 ns). Built
+  at `GOAMD64=v2` or later the floor is one instruction, a lone sine 0.8 ns
+  against the borrow's 1.2, so `floorChecked` is a build constraint
+  (`amd64 && !amd64.v2`) and such a build keeps the floor.
+- The same truncation in `PointAt` reads a third faster alone and costs more
+  than it saves: its inline cost goes from 12 to 50, `physics.Integrate` (55 to
+  93) and three more stop inlining, and a system's loop over bodies reads 20 to
+  40% slower. To name every function a change stops inlining, list
+  `go build -gcflags='github.com/lixenwraith/vif/...=-m' ./...` before and
+  after and compare the sorted `can inline` lines.
+- `pkg/vmath/physics` names a 3D twin with the suffix its older functions carry
+  (`Integrate3D`, `ApplyHoming3D`), beside its flat form in the same file and on
+  the flat form's scalar helper where one exists (`HomingProfile.arrival`,
+  `impulseMagnitude`, `reflectCell`, `bounceSteps`). Two tests hold a twin: in
+  one plane it is the flat form, and with its axes cycled it answers alike.
+- A twin's test compares floats within 1e-9, never by `==`: an architecture that
+  fuses a multiply into an add (arm64, amd64 at `GOAMD64=v3`) rounds two orders
+  of one sum apart. Cells and counts compare exactly.
+- A flat form's result is simulation state. A refactor of one is compared with
+  its previous body, kept in a scratch test, on random inputs by
+  `math.Float64bits`, negative zeros among them, before the headless digests are
+  read: `v -= v*0` turns a negative zero positive, so a branch that skips a
+  subtraction is not one that subtracts nothing.
 
 ## Glyphs and widgets
 
@@ -401,7 +493,20 @@ comment now states, and link that instead.
   does, or that package's wasm test binary stops building.
 - Benchmarks in a cloud container move a fifth between runs, and benchstat is not
   installed: build main's and the branch's test binaries (`go test -c` in a `git
-  worktree` of main) and compare medians of alternating runs.
+  worktree` of main) and compare medians of alternating runs. A bench file the
+  branch adds is copied into the worktree, kept on main's API where the branch
+  changed one. A tick reads in two modes, one binary 22 µs in a round and 28 to
+  32 in the next: for a few percent, read the minimum of seven to nine rounds
+  beside the median.
+- B/op can rise as retained memory falls: a smaller heap collects sooner, and
+  each collection empties the event batch `sync.Pool`s, which then allocate
+  again. Read both sides with `GOGC=off` before blaming an allocation: td's
+  headless ticks read 6% more bytes with the grid 30 MB smaller, and the same
+  bytes with the collector off.
+- Two binaries simulate alike when a scratch test in each prints
+  `snapshot.DigestWorld` and `Positions.Order()` every fifty ticks of the headless
+  shapes and the outputs diff empty; the divergence harness reads the link, this
+  reads the world.
 - A renderer's first call in a live frame runs about twice its hot-bench time,
   its tables and code gone cold under the frame's other work: the ember paints in
   9-12 µs when repeated at once and 20-26 µs as the frame's first. Read a gain
