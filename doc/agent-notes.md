@@ -328,7 +328,7 @@ comment now states, and link that instead.
 ## Position
 
 - [Position](position-package.md) states the index's rules: bounds that are the
-  grid's, the package's names, flat and `Point3` queries, the planes
+  grid's, the package's names, the point a query takes, the planes
   `BlockChangedAt` keeps, `WallBlockAll`. What it leaves out:
 - `pkg/position` knows no entity: a test over walls or glyphs needs a world and
   stays in `internal/engine`; a grid-only test goes to the package with a test id
@@ -354,6 +354,25 @@ comment now states, and link that instead.
   whole calls it; the fuzz test's invariant fails one that does not.
 - `BeginBatch` returns the store's one batch, begun again: commit it before the
   next begins, and hold none across a call that may begin one.
+- A query is a generic method over its point (`Blocks[P Coord]`), the form read
+  by size in `at`, `as`, `box` and `body`, a constant in each instantiation: a
+  flat instantiation must keep the flat function's instructions, which `go tool
+  objdump -s 'Index.*\.Blocks' <test binary>` counts for both. A helper that
+  returns six fields (a `Box`, a `Footprint3`) goes through memory: return the
+  four-field form and two ints. A local named `at` shadows the helper.
+- A search names the zero point with false where it finds nothing: the swarm's
+  `findRoom` and the storm's attack landing keep the point without reading
+  `found`, and what they build from it is in the digests.
+- A loop around a call spills every live value before its first pass, so a
+  helper that calls once in the common case takes it straight (`clear`'s one
+  layer) and loops in a function of its own (`plane.deep`).
+- The volume tests hold a layer against a flat map through the same code, so
+  they see no flat rule broken: a flat rule needs a model of its own, as
+  `placedAround` is the exclusion search's. The block log is lost past
+  `cells/8+64` entries, so a test reads it before that many changes.
+- Two builds with the same instructions can read 15% apart on one probe by link
+  layout alone: rebuild both with `-ldflags=-randlayout=N` for a few N and
+  compare the spreads before believing either.
 
 ## Math and physics
 

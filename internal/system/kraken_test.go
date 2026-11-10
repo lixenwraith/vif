@@ -285,7 +285,7 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 	}
 	settle()
 	for _, cell := range []vmath.Point{{X: 90, Y: 45}, leg, {X: 90, Y: 46}} {
-		if w.Positions.Blocks(cell.X, cell.Y, 0) {
+		if w.Positions.Blocks(cell, 0) {
 			t.Fatalf("spawn footprint left wall at %+v", cell)
 		}
 	}
@@ -298,7 +298,7 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 		settle()
 	}
 	motion, _ := w.Components.Kinetic.GetComponent(e)
-	if motion.PreciseX < 125 || w.Positions.Blocks(125, 45, 0) || !w.Positions.Blocks(150, 80, 0) {
+	if motion.PreciseX < 125 || w.Positions.Blocks(vmath.Point{X: 125, Y: 45}, 0) || !w.Positions.Blocks(vmath.Point{X: 150, Y: 80}, 0) {
 		t.Fatal("charge failed to demolish its path or destroyed a wall outside its footprint")
 	}
 }
@@ -502,7 +502,7 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 		t.Fatal("expected unclamped tentacles beyond the map")
 	}
 	for _, cell := range s.cells {
-		if w.Positions.IsOutOfBounds(cell.X, cell.Y) {
+		if !w.Positions.InBounds(cell) {
 			t.Fatal("off-map tentacle got a spatial hitbox")
 		}
 	}
@@ -513,7 +513,7 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 		t.Fatal("map shrink left Kraken's body out of bounds")
 	}
 	for _, cell := range s.cells {
-		if w.Positions.IsOutOfBounds(cell.X, cell.Y) {
+		if !w.Positions.InBounds(cell) {
 			t.Fatal("map shrink left an off-map interaction cell")
 		}
 	}

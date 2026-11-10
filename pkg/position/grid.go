@@ -131,13 +131,23 @@ func NewGrid[E comparable](width, height, depth int) *Grid[E] {
 // rows in turn. Read-only.
 func (g *Grid[E]) Present(c Class) Bits { return g.present[c] }
 
-// InBounds reports whether the volume holds a cell at p.
-func (g *Grid[E]) InBounds(p Point3) bool {
-	return uint(p.X) < uint(g.Width) && uint(p.Y) < uint(g.Height) && uint(p.Z) < uint(g.Depth)
+// InBounds reports whether the volume holds p's cell.
+func (g *Grid[E]) InBounds[P Coord](p P) bool { return g.in(at(p)) }
+
+// in reports whether the volume holds cell c: a flat point's layer is the first,
+// which every grid holds
+func (g *Grid[E]) in(c Point3, flat bool) bool {
+	return uint(c.X) < uint(g.Width) && uint(c.Y) < uint(g.Height) && (flat || uint(c.Z) < uint(g.Depth))
 }
 
-// row is the row of the presence bits and the planes that p's cell lies in
-func (g *Grid[E]) row(p Point3) int { return p.Z*g.Height + p.Y }
+// row is the row of the presence bits and the planes that c's cell lies in, a
+// flat point's its own
+func (g *Grid[E]) row(c Point3, flat bool) int {
+	if flat {
+		return c.Y
+	}
+	return c.Z*g.Height + c.Y
+}
 
 // occupied is word w of row with a bit set for each cell holding anything scope
 // selects
@@ -184,11 +194,12 @@ func (g *Grid[E]) view(c *cell[E], scope Scope) []E {
 // Set inserts e into its class's half of p's cell and returns how many the cell
 // then holds. O(1); 0 when out of bounds, the cell is full, or the private budget
 // is spent (soft clip).
-func (g *Grid[E]) Set(e E, class Class, p Point3) int {
-	if !g.InBounds(p) {
+func (g *Grid[E]) Set[P Coord](e E, class Class, p P) int {
+	q, flat := at(p)
+	if !g.in(q, flat) {
 		return 0
 	}
-	x, y := p.X, g.row(p)
+	x, y := q.X, g.row(q, flat)
 	c := &g.cells[y*g.Width+x]
 	if c.tag == holdsNone {
 		c.tag, c.one[0] = holdsShared+int32(class), e
@@ -287,11 +298,12 @@ func (g *Grid[E]) EachOccupied(fn func(index int32, occupants []E, shared int)) 
 
 // RemoveEntityAt deletes e from p's cell. O(k), k the cell's occupants:
 // swap-removes within e's half, refilling the shared tail from the private run.
-func (g *Grid[E]) RemoveEntityAt(e E, p Point3) {
-	if !g.InBounds(p) {
+func (g *Grid[E]) RemoveEntityAt[P Coord](e E, p P) {
+	q, flat := at(p)
+	if !g.in(q, flat) {
 		return
 	}
-	x, y := p.X, g.row(p)
+	x, y := q.X, g.row(q, flat)
 	c := &g.cells[y*g.Width+x]
 	if c.tag < holdsCrowd {
 		if c.tag != holdsNone && c.one[0] == e {
@@ -338,48 +350,38 @@ func (g *Grid[E]) RemoveEntityAt(e E, p Point3) {
 	}
 }
 
-// EntitiesAt returns a view of the entities scope selects at (x, y) of the first
-// layer, nil if empty or out of bounds: the cell's own storage, to copy or to read
-// before it changes.
-func (g *Grid[E]) EntitiesAt(x, y int, scope Scope) []E {
-	if uint(x) >= uint(g.Width) || uint(y) >= uint(g.Height) || !g.holds(x, y, scope) {
+// EntitiesAt returns a view of the entities scope selects in p's cell, nil if
+// empty or out of bounds: the cell's own storage, to copy or to read before it
+// changes.
+func (g *Grid[E]) EntitiesAt[P Coord](p P, scope Scope) []E {
+	q, flat := at(p)
+	if !g.in(q, flat) || !g.holds(q.X, g.row(q, flat), scope) {
 		return nil
 	}
-	return g.view(&g.cells[y*g.Width+x], scope)
-}
-
-// EntitiesIn is EntitiesAt for a cell of any layer.
-func (g *Grid[E]) EntitiesIn(p Point3, scope Scope) []E {
-	if !g.InBounds(p) || !g.holds(p.X, g.row(p), scope) {
-		return nil
-	}
-	return g.view(&g.cells[g.row(p)*g.Width+p.X], scope)
+	return g.view(&g.cells[g.row(q, flat)*g.Width+q.X], scope)
 }
 
 // Occupants is EntitiesAt without the presence test, for a caller that knows the
 // cell holds something, as one asking about an entity's own cell does.
-func (g *Grid[E]) Occupants(x, y int, scope Scope) []E {
-	if uint(x) >= uint(g.Width) || uint(y) >= uint(g.Height) {
+func (g *Grid[E]) Occupants[P Coord](p P, scope Scope) []E {
+	q, flat := at(p)
+	if !g.in(q, flat) {
 		return nil
 	}
-	return g.view(&g.cells[y*g.Width+x], scope)
+	return g.view(&g.cells[g.row(q, flat)*g.Width+q.X], scope)
 }
 
-// HasAnyEntityAt reports whether scope selects at least one entity at (x, y) of
-// the first layer. O(1)
-func (g *Grid[E]) HasAnyEntityAt(x, y int, scope Scope) bool {
-	return uint(x) < uint(g.Width) && uint(y) < uint(g.Height) && g.holds(x, y, scope)
-}
-
-// HasAnyEntityIn is HasAnyEntityAt for a cell of any layer.
-func (g *Grid[E]) HasAnyEntityIn(p Point3, scope Scope) bool {
-	return g.InBounds(p) && g.holds(p.X, g.row(p), scope)
+// HasAnyEntityAt reports whether scope selects at least one entity in p's cell.
+// O(1)
+func (g *Grid[E]) HasAnyEntityAt[P Coord](p P, scope Scope) bool {
+	q, flat := at(p)
+	return g.in(q, flat) && g.holds(q.X, g.row(q, flat), scope)
 }
 
 // Holds reports whether the grid holds e in its class's half of p's cell, which
 // tells an idempotent write from a soft-clipped entity that needs another insertion.
-func (g *Grid[E]) Holds(e E, class Class, p Point3) bool {
-	return slices.Contains(g.EntitiesIn(p, 1<<class), e)
+func (g *Grid[E]) Holds[P Coord](e E, class Class, p P) bool {
+	return slices.Contains(g.EntitiesAt(p, 1<<class), e)
 }
 
 // Clear removes every entity from every cell.

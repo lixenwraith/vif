@@ -315,7 +315,7 @@ func TestAnEnteringDataSpeciesLandsAsItsMaterializeEnds(t *testing.T) {
 	landed := map[[2]int]bool{}
 	for _, header := range headers {
 		pos, _ := w.Positions.GetPosition(header)
-		if a := p.Footprint.At(pos.X, pos.Y); !w.Positions.IsAreaFree(a.X, a.Y, a.Width, a.Height, component.WallBlockSpawn) {
+		if !w.Positions.IsAreaFree(p.Footprint.At(pos.X, pos.Y), component.WallBlockSpawn) {
 			t.Fatalf("a warden landed at (%d, %d) on the rock that came over its footprint", pos.X, pos.Y)
 		}
 		landed[[2]int{pos.X, pos.Y}] = true

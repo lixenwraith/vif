@@ -95,7 +95,7 @@ func HasCombatTargetAt(w *engine.World, x, y int, scope position.Scope, selfEnti
 // CombatTargetAt is HasCombatTargetAt naming the first target found and the occupant it was hit through
 func CombatTargetAt(w *engine.World, x, y int, scope position.Scope, selfEntity, ownerEntity core.Entity) (target, hit core.Entity, ok bool) {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := copy(entities[:], w.Positions.EntitiesAt(x, y, scope))
+	count := copy(entities[:], w.Positions.EntitiesAt(vmath.Point{X: x, Y: y}, scope))
 	for i := range count {
 		target, hit, valid := ResolveTargetFromEntity(w, entities[i], selfEntity)
 		if !valid || isPlayerSide(w, target, ownerEntity) {
@@ -295,7 +295,7 @@ func traceRay(w *engine.World, r vmath.Ray) int {
 	limit := w.Resources.Config.MapWidth + w.Resources.Config.MapHeight
 	for i := 1; i <= limit; i++ {
 		x, y := r.Center(i)
-		if w.Positions.IsOutOfBounds(x, y) || w.Positions.Blocks(x, y, component.WallBlockKinetic) {
+		if w.Positions.IsBlocked(vmath.Point{X: x, Y: y}, component.WallBlockKinetic) {
 			return i - 1
 		}
 	}
@@ -304,7 +304,7 @@ func traceRay(w *engine.World, r vmath.Ray) int {
 
 // bodyHasLineOfSight is whether a body flies clear from one header cell to another
 func bodyHasLineOfSight(w *engine.World, x0, y0, x1, y1 int, foot vmath.Footprint) bool {
-	return w.Positions.HasAreaLineOfSight(x0, y0, x1, y1, foot, component.WallBlockKinetic)
+	return w.Positions.HasAreaLineOfSight(vmath.Point{X: x0, Y: y0}, vmath.Point{X: x1, Y: y1}, foot, component.WallBlockKinetic)
 }
 
 // isPlayerSide excludes what no player's weapon targets: every player, every weapon

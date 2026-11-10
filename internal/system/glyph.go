@@ -295,7 +295,7 @@ func (s *GlyphSystem) countPlacedKind() int {
 
 // hides reports a cell of rock or a wall that keeps text out and scenery behind it
 func (s *GlyphSystem) hides(x, y int) bool {
-	return s.world.Positions.Blocks(x, y, component.WallBlockSpawn)
+	return s.world.Positions.Blocks(vmath.Point{X: x, Y: y}, component.WallBlockSpawn)
 }
 
 // updateCensus counts the glyphs of the placed kind a player sees per spawn slot, as
@@ -541,7 +541,7 @@ func (s *GlyphSystem) nearCursor(row, startCol, length int) bool {
 // keeps text out of
 func (s *GlyphSystem) blocked(row, startCol, length int) bool {
 	for i := range length {
-		if s.world.Positions.IsBlocked(startCol+i, row, component.WallBlockSpawn) {
+		if s.world.Positions.IsBlocked(vmath.Point{X: startCol + i, Y: row}, component.WallBlockSpawn) {
 			return true
 		}
 	}
@@ -605,7 +605,7 @@ func (s *GlyphSystem) enterLine(text string, length int, glyphType component.Gly
 // occupied reports a run of cells on a row that any entity stands in
 func (s *GlyphSystem) occupied(row, startCol, length int) bool {
 	for i := range length {
-		if s.world.Positions.HasAnyEntityAt(startCol+i, row, position.ScopeAll) {
+		if s.world.Positions.HasAnyEntityAt(vmath.Point{X: startCol + i, Y: row}, position.ScopeAll) {
 			return true
 		}
 	}
@@ -664,7 +664,7 @@ func (s *GlyphSystem) feed(line *engine.EntryLine, heading [2]int) bool {
 	config := s.world.Resources.Config
 	for line.Text != "" {
 		r, size := utf8.DecodeRuneInString(line.Text)
-		if !s.world.Positions.IsOutOfBounds(line.X, line.Y) {
+		if s.world.Positions.InBounds(vmath.Point{X: line.X, Y: line.Y}) {
 			if r != ' ' {
 				s.enterRune(line, r)
 			}

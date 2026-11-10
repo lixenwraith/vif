@@ -34,11 +34,12 @@ In `pkg/position`:
   block log; `BlockBits`, the plane's words with the surfaces' solid cells for a
   reader deriving whole; and the searches: free area by spiral, by pattern and
   around an exclusion, point and area line of sight, rays, the closest occupant
-  in a direction. A query taking a column and a row answers for the first
-  layer, as a flat game's do; one taking a `Point3` (`BlocksAt`, `BlocksBox`,
-  `IsBlockedAt`, `EntitiesIn`, `HasAnyEntityIn`, `HasLineOfSightBetween`,
-  `HasBoxLineOfSight`) for any, a line through the volume walking `vmath.Line3`;
-  the mutators take a `Point3`, a flat caller placing on the first layer.
+  in a direction. Each query and mutator takes its cell as either point
+  (`Coord`): a `Point`, its cell on the first layer, which a flat game passes
+  as it holds it, or a `Point3`, a cell of the volume; a region is a
+  `vmath.Area` or a `Box` (`Region`), a body a `Footprint` or a `Footprint3`
+  (`Body`). A search answers in the point it was asked in, on its origin's
+  layer, with the zero point and false where it finds nothing.
 - `Bits`: the grid of bits the planes and navigation share, each row starting on
   a word: a point a bit, an area a few words a row, a row shifted a column in a
   word, two grids diffed by XOR.
@@ -234,21 +235,40 @@ serves a flat map as a volume one cell deep, at no cost to it.
   queries take, and `Point.Layer` places a flat cell on a layer. One point with a
   Z of zero on a flat map cost every row, log entry and capture column a third
   more for nothing, and read as a 3D type among 2D functions. `Vec3` stays the
-  float vector of a body's physics. A generic index over the coordinate type is
-  the todo's [item](todo.md#a-generic-index-over-the-coordinate-type) for when
-  vmath and the physics go to three axes.
+  float vector of a body's physics.
+- One index for both, its methods generic over the point: `Index[E]` keeps its
+  depth as a value, and a query is a generic method over `Coord`, `Region` or
+  `Body`, so the one `World` every game shares asks one index, a flat system
+  with the `Point` its rows hold and a volume's with a `Point3`, and a volume
+  can come up a system at a time. The form is read from the type's size, a
+  constant in each instantiation (`at`, `as`, `box`, `body`: the package's one
+  use of `unsafe`, held at compile time to two forms that differ in size), so
+  the flat instantiation compiles to the flat function's instructions; a type
+  switch on the parameter read a probe 10 to 20% slower and a constraint with
+  methods a quarter. A box or a deep footprint comes back from those helpers in
+  parts: six fields leave the registers four stay in, which cost the area probe
+  half again to twice. What it costs: no interface can hold a generic method,
+  every signature carries a type parameter, and nothing at compile time stops a
+  `Point3` on a flat map, where a layer past the first is outside it. An index
+  typed by its coordinate, `Index[E, P]`, which the compiler would hold to one
+  point, is the todo's [item](todo.md#an-index-typed-by-its-coordinate-indexe-p)
+  for when flat and volume games run on the engine together.
 - The grid: `Depth` layers, one on a flat map, the cells indexed
   `(z*Height+y)*Width+x`, the planes and the presence bits each one `Bits` whose
   rows are the layers' in turn, so a cell's index names its row and a flat query
   costs what it did. The one ceiling bounds the volume's cells as the map's
   (`ClampVolume`), so a volume stays small while every cell is dense, 100×50×25
   at most.
-- The queries: one taking a column and a row answers for the first layer, so no
-  call site of a flat game moves; one taking a `Point` answers for any; a line of
-  sight walks `vmath.Line3` in place, the axis of the longest span stepping every
-  cell and in one plane the cells `Line` walks; a body of depth tests a box a
-  step. The placement searches, spiral, pattern and exclusion, stay a layer's, as
-  placing on a floor.
+- The queries: a `Point` is its cell on the first layer and a `Point3` answers
+  in its own; a line of sight through a volume walks `vmath.Line3` in place, the
+  axis of the longest span stepping every cell and in one plane the cells `Line`
+  walks; a body of depth is tested through the layers it spans (`plane.deep`),
+  one layer being one probe. Every search, the spiral, the pattern, the
+  exclusion and the directional scan, works the layer its origin names, as
+  placing on a floor: what a layer means, a storey or a slice of depth, is the
+  game's, so a search crossing layers is the todo's
+  [item](todo.md#placement-searches-that-cross-a-volumes-layers) for a game
+  that needs one.
 - A body with a height on a flat map, the storm: its circles keep a float `Pos3D`
   and `Vel3D` for their physics, and their Z, which picks the half drawn in
   front, never reaches their position. A body's continuous height belongs in its
@@ -350,6 +370,18 @@ main it landed on:
   100×50×25 volume with no wall, segments some forty cells long: a line of sight
   800 to 230 ns, a 3×3×2 body's 1.05 to 0.8 µs; `vmath`'s `BenchmarkLine3` 68 to
   10 µs.
+- One index generic over the point, against the line walk above: a flat probe,
+  area, line of sight, occupant read, move, shift and scan compile to the
+  instructions they had and read level on the package's benches and the game's.
+  What read over was link layout: the gauges and an occupant probe at the
+  ceiling 12 to 17% over in one build, their instructions the same, and the
+  glyph renderer at 200×60 10% over in one and level across six
+  (`-ldflags=-randlayout`), the earlier build's own six 18% apart. The placement
+  searches on a flat map read under, the spiral 4 to 8% and the pattern search
+  6 to 12%, a candidate being one area test where it bounded itself and then
+  asked `IsAreaFree`; the exclusion search level on an open map and 28% under
+  in a maze, its last resort counting a slot's cells off one plane. A lone
+  `IsAreaFree` reads half a nanosecond over, its layers bounded at run time.
 
 Across the changes td's tick read from 0.40 ms before the move to 0.29 ms, each
 step against its own main, and 0.13 to 0.11 ms with the cells; the tables each PR

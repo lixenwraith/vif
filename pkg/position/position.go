@@ -6,16 +6,77 @@
 package position
 
 import (
+	"unsafe"
+
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // Point is a cell's coordinate on a flat map, vmath's, and Point3 a cell's in a
-// volume, its Z the layer. A query taking a column and a row answers for the
-// first layer; one taking a Point3, for any layer.
+// volume, its Z the layer.
 type (
 	Point  = vmath.Point
 	Point3 = vmath.Point3
 )
+
+// Coord is the coordinate a query takes: a Point, a cell of the first layer, or a
+// Point3, a cell of any. Region is a block of cells, an Area of the first layer
+// or a Box, and Body a body's cells around its header, a Footprint one layer deep
+// or a Footprint3.
+type (
+	Coord  interface{ Point | Point3 }
+	Region interface{ vmath.Area | vmath.Box }
+	Body   interface {
+		vmath.Footprint | vmath.Footprint3
+	}
+)
+
+// A query tells the flat form of a coordinate, a region or a body from the
+// volume's by its size, so the two of each kind must differ in it.
+const _ = 1/(unsafe.Sizeof(Point3{})-unsafe.Sizeof(Point{})) +
+	1/(unsafe.Sizeof(vmath.Box{})-unsafe.Sizeof(vmath.Area{})) +
+	1/(unsafe.Sizeof(vmath.Footprint3{})-unsafe.Sizeof(vmath.Footprint{}))
+
+// at is p's cell in the volume, a flat point's on the first layer, and whether p
+// is flat: a constant in each instantiation, so a query reads a flat point as it
+// would two ints and its volume half compiles away.
+func at[P Coord](p P) (Point3, bool) {
+	if unsafe.Sizeof(p) == unsafe.Sizeof(Point3{}) {
+		return *(*Point3)(unsafe.Pointer(&p)), false
+	}
+	return (*Point)(unsafe.Pointer(&p)).Layer(0), true
+}
+
+// as is cell c as a P: itself, or its column and row
+func as[P Coord](c Point3) (p P) {
+	if unsafe.Sizeof(p) == unsafe.Sizeof(c) {
+		*(*Point3)(unsafe.Pointer(&p)) = c
+	} else {
+		*(*Point)(unsafe.Pointer(&p)) = c.Flat()
+	}
+	return p
+}
+
+// box is r's columns and rows, the first of its layers and how many they are, an
+// area the first layer alone, and whether r is flat. A box's six fields would
+// live in memory, where four stay in registers, so it comes back in parts.
+func box[R Region](r R) (a vmath.Area, z, depth int, flat bool) {
+	if unsafe.Sizeof(r) == unsafe.Sizeof(vmath.Box{}) {
+		b := (*vmath.Box)(unsafe.Pointer(&r))
+		return vmath.Area{X: b.X, Y: b.Y, Width: b.Width, Height: b.Height}, b.Z, b.Depth, false
+	}
+	return *(*vmath.Area)(unsafe.Pointer(&r)), 0, 1, true
+}
+
+// body is f's columns and rows around its header, its header's layer among its
+// own and how many they are, a flat footprint one layer deep, and whether f is
+// flat; in parts, as box
+func body[F Body](f F) (foot vmath.Footprint, headerZ, depth int, flat bool) {
+	if unsafe.Sizeof(f) == unsafe.Sizeof(vmath.Footprint3{}) {
+		b := (*vmath.Footprint3)(unsafe.Pointer(&f))
+		return vmath.Footprint{Width: b.Width, Height: b.Height, HeaderX: b.HeaderX, HeaderY: b.HeaderY}, b.HeaderZ, b.Depth, false
+	}
+	return *(*vmath.Footprint)(unsafe.Pointer(&f)), 0, 1, true
+}
 
 // Frame is the map's frame, read live: the cell aspect the searches round on. The
 // bounds every query answers within are the grid's.
@@ -91,17 +152,21 @@ type plane struct {
 	solid [][]uint64
 }
 
-// blocked reports cell px of row, which the caller has bounded: a block's bit, or a
-// merged surface's, whose rows are the first layer's
-func (p *plane) blocked(px, row int) bool {
-	w := row*p.Stride + px>>6
+// word is word w of the plane's bits with the merged surfaces' over them
+func (p *plane) word(w int) uint64 {
 	word := p.Words[w]
 	for _, s := range p.solid {
 		if w < len(s) {
 			word |= s[w]
 		}
 	}
-	return word>>(uint(px)&63)&1 != 0
+	return word
+}
+
+// blocked reports cell px of row, which the caller has bounded: a block's bit, or a
+// merged surface's, whose rows are the first layer's
+func (p *plane) blocked(px, row int) bool {
+	return p.word(row*p.Stride+px>>6)>>(uint(px)&63)&1 != 0
 }
 
 // any reports whether a cell of [x0, x1) × the rows [r0, r1), bounded by the caller
@@ -111,12 +176,7 @@ func (p *plane) any(x0, x1, r0, r1 int) bool {
 	first, last := ^uint64(0)<<(uint(x0)&63), ^uint64(0)>>(63-uint(x1-1)&63)
 	for at := r0 * p.Stride; at < r1*p.Stride; at += p.Stride {
 		for w := at + w0; w <= at+w1; w++ {
-			word := p.Words[w]
-			for _, s := range p.solid {
-				if w < len(s) {
-					word |= s[w]
-				}
-			}
+			word := p.word(w)
 			if w == at+w0 {
 				word &= first
 			}
@@ -126,6 +186,16 @@ func (p *plane) any(x0, x1, r0, r1 int) bool {
 			if word != 0 {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// deep is any on each of n layers, pitch rows apart
+func (p *plane) deep(x0, x1, r0, r1, n, pitch int) bool {
+	for ; n > 0; n, r0, r1 = n-1, r0+pitch, r1+pitch {
+		if p.any(x0, x1, r0, r1) {
+			return true
 		}
 	}
 	return false
@@ -239,58 +309,57 @@ func (x *Index[E]) update(px, row int) {
 	}
 }
 
-// Blocks reports whether (x, y) of the first layer is blocked for mask: a
-// surface's solid side, or a shared occupant blockOf names. Outside the map
-// nothing is.
-func (x *Index[E]) Blocks(px, py int, mask Mask) bool {
-	if uint(px) >= uint(x.Width) || uint(py) >= uint(x.Height) {
+// Blocks reports whether p's cell is blocked for mask: a surface's solid side, or
+// a shared occupant blockOf names. Outside the map nothing is.
+func (x *Index[E]) Blocks[P Coord](p P, mask Mask) bool {
+	c, flat := at(p)
+	if !x.in(c, flat) {
 		return false
 	}
-	return x.probe(mask).blocked(px, py)
+	return x.probe(mask).blocked(c.X, x.row(c, flat))
 }
 
-// BlocksAt is Blocks for a cell of any layer; the surfaces lie on the first.
-func (x *Index[E]) BlocksAt(p Point3, mask Mask) bool {
-	if !x.InBounds(p) {
-		return false
-	}
-	return x.probe(mask).blocked(p.X, x.row(p))
-}
-
-// BlocksArea reports whether a cell of [x, x+width) × [y, y+height) of the first
-// layer is blocked for mask, the cells outside the map passed over.
-func (x *Index[E]) BlocksArea(px, py, width, height int, mask Mask) bool {
-	x0, y0 := max(px, 0), max(py, 0)
-	x1, y1 := min(px+width, x.Width), min(py+height, x.Height)
+// BlocksArea reports whether a cell of r is blocked for mask, the cells outside
+// the map passed over.
+func (x *Index[E]) BlocksArea[R Region](r R, mask Mask) bool {
+	a, z, depth, flat := box(r)
+	x0, y0 := max(a.X, 0), max(a.Y, 0)
+	x1, y1 := min(a.X+a.Width, x.Width), min(a.Y+a.Height, x.Height)
 	if x0 >= x1 || y0 >= y1 {
 		return false
 	}
-	return x.probe(mask).any(x0, x1, y0, y1)
+	plane := x.probe(mask)
+	if flat {
+		return plane.any(x0, x1, y0, y1)
+	}
+	z0, z1 := max(z, 0), min(z+depth, x.Depth)
+	return plane.deep(x0, x1, z0*x.Height+y0, z0*x.Height+y1, z1-z0, x.Height)
 }
 
-// BlocksBox reports whether a cell of the box from p, width×height×depth cells, is
-// blocked for mask, the cells outside the volume passed over.
-func (x *Index[E]) BlocksBox(p Point3, width, height, depth int, mask Mask) bool {
-	x0, y0, z0 := max(p.X, 0), max(p.Y, 0), max(p.Z, 0)
-	x1, y1, z1 := min(p.X+width, x.Width), min(p.Y+height, x.Height), min(p.Z+depth, x.Depth)
-	if x0 >= x1 || y0 >= y1 || z0 >= z1 {
+// clear reports whether the cells of a on depth layers from z lie whole inside
+// the volume and p blocks none of them; one layer, a flat map's every body, is
+// one probe
+func (x *Index[E]) clear(p *plane, a vmath.Area, z, depth int) bool {
+	if a.X < 0 || a.Y < 0 || z < 0 || a.X+a.Width > x.Width || a.Y+a.Height > x.Height || z+depth > x.Depth {
 		return false
 	}
-	plane := x.probe(mask)
-	for z := z0; z < z1; z++ {
-		if plane.any(x0, x1, z*x.Height+y0, z*x.Height+y1) {
-			return true
-		}
+	if a.Width <= 0 || a.Height <= 0 {
+		return true
 	}
-	return false
+	row := z*x.Height + a.Y
+	if depth == 1 {
+		return !p.any(a.X, a.X+a.Width, row, row+a.Height)
+	}
+	return !p.deep(a.X, a.X+a.Width, row, row+a.Height, depth, x.Height)
 }
 
-// blockedCells counts the cells of an area blocked for mask
-func (x *Index[E]) blockedCells(px, py, width, height int, mask Mask) int {
-	n := 0
-	for row := py; row < py+height; row++ {
-		for col := px; col < px+width; col++ {
-			if x.Blocks(col, row, mask) {
+// blockedCells counts the cells of a on z, a layer of the volume, blocked for
+// mask, a cell outside the map being none
+func (x *Index[E]) blockedCells(a vmath.Area, z int, mask Mask) int {
+	p, n := x.probe(mask), 0
+	for row := max(a.Y, 0); row < min(a.Y+a.Height, x.Height); row++ {
+		for col := max(a.X, 0); col < min(a.X+a.Width, x.Width); col++ {
+			if p.blocked(col, z*x.Height+row) {
 				n++
 			}
 		}
@@ -315,10 +384,11 @@ func (x *Index[E]) BlockBits(mask Mask, buf []uint64) Bits {
 // BlockChangedAt logs p as a cell whose block answer may have moved, a block
 // placed, moved or removed there or its mask rewritten, and brings the planes to
 // what the cell holds now.
-func (x *Index[E]) BlockChangedAt(p Point3) {
-	x.log.add(p, len(x.cells))
-	if x.stale&stalePlanes == 0 && x.InBounds(p) {
-		x.update(p.X, x.row(p))
+func (x *Index[E]) BlockChangedAt[P Coord](p P) {
+	c, flat := at(p)
+	x.log.add(c, len(x.cells))
+	if x.stale&stalePlanes == 0 && x.in(c, flat) {
+		x.update(c.X, x.row(c, flat))
 	}
 }
 

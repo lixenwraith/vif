@@ -40,7 +40,7 @@ func benchIndex(s int) (*Index[entity], []placed, []Point) {
 	x.Resize(shape.w, shape.h, 1)
 	for id := 1; id <= shape.walls; {
 		p := Point3{X: rng.IntN(shape.w), Y: rng.IntN(shape.h)}
-		if x.HasAnyEntityAt(p.X, p.Y, ScopeShared) {
+		if x.HasAnyEntityAt(p, ScopeShared) {
 			continue
 		}
 		x.Set(mk(ClassShared, uint64(id))|benchWall|entity(benchMask)<<48, ClassShared, p)
@@ -75,7 +75,7 @@ func BenchmarkBlocks(b *testing.B) {
 	benchEach(b, func(b *testing.B, x *Index[entity], _ []placed, points []Point) {
 		n, i := 0, 0
 		for b.Loop() {
-			if p := points[i&(benchPoints-1)]; x.Blocks(p.X, p.Y, benchMask) {
+			if p := points[i&(benchPoints-1)]; x.Blocks(p, benchMask) {
 				n++
 			}
 			i++
@@ -95,7 +95,7 @@ func BenchmarkBlocksUnderSurfaces(b *testing.B) {
 		x.AddSurface(benchMask, Below, 0, bottom)
 		n, i := 0, 0
 		for b.Loop() {
-			if p := points[i&(benchPoints-1)]; x.Blocks(p.X, p.Y, benchMask) {
+			if p := points[i&(benchPoints-1)]; x.Blocks(p, benchMask) {
 				n++
 			}
 			i++
@@ -109,7 +109,7 @@ func BenchmarkBlocksArea(b *testing.B) {
 	benchEach(b, func(b *testing.B, x *Index[entity], _ []placed, points []Point) {
 		n, i := 0, 0
 		for b.Loop() {
-			if p := points[i&(benchPoints-1)]; x.BlocksArea(p.X-benchBody.HeaderX, p.Y-benchBody.HeaderY, benchBody.Width, benchBody.Height, benchMask) {
+			if p := points[i&(benchPoints-1)]; x.BlocksArea(benchBody.At(p.X, p.Y), benchMask) {
 				n++
 			}
 			i++
@@ -126,7 +126,7 @@ func BenchmarkBodyLineOfSight(b *testing.B) {
 			p := points[i&(benchPoints-1)]
 			q := points[(i+1)&(benchPoints-1)]
 			q = Point{X: p.X + (q.X-p.X)%30, Y: p.Y + (q.Y-p.Y)%12}
-			if x.HasAreaLineOfSight(p.X, p.Y, q.X, q.Y, benchBody, benchMask) {
+			if x.HasAreaLineOfSight(p, q, benchBody, benchMask) {
 				n++
 			}
 			i++
@@ -141,7 +141,7 @@ func BenchmarkOccupants(b *testing.B) {
 		n, i := 0, 0
 		for b.Loop() {
 			p := points[i&(benchPoints-1)]
-			n += len(x.EntitiesAt(p.X, p.Y, ScopeAll))
+			n += len(x.EntitiesAt(p, ScopeAll))
 			i++
 		}
 		_ = n
@@ -182,8 +182,8 @@ func BenchmarkShift(b *testing.B) {
 // BenchmarkWallMove moves a wall a cell and brings the planes to it.
 func BenchmarkWallMove(b *testing.B) {
 	benchEach(b, func(b *testing.B, x *Index[entity], _ []placed, points []Point) {
-		x.Blocks(0, 0, benchMask)
-		x.Blocks(0, 0, 0)
+		x.Blocks(Point{}, benchMask)
+		x.Blocks(Point{}, 0)
 		wall := mk(ClassShared, 1<<30) | benchWall | entity(benchMask)<<48
 		at := points[0].Layer(0)
 		x.Set(wall, ClassShared, at)
@@ -208,10 +208,10 @@ func BenchmarkDirectionalScan(b *testing.B) {
 		n, i := 0, 0
 		for b.Loop() {
 			p := points[i&(benchPoints-1)]
-			if _, _, _, ok := x.FindClosestEntityInDirection(p.X, p.Y, 1, 0, Rect{MinY: p.Y - 3, MaxY: p.Y + 3}, ScopeAll, private); ok {
+			if _, _, ok := x.FindClosestEntityInDirection(p, 1, 0, Rect{MinY: p.Y - 3, MaxY: p.Y + 3}, ScopeAll, private); ok {
 				n++
 			}
-			if _, _, _, ok := x.FindClosestEntityInDirection(p.X, p.Y, 0, 1, Rect{MinX: p.X - 3, MaxX: p.X + 3}, ScopeAll, private); ok {
+			if _, _, ok := x.FindClosestEntityInDirection(p, 0, 1, Rect{MinX: p.X - 3, MaxX: p.X + 3}, ScopeAll, private); ok {
 				n++
 			}
 			i++
@@ -254,7 +254,7 @@ func BenchmarkLoad(b *testing.B) {
 				x.Load(c.index, occupants[at:at+c.count], c.shared)
 				at += c.count
 			}
-			x.Blocks(0, 0, benchMask)
+			x.Blocks(Point{}, benchMask)
 		}
 	})
 }

@@ -254,26 +254,28 @@ func (x *Index[E]) ShiftSurface(s *Surface, enter int) {
 }
 
 // BlocksCarried is Blocks as a frame drawn carry columns into a scroll sees it:
-// the surfaces and the blocks ride it, so cell (x, y) shows what x+carry holds
-// now, and past a surface's right end the heights ahead of it
-func (x *Index[E]) BlocksCarried(px, py, carry int, mask Mask) bool {
-	if carry > 0 && px >= 0 {
-		if px += carry; px >= x.aheadFrom {
-			return x.blocksAhead(px, py, mask)
-		}
-	}
-	return x.Blocks(px, py, mask)
-}
-
-// blocksAhead is BlocksCarried past the first surface's right end
-func (x *Index[E]) blocksAhead(px, py int, mask Mask) bool {
-	for _, s := range x.surfaces {
-		if i := px - len(s.heights); i >= 0 && i < len(s.ahead) && s.stops(mask) &&
-			py >= 0 && py < x.Height && s.solidAt(s.ahead[i], py) {
+// the surfaces and the blocks ride it, so p's cell shows what the one carry
+// columns on holds now, and past a surface's right end the heights ahead of it
+func (x *Index[E]) BlocksCarried[P Coord](p P, carry int, mask Mask) bool {
+	c, flat := at(p)
+	if carry > 0 && c.X >= 0 {
+		if c.X += carry; c.X >= x.aheadFrom && x.solidAhead(c, mask) {
 			return true
 		}
 	}
-	return x.Blocks(px, py, mask)
+	return x.in(c, flat) && x.probe(mask).blocked(c.X, x.row(c, flat))
+}
+
+// solidAhead reports whether c, past a surface's right end, is solid by the
+// heights ahead of that surface
+func (x *Index[E]) solidAhead(c Point3, mask Mask) bool {
+	for _, s := range x.surfaces {
+		if i := c.X - len(s.heights); i >= 0 && i < len(s.ahead) && s.stops(mask) &&
+			c.Z == 0 && c.Y >= 0 && c.Y < x.Height && s.solidAt(s.ahead[i], c.Y) {
+			return true
+		}
+	}
+	return false
 }
 
 // widths notes the surfaces' widths: the first column past one is where its

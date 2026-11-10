@@ -62,30 +62,65 @@ remains stands on its own.
   [Rendering §2](rendering.md#2-render-context-and-coordinates)
 
 The index holds a volume one layer deep on every map, and a game in depth asks it
-by the point. What such a game still needs is not laid: a depth in the config the
-binding resizes to (`Position.Resize` passes one layer), the placement searches
-(spiral, pattern, exclusion) in a 3D form, a footprint with depth and a
-passability per layer in navigation, a flat renderer reading the layer it looks
-at, a render in depth ordering overlap by a depth buffer over every layer
-projected (`sandbox/3d`), a heightfield as a volume's surface (the surfaces lie on
-the first layer), and cells chunked on demand for a volume past the ceiling
-(`ClampVolume` holds a volume to the map's 125,000 cells).
+by a `Point3` where a flat one passes a `Point`, the searches each working their
+origin's layer. What such a game still needs is not laid: a depth in the config
+the binding resizes to (`Position.Resize` passes one layer), a footprint with
+depth and a passability per layer in navigation, a flat renderer reading the
+layer it looks at, a render in depth ordering overlap by a depth buffer over
+every layer projected (`sandbox/3d`), a heightfield as a volume's surface (the
+surfaces lie on the first layer), and cells chunked on demand for a volume past
+the ceiling (`ClampVolume` holds a volume to the map's 125,000 cells).
 
-#### A generic index over the coordinate type
+#### An index typed by its coordinate, `Index[E, P]`
 
-- Priority: P3, with the first 3D game, once `vmath` and the physics go to three axes
-- Affected files: `pkg/position`, `pkg/vmath`, `pkg/vmath/physics`,
-  `internal/engine/position.go`
+- Priority: P3, to evaluate when flat and volume games are to run on the engine together
+- Affected files: `pkg/position`, `internal/engine/position.go`,
+  `internal/engine/world.go`, every call site of a query
 - Guide: [Position §3](position-package.md#3-the-volume)
 
-The index takes a flat `Point` and a `Point3` apart: the flat queries read ints
-and the volume's a `Point3`, which keeps a flat game's rows at two ints and its
-call sites as they are. One API shape for both would be an index generic over
-the coordinate type, `Index[E, P]`, every coordinate read through a constraint's
-methods, each shape specialised by the compiler at no runtime cost, and every
-call site building a `P`. That churn pays only when a game in depth exists and
-`vmath`, its vectors and the physics speak three axes alike; take it then, with
-the volume's foundation above.
+The choice made: one `Index[E]` whose depth is set at `Resize`, each query a
+generic method taking a `Point`, its cell on the first layer, or a `Point3`, the
+two told apart by size at compile time, at no cost to a probe.
+
+What the other form does: the point is the index's second type parameter, a flat
+map an `Index[E, Point]` and a volume an `Index[E, Point3]`. Its methods are plain
+ones taking `P`, the block log is in `P`, and the compiler refuses a `Point3` on
+a flat map.
+
+What it entails: the engine's store embeds the index and every game shares one
+`World`, so `P` is one type for the whole binary. A volume game beside flat ones
+then needs a `World` generic over `P`, or a second store, or `Point3`
+throughout: every game's rows, log and captures carrying a Z, and every flat
+call site, the 155 the conversion rewrote among them, passing a `Point3`. Go
+derives no area or footprint type from `P`, so those queries stay split by name
+or stay generic methods.
+
+Why it was not chosen: with one `World` for every game, a flat system passes the
+`Point` its rows hold and a volume's a `Point3` to the same index, a flat row
+stays two ints, and a volume comes up a system at a time. The form taken pays
+for that with generic methods, new in Go 1.27, which no interface can hold and
+tools may trail, a type parameter on every signature, and nothing at compile
+time between a `Point3` and a flat map. A probe costs the same under both.
+
+Evaluate it when a flat game and a volume game run on the engine in one build:
+if each then has a world of its own type, the point belongs on the index.
+
+#### Placement searches that cross a volume's layers
+
+- Priority: P3, when a game in a volume needs a place found off its origin's layer
+- Affected files: `pkg/position/search.go`, `pkg/vmath` (`Aspect`, the diagonal scale)
+- Guide: [Position §3](position-package.md#3-the-volume)
+
+The spiral, the pattern search and the exclusion search each work the layer
+their origin names, a body with depth tested through the layers it spans, and so
+does the directional scan. What a layer means, a storey or a slice of depth, is
+the game's, so none was guessed. A form of all three that crosses layers
+searches 26 directions where a layer has 8, and has to settle: the order the
+layers are tried in, a depth in `vmath.Aspect` beside the cell's width and
+height, the scale of a corner diagonal (1/√3, beside the 1/√2 of
+`DiagonalNum`/`DiagonalDen`), what clockwise means off the plane, whether the
+pattern's area gains a depth, and the slots before and behind an exclusion that
+has one. It goes beside the layer forms and changes no caller of them.
 
 #### Profile td's storm peaks
 

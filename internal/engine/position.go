@@ -135,11 +135,11 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	i, ok := p.slots.get(e)
 	if ok {
 		old := p.dense[i]
-		if old == pos && p.Index.Holds(e, EntityClass(e), old.Layer(0)) {
+		if old == pos && p.Index.Holds(e, EntityClass(e), old) {
 			return
 		}
 		countSaturation = old != pos
-		p.Index.RemoveEntityAt(e, old.Layer(0))
+		p.Index.RemoveEntityAt(e, old)
 		p.wallMoved(i, old)
 		p.dense[i] = pos
 	} else {
@@ -165,15 +165,15 @@ func (p *Position) insert(e core.Entity, pos component.PositionComponent) int32 
 // setGrid preserves soft clipping while exposing saturation, budget rejection, and
 // data loss; it reports whether the cell took the entity.
 func (p *Position) setGrid(e core.Entity, pos component.PositionComponent, countSaturation bool) bool {
-	class, at := EntityClass(e), pos.Layer(0)
-	held := p.Index.Set(e, class, at)
+	class := EntityClass(e)
+	held := p.Index.Set(e, class, pos)
 	if held == 0 {
 		// Off the map is no cell's refusal, and a player insert stopped by its own
 		// budget is not cell exhaustion
-		if !p.Index.InBounds(at) {
+		if !p.Index.InBounds(pos) {
 			return false
 		}
-		if class == position.ClassPrivate && len(p.Index.EntitiesIn(at, position.ScopePrivate)) >= position.PrivateBudget {
+		if class == position.ClassPrivate && len(p.Index.EntitiesAt(pos, position.ScopePrivate)) >= position.PrivateBudget {
 			if p.statPlayerRejects != nil {
 				p.statPlayerRejects.Add(1)
 			}
@@ -241,10 +241,10 @@ func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 // the grid has let it go
 func (p *Position) remove(e core.Entity, i int32) {
 	pos, wall := p.dense[i], p.wall[i]
-	p.Index.RemoveEntityAt(e, pos.Layer(0))
+	p.Index.RemoveEntityAt(e, pos)
 	p.removeAt(i)
 	if wall {
-		p.Index.BlockChangedAt(pos.Layer(0))
+		p.Index.BlockChangedAt(pos)
 	}
 }
 
@@ -321,7 +321,7 @@ func (p *Position) Clear() {
 func (p *Position) WallChanged(e core.Entity) {
 	if i, ok := p.slots.get(e); ok {
 		p.wall[i] = p.isWall(e)
-		p.Index.BlockChangedAt(p.dense[i].Layer(0))
+		p.Index.BlockChangedAt(p.dense[i])
 	}
 }
 
@@ -344,7 +344,7 @@ func (p *Position) readWalls() {
 // in the grid
 func (p *Position) wallMoved(i int32, pos component.PositionComponent) {
 	if p.wall[i] {
-		p.Index.BlockChangedAt(pos.Layer(0))
+		p.Index.BlockChangedAt(pos)
 	}
 }
 
@@ -356,7 +356,7 @@ func (p *Position) Move(e core.Entity, newPos component.PositionComponent) {
 		return
 	}
 	old := p.dense[i]
-	p.Index.RemoveEntityAt(e, old.Layer(0))
+	p.Index.RemoveEntityAt(e, old)
 	p.wallMoved(i, old)
 	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
@@ -377,7 +377,7 @@ func (p *Position) Shift(entities []core.Entity, dx, dy int, unplaced []core.Ent
 		i, ok := p.slots.get(e)
 		if ok {
 			old := p.dense[i]
-			p.Index.RemoveEntityAt(e, old.Layer(0))
+			p.Index.RemoveEntityAt(e, old)
 			p.wallMoved(i, old)
 			p.dense[i] = component.PositionComponent{X: old.X + dx, Y: old.Y + dy}
 		} else {
@@ -409,7 +409,7 @@ func (p *Position) TopGlyphAt(x, y int) (core.Entity, bool) {
 // TopGlyphIs reports whether typeable e is the glyph drawn at (x, y), the one
 // typing acts on. Alone in its cell it is, which spares the lookup.
 func (p *Position) TopGlyphIs(e core.Entity, x, y int) bool {
-	if cell := p.Index.Occupants(x, y, position.ScopeAll); len(cell) == 1 {
+	if cell := p.Index.Occupants(component.PositionComponent{X: x, Y: y}, position.ScopeAll); len(cell) == 1 {
 		return cell[0] == e
 	}
 	return p.topGlyph(x, y) == e
@@ -433,7 +433,7 @@ func (p *Position) topGlyph(x, y int) core.Entity {
 	glyphs := p.world.Components.Glyph
 	var top core.Entity
 	var topLevel component.GlyphLevel
-	for _, e := range p.Index.Occupants(x, y, position.ScopeAll) {
+	for _, e := range p.Index.Occupants(component.PositionComponent{X: x, Y: y}, position.ScopeAll) {
 		g, ok := glyphs.GetPtr(e)
 		if !ok || p.IsScenery(e) {
 			continue
@@ -503,7 +503,7 @@ func (pb *PositionBatch) commit(scope position.Scope) error {
 	// one cell sort together
 	cells := pb.cells[:0]
 	for _, add := range pb.additions {
-		if pb.store.HasAnyEntityAt(add.pos.X, add.pos.Y, scope) {
+		if pb.store.HasAnyEntityAt(add.pos, scope) {
 			return errBatchOccupied
 		}
 		cells = append(cells, add.pos)

@@ -42,7 +42,7 @@ func TestGridPartitionSurvivesRemoval(t *testing.T) {
 	g.RemoveEntityAt(private[1], Point3{X: 1, Y: 1})
 	assertPartition(t, g, 1, 1, 1, 2)
 
-	if got := g.EntitiesAt(1, 1, ScopeShared)[0]; got != shared[1] {
+	if got := g.EntitiesAt(Point{X: 1, Y: 1}, ScopeShared)[0]; got != shared[1] {
 		t.Fatalf("surviving shared entity = %d, want %d", got, shared[1])
 	}
 }
@@ -67,8 +67,8 @@ func TestPrivateBudgetPreservesSharedCapacity(t *testing.T) {
 // assertPartition checks the class invariant and the expected run lengths.
 func assertPartition(t *testing.T, g *Grid[entity], x, y, wantShared, wantPrivate int) {
 	t.Helper()
-	sharedView := g.EntitiesAt(x, y, ScopeShared)
-	privateView := g.EntitiesAt(x, y, ScopePrivate)
+	sharedView := g.EntitiesAt(Point{X: x, Y: y}, ScopeShared)
+	privateView := g.EntitiesAt(Point{X: x, Y: y}, ScopePrivate)
 	if len(sharedView) != wantShared || len(privateView) != wantPrivate {
 		t.Fatalf("cell runs = (%d, %d), want (%d, %d)", len(sharedView), len(privateView), wantShared, wantPrivate)
 	}
@@ -137,10 +137,10 @@ func TestGridHoldsEachCellAsItsRulesMakeIt(t *testing.T) {
 		crowded := 0
 		for i := range cells {
 			m, x, y := &cells[i], i%w, i/w
-			if got := g.Occupants(x, y, ScopeAll); !slices.Equal(got, m.held) {
+			if got := g.Occupants(Point{X: x, Y: y}, ScopeAll); !slices.Equal(got, m.held) {
 				t.Fatalf("cell %d holds %v, its rules make it %v", i, got, m.held)
 			}
-			if got := g.EntitiesAt(x, y, ScopeShared); !slices.Equal(got, m.held[:m.shared]) {
+			if got := g.EntitiesAt(Point{X: x, Y: y}, ScopeShared); !slices.Equal(got, m.held[:m.shared]) {
 				t.Fatalf("cell %d's shared half is %v of %v", i, got, m.held)
 			}
 			if g.Present(ClassShared).Bit(x, y) != (m.shared > 0) || g.Present(ClassPrivate).Bit(x, y) != (len(m.held) > m.shared) {

@@ -319,7 +319,8 @@ func (s *BehaviorSystem) enter(i, x, y int) {
 // cave's rock among them, and to the body, a cell on an edge or past it searching
 // from the footprint flush against it
 func (s *BehaviorSystem) findFootprint(p *component.BehaviorPrototype, x, y int) (int, int, bool) {
-	return s.world.Positions.FindFreeAreaInside(x, y, p.Footprint, component.WallBlockSpawn, -1)
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: x, Y: y}, p.Footprint, component.WallBlockSpawn, -1)
+	return corner.X, corner.Y, found
 }
 
 // countNow counts an instance of program i the moment it is asked for or lands, not
@@ -484,7 +485,7 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 	}
 	foot, config := c.proto.Footprint, s.world.Resources.Config
 	wallCheck := func(left, top int) bool {
-		return s.world.Positions.BlocksArea(left, top, foot.Width, foot.Height, component.WallBlockKinetic)
+		return s.world.Positions.BlocksArea(vmath.Area{X: left, Y: top, Width: foot.Width, Height: foot.Height}, component.WallBlockKinetic)
 	}
 	x, y, motion := physics.IntegrateWithBounceStats(
 		&c.kinetic.Kinetic,
@@ -506,11 +507,11 @@ func (s *BehaviorSystem) integrate(c *behaviorCtx) {
 // footprint fits, clearing the landing with a flash
 func (s *BehaviorSystem) teleport(c *behaviorCtx) {
 	p := c.proto
-	left, top, found := s.world.Positions.FindFreeAreaInside(c.behavior.TargetX, c.behavior.TargetY, p.Footprint, component.WallBlockSpawn, 0)
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: c.behavior.TargetX, Y: c.behavior.TargetY}, p.Footprint, component.WallBlockSpawn, 0)
 	if !found {
 		return
 	}
-	x, y := left+p.Footprint.HeaderX, top+p.Footprint.HeaderY
+	x, y := corner.X+p.Footprint.HeaderX, corner.Y+p.Footprint.HeaderY
 	s.clearFootprint(p, x, y, event.EventFlashSpawnOneRequest)
 	c.kinetic.PreciseX, c.kinetic.PreciseY = vmath.Point{X: x, Y: y}.Center()
 	c.kinetic.VelX, c.kinetic.VelY = 0, 0
@@ -709,9 +710,9 @@ func newBehaviorVocabulary() *behavior.Vocabulary[*behaviorCtx] {
 				return false
 			}
 			foot := c.proto.Footprint
-			left, top, found := c.sys.world.Positions.FindFreeAreaInside(x, y, foot, component.WallBlockSpawn, 0)
+			corner, found := c.sys.world.Positions.FindFreeAreaInside(vmath.Point{X: x, Y: y}, foot, component.WallBlockSpawn, 0)
 			if found {
-				c.probe(left+foot.HeaderX, top+foot.HeaderY)
+				c.probe(corner.X+foot.HeaderX, corner.Y+foot.HeaderY)
 			}
 			return found
 		}, nil

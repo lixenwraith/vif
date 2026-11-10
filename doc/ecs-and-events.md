@@ -114,9 +114,8 @@ The grid is dense, so a map costs cells: a cell is 16 bytes, its occupant inline
 while it holds one, and a cell of two or more keeps them in a 256-byte crowd from
 a slab; the grid is sized to its map with grow-only backing, so a shrink never
 reallocates. It
-is a volume of layers, one on today's maps: a `Point3`'s Z is its layer, the
-queries taking a column and a row answer for the first, and `BlocksAt`,
-`BlocksBox`, `EntitiesIn` and `HasLineOfSightBetween` for any
+is a volume of layers, one on today's maps: a `Point3`'s Z is its layer, and
+each query takes either point, a `Point` naming its cell on the first layer
 ([Position §3](position-package.md#3-the-volume)).
 Beside the cells it keeps a bit a cell for each class that holds something
 (`Grid.Present`), so a probe of an empty cell costs a word in cache rather than a

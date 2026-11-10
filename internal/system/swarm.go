@@ -353,13 +353,13 @@ func (s *SwarmSystem) spawnAt(ev event.GameEvent) (int, int, bool) {
 // spawnSwarm stands a swarm with its header at the cell, its footprint pulled inside
 // the map, or on the nearest footprint free of walls a spawn is kept from
 func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(targetX, targetY, component.Footprints[component.SpeciesSwarm], component.WallBlockSpawn, 0)
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: targetX, Y: targetY}, component.Footprints[component.SpeciesSwarm], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		return
 	}
-	headerX := topLeftX + parameter.SwarmHeaderOffsetX
-	headerY := topLeftY + parameter.SwarmHeaderOffsetY
+	headerX := corner.X + parameter.SwarmHeaderOffsetX
+	headerY := corner.Y + parameter.SwarmHeaderOffsetY
 
 	// Clear area (retained as defensive measure)
 	s.clearSwarmSpawnArea(headerX, headerY)
@@ -551,8 +551,8 @@ func (s *SwarmSystem) probeLanding(c *swarmCtx) bool {
 // context's landing
 func (s *SwarmSystem) findRoom(c *swarmCtx, x, y int) bool {
 	foot := component.Footprints[component.SpeciesSwarm]
-	left, top, found := s.world.Positions.FindFreeAreaInside(x, y, foot, component.WallBlockSpawn, 0)
-	c.landingX, c.landingY = left+foot.HeaderX, top+foot.HeaderY
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: x, Y: y}, foot, component.WallBlockSpawn, 0)
+	c.landingX, c.landingY = corner.X+foot.HeaderX, corner.Y+foot.HeaderY
 	return found
 }
 
@@ -640,8 +640,7 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtSec float64) 
 	// Physics Integration with Wall Constraints
 	wallCheck := func(topLeftX, topLeftY int) bool {
 		return s.world.Positions.BlocksArea(
-			topLeftX, topLeftY,
-			parameter.SwarmWidth, parameter.SwarmHeight,
+			vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.SwarmWidth, Height: parameter.SwarmHeight},
 			component.WallBlockKinetic,
 		)
 	}

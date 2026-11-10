@@ -677,7 +677,7 @@ func (ew *entryWorld) shown() map[component.PositionComponent]rune {
 		step := ew.w.Resources.Drift.Step[line.Level]
 		x, y := line.X+step[0], line.Y+step[1]
 		for _, r := range line.Text {
-			if !ew.w.Positions.IsOutOfBounds(x, y) {
+			if ew.w.Positions.InBounds(vmath.Point{X: x, Y: y}) {
 				cells[component.PositionComponent{X: x, Y: y}] = r
 			}
 			x += line.Dir
@@ -785,7 +785,7 @@ func TestAnEnteringRuneTakesItsCellAsTheDriftCarriesAGlyph(t *testing.T) {
 		}
 		got := []rune(".......")
 		for x := range got {
-			for _, e := range w.Positions.EntitiesAt(30+x, tc.y, position.ScopeAll) {
+			for _, e := range w.Positions.EntitiesAt(vmath.Point{X: 30 + x, Y: tc.y}, position.ScopeAll) {
 				if g, ok := w.Components.Glyph.GetComponent(e); ok && g.Level == component.GlyphBright {
 					got[x] = g.Rune
 				}
