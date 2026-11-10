@@ -617,6 +617,18 @@ comment now states, and link that instead.
 - The behavior vocabulary is built before any program compiles, so a verb whose
   arg names what programs extend (a species, a materialize style) registers with
   `Named`, whose build gets the set's payload names; `Effect` decodes without them.
+- A rewrite of scenario files that must leave what a scenario does alone is
+  proven on the resolved tree: a program under `tmp/` writes
+  `fsm.ResolveScenario`'s result for every folder holding a `scenario.toml`, keys
+  sorted, each value with its kind and a float by its bits, and the runs before
+  and after compare by bytes. What a set spends
+  ([TOML macros §4](toml-macros.md#4-invocations)) is `macro.Set`'s unexported
+  `spent` and `open`: a scratch test in `internal/fsm` reads them by reflection
+  off the set `readExpanded` returns, the entry's behaviors and regions loaded
+  through it as `loadAndResolve` loads them.
+- A shipped scenario written in a form an older build's expander refuses takes
+  the next `network.ProtocolVersion`: a joiner is sent the scenario's files and
+  expands them itself, so the older build is refused at the door instead.
 
 ## Corpus
 

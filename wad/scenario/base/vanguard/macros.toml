@@ -121,16 +121,9 @@ bg256 = 0
 
 [macros.RaiderRank1]
 doc = "A first-rank raider: small, quick and fragile, on a short warning."
-params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
+base = "Raider"
 
-[macros.RaiderRank1.body]
-macro = "Raider"
-theme = "${theme}"
-width = "${width}"
-height = "${height}"
-header = "${header}"
-pattern_ms = "${pattern_ms}"
-frames = "${frames}"
+[macros.RaiderRank1.with]
 hp = 8
 mass = 2.0
 contact = { energy = 600, heat = 6 }
@@ -142,16 +135,9 @@ teleport_ms = 300
 
 [macros.RaiderRank2]
 doc = "A second-rank raider: twice the first's hit points, a little slower."
-params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
+base = "Raider"
 
-[macros.RaiderRank2.body]
-macro = "Raider"
-theme = "${theme}"
-width = "${width}"
-height = "${height}"
-header = "${header}"
-pattern_ms = "${pattern_ms}"
-frames = "${frames}"
+[macros.RaiderRank2.with]
 hp = 16
 mass = 2.4
 contact = { energy = 900, heat = 9 }
@@ -163,16 +149,9 @@ teleport_ms = 350
 
 [macros.RaiderRank3]
 doc = "A third-rank raider: a heavier body on a steadier chase."
-params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
+base = "Raider"
 
-[macros.RaiderRank3.body]
-macro = "Raider"
-theme = "${theme}"
-width = "${width}"
-height = "${height}"
-header = "${header}"
-pattern_ms = "${pattern_ms}"
-frames = "${frames}"
+[macros.RaiderRank3.with]
 hp = 28
 mass = 2.9
 contact = { energy = 1200, heat = 12 }
@@ -184,16 +163,9 @@ teleport_ms = 450
 
 [macros.RaiderRank4]
 doc = "A fourth-rank raider: slow and armoured, its touch the costliest."
-params = { theme = "string", width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array" }
+base = "Raider"
 
-[macros.RaiderRank4.body]
-macro = "Raider"
-theme = "${theme}"
-width = "${width}"
-height = "${height}"
-header = "${header}"
-pattern_ms = "${pattern_ms}"
-frames = "${frames}"
+[macros.RaiderRank4.with]
 hp = 44
 mass = 3.5
 contact = { energy = 1500, heat = 15 }

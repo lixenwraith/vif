@@ -107,19 +107,21 @@ body = { parent = "Root", on_enter = ["${request}"], transitions = [
 
 [macros.Tower]
 doc = "Spawn tower `id` at (x, y), feeding target group `group`."
-params = { id = "string", x = "int", y = "int", group = "int", next = "string", fallback = "string", fallback_actions = "array" }
-defaults = { fallback_actions = [] }
-body = { macro = "SpawnAwait", species = "tower", capture = "${id}_anchor", next = "${next}", refused = "EventTowerSpawnFailed", fallback = "${fallback}", fallback_actions = "${fallback_actions}", request = { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = "${x}", y = "${y}", target_group_id = "${group}" } } }
+base = "SpawnAwait"
+params = { id = "string", x = "int", y = "int", group = "int" }
+with = { species = "tower", capture = "${id}_anchor", refused = "EventTowerSpawnFailed", request = { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = "${x}", y = "${y}", target_group_id = "${group}" } } }
 
 [macros.QuadrantTower]
 doc = "A forward tower whose failure is not fatal: unspawned, its group feeds central tower `cover` instead."
-params = { id = "string", x = "int", y = "int", group = "int", cover = "string", next = "string" }
-body = { macro = "Tower", id = "${id}", x = "${x}", y = "${y}", group = "${group}", next = "${next}", fallback = "${next}", fallback_actions = [{ macro = "Retarget", group = "${group}", to = "${cover}" }] }
+base = "Tower"
+params = { cover = "string" }
+with = { fallback = "${next}", fallback_actions = [{ macro = "Retarget", group = "${group}", to = "${cover}" }] }
 
 [macros.Pylon]
 doc = "Spawn a pylon at (x, y) into gw_anchor and go to `attach`, or skip to `next` when it cannot spawn."
+base = "SpawnAwait"
 params = { x = "int", y = "int", attach = "string", next = "string" }
-body = { macro = "SpawnAwait", species = "pylon", capture = "gw_anchor", next = "${attach}", refused = "EventPylonSpawnFailed", fallback = "${next}", request = { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = "${x}", y = "${y}" } } }
+with = { species = "pylon", capture = "gw_anchor", next = "${attach}", refused = "EventPylonSpawnFailed", fallback = "${next}", request = { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = "${x}", y = "${y}" } } }
 
 [macros.Gateway]
 doc = "Attach an eye gateway feeding `group` to the pylon in gw_anchor, count it in `count`, go to `next`. Timing defaults to a corner pylon's."
@@ -140,8 +142,9 @@ body = { parent = "Root", on_enter = [
 
 [macros.FlankGateway]
 doc = "A flank twin's gateway: faster than a corner's, and accelerating sooner."
-params = { side = "string", group = "int", next = "string" }
-body = { macro = "Gateway", group = "${group}", count = "${side}_p2n", next = "${next}", interval_ms = 2000, rate = 0.88, accel_ms = 10000, min_ms = 500 }
+base = "Gateway"
+params = { side = "string" }
+with = { count = "${side}_p2n", interval_ms = 2000, rate = 0.88, accel_ms = 10000, min_ms = 500 }
 
 [macros.FlankDone]
 doc = "Close a flank's escalation: total its pylons, raise the damage multiplier, announce it."

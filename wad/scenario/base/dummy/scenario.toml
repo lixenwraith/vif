@@ -132,8 +132,8 @@ on_enter = [
     { macro = "Offset", each = { name = ["col_0", "col_1", "col_2", "col_3", "row_top", "row_bottom"], from = ["cx", "cx", "cx", "cx", "cy", "cy"], delta = [-54, -42, -30, -18, -6, 7] } },
     { macro = "Offset", each = { name = ["dummy_x", "dummy_left", "dummy_right", "dummy_top", "dummy_bottom"], from = ["cx", "cx", "cx", "cy", "cy"], delta = [20, 14, 26, -3, 3] } },
     { macro = "Offset", each = { name = ["clear_left", "clear_right", "clear_top", "clear_bottom"], from = ["cx", "cx", "cy", "cy"], delta = [4, 36, -8, 8] } },
-    { macro = "Offset", each = { name = ["pad_x", "pad_left", "pad_right"], from = ["cx", "cx", "cx"], delta = [44, 42, 46] } },
-    { macro = "Offset", each = { name = ["plus_y", "plus_top", "plus_bottom", "minus_y", "minus_top", "minus_bottom"], from = ["cy", "cy", "cy", "cy", "cy", "cy"], delta = [-7, -8, -6, 7, 6, 8] } },
+    { macro = "Offset", each = { name = ["pad_x", "pad_left", "pad_right"], from = "cx", delta = [44, 42, 46] } },
+    { macro = "Offset", each = { name = ["plus_y", "plus_top", "plus_bottom", "minus_y", "minus_top", "minus_bottom"], from = "cy", delta = [-7, -8, -6, 7, 6, 8] } },
     { macro = "RangeDrop", each = { kind = ["heat", "rod", "launcher", "disruptor", "energy", "turret", "emitter", "gun"], x = ["col_0", "col_1", "col_2", "col_3", "col_0", "col_1", "col_2", "col_3"], y = ["row_top", "row_top", "row_top", "row_top", "row_bottom", "row_bottom", "row_bottom", "row_bottom"] } },
     { macro = "Pad", x = "pad_x", y = "plus_y", sign = 43, color = { r = 0, g = 220, b = 0 } },    # +
     { macro = "Pad", x = "pad_x", y = "minus_y", sign = 45, color = { r = 230, g = 40, b = 40 } }, # -
