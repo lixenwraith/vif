@@ -376,6 +376,19 @@ comment now states, and link that instead.
 - The sine tables hold `math.Sin` and `math.Cos` at `TwoPi*i/LUTSize`, the very
   angles a sample count dividing `LUTSize` asks for: reading them there gives
   the computed cells bit for bit. `Sin` and `Cos` floor any other angle to a bin.
+- `pkg/vmath/physics` names a 3D twin with the suffix its older functions carry
+  (`Integrate3D`, `ApplyHoming3D`), beside its flat form in the same file and on
+  the flat form's scalar helper where one exists (`HomingProfile.arrival`,
+  `impulseMagnitude`, `reflectCell`, `bounceSteps`). Two tests hold a twin: in
+  one plane it is the flat form, and with its axes cycled it answers alike.
+- A twin's test compares floats within 1e-9, never by `==`: an architecture that
+  fuses a multiply into an add (arm64, amd64 at `GOAMD64=v3`) rounds two orders
+  of one sum apart. Cells and counts compare exactly.
+- A flat form's result is simulation state. A refactor of one is compared with
+  its previous body, kept in a scratch test, on random inputs by
+  `math.Float64bits`, negative zeros among them, before the headless digests are
+  read: `v -= v*0` turns a negative zero positive, so a branch that skips a
+  subtraction is not one that subtracts nothing.
 
 ## Glyphs and widgets
 

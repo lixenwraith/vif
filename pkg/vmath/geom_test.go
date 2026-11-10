@@ -92,7 +92,7 @@ func TestV3TurnsAndMirrorsAboutAnAxis(t *testing.T) {
 	for range 5000 {
 		v, w, axis := vec(), vec(), V3Normalize(vec())
 		c := V3Cross(v, w)
-		if math.Abs(V3Dot(c, v)) > 1e-9 || math.Abs(V3Dot(c, w)) > 1e-9 || V3Cross(w, v) != V3Scale(c, -1) {
+		if math.Abs(V3Dot(c, v)) > 1e-9 || math.Abs(V3Dot(c, w)) > 1e-9 || !nearV3(V3Cross(w, v), V3Scale(c, -1)) {
 			t.Fatalf("%v cross %v = %v, not square to both or not antisymmetric", v, w, c)
 		}
 		angle := rng.Float64()*2*TwoPi - TwoPi
@@ -111,26 +111,35 @@ func TestV3TurnsAndMirrorsAboutAnAxis(t *testing.T) {
 	}
 }
 
+// nearV3 reports two vectors equal to a part in 1e9 an axis, which leaves a form
+// through a volume its own order of operations
+func nearV3(a, b Vec3) bool {
+	near := func(a, b float64) bool {
+		return math.Abs(a-b) <= 1e-9*math.Max(1, math.Max(math.Abs(a), math.Abs(b)))
+	}
+	return near(a.X, b.X) && near(a.Y, b.Y) && near(a.Z, b.Z)
+}
+
 // TestThreeAxesInOnePlaneAreTwo: a vector with no depth turns about z, mirrors
-// in a flat normal and lies in an ellipsoid exactly as its two parts do in the plane.
+// in a flat normal and lies in an ellipsoid as its two parts do in the plane.
 func TestThreeAxesInOnePlaneAreTwo(t *testing.T) {
 	rng := NewFastRand(0x2d)
 	for range 5000 {
 		x, y := rng.Float64()*40-20, rng.Float64()*40-20
 		angle := rng.Float64()*2*TwoPi - TwoPi
 		rx, ry := RotateVector(x, y, angle)
-		if got := V3Rotate(Vec3{X: x, Y: y}, Vec3{Z: 1}, angle); got != (Vec3{X: rx, Y: ry}) {
+		if got := V3Rotate(Vec3{X: x, Y: y}, Vec3{Z: 1}, angle); !nearV3(got, Vec3{X: rx, Y: ry}) || got.Z != 0 {
 			t.Fatalf("(%v, %v) turned %v about z is %v, the plane's (%v, %v)", x, y, angle, got, rx, ry)
 		}
 		nx, ny := Normalize2D(rng.Float64()*2-1, rng.Float64()*2-1)
 		mx, my := Reflect(x, y, nx, ny)
-		if got := V3Reflect(Vec3{X: x, Y: y}, Vec3{X: nx, Y: ny}); got != (Vec3{X: mx, Y: my}) {
+		if got := V3Reflect(Vec3{X: x, Y: y}, Vec3{X: nx, Y: ny}); !nearV3(got, Vec3{X: mx, Y: my}) || got.Z != 0 {
 			t.Fatalf("(%v, %v) mirrored in (%v, %v) is %v, the plane's (%v, %v)", x, y, nx, ny, got, mx, my)
 		}
 		radiusX, radiusY := rng.Float64()*12, rng.Float64()*12
 		invX, invY := EllipseInvRadiiSq(radiusX, radiusY)
 		inv := EllipsoidInvRadiiSq(radiusX, radiusY, rng.Float64()*12)
-		if EllipsoidDistSq(Vec3{X: x, Y: y}, inv) != EllipseDistSq(x, y, invX, invY) {
+		if !nearV3(Vec3{X: EllipsoidDistSq(Vec3{X: x, Y: y}, inv)}, Vec3{X: EllipseDistSq(x, y, invX, invY)}) {
 			t.Fatalf("(%v, %v) lies %v into the ellipsoid and %v into its ellipse", x, y,
 				EllipsoidDistSq(Vec3{X: x, Y: y}, inv), EllipseDistSq(x, y, invX, invY))
 		}

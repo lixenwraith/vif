@@ -84,3 +84,42 @@ func SpringToRest(k *Kinetic, restX, restY, stiffness, damping, maxForce, dt flo
 	k.VelY += fy * dt
 	ScaleVelocity(k, damping)
 }
+
+// IntegratePosition3D advances position by velocity, ignoring acceleration
+func IntegratePosition3D(k *Kinetic3D, dt float64) vmath.Point3 {
+	k.Pos = vmath.V3Add(k.Pos, vmath.V3Scale(k.Vel, dt))
+	return vmath.PointAt3(k.Pos)
+}
+
+// ApplyLinearDrag3D scales velocity by (1 - rate*dt), clamped to [0, 1]
+func ApplyLinearDrag3D(k *Kinetic3D, rate, dt float64) {
+	k.Vel = vmath.V3Scale(k.Vel, vmath.Clamp(1.0-rate*dt, 0, 1.0))
+}
+
+// ApplyQuadraticDrag3D scales velocity by (1 - coeff*dt*speed), clamped to [0, 1]
+func ApplyQuadraticDrag3D(k *Kinetic3D, coeff, dt float64) {
+	if speed := vmath.V3Mag(k.Vel); speed > 0 {
+		k.Vel = vmath.V3Scale(k.Vel, vmath.Clamp(1.0-coeff*dt*speed, 0, 1.0))
+	}
+}
+
+// TurnSeverity3D is TurnSeverity in a volume: how far the heading's cosine to
+// target falls below threshold, 0 at or below minSpeed
+func TurnSeverity3D(k *Kinetic3D, target vmath.Vec3, threshold, minSpeed float64) float64 {
+	speed := vmath.V3Mag(k.Vel)
+	if speed <= minSpeed {
+		return 0
+	}
+	alignment := vmath.V3Dot(vmath.V3Scale(k.Vel, 1/speed), vmath.V3Normalize(vmath.V3Sub(target, k.Pos)))
+	if alignment >= threshold {
+		return 0
+	}
+	return threshold - alignment
+}
+
+// SpringToRest3D accelerates toward rest and damps velocity; force magnitude is
+// clamped to maxForce. Does not integrate position.
+func SpringToRest3D(k *Kinetic3D, rest vmath.Vec3, stiffness, damping, maxForce, dt float64) {
+	force := vmath.V3ClampMagnitude(vmath.V3Scale(vmath.V3Sub(rest, k.Pos), stiffness), maxForce)
+	k.Vel = vmath.V3Scale(vmath.V3Add(k.Vel, vmath.V3Scale(force, dt)), damping)
+}

@@ -169,7 +169,7 @@ does not restart evolution from the scored archive.
 | Collision | profile-based impulses, additive/override modes, mass ratio, angle/magnitude variance, offset influence for multi-cell hits |
 | Shapes | ellipse containment with a radial push direction (`CheckSoftCollision`) over `vmath` ellipse/circle tests |
 | Orbital | circular-orbit insertion and attraction, radial damping, equilibrium radius |
-| 3D | gravity with soft repulsion, elastic collision, overlap separation and axis reflection on `vmath.Vec3` |
+| 3D | `Kinetic3D`, a body in a volume, and a twin of each row above: `Integrate3D`, bounds and the swept bounce over a `vmath.Box` (`ReflectBounds3D`, `IntegrateWithBounce3D`), the drags, turn severity and spring, `ApplyHoming3D`, the collision forms with a cone for the angle spread, the orbits about an axis. Beside them, on bare `vmath.Vec3`: gravity with soft repulsion, elastic collision, overlap separation and axis reflection |
 
 `IntegrateWithBounce` limits a substep to roughly 0.45 cells to reduce wall
 tunneling, applies acceleration once before selecting the step count, moves one
@@ -177,6 +177,15 @@ axis at a time, restores the prior axis position on a wall, and scales reflected
 velocity by restitution. Its bounds are the first and last cells a body may hold,
 both inclusive. Projectiles with stricter swept collision needs use grid
 traversal in their owning system rather than relying only on final-cell overlap.
+It keeps the body's cell across the moves and floors one coordinate a move where
+it floored four: `BenchmarkIntegrateWithBounce` 28 to 23 ns a body, the same
+state bit for bit over twelve million random steps.
+
+A 3D form held to one plane steers, drags, reflects, strikes and moves a body as
+its flat form, and treats its three axes alike; both are tested. Two things part
+by design: a collision's angle spread turns about an axis drawn round the
+direction, a cone where the flat spread is an arc, and a body sunk in a wall
+tests it once an axis a sub-step, three times where the flat one tests twice.
 
 Homing separates desired cruise speed, acceleration, overspeed drag, arrival
 radius, near-target drag/acceleration, and a snap dead zone. The profiles in
