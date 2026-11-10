@@ -152,7 +152,7 @@ func (s *CompositeSystem) countLiving(header *component.HeaderComponent) int {
 }
 
 // destroyComposite handles centralized composite destruction via death system
-func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect event.EventType) {
+func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect component.DeathEffect) {
 	header, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return
@@ -252,87 +252,4 @@ func (s *CompositeSystem) compactMembers(headerComp *component.HeaderComponent) 
 		}
 	}
 	headerComp.MemberEntries = headerComp.MemberEntries[:write]
-}
-
-// handleEmptyComposite processes a composite with no remaining members
-func (s *CompositeSystem) handleEmptyComposite(headerEntity core.Entity, headerComp *component.HeaderComponent) {
-	switch headerComp.Behavior {
-	case component.BehaviorGold:
-		// Gold completion handled by GoldSystem via events
-		s.destroyHead(headerEntity)
-
-	case component.BehaviorSwarm, component.BehaviorStorm:
-		s.destroyHead(headerEntity)
-
-	default:
-		s.destroyHead(headerEntity)
-	}
-}
-
-// CreateHeader spawns an invisible head entity, returns phantom head entity
-func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.Behavior) core.Entity {
-	entity := s.world.CreateEntity(core.DomainShared)
-
-	// Positions at anchor point
-	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
-
-	// Header component with empty member slice
-	s.world.Components.Header.SetComponent(entity, component.HeaderComponent{
-		Behavior:      behaviorID,
-		MemberEntries: make([]component.MemberEntry, 0, 16),
-	})
-
-	// Phantom heads are protected from all destruction except explicit removal
-	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectAll ^ component.ProtectFromDeath,
-	})
-
-	return entity
-}
-
-// AddMember attaches a member entity to an existing composite
-func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offsetX, offsetY int, layer uint8) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Set member entry
-	headerComp.MemberEntries = append(headerComp.MemberEntries, component.MemberEntry{
-		Entity:  memberEntity,
-		OffsetX: offsetX,
-		OffsetY: offsetY,
-	})
-	s.world.Components.Header.SetComponent(headerEntity, headerComp)
-
-	// Set backlink to member
-	s.world.Components.Member.SetComponent(memberEntity, component.MemberComponent{
-		HeaderEntity: headerEntity,
-	})
-}
-
-// DestroyComposite removes the phantom head and all members
-func (s *CompositeSystem) DestroyComposite(headerEntity core.Entity) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Destroy all living members
-	for _, member := range headerComp.MemberEntries {
-		if member.Entity != 0 {
-			s.world.DestroyEntity(member.Entity)
-		}
-	}
-
-	s.world.DestroyEntity(headerEntity)
-}
-
-// GetAnchorForMember resolves the phantom head from a member entity
-func (s *CompositeSystem) GetAnchorForMember(memberEntity core.Entity) (core.Entity, bool) {
-	memberComp, ok := s.world.Components.Member.GetComponent(memberEntity)
-	if !ok {
-		return 0, false
-	}
-	return memberComp.HeaderEntity, true
 }

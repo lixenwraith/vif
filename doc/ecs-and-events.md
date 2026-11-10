@@ -341,14 +341,24 @@ they have already established that removal is safe, so gameplay code should pref
 the appropriate death request unless it owns that invariant.
 
 Every death request is an `EventDeathBatch` carrying a pooled
-`DeathRequestPayload`, emitted through `event.EmitDeath` or
-`EmitParticleDeath`. Mixed-domain input is split into one domain-pure batch per
-domain, so a shared death record never names a player entity. A flash, particle or
-fadeout effect is read from each entity before the batch is destroyed and
-published as one pooled batch event. Code must not retain a pooled payload after
-its handler returns.
+`DeathRequestPayload`, emitted through `event.EmitDeath`, which names the effect
+the dead leave, or `EmitParticleDeath`, which names the particle each becomes.
+Mixed-domain input is split into one domain-pure batch per domain, so a shared
+death record never names a player entity. The effect is read from each entity
+before the batch is destroyed and published as one pooled batch event. Code must
+not retain a pooled payload after its handler returns.
 
 ### Death effects
+
+The effect is a `component.DeathEffect`, which a death batch, a composite destroy
+request and a footprint sweep all name the same way, and a document by its name:
+
+- `DeathSilent` (`none`): nothing is drawn.
+- `DeathFlash` (`flash`): each glyph, sigil or glyph-only wall lit at its cell in
+  the removal flash's color.
+- `DeathFadeout` (`fadeout`): each wall's cell fading out in its own colors.
+- `DeathParticle` (`particle`): each glyph a decay, blossom or dust particle, as
+  `EmitParticleDeath` names it.
 
 An effect draws the cells a death leaves, never the entities that died: each cell
 is read as a `component.EffectCell` (its cell, glyph, colors and whether it has a

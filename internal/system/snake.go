@@ -958,7 +958,7 @@ func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
 	if snakeComp.BodyEntity != 0 {
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 			HeaderEntity: snakeComp.BodyEntity,
-			Effect:       event.EventFlashSpawnOneRequest,
+			Effect:       component.DeathFlash,
 		})
 	}
 
@@ -966,14 +966,13 @@ func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
 	if snakeComp.HeadEntity != 0 {
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 			HeaderEntity: snakeComp.HeadEntity,
-			Effect:       event.EventFlashSpawnOneRequest,
+			Effect:       component.DeathFlash,
 		})
 	}
 
 	// Destroy root
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: rootEntity,
-		Effect:       0,
 	})
 }
 
@@ -996,7 +995,7 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 			})
 		}
 	}
-	s.sweep.emit(s.world, 0)
+	s.sweep.emit(s.world, component.DeathSilent)
 }
 
 // resolvedSegment holds per-segment member entities resolved from HeaderComponent

@@ -321,7 +321,7 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 			})
 		}
 	}
-	s.sweep.emit(s.world, 0)
+	s.sweep.emit(s.world, component.DeathSilent)
 }
 
 // createQuasarComposite builds the 3x5 quasar entity structure
@@ -679,7 +679,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 			s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: e})
 		}
 	}
-	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
+	s.sweep.emit(s.world, component.DeathFlash)
 }
 
 // terminateQuasar ends a specific quasar: its state's exit, then the composite
@@ -701,6 +701,5 @@ func (s *QuasarSystem) terminateQuasar(headerEntity core.Entity) {
 	// Delegate composite destruction to CompositeSystem
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 }

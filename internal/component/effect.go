@@ -6,6 +6,25 @@ import (
 	"github.com/lixenwraith/color"
 )
 
+// DeathEffect is the visual a death leaves where the dead stood
+type DeathEffect uint8
+
+const (
+	DeathSilent   DeathEffect = iota
+	DeathFlash                // each glyph lit at its cell in the removal flash's color
+	DeathFadeout              // each cell fading out in its own colors
+	DeathParticle             // each glyph a particle, of the behavior its request names
+	DeathEffectCount
+)
+
+// DeathEffectNames are what a document calls each DeathEffect
+var DeathEffectNames = [DeathEffectCount]string{
+	DeathSilent:   "none",
+	DeathFlash:    "flash",
+	DeathFadeout:  "fadeout",
+	DeathParticle: "particle",
+}
+
 // EffectCell is one cell an effect draws: its glyph in Fg, over Bg where Solid. A
 // zero Rune is a background alone.
 type EffectCell struct {

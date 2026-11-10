@@ -45,7 +45,6 @@ type DeathSystem struct {
 }
 
 func NewDeathSystem(world *engine.World) engine.System {
-	// res := engine.GetResourceStore(world)
 	s := &DeathSystem{
 		world: world,
 	}
@@ -128,65 +127,18 @@ func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
 				s.enabled = payload.Enabled
 			}
 		}
-	}
-
-	if !s.enabled {
-		if ev.Type == event.EventDeathBatch {
-			s.statDisabledRejects.Add(1)
-			if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
-				event.ReleaseDeathRequest(p)
-			}
-		}
 		return
 	}
 
-	switch ev.Type {
-	case event.EventDeathBatch:
-		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
-			s.processBatch(p)
-		} else {
-			s.statPayloadRejects.Add(1)
-		}
-	}
-}
-
-func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType) {
-	entityPos, ok := s.world.Positions.GetPosition(entity)
-	if !ok {
-		s.statMissingEffectData.Add(1)
-		return
-	}
-
-	// Fadeout handles its own data extraction from WallComponent
-	if effectEvent == event.EventFadeoutSpawnOne {
-		if wallComp, ok := s.world.Components.Wall.GetPtr(entity); ok {
-			fg, bg := wallFadeoutColors(wallComp)
-			s.world.PushLocal(event.EventFadeoutSpawnOne, &event.FadeoutSpawnPayload{
-				X:       entityPos.X,
-				Y:       entityPos.Y,
-				Char:    wallComp.Rune,
-				FgColor: fg,
-				BgColor: bg,
-			})
-		} else {
-			s.statMissingEffectData.Add(1)
-		}
-		return
-	}
-
-	// Extract char: glyph first, sigil fallback
-	char, _, ok := s.extractCharData(entity)
-	if !ok {
-		s.statMissingEffectData.Add(1)
-		return
-	}
-
-	if effectEvent == event.EventFlashSpawnOneRequest {
-		s.world.PushLocal(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
-			X:    entityPos.X,
-			Y:    entityPos.Y,
-			Char: char,
-		})
+	p, ok := ev.Payload.(*event.DeathRequestPayload)
+	switch {
+	case !ok:
+		s.statPayloadRejects.Add(1)
+	case !s.enabled:
+		s.statDisabledRejects.Add(1)
+		event.ReleaseDeathRequest(p)
+	default:
+		s.processBatch(p)
 	}
 }
 
@@ -211,24 +163,24 @@ func (s *DeathSystem) Update() {
 
 // --- Batch processing (two-pass: collect → destroy → emit) ---
 
-// processBatch routes batch death requests through the generic pipeline
+// processBatch destroys a batch's entities and sends what its effect draws of them
 func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 	defer event.ReleaseDeathRequest(p)
 	s.statBatchCount.Add(1)
 	s.statBatchEntities.Add(int64(len(p.Entities)))
 	storeMax(s.statBatchSizeMax, int64(len(p.Entities)))
 
-	if p.EffectEvent == 0 {
+	switch p.Effect {
+	case component.DeathSilent:
 		s.statBatchSilent.Add(1)
 		s.processBatchSilent(p.Entities)
-		return
-	}
-
-	switch p.EffectEvent {
-	case event.EventFlashSpawnOneRequest:
+	case component.DeathFlash:
 		s.statBatchFlash.Add(1)
 		processBatchWith(s, event.EffectBatchPool, event.EventFlashSpawnBatchRequest, p.Entities, s.extractFlash)
-	case event.EventParticleSpawnOne:
+	case component.DeathFadeout:
+		s.statBatchFadeout.Add(1)
+		processBatchWith(s, event.EffectBatchPool, event.EventFadeoutSpawnBatch, p.Entities, s.extractFadeout)
+	case component.DeathParticle:
 		switch p.Behavior {
 		case component.ParticleDecay:
 			s.statBatchDecay.Add(1)
@@ -245,37 +197,10 @@ func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 			func(entity core.Entity) (event.ParticleSpawnEntry, bool) {
 				return s.extractParticle(entity, p.Behavior)
 			})
-	case event.EventFadeoutSpawnOne:
-		s.statBatchFadeout.Add(1)
-		processBatchWith(s, event.EffectBatchPool, event.EventFadeoutSpawnBatch, p.Entities, s.extractFadeout)
 	default:
+		// An effect this system draws nothing for
 		s.statBatchOther.Add(1)
-		for _, entity := range p.Entities {
-			s.markForDeath(entity, p.EffectEvent)
-		}
-	}
-}
-
-// markForDeath is the batch processor's fallback for effects without a
-// specialized extractor. Known effects use the two-pass batch path above.
-func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
-	if entity == 0 {
-		s.statZeroRejects.Add(1)
-		return
-	}
-	_, existed := s.world.GetComponentMask(entity)
-	if !existed {
-		s.statMissingEntities.Add(1)
-	}
-	if s.isProtected(entity) {
-		return
-	}
-	if effect != 0 {
-		s.emitEffect(entity, effect)
-	}
-	s.world.DestroyEntity(entity)
-	if existed {
-		s.statKilled.Add(1)
+		s.processBatchSilent(p.Entities)
 	}
 }
 
@@ -350,11 +275,16 @@ func (s *DeathSystem) extractPosChar(entity core.Entity) (int, int, rune, compon
 }
 
 func (s *DeathSystem) extractFlash(entity core.Entity) (component.EffectCell, bool) {
-	x, y, char, _, ok := s.extractPosChar(entity)
-	if !ok {
+	if x, y, char, _, ok := s.extractPosChar(entity); ok {
+		return component.EffectCell{X: x, Y: y, Rune: char}, true
+	}
+	// A wall that draws a glyph and no background flashes it
+	pos, ok := s.world.Positions.GetPosition(entity)
+	wall, isWall := s.world.Components.Wall.GetPtr(entity)
+	if !ok || !isWall || !wall.RenderFg || wall.Rune == 0 {
 		return component.EffectCell{}, false
 	}
-	return component.EffectCell{X: x, Y: y, Rune: char}, true
+	return component.EffectCell{X: pos.X, Y: pos.Y, Rune: wall.Rune}, true
 }
 
 func (s *DeathSystem) extractParticle(entity core.Entity, behavior component.ParticleBehavior) (event.ParticleSpawnEntry, bool) {

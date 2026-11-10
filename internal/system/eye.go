@@ -277,7 +277,7 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 			})
 		}
 	}
-	s.sweep.emit(s.world, 0)
+	s.sweep.emit(s.world, component.DeathSilent)
 }
 
 func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.EyeType, groupID uint8, routeGraphID uint32, routeID int, evalID uint64, genes []float64) core.Entity {
@@ -605,6 +605,5 @@ func (s *EyeSystem) despawnEye(headerEntity core.Entity) {
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 }

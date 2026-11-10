@@ -35,13 +35,12 @@ type EventType int
 // EventType comments generate the registry: EventFoo (FooPayload) [class] description.
 // Keep matching event/payload stems; omit the annotation only for nil payloads.
 // Generic or qualified payload types register nil; authorable fields need TOML tags.
-// Values are contiguous and never serialized. EventNone stays zero for FSM ticks
-// and the no-effect sentinel; regenerate instead of editing registry_gen.go.
+// Values are contiguous and never serialized. EventNone stays zero for FSM ticks;
+// regenerate instead of editing registry_gen.go.
 
 const (
 	// EventNone is the zero value, reserved so that no real event aliases the FSM
-	// tick sentinel (fsm.Transition.Event == 0) or the no-effect sentinel a field
-	// such as a death batch's EffectEvent leaves unset.
+	// tick sentinel (fsm.Transition.Event == 0)
 	EventNone EventType = iota
 
 	// --- Level ---
@@ -546,8 +545,6 @@ const (
 
 	// --- Fadeout ---
 
-	// EventFadeoutSpawnOne (FadeoutSpawnPayload) [local] signals intent to spawn a single fadeout effect
-	EventFadeoutSpawnOne
 	// EventFadeoutSpawnBatch (BatchPayload[component.EffectCell]) [local] fades a batch of cells out together
 	EventFadeoutSpawnBatch
 

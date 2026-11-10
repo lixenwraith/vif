@@ -964,7 +964,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 			s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: e})
 		}
 	}
-	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
+	s.sweep.emit(s.world, component.DeathFlash)
 }
 
 // processCircleMemberCombat scans members for HP<=0 and routes deaths through CompositeSystem, storm system it the combat-based lifecycle authority
@@ -1037,7 +1037,6 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 	// Destroy circle header via composite system
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: circleEntity,
-		Effect:       0, // Silent destruction
 	})
 
 	// Check if all dead
@@ -1075,7 +1074,6 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 			// The flag alone leaves the header entity live and combat-resolvable
 			s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 				HeaderEntity: headerEntity,
-				Effect:       0,
 			})
 
 			if s.AliveCount(stormComp) == 0 {
@@ -1239,7 +1237,6 @@ func (s *StormSystem) terminateStorm() {
 			if s.world.Components.Header.HasEntity(stormComp.Circles[i]) {
 				s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 					HeaderEntity: stormComp.Circles[i],
-					Effect:       0,
 				})
 			}
 		}
@@ -1248,7 +1245,6 @@ func (s *StormSystem) terminateStorm() {
 	// Destroy root
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: s.rootEntity,
-		Effect:       0,
 	})
 
 	// A materialize in flight would land its swarm after the storm
@@ -1258,7 +1254,7 @@ func (s *StormSystem) terminateStorm() {
 			landing = append(landing, e)
 		}
 	}
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, landing...)
+	event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, landing...)
 
 	s.rootEntity = 0
 	s.statActive.Store(false)

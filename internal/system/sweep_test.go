@@ -62,8 +62,8 @@ func TestSpeciesBodyBreaksTheGoldItCovers(t *testing.T) {
 	var died []core.Entity
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
-			if p.EffectEvent != event.EventFlashSpawnOneRequest {
-				t.Fatalf("effect = %v, want the flash a shared body leaves", p.EffectEvent)
+			if p.Effect != component.DeathFlash {
+				t.Fatalf("effect = %v, want the flash a shared body leaves", p.Effect)
 			}
 			died = append(died, p.Entities...)
 		}

@@ -343,7 +343,7 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 	}
 	foot := p.Footprint
 	headerX, headerY := left+foot.HeaderX, top+foot.HeaderY
-	s.clearFootprint(p, headerX, headerY, 0)
+	s.clearFootprint(p, headerX, headerY, component.DeathSilent)
 
 	header := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(header, component.PositionComponent{X: headerX, Y: headerY})
@@ -410,7 +410,7 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 
 // clearFootprint empties a footprint in both domains (D-12), each victim leaving
 // with effect
-func (s *BehaviorSystem) clearFootprint(p *component.BehaviorPrototype, headerX, headerY int, effect event.EventType) {
+func (s *BehaviorSystem) clearFootprint(p *component.BehaviorPrototype, headerX, headerY int, effect component.DeathEffect) {
 	s.sweep.reset()
 	area := p.Footprint.At(headerX, headerY)
 	for row := range area.Height {
@@ -451,7 +451,7 @@ func (s *BehaviorSystem) cancel(program string) {
 			entrances = append(entrances, e)
 		}
 	}
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, entrances...)
+	event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, entrances...)
 	for _, header := range s.world.Components.Behavior.Entities() {
 		b, ok := s.world.Components.Behavior.GetComponent(header)
 		if !ok || int(b.Program) >= len(s.programs) || program != "" && int(b.Program) != i {
@@ -511,7 +511,7 @@ func (s *BehaviorSystem) teleport(c *behaviorCtx) {
 		return
 	}
 	x, y := left+p.Footprint.HeaderX, top+p.Footprint.HeaderY
-	s.clearFootprint(p, x, y, event.EventFlashSpawnOneRequest)
+	s.clearFootprint(p, x, y, component.DeathFlash)
 	c.kinetic.PreciseX, c.kinetic.PreciseY = vmath.Point{X: x, Y: y}.Center()
 	c.kinetic.VelX, c.kinetic.VelY = 0, 0
 	s.place(c.entity, x, y)

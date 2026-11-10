@@ -233,8 +233,9 @@ A host is the species system that steps a graph. Its contract:
   without the runtime importing `status`. Nothing reads `Graph.Flags` or
   `Graph.States` yet ([todo](todo.md#show-a-species-machine-state-in-a-debug-overlay)).
 - **Footprint effects.** A host that clears the cells under a footprint names the
-  effect each victim leaves. A move or a landing leaves
-  `EventFlashSpawnOneRequest`, each dead glyph's rune drawn for
+  effect each victim leaves, a `component.DeathEffect`
+  ([ECS and events §7](ecs-and-events.md#death-effects)). A move or a landing
+  leaves `DeathFlash`, each dead glyph's rune drawn for
   `DestructionFlashDuration` in the particle layer under the species, so the body
   covers it: the quasar's and the storm circles' moves, a program's `Teleport`,
   and the gold every composite breaks (`breakGoldUnder`). A spawn clears its

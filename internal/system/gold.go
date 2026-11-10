@@ -433,7 +433,6 @@ func (s *GoldSystem) handleGoldComplete() {
 	// Silent destruction - members already dead from typing
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 
 	s.clearState()
@@ -453,7 +452,6 @@ func (s *GoldSystem) handleGoldTimeout() {
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 
 	s.clearState()
@@ -475,7 +473,7 @@ func (s *GoldSystem) handleGoldDestroyed() {
 	// Request centralized destruction with flash effect
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       event.EventFlashSpawnOneRequest,
+		Effect:       component.DeathFlash,
 	})
 
 	s.clearState()
@@ -489,7 +487,6 @@ func (s *GoldSystem) cancelGold() {
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: s.headerEntity,
-		Effect:       0,
 	})
 
 	s.clearState()

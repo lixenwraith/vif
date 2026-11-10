@@ -341,7 +341,7 @@ func (s *TypingSystem) handleGlyph(cursor, entity core.Entity, glyph component.G
 	}
 
 	// Silent Death
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
+	event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, entity)
 
 	// Blink typing feedback
 	s.emitTypingFeedback(cursor, glyph.Type)
@@ -440,7 +440,7 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 	s.buffers.Observe(0, len(s.deleteBuf))
 
 	if len(s.deleteBuf) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, s.deleteBuf...)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, s.deleteBuf...)
 	}
 }
 

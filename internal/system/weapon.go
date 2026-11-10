@@ -414,7 +414,7 @@ func (s *WeaponSystem) removeWeapon(cursor core.Entity, weapon component.WeaponT
 	}
 	weaponComp.Charges[weapon], weaponComp.Cooldown[weapon], weaponComp.Stream[weapon] = 0, 0, 0
 	if orb := s.orbsOf(cursor)[weapon]; orb != 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, orb)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, orb)
 	}
 	s.publishLoadout(cursor, weaponComp)
 }
@@ -466,7 +466,7 @@ func (s *WeaponSystem) reapOrbs() {
 
 	if len(s.reapBuf) > 0 {
 		s.statOrbsReaped.Add(int64(len(s.reapBuf)))
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, s.reapBuf...)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, s.reapBuf...)
 	}
 }
 
@@ -780,14 +780,14 @@ func (s *WeaponSystem) destroyCursorOrbs(cursor core.Entity) {
 		if orbEntity == 0 {
 			continue
 		}
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, orbEntity)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, orbEntity)
 	}
 }
 
 // destroyAllOrbs drops every orb in the world; the reset path
 func (s *WeaponSystem) destroyAllOrbs() {
 	for _, orbEntity := range s.world.Components.Orb.Entities() {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, orbEntity)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, orbEntity)
 	}
 }
 

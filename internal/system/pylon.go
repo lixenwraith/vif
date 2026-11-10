@@ -450,7 +450,6 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 	// Request composite destruction (header + remaining members)
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 
 	// Publish one canonical species death for FSMs, loot, scoring, and rewards.
@@ -469,14 +468,12 @@ func (s *PylonSystem) terminatePylon(headerEntity core.Entity) {
 		// Still request composite cleanup for orphaned headers
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 			HeaderEntity: headerEntity,
-			Effect:       0,
 		})
 		return
 	}
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 }
 

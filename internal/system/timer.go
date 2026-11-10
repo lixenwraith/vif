@@ -93,7 +93,7 @@ func (s *TimerSystem) Update() {
 	// Store order may differ between instances after a correction (D-8); the
 	// batch must not carry that difference into destruction order
 	slices.Sort(s.expired)
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, s.expired...)
+	event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, s.expired...)
 }
 
 // timerRunning reports one of e's countdowns still running; an entity without a

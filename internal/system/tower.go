@@ -429,7 +429,6 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 }
 
@@ -437,14 +436,12 @@ func (s *TowerSystem) terminateTower(headerEntity core.Entity) {
 	if !s.world.Components.Tower.HasEntity(headerEntity) {
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 			HeaderEntity: headerEntity,
-			Effect:       0,
 		})
 		return
 	}
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 }
 

@@ -459,6 +459,8 @@ index](https://github.com/lixenwraith/stapes/blob/main/doc/term-index.md).
 
 **death** (also: death request, EventDeathBatch, DeathComponent, EmitDeath) — The event path that destroys entities with effects: `event.EmitDeath` pushes an `EventDeathBatch` split into domain-pure batches, and `DeathSystem` destroys each after its protection checks and publishes the effect once per batch; `DeathComponent` tags an entity it destroys silently. [ECS and events §7](ecs-and-events.md#7-destruction-and-protection) · `internal/event` `EmitDeath` · `internal/system` `DeathSystem`
 
+**death effect** (also: DeathEffect, `none`, `flash`, `fadeout`, `particle`) — The visual a death leaves where the dead stood, named the same way by a death batch, a composite destroy request and a footprint sweep: nothing, the **flash**, the **fadeout**, or a particle of each glyph. See also **effect cell**. [ECS §7](ecs-and-events.md#death-effects) · `internal/component` `DeathEffect`
+
 **debug** (also: `:debug`, `:d`) — four senses.
 - *Command*: `:debug` (`:d`) opens the profiler report, toggles the profiler, writes a CPU, heap or mutex profile or an execution trace, and sets standing breakpoints with `:d break`. [Input and modes §9](input-and-modes.md#9-command-mode) · [Logging §11](logging-and-diagnostics.md#11-profiler) · `internal/mode` commands.go
 - *Log level*: the `vlog` level between trace and info, for per-pass detail such as dispatch summaries, input intents and FSM transitions; the default when logging is on without `-lv`. [Logging §3](logging-and-diagnostics.md#3-levels) · `internal/vlog` `LevelDebug`

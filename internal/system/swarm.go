@@ -383,7 +383,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 			})
 		}
 	}
-	s.sweep.emit(s.world, 0)
+	s.sweep.emit(s.world, component.DeathSilent)
 }
 
 // createSwarmComposite builds the 4×2 swarm entity structure
@@ -701,6 +701,5 @@ func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity) {
 	}
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
 	})
 }

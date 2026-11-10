@@ -475,7 +475,7 @@ func (s *KrakenSystem) interact() {
 	for _, cell := range s.cells {
 		s.sweep.collect(s.world, cell.X, cell.Y, clearable)
 	}
-	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
+	s.sweep.emit(s.world, component.DeathFlash)
 	event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleDecay, s.glyphs...)
 
 	damage := profile.Contact[component.SpeciesKraken]

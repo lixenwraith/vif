@@ -41,7 +41,6 @@ func (s *FadeoutSystem) Priority() int {
 
 func (s *FadeoutSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventFadeoutSpawnOne,
 		event.EventFadeoutSpawnBatch,
 		event.EventMetaSystemCommandRequest,
 	}
@@ -61,18 +60,9 @@ func (s *FadeoutSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	switch ev.Type {
-	case event.EventFadeoutSpawnOne:
-		if payload, ok := ev.Payload.(*event.FadeoutSpawnPayload); ok {
-			s.fade(component.EffectCell{X: payload.X, Y: payload.Y, Rune: payload.Char,
-				Fg: payload.FgColor, Bg: payload.BgColor, Solid: true})
-		}
-
-	case event.EventFadeoutSpawnBatch:
-		if batch, ok := ev.Payload.(*event.BatchPayload[component.EffectCell]); ok {
-			s.fade(batch.Entries...)
-			event.EffectBatchPool.Release(batch)
-		}
+	if batch, ok := ev.Payload.(*event.BatchPayload[component.EffectCell]); ok {
+		s.fade(batch.Entries)
+		event.EffectBatchPool.Release(batch)
 	}
 }
 
@@ -90,7 +80,7 @@ func (s *FadeoutSystem) Update() {
 }
 
 // fade adds cells to the batch this tick opened, opening it with the first of them
-func (s *FadeoutSystem) fade(cells ...component.EffectCell) {
+func (s *FadeoutSystem) fade(cells []component.EffectCell) {
 	fadeouts, timers := s.world.Components.Fadeout, s.world.Components.Timer
 	for _, e := range fadeouts.Entities() {
 		// A deadline no tick has aged yet is this tick's
