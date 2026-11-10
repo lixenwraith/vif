@@ -271,23 +271,6 @@ In order: reference kinds, order and provenance; a read-only graph of a scenario
 regions, states and blocks; placing and editing blocks into editor-owned files; the
 map layer and point markers; root `[[expand]]` blocks and library copies.
 
-### Write a macro as another with arguments fixed
-
-- Priority: P3
-- Affected files: `lixenwraith/toml/macro`, `wad/scenario/base/vanguard/macros.toml`,
-  `wad/scenario/base/td/td_macros.toml`
-- Design: [TOML macros](toml-macros.md)
-
-Eight of the shipped scenarios' macros are one invocation of another: vanguard's
-four ranks over `Raider`, and td's `Tower`, `QuadrantTower` and `Pylon` over
-`SpawnAwait` and `FlankGateway` over `Gateway`. Each declares again the parameters
-it passes through and forwards them one by one, 34 arguments written
-`x = "${x}"`, so a parameter added to `Raider` is four more edits. The expander
-could take a definition that names its base and the arguments it fixes, every
-other parameter of the base staying one with its type and default. The form is
-the TOML module's to add, and the audio bank waits on the same one for nine of
-its nineteen macros.
-
 ### Add the cheap vim keys, and let the tutor override the game's
 
 - Priority: P3
