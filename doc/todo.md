@@ -1540,3 +1540,26 @@ when they land.
 down composites at run time, but no system or scenario uses them. A species or
 scenario that assembles composites would; it reaches them through events, since
 another system may not call them directly.
+
+### Trim what a tick spends outside the position index
+
+- Priority: P2
+- Affected files: `internal/system/interaction.go`, `internal/engine/store.go`,
+  `internal/engine/world.go`, `internal/event/queue.go`
+- Guide: [Position §5](position-package.md#5-costs)
+
+A td tick with sixteen cursors on its 500×250 map (`TestTickProfileTD16`, sixteen
+runs merged) is led by costs outside the index, the math and the physics. Each
+share is measured and none of its code changed:
+
+- A species' contact with the cursors (`CheckCursorOverlaps`, `overlapOf`), 15%:
+  every entity reads each roster slot's cursor and shield again before it tests
+  its cells against them. Reading the roster once a tick is the smallest step.
+- The stores' entity lookup (`sparseIndex.get`), 9.5% across the systems, a
+  third of it under a position read.
+- The route graph (`RouteSolver.Compute`), 12%, and the maze a reset lays again
+  (`executeBatchSpawn`), 15%, a third of that `World.componentMask`, a Go map
+  written once a component.
+- Three allocations every tick: a `Stamp` in `EventQueue.BeginTick`, one in
+  `NextBoundary`, and the system list the membership's off-tick drain copies
+  (`World.Systems`).
