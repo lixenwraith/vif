@@ -384,6 +384,21 @@ as one pooled batch.
   to 29 µs. Neither form allocates. Holding the cells outside any entity could
   save no more than the 0.5 µs a tick that is left, and would need a capture,
   reset and staging path of its own.
+- `SpiritSystem` holds its flights the same way: the parts a tick sends that
+  travel alike are one entity, whose component carries them in a slice under one
+  deadline; the system ends it and keeps the slice. A flight naming a species
+  stays an entity of its own, the pending spawn a capture carries
+  ([behavior machines §4.4](machine-design.md#44-spawns-that-ride-their-materializes-and-spirits)).
+  A scatter request is a body's cells as one pooled batch: each glyph's way out
+  from the body's middle is worked out once as it joins the tick's flight, and a
+  part is one buffer write a frame, left out where a glyph is already drawn.
+- Measured the same way against a spirit entity a part: 15 converging spirits
+  every tick cost the tick 2.7 µs where they cost 5.2 µs and a tick's three frames
+  70 µs where they cost 111 µs, 600 every ten ticks 4.8 µs from 17.6 µs and 284 µs
+  from 465 µs; the frames' cost is the ten trail segments a part draws, whose
+  turn and light are now worked out once a flight. A scattered 5x3 body every
+  tick costs the tick 0.8 µs and its three frames 3.4 µs, 600 cells every ten
+  ticks 1.2 µs and 10.6 µs, and a scatter allocates nothing.
 
 ### Timers
 

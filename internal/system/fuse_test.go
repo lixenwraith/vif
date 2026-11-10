@@ -131,8 +131,7 @@ func newFusionWorld(t *testing.T) (*materializeWorld, core.Entity, [2]core.Entit
 // TestADrainPairsSwarmLandsAsItsSpiritsArrive: a drain pair's fusion flies its
 // drains' spirits and plays no materialize, the first spirit naming the swarm and
 // the footprint the others fly onto, and the swarm crosses on that footprint the
-// tick the spirits draw their arrival frame, where the timer the materialize
-// replaced landed it
+// tick the flights end, where the timer the materialize replaced landed it
 func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -166,9 +165,8 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			area := component.Footprints[component.SpeciesSwarm].At(carrier.LandX, carrier.LandY)
 			for _, e := range spirits {
 				sp, _ := w.Components.Spirit.GetComponent(e)
-				if x, y := int(sp.TargetX), int(sp.TargetY); x < area.X || x >= area.X+area.Width ||
-					y < area.Y || y >= area.Y+area.Height {
-					t.Fatalf("a spirit flies to (%d, %d), off the footprint headed at (%d, %d)", x, y, carrier.LandX, carrier.LandY)
+				if len(sp.Parts) != 1 || !area.Contains(int(sp.Parts[0].ToX), int(sp.Parts[0].ToY)) {
+					t.Fatalf("a flight's parts fly to %+v, want one onto the footprint headed at (%d, %d)", sp.Parts, carrier.LandX, carrier.LandY)
 				}
 			}
 
@@ -188,16 +186,13 @@ func TestADrainPairsSwarmLandsAsItsSpiritsArrive(t *testing.T) {
 			if x, y := landCell(spawns[0]); x != carrier.LandX || y != carrier.LandY {
 				t.Fatalf("the swarm lands at (%d, %d), off the header the spirit names (%d, %d)", x, y, carrier.LandX, carrier.LandY)
 			}
-			for _, e := range spirits {
-				if timer, ok := w.Components.Timer.GetPtr(e); !ok || timer.Expired(component.TimerLifetime) ||
-					timer.Elapsed(component.TimerLifetime) != parameter.SpiritAnimationDuration {
-					t.Fatal("the swarm landed off the spirits' arrival frame")
-				}
+			if n := w.Components.Spirit.CountEntities(); n != 0 {
+				t.Fatalf("%d flights outlived the tick the swarm landed on", n)
 			}
 
 			b.tick()
-			if n := len(b.landings(component.SpeciesSwarm, mark)); n != 1 || w.Components.Spirit.CountEntities() != 0 {
-				t.Fatalf("%d swarms and %d spirits a tick on, want one and none", n, w.Components.Spirit.CountEntities())
+			if n := len(b.landings(component.SpeciesSwarm, mark)); n != 1 {
+				t.Fatalf("%d swarms a tick on, want the one", n)
 			}
 		})
 	}

@@ -2647,37 +2647,53 @@ func decodeColumnsPulse(r *columnReader) []StoreEntry[component.PulseComponent] 
 func encodeColumnsSpirit(dst []byte, rows []StoreEntry[component.SpiritComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.StartX)
+		dst = appendUint(dst, rows[i].Value.Pattern)
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.StartY)
+		dst = appendInt(dst, rows[i].Value.Color)
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.TargetX)
+		dst = appendLen(dst, rows[i].Value.Parts)
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.TargetY)
+		for j := range rows[i].Value.Parts {
+			dst = appendF64(dst, rows[i].Value.Parts[j].FromX)
+		}
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.Pattern)
+		for j := range rows[i].Value.Parts {
+			dst = appendF64(dst, rows[i].Value.Parts[j].FromY)
+		}
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.Amplitude)
+		for j := range rows[i].Value.Parts {
+			dst = appendF64(dst, rows[i].Value.Parts[j].ToX)
+		}
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.Frequency)
+		for j := range rows[i].Value.Parts {
+			dst = appendF64(dst, rows[i].Value.Parts[j].ToY)
+		}
 	}
 	for i := range rows {
-		dst = appendF64(dst, rows[i].Value.Spin)
+		for j := range rows[i].Value.Parts {
+			dst = appendInt(dst, rows[i].Value.Parts[j].Rune)
+		}
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.Rune)
+		for j := range rows[i].Value.Parts {
+			dst = appendUint(dst, rows[i].Value.Parts[j].Color.R)
+		}
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.BaseColor)
+		for j := range rows[i].Value.Parts {
+			dst = appendUint(dst, rows[i].Value.Parts[j].Color.G)
+		}
 	}
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.BlinkColor)
+		for j := range rows[i].Value.Parts {
+			dst = appendUint(dst, rows[i].Value.Parts[j].Color.B)
+		}
 	}
 	for i := range rows {
 		dst = appendUint(dst, rows[i].Value.Species)
@@ -2699,37 +2715,53 @@ func decodeColumnsSpirit(r *columnReader) []StoreEntry[component.SpiritComponent
 	rows := make([]StoreEntry[component.SpiritComponent], n)
 	readEntityColumn(rows, r)
 	for i := range rows {
-		readF64(&rows[i].Value.StartX, r)
+		readUint(&rows[i].Value.Pattern, r)
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.StartY, r)
+		readInt(&rows[i].Value.Color, r)
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.TargetX, r)
+		readSlice(&rows[i].Value.Parts, r)
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.TargetY, r)
+		for j := range rows[i].Value.Parts {
+			readF64(&rows[i].Value.Parts[j].FromX, r)
+		}
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.Pattern, r)
+		for j := range rows[i].Value.Parts {
+			readF64(&rows[i].Value.Parts[j].FromY, r)
+		}
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.Amplitude, r)
+		for j := range rows[i].Value.Parts {
+			readF64(&rows[i].Value.Parts[j].ToX, r)
+		}
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.Frequency, r)
+		for j := range rows[i].Value.Parts {
+			readF64(&rows[i].Value.Parts[j].ToY, r)
+		}
 	}
 	for i := range rows {
-		readF64(&rows[i].Value.Spin, r)
+		for j := range rows[i].Value.Parts {
+			readInt(&rows[i].Value.Parts[j].Rune, r)
+		}
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.Rune, r)
+		for j := range rows[i].Value.Parts {
+			readUint(&rows[i].Value.Parts[j].Color.R, r)
+		}
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.BaseColor, r)
+		for j := range rows[i].Value.Parts {
+			readUint(&rows[i].Value.Parts[j].Color.G, r)
+		}
 	}
 	for i := range rows {
-		readInt(&rows[i].Value.BlinkColor, r)
+		for j := range rows[i].Value.Parts {
+			readUint(&rows[i].Value.Parts[j].Color.B, r)
+		}
 	}
 	for i := range rows {
 		readUint(&rows[i].Value.Species, r)

@@ -254,16 +254,16 @@ func (r *effectRig) frames() {
 	}
 }
 
-// BenchmarkDeathEffects measures the effects a death leaves, on a bare world: "tick"
-// is one tick's share of spawning, ageing and ending them, "frames" a tick's three
-// frames of drawing them. bodies is a 5x3 body dying every tick, storm 600 cells
-// going at once every ten ticks.
+// BenchmarkDeathEffects measures the effects a death leaves and the converging
+// spirit, on a bare world: "tick" is one tick's share of spawning, ageing and ending
+// them, "frames" a tick's three frames of drawing them. bodies is a 5x3 body dying
+// every tick, storm 600 cells going at once every ten ticks.
 func BenchmarkDeathEffects(b *testing.B) {
 	loads := []struct {
 		name         string
 		cells, every int
 	}{{"bodies", 15, 1}, {"storm", 600, 10}}
-	for _, effect := range []string{"flash", "fadeout", "spirit"} {
+	for _, effect := range []string{"flash", "fadeout", "spirit", "scatter"} {
 		for _, load := range loads {
 			for _, frames := range []bool{false, true} {
 				name := "tick"
@@ -300,6 +300,13 @@ func BenchmarkDeathEffects(b *testing.B) {
 									StartX: x0 + i%cols, StartY: y0 + i/cols, TargetX: x0 + 2, TargetY: y0 + 1, Char: 'x',
 									BaseColor: component.SpiritCyan}, core.DomainPlayer)
 							}
+						case "scatter":
+							batch := event.EffectBatchPool.Acquire()
+							for i := range load.cells {
+								batch.Entries = append(batch.Entries, component.EffectCell{X: x0 + i%cols, Y: y0 + i/cols, Rune: 'x',
+									Fg: color.RGB{R: 200, G: 100, B: 50}})
+							}
+							r.w.PushLocal(event.EventSpiritScatterRequest, batch)
 						}
 					}
 					step := func(i int) {

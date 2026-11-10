@@ -6,13 +6,13 @@ import (
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
-	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// SpiritRenderer draws converging spirit entities with blinking effect
+// SpiritRenderer draws the spirit flights: converging parts spiralling in to their
+// targets with a trail of light, scattered ones flying out and fading
 type SpiritRenderer struct {
 	gameCtx *engine.GameContext
 }
@@ -24,108 +24,96 @@ func NewSpiritRenderer(gameCtx *engine.GameContext) *SpiritRenderer {
 }
 
 func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	spirits := r.gameCtx.World.Components.Spirit
+	world := r.gameCtx.World
+	spirits := world.Components.Spirit
 	if spirits.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	timers := r.gameCtx.World.Components.Timer
-	spirits.Each(func(e core.Entity, spiritComp *component.SpiritComponent) bool {
-		timer, ok := timers.GetPtr(e)
-		if !ok || timer.Expired(component.TimerLifetime) {
+	spirits.Each(func(e core.Entity, spirit *component.SpiritComponent) bool {
+		progress, ok := deadlineProgress(ctx, world, e)
+		if !ok {
 			return true
 		}
-		progress := min(float64(timer.Elapsed(component.TimerLifetime))/float64(parameter.SpiritAnimationDuration), 1)
-
-		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
-		relX := spiritComp.StartX - spiritComp.TargetX
-		relY := spiritComp.StartY - spiritComp.TargetY
-		relYCirc := ctx.CellAspect.Circular(relY)
-
-		// Render loop: Draw head (i=0) and trailing segments (i>0)
-		for i := range visual.SpiritTrailSteps {
-			// Calculate progress for this segment
-			p := progress - float64(i)*visual.SpiritTrailLag
-			if p < 0 {
-				continue // Segment hasn't spawned yet
-			}
-
-			// --- Spiral Trajectory Calculation ---
-
-			// 1. Calculate rotation at current progress
-			currentRot := p * spiritComp.Spin
-
-			// 2. Rotate the aspect-corrected relative vector
-			rotX, rotYCirc := vmath.RotateVector(relX, relYCirc, currentRot)
-
-			// 3. Apply convergence scale (1.0 at start -> 0.0 at target)
-			scale := 1.0 - p
-			rotX *= scale
-			rotYCirc *= scale
-
-			// 4. Restore aspect ratio (Circular -> Elliptical)
-			rotY := ctx.CellAspect.FromCircular(rotYCirc)
-
-			// 5. Map to screen space
-
-			// Compute map position
-			mapPoint := vmath.PointAt(spiritComp.TargetX+rotX, spiritComp.TargetY+rotY)
-			mapX := mapPoint.X
-			mapY := mapPoint.Y
-
-			// Transform to screen coords
-			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-			if !visible {
-				continue
-			}
-
-			// --- Coloring & Fading ---
-
-			var c color.RGB
-			var alpha = 1.0
-
-			if i == 0 {
-				// Head: color cycle through gradient based on progress
-				c = spiritProgressColor(spiritComp.BaseColor, p)
-				// Intensity increases as it approaches target (0.5 -> 1.0)
-				intensity := 0.5 + p*0.5
-				c = color.Scale(c, intensity)
-			} else {
-				// Trail: inherit cycled color with linear fade + boosted alpha
-				trailProgress := p - float64(i-1)*visual.SpiritTrailLag
-				if trailProgress < 0 {
-					trailProgress = 0
-				}
-				c = spiritProgressColor(spiritComp.BaseColor, trailProgress)
-
-				// Normalized position in trail (0.0 to 1.0)
-				trailPos := float64(i) / float64(visual.SpiritTrailSteps)
-
-				fade := 1.0 - trailPos
-				fade = fade * 1.3
-				if fade > 1.0 {
-					fade = 1.0
-				}
-
-				c = color.Scale(c, fade)
-				alpha = 0.4 + fade*0.6
-			}
-
-			// Additive blend for glow effect
-			buf.Set(screenX, screenY, spiritComp.Rune, c, visual.RgbBlack, render.BlendAddFg, alpha, terminal.AttrNone)
+		if spirit.Pattern == component.SpiritScatter {
+			drawScatter(ctx, buf, spirit.Parts, progress)
+		} else {
+			drawConverge(ctx, buf, spirit, progress)
 		}
 		return true
 	})
 }
 
-// spiritProgressColor returns gradient color based on base and animation progress
-func spiritProgressColor(base component.SpiritColor, progress float64) color.RGB {
-	offset := visual.SpiritBaseOffsets[base]
-	// Progress adds 0-128 to cycle through ~half the gradient
-	progressOffset := int(progress * 128.0)
-	lutIdx := (offset + progressOffset) & 0xFF
+// drawScatter draws each part once on its way out, fast at first and slowing, its
+// light going as it settles. A cell already showing a glyph keeps it: a scatter
+// passes under what is there, as the species drawn after it pass over it.
+func drawScatter(ctx render.RenderContext, buf *render.RenderBuffer, parts []component.SpiritPart, progress float64) {
+	rest := 1 - progress
+	travelled, light := 1-rest*rest, 1-progress*progress
+	for i := range parts {
+		part := &parts[i]
+		at := vmath.PointAt(vmath.Lerp(part.FromX, part.ToX, travelled), vmath.Lerp(part.FromY, part.ToY, travelled))
+		screenX, screenY, visible := ctx.MapToScreen(at.X, at.Y)
+		if !visible || buf.CellAt(screenX, screenY).Rune != 0 {
+			continue
+		}
+		buf.Set(screenX, screenY, part.Rune, color.Scale(part.Color, light), visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
+	}
+}
 
-	return render.HeatGradientLUT[lutIdx]
+// drawConverge draws each part's head and the segments trailing it down the spiral
+// it rides in to its target. The parts keep one time, so each segment's turn, pull
+// and light are worked out once for the flight.
+func drawConverge(ctx render.RenderContext, buf *render.RenderBuffer, spirit *component.SpiritComponent, progress float64) {
+	var segments [visual.SpiritTrailSteps]struct {
+		cos, sin, pull, alpha float64
+		c                     color.RGB
+	}
+	drawn := 0
+	for step := range segments {
+		// Each segment rides the same spiral a lag behind the one ahead
+		p := progress - float64(step)*visual.SpiritTrailLag
+		if p < 0 {
+			break
+		}
+		seg := &segments[step]
+		seg.cos, seg.sin, seg.pull = vmath.Cos(p*visual.SpiritSpin), vmath.Sin(p*visual.SpiritSpin), 1-p
+		// The head brightens as it nears the target; a trail segment's color lags
+		// its place once more, and it dims down the trail's length
+		seg.c, seg.alpha = color.Scale(spiritProgressColor(spirit.Color, p), vmath.Lerp(visual.SpiritHeadFloor, 1, p)), 1
+		if step > 0 {
+			fade := min((1-float64(step)/float64(visual.SpiritTrailSteps))*visual.SpiritTrailBoost, 1)
+			seg.c = color.Scale(spiritProgressColor(spirit.Color, max(p-float64(step-1)*visual.SpiritTrailLag, 0)), fade)
+			seg.alpha = vmath.Lerp(visual.SpiritTrailAlphaFloor, 1, fade)
+		}
+		drawn++
+	}
+
+	for i := range spirit.Parts {
+		part := &spirit.Parts[i]
+		// The spiral turns in circular space, so it reads round on tall cells, and
+		// one way or the other by the start cell, so an implosion reads as chaotic
+		relX, relY := part.FromX-part.ToX, ctx.CellAspect.Circular(part.FromY-part.ToY)
+		way := 1.0
+		if start := vmath.PointAt(part.FromX, part.FromY); (start.X^start.Y)&1 != 0 {
+			way = -1
+		}
+		for step := range drawn {
+			seg := &segments[step]
+			sin := way * seg.sin
+			at := vmath.PointAt(part.ToX+(relX*seg.cos-relY*sin)*seg.pull,
+				part.ToY+ctx.CellAspect.FromCircular((relX*sin+relY*seg.cos)*seg.pull))
+			if screenX, screenY, visible := ctx.MapToScreen(at.X, at.Y); visible {
+				buf.Set(screenX, screenY, part.Rune, seg.c, visual.RgbBlack, render.BlendAddFg, seg.alpha, terminal.AttrNone)
+			}
+		}
+	}
+}
+
+// spiritProgressColor is a converging spirit's color at a progress: its base's
+// place on the heat gradient, cycled on through the gradient's span
+func spiritProgressColor(base component.SpiritColor, progress float64) color.RGB {
+	return render.HeatGradientLUT[(visual.SpiritBaseOffsets[base]+int(progress*visual.SpiritGradientSpan))&0xFF]
 }

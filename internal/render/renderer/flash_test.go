@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
 	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // TestEffectBatchesFadeBetweenTicks: a batch's cells are drawn as far through the
@@ -74,5 +75,73 @@ func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
 		MapHeight: config.MapHeight, ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}, buf)
 	if got := buf.CellAt(3, 4); got.Rune != 0 {
 		t.Fatalf("a flash past its deadline drew %q", got.Rune)
+	}
+}
+
+// TestFlightsTravelBetweenTicks: a flight's parts are drawn as far along as its
+// deadline stands at the frame's moment. A scattered part runs fast and slows,
+// dimming in its own color, and passes under a glyph already drawn; a converging
+// part sets off from its start cell alone and is on its target as the flight ends
+func TestFlightsTravelBetweenTicks(t *testing.T) {
+	w, game := glyphWorld()
+	tick := engine.SimEpoch.Add(time.Second)
+	w.Resources.Time.PaceTime, w.Resources.Time.DeltaTime = tick, 50*time.Millisecond
+	red, green := color.RGB{R: 200}, color.RGB{G: 200}
+	config := w.Resources.Config
+	draw := func(since time.Duration) *render.RenderBuffer {
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+		buf.SetFgOnly(20, 4, 'G', green, terminal.AttrNone)
+		NewSpiritRenderer(game).Render(render.RenderContext{GameTime: tick.Add(since), MapWidth: config.MapWidth,
+			MapHeight: config.MapHeight, ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight,
+			CellAspect: vmath.RefAspect}, buf)
+		return buf
+	}
+	flight := func(c component.SpiritComponent, duration, elapsed time.Duration) {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Components.Spirit.SetComponent(e, c)
+		var timer component.TimerComponent
+		timer.Slots[component.TimerDeadline] = component.Countdown{Remaining: duration - elapsed, Duration: duration}
+		w.Components.Timer.SetComponent(e, timer)
+	}
+
+	// A part thrown 8 cells right, a fifth through as the tick left it, and one
+	// still over the cell it left, where a glyph stands
+	const duration, elapsed = 500 * time.Millisecond, 100 * time.Millisecond
+	flight(component.SpiritComponent{Pattern: component.SpiritScatter, Parts: []component.SpiritPart{
+		{FromX: 2.5, FromY: 4.5, ToX: 10.5, ToY: 4.5, Rune: 'a', Color: red},
+		{FromX: 20.5, FromY: 4.5, ToX: 21.5, ToY: 4.5, Rune: 'b', Color: red},
+	}}, duration, elapsed)
+	for _, since := range []time.Duration{0, 25 * time.Millisecond} {
+		buf := draw(since)
+		progress := float64(elapsed+since) / float64(duration)
+		x := int(2.5 + 8*(1-(1-progress)*(1-progress)))
+		if got := buf.CellAt(x, 4); got.Rune != 'a' || got.Fg != color.Scale(red, 1-progress*progress) {
+			t.Fatalf("%v past the tick, (%d,4) drew %q fg %v, want the part there, dimmed by its progress", since, x, got.Rune, got.Fg)
+		}
+		if got := buf.CellAt(20, 4); got.Rune != 'G' || got.Fg != green {
+			t.Fatalf("%v past the tick, the glyph a part stands over drew %q fg %v", since, got.Rune, got.Fg)
+		}
+	}
+	w.DestroyEntity(w.Components.Spirit.Entities()[0])
+
+	converging := component.SpiritComponent{Parts: []component.SpiritPart{{FromX: 3.5, FromY: 2.5, ToX: 30.5, ToY: 10.5, Rune: 'x'}}}
+	flight(converging, duration, 0)
+	drawn := func(buf *render.RenderBuffer) (cells []vmath.Point) {
+		for y := range config.MapHeight {
+			for x := range config.MapWidth {
+				if buf.CellAt(x, y).Rune == 'x' {
+					cells = append(cells, vmath.Point{X: x, Y: y})
+				}
+			}
+		}
+		return cells
+	}
+	if got := drawn(draw(0)); len(got) != 1 || got[0] != (vmath.Point{X: 3, Y: 2}) {
+		t.Fatalf("a flight setting off drew %v, want its head alone on its start cell", got)
+	}
+	w.DestroyEntity(w.Components.Spirit.Entities()[0])
+	flight(converging, duration, duration-time.Nanosecond)
+	if got := draw(0).CellAt(30, 10); got.Rune != 'x' {
+		t.Fatalf("a flight about to end drew %q on its target", got.Rune)
 	}
 }

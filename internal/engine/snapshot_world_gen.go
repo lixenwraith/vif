@@ -1626,7 +1626,14 @@ func equalPulse(a, b *component.PulseComponent) bool {
 }
 
 func equalSpirit(a, b *component.SpiritComponent) bool {
-	return math.Float64bits(float64(a.StartX)) == math.Float64bits(float64(b.StartX)) && math.Float64bits(float64(a.StartY)) == math.Float64bits(float64(b.StartY)) && math.Float64bits(float64(a.TargetX)) == math.Float64bits(float64(b.TargetX)) && math.Float64bits(float64(a.TargetY)) == math.Float64bits(float64(b.TargetY)) && a.Pattern == b.Pattern && math.Float64bits(float64(a.Amplitude)) == math.Float64bits(float64(b.Amplitude)) && math.Float64bits(float64(a.Frequency)) == math.Float64bits(float64(b.Frequency)) && math.Float64bits(float64(a.Spin)) == math.Float64bits(float64(b.Spin)) && a.Rune == b.Rune && a.BaseColor == b.BaseColor && a.BlinkColor == b.BlinkColor && a.Species == b.Species && a.LandX == b.LandX && a.LandY == b.LandY
+	return a.Pattern == b.Pattern && a.Color == b.Color && (a.Parts == nil) == (b.Parts == nil) && len(a.Parts) == len(b.Parts) && func() bool {
+		for i0 := range a.Parts {
+			if !(math.Float64bits(float64(a.Parts[i0].FromX)) == math.Float64bits(float64(b.Parts[i0].FromX)) && math.Float64bits(float64(a.Parts[i0].FromY)) == math.Float64bits(float64(b.Parts[i0].FromY)) && math.Float64bits(float64(a.Parts[i0].ToX)) == math.Float64bits(float64(b.Parts[i0].ToX)) && math.Float64bits(float64(a.Parts[i0].ToY)) == math.Float64bits(float64(b.Parts[i0].ToY)) && a.Parts[i0].Rune == b.Parts[i0].Rune && a.Parts[i0].Color == b.Parts[i0].Color) {
+				return false
+			}
+		}
+		return true
+	}() && a.Species == b.Species && a.LandX == b.LandX && a.LandY == b.LandY
 }
 
 func equalMaterialize(a, b *component.MaterializeComponent) bool {

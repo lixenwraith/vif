@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 206
+const EventTypeCount = 207
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -161,6 +161,7 @@ func InitRegistry() {
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd)
 	RegisterType("EventStrobeRequest", EventStrobeRequest)
 	RegisterType("EventSpiritSpawnRequest", EventSpiritSpawnRequest)
+	RegisterType("EventSpiritScatterRequest", EventSpiritScatterRequest)
 	RegisterType("EventSpiritDespawnRequest", EventSpiritDespawnRequest)
 	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest)
 	RegisterType("EventLightningUpdateRequest", EventLightningUpdateRequest)
@@ -373,6 +374,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventGrayoutEnd:                      ClassLocal,
 	EventStrobeRequest:                   ClassLocal,
 	EventSpiritSpawnRequest:              ClassStamped,
+	EventSpiritScatterRequest:            ClassLocal,
 	EventSpiritDespawnRequest:            ClassStamped,
 	EventLightningSpawnRequest:           ClassLocal,
 	EventLightningUpdateRequest:          ClassLocal,

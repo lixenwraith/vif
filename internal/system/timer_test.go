@@ -44,43 +44,30 @@ func lightningEntity(w *engine.World) core.Entity {
 	return 0
 }
 
-// TestLifetimesKeepTheirTickCounts pins two lifetimes against the counts their
-// own countdowns produced: a turret bullet moves on 80 ticks (its age had to
-// exceed the limit), and a spirit draws 10 frames, the last on its target,
-// however soon the death batch settles after its lifetime ends.
+// TestLifetimesKeepTheirTickCounts pins a lifetime against the count its own
+// countdown produced: a turret bullet moves on 80 ticks (its age had to exceed the
+// limit), however soon the death batch settles after its lifetime ends.
 func TestLifetimesKeepTheirTickCounts(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
 	tick := newTimerTick(w)
 	bullets := ready(NewBulletSystem(w)).(*BulletSystem)
-	spirits := ready(NewSpiritSystem(w)).(*SpiritSystem)
 
 	bullets.HandleEvent(event.GameEvent{Type: event.EventBulletSpawnRequest, Payload: &event.BulletSpawnRequestPayload{
 		OriginX: 2.5, OriginY: 5.5, VelX: 1, MaxLifetime: parameter.TurretBulletLifetime,
 	}})
-	spirits.HandleEvent(event.GameEvent{Type: event.EventSpiritSpawnRequest, Domain: core.DomainPlayer,
-		Payload: &event.SpiritSpawnRequestPayload{StartX: 2, StartY: 2, TargetX: 30, TargetY: 10, Char: 'x'}})
-	bullet, spirit := w.Components.Bullet.Entities()[0], w.Components.Spirit.Entities()[0]
+	bullet := w.Components.Bullet.Entities()[0]
 
-	alive := func(e core.Entity) bool { _, ok := w.GetComponentMask(e); return ok }
-	moves, frames, lastProgress := 0, 0, 0.0
+	moves := 0
 	for range 100 {
 		tick.open()
-		if alive(bullet) {
+		if _, alive := w.GetComponentMask(bullet); alive {
 			bullets.Update()
 			moves++
-		}
-		// Drawn as the spirit renderer draws it
-		if timer, ok := w.Components.Timer.GetPtr(spirit); ok && !timer.Expired(component.TimerLifetime) {
-			frames++
-			lastProgress = min(float64(timer.Elapsed(component.TimerLifetime))/float64(parameter.SpiritAnimationDuration), 1)
 		}
 	}
 	if want := int(parameter.TurretBulletLifetime / parameter.GameUpdateInterval); moves != want {
 		t.Fatalf("bullet moved on %d ticks, want %d", moves, want)
-	}
-	if want := int(parameter.SpiritAnimationDuration / parameter.GameUpdateInterval); frames != want || lastProgress != 1 {
-		t.Fatalf("spirit drew %d frames ending at %v, want %d ending at 1", frames, lastProgress, want)
 	}
 }
 

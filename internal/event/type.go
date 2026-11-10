@@ -442,9 +442,11 @@ const (
 
 	// --- Spirit ---
 
-	// EventSpiritSpawnRequest (SpiritSpawnRequestPayload) [stamped] signals intent to spawn a spirit entity
+	// EventSpiritSpawnRequest (SpiritSpawnRequestPayload) [stamped] flies a spirit in to its target, landing the species it names
 	EventSpiritSpawnRequest
-	// EventSpiritDespawnRequest [stamped] signals force-clear of all spirit entities
+	// EventSpiritScatterRequest (BatchPayload[component.EffectCell]) [local] throws a body's glyphs out from its middle as fading spirits
+	EventSpiritScatterRequest
+	// EventSpiritDespawnRequest [stamped] signals force-clear of all spirit flights
 	EventSpiritDespawnRequest
 
 	// --- Lightning ---
