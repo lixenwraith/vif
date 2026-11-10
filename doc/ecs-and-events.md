@@ -348,6 +348,33 @@ fadeout effect is read from each entity before the batch is destroyed and
 published as one pooled batch event. Code must not retain a pooled payload after
 its handler returns.
 
+### Death effects
+
+An effect draws the cells a death leaves, never the entities that died: each cell
+is read as a `component.EffectCell` (its cell, glyph, colors and whether it has a
+background) before the batch is destroyed, and the cells go to the effect's system
+as one pooled batch.
+
+- `FlashSystem` and `FadeoutSystem` hold the cells a tick sends as one Player
+  entity, whose component carries them in a slice under one deadline. A batch
+  arriving later in the tick joins it. The system ends the entity on the tick its
+  deadline runs out and keeps the slice for a later batch, so a steady stream of
+  deaths allocates nothing.
+- The cells are in no position index and carry no timer or protection of their
+  own: an effect loads no cell's occupant budget, however many cells it draws.
+- Their renderers draw a batch as far through its fade as the deadline stands at
+  the frame's moment, the time since the tick included (`deadlineProgress`), so a
+  fade steps on every frame.
+- Measured by `BenchmarkDeathEffects` on a bare world, medians of five alternating
+  runs against an entity a cell: a 5x3 body dying every tick costs the tick 0.5 µs
+  where it cost 3.9 µs as a flash and 4.0 µs as a fadeout, and 600 cells every ten
+  ticks cost 0.4 to 0.5 µs a tick where they cost 13.7 and 14.1 µs. A tick's three
+  frames of the bodies fall from 8.6 to 5.7 µs for the flash and from 10.7 to
+  8.0 µs for the fadeout, the frames of the 600 cells from 32 to 18 µs and from 42
+  to 29 µs. Neither form allocates. Holding the cells outside any entity could
+  save no more than the 0.5 µs a tick that is left, and would need a capture,
+  reset and staging path of its own.
+
 ### Timers
 
 `TimerComponent` gives an entity three countdowns, indexed by `TimerSlot`: a

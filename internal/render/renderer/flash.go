@@ -10,52 +10,52 @@ import (
 	"github.com/lixenwraith/vif/internal/render"
 )
 
-// FlashRenderer draws brief destruction flash effects
+// FlashRenderer draws the cells flashing away
 type FlashRenderer struct {
 	gameCtx *engine.GameContext
 }
 
-// NewEffectsRenderer creates fg-only effects renderer for flash
 func NewFlashRenderer(gameCtx *engine.GameContext) *FlashRenderer {
 	return &FlashRenderer{
 		gameCtx: gameCtx,
 	}
 }
 
-// Render draws brief flash effects when characters are removed
+// Render draws each batch's glyphs in the removal flash's color, fading as one
 func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	flashes := r.gameCtx.World.Components.Flash
+	world := r.gameCtx.World
+	flashes := world.Components.Flash
 	if flashes.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	timers := r.gameCtx.World.Components.Timer
-	flashes.Each(func(flashEntity core.Entity, flashComp *component.FlashComponent) bool {
-		timer, ok := timers.GetPtr(flashEntity)
-		if !ok || timer.Slots[component.TimerLifetime].Remaining <= 0 {
-			return true
-		}
-
-		posComp, ok := r.gameCtx.World.Positions.GetPosition(flashEntity)
+	flashes.Each(func(e core.Entity, flash *component.FlashComponent) bool {
+		progress, ok := deadlineProgress(ctx, world, e)
 		if !ok {
 			return true
 		}
-
-		// Transform map coords to screen coords with visibility check
-		screenX, screenY, visible := ctx.MapToScreen(posComp.X, posComp.Y)
-		if !visible {
-			return true
+		// Additive on the foreground alone, which keeps the cell's background
+		flashColor := color.Scale(visual.RgbRemovalFlash, 1-progress)
+		for i := range flash.Cells {
+			cell := &flash.Cells[i]
+			if screenX, screenY, visible := ctx.MapToScreen(cell.X, cell.Y); visible {
+				buf.Set(screenX, screenY, cell.Rune, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
+			}
 		}
-
-		// Opacity fades from 1.0 to 0.0 over duration (bright to transparent)
-		opacity := 1 - timer.Progress(component.TimerLifetime)
-
-		flashColor := color.Scale(visual.RgbRemovalFlash, opacity)
-
-		// Additive blend on foreground only, preserves background
-		buf.Set(screenX, screenY, flashComp.Rune, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
 		return true
 	})
+}
+
+// deadlineProgress is how far e's deadline has run at the frame's moment, which
+// stands part of a tick past the tick that last aged it; false once it has run out
+func deadlineProgress(ctx render.RenderContext, world *engine.World, e core.Entity) (float64, bool) {
+	timer, ok := world.Components.Timer.GetPtr(e)
+	if !ok || !timer.Running(component.TimerDeadline) {
+		return 0, false
+	}
+	since, _ := sinceTick(ctx, world.Resources.Time)
+	deadline := timer.Slots[component.TimerDeadline]
+	return min(float64(deadline.Duration-deadline.Remaining+since)/float64(deadline.Duration), 1), true
 }

@@ -1724,11 +1724,25 @@ func equalMember(a, b *component.MemberComponent) bool {
 }
 
 func equalFlash(a, b *component.FlashComponent) bool {
-	return *a == *b
+	return (a.Cells == nil) == (b.Cells == nil) && len(a.Cells) == len(b.Cells) && func() bool {
+		for i0 := range a.Cells {
+			if !(a.Cells[i0] == b.Cells[i0]) {
+				return false
+			}
+		}
+		return true
+	}()
 }
 
 func equalFadeout(a, b *component.FadeoutComponent) bool {
-	return *a == *b
+	return (a.Cells == nil) == (b.Cells == nil) && len(a.Cells) == len(b.Cells) && func() bool {
+		for i0 := range a.Cells {
+			if !(a.Cells[i0] == b.Cells[i0]) {
+				return false
+			}
+		}
+		return true
+	}()
 }
 
 func equalSplash(a, b *component.SplashComponent) bool {

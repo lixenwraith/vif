@@ -1,8 +1,10 @@
 package system
 
 import (
+	"slices"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
@@ -182,6 +184,85 @@ func TestDeadlinesEndOnTheirLastTick(t *testing.T) {
 	spawnGold()
 	if got, want := actsOn(gold.Update, has(event.EventGoldTimeout)), ticks(parameter.GoldDuration); got != want {
 		t.Fatalf("gold sequence timed out on tick %d, want %d", got, want)
+	}
+}
+
+// TestEffectBatchesEndWithTheirDeadlines: the cells one tick sends flash, or fade,
+// as one batch and the next tick's as another, each leaving on the tick its
+// deadline ends, and a batch that left lends its storage to the next
+func TestEffectBatchesEndWithTheirDeadlines(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	tick := newTimerTick(w)
+	flashes, fadeouts := ready(NewFlashSystem(w)), ready(NewFadeoutSystem(w))
+	send := func(n int) {
+		for _, to := range []struct {
+			system engine.System
+			batch  event.EventType
+		}{{flashes, event.EventFlashSpawnBatchRequest}, {fadeouts, event.EventFadeoutSpawnBatch}} {
+			batch := event.EffectBatchPool.Acquire()
+			for i := range n {
+				batch.Entries = append(batch.Entries, component.EffectCell{X: i, Y: 3, Rune: 'x'})
+			}
+			to.system.(event.Handler).HandleEvent(event.GameEvent{Type: to.batch, Payload: batch})
+		}
+	}
+	cells := func() (flash, fade []int) {
+		w.Components.Flash.Each(func(_ core.Entity, f *component.FlashComponent) bool {
+			flash = append(flash, len(f.Cells))
+			return true
+		})
+		w.Components.Fadeout.Each(func(_ core.Entity, f *component.FadeoutComponent) bool {
+			fade = append(fade, len(f.Cells))
+			return true
+		})
+		return flash, fade
+	}
+	update := func() {
+		tick.open()
+		flashes.Update()
+		fadeouts.Update()
+	}
+
+	send(3)
+	flashes.(event.Handler).HandleEvent(event.GameEvent{Type: event.EventFlashSpawnOneRequest,
+		Payload: &event.FlashRequestPayload{X: 9, Y: 9, Char: 'y'}})
+	send(2)
+	update()
+	send(4)
+	if flash, fade := cells(); !slices.Equal(flash, []int{6, 4}) || !slices.Equal(fade, []int{5, 4}) {
+		t.Fatalf("batches hold %v flashing and %v fading cells, want a tick's 6 and 5, then the next's 4", flash, fade)
+	}
+	var storage []*component.EffectCell
+	w.Components.Flash.Each(func(_ core.Entity, f *component.FlashComponent) bool {
+		storage = append(storage, unsafe.SliceData(f.Cells))
+		return true
+	})
+
+	// The second tick's batches leave one tick after the first's
+	left := map[string]int{}
+	for n := 2; n <= 12; n++ {
+		update()
+		flash, fade := cells()
+		if len(flash) == 0 && left["flash"] == 0 {
+			left["flash"] = n
+		}
+		if len(fade) == 0 && left["fadeout"] == 0 {
+			left["fadeout"] = n
+		}
+	}
+	ticks := func(d time.Duration) int { return int(d/parameter.GameUpdateInterval) + 1 }
+	if left["flash"] != ticks(parameter.DestructionFlashDuration) || left["fadeout"] != ticks(parameter.FadeoutDuration) {
+		t.Fatalf("the last batches left on ticks %v, want the flash's on %d and the fadeout's on %d", left,
+			ticks(parameter.DestructionFlashDuration), ticks(parameter.FadeoutDuration))
+	}
+	if w.Components.Timer.CountEntities() != 0 {
+		t.Fatalf("%d timers outlived their batches", w.Components.Timer.CountEntities())
+	}
+
+	send(1)
+	if again, _ := w.Components.Flash.GetPtr(w.Components.Flash.Entities()[0]); !slices.Contains(storage, unsafe.SliceData(again.Cells)) {
+		t.Fatal("a new batch did not take the storage of one that left")
 	}
 }
 

@@ -3884,7 +3884,57 @@ func decodeColumnsMember(r *columnReader) []StoreEntry[component.MemberComponent
 func encodeColumnsFlash(dst []byte, rows []StoreEntry[component.FlashComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.Rune)
+		dst = appendLen(dst, rows[i].Value.Cells)
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendInt(dst, rows[i].Value.Cells[j].X)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendInt(dst, rows[i].Value.Cells[j].Y)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendInt(dst, rows[i].Value.Cells[j].Rune)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Fg.R)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Fg.G)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Fg.B)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Bg.R)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Bg.G)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Bg.B)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendBool(dst, rows[i].Value.Cells[j].Solid)
+		}
 	}
 	return dst
 }
@@ -3897,7 +3947,57 @@ func decodeColumnsFlash(r *columnReader) []StoreEntry[component.FlashComponent] 
 	rows := make([]StoreEntry[component.FlashComponent], n)
 	readEntityColumn(rows, r)
 	for i := range rows {
-		readInt(&rows[i].Value.Rune, r)
+		readSlice(&rows[i].Value.Cells, r)
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readInt(&rows[i].Value.Cells[j].X, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readInt(&rows[i].Value.Cells[j].Y, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readInt(&rows[i].Value.Cells[j].Rune, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Fg.R, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Fg.G, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Fg.B, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Bg.R, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Bg.G, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Bg.B, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readBool(&rows[i].Value.Cells[j].Solid, r)
+		}
 	}
 	return rows
 }
@@ -3905,25 +4005,57 @@ func decodeColumnsFlash(r *columnReader) []StoreEntry[component.FlashComponent] 
 func encodeColumnsFadeout(dst []byte, rows []StoreEntry[component.FadeoutComponent]) []byte {
 	dst = appendEntityColumn(dst, rows)
 	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.Char)
+		dst = appendLen(dst, rows[i].Value.Cells)
 	}
 	for i := range rows {
-		dst = appendUint(dst, rows[i].Value.FgColor.R)
+		for j := range rows[i].Value.Cells {
+			dst = appendInt(dst, rows[i].Value.Cells[j].X)
+		}
 	}
 	for i := range rows {
-		dst = appendUint(dst, rows[i].Value.FgColor.G)
+		for j := range rows[i].Value.Cells {
+			dst = appendInt(dst, rows[i].Value.Cells[j].Y)
+		}
 	}
 	for i := range rows {
-		dst = appendUint(dst, rows[i].Value.FgColor.B)
+		for j := range rows[i].Value.Cells {
+			dst = appendInt(dst, rows[i].Value.Cells[j].Rune)
+		}
 	}
 	for i := range rows {
-		dst = appendUint(dst, rows[i].Value.BgColor.R)
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Fg.R)
+		}
 	}
 	for i := range rows {
-		dst = appendUint(dst, rows[i].Value.BgColor.G)
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Fg.G)
+		}
 	}
 	for i := range rows {
-		dst = appendUint(dst, rows[i].Value.BgColor.B)
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Fg.B)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Bg.R)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Bg.G)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendUint(dst, rows[i].Value.Cells[j].Bg.B)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			dst = appendBool(dst, rows[i].Value.Cells[j].Solid)
+		}
 	}
 	return dst
 }
@@ -3936,25 +4068,57 @@ func decodeColumnsFadeout(r *columnReader) []StoreEntry[component.FadeoutCompone
 	rows := make([]StoreEntry[component.FadeoutComponent], n)
 	readEntityColumn(rows, r)
 	for i := range rows {
-		readInt(&rows[i].Value.Char, r)
+		readSlice(&rows[i].Value.Cells, r)
 	}
 	for i := range rows {
-		readUint(&rows[i].Value.FgColor.R, r)
+		for j := range rows[i].Value.Cells {
+			readInt(&rows[i].Value.Cells[j].X, r)
+		}
 	}
 	for i := range rows {
-		readUint(&rows[i].Value.FgColor.G, r)
+		for j := range rows[i].Value.Cells {
+			readInt(&rows[i].Value.Cells[j].Y, r)
+		}
 	}
 	for i := range rows {
-		readUint(&rows[i].Value.FgColor.B, r)
+		for j := range rows[i].Value.Cells {
+			readInt(&rows[i].Value.Cells[j].Rune, r)
+		}
 	}
 	for i := range rows {
-		readUint(&rows[i].Value.BgColor.R, r)
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Fg.R, r)
+		}
 	}
 	for i := range rows {
-		readUint(&rows[i].Value.BgColor.G, r)
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Fg.G, r)
+		}
 	}
 	for i := range rows {
-		readUint(&rows[i].Value.BgColor.B, r)
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Fg.B, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Bg.R, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Bg.G, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readUint(&rows[i].Value.Cells[j].Bg.B, r)
+		}
+	}
+	for i := range rows {
+		for j := range rows[i].Value.Cells {
+			readBool(&rows[i].Value.Cells[j].Solid, r)
+		}
 	}
 	return rows
 }

@@ -1,0 +1,78 @@
+package renderer
+
+import (
+	"testing"
+	"time"
+
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/parameter/visual"
+	"github.com/lixenwraith/vif/internal/render"
+)
+
+// TestEffectBatchesFadeBetweenTicks: a batch's cells are drawn as far through the
+// fade as its deadline stands at the frame's moment, part of a tick past the tick
+// that aged it: a flash's glyph in the removal flash's color, a fadeout's cell in
+// its own colors, its glyph alone where the cell is not solid
+func TestEffectBatchesFadeBetweenTicks(t *testing.T) {
+	w, game := glyphWorld()
+	tick := engine.SimEpoch.Add(time.Second)
+	w.Resources.Time.PaceTime, w.Resources.Time.DeltaTime = tick, 50*time.Millisecond
+	red, green, blue := color.RGB{R: 200}, color.RGB{G: 200}, color.RGB{B: 100}
+
+	flash, fadeout := w.CreateEntity(core.DomainPlayer), w.CreateEntity(core.DomainPlayer)
+	w.Components.Flash.SetComponent(flash, component.FlashComponent{Cells: []component.EffectCell{{X: 3, Y: 4, Rune: 'f'}}})
+	w.Components.Fadeout.SetComponent(fadeout, component.FadeoutComponent{Cells: []component.EffectCell{
+		{X: 5, Y: 4, Rune: 'w', Fg: red, Bg: blue, Solid: true},
+		{X: 6, Y: 4, Bg: blue, Solid: true},
+		{X: 7, Y: 4, Rune: 'g', Fg: green},
+	}})
+	// Both a fifth through a half-second fade as the tick left them
+	const duration, elapsed = 500 * time.Millisecond, 100 * time.Millisecond
+	for _, e := range []core.Entity{flash, fadeout} {
+		var timer component.TimerComponent
+		timer.Slots[component.TimerDeadline] = component.Countdown{Remaining: duration - elapsed, Duration: duration}
+		w.Components.Timer.SetComponent(e, timer)
+	}
+
+	for _, since := range []time.Duration{0, 25 * time.Millisecond, 80 * time.Millisecond} {
+		config := w.Resources.Config
+		buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+		ctx := render.RenderContext{GameTime: tick.Add(since), MapWidth: config.MapWidth,
+			MapHeight: config.MapHeight, ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}
+		NewFlashRenderer(game).Render(ctx, buf)
+		NewFadeoutRenderer(game).Render(ctx, buf)
+
+		// A frame stands a tick past its tick at most
+		opacity := 1 - float64(elapsed+min(since, 50*time.Millisecond))/float64(duration)
+		for _, want := range []struct {
+			x      int
+			r      rune
+			fg, bg color.RGB
+		}{
+			{3, 'f', color.Scale(visual.RgbRemovalFlash, opacity), color.RGB{}},
+			{5, 'w', color.Blend(color.RGB{}, color.Scale(red, opacity), opacity), color.Blend(color.RGB{}, color.Scale(blue, opacity), opacity)},
+			{6, 0, color.RGB{}, color.Blend(color.RGB{}, color.Scale(blue, opacity), opacity)},
+			{7, 'g', color.Scale(green, opacity), color.RGB{}},
+		} {
+			if got := buf.CellAt(want.x, 4); got.Rune != want.r || got.Fg != want.fg || got.Bg != want.bg {
+				t.Fatalf("%v past the tick, (%d,4) drew %q fg %v bg %v, want %q fg %v bg %v",
+					since, want.x, got.Rune, got.Fg, got.Bg, want.r, want.fg, want.bg)
+			}
+		}
+	}
+
+	// A deadline that ran out draws nothing while its owner has yet to end it
+	timer, _ := w.Components.Timer.GetPtr(flash)
+	timer.Slots[component.TimerDeadline].Remaining = 0
+	config := w.Resources.Config
+	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, config.MapWidth, config.MapHeight)
+	NewFlashRenderer(game).Render(render.RenderContext{GameTime: tick, MapWidth: config.MapWidth,
+		MapHeight: config.MapHeight, ViewportWidth: config.MapWidth, ViewportHeight: config.MapHeight}, buf)
+	if got := buf.CellAt(3, 4); got.Rune != 0 {
+		t.Fatalf("a flash past its deadline drew %q", got.Rune)
+	}
+}

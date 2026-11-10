@@ -286,7 +286,7 @@ const (
 
 	// EventFlashSpawnOneRequest (FlashRequestPayload) [local] signals a request to spawn a destruction flash effect
 	EventFlashSpawnOneRequest
-	// EventFlashSpawnBatchRequest (BatchPayload[FlashSpawnEntry]) [local] signals batch spawn of destruction flash effects
+	// EventFlashSpawnBatchRequest (BatchPayload[component.EffectCell]) [local] flashes a batch of cells away together
 	EventFlashSpawnBatchRequest
 
 	// --- Explosion ---
@@ -548,7 +548,7 @@ const (
 
 	// EventFadeoutSpawnOne (FadeoutSpawnPayload) [local] signals intent to spawn a single fadeout effect
 	EventFadeoutSpawnOne
-	// EventFadeoutSpawnBatch (BatchPayload[FadeoutSpawnEntry]) [local] signals intent to spawn multiple fadeout effects
+	// EventFadeoutSpawnBatch (BatchPayload[component.EffectCell]) [local] fades a batch of cells out together
 	EventFadeoutSpawnBatch
 
 	// --- Pylon ---

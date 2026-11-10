@@ -227,7 +227,7 @@ func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 	switch p.EffectEvent {
 	case event.EventFlashSpawnOneRequest:
 		s.statBatchFlash.Add(1)
-		processBatchWith(s, event.FlashBatchPool, event.EventFlashSpawnBatchRequest, p.Entities, s.extractFlash)
+		processBatchWith(s, event.EffectBatchPool, event.EventFlashSpawnBatchRequest, p.Entities, s.extractFlash)
 	case event.EventParticleSpawnOne:
 		switch p.Behavior {
 		case component.ParticleDecay:
@@ -247,7 +247,7 @@ func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 			})
 	case event.EventFadeoutSpawnOne:
 		s.statBatchFadeout.Add(1)
-		processBatchWith(s, event.FadeoutBatchPool, event.EventFadeoutSpawnBatch, p.Entities, s.extractFadeout)
+		processBatchWith(s, event.EffectBatchPool, event.EventFadeoutSpawnBatch, p.Entities, s.extractFadeout)
 	default:
 		s.statBatchOther.Add(1)
 		for _, entity := range p.Entities {
@@ -349,12 +349,12 @@ func (s *DeathSystem) extractPosChar(entity core.Entity) (int, int, rune, compon
 	return pos.X, pos.Y, char, level, true
 }
 
-func (s *DeathSystem) extractFlash(entity core.Entity) (event.FlashSpawnEntry, bool) {
+func (s *DeathSystem) extractFlash(entity core.Entity) (component.EffectCell, bool) {
 	x, y, char, _, ok := s.extractPosChar(entity)
 	if !ok {
-		return event.FlashSpawnEntry{}, false
+		return component.EffectCell{}, false
 	}
-	return event.FlashSpawnEntry{X: x, Y: y, Char: char}, true
+	return component.EffectCell{X: x, Y: y, Rune: char}, true
 }
 
 func (s *DeathSystem) extractParticle(entity core.Entity, behavior component.ParticleBehavior) (event.ParticleSpawnEntry, bool) {
@@ -367,22 +367,21 @@ func (s *DeathSystem) extractParticle(entity core.Entity, behavior component.Par
 	}, true
 }
 
-func (s *DeathSystem) extractFadeout(entity core.Entity) (event.FadeoutSpawnEntry, bool) {
+func (s *DeathSystem) extractFadeout(entity core.Entity) (component.EffectCell, bool) {
 	pos, ok := s.world.Positions.GetPosition(entity)
 	if !ok {
-		return event.FadeoutSpawnEntry{}, false
+		return component.EffectCell{}, false
 	}
 	wallComp, ok := s.world.Components.Wall.GetPtr(entity)
 	if !ok {
-		return event.FadeoutSpawnEntry{}, false
+		return component.EffectCell{}, false
 	}
-	fg, bg := wallFadeoutColors(wallComp)
-	return event.FadeoutSpawnEntry{
-		X: pos.X, Y: pos.Y,
-		Char:    wallComp.Rune,
-		FgColor: fg,
-		BgColor: bg,
-	}, true
+	cell := component.EffectCell{X: pos.X, Y: pos.Y, Solid: wallComp.RenderBg}
+	cell.Fg, cell.Bg = wallFadeoutColors(wallComp)
+	if wallComp.RenderFg {
+		cell.Rune = wallComp.Rune
+	}
+	return cell, true
 }
 
 // wallFadeoutColors returns a wall's colours as RGB for the fadeout to blend: a
