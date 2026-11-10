@@ -3,6 +3,7 @@ package position
 import (
 	"math"
 	"math/rand/v2"
+	"slices"
 	"testing"
 	"unsafe"
 )
@@ -14,10 +15,11 @@ func mk(c Class, id uint64) entity { return entity(uint64(c)<<56 | id) }
 
 func (e entity) class() Class { return Class(e >> 56) }
 
-// TestCellFitsFourCacheLines pins the layout the partition byte was taken from.
-func TestCellFitsFourCacheLines(t *testing.T) {
-	if got := unsafe.Sizeof(Cell[entity]{}); got != 256 {
-		t.Fatalf("unsafe.Sizeof(Cell{}) = %d, want 256", got)
+// TestACellOfEightByteEntitiesIsSixteenBytes pins the layout the grid's cost is
+// read from: four cells a cache line, and a crowd four lines.
+func TestACellOfEightByteEntitiesIsSixteenBytes(t *testing.T) {
+	if cell, crowd := unsafe.Sizeof(cell[entity]{}), unsafe.Sizeof(crowd[entity]{}); cell != 16 || crowd != 256 {
+		t.Fatalf("a cell is %d bytes and a crowd %d, want 16 and 256", cell, crowd)
 	}
 }
 
@@ -48,15 +50,15 @@ func TestGridPartitionSurvivesRemoval(t *testing.T) {
 func TestPrivateBudgetPreservesSharedCapacity(t *testing.T) {
 	g := NewGrid[entity](1, 1, 1)
 	for i := range PrivateBudget {
-		if !g.Set(mk(ClassPrivate, uint64(i+1)), ClassPrivate, Point3{X: 0, Y: 0}) {
+		if g.Set(mk(ClassPrivate, uint64(i+1)), ClassPrivate, Point3{X: 0, Y: 0}) == 0 {
 			t.Fatalf("private %d rejected inside the budget", i)
 		}
 	}
-	if g.Set(mk(ClassPrivate, 9999), ClassPrivate, Point3{X: 0, Y: 0}) {
+	if g.Set(mk(ClassPrivate, 9999), ClassPrivate, Point3{X: 0, Y: 0}) != 0 {
 		t.Fatal("private insert exceeded the budget")
 	}
 	for i := range CellCapacity - PrivateBudget {
-		if !g.Set(mk(ClassShared, uint64(i+1)), ClassShared, Point3{X: 0, Y: 0}) {
+		if g.Set(mk(ClassShared, uint64(i+1)), ClassShared, Point3{X: 0, Y: 0}) == 0 {
 			t.Fatalf("shared %d displaced by a saturated private run", i)
 		}
 	}
@@ -82,13 +84,48 @@ func assertPartition(t *testing.T, g *Grid[entity], x, y, wantShared, wantPrivat
 	}
 }
 
-// TestGridOccupiedListIsTheCellsHoldingEntities holds the index a copy and the gauges
-// read in place of the map: every listed cell holds something, every cell holding
-// something is listed once at its slot, and the stats read off the list are the
-// full scan's.
-func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
-	g := NewGrid[entity](7, 5, 1)
+// model is a cell as the grid's rules make it, in one slice: the shared occupants
+// first, a shared insert moving the first private one to the tail, a removal
+// closing its half from that half's tail.
+type model struct {
+	held   []entity
+	shared int
+}
+
+func (m *model) set(e entity) bool {
+	if len(m.held) >= CellCapacity || e.class() == ClassPrivate && len(m.held)-m.shared >= PrivateBudget {
+		return false
+	}
+	m.held = append(m.held, e)
+	if e.class() == ClassShared {
+		last := len(m.held) - 1
+		m.held[last], m.held[m.shared] = m.held[m.shared], e
+		m.shared++
+	}
+	return true
+}
+
+func (m *model) remove(e entity) {
+	i, last := slices.Index(m.held, e), len(m.held)-1
+	if i < m.shared {
+		m.shared--
+		m.held[i] = m.held[m.shared]
+		m.held[m.shared] = m.held[last]
+	} else {
+		m.held[i] = m.held[last]
+	}
+	m.held = m.held[:last]
+}
+
+// TestGridHoldsEachCellAsItsRulesMakeIt: whether a cell holds one occupant in
+// itself or more in a crowd, they and their order are the model's, a cell that
+// emptied and one that never filled read alike, and the presence bits, the
+// gauges, the listing, the order and a copy loaded elsewhere are the cells'.
+func TestGridHoldsEachCellAsItsRulesMakeIt(t *testing.T) {
+	const w, h = 7, 5
+	g := NewGrid[entity](w, h, 1)
 	rng := rand.New(rand.NewPCG(3, 9))
+	cells := make([]model, w*h)
 	type placed struct {
 		e    entity
 		x, y int
@@ -96,52 +133,74 @@ func TestGridOccupiedListIsTheCellsHoldingEntities(t *testing.T) {
 	var held []placed
 	check := func() {
 		t.Helper()
-		seen := map[int32]bool{}
-		for slot, idx := range g.Occupied() {
-			c := &g.Cells[idx]
-			if c.Count == 0 || int(c.slot) != slot || seen[idx] {
-				t.Fatalf("occupied[%d] = cell %d: count %d, slot %d, seen %v", slot, idx, c.Count, c.slot, seen[idx])
-			}
-			seen[idx] = true
-		}
 		var want Stats
-		for i := range g.Cells {
-			c := &g.Cells[i]
-			if x, y := i%7, i/7; g.Present(ClassShared).Bit(x, y) != (c.SharedCount > 0) || g.Present(ClassPrivate).Bit(x, y) != (c.Count > c.SharedCount) {
-				t.Fatalf("cell %d holds %d shared of %d, the presence bits say otherwise", i, c.SharedCount, c.Count)
+		crowded := 0
+		for i := range cells {
+			m, x, y := &cells[i], i%w, i/w
+			if got := g.Occupants(x, y, ScopeAll); !slices.Equal(got, m.held) {
+				t.Fatalf("cell %d holds %v, its rules make it %v", i, got, m.held)
 			}
-			if n := int(c.Count); n > 0 {
-				if !seen[int32(i)] {
-					t.Fatalf("cell %d holds %d and is not listed", i, n)
-				}
+			if got := g.EntitiesAt(x, y, ScopeShared); !slices.Equal(got, m.held[:m.shared]) {
+				t.Fatalf("cell %d's shared half is %v of %v", i, got, m.held)
+			}
+			if g.Present(ClassShared).Bit(x, y) != (m.shared > 0) || g.Present(ClassPrivate).Bit(x, y) != (len(m.held) > m.shared) {
+				t.Fatalf("cell %d holds %d shared of %d, the presence bits say otherwise", i, m.shared, len(m.held))
+			}
+			if n := len(m.held); n > 0 {
 				want.CellsOccupied++
 				want.EntitiesTotal += n
-				want.EntitiesShared += int(g.Cells[i].SharedCount)
+				want.EntitiesShared += m.shared
 				want.MaxOccupancy = max(want.MaxOccupancy, n)
+			}
+			if len(m.held) >= 2 {
+				crowded++
 			}
 		}
 		if got := g.ComputeStats(); got != want {
-			t.Fatalf("stats off the list %+v, off the cells %+v", got, want)
+			t.Fatalf("the gauges read %+v, the cells %+v", got, want)
+		}
+		listed, last := 0, int32(-1)
+		g.EachOccupied(func(index int32, occupants []entity, shared int) {
+			if m := &cells[index]; !slices.Equal(occupants, m.held) || shared != m.shared || len(occupants) == 0 || index <= last {
+				t.Fatalf("cell %d is listed after %d as %v, %d shared; it holds %v, %d shared", index, last, occupants, shared, m.held, m.shared)
+			}
+			listed, last = listed+1, index
+		})
+		order := g.Order()
+		if listed != want.CellsOccupied || len(order) != crowded || !slices.IsSortedFunc(order, func(a, b CellOrder[entity]) int { return a.Index - b.Index }) {
+			t.Fatalf("%d cells listed and %d in order, of %d holding something and %d crowded", listed, len(order), want.CellsOccupied, crowded)
 		}
 	}
-	for step := range 2000 {
+	for step := range 6000 {
 		switch {
-		case len(held) > 0 && rng.IntN(3) == 0:
+		case len(held) > 0 && rng.IntN(5) < 2:
 			i := rng.IntN(len(held))
 			g.RemoveEntityAt(held[i].e, Point3{X: held[i].x, Y: held[i].y})
+			cells[held[i].y*w+held[i].x].remove(held[i].e)
 			held[i] = held[len(held)-1]
 			held = held[:len(held)-1]
-		case step%97 == 96:
+		case step%997 == 996:
 			g.Clear()
-			held = nil
+			held, cells = nil, make([]model, w*h)
+		case step%499 == 498: // a copy loaded into another grid is this one
+			o := NewGrid[entity](w, h, 1)
+			g.EachOccupied(func(index int32, occupants []entity, shared int) { o.Load(index, occupants, shared) })
+			g = o
 		default:
 			c := ClassShared
-			if rng.IntN(4) == 0 {
+			if rng.IntN(3) == 0 {
 				c = ClassPrivate
 			}
 			e := mk(c, uint64(step+1))
-			x, y := rng.IntN(7), rng.IntN(5)
-			if g.Set(e, c, Point3{X: x, Y: y}) {
+			x, y := rng.IntN(w), rng.IntN(h)
+			if rng.IntN(2) == 0 { // a few cells take half the entities, to the capacity
+				x, y = rng.IntN(2), 0
+			}
+			took := g.Set(e, c, Point3{X: x, Y: y}) > 0
+			if took != cells[y*w+x].set(e) {
+				t.Fatalf("step %d: the grid took %v at (%d, %d): %t, its rules say otherwise", step, e, x, y, took)
+			}
+			if took {
 				held = append(held, placed{e, x, y})
 			}
 		}
@@ -207,12 +266,12 @@ func TestTheGridSurvivesAHostileResize(t *testing.T) {
 		{MaxWidth * 100, MaxHeight * 100},
 	} {
 		g.Resize(tt[0], tt[1], 1) // must not panic
-		if len(g.Cells) > MaxCells {
-			t.Fatalf("resize to %dx%d allocated %d cells", tt[0], tt[1], len(g.Cells))
+		if len(g.cells) > MaxCells {
+			t.Fatalf("resize to %dx%d allocated %d cells", tt[0], tt[1], len(g.cells))
 		}
-		if g.Width*g.Height != len(g.Cells) {
+		if g.Width*g.Height != len(g.cells) {
 			t.Fatalf("resize to %dx%d left %dx%d describing %d cells",
-				tt[0], tt[1], g.Width, g.Height, len(g.Cells))
+				tt[0], tt[1], g.Width, g.Height, len(g.cells))
 		}
 	}
 }

@@ -97,7 +97,7 @@ func (m *solid) layColumn(x, h int) {
 // merge brings the merged surfaces to the surfaces as they stand, one entry a
 // mask, in storage kept from the last merge, and lays their bits
 func (x *Index[E]) merge() {
-	x.unmerged = false
+	x.stale &^= staleSurfaces
 	n := 0
 	for _, s := range x.surfaces {
 		i := -1
@@ -131,6 +131,9 @@ func (x *Index[E]) merge() {
 		x.solid[i].pending = 0
 		x.solid[i].lay(x.Width, x.Height)
 	}
+	for i := range x.planes {
+		x.bind(&x.planes[i])
+	}
 }
 
 // shifted notes that s moved a column: once every surface of its mask has, the
@@ -138,7 +141,7 @@ func (x *Index[E]) merge() {
 // from the surfaces' last heights; a surface moving twice before the rest, or
 // one moving alone before a probe, leaves the mask to a merge.
 func (x *Index[E]) shifted(s *Surface) {
-	if x.unmerged {
+	if x.stale&staleSurfaces != 0 {
 		return
 	}
 	i := -1
@@ -148,7 +151,7 @@ func (x *Index[E]) shifted(s *Surface) {
 		}
 	}
 	if i < 0 || s.pending {
-		x.unmerged = true
+		x.spoil(staleSurfaces)
 		return
 	}
 	s.pending = true
@@ -199,7 +202,7 @@ func (x *Index[E]) AddSurface(mask Mask, side Side, origin int64, heights []int)
 	s := &Surface{Mask: mask, Side: side, Origin: origin, heights: slices.Clone(heights)}
 	x.surfaces = append(x.surfaces, s)
 	x.log.lose()
-	x.unmerged = true
+	x.spoil(staleSurfaces)
 	x.widths()
 	return s
 }
@@ -209,7 +212,7 @@ func (x *Index[E]) AddSurface(mask Mask, side Side, origin int64, heights []int)
 func (x *Index[E]) LaySurface(s *Surface, origin int64, heights []int) {
 	s.Origin, s.heights, s.ahead = origin, append(s.heights[:0], heights...), s.ahead[:0]
 	x.log.lose()
-	x.unmerged = true
+	x.spoil(staleSurfaces)
 	x.widths()
 }
 
@@ -218,7 +221,7 @@ func (x *Index[E]) RemoveSurface(s *Surface) {
 	if i := slices.Index(x.surfaces, s); i >= 0 {
 		x.surfaces = slices.Delete(x.surfaces, i, i+1)
 		x.log.lose()
-		x.unmerged = true
+		x.spoil(staleSurfaces)
 		x.widths()
 	}
 }
@@ -239,7 +242,7 @@ func (x *Index[E]) ShiftSurface(s *Surface, enter int) {
 		}
 		// A row the height did not cross is solid in both columns or in neither
 		for y := max(min(was, now), 0); y < min(max(was, now), h); y++ {
-			x.log.add(vmath.Point3{X: col, Y: y}, len(x.Cells))
+			x.log.add(vmath.Point3{X: col, Y: y}, len(x.cells))
 		}
 	}
 	if len(s.heights) > 0 {

@@ -69,8 +69,7 @@ passability per layer in navigation, a flat renderer reading the layer it looks
 at, a render in depth ordering overlap by a depth buffer over every layer
 projected (`sandbox/3d`), a heightfield as a volume's surface (the surfaces lie on
 the first layer), and cells chunked on demand for a volume past the ceiling
-(`ClampVolume` holds a volume to the map's 125,000 cells), which also serves
-[a ceiling-sized empty map](#shrink-the-spatial-grid-on-ceiling-sized-maps).
+(`ClampVolume` holds a volume to the map's 125,000 cells).
 
 #### A generic index over the coordinate type
 
@@ -523,18 +522,6 @@ What a fleet session reads from the node volume is one list in three places —
 the template. `scenario` and `image` are on it. `audio` goes on it the day a
 dedicated host renders anything, and `content` never does. Nothing else changes;
 the volume already carries whatever the installer puts there.
-
-### Shrink the spatial grid on ceiling-sized maps
-
-- Priority: P3
-- Affected files: `pkg/position/grid.go`
-- Guide: [Session fleet](kubernetes-fleet.md#6-resources) §6
-
-The grid is sized to the map, so only a ceiling-sized one such as `td` (500×250)
-reserves about 30.5 MiB per world, and a guest's staging world a second: 92 MB of
-the 240 MiB a td host, guest and staging world held after a collection, the largest
-owner (netcode design §3.7). A sparse or tiled grid for a map this empty, or one
-staging world sharing the live grid's shape without its cells, takes it.
 
 ## Multiplayer
 

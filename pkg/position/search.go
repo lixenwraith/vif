@@ -2,6 +2,7 @@ package position
 
 import (
 	"math"
+	"math/bits"
 
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
@@ -126,8 +127,9 @@ func (x *Index[E]) IsAnyBlockedInSet(points []vmath.Point, mask Mask) bool {
 // HasLineOfSight reports whether no cell strictly between (x0, y0) and (x1, y1) on
 // the Bresenham line is a wall matching mask
 func (x *Index[E]) HasLineOfSight(x0, y0, x1, y1 int, mask Mask) bool {
+	plane := x.probe(mask)
 	for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
-		if x.Blocks(line.X(), line.Y(), mask) {
+		if px, py := line.X(), line.Y(); uint(px) < uint(x.Width) && uint(py) < uint(x.Height) && plane.blocked(px, py) {
 			return false
 		}
 	}
@@ -137,8 +139,9 @@ func (x *Index[E]) HasLineOfSight(x0, y0, x1, y1 int, mask Mask) bool {
 // HasLineOfSightBetween is HasLineOfSight through the volume: no cell strictly
 // between a and b on the line is blocked for mask
 func (x *Index[E]) HasLineOfSightBetween(a, b Point3, mask Mask) bool {
+	plane := x.probe(mask)
 	for line := vmath.NewLine3(a, b).Next(); !line.AtEnd(); line = line.Next() {
-		if x.BlocksAt(line.Point(), mask) {
+		if p := line.Point(); x.InBounds(p) && plane.blocked(p.X, x.row(p)) {
 			return false
 		}
 	}
@@ -167,8 +170,11 @@ func (x *Index[E]) HasAreaLineOfSight(x0, y0, x1, y1 int, foot vmath.Footprint, 
 	if foot.Width <= 1 && foot.Height <= 1 {
 		return x.HasLineOfSight(x0, y0, x1, y1, mask)
 	}
+	plane := x.probe(mask)
 	for line := vmath.NewLine(x0, y0, x1, y1).Next(); !line.AtEnd(); line = line.Next() {
-		if !x.IsAreaFree(line.X()-foot.HeaderX, line.Y()-foot.HeaderY, foot.Width, foot.Height, mask) {
+		px, py := line.X()-foot.HeaderX, line.Y()-foot.HeaderY
+		if px < 0 || py < 0 || px+foot.Width > x.Width || py+foot.Height > x.Height ||
+			plane.any(px, px+foot.Width, py, py+foot.Height) {
 			return false
 		}
 	}
@@ -205,63 +211,88 @@ type Rect struct {
 // FindClosestEntityInDirection scans from (startX, startY) in one cardinal
 // direction, row by row or column by column to the grid's edge, each held to
 // bounds on the cross axis, and returns the first row's or column's occupant
-// nearest the start that scope selects and filter passes.
+// nearest the start that scope selects and filter passes. It reads the presence
+// bits a word at a time, so empty cells cost it nothing.
 func (x *Index[E]) FindClosestEntityInDirection(startX, startY, dx, dy int, bounds Rect, scope Scope, filter func(E) bool) (E, int, int, bool) {
-	var zero E
+	var best E
 	g := x.Grid
-	if dy != 0 {
-		stepY := 1
-		if dy < 0 {
-			stepY = -1
-		}
-		x0, x1 := max(bounds.MinX, 0), min(bounds.MaxX+1, g.Width)
-		for py := startY + stepY; py >= 0 && py < g.Height; py += stepY {
-			if x0 >= x1 || !g.anyIn(x0, x1, py, py+1, scope) {
-				continue
-			}
-			var best E
-			bestX, minDist, found := -1, math.MaxInt, false
-			for px := x0; px < x1; px++ {
-				for _, e := range g.Cells[py*g.Width+px].view(scope) {
-					if filter == nil || filter(e) {
-						if dist := vmath.IntAbs(px - startX); dist < minDist {
-							minDist, best, bestX, found = dist, e, px, true
-						}
-					}
-				}
-			}
-			// The first row holding anything settles it, on its occupant nearest the centre
-			if found {
-				return best, bestX, py, true
-			}
-		}
-	} else if dx != 0 {
-		stepX := 1
-		if dx < 0 {
-			stepX = -1
-		}
-		y0, y1 := max(bounds.MinY, 0), min(bounds.MaxY+1, g.Height)
-		for px := startX + stepX; px >= 0 && px < g.Width; px += stepX {
-			if y0 >= y1 || !g.anyIn(px, px+1, y0, y1, scope) {
-				continue
-			}
-			var best E
-			bestY, minDist, found := -1, math.MaxInt, false
-			for py := y0; py < y1; py++ {
-				for _, e := range g.Cells[py*g.Width+px].view(scope) {
-					if filter == nil || filter(e) {
-						if dist := vmath.IntAbs(py - startY); dist < minDist {
-							minDist, best, bestY, found = dist, e, py, true
-						}
-					}
-				}
-			}
-			if found {
-				return best, px, bestY, true
+	at, minDist := -1, math.MaxInt
+	// nearest keeps the occupant of cell (px, py) nearest the start on the cross axis
+	nearest := func(px, py, dist, cross int) {
+		for _, e := range g.view(&g.cells[py*g.Width+px], scope) {
+			if dist < minDist && (filter == nil || filter(e)) {
+				minDist, best, at = dist, e, cross
 			}
 		}
 	}
-	return zero, -1, -1, false
+	if dy != 0 {
+		step := 1
+		if dy < 0 {
+			step = -1
+		}
+		x0, x1 := max(bounds.MinX, 0), min(bounds.MaxX+1, g.Width)
+		if x0 >= x1 {
+			return best, -1, -1, false
+		}
+		first, last := ^uint64(0)<<(uint(x0)&63), ^uint64(0)>>(63-uint(x1-1)&63)
+		for py := startY + step; py >= 0 && py < g.Height; py += step {
+			for w := x0 >> 6; w <= (x1-1)>>6; w++ {
+				word := g.occupied(py, w, scope)
+				if w == x0>>6 {
+					word &= first
+				}
+				if w == (x1-1)>>6 {
+					word &= last
+				}
+				for ; word != 0; word &= word - 1 {
+					px := w<<6 + bits.TrailingZeros64(word)
+					nearest(px, py, vmath.IntAbs(px-startX), px)
+				}
+			}
+			// The first row holding anything settles it, on its occupant nearest the centre
+			if at >= 0 {
+				return best, at, py, true
+			}
+		}
+	} else if dx != 0 {
+		step := 1
+		if dx < 0 {
+			step = -1
+		}
+		y0, y1 := max(bounds.MinY, 0), min(bounds.MaxY+1, g.Height)
+		px := startX + step
+		if y0 >= y1 || px < 0 || px >= g.Width {
+			return best, -1, -1, false
+		}
+		for w := px >> 6; w >= 0 && w < g.present[ClassShared].Stride; w += step {
+			var word uint64
+			for py := y0; py < y1; py++ {
+				word |= g.occupied(py, w, scope)
+			}
+			if w == px>>6 && step > 0 { // the columns from px on, the way the scan goes
+				word &= ^uint64(0) << (uint(px) & 63)
+			} else if w == px>>6 {
+				word &= ^uint64(0) >> (63 - uint(px)&63)
+			}
+			for word != 0 {
+				b := bits.TrailingZeros64(word)
+				if step < 0 {
+					b = 63 - bits.LeadingZeros64(word)
+				}
+				word &^= 1 << uint(b)
+				col := w<<6 + b
+				for py := y0; py < y1; py++ {
+					if g.holds(col, py, scope) {
+						nearest(col, py, vmath.IntAbs(py-startY), py)
+					}
+				}
+				if at >= 0 {
+					return best, col, at, true
+				}
+			}
+		}
+	}
+	return best, -1, -1, false
 }
 
 // Pattern is the order FindFreeFromPattern tries its directions in

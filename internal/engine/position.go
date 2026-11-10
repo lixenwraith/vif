@@ -155,16 +155,15 @@ func (p *Position) insert(e core.Entity, pos component.PositionComponent) {
 // setGrid preserves soft clipping while exposing saturation, budget rejection, and
 // data loss; it reports whether the cell took the entity.
 func (p *Position) setGrid(e core.Entity, pos component.PositionComponent, countSaturation bool) bool {
-	class := EntityClass(e)
-	cell := p.Index.CellAt(pos.Layer(0))
-	if cell == nil {
-		return p.Index.Set(e, class, pos.Layer(0))
-	}
-	before := cell.Count
-	playerBefore := cell.Count - cell.SharedCount
-	if !p.Index.Set(e, class, pos.Layer(0)) {
-		// A player insert stopped by its own budget is not cell exhaustion
-		if class == position.ClassPrivate && playerBefore >= position.PrivateBudget {
+	class, at := EntityClass(e), pos.Layer(0)
+	held := p.Index.Set(e, class, at)
+	if held == 0 {
+		// Off the map is no cell's refusal, and a player insert stopped by its own
+		// budget is not cell exhaustion
+		if !p.Index.InBounds(at) {
+			return false
+		}
+		if class == position.ClassPrivate && len(p.Index.EntitiesIn(at, position.ScopePrivate)) >= position.PrivateBudget {
 			if p.statPlayerRejects != nil {
 				p.statPlayerRejects.Add(1)
 			}
@@ -174,9 +173,9 @@ func (p *Position) setGrid(e core.Entity, pos component.PositionComponent, count
 		return false
 	}
 	if p.statOccupancyHWM != nil {
-		storeAtomicMax(p.statOccupancyHWM, int64(before+1))
+		storeAtomicMax(p.statOccupancyHWM, int64(held))
 	}
-	if countSaturation && before+1 == position.CellCapacity && p.statCellSaturations != nil {
+	if countSaturation && held == position.CellCapacity && p.statCellSaturations != nil {
 		p.statCellSaturations.Add(1)
 	}
 	return true

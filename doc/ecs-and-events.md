@@ -102,16 +102,18 @@ one without updating the other.
 
 `pkg/position` is the spatial index and the geometry over a map, free of the game
 ([Position](position-package.md)); `engine.Position` binds it to the world.
-`position.Grid` maps every map coordinate to a fixed-capacity `Cell` of up to
-`CellCapacity` (31) entity IDs, which spares the collision, typing and targeting hot
-paths a per-query allocation. Shared occupants precede private ones,
+`position.Grid` maps every map coordinate to a cell of up to `CellCapacity` (31)
+entity IDs, which spares the collision, typing and targeting hot paths a per-query
+allocation. Shared occupants precede private ones,
 `PrivateBudget` (12) caps the private half, and a query takes a `position.Scope`
 (`ScopeShared`, `ScopePrivate`, `ScopeAll`); an entity's class is its domain
 (`engine.EntityClass`, [the domain
 model](domain-design.md#3-spatial-and-entity-classification)).
 
-The grid is dense, so a map costs cells: `Cell` is exactly 256 bytes, and the
-grid is sized to its map with grow-only backing, so a shrink never reallocates. It
+The grid is dense, so a map costs cells: a cell is 16 bytes, its occupant inline
+while it holds one, and a cell of two or more keeps them in a 256-byte crowd from
+a slab; the grid is sized to its map with grow-only backing, so a shrink never
+reallocates. It
 is a volume of layers, one on today's maps: a `Point3`'s Z is its layer, the
 queries taking a column and a row answer for the first, and `BlocksAt`,
 `BlocksBox`, `EntitiesIn` and `HasLineOfSightBetween` for any
@@ -120,7 +122,7 @@ Beside the cells it keeps a bit a cell for each class that holds something
 (`Grid.Present`), so a probe of an empty cell costs a word in cache rather than a
 cell out of it, and a scan passes empty cells a word at a time.
 `position.Clamp` is the single gate in front of that allocation, bounding a map by
-`MaxWidth`, `MaxHeight` and `MaxCells` (32 MB of cells per world at the ceiling),
+`MaxWidth`, `MaxHeight` and `MaxCells` (2 MB of cells per world at the ceiling),
 which `parameter` names as the game reads them. It clamps rather than rejects
 because a `LevelSetup` payload is replicated: every participant applies the same
 one, so a clamp reaches the same bounds everywhere where a payload dropped on one

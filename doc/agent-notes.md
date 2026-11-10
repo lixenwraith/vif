@@ -341,6 +341,13 @@ comment now states, and link that instead.
 - `engine.NewGameContextWithClock(w, 80, 40, ...)` takes the terminal's size; the
   map is what the status bar and rulers leave of it (79x36 there), so a test of a
   cell at an edge reads `Positions.Width` and `Height`.
+- A cell's view (`EntitiesAt`, `Occupants`, `EachOccupied`) is the cell's own
+  storage or its crowd's, and a cell going from one occupant to two, or back,
+  moves them: copy a view before writing its cell, as every call site does
+  (`copy(buf[:], ...)`).
+- The probe path lives on the inliner's budget: `go build -gcflags=-m=2
+  ./pkg/position` prints each function's cost against 80, and `probe` stands at
+  79. A table of indices beside a stale flag cost it 88 and a call a probe.
 
 ## Glyphs and widgets
 
@@ -401,7 +408,18 @@ comment now states, and link that instead.
   does, or that package's wasm test binary stops building.
 - Benchmarks in a cloud container move a fifth between runs, and benchstat is not
   installed: build main's and the branch's test binaries (`go test -c` in a `git
-  worktree` of main) and compare medians of alternating runs.
+  worktree` of main) and compare medians of alternating runs. A bench file the
+  branch adds is copied into the worktree, kept on main's API where the branch
+  changed one.
+- B/op can rise as retained memory falls: a smaller heap collects sooner, and
+  each collection empties the event batch `sync.Pool`s, which then allocate
+  again. Read both sides with `GOGC=off` before blaming an allocation: td's
+  headless ticks read 6% more bytes with the grid 30 MB smaller, and the same
+  bytes with the collector off.
+- Two binaries simulate alike when a scratch test in each prints
+  `snapshot.DigestWorld` and `Positions.Order()` every fifty ticks of the headless
+  shapes and the outputs diff empty; the divergence harness reads the link, this
+  reads the world.
 - A renderer's first call in a live frame runs about twice its hot-bench time,
   its tables and code gone cold under the frame's other work: the ember paints in
   9-12 µs when repeated at once and 20-26 µs as the frame's first. Read a gain

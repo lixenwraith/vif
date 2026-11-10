@@ -46,7 +46,7 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 	w, h = 70, 9
 	x.Resize(w, h, 1)
 	place := func(e entity, px, py int) {
-		if x.Set(e, e.class(), Point3{X: px, Y: py}) {
+		if x.Set(e, e.class(), Point3{X: px, Y: py}) > 0 {
 			x.BlockChangedAt(Point3{X: px, Y: py})
 		}
 	}
@@ -111,7 +111,7 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 				held = held[:0]
 				for e := range walls {
 					px, py := rng.IntN(w), rng.IntN(h)
-					if x.Set(e, e.class(), Point3{X: px, Y: py}) {
+					if x.Set(e, e.class(), Point3{X: px, Y: py}) > 0 {
 						held = append(held, struct {
 							e    entity
 							x, y int
@@ -188,8 +188,8 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 	x := New[entity](frame{}, func(e entity) (Mask, bool) { m, ok := walls[e]; return m, ok })
 	const w, h, d = 9, 6, 4
 	x.Resize(w, h, d)
-	if x.Depth != d || len(x.Cells) != w*h*d {
-		t.Fatalf("a %d×%d×%d volume has depth %d and %d cells", w, h, d, x.Depth, len(x.Cells))
+	if x.Depth != d || len(x.cells) != w*h*d {
+		t.Fatalf("a %d×%d×%d volume has depth %d and %d cells", w, h, d, x.Depth, len(x.cells))
 	}
 	masks := []Mask{0, 1, 2, 4, 3}
 	cells := map[Point3][]entity{}
@@ -207,7 +207,7 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 			walls[e] = Mask(1 << rng.IntN(3))
 		}
 		p := Point3{X: rng.IntN(w), Y: rng.IntN(h), Z: rng.IntN(d)}
-		if x.Set(e, e.class(), p) {
+		if x.Set(e, e.class(), p) > 0 {
 			x.BlockChangedAt(p)
 			cells[p] = append(cells[p], e)
 		}
@@ -285,6 +285,66 @@ func TestAVolumeAnswersLayerByLayer(t *testing.T) {
 	}
 }
 
+// TestADirectionalScanAnswersAsItsCells: the scan over the presence words finds
+// what a walk of every cell finds, row by row or column by column from the start:
+// the first holding an occupant the scope and the filter take, and of those the
+// one nearest the start on the cross axis, the first met winning a tie.
+func TestADirectionalScanAnswersAsItsCells(t *testing.T) {
+	rng := rand.New(rand.NewPCG(4, 6))
+	x := New[entity](frame{}, func(entity) (Mask, bool) { return 0, false })
+	const w, h = 150, 9
+	x.Resize(w, h, 1)
+	for i := range 160 { // sparse, with a few cells of several
+		e := mk(Class(rng.IntN(2)), uint64(i+1))
+		x.Set(e, e.class(), Point3{X: rng.IntN(w) / (1 + rng.IntN(3)), Y: rng.IntN(h)})
+	}
+	walk := func(sx, sy, dx, dy int, b Rect, scope Scope, filter func(entity) bool) (entity, int, int, bool) {
+		along, across, end, lo, hi := sx+dx, sy, w, max(b.MinY, 0), min(b.MaxY+1, h)
+		if dy != 0 {
+			along, across, end, lo, hi = sy+dy, sx, h, max(b.MinX, 0), min(b.MaxX+1, w)
+		}
+		for ; along >= 0 && along < end; along += dx + dy {
+			var best entity
+			at, nearest := -1, 0
+			for c := lo; c < hi; c++ {
+				px, py := along, c
+				if dy != 0 {
+					px, py = c, along
+				}
+				for _, e := range x.EntitiesAt(px, py, scope) {
+					if d := vmath.IntAbs(c - across); (filter == nil || filter(e)) && (at < 0 || d < nearest) {
+						best, at, nearest = e, c, d
+					}
+				}
+			}
+			if at >= 0 && dy != 0 {
+				return best, at, along, true
+			} else if at >= 0 {
+				return best, along, at, true
+			}
+		}
+		return 0, -1, -1, false
+	}
+	odd := func(e entity) bool { return e&1 != 0 }
+	for i := range 20000 {
+		sx, sy := rng.IntN(w+6)-3, rng.IntN(h+6)-3
+		dir := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}[rng.IntN(4)]
+		b := Rect{MinX: rng.IntN(w+8) - 4, MinY: rng.IntN(h+4) - 2}
+		b.MaxX, b.MaxY = b.MinX+rng.IntN(140)-2, b.MinY+rng.IntN(8)-2
+		scope := Scope(1 + rng.IntN(3))
+		filter := odd
+		if i%3 == 0 {
+			filter = nil
+		}
+		ge, gx, gy, gok := x.FindClosestEntityInDirection(sx, sy, dir[0], dir[1], b, scope, filter)
+		we, wx, wy, wok := walk(sx, sy, dir[0], dir[1], b, scope, filter)
+		if ge != we || gx != wx || gy != wy || gok != wok {
+			t.Fatalf("from (%d,%d) by %v within %+v, scope %d: found %v at (%d,%d) %t, the cells say %v at (%d,%d) %t",
+				sx, sy, dir, b, scope, ge, gx, gy, gok, we, wx, wy, wok)
+		}
+	}
+}
+
 // TestAnAreaLineOfSightFliesTheBodyFromItsAnchor: a body clears the line between
 // two anchor cells when, with its anchor on each cell strictly between them, every
 // cell of it lies on the map and none is blocked; a body of one cell is a point's
@@ -299,7 +359,7 @@ func TestAnAreaLineOfSightFliesTheBodyFromItsAnchor(t *testing.T) {
 		e := mk(ClassShared, uint64(i+1))
 		walls[e] = Mask(1 << rng.IntN(2))
 		p := Point3{X: rng.IntN(w), Y: rng.IntN(h)}
-		if x.Set(e, e.class(), p) {
+		if x.Set(e, e.class(), p) > 0 {
 			x.BlockChangedAt(p)
 		}
 	}
