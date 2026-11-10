@@ -16,20 +16,20 @@ const (
 	Below
 )
 
-// Surface is a boundary no entity holds: a height for each column from x 0 of the
-// first layer, the cells on Side of it solid, blocking Mask as a block does. A
-// ceiling is Above, a floor Below. Its writer lays it from a record of its own, so
-// a capture carries that record and never the surface. Origin is the profile
-// column at column 0, which what draws the surface anchors to.
+// Surface is a boundary no entity holds: a height for each column from x 0 of
+// Layer, the cells on Side of it solid, blocking Mask as a block does. A ceiling
+// is Above, a floor Below. Its writer lays it from a record of its own, so a
+// capture carries that record and never the surface, and sets Mask, Side and
+// Layer only before laying it again.
 type Surface struct {
-	Mask   Mask
-	Side   Side
-	Origin int64
+	Mask  Mask
+	Side  Side
+	Layer int
 	// heights from column 0; ahead the heights past the right end the next shift
 	// brings in, for a frame drawn between shifts, which block nothing
 	heights []int
 	ahead   []int
-	pending bool // shifted since the merged bits moved
+	pending bool // shifted since the merged bits of its mask and layer moved
 }
 
 // Width is how many columns the surface covers, from x 0
@@ -61,145 +61,124 @@ func (s *Surface) solidAt(h, y int) bool {
 // stops reports whether the surface blocks mask, 0 asking for any
 func (s *Surface) stops(mask Mask) bool { return mask == 0 || s.Mask&mask != 0 }
 
-// solid is the surfaces of one mask merged for the probes: for each column the
-// greatest height solid above it and the least solid from it, and the cells
-// those make within the grid as bits, so a cell is one bit whatever the
-// surfaces. A shift of every surface of the mask moves the bits a column; a
-// change of any other kind lays them again from the heights.
+// solid is the cells the surfaces of one mask make solid, as bits sized as a
+// plane's, so a cell is one bit whatever the surfaces. A shift of every surface
+// of the mask on a layer moves that layer's bits a column; a change of any other
+// kind lays them again from the heights.
 type solid struct {
-	mask        Mask
-	ceil, floor []int
-	bits        Bits
-	pending     int // the surfaces of the mask shifted since the bits moved
+	mask Mask
+	bits Bits
 }
 
 // stops reports whether the merged surfaces block mask, 0 asking for any
 func (m *solid) stops(mask Mask) bool { return mask == 0 || m.mask&mask != 0 }
 
-// lay sets the bits from the heights, within w×h
-func (m *solid) lay(w, h int) {
-	m.bits = m.bits.sized(Stride(w), h)
-	for x := range min(len(m.ceil), w) {
-		m.layColumn(x, h)
+// lay sets the solid cells of s's column col, which with s's layer lies inside a
+// volume of h rows a layer
+func (m *solid) lay(s *Surface, col, h int) {
+	from, to := 0, min(s.heights[col], h)
+	if s.Side == Below {
+		from, to = max(s.heights[col], 0), h
+	}
+	for y := from; y < to; y++ {
+		m.bits.Set(col, s.Layer*h+y)
 	}
 }
 
-// layColumn sets column x's bits from its heights
-func (m *solid) layColumn(x, h int) {
-	for y := range min(m.ceil[x], h) {
-		m.bits.Set(x, y)
+// merged returns mask's entry among solids, or nil
+func merged(solids []solid, mask Mask) *solid {
+	for i := range solids {
+		if solids[i].mask == mask {
+			return &solids[i]
+		}
 	}
-	for y := max(m.floor[x], 0); y < h; y++ {
-		m.bits.Set(x, y)
-	}
+	return nil
 }
 
-// merge brings the merged surfaces to the surfaces as they stand, one entry a
-// mask, in storage kept from the last merge, and lays their bits
+// merge lays the merged bits again from the surfaces as they stand, one entry a
+// mask, in storage kept from the last merge; a layer or a column outside the
+// volume lays nothing
 func (x *Index[E]) merge() {
-	x.stale &^= staleSurfaces
+	x.stale &^= staleSurfaces | staleShift
 	n := 0
 	for _, s := range x.surfaces {
-		i := -1
-		for j := range n {
-			if x.solid[j].mask == s.Mask {
-				i = j
-			}
-		}
-		if i < 0 {
-			if i = n; n == len(x.solid) {
-				x.solid = append(x.solid, solid{})
-			}
-			x.solid[i] = solid{mask: s.Mask, ceil: x.solid[i].ceil[:0], floor: x.solid[i].floor[:0], bits: x.solid[i].bits}
-			n++
-		}
 		s.pending = false
-		m := &x.solid[i]
-		for len(m.ceil) < len(s.heights) {
-			m.ceil, m.floor = append(m.ceil, 0), append(m.floor, math.MaxInt)
+		if merged(x.solid[:n], s.Mask) != nil {
+			continue
 		}
-		for col, h := range s.heights {
-			if s.Side == Above {
-				m.ceil[col] = max(m.ceil[col], h)
-			} else {
-				m.floor[col] = min(m.floor[col], h)
-			}
+		if n == len(x.solid) {
+			x.solid = append(x.solid, solid{})
 		}
+		x.solid[n] = solid{mask: s.Mask, bits: x.solid[n].bits.sized(Stride(x.Width), x.Height*x.Depth)}
+		n++
 	}
 	x.solid = x.solid[:n]
-	for i := range x.solid {
-		x.solid[i].pending = 0
-		x.solid[i].lay(x.Width, x.Height)
+	for _, s := range x.surfaces {
+		if uint(s.Layer) >= uint(x.Depth) {
+			continue
+		}
+		m := merged(x.solid, s.Mask)
+		for col := range min(len(s.heights), x.Width) {
+			m.lay(s, col, x.Height)
+		}
 	}
 	for i := range x.planes {
 		x.bind(&x.planes[i])
 	}
 }
 
-// shifted notes that s moved a column: once every surface of its mask has, the
-// merged heights and bits move a column with them and the last column is laid
-// from the surfaces' last heights; a surface moving twice before the rest, or
-// one moving alone before a probe, leaves the mask to a merge.
+// shifted notes that s moved a column: once every surface of its mask on its
+// layer has, that layer's merged bits move a column with them and each lays the
+// column it brought in. Until then a probe lays the surfaces again, as it does
+// for a surface moving twice before the rest.
 func (x *Index[E]) shifted(s *Surface) {
 	if x.stale&staleSurfaces != 0 {
 		return
 	}
-	i := -1
-	for j := range x.solid {
-		if x.solid[j].mask == s.Mask {
-			i = j
-		}
-	}
-	if i < 0 || s.pending {
+	m := merged(x.solid, s.Mask)
+	if m == nil || s.pending {
 		x.spoil(staleSurfaces)
 		return
 	}
 	s.pending = true
-	m := &x.solid[i]
-	m.pending++
-	n := 0
+	whole, others := true, false
 	for _, o := range x.surfaces {
-		if o.Mask == s.Mask {
-			n++
+		if o.Mask == s.Mask && o.Layer == s.Layer {
+			whole = whole && o.pending
+		} else {
+			others = others || o.pending
 		}
 	}
-	if m.pending < n {
+	if !whole {
+		x.spoil(staleShift)
 		return
 	}
-	w := len(m.ceil)
-	if w > 0 {
-		copy(m.ceil, m.ceil[1:])
-		copy(m.floor, m.floor[1:])
-		m.ceil[w-1], m.floor[w-1] = 0, math.MaxInt
+	if !others {
+		x.stale &^= staleShift
 	}
-	for _, o := range x.surfaces {
-		o.pending = false
-		if o.Mask != s.Mask || len(o.heights) == 0 {
-			continue
-		}
-		if last := len(o.heights) - 1; o.Side == Above {
-			m.ceil[last] = max(m.ceil[last], o.heights[last])
-		} else {
-			m.floor[last] = min(m.floor[last], o.heights[last])
-		}
-	}
-	m.pending = 0
-	for y := range x.Height {
+	inside := uint(s.Layer) < uint(x.Depth)
+	for y := s.Layer * x.Height; inside && y < (s.Layer+1)*x.Height; y++ {
 		row := m.bits.Row(y)
 		ShiftRow(row, row, 1)
 	}
-	if last := min(w, x.Width) - 1; last >= 0 {
-		m.layColumn(last, x.Height)
+	for _, o := range x.surfaces {
+		if o.Mask != s.Mask || o.Layer != s.Layer {
+			continue
+		}
+		o.pending = false
+		if col := min(len(o.heights), x.Width) - 1; inside && col >= 0 {
+			m.lay(o, col, x.Height)
+		}
 	}
 }
 
 // Surfaces is every surface laid, in the order laid. Read-only.
 func (x *Index[E]) Surfaces() []*Surface { return x.surfaces }
 
-// AddSurface lays a surface of heights from column 0, solid on side, blocking
-// mask, origin its first profile column, and returns it for its writer to keep.
-func (x *Index[E]) AddSurface(mask Mask, side Side, origin int64, heights []int) *Surface {
-	s := &Surface{Mask: mask, Side: side, Origin: origin, heights: slices.Clone(heights)}
+// AddSurface lays a surface of heights from column 0 of layer, solid on side,
+// blocking mask, and returns it for its writer to keep.
+func (x *Index[E]) AddSurface(mask Mask, side Side, layer int, heights []int) *Surface {
+	s := &Surface{Mask: mask, Side: side, Layer: layer, heights: slices.Clone(heights)}
 	x.surfaces = append(x.surfaces, s)
 	x.log.lose()
 	x.spoil(staleSurfaces)
@@ -207,10 +186,10 @@ func (x *Index[E]) AddSurface(mask Mask, side Side, origin int64, heights []int)
 	return s
 }
 
-// LaySurface lays s again, from column 0 with origin its first profile column,
-// its heights ahead forgotten.
-func (x *Index[E]) LaySurface(s *Surface, origin int64, heights []int) {
-	s.Origin, s.heights, s.ahead = origin, append(s.heights[:0], heights...), s.ahead[:0]
+// LaySurface lays s again from column 0 as its fields now stand, its heights
+// ahead forgotten.
+func (x *Index[E]) LaySurface(s *Surface, heights []int) {
+	s.heights, s.ahead = append(s.heights[:0], heights...), s.ahead[:0]
 	x.log.lose()
 	x.spoil(staleSurfaces)
 	x.widths()
@@ -232,9 +211,12 @@ func (x *Index[E]) SetSurfaceAhead(s *Surface, heights []int) {
 }
 
 // ShiftSurface moves s a column left: column 0 leaves it and enter stands at its
-// right end. The log takes the cells its height crossed.
+// right end. The log takes the cells of the volume its height crossed.
 func (x *Index[E]) ShiftSurface(s *Surface, enter int) {
 	w, h := x.Width, x.Height
+	if uint(s.Layer) >= uint(x.Depth) {
+		w = 0
+	}
 	for col := range min(len(s.heights), w) {
 		was, now := s.heights[col], enter
 		if col+1 < len(s.heights) {
@@ -242,14 +224,13 @@ func (x *Index[E]) ShiftSurface(s *Surface, enter int) {
 		}
 		// A row the height did not cross is solid in both columns or in neither
 		for y := max(min(was, now), 0); y < min(max(was, now), h); y++ {
-			x.log.add(vmath.Point3{X: col, Y: y}, len(x.cells))
+			x.log.add(vmath.Point3{X: col, Y: y, Z: s.Layer}, len(x.cells))
 		}
 	}
 	if len(s.heights) > 0 {
 		copy(s.heights, s.heights[1:])
 		s.heights[len(s.heights)-1] = enter
 	}
-	s.Origin++
 	x.shifted(s)
 }
 
@@ -266,12 +247,15 @@ func (x *Index[E]) BlocksCarried[P Coord](p P, carry int, mask Mask) bool {
 	return x.in(c, flat) && x.probe(mask).blocked(c.X, x.row(c, flat))
 }
 
-// solidAhead reports whether c, past a surface's right end, is solid by the
-// heights ahead of that surface
+// solidAhead reports whether c, past a surface's right end on its layer, is
+// solid by the heights ahead of that surface
 func (x *Index[E]) solidAhead(c Point3, mask Mask) bool {
+	if c.Y < 0 || c.Y >= x.Height || uint(c.Z) >= uint(x.Depth) {
+		return false
+	}
 	for _, s := range x.surfaces {
-		if i := c.X - len(s.heights); i >= 0 && i < len(s.ahead) && s.stops(mask) &&
-			c.Z == 0 && c.Y >= 0 && c.Y < x.Height && s.solidAt(s.ahead[i], c.Y) {
+		if i := c.X - len(s.heights); i >= 0 && i < len(s.ahead) && s.Layer == c.Z && s.stops(mask) &&
+			s.solidAt(s.ahead[i], c.Y) {
 			return true
 		}
 	}

@@ -43,15 +43,14 @@ In `pkg/position`:
 - `Bits`: the grid of bits the planes and navigation share, each row starting on
   a word: a point a bit, an area a few words a row, a row shifted a column in a
   word, two grids diffed by XOR.
-- `Surface`: a boundary no entity holds on the first layer, a height for each
+- `Surface`: a boundary no entity holds on the layer it names, a height for each
   column with the cells on one `Side` of it solid (`Above`, a ceiling; `Below`, a
   floor), blocking its mask as a block does; laid from its writer's record,
   shifted a column at a time with the heights ahead of it for a frame drawn
-  between shifts. The surfaces of one mask are merged for the probes into a
-  ceiling and a floor per column and the bits those make, laid again on the first
-  probe after a lay, and moved a column once every surface of the mask has
-  shifted, so a cell is one bit whatever their number, answered before the cell's
-  occupants.
+  between shifts. The surfaces of one mask are merged for the probes into bits
+  sized as a plane's, laid again on the first probe after a lay, a layer's moved
+  a column once every surface of the mask on it has shifted, so a cell is one
+  bit whatever their number, answered before the cell's occupants.
 
 The terms, the package's and the game's:
 
@@ -147,13 +146,17 @@ Each names the choice taken and what the other would have cost.
   wall up. `WallBlockAll` is the four mover kinds, never every bit, so a query
   with it matches no styled wall that stops nothing. A second word of kinds
   beside the mask would have doubled the planes' key for two bits.
-- Surfaces, heights with a side, merged per mask for the probes: a shift moves a
-  slice of heights and logs the rows crossed, and the mask's merged bits move a
-  column once every surface of the mask has shifted, the last column laid from
-  their last heights; a lay, an add or a removal lays the merged heights and bits
-  again on the first probe after it. A plane holds the words of the merged bits
-  that stop its mask (`plane.solid`), bound again at each merge, so a probe reads
-  them with its own. Four shapes read worse: each surface tested on its own, by
+- Surfaces, heights with a side on a layer, merged per mask for the probes: a
+  shift moves a slice of heights and logs the cells crossed, and once every
+  surface of the mask on that layer has shifted the layer's merged bits move a
+  column and each lays the column it brought in, whatever their widths; a lay,
+  an add or a removal lays the bits again from the heights on the first probe
+  after it, and so does a probe that finds a surface a column ahead of the rest
+  (`staleShift`), so no answer waits on the order of the shifts. A plane holds
+  the words of the merged bits that stop its mask (`plane.solid`), sized as its
+  own and bound again at each merge, so a probe reads them with its own. A
+  surface keeps no origin: its writer's record does, as `RockField`'s. Four
+  shapes read worse: each surface tested on its own, by
   its heights, read the glyph renderer a tenth slower at 400×120; a merge of the
   heights on every shift, allocating, read the cave step at twice main's; the
   merged heights compared on each probe, without bits, still read the glyph
@@ -161,9 +164,8 @@ Each names the choice taken and what the other would have cost.
   before the plane's, which the plane's own words replaced, read it 9 to 12%
   slower at 120×40 and 200×60. Typing's reads of a glyph's own cell (`TopGlyphIs`)
   take the cell without the presence test, since the cell holds the glyph. The
-  game's rock is two surfaces that move together; a floor alone or a ceiling
-  alone is one. The surfaces lie on the first layer; a volume's is a
-  heightfield, not laid.
+  game's rock is two surfaces that move together on the first layer; a floor
+  alone or a ceiling alone is one.
 - The mask, the package's: `component.WallBlockMask` is `position.Mask` by alias,
   since the package names no game type and the game's constants stay where they
   are, passed to the package's methods unchanged.
@@ -269,6 +271,11 @@ serves a flat map as a volume one cell deep, at no cost to it.
   game's, so a search crossing layers is the todo's
   [item](todo.md#placement-searches-that-cross-a-volumes-layers) for a game
   that needs one.
+- Surfaces: one lies on the layer it names, a height a column within that
+  layer's rows, so a surface a layer is a field over columns and layers; the
+  merged bits cover the volume and a shift moves its own layer's rows. A height
+  for each column and row, solid through the layers under it, is not laid: it
+  is the [volume item](todo.md#play-a-volume-the-third-axiss-remaining-foundation)'s.
 - A body with a height on a flat map, the storm: its circles keep a float `Pos3D`
   and `Vel3D` for their physics, and their Z, which picks the half drawn in
   front, never reaches their position. A body's continuous height belongs in its
@@ -382,6 +389,10 @@ main it landed on:
   asked `IsAreaFree`; the exclusion search level on an open map and 28% under
   in a maze, its last resort counting a slot's cells off one plane. A lone
   `IsAreaFree` reads half a nanosecond over, its layers bounded at run time.
+- Surfaces on any layer, against the generic index above: the probes, the glyph
+  and rock renderers and the cave start level; the cave step 2 to 3% under by
+  the minimum at its three sizes, the merged heights it copied a column each
+  step gone.
 
 Across the changes td's tick read from 0.40 ms before the move to 0.29 ms, each
 step against its own main, and 0.13 to 0.11 ms with the cells; the tables each PR

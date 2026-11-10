@@ -55,21 +55,35 @@ remains stands on its own.
 #### Play a volume: the third axis's remaining foundation
 
 - Priority: P3, not now: it needs other foundation changes first
-- Affected files: `pkg/position`, `internal/engine/position.go`,
-  `internal/app/internal/config`, `internal/system/navigation.go`, `pkg/navigation`,
-  `internal/render/renderer`
+- Affected files: `internal/engine/position.go`, `internal/app/internal/config`,
+  `internal/snapshot`, `internal/system/navigation.go`, `pkg/navigation`,
+  `internal/render/renderer`, `pkg/vmath`, `pkg/position/surface.go`
 - Guide: [Position §3](position-package.md#3-the-volume),
   [Rendering §2](rendering.md#2-render-context-and-coordinates)
 
-The index holds a volume one layer deep on every map, and a game in depth asks it
-by a `Point3` where a flat one passes a `Point`, the searches each working their
-origin's layer. What such a game still needs is not laid: a depth in the config
-the binding resizes to (`Position.Resize` passes one layer), a footprint with
-depth and a passability per layer in navigation, a flat renderer reading the
-layer it looks at, a render in depth ordering overlap by a depth buffer over
-every layer projected (`sandbox/3d`), a heightfield as a volume's surface (the
-surfaces lie on the first layer), and cells chunked on demand for a volume past
-the ceiling (`ClampVolume` holds a volume to the map's 125,000 cells).
+The index, the math and the physics are laid for a volume: `pkg/position` holds
+`Depth` layers and answers a `Point3`, a `Box` and a `Footprint3` on any of them,
+its surfaces on the layer they name, and `pkg/vmath` and its physics have a form
+through a volume beside each flat one. What a game in depth still needs is not
+laid:
+
+- The binding and the records: a depth in the config the binding resizes to
+  (`Position.Resize` passes one layer), and a row that carries its layer, which
+  moves the journal, the captures and the digest, a row being a flat `Point`.
+- Navigation: a footprint with depth and a passability per layer, where one
+  flat grid is derived from `BlockBits`.
+- Rendering: a flat renderer reading the layer it looks at, and a render in
+  depth ordering overlap by a depth buffer over every layer projected
+  (`sandbox/3d`).
+- The forms left flat for want of a use: the cell strip `Ray` and `Octants`,
+  the arcs on a sphere, a depth in `vmath.Aspect`; the searches that cross
+  layers are [their own item](#placement-searches-that-cross-a-volumes-layers).
+- A heightfield along the third axis: a height for each column and row, solid
+  through the layers under or over it. A `Surface` a layer is a field over
+  columns and layers only.
+- The ceiling: `MaxCells` bounds a volume as it does a map (`ClampVolume`), 2 MB
+  of cells, 100×50×25 or 200×60 ten layers deep. A game in depth raises the one
+  constant, and past what stays dense needs cells chunked on demand.
 
 #### An index typed by its coordinate, `Index[E, P]`
 

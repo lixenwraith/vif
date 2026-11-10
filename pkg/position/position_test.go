@@ -33,8 +33,8 @@ func TestAreaAnswersAsItsCells(t *testing.T) {
 			return
 		}
 		ceiling.Mask, floor.Mask = mask, mask
-		x.LaySurface(ceiling, 0, top)
-		x.LaySurface(floor, 0, bottom)
+		x.LaySurface(ceiling, top)
+		x.LaySurface(floor, bottom)
 	}
 	lift := func() {
 		if ceiling != nil {
@@ -179,11 +179,150 @@ func TestAPointAnswersAsTheCellsBlocks(t *testing.T) {
 	}
 }
 
+// TestASurfaceIsSolidOnItsSideOfItsHeightsOnItsLayer: surfaces of any mask, side,
+// width and layer, laid, laid again, lifted and shifted in any order between
+// probes, block the cells their own heights say and no other; a frame carried
+// into the scroll sees the heights ahead; and a reader of the log re-testing only
+// the cells it names keeps every answer.
+func TestASurfaceIsSolidOnItsSideOfItsHeightsOnItsLayer(t *testing.T) {
+	rng := rand.New(rand.NewPCG(8, 3))
+	walls, standing := map[entity]Mask{}, map[Point3]entity{}
+	x := New[entity](frame{}, func(e entity) (Mask, bool) { m, ok := walls[e]; return m, ok })
+	var w, h, d int
+	heights := func(n int) []int { // a profile's, a step a column, or scattered
+		out, v, step := make([]int, n), rng.IntN(h+3)-1, 3
+		if rng.IntN(5) == 0 {
+			step = 2*h + 1
+		}
+		for i := range out {
+			v = min(max(v+rng.IntN(step)-step/2, -1), h+1)
+			out[i] = v
+		}
+		return out
+	}
+	stops := func(of, mask Mask) bool { return mask == 0 || of&mask != 0 }
+	solid := func(c Point3, mask Mask, of func(*Surface, int) (int, bool)) bool {
+		for _, s := range x.Surfaces() {
+			if v, ok := of(s, c.X); ok && s.Layer == c.Z && stops(s.Mask, mask) && (c.Y < v) == (s.Side == Above) {
+				return true
+			}
+		}
+		return false
+	}
+	blocked := func(c Point3, mask Mask) bool {
+		if c.X < 0 || c.Y < 0 || c.Z < 0 || c.X >= w || c.Y >= h || c.Z >= d {
+			return false
+		}
+		e, wall := standing[c]
+		return wall && stops(walls[e], mask) || solid(c, mask, (*Surface).Height)
+	}
+	ahead := func(s *Surface, col int) (int, bool) {
+		if i := col - s.Width(); i >= 0 && i < len(s.Ahead()) {
+			return s.Ahead()[i], true
+		}
+		return 0, false
+	}
+	masks := []Mask{0, 1, 2, 4, 3, 0xFF}
+	var reader []bool
+	var since uint64
+	for round := range 2500 {
+		if round%250 == 0 {
+			w, h, d = 3+rng.IntN(140), 2+rng.IntN(8), 1+rng.IntN(3)
+			x.Resize(w, h, d)
+			clear(standing)
+		}
+		for range 1 + rng.IntN(4) {
+			surfaces := x.Surfaces()
+			pick := func() *Surface { return surfaces[rng.IntN(len(surfaces))] }
+			switch op := rng.IntN(12); {
+			case op >= 10:
+				c := Point3{X: rng.IntN(w), Y: rng.IntN(h), Z: rng.IntN(d)}
+				if e, ok := standing[c]; ok {
+					x.RemoveEntityAt(e, c)
+					delete(standing, c)
+				} else {
+					e = mk(ClassShared, uint64(len(walls)+1))
+					walls[e], standing[c] = masks[rng.IntN(5)], e
+					x.Set(e, ClassShared, c)
+				}
+				x.BlockChangedAt(c)
+			case op == 0 && len(surfaces) < 7:
+				mask, layer := masks[rng.IntN(5)], rng.IntN(d+2)-1
+				if len(surfaces) > 0 && rng.IntN(2) == 0 { // beside another, as a floor under a ceiling
+					beside := pick()
+					mask, layer = beside.Mask, beside.Layer
+				}
+				x.AddSurface(mask, Side(rng.IntN(2)), layer, heights(rng.IntN(w+3)))
+			case len(surfaces) == 0:
+			case op == 1:
+				s := pick()
+				s.Mask, s.Side, s.Layer = masks[rng.IntN(5)], Side(rng.IntN(2)), rng.IntN(d+2)-1
+				x.LaySurface(s, heights(rng.IntN(w+3)))
+			case op == 2:
+				x.RemoveSurface(pick())
+			case op == 3:
+				x.SetSurfaceAhead(pick(), heights(rng.IntN(5)))
+			case op < 7: // a scroll: each a column, in any order, which leaves a probe no work
+				settled := x.stale == 0
+				for _, i := range rng.Perm(len(surfaces)) {
+					x.ShiftSurface(surfaces[i], rng.IntN(h+3)-1)
+				}
+				if settled && x.stale != 0 {
+					t.Fatalf("round %d: a scroll of every surface left the probes work %b", round, x.stale)
+				}
+			default: // some ahead of the rest, or twice
+				for range 1 + rng.IntN(3) {
+					x.ShiftSurface(pick(), rng.IntN(h+3)-1)
+				}
+			}
+		}
+		mask, carry := masks[rng.IntN(len(masks))], rng.IntN(4)
+		cells, now, logged := x.BlockChanges(since)
+		since = now
+		if !logged || len(reader) != w*h*d {
+			reader, cells = make([]bool, w*h*d), nil
+			for i := range reader {
+				reader[i] = x.Blocks(Point3{X: i % w, Y: i / w % h, Z: i / (w * h)}, 0)
+			}
+		}
+		for _, c := range cells {
+			if !x.InBounds(c) {
+				t.Fatalf("round %d: the log names %v, outside the volume", round, c)
+			}
+			reader[(c.Z*h+c.Y)*w+c.X] = x.Blocks(c, 0)
+		}
+		for z := -1; z <= d; z++ {
+			for y := -1; y <= h; y++ {
+				for px := -1; px <= w; px++ {
+					c := Point3{X: px, Y: y, Z: z}
+					if got, want := x.Blocks(c, mask), blocked(c, mask); got != want {
+						t.Fatalf("round %d mask %d at %v: Blocks %t, the heights say %t", round, mask, c, got, want)
+					}
+					on := c
+					if carry > 0 && px >= 0 {
+						on.X += carry
+					}
+					want := blocked(on, mask) || on != c && y >= 0 && y < h && z >= 0 && z < d && solid(on, mask, ahead)
+					if got := x.BlocksCarried(c, carry, mask); got != want {
+						t.Fatalf("round %d mask %d at %v carried %d: BlocksCarried %t, the heights say %t", round, mask, c, carry, got, want)
+					}
+					if x.InBounds(c) && reader[(z*h+y)*w+px] != blocked(c, 0) {
+						t.Fatalf("round %d at %v: the log's reader holds %t", round, c, reader[(z*h+y)*w+px])
+					}
+				}
+			}
+		}
+		if x.stale != 0 {
+			t.Fatalf("round %d: the probes left themselves work %b", round, x.stale)
+		}
+	}
+}
+
 // layered builds a volume and, for each of its layers, a flat map holding what
 // that layer holds: entities of both halves placed and lifted, blocks of every
-// mask, and a surface on the first layer with heights ahead of it. Half the
-// changes come once the planes stand, so they reach them cell by cell; a flat
-// point changes and logs the first layer, which the log read at the half shows.
+// mask, and a surface on each layer with heights ahead of it. Half the changes
+// come once the planes stand, so they reach them cell by cell; a flat point
+// changes and logs the first layer, which the log read at the half shows.
 func layered(t *testing.T, rng *rand.Rand, w, h, d, n int, masks []Mask) (*Index[entity], []*Index[entity]) {
 	t.Helper()
 	walls := map[entity]Mask{}
@@ -225,15 +364,16 @@ func layered(t *testing.T, rng *rand.Rand, w, h, d, n int, masks []Mask) (*Index
 		toggle(maps[p.Z], e, p.Flat())
 		held, changed = append(held, e), append(changed, p)
 	}
-	top, ahead := make([]int, w-9), make([]int, 6)
-	for i := range top {
-		top[i] = rng.IntN(4)
-	}
-	for i := range ahead {
-		ahead[i] = rng.IntN(h)
-	}
-	for _, x := range all[:2] {
-		x.SetSurfaceAhead(x.AddSurface(1, Above, 0, top), ahead)
+	for z, flat := range maps { // a ceiling or a floor a layer, narrower than the map
+		side, heights, ahead := Side(z%2), make([]int, w-9+z), make([]int, 6)
+		for i := range heights {
+			heights[i] = int(side)*(h-3) + rng.IntN(4)
+		}
+		for i := range ahead {
+			ahead[i] = rng.IntN(h)
+		}
+		vol.SetSurfaceAhead(vol.AddSurface(Mask(1<<(z%3)), side, z, heights), ahead)
+		flat.SetSurfaceAhead(flat.AddSurface(Mask(1<<(z%3)), side, 0, heights), ahead)
 	}
 	return vol, maps
 }

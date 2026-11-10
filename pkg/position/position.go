@@ -120,7 +120,7 @@ type Index[E comparable] struct {
 	frame     Frame
 	blockOf   func(e E) (mask Mask, block bool)
 	surfaces  []*Surface
-	solid     []solid   // the surfaces merged, one entry a mask, unless staleSurfaces
+	solid     []solid   // the surfaces merged, one entry a mask, unless stale lays them again
 	aheadFrom int       // the first column past a surface, where its heights ahead answer
 	log       changeLog // the cells each block change can have moved, for BlockChanges
 
@@ -136,6 +136,7 @@ type Index[E comparable] struct {
 const (
 	stalePlanes   uint8 = 1 << iota // every plane, rebuilt from the cells
 	staleSurfaces                   // the merged surfaces, laid again from the heights
+	staleShift                      // the same, while a surface is a column ahead of its mask and layer
 )
 
 // spoil leaves work for the next probe of each plane
@@ -156,15 +157,13 @@ type plane struct {
 func (p *plane) word(w int) uint64 {
 	word := p.Words[w]
 	for _, s := range p.solid {
-		if w < len(s) {
-			word |= s[w]
-		}
+		word |= s[w]
 	}
 	return word
 }
 
 // blocked reports cell px of row, which the caller has bounded: a block's bit, or a
-// merged surface's, whose rows are the first layer's
+// merged surface's
 func (p *plane) blocked(px, row int) bool {
 	return p.word(row*p.Stride+px>>6)>>(uint(px)&63)&1 != 0
 }
@@ -235,7 +234,7 @@ func (x *Index[E]) probe(mask Mask) *plane {
 // planeFor does what stale names and returns mask's plane, built from the cells
 // on its first use
 func (x *Index[E]) planeFor(mask Mask) *plane {
-	if x.stale&staleSurfaces != 0 {
+	if x.stale&(staleSurfaces|staleShift) != 0 {
 		x.merge()
 	}
 	if x.stale&stalePlanes != 0 {

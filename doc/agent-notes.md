@@ -372,7 +372,13 @@ comment now states, and link that instead.
   `cells/8+64` entries, so a test reads it before that many changes.
 - Two builds with the same instructions can read 15% apart on one probe by link
   layout alone: rebuild both with `-ldflags=-randlayout=N` for a few N and
-  compare the spreads before believing either.
+  compare the spreads before believing either, or, where the hot function did
+  not change, diff its `go tool objdump -s` in both with the addresses masked.
+- A surface a column ahead of the others of its mask and layer leaves
+  `staleShift`, so a probe lays the surfaces again; a scroll of every one leaves
+  `stale` clear, which the surface test holds and `BenchmarkCaveStep` shows. A
+  test that probes after each change never lets a scroll finish: change in
+  batches, as that test does.
 
 ## Math and physics
 
