@@ -401,6 +401,25 @@ comment now states, and link that instead.
 - The sine tables hold `math.Sin` and `math.Cos` at `TwoPi*i/LUTSize`, the very
   angles a sample count dividing `LUTSize` asks for: reading them there gives
   the computed cells bit for bit. `Sin` and `Cos` floor any other angle to a bin.
+- A benchmark that feeds a pure function constants measures nothing: the call
+  folds at compile time, and `vmath`'s older benches read 0.9 ns for a sine that
+  costs 5.5. Feed package variables, and read a loop over varied inputs beside
+  the lone call, since inlining and what one iteration waits on differ there.
+- On amd64 at its default level `math.Floor`, `Ceil` and `Trunc` compile to a CPU
+  feature test with a call for the fallback. Inlined in a loop the rounding also
+  waits on its output register's last value, chaining the iterations: the table
+  sine read 5.5 ns, a rotation 7.5. `lutIndex` truncates and steps down by a
+  borrow (`bits.Sub64`); the same step as an `if` compiled to a branch in some
+  callers and missed on angles of either sign (a collision 9 to 18 ns). Built
+  at `GOAMD64=v2` or later the floor is one instruction, a lone sine 0.8 ns
+  against the borrow's 1.2, so `floorChecked` is a build constraint
+  (`amd64 && !amd64.v2`) and such a build keeps the floor.
+- The same truncation in `PointAt` reads a third faster alone and costs more
+  than it saves: its inline cost goes from 12 to 50, `physics.Integrate` (55 to
+  93) and three more stop inlining, and a system's loop over bodies reads 20 to
+  40% slower. To name every function a change stops inlining, list
+  `go build -gcflags='github.com/lixenwraith/vif/...=-m' ./...` before and
+  after and compare the sorted `can inline` lines.
 - `pkg/vmath/physics` names a 3D twin with the suffix its older functions carry
   (`Integrate3D`, `ApplyHoming3D`), beside its flat form in the same file and on
   the flat form's scalar helper where one exists (`HomingProfile.arrival`,

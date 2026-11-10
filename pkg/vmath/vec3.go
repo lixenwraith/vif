@@ -63,7 +63,8 @@ func V3Reflect(v, normal Vec3) Vec3 {
 // V3Rotate rotates v about a unit axis by angle in radians, by the right hand:
 // about z it turns the plane as RotateVector does
 func V3Rotate(v, axis Vec3, angleRad float64) Vec3 {
-	cos, sin := Cos(angleRad), Sin(angleRad)
+	i := lutIndex(angleRad)
+	cos, sin := CosLUT[i], SinLUT[i]
 	c := V3Cross(axis, v)
 	k := V3Dot(axis, v) * (1.0 - cos)
 	return Vec3{v.X*cos + c.X*sin + axis.X*k, v.Y*cos + c.Y*sin + axis.Y*k, v.Z*cos + c.Z*sin + axis.Z*k}

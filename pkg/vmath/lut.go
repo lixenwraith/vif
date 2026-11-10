@@ -1,6 +1,9 @@
 package vmath
 
-import "math"
+import (
+	"math"
+	"math/bits"
+)
 
 var (
 	// Float64 look-up tables avoid per-call transcendental calculations.
@@ -10,8 +13,13 @@ var (
 	ExpDecayLUT [ExpLUTSize]float64
 )
 
-// radToIndex is a precalculated multiplier to convert radians to a LUT index
-const radToIndex = float64(LUTSize) / (2.0 * math.Pi)
+const (
+	// radToIndex is a precalculated multiplier to convert radians to a LUT index
+	radToIndex = float64(LUTSize) / (2.0 * math.Pi)
+	// oneBits is math.Float64bits(1), under which lie the bits of every positive
+	// float below one
+	oneBits = 0x3FF0000000000000
+)
 
 func init() {
 	// Initialize trigonometric LUTs.
@@ -32,19 +40,27 @@ func init() {
 	}
 }
 
-// Sin returns the sine of angleRad using O(1) LUT lookup.
-func Sin(angleRad float64) float64 {
-	// Floor keeps negative angles in the preceding angular bin instead of
-	// truncating them toward zero.
-	idx := int(math.Floor(angleRad*radToIndex)) & LUTMask
-	return SinLUT[idx]
+// lutIndex is the table bin angleRad lies in: its floor, so a negative angle
+// takes the bin before it. Where the floor is checked it truncates and steps
+// down past a fraction below zero, the same bin on every input.
+func lutIndex(angleRad float64) int {
+	v := angleRad * radToIndex
+	if !floorChecked {
+		return int(math.Floor(v)) & LUTMask
+	}
+	i := int(v)
+	// i-v lies in (0, 1) only past such a fraction: compared as bits, so that a
+	// NaN and a conversion out of range step nowhere, and by a borrow, so that no
+	// branch waits on the angle's sign
+	_, below := bits.Sub64(math.Float64bits(float64(i)-v)-1, oneBits-1, 0)
+	return (i - int(below)) & LUTMask
 }
 
+// Sin returns the sine of angleRad using O(1) LUT lookup.
+func Sin(angleRad float64) float64 { return SinLUT[lutIndex(angleRad)] }
+
 // Cos returns the cosine of angleRad using O(1) LUT lookup.
-func Cos(angleRad float64) float64 {
-	idx := int(math.Floor(angleRad*radToIndex)) & LUTMask
-	return CosLUT[idx]
-}
+func Cos(angleRad float64) float64 { return CosLUT[lutIndex(angleRad)] }
 
 // Atan2 returns angle in [0, 2π) for (dy, dx) using LUT.
 // The octant reduction keeps the lookup table compact.

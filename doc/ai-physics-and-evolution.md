@@ -244,6 +244,25 @@ and `GridTraverser3` for the two walks; the `V3` operations on `Vec3`, cross,
 reflection and rotation about an axis among them; the ellipsoid tests. A twin
 held to one plane answers as its flat form, which its tests pin.
 
+`Sin`, `Cos` and the two rotations read a 1,024-bin table at the floor of the
+angle's bin (`lutIndex`), a rotation reading the bin once. On amd64 at its
+default level a `math.Floor` is a CPU feature test with a call behind it, and
+inlined in a loop it makes each sine wait on the one before; there the index
+truncates and steps down past a negative fraction by a borrow, the same bin on
+every input, a NaN and an angle past an int's range among them. Other targets
+and an amd64 build at `GOAMD64=v2` keep the floor, one instruction, which reads
+a sine in 0.8 ns (`floorChecked`). A call in a loop, before and after:
+
+```
+Sin                      5.5 ns   1.2 ns   (math.Sin 5.4 ns)
+RotateVector             7.5 ns   2.5 ns
+Sin and Cos of an angle  7.8 ns   2.3 ns
+```
+
+A collision, which rotates once outside any loop, reads level at 9 ns, and so
+do the game's tick and renderer benchmarks: none draws the ember or the storm,
+whose loops call the sine.
+
 Integer `Point` and `Area` values, `Point3` and `Box` in a volume, describe
 discrete grid cells; they are not a fixed-point representation. `Point.Center`
 (`Point3.Center`) is the sanctioned grid-to-precise conversion and adds the

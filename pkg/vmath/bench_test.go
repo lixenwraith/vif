@@ -5,14 +5,16 @@ import (
 	"testing"
 )
 
-// sink prevents dead-code elimination of pure arithmetic benchmarks
+// sink prevents dead-code elimination of pure arithmetic benchmarks, and the
+// inputs are variables so that no call folds to its constant at compile time
 var (
 	sinkI int64
 	sinkF float64
 	sinkB bool
-)
 
-const bfx, bfy = 7.25, 3.5
+	bfx, bfy = 7.25, 3.5
+	bfCount  = 137
+)
 
 func BenchmarkMagnitude(b *testing.B) {
 	for b.Loop() {
@@ -116,6 +118,6 @@ func BenchmarkOrbitArcs(b *testing.B) {
 
 func BenchmarkExpDecay(b *testing.B) {
 	for b.Loop() {
-		sinkF = ExpDecay(137)
+		sinkF = ExpDecay(bfCount)
 	}
 }
