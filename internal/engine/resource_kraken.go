@@ -44,7 +44,7 @@ func (r *KrakenShapeResource) Build(e core.Entity, k *component.KrakenComponent,
 	}
 	s := &r.shapes[i]
 	s.Entity, s.Kraken, s.X, s.Y = e, *k, x, y
-	s.Samples = k.AppendTentacleSamples(s.Samples[:0], x, y)
+	s.Samples = k.AppendTentacleSamples(s.Samples[:0], x, y, 0)
 	return s.Samples
 }
 

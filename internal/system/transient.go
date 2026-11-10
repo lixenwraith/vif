@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
@@ -14,8 +15,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TransientSystem manages player-domain presentation: screen overlays and
-// short-lived spatial explosion centers.
+// TransientSystem manages player-domain presentation: screen overlays,
+// short-lived spatial explosion centers and the Krakens burning away.
 type TransientSystem struct {
 	world *engine.World
 
@@ -68,6 +69,7 @@ func (s *TransientSystem) EventTypes() []event.EventType {
 		event.EventStrobeRequest,
 		event.EventExplosionVisualRequest,
 		event.EventExplosionVisualBatchRequest,
+		event.EventKrakenBurnRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
@@ -120,6 +122,17 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 				s.addExplosionCenter(p.Centers[i].X, p.Centers[i].Y, p.Radius, p.Duration, p.Type)
 			}
 		}
+
+	case event.EventKrakenBurnRequest:
+		if p, ok := ev.Payload.(*component.KrakenBurn); ok {
+			// Burns stand oldest first, and the oldest gives way to one past the cap
+			transient := s.world.Resources.Transient
+			if transient.BurnCount == parameter.KrakenBurnCap {
+				transient.BurnCount = copy(transient.BurnBacking[:], transient.BurnBacking[1:])
+			}
+			transient.BurnBacking[transient.BurnCount] = *p
+			transient.BurnCount++
+		}
 	}
 }
 
@@ -150,6 +163,7 @@ func (s *TransientSystem) Update() {
 		return
 	}
 	s.updateExplosions()
+	s.updateKrakenBurns()
 
 	strobe := &s.world.Resources.View.Strobe
 	if !strobe.Active {
@@ -184,6 +198,26 @@ func (s *TransientSystem) updateExplosions() {
 		}
 	}
 	transient.ExplosionCount = write
+}
+
+// updateKrakenBurns burns each dead Kraken further, its legs thrashing, until it is
+// through. An install brings a Kraken back without a word, so its return ends its burn.
+func (s *TransientSystem) updateKrakenBurns() {
+	transient := s.world.Resources.Transient
+	seconds := s.world.Resources.Time.DeltaTime.Seconds()
+	write := 0
+	for i := range transient.BurnCount {
+		burn := &transient.BurnBacking[i]
+		burn.Kraken.Time += seconds * parameter.KrakenBurnThrash
+		burn.Burn += seconds / parameter.KrakenBurnDuration.Seconds()
+		if burn.Burn < 1 && !s.world.Components.Kraken.HasEntity(burn.Entity) {
+			if write != i {
+				transient.BurnBacking[write] = *burn
+			}
+			write++
+		}
+	}
+	transient.BurnCount = write
 }
 
 // addExplosionCenter owns the visual-only merge and bounded center array. Neither

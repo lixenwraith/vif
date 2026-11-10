@@ -412,7 +412,9 @@ and a drain flash. A body whose time ran out (a swarm's charges or lifetime, a
 data species' lifetime) fades out, a cancelled one leaves nothing, and a cell an
 attack takes off a pylon, a tower, a storm circle or a snake's body fades out
 where it stood. As the last cell of a pylon, a tower or a storm circle falls, its
-shell bursts: shards fly out from the outline its glow stood on
+shell bursts: shards fly out from the outline its glow stood on. A killed Kraken
+burns away where it died, in a second: its legs thrash and draw in as they burn
+from tip to root, then its core glows and closes
 ([ECS §7](ecs-and-events.md#death-effects)).
 
 ## 9. Walls, maps, navigation, and environment

@@ -417,6 +417,20 @@ the body's void as black, the Kraken draws in console entries: legs, rim and bod
 `Kraken256Leg`, the body solid where its void passes `Effect256Threshold`, and a leg
 heated past that threshold in `Kraken256Heat`.
 
+A dead Kraken's last pose (`Transient`'s `component.KrakenBurn`) is shaded the same
+way under the living, from the shape at how far it has burnt, which no system
+samples. Its legs burn from tip to root over the first `KrakenBurnLegs` of the
+burn: samples past the cut are left out, and a leg glows toward the attack color
+within `KrakenBurnEmber` of its length behind the cut, from the tick it dies.
+The void glows as the cut reaches the roots and closes over the rest, its blend
+scaled down to nothing, which in 256 colors draws the solid body in toward its
+middle. The burnt samples leave before the cells are stamped, and the stamping
+(`stamp`) reads nothing of the burn: with the cut read inside its loop the living
+Kraken's frames slowed by 4%. `BenchmarkKrakenRegion`'s frames in the cloud
+container, medians of nine alternating runs: 51.4 µs a tick before the burn,
+49.0 µs with it. A burn's three frames cost 22 µs a tick averaged over the burn,
+where the same pose alive costs 53 µs, the renderer sampling both.
+
 The discs sit `KrakenSampleStep` apart toward the tip and every third, then every
 second, within 10 and 20 cells of the body (`KrakenSampleStrides`), where they are
 widest. Over 4,000 poses of the campaign's kraken region that is 518 discs instead

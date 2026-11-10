@@ -412,6 +412,8 @@ const (
 	EventKrakenSpawnFailed
 	// EventKrakenCancelRequest [shared] removes all Kraken composites
 	EventKrakenCancelRequest
+	// EventKrakenBurnRequest (component.KrakenBurn) [local] burns a killed Kraken away from the pose it died in
+	EventKrakenBurnRequest
 
 	// --- Behavior ---
 

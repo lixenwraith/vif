@@ -243,7 +243,7 @@ transport the app attaches.
 | `Pursuit` | Navigation's field toward each cursor, published every tick and read for what one cursor owns (loot); a field is computed at its first read, which leaves the shared throttle phase alone (D-17). |
 | `Adaptation` | Per-gateway route-selection learner weights and pre-sampled route pools. |
 | `Genetics` | Population registry spawners sample genotypes from. |
-| `Transient` | Player-domain explosion presentation. |
+| `Transient` | Player-domain explosion presentation and the Krakens burning away. |
 | `View` | Player-domain screen effects: grayout, strobe and this instance's button echo. |
 | `KrakenShape` | The tentacle samples the Kraken system built this tick, each with the pose it came from, which the kraken renderer reuses for the same pose; derived, so a snapshot never carries it. |
 | `NavigationDebug` | Per-runtime operator view of navigation internals. |
@@ -380,7 +380,7 @@ as one pooled batch, on this instance alone. Two systems do the reading:
   ground. A flash or a scatter takes the glyphs while the grounds under them fade
   out; a fadeout takes each cell whole. The members then die silently. A wall's
   and a gold's members are glyphs of their own, which go to `DeathSystem` with
-  the effect, and a kraken's body is its renderer's.
+  the effect, and a Kraken's body is its renderer's, which burns it away.
 
 A species' end names the effect by why it ends:
 
@@ -394,6 +394,17 @@ A species' end names the effect by why it ends:
   the outline the glow stood on, in the glow's color (a console's in the color
   of the cells), 18 for a body of the default radii and 31 for a storm circle.
   Nothing strobes: a strobe is a scenario's signal.
+- A Kraken's body is hundreds of cells its renderer shades from a pose, so a
+  killed one leaves that pose instead of cells. `KrakenSystem` sends it on this
+  instance alone (`EventKrakenBurnRequest`), and `TransientSystem` holds it
+  beside the explosion centers (`component.KrakenBurn`, `KrakenBurnCap` at once)
+  and burns it through in `KrakenBurnDuration`, its legs waving
+  `KrakenBurnThrash` times faster. The shape function the hitboxes share takes
+  how far it has burnt, and draws the legs in, crinkles them and swings them
+  wider. The kraken renderer shades that pose under the living: the legs gone
+  past a cut running from tip to root and glowing in the attack color behind
+  it, the void glowing as they reach it and closing over the last quarter. A
+  Kraken an install brings back ends its own burn.
 - An expiry (a swarm's charges or lifetime, a data species' lifetime) fades the
   body out, and a cancel or an integrity breach leaves nothing.
 - A member an ablative owner finds dead (a pylon's, a tower's, a storm circle's,

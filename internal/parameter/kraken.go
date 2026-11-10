@@ -41,6 +41,17 @@ const (
 	KrakenInitialHP      = 10000
 	KrakenShieldDrain    = 10 * QuasarShieldDrain
 	KrakenDamageHeat     = 10 * QuasarDamageHeat
+
+	// A killed Kraken burns away over KrakenBurnDuration, its legs waving
+	// KrakenBurnThrash times faster. Burnt through they have drawn in by
+	// KrakenBurnShrink of their length, crinkled into 1+KrakenBurnCrinkle times the
+	// waves and swing KrakenBurnSwing radians wider. KrakenBurnCap burn at once.
+	KrakenBurnDuration = 1 * time.Second
+	KrakenBurnThrash   = 4.0
+	KrakenBurnShrink   = 0.6
+	KrakenBurnCrinkle  = 2.0
+	KrakenBurnSwing    = 0.5
+	KrakenBurnCap      = 4
 )
 
 // A tentacle samples a disc every KrakenSampleStep from its root, and within each
