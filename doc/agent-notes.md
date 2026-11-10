@@ -65,6 +65,11 @@ comment now states, and link that instead.
   event stops the generator on the stale use of it ("type-check ...: has no field",
   "undefined"): delete those lines from `payload_gen.go` and `registry_gen.go`
   first, and the run writes them anew.
+- A registered struct payload decodes from TOML, so every enum it holds at any
+  depth must take names (`TestEveryEnumAPayloadHoldsTakesNames`), and a payload
+  that is a component fails on that component's enums. Annotate the event with the
+  qualified type (`(component.KrakenBurn)`), which registers nil: right only for a
+  `[local]` event a system pushes, which is neither journaled nor sent.
 - A change to a package's API is compiled against every test file by
   `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
   nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
@@ -369,6 +374,19 @@ comment now states, and link that instead.
   own argument. A capture shows the cursor on a glyph as the glyph, so read the
   cursor from the telemetry overlay's player card (`:t`, `/player.0`) instead.
 - `-l <dir>` is `-l=<dir>`: with a space the log lands under `~/.local/state/vif/log`.
+- To watch one moment tick by tick, `:step ev <Event> pause` runs to the tick the
+  event is dispatched, `:step 1` advances a tick and `:step off` resumes. A paused
+  frame is dimmed by half (`DimFactor`): for true colors resume and capture every
+  50 ms, which lands one capture a tick. A drain's end raises `EventSpeciesKilled`
+  too, so `:system drain disable` first.
+- `:god`'s weapons hide what dies under their fire. `:energy 900000000` survives
+  without it, `:w rod 9` or `:w launcher 9` arms one weapon, and `-s blank` has
+  nothing else on the map; a swarm there with no weapon armed lives out its 35 s,
+  under five at `:speed 8`.
+- A renderer's own test does not show how layers compose. A flash's glyph under a
+  fading ground was blended to nothing, and a fade over a cell nothing painted
+  (black in staging, the theme background after `finalize`) went through black:
+  both showed only in the running game, read from a capture's colors, not its glyphs.
 - Xvfb, Alacritty and xdotool install in an Ubuntu container for real key and mouse
   input: `xdotool key` types, and tmux inside the window reads the screen back.
   Alacritty 0.13 from apt also needs `libxkbcommon-x11-0` and runs under
@@ -407,6 +425,11 @@ comment now states, and link that instead.
   9-12 µs when repeated at once and 20-26 µs as the frame's first. Read a gain
   live, with `:d prof` under `:log on` (`prof.top` lines) or a `time.Now` probe
   round the call in a scratch build, before calling a bench gain felt.
+- A value kept live across a hot per-cell loop can cost more than the work it
+  guards: a burn's cut held across the Kraken renderer's stamping loop slowed a
+  living Kraken's frames 4% with nothing burning. Filter before the loop, keep the
+  loop in a function that takes only what it reads (`KrakenRenderer.stamp`), and
+  measure the common path against main.
 - An indirect call on a per-cell probe shows: reading the bounds through an
   interface on each `Blocks` cost `BenchmarkGlyphRender` a quarter, and an
   interface over the wall entities a tenth more. Measure a probe path with the
