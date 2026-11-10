@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/ebitengine/purego v0.11.3
 	github.com/lixenwraith/ascimage v0.1.0
-	github.com/lixenwraith/audio v0.8.2
+	github.com/lixenwraith/audio v0.14.0
 	github.com/lixenwraith/auth v0.5.2
 	github.com/lixenwraith/color v0.1.5
 	github.com/lixenwraith/genetic v0.1.0
