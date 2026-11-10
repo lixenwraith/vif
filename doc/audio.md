@@ -184,6 +184,12 @@ own. [Its design](https://github.com/lixenwraith/stapes/blob/main/doc/stapes.md)
 README](https://github.com/lixenwraith/stapes) its commands and keys, and [Rip
 design](https://github.com/lixenwraith/stapes/blob/main/doc/rip-design.md) where the rip is going.
 
+Two things the rip gained in November reach the game through the library: a
+step may glide (`bend`, the semitones its pitch reaches by its end), which the
+sequencer plays and the MIDI files carry, and a rip may follow a recording as it
+plays (`RipStream`), bars frozen two behind the sound, which the Android app is
+to host over the microphone ([todo](todo.md#rip-live-on-android)).
+
 ## 5. Extension checklist
 
 For a new sound effect:

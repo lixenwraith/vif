@@ -1345,6 +1345,22 @@ system keyboard's text into `terminal.Event`s and flushes cell frames through
    a written file goes back out through it ([Multi-platform
    §8](multi-platform.md#stapes-files)).
 
+### Rip live on Android
+
+- Priority: P2
+- Affected files: `android/game`, `android/app`, `internal/app`,
+  `lixenwraith/audio` (`RipStream`)
+
+The library rips a recording as it plays (`RipStream`: blocks of samples in,
+each bar frozen once two follow it from the sixth bar on, `Final` the whole rip
+once the recording ends). What remains is the host: the microphone's blocks
+into the stream, the frozen bars shown a few seconds behind the music and
+revised until frozen, a `Final` the player asks for, and the song saved into the
+user root's `audio/` as a rip of a file is ([Rip design
+§7](https://github.com/lixenwraith/stapes/blob/main/doc/rip-design.md#7-plan)).
+The smallest close: the stream over a file first, in stapes, measured against
+the offline rip of the same recording.
+
 ### Render a conductor timeline offline
 
 - Priority: P3
