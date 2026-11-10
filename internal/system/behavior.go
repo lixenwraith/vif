@@ -166,7 +166,7 @@ func (s *BehaviorSystem) HandleEvent(ev event.GameEvent) {
 			if b, ok := s.world.Components.Behavior.GetComponent(payload.HeaderEntity); ok && int(b.Program) < len(s.programs) {
 				s.programs[b.Program].lifecycle.despawned.Add(1)
 			}
-			s.terminate(payload.HeaderEntity)
+			s.terminate(payload.HeaderEntity, component.DeathSilent)
 		}
 	}
 }
@@ -210,12 +210,12 @@ func (s *BehaviorSystem) Update() {
 				X:            killX,
 				Y:            killY,
 			})
-			s.terminate(header)
+			s.terminate(header, c.proto.Death)
 			continue
 		}
 		if timer, ok := s.world.Components.Timer.GetPtr(header); ok && timer.Expired(component.TimerDeadline) {
 			s.programs[b.Program].lifecycle.killedLifecycle.Add(1)
-			s.terminate(header)
+			s.terminate(header, component.DeathFadeout)
 			continue
 		}
 
@@ -344,7 +344,7 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 	}
 	foot := p.Footprint
 	headerX, headerY := left+foot.HeaderX, top+foot.HeaderY
-	s.clearFootprint(p, headerX, headerY, 0)
+	s.clearFootprint(p, headerX, headerY, component.DeathSilent)
 
 	header := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(header, component.PositionComponent{X: headerX, Y: headerY})
@@ -411,7 +411,7 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 
 // clearFootprint empties a footprint in both domains (D-12), each victim leaving
 // with effect
-func (s *BehaviorSystem) clearFootprint(p *component.BehaviorPrototype, headerX, headerY int, effect event.EventType) {
+func (s *BehaviorSystem) clearFootprint(p *component.BehaviorPrototype, headerX, headerY int, effect component.DeathEffect) {
 	s.sweep.reset()
 	area := p.Footprint.At(headerX, headerY)
 	for row := range area.Height {
@@ -452,25 +452,27 @@ func (s *BehaviorSystem) cancel(program string) {
 			entrances = append(entrances, e)
 		}
 	}
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, entrances...)
+	event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, entrances...)
 	for _, header := range s.world.Components.Behavior.Entities() {
 		b, ok := s.world.Components.Behavior.GetComponent(header)
 		if !ok || int(b.Program) >= len(s.programs) || program != "" && int(b.Program) != i {
 			continue
 		}
 		s.programs[b.Program].lifecycle.despawned.Add(1)
-		s.terminate(header)
+		s.terminate(header, component.DeathSilent)
 	}
 }
 
-// terminate ends an instance: its state's exit, then the composite
-func (s *BehaviorSystem) terminate(header core.Entity) {
+// terminate ends an instance: its state's exit, then the composite, leaving effect
+// of its body
+func (s *BehaviorSystem) terminate(header core.Entity, effect component.DeathEffect) {
 	// The exit ends what the state started, a telegraph above all
 	if b, ok := s.world.Components.Behavior.GetPtr(header); ok && s.fill(header, b, 0) {
 		s.set.Graph(int(b.Program)).Stop(&b.Machine, &s.ctx)
 	}
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: header,
+		Effect:       effect,
 	})
 }
 
@@ -512,7 +514,7 @@ func (s *BehaviorSystem) teleport(c *behaviorCtx) {
 		return
 	}
 	x, y := corner.X+p.Footprint.HeaderX, corner.Y+p.Footprint.HeaderY
-	s.clearFootprint(p, x, y, event.EventFlashSpawnOneRequest)
+	s.clearFootprint(p, x, y, component.DeathFlash)
 	c.kinetic.PreciseX, c.kinetic.PreciseY = vmath.Point{X: x, Y: y}.Center()
 	c.kinetic.VelX, c.kinetic.VelY = 0, 0
 	s.place(c.entity, x, y)

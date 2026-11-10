@@ -13,6 +13,12 @@ const (
 	KrakenRimRune    = '░'
 	KrakenMoveHeat   = 0.4
 	KrakenVoidOpaque = 0.3
+
+	// A dead Kraken's legs burn from tip to root over the first KrakenBurnLegs of its
+	// burn, glowing in the attack color within KrakenBurnEmber of their length of
+	// the burnt end; the void glows as they reach it and closes over the rest
+	KrakenBurnLegs  = 0.75
+	KrakenBurnEmber = 0.3
 )
 
 // In 256 colors the console shows the legs' dark gradient and the body's void as

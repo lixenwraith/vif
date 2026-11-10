@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/event"
 )
@@ -115,7 +116,7 @@ func TestAPushCrossesByItsProducersDomain(t *testing.T) {
 	shared := func(w *World) core.Entity { return w.CreateEntity(core.DomainShared) }
 	player := func(w *World) core.Entity { return w.CreateEntity(core.DomainPlayer) }
 	death := func(of func(*World) core.Entity) func(*World) {
-		return func(w *World) { event.EmitDeath(w.Resources.Event.Queue, 0, of(w)) }
+		return func(w *World) { event.EmitDeath(w.Resources.Event.Queue, component.DeathSilent, of(w)) }
 	}
 	hit := func(chain uint8) func(*World) {
 		return func(w *World) {

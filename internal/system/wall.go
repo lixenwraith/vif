@@ -602,10 +602,10 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
 
 	if len(flashTargets) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, flashTargets...)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFlash, flashTargets...)
 	}
 	if len(fadeoutTargets) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets...)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFadeout, fadeoutTargets...)
 	}
 	if len(silentTargets) > 0 {
 		s.world.DestroyEntitiesBatch(silentTargets)
@@ -642,10 +642,10 @@ func (s *WallSystem) despawnAllWalls() {
 	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
 
 	if len(flashTargets) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, flashTargets...)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFlash, flashTargets...)
 	}
 	if len(fadeoutTargets) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets...)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFadeout, fadeoutTargets...)
 	}
 	if len(silentTargets) > 0 {
 		s.world.DestroyEntitiesBatch(silentTargets)
@@ -924,7 +924,7 @@ func (s *WallSystem) pushOut(entity core.Entity, x, y int, mask component.WallBl
 	}
 	if combat, ok := s.world.Components.Combat.GetPtr(entity); ok {
 		if !s.world.Components.Cursor.HasEntity(combat.OwnerEntity) {
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
+			event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, entity)
 		}
 	}
 	return 0

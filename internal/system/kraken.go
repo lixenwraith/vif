@@ -131,16 +131,22 @@ func (s *KrakenSystem) Update() {
 		if !ok {
 			continue
 		}
+		k, _ := s.world.Components.Kraken.GetPtr(e)
+		motion, ok := s.world.Components.Kinetic.GetPtr(e)
 		if combat.HitPoints <= 0 {
 			pos, _ := s.world.Positions.GetPosition(e)
 			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity: e, Species: component.SpeciesKraken, KillerEntity: combat.LastDamagedBy, X: pos.X, Y: pos.Y,
 			})
+			// Its members leave nothing: what it leaves is the pose it died in, burning away
+			if ok {
+				s.world.PushLocal(event.EventKrakenBurnRequest, &component.KrakenBurn{
+					Entity: e, Kraken: *k, X: motion.PreciseX, Y: motion.PreciseY,
+				})
+			}
 			s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{HeaderEntity: e})
 			continue
 		}
-		k, _ := s.world.Components.Kraken.GetPtr(e)
-		motion, ok := s.world.Components.Kinetic.GetPtr(e)
 		if !ok {
 			continue
 		}
@@ -475,7 +481,7 @@ func (s *KrakenSystem) interact() {
 	for _, cell := range s.cells {
 		s.sweep.collect(s.world, cell.X, cell.Y, clearable)
 	}
-	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
+	s.sweep.emit(s.world, component.DeathFlash)
 	event.EmitParticleDeath(s.world.Resources.Event.Queue, component.ParticleDecay, s.glyphs...)
 
 	damage := profile.Contact[component.SpeciesKraken]

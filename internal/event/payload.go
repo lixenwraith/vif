@@ -798,13 +798,12 @@ type ParticleVortexPayload struct {
 
 // --- Death ---
 
-// DeathRequestPayload contains a death request for one or more entities.
-// EffectEvent selects the emitted effect; Behavior discriminates the unified
-// particle effect when EffectEvent is EventParticleSpawnOne.
+// DeathRequestPayload asks for the death of entities of one domain, each leaving
+// Effect; Behavior is the particle a DeathParticle makes of each glyph
 type DeathRequestPayload struct {
-	Entities    []core.Entity              `toml:"entities"`
-	EffectEvent EventType                  `toml:"effect_event"`
-	Behavior    component.ParticleBehavior `toml:"behavior"`
+	Entities []core.Entity              `toml:"entities"`
+	Effect   component.DeathEffect      `toml:"effect"`
+	Behavior component.ParticleBehavior `toml:"behavior"`
 }
 
 // --- Composite ---
@@ -826,10 +825,11 @@ type CompositeIntegrityBreachPayload struct {
 	RemainingCount int                `toml:"remaining_count"`
 }
 
-// CompositeDestroyRequestPayload requests centralized composite destruction
+// CompositeDestroyRequestPayload asks CompositeSystem to destroy a composite, its
+// members leaving Effect
 type CompositeDestroyRequestPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
+	HeaderEntity core.Entity           `toml:"header_entity"`
+	Effect       component.DeathEffect `toml:"effect"`
 }
 
 // --- Cursor ---
@@ -1558,17 +1558,6 @@ type CavePacePayload struct {
 type CaveOpenPayload struct {
 	Gap  int `toml:"gap"`
 	Ramp int `toml:"ramp"`
-}
-
-// --- Fadeout ---
-
-// FadeoutSpawnPayload contains parameters for single fadeout effect
-type FadeoutSpawnPayload struct {
-	X       int  `toml:"x"`
-	Y       int  `toml:"y"`
-	Char    rune `toml:"char"` // 0 = bg-only
-	FgColor color.RGB
-	BgColor color.RGB
 }
 
 // --- Pylon ---

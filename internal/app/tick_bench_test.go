@@ -9,11 +9,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
+	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/render"
+	"github.com/lixenwraith/vif/internal/render/renderer"
 	"github.com/lixenwraith/vif/internal/resource"
+	"github.com/lixenwraith/vif/internal/system"
+	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
 // BenchmarkHeadlessTicks measures one simulation tick on a driven App: the embedded
@@ -180,4 +187,197 @@ func BenchmarkWorldCopyAtMapLimit(b *testing.B) {
 			w.RunSafe(func() { c = w.CopyOut(c) })
 		}
 	})
+}
+
+// effectRig is a bare world running the death effects alone: their systems, the
+// timer and death systems that end them, and their renderers
+type effectRig struct {
+	w        *engine.World
+	systems  []engine.System
+	handlers map[event.EventType][]event.Handler
+	draw     []render.SystemRenderer
+	ctx      render.RenderContext
+	buf      *render.RenderBuffer
+}
+
+func newEffectRig(tb testing.TB) *effectRig {
+	w := engine.NewWorld()
+	game := engine.NewGameContextWithClock(w, 200, 60, engine.NewManualClock())
+	w.Resources.Config.ColorMode = terminal.ColorModeTrueColor
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	r := &effectRig{w: w, handlers: map[event.EventType][]event.Handler{}}
+	for _, build := range []func(*engine.World) engine.System{
+		system.NewTimerSystem, system.NewSpiritSystem, system.NewFlashSystem, system.NewFadeoutSystem, system.NewDeathSystem,
+		system.NewCompositeSystem,
+	} {
+		s := build(w)
+		s.Init()
+		r.systems = append(r.systems, s)
+		h := s.(event.Handler)
+		for _, et := range h.EventTypes() {
+			r.handlers[et] = append(r.handlers[et], h)
+		}
+	}
+	r.draw = []render.SystemRenderer{renderer.NewFlashRenderer(game), renderer.NewFadeoutRenderer(game), renderer.NewSpiritRenderer(game)}
+	config := w.Resources.Config
+	r.ctx = render.NewRenderContextFromGame(game, *w.Resources.Time, 0, 0, false)
+	r.buf = render.NewRenderBuffer(terminal.ColorModeTrueColor, game.Width, game.Height)
+	if config.MapWidth < 100 || config.MapHeight < 40 {
+		tb.Fatalf("map %dx%d", config.MapWidth, config.MapHeight)
+	}
+	return r
+}
+
+// tick runs one tick: every system's update, then the settle
+func (r *effectRig) tick() {
+	for _, s := range r.systems {
+		s.Update()
+	}
+	q := r.w.Resources.Event.Queue
+	for {
+		events := q.Consume()
+		if len(events) == 0 {
+			return
+		}
+		for _, ev := range events {
+			for _, s := range r.handlers[ev.Type] {
+				s.HandleEvent(ev)
+			}
+		}
+	}
+}
+
+func (r *effectRig) frames() {
+	for range int(parameter.GameUpdateInterval / parameter.FrameUpdateInterval) {
+		for _, d := range r.draw {
+			d.Render(r.ctx, r.buf)
+		}
+	}
+}
+
+// standBody stands a composite of the kind with its header at (x, y), a member a
+// cell of the kind's footprint, which the composite system reads as it ends
+func (r *effectRig) standBody(species component.SpeciesType, kind component.Behavior, x, y int) core.Entity {
+	w, foot := r.w, component.Footprints[species]
+	header := w.CreateEntity(core.DomainShared)
+	w.Positions.SetPosition(header, component.PositionComponent{X: x, Y: y})
+	h := component.HeaderComponent{Behavior: kind, MemberEntries: make([]component.MemberEntry, 0, foot.Width*foot.Height)}
+	for row := range foot.Height {
+		for col := range foot.Width {
+			m := w.CreateEntity(core.DomainShared)
+			offX, offY := col-foot.HeaderX, row-foot.HeaderY
+			w.Positions.SetPosition(m, component.PositionComponent{X: x + offX, Y: y + offY})
+			w.Components.Member.SetComponent(m, component.MemberComponent{HeaderEntity: header})
+			h.MemberEntries = append(h.MemberEntries, component.MemberEntry{Entity: m, OffsetX: offX, OffsetY: offY})
+		}
+	}
+	w.Components.Header.SetComponent(header, h)
+	return header
+}
+
+// BenchmarkDeathEffects measures the effects a death leaves and the converging
+// spirit, on a bare world: "tick" is one tick's share of spawning, ageing and ending
+// them, "frames" a tick's three frames of drawing them. bodies is a 5x3 body dying
+// every tick, storm 600 cells going at once every ten ticks. swarm and eye are
+// whole bodies ending through the composite system, standing them left untimed: a
+// swarm scattering or an eye flashing every tick, 75 or 40 of them at once.
+func BenchmarkDeathEffects(b *testing.B) {
+	loads := []struct {
+		name         string
+		cells, every int
+	}{{"bodies", 15, 1}, {"storm", 600, 10}}
+	for _, effect := range []string{"flash", "fadeout", "spirit", "scatter", "swarm", "eye"} {
+		for _, load := range loads {
+			for _, frames := range []bool{false, true} {
+				name := "tick"
+				if frames {
+					name = "frames"
+				}
+				b.Run(fmt.Sprintf("%s/%s/%s", effect, load.name, name), func(b *testing.B) {
+					r := newEffectRig(b)
+					rng := vmath.NewFastRand(7)
+					width, height := r.w.Resources.Config.MapWidth, r.w.Resources.Config.MapHeight
+					spawn := func() {
+						x0, y0 := rng.Intn(width-40), rng.Intn(height-20)
+						cols := 5
+						if load.cells > 15 {
+							cols = 30
+						}
+						switch effect {
+						case "flash":
+							batch := event.EffectBatchPool.Acquire()
+							for i := range load.cells {
+								batch.Entries = append(batch.Entries, component.EffectCell{X: x0 + i%cols, Y: y0 + i/cols, Rune: 'x'})
+							}
+							r.w.PushLocal(event.EventFlashSpawnBatchRequest, batch)
+						case "fadeout":
+							batch := event.EffectBatchPool.Acquire()
+							for i := range load.cells {
+								batch.Entries = append(batch.Entries, component.EffectCell{X: x0 + i%cols, Y: y0 + i/cols, Rune: 'x',
+									Fg: color.RGB{R: 200, G: 100, B: 50}, Bg: color.RGB{R: 20, G: 40, B: 60}, Solid: true})
+							}
+							r.w.PushLocal(event.EventFadeoutSpawnBatch, batch)
+						case "spirit":
+							for i := range load.cells {
+								r.w.PushEventDomain(event.EventSpiritSpawnRequest, &event.SpiritSpawnRequestPayload{
+									StartX: x0 + i%cols, StartY: y0 + i/cols, TargetX: x0 + 2, TargetY: y0 + 1, Char: 'x',
+									BaseColor: component.SpiritCyan}, core.DomainPlayer)
+							}
+						case "scatter":
+							batch := event.EffectBatchPool.Acquire()
+							for i := range load.cells {
+								batch.Entries = append(batch.Entries, component.EffectCell{X: x0 + i%cols, Y: y0 + i/cols, Rune: 'x',
+									Fg: color.RGB{R: 200, G: 100, B: 50}})
+							}
+							r.w.PushLocal(event.EventSpiritScatterRequest, batch)
+						case "swarm", "eye":
+							species, kind, kill := component.SpeciesSwarm, component.BehaviorSwarm, component.KillEffects[component.SpeciesSwarm]
+							if effect == "eye" {
+								species, kind, kill = component.SpeciesEye, component.BehaviorEye, component.KillEffects[component.SpeciesEye]
+							}
+							foot := component.Footprints[species]
+							for range max(load.cells/(foot.Width*foot.Height), 1) {
+								header := r.standBody(species, kind, x0+rng.Intn(30), y0+rng.Intn(15))
+								if effect == "eye" {
+									r.w.Components.Eye.SetComponent(header, component.EyeComponent{})
+								} else {
+									r.w.Components.Swarm.SetComponent(header, component.SwarmComponent{})
+								}
+								r.w.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{HeaderEntity: header, Effect: kill})
+							}
+						}
+					}
+					standing := effect == "swarm" || effect == "eye"
+					step := func(i int, timed bool) {
+						if i%load.every == 0 {
+							if timed && standing {
+								b.StopTimer()
+							}
+							spawn()
+							if timed && standing {
+								b.StartTimer()
+							}
+						}
+						r.tick()
+					}
+					for i := range 40 { // to the steady state
+						step(i, false)
+					}
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := range b.N {
+						if !frames {
+							step(i, true)
+							continue
+						}
+						b.StopTimer()
+						step(i, false)
+						r.buf.Clear()
+						b.StartTimer()
+						r.frames()
+					}
+				})
+			}
+		}
+	}
 }

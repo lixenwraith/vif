@@ -176,7 +176,7 @@ func (s *SplashSystem) Update() {
 			anchorEntity := splashComp.AnchorEntity
 			if anchorEntity != 0 && !s.world.Components.Header.HasEntity(anchorEntity) {
 				// Anchored to entity and anchor entity destroyed
-				event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
+				event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, splashEntity)
 				continue
 			}
 
@@ -224,19 +224,19 @@ func (s *SplashSystem) Update() {
 func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *component.SplashComponent) bool {
 	cursorPos, ok := s.world.LocalCursor()
 	if !ok {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, splashEntity)
 		return false
 	}
 
 	glyphEntity, ok := s.world.Positions.TopGlyphAt(cursorPos.X, cursorPos.Y)
 	if !ok {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, splashEntity)
 		return false
 	}
 
 	glyph, ok := s.world.Components.Glyph.GetComponent(glyphEntity)
 	if !ok {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, splashEntity)
 		return false
 	}
 
@@ -359,7 +359,7 @@ func (s *SplashSystem) find(match func(*component.SplashComponent) bool) core.En
 func (s *SplashSystem) retire(match func(*component.SplashComponent) bool) {
 	for _, splashEntity := range s.world.Components.Splash.Entities() {
 		if splashComp, ok := s.world.Components.Splash.GetPtr(splashEntity); ok && match(splashComp) {
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
+			event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, splashEntity)
 		}
 	}
 }

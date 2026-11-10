@@ -145,14 +145,14 @@ per-target combat requests derived from that geometry do not.
 
 ### D-6 — Presentation and personal effects are Player-domain
 
-Lightning, flash, fadeout, splash, motion markers, explosion smoke, a cursor's pulses,
-particles (dust, decay and blossom), orbs, bullets, missiles, and loot are
-Player-domain; a materialize takes its requester's domain (§3). Encounter
-level clears explicitly preserve loot; run resets clear it. Shared corrections
-retain each receiver's drops and ownership, and loot revalidates its bounds and
-walls after an install. Collected weapon charges travel through the existing
-owner-state sync (D-13). These effects may depend on local view state and must not
-decide a Shared outcome.
+Lightning, flash, fadeout, splash, motion markers, explosion smoke, a Kraken's
+burn, a cursor's pulses, particles (dust, decay and blossom), orbs, bullets,
+missiles, and loot are Player-domain; a materialize takes its requester's domain
+(§3). Encounter level clears explicitly preserve loot; run resets clear it. Shared
+corrections retain each receiver's drops and ownership, and loot revalidates its
+bounds and walls after an install. Collected weapon charges travel through the
+existing owner-state sync (D-13). These effects may depend on local view state and
+must not decide a Shared outcome.
 
 An effect keyed to a Shared entity retires with it. An install writes the world
 rather than replaying the lifecycle that ends such effects, so the owner's absence
@@ -162,7 +162,8 @@ for an effect the entity's spawn raises: an install brings the entity without th
 spawn, so the system carrying it raises the effect again. A gold sequence an
 install brings gets its countdown splash for the time it has left, and an install
 that replaces a sequence's header cancels the old header's countdown, since the
-install may have given that id to another composite.
+install may have given that id to another composite. An effect a death raises
+ends the other way: a dead Kraken's burn ends when its Kraken stands again.
 
 Player-domain does not mean that only one participant sees an effect. A shared FSM
 may raise a local effect on every instance. Effects intended for one participant

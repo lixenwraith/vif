@@ -1,7 +1,10 @@
 package visual
 
 import (
+	"fmt"
+
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
 
@@ -311,3 +314,16 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]LookArt{
 		},
 	},
 }
+
+// EyeLooks are the eye types' looks compiled once, which the eye's renderer draws
+// and its death leaves
+var EyeLooks = func() (looks [parameter.EyeTypeCount]component.Look) {
+	for i := range looks {
+		look, err := CompileLook(parameter.EyeWidth, parameter.EyeHeight, EyeTypeVisuals[i])
+		if err != nil {
+			panic(fmt.Sprintf("eye type %d: %v", i, err))
+		}
+		looks[i] = look
+	}
+	return looks
+}()

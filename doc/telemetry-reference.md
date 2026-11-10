@@ -228,7 +228,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `bullet.spawned`, `bullet.hits` (int) | Bullets created by a mount or a cursor's turret, and bullets stopped by a cursor, a shield or a combat target |
 | `dust.created`, `dust.destroyed` (int) | Dust actually created, and dust consumed by a detonation. Expired dust dies through the timer |
 | `dust.centers_dropped` (int) | Burst centres (one per occupied cell) dropped from a detonation that already held `ExplosionCenterCap` |
-| `death.batch_*` (int) | Resolved `EventDeathBatch` payloads (`count`), entries presented (`entities_total`), the largest batch (`size_max`), and requests per effect route (`silent`, `flash`, `blossom`, `decay`, `fadeout`, `dust`, `other`) |
+| `death.batch_*` (int) | Resolved `EventDeathBatch` payloads (`count`), entries presented (`entities_total`), the largest batch (`size_max`), and requests per effect route (`silent`, `flash`, `blossom`, `decay`, `fadeout`, `scatter`, `dust`, `other`) |
 | `death.tagged` (int) | Entities processed from the `DeathComponent` sweep |
 | `death.{protected,zero,payload}_rejects`, `death.missing_{entities,effect_data}` (int) | Entries refused by `ProtectFromDeath`, zero identifiers, bad payload types, entities already gone, and deaths whose effect lacked position, glyph or wall data |
 | `environment.drift_active`, `environment.drift_scenery` (bool), `environment.drift_direction`, `environment.drift_speed` (float) | The drift gauge, whether text placed under it is scenery, its heading, and the pace in cells a second it drifts or eases to, 0 while none runs. The glyph spawner reads them to choose its entry edge, to spawn sooner past `DriftFillSpeed` and to stamp and count scenery |

@@ -49,6 +49,7 @@ type BehaviorPrototype struct {
 	Drops            string                           // the drop table its kills roll, by name; "" drops nothing
 	Contact          CursorDamage                     // what touching it costs a cursor
 	Lifetime         time.Duration                    // 0 = lives until killed or cancelled
+	Death            DeathEffect                      // what a kill leaves of its body
 	Entrance         BehaviorEntrance                 // how it comes onto the map
 	EntranceDuration time.Duration                    // how long the entrance plays, 0 = its materialize's own
 	Materialize      MaterializeStyle                 // its own style, its entrance's, SpawnTypeDataFirst plus its index

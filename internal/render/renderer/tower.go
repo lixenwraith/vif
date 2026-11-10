@@ -22,7 +22,9 @@ type towerColorEntry struct {
 // towerRenderFunc defines the render strategy signature, selected at initialization
 type towerRenderFunc func(ctx render.RenderContext, buf *render.RenderBuffer)
 
-// TowerRenderer draws tower entities with health-based coloring and target-aware glow
+// TowerRenderer draws tower entities with health-based coloring and target-aware
+// glow. A member with no hit points left draws, critical, until its owner destroys
+// it, where its fade takes the cell over.
 type TowerRenderer struct {
 	gameCtx *engine.GameContext
 
@@ -303,7 +305,7 @@ func (r *TowerRenderer) renderMembersTrueColor(
 		}
 
 		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
-		if !ok || combatComp.HitPoints <= 0 {
+		if !ok {
 			continue
 		}
 
@@ -365,7 +367,7 @@ func (r *TowerRenderer) renderMembers256Color(
 		}
 
 		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
-		if !ok || combatComp.HitPoints <= 0 {
+		if !ok {
 			continue
 		}
 

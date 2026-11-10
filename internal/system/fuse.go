@@ -361,6 +361,6 @@ func (s *FuseSystem) killDrains(drains []core.Entity) {
 				Entity: s.world.Resources.Player.Entity,
 			})
 		}
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, drains...)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, drains...)
 	})
 }

@@ -447,10 +447,10 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 		killerEntity = combatComp.LastDamagedBy
 	}
 
-	// Request composite destruction (header + remaining members)
+	// Its cells fell one by one; what is left to leave is its shell
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       0,
+		Effect:       component.KillEffects[component.SpeciesPylon],
 	})
 
 	// Publish one canonical species death for FSMs, loot, scoring, and rewards.
@@ -463,25 +463,11 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 	})
 }
 
-func (s *PylonSystem) terminatePylon(headerEntity core.Entity) {
-	// Guard: skip if already removed by handlePylonDeath
-	if !s.world.Components.Pylon.HasEntity(headerEntity) {
-		// Still request composite cleanup for orphaned headers
-		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
-			HeaderEntity: headerEntity,
-			Effect:       0,
-		})
-		return
-	}
-
-	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
-		HeaderEntity: headerEntity,
-		Effect:       0,
-	})
-}
-
+// terminateAll ends every pylon for a cancel, which leaves nothing of them
 func (s *PylonSystem) terminateAll() {
 	for _, entity := range s.world.Components.Pylon.Entities() {
-		s.terminatePylon(entity)
+		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+			HeaderEntity: entity,
+		})
 	}
 }

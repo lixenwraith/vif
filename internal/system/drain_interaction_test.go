@@ -219,7 +219,7 @@ func TestDrainCollisionHealsSharedSpeciesThroughCombatEvent(t *testing.T) {
 					if !ok {
 						t.Fatalf("death payload = %T, want *event.DeathRequestPayload", ev.Payload)
 					}
-					if len(payload.Entities) != 1 || payload.Entities[0] != drain || payload.EffectEvent != event.EventNone {
+					if len(payload.Entities) != 1 || payload.Entities[0] != drain || payload.Effect != component.DeathSilent {
 						t.Fatalf("death payload = %+v, want silent death of drain %d", payload, drain)
 					}
 					event.ReleaseDeathRequest(payload)
@@ -385,7 +385,7 @@ func TestDrainBreaksTheGoldMemberItCrosses(t *testing.T) {
 	deaths := 0
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
-			if len(p.Entities) != 1 || p.Entities[0] != member || p.EffectEvent != event.EventFlashSpawnOneRequest {
+			if len(p.Entities) != 1 || p.Entities[0] != member || p.Effect != component.DeathFlash {
 				t.Fatalf("death = %+v, want the member with a flash", p)
 			}
 			deaths++

@@ -700,7 +700,7 @@ func (s *ParticleSystem) updateBehavior(behavior component.ParticleBehavior) {
 		s.applyDrainImpulses()
 	case component.ParticleDecay:
 		if len(s.deathBuf) > 0 {
-			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.deathBuf...)
+			event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFlash, s.deathBuf...)
 		}
 	}
 	state.buffers.Observe(0, len(state.hitThisFrame))
@@ -919,7 +919,7 @@ func (s *ParticleSystem) processDecayTargets(state *particleBehaviorState, parti
 
 		if s.world.Components.Nugget.HasEntity(target) {
 			s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
-			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, target)
+			event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFlash, target)
 		} else {
 			// Glyph mechanics are Player-domain; a Shared glyph is a gold member.
 			if target.Domain() != core.DomainPlayer {
@@ -988,7 +988,7 @@ func (s *ParticleSystem) applyDecayToCharacter(state *particleBehaviorState, ent
 			glyph.Type = component.GlyphRed
 			glyph.Level = component.GlyphBright
 		default:
-			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entity)
+			event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFlash, entity)
 		}
 	}
 	state.statApplied.Add(1)
@@ -1153,7 +1153,7 @@ func (s *ParticleSystem) convertGlyphs(cursorX, cursorY int, area *blastArea, ma
 	s.dustBuffers.Observe(bufDustFlash, len(s.flashBuf))
 
 	if len(s.flashBuf) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.flashBuf...)
+		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathFlash, s.flashBuf...)
 	}
 	if len(s.transformBuf) == 0 {
 		return

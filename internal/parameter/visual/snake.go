@@ -54,3 +54,7 @@ var SnakeHeadChars = [3][5]rune{
 	{'▌', '●', '▓', '●', '▐'},
 	{'▘', '▄', '▄', '▄', '▝'},
 }
+
+// SnakeHeadChar256 is every head cell in 256 colors: solid in the foreground, which
+// takes bright colors where backgrounds cannot
+const SnakeHeadChar256 = '█'

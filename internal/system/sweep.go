@@ -43,7 +43,7 @@ func (s *cellSweep) collect(w *engine.World, x, y int, clearable func(core.Entit
 }
 
 // emit routes each domain's victims through the death pipeline separately
-func (s *cellSweep) emit(w *engine.World, effect event.EventType) {
+func (s *cellSweep) emit(w *engine.World, effect component.DeathEffect) {
 	if len(s.shared) > 0 {
 		event.EmitDeath(w.Resources.Event.Queue, effect, s.shared...)
 	}
@@ -94,7 +94,7 @@ func breakGoldUnder(w *engine.World, sweep *cellSweep, header core.Entity) {
 			sweep.collect(w, pos.X, pos.Y, func(e core.Entity) bool { return goldMember(w, e) })
 		}
 	}
-	sweep.emit(w, event.EventFlashSpawnOneRequest)
+	sweep.emit(w, component.DeathFlash)
 }
 
 // goldMember reports a shared glyph, which only a gold sequence holds

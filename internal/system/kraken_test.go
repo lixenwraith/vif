@@ -183,7 +183,7 @@ func TestKrakenWindupKeepsSpinningUntilItsLockedCharge(t *testing.T) {
 		t.Fatal("wind-up did not visibly rotate at least a full turn")
 	}
 	maxBend, leg := 0.0, -1
-	for _, p := range k.AppendTentacleSamples(nil, x, y) {
+	for _, p := range k.AppendTentacleSamples(nil, x, y, 0) {
 		if p.Step == 0 {
 			leg++
 		}
@@ -248,7 +248,7 @@ func TestKrakenDestroysWallsAtSpawnAndAcrossItsFootprint(t *testing.T) {
 	walls, death := ready(NewWallSystem(w)).(*WallSystem), ready(NewDeathSystem(w)).(*DeathSystem)
 	var leg vmath.Point
 	shape := component.KrakenComponent{}
-	for _, p := range shape.AppendTentacleSamples(nil, 90.5, 45.5) {
+	for _, p := range shape.AppendTentacleSamples(nil, 90.5, 45.5, 0) {
 		if p.Step >= 0.5 {
 			leg = vmath.PointAt(p.X, p.Y)
 			break
@@ -495,7 +495,7 @@ func TestKrakenOnlyBodyStopsAtMapEdges(t *testing.T) {
 	k.State, k.AttackT = component.KrakenAttack, 1
 	s.syncMembers(e, k, motion.PreciseX, motion.PreciseY)
 	outside := false
-	for _, p := range k.AppendTentacleSamples(nil, motion.PreciseX, motion.PreciseY) {
+	for _, p := range k.AppendTentacleSamples(nil, motion.PreciseX, motion.PreciseY, 0) {
 		outside = outside || p.X < 0 || p.Y < 0
 	}
 	if !outside {
@@ -657,6 +657,122 @@ func TestKrakenDeathRetiresWholeMemberPool(t *testing.T) {
 	}
 }
 
+// A killed Kraken leaves the pose it died in to burn away, its legs waving faster
+// until it is through. A cancel leaves none, a Kraken standing again as an install
+// brings it back ends its own, and the oldest gives way to one past the cap.
+func TestAKilledKrakenBurnsAwayFromItsLastPose(t *testing.T) {
+	w, s, e, _ := krakenFixture(t)
+	composite, death := ready(NewCompositeSystem(w)).(*CompositeSystem), ready(NewDeathSystem(w)).(*DeathSystem)
+	transient := ready(NewTransientSystem(w)).(*TransientSystem)
+	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+	settle := func(leaves bool) {
+		for range 8 {
+			for _, ev := range w.Resources.Event.Queue.Consume() {
+				if ev.Type == event.EventKrakenBurnRequest && ev.Domain != core.DomainPlayer {
+					t.Fatal("a burn is asked for outside the player domain")
+				}
+				if leaves {
+					composite.HandleEvent(ev)
+					death.HandleEvent(ev)
+				}
+				transient.HandleEvent(ev)
+			}
+		}
+	}
+	kill := func(e core.Entity) component.KrakenBurn {
+		k, _ := w.Components.Kraken.GetPtr(e)
+		motion, _ := w.Components.Kinetic.GetPtr(e)
+		hp, _ := w.Components.Combat.GetPtr(e)
+		hp.HitPoints = 0
+		last := component.KrakenBurn{Entity: e, Kraken: *k, X: motion.PreciseX, Y: motion.PreciseY}
+		s.Update()
+		return last
+	}
+	burns := w.Resources.Transient.KrakenBurns
+
+	s.Update()
+	last := kill(e)
+	settle(true)
+	if got := burns(); len(got) != 1 || got[0] != last || w.Components.Kraken.HasEntity(e) {
+		t.Fatalf("a killed Kraken left %+v, want its last pose %+v and no Kraken", got, last)
+	}
+	transient.Update()
+	last.Kraken.Time += parameter.GameUpdateInterval.Seconds() * parameter.KrakenBurnThrash
+	last.Burn = parameter.GameUpdateInterval.Seconds() / parameter.KrakenBurnDuration.Seconds()
+	if got := burns(); len(got) != 1 || got[0] != last {
+		t.Fatalf("a tick burnt it to %+v, want %+v", got, last)
+	}
+	ticks := int(parameter.KrakenBurnDuration / parameter.GameUpdateInterval)
+	for range ticks - 3 {
+		transient.Update()
+	}
+	if len(burns()) != 1 {
+		t.Fatalf("the burn was through %d ticks into its %d", ticks-2, ticks)
+	}
+	for range 3 {
+		transient.Update()
+	}
+	if len(burns()) != 0 {
+		t.Fatalf("the burn stands %d ticks into its %d", ticks+1, ticks)
+	}
+
+	s.spawn(&event.KrakenSpawnRequestPayload{X: 90, Y: 45})
+	s.HandleEvent(event.GameEvent{Type: event.EventKrakenCancelRequest})
+	settle(true)
+	if len(burns()) != 0 || w.Components.Kraken.CountEntities() != 0 {
+		t.Fatalf("a cancel left %d burns and %d Krakens", len(burns()), w.Components.Kraken.CountEntities())
+	}
+
+	// Its destruction unheard, the Kraken stands as one an install brought back
+	s.spawn(&event.KrakenSpawnRequestPayload{X: 90, Y: 45})
+	w.Resources.Event.Queue.Consume()
+	back := w.Components.Kraken.Entities()[0]
+	kill(back)
+	settle(false)
+	if len(burns()) != 1 {
+		t.Fatalf("%d burns for the Kraken killed, want 1", len(burns()))
+	}
+	transient.Update()
+	if len(burns()) != 0 {
+		t.Fatal("a Kraken standing again still burns")
+	}
+
+	for i := range parameter.KrakenBurnCap + 1 {
+		transient.HandleEvent(event.GameEvent{Type: event.EventKrakenBurnRequest, Payload: &component.KrakenBurn{Entity: core.Entity(1000 + i)}})
+	}
+	if got := burns(); len(got) != parameter.KrakenBurnCap || got[0].Entity != 1001 || got[len(got)-1].Entity != core.Entity(1000+parameter.KrakenBurnCap) {
+		t.Fatalf("past the cap the burns are %+v, want the oldest gone", got)
+	}
+}
+
+// A burning Kraken's legs draw in toward the body as they swing wider about their
+// own lines, every leg alike
+func TestABurningKrakensLegsDrawInAndSwingWider(t *testing.T) {
+	k := component.KrakenComponent{Angle: 0.4, Time: 2}
+	const x, y = 90.5, 45.5
+	reach, swing := math.Inf(1), 0.0
+	for _, burn := range []float64{0, 0.25, 0.5, 0.75, 1} {
+		samples := k.AppendTentacleSamples(nil, x, y, burn)
+		farthest, widest, legs := 0.0, 0.0, len(samples)/8
+		for i, p := range samples {
+			dx, dy := p.X-x, (p.Y-y)*parameter.KrakenRowSquash
+			farthest = max(farthest, math.Hypot(dx, dy))
+			if p.Index > 0 {
+				off := math.Remainder(math.Atan2(dy, dx)-k.Angle-float64(i/legs)*math.Pi/4, 2*math.Pi)
+				widest = max(widest, math.Abs(off))
+			}
+		}
+		length, amplitude := parameter.KrakenLegLength*(1-burn*parameter.KrakenBurnShrink), parameter.KrakenWiggleAmp+burn*parameter.KrakenBurnSwing
+		if len(samples)%8 != 0 || farthest > length+1e-9 || farthest < length-1 || widest > amplitude+1e-9 || widest < 0.9*amplitude {
+			t.Fatalf("burnt %v: %d samples reach %.2f of %.2f and swing %.3f of %.3f", burn, len(samples), farthest, length, widest, amplitude)
+		}
+		if farthest >= reach || widest < swing {
+			t.Fatalf("burnt %v the legs reach %.2f after %.2f and swing %.3f after %.3f", burn, farthest, reach, widest, swing)
+		}
+		reach, swing = farthest, widest
+	}
+}
+
 func TestKrakenSharesItsSamplesWithTheRenderer(t *testing.T) {
 	w, s, e, _ := krakenFixture(t)
 	w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
@@ -664,7 +780,7 @@ func TestKrakenSharesItsSamplesWithTheRenderer(t *testing.T) {
 	k, _ := w.Components.Kraken.GetPtr(e)
 	motion, _ := w.Components.Kinetic.GetPtr(e)
 	got, ok := w.Resources.KrakenShape.Samples(e, k, motion.PreciseX, motion.PreciseY)
-	if !ok || !slices.Equal(got, k.AppendTentacleSamples(nil, motion.PreciseX, motion.PreciseY)) {
+	if !ok || !slices.Equal(got, k.AppendTentacleSamples(nil, motion.PreciseX, motion.PreciseY, 0)) {
 		t.Fatalf("the tick's pose has no samples of its own: ok=%v, %d samples", ok, len(got))
 	}
 	moved := *k

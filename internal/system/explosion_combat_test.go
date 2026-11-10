@@ -199,7 +199,7 @@ func TestSpecialAttackConvertsDarkGlyphsThenChainsThroughTheBlast(t *testing.T) 
 				case event.EventDeathBatch:
 					deaths++
 					p := ev.Payload.(*event.DeathRequestPayload)
-					if p.EffectEvent != event.EventFlashSpawnOneRequest || !slices.Equal(p.Entities, flashed) {
+					if p.Effect != component.DeathFlash || !slices.Equal(p.Entities, flashed) {
 						t.Fatalf("flashes = %+v, want the caught dark glyphs %v", p, flashed)
 					}
 					event.ReleaseDeathRequest(p)

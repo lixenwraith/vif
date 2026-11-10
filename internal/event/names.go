@@ -91,6 +91,7 @@ var codeNames = sync.OnceValue(func() *dialect.Names {
 		Enum[component.TowerType](component.TowerTypeNames[:]...).
 		Enum[component.TargetType](component.TargetTypeNames[:]...).
 		Enum[component.ParticleBehavior](component.ParticleBehaviorNames[:]...).
+		Enum[component.DeathEffect](component.DeathEffectNames[:]...).
 		Enum[component.EnergyDeltaType](component.EnergyDeltaNames[:]...).
 		Enum[component.GlyphType](component.GlyphTypeNames[:]...).
 		Enum[component.GlyphLevel](component.GlyphLevelNames[:]...).
