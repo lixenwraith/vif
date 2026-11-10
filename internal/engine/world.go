@@ -928,20 +928,19 @@ func (w *World) PingAbsoluteBoundsOf(e core.Entity) PingAbsoluteBounds {
 // ResolveFreeCell returns the nearest cell to (x, y) that the mask does not block
 // Reports false when no escape route exists within half the map
 func (w *World) ResolveFreeCell(x, y int, mask component.WallBlockMask) (int, int, bool) {
-	if !w.Positions.IsBlocked(x, y, mask) {
+	cell := vmath.Point{X: x, Y: y}
+	if !w.Positions.IsBlocked(cell, mask) {
 		return x, y, true
 	}
 
 	config := w.Resources.Config
 	maxRadius := max(config.MapWidth, config.MapHeight) / 2
 
-	newX, newY, found := w.Positions.FindFreeFromPattern(
-		x, y, 1, 1, position.PatternCardinalFirst, 1, maxRadius, true, mask, nil,
-	)
+	free, found := w.Positions.FindFreeFromPattern(cell, 1, 1, position.PatternCardinalFirst, 1, maxRadius, true, mask, nil)
 	if !found {
 		return x, y, false
 	}
-	return newX, newY, true
+	return free.X, free.Y, true
 }
 
 // PushEntityFromBlocked relocates a non-cursor entity to the nearest valid position

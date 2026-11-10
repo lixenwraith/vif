@@ -539,7 +539,7 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		// Check for overlaps with existing characters
 		overlaps := false
 		for c := range seqLength {
-			if s.world.Positions.IsBlocked(x+c, y, component.WallBlockParticle) {
+			if s.world.Positions.IsBlocked(vmath.Point{X: x + c, Y: y}, component.WallBlockParticle) {
 				overlaps = true
 				break
 			}

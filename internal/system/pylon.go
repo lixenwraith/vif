@@ -254,7 +254,7 @@ func (s *PylonSystem) validatePylonPosition(centerX, centerY, radiusX, radiusY i
 	width := 2*radiusX + 1
 	height := 2*radiusY + 1
 
-	return s.world.Positions.IsAreaFree(topLeftX, topLeftY, width, height, component.WallBlockSpawn)
+	return s.world.Positions.IsAreaFree(vmath.Area{X: topLeftX, Y: topLeftY, Width: width, Height: height}, component.WallBlockSpawn)
 }
 
 // findRandomPylonPosition attempts random placement, then spiral, then cursor fallback
@@ -311,9 +311,9 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 	// Tier 2: Spiral from last random attempt center
 	last := cells[len(cells)-1]
 	foot := vmath.Footprint{Width: width, Height: height, HeaderX: radiusX, HeaderY: radiusY}
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(last.X, last.Y, foot, component.WallBlockSpawn, parameter.PylonSpawnSpiralMaxRadius)
+	corner, found := s.world.Positions.FindFreeAreaInside(last, foot, component.WallBlockSpawn, parameter.PylonSpawnSpiralMaxRadius)
 	if found {
-		return topLeftX + radiusX, topLeftY + radiusY, true
+		return corner.X + radiusX, corner.Y + radiusY, true
 	}
 
 	// Tier 3: Last resort — try cursor positions.

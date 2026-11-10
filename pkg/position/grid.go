@@ -2,11 +2,12 @@ package position
 
 import (
 	"errors"
+	"math/bits"
 	"slices"
 )
 
-// CellCapacity keeps a Cell of eight-byte entities at exactly 256 bytes, four cache
-// lines: 31 entities, two counts and six bytes of padding.
+// CellCapacity is the most occupants a cell holds, which keeps a crowd of
+// eight-byte entities at 256 bytes, four cache lines.
 const CellCapacity = 31
 
 // PrivateBudget caps the private half of a cell so a pile of one instance's own
@@ -15,7 +16,7 @@ const PrivateBudget = 12
 
 // Map bounds, a clamp rather than a rejection: a replicated map setup must reach
 // the same bounds on every instance, and the product reaches make(). A grid is
-// sized to its map at 256 bytes a cell, so the ceiling costs 32 MB.
+// sized to its map at 16 bytes a cell, so the ceiling costs 2 MB.
 const (
 	// MaxWidth is the widest map, in cells.
 	MaxWidth = 2000
@@ -27,27 +28,40 @@ const (
 	MaxCells = 500 * 250
 )
 
-// Cell is one grid cell: its occupants, the shared ones in Entities[:SharedCount]
-// and the private ones in Entities[SharedCount:Count]. slot is the cell's place in
-// the grid's occupied list while it holds anything.
-type Cell[E comparable] struct {
-	Count       uint8
-	SharedCount uint8
-	_           [2]byte
-	slot        int32
-	Entities    [CellCapacity]E
+// cell is one grid cell: what it holds, and its occupant while that is one, as in
+// play all but a few cells in a hundred holding anything do.
+type cell[E comparable] struct {
+	tag int32
+	one [1]E
 }
 
-// view returns the sub-slice a scope selects; the partition makes every scope one
+// What a cell's tag says it holds; from holdsCrowd up, its place among the crowds.
+const (
+	holdsNone    int32 = iota
+	holdsShared        // one shared occupant, in one
+	holdsPrivate       // one private occupant, in one
+	holdsCrowd         // two or more, in crowds[tag-holdsCrowd]
+)
+
+// crowd is the occupants of cell at while it holds two or more: the shared ones in
+// held[:shared], the private ones in held[shared:count].
+type crowd[E comparable] struct {
+	count, shared uint8
+	_             [2]byte
+	at            int32
+	held          [CellCapacity]E
+}
+
+// view returns the occupants a scope selects; the partition makes every scope one
 // contiguous range.
-func (c *Cell[E]) view(scope Scope) []E {
+func (k *crowd[E]) view(scope Scope) []E {
 	switch scope & ScopeAll {
 	case ScopeShared:
-		return c.Entities[:c.SharedCount]
+		return k.held[:k.shared]
 	case ScopePrivate:
-		return c.Entities[c.SharedCount:c.Count]
+		return k.held[k.shared:k.count]
 	case ScopeAll:
-		return c.Entities[:c.Count]
+		return k.held[:k.count]
 	}
 	return nil
 }
@@ -83,64 +97,81 @@ func ClampVolume(width, height, depth int) (int, int, int) {
 }
 
 // Grid is a dense grid for spatial queries without allocation, every cell of the
-// map a Cell: a volume of Depth layers, one on a flat map, each Width×Height.
+// map a cell: a volume of Depth layers, one on a flat map, each Width×Height.
 type Grid[E comparable] struct {
-	Cells  []Cell[E] // 1D array: index = (z*Height+y)*Width + x
 	Width  int
 	Height int
 	Depth  int
 
-	// occupied lists the cells holding an entity, each knowing its slot, so a cell
-	// that empties is swapped out by the last in constant time and a copy, a clear
-	// and the gauges read what the map holds rather than the map: the ceiling is
-	// 125,000 cells, 32 MB, which a scan touches whole.
-	occupied []int32
+	// cells is every cell, index (z*Height+y)*Width+x, and crowds the occupants of
+	// the ones holding two or more, spare the places a cell that thinned out left.
+	cells  []cell[E]
+	crowds []crowd[E]
+	spare  []int32
 
 	// present marks the cells holding an entity of each class, a bit a cell, the
-	// layers' rows in turn, so a probe passes an empty cell on a word that stays in
-	// cache rather than a cell of 256 bytes that does not, and a scan passes empty
-	// cells a word at a time.
+	// layers' rows in turn, so a probe passes an empty cell, a scan empty cells a
+	// word at a time, and a copy, a clear and the planes read what the map holds.
 	present [2]Bits
+
+	// byCount is how many cells hold each count of occupants, [0] unread, and shared
+	// the shared occupants of them all: the gauges and the crowded cells, unscanned.
+	byCount [CellCapacity + 1]int32
+	shared  int
 }
 
 // NewGrid makes a grid of width×height×depth cells, clamped to the ceiling.
 func NewGrid[E comparable](width, height, depth int) *Grid[E] {
-	width, height, depth = ClampVolume(width, height, depth)
-	width, height = max(width, 0), max(height, 0)
-	return &Grid[E]{
-		Cells:   make([]Cell[E], width*height*depth),
-		Width:   width,
-		Height:  height,
-		Depth:   depth,
-		present: [2]Bits{NewBits(width, height*depth), NewBits(width, height*depth)},
-	}
+	g := &Grid[E]{}
+	g.Resize(width, height, depth)
+	return g
 }
 
 // Present is the cells holding an entity of class c, a bit a cell, the layers'
 // rows in turn. Read-only.
 func (g *Grid[E]) Present(c Class) Bits { return g.present[c] }
 
-// InBounds reports whether the volume holds a cell at p.
-func (g *Grid[E]) InBounds(p Point3) bool {
-	return p.X >= 0 && p.X < g.Width && p.Y >= 0 && p.Y < g.Height && p.Z >= 0 && p.Z < g.Depth
+// InBounds reports whether the volume holds p's cell.
+func (g *Grid[E]) InBounds[P Coord](p P) bool { return g.in(at(p)) }
+
+// in reports whether the volume holds cell c: a flat point's layer is the first,
+// which every grid holds
+func (g *Grid[E]) in(c Point3, flat bool) bool {
+	return uint(c.X) < uint(g.Width) && uint(c.Y) < uint(g.Height) && (flat || uint(c.Z) < uint(g.Depth))
 }
 
-// row is the row of the presence bits and the planes that p's cell lies in
-func (g *Grid[E]) row(p Point3) int { return p.Z*g.Height + p.Y }
-
-// CellAt returns p's cell, or nil outside the volume. Read-only.
-func (g *Grid[E]) CellAt(p Point3) *Cell[E] {
-	if !g.InBounds(p) {
-		return nil
+// row is the row of the presence bits and the planes that c's cell lies in, a
+// flat point's its own
+func (g *Grid[E]) row(c Point3, flat bool) int {
+	if flat {
+		return c.Y
 	}
-	return &g.Cells[g.row(p)*g.Width+p.X]
+	return c.Z*g.Height + c.Y
 }
 
-// anyIn reports whether a cell of [x0, x1) × [y0, y1), which the caller has
-// bounded and found non-empty, holds anything scope selects, by the bits
-func (g *Grid[E]) anyIn(x0, x1, y0, y1 int, scope Scope) bool {
-	return scope&ScopeShared != 0 && g.present[ClassShared].Any(x0, x1, y0, y1) ||
-		scope&ScopePrivate != 0 && g.present[ClassPrivate].Any(x0, x1, y0, y1)
+// occupied is word w of row with a bit set for each cell holding anything scope
+// selects
+func (g *Grid[E]) occupied(row, w int, scope Scope) uint64 {
+	var word uint64
+	if scope&ScopeShared != 0 {
+		word = g.present[ClassShared].Words[row*g.present[ClassShared].Stride+w]
+	}
+	if scope&ScopePrivate != 0 {
+		word |= g.present[ClassPrivate].Words[row*g.present[ClassPrivate].Stride+w]
+	}
+	return word
+}
+
+// each calls fn with the column and row of every cell holding anything scope
+// selects, by cell index
+func (g *Grid[E]) each(scope Scope, fn func(px, row int)) {
+	for row := range g.Height * g.Depth {
+		for w := range g.present[ClassShared].Stride {
+			for word := g.occupied(row, w, scope); word != 0; word &= word - 1 {
+				fn(w<<6+bits.TrailingZeros64(word), row)
+			}
+		}
+	}
 }
 
 // holds reports whether a cell scope selects holds anything, by the bits
@@ -149,205 +180,233 @@ func (g *Grid[E]) holds(x, y int, scope Scope) bool {
 		scope&ScopePrivate != 0 && g.present[ClassPrivate].Bit(x, y)
 }
 
-// Set inserts e into its class's half of p's cell. O(1); false when out of bounds,
-// the cell is full, or the private budget is spent (soft clip).
-func (g *Grid[E]) Set(e E, class Class, p Point3) bool {
-	if !g.InBounds(p) {
-		return false
+// view returns the occupants of c that scope selects, its own storage
+func (g *Grid[E]) view(c *cell[E], scope Scope) []E {
+	if c.tag >= holdsCrowd {
+		return g.crowds[c.tag-holdsCrowd].view(scope)
 	}
-
-	x, y := p.X, g.row(p)
-	idx := int32(y*g.Width + x)
-	cell := &g.Cells[idx]
-	if cell.Count >= CellCapacity {
-		return false
+	if c.tag != holdsNone && scope&(1<<(c.tag-holdsShared)) != 0 {
+		return c.one[:]
 	}
+	return nil
+}
 
-	// A private insert appends inside its own budget and never touches the shared run
+// Set inserts e into its class's half of p's cell and returns how many the cell
+// then holds. O(1); 0 when out of bounds, the cell is full, or the private budget
+// is spent (soft clip).
+func (g *Grid[E]) Set[P Coord](e E, class Class, p P) int {
+	q, flat := at(p)
+	if !g.in(q, flat) {
+		return 0
+	}
+	x, y := q.X, g.row(q, flat)
+	c := &g.cells[y*g.Width+x]
+	if c.tag == holdsNone {
+		c.tag, c.one[0] = holdsShared+int32(class), e
+		g.present[class].Set(x, y)
+		g.shared += int(ClassPrivate - class)
+		g.byCount[1]++
+		return 1
+	}
+	if c.tag < holdsCrowd {
+		g.gather(c, y*g.Width+x)
+	}
+	k := &g.crowds[c.tag-holdsCrowd]
+	n := k.count
+	if n >= CellCapacity || class == ClassPrivate && n-k.shared >= PrivateBudget {
+		return 0
+	}
 	if class == ClassPrivate {
-		if cell.Count-cell.SharedCount >= PrivateBudget {
-			return false
-		}
-		g.fill(idx, cell)
-		if cell.Count == cell.SharedCount {
+		// A private insert appends inside its own budget and never touches the shared run
+		if n == k.shared {
 			g.present[ClassPrivate].Set(x, y)
 		}
-		cell.Entities[cell.Count] = e
-		cell.Count++
-		return true
+		k.held[n] = e
+	} else {
+		// A shared insert splits the run: the first private entity moves to the tail
+		if k.shared == 0 {
+			g.present[ClassShared].Set(x, y)
+		}
+		k.held[n] = k.held[k.shared]
+		k.held[k.shared] = e
+		k.shared++
+		g.shared++
 	}
-
-	// A shared insert splits the run: the first private entity moves to the tail
-	g.fill(idx, cell)
-	if cell.SharedCount == 0 {
-		g.present[ClassShared].Set(x, y)
-	}
-	cell.Entities[cell.Count] = cell.Entities[cell.SharedCount]
-	cell.Entities[cell.SharedCount] = e
-	cell.SharedCount++
-	cell.Count++
-	return true
+	k.count = n + 1
+	g.byCount[n]--
+	g.byCount[n+1]++
+	return int(n) + 1
 }
 
-// fill notes a cell about to take its first entity.
-func (g *Grid[E]) fill(idx int32, cell *Cell[E]) {
-	if cell.Count == 0 {
-		cell.slot = int32(len(g.occupied))
-		g.occupied = append(g.occupied, idx)
+// crowdFor gives cell idx a place among the crowds, a spare one or a new
+func (g *Grid[E]) crowdFor(idx int) *crowd[E] {
+	var place int32
+	if n := len(g.spare); n > 0 {
+		place, g.spare = g.spare[n-1], g.spare[:n-1]
+	} else {
+		place = int32(len(g.crowds))
+		g.crowds = append(g.crowds, crowd[E]{})
 	}
+	g.cells[idx].tag = holdsCrowd + place
+	k := &g.crowds[place]
+	k.at = int32(idx)
+	return k
 }
 
-// vacate takes a cell that emptied off the occupied list, the last one into its place.
-func (g *Grid[E]) vacate(cell *Cell[E]) {
-	last := g.occupied[len(g.occupied)-1]
-	g.occupied[cell.slot] = last
-	g.Cells[last].slot = cell.slot
-	g.occupied = g.occupied[:len(g.occupied)-1]
+// gather moves the one occupant of c, cell idx, into a crowd, since the cell is
+// about to hold a second
+func (g *Grid[E]) gather(c *cell[E], idx int) {
+	shared, e := uint8(holdsPrivate-c.tag), c.one[0]
+	k := g.crowdFor(idx)
+	k.count, k.shared, k.held[0] = 1, shared, e
+	var zero E
+	c.one[0] = zero
 }
 
-// Load fills cell idx from a copy: its counts and its occupants in the copy's order.
-func (g *Grid[E]) Load(idx int32, count, shared uint8, occupants []E) {
-	cell := &g.Cells[idx]
-	g.fill(idx, cell)
-	cell.Count, cell.SharedCount = count, shared
-	copy(cell.Entities[:count], occupants)
+// Load fills cell idx, which holds nothing, from a copy: its occupants in the
+// copy's order, the first shared of them the shared ones.
+func (g *Grid[E]) Load(idx int32, occupants []E, shared int) {
+	switch len(occupants) {
+	case 0:
+		return
+	case 1:
+		g.cells[idx] = cell[E]{tag: holdsPrivate - int32(shared), one: [1]E{occupants[0]}}
+	default:
+		k := g.crowdFor(int(idx))
+		k.count, k.shared = uint8(copy(k.held[:], occupants)), uint8(shared)
+	}
+	g.byCount[min(len(occupants), CellCapacity)]++
+	g.shared += shared
 	x, y := int(idx)%g.Width, int(idx)/g.Width
 	g.present[ClassShared].Put(x, y, shared > 0)
-	g.present[ClassPrivate].Put(x, y, count > shared)
+	g.present[ClassPrivate].Put(x, y, len(occupants) > shared)
 }
 
-// Occupied is every cell holding an entity, in the order they filled. Read-only.
-func (g *Grid[E]) Occupied() []int32 { return g.occupied }
+// EachOccupied calls fn with every cell holding an entity, by cell index: the
+// index, its occupants, the shared ones first, and how many those are. The
+// occupants are the cell's own storage, to read before it changes.
+func (g *Grid[E]) EachOccupied(fn func(index int32, occupants []E, shared int)) {
+	g.each(ScopeAll, func(px, row int) {
+		idx := row*g.Width + px
+		if c := &g.cells[idx]; c.tag < holdsCrowd {
+			fn(int32(idx), c.one[:], int(holdsPrivate-c.tag))
+		} else if k := &g.crowds[c.tag-holdsCrowd]; true {
+			fn(int32(idx), k.held[:k.count], int(k.shared))
+		}
+	})
+}
 
 // RemoveEntityAt deletes e from p's cell. O(k), k the cell's occupants:
 // swap-removes within e's half, refilling the shared tail from the private run.
-func (g *Grid[E]) RemoveEntityAt(e E, p Point3) {
-	if !g.InBounds(p) {
+func (g *Grid[E]) RemoveEntityAt[P Coord](e E, p P) {
+	q, flat := at(p)
+	if !g.in(q, flat) {
 		return
 	}
-
-	x, y := p.X, g.row(p)
-	cell := &g.Cells[y*g.Width+x]
-	for i := uint8(0); i < cell.Count; i++ {
-		if cell.Entities[i] != e {
+	x, y := q.X, g.row(q, flat)
+	c := &g.cells[y*g.Width+x]
+	if c.tag < holdsCrowd {
+		if c.tag != holdsNone && c.one[0] == e {
+			g.present[c.tag-holdsShared].Clear(x, y)
+			g.shared -= int(holdsPrivate - c.tag)
+			g.byCount[1]--
+			*c = cell[E]{}
+		}
+		return
+	}
+	k := &g.crowds[c.tag-holdsCrowd]
+	n := k.count
+	for i := uint8(0); i < n; i++ {
+		if k.held[i] != e {
 			continue
 		}
-
-		if i < cell.SharedCount {
+		n--
+		if i < k.shared {
 			// Close the shared run, then pull the last private entity into the vacated shared tail
-			lastShared := cell.SharedCount - 1
-			cell.Entities[i] = cell.Entities[lastShared]
-			cell.Count--
-			cell.SharedCount--
-			if lastShared != cell.Count {
-				cell.Entities[lastShared] = cell.Entities[cell.Count]
-			}
-			if cell.SharedCount == 0 {
+			k.shared--
+			k.held[i] = k.held[k.shared]
+			k.held[k.shared] = k.held[n]
+			if k.shared == 0 {
 				g.present[ClassShared].Clear(x, y)
 			}
+			g.shared--
 		} else {
-			cell.Count--
-			if i != cell.Count {
-				cell.Entities[i] = cell.Entities[cell.Count]
-			}
-			if cell.Count == cell.SharedCount {
+			k.held[i] = k.held[n]
+			if n == k.shared {
 				g.present[ClassPrivate].Clear(x, y)
 			}
 		}
-
 		var zero E
-		cell.Entities[cell.Count] = zero
-		if cell.Count == 0 {
-			g.vacate(cell)
+		k.held[n] = zero
+		k.count = n
+		g.byCount[n+1]--
+		g.byCount[n]++
+		if n == 1 { // a cell of one again, its place among the crowds spare
+			g.spare = append(g.spare, c.tag-holdsCrowd)
+			c.tag, c.one[0] = holdsPrivate-int32(k.shared), k.held[0]
+			k.count, k.held[0] = 0, zero
 		}
 		return
 	}
 }
 
-// EntitiesAt returns a view of the entities scope selects at (x, y) of the first
-// layer, nil if empty or out of bounds: the cell's own storage, to copy or to read
-// before it changes.
-func (g *Grid[E]) EntitiesAt(x, y int, scope Scope) []E {
-	if x < 0 || x >= g.Width || y < 0 || y >= g.Height || !g.holds(x, y, scope) {
+// EntitiesAt returns a view of the entities scope selects in p's cell, nil if
+// empty or out of bounds: the cell's own storage, to copy or to read before it
+// changes.
+func (g *Grid[E]) EntitiesAt[P Coord](p P, scope Scope) []E {
+	q, flat := at(p)
+	if !g.in(q, flat) || !g.holds(q.X, g.row(q, flat), scope) {
 		return nil
 	}
-	return g.Cells[y*g.Width+x].view(scope)
-}
-
-// EntitiesIn is EntitiesAt for a cell of any layer.
-func (g *Grid[E]) EntitiesIn(p Point3, scope Scope) []E {
-	if !g.InBounds(p) || !g.holds(p.X, g.row(p), scope) {
-		return nil
-	}
-	return g.Cells[g.row(p)*g.Width+p.X].view(scope)
+	return g.view(&g.cells[g.row(q, flat)*g.Width+q.X], scope)
 }
 
 // Occupants is EntitiesAt without the presence test, for a caller that knows the
 // cell holds something, as one asking about an entity's own cell does.
-func (g *Grid[E]) Occupants(x, y int, scope Scope) []E {
-	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
+func (g *Grid[E]) Occupants[P Coord](p P, scope Scope) []E {
+	q, flat := at(p)
+	if !g.in(q, flat) {
 		return nil
 	}
-	return g.Cells[y*g.Width+x].view(scope)
+	return g.view(&g.cells[g.row(q, flat)*g.Width+q.X], scope)
 }
 
-// HasAnyEntityAt reports whether scope selects at least one entity at (x, y) of
-// the first layer. O(1)
-func (g *Grid[E]) HasAnyEntityAt(x, y int, scope Scope) bool {
-	return x >= 0 && x < g.Width && y >= 0 && y < g.Height && g.holds(x, y, scope)
-}
-
-// HasAnyEntityIn is HasAnyEntityAt for a cell of any layer.
-func (g *Grid[E]) HasAnyEntityIn(p Point3, scope Scope) bool {
-	return g.InBounds(p) && g.holds(p.X, g.row(p), scope)
+// HasAnyEntityAt reports whether scope selects at least one entity in p's cell.
+// O(1)
+func (g *Grid[E]) HasAnyEntityAt[P Coord](p P, scope Scope) bool {
+	q, flat := at(p)
+	return g.in(q, flat) && g.holds(q.X, g.row(q, flat), scope)
 }
 
 // Holds reports whether the grid holds e in its class's half of p's cell, which
 // tells an idempotent write from a soft-clipped entity that needs another insertion.
-func (g *Grid[E]) Holds(e E, class Class, p Point3) bool {
-	for _, occupant := range g.EntitiesIn(p, 1<<class) {
-		if occupant == e {
-			return true
-		}
-	}
-	return false
+func (g *Grid[E]) Holds[P Coord](e E, class Class, p P) bool {
+	return slices.Contains(g.EntitiesAt(p, 1<<class), e)
 }
 
 // Clear removes every entity from every cell.
-func (g *Grid[E]) Clear() {
-	for _, i := range g.occupied {
-		g.Cells[i].Count = 0
-		g.Cells[i].SharedCount = 0
-	}
-	g.occupied = g.occupied[:0]
-	clear(g.present[ClassShared].Words)
-	clear(g.present[ClassPrivate].Words)
-}
+func (g *Grid[E]) Clear() { g.Resize(g.Width, g.Height, g.Depth) }
 
 // Resize sets the grid's dimensions, a volume of newDepth layers, emptying it.
 // Backing storage is grow-only: shrinking keeps capacity, so a map that oscillates
 // never reallocates; growth allocates once and holds. It clamps rather than
 // trusting its caller: every path into it carries dimensions from a replicated
-// payload or a terminal report, and an unbounded product here is a panic in the
-// allocator rather than a rejected map.
+// payload or a terminal report, and an unbounded product here panics the allocator.
 func (g *Grid[E]) Resize(newWidth, newHeight, newDepth int) {
 	newWidth, newHeight, newDepth = ClampVolume(newWidth, newHeight, newDepth)
 	// Floored before the dimensions are stored, not just before they are used: a
 	// grid recording bounds that disagree with the cells it holds answers Set and
 	// every enumeration from two different maps.
 	newWidth, newHeight = max(newWidth, 0), max(newHeight, 0)
-	g.occupied = g.occupied[:0]
-	need := newWidth * newHeight * newDepth
-	if need <= cap(g.Cells) {
-		g.Cells = g.Cells[:need]
-		// Every cell, as a re-grown one may hold stale counts from a larger layout
-		for i := range g.Cells {
-			g.Cells[i].Count = 0
-			g.Cells[i].SharedCount = 0
-		}
+	if need := newWidth * newHeight * newDepth; need <= cap(g.cells) {
+		g.cells = g.cells[:need]
+		clear(g.cells)
 	} else {
-		g.Cells = make([]Cell[E], need)
+		g.cells = make([]cell[E], need)
 	}
+	clear(g.crowds)
+	g.crowds, g.spare = g.crowds[:0], g.spare[:0]
+	g.byCount, g.shared = [CellCapacity + 1]int32{}, 0
 	g.Width, g.Height, g.Depth = newWidth, newHeight, newDepth
 	for c := range g.present {
 		g.present[c] = g.present[c].sized(Stride(newWidth), newHeight*newDepth)
@@ -362,16 +421,14 @@ type Stats struct {
 	MaxOccupancy   int
 }
 
-// ComputeStats reads the occupied cells.
+// ComputeStats reads the gauges off the counts the grid keeps.
 func (g *Grid[E]) ComputeStats() Stats {
-	var stats Stats
-	for _, i := range g.occupied {
-		count := int(g.Cells[i].Count)
-		stats.CellsOccupied++
-		stats.EntitiesTotal += count
-		stats.EntitiesShared += int(g.Cells[i].SharedCount)
-		if count > stats.MaxOccupancy {
-			stats.MaxOccupancy = count
+	stats := Stats{EntitiesShared: g.shared}
+	for n := 1; n <= CellCapacity; n++ {
+		if cells := int(g.byCount[n]); cells > 0 {
+			stats.CellsOccupied += cells
+			stats.EntitiesTotal += cells * n
+			stats.MaxOccupancy = n
 		}
 	}
 	return stats
@@ -386,14 +443,15 @@ type CellOrder[E comparable] struct {
 // ErrOrderMismatch refuses an order naming other occupants than the grid holds.
 var ErrOrderMismatch = errors.New("the order names other entities than the world holds")
 
-// Order reads the occupants of every cell holding two or more.
+// Order reads the occupants of every cell holding two or more, by cell index.
 func (g *Grid[E]) Order() []CellOrder[E] {
 	var out []CellOrder[E]
-	for i := range g.Cells {
-		if c := &g.Cells[i]; c.Count >= 2 {
-			out = append(out, CellOrder[E]{Index: i, Entities: slices.Clone(c.Entities[:c.Count])})
+	for i := range g.crowds {
+		if k := &g.crowds[i]; k.count >= 2 {
+			out = append(out, CellOrder[E]{Index: int(k.at), Entities: slices.Clone(k.held[:k.count])})
 		}
 	}
+	slices.SortFunc(out, func(a, b CellOrder[E]) int { return a.Index - b.Index })
 	return out
 }
 
@@ -403,30 +461,27 @@ func (g *Grid[E]) Order() []CellOrder[E] {
 func (g *Grid[E]) Reorder(cells []CellOrder[E], class func(E) Class) error {
 	listed := make(map[int]struct{}, len(cells))
 	for _, co := range cells {
-		if _, twice := listed[co.Index]; twice || co.Index < 0 || co.Index >= len(g.Cells) {
+		if _, twice := listed[co.Index]; twice || co.Index < 0 || co.Index >= len(g.cells) {
 			return ErrOrderMismatch
 		}
 		listed[co.Index] = struct{}{}
-		c := &g.Cells[co.Index]
-		held := c.Entities[:c.Count]
-		if c.Count < 2 || len(co.Entities) != len(held) {
+		c := &g.cells[co.Index]
+		if c.tag < holdsCrowd {
 			return ErrOrderMismatch
 		}
-		for k, e := range co.Entities {
-			shared := k < int(c.SharedCount)
-			if shared != (class(e) == ClassShared) || !slices.Contains(held, e) || slices.Contains(co.Entities[:k], e) {
+		k := &g.crowds[c.tag-holdsCrowd]
+		held := k.held[:k.count]
+		if len(co.Entities) != len(held) {
+			return ErrOrderMismatch
+		}
+		for i, e := range co.Entities {
+			if (i < int(k.shared)) != (class(e) == ClassShared) || !slices.Contains(held, e) || slices.Contains(co.Entities[:i], e) {
 				return ErrOrderMismatch
 			}
 		}
 		copy(held, co.Entities)
 	}
-	crowded := 0
-	for i := range g.Cells {
-		if g.Cells[i].Count >= 2 {
-			crowded++
-		}
-	}
-	if crowded != len(cells) {
+	if len(g.crowds)-len(g.spare) != len(cells) {
 		return ErrOrderMismatch
 	}
 	return nil

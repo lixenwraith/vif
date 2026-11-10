@@ -271,13 +271,13 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 
 	// The head's footprint the request names, pulled inside the map, or the nearest
 	// free one
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(payload.X, payload.Y, component.Footprints[component.SpeciesSnake], component.WallBlockSpawn, 0)
+	corner, found := s.world.Positions.FindFreeAreaInside(vmath.Point{X: payload.X, Y: payload.Y}, component.Footprints[component.SpeciesSnake], component.WallBlockSpawn, 0)
 	if !found {
 		s.lifecycle.spawnFailures.Add(1)
 		return
 	}
-	headX := topLeftX + parameter.SnakeHeadHeaderOffsetX
-	headY := topLeftY + parameter.SnakeHeadHeaderOffsetY
+	headX := corner.X + parameter.SnakeHeadHeaderOffsetX
+	headY := corner.Y + parameter.SnakeHeadHeaderOffsetY
 
 	// Clear spawn area
 	s.clearSpawnArea(headX, headY, parameter.SnakeHeadWidth, parameter.SnakeHeadHeight,
@@ -525,7 +525,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 		memberX := centerX + int(math.Floor(perpX*float64(lateralOffset)))
 		memberY := centerY + int(math.Floor(perpY*float64(lateralOffset)))
 
-		if s.world.Positions.Blocks(memberX, memberY, component.WallBlockSpawn) {
+		if s.world.Positions.Blocks(vmath.Point{X: memberX, Y: memberY}, component.WallBlockSpawn) {
 			continue
 		}
 
@@ -618,8 +618,7 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	config := s.world.Resources.Config
 	wallCheck := func(topLeftX, topLeftY int) bool {
 		return s.world.Positions.BlocksArea(
-			topLeftX, topLeftY,
-			parameter.SnakeHeadWidth, parameter.SnakeHeadHeight,
+			vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.SnakeHeadWidth, Height: parameter.SnakeHeadHeight},
 			component.WallBlockKinetic,
 		)
 	}

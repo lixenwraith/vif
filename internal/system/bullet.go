@@ -155,12 +155,12 @@ func (s *BulletSystem) traverseAndCollide(
 			continue
 		}
 
-		if s.world.Positions.IsOutOfBounds(cx, cy) {
+		if !s.world.Positions.InBounds(vmath.Point{X: cx, Y: cy}) {
 			s.statBoundaryHits.Add(1)
 			return true
 		}
 
-		if s.world.Positions.Blocks(cx, cy, component.WallBlockKinetic) {
+		if s.world.Positions.Blocks(vmath.Point{X: cx, Y: cy}, component.WallBlockKinetic) {
 			s.statWallCollisions.Add(1)
 			return true
 		}

@@ -268,14 +268,14 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		return
 	}
 
-	isBlocked := s.world.Positions.IsBlocked(payload.X, payload.Y, component.WallBlockAll)
+	isBlocked := s.world.Positions.IsBlocked(vmath.Point{X: payload.X, Y: payload.Y}, component.WallBlockAll)
 
 	if isBlocked {
 		switch payload.CollisionMode {
 		case event.WallBatchOverwrite:
 			var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 			var toDestroy []core.Entity
-			n := copy(entityBuf[:], s.world.Positions.EntitiesAt(payload.X, payload.Y, position.ScopeShared))
+			n := copy(entityBuf[:], s.world.Positions.EntitiesAt(vmath.Point{X: payload.X, Y: payload.Y}, position.ScopeShared))
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
@@ -373,14 +373,9 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 	// 2. Collision handling based on mode
 	switch payload.CollisionMode {
 	case event.WallBatchSkipBlocked:
-		points := make([]vmath.Point, len(resolved))
-		for i, rc := range resolved {
-			points[i] = vmath.Point{X: rc.x, Y: rc.y}
-		}
-		blocked := s.world.Positions.CheckBlockedBatch(points, component.WallBlockAll)
 		filtered := resolved[:0]
-		for i, rc := range resolved {
-			if !blocked[i] {
+		for _, rc := range resolved {
+			if !s.world.Positions.IsBlocked(vmath.Point{X: rc.x, Y: rc.y}, component.WallBlockAll) {
 				filtered = append(filtered, rc)
 			}
 		}
@@ -391,7 +386,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 		for _, rc := range resolved {
-			n := copy(entityBuf[:], s.world.Positions.EntitiesAt(rc.x, rc.y, position.ScopeShared))
+			n := copy(entityBuf[:], s.world.Positions.EntitiesAt(vmath.Point{X: rc.x, Y: rc.y}, position.ScopeShared))
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
@@ -404,12 +399,10 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		}
 
 	case event.WallBatchFailIfBlocked:
-		points := make([]vmath.Point, len(resolved))
-		for i, rc := range resolved {
-			points[i] = vmath.Point{X: rc.x, Y: rc.y}
-		}
-		if s.world.Positions.IsAnyBlockedInSet(points, component.WallBlockAll) {
-			return result
+		for _, rc := range resolved {
+			if s.world.Positions.IsBlocked(vmath.Point{X: rc.x, Y: rc.y}, component.WallBlockAll) {
+				return result
+			}
 		}
 	}
 
@@ -597,7 +590,7 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for y := max(payload.Y, 0); y < min(payload.Y+height, gridH); y++ {
 		for x := max(payload.X, 0); x < min(payload.X+width, gridW); x++ {
-			n := copy(entities[:], s.world.Positions.EntitiesAt(x, y, position.ScopeShared))
+			n := copy(entities[:], s.world.Positions.EntitiesAt(vmath.Point{X: x, Y: y}, position.ScopeShared))
 			for _, entity := range entities[:n] {
 				if wall, ok := s.world.Components.Wall.GetPtr(entity); ok {
 					s.classifyWallForDespawn(entity, *wall, &flashTargets, &fadeoutTargets, &silentTargets)
@@ -804,7 +797,7 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int, cursors []cursorCell) int6
 	// Check other entities
 	// Both domains: a new wall claims its cell and displaces whoever holds it (D-12)
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := copy(entities[:], s.world.Positions.EntitiesAt(x, y, position.ScopeAll))
+	count := copy(entities[:], s.world.Positions.EntitiesAt(vmath.Point{X: x, Y: y}, position.ScopeAll))
 	for i := range count {
 		entity := entities[i]
 		if s.world.Components.Cursor.HasEntity(entity) {
@@ -881,7 +874,7 @@ func (s *WallSystem) displaceComposite(hit compositeHit, cave bool) int64 {
 	}
 	fits := func(dx, dy int) bool {
 		for _, c := range s.bodyCells {
-			if positions.IsBlocked(c.X+dx, c.Y+dy, mask) {
+			if positions.IsBlocked(vmath.Point{X: c.X + dx, Y: c.Y + dy}, mask) {
 				return false
 			}
 		}
@@ -905,10 +898,10 @@ func (s *WallSystem) displaceComposite(hit compositeHit, cave bool) int64 {
 		for _, c := range s.bodyCells[1:] {
 			left, top, right, bottom = min(left, c.X), min(top, c.Y), max(right, c.X), max(bottom, c.Y)
 		}
-		var x, y int
+		var corner vmath.Point
 		body := vmath.Footprint{Width: right - left + 1, Height: bottom - top + 1, HeaderX: headerPos.X - left, HeaderY: headerPos.Y - top}
-		x, y, found = positions.FindFreeAreaSpiral(headerPos.X, headerPos.Y, body, mask, 0)
-		dx, dy = x-left, y-top
+		corner, found = positions.FindFreeAreaSpiral(headerPos, body, mask, 0)
+		dx, dy = corner.X-left, corner.Y-top
 	}
 	if !found {
 		s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{HeaderEntity: hit.header})
@@ -926,7 +919,7 @@ func (s *WallSystem) pushOut(entity core.Entity, x, y int, mask component.WallBl
 		return sharedCount(entity)
 	}
 	// Not moved: either this wall does not block the entity, or no free cell exists
-	if !s.world.Positions.IsBlocked(x, y, mask) {
+	if !s.world.Positions.IsBlocked(vmath.Point{X: x, Y: y}, mask) {
 		return 0
 	}
 	if combat, ok := s.world.Components.Combat.GetPtr(entity); ok {
@@ -1148,7 +1141,7 @@ func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style compon
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for cy := y; cy < endY; cy++ {
 		for cx := x; cx < endX; cx++ {
-			count := copy(entities[:], s.world.Positions.EntitiesAt(cx, cy, position.ScopeShared))
+			count := copy(entities[:], s.world.Positions.EntitiesAt(vmath.Point{X: cx, Y: cy}, position.ScopeShared))
 			for i := range count {
 				e := entities[i]
 				wall, ok := s.world.Components.Wall.GetPtr(e)
@@ -1486,7 +1479,7 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 	var pushes int64
 	for i := range cursors {
 		cursor := &cursors[i]
-		if cursor.crushed || cursor.x != x || cursor.y != y || !positions.Blocks(x, y, component.WallBlockCursor) {
+		if cursor.crushed || cursor.x != x || cursor.y != y || !positions.Blocks(vmath.Point{X: x, Y: y}, component.WallBlockCursor) {
 			continue
 		}
 		newX, newY, found := s.caveRoom(x, y, component.WallBlockCursor)
@@ -1500,7 +1493,7 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 	}
 
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	n := copy(entities[:], positions.EntitiesAt(x, y, position.ScopeAll))
+	n := copy(entities[:], positions.EntitiesAt(vmath.Point{X: x, Y: y}, position.ScopeAll))
 	s.caveDoomed = s.caveDoomed[:0]
 	for _, e := range entities[:n] {
 		// A composite that flies moves whole wherever the rock reached it; any other
@@ -1516,7 +1509,7 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 			continue
 		}
 		mask := s.getMaskForEntity(e)
-		if mask == component.WallBlockNone || !positions.Blocks(x, y, mask) {
+		if mask == component.WallBlockNone || !positions.Blocks(vmath.Point{X: x, Y: y}, mask) {
 			continue
 		}
 		if newX, newY, found := s.caveRoom(x, y, mask); found {
@@ -1534,10 +1527,10 @@ func (s *WallSystem) displaceCave(x, y int, cursors []cursorCell) int64 {
 // and a row toward its column's nearer opening, else straight left
 func (s *WallSystem) caveRoom(x, y int, mask component.WallBlockMask) (int, int, bool) {
 	positions := s.world.Positions
-	if dy := s.towardChannel(x, y, mask); dy != 0 && !positions.IsBlocked(x-1, y+dy, mask) {
+	if dy := s.towardChannel(x, y, mask); dy != 0 && !positions.IsBlocked(vmath.Point{X: x - 1, Y: y + dy}, mask) {
 		return x - 1, y + dy, true
 	}
-	if !positions.IsBlocked(x-1, y, mask) {
+	if !positions.IsBlocked(vmath.Point{X: x - 1, Y: y}, mask) {
 		return x - 1, y, true
 	}
 	return 0, 0, false
@@ -1549,8 +1542,8 @@ func (s *WallSystem) towardChannel(x, y int, mask component.WallBlockMask) int {
 	positions := s.world.Positions
 	h := s.world.Resources.Config.MapHeight
 	for d := 1; y-d >= 0 || y+d < h; d++ {
-		up := y-d >= 0 && !positions.Blocks(x, y-d, mask)
-		down := y+d < h && !positions.Blocks(x, y+d, mask)
+		up := y-d >= 0 && !positions.Blocks(vmath.Point{X: x, Y: y - d}, mask)
+		down := y+d < h && !positions.Blocks(vmath.Point{X: x, Y: y + d}, mask)
 		switch {
 		case up && down && 2*y < h, down && !up:
 			return 1
@@ -1677,7 +1670,7 @@ func popCount8(b uint8) int {
 // index's plane of that kind
 func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bool {
 	kind := component.BoxKind(style)
-	return kind != 0 && s.world.Positions.Blocks(x, y, kind)
+	return kind != 0 && s.world.Positions.Blocks(vmath.Point{X: x, Y: y}, kind)
 }
 
 // invalidateBoxNeighbors recomputes box chars for adjacent walls
@@ -1692,7 +1685,7 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 			continue
 		}
 
-		count := copy(entities[:], s.world.Positions.EntitiesAt(nx, ny, position.ScopeShared))
+		count := copy(entities[:], s.world.Positions.EntitiesAt(vmath.Point{X: nx, Y: ny}, position.ScopeShared))
 		for i := range count {
 			e := entities[i]
 			wall, ok := s.world.Components.Wall.GetPtr(e)

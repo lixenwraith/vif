@@ -281,7 +281,7 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 		}
 
 		// Block spawn on walls or occupied cells
-		if s.world.Positions.IsBlocked(x, y, component.WallBlockSpawn) {
+		if s.world.Positions.IsBlocked(vmath.Point{X: x, Y: y}, component.WallBlockSpawn) {
 			continue
 		}
 

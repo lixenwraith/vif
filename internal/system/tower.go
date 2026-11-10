@@ -263,7 +263,7 @@ func (s *TowerSystem) validateTowerPosition(centerX, centerY, radiusX, radiusY i
 	width := 2*radiusX + 1
 	height := 2*radiusY + 1
 
-	return s.world.Positions.IsAreaFree(topLeftX, topLeftY, width, height, component.WallBlockSpawn)
+	return s.world.Positions.IsAreaFree(vmath.Area{X: topLeftX, Y: topLeftY, Width: width, Height: height}, component.WallBlockSpawn)
 }
 
 func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
@@ -295,9 +295,9 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 	// Spiral fallback from last attempt
 	last := cells[len(cells)-1]
 	foot := vmath.Footprint{Width: width, Height: height, HeaderX: radiusX, HeaderY: radiusY}
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaInside(last.X, last.Y, foot, component.WallBlockSpawn, parameter.TowerSpawnSpiralMaxRadius)
+	corner, found := s.world.Positions.FindFreeAreaInside(last, foot, component.WallBlockSpawn, parameter.TowerSpawnSpiralMaxRadius)
 	if found {
-		return topLeftX + radiusX, topLeftY + radiusY, true
+		return corner.X + radiusX, corner.Y + radiusY, true
 	}
 
 	return 0, 0, false

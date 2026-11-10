@@ -332,7 +332,7 @@ func (p *Position) capturePlayer() ([]StoreEntry[component.PositionComponent], [
 	placed := captureRows(p.dense, p.entities, core.DomainPlayer)
 	var out []core.Entity
 	for _, en := range placed {
-		if !p.Index.Holds(en.Entity, EntityClass(en.Entity), en.Value.Layer(0)) {
+		if !p.Index.Holds(en.Entity, EntityClass(en.Entity), en.Value) {
 			out = append(out, en.Entity)
 		}
 	}
@@ -415,6 +415,7 @@ func (p *Position) reorder(order []core.Entity, cells []position.CellOrder[core.
 	if err := reorderRows(&p.slots, p.dense, p.entities, order); err != nil {
 		return err
 	}
+	p.readWalls()
 	return p.Index.Reorder(cells, EntityClass)
 }
 

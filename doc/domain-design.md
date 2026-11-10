@@ -560,8 +560,8 @@ which version of Shared state is authoritative.
 
 ## 3. Spatial and entity classification
 
-`Cell` is 256 bytes: count, Shared count, alignment padding, and 31 entities.
-Shared occupants are the prefix `Entities[:SharedCount]`; Player occupants follow.
+A cell holds up to 31 entities: one inline in its 16 bytes, two or more in a
+256-byte crowd. Shared occupants are the prefix; Player occupants follow.
 `ReservedPlayerPerCell` preserves Shared capacity, and insertion rejects rather
 than evicts when full.
 

@@ -501,21 +501,22 @@ func (s *StormSystem) spawnStorm(centerX, centerY int) {
 // findCirclePosition finds the centre nearest the target, the target first, whose
 // elliptical footprint lies inside the map clear of walls a spawn is kept from
 func (s *StormSystem) findCirclePosition(targetX, targetY int) (int, int, bool) {
-	return s.world.Positions.SpiralSearch(targetX, targetY, 0, s.isCirclePositionValid)
+	center, found := s.world.Positions.SpiralSearch(vmath.Point{X: targetX, Y: targetY}, 0, s.isCirclePositionValid)
+	return center.X, center.Y, found
 }
 
 // isCirclePositionValid checks if all ellipse member cells at this center are valid
-func (s *StormSystem) isCirclePositionValid(centerX, centerY int) bool {
+func (s *StormSystem) isCirclePositionValid(center vmath.Point) bool {
 	config := s.world.Resources.Config
 
 	for _, off := range s.ellipseOffsets {
-		cellX := centerX + off.X
-		cellY := centerY + off.Y
+		cellX := center.X + off.X
+		cellY := center.Y + off.Y
 
 		if cellX < 0 || cellX >= config.MapWidth || cellY < 0 || cellY >= config.MapHeight {
 			return false
 		}
-		if s.world.Positions.Blocks(cellX, cellY, component.WallBlockSpawn) {
+		if s.world.Positions.Blocks(vmath.Point{X: cellX, Y: cellY}, component.WallBlockSpawn) {
 			return false
 		}
 	}
@@ -653,7 +654,7 @@ func (s *StormSystem) collectAndDestroyWallsInEllipse(centerX, centerY int) bool
 		cellX := centerX + off.X
 		cellY := centerY + off.Y
 
-		if s.world.Positions.Blocks(cellX, cellY, component.WallBlockKinetic) {
+		if s.world.Positions.Blocks(vmath.Point{X: cellX, Y: cellY}, component.WallBlockKinetic) {
 			s.world.PushEvent(event.EventWallDespawnRequest, &event.WallDespawnRequestPayload{
 				X:      cellX,
 				Y:      cellY,
@@ -1205,9 +1206,9 @@ func (s *StormSystem) findLanding(c *circleCtx) {
 	)
 
 	foot := component.Footprints[component.SpeciesSwarm]
-	left, top, found := s.world.Positions.FindFreeAreaInside(target.X, target.Y, foot, component.WallBlockSpawn, 0)
+	corner, found := s.world.Positions.FindFreeAreaInside(target, foot, component.WallBlockSpawn, 0)
 	c.circle.LandingFound = found
-	c.circle.AttackTargetX, c.circle.AttackTargetY = left+foot.HeaderX, top+foot.HeaderY
+	c.circle.AttackTargetX, c.circle.AttackTargetY = corner.X+foot.HeaderX, corner.Y+foot.HeaderY
 }
 
 // materializeIn materializes a swarm onto the landing its attack found: a cue, so

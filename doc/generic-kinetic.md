@@ -53,6 +53,11 @@ projection of precise state. `Point.Center` converts a cell to precise space and
 use the existing terminal-plane convention: 0 points right, π/2 points down, π
 points left, and 3π/2 points up.
 
+`physics.Kinetic3D` is the same state in a volume, `Pos`, `Vel` and `Accel` each
+a `vmath.Vec3`, with a 3D twin of every integrator and force named here; no
+component embeds it yet, and the storm's circles keep their own `Pos3D` and
+`Vel3D`.
+
 Mass is not part of `Kinetic`. `internal/profile/mass.go` supplies relative masses
 used by collision profiles and wind. Consequently, having a `KineticComponent`
 does not by itself make an entity a physical body with a known mass.

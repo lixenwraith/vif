@@ -385,7 +385,7 @@ func TestAnInstallDerivesPassabilityFromTheWallsItInstalls(t *testing.T) {
 	origin.World().RunSafe(func() {
 		p := passability()
 		for i := range p.Width * p.Height {
-			if x, y := i%p.Width, i/p.Width; hx < 0 && p.IsValid(x, y) && !origin.World().Positions.HasAnyEntityAt(x, y, position.ScopeAll) {
+			if x, y := i%p.Width, i/p.Width; hx < 0 && p.IsValid(x, y) && !origin.World().Positions.HasAnyEntityAt(position.Point{X: x, Y: y}, position.ScopeAll) {
 				hx, hy = x, y
 			}
 		}

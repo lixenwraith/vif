@@ -143,9 +143,25 @@ func BenchmarkLineReference(b *testing.B) {
 	sinkI = int64(len(cells))
 }
 
+// BenchmarkLine3 walks BenchmarkLine's segments through a volume 25 layers deep
+func BenchmarkLine3(b *testing.B) {
+	segs, cells := benchSegments(), make([]Point3, 0, 256)
+	b.ReportAllocs()
+	for b.Loop() {
+		for i, s := range segs {
+			l := NewLine3(Point3{X: s[0], Y: s[1], Z: i % 25}, Point3{X: s[2], Y: s[3], Z: i * 7 % 25})
+			for cells = append(cells[:0], l.Point()); !l.AtEnd(); cells = append(cells, l.Point()) {
+				l.Advance()
+			}
+		}
+	}
+	sinkI = int64(len(cells))
+}
+
 // TestLine3WalksTheLongestSpanOneCellAStep: a walk through a volume starts on a,
 // ends on b after as many steps as its longest span, moves at most one cell on
-// each axis a step, and in one plane walks Line's cells.
+// each axis a step, and in one plane walks Line's cells; stepped in place it
+// walks the cells Next does, and a step on the end stays there.
 func TestLine3WalksTheLongestSpanOneCellAStep(t *testing.T) {
 	rng := rand.New(rand.NewPCG(7, 3))
 	for range 3000 {
@@ -159,17 +175,21 @@ func TestLine3WalksTheLongestSpanOneCellAStep(t *testing.T) {
 		if l.Point() != a || l.Steps() != span {
 			t.Fatalf("%v→%v starts on %v with %d steps, want %d", a, b, l.Point(), l.Steps(), span)
 		}
-		prev, cells := a, []Point3(nil)
+		prev, cells, inPlace := a, []Point3(nil), l
 		for !l.AtEnd() {
 			l = l.Next()
+			inPlace.Advance()
 			c := l.Point()
 			if c == prev || IntAbs(c.X-prev.X) > 1 || IntAbs(c.Y-prev.Y) > 1 || IntAbs(c.Z-prev.Z) > 1 {
 				t.Fatalf("%v→%v stepped from %v to %v", a, b, prev, c)
 			}
+			if inPlace != l {
+				t.Fatalf("%v→%v stepped in place to %v, Next to %v", a, b, inPlace.Point(), c)
+			}
 			prev, cells = c, append(cells, c)
 		}
-		if prev != b || len(cells) != span {
-			t.Fatalf("%v→%v ended on %v after %d steps, want %d", a, b, prev, len(cells), span)
+		if inPlace.Advance(); prev != b || len(cells) != span || inPlace != l || l.Next() != l {
+			t.Fatalf("%v→%v ended on %v after %d steps, want %d, or left its end", a, b, prev, len(cells), span)
 		}
 		if b.Z != a.Z {
 			continue

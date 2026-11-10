@@ -133,6 +133,106 @@ func TestAreaRandomPointSingleCellPreservesRNG(t *testing.T) {
 	}
 }
 
+// TestAVolumeOneLayerDeepIsItsFlatMap: on one layer a cell, an area and a body of
+// the volume are the flat map's: the same centre and cell-of, the same cells
+// held, the same draws from one stream, the same fit and cover.
+func TestAVolumeOneLayerDeepIsItsFlatMap(t *testing.T) {
+	rng, twin := NewFastRand(0x3d), NewFastRand(0x3d)
+	for range 2000 {
+		p, z := Point{X: int(signedRand(rng, 64)), Y: int(signedRand(rng, 64))}, int(signedRand(rng, 8))
+		twin.SetState(rng.State())
+		px, py := p.Center()
+		if c := p.Layer(z).Center(); c != (Vec3{px, py, float64(z) + CellCenter}) || PointAt3(c) != p.Layer(z) || p.Layer(z).Flat() != p {
+			t.Fatalf("cell %v on layer %d centres on %v", p, z, c)
+		}
+		a := Area{X: p.X, Y: p.Y, Width: 1 + rng.Intn(6), Height: 1 + rng.Intn(6)}
+		b := a.Layer(z)
+		twin.SetState(rng.State())
+		if b.Flat() != a || b.Center() != a.Center().Layer(z) ||
+			b.RandomPoint(rng) != a.RandomPoint(twin).Layer(z) || rng.State() != twin.State() {
+			t.Fatalf("area %+v on layer %d is box %+v", a, z, b)
+		}
+		for i := -1; i <= a.Width*a.Height; i++ {
+			if got, want := b.DistributePoint(i, rng), a.DistributePoint(i, twin).Layer(z); got != want {
+				t.Fatalf("box %+v distributes index %d to %v, its area to %v", b, i, got, want)
+			}
+		}
+		q := Point{X: p.X + rng.Intn(9) - 2, Y: p.Y + rng.Intn(9) - 2}
+		if b.ContainsPoint(q.Layer(z)) != a.ContainsPoint(q) || b.ContainsPoint(q.Layer(z+1)) || b.ContainsPoint(q.Layer(z-1)) {
+			t.Fatalf("box %+v and area %+v part on cell %v", b, a, q)
+		}
+		f := Footprint{Width: a.Width, Height: a.Height, HeaderX: rng.Intn(8) - 1, HeaderY: rng.Intn(8) - 1}
+		o := Footprint{Width: 1 + rng.Intn(6), Height: 1 + rng.Intn(6), HeaderX: rng.Intn(6), HeaderY: rng.Intn(6)}
+		if f.Deep(1).At(q.Layer(z)) != f.At(q.X, q.Y).Layer(z) || f.Deep(1).Valid() != f.Valid() ||
+			f.Deep(1).Covers(o.Deep(1)) != f.Covers(o) || f.Deep(1).Flat() != f {
+			t.Fatalf("footprint %+v one layer deep parts from it against %+v", f, o)
+		}
+	}
+}
+
+// TestABoxHoldsEachOfItsCellsOnce: a box's cells are its width, height and depth
+// from its corner, the far faces outside; an index distributes to each once, a
+// draw lands inside, and a box of one cell draws nothing from the stream.
+func TestABoxHoldsEachOfItsCellsOnce(t *testing.T) {
+	b := Box{X: 5, Y: -9, Z: 2, Width: 4, Height: 3, Depth: 5}
+	rng := NewFastRand(1)
+	seen := make(map[Point3]bool)
+	for i := range b.Width * b.Height * b.Depth {
+		p := b.DistributePoint(i, rng)
+		if !b.ContainsPoint(p) || seen[p] {
+			t.Fatalf("index %d distributes to %v, outside the box or held twice", i, p)
+		}
+		seen[p] = true
+	}
+	for _, p := range []Point3{{X: 4, Y: -9, Z: 2}, {X: 9, Y: -9, Z: 2}, {X: 5, Y: -10, Z: 2}, {X: 5, Y: -6, Z: 2}, {X: 5, Y: -9, Z: 1}, {X: 5, Y: -9, Z: 7}} {
+		if b.ContainsPoint(p) {
+			t.Fatalf("box %+v holds %v, a cell past one of its faces", b, p)
+		}
+	}
+	if c := b.Center(); c != (Point3{X: 7, Y: -8, Z: 4}) {
+		t.Fatalf("box %+v centres on %v", b, c)
+	}
+	for range 2000 {
+		if p := b.RandomPoint(rng); !b.ContainsPoint(p) {
+			t.Fatalf("box %+v drew %v", b, p)
+		}
+	}
+	before := rng.State()
+	if p := (Box{X: 1, Y: 2, Z: 3, Width: 1, Height: 1, Depth: 1}).RandomPoint(rng); p != (Point3{X: 1, Y: 2, Z: 3}) || rng.State() != before {
+		t.Fatalf("a box of one cell drew %v and moved the stream", p)
+	}
+}
+
+// TestAFootprintWithDepthIsABodyAroundItsHeader: its box lies around the header
+// on every axis; it is a body with a layer or more and its header among them,
+// and covers one that reaches no further before or behind the header.
+func TestAFootprintWithDepthIsABodyAroundItsHeader(t *testing.T) {
+	f := Footprint3{Width: 3, Height: 2, Depth: 4, HeaderX: 1, HeaderY: 0, HeaderZ: 2}
+	if got, want := f.At(Point3{X: 10, Y: 20, Z: 5}), (Box{X: 9, Y: 20, Z: 3, Width: 3, Height: 2, Depth: 4}); got != want {
+		t.Fatalf("footprint %+v stands on %+v, want %+v", f, got, want)
+	}
+	for _, tt := range []struct {
+		depth, headerZ int
+		valid          bool
+	}{{4, 2, true}, {1, 0, true}, {0, 0, false}, {4, 4, false}, {4, -1, false}} {
+		g := f
+		g.Depth, g.HeaderZ = tt.depth, tt.headerZ
+		if g.Valid() != tt.valid {
+			t.Fatalf("footprint %+v valid %v, want %v", g, g.Valid(), tt.valid)
+		}
+	}
+	for _, tt := range []struct {
+		depth, headerZ int
+		covered        bool
+	}{{4, 2, true}, {2, 1, true}, {3, 2, true}, {5, 2, false}, {4, 3, false}} {
+		o := f
+		o.Depth, o.HeaderZ = tt.depth, tt.headerZ
+		if f.Covers(o) != tt.covered {
+			t.Fatalf("footprint %+v covers %+v: %v, want %v", f, o, f.Covers(o), tt.covered)
+		}
+	}
+}
+
 // --- rng ---
 
 func TestFastRandDeterministic(t *testing.T) {

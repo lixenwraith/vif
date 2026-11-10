@@ -118,7 +118,7 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		for i := range drawn {
 			d := &drawn[i]
 			x, y := int(d.x), int(d.y)
-			if positions.BlocksCarried(x, y, rockCarry, component.WallBlockSpawn) {
+			if positions.BlocksCarried(component.PositionComponent{X: x, Y: y}, rockCarry, component.WallBlockSpawn) {
 				continue
 			}
 			if screenX, screenY, visible := ctx.MapToScreen(x, y); visible {

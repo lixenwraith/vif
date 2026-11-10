@@ -62,32 +62,6 @@ func (b Bits) Put(x, y int, on bool) {
 	}
 }
 
-// Any reports whether a bit is set in [x0, x1) × [y0, y1), which the caller has
-// bounded by the grid and found non-empty
-func (b Bits) Any(x0, x1, y0, y1 int) bool {
-	w0, w1 := x0>>6, (x1-1)>>6
-	first := ^uint64(0) << (uint(x0) & 63)
-	last := ^uint64(0) >> (63 - uint(x1-1)&63)
-	for y := y0; y < y1; y++ {
-		row := b.Words[y*b.Stride:]
-		if w0 == w1 {
-			if row[w0]&first&last != 0 {
-				return true
-			}
-			continue
-		}
-		if row[w0]&first != 0 || row[w1]&last != 0 {
-			return true
-		}
-		for w := w0 + 1; w < w1; w++ {
-			if row[w] != 0 {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // Each calls fn with every set cell of row y, in order
 func (b Bits) Each(y int, fn func(x int)) {
 	for i, word := range b.Row(y) {
