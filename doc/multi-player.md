@@ -791,6 +791,15 @@ link (§5.2), and the authority's own two, which it crosses once
   which seats and first joins retry in a moment; the retry takes the freed place.
   A successor orders who is away by their Wraiths' waits.
 
+A reset clears the barrier, so the new game announces again each departure it
+interrupted: one still scheduled, one applied at the reset's own tick to a cursor
+already cleared, and a link whose loss was noticed while the cursors were cleared.
+Every instance keeps those its barrier would have applied, nothing a guest forged
+among them (`NetworkSystem.keepLost`), and the place of a participant the reset is
+rebuilding stays taken (`PlayerResource.Restores`). At the new game's first flush
+the authority crosses each again as it was, a dismissal with its flags, unless its
+Wraith already waits (`announceLost`).
+
 A notice dismisses only a seat, which its holder dropped; a player whose link
 closed is only ever away. A Wraith counts as a guest, so a dedicated host stays
 occupied and its clock runs while one waits, which is what lets its wait run out.

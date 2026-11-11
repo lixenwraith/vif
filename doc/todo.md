@@ -647,22 +647,6 @@ mount) never crosses. What would close it: a row for the direct request on its
 owner, and on both requests an emitter that is zero or the owner; a refusal test
 for each beside the `network.artifacts_refused` ones.
 
-### Cross a departure a reset dropped
-
-- Priority: P2
-- Affected files: `internal/system/network.go` (`Init`, `announceDeparture`),
-  `internal/app/transport_test.go`
-
-A link lost within a lead of a reset loses its departure: the reset clears the
-barrier (`NetworkSystem.Init` drops `scheduled` and `departed`) before the
-departure crossed for it applies, and the next game rebuilds that participant's
-cursor from the roster as a live one nobody drives, which never turns Wraith, never
-times out and holds the slot its key comes back for: a player who quits as its
-defeat ends the game can leave one. `TestTwoLiveParticipantsConvergeOverTCP` shows
-it once its scripted defeat's reset is moved into the disconnect's lead. What would
-close it: after a reset the authority crosses, once, the departure of every
-rostered participant it neither links nor carries.
-
 ### Publish a player's session at the router
 
 - Priority: P3

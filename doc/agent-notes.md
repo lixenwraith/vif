@@ -141,6 +141,21 @@ comment now states, and link that instead.
 - `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
   the game resets near tick 35; a session test that waits a fixed count of ticks
   past that reads the reset. Wait for the condition, bounded.
+- A reset's tick closes with no flush, and `Scheduler.executeReset` takes the world
+  lock again after `MetaSystem.handleGameReset` cleared the world: a goroutine in
+  between (a correction's off-tick drain, the accept loop) meets no cursor, the
+  roster waiting in `PlayerResource`'s restore (`Restores`), and what it pushes goes
+  with the queue. `NetworkSystem.Init` runs there, before the boot spawn rebuilds.
+- `NetworkSystem.scheduled` holds artifacts not yet admitted: `admissibleFromSource`
+  runs as each applies, so a roster artifact a guest forged waits there for its tick
+  to refuse it. Code acting on what is scheduled checks admission itself
+  (`keepLost`); `applied` holds admitted ones alone.
+- In `meshSession`, `mode.ExecuteCommand(apps[0].Context(), "n")` then
+  `apps[0].Settle()` crosses the host's new game in the epoch at hand, and closing a
+  participant's `link.MeshPort` under its world lock drops it. The host's lead is 3
+  near tick 10 and 1 later, so a test of what lands inside a lead runs early. A mesh
+  opens no door (`Membership.GuestCount` reads 0): what the door's roster keeps is
+  tested over sockets (`mustHosting`, `mustSocketJoiner`, `arrival`).
 - A run's tick is `World.TickInterval`, which its host may choose (`-tick`);
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
   reads the run's, as tests may keep the constant.
