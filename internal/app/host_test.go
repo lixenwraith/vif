@@ -2899,6 +2899,337 @@ func TestAPlayerWhoLeftAsANewGameBeganComesBack(t *testing.T) {
 	}
 }
 
+// departing is each participant a's barrier holds crossed out and not yet turned.
+func departing(a *App) (out []uint32) {
+	a.World().RunSafe(func() {
+		for _, sys := range a.World().Systems() {
+			if d, ok := sys.(interface{ Departing() []uint32 }); ok {
+				out = d.Departing()
+			}
+		}
+	})
+	return out
+}
+
+// heldAway is a session held by its host whose guest's link dropped under the hold,
+// its departure crossed and unapplied: the host, no longer ticking, a witness guest
+// when asked for, the lost guest's participant and slot, and its process's store.
+type heldAway struct {
+	host, witness *App
+	id            link.PeerID
+	slot          uint8
+	store         *keptPlaces
+}
+
+// heldAwayGuest holds by a pause or, start, by a new game waiting for its press.
+func heldAwayGuest(t *testing.T, start, witnessed bool) heldAway {
+	t.Helper()
+	h := heldAway{host: mustHosting(t, Membership{Participants: 3}), store: &keptPlaces{}}
+	stop := tickInBackground(h.host)
+	t.Cleanup(stop)
+	if witnessed {
+		h.witness, _ = mustSocketJoiner(t, h.host.HostAddr(), fixtureSeed, 120, 40)
+		arrival(t, h.host, h.witness)
+	}
+	guest, port := mustSocketJoiner(t, h.host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.PlaceStore = h.store })
+	h.id, h.slot = arrival(t, h.host, guest)
+	if witnessed {
+		waitUntil(t, func() bool { h.witness.Tick(1); return cursorIn(h.witness, h.slot) }, "the witness seeing the guest arrive")
+	}
+	stop()
+	if start {
+		h.host.Context().WaitStart.Store(true)
+		mode.ExecuteCommand(h.host.Context(), "n")
+	} else {
+		mode.ExecuteCommand(h.host.Context(), "pause")
+	}
+	h.host.Settle()
+	// Crossed before the hold lands, the guest's own moves wait on the barrier with it
+	for range parameter.NetworkBarrierMaxDelayTicks + 4 {
+		inject(t, guest, intentMotion(input.MotionRight, 1))
+		h.step(1, guest)
+	}
+	if !h.host.Context().TimeCtl.Held() {
+		t.Fatal("the host's session did not hold")
+	}
+	h.lose(t, guest, port)
+	return h
+}
+
+// step ticks the host, its witness and each of others n times, a link's moment apart.
+func (h heldAway) step(n int, others ...*App) {
+	for range n {
+		for _, a := range append([]*App{h.host, h.witness}, others...) {
+			if a != nil {
+				a.Tick(1)
+			}
+		}
+		time.Sleep(joinTestTickInterval / 5)
+	}
+}
+
+// lose closes a run in the guest's place and waits for the host to cross it out.
+func (h heldAway) lose(t *testing.T, run *App, port *link.SocketPort) {
+	t.Helper()
+	_ = port.Close()
+	run.Close()
+	waitUntil(t, func() bool { h.step(1); return slices.Contains(departing(h.host), uint32(h.id)) },
+		"the held host crossing the lost guest out")
+}
+
+// back joins a run under the lost guest's key while the host stands held, and
+// fails unless it is seated in that guest's place, the cursor there driven by nobody.
+func (h heldAway) back(t *testing.T, opts ...func(*Config)) (*App, *link.SocketPort) {
+	t.Helper()
+	stop := tickInBackground(h.host)
+	run, port := mustSocketJoiner(t, h.host.HostAddr(), fixtureSeed, 120, 40,
+		append(opts, func(c *Config) { c.Membership.PlaceStore = h.store })...)
+	stop()
+	if got := run.membership.LocalParticipant(); got != uint32(h.id) || run.membership.LocalSlot() != parameter.NoPlayerSlot ||
+		!cursorIn(h.host, h.slot) || wraithIn(h.host, h.slot) || !run.Context().TimeCtl.Held() {
+		t.Fatalf("under the hold the key was seated as %d driving slot %d, held %v, the host's cursor a Wraith %v; "+
+			"want participant %d seated held, driving none, its cursor live",
+			got, run.membership.LocalSlot(), run.Context().TimeCtl.Held(), wraithIn(h.host, h.slot), h.id)
+	}
+	assertSharedParity(t, h.host, run, 0)
+	return run, port
+}
+
+// resume ends the host's pause and ticks everyone until what it held has applied.
+func (h heldAway) resume(others ...*App) {
+	mode.ExecuteCommand(h.host.Context(), "pause off")
+	h.host.Settle()
+	h.step(2*parameter.NetworkBarrierMaxDelayTicks, others...)
+}
+
+// TestAHeldSessionTakesBackAPlayerWhoseLinkDropped: a held session reads a departure
+// it crossed and cannot apply as away, so the key takes its place back held, its
+// cursor live and driven by nobody. However the hold ends, the departure and the
+// arrival behind it apply in order on every instance, and the player drives it.
+func TestAHeldSessionTakesBackAPlayerWhoseLinkDropped(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, shape := range []struct {
+		name           string
+		start, newGame bool // held waiting for its start, not by a pause; ended by a new game
+	}{{name: "paused, resumed"}, {name: "paused, a new game", newGame: true},
+		{name: "waiting for its start, pressed", start: true}, {name: "waiting for its start, a new game", start: true, newGame: true}} {
+		t.Run(shape.name, func(t *testing.T) {
+			h := heldAwayGuest(t, shape.start, !shape.start && !shape.newGame)
+			back, _ := h.back(t)
+			switch {
+			case shape.newGame:
+				h.host.Context().WaitStart.Store(false)
+				mode.ExecuteCommand(h.host.Context(), "n")
+				h.host.Settle()
+				h.step(2*parameter.NetworkBarrierMaxDelayTicks, back)
+			case shape.start:
+				if !startPress(h.host) {
+					t.Fatal("the host's press did not start its game")
+				}
+				h.step(2*parameter.NetworkBarrierMaxDelayTicks, back)
+			default:
+				h.resume(back)
+			}
+			for _, a := range []*App{h.host, back, h.witness} {
+				if a != nil && (wraithIn(a, h.slot) || !cursorIn(a, h.slot) || a.Context().TimeCtl.Held()) {
+					t.Fatalf("participant %d: the place's cursor waits as a Wraith %v, held %v; want it live and the session running",
+						a.membership.LocalParticipant(), wraithIn(a, h.slot), a.Context().TimeCtl.Held())
+				}
+			}
+			if got := back.membership.LocalSlot(); got != h.slot || !portOf(t, h.host).Connected(uint32(h.id)) {
+				t.Fatalf("the returned run drives slot %d, linked %v; want its own slot, %d, on the link it came back by",
+					got, portOf(t, h.host).Connected(uint32(h.id)), h.slot)
+			}
+			for step, a := range []*App{back, h.witness} {
+				if a != nil {
+					settleCorrections(t, h.host, a)
+					alignTicks(t, h.host, a)
+					assertSharedParity(t, h.host, a, step+1)
+				}
+			}
+			var refusal *network.Refusal
+			if _, _, err := dialOnce(h.host.HostAddr(), h.store.key(t)); !errors.As(err, &refusal) || refusal.Code != network.RefusalReturning {
+				t.Fatalf("a further dial under the key of a place its run plays in: %v; want it refused as linked", err)
+			}
+		})
+	}
+}
+
+// TestAPlayerLostAgainUnderOneHoldIsCrossedOutAgain: a player taken back held whose
+// link drops again under the same hold is crossed out again behind its arrival: it
+// waits as a Wraith once the hold ends, its key good for the place, unless it came
+// back once more, and then it plays.
+func TestAPlayerLostAgainUnderOneHoldIsCrossedOutAgain(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, again := range []bool{false, true} {
+		h := heldAwayGuest(t, false, false)
+		back, port := h.back(t)
+		h.lose(t, back, port)
+		if again {
+			back, _ = h.back(t)
+		}
+		if !again {
+			h.resume()
+			if !wraithIn(h.host, h.slot) {
+				t.Fatal("a player lost twice under one hold does not wait as a Wraith once it ends")
+			}
+			stop := tickInBackground(h.host)
+			pending, offered, err := dialOnce(h.host.HostAddr(), h.store.key(t))
+			stop()
+			if err != nil || offered.Assigned != h.id || assignedSlot(offered) != h.slot {
+				t.Fatalf("its key was given %d on slot %d (%v); want its own place, %d on slot %d",
+					offered.Assigned, assignedSlot(offered), err, h.id, h.slot)
+			}
+			_ = pending.Close()
+			continue
+		}
+		h.resume(back)
+		if got := back.membership.LocalSlot(); got != h.slot || wraithIn(h.host, h.slot) || wraithIn(back, h.slot) {
+			t.Fatalf("back a second time the run drives slot %d, its cursor a Wraith on the host %v and its own world %v; want slot %d, live",
+				got, wraithIn(h.host, h.slot), wraithIn(back, h.slot), h.slot)
+		}
+		settleCorrections(t, h.host, back)
+		alignTicks(t, h.host, back)
+		assertSharedParity(t, h.host, back, 1)
+	}
+}
+
+// TestAHoldEndingInsideAReturnLeavesItsDialLinked: a hold that ends between a
+// returning dial's seat and its world applies the departure with no arrival behind
+// it yet. The place waits as a Wraith, the link is the dial's and stays, and its
+// arrival takes the Wraith back.
+func TestAHoldEndingInsideAReturnLeavesItsDialLinked(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	h := heldAwayGuest(t, false, false)
+	stop := tickInBackground(h.host)
+	pending, offered := dialSession(t, h.host.HostAddr(), h.store.key(t))
+	cfg := pending.TransportConfig()
+	if err := pending.Complete(nil, network.JoinerReport{Identity: offered.Identity}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pending.WaitStart(); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	h.resume()
+	if !wraithIn(h.host, h.slot) || !portOf(t, h.host).Connected(uint32(h.id)) {
+		t.Fatalf("resumed inside the return, the place waits as a Wraith %v and its dial is linked %v; want both",
+			wraithIn(h.host, h.slot), portOf(t, h.host).Connected(uint32(h.id)))
+	}
+	stop = tickInBackground(h.host)
+	defer stop()
+	if _, _, err := pending.ReceiveSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	if err := pending.Ready(); err != nil {
+		t.Fatal(err)
+	}
+	port := link.NewSocketPort(cfg)
+	if err := port.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer port.Close()
+	waitUntil(t, func() bool { return cursorIn(h.host, h.slot) && !wraithIn(h.host, h.slot) }, "the returning dial taking its Wraith back")
+}
+
+// TestARunWhoseHostGoesBeforeItsArrivalDrivesItsOwnCursor: a run that took its
+// place back under a hold and loses its host before the arrival could apply plays
+// on alone in the cursor its place holds, which nothing else will give it.
+func TestARunWhoseHostGoesBeforeItsArrivalDrivesItsOwnCursor(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	h := heldAwayGuest(t, false, false)
+	back, _ := h.back(t)
+	back.World().RunSafe(func() { back.cfg.Mode, back.cfg.Membership.JoinAddress = ModePlay, h.host.HostAddr() })
+	h.host.Close()
+	stop := tickInBackground(back)
+	waitUntil(t, back.membership.Leaving, "the returned run noticing its host is gone")
+	stop()
+	back.membership.LeaveSession()
+	var before, after component.PositionComponent
+	back.World().RunSafe(func() { before, _ = back.World().Positions.GetPosition(back.World().Resources.Player.Slot(h.slot)) })
+	back.Tick(2)
+	inject(t, back, intentMotion(input.MotionRight, 3))
+	back.Tick(4)
+	back.World().RunSafe(func() { after, _ = back.World().Positions.GetPosition(back.World().Resources.Player.Slot(h.slot)) })
+	if got := back.membership.LocalSlot(); got != h.slot || back.World().Session().Superseding || after.X <= before.X {
+		t.Fatalf("alone, the run drives slot %d (superseding %v) and its move took the cursor from x=%d to x=%d; want slot %d, moved right",
+			got, back.World().Session().Superseding, before.X, after.X, h.slot)
+	}
+}
+
+// TestAPlayerComesBackThroughItsRelayWhileTheSessionIsHeld: a relay's door reads
+// what the authority's does, so a player who joined through it and dropped under a
+// hold is taken back through it held, and drives its cursor once the hold ends. A
+// hold that ends inside the return leaves the dial its relay's link all the same.
+func TestAPlayerComesBackThroughItsRelayWhileTheSessionIsHeld(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, inside := range []bool{false, true} {
+		addr, relayAddr := freeAddress(t), freeAddress(t)
+		host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
+		waitForCursors(t, host, 2)
+		relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "patrol", nil)
+		waitForCursors(t, host, 3)
+		waitListening(t, relayAddr)
+		store := &keptPlaces{}
+		person, leave := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr, PlaceStore: store}}, "roam", nil)
+		for _, a := range []*App{host, relay, person} {
+			waitForCursors(t, a, 4)
+		}
+		id, slot := person.membership.LocalParticipant(), person.membership.LocalSlot()
+		hold := func(held bool) {
+			host.world.RunSafe(func() { host.ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: held}) })
+			host.Settle()
+		}
+		hold(true)
+		waitUntil(t, func() bool {
+			return host.Context().TimeCtl.Held() && relay.Context().TimeCtl.Held() && person.Context().TimeCtl.Held()
+		}, "the session standing held")
+		leave()
+		person.Close()
+		waitUntil(t, func() bool { return slices.Contains(departing(host), id) }, "the held host crossing the lost player out")
+		if !inside {
+			back, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr, PlaceStore: store}}, "roam", nil)
+			waitUntil(t, func() bool { return back.Context().TimeCtl.Held() }, "the returning run landing held")
+			if got := back.membership.LocalParticipant(); got != id || back.membership.LocalSlot() != parameter.NoPlayerSlot || wraithIn(host, slot) {
+				t.Fatalf("under the hold the relay seated the key as %d driving slot %d, the host's cursor a Wraith %v; want %d, driving none",
+					got, back.membership.LocalSlot(), wraithIn(host, slot), id)
+			}
+			hold(false)
+			waitUntil(t, func() bool {
+				return back.membership.LocalSlot() == slot && !wraithIn(host, slot) && !wraithIn(relay, slot)
+			},
+				"the returned run driving its cursor")
+			continue
+		}
+		pending, offered := dialSession(t, relayAddr, store.key(t))
+		if uint32(offered.Assigned) != id || assignedSlot(offered) != slot {
+			t.Fatalf("the relay seated the key as %d on slot %d; want its own place, %d on slot %d", offered.Assigned, assignedSlot(offered), id, slot)
+		}
+		cfg := pending.TransportConfig()
+		if err := pending.Complete(nil, network.JoinerReport{Identity: offered.Identity}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pending.WaitStart(); err != nil {
+			t.Fatal(err)
+		}
+		hold(false)
+		waitUntil(t, func() bool { return wraithIn(host, slot) && wraithIn(relay, slot) }, "the departure applying on the host and the relay")
+		if _, _, err := pending.ReceiveSnapshot(); err != nil {
+			t.Fatalf("the relay closed the link of the dial taking the place back: %v", err)
+		}
+		if err := pending.Ready(); err != nil {
+			t.Fatal(err)
+		}
+		port := link.NewSocketPort(cfg)
+		if err := port.Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer port.Close()
+		waitUntil(t, func() bool { return cursorIn(host, slot) && !wraithIn(host, slot) && !wraithIn(relay, slot) },
+			"the returning dial taking its Wraith back")
+	}
+}
+
 // TestAHostTakesJoinsAtEveryDoor: a host naming a tcp door and a ws door serves one
 // session at both, and a joiner at the second is seated as one at the first is.
 func TestAHostTakesJoinsAtEveryDoor(t *testing.T) {

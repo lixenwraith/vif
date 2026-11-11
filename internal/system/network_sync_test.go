@@ -285,7 +285,7 @@ func holderWorld(t *testing.T) (*engine.World, *NetworkSystem, map[uint32]bool) 
 	w.Resources.Network = engine.NewNetworkResource(host)
 	w.RunSafe(w.LatchSession)
 	finals := map[uint32]bool{}
-	w.Resources.Network.OnDeparture = func(id uint32, final bool) { finals[id] = final }
+	w.Resources.Network.OnDeparture = func(id uint32, final bool) bool { finals[id] = final; return false }
 	return w, ready(NewNetworkSystem(w)).(*NetworkSystem), finals
 }
 

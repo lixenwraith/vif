@@ -636,8 +636,8 @@ What would close it:
   [§5.1](multi-player.md#51-succession), [§5.4](multi-player.md#54-wraiths)
 
 A departure is announced by whichever neighbour sees a link drop, and the authority
-has no view of its own of a participant it is not linked to. Three cases follow,
-each shown by a probe:
+has no view of its own of a participant it is not linked to. Four cases follow, the
+first three each shown by a probe:
 - A relay leaves, and the person behind it finds no other path and forks or quits
   (§5.1): nobody is left to see its link go. Its cursor stays live on the host,
   never a Wraith and never timed out (600 ticks and a reset later on a `meshSession`
@@ -651,6 +651,10 @@ each shown by a probe:
   `noticeDeparture` finds no cursor, frees the place and crosses nothing, and the
   arrival then spawns a cursor nobody drives, whose identity and slot read free at
   the door.
+- A player taken back through a relay under a hold (§5.4) drops again before the
+  hold ends. The relay's mark from the first loss still stands, the arrival that
+  clears it not having reached it, so it floods no second notice, and the arrival
+  gives the place back to a cursor nobody drives.
 
 What would close it: the authority keeps the tick it last admitted each
 participant's raw epoch at (`scheduleCrossings`), an arrival counting as one, and
@@ -937,6 +941,45 @@ crossing a host playing alone makes lands two ticks later than it needs to. Push
 the authority's lead when hosting starts, or let `driveOwnLead` run for an
 authority with no peers.
 
+### Hold a guest its correction carries past the hold
+
+- Priority: P2
+- Affected files: `internal/system/network.go` (`AdoptSnapshot`),
+  `internal/converge/correction.go` (`publishRound`),
+  `internal/app/internal/corrector/snapshot_stage.go`
+- Guide: [Multi-player §3.6](multi-player.md#36-holding-a-session)
+
+A hold reaches a guest as a crossing, and the host sends the held tick's round once
+(§3.6). A guest more than `NetworkHoldTicks` behind when that round arrives takes
+it at once, as any guest behind does: it lands on the held tick, the hold it had
+scheduled at or before that tick is pruned as part of the world it installed, and
+nothing holds it. It plays on alone against a host that sends nothing until the
+resume. A socket probe held a host as its guest seated a bot, 10 ticks behind: the
+guest ran on unheld in every run. What would close it: a round sent for a hold says
+so, or `AdoptSnapshot` applies a hold it prunes, and the guest stands held at the
+world it installed, as a joiner does (`SessionOffer.Held`). A test holds a session
+whose guest stands `NetworkHoldTicks + 1` behind.
+
+### Settle a replay's placements as its run's install did
+
+- Priority: P3
+- Affected files: `internal/system/network.go` (`AdoptSnapshot`),
+  `internal/app/replay.go` (`replayTarget.Install`), `internal/engine/resource.go`
+  (`PlayerResource.Reconcile`)
+- Guide: [Multi-player §3.3](multi-player.md#33-projection),
+  [Logging: Written worlds and notes](logging-and-diagnostics.md#written-worlds-and-notes)
+
+A run settles its D-18 queue when a world it installs already contains placements
+it had in flight (`AdoptSnapshot` reconciles one prediction for each own move it
+prunes). No record says so, and a replay has no barrier to prune, so its queue
+keeps them: from that tick its view record's `predicted` depth differs, and with it
+the cell the camera and a shot from the local cursor read. It takes a guest behind
+its host with moves in flight, which a correction then carries forward: a newcomer
+joined under a hold whose host ran 80 ticks before its first tick diverged in 6 of
+6 runs. What would close it: the install's record carries how many placements it
+settled, or the settle is journaled as a note, and `replayTarget.Install`
+reconciles as many.
+
 ### Let the selective-apply test see an adopted owner-authored cell
 
 - Priority: P2
@@ -1073,25 +1116,45 @@ against `Makefile` and `script/test.sh`, the platform matrix and the source map.
 Implication: a newcomer reads these two first, so a stale claim there costs more
 than one in a reference document.
 
-### Take a player back while the session is held
+### Give up a place to a newcomer while the session is held
 
 - Priority: P3
-- Affected files: `internal/app/internal/membership/session.go` (`keyedLocked`,
-  `yieldLocked`), `internal/system/network.go` (`announceDeparture`)
+- Affected files: `internal/app/internal/membership/session.go` (`yieldLocked`,
+  `assignFor`), `internal/system/network.go` (`expireWraiths`, `addParticipant`)
 - Guide: [Multi-player §3.6](multi-player.md#36-holding-a-session),
   [§5.4](multi-player.md#54-wraiths)
 
-A roster change applies at a tick, and a held session takes none. A player whose
-link drops under the host's `:pause`, or while a new game waits for the host's
-press, stays present at the door until the host resumes, so its key is refused
-`RefusalReturning` for as long as the hold stands (a socket probe: refused twice a
-second apart, admitted once the host resumed and the Wraith appeared), and a full
-session cannot give a Wraith's place to a newcomer meanwhile. A newcomer with a free
-place is admitted held (§3.6). What would close it: the door reads a departure
-announced and not yet applied (`NetworkSystem.departed`) as away and admits the dial
-held, its arrival crossing behind the departure for the resume to apply in order;
-the returning run, which the held capture gives its cursor live, applies both as the
-others do.
+A held session takes a player back (§5.4) and admits a newcomer to a free place
+(§3.6), but a full one gives no place up. The yield asks the authority to dismiss
+the Wraith away longest, which it crosses from a tick (`expireWraiths`), and a held
+session takes none: the dial is refused `RefusalYielding` until the hold ends, and
+a player crossed out under the hold is not away to a newcomer at all. It was left
+out of the held return because it is another rule, not the door's reading: a
+place's identity and slot return to the pool as its dismissal applies
+(`leaveRoster`), so the door would hand out a slot the newcomer's world still holds
+as another's cursor, its arrival crossing behind the dismissal, and the dismissed
+player's own key, its bots' places and a new game under the hold each need an
+answer. Decide first whether a paused session should turn anyone out for a newcomer.
+
+### Take a returned run into its successor's session
+
+- Priority: P3
+- Affected files: `internal/converge/authority.go` (`adopt`, `driveWalk`,
+  `takeBack`), `internal/app/internal/membership/converge.go` (`takeOwnPlaceLocked`)
+- Guide: [Multi-player §5.1](multi-player.md#51-succession),
+  [§5.4](multi-player.md#54-wraiths)
+
+A run that takes its place back under a hold waits for its own arrival (§5.4),
+which only the authority it came back through scheduled: a held host flushes
+nothing, so no successor's group holds it. If that authority goes first, the run
+gives the session up and plays on alone in its own cursor (`arrivalLost`), and its
+place waits as a Wraith in the successor's session for its key. Following the
+successor instead left it in the session for good, its cursor live and driven by
+nobody (a socket probe: host, successor and a guest that dropped and came back
+under the hold, then the host closed). What would keep it in: the successor gives a
+survivor that reports itself waiting a departure and an arrival of its own term,
+which is the walk "Hear a participant again once its link reopens" gives a
+reopened link (`CrossReturns`); do it with that item.
 
 ### Hold a Wraith's wait while no door is open
 

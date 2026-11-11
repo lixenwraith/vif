@@ -219,9 +219,10 @@ func (m *Membership) seatLink() (net.Conn, error) {
 }
 
 // playSeat runs one seat until its holder halts it, its graph quits, or the session
-// ends for it, standing still while its holder's pause does. A join refused while
-// the session starts or hands off is retried, as the refusal asks; any other failure
-// ends it.
+// ends for it, standing still while its holder's pause does. A join refused for a
+// moment is retried, as the refusal asks, within the rejoin window, which starts
+// over while its holder stands held: the moment is then the hold's. Any other
+// failure ends it.
 func (m *Membership) playSeat(s *seat, play SeatPlay) {
 	defer close(s.done)
 	defer m.forgetSeat(s)
@@ -247,6 +248,9 @@ func (m *Membership) playSeat(s *seat, play SeatPlay) {
 				"peer", s.id.Load(), "slot", s.slot.Load())
 			return int(entry.Slot)
 		})
+		if m.ctx.TimeCtl.Held() {
+			deadline = time.Now().Add(parameter.SessionRejoinWindow) // [wall] a hold's moment lasts as it does
+		}
 		if driver == nil && err != nil && network.RetryOf(err) == network.RetrySoon && time.Now().Before(deadline) &&
 			WaitScriptTick(s.stop, parameter.SessionRejoinInterval) {
 			continue

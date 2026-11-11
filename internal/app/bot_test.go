@@ -927,35 +927,65 @@ func TestDefaultTypesWhatItReaches(t *testing.T) {
 
 // TestAPlayerComingBackTakesBackItsWraithAndItsBots: a guest whose run left joins
 // again from the same process, proving the keys it left under, and it and its bot
-// are given their own places back, the cursors their Wraiths kept.
+// are given their own places back, the cursors their Wraiths kept. Under a hold the
+// guest is taken back held, and its bot once the session resumes.
 func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
-	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
-	tickUntilCursor(t, host)
-	// The host's cursor stands idle throughout, and its defeat would start a new game
-	// that recreates every cursor compared here; under load the test outlasts it.
-	host.World().RunSafe(func() {
-		w := host.World()
-		w.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: w.Resources.Player.Entity, Value: parameter.HeatMax})
-		w.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: w.Resources.Player.Entity, Value: parameter.GodEnergyAmount})
-	})
-	host.Tick(1)
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatal(err)
-	}
-	stopTicks := tickInBackground(host)
-	t.Cleanup(func() { stopTicks(); host.Close() })
-	cfg := runConfig{Config: Config{Membership: Membership{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}},
-		wiring: wiring{membership: membership.Wiring{Places: membership.NewPlaceKeeper(nil)}}}
-	_, leave := driveRun(t, "bot", cfg, "patrol", nil)
-	waitForCursors(t, host, 3)
-	left := places(host, everyone)
-	leave()
-	waitForWraiths(t, host, 2)
+	for _, held := range []bool{false, true} {
+		host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+		tickUntilCursor(t, host)
+		// The host's cursor stands idle throughout, and its defeat would start a new game
+		// that recreates every cursor compared here; under load the test outlasts it.
+		host.World().RunSafe(func() {
+			w := host.World()
+			w.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: w.Resources.Player.Entity, Value: parameter.HeatMax})
+			w.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: w.Resources.Player.Entity, Value: parameter.GodEnergyAmount})
+		})
+		host.Tick(1)
+		if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+			t.Fatal(err)
+		}
+		stopTicks := tickInBackground(host)
+		t.Cleanup(func() { stopTicks(); host.Close() })
+		cfg := runConfig{Config: Config{Membership: Membership{JoinAddress: host.HostAddr(), Bots: []string{"patrol"}}},
+			wiring: wiring{membership: membership.Wiring{Places: membership.NewPlaceKeeper(nil)}}}
+		guest, leave := driveRun(t, "bot", cfg, "patrol", nil)
+		seated := func(run *App) bool {
+			bots := run.ctx.SessionCtl.BotSummary()
+			return strings.Contains(bots, "slot") && !strings.Contains(bots, "joining")
+		}
+		waitForCursors(t, host, 3)
+		left := places(host, everyone)
+		hold := func(on bool) { // settled, since a held run takes no tick to dispatch its end in
+			host.world.RunSafe(func() { host.ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: on}) })
+			host.Settle()
+		}
+		if held {
+			id := guest.membership.LocalParticipant()
+			// The hold lands on a guest in step: one still seating its bot is carried past it.
+			waitForCursors(t, guest, 3)
+			waitUntil(t, func() bool { return seated(guest) }, "the guest's bot seated")
+			hold(true)
+			waitUntil(t, func() bool { return host.Context().TimeCtl.Held() && guest.Context().TimeCtl.Held() }, "the session standing held")
+			leave()
+			waitUntil(t, func() bool { return slices.Contains(departing(host), id) }, "the held host crossing the lost guest out")
+		} else {
+			leave()
+			waitForWraiths(t, host, 2)
+		}
 
-	driveRun(t, "bot", cfg, "patrol", nil)
-	waitForWraiths(t, host, 0)
-	if got := places(host, everyone); !maps.Equal(got, left) {
-		t.Fatalf("after coming back the session holds %v (entity, participant by slot), want the places it left, %v", got, left)
+		back, _ := driveRun(t, "bot", cfg, "patrol", nil)
+		if held {
+			waitUntil(t, func() bool { return back.Context().TimeCtl.Held() && len(departing(host)) == 0 }, "the guest taken back held")
+			if seated(back) {
+				t.Fatalf("under the hold the guest's bot is seated already: %s", back.ctx.SessionCtl.BotSummary())
+			}
+			hold(false)
+		}
+		waitUntil(t, func() bool { return seated(back) }, "the guest's bot seated again")
+		waitForWraiths(t, host, 0)
+		if got := places(host, everyone); !maps.Equal(got, left) {
+			t.Fatalf("held %v: after coming back the session holds %v (entity, participant by slot), want the places it left, %v", held, got, left)
+		}
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
+	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -288,11 +289,10 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 }
 
 // TestASuccessorTakesPlayersAsTheFirstHostDid: a guest's own port turns a join away
-// while another participant hosts, and takes one once the guest took the session
-// over, into the term it holds and under the -players its first host set. :host
-// then opens the door it names, keeping the policy the session's players hold, and
-// the run is its host. A survivor whose link to it drops redials it where the chain
-// says, the first host's door long shut, and is admitted back into its own place.
+// while another hosts, and takes one once the guest took the session over, into its
+// term and under its first host's -players. :host then opens the door it names under
+// the policy the session's players hold. A survivor whose link drops under its hold
+// redials it where the chain says, and is admitted back into its own place.
 func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
@@ -375,8 +375,14 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	}
 	waitForCursors(t, successor, 5)
 
+	// Under the successor's hold the departure it crosses cannot apply, and its door
+	// reads the survivor as away all the same, as its first host's does.
 	gid := guest.membership.LocalParticipant()
 	guest.World().RunSafe(func() { guest.cfg.Mode = ModePlay }) // the mode whose loop takes a rejoin on
+	successor.World().RunSafe(func() {
+		successor.ctx.PushLocal(event.EventGameHoldRequest, &event.GamePausePayload{Paused: true})
+	})
+	waitUntil(t, func() bool { return successor.Context().TimeCtl.Held() }, "the successor holding its session")
 	if !successor.instance().DropParticipant(gid) {
 		t.Fatal("the guest's link would not drop")
 	}

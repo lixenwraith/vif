@@ -270,7 +270,8 @@ func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
 // TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds: a participant's spawn request
 // that finds a reset's roster pending leaves it for the boot's, which builds the
 // arrival with the rest and in slot order: this run's own under its control, and
-// one back in its Wraith's place. No slot, another's or one held live is refused.
+// one back in the place its own cursor left, a Wraith or live. No slot, or
+// another's, is refused.
 func TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
@@ -296,7 +297,7 @@ func TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds(t *testing.T) {
 
 	arrive(parameter.MaxPlayers, 5, component.ControlRemote) // no such slot
 	arrive(2, 6, component.ControlRemote)                    // another's Wraith
-	arrive(0, 1, component.ControlRemote)                    // its own, held live
+	arrive(0, 1, component.ControlRemote)                    // its own, which no departure turned
 	arrive(1, 9, component.ControlLocal)
 	arrive(2, 7, component.ControlRemote)
 	if n := w.Resources.Player.Count(); n != 0 {
@@ -310,7 +311,7 @@ func TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds(t *testing.T) {
 	roster := w.Resources.Player
 	var last core.Entity
 	for slot, want := range []component.CursorComponent{
-		{Slot: 0, PeerID: 1, Control: component.ControlRemote},
+		{Slot: 0, PeerID: 1, Holder: 4, Control: component.ControlRemote, Key: "key", Name: "name"},
 		{Slot: 1, PeerID: 9, Holder: 4, Control: component.ControlLocal, Key: "key", Name: "name"},
 		{Slot: 2, PeerID: 7, Holder: 4, Control: component.ControlRemote, Key: "key", Name: "name"},
 		{Slot: 3, PeerID: 8, Control: component.ControlRemote},

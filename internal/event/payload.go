@@ -175,6 +175,7 @@ type SessionStatePayload struct {
 	Authority   uint32 `toml:"authority"`
 	SeatsOnly   bool   `toml:"seats_only"`
 	Peers       uint32 `toml:"peers"`
+	Superseding bool   `toml:"superseding"`
 }
 
 // NetworkDisconnectPayload signals peer disconnection

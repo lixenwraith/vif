@@ -884,6 +884,7 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	if m.dismissed.Load() || m.run.Replacing() {
 		return nil, scribe.ErrRunReplaced
 	}
+	m.takeOwnPlaceLocked()
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
 	local := link.PeerID(m.world.LocalParticipant())
 	m.sessionMu.Lock()

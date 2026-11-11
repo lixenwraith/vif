@@ -197,12 +197,14 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 		return
 	}
 	if e := roster.Slot(slot); e != 0 {
-		c, _ := s.world.Components.Cursor.GetComponent(e)
-		if w, away := s.world.Components.Wraith.GetComponent(e); away && c.PeerID == p.PeerID {
-			s.reclaim(e, slot, w, p)
+		if c, _ := s.world.Components.Cursor.GetComponent(e); p.PeerID == 0 || c.PeerID != p.PeerID {
+			s.fail("slot unavailable")
 			return
 		}
-		s.fail("slot unavailable")
+		// Its participant's arrival stands for a departure that never turned it
+		s.wraith(slot, 0)
+		w, _ := s.world.Components.Wraith.GetComponent(e)
+		s.reclaim(e, slot, w, p)
 		return
 	}
 

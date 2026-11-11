@@ -234,12 +234,16 @@ func (m *Membership) bindSessionControl(o network.SessionOffer, local link.PeerI
 		return fmt.Errorf("join roster omits local participant %d", local)
 	}
 	// A participant drives the cursor in its place and none while the place holds
-	// none or its Wraith, which its arrival brings or takes back as it crosses: the
-	// boot slot is another's. A cursorless one takes the sentinel for good, so every
-	// "is this my cursor" test answers no.
+	// none, its Wraith, or the cursor of the run it took the place back from, which
+	// its arrival brings or takes back as it crosses: the boot slot is another's. A
+	// cursorless one takes the sentinel for good, so every "is this my cursor" test
+	// answers no.
 	slot := localAssignment.Slot
 	m.world.RunSafe(func() {
-		if e := m.world.Resources.Player.Slot(slot); e == 0 || m.world.Components.Wraith.HasEntity(e) {
+		e := m.world.Resources.Player.Slot(slot)
+		waits := e == 0 || m.world.Components.Wraith.HasEntity(e)
+		m.world.Supersede(localAssignment.Away && !waits)
+		if waits || localAssignment.Away {
 			slot = parameter.NoPlayerSlot
 		}
 	})
@@ -273,7 +277,7 @@ func (m *Membership) bindCursorOwnersLocked(participants []network.RosterEntry, 
 		default:
 			c.PeerID, c.Holder, c.Key = uint32(p.ID), uint32(p.Holder), p.Key
 			c.Control = component.ControlRemote
-			if p.ID == local {
+			if p.ID == local && !p.Away { // an away place's live cursor is its last run's
 				c.Control = component.ControlLocal
 			}
 		}
