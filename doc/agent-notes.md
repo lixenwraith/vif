@@ -122,6 +122,17 @@ comment now states, and link that instead.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
   `crossingActors` (`internal/system/network.go`); without one, a misbound or
   modified participant can act as another's cursor through it.
+- A crossing only the authority may make joins the list in `admissibleFromSource`,
+  and `barrierBound` when it sets shared state from one tick on; with no payload it
+  needs no codec (`crossSession(et, nil)`). A new event type moves the number of
+  every one declared after it, so it takes the next `network.ProtocolVersion` and
+  `event.JournalSchema`.
+- A reset clears the barrier and every crossing still scheduled on it. What the
+  authority still owes the session past one is state its system keeps and crosses
+  again in the new game (`NetworkSystem.keepLost`, `NetworkSystem.restart`). Between
+  the reset and the boot's spawn the cursors are cleared, so an event that writes
+  every cursor or Wraith writes the roster pending behind `World.Clear` too
+  (`PlayerResource.JoinRestore`, `PlayerResource.RestartWaits`).
 - A joiner's arrival can reach it inside a correction rather than as the crossing,
   which the capture's fence then drops: state a joiner takes on arriving is derived
   in `RebindCursorRoster` too, never only in the arrival's handler.
@@ -158,9 +169,22 @@ comment now states, and link that instead.
   (`keepLost`); `applied` holds admitted ones alone. Both hold one source's in the
   order it made them, which is the order they apply in (`schedule`).
 - The door marks a place away as its departure applies (`participantDeparted`) and
-  takes a key back only into one that is (`keyedLocked`), so a return's arrival
-  crosses behind its departure's apply. A successor's (`CrossReturns`) waits on
-  nothing: a departure and an arrival for one participant can both be scheduled.
+  takes a key back only into one that is (`keyedLocked`), bar a held door, which
+  takes one whose departure is only scheduled (`Departing`). So can a successor's
+  `CrossReturns`: a departure and an arrival for one participant can both be
+  scheduled, and a handler asks what stands behind the one it applies (`rosterBehind`).
+- A held host flushes nothing, so what it crosses under a hold reaches no guest,
+  relay or successor until the resume: a run joining held has it from its gate
+  (`PendingAfter`), a relay's `departed` mark stands, and a successor's group never
+  holds it, which is why a run waiting for its arrival forks when its authority goes.
+- A participant's crossing sequence outlives its run: every instance forgets it only
+  as the departure applies (`forgetParticipant`). A run in a place whose departure
+  has not applied crosses nothing (`SessionState.Superseding`), or its first
+  sequences are dropped as its predecessor's.
+- Session state a replay must follow changes only through the latch's note
+  (`World.LatchSession`, `Supersede`): a flag an install or a link event flips with
+  no note binds the replay's cursor at another tick. A change a dispatch makes needs
+  none, since the replay dispatches too (`World.TakePlace`).
 - In `meshSession`, `mode.ExecuteCommand(apps[0].Context(), "n")` then
   `apps[0].Settle()` crosses the host's new game in the epoch at hand, and closing a
   participant's `link.MeshPort` under its world lock drops it. The host's lead is 3
@@ -249,6 +273,35 @@ comment now states, and link that instead.
   sets (`ownerAuthoredCursors`, `liveOwnerAuthoredCursors`) and
   `RebindCursorRoster`'s restore. Each masks a mutation of the others, so a test
   proving the rule turns them all off.
+- A held run takes no tick, so an event pushed at it dispatches only on `Settle`:
+  end a test's hold with the request and `Settle`, as `mode.ExecuteCommand` callers
+  do. A test-driven guest (`mustSocketJoiner`) applies no correction in `Tick`: run
+  `settleCorrections` before `alignTicks` and `assertSharedParity`, and close no
+  host publication while a hold's end or a new game is still to land.
+- Hold only a session whose guests are in step. One more than `NetworkHoldTicks`
+  behind, as a holder still seating its bot is, is carried past the hold and plays
+  on unheld ([todo](todo.md#hold-a-guest-its-correction-carries-past-the-hold)):
+  wait for the seat and the cursors on the guest first, and for the hold on the
+  host alone, since under `-race` the guest of a host ticked in the background
+  falls that far behind about every other run. A replay test levels its guest with
+  its host before it plays, or an install that carries it forward leaves the
+  replay's `predicted` depth behind the run's.
+- `EventQueue.Consume` returns the queue's own slice, which the next `Consume`
+  overwrites: a test dispatching handlers that push clones it first. A unit
+  `NetworkSystem` reads its identity at `Init` from the latched session, so latch
+  before building it, and `Cross` takes nothing until `barrierActive` is set.
+- A headless run ticks `WraithTimeout` of game time in a fraction of a second, its
+  resets included (`a.Tick(int(d / DeltaTime))`), so a test of a wait waits it out.
+  `replayMatches` wants fifty compared ticks.
+- A new game starts the tick count over (`Stamp.Run` moves), so a tick read before
+  one bounds nothing after it: a wait for a tick ends when the run moves
+  (`KeyframeAt`, `ProvedWorld`, `gateJoiner`). The harness's host ticks every 10 ms,
+  five times the game's rate, so a wait that outlasts a 5 s deadline in play is
+  over in a test unless the test ticks its host by hand.
+- A host a test does not tick parks a mid-run gate in its lead, and gates run one
+  at a time (`midRunGate`): a raw dial's reply holds the gate (`dialSession`,
+  `Complete`), a second joiner's waits behind it, and what the test crosses
+  meanwhile lands before that gate reads its offer.
 - A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
   test that builds a joiner as a join does goes through `configForJoin` into
   `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,

@@ -907,30 +907,36 @@ func TestOnlyTheAuthorityRunningPastAGuestResumesIt(t *testing.T) {
 	}
 }
 
-// TestATransitionFromAGuestIsRefused: a Shared FSM moves on what the authority's
-// machine took, so a transition any other participant crosses applies nowhere.
-func TestATransitionFromAGuestIsRefused(t *testing.T) {
+// TestATransitionOrARestartFromAGuestIsRefused: a Shared FSM moves on what the
+// authority's machine took and a Wraith's wait is the authority's to start over, so
+// either crossed by any other participant applies nowhere.
+func TestATransitionOrARestartFromAGuestIsRefused(t *testing.T) {
 	t.Parallel()
-	s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
-	f, msg := event.NewWireFrame(event.GameEvent{Type: event.EventFSMTransition, Domain: core.DomainPlayer,
-		Payload: &event.FSMTransitionPayload{Region: "storm", Owner: 3}})
-	if msg != "" {
-		t.Fatalf("encode transition: %s", msg)
-	}
-	f.Seq = 1
-	body, err := event.EncodeWireBatch(event.WireBatch{Source: 2, ProducedTick: 99,
-		Frames: []event.ScheduledWireFrame{{Frame: f, ApplyTick: 101}}})
-	if err != nil {
-		t.Fatalf("encode batch: %v", err)
-	}
-	s.scheduleCrossings(2, body)
-	s.applyDue(101)
-	for _, ev := range s.world.Resources.Event.Queue.Consume() {
-		if ev.Type == event.EventFSMTransition {
-			t.Fatal("a guest's transition was applied")
+	for _, forged := range []event.GameEvent{
+		{Type: event.EventFSMTransition, Payload: &event.FSMTransitionPayload{Region: "storm", Owner: 3}},
+		{Type: event.EventWraithWaitRestart},
+	} {
+		s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
+		forged.Domain = core.DomainPlayer
+		f, msg := event.NewWireFrame(forged)
+		if msg != "" {
+			t.Fatalf("encode %s: %s", event.GetEventName(forged.Type), msg)
 		}
-	}
-	if got := s.statForged.Load(); got != 1 {
-		t.Fatalf("%d claims counted, want the guest's transition", got)
+		f.Seq = 1
+		body, err := event.EncodeWireBatch(event.WireBatch{Source: 2, ProducedTick: 99,
+			Frames: []event.ScheduledWireFrame{{Frame: f, ApplyTick: 101}}})
+		if err != nil {
+			t.Fatalf("encode batch: %v", err)
+		}
+		s.scheduleCrossings(2, body)
+		s.applyDue(101)
+		for _, ev := range s.world.Resources.Event.Queue.Consume() {
+			if ev.Type == forged.Type {
+				t.Fatalf("a guest's %s was applied", event.GetEventName(forged.Type))
+			}
+		}
+		if got := s.statForged.Load(); got != 1 {
+			t.Fatalf("%d claims counted, want the guest's %s", got, event.GetEventName(forged.Type))
+		}
 	}
 }

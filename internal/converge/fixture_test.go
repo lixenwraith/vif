@@ -36,6 +36,7 @@ type stub struct {
 	local  uint32
 	key    network.Key
 	seated bool
+	waits  bool // for its own arrival, in a place it took back
 	roster []network.RosterEntry
 	port   engine.NetworkPort
 	world  snapshot.SharedCapture
@@ -119,6 +120,8 @@ func (s *stub) LocalKey() network.Key { return s.key }
 func (s *stub) KeepOut() []string { return nil }
 
 func (s *stub) Seated() bool { return s.seated }
+
+func (s *stub) Superseding() bool { return s.waits }
 
 func (s *stub) WorldRoster() []network.RosterEntry {
 	s.mu.Lock()

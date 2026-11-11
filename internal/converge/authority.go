@@ -740,6 +740,10 @@ func (u *Authority) driveWalk(now time.Time) {
 	if from.IsZero() {
 		return
 	}
+	if u.inst.Superseding() {
+		u.giveUp(arrivalLost)
+		return
+	}
 	if !fixed {
 		u.trySucceed(now)
 	}
@@ -931,6 +935,11 @@ func (u *Authority) trySucceed(now time.Time) {
 	u.mu.Unlock()
 }
 
+// arrivalLost is why a run that took its place back gives up a session whose
+// authority went before its arrival applied: no successor's group holds that
+// arrival, and following one would leave the cursor in its place driven by nobody.
+const arrivalLost = "the arrival this run waited for went with its authority"
+
 // giveUp ends a walk no record answered, or a path no participant restored: this
 // instance's turn never came or it had nothing retained to author from, or the
 // session pinned its authority. What is left is the local continuation, said
@@ -985,6 +994,11 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 	// window a survivor follows only the host it joined.
 	if rec.Term <= u.term || u.fork || rec.Predecessor != u.holder {
 		u.mu.Unlock()
+		return nil
+	}
+	if u.inst.Superseding() {
+		u.mu.Unlock()
+		u.giveUp(arrivalLost)
 		return nil
 	}
 	held := u.term

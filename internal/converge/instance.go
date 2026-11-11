@@ -35,6 +35,9 @@ type Instance interface {
 	LocalParticipant() uint32
 	LocalKey() network.Key
 	Seated() bool
+	// Superseding reports a run still waiting for its own arrival in the place it
+	// took back, which the authority it came back through scheduled and no other holds.
+	Superseding() bool
 	// KeepOut is the keys and accounts the session keeps out, as its doors hold
 	// them, which the record this instance authors carries to its successors.
 	KeepOut() []string

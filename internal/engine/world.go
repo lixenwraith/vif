@@ -662,6 +662,9 @@ type SessionState struct {
 	Participant, Authority uint32
 	SeatsOnly              bool
 	Peers                  uint32
+	// Superseding: the cursor in this run's place is still the run's it took the
+	// place back from, driven by nobody until this run's own arrival applies.
+	Superseding bool
 }
 
 // Pausable reports whether this instance may pause: a solo run, or an authority
@@ -690,6 +693,39 @@ func (w *World) Session() SessionState {
 // written world's own identity.
 func (w *World) AdoptSession(s SessionState) { w.session.Store(&s) }
 
+// latch adopts s and, where it starts or ends a supersession, binds the roster
+// again: the cursor in this run's place is its own to drive, or no longer. A run
+// and its replay both come through here. Caller MUST hold updateMutex.
+func (w *World) latch(s SessionState) {
+	was := w.Session().Superseding
+	if w.AdoptSession(s); was != s.Superseding {
+		w.RebindCursorRoster(w.CaptureCursorControl())
+	}
+}
+
+// Supersede sets whether the cursor in this run's place is still the run's it took
+// the place back from, and latches it with the session, which journals the change.
+// Caller MUST hold updateMutex.
+func (w *World) Supersede(on bool) {
+	if r := w.Resources.Network; r != nil {
+		r.Superseding.Store(on)
+		w.LatchSession()
+	}
+}
+
+// TakePlace ends a supersession as this run's own arrival dispatches, which binds
+// its cursor itself: latched unjournaled, since a replay's dispatch does the same.
+// Caller MUST hold updateMutex.
+func (w *World) TakePlace() {
+	if r := w.Resources.Network; r != nil {
+		r.Superseding.Store(false)
+	}
+	if s := w.Session(); s.Superseding {
+		s.Superseding = false
+		w.AdoptSession(s)
+	}
+}
+
 // PredictsShared reports whether a derivation now is provisional; see Predicting.
 func (w *World) PredictsShared() bool { return w.Session().Predicting() }
 
@@ -707,15 +743,16 @@ func (w *World) LatchSession() {
 		s.Live = r.Port.IsRunning() && r.Port.PeerCount() > 0
 		s.Peers = uint32(r.Port.PeerCount())
 		s.SeatsOnly = s.Live && s.Coordinator() && r.SeatsOnly != nil && r.SeatsOnly()
+		s.Superseding = r.Superseding.Load()
 	}
 	if s == w.Session() {
 		return
 	}
-	w.AdoptSession(s)
+	w.latch(s)
 	if w.Resources.Event != nil && w.Resources.Event.Queue != nil {
 		w.Resources.Event.Queue.Note(event.GameEvent{
-			Type: event.EventSessionState, Payload: &event.SessionStatePayload{Live: s.Live,
-				Participant: s.Participant, Authority: s.Authority, SeatsOnly: s.SeatsOnly, Peers: s.Peers},
+			Type: event.EventSessionState, Payload: &event.SessionStatePayload{Live: s.Live, Participant: s.Participant,
+				Authority: s.Authority, SeatsOnly: s.SeatsOnly, Peers: s.Peers, Superseding: s.Superseding},
 			Origin: event.OriginSession, Domain: core.DomainPlayer,
 		})
 	}
@@ -803,8 +840,8 @@ func (w *World) recordEvent(rec event.JournalRecord, payload any) (event.GameEve
 			return event.GameEvent{}, false
 		}
 	case *event.SessionStatePayload:
-		w.AdoptSession(SessionState{Live: p.Live, Participant: p.Participant, Authority: p.Authority,
-			SeatsOnly: p.SeatsOnly, Peers: p.Peers})
+		w.latch(SessionState{Live: p.Live, Participant: p.Participant, Authority: p.Authority,
+			SeatsOnly: p.SeatsOnly, Peers: p.Peers, Superseding: p.Superseding})
 		return event.GameEvent{}, false
 	}
 	return event.GameEvent{

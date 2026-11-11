@@ -157,9 +157,9 @@ func dropOwned[T any](rows []StoreEntry[T], authored map[core.Entity]bool) []Sto
 
 // RebindCursorRoster rebuilds the roster from the installed cursor store in slot
 // order and restores this instance's control (the handshake identity in a session,
-// bar a Wraith, which nobody drives; the held assignment outside one), input and view
-// on the slot it drives, and owner-authored state for cursors it held and still
-// authors; a joiner's new slot keeps the host's template. Caller MUST hold updateMutex.
+// bar a Wraith or a cursor it supersedes, which nobody drives; the held assignment
+// outside one), input and view on its slot, and owner-authored state for cursors it
+// still authors; a joiner's new slot keeps the host's template. Caller MUST hold updateMutex.
 func (w *World) RebindCursorRoster(prior LocalControl) {
 	roster := w.Resources.Player
 	slots := [parameter.MaxPlayers]core.Entity{}
@@ -170,7 +170,8 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 		return true
 	})
 
-	localID := w.Session().Participant
+	session := w.Session()
+	localID := session.Participant
 	// The placements this instance has requested are still pending on the barrier
 	// after the write; dropping them would snap the local cell back for a lead.
 	// They are kept exactly when the same entity is still the cursor it drives.
@@ -188,7 +189,11 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 			switch {
 			case localID != 0:
 				c.Control = component.ControlRemote
-				if c.PeerID == localID && !w.Components.Wraith.HasEntity(e) {
+				switch {
+				case c.PeerID != localID || w.Components.Wraith.HasEntity(e):
+				case session.Superseding:
+					local = parameter.NoPlayerSlot // input follows no cursor meanwhile
+				default:
 					c.Control, local = component.ControlLocal, uint8(slot)
 				}
 			case prior.held[slot]:

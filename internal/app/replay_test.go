@@ -1055,6 +1055,63 @@ func TestAHeldSessionReplaysOnEitherSide(t *testing.T) {
 	replayMatches(t, guestRec, guestWant, guestSurface)
 }
 
+// TestARunThatTookItsPlaceBackHeldReplaysAsItRan: a run that took its place back
+// under a hold journals where its wait for its own arrival ends, so its replay
+// leaves the cursor it landed on undriven as long and takes it where the run did:
+// as its arrival applies, or at a world installed past the tick it applied at.
+func TestARunThatTookItsPlaceBackHeldReplaysAsItRan(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for name, ahead := range map[string]int{"as its arrival applies": 0, "at a world past its arrival": 80} {
+		t.Run(name, func(t *testing.T) {
+			h := heldAwayGuest(t, false, false)
+			rec := journal.NewCapture()
+			back, _ := h.back(t, func(c *Config) { c.Journal, c.JournalSink = true, rec })
+			rng := vmath.NewFastRand(11)
+			motions := []input.MotionOp{input.MotionLeft, input.MotionRight, input.MotionUp, input.MotionDown}
+			want := map[event.Stamp][]string{}
+			note := func() {
+				back.ApplyPendingCorrections()
+				p := back.Position()
+				want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(back)
+			}
+			play := func(ticks int) {
+				for range ticks {
+					for _, a := range []*App{h.host, back} {
+						if rng.Intn(3) == 0 {
+							inject(t, a, intentMotion(motions[rng.Intn(4)], 1+rng.Intn(3)))
+						}
+					}
+					h.step(1, back)
+					note()
+				}
+			}
+			play(5)
+			held := back.Position().Tick
+			mode.ExecuteCommand(h.host.Context(), "pause off")
+			h.host.Settle()
+			if ahead > 0 {
+				// The host alone, then its world before the run's next tick: the arrival is
+				// behind what the run installs, and dispatches nowhere.
+				h.step(ahead)
+				waitUntil(t, func() bool { back.ApplyPendingCorrections(); return back.Position().Tick > held },
+					"the returned run installing a world the host ran ahead to")
+				// Level with its host before it plays, as a paced run is.
+				for back.Position().Tick < h.host.Position().Tick {
+					back.Tick(1)
+					note()
+				}
+			}
+			play(200)
+			if got := back.membership.LocalSlot(); got != h.slot {
+				t.Fatalf("resumed, the returned run drives slot %d, want its own, %d", got, h.slot)
+			}
+			back.World().RunSafe(func() { _ = back.scribe.StopJournalLocked(-1) })
+			back.scribe.ServeJournal()
+			replayMatches(t, rec, want, guestSurface)
+		})
+	}
+}
+
 // TestAFrozenSurvivorReplaysAsItRan: a survivor journaled across its host's loss
 // replays to the run it was. The replay stands still where the run froze, so the
 // input the run took while its session stood counts alike on both.

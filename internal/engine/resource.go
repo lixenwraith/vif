@@ -547,8 +547,9 @@ func (pr *PlayerResource) Restores(peerID uint32) bool {
 }
 
 // JoinRestore adds a participant arriving at a reset's own tick to the roster pending
-// behind World.Clear, in slot order or over the entry its own Wraith left, and
-// reports whether a reset is pending: its spawn is then the boot's to make.
+// behind World.Clear, in slot order or over the entry its own cursor left, a Wraith
+// or one its departure had yet to turn, and reports whether a reset is pending: its
+// spawn is then the boot's to make.
 func (pr *PlayerResource) JoinRestore(e CursorRosterEntry) bool {
 	if pr.restoreCount == 0 {
 		return false
@@ -558,8 +559,8 @@ func (pr *PlayerResource) JoinRestore(e CursorRosterEntry) bool {
 		i++
 	}
 	held := i < pr.restoreCount && pr.restore[i].Slot == e.Slot
-	if int(e.Slot) >= len(pr.restore) || held && (pr.restore[i].PeerID != e.PeerID || !pr.restore[i].Wraith) {
-		return true // no such slot, or one only its own Wraith gives up: refused as a spawn is
+	if int(e.Slot) >= len(pr.restore) || held && pr.restore[i].PeerID != e.PeerID {
+		return true // no such slot, or another's: refused as a spawn is
 	}
 	if !held {
 		copy(pr.restore[i+1:], pr.restore[i:pr.restoreCount])
@@ -570,6 +571,14 @@ func (pr *PlayerResource) JoinRestore(e CursorRosterEntry) bool {
 		pr.restoreLocal = e.Slot
 	}
 	return true
+}
+
+// RestartWaits starts over the wait of each Wraith the reset pending behind
+// World.Clear rebuilds, as a restart reaching the cleared world starts the others'.
+func (pr *PlayerResource) RestartWaits() {
+	for i := range pr.restoreCount {
+		pr.restore[i].Waited = 0
+	}
 }
 
 // TakeRestore returns and clears the reset roster pending behind World.Clear.
@@ -1276,11 +1285,18 @@ type NetworkResource struct {
 	// authority: its path to the authority until a link to it exists.
 	Relay uint32
 
+	// Superseding is set while this run holds a place whose cursor the run it took
+	// the place back from left live: that run's until its departure applies, so this
+	// one neither drives it nor crosses in its name (multi-player.md §5.4). Set by
+	// World.Supersede; the simulation reads it latched (SessionState).
+	Superseding atomic.Bool
+
 	// OnDeparture is called under the world lock when a participant leaves. A final
 	// departure returns its identity to the pool; any other leaves the identity and
-	// slot to the Wraith that waits for it. It must not take a lock that a world-lock
+	// slot to the Wraith that waits for it. It reports a place a dial is taking back,
+	// whose link is that dial's. It must not take a lock that a world-lock
 	// acquisition waits behind.
-	OnDeparture func(participant uint32, final bool)
+	OnDeparture func(participant uint32, final bool) (back bool)
 	OnDismissed func(shed, dropped bool)
 	// OnDropped takes the key and slot of a participant the host dropped, which the
 	// session keeps out from the tick the departure applies, on every instance alike.
@@ -1330,6 +1346,11 @@ type NetworkResource struct {
 	// WraithKept reports a participant the session layer is giving its Wraith back
 	// to, which no wait may run out on while its arrival is on its way.
 	WraithKept func(participant uint32) bool
+
+	// Doorless reports a session with no door for a player to come back through,
+	// which :host can still open: the authority runs out no person's wait there
+	// (multi-player.md §5.4). Called under the world lock.
+	Doorless func() bool
 
 	// Relaying reports that this run's player lets it carry any participant's
 	// artifacts toward the authority, not only those that joined through it. Called

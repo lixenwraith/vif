@@ -908,22 +908,25 @@ func (f refusalField) Refused() error {
 	return &Refusal{Code: f.Code, Reason: f.Error}
 }
 
+// RefusalReply is a MsgJoinReply's body turning a join away for cause, which a
+// port sends a joiner already on it, inside its gate.
+func RefusalReply(cause error) []byte {
+	var reply sessionReply
+	reply.Refuse(cause)
+	body, _ := json.Marshal(reply) // plain data cannot fail to encode
+	return body
+}
+
 // RefuseJoin writes one rejection, which the dialer reads as its reason; a
 // compressed stream is flushed, since the dialer reads nothing it still holds. A
 // failure to write it is not worth reporting: the connection is being closed
 // either way, and the joiner falls back to reading the stream's end.
 func RefuseJoin(conn net.Conn, cause error, timeout time.Duration) {
-	var reply sessionReply
-	reply.Refuse(cause)
-	body, err := json.Marshal(reply)
-	if err != nil {
-		return
-	}
 	if timeout > 0 {
 		_ = conn.SetWriteDeadline(time.Now().Add(timeout))
 		defer conn.SetWriteDeadline(time.Time{})
 	}
-	if err = link.NewMessage(MsgJoinReply, body).Encode(conn); err == nil {
+	if err := link.NewMessage(MsgJoinReply, RefusalReply(cause)).Encode(conn); err == nil {
 		if stream, ok := conn.(*link.Stream); ok {
 			_ = stream.Flush()
 		}

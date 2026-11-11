@@ -95,6 +95,10 @@ type NetworkSystem struct {
 	departed     [participantSlots]bool       // participants already announced or noticed
 	expiring     [participantSlots]bool       // Wraiths whose dismissal this authority has crossed
 	lost         [participantSlots]lostChange // roster changes a reset interrupted, for the new game to announce again
+	rosterDue    [participantSlots]rosterDue  // roster changes pushed for this tick that no handler has taken
+	closed       [participantSlots]bool       // links this instance closed as their departure applied, their loss unnoticed yet
+	arriveAt     uint64                       // the tick this run's own arrival applies at, once it is scheduled
+	restart      waitRestart                  // the restart of every Wraith's wait this authority owes a door's opening
 	ticks        uint64
 	statSent     *atomic.Int64
 	statRecv     *atomic.Int64
@@ -482,6 +486,9 @@ func (s *NetworkSystem) Init() {
 	s.states, s.stateSeen, s.rawStateSeen = s.states[:0], [parameter.MaxPlayers]uint64{}, [parameter.MaxPlayers]uint64{}
 	s.keepLost()
 	s.expiring = [participantSlots]bool{}
+	if s.restart == restartCrossed {
+		s.restart = restartDue // cleared with the barrier it stood on: the new game's to cross
+	}
 
 	for _, c := range s.resetInts {
 		c.Store(0)
@@ -523,7 +530,7 @@ func (s *NetworkSystem) Init() {
 	s.rawEpochs = [participantSlots]window{}
 	s.seqs = [participantSlots]window{}
 	s.ownCommitted = window{}
-	s.snapshotFloor = 0
+	s.snapshotFloor, s.arriveAt = 0, 0
 	s.snapshotAuthority = 0
 	s.snapshotFences = nil
 	s.appliedPeerSeq = [participantSlots]uint64{}
@@ -603,6 +610,7 @@ func (s *NetworkSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
+		event.EventWraithWaitRestart,
 		event.EventPlayoutLead,
 		event.EventCursorStateSync,
 	}
@@ -612,12 +620,16 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventParticipantJoined:
 		if p, ok := ev.Payload.(*event.ParticipantJoinedPayload); ok {
+			s.dueFor(p.Participant).arrivals.take()
 			s.addParticipant(p)
 		}
 	case event.EventParticipantDeparted:
 		if p, ok := ev.Payload.(*event.ParticipantDepartedPayload); ok {
+			s.dueFor(p.Participant).departures.take()
 			s.removeParticipant(p)
 		}
+	case event.EventWraithWaitRestart:
+		s.restart = restartNone // every wait runs from this tick, the authority's reading of them too
 	case event.EventPlayoutLead:
 		if p, ok := ev.Payload.(*event.PlayoutLeadPayload); ok {
 			s.adoptDelay(p.Ticks)
@@ -629,24 +641,24 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// addParticipant applies the arrival crossing. Every instance runs it at the same
-// apply tick, so the cursor it creates takes the same shared entity everywhere (D-11)
-// — which is the reason a mid-run arrival cannot be a local reaction to a connect.
-// The instance the payload names is the one that goes on to simulate it. An arrival
-// into a slot its participant's own Wraith holds is that participant back.
+// addParticipant applies the arrival crossing. Every instance runs it at one apply
+// tick, so the cursor it creates takes the same shared entity everywhere (D-11): a
+// mid-run arrival cannot be a local reaction to a connect. The instance it names
+// simulates it, unless a departure behind it makes it an earlier run's. An arrival
+// into a slot its participant's own cursor holds, Wraith or not, is that one back.
 func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
 	if int(p.Slot) >= parameter.MaxPlayers {
 		return
 	}
 	if e := s.world.Resources.Player.Slot(p.Slot); e != 0 {
-		c, _ := s.world.Components.Cursor.GetComponent(e)
-		if c.PeerID != p.Participant || !s.world.Components.Wraith.HasEntity(e) {
+		if c, _ := s.world.Components.Cursor.GetComponent(e); c.PeerID != p.Participant {
 			return
 		}
 	}
 	control := component.ControlRemote
-	if p.Participant == s.participantID() {
+	if _, left := s.rosterBehind(p.Participant); p.Participant == s.participantID() && !left {
 		control = component.ControlLocal
+		s.world.TakePlace()
 	}
 	heat, energy := s.world.Resources.Player.InitialResources()
 	s.world.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
@@ -768,11 +780,15 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	// A participant with no cursor has nothing to wait in, so it leaves for good. One
 	// a reset at this tick is rebuilding has left nothing yet: the session layer hears
 	// when the new game's announcement applies, and takes nobody back ahead of it.
-	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil && !s.world.Resources.Player.Restores(p.Participant) {
-		r.OnDeparture(p.Participant, p.Dismissed || !held)
+	// One whose arrival stands behind this departure is not away to anyone, and the
+	// link of a place a dial is taking back is that dial's: neither is closed.
+	back, _ := s.rosterBehind(p.Participant)
+	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil && !back && !s.world.Resources.Player.Restores(p.Participant) {
+		back = r.OnDeparture(p.Participant, p.Dismissed || !held)
 	}
-	if port, ok := s.port().(engine.PeerDroppingPort); ok {
-		port.Disconnect(p.Participant)
+	if port, ok := s.port().(engine.PeerDroppingPort); ok && !back && port.Disconnect(p.Participant) &&
+		int(p.Participant) < len(s.closed) {
+		s.closed[p.Participant] = true // the loss it reports is this departure's, and no other
 	}
 	if !held || s.world.SimulatesLocally(cursor) {
 		return
@@ -783,6 +799,88 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 		s.world.PushEvent(event.EventCursorWraithRequest, &event.CursorWraithRequestPayload{Slot: p.Slot})
 	}
 	s.lastSync[p.Slot], s.stateSeen[p.Slot], s.rawStateSeen[p.Slot] = 0, 0, 0
+}
+
+// rosterDue counts one participant's roster changes the barrier pushed for this tick
+// that no handler has taken yet: what stands behind the one applying.
+type rosterDue struct{ arrivals, departures dueCount }
+
+type dueCount uint8
+
+func (c *dueCount) take() {
+	if *c > 0 {
+		*c--
+	}
+}
+
+// dueFor is participant's count, or a scratch one for an identity out of range.
+func (s *NetworkSystem) dueFor(participant uint32) *rosterDue {
+	if int(participant) >= len(s.rosterDue) {
+		return &rosterDue{}
+	}
+	return &s.rosterDue[participant]
+}
+
+// rosterBehind reports an arrival and a departure of participant's still to apply
+// behind the roster change a handler is applying: pushed for this tick, or scheduled.
+func (s *NetworkSystem) rosterBehind(participant uint32) (arrival, departure bool) {
+	d := s.dueFor(participant)
+	arrival, departure = d.arrivals > 0, d.departures > 0
+	s.eachRosterScheduled(func(id uint32, arrives, _ bool) {
+		if id == participant {
+			arrival, departure = arrival || arrives, departure || !arrives
+		}
+	})
+	return arrival, departure
+}
+
+// arrivalScheduled reports that the last roster change scheduled for participant is
+// its arrival: a link it loses from here on is a departure of its own.
+func (s *NetworkSystem) arrivalScheduled(participant uint32) (last bool) {
+	s.eachRosterScheduled(func(id uint32, arrives, _ bool) {
+		if id == participant {
+			last = arrives
+		}
+	})
+	return last
+}
+
+// Departing is each participant whose last roster change scheduled here is a
+// departure that keeps its place: away already to a door that takes its key back,
+// since a held session reaches no tick to apply it at. One a dismissal is scheduled
+// for is not coming back. Caller MUST hold updateMutex.
+func (s *NetworkSystem) Departing() (out []uint32) {
+	var dismissed []uint32
+	s.eachRosterScheduled(func(id uint32, arrives, gone bool) {
+		out = slices.DeleteFunc(out, func(was uint32) bool { return was == id })
+		switch {
+		case gone:
+			dismissed = append(dismissed, id)
+		case !arrives && !slices.Contains(dismissed, id):
+			out = append(out, id)
+		}
+	})
+	return out
+}
+
+// eachRosterScheduled visits, in the order they crossed, the roster changes this
+// barrier holds for a later tick: the authority's alone.
+func (s *NetworkSystem) eachRosterScheduled(visit func(participant uint32, arrives, dismissed bool)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range s.scheduled {
+		et := a.frame.Event
+		if a.void || et != event.EventParticipantDeparted && et != event.EventParticipantJoined ||
+			!s.admissibleFromSource(et, nil, a.source, a.authored) {
+			continue
+		}
+		switch v, _ := a.frame.Decode(); p := v.(type) {
+		case *event.ParticipantJoinedPayload:
+			visit(p.Participant, true, false)
+		case *event.ParticipantDepartedPayload:
+			visit(p.Participant, false, p.Dismissed)
+		}
+	}
 }
 
 // forgetParticipant clears a departed identity for whoever takes it next, whose
@@ -862,9 +960,58 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	if ev.Type == event.EventCursorDefeatState && s.settles(ev) {
 		return true
 	}
+	// A superseding run's identity still counts its predecessor's sequence, which
+	// every instance forgets only as that run's departure applies.
+	if s.superseding() {
+		event.ReleaseDeferredPayload(ev.Payload)
+		return true
+	}
 	s.schedule(ev)
 	return true
 }
+
+// superseding reports that this run's identity is still the run's it took its place
+// back from: what that run crossed is a peer's here, and this one crosses nothing.
+func (s *NetworkSystem) superseding() bool { return s.world.Session().Superseding }
+
+// noteOwnRoster keeps the tick this run's own arrival applies at: the last among the
+// authority's frames with no departure of its identity behind it.
+func (s *NetworkSystem) noteOwnRoster(frames []event.ScheduledWireFrame) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, f := range frames {
+		if et := f.Frame.Event; et != event.EventParticipantJoined && et != event.EventParticipantDeparted {
+			continue
+		}
+		switch v, _ := f.Frame.Decode(); p := v.(type) {
+		case *event.ParticipantJoinedPayload:
+			if p.Participant == s.localSource {
+				s.arriveAt = f.ApplyTick
+			}
+		case *event.ParticipantDepartedPayload:
+			if p.Participant == s.localSource {
+				s.arriveAt = 0
+			}
+		}
+	}
+}
+
+// settleArrival ends a supersession no dispatch will: a world installed at or past
+// the tick this run's own arrival applies at holds it, and the cursor it took back
+// is the run's to drive. Caller MUST hold updateMutex.
+func (s *NetworkSystem) settleArrival() {
+	s.mu.Lock()
+	held := s.arriveAt != 0 && s.snapshotFloor >= s.arriveAt
+	s.mu.Unlock()
+	if held && s.superseding() {
+		s.world.Log().Info("session", "msg", "place taken with a world past this run's arrival")
+		s.world.Supersede(false)
+	}
+}
+
+// ForgetSuperseded drops what the run this one took its place back from crossed, as
+// that run's departure would have. Caller MUST hold updateMutex.
+func (s *NetworkSystem) ForgetSuperseded() { s.forgetParticipant(s.participantID()) }
 
 // settles holds a defeat and drops a held one its undoing reaches first, reporting
 // whether it took the event; an undoing with nothing held crosses as it is.
@@ -1070,8 +1217,8 @@ func (s *NetworkSystem) AppliedCrossingFences() link.CrossingFences {
 // both already hold, whose gap a correction repairs. See multi-player.md §3.1.
 func barrierBound(et event.EventType) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest,
-		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventBehaviorSpawnRequest,
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
+		event.EventGameResetRequest, event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventBehaviorSpawnRequest,
 		event.EventSpeciesLandRequest, event.EventDrainDefeated, event.EventCursorDefeatState,
 		event.EventGameHold, event.EventGameSpeed:
 		return true
@@ -1289,6 +1436,7 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 // floor and ordinary ones source fences, for late arrivals too. Caller holds
 // updateMutex.
 func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, fences link.CrossingFences) {
+	defer s.settleArrival() // once the barrier stands at the installed tick
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snapshotFloor = tick
@@ -1583,9 +1731,11 @@ func (s *NetworkSystem) announceLost(p engine.NetworkPort) {
 // time, and the one the session layer gives a newcomer the place of, once each: the
 // authority decides it as it decides every roster change, a bot whose holder waits
 // too goes in its holder's crossing, and one on its way back waits for its arrival.
+// A person's wait runs out only where a door stands for it to come back through.
 func (s *NetworkSystem) expireWraiths() {
 	var yield uint32
 	kept := func(uint32) bool { return false }
+	held := s.restart != restartNone
 	if r := s.world.Resources.Network; r != nil {
 		if r.DismissWraith != nil {
 			yield = r.DismissWraith()
@@ -1593,14 +1743,19 @@ func (s *NetworkSystem) expireWraiths() {
 		if r.WraithKept != nil {
 			kept = r.WraithKept
 		}
+		held = held || r.Doorless != nil && r.Doorless()
+	}
+	if s.restart == restartDue {
+		s.restart = restartCrossed
+		s.crossSession(event.EventWraithWaitRestart, nil)
 	}
 	cursors := s.world.Components.Cursor
 	var due []event.ParticipantDepartedPayload
 	s.world.Components.Wraith.Each(func(e core.Entity, w *component.WraithComponent) bool {
 		c, ok := cursors.GetComponent(e)
+		waited := w.Waited >= parameter.WraithTimeout && (!held || c.Holder != 0)
 		if !ok || c.PeerID == 0 || int(c.PeerID) >= len(s.expiring) || s.expiring[c.PeerID] ||
-			w.Waited < parameter.WraithTimeout && c.PeerID != yield || c.Holder != 0 && s.away(c.Holder) ||
-			kept(c.PeerID) {
+			!waited && c.PeerID != yield || c.Holder != 0 && s.away(c.Holder) || kept(c.PeerID) {
 			return true
 		}
 		s.expiring[c.PeerID] = true
@@ -1613,6 +1768,21 @@ func (s *NetworkSystem) expireWraiths() {
 		s.crossSession(event.EventParticipantDeparted, &due[i])
 	}
 }
+
+// waitRestart is where the restart of every Wraith's wait stands, which the
+// authority owes a door opened on a session that had none: no person could come
+// back while those waits ran, so none runs out until the restart has applied.
+type waitRestart uint8
+
+const (
+	restartNone    waitRestart = iota
+	restartDue                 // owed: crossed as the authority closes its next tick
+	restartCrossed             // crossed, and still to apply
+)
+
+// RestartWraithWaits has this authority start every Wraith's wait over, as a
+// crossing: the wait is shared state. Caller MUST hold updateMutex.
+func (s *NetworkSystem) RestartWraithWaits() { s.restart = restartDue }
 
 // away reports whether a participant's cursor is a Wraith.
 func (s *NetworkSystem) away(participant uint32) bool {
@@ -1718,6 +1888,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound
 				s.served[in.Peer] = true
 				s.noteDown(uint32(in.Peer))
 			}
+			if int(in.Peer) < len(s.closed) {
+				s.closed[in.Peer] = false
+			}
 			s.world.PushLocal(event.EventNetworkConnect, &event.NetworkConnectPayload{PeerID: uint32(in.Peer)})
 			s.world.LatchSession()
 		case link.InboundDisconnect:
@@ -1727,6 +1900,9 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound
 			s.world.LatchSession()
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
 			dropped := s.reportDisconnect(uint32(in.Peer), p.PeerCount())
+			if int(in.Peer) < len(s.closed) && s.closed[in.Peer] {
+				continue // closed here as its departure applied: no departure of another
+			}
 			s.noticeDeparture(uint32(in.Peer), dropped)
 		case link.InboundMessage:
 			if r := s.world.Resources.Network; r != nil && in.Msg != nil && int(in.Peer) < len(r.Ingress) {
@@ -1812,10 +1988,11 @@ func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
 	s.announceDeparture(peerID, 0, dismissed)
 }
 
-// announceDeparture crosses or forwards one departure, once. from is the link a
-// notice arrived on, or zero when this instance observed the disconnect itself.
+// announceDeparture crosses or forwards one departure, once for each time its
+// participant is in: an arrival scheduled since the last starts another. from is the
+// link a notice arrived on, or zero when this instance observed the disconnect itself.
 func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32, dismissed bool) bool {
-	if peerID == 0 || int(peerID) >= len(s.departed) || s.departed[peerID] {
+	if peerID == 0 || int(peerID) >= len(s.departed) || s.departed[peerID] && !s.arrivalScheduled(peerID) {
 		return false
 	}
 	s.departed[peerID] = true
@@ -2204,6 +2381,9 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		return
 	}
 	local, authority := s.participantID(), s.authorityParticipant()
+	if batch.Source == authority {
+		s.noteOwnRoster(batch.Frames) // ahead of any window: a refused epoch's world still comes
+	}
 	raw := !batch.Committed && batch.Source != authority
 	committing := raw && local == authority
 	if raw && batch.Source != local {
@@ -2214,7 +2394,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		s.noteDown(from)
 	}
 	switch {
-	case batch.Source == local:
+	case batch.Source == local && !s.superseding():
 		// Committed and returned: those behind this instance need it once, it
 		// measures the path to the authority, and it proves the link is one.
 		if batch.Committed && s.noteOwnCommit(batch) {
@@ -2335,6 +2515,7 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	}
 	if installed > 0 {
 		s.statPreInstall.Add(int64(installed))
+		s.settleArrival()
 	}
 	if refused > 0 {
 		s.statRefusedTick.Add(int64(refused))
@@ -2771,6 +2952,10 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 
 	local, peer := 0, 0
 	retain := s.retain[:0]
+	s.rosterDue = [participantSlots]rosterDue{} // a change no handler took is no later tick's
+	if s.superseding() {
+		localSource = 0 // what its identity crossed is the run's it took its place back from
+	}
 	for _, a := range due {
 		if a.void {
 			s.noteAppliedFrom(a.source, a.frame.Seq)
@@ -2792,6 +2977,12 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 			// Committed frames reach a paced guest before their tick, so this counts
 			// a guest running ahead of its band; its next correction repairs it.
 			s.statLate.Add(1)
+		}
+		switch p := payload.(type) {
+		case *event.ParticipantJoinedPayload:
+			s.dueFor(p.Participant).arrivals++
+		case *event.ParticipantDepartedPayload:
+			s.dueFor(p.Participant).departures++
 		}
 		event.BoundTick(payload, a.applyTick)
 		ev := event.GameEvent{Type: et, Payload: payload, Origin: a.origin, Domain: domain}
@@ -2834,8 +3025,8 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 // participant's cursor (crossingActors); other authentication needs authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, payload any, source uint32, authored bool) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameHold, event.EventGameSpeed,
-		event.EventFSMTransition:
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
+		event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
 		return authored || source == s.authorityParticipant()
 	}
 	actor, ok := crossingActors[et]

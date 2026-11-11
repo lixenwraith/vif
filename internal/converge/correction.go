@@ -268,7 +268,11 @@ func newCorrections(inst Instance, tel snapshot.Telemetry) *Corrections {
 	}
 }
 
-// provedPoll is how often ProvedWorld looks for a hold that landed as it waited.
+// errRunEnded ends a wait for a world at a tick of a run this instance has left.
+var errRunEnded = errors.New("the session started another game")
+
+// provedPoll is how often ProvedWorld looks for a hold or a new game that landed as
+// it waited.
 const provedPoll = 10 * time.Millisecond
 
 // keyframePoll is how often KeyframeAt looks at a clock that has not yet reached
@@ -945,15 +949,20 @@ func (c *Corrections) followRunLocked() event.Stamp {
 
 // KeyframeAt returns a keyframe describing the world at or after minTick, taking
 // one if the newest is older than that. minTick is not a preference: an epoch
-// flushed just before the admission reaches nobody and is not in a capture taken at
-// the admission tick either, so the caller asks for one far enough ahead that every
-// such artifact has been applied into it. A join reuses whatever the cadence made.
+// flushed just before the admission is in no capture taken at the admission tick,
+// so the caller asks far enough ahead that every such artifact has applied. It
+// counts this run's ticks: a new game under the wait ends it (errRunEnded).
 func (c *Corrections) KeyframeAt(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
 	poll := time.NewTimer(keyframePoll)
 	defer poll.Stop()
+	run := c.inst.Position().Run
 	for {
 		c.publishMu.Lock()
 		at := c.followRunLocked()
+		if at.Run != run {
+			c.publishMu.Unlock()
+			return nil, 0, errRunEnded
+		}
 		// A held session reaches no lead past its tick: its world is the held tick's.
 		if minTick > at.Tick && c.inst.Held() {
 			minTick = at.Tick
@@ -1382,12 +1391,13 @@ type provedWait struct {
 }
 
 // ProvedWorld encodes the first world this instance proves the authority's at or
-// past minTick — installed whole, repaired, or matched by an index's root — and
-// names its tick, as KeyframeAt does: it is what a relay serves a participant
-// joining through it. The header is the authority's and the seal this instance's
-// own, since owner-authored cursor cells sit outside the root and it mirrors each.
+// past minTick (installed whole, repaired, or matched by an index's root) and names
+// its tick, waiting as KeyframeAt does, within one run: it is what a relay serves a
+// participant joining through it. The header is the authority's and the seal this
+// instance's own, since owner-authored cursor cells sit outside the root.
 func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
 	w := provedWait{tick: minTick, ch: make(chan snapshot.SharedCapture, 1)}
+	run := c.inst.Position().Run
 	c.installedMu.Lock()
 	if cap, ok := c.lastProvedLocked(minTick); ok {
 		c.installedMu.Unlock()
@@ -1399,11 +1409,16 @@ func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) ([]byte, u
 	defer timer.Stop()
 	poll := time.NewTicker(provedPoll)
 	defer poll.Stop()
+	ended := false
 	for waiting := true; waiting; {
 		select {
 		case cap := <-w.ch:
 			return c.encodeProved(cap)
 		case <-poll.C:
+			if ended = c.inst.Position().Run != run; ended {
+				waiting = false
+				continue
+			}
 			// A hold that landed since lowers what the join waits for: the session
 			// reaches no further, and the held tick's world is what it is handed.
 			if !c.inst.Held() {
@@ -1432,6 +1447,9 @@ func (c *Corrections) ProvedWorld(minTick uint64, deadline time.Time) ([]byte, u
 	c.installedMu.Lock()
 	c.proving = slices.DeleteFunc(c.proving, func(o provedWait) bool { return o.ch == w.ch })
 	c.installedMu.Unlock()
+	if ended {
+		return nil, 0, errRunEnded
+	}
 	select {
 	case cap := <-w.ch: // proved as the wait ran out
 		return c.encodeProved(cap)

@@ -1,8 +1,11 @@
 package converge
 
 import (
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/lixenwraith/vif/internal/event"
 )
 
 // TestAHeldSessionGatesAtItsTick: a join that meets a hold is handed the held tick's
@@ -115,4 +118,36 @@ func TestAHeldSessionGatesAtItsTick(t *testing.T) {
 			t.Fatal("a running session kept a proved world for a join that came after it")
 		}
 	})
+}
+
+// TestANewGameEndsAWaitForAWorld: a join's lead counts the ticks of the run it was
+// read in, which the next game reaches late or never. The host's keyframe and a
+// relay's proved world both end the wait as the run changes, not at its deadline.
+func TestANewGameEndsAWaitForAWorld(t *testing.T) {
+	t.Parallel()
+	for i, name := range []string{"the host's keyframe", "a relay's proved world"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := session(t, 2, [][2]int{{1, 2}})[i]
+			wait := [](func(uint64, time.Time) ([]byte, uint64, error)){r.c.KeyframeAt, r.c.ProvedWorld}[i]
+			at := r.world.Position()
+			ended := make(chan error, 1)
+			go func() {
+				_, _, err := wait(at.Tick+5, time.Now().Add(5*time.Second))
+				ended <- err
+			}()
+			time.Sleep(20 * time.Millisecond)
+			r.world.mu.Lock()
+			r.world.stamp = event.Stamp{Run: at.Run + 1}
+			r.world.mu.Unlock()
+			select {
+			case err := <-ended:
+				if !errors.Is(err, errRunEnded) {
+					t.Fatalf("the wait ended with %v, want the run's end", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("the wait outlasted the run whose ticks it counted")
+			}
+		})
+	}
 }

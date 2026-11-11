@@ -581,6 +581,7 @@ var codecSessionStatePayload = structCodec{size: unsafe.Sizeof(SessionStatePaylo
 	{off: unsafe.Offsetof(SessionStatePayload{}.Authority), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
 	{off: unsafe.Offsetof(SessionStatePayload{}.SeatsOnly), kind: kindBool},
 	{off: unsafe.Offsetof(SessionStatePayload{}.Peers), kind: kindUint, size: unsafe.Sizeof(uint32(0))},
+	{off: unsafe.Offsetof(SessionStatePayload{}.Superseding), kind: kindBool},
 }}
 
 func (p *GameResetPayload) codec() (*structCodec, unsafe.Pointer) {

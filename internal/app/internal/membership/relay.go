@@ -221,6 +221,15 @@ func (m *Membership) relayReport(local, id link.PeerID, r network.JoinerReport) 
 	return nil
 }
 
+// relaying reports a join this run carries to the authority for id, whose link is
+// that join's whatever departure of the run it replaces applies meanwhile.
+func (m *Membership) relaying(id link.PeerID) bool {
+	m.relay.mu.Lock()
+	defer m.relay.mu.Unlock()
+	_, ok := m.relay.offers[id]
+	return ok
+}
+
 // relayRelease returns an identity whose handshake failed.
 func (m *Membership) relayRelease(id link.PeerID) {
 	m.relay.mu.Lock()
@@ -240,13 +249,15 @@ func (m *Membership) releaseRelayedJoiner(id link.PeerID) {
 	}
 	m.relay.mu.Lock()
 	offer, report := m.relay.offers[id], m.relay.reports[id]
-	delete(m.relay.offers, id)
 	delete(m.relay.reports, id)
 	m.relay.mu.Unlock()
 	port, err := m.socketPort()
 	if err == nil {
 		err = m.sendRelayedGate(port, offer, report)
 	}
+	m.relay.mu.Lock()
+	delete(m.relay.offers, id) // kept through the gate, for a departure applying inside it (relaying)
+	m.relay.mu.Unlock()
 	if err != nil {
 		m.log.Warn("session", "msg", "relayed join failed", "peer", id, "error", err.Error())
 		if port != nil {
@@ -391,7 +402,7 @@ func (m *Membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 			pass, err = m.checkPass(req.Pass, keys)
 		}
 		if err == nil {
-			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, keys, pass, nil)
+			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, m.departingLocked(), keys, pass, nil)
 			m.closeStaleLink(err, m.sessionTransportLocked())
 		}
 	case req.Step == network.RelayReady:

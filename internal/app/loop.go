@@ -158,8 +158,8 @@ func (a *App) Loop() (*restartRequest, error) {
 				return next, err
 			}
 		}
-		if err := a.membership.StartJoinSession(sigChan); err != nil {
-			return nil, err
+		if next, err := a.joinAnew(a.membership.StartJoinSession(sigChan)); next != nil || err != nil {
+			return next, err
 		}
 	}
 	if err := a.hub.StartAll(); err != nil {
@@ -521,17 +521,20 @@ func (a *App) awaitJoinPress(signals <-chan os.Signal) (*restartRequest, error) 
 				continue
 			}
 			a.showJoinStatus("Joining " + link.Shown(a.cfg.Membership.JoinAddress) + "...")
-			err := a.membership.TakeSeat(true, signals)
-			if errors.Is(err, membership.ErrSessionMoved) {
-				// Pressed already, and holding the bots it was to seat once it was in.
-				a.log.Info("session", "msg", "joining the session's new game",
-					"join", link.Shown(a.cfg.Membership.JoinAddress))
-				return &restartRequest{Rejoin: true, provided: a.cfg.Resources.Provided,
-					Bots: a.cfg.Membership.Bots}, nil
-			}
-			return nil, err
+			return a.joinAnew(a.membership.TakeSeat(true, signals))
 		}
 	}
+}
+
+// joinAnew answers a seat or a start gate that found its session playing another
+// game with the run that joins that one: pressed already, and holding the bots this
+// run was to seat once it was in. Any other failure is the join's own.
+func (a *App) joinAnew(err error) (*restartRequest, error) {
+	if !errors.Is(err, membership.ErrSessionMoved) {
+		return nil, err
+	}
+	a.log.Info("session", "msg", "joining the session's new game", "join", link.Shown(a.cfg.Membership.JoinAddress))
+	return &restartRequest{Rejoin: true, provided: a.cfg.Resources.Provided, Bots: a.cfg.Membership.Bots}, nil
 }
 
 // joinPressed reports whether ev is the press that seats a waiting join: one that
