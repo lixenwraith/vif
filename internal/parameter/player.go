@@ -107,12 +107,6 @@ const (
 	// OrbCoronaRadiusY is vertical glow radius in cells (2:1 aspect)
 	OrbCoronaRadiusY = 1.5
 
-	// OrbBurstRadiusX is horizontal burst radius in cells
-	OrbBurstRadiusX = 3.0
-
-	// OrbBurstRadiusY is vertical burst radius in cells
-	OrbBurstRadiusY = 1.5
-
 	// OrbCoronaPeriodMs is corona rotation period (ms)
 	OrbCoronaPeriodMs = int64(500)
 

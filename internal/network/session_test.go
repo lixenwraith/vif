@@ -148,7 +148,7 @@ func TestTheCoordinatorAssignsWithTheKeysADialProves(t *testing.T) {
 			want = []string{pending.Key().ID()}
 		}
 		_ = pending.Close()
-		if !slices.Equal(got, want) || !ValidKeyString(got[0]) {
+		if !slices.Equal(got, want) || DecodeKey(got[0]) == nil {
 			t.Fatalf("a dial keeping %q was assigned knowing %q", want, got)
 		}
 	}

@@ -12,8 +12,6 @@ var (
 
 	// Body colors (gradient from head toward tail)
 	RgbSnakeBodyBright = color.GrassGreen
-	RgbSnakeBodyMid    = color.FernGreen
-	RgbSnakeBodyDark   = color.DarkFern
 
 	// Shielded state overlay
 	RgbSnakeShieldTint = color.SkyTeal
@@ -38,12 +36,6 @@ const (
 
 	// Hit flash intensity
 	SnakeHitFlashIntensity = 0.8
-)
-
-// Segment visual spacing (for renderer continuity tuning)
-const (
-	// Visual overlap between segments (0 = touching, negative = gap, positive = overlap)
-	SnakeSegmentVisualOverlap = 0.2
 )
 
 // SnakeHeadChars defines the 5×3 head character pattern

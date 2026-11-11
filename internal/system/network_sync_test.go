@@ -764,10 +764,9 @@ func TestADepartureWhileAResetRebuildsKeepsItsPlace(t *testing.T) {
 	}
 }
 
-// TestCoordinatorLossRaisesLocalStatus covers the failure mode a digest cannot:
-// once the host link is gone there is no peer left to disagree with, so the guest
-// must report the disconnect directly rather than waiting for DESYNC. The guest
-// continues as a local fork, and that fact survives a game reset.
+// TestCoordinatorLossRaisesLocalStatus: once the host link is gone no correction
+// arrives to show the guest where it stands, so it reports the disconnect itself.
+// The guest continues as a local fork, and that fact survives a game reset.
 func TestCoordinatorLossRaisesLocalStatus(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	host, guest := network.NewLoopbackPair(1, 2)

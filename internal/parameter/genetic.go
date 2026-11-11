@@ -9,7 +9,6 @@ const (
 	GAPerturbationStrength    = 0.15
 	GATournamentSize          = 3
 	GACrossoverMixProbability = 0.5
-	GAParallelism             = 4 // Batch engine only; unused by the streaming path
 
 	// GAScoutRate is the fraction of gateway samples replaced by probe genotypes
 	GAScoutRate = 0.08

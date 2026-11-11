@@ -231,12 +231,7 @@ var (
 	RgbStatusMessageText  = color.LightGray
 
 	// Wall colors
-	RgbWallDefault = color.SlateGray
-	RgbWallStone   = color.Taupe
-	RgbWallMetal   = color.CoolSilver
-	RgbWallEnergy  = color.DeepPurple
-	RgbWallDanger  = color.Oxblood
-	RgbWallGhost   = color.DarkSlate
+	RgbWallStone = color.Taupe
 
 	// Shield
 	RgbLootShieldBorder = color.PalePink

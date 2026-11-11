@@ -285,9 +285,10 @@ four ticks apart (on a slower container than the figures above), the seal costs
 (protocol 26) a keyframe's deflate falls to the stores that moved: on four cores a
 td keyframe that one deflate took 72.7 ms encodes in 2.2 while its stores hold and
 8.6 a tick later, at the same bytes within 0.4%, and a session's first in 150
-against 158 (`BenchmarkKeyframeEncodeTD`, `TDMoving`, `TDCold`). An install that
-projects nothing holds the live lock 7–10 / 40–70 ms, and each projected tick adds up
-to a simulation tick. Sealing, indexing and encoding run outside the lock, but on
+against 158 (`BenchmarkKeyframeEncodeTD`, `BenchmarkKeyframeEncodeTDMoving`,
+`BenchmarkKeyframeEncodeTDCold`). An install that projects nothing held the live lock
+7–10 / 40–70 ms, 8 at td once it compared in place (§4), and each projected tick adds
+up to a simulation tick. Sealing, indexing and encoding run outside the lock, but on
 the one thread a browser guest has.
 
 Per simulated second the host costs 20·T_sim + R·(capture + seal + index) plus the
@@ -474,8 +475,8 @@ the pod authoring, 76 s at DEBUG on 2026-10-24, read from its log and journal:
   pages, whose cause §3.5 found: the FSM's transition tick.
 - **The storm's bandwidth**: the committed copies the guest received carried 25–50 kB
   of crossing payload per five seconds between storms and 134–144 kB during one,
-  three quarters of it `CombatAttackAreaCrossingRequest` and
-  `CombatAttackDirectRequest` at 290–425 bytes of TOML each, the rest explosions.
+  three quarters of it `EventCombatAttackAreaCrossingRequest` and
+  `EventCombatAttackDirectRequest` at 290–425 bytes of TOML each, the rest explosions.
   Omitting their zero-valued fields would take 16–18% off those payloads before
   deflate and little after it; the binary codec is what shrinks them. The guest's
   own crossings, 40% as many bytes again, came back to it in full as the echo until
@@ -776,12 +777,14 @@ it can land. The costs name what it lowers (−), raises (+) and leaves (·), in
 order CPU, memory, bandwidth, latency; projections come from §1's figures and §3
 confirms or refutes them. Phase 1 closed with the six-tick wire digest retired
 (protocol 22): parity is the correction exchange's, and a repair names its sections
-in `snapshot.repair_sections`. Phase 2's first four iterations landed the binary
-wire codec, its envelope (protocol 23) and its payload (protocol 24, journal
-schema 37), the authority's FSM transitions (protocol 25, journal schema 38), the
-index read in place under a word hash (manifest version 4, capture schema 24) and
-keyframes from cached sections (protocol 26); the last batch's three are decided on
-§3.7 and wait in the todo. The approaches are in three batches, and §5 orders them.
+in `snapshot.repair_sections`. Phase 2 landed the binary wire codec, its envelope
+(protocol 23) and its payload (protocol 24, journal schema 37), the authority's FSM
+transitions (protocol 25, journal schema 38) and their folded chains (protocol 27,
+journal schema 39), the index read in place under a word hash (manifest version 4,
+capture schema 24), keyframes from cached sections (protocol 26), the install that
+compares in place, the columnar keyframe codec (protocol 28, capture schema 25) and
+retention by reference; the projection the live lock still holds waits in the todo.
+The approaches are in three batches, and §5 orders them.
 
 ### Batch 1: the wire
 
@@ -1044,8 +1047,8 @@ keyframes from cached sections (protocol 26); the last batch's three are decided
 
 ## 5. Order and iterations
 
-Phase 2 is landed: five iterations in this order, each one task, branch and PR,
-re-running §3.1's matrix and §3.5's four shapes, measured in §3.6.
+Phase 2 is landed in this order, each iteration one task, branch and PR, re-running
+§3.1's matrix and §3.5's four shapes; §3.6 measures the first five and §3.7 the rest.
 
 1. The codec's envelope (batch 1): protocol 23 (§4).
 2. The codec's payload (batch 1): protocol 24 and journal schema 37, the syncs'
@@ -1055,10 +1058,12 @@ re-running §3.1's matrix and §3.5's four shapes, measured in §3.6.
 4. Converged answers without a capture and the faster hash (batch 2): manifest
    version 4 and capture schema 24 (§3.3, §4).
 5. Keyframes from cached sections (batch 3): protocol 26 (§3.1, §3.6, §4).
-6. The columnar keyframe codec (batch 3): protocol 28 and capture schema 25
+6. Less work under the live lock (batch 3): the install compares in place; no
+   version moves (§3.7, §4).
+7. The columnar keyframe codec (batch 3): protocol 28 and capture schema 25
    (§3.7, §4), after batch 2's fold of unguarded chains (protocol 27).
-7. Retained indexes by reference (batch 3): no version moves (§3.7, §4).
+8. Retained indexes by reference (batch 3): no version moves (§3.7, §4).
 
-What follows is decided on §3.7 and waits in the todo: the
-[install that compares in place](todo.md#project-a-correction-outside-the-live-lock),
-alone, with its measurement before and after in §3.
+What is left waits in the todo:
+[a correction projected outside the live lock](todo.md#project-a-correction-outside-the-live-lock),
+with its measurement before and after in §3.

@@ -7,8 +7,8 @@ The game combines vi-style cursor and text operations with real-time combat,
 adaptive navigation, and evolving species parameters.
 
 This document is the high-level entry point. The repository imports the
-separately maintained `terminal`, `toml`, `color`, and `log` modules. Simulation
-math is `float64`, with integer values reserved for discrete grid-cell topology;
+separately maintained `terminal`, `toml`, `color`, `log`, `audio`, `genetic`,
+`auth` and `ascimage` modules (§11). Simulation math is `float64`, with integer values reserved for discrete grid-cell topology;
 the driven runtime's reproducibility is deliberately narrower than a
 cross-platform lockstep guarantee.
 
@@ -25,11 +25,9 @@ flowchart TD
     App --> Site["The site's router and identity service: sessions and accounts"]
 ```
 
-The application owns gameplay and orchestration. It delegates terminal
-protocol details to `github.com/lixenwraith/terminal`, TOML parsing to
-`github.com/lixenwraith/toml`, RGB operations to
-`github.com/lixenwraith/color`, and asynchronous log transport to
-`github.com/lixenwraith/log`.
+The application owns gameplay and orchestration. It delegates terminal protocol
+details, TOML, RGB operations, log transport, sound, evolution, the SCRAM
+exchanges and image conversion to the modules of §11.
 
 ## 2. Application containers
 
@@ -48,16 +46,16 @@ The main architectural planes are:
 
 | Plane | Owners | Responsibility |
 |---|---|---|
-| Composition | `cmd/vif`, `internal/app`, `internal/manifest`, `internal/resource`, `internal/paths` | Resolve options and config roots, construct services/resources/systems/renderers, load the FSM, start and stop the process. |
+| Composition | `cmd/vif`, `internal/app`, `internal/manifest`, `internal/resource`, `internal/paths`, `internal/asset` | Resolve options and config roots, construct services/resources/systems/renderers, load the FSM, start and stop the process; the embedded shipped files a root falls back to. |
 | Simulation data | `internal/engine`, `internal/component`, `internal/core`, `internal/parameter`, `internal/profile` | Entity identities, typed sparse-set component stores, singleton resources, spatial indexing, shared time/state, tunables, and per-kind profile tables. |
-| Simulation behavior | `internal/system`, `internal/fsm`, `internal/event` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement. |
-| Interaction | `internal/input`, `internal/mode`, `internal/bot` | Parse terminal events, or step a bot graph, into semantic intents and apply them under the world lock. |
+| Simulation behavior | `internal/system`, `internal/fsm`, `internal/event`, `internal/behavior`, `internal/pattern` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement; the behavior programs a data species runs, and the wall cells an image or a stone preset lays. |
+| Interaction | `internal/input`, `internal/mode`, `internal/bot`, `internal/help` | Parse terminal events, or step a bot graph, into semantic intents and apply them under the world lock; project the live bindings into the help overlay. |
 | Authority and convergence | `internal/converge`, `internal/snapshot` | Hold the session's authority term and run its succession, publish the correction cadence, answer the selective manifest exchange, install what arrives, and keep the links a handoff needs. `converge` reads and writes the live world only through the seam the composition root supplies; `snapshot` is the capture wire model and comparison surface. |
 | Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the presentation's surface. |
 | I/O boundaries | `internal/service`, `internal/content`, `internal/network` over `pkg/network`, external modules | Categorized file access, terminal polling, corpus loading, audio device/process management, and framed TCP, TLS or WebSocket sessions with their admission: a participant's key proven at every door, the pass that brings it back, the router's ticket, a passphrase door's Argon2-SCRAM exchange, and the account exchange with the site's identity service ([Auth and session design](auth-session-design.md)). |
 | Supervision and diagnostics | `internal/lifecycle`, `internal/probe`, `internal/vlog`, `internal/status`, `internal/prof` | An allocated session's lifetime and `/health`/`/metrics` endpoint; the log sink, metric registry, flight recorder and profiler. |
-| Reusable algorithms | `pkg/*` | float64 math/physics, the map's spatial index, navigation, maze and cave generation, per-entity state machines, link pacing, framed TCP and WebSocket messages, and a graphical host's window, browser page and glyph drawer. |
+| Reusable algorithms | `pkg/*` | float64 math/physics, the map's spatial index, navigation, maze and cave generation, per-entity state machines, link pacing, framed TCP and WebSocket messages, and a graphical host's window, browser page, glyph drawer and key report. |
 
 See [Package map](package-map.md) for the medium-level dependency view.
 
@@ -191,13 +189,17 @@ that names game concepts. `internal/gen-manifest` hardcodes no component; it
 parses `internal/manifest/definition.go` and emits templates over whatever that
 file lists, the only name it knows being `Position`, and the world, scheduler,
 queue, convergence and snapshot code is written over the generated rows, never
-over a named component. In the headless binary the generated capture, install and
-delta code is 877 KB of text and data against 317 KB of hand-written engine, and
-the terminal module the engine's vocabulary comes from links at 14 KB.
+over a named component. In the headless binary the code the manifest expands into,
+the generated capture, install, delta, page and column passes and the generic
+helpers they instantiate for each component, is 1.8 MB of text and data against
+167 KB for the rest of the engine, and the terminal module the engine's vocabulary
+comes from links at 21 KB (`go tool nm -size`).
 
-Position is specialized rather than being an ordinary generated store. It also
-maintains a fixed-capacity spatial grid used for cell queries, wall masks,
-line-of-sight, patterns, and nearby free-space searches. Large actors use a
+Position is specialized rather than being an ordinary generated store:
+`engine.Position` binds the rows to `pkg/position`, the map's spatial index, a
+dense grid of cells over one layer or a volume of them with a bit plane for each
+block mask, which answers cell queries, wall masks, line of sight, patterns and
+free-space searches ([Position](position-package.md)). Large actors use a
 header/member composite model: an invisible or controlling header owns motion
 and lifecycle, while member entities provide visible and collidable cells.
 
@@ -360,20 +362,36 @@ See [Navigation](navigation-design.md) and [AI, physics, and evolution](ai-physi
 
 ## 11. Externalized module boundaries
 
-These boundaries belong to separately maintained modules.
+These boundaries belong to separately maintained modules:
 
-| Module | Boundary owned outside this repository |
-|---|---|
-| `github.com/lixenwraith/terminal` | Raw/alternate-screen lifecycle, terminal event decoding, color-mode detection, cells, mouse modes, syncing, and flushing, plus the `tui` form and widget layer the configuration menu, renderers and tools draw with. |
-| `github.com/lixenwraith/toml` | Parsing, reflection-based decoding, and encoding used by scenarios, bot graphs, `vif.toml`, content, keymaps, authored scripts, audio specs and commands. |
-| `github.com/lixenwraith/color` | RGB values, interpolation, blend operations, grayscale, and palette-related color manipulation. |
-| `github.com/lixenwraith/log` | Buffered asynchronous structured-log sink, rotation, retention, and transport below `internal/vlog`. |
-| `github.com/lixenwraith/genetic` | Generational and streaming steady-state engines, their selection, crossover and mutation operators, the multi-population registry with its scout sampling, and the exact-continuation state a capture carries. |
-| `github.com/lixenwraith/audio` | Synthesis, sound caches, the PCM mixer and its backends, voices, patterns and the sequencer, MIDI files, the rip and its learned front end, and the shipped sound and music banks. |
-| `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window (`pkg/window`), with cgo off. |
+- `github.com/lixenwraith/terminal`: raw/alternate-screen lifecycle, terminal
+  event decoding, color-mode detection, cells, mouse modes, syncing and flushing,
+  plus the `tui` form and widget layer the configuration menu, renderers and tools
+  draw with.
+- `github.com/lixenwraith/toml`: parsing, reflection-based decoding, encoding and
+  macros, used by scenarios, bot graphs, `vif.toml`, content, keymaps, authored
+  scripts, audio specs and commands.
+- `github.com/lixenwraith/color`: RGB values, interpolation, blend operations,
+  grayscale and palette-related color manipulation.
+- `github.com/lixenwraith/log`: the buffered asynchronous structured-log sink,
+  rotation, retention and transport below `internal/vlog`.
+- `github.com/lixenwraith/genetic`: generational and streaming steady-state
+  engines, their selection, crossover and mutation operators, the multi-population
+  registry with its scout sampling, and the exact-continuation state a capture
+  carries.
+- `github.com/lixenwraith/audio`: synthesis, sound caches, the PCM mixer and its
+  backends, voices, patterns and the sequencer, MIDI files, the rip and its
+  learned front end, and the shipped sound and music banks.
+- `github.com/lixenwraith/auth`: the Argon2-SCRAM credential and exchange a
+  passphrase door and an account sign-in prove with.
+- `github.com/lixenwraith/ascimage`: the dual-mode cell images a wall pattern
+  loads (`.aimg`) and the quadrant fit the logo draws with.
+- `github.com/ebitengine/purego`: loading Xlib, EGL and GLES 2 at run time for the
+  desktop window (`pkg/window`), with cgo off.
 
-`golang.org/x/sys` serves the window's Unix calls, and `golang.org/x/term` is an
-indirect dependency. vif has no application CGO requirement, although external
+`golang.org/x/sys` serves the window's Unix calls; `golang.org/x/term`,
+`golang.org/x/crypto` and `github.com/golang-jwt/jwt/v5`, the last two through
+`auth`, are indirect dependencies. vif has no application CGO requirement, although external
 audio executables or an OSS device are runtime dependencies when sound is
 enabled.
 

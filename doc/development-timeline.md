@@ -1,7 +1,7 @@
 # vif Development Timeline
 
 How vif's features, and the defects chased along the way, followed one another
-from the first commit to 2026-10-20: a section a month, a line a topic, each line
+from the first commit to 2026-11-11: a section a month, a line a topic, each line
 folding every commit on that topic within its month. The project was vi-fighter
 until its rename to vif in September 2026.
 
@@ -166,7 +166,7 @@ until its rename to vif in September 2026.
 - Behavior machine design
 - Replay step back, seek, digests and per-runtime logs
 - Combat statuses, charge caps, ray, the cleaner as gun
-- Go 1.27.2; terminal v0.2's themed TUI
+- Go 1.27.2, then 1.27.3; terminal v0.2's themed TUI
 - Network failures name the next step; messages stay up
 - User installs, uninstall, root-owned archives
 - TOML macros for scenarios and bot graphs
@@ -188,5 +188,50 @@ until its rename to vif in September 2026.
 - Navigation rework: td's worst storm tick 132 to 30 ms
 - Journals across resets, then opened and closed mid-run
 - Windows play notes; a README for each release archive
-- Netcode design: bodies raw past the link, bundled links, one-trip descent, leaf echo
-- Netcode phase 1 closed: the divergence harness, a lead that learns a spike, the wire digest retired
+- Key releases, the input hook, keys per action
+- Start screen and press to start on every host
+- Typed refusals; join matrix tests; fuzzed handshakes
+- Session pause, `:leave` and Wraiths
+- Host loss: succession walk, redial, forks
+- wss doors, self-signed or pinned by `-ca`
+- Browser: a hidden tab leaves and rejoins
+- Netcode phase 1: raw bodies, bundled links, leaf echo
+- Divergence harness; the wire digest retired
+- Netcode phase 2: binary wire, columnar keyframes
+- `pkg/network`; relay doors through the router
+- Soundlab editors, mixer and keyboard
+- `vif.toml` written back with its comments kept
+- Behavior machines: `pkg/machine`, data species
+- Vanguard: a cave side-scroller with raiders
+- Payload enums by name in scenarios
+- Load shedding; the host sets the session's rate
+- One pulse system for every pulse
+- `pkg/position`: bit planes, a volume of layers
+- 24 fps inside tmux; a max FPS setting
+- Menu by purpose; native menus on Android and web
+- Genetic completed with its examples
+- Audio stands alone; the rip begins
+
+## 2026-11 — Libraries, admission and the rip
+
+- The rip: a transformer model trained in rounds
+- Soundlab: MIDI both ways, track edits, undo
+- Strings, piano, bass and drums fit recordings
+- Windows Terminal play; termbench
+- SIMD builds; glyph diffs by changed cells
+- Audio, genetic, transformer, ascimage split out
+- Soundlab becomes stapes, a repository of its own
+- Shields at their own radius and colour
+- `internal/app` split: corrector, config, membership
+- Fusion of drains and composites into any species
+- Dead code swept; cursor syncs bounded
+- The vim tutor: eleven lessons
+- Participant keys, session passes, keep-out list
+- Passphrase doors over Argon2-SCRAM
+- Router tickets, a TLS front door, accounts
+- A held key repeats motion, text and fire
+- Scenario trees under `base/`; downloads opt-in
+- Scenario macros three times faster
+- A death visual for every species
+- Cheaper cells and probes; three axes
+- Roster across new games; unheard players retired

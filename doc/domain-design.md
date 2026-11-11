@@ -793,7 +793,7 @@ departing cursor Wraith, and reconnect must take a current world.
 
 | Area | Current limit |
 |---|---|
-| Trust | Transport is plaintext and the door admits any key. A participant proves its key at admission, peer links are proved both ways and reports and handoff records are signed, so a stranger takes no member's place or term; a member is trusted within its session. |
+| Trust | Transport is plaintext but at a TLS door, and a door without a passphrase or a ticket gate admits any key. A participant proves its key at admission, peer links are proved both ways and reports and handoff records are signed, so a stranger takes no member's place or term; a member is trusted within its session. |
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | Each participant stamps the lead its own link to the authority asks for, capped at `NetworkBarrierMaxDelayTicks` (multi-player.md §3.5). A crossing that misses it still lands later on the authority than on its producer, and one past `NetworkCommitLateTicks` is void everywhere but its producer until a correction repairs it. |
 | Topology | The protocol relays over a graph. `-join` dials one address, and in a migrate session every participant then dials the first candidate on the published succession chain, so the shape is a star with a successor chain over it. |

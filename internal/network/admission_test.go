@@ -288,7 +288,7 @@ func TestADialProvesEveryKeyItNamesOrNone(t *testing.T) {
 	nonce := NewNonce()
 	proofs := []Proof{a.Prove(nonce, nil), b.Prove(nonce, nil)}
 	keys, err := VerifyProofs(proofs, nonce, nil)
-	if err != nil || len(keys) != 2 || keys[0] != a.ID() || keys[1] != b.ID() || !ValidKeyString(keys[0]) {
+	if err != nil || len(keys) != 2 || keys[0] != a.ID() || keys[1] != b.ID() || DecodeKey(keys[0]) == nil {
 		t.Fatalf("proved %v, %v", keys, err)
 	}
 	if !bytes.Equal(DecodeKey(keys[0]), a.Public()) || DecodeKey("not a key") != nil || EncodeKey([]byte{1}) != "" {

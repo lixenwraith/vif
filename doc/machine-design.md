@@ -672,8 +672,10 @@ smaller part of it.
   code pair keeps its rule. The range checks in `meta.go`, `genetic.go` and
   `loot.go` read `>= SpeciesMax`.
 - **Composite routing.** A data species' header carries `component.BehaviorData`;
-  the behavior system handles `EventCompositeIntegrityBreach` for it, and
-  `handleEmptyComposite`'s default destroys the head.
+  the behavior system handles `EventCompositeIntegrityBreach` for it, ending the
+  instance silently, and the composite system destroys a head left with no members
+  unless its hit points are spent (`CompositeSystem.destroyHead`), as for any
+  composite.
 - **Events.** A scenario emits `EventBehaviorSpawnRequest{program, x, y, edge, inset}` (bus,
   and barrier-bound, since a crossed one allocates shared identity) and `EventBehaviorCancelRequest{program}` (shared, as every species'
   cancel; an empty program cancels every data species). A program no entry

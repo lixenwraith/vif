@@ -60,7 +60,7 @@ events, including sound requests; the journal carries no mute state, so
 `-mute`, `-ab` and `-mw` are the viewer's. The viewer's pause holds the mixer,
 as the game's pause does, and so do a seek and the end of the stream. A copy
 that takes over to go back keeps the speakers and the conductor's state, since
-the engine does not rewind (`system.HandOverSound`).
+the engine does not rewind (`system.HandOverAudio`).
 
 What vif sets of the engine:
 

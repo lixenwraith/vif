@@ -301,7 +301,8 @@ What a cluster has not yet been put through is
   `admit` sub that names a player's address remain operator-only.
 - **The host is the authority over identity.** A joiner reports; the coordinator
   decides.
-- **No authentication, and hardening first.** See §4.
+- **Anonymous play, and hardening first.** A pod takes the router's ticket, and an
+  account is optional ([auth design D12](auth-session-design.md#0-decisions)); see §4.
 - **WebSocket on the standard library, terminated in the router.** `pkg/websocket`
   is one minimal RFC 6455 byte stream for `vif`'s native client and the router,
   which splices the browser route to the pod as the front door does (§9).

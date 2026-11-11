@@ -126,10 +126,11 @@ dropped comes back the same way. `-host ws://:7777` serves WebSocket instead of
 TCP, which is how a browser joins; `-host :7777,wss://:7778 -cert host.pem` serves
 both, the second under TLS, which a page served over https needs, and `-selfsign`
 in place of `-cert` makes a certificate for the run, which a terminal joins as it
-is, encrypted and unauthenticated, or pins with `-ca`. Sessions are trusted-peer: a
-dial is rate-limited and bounded in what it can allocate, but nobody is
-authenticated, so a host reachable from an untrusted network needs that in front
-of it. [Multiplayer](doc/multi-player.md) has the session design and
+is, encrypted and unauthenticated, or pins with `-ca`. A dial is rate-limited and
+bounded in what it can allocate. A door admits anyone who reaches it unless
+`-passphrase` gives it one, which a new player proves; on a `wss://` door that
+exchange proves the host too, so a plaintext tcp or ws door is for trusted peers.
+[Multiplayer](doc/multi-player.md) has the session design and
 [Netcode design](doc/netcode-design.md) the wire, the correction pipeline and their
 readings.
 

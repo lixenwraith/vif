@@ -15,9 +15,6 @@ const (
 	// CombatInitialHPSwarm is swarm starting hit points
 	CombatInitialHPSwarm = 20
 
-	// CombatInitialHPStorm is storm starting hit points
-	CombatInitialHPStorm = 1000
-
 	// CombatInitialHPCursor is a cursor's starting hit points, which nothing raises
 	CombatInitialHPCursor = 100
 
@@ -107,9 +104,6 @@ const (
 
 	// SwarmCollisionRadiusY is swarm vertical collision radius (2/2 cells)
 	SwarmCollisionRadiusY = 1.0
-
-	// DrainCollisionRadius is drain collision radius (point entity with small area)
-	DrainCollisionRadius = 0.5
 )
 
 const LightningEnergyDrainReward = 100

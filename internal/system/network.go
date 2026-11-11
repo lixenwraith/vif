@@ -31,8 +31,12 @@ type NetworkSystem struct {
 	world *engine.World
 
 	// Barrier state is written from the lock-free push path and drained under the tick.
-	mu             sync.Mutex
-	crossings      []event.ScheduledWireFrame
+	mu        sync.Mutex
+	crossings []event.ScheduledWireFrame
+	// scheduled holds artifacts not yet admitted, applied (below) the admitted ones:
+	// admissibleFromSource runs as each applies, so code acting on what is scheduled
+	// checks admission itself (keepLost). Each source's stand in the order it made
+	// them, which is the order they apply in.
 	scheduled      []barrierArtifact
 	scheduledBytes int
 	epochs         [participantSlots]window

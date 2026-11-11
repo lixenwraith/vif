@@ -154,9 +154,6 @@ func DecodeKey(s string) []byte {
 	return pub
 }
 
-// ValidKeyString reports a string of a public key's form.
-func ValidKeyString(s string) bool { return DecodeKey(s) != nil }
-
 // NewNonce is the challenge a door writes into its question: random bytes no two
 // dials share, so a proof read off one link is good on no other.
 func NewNonce() string {
