@@ -160,8 +160,8 @@ flags so no caller can bypass the start/ready gate. The entry points:
 | `:session` | One line: hosting or joined, by the role held now, and the address (a successor hosts at the one it declared until `:host` names one), participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
-`[tcp://|vif://]host:port[/name]`, the name routing to one of several sessions on
-an address, or a `ws(s)://` route a browser joins by, whose last path segment is
+`[tcp://|vif://|vifs://]host:port[/name]`, the name routing to one of several
+sessions on an address and `vifs://` dialling it over TLS, or a `ws(s)://` route a browser joins by, whose last path segment is
 the name. An `http(s)://` URL names a site instead: `network.RequestSession` posts
 to its `/vif/api/sessions` and the returned link is what `-join` or `:join` dials,
 so a restart or rejoin follows that session rather than creating another. A link

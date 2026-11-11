@@ -17,9 +17,11 @@ The modules it requires:
 | `github.com/lixenwraith/toml` | Scenario, FSM, content, keymap, audio, bot-graph, `vif.toml`, script and journal-payload parsing. |
 | `github.com/lixenwraith/log` | Asynchronous structured file logger behind `internal/vlog`. |
 | `github.com/lixenwraith/audio` | Synthesis, mixing, the sequencer, MIDI, the rip and the shipped banks. |
+| `github.com/lixenwraith/genetic` | The streaming engines and the registry that evolve species parameters. |
+| `github.com/lixenwraith/ascimage` | Dual-mode cell images: a wall pattern's `.aimg`, the logo's quadrant fit, and `bin/ascimage` from `make tools`. |
 | `github.com/lixenwraith/auth` | Argon2id-SCRAM for a passphrase door and an account sign-in: the credential a player derives, the exchange both ends run. Its JWT half is unused ([Auth and session design D7](auth-session-design.md#0-decisions)). |
 | `github.com/ebitengine/purego` | Loading Xlib, EGL and GLES 2 at run time for the desktop window, with cgo off. |
-| `golang.org/x/sys`; `x/term` (indirect) | The desktop window's Unix calls; terminal support for the terminal module. |
+| `golang.org/x/sys`; `x/term`, `x/crypto`, `golang-jwt/jwt/v5` (indirect) | The desktop window's Unix calls; terminal support for the terminal module; Argon2 and the JWT half `auth` carries. |
 
 Audio sends PCM to optional host commands; see the audio library's
 [§3](https://github.com/lixenwraith/audio/blob/main/doc/audio.md#3-backend-detection-and-failover) for runtime
@@ -111,11 +113,13 @@ input enum declarations. `go generate ./internal/manifest/...` runs
 | `internal/engine/component_domain_gen.go` | `ComponentDef.Domain` | `componentDomains`, the replication-domain audit table |
 | `internal/engine/snapshot_world_gen.go` | manifest components | the shared-world capture, its delta, the install/reconcile passes over every store, and the player-world capture a journal's opening carries |
 | `internal/engine/snapshot_pages_gen.go` | manifest components | the canonical page rows a correction manifest is hashed over, and the writer one repaired page is applied through |
+| `internal/engine/snapshot_columns_gen.go` | the component types | each store's columnar keyframe layout: entities as deltas, then each field over every row |
 | `internal/manifest/build_gen.go` | manifest systems | core constructors, active-name list, profiles, and snapshot declarations |
 | `internal/manifest/build_audio_gen.go` | systems with the `audio` capability | audio-capable constructors and names |
 | `internal/manifest/build_noaudio_gen.go` | audio capability boundary | audio-free event-sink constructors |
 | `internal/manifest/render_gen.go` | manifest renderers | terminal renderer constructors and priorities |
 | `internal/event/registry_gen.go` | `internal/event/type.go` and payload comments/types | event name/type/payload registry and the replication class table |
+| `internal/event/payload_gen.go` | registered payload structs | the field tables the wire and journal codec walks |
 | `internal/input/strings_gen.go` | selected input enum const blocks | enum string/reverse lookup tables |
 
 ```mermaid
@@ -125,6 +129,7 @@ flowchart TD
     Generator --> Domains["component domain audit table"]
     Generator --> Builders["system/renderer builders and profiles"]
     Generator --> Registry["event registry"]
+    Generator --> Codecs["payload and column codecs"]
     Generator --> Strings["input strings"]
 ```
 
@@ -155,9 +160,11 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 
 | Flag | Purpose |
 |---|---|
-| `-host <addr>` | Play at once and open the run to participants, for example `:7777`, or `ws://:7777` for WebSocket. |
-| `-serve <addr>` | Bind a headless session with no local cursor: a dedicated host. Takes `ws://` like `-host`. |
-| `-join <addr>` | Join `[tcp://\|vif://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies the seed and the scenario, and the joiner keeps its own typing corpus. Grammar in [Services and networking](services-and-networking.md) §6. |
+| `-host <doors>` | Play at once and open the run to participants at one or more doors, comma-separated: `:7777` for tcp, `ws://:7777` or `wss://:7777` for WebSocket. |
+| `-serve <doors>` | Bind a headless session with no local cursor, a dedicated host, at one or more doors, as `-host` takes them. |
+| `-cert <file>`, `-key <file>`, `-selfsign` | The certificate chain a `wss://` door serves and its key, PEM, the key defaulting to the `-cert` file; or a certificate made for this run, encrypted and taken as it is by a terminal that joins. For `-host`, `-serve` or `:host`. |
+| `-join <addr>` | Join `[tcp://\|vif://\|vifs://]host:port[/name]` or a `ws(s)://` URL, or a new session an `http(s)://` site creates; the host supplies the seed and the scenario, and the joiner keeps its own typing corpus. Grammar in [Services and networking](services-and-networking.md) §6. |
+| `-ca <file\|sha256:hex>` | With `-join`, what a `wss://` host's certificate is trusted by beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint. |
 | `-name <name>` | With `-host` or `-serve`, the session name this host answers to, so one address serves several. |
 | `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`, beside the scenario's `max_players`, the lower holding; with a `-join` site, the size requested. Unset holds the whole roster; under the scenario's `min_players` it is refused. With `-serve` it counts guests from `1`, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
 | `-bot [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
@@ -165,6 +172,7 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second of game time over the window, on a link carrying at least this many bytes per second of it. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
 | `-shed-window <dur>` | A host's shedding when it cannot keep its own tick: past a tenth of the ticks it owed dropped over the window, it dismisses its newest bot, then its newest player, one a window. `0` never sheds. See [Multiplayer](multi-player.md) §3.5. |
 | `-listen <addr>`, `-no-advertise` | With `-join`, the address the other participants reach this one at in a migrate session, or none at all, which keeps it a leaf, never a candidate ([Multiplayer](multi-player.md) §5.3). |
+| `-relay <addr>` | With `-join`, admit participants that cannot reach the host here and carry their traffic, or at a door published through `vif://<router>` ([Multiplayer](multi-player.md) §5.6). |
 | `-passphrase <phrase\|new>` | With `-host` or `-serve`, the passphrase the doors take through an Argon2-SCRAM exchange, or `new` for one made and printed; with `-join`, the one shown to a door that asks. Eight bytes at least; `:session` shows a host's ([Multiplayer](multi-player.md) §5.4). |
 | `-admit <open\|ticket:key>` | What a `-host` or `-serve` door admits beside a pass: `open`, any key; or the site's tickets under the router's public key(s), comma-separated, and no bare key, which a fleet pod's Job sets ([fleet design §4](kubernetes-fleet.md#4-security-posture)). |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own. Omitted on a server, the first person's terminal sizes the session, or a bot's 120x40 when the server seats bots of its own. |
@@ -302,7 +310,8 @@ Both sides should show `2P` and its round trip, two cursors, and the same shared
 score/progression after either participant moves, types and fires. Use terminals
 of different sizes and resize one mid-run: the shared map must not follow either
 terminal. Quit the joiner and continue on the host; its badge becomes `Net: down`
-and only the remote cursor disappears. The map stays latched either way — a run
+and the remote cursor waits as a Wraith until the joiner comes back or its wait
+runs out ([Multiplayer §5.4](multi-player.md#54-wraiths)). The map stays latched either way — a run
 that opened a session keeps its bounds — which `:session` names rather than the
 status bar, along with the peers, the tick and how many succession candidates the
 chain holds. For a LAN, bind `:7777` and join the host's reachable address.
@@ -364,13 +373,10 @@ interval divided by the rate, so `-speed 2` runs a script at twice real time and
 `-host`, `-join` or bots, because a participant that outruns its peers is not
 simulating the session it is in.
 
-Every participant of one session must use the same rate. Only the `max` case is
-enforced, because the runtime cannot see a peer's pace: a faster participant is
-rebased to the authority's tick by every correction, which keeps the session
-correct and moves the world under a script's own schedule. A dedicated host runs
-real time; an interactive host runs its own rate, which an interactive guest
-adopts from the offer and nobody changes while a peer is linked. A script sharing
-the session must match it.
+Every participant of one session runs at its host's rate: a joiner, a script's or
+a bot's run included, adopts the rate its offer names, and the host's `:speed`
+crosses to every participant at one tick, which a guest's cannot
+([Multiplayer §3.6](multi-player.md#36-holding-a-session)).
 
 ### A dedicated host
 
@@ -450,8 +456,9 @@ scripted side exactly, so what changes between runs is only what the person did.
 
 `-watch` presents a scripted run on its own terminal over the same manual clock
 and the same script geometry, so the presented and headless forms simulate
-identically. A presented run that is in a session offers pan and quit only: step
-and rate are instance-local, and a session stops only by its host's hold.
+identically. A presented run that is in a session offers pan and quit only: the
+viewer's step and speed would move this instance alone, and a session stops only
+by its host's hold and changes rate only by its host's `:speed`.
 
 The two halves also play each other headless: start the host half as above and
 run `./bin/vif -script script/sparring-guest.toml -join 127.0.0.1:7777` beside it.
@@ -812,7 +819,9 @@ across instances is the invariant the domain model rests on.
 | CI | `.github/workflows/test.yml`, `release.yml` |
 | End-to-end checks | `script/test.sh`, `script/*.toml` |
 | Browser host | `web/index.html`, `web/terminal.js`, `web/worker.js`, `web/terminal.css`, `web/fonts/` |
-| Session admission, passes, passphrase doors and accounts | `internal/network/admission.go`, `account.go`, `session.go`, `internal/app/internal/membership/place.go`, `signin.go`, `host.go`, `session.go`; [Auth and session design](auth-session-design.md) |
+| Android host | `android/game`, `android/app/src/main/java/com/lixen/vif`, `android/toolchain.sh` |
+| Session admission: keys, passes, tickets, passphrase doors and accounts | `internal/network/admission.go`, `account.go`, `session.go`, `internal/app/internal/membership/place.go`, `signin.go`, `host.go`, `session.go`; [Auth and session design](auth-session-design.md) |
+| Doors, the `vifs://` TLS front door and its trust | `pkg/network/endpoint.go`, `pkg/websocket`, `internal/app/internal/config/membership.go` |
 | Fleet router and the identity service's forward | `tool/vif-router`, `deploy/guest`, `deploy/k3s`, `deploy/website/vif.nginx.example`; the service itself is `lixenwraith/identity` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |
