@@ -625,6 +625,72 @@ What would close it:
 - A test per case on the probe's shape, with `meshSession` handing back its mesh:
   participant 3 follows 2 at term 2, and no Wraith but the lost host's remains.
 
+### Keep an arrival a new game interrupted
+
+- Priority: P1
+- Affected files: `internal/system/network.go` (`keepLost`, `announceLost`),
+  `internal/system/cursor.go` (`spawn`), `internal/engine/scheduler.go`
+  (`executeReset`)
+- Guide: [Multi-player §5.4](multi-player.md#54-wraiths)
+
+A reset keeps the departures it interrupts and no arrival. Three shapes, the first
+two shown by `meshSession` probes that push the arrival crossing beside `:n`:
+- An arrival applying at the reset's own tick, in either order, stops the game. Its
+  spawn request dispatches after `World.Clear` and takes the roster the reset
+  rebuilds (`PlayerResource.TakeRestore`) as its template's, so the boot's own
+  request finds its slot taken and retries for good: no instance enters the main
+  region until the host starts another game, and the newcomer has no cursor in that
+  one either.
+- An arrival crossed inside the reset's lead is cleared with the barrier
+  (`NetworkSystem.Init`). The door marked the place present as it crossed
+  (`crossArrivalLocked`), so a newcomer is linked with no cursor, and a returning
+  player's Wraith neither comes back nor times out (`wraithKept`), until the run
+  quits and dials again.
+- An arrival, or a host's drop, pushed between the reset's clear and its rebuild is
+  discarded with the queue (`executeReset`).
+
+What would close it: `keepLost` keeps an admissible arrival still scheduled, and one
+applied whose participant the reset rebuilds as no live cursor, and `announceLost`
+crosses each again ahead of any departure; a spawn request naming a participant
+leaves a pending restore to the boot's; `executeReset` keeps the session's roster
+events it would discard. A test per shape on the probes' mesh.
+
+### Retire a relayed player the authority no longer hears
+
+- Priority: P2
+- Affected files: `internal/system/network.go` (`noticeDeparture`,
+  `announceDeparture`, `receiveDeparture`, `scheduleCrossings`),
+  `internal/app/internal/membership/session.go` (`keyedLocked`, `closeStaleLink`),
+  `internal/parameter/network.go`
+- Guide: [Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity),
+  [§5.1](multi-player.md#51-succession), [§5.4](multi-player.md#54-wraiths)
+
+A departure is announced by whichever neighbour sees a link drop, and the authority
+has no view of its own of a participant it is not linked to. Three cases follow,
+each shown by a probe:
+- A relay leaves, and the person behind it finds no other path and forks or quits
+  (§5.1): nobody is left to see its link go. Its cursor stays live on the host,
+  never a Wraith and never timed out (600 ticks and a reset later on a `meshSession`
+  chain 1-2-3 with 2 closed), and its key is refused `RefusalReturning` for good,
+  since `closeStaleLink` closes only a link the host holds.
+- A relayed person's warm link drops (links 1-2, 1-3, 3-4, 2-4; 2 cuts 4 with
+  `MeshPort.Disconnect`): 2 floods the notice, the host is not linked to 4
+  (`receiveDeparture`) and crosses its departure, and every instance closes its
+  links to a participant its relay still carried (`removeParticipant`).
+- A joiner's link drops after its arrival crossed and before it applies:
+  `noticeDeparture` finds no cursor, frees the place and crosses nothing, and the
+  arrival then spawns a cursor nobody drives, whose identity and slot read free at
+  the door.
+
+What would close it: the authority keeps the tick it last admitted each
+participant's raw epoch at (`scheduleCrossings`), an arrival counting as one, and
+crosses a plain departure for a live remote cursor it is not linked to once that is
+a window old: longer than a walk down the chain (§5.1), and counted in its own ticks
+so a hold costs nothing. A neighbour then announces a lost link only for a
+participant behind it (`served`, `behind`), leaving a warm link's drop to the relay
+or the window. The window is the cost: a relayed player slower than it is retired
+while it plays. A test per case on the probes' shapes.
+
 ### Refuse a combat crossing that acts as another cursor or emitter
 
 - Priority: P1
@@ -1036,6 +1102,54 @@ generated code, the CLI tables against `cmd/vif/usage.go`, the validation sweep
 against `Makefile` and `script/test.sh`, the platform matrix and the source map.
 Implication: a newcomer reads these two first, so a stale claim there costs more
 than one in a reference document.
+
+### Take a player back while the session is held
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/session.go` (`keyedLocked`,
+  `yieldLocked`), `internal/system/network.go` (`announceDeparture`)
+- Guide: [Multi-player §3.6](multi-player.md#36-holding-a-session),
+  [§5.4](multi-player.md#54-wraiths)
+
+A roster change applies at a tick, and a held session takes none. A player whose
+link drops under the host's `:pause`, or while a new game waits for the host's
+press, stays present at the door until the host resumes, so its key is refused
+`RefusalReturning` for as long as the hold stands (a socket probe: refused twice a
+second apart, admitted once the host resumed and the Wraith appeared), and a full
+session cannot give a Wraith's place to a newcomer meanwhile. A newcomer with a free
+place is admitted held (§3.6). What would close it: the door reads a departure
+announced and not yet applied (`NetworkSystem.departed`) as away and admits the dial
+held, its arrival crossing behind the departure for the resume to apply in order;
+the returning run, which the held capture gives its cursor live, applies both as the
+others do.
+
+### Hold a Wraith's wait while no door is open
+
+- Priority: P3
+- Affected files: `internal/system/network.go` (`expireWraiths`),
+  `internal/system/cursor.go` (`Update`), `internal/app/internal/membership/host.go`
+- Guide: [Multi-player §5.4](multi-player.md#54-wraiths),
+  [§5.5](multi-player.md#55-leaving-a-session)
+
+A fork, and a run after `:leave`, keeps each other player's place as a Wraith for
+its player to take back once `:host` opens the door (§5.5), and the wait runs from
+the fork whether a door is open or not. A headless probe that forked, played
+`WraithTimeout` and then hosted had dismissed the lost host's Wraith before the door
+opened, and the host's key was seated as a newcomer, its record unused. What would
+close it: the authority dismisses no Wraith for its wait while its session has no
+door, and opening one starts every wait over, as a crossing, since the wait is
+shared state.
+
+### Write a returning player's name to its cursor
+
+- Priority: P3
+- Affected files: `internal/system/cursor.go` (`reclaim`)
+
+`reclaim` writes a returning arrival's control and record and not its `Name`, which
+the door takes from the ticket or pass the return showed (`assignFor`): a player who
+signed in while away keeps the slot's label on every instance, and a reset or a
+successor's roster carries the old one on. What would close it: `reclaim` writes
+the arrival's name, asserted in `TestAnArrivalIntoItsOwnWraithTakesItBack`.
 
 ### Keep a Wraith's stats in the session
 
