@@ -420,6 +420,115 @@ func TestANoticeDismissesOnlyASeat(t *testing.T) {
 	}
 }
 
+// TestADepartureAResetInterruptedIsAnnouncedAgain: a departure a reset finds still
+// scheduled, applied to cursors it rebuilds live, or noticed while it had cleared
+// them is crossed again as it was, once, by the authority and no reproduction; one
+// forged, or whose participant already waits, is back or is gone, is not.
+func TestADepartureAResetInterruptedIsAnnouncedAgain(t *testing.T) {
+	type departure = event.ParticipantDepartedPayload
+	type world = func(*engine.World, *NetworkSystem)
+	plain, gone := departure{Participant: 7, Slot: 2}, departure{Participant: 7, Slot: 2, Dismissed: true}
+	dropped := departure{Participant: 7, Slot: 2, Dismissed: true, Dropped: true}
+	cross := func(net *NetworkSystem, p departure) {
+		net.schedule(event.GameEvent{Type: event.EventParticipantDeparted, Payload: &p,
+			Origin: event.OriginSession, Domain: core.DomainPlayer})
+	}
+	settle := func(w *engine.World) *CursorSystem { // the cursor system takes what a roster change asked of it
+		cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			cursors.HandleEvent(ev)
+		}
+		return cursors
+	}
+	apply := func(w *engine.World, net *NetworkSystem, p departure, settled bool) {
+		cross(net, p)
+		net.applyDue(net.lastApplyTick)
+		if net.removeParticipant(&p); settled {
+			settle(w)
+		}
+	}
+	scheduled := func(p departure) world { return func(_ *engine.World, net *NetworkSystem) { cross(net, p) } }
+	noticed := func(_ *engine.World, net *NetworkSystem) { net.noticeDeparture(7, false) }
+	for name, tc := range map[string]struct {
+		interrupted world // what the reset finds
+		after       world // what the new game sees before its first flush
+		want        []departure
+	}{
+		"scheduled":             {interrupted: scheduled(plain), want: []departure{plain}},
+		"a dismissal scheduled": {interrupted: scheduled(gone), want: []departure{gone}},
+		"a Wraith's drop scheduled at its time": {interrupted: func(w *engine.World, net *NetworkSystem) {
+			apply(w, net, plain, false)
+			w.Resources.Time.DeltaTime = parameter.WraithTimeout
+			settle(w).Update()
+			cross(net, dropped)
+		}, want: []departure{dropped}},
+		"applied to a holder and its bot": {
+			interrupted: func(w *engine.World, net *NetworkSystem) { apply(w, net, plain, false) }, want: []departure{plain}},
+		"noticed while its cursor was cleared": {interrupted: func(w *engine.World, net *NetworkSystem) {
+			w.Resources.Player.PrepareRestore([]engine.CursorRosterEntry{{Slot: 2, PeerID: 7, Control: component.ControlRemote}})
+			w.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: 2})
+			settle(w)
+			noticed(w, net)
+		}, after: func(w *engine.World, _ *NetworkSystem) { spawnRemoteCursor(t, w, 2, 25, 5, 7) }, want: []departure{plain}},
+		"scheduled, and noticed again":                   {interrupted: scheduled(plain), after: noticed, want: []departure{plain}},
+		"discarded before it crossed, and noticed again": {interrupted: noticed, after: noticed, want: []departure{plain}},
+		"forged by a guest": {interrupted: func(_ *engine.World, net *NetworkSystem) {
+			cross(net, gone)
+			net.scheduled[len(net.scheduled)-1].source = 2
+		}},
+		"held by a guest": {interrupted: scheduled(plain),
+			after: func(w *engine.World, _ *NetworkSystem) { w.Resources.Network.Authority.Store(2) }},
+		"reproduced": {interrupted: scheduled(plain),
+			after: func(_ *engine.World, net *NetworkSystem) { net.pushSessionRecords(nil) }},
+		"waiting already": {interrupted: func(w *engine.World, net *NetworkSystem) { apply(w, net, plain, true) }},
+		"gone for good":   {interrupted: func(w *engine.World, net *NetworkSystem) { apply(w, net, gone, true) }},
+		"taken back since": {interrupted: func(w *engine.World, net *NetworkSystem) {
+			apply(w, net, plain, true)
+			net.addParticipant(&event.ParticipantJoinedPayload{Participant: 7, Slot: 2})
+			settle(w)
+		}},
+	} {
+		w, net, _ := holderWorld(t)
+		port := w.Resources.Network.Port
+		tc.interrupted(w, net)
+		w.Resources.Event.Queue.Consume() // the reset discards what was still queued
+		if net.Init(); tc.after != nil {
+			tc.after(w, net)
+		}
+		net.pushSessionRecords(port)
+		if got := departures(w); !slices.Equal(got, tc.want) {
+			t.Fatalf("%s: the new game crossed %+v, want %+v", name, got, tc.want)
+		}
+		if net.pushSessionRecords(port); len(departures(w)) != 0 {
+			t.Fatalf("%s: a departure announced again was announced twice", name)
+		}
+	}
+}
+
+// TestADepartureWhileAResetRebuildsKeepsItsPlace: a participant whose cursor a
+// reset cleared and is about to rebuild has not left for good, whether a departure
+// or a dismissal applies or its lost link is noticed in between: its identity stays
+// taken until the new game announces it again.
+func TestADepartureWhileAResetRebuildsKeepsItsPlace(t *testing.T) {
+	for name, leave := range map[string]func(*NetworkSystem){
+		"applied": func(net *NetworkSystem) {
+			net.removeParticipant(&event.ParticipantDepartedPayload{Participant: 7, Slot: 2})
+		},
+		"dismissed": func(net *NetworkSystem) {
+			net.removeParticipant(&event.ParticipantDepartedPayload{Participant: 7, Slot: 2, Dismissed: true})
+		},
+		"noticed": func(net *NetworkSystem) { net.noticeDeparture(7, false) },
+	} {
+		w, net, finals := holderWorld(t)
+		w.Resources.Player.PrepareRestore([]engine.CursorRosterEntry{{Slot: 2, PeerID: 7, Control: component.ControlRemote}})
+		ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorDespawnRequest,
+			Payload: &event.CursorDespawnRequestPayload{Slot: 2}})
+		if leave(net); finals[7] {
+			t.Fatalf("%s: a participant the reset is rebuilding was told gone for good", name)
+		}
+	}
+}
+
 // TestCoordinatorLossRaisesLocalStatus covers the failure mode a digest cannot:
 // once the host link is gone there is no peer left to disagree with, so the guest
 // must report the disconnect directly rather than waiting for DESYNC. The guest

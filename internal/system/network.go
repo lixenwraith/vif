@@ -92,8 +92,9 @@ type NetworkSystem struct {
 	states       []pendingState
 	stateSeen    [parameter.MaxPlayers]uint64
 	rawStateSeen [parameter.MaxPlayers]uint64
-	departed     [participantSlots]bool // participants already announced or noticed
-	expiring     [participantSlots]bool // Wraiths whose dismissal this authority has crossed
+	departed     [participantSlots]bool          // participants already announced or noticed
+	expiring     [participantSlots]bool          // Wraiths whose dismissal this authority has crossed
+	lost         [participantSlots]lostDeparture // departures a reset interrupted, for the new game to announce again
 	ticks        uint64
 	statSent     *atomic.Int64
 	statRecv     *atomic.Int64
@@ -377,6 +378,14 @@ type settlingDefeat struct {
 	settleAt uint64
 }
 
+// lostDeparture is a departure a reset interrupted: crossed is one the barrier held
+// when the reset cleared it, marked a lost link noticed while the reset had cleared
+// its participant's cursor, and how the way it leaves.
+type lostDeparture struct {
+	how             event.ParticipantDepartedPayload
+	marked, crossed bool
+}
+
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick,
 // and the epoch its source produced it in.
 type barrierArtifact struct {
@@ -470,7 +479,8 @@ func (s *NetworkSystem) Init() {
 	s.syncSeq = 0
 	s.lastSync = [parameter.MaxPlayers]uint64{}
 	s.states, s.stateSeen, s.rawStateSeen = s.states[:0], [parameter.MaxPlayers]uint64{}, [parameter.MaxPlayers]uint64{}
-	s.departed, s.expiring = [participantSlots]bool{}, [participantSlots]bool{}
+	s.keepLost()
+	s.expiring = [participantSlots]bool{}
 
 	for _, c := range s.resetInts {
 		c.Store(0)
@@ -532,6 +542,35 @@ func (s *NetworkSystem) Init() {
 	s.mu.Unlock()
 
 	s.world.Resources.Event.Queue.SetWireSink(s)
+}
+
+// keepLost keeps, across the reset about to clear the barrier, how each departure
+// it would have applied has its participant leave: one still scheduled, or one
+// applied whose participant is still marked departed, which an arrival since would
+// have cleared. The new game rebuilds their cursors, so it announces them again
+// (announceLost); until then they alone stay marked, so a notice for one is a repeat.
+func (s *NetworkSystem) keepLost() {
+	keep := func(artifacts []barrierArtifact, applied bool) {
+		for _, a := range artifacts {
+			et := a.frame.Event
+			if et != event.EventParticipantDeparted || !s.admissibleFromSource(et, nil, a.source, a.authored) {
+				continue
+			}
+			v, err := a.frame.Decode()
+			p, ok := v.(*event.ParticipantDepartedPayload)
+			if err != nil || !ok || int(p.Participant) >= len(s.lost) || applied && !s.departed[p.Participant] {
+				continue
+			}
+			s.lost[p.Participant].how, s.lost[p.Participant].crossed = *p, true
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keep(s.applied, true)
+	keep(s.scheduled, false)
+	for id, d := range s.lost {
+		s.departed[id] = d.marked || d.crossed
+	}
 }
 
 // port returns the live endpoint, nil when no transport is attached. Read per tick
@@ -720,8 +759,9 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 		r.OnDropped(c.Key, p.Slot)
 	}
 	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
-		// A participant with no cursor has nothing to wait in, so it leaves for good.
-		r.OnDeparture(p.Participant, p.Dismissed || !held)
+		// A participant with no cursor has nothing to wait in, so it leaves for good,
+		// unless a reset at this tick is rebuilding it: the new game announces it again.
+		r.OnDeparture(p.Participant, (p.Dismissed || !held) && !s.world.Resources.Player.Restores(p.Participant))
 	}
 	if port, ok := s.port().(engine.PeerDroppingPort); ok {
 		port.Disconnect(p.Participant)
@@ -762,6 +802,7 @@ func (s *NetworkSystem) LeaveSession() {
 	// closing; the session it plays on in, or joins next, has it on again.
 	s.enabled = true
 	s.states = s.states[:0] // owner syncs are other participants'; an own one is only forwarded
+	s.lost = [participantSlots]lostDeparture{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	local := s.localSource
@@ -1488,8 +1529,38 @@ func (s *NetworkSystem) pushSessionRecords(p engine.NetworkPort) {
 	s.world.SettlePredictedDeaths()
 	if s.enabled {
 		s.driveOwnLead(p)
+		s.announceLost(p)
 		if p != nil && p.IsRunning() && s.isCoordinator() {
 			s.expireWraiths()
+		}
+	}
+}
+
+// announceLost announces again each departure a reset interrupted, to the cursor the
+// new game has rebuilt for its participant: a live one, or any for a dismissal. The
+// authority crosses again what the barrier held, as it was; a link lost while its
+// cursor was cleared is announced by whoever saw it go.
+func (s *NetworkSystem) announceLost(p engine.NetworkPort) {
+	lost := s.lost
+	s.lost = [participantSlots]lostDeparture{}
+	if p == nil || !p.IsRunning() {
+		return
+	}
+	for id, d := range lost {
+		if !d.marked && !d.crossed {
+			continue
+		}
+		_, rebuilt := s.participantSlot(uint32(id))
+		switch {
+		case !rebuilt || !d.how.Dismissed && s.away(uint32(id)):
+		case d.crossed && s.isCoordinator():
+			s.world.Log().Info("session", "msg", "departure crossed again after a reset",
+				"participant", id, "slot", int(d.how.Slot), "dismissed", d.how.Dismissed)
+			s.expiring[id] = d.how.Dismissed
+			s.crossSession(event.EventParticipantDeparted, &d.how)
+		case d.marked:
+			s.departed[id] = false // marked when there was no cursor to announce it for
+			s.announceDeparture(uint32(id), 0, d.how.Dismissed)
 		}
 	}
 }
@@ -1719,7 +1790,7 @@ func (s *NetworkSystem) dismissalScheduled() bool {
 // that crossing applies, or here for a participant with no cursor. dismissed is a
 // seat this run dropped, which leaves for good.
 func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
-	if _, crossed := s.participantSlot(peerID); !crossed {
+	if _, crossed := s.participantSlot(peerID); !crossed && !s.world.Resources.Player.Restores(peerID) {
 		if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
 			r.OnDeparture(peerID, true)
 		}
@@ -1737,6 +1808,10 @@ func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32, dismissed 
 
 	slot, ok := s.participantSlot(peerID)
 	if !ok {
+		// A reset cleared its cursor and is about to rebuild it: announced once it has
+		if s.world.Resources.Player.Restores(peerID) {
+			s.lost[peerID] = lostDeparture{how: event.ParticipantDepartedPayload{Dismissed: dismissed}, marked: true}
+		}
 		return true
 	}
 	if s.isCoordinator() {
@@ -3188,6 +3263,7 @@ type networkState struct {
 	lastSync, stateSeen, rawStateSeen          [parameter.MaxPlayers]uint64
 	states                                     []pendingState
 	departed, expiring                         [participantSlots]bool
+	lost                                       [participantSlots]lostDeparture
 	suffix                                     []localCrossing
 	paceSamples                                [parameter.NetworkPaceWindow]int64
 	paceCount                                  int
@@ -3213,6 +3289,7 @@ func (s *NetworkSystem) CopyState() any {
 		appliedPeerSeq: s.appliedPeerSeq, downAt: s.downAt, relay: s.relay, snapshotFences: slices.Clone(s.snapshotFences),
 		syncSeq: s.syncSeq, ticks: s.ticks, lostSeq: s.lostSeq, lastSync: s.lastSync, stateSeen: s.stateSeen,
 		rawStateSeen: s.rawStateSeen, states: clonePendingStates(s.states), departed: s.departed, expiring: s.expiring,
+		lost:        s.lost,
 		suffix:      slices.Clone(s.suffix),
 		paceSamples: s.paceSamples, paceCount: s.paceCount, pathAge: s.pathAge,
 		paceLatest: s.paceLatest, paceKnown: s.paceKnown, paceStale: s.paceStale, paceSettled: s.paceSettled, pathEpoch: s.pathEpoch,
@@ -3240,7 +3317,7 @@ func (s *NetworkSystem) RestoreState(v any) error {
 	s.appliedPeerSeq, s.downAt, s.relay, s.snapshotFences = c.appliedPeerSeq, c.downAt, c.relay, slices.Clone(c.snapshotFences)
 	s.syncSeq, s.ticks, s.lostSeq, s.lastSync = c.syncSeq, c.ticks, c.lostSeq, c.lastSync
 	s.stateSeen, s.rawStateSeen, s.states, s.departed = c.stateSeen, c.rawStateSeen, clonePendingStates(c.states), c.departed
-	s.expiring = c.expiring
+	s.expiring, s.lost = c.expiring, c.lost
 	s.suffix = slices.Clone(c.suffix)
 	s.paceSamples, s.paceCount, s.pathAge = c.paceSamples, c.paceCount, c.pathAge
 	s.paceLatest, s.paceKnown, s.paceStale, s.paceSettled, s.pathEpoch = c.paceLatest, c.paceKnown, c.paceStale, c.paceSettled, c.pathEpoch

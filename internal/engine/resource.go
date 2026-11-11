@@ -535,6 +535,17 @@ func (pr *PlayerResource) PrepareRestore(entries []CursorRosterEntry) {
 	pr.restoreLocal = pr.local
 }
 
+// Restores reports whether the reset pending behind World.Clear rebuilds a cursor
+// for a participant: one the cleared world no longer shows, which still has a place.
+func (pr *PlayerResource) Restores(peerID uint32) bool {
+	for i := range pr.restoreCount {
+		if pr.restore[i].PeerID == peerID {
+			return true
+		}
+	}
+	return false
+}
+
 // TakeRestore returns and clears the reset roster pending behind World.Clear.
 func (pr *PlayerResource) TakeRestore() ([parameter.MaxPlayers]CursorRosterEntry, int, uint8) {
 	entries, count, local := pr.restore, pr.restoreCount, pr.restoreLocal
