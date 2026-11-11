@@ -316,7 +316,7 @@ func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.Wrait
 	}
 	w.Components.Wraith.RemoveEntity(e)
 	if c, ok := w.Components.Cursor.GetPtr(e); ok {
-		c.Control = component.ControlKind(p.Control)
+		c.Control, c.Name = component.ControlKind(p.Control), p.Name // the name its return showed the door
 	}
 	if x >= 0 {
 		s.equip(e, x, y, p.Heat, p.Energy)

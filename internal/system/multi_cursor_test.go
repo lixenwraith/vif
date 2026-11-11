@@ -236,7 +236,8 @@ func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
 	record := event.CursorRecord{Charges: []int{0, 3}, Energy: 4321, Heat: 9, HitPoints: 37}
 	arrive := func(peer uint32) {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
-			Slot: 2, Center: true, Control: uint8(component.ControlRemote), PeerID: peer, Energy: 100, Record: &record}})
+			Slot: 2, Center: true, Control: uint8(component.ControlRemote), PeerID: peer, Energy: 100, Record: &record,
+			Name: "renamed"}})
 		w.Resources.Event.Queue.Consume()
 	}
 
@@ -251,6 +252,9 @@ func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
 	}
 	if pos, ok := w.Positions.GetPosition(remote); !ok || pos.X != 25 || pos.Y != 5 {
 		t.Fatalf("the cursor taken back stands at %+v, want the cell its Wraith held, 25,5", pos)
+	}
+	if c, _ := w.Components.Cursor.GetComponent(remote); c.Name != "renamed" {
+		t.Fatalf("the cursor taken back is named %q, want the name its return showed", c.Name)
 	}
 	energy, _ := w.Components.Energy.GetComponent(remote)
 	heat, _ := w.Components.Heat.GetComponent(remote)
