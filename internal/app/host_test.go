@@ -1784,6 +1784,101 @@ func TestAResetKeepsAWraithWaiting(t *testing.T) {
 	assertMeshParity(t, survivors, 0)
 }
 
+// TestAResetKeepsADepartureItInterrupted: a link lost inside a new game's lead still
+// leaves a Wraith on every instance, whether its departure was scheduled past the
+// reset or due at the reset's own tick, behind it, where the game was cleared.
+func TestAResetKeepsADepartureItInterrupted(t *testing.T) {
+	t.Parallel()
+	for _, shape := range []struct {
+		name  string
+		ticks int // between the new game's crossing and the link's loss
+	}{{"past the reset", 1}, {"at the reset's tick", 0}} {
+		apps := meshSession(t, 0xA3A6, 3, [][2]int{{1, 2}, {1, 3}})
+		localCursors(t, apps)
+		for range 10 {
+			tickAll(apps)
+		}
+		mode.ExecuteCommand(apps[0].Context(), "n")
+		apps[0].Settle()
+		for range shape.ticks {
+			tickAll(apps)
+		}
+		apps[2].World().RunSafe(func() {
+			apps[2].World().Resources.Network.Port.(*link.MeshPort).Close()
+		})
+		survivors := apps[:2]
+		for range 2*parameter.NetworkBarrierDelayTicks + 8 {
+			tickAll(survivors)
+		}
+		for i, a := range survivors {
+			if got := a.Position().Run; got != 1 {
+				t.Fatalf("%s: participant %d reset run=%d, want 1", shape.name, i+1, got)
+			}
+			if !wraithIn(a, 2) {
+				t.Fatalf("%s: participant %d holds slot 2 live in the new game, its participant gone", shape.name, i+1)
+			}
+		}
+		assertMeshParity(t, survivors, 0)
+	}
+}
+
+// TestAResetKeepsAnArrivalItInterrupted: a participant whose arrival crosses as a new
+// game begins plays in that game on every instance, and the game starts: its arrival
+// due at the reset's own tick, ahead of it or behind, or scheduled past it.
+func TestAResetKeepsAnArrivalItInterrupted(t *testing.T) {
+	t.Parallel()
+	for _, shape := range []struct {
+		name  string
+		ahead bool // the arrival crosses ahead of the new game
+		ticks int  // between the new game's crossing and the arrival's
+	}{{"at the reset's tick, ahead of it", true, 0}, {"at the reset's tick, behind it", false, 0}, {"past the reset", false, 1}} {
+		apps := meshSession(t, 0xA3A6, 2, [][2]int{{1, 2}})
+		localCursors(t, apps)
+		for range 10 {
+			tickAll(apps)
+		}
+		arrive := func() {
+			apps[0].World().RunSafe(func() {
+				apps[0].World().PushEventFull(event.EventParticipantJoined,
+					&event.ParticipantJoinedPayload{Participant: 3, Slot: 2}, event.OriginSession, core.DomainPlayer)
+			})
+		}
+		if shape.ahead {
+			arrive()
+		}
+		mode.ExecuteCommand(apps[0].Context(), "n")
+		if !shape.ahead {
+			if shape.ticks > 0 {
+				apps[0].Settle()
+			}
+			for range shape.ticks {
+				tickAll(apps)
+			}
+			arrive()
+		}
+		apps[0].Settle()
+		for range 2*parameter.NetworkBarrierDelayTicks + 8 {
+			tickAll(apps)
+		}
+		for i, a := range apps {
+			var seated bool
+			var state string
+			a.World().RunSafe(func() {
+				w := a.World()
+				e := w.Resources.Player.Slot(2)
+				c, _ := w.Components.Cursor.GetComponent(e)
+				seated = e != 0 && c.PeerID == 3 && !w.Components.Wraith.HasEntity(e)
+				state = w.Resources.Status.Strings.Get("fsm.state").Load()
+			})
+			if got := a.Position().Run; got != 1 || !seated || state == "" {
+				t.Fatalf("%s: participant %d in run %d holds the arrival in slot 2 %t, its game in state %q; want run 1, seated, started",
+					shape.name, i+1, got, seated, state)
+			}
+		}
+		assertMeshParity(t, apps, 0)
+	}
+}
+
 // TestOneSharedQuasarTriggerProducesOneSpawn is the MainEscalate fan-out: one shared
 // decision reaches every participant's player-domain FuseSystem. It is one logical
 // fusion and therefore must yield one shared spawn request, not N.
@@ -2764,6 +2859,43 @@ func TestAKeyOnAPlaceStillLinkedClosesTheLinkItLeft(t *testing.T) {
 	defer back.Close()
 	if offered.Assigned != id || assignedSlot(offered) != slot {
 		t.Fatalf("the retry was given %d on slot %d; want participant %d's place on slot %d", offered.Assigned, assignedSlot(offered), id, slot)
+	}
+}
+
+// TestAPlayerWhoLeftAsANewGameBeganComesBack: a link lost inside a new game's lead
+// keeps its place on the host's roster and waits as a Wraith in the new game, so
+// the key it left under takes that place back.
+func TestAPlayerWhoLeftAsANewGameBeganComesBack(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, shape := range []struct {
+		name  string
+		ticks int // between the new game's crossing and the link's loss
+	}{{"past the reset", 1}, {"at the reset's tick", 0}} {
+		host := mustHosting(t, Membership{Participants: 2})
+		stop := tickInBackground(host)
+		t.Cleanup(stop)
+		store := &keptPlaces{}
+		guest, port := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.PlaceStore = store })
+		id, slot := arrival(t, host, guest)
+		stop()
+		run := host.Position().Run
+		mode.ExecuteCommand(host.Context(), "n")
+		host.Settle()
+		host.Tick(shape.ticks)
+		_ = port.Close()
+		guest.Close()
+		waitUntil(t, func() bool { return host.membership.SessionTransport().PeerCount() == 0 }, "the host losing the guest's link")
+		host.Tick(2 * parameter.NetworkBarrierMaxDelayTicks)
+		if got := host.Position().Run; got != run+1 || !wraithIn(host, slot) || host.membership.GuestCount() != 1 {
+			t.Fatalf("%s: in run %d the departed guest waits as a Wraith %t, the roster holds %d guest(s); want run %d, waiting, its place kept",
+				shape.name, got, wraithIn(host, slot), host.membership.GuestCount(), run+1)
+		}
+		back, offered := dialSession(t, host.HostAddr(), store.key(t))
+		defer back.Close()
+		if offered.Assigned != id || assignedSlot(offered) != slot {
+			t.Fatalf("%s: the returning player was given %d on slot %d; want its own place, %d on slot %d",
+				shape.name, offered.Assigned, assignedSlot(offered), id, slot)
+		}
 	}
 }
 
