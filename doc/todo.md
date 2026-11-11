@@ -1133,20 +1133,6 @@ and wasm readings put under one percent. The identity service's own readings (RS
 Implication: the budget in §8 stands as a projection until these are in; a reading
 that misses it changes `-route-max`, `MemoryMax` or the splice before anything else.
 
-### Refresh the architecture and development documents
-
-- Priority: P2
-- Affected files: `doc/architecture.md`, `doc/development.md`
-
-Both were last read whole before the netcode, kinetics, audio and menu work; the
-session layer's parts were brought current with the auth design. The rest wants a
-pass against the code: the containers and control flow in `architecture.md` §2 to
-§11 against `package-map.md`, and in `development.md` the build workflow, the
-generated code, the CLI tables against `cmd/vif/usage.go`, the validation sweep
-against `Makefile` and `script/test.sh`, the platform matrix and the source map.
-Implication: a newcomer reads these two first, so a stale claim there costs more
-than one in a reference document.
-
 ### Give up a place to a newcomer while the session is held
 
 - Priority: P3
@@ -1608,7 +1594,7 @@ a second of CPU, so it runs off the audio thread.
 ### Render a conductor timeline offline
 
 - Priority: P3
-- Affected files: `cmd/vif-log`, `internal/system/music.go`
+- Affected files: `tool/vif-log`, `internal/system/music.go`
 
 `RenderTimeline` plays a timeline of slot patterns offline and stapes' `song`
 writes a `SongDef` through it; the conductor's own timeline, patterns by tier from an APM
@@ -1737,17 +1723,6 @@ its own todo. New terms (binaural beat, bed, carrier) go in both term indexes
 when they land.
 
 ## Engine
-
-### Give the composite lifecycle methods a user
-
-- Priority: P3
-- Affected files: `internal/system/composite.go`
-
-`CompositeSystem` carries `handleEmptyComposite`, `CreateHeader`, `AddMember`,
-`DestroyComposite` and `GetAnchorForMember`, designed for building and tearing
-down composites at run time, but no system or scenario uses them. A species or
-scenario that assembles composites would; it reaches them through events, since
-another system may not call them directly.
 
 ### Trim what a tick spends outside the position index
 

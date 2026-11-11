@@ -522,8 +522,9 @@ the project owner runs, not per-change steps. `make verify` regenerates, runs
 `vif_noaudio`, `vif_headless` and `vif_nogui`, tests `./internal/...` under
 `vif_noaudio` and the manifest and system suites under `vif_headless`, `cmd/vif`
 under both, vets and tests the `android` module, tests `pkg/window` with cgo off,
-cross-builds `js/wasm` and `windows/amd64` (`novlog vif_noaudio`), fails if the
-headless command imports the renderer or audio implementation, and runs
+cross-builds `js/wasm` and `windows/amd64` (`novlog vif_noaudio`), builds `./...`
+natively and for `js/wasm` under `GOEXPERIMENT=simd`, fails if the headless
+command imports the renderer or audio implementation, and runs
 `go vet ./...` and the `vif_gui` vet of `pkg/window` and `cmd/vif`. It does not
 execute a Windows artifact or a real terminal/audio backend; Windows is played by
 hand, not a supported release target, and its known issues are in [Build profiles

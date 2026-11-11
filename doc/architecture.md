@@ -46,10 +46,10 @@ The main architectural planes are:
 
 | Plane | Owners | Responsibility |
 |---|---|---|
-| Composition | `cmd/vif`, `internal/app`, `internal/manifest`, `internal/resource`, `internal/paths` | Resolve options and config roots, construct services/resources/systems/renderers, load the FSM, start and stop the process. |
+| Composition | `cmd/vif`, `internal/app`, `internal/manifest`, `internal/resource`, `internal/paths`, `internal/asset` | Resolve options and config roots, construct services/resources/systems/renderers, load the FSM, start and stop the process; the embedded shipped files a root falls back to. |
 | Simulation data | `internal/engine`, `internal/component`, `internal/core`, `internal/parameter`, `internal/profile` | Entity identities, typed sparse-set component stores, singleton resources, spatial indexing, shared time/state, tunables, and per-kind profile tables. |
-| Simulation behavior | `internal/system`, `internal/fsm`, `internal/event` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement. |
-| Interaction | `internal/input`, `internal/mode`, `internal/bot` | Parse terminal events, or step a bot graph, into semantic intents and apply them under the world lock. |
+| Simulation behavior | `internal/system`, `internal/fsm`, `internal/event`, `internal/behavior`, `internal/pattern` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement; the behavior programs a data species runs, and the wall cells an image or a stone preset lays. |
+| Interaction | `internal/input`, `internal/mode`, `internal/bot`, `internal/help` | Parse terminal events, or step a bot graph, into semantic intents and apply them under the world lock; project the live bindings into the help overlay. |
 | Authority and convergence | `internal/converge`, `internal/snapshot` | Hold the session's authority term and run its succession, publish the correction cadence, answer the selective manifest exchange, install what arrives, and keep the links a handoff needs. `converge` reads and writes the live world only through the seam the composition root supplies; `snapshot` is the capture wire model and comparison surface. |
 | Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the presentation's surface. |

@@ -252,6 +252,7 @@ duplicating version strings that would become stale.
 | `tool/http-server` | Minimal static server used by `make serve` for the WASM bundle. |
 | `tool/vif-router` | Website-to-K3s session router; a host service, not part of the game binary. |
 | `tool/vif-log` | Terminal viewer for the JSONL session log and replay journal, separately or merged; its packages are internal to the tool. |
+| `tool/vif-settings` | Bring a `vif.toml` an earlier build left up to this build's in place (`paths.UpgradeSettings`); `make install` and `install-config` run it. |
 | `wad/` | The external payload, laid out as it installs into a `vif/` configuration root: alternate scenarios, a plain-text corpus and a wall image ([filesystem layout](filesystem-layout.md)). |
 | `web/` | The page and worker the WASM build runs in: a WebGL canvas drawn from the host's cell frames, a hidden text field for keys, the key strip for touch screens. |
 | `deploy/` | The session image, K3s objects, node units, updaters and runbook, the LogWisp pipeline, the site's log-viewer page, and the packaging files in `deploy/package/` ([deploy/README.md](../deploy/README.md)). |
