@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -155,6 +156,98 @@ func TestAPressIntoAGameItsSessionReplacedJoinsTheNewOne(t *testing.T) {
 	}
 	if n := host.membership.GuestCount(); n != 0 {
 		t.Fatalf("the host holds %d guest(s) for a seat its joiner turned down", n)
+	}
+}
+
+// TestANewGameLandingInAGateJoinsTheNewOne: a game that starts inside a join's start
+// gate is not the one its run was built on. The host refuses the gate it landed in
+// at once, the gate waiting behind hands over the new game, which its run reads as
+// that, and the run that follows joins the new game seated, with this one's bots.
+func TestANewGameLandingInAGateJoinsTheNewOne(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
+	host := mustHeadless(t, 0x3035, 120, 40)
+	t.Cleanup(host.Close)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	host.Tick(60) // an older game than the ticks its next one is given below
+	// The host stands still: the first gate waits for its lead, the second behind it.
+	first, offered := dialSession(t, host.HostAddr())
+	if err := first.Complete(nil, network.JoinerReport{Width: 120, Height: 40, Identity: offered.Identity}); err != nil {
+		t.Fatalf("the first joiner's reply: %v", err)
+	}
+	waitUntil(t, func() bool { return portOf(t, host).Connected(uint32(offered.Assigned)) }, "the first joiner in its gate")
+	guest, err := newSessionApp(joinerConfig(host.HostAddr(), false, "roam"))
+	if err != nil {
+		t.Fatalf("join: %v", err)
+	}
+	leave := sync.OnceFunc(guest.Close)
+	t.Cleanup(leave)
+
+	was := host.JoinAnchor().Anchor.Session
+	host.World().RunSafe(func() { mode.ExecuteCommand(host.Context(), "n") })
+	host.Tick(10)
+	if host.JoinAnchor().Anchor.Session == was {
+		t.Fatal("the host started no new game")
+	}
+	refused := make(chan error, 1)
+	go func() {
+		_, err := first.WaitStart()
+		refused <- err
+	}()
+	select {
+	case err := <-refused:
+		if !errors.Is(err, membership.ErrSessionMoved) {
+			t.Fatalf("the gate a new game landed in ended with %v, want the session moved", err)
+		}
+	case <-time.After(parameter.NetworkJoinReadyTimeout / 2): // [wall] well short of the gate's own bound
+		t.Fatal("the host held the gate its new game landed in for the ended game's lead")
+	}
+
+	t.Cleanup(tickInBackground(host))
+	next, err := guest.Loop()
+	if err != nil || next == nil || !next.Rejoin || next.Press || !slices.Equal(next.Bots, []string{"roam"}) {
+		t.Fatalf("a gate handing over another game ended its run with %+v, %v; want a rejoin, unpressed, with its bot", next, err)
+	}
+	leave()
+	again, _ := guest.cfg.restarted(next)
+	back, err := openRun(again, true)
+	if err != nil {
+		t.Fatalf("the run that follows: %v", err)
+	}
+	t.Cleanup(back.Close)
+	if err := back.membership.StartJoinSession(nil); err != nil {
+		t.Fatalf("the following run's gate: %v", err)
+	}
+	id := back.membership.LocalParticipant()
+	waitUntil(t, func() bool { return portOf(t, host).Connected(id) && host.membership.GuestCount() == 1 },
+		"the following run seated alone in the new game")
+}
+
+// TestARelayRefusesAGateItsSessionsNewGameOutran: a relay gates on the offer the
+// authority gave at the seat, so a new game between that seat and its gate leaves the
+// offer naming a game the session has left, and the relay refuses as the host does.
+func TestARelayRefusesAGateItsSessionsNewGameOutran(t *testing.T) {
+	// Not parallel: this drives real sockets against wall-clock deadlines.
+	addr, relayAddr := freeAddress(t), freeAddress(t)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	relay, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: relayAddr}}, "patrol", nil)
+	waitForCursors(t, host, 3)
+	waitListening(t, relayAddr)
+	pending, offered := dialSession(t, relayAddr)
+	host.World().RunSafe(func() { mode.ExecuteCommand(host.Context(), "n") })
+	waitUntil(t, func() bool { return relay.JoinAnchor().Anchor.Session != offered.Anchor.Anchor.Session }, "the relay's next game")
+	if err := pending.Complete(nil, network.JoinerReport{Width: 120, Height: 40, Identity: offered.Identity}); err != nil {
+		t.Fatalf("the joiner's reply: %v", err)
+	}
+	if _, err := pending.WaitStart(); !errors.Is(err, membership.ErrSessionMoved) {
+		t.Fatalf("the gate of a seat given in the game before ended with %v, want the session moved", err)
+	}
+	// The refusal ends the gate: no world follows it down the link.
+	if _, err := pending.WaitStart(); err == nil {
+		t.Fatal("the relay sent a start gate after refusing it")
 	}
 }
 

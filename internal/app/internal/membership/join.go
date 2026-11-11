@@ -234,12 +234,16 @@ func (m *Membership) bindSessionControl(o network.SessionOffer, local link.PeerI
 		return fmt.Errorf("join roster omits local participant %d", local)
 	}
 	// A participant drives the cursor in its place and none while the place holds
-	// none or its Wraith, which its arrival brings or takes back as it crosses: the
-	// boot slot is another's. A cursorless one takes the sentinel for good, so every
-	// "is this my cursor" test answers no.
+	// none, its Wraith, or the cursor of the run it took the place back from, which
+	// its arrival brings or takes back as it crosses: the boot slot is another's. A
+	// cursorless one takes the sentinel for good, so every "is this my cursor" test
+	// answers no.
 	slot := localAssignment.Slot
 	m.world.RunSafe(func() {
-		if e := m.world.Resources.Player.Slot(slot); e == 0 || m.world.Components.Wraith.HasEntity(e) {
+		e := m.world.Resources.Player.Slot(slot)
+		waits := e == 0 || m.world.Components.Wraith.HasEntity(e)
+		m.world.Supersede(localAssignment.Away && !waits)
+		if waits || localAssignment.Away {
 			slot = parameter.NoPlayerSlot
 		}
 	})
@@ -370,6 +374,7 @@ func (m *Membership) BindSessionHooks(r *engine.NetworkResource) {
 	r.OnAuthorityAhead = m.authorityAhead
 	r.DismissWraith = func() uint32 { return m.dismissWraith.Swap(0) }
 	r.WraithKept = m.wraithKept
+	r.Doorless = m.doorless
 	// Read as each artifact arrives, since the context is built after the world.
 	r.Relaying = func() bool { return m.ctx.Relaying.Load() }
 	r.OnOwnState = m.keepRecord
@@ -412,6 +417,31 @@ func (m *Membership) wraithKept(participant uint32) bool {
 	}
 	i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
 	return i >= 0 && !m.sessionRoster[i].Away
+}
+
+// doorless reports a session nobody can come back to until :host opens it: the one
+// this run opened for its bots, or went on in after a leave or a fork. A build
+// that binds no socket never opens one, so its waits run as any other's. Caller
+// MUST hold updateMutex.
+func (m *Membership) doorless() bool {
+	return config.SocketNetwork && m.sessionRoleLocked() == roleSeats
+}
+
+// restartWaitsLocked has the authority start every Wraith's wait over once a door
+// stands where the session had none: whoever is away could not come back before.
+// Caller MUST hold updateMutex.
+func (m *Membership) restartWaitsLocked() {
+	m.sessionMu.Lock()
+	away := slices.ContainsFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.Away })
+	m.sessionMu.Unlock()
+	if !away {
+		return
+	}
+	for _, sys := range m.world.Systems() {
+		if s, ok := sys.(interface{ RestartWraithWaits() }); ok {
+			s.RestartWraithWaits()
+		}
+	}
 }
 
 // keepRecord keeps what this run's own cursor holds as its sync sends it, which is

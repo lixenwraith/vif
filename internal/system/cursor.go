@@ -71,6 +71,17 @@ func (s *CursorSystem) Update() {
 	s.publishRoster()
 }
 
+// restartWaits starts every Wraith's wait over, at one tick on every instance, a
+// Wraith a pending reset is rebuilding included: a door has opened on a session
+// that had none, and nobody could come back while the waits ran.
+func (s *CursorSystem) restartWaits() {
+	s.world.Components.Wraith.Each(func(_ core.Entity, w *component.WraithComponent) bool {
+		w.Waited = 0
+		return true
+	})
+	s.world.Resources.Player.RestartWaits()
+}
+
 // EventTypes returns the event types CursorSystem handles.
 // EventMetaSystemCommandRequest is absent deliberately: a disabled cursor system
 // would strand every cursor, so it carries no toggle.
@@ -79,6 +90,7 @@ func (s *CursorSystem) EventTypes() []event.EventType {
 		event.EventCursorSpawnRequest,
 		event.EventCursorDespawnRequest,
 		event.EventCursorWraithRequest,
+		event.EventWraithWaitRestart,
 		event.EventCursorMoveRequest,
 		event.EventCursorSetLocalRequest,
 	}
@@ -99,6 +111,8 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 		if p, ok := ev.Payload.(*event.CursorWraithRequestPayload); ok {
 			s.wraith(p.Slot, 0)
 		}
+	case event.EventWraithWaitRestart:
+		s.restartWaits()
 	case event.EventCursorMoveRequest:
 		if p, ok := ev.Payload.(*event.CursorMoveRequestPayload); ok {
 			s.move(p, ev.CrossingSeq != 0)
@@ -197,12 +211,14 @@ func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
 		return
 	}
 	if e := roster.Slot(slot); e != 0 {
-		c, _ := s.world.Components.Cursor.GetComponent(e)
-		if w, away := s.world.Components.Wraith.GetComponent(e); away && c.PeerID == p.PeerID {
-			s.reclaim(e, slot, w, p)
+		if c, _ := s.world.Components.Cursor.GetComponent(e); p.PeerID == 0 || c.PeerID != p.PeerID {
+			s.fail("slot unavailable")
 			return
 		}
-		s.fail("slot unavailable")
+		// Its participant's arrival stands for a departure that never turned it
+		s.wraith(slot, 0)
+		w, _ := s.world.Components.Wraith.GetComponent(e)
+		s.reclaim(e, slot, w, p)
 		return
 	}
 

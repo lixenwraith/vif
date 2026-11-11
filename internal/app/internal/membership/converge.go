@@ -24,6 +24,8 @@ func (m *Membership) Rate() engine.TimeScale { return m.ctx.TimeCtl.Scale() }
 
 func (m *Membership) TickInterval() time.Duration { return m.world.TickInterval() }
 
+func (m *Membership) Superseding() bool { return m.world.Session().Superseding }
+
 func (m *Membership) LocalParticipant() uint32 { return m.localParticipant() }
 
 func (m *Membership) Seated() bool {
@@ -464,8 +466,24 @@ func (m *Membership) forked(roster []network.RosterEntry, local link.PeerID) {
 		return
 	}
 	m.LeavePlace()
+	m.world.RunSafe(m.takeOwnPlaceLocked)
 	m.dropAbandonedCursors(roster, local)
 	m.world.RunSafe(func() { m.thawLocked() })
+}
+
+// takeOwnPlaceLocked ends a supersession the session this run is leaving never
+// will: the cursor in its place is its own to drive from here, and nothing the run
+// it took the place back from crossed applies. Caller MUST hold updateMutex.
+func (m *Membership) takeOwnPlaceLocked() {
+	if !m.world.Session().Superseding {
+		return
+	}
+	for _, sys := range m.world.Systems() {
+		if s, ok := sys.(interface{ ForgetSuperseded() }); ok {
+			s.ForgetSuperseded()
+		}
+	}
+	m.world.Supersede(false)
 }
 
 // errRedialEnded turns down an admission the redialling run no longer takes.

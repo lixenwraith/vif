@@ -147,6 +147,32 @@ func TestASurvivorStandsFrozenThroughTheWalk(t *testing.T) {
 	}
 }
 
+// TestARunWaitingForItsArrivalFollowsNoSuccessor: a run that took its place back
+// and still waits for its own arrival, which went with the authority that scheduled
+// it, plays on alone: it follows no successor's record, whose group holds no such
+// arrival, and takes no term at its own turn.
+func TestARunWaitingForItsArrivalFollowsNoSuccessor(t *testing.T) {
+	t.Parallel()
+	guest := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
+	guest.world.waits = true
+	if err := guest.u.adopt(record(guest.u, network.FirstTerm+1, 2, 1), 0); err != nil {
+		t.Fatalf("the successor's record: %v", err)
+	}
+	if got := guest.u.State(); !got.Fork || got.Term != network.FirstTerm || guest.world.forked != 1 {
+		t.Fatalf("handed a successor's record the run holds %+v, told of a fork %d times; want it alone under the term it held",
+			got, guest.world.forked)
+	}
+
+	candidate := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[1]
+	candidate.world.waits = true
+	candidate.u.beginSuccession(1)
+	candidate.u.drive()
+	if got := candidate.u.State(); !got.Fork || got.Term != network.FirstTerm || candidate.world.forked != 1 {
+		t.Fatalf("at its own turn the run holds %+v, told of a fork %d times; want it alone, no term taken",
+			got, candidate.world.forked)
+	}
+}
+
 // TestARecordAheadOfTheNoticeFreezesItsReader: a survivor the handoff reaches before
 // it saw its authority go stands still with the rest, since its new authority does.
 func TestARecordAheadOfTheNoticeFreezesItsReader(t *testing.T) {

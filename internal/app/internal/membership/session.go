@@ -480,8 +480,9 @@ func (m *Membership) joinWaits() bool {
 // HoldsPlace reports whether this joining run holds its place in its session yet.
 func (m *Membership) HoldsPlace() bool { return m.sessionOffer.Assigned != 0 }
 
-// ErrSessionMoved refuses a seat in a session that started another game, or moved
-// to another host, after this run built its world: a retry builds one on that game.
+// ErrSessionMoved refuses a seat or a start gate in a session that started another
+// game, or moved to another host, after this run built its world: a retry builds
+// one on that game.
 var ErrSessionMoved = &network.Refusal{Code: network.RefusalBehind,
 	Reason: "the session started another game while this join prepared"}
 
@@ -673,9 +674,27 @@ func (m *Membership) previewParticipant(a network.Admission) (network.SessionOff
 // connection: the roster is the lobby so far, and the roster a participant actually
 // builds from arrives later, at the start gate.
 func (m *Membership) assignParticipant(a network.Admission) (network.SessionOffer, error) {
-	o, err := m.assignFor(m.JoinAnchor(), 0, a.Keys(), a.Pass, a.Ticket)
+	var anchor event.JoinAnchor
+	var departing []uint32
+	m.world.RunSafe(func() { anchor, departing = m.joinAnchorLocked(), m.departingLocked() })
+	o, err := m.assignFor(anchor, 0, departing, a.Keys(), a.Pass, a.Ticket)
 	m.closeStaleLink(err, m.SessionTransport())
 	return o, err
+}
+
+// departingLocked is each participant whose departure a held session has crossed and
+// reaches no tick to apply: away to the door already, so its key takes its place
+// back held (NetworkSystem.Departing). Caller MUST hold updateMutex.
+func (m *Membership) departingLocked() (departing []uint32) {
+	if !m.ctx.TimeCtl.Held() {
+		return nil
+	}
+	for _, sys := range m.world.Systems() {
+		if d, ok := sys.(interface{ Departing() []uint32 }); ok {
+			departing = d.Departing()
+		}
+	}
+	return departing
 }
 
 // returnPlace is a place a dial took back with its key, until its arrival
@@ -706,9 +725,10 @@ func (m *Membership) closeStaleLink(err error, port engine.NetworkPort) {
 
 // assignFor is the allocation itself. holder is the participant a bot joins through,
 // recorded now because the bot never reports to this instance. A key among those
-// proved takes back the place its Wraith keeps, a full session's too; the first is
-// the one a new place is held under. Caller must not hold sessionMu.
-func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys []string, shown *network.PassBody, ticket *network.TicketBody) (network.SessionOffer, error) {
+// proved takes back the place its Wraith keeps, a full session's too, or one of the
+// departing its held session has yet to turn; the first is the one a new place is
+// held under. Caller must not hold sessionMu.
+func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, departing []uint32, keys []string, shown *network.PassBody, ticket *network.TicketBody) (network.SessionOffer, error) {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
 	if err := m.refusedLocked(); err != nil {
@@ -730,7 +750,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, keys
 			return network.SessionOffer{}, errors.New("a bot's holder must be a participant that is not itself a bot")
 		}
 	}
-	if entry, err := m.keyedLocked(keys, holder); err != nil || entry.ID != 0 {
+	if entry, err := m.keyedLocked(keys, holder, departing); err != nil || entry.ID != 0 {
 		if err != nil {
 			return network.SessionOffer{}, err
 		}
@@ -958,10 +978,11 @@ func (m *Membership) holdsPlaceLocked(keys []string) bool {
 }
 
 // keyedLocked is the place one of the keys a dial proved takes back: an away entry
-// its Wraith keeps, held for the dial until its arrival crosses. A bot comes back
-// through its own holder. A place still linked, or coming back on another dial,
-// refuses this one for a retry. Caller holds sessionMu.
-func (m *Membership) keyedLocked(keys []string, holder link.PeerID) (network.RosterEntry, error) {
+// its Wraith keeps, or one of the departing, away from here on, held for the dial
+// until its arrival crosses. A bot comes back through its own holder. A place still
+// linked, or coming back on another dial, refuses this one for a retry. Caller
+// holds sessionMu.
+func (m *Membership) keyedLocked(keys []string, holder link.PeerID, departing []uint32) (network.RosterEntry, error) {
 	var refused error
 	for _, k := range keys {
 		if k == "" {
@@ -978,13 +999,14 @@ func (m *Membership) keyedLocked(keys []string, holder link.PeerID) (network.Ros
 			continue
 		case back:
 			refused = &network.Refusal{Code: network.RefusalReturning, Reason: "this player's place is being taken back by another join"}
-		case !p.Away:
+		case !p.Away && !slices.Contains(departing, uint32(p.ID)):
 			refused = &staleLink{id: p.ID, Refusal: &network.Refusal{Code: network.RefusalReturning,
 				Reason: "this player's place is still linked to the run it left"}}
 		default:
 			if m.returning == nil {
 				m.returning = make(map[link.PeerID]returnPlace)
 			}
+			p.Away, m.sessionRoster[i].Away = true, true
 			m.returning[p.ID] = returnPlace{entry: p}
 			if holder != 0 {
 				m.sessionRoster[i].Holder = holder
@@ -1067,8 +1089,8 @@ func (m *Membership) nextParticipantLocked() network.RosterEntry {
 
 // participantDeparted is the departure hook the network resource calls when a
 // participant leaves.
-func (m *Membership) participantDeparted(id uint32, final bool) {
-	m.leaveRoster(link.PeerID(id), final)
+func (m *Membership) participantDeparted(id uint32, final bool) bool {
+	return m.leaveRoster(link.PeerID(id), final)
 }
 
 // releaseParticipant returns an identity whose handshake did not complete, or whose
@@ -1081,14 +1103,20 @@ func (m *Membership) releaseParticipant(id link.PeerID) {
 
 // leaveRoster forgets the links a departed participant held. A final departure
 // returns its identity and slot to the pool, with its bots'; any other keeps both
-// for the Wraith that waits in the slot, and marks the entry away.
-func (m *Membership) leaveRoster(id link.PeerID, final bool) {
+// for the Wraith that waits in the slot, and marks the entry away. It reports a
+// place a dial is taking back, whose links are that dial's and are kept.
+func (m *Membership) leaveRoster(id link.PeerID, final bool) (back bool) {
 	if id == 0 || id == m.authorityID() {
-		return
+		return false
 	}
-	m.reach.Forget(id)
-	if m.authority != nil {
-		m.authority.ForgetReachable(id)
+	m.sessionMu.Lock()
+	_, back = m.returning[id]
+	m.sessionMu.Unlock()
+	if back = (back || m.relaying(id)) && !final; !back {
+		m.reach.Forget(id)
+		if m.authority != nil {
+			m.authority.ForgetReachable(id)
+		}
 	}
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
@@ -1104,7 +1132,7 @@ func (m *Membership) leaveRoster(id link.PeerID, final bool) {
 			}
 		}
 		m.sessionRoster = slices.DeleteFunc(m.sessionRoster, gone)
-		return
+		return false
 	}
 	for i := range m.sessionRoster {
 		if m.sessionRoster[i].ID == id {
@@ -1114,6 +1142,7 @@ func (m *Membership) leaveRoster(id link.PeerID, final bool) {
 	if !slices.Contains(m.awayOrder, id) {
 		m.awayOrder = append(m.awayOrder, id)
 	}
+	return back
 }
 
 // yieldLocked asks the authority to dismiss the participant away longest, for a dial
@@ -1449,7 +1478,8 @@ func (m *Membership) settleLobbyHandshakes(port *link.SocketPort) {
 
 // StartJoinSession completes the tick-zero gate before the socket port owns the
 // stream. The roster arrives with the gate, not with the offer: a joiner that
-// dialled early saw only the participants ahead of it.
+// dialled early saw only the participants ahead of it. A gate its session's new
+// game landed in is ErrSessionMoved: the host's word, or another game's world.
 func (m *Membership) StartJoinSession(signals <-chan os.Signal) error {
 	if m.pendingJoin == nil {
 		return errors.New("join session has no pending stream")
@@ -1471,6 +1501,10 @@ func (m *Membership) StartJoinSession(signals <-chan os.Signal) error {
 	cap, err := snapshot.DecodeCapture(body)
 	if err != nil {
 		return err
+	}
+	// Another game's world: a new game landed in the gate, and a retry builds on it.
+	if cap.Header.Session != m.world.Resources.Rand.Session() {
+		return ErrSessionMoved
 	}
 	m.run.ShowJoinStatus(fmt.Sprintf("Installing the session world at tick %d (%d bytes)",
 		cap.Header.Tick, len(body)))

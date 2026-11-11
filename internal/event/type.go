@@ -90,6 +90,8 @@ const (
 	EventParticipantJoined
 	// EventParticipantDeparted (ParticipantDepartedPayload) [bus] removes a participant from the session roster
 	EventParticipantDeparted
+	// EventWraithWaitRestart [bus] starts every Wraith's wait over; the authority crosses it once its session's first door opens
+	EventWraithWaitRestart
 	// EventPlayoutLead (PlayoutLeadPayload) [local] carries the lead this instance stamps its own crossings with
 	EventPlayoutLead
 	// EventCursorStateSync (CursorStatePayload) [local] carries one cursor's owner-authored state to the instances that do not simulate it
