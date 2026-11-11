@@ -403,6 +403,133 @@ func TestAYieldedWraithIsDroppedAtOnce(t *testing.T) {
 	}
 }
 
+// TestAPersonsWaitRunsOutOnlyWhereADoorStands: with no door on its session the
+// authority dismisses no person at its time, nor the bot that waits with one; a bot
+// whose holder is here goes at its time and a newcomer is given a person's place
+// all the same, and the person goes at its time once a door stands.
+func TestAPersonsWaitRunsOutOnlyWhereADoorStands(t *testing.T) {
+	person := event.ParticipantDepartedPayload{Participant: 7, Slot: 2, Dismissed: true}
+	seat := event.ParticipantDepartedPayload{Participant: 9, Slot: 4, Dismissed: true}
+	for name, tc := range map[string]struct {
+		yield uint32
+		open  bool
+		want  []event.ParticipantDepartedPayload
+	}{
+		"no door":                          {want: []event.ParticipantDepartedPayload{seat}},
+		"no door, and a place asked for":   {yield: 7, want: []event.ParticipantDepartedPayload{person, seat}},
+		"a door":                           {open: true, want: []event.ParticipantDepartedPayload{person, seat}},
+		"no door, short of anybody's time": {},
+	} {
+		w, net, wait := wraithWorld(t)
+		own := spawnRemoteCursor(t, w, 4, 35, 5, 9)
+		if c, ok := w.Components.Cursor.GetPtr(own); ok {
+			c.Holder = 1 // this run's own seat, which no door brings back
+		}
+		ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+			Payload: &event.CursorWraithRequestPayload{Slot: 4}})
+		w.Resources.Event.Queue.Consume()
+		w.Resources.Network.Doorless = func() bool { return !tc.open }
+		w.Resources.Network.DismissWraith = func() uint32 { return tc.yield }
+		if wait(parameter.WraithTimeout - time.Millisecond); tc.want != nil {
+			wait(time.Millisecond)
+		}
+		net.expireWraiths()
+		if got := departures(w); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: at their time the authority dismissed %+v, want %+v", name, got, tc.want)
+		}
+	}
+}
+
+// TestADoorOpenedStartsEveryWaitOver: for the door its session opens the authority
+// crosses one restart, and dismisses nobody until it applies; from that tick every
+// wait runs from zero, a person's included, on a world a reset has cleared too.
+func TestADoorOpenedStartsEveryWaitOver(t *testing.T) {
+	w, net, wait := wraithWorld(t)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	doorless := true
+	w.Resources.Network.Doorless = func() bool { return doorless }
+	crossed := func() (restarts int, gone []event.ParticipantDepartedPayload) {
+		net.expireWraiths()
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.ParticipantDepartedPayload:
+				gone = append(gone, *p)
+			default:
+				if ev.Type == event.EventWraithWaitRestart && ev.Origin == event.OriginSession && ev.Domain == core.DomainPlayer {
+					restarts++
+				}
+			}
+		}
+		return restarts, gone
+	}
+	wait(2 * parameter.WraithTimeout)
+	doorless = false
+	net.RestartWraithWaits()
+	if restarts, gone := crossed(); restarts != 1 || len(gone) != 0 {
+		t.Fatalf("the door opening crossed %d restarts and dismissed %+v, want one restart and nobody gone", restarts, gone)
+	}
+	if restarts, gone := crossed(); restarts != 0 || len(gone) != 0 {
+		t.Fatalf("ahead of its restart the authority crossed %d more and dismissed %+v, want neither", restarts, gone)
+	}
+	restart := event.GameEvent{Type: event.EventWraithWaitRestart}
+	w.Resources.Player.PrepareRestore([]engine.CursorRosterEntry{{Slot: 5, PeerID: 11, Wraith: true, Waited: time.Minute}})
+	net.HandleEvent(restart)
+	cursors.HandleEvent(restart)
+	w.Components.Wraith.Each(func(e core.Entity, wr *component.WraithComponent) bool {
+		if wr.Waited != 0 {
+			t.Errorf("the restart left cursor %d waiting %v, want every wait at zero", e, wr.Waited)
+		}
+		return true
+	})
+	if pending, n, _ := w.Resources.Player.TakeRestore(); n != 1 || pending[0].Waited != 0 {
+		t.Fatalf("the restart left the Wraith a reset is rebuilding at %v, want zero", pending[0].Waited)
+	}
+	wait(parameter.WraithTimeout - time.Millisecond)
+	if restarts, gone := crossed(); restarts != 0 || len(gone) != 0 {
+		t.Fatalf("short of its time from the restart the authority crossed %d restarts and dismissed %+v", restarts, gone)
+	}
+	wait(time.Millisecond)
+	if _, gone := crossed(); len(gone) != 1 || gone[0].Participant != 7 {
+		t.Fatalf("at its time from the restart the authority dismissed %+v, want the person alone", gone)
+	}
+}
+
+// TestARestartAResetInterruptedIsCrossedAgain: a restart still scheduled when a new
+// game clears the barrier is the new game's to cross, once, and one that applied
+// is not crossed again.
+func TestARestartAResetInterruptedIsCrossedAgain(t *testing.T) {
+	for name, applied := range map[string]bool{"still scheduled": false, "applied": true} {
+		w, net, _ := wraithWorld(t)
+		restarts := func() (n int) {
+			net.expireWraiths()
+			for _, ev := range w.Resources.Event.Queue.Consume() {
+				if ev.Type == event.EventWraithWaitRestart {
+					n++
+				}
+			}
+			return n
+		}
+		net.RestartWraithWaits()
+		if got := restarts(); got != 1 {
+			t.Fatalf("%s: the door opening crossed %d restarts, want one", name, got)
+		}
+		if applied {
+			net.HandleEvent(event.GameEvent{Type: event.EventWraithWaitRestart})
+		}
+		net.Init()
+		want := 1
+		if applied {
+			want = 0
+		}
+		if got := restarts(); got != want {
+			t.Errorf("%s: the new game crossed %d restarts, want %d", name, got, want)
+		}
+		if got := restarts(); got != 0 {
+			t.Errorf("%s: the new game crossed its restart again", name)
+		}
+	}
+}
+
 // TestANoticeDismissesOnlyASeat: a seat its holder dropped is gone for good on
 // whichever neighbour's word reaches the authority; a player whose link closed is
 // only ever away.

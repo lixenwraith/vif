@@ -122,6 +122,17 @@ comment now states, and link that instead.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
   `crossingActors` (`internal/system/network.go`); without one, a misbound or
   modified participant can act as another's cursor through it.
+- A crossing only the authority may make joins the list in `admissibleFromSource`,
+  and `barrierBound` when it sets shared state from one tick on; with no payload it
+  needs no codec (`crossSession(et, nil)`). A new event type moves the number of
+  every one declared after it, so it takes the next `network.ProtocolVersion` and
+  `event.JournalSchema`.
+- A reset clears the barrier and every crossing still scheduled on it. What the
+  authority still owes the session past one is state its system keeps and crosses
+  again in the new game (`NetworkSystem.keepLost`, `NetworkSystem.restart`). Between
+  the reset and the boot's spawn the cursors are cleared, so an event that writes
+  every cursor or Wraith writes the roster pending behind `World.Clear` too
+  (`PlayerResource.JoinRestore`, `PlayerResource.RestartWaits`).
 - A joiner's arrival can reach it inside a correction rather than as the crossing,
   which the capture's fence then drops: state a joiner takes on arriving is derived
   in `RebindCursorRoster` too, never only in the arrival's handler.
@@ -277,6 +288,9 @@ comment now states, and link that instead.
   overwrites: a test dispatching handlers that push clones it first. A unit
   `NetworkSystem` reads its identity at `Init` from the latched session, so latch
   before building it, and `Cross` takes nothing until `barrierActive` is set.
+- A headless run ticks `WraithTimeout` of game time in a fraction of a second, its
+  resets included (`a.Tick(int(d / DeltaTime))`), so a test of a wait waits it out.
+  `replayMatches` wants fifty compared ticks.
 - A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
   test that builds a joiner as a join does goes through `configForJoin` into
   `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,

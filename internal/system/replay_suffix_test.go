@@ -23,6 +23,7 @@ func TestWorldDefiningArtifactsAreNeverRetained(t *testing.T) {
 	for _, et := range []event.EventType{
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
+		event.EventWraithWaitRestart,
 		event.EventGameResetRequest,
 		event.EventSwarmSpawnRequest,
 		event.EventQuasarSpawnRequest,

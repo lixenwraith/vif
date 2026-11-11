@@ -131,6 +131,7 @@ A correction must not be repairing entity allocation or run numbering.
 | `EventGameResetRequest` | replaces the run |
 | `EventGameHold` | stops every participant's clock after the same tick (§3.6) |
 | `EventGameSpeed` | sets every participant's rate from the same tick (§3.6) |
+| `EventWraithWaitRestart` | starts every Wraith's wait over from the same tick (§5.4) |
 | `EventSpeciesLandRequest` | allocates the species a fusion's personal materialize or spirit carried |
 | `EventSwarmSpawnRequest` / `EventQuasarSpawnRequest` / `EventBehaviorSpawnRequest` | allocates a species; only a script crosses one, a bus event defaulting to the player domain there |
 | `EventDrainDefeated` | advances the shared progression a region gates its spawns on |
@@ -791,11 +792,27 @@ link (§5.2), and the authority's own two, which it crosses once
 - **Timeout.** A Wraith is dismissed `WraithTimeout` (2 min) of game time after it
   turned; a bot whose holder waits too goes in its holder's dismissal. A reset
   rebuilds a Wraith as a Wraith, its wait going on from the last game's, so no run
-  of resets keeps one.
+  of resets keeps one. A person's wait runs out only where a door stands for it to
+  come back through: the session a run opens for its bots, or goes on in after
+  `:leave` or a fork, has none until `:host` (§5.0, `NetworkResource.Doorless`), so
+  its authority dismisses no person there, nor the bots waiting with one, however
+  long the Wraiths age; a bot whose holder is there goes at its time, since no door
+  brings it back, and a browser run, which opens none, dismisses as ever.
 - **Yield.** A dial a full session cannot otherwise admit has the participant away
   longest dismissed for it (`Membership.yieldLocked`) and is refused `RefusalYielding`,
   which seats and first joins retry in a moment; the retry takes the freed place.
-  A successor orders who is away by their Wraiths' waits.
+  A successor orders who is away by their Wraiths' waits. A session with no door
+  yields all the same: its bots dial through no door.
+
+The door `:host` opens on such a session starts every wait over where somebody is
+away (`Membership.restartWaitsLocked`): the authority crosses
+`EventWraithWaitRestart` as it closes its next tick, authority-only and
+barrier-bound as a roster change is, `CursorSystem` zeroes every Wraith's wait at
+its tick, those a pending reset is rebuilding too, and nobody is dismissed for a
+wait between the opening and that tick. A reset that clears the restart has the new
+game cross it again (`NetworkSystem.Init`). Who was away before the door has then
+waited the same, so a successor orders them by roster; the run that opened the
+session keeps the order they left in.
 
 A reset clears the barrier, so the new game announces again each roster change it
 interrupted: an arrival or a departure still scheduled, a departure applied at the
@@ -938,7 +955,9 @@ A person's fork leaves the same way. `converge.Instance.Forked` hands the run th
 roster it held, and its loop serves the fork as it serves `:leave` (`Membership.forked`,
 `Membership.LeaveSession`), except that it keeps every place rather than its bots' alone:
 each other player's cursor waits as a Wraith in the session it opens, for its player
-to take back once `:host` opens the door (§5.4). A hold the lost host set stands
+to take back once `:host` opens the door, however long that takes: no wait runs out
+on a person before it, and each starts over at it (§5.4). The host's `:player drop`
+removes one sooner. A hold the lost host set stands
 there for this run's own `:pause`, and a freeze ends; the status bar says which. A
 seat under such a run ends only when the run halts it (`seatEnds`), never on its
 own fork or the run's, so the leave finds every bot to seat again. A run with no

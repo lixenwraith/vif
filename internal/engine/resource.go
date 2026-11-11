@@ -573,6 +573,14 @@ func (pr *PlayerResource) JoinRestore(e CursorRosterEntry) bool {
 	return true
 }
 
+// RestartWaits starts over the wait of each Wraith the reset pending behind
+// World.Clear rebuilds, as a restart reaching the cleared world starts the others'.
+func (pr *PlayerResource) RestartWaits() {
+	for i := range pr.restoreCount {
+		pr.restore[i].Waited = 0
+	}
+}
+
 // TakeRestore returns and clears the reset roster pending behind World.Clear.
 func (pr *PlayerResource) TakeRestore() ([parameter.MaxPlayers]CursorRosterEntry, int, uint8) {
 	entries, count, local := pr.restore, pr.restoreCount, pr.restoreLocal
@@ -1338,6 +1346,11 @@ type NetworkResource struct {
 	// WraithKept reports a participant the session layer is giving its Wraith back
 	// to, which no wait may run out on while its arrival is on its way.
 	WraithKept func(participant uint32) bool
+
+	// Doorless reports a session with no door for a player to come back through,
+	// which :host can still open: the authority runs out no person's wait there
+	// (multi-player.md §5.4). Called under the world lock.
+	Doorless func() bool
 
 	// Relaying reports that this run's player lets it carry any participant's
 	// artifacts toward the authority, not only those that joined through it. Called

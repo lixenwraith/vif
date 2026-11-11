@@ -633,6 +633,7 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	// A dial already in reads these only once it has the world lock this call holds.
 	// The policy is the session's from here: only this run's bots were offered one.
 	m.cfg.HostAddress = addr
+	m.restartWaitsLocked()
 	m.authority.Pin(m.cfg.FixedAuthority)
 	bound := doorsText(port.Doors())
 	m.log.Info("session", "msg", "hosting opened mid-run", "address", bound,

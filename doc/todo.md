@@ -1156,23 +1156,6 @@ survivor that reports itself waiting a departure and an arrival of its own term,
 which is the walk "Hear a participant again once its link reopens" gives a
 reopened link (`CrossReturns`); do it with that item.
 
-### Hold a Wraith's wait while no door is open
-
-- Priority: P3
-- Affected files: `internal/system/network.go` (`expireWraiths`),
-  `internal/system/cursor.go` (`Update`), `internal/app/internal/membership/host.go`
-- Guide: [Multi-player §5.4](multi-player.md#54-wraiths),
-  [§5.5](multi-player.md#55-leaving-a-session)
-
-A fork, and a run after `:leave`, keeps each other player's place as a Wraith for
-its player to take back once `:host` opens the door (§5.5), and the wait runs from
-the fork whether a door is open or not. A headless probe that forked, played
-`WraithTimeout` and then hosted had dismissed the lost host's Wraith before the door
-opened, and the host's key was seated as a newcomer, its record unused. What would
-close it: the authority dismisses no Wraith for its wait while its session has no
-door, and opening one starts every wait over, as a crossing, since the wait is
-shared state.
-
 ### Join anew a session whose new game lands in the gate
 
 - Priority: P3

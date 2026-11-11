@@ -98,6 +98,7 @@ type NetworkSystem struct {
 	rosterDue    [participantSlots]rosterDue  // roster changes pushed for this tick that no handler has taken
 	closed       [participantSlots]bool       // links this instance closed as their departure applied, their loss unnoticed yet
 	arriveAt     uint64                       // the tick this run's own arrival applies at, once it is scheduled
+	restart      waitRestart                  // the restart of every Wraith's wait this authority owes a door's opening
 	ticks        uint64
 	statSent     *atomic.Int64
 	statRecv     *atomic.Int64
@@ -485,6 +486,9 @@ func (s *NetworkSystem) Init() {
 	s.states, s.stateSeen, s.rawStateSeen = s.states[:0], [parameter.MaxPlayers]uint64{}, [parameter.MaxPlayers]uint64{}
 	s.keepLost()
 	s.expiring = [participantSlots]bool{}
+	if s.restart == restartCrossed {
+		s.restart = restartDue // cleared with the barrier it stood on: the new game's to cross
+	}
 
 	for _, c := range s.resetInts {
 		c.Store(0)
@@ -606,6 +610,7 @@ func (s *NetworkSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventParticipantJoined,
 		event.EventParticipantDeparted,
+		event.EventWraithWaitRestart,
 		event.EventPlayoutLead,
 		event.EventCursorStateSync,
 	}
@@ -623,6 +628,8 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 			s.dueFor(p.Participant).departures.take()
 			s.removeParticipant(p)
 		}
+	case event.EventWraithWaitRestart:
+		s.restart = restartNone // every wait runs from this tick, the authority's reading of them too
 	case event.EventPlayoutLead:
 		if p, ok := ev.Payload.(*event.PlayoutLeadPayload); ok {
 			s.adoptDelay(p.Ticks)
@@ -1210,8 +1217,8 @@ func (s *NetworkSystem) AppliedCrossingFences() link.CrossingFences {
 // both already hold, whose gap a correction repairs. See multi-player.md §3.1.
 func barrierBound(et event.EventType) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest,
-		event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventBehaviorSpawnRequest,
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
+		event.EventGameResetRequest, event.EventSwarmSpawnRequest, event.EventQuasarSpawnRequest, event.EventBehaviorSpawnRequest,
 		event.EventSpeciesLandRequest, event.EventDrainDefeated, event.EventCursorDefeatState,
 		event.EventGameHold, event.EventGameSpeed:
 		return true
@@ -1724,9 +1731,11 @@ func (s *NetworkSystem) announceLost(p engine.NetworkPort) {
 // time, and the one the session layer gives a newcomer the place of, once each: the
 // authority decides it as it decides every roster change, a bot whose holder waits
 // too goes in its holder's crossing, and one on its way back waits for its arrival.
+// A person's wait runs out only where a door stands for it to come back through.
 func (s *NetworkSystem) expireWraiths() {
 	var yield uint32
 	kept := func(uint32) bool { return false }
+	held := s.restart != restartNone
 	if r := s.world.Resources.Network; r != nil {
 		if r.DismissWraith != nil {
 			yield = r.DismissWraith()
@@ -1734,14 +1743,19 @@ func (s *NetworkSystem) expireWraiths() {
 		if r.WraithKept != nil {
 			kept = r.WraithKept
 		}
+		held = held || r.Doorless != nil && r.Doorless()
+	}
+	if s.restart == restartDue {
+		s.restart = restartCrossed
+		s.crossSession(event.EventWraithWaitRestart, nil)
 	}
 	cursors := s.world.Components.Cursor
 	var due []event.ParticipantDepartedPayload
 	s.world.Components.Wraith.Each(func(e core.Entity, w *component.WraithComponent) bool {
 		c, ok := cursors.GetComponent(e)
+		waited := w.Waited >= parameter.WraithTimeout && (!held || c.Holder != 0)
 		if !ok || c.PeerID == 0 || int(c.PeerID) >= len(s.expiring) || s.expiring[c.PeerID] ||
-			w.Waited < parameter.WraithTimeout && c.PeerID != yield || c.Holder != 0 && s.away(c.Holder) ||
-			kept(c.PeerID) {
+			!waited && c.PeerID != yield || c.Holder != 0 && s.away(c.Holder) || kept(c.PeerID) {
 			return true
 		}
 		s.expiring[c.PeerID] = true
@@ -1754,6 +1768,21 @@ func (s *NetworkSystem) expireWraiths() {
 		s.crossSession(event.EventParticipantDeparted, &due[i])
 	}
 }
+
+// waitRestart is where the restart of every Wraith's wait stands, which the
+// authority owes a door opened on a session that had none: no person could come
+// back while those waits ran, so none runs out until the restart has applied.
+type waitRestart uint8
+
+const (
+	restartNone    waitRestart = iota
+	restartDue                 // owed: crossed as the authority closes its next tick
+	restartCrossed             // crossed, and still to apply
+)
+
+// RestartWraithWaits has this authority start every Wraith's wait over, as a
+// crossing: the wait is shared state. Caller MUST hold updateMutex.
+func (s *NetworkSystem) RestartWraithWaits() { s.restart = restartDue }
 
 // away reports whether a participant's cursor is a Wraith.
 func (s *NetworkSystem) away(participant uint32) bool {
@@ -2997,8 +3026,8 @@ func (s *NetworkSystem) applyDue(nextTick uint64) {
 // participant's cursor (crossingActors); other authentication needs authenticated peers.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, payload any, source uint32, authored bool) bool {
 	switch et {
-	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameHold, event.EventGameSpeed,
-		event.EventFSMTransition:
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventWraithWaitRestart,
+		event.EventGameHold, event.EventGameSpeed, event.EventFSMTransition:
 		return authored || source == s.authorityParticipant()
 	}
 	actor, ok := crossingActors[et]

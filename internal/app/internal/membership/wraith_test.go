@@ -107,3 +107,29 @@ func TestASessionARunOpensIsAwayOnlyFromWhomItKept(t *testing.T) {
 			m.awayOrder, m.yielding, len(m.returning), m.dismissWraith.Load(), want)
 	}
 }
+
+// restarts is a system that counts the restarts of every wait it is asked for.
+type restarts struct{ asked int }
+
+func (*restarts) Init()                 {}
+func (*restarts) Priority() int         { return 0 }
+func (*restarts) Name() string          { return "restarts" }
+func (*restarts) Update()               {}
+func (r *restarts) RestartWraithWaits() { r.asked++ }
+
+// TestADoorOpenedStartsWaitsOverOnlyForSomebodyAway: the door a run opens on a
+// session that had none has the authority start every wait over where the roster
+// counts somebody away, and asks nothing of a session nobody is away from.
+func TestADoorOpenedStartsWaitsOverOnlyForSomebodyAway(t *testing.T) {
+	t.Parallel()
+	for _, away := range []bool{false, true} {
+		m := wraithWorld()()
+		asked := &restarts{}
+		m.world.AddSystem(asked, engine.SystemProfile{})
+		m.sessionRoster = []network.RosterEntry{{ID: 1}, {ID: 2, Slot: 1, Away: away}}
+		m.restartWaitsLocked()
+		if want := map[bool]int{true: 1}[away]; asked.asked != want {
+			t.Fatalf("with somebody away %t the opening asked for %d restarts, want %d", away, asked.asked, want)
+		}
+	}
+}

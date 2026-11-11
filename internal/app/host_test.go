@@ -25,6 +25,7 @@ import (
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/journal"
 	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -2252,13 +2253,18 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	waitForWraiths(t, host, 1)
 }
 
-// TestAForkGoesOnInASessionOfItsOwn: a run its session gives up, here a guest whose
-// pinned host left, is taken on as :leave takes it: a session of its own under the
-// identity it had and the next term, :host and :join open to it, and the loss said
-// as one. The host's place stays, its cursor a Wraith the fork gives back to the
-// key it waits under.
-func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
-	// Not parallel: real sockets against wall-clock deadlines.
+// lostHost is a guest its pinned host has left, as the loss reaches its loop: who it
+// was, what it held, and the key the host's place waits under.
+type lostHost struct {
+	guest *App
+	id    uint32
+	term  network.AuthorityTerm
+	key   network.Key
+	held  map[uint8][2]uint64
+}
+
+func guestOfALostHost(t *testing.T) lostHost {
+	t.Helper()
 	store := &keptPlaces{}
 	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
 		Resources: resource.Options{Embedded: true}, Membership: Membership{PlaceStore: store}})
@@ -2280,8 +2286,8 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	})
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	id, term, key := guest.membership.LocalParticipant(), guest.authority.Term(), store.key(t)
-	held := places(guest, everyone)
+	l := lostHost{guest: guest, id: guest.membership.LocalParticipant(), term: guest.authority.Term(),
+		key: store.key(t), held: places(guest, everyone)}
 
 	leaveAs(t, host)
 	stopGuest := tickInBackground(guest)
@@ -2291,6 +2297,17 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	if !guest.membership.Leaving() {
 		t.Fatal("the guest lost its pinned host, and nothing asked its loop to take it on")
 	}
+	return l
+}
+
+// TestAForkGoesOnInASessionOfItsOwn: a run its session gives up, here a guest whose
+// pinned host left, is taken on as :leave takes it: a session of its own under the
+// identity it had and the next term, :host and :join open to it, and the loss said
+// as one. The host's place stays, its cursor a Wraith.
+func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	l := guestOfALostHost(t)
+	guest, id, term, held := l.guest, l.id, l.term, l.held
 	guest.membership.LeaveSession() // as Run's loop does
 
 	var authoring bool
@@ -2314,15 +2331,92 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	if msg := guest.Context().GetStatusMessage(); msg != "Host connection lost; playing on in a session of your own" {
 		t.Fatalf("after its fork the guest says %q; want the loss said", msg)
 	}
+}
+
+// TestAForksWraithsWaitForItsDoor: a fork dismisses nobody it kept a place for while
+// its session has no door, however long they wait; :host starts every wait over,
+// in its replay as in the run, and from there the lost host's key takes its place
+// back, or the place goes at its time.
+func TestAForksWraithsWaitForItsDoor(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for name, returns := range map[string]bool{"its key comes back": true, "nobody comes back": false} {
+		t.Run(name, func(t *testing.T) { aForksWraithsWaitForItsDoor(t, returns) })
+	}
+}
+
+func aForksWraithsWaitForItsDoor(t *testing.T, returns bool) {
+	l := guestOfALostHost(t)
+	guest := l.guest
+	guest.membership.LeaveSession() // as Run's loop does
+	waiting := func() (d time.Duration, doorless bool) {
+		guest.World().RunSafe(func() {
+			w := guest.world
+			if wraith, away := w.Components.Wraith.GetComponent(w.Resources.Player.Slot(0)); away {
+				d = wraith.Waited
+			} else {
+				d = -1
+			}
+			doorless = w.Resources.Network.Doorless()
+		})
+		return d, doorless
+	}
+	var dt time.Duration
+	guest.World().RunSafe(func() { dt = guest.world.Resources.Time.DeltaTime })
+	guest.Tick(int((parameter.WraithTimeout + time.Second) / dt))
+	if d, doorless := waiting(); d < parameter.WraithTimeout || !doorless {
+		t.Fatalf("past its time with no door, the host's place has waited %v (-1: gone) in a session doorless %t; want it waiting still",
+			d, doorless)
+	}
+
+	rec := journal.NewCapture()
+	guest.cfg.JournalSink = rec
+	if _, err := guest.scribe.OpenJournal(); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	want := map[event.Stamp][]string{}
+	play := func(ticks int) {
+		for range ticks {
+			guest.Tick(1)
+			p := guest.Position()
+			want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(guest)
+		}
+	}
+	play(20)
 	if err := guest.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatalf("the fork opens no door: %v", err)
 	}
-	stopGuest = tickInBackground(guest)
+	const settle = 2 * parameter.NetworkBarrierMaxDelayTicks
+	play(settle)
+	if d, doorless := waiting(); d < 0 || d > settle*dt || doorless {
+		t.Fatalf("%d ticks after :host the host's place has waited %v (-1: gone) in a session doorless %t; want a wait begun at the door",
+			settle, d, doorless)
+	}
+	guest.World().RunSafe(func() { _ = guest.scribe.StopJournalLocked(-1) })
+	guest.scribe.ServeJournal()
+	restarts := 0
+	for _, r := range rec.Records() {
+		if r.Type == event.EventWraithWaitRestart {
+			restarts++
+		}
+	}
+	if restarts != 1 {
+		t.Fatalf("the door's opening is journaled as %d restarts, want one", restarts)
+	}
+	replayMatches(t, rec, want, guestSurface)
+
+	if !returns {
+		guest.Tick(int(parameter.WraithTimeout / dt))
+		if d, _ := waiting(); d != -1 {
+			t.Fatalf("its time after :host the host's place has waited %v, want it dismissed", d)
+		}
+		return
+	}
+	stopGuest := tickInBackground(guest)
 	defer stopGuest()
-	back, offered := dialSession(t, guest.HostAddr(), key)
+	back, offered := dialSession(t, guest.HostAddr(), l.key)
 	defer back.Close()
-	if uint64(offered.Assigned) != held[0][1] || assignedSlot(offered) != 0 {
-		t.Fatalf("the host's key was given %d on slot %d; want its own place, %d on slot 0", offered.Assigned, assignedSlot(offered), held[0][1])
+	if uint64(offered.Assigned) != l.held[0][1] || assignedSlot(offered) != 0 {
+		t.Fatalf("the host's key was given %d on slot %d; want its own place, %d on slot 0", offered.Assigned, assignedSlot(offered), l.held[0][1])
 	}
 }
 
