@@ -625,36 +625,6 @@ What would close it:
 - A test per case on the probe's shape, with `meshSession` handing back its mesh:
   participant 3 follows 2 at term 2, and no Wraith but the lost host's remains.
 
-### Keep an arrival a new game interrupted
-
-- Priority: P1
-- Affected files: `internal/system/network.go` (`keepLost`, `announceLost`),
-  `internal/system/cursor.go` (`spawn`), `internal/engine/scheduler.go`
-  (`executeReset`)
-- Guide: [Multi-player §5.4](multi-player.md#54-wraiths)
-
-A reset keeps the departures it interrupts and no arrival. Three shapes, the first
-two shown by `meshSession` probes that push the arrival crossing beside `:n`:
-- An arrival applying at the reset's own tick, in either order, stops the game. Its
-  spawn request dispatches after `World.Clear` and takes the roster the reset
-  rebuilds (`PlayerResource.TakeRestore`) as its template's, so the boot's own
-  request finds its slot taken and retries for good: no instance enters the main
-  region until the host starts another game, and the newcomer has no cursor in that
-  one either.
-- An arrival crossed inside the reset's lead is cleared with the barrier
-  (`NetworkSystem.Init`). The door marked the place present as it crossed
-  (`crossArrivalLocked`), so a newcomer is linked with no cursor, and a returning
-  player's Wraith neither comes back nor times out (`wraithKept`), until the run
-  quits and dials again.
-- An arrival, or a host's drop, pushed between the reset's clear and its rebuild is
-  discarded with the queue (`executeReset`).
-
-What would close it: `keepLost` keeps an admissible arrival still scheduled, and one
-applied whose participant the reset rebuilds as no live cursor, and `announceLost`
-crosses each again ahead of any departure; a spawn request naming a participant
-leaves a pending restore to the boot's; `executeReset` keeps the session's roster
-events it would discard. A test per shape on the probes' mesh.
-
 ### Retire a relayed player the authority no longer hears
 
 - Priority: P2
@@ -1140,16 +1110,23 @@ close it: the authority dismisses no Wraith for its wait while its session has n
 door, and opening one starts every wait over, as a crossing, since the wait is
 shared state.
 
-### Write a returning player's name to its cursor
+### Join anew a session whose new game lands in the gate
 
 - Priority: P3
-- Affected files: `internal/system/cursor.go` (`reclaim`)
+- Affected files: `internal/app/internal/membership/host.go` (`gateJoiner`,
+  `midRunOffer`), `internal/app/internal/membership/join.go` (`JoinSessionAt`)
+- Guide: [Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity)
 
-`reclaim` writes a returning arrival's control and record and not its `Name`, which
-the door takes from the ticket or pass the return showed (`assignFor`): a player who
-signed in while away keeps the slot's label on every instance, and a reset or a
-successor's roster carries the old one on. What would close it: `reclaim` writes
-the arrival's name, asserted in `TestAnArrivalIntoItsOwnWraithTakesItBack`.
+A seat refuses a session that started another game while the join prepared
+(`ErrSessionMoved`), and the run joins the new game anew. A reset applying after the
+seat, inside the lead the mid-run gate waits for its world (`gateJoiner`), is not
+caught: the offer names the game that ended, the capture is the new game's, and the
+install fails `capture mismatch: session recorded 2, this run has 1`, so the join
+fails where it could follow. A socket probe that fired `:n` at swept moments of a
+headless run's join met it once in 36. What would close it: the install reads a
+session mismatch as `ErrSessionMoved`, and the run joins anew as it does at the
+seat; a test crosses `:n` between a seated dial's reply and its start gate
+(`takePlace`).
 
 ### Keep a Wraith's stats in the session
 

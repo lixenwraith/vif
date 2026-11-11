@@ -141,15 +141,26 @@ comment now states, and link that instead.
 - `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
   the game resets near tick 35; a session test that waits a fixed count of ticks
   past that reads the reset. Wait for the condition, bounded.
-- A reset's tick closes with no flush, and `Scheduler.executeReset` takes the world
-  lock again after `MetaSystem.handleGameReset` cleared the world: a goroutine in
-  between (a correction's off-tick drain, the accept loop) meets no cursor, the
-  roster waiting in `PlayerResource`'s restore (`Restores`), and what it pushes goes
-  with the queue. `NetworkSystem.Init` runs there, before the boot spawn rebuilds.
+- A reset's tick settles on after `MetaSystem.handleGameReset` cleared the world,
+  closes with no flush, and `Scheduler.executeReset` takes the world lock again:
+  what a crossing applied at that tick raised, and a goroutine in between (a
+  correction's off-tick drain, the accept loop), meet no cursor and the roster
+  waiting in `PlayerResource`'s restore (`Restores`). A queue event pushed there
+  goes with the queue; a crossing the barrier takes as it is pushed
+  (`EventQueue.Push`), and `NetworkSystem.Init`, run there before the boot spawn
+  rebuilds, clears it bar the roster changes `keepLost` keeps.
+- A spawn request naming a participant joins a reset's roster while one waits
+  (`PlayerResource.JoinRestore`) and spawns nothing, so a unit test that leaves a
+  restore pending rebuilds through the boot's request, one with no `PeerID`.
 - `NetworkSystem.scheduled` holds artifacts not yet admitted: `admissibleFromSource`
   runs as each applies, so a roster artifact a guest forged waits there for its tick
   to refuse it. Code acting on what is scheduled checks admission itself
-  (`keepLost`); `applied` holds admitted ones alone.
+  (`keepLost`); `applied` holds admitted ones alone. Both hold one source's in the
+  order it made them, which is the order they apply in (`schedule`).
+- The door marks a place away as its departure applies (`participantDeparted`) and
+  takes a key back only into one that is (`keyedLocked`), so a return's arrival
+  crosses behind its departure's apply. A successor's (`CrossReturns`) waits on
+  nothing: a departure and an arrival for one participant can both be scheduled.
 - In `meshSession`, `mode.ExecuteCommand(apps[0].Context(), "n")` then
   `apps[0].Settle()` crosses the host's new game in the epoch at hand, and closing a
   participant's `link.MeshPort` under its world lock drops it. The host's lead is 3
