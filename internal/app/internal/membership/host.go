@@ -1141,20 +1141,27 @@ func (m *Membership) sendMidRunGate(port *link.SocketPort, id link.PeerID) error
 // playout lead past the admission, where every epoch flushed before it has applied,
 // waits for its install and says which world and how long its transfer took. A held
 // session reaches no lead: the joiner is handed the held tick's world and what is
-// scheduled past it, and holds there too; the loop below reads which the hold made it.
+// scheduled past it, and holds there too. A new game under the gate refuses it.
 func (m *Membership) gateJoiner(port *link.SocketPort, offer network.SessionOffer, held bool,
 	world func(minTick uint64, deadline time.Time) ([]byte, uint64, error),
 ) (tick uint64, bytes int, took time.Duration, err error) {
 	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
 	var body []byte
 	var pending [][]byte
+	run := offer.Anchor.Anchor.Run
 	for again := true; ; again = false {
 		at := m.run.Position()
 		minTick := at.Tick + parameter.NetworkBarrierDelayTicks
 		if held {
 			minTick = at.Tick
 		}
-		if body, tick, err = world(minTick, deadline); err != nil {
+		body, tick, err = world(minTick, deadline)
+		// The session left the game offer names: told now, its joiner dials the next.
+		if m.run.Position().Run != run {
+			port.Send(uint32(offer.Assigned), uint8(network.MsgJoinReply), network.RefusalReply(ErrSessionMoved))
+			return 0, 0, 0, ErrSessionMoved
+		}
+		if err != nil {
 			return 0, 0, 0, err
 		}
 		// A world short of the lead is the held tick's: a hold landed as it was read.

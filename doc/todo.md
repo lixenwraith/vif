@@ -1156,24 +1156,6 @@ survivor that reports itself waiting a departure and an arrival of its own term,
 which is the walk "Hear a participant again once its link reopens" gives a
 reopened link (`CrossReturns`); do it with that item.
 
-### Join anew a session whose new game lands in the gate
-
-- Priority: P3
-- Affected files: `internal/app/internal/membership/host.go` (`gateJoiner`,
-  `midRunOffer`), `internal/app/internal/membership/join.go` (`JoinSessionAt`)
-- Guide: [Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity)
-
-A seat refuses a session that started another game while the join prepared
-(`ErrSessionMoved`), and the run joins the new game anew. A reset applying after the
-seat, inside the lead the mid-run gate waits for its world (`gateJoiner`), is not
-caught: the offer names the game that ended, the capture is the new game's, and the
-install fails `capture mismatch: session recorded 2, this run has 1`, so the join
-fails where it could follow. A socket probe that fired `:n` at swept moments of a
-headless run's join met it once in 36. What would close it: the install reads a
-session mismatch as `ErrSessionMoved`, and the run joins anew as it does at the
-seat; a test crosses `:n` between a seated dial's reply and its start gate
-(`takePlace`).
-
 ### Keep a Wraith's stats in the session
 
 - Priority: P2

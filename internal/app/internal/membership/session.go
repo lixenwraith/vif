@@ -480,8 +480,9 @@ func (m *Membership) joinWaits() bool {
 // HoldsPlace reports whether this joining run holds its place in its session yet.
 func (m *Membership) HoldsPlace() bool { return m.sessionOffer.Assigned != 0 }
 
-// ErrSessionMoved refuses a seat in a session that started another game, or moved
-// to another host, after this run built its world: a retry builds one on that game.
+// ErrSessionMoved refuses a seat or a start gate in a session that started another
+// game, or moved to another host, after this run built its world: a retry builds
+// one on that game.
 var ErrSessionMoved = &network.Refusal{Code: network.RefusalBehind,
 	Reason: "the session started another game while this join prepared"}
 
@@ -1477,7 +1478,8 @@ func (m *Membership) settleLobbyHandshakes(port *link.SocketPort) {
 
 // StartJoinSession completes the tick-zero gate before the socket port owns the
 // stream. The roster arrives with the gate, not with the offer: a joiner that
-// dialled early saw only the participants ahead of it.
+// dialled early saw only the participants ahead of it. A gate its session's new
+// game landed in is ErrSessionMoved: the host's word, or another game's world.
 func (m *Membership) StartJoinSession(signals <-chan os.Signal) error {
 	if m.pendingJoin == nil {
 		return errors.New("join session has no pending stream")
@@ -1499,6 +1501,10 @@ func (m *Membership) StartJoinSession(signals <-chan os.Signal) error {
 	cap, err := snapshot.DecodeCapture(body)
 	if err != nil {
 		return err
+	}
+	// Another game's world: a new game landed in the gate, and a retry builds on it.
+	if cap.Header.Session != m.world.Resources.Rand.Session() {
+		return ErrSessionMoved
 	}
 	m.run.ShowJoinStatus(fmt.Sprintf("Installing the session world at tick %d (%d bytes)",
 		cap.Header.Tick, len(body)))

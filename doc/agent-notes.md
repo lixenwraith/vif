@@ -291,6 +291,15 @@ comment now states, and link that instead.
 - A headless run ticks `WraithTimeout` of game time in a fraction of a second, its
   resets included (`a.Tick(int(d / DeltaTime))`), so a test of a wait waits it out.
   `replayMatches` wants fifty compared ticks.
+- A new game starts the tick count over (`Stamp.Run` moves), so a tick read before
+  one bounds nothing after it: a wait for a tick ends when the run moves
+  (`KeyframeAt`, `ProvedWorld`, `gateJoiner`). The harness's host ticks every 10 ms,
+  five times the game's rate, so a wait that outlasts a 5 s deadline in play is
+  over in a test unless the test ticks its host by hand.
+- A host a test does not tick parks a mid-run gate in its lead, and gates run one
+  at a time (`midRunGate`): a raw dial's reply holds the gate (`dialSession`,
+  `Complete`), a second joiner's waits behind it, and what the test crosses
+  meanwhile lands before that gate reads its offer.
 - A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
   test that builds a joiner as a join does goes through `configForJoin` into
   `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,

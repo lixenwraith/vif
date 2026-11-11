@@ -478,6 +478,15 @@ either, since a fresh attempt brings a fresher world. A joiner drives no cursor 
 its own exists: the arrival binds it, or a correction that already holds the arrival,
 whose fence drops the crossing, binds it by identity (`RebindCursorRoster`).
 
+A gate's lead counts the ticks of the game its offer names. A new game that starts
+under it ends the wait (`KeyframeAt`, `ProvedWorld`), and the host refuses the
+joiner at once as `ErrSessionMoved`, as a relay does one whose seat the authority
+gave in the game before (`Membership.gateJoiner`). A gate that begins after the new
+game hands that game over, and the joiner's run, built on the one before, reads the
+world's session counter as the same refusal (`StartJoinSession`); no other mismatch
+reads so. The run then joins the new game anew, as at the seat (`App.joinAnew`): a
+player's run and a bot seat dial again, and a driven run ends on the refusal.
+
 A join its player started (`-join` at launch, `:join`, the Multiplayer page) holds
 nothing in the session until their press. Its handshake previews the session
 ([Services §8](services-and-networking.md#8-wire-frame-and-session-messages)); the
