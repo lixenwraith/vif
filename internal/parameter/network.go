@@ -272,9 +272,9 @@ const (
 	SnapshotFloorKeyframeTicks = 60
 
 	// SnapshotLinkUtilisation is the share of measured link capacity the
-	// correction cadence may spend. The rest is headroom for the crossing epochs,
-	// the owner-authored syncs and the digests, which travel on the same link and
-	// are not in the controller's cost model.
+	// correction cadence may spend. The rest is headroom for the crossing epochs and
+	// the owner-authored syncs, which travel on the same link and are not in the
+	// controller's cost model.
 	SnapshotLinkUtilisation = 0.75
 
 	// SnapshotBulkQueue is how long a link's undelivered bytes may take to drain,

@@ -30,10 +30,10 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TestNetcodeReadingsOverSockets takes doc/netcode-optimization.md §2's readings on
-// the socket path, which the in-process mesh has none of: bytes by kind before each
+// TestNetcodeReadingsOverSockets takes doc/netcode-design.md §3.3's readings on the
+// socket path, which the in-process mesh has none of: bytes by kind before each
 // link's deflate and on the wire after it, with the rounds, proofs and repairs
-// beside them, in multi-player §6's shape paced at the tick. It prints what it
+// beside them, in §3.1's shape paced at the tick. It prints what it
 // measured and runs only when asked, VIF_NETCODE_READINGS=1: it is minutes of whole
 // worlds, and an approach is judged by it, not a build.
 // readingRepeats is how many times a td row is taken: its rows vary run to run with

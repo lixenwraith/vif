@@ -990,7 +990,7 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 
 // TestALateSurvivorsPlaceIsGivenBackWithItsBots: the places the floor took from a
 // survivor and its bot, Wraiths on the host, are given back when its report reaches
-// the host late, as a claim's return gives them back; the survivor kept its own
+// the host late, as a key's return gives them back; the survivor kept its own
 // cursor throughout, and everyone holds the places it had.
 func TestALateSurvivorsPlaceIsGivenBackWithItsBots(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
@@ -1411,8 +1411,8 @@ func TestAPersonRedialsItsRelayWhenTheLinkDrops(t *testing.T) {
 	if !relay.instance().DropParticipant(id) {
 		t.Fatal("the person's link would not drop")
 	}
-	// Its own place is the one its claim waits under, and the redial replaces the run
-	// only with the dial that took it back under that claim.
+	// Its own place is the one its key holds, and the redial replaces the run only
+	// with the dial that took it back by that key.
 	var req *restartRequest
 	waitUntil(t, func() bool { req = person.restart.Load(); return req != nil }, "the person admitted back through its relay")
 	if req.Dialled == nil || uint32(req.Dialled.Offer().Assigned) != id ||
@@ -1457,7 +1457,7 @@ func TestARelayDoorAdmitsAsTheHostOnceItsRunHosts(t *testing.T) {
 }
 
 // TestADroppedGuestRejoinsThroughARelayingPeer: a guest whose own link to a live
-// host dropped, and whose redial cannot reach that host, rejoins under its claim
+// host dropped, and whose redial cannot reach that host, rejoins by its key
 // through a candidate relaying for others, whose own port takes the join as a -relay
 // door does, and is admitted back into its own place behind it.
 func TestADroppedGuestRejoinsThroughARelayingPeer(t *testing.T) {

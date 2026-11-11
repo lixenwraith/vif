@@ -469,7 +469,7 @@ func TestTheWalkGoesDownTheList(t *testing.T) {
 
 // TestALateSurvivorIsTakenBack: a survivor whose membership report reaches the host
 // after the floor, a hop or a wait too late for it, is given its place back as a
-// claim's return gives one; the same report again, or one from a participant the
+// key's return gives one; the same report again, or one from a participant the
 // floor kept, changes nothing.
 func TestALateSurvivorIsTakenBack(t *testing.T) {
 	t.Parallel()

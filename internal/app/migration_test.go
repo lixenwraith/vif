@@ -216,7 +216,7 @@ func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 // TestAGuestNoCandidateReachesForks: the centre of a star goes and its guests share
 // no link. The first candidate takes the term alone; the other guest walks the list
 // without reaching it and forks once its turn is over (what a fork does with its
-// claim is TestAForkLetsItsClaimGo's). The host keeps the place of each participant
+// place is TestAForkLetsItsPlaceGo's). The host keeps the place of each participant
 // it lost as a Wraith.
 func TestAGuestNoCandidateReachesForks(t *testing.T) {
 	t.Parallel()
@@ -257,7 +257,7 @@ func TestAGuestNoCandidateReachesForks(t *testing.T) {
 }
 
 // TestAGuestWhoseLinkDroppedRedialsItsPlace: a person's run whose own link to its
-// host dropped, the host still there, dials the host's door again under the claim
+// host dropped, the host still there, dials the host's door again under the key
 // its place waits under; the dial the host admits back into that place is what the
 // run is replaced by.
 func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
@@ -276,8 +276,8 @@ func TestAGuestWhoseLinkDroppedRedialsItsPlace(t *testing.T) {
 	if !host.instance().DropParticipant(id) {
 		t.Fatal("the guest's link would not drop")
 	}
-	// Its own place is the one its claim waits under, and the redial replaces the run
-	// only with the dial that took it back under that claim.
+	// Its own place is the one its key holds, and the redial replaces the run only
+	// with the dial that took it back by that key.
 	var req *restartRequest
 	for deadline := time.Now().Add(socketWait); req == nil && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		req = guest.restart.Load()
