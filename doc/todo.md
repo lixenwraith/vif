@@ -1025,6 +1025,32 @@ exclusion, both owner-authored cursor sets, `RebindCursorRoster`'s restore).
 Perturb where the successor's mirror still differs at a tick close, and show the
 test then fails with the guards off.
 
+### Move the netcode out of the network system, then split what stays
+
+- Priority: P3
+- Affected files: `internal/system/network.go`, `pkg/network`, `internal/event`
+  (the wire batch), `internal/system/domain_test.go`
+
+`NetworkSystem` is one file of about 3,600 lines: the roster and departures,
+crossings and the barrier, the relay tree, the lead and pacing, owner syncs, the
+replay suffix and the snapshot's adoption, and telemetry. The netcode is meant to
+plug into other projects, so the first step moves every part that is not this
+game's to the package that should own it, `pkg/network` or one beside it: the
+sequence `window`, the barrier's schedule of artifacts by apply tick and source,
+the replay suffix, the relay tree (`up`, `down`, `carries`, `behind`,
+`Downstream`), the flooding of departures, and the lead's pacing (`paceDecision`,
+`driveOwnLead`). A `pkg/` package imports nothing under `internal/`, so what moves
+takes a frame type of its own or a type parameter where it holds `event.WireBatch`,
+and a small interface where it reads the world, the log or the status registry.
+What stays is the game's: a cursor's owner syncs (`readCursorState`, D-13), the
+actor a crossing may name (`actsAsOwn`), the status cells and the ECS hooks.
+
+Then what stays splits by concern, as pure moves. The domain suite credits a file
+to the system whose `Name` it declares (`declaredName`), so it must first credit a
+file by its methods' receiver, or each new file is an unchecked helper that
+`TestHelperFilesArePinned` refuses. Both steps conflict with every open branch on
+the file, so they wait for a pause between waves of netcode work.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -1132,20 +1158,6 @@ and wasm readings put under one percent. The identity service's own readings (RS
 10,000 verifiers, the launch-day introspection rate) are its repository's todo.
 Implication: the budget in §8 stands as a projection until these are in; a reading
 that misses it changes `-route-max`, `MemoryMax` or the splice before anything else.
-
-### Refresh the architecture and development documents
-
-- Priority: P2
-- Affected files: `doc/architecture.md`, `doc/development.md`
-
-Both were last read whole before the netcode, kinetics, audio and menu work; the
-session layer's parts were brought current with the auth design. The rest wants a
-pass against the code: the containers and control flow in `architecture.md` §2 to
-§11 against `package-map.md`, and in `development.md` the build workflow, the
-generated code, the CLI tables against `cmd/vif/usage.go`, the validation sweep
-against `Makefile` and `script/test.sh`, the platform matrix and the source map.
-Implication: a newcomer reads these two first, so a stale claim there costs more
-than one in a reference document.
 
 ### Give up a place to a newcomer while the session is held
 
@@ -1608,7 +1620,7 @@ a second of CPU, so it runs off the audio thread.
 ### Render a conductor timeline offline
 
 - Priority: P3
-- Affected files: `cmd/vif-log`, `internal/system/music.go`
+- Affected files: `tool/vif-log`, `internal/system/music.go`
 
 `RenderTimeline` plays a timeline of slot patterns offline and stapes' `song`
 writes a `SongDef` through it; the conductor's own timeline, patterns by tier from an APM
@@ -1737,17 +1749,6 @@ its own todo. New terms (binaural beat, bed, carrier) go in both term indexes
 when they land.
 
 ## Engine
-
-### Give the composite lifecycle methods a user
-
-- Priority: P3
-- Affected files: `internal/system/composite.go`
-
-`CompositeSystem` carries `handleEmptyComposite`, `CreateHeader`, `AddMember`,
-`DestroyComposite` and `GetAnchorForMember`, designed for building and tearing
-down composites at run time, but no system or scenario uses them. A species or
-scenario that assembles composites would; it reaches them through events, since
-another system may not call them directly.
 
 ### Trim what a tick spends outside the position index
 

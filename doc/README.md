@@ -3,7 +3,8 @@
 This directory describes the architecture and design of the current vif
 codebase. It was last audited on 2026-10-14, when every document but the
 future designs, every README and the package doc comments were checked claim by
-claim against the code. The implementation, generated manifest and shipped
+claim against the code; on 2026-11-11 every identifier, path and link in them was
+checked again. The implementation, generated manifest and shipped
 configuration are authoritative where prose disagrees with them.
 
 vif is a terminal action game that combines vi-style text navigation,
@@ -37,7 +38,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [AI, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Behavior machines](machine-design.md) | Domain detail | How does a species step its per-entity state machine, how does a behavior program define a species from data, and why this runtime rather than another? |
 | [Generic kinetic analysis](generic-kinetic.md) | Future design | Which kinetic paths exist, why one universal motion system is unsafe today, and how could they be consolidated incrementally? A design for future implementation. |
-| [Native menu](native-menu.md) | Future design | How does a host draw the menu with its own widgets, Android first and the browser next: the snapshot it is sent, the ops it answers with, and the phases to build it? A design for future implementation. |
+| [Native menu](native-menu.md) | Domain detail | How do Android and the browser draw the configuration menu with their own widgets: the snapshot a host is sent, the ops it answers with, and how each host draws and checks it? |
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, how does a session's transport start, frame, relay, poll, time out and disconnect, and what does a supervised run's endpoint answer? |
 | [Authentication and session design](auth-session-design.md) | Design/detail | Who a player is, what admits a dial to a session, how a participant comes back after a dropped link, a crash or a reboot without authenticating again, and what it asks of the router, the identity service and the deployment? Its decisions, the mechanisms as built, the router's budget for ten thousand routed players and what remains. |

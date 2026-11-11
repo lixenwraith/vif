@@ -160,8 +160,8 @@ flags so no caller can bypass the start/ready gate. The entry points:
 | `:session` | One line: hosting or joined, by the role held now, and the address (a successor hosts at the one it declared until `:host` names one), participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
-`[tcp://|vif://]host:port[/name]`, the name routing to one of several sessions on
-an address, or a `ws(s)://` route a browser joins by, whose last path segment is
+`[tcp://|vif://|vifs://]host:port[/name]`, the name routing to one of several
+sessions on an address and `vifs://` dialling it over TLS, or a `ws(s)://` route a browser joins by, whose last path segment is
 the name. An `http(s)://` URL names a site instead: `network.RequestSession` posts
 to its `/vif/api/sessions` and the returned link is what `-join` or `:join` dials,
 so a restart or rejoin follows that session rather than creating another. A link
@@ -448,7 +448,10 @@ inflater's 32 KiB window, where its last frame would be delivered before the flu
 marker is read: a raw frame due there travels in the run. Go's levels 1-6 drop their
 history on a flushed block under 128 bytes, which is most bursts; 7 keeps it.
 
-Control messages carry join offer/reply, start/ready gates and disconnect notices.
+Control messages carry join offer/reply, start/ready gates and disconnect notices
+(`MsgDisconnect`, 0x03: the lost link of a participant behind the sender, passed
+on until the coordinator crosses the departure, [Multiplayer
+§5](multi-player.md#5-membership-topology-and-authority-continuity)).
 `MsgSessionRoute` (0x05) is the exception to the coordinator speaking first: every
 join sends it as one frame before it reads, with the session name it was given or
 none. A front door places the connection on it where one address serves several
@@ -962,13 +965,13 @@ What the operator surface does not cover:
   *repairs*. It is also what the succession rule is shaped around: a star's leaves
   reach nobody but the candidates once its centre goes, so who hosts has to be a
   function of the chain rather than of a vote;
-- a partition has no digest edge between its components;
 - live pause/speed/step are refused, because a suspended participant has no way
   back into the running session; a coordinator whose only links are its own bot
   seats may still pause;
 - no lag compensation;
-- trusted plaintext peers over tcp and `ws`; no authentication, and a `wss://`
-  door's certificate names the host to a browser, not the player to the host. A
+- plaintext peers over tcp and `ws`; a participant key proves a place, never a
+  person, so an open door admits whoever dials it, and a `wss://` door's
+  certificate names the host to a browser, not the player to the host. A
   self-signed door encrypts and names nobody: a native join takes it as it is, open
   to a man in the middle unless `-ca` pins it or a passphrase bound to that
   certificate authenticates both ends
@@ -1001,14 +1004,13 @@ startup gates, and checks disconnect continuation while the listener stays up.
 `TestThreeParticipantLobbyClosesOnOneRoster` the socket handshake for a lobby
 larger than a pair. `TestActivatedSessionDefersCrossingBeforeFirstTick` covers
 input immediately after the lobby gate.
-`TestRuntimeDigestIsADriftGaugeRatherThanAVerdict` pins that a digest mismatch is
-counted and its surface named and is not a state a session is stuck in;
-`TestSharedSnapshotExcludesLocalSchedulerTimingAndComparesGameTime` keeps wall
-origins, tick slips and display-only deadline remainder out of that surface. Framing, timeout,
-mismatch and encoding budgets have focused tests in `internal/network` and
-`internal/event`.
-`TestCoordinatorLossRaisesLocalStatus` pins the direct guest warning that does not
-depend on a surviving digest edge.
+`TestCorrectionMagnitudeIsMeasuredNotAsserted` pins that a correction's size is
+published and is not a state a session is stuck in;
+`TestTheComparedSurfaceDropsWhatOneInstanceAloneMoves` keeps per-instance counts
+out of the compared surface. Framing, timeout, mismatch and encoding budgets have
+focused tests in `internal/network` and `internal/event`.
+`TestCoordinatorLossRaisesLocalStatus` pins the guest's own warning once its host
+link is gone and no correction can arrive.
 
 The adaptive cadence splits its verification in three, because the three questions
 are different. `pkg/linkpace` holds the arithmetic and is tested on an explicit
@@ -1096,8 +1098,9 @@ and the next term, and the host's cursor waits as a Wraith. Restarting the host
 and rejoining with `:join` is a *new* session, not a merge.
 `-players <n>` caps the roster a host admits, `-host` or a later `:host` alike, and
 so does the scenario's `max_players`; unset, both are `MaxPlayers`. Bind the host to `:7777` for a LAN. Internet routing
-uses the same TCP path but is not safe for untrusted peers until authentication
-and TLS configuration are exposed.
+uses the same TCP path: a tcp door is plaintext and admits any key, so it is for
+trusted peers, and a `wss://` door with `-passphrase` authenticates both ends
+([Auth and session design §3.5](auth-session-design.md#35-passphrase-doors)).
 
 Use an unmodified loadout when checking for duplicated presentation. `:god` is an
 intentional stress mode: it sets the invoking cursor's energy to 100 billion,

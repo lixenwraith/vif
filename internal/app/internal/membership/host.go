@@ -756,9 +756,9 @@ func (m *Membership) openSessionLocked(kept []network.RosterEntry) error {
 		Term: m.authorityTerm() + 1, Roster: roster, FixedAuthority: m.cfg.FixedAuthority,
 	}, self.ID)
 
-	// Attaching latches the world as shared (D-14) and installs the departure and
-	// digest hooks; activating closes the pre-session crossing window so this
-	// instance's own artifacts start taking the session's playout lead.
+	// Attaching latches the world as shared (D-14) and installs the session hooks;
+	// activating closes the pre-session crossing window so this instance's own
+	// artifacts start taking the session's playout lead.
 	m.attachTransportLocked(port)
 	m.ActivateNetworkSessionLocked()
 
