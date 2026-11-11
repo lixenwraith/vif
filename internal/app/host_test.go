@@ -3277,11 +3277,12 @@ func TestARunWhoseHostGoesBeforeItsArrivalDrivesItsOwnCursor(t *testing.T) {
 
 // TestAPlayerComesBackThroughItsRelayWhileTheSessionIsHeld: a relay's door reads
 // what the authority's does, so a player who joined through it and dropped under a
-// hold is taken back through it held, and drives its cursor once the hold ends. A
+// hold is taken back through it held, and drives its cursor once the hold ends. Lost
+// again under that hold it is crossed out again, its relay saying so a second time. A
 // hold that ends inside the return leaves the dial its relay's link all the same.
 func TestAPlayerComesBackThroughItsRelayWhileTheSessionIsHeld(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	for _, inside := range []bool{false, true} {
+	for _, shape := range []struct{ again, inside bool }{{}, {again: true}, {inside: true}} {
 		addr, relayAddr := freeAddress(t), freeAddress(t)
 		host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Bots: []string{"roam"}}}, "patrol", nil)
 		waitForCursors(t, host, 2)
@@ -3305,12 +3306,20 @@ func TestAPlayerComesBackThroughItsRelayWhileTheSessionIsHeld(t *testing.T) {
 		leave()
 		person.Close()
 		waitUntil(t, func() bool { return slices.Contains(departing(host), id) }, "the held host crossing the lost player out")
-		if !inside {
-			back, _ := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr, PlaceStore: store}}, "roam", nil)
+		if !shape.inside {
+			back, quit := driveBot(t, Config{Membership: Membership{JoinAddress: relayAddr, PlaceStore: store}}, "roam", nil)
 			waitUntil(t, func() bool { return back.Context().TimeCtl.Held() }, "the returning run landing held")
 			if got := back.membership.LocalParticipant(); got != id || back.membership.LocalSlot() != parameter.NoPlayerSlot || wraithIn(host, slot) {
 				t.Fatalf("under the hold the relay seated the key as %d driving slot %d, the host's cursor a Wraith %v; want %d, driving none",
 					got, back.membership.LocalSlot(), wraithIn(host, slot), id)
+			}
+			if shape.again {
+				quit()
+				back.Close()
+				waitUntil(t, func() bool { return slices.Contains(departing(host), id) }, "the held host crossing the player out again")
+				hold(false)
+				waitUntil(t, func() bool { return wraithIn(host, slot) && wraithIn(relay, slot) }, "the player lost twice waiting as a Wraith")
+				continue
 			}
 			hold(false)
 			waitUntil(t, func() bool {

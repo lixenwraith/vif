@@ -585,20 +585,24 @@ the volume already carries whatever the installer puts there.
   [§5.2](multi-player.md#52-the-roster-after-a-loss),
   [§5.3](multi-player.md#53-reachability-under--authority-migrate)
 
-An instance marks a participant departed the moment its own link to it drops
-(`announceDeparture`), and the coordinator's crossing marks it on every instance
-(`removeParticipant`). Only an arrival clears the mark (`addParticipant`), and while
-it stands `receiveAuthority` and `receiveDeparture` drop whatever that participant
-sends. A reopened link clears nothing: `admitPeerLink` admits any roster member, a
-Wraith included, so the link stands and the succession hears nothing on it. A person
-whose link to its host drops is unaffected, since its redial proves its key and
-the key's arrival clears the mark. Two cases are not:
-- Two guests' warm link (§5.3 item 3) drops and reopens while the host lives.
-  Neither end coordinates, so nothing crosses and nothing clears, and each ignores
-  the other for the rest of the session. When the host goes, the candidate takes
-  the term and drops the other's notices (`MsgAuthorityReport`), the other drops its
-  record (`MsgAuthorityHandoff`), and at its own turn takes the next term.
-- A survivor's link to the candidate is down when the candidate takes the term and
+An instance marks a participant departed as it announces its lost link
+(`announceDeparture`): the coordinator any link, a guest one the participant was
+behind. The coordinator's crossing marks it on every instance (`removeParticipant`).
+Only an arrival clears the mark (`addParticipant`), or on a guest a join through it
+(`drainWith`), and while it stands `receiveAuthority` and `receiveDeparture` drop
+whatever that participant sends. A reopened peer link clears nothing:
+`admitPeerLink` admits any roster member, a Wraith included, so the link stands and
+the succession hears nothing on it. A person whose link to its host drops is
+unaffected, since its redial proves its key and the key's arrival clears the mark.
+Two cases are not:
+- A participant that joined through a guest holds a link to the host too, as every
+  participant does to a successor (§5.3 item 3), and its link to that guest drops
+  and reopens. The guest floods a notice the host, linked to the participant,
+  ignores (`receiveDeparture`), so nothing crosses and nothing clears, and the guest
+  ignores it for the rest of the session. When the host goes and the guest takes
+  the term, it drops the other's notices (`MsgAuthorityReport`) and crosses its
+  departure at the floor, and the other takes the next term.
+- A survivor's link to the candidate drops once the candidate holds the term and
   reopens before the survivor adopts a record. The new host crossed its departure,
   so the notices on the reopened link are dropped, the survivor is never answered,
   and it takes a term of its own. Only a report another participant relays passes
@@ -606,10 +610,19 @@ the key's arrival clears the mark. Two cases are not:
 
 Either way the session splits: two hosts, each holding the other and the lost host
 as Wraiths. A survivor with no path to the candidate is meant to split off (§5.1);
-one whose link came back is not. A three-participant `meshSession` probe (links
-1-2, 2-3, 1-3; 2-3 cut with `MeshPort.Disconnect` and linked again with `Mesh.Peer`,
-before the host closes or across 2 taking term 2) ended in all five runs with 2 on
-term 2 and 3 on term 3, two Wraiths each; without the cut both were on term 2.
+one whose link came back is not. A three-participant `meshSession` probe, 2-3 cut
+with `MeshPort.Disconnect` and linked again with `Mesh.Peer`, ended with 2 on term
+2 and 3 on term 3 in both: 3 joined through 2 and linked to the host beside (links
+1-2, 2-3, 3-1), cut before the host closes, and each joined through the host (1-2,
+2-3, 1-3), cut once 2 holds term 2. The second shape cut before the host closes, or
+linked again as 2 takes the term, no longer splits: neither guest marks the other,
+and both end on term 2.
+
+A relayed person the silence window retired (§5.4) that finds another path only
+afterwards is a third case, with no split: the host admits its epochs for a Wraith,
+and it plays on unseen until its key comes back through a door. Its authority is
+not lost, so it walks nothing and sends no notice for the remedy below to answer;
+an epoch it produced after its departure applied is the evidence a host has.
 
 What would close it:
 - A link admitted after the mark was set clears it, so a mark nothing crossed is
@@ -625,45 +638,63 @@ What would close it:
 - A test per case on the probe's shape, with `meshSession` handing back its mesh:
   participant 3 follows 2 at term 2, and no Wraith but the lost host's remains.
 
-### Retire a relayed player the authority no longer hears
+### Close what a relayed player's departure still leaves open
 
-- Priority: P2
-- Affected files: `internal/system/network.go` (`noticeDeparture`,
-  `announceDeparture`, `receiveDeparture`, `scheduleCrossings`),
-  `internal/app/internal/membership/session.go` (`keyedLocked`, `closeStaleLink`),
-  `internal/parameter/network.go`
-- Guide: [Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity),
-  [§5.1](multi-player.md#51-succession), [§5.4](multi-player.md#54-wraiths)
+- Priority: P3
+- Affected files: `internal/converge/authority.go` (`driveSilence`),
+  `internal/system/network.go` (`removeParticipant`, `receiveDeparture`,
+  `announceDeparture`, `publishBarrierTelemetry`),
+  `internal/app/internal/membership/session.go` (`keyedLocked`, `leaveRoster`)
+- Guide: [Multi-player §3.6](multi-player.md#36-holding-a-session),
+  [§5](multi-player.md#5-membership-topology-and-authority-continuity),
+  [§5.4](multi-player.md#54-wraiths)
 
-A departure is announced by whichever neighbour sees a link drop, and the authority
-has no view of its own of a participant it is not linked to. Four cases follow, the
-first three each shown by a probe:
-- A relay leaves, and the person behind it finds no other path and forks or quits
-  (§5.1): nobody is left to see its link go. Its cursor stays live on the host,
-  never a Wraith and never timed out (600 ticks and a reset later on a `meshSession`
-  chain 1-2-3 with 2 closed), and its key is refused `RefusalReturning` for good,
-  since `closeStaleLink` closes only a link the host holds.
-- A relayed person's warm link drops (links 1-2, 1-3, 3-4, 2-4; 2 cuts 4 with
-  `MeshPort.Disconnect`): 2 floods the notice, the host is not linked to 4
-  (`receiveDeparture`) and crosses its departure, and every instance closes its
-  links to a participant its relay still carried (`removeParticipant`).
-- A joiner's link drops after its arrival crossed and before it applies:
-  `noticeDeparture` finds no cursor, frees the place and crosses nothing, and the
-  arrival then spawns a cursor nobody drives, whose identity and slot read free at
-  the door.
-- A player taken back through a relay under a hold (§5.4) drops again before the
-  hold ends. The relay's mark from the first loss still stands, the arrival that
-  clears it not having reached it, so it floods no second notice, and the arrival
-  gives the place back to a cursor nobody drives.
+The authority retires a person it holds no link to once it has had no news of it
+for the silence window (§5.4), crosses out behind its arrival a joiner lost before
+that applies, and hears of a lost link only from the instance its participant is
+behind. What those rules leave:
+- **Under a hold** the window does not run, a held authority taking no tick. A
+  person whose relay left under one stays live until the hold ends and the window
+  passes, its key refused `RefusalReturning` meanwhile, past its dial's 30 s. And a
+  departure the window crosses within a lead of a hold stays scheduled through it,
+  the relay's link standing: a key that comes back through another door, its old
+  link dropping after, is announced by the old relay behind its arrival
+  (`announceDeparture`) and retired again as the hold ends, which costs it a redial.
+- **An arrival and a departure applying in one tick**, as those crossed under a
+  hold do, both run before the arrival's cursor is made. A bot arriving as its
+  holder departs is missed by the holder's group (`removeParticipant`) and stays
+  live and undriven until its holder returns or is dismissed, the window judging no
+  bot. A seat its holder drops before its arrival applies is read as no seat
+  (`receiveDeparture`) and waits a Wraith's two minutes. An arrival whose spawn
+  finds no free cell leaves the door's entry away with no Wraith to time it out.
+- **A relay more than a redial behind its authority** applies the departure a
+  returned player came back from after that player's gate, a tick ahead of the
+  arrival, and closes the new link, leaving the player to the window and a second
+  dial (read off `removeParticipant`, not reproduced).
+- **Telemetry.** A guest that takes a departure from a capture rather than its
+  crossing never marks the source, and it marks no participant it was not carrying:
+  a person whose relay left, playing on behind another guest, counts that relay in
+  `network.barrier_peer_lag_ticks` and `network.barrier_ran_without_peer` for the
+  rest of the run. Nothing reads either.
 
-What would close it: the authority keeps the tick it last admitted each
-participant's raw epoch at (`scheduleCrossings`), an arrival counting as one, and
-crosses a plain departure for a live remote cursor it is not linked to once that is
-a window old: longer than a walk down the chain (§5.1), and counted in its own ticks
-so a hold costs nothing. A neighbour then announces a lost link only for a
-participant behind it (`served`, `behind`), leaving a warm link's drop to the relay
-or the window. The window is the cost: a relayed player slower than it is retired
-while it plays. A test per case on the probes' shapes.
+What would close them: under a hold, the first rule below kept to one, the door
+reading as departing a person whose epochs last came in on a link that is; for one
+tick, the handlers asking what an arrival of that tick is about to make (`rosterDue`
+keeping its holder, and the spawn's refusal reaching the door); for telemetry, the
+capture's rebind marking each Wraith's source.
+
+Two rules were weighed against the window and not taken:
+- **Only after another departure.** The authority counts from the departure of the
+  link a person's epochs came in on. A stall alone retires nobody and a hold needs
+  no clock, but a person lost with no departure before it stays a live cursor
+  nobody drives, as one its adopter stopped hearing before the link died or whose
+  notice outran its relay's word that it had joined, and it takes a case list and
+  a record of each person's last link.
+- **No timer, only a returning key.** A proved key takes back a place the host
+  holds no link to. Nobody is retired while it plays, but a lost player holds its
+  slot as a live cursor until it comes back, a key cannot tell a lost relay from a
+  live one whose link is half open, and the old relay's late notice then retires
+  the returned player again.
 
 ### Refuse a combat crossing that acts as another cursor or emitter
 

@@ -175,8 +175,25 @@ comment now states, and link that instead.
   scheduled, and a handler asks what stands behind the one it applies (`rosterBehind`).
 - A held host flushes nothing, so what it crosses under a hold reaches no guest,
   relay or successor until the resume: a run joining held has it from its gate
-  (`PendingAfter`), a relay's `departed` mark stands, and a successor's group never
-  holds it, which is why a run waiting for its arrival forks when its authority goes.
+  (`PendingAfter`), a relay's `departed` mark stands until its participant joins
+  through it again (`drainWith`), and a successor's group never holds it, which is
+  why a run waiting for its arrival forks when its authority goes. A guest's
+  barrier holds no roster change under a hold, so a guest's rule reading
+  `arrivalScheduled`, or a mark an arrival clears, needs another source there.
+- The settle dispatches pass by pass, breadth first: an arrival and a departure
+  applying in one tick both run before the cursor the arrival asks for is made
+  (`rosterDue.spawning`), and what the departure asks of that cursor is queued
+  behind the spawn. Every crossing made under a hold shares one apply tick, a lead
+  past the held one, so a hold's end is where a participant's roster changes meet.
+- A session policy on the wall clock lives in `Authority.drive`, which the
+  correction loop reaches between ticks and a driven run once per `App.Tick` call,
+  however many ticks that advances. One that crosses requires a running transport,
+  which a replay has none of, and restarts its own watch as it crosses, since the
+  roster it reads (`WorldRoster`) shows the crossing only as it applies, a lead
+  later. A wait counted in the authority's ticks at the rate played stops under a
+  hold and is wall time on a paced host alone: `-speed max` is refused with
+  `-host`, `-join` or bots, and a test's host ticking every 10 ms runs it out five
+  times as fast.
 - A participant's crossing sequence outlives its run: every instance forgets it only
   as the departure applies (`forgetParticipant`). A run in a place whose departure
   has not applied crosses nothing (`SessionState.Superseding`), or its first
@@ -190,7 +207,10 @@ comment now states, and link that instead.
   participant's `link.MeshPort` under its world lock drops it. The host's lead is 3
   near tick 10 and 1 later, so a test of what lands inside a lead runs early. A mesh
   opens no door (`Membership.GuestCount` reads 0): what the door's roster keeps is
-  tested over sockets (`mustHosting`, `mustSocketJoiner`, `arrival`).
+  tested over sockets (`mustHosting`, `mustSocketJoiner`, `arrival`). A pair led by
+  1 is a join through the host, and one whose ends are both in already is a link
+  beside (`meshOf`): a second link to the host is `{3, 1}`, after the pair that
+  brings 3 in.
 - A run's tick is `World.TickInterval`, which its host may choose (`-tick`);
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
   reads the run's, as tests may keep the constant.
@@ -267,7 +287,8 @@ comment now states, and link that instead.
 - A test proven to pin a rule by mutating the rule's line runs from a copy of the
   tree (`tar` it out), so the working tree stays editable; a mutation that survives
   is run against main's own tests in a `git worktree`, where surviving too makes it
-  an old gap rather than a lost pin.
+  an old gap rather than a lost pin. One that only fails to build, a name left
+  unused, proves nothing: keep the name read (`false && x`).
 - A correction leaves a cursor's owner-authored cells (D-13) alone four ways:
   `applyShard`'s owner check, the encoder's exclusion, the owner-authored cursor
   sets (`ownerAuthoredCursors`, `liveOwnerAuthoredCursors`) and

@@ -645,6 +645,7 @@ func TestAnArrivalAResetInterruptedIsCrossedAgain(t *testing.T) {
 	arrival := event.ParticipantJoinedPayload{Participant: 7, Slot: 2, Key: "key", Name: "name",
 		Record: &event.CursorRecord{Charges: []int{0, 3}, Energy: 4321}}
 	left := event.ParticipantDepartedPayload{Participant: 7, Slot: 2}
+	joins, lost := event.ParticipantJoinedPayload{Participant: 9, Slot: 4}, event.ParticipantDepartedPayload{Participant: 9, Slot: 4}
 	cross := func(net *NetworkSystem, t event.EventType, p any) {
 		net.schedule(event.GameEvent{Type: t, Payload: p, Origin: event.OriginSession, Domain: core.DomainPlayer})
 	}
@@ -703,6 +704,10 @@ func TestAnArrivalAResetInterruptedIsCrossedAgain(t *testing.T) {
 			interrupted: all(waits, scheduled, leaves), want: []any{arrival, left}},
 		"scheduled into its Wraith, its link lost as the reset rebuilt it": {
 			interrupted: all(waits, scheduled, dropped), after: boot, want: []any{arrival, left}},
+		"a joiner's, ahead of the departure its lost link crossed": {interrupted: func(_ *engine.World, net *NetworkSystem) {
+			cross(net, event.EventParticipantJoined, &joins)
+			cross(net, event.EventParticipantDeparted, &lost)
+		}, want: []any{joins, lost}},
 		"applied already": {interrupted: func(w *engine.World, net *NetworkSystem) {
 			scheduled(w, net)
 			net.applyDue(net.lastApplyTick)

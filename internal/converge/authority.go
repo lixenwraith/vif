@@ -36,6 +36,10 @@ type Authority struct {
 	metered   map[link.PeerID]slowWatch
 	statEvict *atomic.Int64
 
+	// silent is each person this authority holds no link to as its last news of it
+	// stood; see driveSilence. Touched only by the correction loop.
+	silent map[link.PeerID]silenceWatch
+
 	// shed is when this authority drops what it cannot carry and shedFrom the window
 	// its own tick keeping is judged over; see driveShedding.
 	shed        ShedPolicy
@@ -152,6 +156,7 @@ func newAuthority(inst Instance, tel snapshot.Telemetry, reg *status.Registry) *
 		watch:          make(map[link.PeerID]slowWatch),
 		ingress:        parameter.NetworkIngressBytesPerSecond,
 		metered:        make(map[link.PeerID]slowWatch),
+		silent:         make(map[link.PeerID]silenceWatch),
 		statEvict:      reg.Ints.Get("network.evicted"),
 		slow: SlowPolicy{
 			Window:         parameter.NetworkSlowWindow,
@@ -372,6 +377,58 @@ func (u *Authority) driveIngress(now time.Time) {
 	for id := range u.metered {
 		if !seen[id] {
 			delete(u.metered, id)
+		}
+	}
+}
+
+// silenceWatch is where an unlinked person stood at this authority's last news of
+// it: the count by then, and the run, tick and rate that was read at.
+type silenceWatch struct {
+	heard, run, tick uint64
+	rate             engine.TimeScale
+}
+
+// driveSilence crosses the departure of each person this authority holds no link to
+// and has had no news of for NetworkSilenceWindow: with its relay gone nobody is
+// left to see its link go. The window is wall time over this authority's own ticks,
+// so a hold costs none; news, a new run or a new rate starts it over, a succession's
+// floor judges first, and a bot waits or goes with its holder.
+func (u *Authority) driveSilence() {
+	u.mu.Lock()
+	floor := u.reconcileAt != 0
+	u.mu.Unlock()
+	port, ok := u.inst.Transport().(interface {
+		IsRunning() bool
+		Peers() []uint32
+	})
+	if !ok || !port.IsRunning() || floor || !u.isAuthority() {
+		clear(u.silent)
+		return
+	}
+	at, played, local, peers := u.inst.Position(), u.inst.Rate(), link.PeerID(u.inst.LocalParticipant()), port.Peers()
+	perTick := played.Wall(u.inst.TickInterval())
+	seen := make(map[link.PeerID]bool, len(u.silent))
+	for _, e := range u.currentRoster() {
+		if e.ID == local || e.Holder != 0 || e.Away || slices.Contains(peers, uint32(e.ID)) {
+			continue
+		}
+		seen[e.ID] = true
+		now := silenceWatch{heard: u.inst.Heard(uint32(e.ID)), run: at.Run, tick: at.Tick, rate: played}
+		w, ok := u.silent[e.ID]
+		quiet := ok && w.heard == now.heard && w.run == now.run && w.rate == now.rate
+		if quiet && time.Duration(now.tick-w.tick)*perTick < parameter.NetworkSilenceWindow {
+			continue
+		}
+		u.silent[e.ID] = now
+		if quiet {
+			u.inst.CrossDepartures([]network.RosterEntry{e})
+			u.log.Warn("session", "msg", "participant retired as unheard", "peer", e.ID,
+				"ticks", now.tick-w.tick, "speed", played.String(), "window", parameter.NetworkSilenceWindow.String())
+		}
+	}
+	for id := range u.silent {
+		if !seen[id] {
+			delete(u.silent, id)
 		}
 	}
 }
@@ -719,6 +776,7 @@ func (u *Authority) drive() {
 	u.driveEviction(now)
 	u.driveIngress(now)
 	u.driveShedding(now)
+	u.driveSilence()
 	if contested != 0 {
 		u.driveWalk(now)
 	}
