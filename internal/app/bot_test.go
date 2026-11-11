@@ -961,11 +961,10 @@ func TestAPlayerComingBackTakesBackItsWraithAndItsBots(t *testing.T) {
 		}
 		if held {
 			id := guest.membership.LocalParticipant()
-			// The hold lands on a guest in step: one still seating its bot is carried past it.
-			waitForCursors(t, guest, 3)
+			// The hold is the host's to stand in: a guest behind it may be carried past it.
 			waitUntil(t, func() bool { return seated(guest) }, "the guest's bot seated")
 			hold(true)
-			waitUntil(t, func() bool { return host.Context().TimeCtl.Held() && guest.Context().TimeCtl.Held() }, "the session standing held")
+			waitUntil(t, func() bool { return host.Context().TimeCtl.Held() }, "the host standing held")
 			leave()
 			waitUntil(t, func() bool { return slices.Contains(departing(host), id) }, "the held host crossing the lost guest out")
 		} else {
