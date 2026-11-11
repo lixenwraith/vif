@@ -281,9 +281,11 @@ comment now states, and link that instead.
 - Hold only a session whose guests are in step. One more than `NetworkHoldTicks`
   behind, as a holder still seating its bot is, is carried past the hold and plays
   on unheld ([todo](todo.md#hold-a-guest-its-correction-carries-past-the-hold)):
-  wait for the seat and the cursors on the guest first. A replay test levels its
-  guest with its host before it plays, or an install that carries it forward leaves
-  the replay's `predicted` depth behind the run's.
+  wait for the seat and the cursors on the guest first, and for the hold on the
+  host alone, since under `-race` the guest of a host ticked in the background
+  falls that far behind about every other run. A replay test levels its guest with
+  its host before it plays, or an install that carries it forward leaves the
+  replay's `predicted` depth behind the run's.
 - `EventQueue.Consume` returns the queue's own slice, which the next `Consume`
   overwrites: a test dispatching handlers that push clones it first. A unit
   `NetworkSystem` reads its identity at `Init` from the latched session, so latch

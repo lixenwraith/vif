@@ -2931,7 +2931,8 @@ func TestAReturnThatDoesNotCompleteLeavesItsWraithWaiting(t *testing.T) {
 
 // TestAKeyOnAPlaceStillLinkedClosesTheLinkItLeft: a dial proving the key of a
 // place whose link the host still holds is told to retry in a moment, and that link
-// is closed, so its departure crosses and the retry takes the place back.
+// is closed, so its departure crosses. A session that is not held answers the same
+// until that departure applies, a few ticks on, and the retry takes the place back.
 func TestAKeyOnAPlaceStillLinkedClosesTheLinkItLeft(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHosting(t, Membership{})
@@ -2940,15 +2941,22 @@ func TestAKeyOnAPlaceStillLinkedClosesTheLinkItLeft(t *testing.T) {
 	store := &keptPlaces{}
 	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, 120, 40, func(c *Config) { c.Membership.PlaceStore = store })
 	id, slot := arrival(t, host, guest)
+	stop() // ticked by hand from here, to stand inside the departure's lead
 
-	_, _, err := dialOnce(host.HostAddr(), store.key(t))
-	if !errors.Is(err, &network.Refusal{Code: network.RefusalReturning}) || network.RetryOf(err) != network.RetrySoon {
-		t.Fatalf("a key on a place still linked was answered %v; want a refusal to retry soon", err)
+	refused := func(place string) {
+		t.Helper()
+		_, _, err := dialOnce(host.HostAddr(), store.key(t))
+		if !errors.Is(err, &network.Refusal{Code: network.RefusalReturning}) || network.RetryOf(err) != network.RetrySoon {
+			t.Fatalf("a key on a place %s was answered %v; want a refusal to retry soon", place, err)
+		}
+		if portOf(t, host).Connected(uint32(id)) {
+			t.Fatal("the link the returning player left is still open")
+		}
 	}
-	if portOf(t, host).Connected(uint32(id)) {
-		t.Fatal("the link the returning player left is still open")
-	}
-	waitUntil(t, func() bool { return wraithIn(host, slot) }, "the closed link's departure")
+	refused("still linked")
+	waitUntil(t, func() bool { host.Tick(1); return slices.Contains(departing(host), uint32(id)) }, "the closed link's departure crossing")
+	refused("crossed out and not yet turned")
+	waitUntil(t, func() bool { host.Tick(1); return wraithIn(host, slot) }, "the closed link's departure")
 	back, offered := dialSession(t, host.HostAddr(), store.key(t))
 	defer back.Close()
 	if offered.Assigned != id || assignedSlot(offered) != slot {
@@ -3085,6 +3093,7 @@ func (h heldAway) back(t *testing.T, opts ...func(*Config)) (*App, *link.SocketP
 			"want participant %d seated held, driving none, its cursor live",
 			got, run.membership.LocalSlot(), run.Context().TimeCtl.Held(), wraithIn(h.host, h.slot), h.id)
 	}
+	assertControl(t, run, h.slot, component.ControlRemote)
 	assertSharedParity(t, h.host, run, 0)
 	return run, port
 }
@@ -3227,27 +3236,42 @@ func TestAHoldEndingInsideAReturnLeavesItsDialLinked(t *testing.T) {
 }
 
 // TestARunWhoseHostGoesBeforeItsArrivalDrivesItsOwnCursor: a run that took its
-// place back under a hold and loses its host before the arrival could apply plays
-// on alone in the cursor its place holds, which nothing else will give it.
+// place back under a hold and loses its host before the arrival could apply goes on
+// alone in the cursor its place holds, which nothing else will give it, and which
+// nothing the run before it crossed moves: a play run in a session of its own, as
+// its loop leaves, and a run with no loop as the fork.
 func TestARunWhoseHostGoesBeforeItsArrivalDrivesItsOwnCursor(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	h := heldAwayGuest(t, false, false)
-	back, _ := h.back(t)
-	back.World().RunSafe(func() { back.cfg.Mode, back.cfg.Membership.JoinAddress = ModePlay, h.host.HostAddr() })
-	h.host.Close()
-	stop := tickInBackground(back)
-	waitUntil(t, back.membership.Leaving, "the returned run noticing its host is gone")
-	stop()
-	back.membership.LeaveSession()
-	var before, after component.PositionComponent
-	back.World().RunSafe(func() { before, _ = back.World().Positions.GetPosition(back.World().Resources.Player.Slot(h.slot)) })
-	back.Tick(2)
-	inject(t, back, intentMotion(input.MotionRight, 3))
-	back.Tick(4)
-	back.World().RunSafe(func() { after, _ = back.World().Positions.GetPosition(back.World().Resources.Player.Slot(h.slot)) })
-	if got := back.membership.LocalSlot(); got != h.slot || back.World().Session().Superseding || after.X <= before.X {
-		t.Fatalf("alone, the run drives slot %d (superseding %v) and its move took the cursor from x=%d to x=%d; want slot %d, moved right",
-			got, back.World().Session().Superseding, before.X, after.X, h.slot)
+	for _, play := range []bool{true, false} {
+		h := heldAwayGuest(t, false, false)
+		back, _ := h.back(t)
+		at := func() (pos component.PositionComponent) {
+			back.World().RunSafe(func() { pos, _ = back.World().Positions.GetPosition(back.World().Resources.Player.Slot(h.slot)) })
+			return pos
+		}
+		before := at()
+		if play {
+			back.World().RunSafe(func() { back.cfg.Mode, back.cfg.Membership.JoinAddress = ModePlay, h.host.HostAddr() })
+		}
+		h.host.Close()
+		stop := tickInBackground(back)
+		if play {
+			waitUntil(t, back.membership.Leaving, "the returned run noticing its host is gone")
+			stop()
+			back.membership.LeaveSession()
+		} else {
+			waitUntil(t, func() bool { return back.membership.LocalSlot() == h.slot }, "the returned run going on as the fork")
+			stop()
+		}
+		back.Tick(2 * parameter.NetworkBarrierMaxDelayTicks)
+		still := at()
+		inject(t, back, intentMotion(input.MotionRight, 3))
+		back.Tick(4)
+		if got := back.membership.LocalSlot(); got != h.slot || back.World().Session().Superseding || still != before || at().X <= before.X {
+			t.Fatalf("alone (a play run %v), the run drives slot %d (superseding %v), its cursor went from %+v to %+v unmoved and its "+
+				"move took it to x=%d; want slot %d, still until moved right", play, got, back.World().Session().Superseding,
+				before, still, at().X, h.slot)
+		}
 	}
 }
 

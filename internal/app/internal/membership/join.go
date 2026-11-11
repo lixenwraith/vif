@@ -277,7 +277,7 @@ func (m *Membership) bindCursorOwnersLocked(participants []network.RosterEntry, 
 		default:
 			c.PeerID, c.Holder, c.Key = uint32(p.ID), uint32(p.Holder), p.Key
 			c.Control = component.ControlRemote
-			if p.ID == local && !p.Away { // an away place's live cursor is its last run's
+			if p.ID == local {
 				c.Control = component.ControlLocal
 			}
 		}

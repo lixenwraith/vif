@@ -1901,8 +1901,7 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
 			dropped := s.reportDisconnect(uint32(in.Peer), p.PeerCount())
 			if int(in.Peer) < len(s.closed) && s.closed[in.Peer] {
-				s.closed[in.Peer] = false // closed here as its departure applied: no departure of another
-				continue
+				continue // closed here as its departure applied: no departure of another
 			}
 			s.noticeDeparture(uint32(in.Peer), dropped)
 		case link.InboundMessage:

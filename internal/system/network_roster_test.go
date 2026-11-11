@@ -1,6 +1,7 @@
 package system
 
 import (
+	"cmp"
 	"slices"
 	"testing"
 
@@ -155,12 +156,24 @@ func TestADepartureItsArrivalStandsBehindLeavesItsPlaceLinked(t *testing.T) {
 				name, told, got, tc.told, tc.linked)
 		}
 	}
+
+	// An arrival pushed for a tick whose handlers never took it stands behind no later one
+	w, net, _, mesh := linkedHolderWorld(t)
+	crossRoster(net, 1, arrives)
+	net.applyDue(net.lastApplyTick)
+	w.Resources.Event.Queue.Consume()
+	net.lastApplyTick++
+	crossRoster(net, 1, leaves)
+	if applyRoster(w, net); mesh.Node(1).Connected(7) {
+		t.Fatal("a departure kept its link for an arrival of an earlier tick that no handler took")
+	}
 }
 
 // TestADepartureIsAnnouncedOnceForEachTimeItsParticipantIsIn: a lost link crosses
-// one departure however often it is noticed, and another only once an arrival of
-// its participant is scheduled; the link a departure closed as it applied is that
-// departure's, whatever arrival is scheduled by the time its loss is drained.
+// one departure however often it is noticed, and another only once an arrival is
+// the last change scheduled for its participant; the link a departure closed as it
+// applied is that departure's, whatever arrival is scheduled by the time its loss
+// is drained.
 func TestADepartureIsAnnouncedOnceForEachTimeItsParticipantIsIn(t *testing.T) {
 	plain := event.ParticipantDepartedPayload{Participant: 7, Slot: 2}
 	w, net, _, mesh := linkedHolderWorld(t)
@@ -180,6 +193,10 @@ func TestADepartureIsAnnouncedOnceForEachTimeItsParticipantIsIn(t *testing.T) {
 	mesh.Link(1, 7)
 	if got := lose(); !slices.Equal(got, []event.ParticipantDepartedPayload{plain}) {
 		t.Fatalf("the link lost behind a scheduled arrival crossed %+v, want %+v", got, plain)
+	}
+	crossRoster(net, 1, leaves)
+	if net.noticeDeparture(7, false); len(departures(w)) != 0 {
+		t.Fatal("a departure scheduled behind that arrival was crossed again on a second notice")
 	}
 
 	w, net, _, mesh = linkedHolderWorld(t)
@@ -234,48 +251,61 @@ func TestASupersedingRunLeavesItsPlaceToTheRunItReplaced(t *testing.T) {
 	if applyRoster(w, net); !drives(w) || w.Session().Superseding || w.Resources.Network.Superseding.Load() {
 		t.Fatalf("after its own arrival the run drives its cursor %v, superseding %v", drives(w), w.Session().Superseding)
 	}
+
+	// A run going on alone forgets what the run it replaced crossed, as its departure would have
+	_, net = returnedWorld(t)
+	net.scheduleCrossings(1, body)
+	if net.ForgetSuperseded(); len(net.scheduled) != 0 {
+		t.Fatalf("a superseding run going on alone kept %d crossing(s) of the run it replaced", len(net.scheduled))
+	}
 }
 
 // TestAWorldInstalledPastItsArrivalEndsASupersession: a world installed at or past
 // the tick the run's own arrival applies at holds that arrival, so the cursor is
-// the run's to drive from the install, or from the arrival's late frames; a world
-// short of it, or an arrival its identity's departure follows, leaves it.
+// the run's to drive from the install, or from the arrival's late frames. A world
+// short of it leaves it, and so does an arrival its identity's departure follows,
+// another's, one no authority crossed, or one of the game before.
 func TestAWorldInstalledPastItsArrivalEndsASupersession(t *testing.T) {
-	batch := func(net *NetworkSystem, tick uint64, changes ...rosterChange) []byte {
-		t.Helper()
-		var frames []event.ScheduledWireFrame
-		for i, c := range changes {
-			ev := event.GameEvent{Type: event.EventParticipantDeparted, Origin: event.OriginSession, Domain: core.DomainPlayer,
-				Payload: &event.ParticipantDepartedPayload{Participant: 7, Slot: 2}}
-			if c.arrives {
-				ev.Type, ev.Payload = event.EventParticipantJoined, &event.ParticipantJoinedPayload{Participant: 7, Slot: 2}
-			}
-			frames = append(frames, event.ScheduledWireFrame{Frame: mustFrame(t, ev, uint64(i+1)), ApplyTick: tick})
-		}
-		body, err := event.EncodeWireBatch(event.WireBatch{Source: 1, ProducedTick: 1, Committed: true, Frames: frames})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return body
-	}
 	for name, tc := range map[string]struct {
 		changes   []rosterChange
+		who, from uint32 // whose changes, and who crossed them: 7's and its authority's unless named
 		installed uint64 // the tick of the world installed, the arrival applying at 5
 		late      bool   // the arrival's frames reach the run after the install
+		reset     bool   // a new game starts between the arrival's frames and the install
 		want      bool
 	}{
 		"at its tick":                      {changes: []rosterChange{leaves, arrives}, installed: 5, want: true},
 		"past its tick, its frames late":   {changes: []rosterChange{leaves, arrives}, installed: 8, late: true, want: true},
 		"short of its tick":                {changes: []rosterChange{leaves, arrives}, installed: 4},
 		"its departure behind the arrival": {changes: []rosterChange{leaves, arrives, leaves}, installed: 5},
+		"another's arrival":                {changes: []rosterChange{arrives}, who: 9, installed: 5},
+		"an arrival a guest crossed":       {changes: []rosterChange{leaves, arrives}, from: 9, installed: 5},
+		"an arrival of the game before":    {changes: []rosterChange{leaves, arrives}, reset: true, installed: 5},
 	} {
+		who := cmp.Or(tc.who, 7)
+		var frames []event.ScheduledWireFrame
+		for i, c := range tc.changes {
+			ev := event.GameEvent{Type: event.EventParticipantDeparted, Origin: event.OriginSession, Domain: core.DomainPlayer,
+				Payload: &event.ParticipantDepartedPayload{Participant: who, Slot: uint8(who - 5)}}
+			if c.arrives {
+				ev.Type, ev.Payload = event.EventParticipantJoined, &event.ParticipantJoinedPayload{Participant: who, Slot: uint8(who - 5)}
+			}
+			frames = append(frames, event.ScheduledWireFrame{Frame: mustFrame(t, ev, uint64(i+1)), ApplyTick: 5})
+		}
+		body, err := event.EncodeWireBatch(event.WireBatch{Source: cmp.Or(tc.from, 1), ProducedTick: 1, Committed: true, Frames: frames})
+		if err != nil {
+			t.Fatal(err)
+		}
 		w, net := returnedWorld(t)
 		if !tc.late {
-			net.scheduleCrossings(1, batch(net, 5, tc.changes...))
+			net.scheduleCrossings(1, body)
+		}
+		if tc.reset {
+			net.Init()
 		}
 		net.AdoptSnapshot(tc.installed, 1, nil)
 		if tc.late {
-			net.scheduleCrossings(1, batch(net, 5, tc.changes...))
+			net.scheduleCrossings(1, body)
 		}
 		if got := drives(w); got != tc.want || w.Session().Superseding == tc.want {
 			t.Fatalf("%s: the run drives its cursor %v, superseding %v; want it driven %v", name, got, w.Session().Superseding, tc.want)

@@ -223,10 +223,11 @@ func TestADepartedCursorWaitsAsAWraith(t *testing.T) {
 	}
 }
 
-// TestAnArrivalIntoItsOwnWraithTakesItBack: a participant's spawn into the slot its
-// Wraith keeps is that cursor again, at the cell it held and with what its player
-// brought back over the template; another participant's finds the slot taken.
-func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
+// TestAnArrivalIntoItsOwnPlaceTakesItsCursorBack: a participant's spawn into the slot
+// its cursor keeps, a Wraith or one no departure turned, is that cursor again, at the
+// cell it held and with what its player brought back over the template; another
+// participant's, or one that names none, finds the slot taken.
+func TestAnArrivalIntoItsOwnPlaceTakesItsCursorBack(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
 	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
@@ -234,24 +235,27 @@ func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
 		Payload: &event.CursorWraithRequestPayload{Slot: 2}})
 	w.Resources.Event.Queue.Consume()
 	record := event.CursorRecord{Charges: []int{0, 3}, Energy: 4321, Heat: 9, HitPoints: 37}
-	arrive := func(peer uint32) {
+	arrive := func(slot uint8, peer uint32) (failed bool) {
 		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
-			Slot: 2, Center: true, Control: uint8(component.ControlRemote), PeerID: peer, Energy: 100, Record: &record,
+			Slot: slot, Center: true, Control: uint8(component.ControlRemote), PeerID: peer, Energy: 100, Record: &record,
 			Name: "renamed"}})
-		w.Resources.Event.Queue.Consume()
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			failed = failed || ev.Type == event.EventCursorSpawnFailed
+		}
+		return failed
 	}
 
-	arrive(8)
-	if !w.Components.Wraith.HasEntity(remote) || w.Resources.Player.Slot(2) != remote {
+	if !arrive(2, 8) || !w.Components.Wraith.HasEntity(remote) || w.Resources.Player.Slot(2) != remote {
 		t.Fatal("another participant's arrival took the Wraith's place")
 	}
-	arrive(7)
-	if w.Resources.Player.Slot(2) != remote || w.Components.Wraith.HasEntity(remote) {
-		t.Fatalf("slot 2 holds %d, a Wraith %t; want entity %d taken back", w.Resources.Player.Slot(2),
-			w.Components.Wraith.HasEntity(remote), remote)
-	}
-	if pos, ok := w.Positions.GetPosition(remote); !ok || pos.X != 25 || pos.Y != 5 {
-		t.Fatalf("the cursor taken back stands at %+v, want the cell its Wraith held, 25,5", pos)
+	for _, kept := range []string{"its Wraith", "its cursor no departure turned"} {
+		if arrive(2, 7) || w.Resources.Player.Slot(2) != remote || w.Components.Wraith.HasEntity(remote) {
+			t.Fatalf("an arrival into %s: slot 2 holds %d, a Wraith %t; want entity %d taken back", kept,
+				w.Resources.Player.Slot(2), w.Components.Wraith.HasEntity(remote), remote)
+		}
+		if pos, ok := w.Positions.GetPosition(remote); !ok || pos.X != 25 || pos.Y != 5 {
+			t.Fatalf("an arrival into %s: the cursor taken back stands at %+v, want the cell it held, 25,5", kept, pos)
+		}
 	}
 	if c, _ := w.Components.Cursor.GetComponent(remote); c.Name != "renamed" {
 		t.Fatalf("the cursor taken back is named %q, want the name its return showed", c.Name)
@@ -264,6 +268,9 @@ func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
 		weapon.Charges[1] != record.Charges[1] {
 		t.Fatalf("taken back with energy %d heat %d health %d charges %v; want the record %+v",
 			energy.Current, heat.Current, combat.HitPoints, weapon.Charges, record)
+	}
+	if held := w.Resources.Player.Slot(0); !arrive(0, 0) || w.Resources.Player.Slot(0) != held {
+		t.Fatal("a spawn naming no participant took a slot a cursor holds")
 	}
 }
 
