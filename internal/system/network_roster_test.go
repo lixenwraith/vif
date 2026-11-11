@@ -36,17 +36,18 @@ func crossRoster(net *NetworkSystem, source uint32, changes ...rosterChange) {
 	}
 }
 
-// applyRoster applies what the barrier holds due, each roster change in turn with
-// what it asked of the cursors, and reports whether one was due.
+// applyRoster applies what the barrier holds due as a tick's dispatch does, every
+// roster change in one pass and what they asked of the cursors in the next, and
+// reports whether one was due.
 func applyRoster(w *engine.World, net *NetworkSystem) (applied bool) {
 	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
 	net.applyDue(net.lastApplyTick)
 	for _, ev := range slices.Clone(w.Resources.Event.Queue.Consume()) { // the queue reuses the slice
 		applied = true
 		net.HandleEvent(ev)
-		for _, asked := range w.Resources.Event.Queue.Consume() {
-			cursors.HandleEvent(asked)
-		}
+	}
+	for _, asked := range w.Resources.Event.Queue.Consume() {
+		cursors.HandleEvent(asked)
 	}
 	return applied
 }
@@ -210,6 +211,73 @@ func TestADepartureIsAnnouncedOnceForEachTimeItsParticipantIsIn(t *testing.T) {
 	mesh.Link(1, 7)
 	if got := lose(); !slices.Equal(got, []event.ParticipantDepartedPayload{plain}) {
 		t.Fatalf("a link opened since, and lost, crossed %+v, want %+v", got, plain)
+	}
+}
+
+// TestAJoinerLostBeforeItsArrivalAppliesIsCrossedOutBehindIt: a link lost while its
+// participant's arrival is still to apply, or kept by a new game to cross again,
+// frees no place: the authority crosses the departure behind the arrival, from the
+// slot it arrives in, and the cursor made in the tick both apply waits, or goes, as
+// any would. One never crossed in gives its place up where its link is lost.
+func TestAJoinerLostBeforeItsArrivalAppliesIsCrossedOutBehindIt(t *testing.T) {
+	for name, tc := range map[string]struct{ crossed, later, reset, dismissed bool }{
+		"at its arrival's tick":          {crossed: true},
+		"a tick behind its arrival":      {crossed: true, later: true},
+		"a seat its run dropped":         {crossed: true, dismissed: true},
+		"its arrival kept by a new game": {crossed: true, reset: true},
+		"never crossed in":               {},
+	} {
+		w, net, finals := holderWorld(t)
+		net.barrierActive.Store(true) // what this authority crosses, its barrier schedules
+		slot, _ := w.Resources.Player.FreeSlot()
+		if tc.crossed {
+			w.PushEventFull(event.EventParticipantJoined, &event.ParticipantJoinedPayload{Participant: 9, Slot: slot},
+				event.OriginSession, core.DomainPlayer)
+		}
+		if tc.reset {
+			net.Init()
+			net.barrierActive.Store(true)
+		}
+		net.noticeDeparture(9, tc.dismissed)
+		if final, told := finals[9]; told == tc.crossed || told && !final {
+			t.Fatalf("%s: as its link was lost the session layer was told %v (for good: %v)", name, told, final)
+		}
+		if tc.reset {
+			net.pushSessionRecords(w.Resources.Network.Port)
+		}
+		if got, want := scheduledCount(net), map[bool]int{true: 2}[tc.crossed]; got != want {
+			t.Fatalf("%s: the barrier holds %d roster changes, want %d", name, got, want)
+		}
+		if tc.later {
+			net.scheduled[1].applyTick++
+		}
+		for applyRoster(w, net); applyRoster(w, net); {
+			net.lastApplyTick++
+		}
+		e := w.Resources.Player.Slot(slot)
+		c, _ := w.Components.Cursor.GetComponent(e)
+		waits, final := w.Components.Wraith.HasEntity(e) && c.PeerID == 9, finals[9]
+		if want := tc.crossed && !tc.dismissed; waits != want || final == want {
+			t.Fatalf("%s: its cursor waits %v and the session layer holds it gone for good %v, want %v and %v",
+				name, waits, final, want, !want)
+		}
+	}
+
+	// A guest floods its notice whether or not the arrival has reached its barrier
+	for _, reached := range []bool{true, false} {
+		port := &linkedPort{peers: []uint32{1}}
+		guest := sessionSystem(t, 2, 100, port)
+		told := false
+		guest.world.Resources.Network.OnDeparture = func(uint32, bool) bool { told = true; return false }
+		if reached {
+			guest.schedule(event.GameEvent{Type: event.EventParticipantJoined, Origin: event.OriginSession,
+				Domain: core.DomainPlayer, Payload: &event.ParticipantJoinedPayload{Participant: 9, Slot: 4}})
+			guest.scheduled[0].source = 1
+		}
+		if guest.noticeDeparture(9, false); len(port.flooded) != 1 || told == reached {
+			t.Fatalf("a guest whose barrier holds the arrival %v flooded %d notices and told its session layer %v",
+				reached, len(port.flooded), told)
+		}
 	}
 }
 

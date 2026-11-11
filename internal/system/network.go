@@ -668,6 +668,7 @@ func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
 	if control == component.ControlLocal {
 		s.world.PushEvent(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: p.Slot})
 	}
+	s.dueFor(p.Participant).spawning = true
 	s.lastSync[p.Slot], s.stateSeen[p.Slot], s.rawStateSeen[p.Slot] = 0, 0, 0
 	if int(p.Participant) < len(s.departed) {
 		s.departed[p.Participant], s.expiring[p.Participant] = false, false
@@ -758,7 +759,9 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 		cursor = s.world.Resources.Player.Slot(p.Slot)
 	}
 	c, held := s.world.Components.Cursor.GetComponent(cursor)
-	held = held && c.PeerID == p.Participant
+	// An arrival applied in this tick has its cursor still to make: what this asks
+	// of it is handled behind the spawn
+	held = held && c.PeerID == p.Participant || cursor == 0 && s.dueFor(p.Participant).spawning
 	if (p.Shed || p.Dropped) && held && p.Participant != s.world.Session().Participant {
 		who := "player"
 		if c.Holder != 0 {
@@ -802,8 +805,12 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 }
 
 // rosterDue counts one participant's roster changes the barrier pushed for this tick
-// that no handler has taken yet: what stands behind the one applying.
-type rosterDue struct{ arrivals, departures dueCount }
+// that no handler has taken yet: what stands behind the one applying. spawning marks
+// an arrival applied in it, whose cursor the tick's next pass makes.
+type rosterDue struct {
+	arrivals, departures dueCount
+	spawning             bool
+}
 
 type dueCount uint8
 
@@ -826,7 +833,7 @@ func (s *NetworkSystem) dueFor(participant uint32) *rosterDue {
 func (s *NetworkSystem) rosterBehind(participant uint32) (arrival, departure bool) {
 	d := s.dueFor(participant)
 	arrival, departure = d.arrivals > 0, d.departures > 0
-	s.eachRosterScheduled(func(id uint32, arrives, _ bool) {
+	s.eachRosterScheduled(func(id uint32, _ uint8, arrives, _ bool) {
 		if id == participant {
 			arrival, departure = arrival || arrives, departure || !arrives
 		}
@@ -835,14 +842,15 @@ func (s *NetworkSystem) rosterBehind(participant uint32) (arrival, departure boo
 }
 
 // arrivalScheduled reports that the last roster change scheduled for participant is
-// its arrival: a link it loses from here on is a departure of its own.
-func (s *NetworkSystem) arrivalScheduled(participant uint32) (last bool) {
-	s.eachRosterScheduled(func(id uint32, arrives, _ bool) {
+// its arrival, and the slot it arrives in: a link it loses from here on is a
+// departure of its own, from that slot while its cursor is still to make.
+func (s *NetworkSystem) arrivalScheduled(participant uint32) (slot uint8, last bool) {
+	s.eachRosterScheduled(func(id uint32, into uint8, arrives, _ bool) {
 		if id == participant {
-			last = arrives
+			slot, last = into, arrives
 		}
 	})
-	return last
+	return slot, last
 }
 
 // Departing is each participant whose last roster change scheduled here is a
@@ -851,7 +859,7 @@ func (s *NetworkSystem) arrivalScheduled(participant uint32) (last bool) {
 // for is not coming back. Caller MUST hold updateMutex.
 func (s *NetworkSystem) Departing() (out []uint32) {
 	var dismissed []uint32
-	s.eachRosterScheduled(func(id uint32, arrives, gone bool) {
+	s.eachRosterScheduled(func(id uint32, _ uint8, arrives, gone bool) {
 		out = slices.DeleteFunc(out, func(was uint32) bool { return was == id })
 		switch {
 		case gone:
@@ -865,7 +873,7 @@ func (s *NetworkSystem) Departing() (out []uint32) {
 
 // eachRosterScheduled visits, in the order they crossed, the roster changes this
 // barrier holds for a later tick: the authority's alone.
-func (s *NetworkSystem) eachRosterScheduled(visit func(participant uint32, arrives, dismissed bool)) {
+func (s *NetworkSystem) eachRosterScheduled(visit func(participant uint32, slot uint8, arrives, dismissed bool)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, a := range s.scheduled {
@@ -876,9 +884,9 @@ func (s *NetworkSystem) eachRosterScheduled(visit func(participant uint32, arriv
 		}
 		switch v, _ := a.frame.Decode(); p := v.(type) {
 		case *event.ParticipantJoinedPayload:
-			visit(p.Participant, true, false)
+			visit(p.Participant, p.Slot, true, false)
 		case *event.ParticipantDepartedPayload:
-			visit(p.Participant, false, p.Dismissed)
+			visit(p.Participant, p.Slot, false, p.Dismissed)
 		}
 	}
 }
@@ -1982,10 +1990,11 @@ func (s *NetworkSystem) dismissalScheduled() bool {
 // noticeDeparture changes no shared cursor: only a direct neighbour sees a lost
 // link, at a moment its transport chose, so the coordinator crosses the departure
 // and a neighbour the participant was behind floods a notice. The identity returns
-// to the pool when that crossing applies, or here for a participant with no cursor.
-// dismissed is a seat this run dropped, which leaves for good.
+// to the pool when that crossing applies, or here for a participant never crossed
+// in. dismissed is a seat this run dropped, which leaves for good.
 func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
-	if _, crossed := s.participantSlot(peerID); !crossed && !s.world.Resources.Player.Restores(peerID) {
+	_, in := s.participantSlot(peerID)
+	if _, arriving := s.arrivalScheduled(peerID); !in && !arriving && !s.rebuilds(peerID) {
 		if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
 			r.OnDeparture(peerID, true)
 		}
@@ -1993,22 +2002,35 @@ func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
 	s.announceDeparture(peerID, 0, dismissed)
 }
 
+// rebuilds reports a participant a reset is bringing into its new game with no
+// cursor yet: one it is about to rebuild, or whose arrival it kept to cross again.
+func (s *NetworkSystem) rebuilds(participant uint32) bool {
+	return s.world.Resources.Player.Restores(participant) ||
+		int(participant) < len(s.lost) && s.lost[participant].arrived
+}
+
 // announceDeparture crosses or forwards one departure, once for each time its
-// participant is in: an arrival scheduled since the last starts another. from is the
+// participant is in: an arrival scheduled since the last starts another, and one
+// whose cursor is still to make is left from the slot it arrives in. from is the
 // link a notice arrived on, or zero when this instance observed the disconnect itself.
 func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32, dismissed bool) bool {
-	if peerID == 0 || int(peerID) >= len(s.departed) || s.departed[peerID] && !s.arrivalScheduled(peerID) {
+	into, arriving := s.arrivalScheduled(peerID)
+	if peerID == 0 || int(peerID) >= len(s.departed) || s.departed[peerID] && !arriving {
 		return false
 	}
 	s.departed[peerID] = true
 
 	slot, ok := s.participantSlot(peerID)
-	if !ok {
-		// A reset cleared its cursor and is about to rebuild it: announced once it has
-		if s.world.Resources.Player.Restores(peerID) {
-			s.lost[peerID] = lostChange{how: event.ParticipantDepartedPayload{Dismissed: dismissed}, marked: true}
-		}
+	switch {
+	case ok:
+	case s.rebuilds(peerID):
+		// Announced once the new game has its cursor, or has crossed its arrival again
+		s.lost[peerID].how, s.lost[peerID].marked = event.ParticipantDepartedPayload{Dismissed: dismissed}, true
 		return true
+	case arriving:
+		slot = into
+	case s.isCoordinator():
+		return true // never crossed in: nothing to cross out
 	}
 	if s.isCoordinator() {
 		s.crossSession(event.EventParticipantDeparted,

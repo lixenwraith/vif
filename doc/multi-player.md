@@ -829,7 +829,8 @@ session keeps the order they left in.
 A reset clears the barrier, so the new game announces again each roster change it
 interrupted: an arrival or a departure still scheduled, a departure applied at the
 reset's own tick to a cursor already cleared, and a link whose loss was noticed
-while the cursors were cleared. Every instance keeps those its barrier would have
+while the cursors were cleared or its arrival waited to be crossed again
+(`NetworkSystem.rebuilds`). Every instance keeps those its barrier would have
 applied, nothing a guest forged among them, and an arrival stands for a departure
 ahead of it (`NetworkSystem.keepLost`). The place of a participant the reset is
 rebuilding stays taken, and the session layer hears of its leaving when the new
@@ -929,7 +930,12 @@ hold's end, a new game's included (`keepLost`); a relay carries the dial to its
 authority's reading, and a successor's door reads its own. A link lost again behind
 that arrival is another departure: one is announced for each time its participant
 is in (`announceDeparture`), and the loss a departure reports by closing its link
-as it applies is no other's (`NetworkSystem.closed`). A departure whose arrival
+as it applies is no other's (`NetworkSystem.closed`). A newcomer's link lost before
+its arrival applies, under a hold or inside its lead, is one as well: the place
+stays taken, the authority crosses the departure behind the arrival from the slot
+it names, a guest flooding its notice with no cursor to name, and the departure
+finds the cursor the arrival is making in the tick both apply (`rosterDue`), so the
+newcomer waits as a Wraith for its key. A departure whose arrival
 stands behind it, or whose place a dial is taking back, tells the session layer
 nothing and closes no link, that dial's among them (`rosterBehind`,
 `NetworkResource.OnDeparture`). The arrival then finds its participant's own cursor

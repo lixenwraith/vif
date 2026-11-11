@@ -643,16 +643,12 @@ What would close it:
 
 A departure is announced by the instance its participant is behind, when that sees
 the link drop, and the authority has no view of its own of a participant it is not
-linked to. Three cases follow, the first two each shown by a probe:
+linked to. Two cases follow, the first shown by a probe:
 - A relay leaves, and the person behind it finds no other path and forks or quits
   (§5.1): nobody is left to see its link go. Its cursor stays live on the host,
   never a Wraith and never timed out (600 ticks and a reset later on a `meshSession`
   chain 1-2-3 with 2 closed), and its key is refused `RefusalReturning` for good,
   since `closeStaleLink` closes only a link the host holds.
-- A joiner's link drops after its arrival crossed and before it applies:
-  `noticeDeparture` finds no cursor, frees the place and crosses nothing, and the
-  arrival then spawns a cursor nobody drives, whose identity and slot read free at
-  the door.
 - A player taken back through a relay under a hold (§5.4) drops again before the
   hold ends. The relay's mark from the first loss still stands, the arrival that
   clears it not having reached it, so it floods no second notice, and the arrival
