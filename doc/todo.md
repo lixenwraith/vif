@@ -588,12 +588,13 @@ the volume already carries whatever the installer puts there.
 An instance marks a participant departed as it announces its lost link
 (`announceDeparture`): the coordinator any link, a guest one the participant was
 behind. The coordinator's crossing marks it on every instance (`removeParticipant`).
-Only an arrival clears the mark (`addParticipant`), and while it stands
-`receiveAuthority` and `receiveDeparture` drop whatever that participant sends. A
-reopened link clears nothing: `admitPeerLink` admits any roster member, a Wraith
-included, so the link stands and the succession hears nothing on it. A person
-whose link to its host drops is unaffected, since its redial proves its key and
-the key's arrival clears the mark. Two cases are not:
+Only an arrival clears the mark (`addParticipant`), or on a guest a join through it
+(`drainWith`), and while it stands `receiveAuthority` and `receiveDeparture` drop
+whatever that participant sends. A reopened peer link clears nothing:
+`admitPeerLink` admits any roster member, a Wraith included, so the link stands and
+the succession hears nothing on it. A person whose link to its host drops is
+unaffected, since its redial proves its key and the key's arrival clears the mark.
+Two cases are not:
 - A participant that joined through a guest holds a link to the host too, as every
   participant does to a successor (§5.3 item 3), and its link to that guest drops
   and reopens. The guest floods a notice the host, linked to the participant,
@@ -643,23 +644,18 @@ What would close it:
 
 A departure is announced by the instance its participant is behind, when that sees
 the link drop, and the authority has no view of its own of a participant it is not
-linked to. Two cases follow, the first shown by a probe:
-- A relay leaves, and the person behind it finds no other path and forks or quits
-  (§5.1): nobody is left to see its link go. Its cursor stays live on the host,
-  never a Wraith and never timed out (600 ticks and a reset later on a `meshSession`
-  chain 1-2-3 with 2 closed), and its key is refused `RefusalReturning` for good,
-  since `closeStaleLink` closes only a link the host holds.
-- A player taken back through a relay under a hold (§5.4) drops again before the
-  hold ends. The relay's mark from the first loss still stands, the arrival that
-  clears it not having reached it, so it floods no second notice, and the arrival
-  gives the place back to a cursor nobody drives.
+linked to. A relay leaves, and the person behind it finds no other path and forks or
+quits (§5.1): nobody is left to see its link go. Its cursor stays live on the host,
+never a Wraith and never timed out (600 ticks and a reset later on a `meshSession`
+chain 1-2-3 with 2 closed, a probe), and its key is refused `RefusalReturning` for
+good, since `closeStaleLink` closes only a link the host holds.
 
 What would close it: the authority keeps the tick it last admitted each
 participant's raw epoch at (`scheduleCrossings`), an arrival counting as one, and
 crosses a plain departure for a live remote cursor it is not linked to once that is
 a window old: longer than a walk down the chain (§5.1), and counted in its own ticks
 so a hold costs nothing. The window is the cost: a relayed player slower than it is
-retired while it plays. A test per case on the probes' shapes.
+retired while it plays. A test on the probe's shape.
 
 ### Refuse a combat crossing that acts as another cursor or emitter
 

@@ -929,15 +929,16 @@ place back held and its arrival crosses behind the departure, both waiting for t
 hold's end, a new game's included (`keepLost`); a relay carries the dial to its
 authority's reading, and a successor's door reads its own. A link lost again behind
 that arrival is another departure: one is announced for each time its participant
-is in (`announceDeparture`), and the loss a departure reports by closing its link
-as it applies is no other's (`NetworkSystem.closed`). A newcomer's link lost before
-its arrival applies, under a hold or inside its lead, is one as well: the place
-stays taken, the authority crosses the departure behind the arrival from the slot
-it names, a guest flooding its notice with no cursor to name, and the departure
-finds the cursor the arrival is making in the tick both apply (`rosterDue`), so the
-newcomer waits as a Wraith for its key. A departure whose arrival
-stands behind it, or whose place a dial is taking back, tells the session layer
-nothing and closes no link, that dial's among them (`rosterBehind`,
+is in (`announceDeparture`), which to a relay, sent no arrival by a held authority,
+is each join through it (`drainWith`), and the loss a departure reports by closing
+its link as it applies is no other's (`NetworkSystem.closed`). A newcomer's link
+lost before its arrival applies, under a hold or inside its lead, is one as well:
+the place stays taken, the authority crosses the departure behind the arrival from
+the slot it names, a guest flooding its notice with no cursor to name, and the
+departure finds the cursor the arrival is making in the tick both apply
+(`rosterDue`), so the newcomer waits as a Wraith for its key. A departure whose
+arrival stands behind it, or whose place a dial is taking back, tells the session
+layer nothing and closes no link, that dial's among them (`rosterBehind`,
 `NetworkResource.OnDeparture`). The arrival then finds its participant's own cursor
 in the slot, a Wraith or one no departure turned, and is that participant back
 (`addParticipant`, `CursorSystem.spawnOne`).

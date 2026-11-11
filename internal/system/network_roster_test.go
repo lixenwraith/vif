@@ -171,10 +171,10 @@ func TestADepartureItsArrivalStandsBehindLeavesItsPlaceLinked(t *testing.T) {
 }
 
 // TestADepartureIsAnnouncedOnceForEachTimeItsParticipantIsIn: a lost link crosses
-// one departure however often it is noticed, and another only once an arrival is
-// the last change scheduled for its participant; the link a departure closed as it
-// applied is that departure's, whatever arrival is scheduled by the time its loss
-// is drained.
+// one departure however often it is noticed or joined again, and another only once
+// an arrival is the last change scheduled for its participant; a guest, sent none
+// by a held authority, floods one for each join through it. The link a departure
+// closed as it applied is that departure's, whatever arrival is scheduled since.
 func TestADepartureIsAnnouncedOnceForEachTimeItsParticipantIsIn(t *testing.T) {
 	plain := event.ParticipantDepartedPayload{Participant: 7, Slot: 2}
 	w, net, _, mesh := linkedHolderWorld(t)
@@ -189,6 +189,10 @@ func TestADepartureIsAnnouncedOnceForEachTimeItsParticipantIsIn(t *testing.T) {
 	}
 	if net.noticeDeparture(7, false); len(departures(w)) != 0 {
 		t.Fatal("a departure noticed twice was crossed twice")
+	}
+	mesh.Link(1, 7)
+	if got := lose(); len(got) != 0 {
+		t.Fatalf("a link joined again and lost, no arrival crossed between, crossed %+v", got)
 	}
 	crossRoster(net, 1, leaves, arrives)
 	mesh.Link(1, 7)
@@ -211,6 +215,17 @@ func TestADepartureIsAnnouncedOnceForEachTimeItsParticipantIsIn(t *testing.T) {
 	mesh.Link(1, 7)
 	if got := lose(); !slices.Equal(got, []event.ParticipantDepartedPayload{plain}) {
 		t.Fatalf("a link opened since, and lost, crossed %+v, want %+v", got, plain)
+	}
+
+	flood := &linkedPort{peers: []uint32{1}}
+	guest := sessionSystem(t, 2, 100, flood)
+	for joins := 1; joins <= 2; joins++ {
+		for _, in := range []link.Inbound{{Kind: link.InboundConnect, Peer: 7, Served: true}, {Kind: link.InboundDisconnect, Peer: 7}} {
+			guest.drainWith(flood, func(buf []link.Inbound) int { buf[0] = in; return 1 })
+		}
+		if len(flood.flooded) != joins {
+			t.Fatalf("a guest its participant joined through %d time(s), lost each time, flooded %d notice(s)", joins, len(flood.flooded))
+		}
 	}
 }
 

@@ -1895,6 +1895,11 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound
 			if in.Served && int(in.Peer) < len(s.served) {
 				s.served[in.Peer] = true
 				s.noteDown(uint32(in.Peer))
+				// The arrival that clears a guest's mark is the authority's to send, and a
+				// held one sends none: a join through this guest is in again to it
+				if !s.isCoordinator() {
+					s.departed[in.Peer] = false
+				}
 			}
 			if int(in.Peer) < len(s.closed) {
 				s.closed[in.Peer] = false
