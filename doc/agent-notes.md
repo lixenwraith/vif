@@ -3,9 +3,16 @@
 What agents working on this repository learned that no rule in
 [AGENTS.md](../AGENTS.md) and no design document states: facts that cost a session
 an hour to rediscover, and how to check them. Read it before starting. When a task
-teaches you one, add it in the same PR, one bullet under its topic. Keep it short:
-delete a note that proves wrong, whose trap is gone, or that a document or a code
-comment now states, and link that instead.
+teaches you one, add it in the same PR, one bullet under its topic. A note is a
+trap or a technique the next task meets; how a feature works belongs in its design
+document. Keep it short: delete a note that proves wrong, whose trap is gone, or
+that a document or a code comment now states, and link that instead.
+
+Topics: Toolchain · Events and ticks · Sessions · Runs and their wiring ·
+Determinism and the harness · Session tests · Tests that flake · Locks · Networking
+and admission · Position · Math and physics · Glyphs and widgets · Looking at the
+game without a device · Measuring · Scenario TOML · Corpus · Docs · Libraries ·
+Branches.
 
 ## Toolchain
 
@@ -65,11 +72,6 @@ comment now states, and link that instead.
   event stops the generator on the stale use of it ("type-check ...: has no field",
   "undefined"): delete those lines from `payload_gen.go` and `registry_gen.go`
   first, and the run writes them anew.
-- A registered struct payload decodes from TOML, so every enum it holds at any
-  depth must take names (`TestEveryEnumAPayloadHoldsTakesNames`), and a payload
-  that is a component fails on that component's enums. Annotate the event with the
-  qualified type (`(component.KrakenBurn)`), which registers nil: right only for a
-  `[local]` event a system pushes, which is neither journaled nor sent.
 - A change to a package's API is compiled against every test file by
   `go test -count=1 -run '^$' ./...`, which builds each test binary and runs
   nothing; `go build ./...` and `go vet` on the touched packages miss a test in a
@@ -89,11 +91,10 @@ comment now states, and link that instead.
   `main`; a scratch one under `android/tmp/` calling every bound function, run with
   `GOOS=android` and `-filter '^github.com/lixenwraith/vif(/|$)'`, stands in for
   gomobile's wrapper.
-- deadcode lists code that is reserved and stays: `internal/system/composite.go`'s
-  lifecycle methods (their todo item), `pkg/vmath` and `pkg/vmath/physics` (other
-  repositories import them),
-  `appendF32`/`readF32` (what gen-manifest emits for a float32 field) and the vlog
-  stub's mirrors of live functions.
+- deadcode lists code that is reserved and stays: `pkg/vmath` and
+  `pkg/vmath/physics` (other repositories import them), `appendF32`/`readF32` (what
+  gen-manifest emits for a float32 field) and the vlog stub's mirrors of live
+  functions.
 - A cloud checkout is shallow, about 50 commits: `git log -S` names the boundary
   commit as a line's origin. `git fetch --deepen=3000 origin main` reaches the rest.
 - Claude Code's Bash safety check refuses any command whose text holds `rm -rf` on
@@ -101,7 +102,7 @@ comment now states, and link that instead.
   edit that recipe with the Edit tool, and read what `CLEAN=1` would remove with
   `make -n install-config CLEAN=1 VIF_CONFIG_DIR=<any path>`, never by running it.
 
-## Ticks and events
+## Events and ticks
 
 - An event a system pushes in its `Update`, a crossing due at the tick and an FSM
   action's event all dispatch in the tick's one settle, after every system's
@@ -114,110 +115,24 @@ comment now states, and link that instead.
 - A derived resource is created in `engine.newGameContext`, rewritten by its owner
   every tick and never captured, so it bumps no schema. Systems run in ascending
   `Priority`, so only a later system reads it the same tick.
+- The settle dispatches pass by pass, breadth first: what a handler pushes runs
+  after every event of the pass it ran in. An arrival and a departure applying in
+  one tick both run before the cursor the arrival asks for is made
+  (`rosterDue.spawning`), and what the departure asks of that cursor is queued
+  behind the spawn.
 - A journaled event, of any origin but a system or a device, is never pushed inside
   the tick body: the tick's settle would dispatch it live while a replay injects it
   after the tick. The barrier's are the exception, stamped as the body's (settle
   group 0), which a replay queues for its own tick (`ReplayTarget.PushBody`,
   `EventQueue.Defer`) instead of settling before it.
-- A new bus crossing whose payload names its producer's cursor or slot adds a row to
-  `crossingActors` (`internal/system/network.go`); without one, a misbound or
-  modified participant can act as another's cursor through it.
-- A crossing only the authority may make joins the list in `admissibleFromSource`,
-  and `barrierBound` when it sets shared state from one tick on; with no payload it
-  needs no codec (`crossSession(et, nil)`). A new event type moves the number of
-  every one declared after it, so it takes the next `network.ProtocolVersion` and
-  `event.JournalSchema`.
-- A reset clears the barrier and every crossing still scheduled on it. What the
-  authority still owes the session past one is state its system keeps and crosses
-  again in the new game (`NetworkSystem.keepLost`, `NetworkSystem.restart`). Between
-  the reset and the boot's spawn the cursors are cleared, so an event that writes
-  every cursor or Wraith writes the roster pending behind `World.Clear` too
-  (`PlayerResource.JoinRestore`, `PlayerResource.RestartWaits`).
-- A joiner's arrival can reach it inside a correction rather than as the crossing,
-  which the capture's fence then drops: state a joiner takes on arriving is derived
-  in `RebindCursorRoster` too, never only in the arrival's handler.
-- A joiner's world holds no entry for it until its arrival crosses there, while the
-  authority's may already: what the run itself is, a bot seat, is its own word
-  (`Instance.Seated`), never read off its roster entry. Its `LocalSlot` stays
-  `NoPlayerSlot` until then, which takes the joiner's own ticks: a test waiting on it
-  ticks the joiner (`arrival` in `host_test.go`).
-- A guest's own crossings apply a lead after it produced them even with host and
-  guest on one machine: the default lead plus the relay slack is four ticks. What a
-  crossing's resolution draws (a hit's zap) shows that late on its producer, so a
-  cell the producer captured is stale by then; draw a shot as it fires, its ends
-  naming entities (`pushDrainBolt`).
-- `NetworkSystem.Flush` runs at the tick's close under the world lock, after the
-  tick's settle, so a hold it releases at a crossing's apply tick sees everything
-  that crossing paid in that tick (`NetworkSystem.crossSettled`).
-- `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
-  the game resets near tick 35; a session test that waits a fixed count of ticks
-  past that reads the reset. Wait for the condition, bounded.
-- A reset's tick settles on after `MetaSystem.handleGameReset` cleared the world,
-  closes with no flush, and `Scheduler.executeReset` takes the world lock again:
-  what a crossing applied at that tick raised, and a goroutine in between (a
-  correction's off-tick drain, the accept loop), meet no cursor and the roster
-  waiting in `PlayerResource`'s restore (`Restores`). A queue event pushed there
-  goes with the queue; a crossing the barrier takes as it is pushed
-  (`EventQueue.Push`), and `NetworkSystem.Init`, run there before the boot spawn
-  rebuilds, clears it bar the roster changes `keepLost` keeps.
-- A spawn request naming a participant joins a reset's roster while one waits
-  (`PlayerResource.JoinRestore`) and spawns nothing, so a unit test that leaves a
-  restore pending rebuilds through the boot's request, one with no `PeerID`.
-- `NetworkSystem.scheduled` holds artifacts not yet admitted: `admissibleFromSource`
-  runs as each applies, so a roster artifact a guest forged waits there for its tick
-  to refuse it. Code acting on what is scheduled checks admission itself
-  (`keepLost`); `applied` holds admitted ones alone. Both hold one source's in the
-  order it made them, which is the order they apply in (`schedule`).
-- The door marks a place away as its departure applies (`participantDeparted`) and
-  takes a key back only into one that is (`keyedLocked`), bar a held door, which
-  takes one whose departure is only scheduled (`Departing`). So can a successor's
-  `CrossReturns`: a departure and an arrival for one participant can both be
-  scheduled, and a handler asks what stands behind the one it applies (`rosterBehind`).
-- A held host flushes nothing, so what it crosses under a hold reaches no guest,
-  relay or successor until the resume: a run joining held has it from its gate
-  (`PendingAfter`), a relay's `departed` mark stands until its participant joins
-  through it again (`drainWith`), and a successor's group never holds it, which is
-  why a run waiting for its arrival forks when its authority goes. A guest's
-  barrier holds no roster change under a hold, so a guest's rule reading
-  `arrivalScheduled`, or a mark an arrival clears, needs another source there.
-- The settle dispatches pass by pass, breadth first: an arrival and a departure
-  applying in one tick both run before the cursor the arrival asks for is made
-  (`rosterDue.spawning`), and what the departure asks of that cursor is queued
-  behind the spawn. Every crossing made under a hold shares one apply tick, a lead
-  past the held one, so a hold's end is where a participant's roster changes meet.
-- A session policy on the wall clock lives in `Authority.drive`, which the
-  correction loop reaches between ticks and a driven run once per `App.Tick` call,
-  however many ticks that advances. One that crosses requires a running transport,
-  which a replay has none of, and restarts its own watch as it crosses, since the
-  roster it reads (`WorldRoster`) shows the crossing only as it applies, a lead
-  later. A wait counted in the authority's ticks at the rate played stops under a
-  hold and is wall time on a paced host alone: `-speed max` is refused with
-  `-host`, `-join` or bots, and a test's host ticking every 10 ms runs it out five
-  times as fast.
-- A participant's crossing sequence outlives its run: every instance forgets it only
-  as the departure applies (`forgetParticipant`). A run in a place whose departure
-  has not applied crosses nothing (`SessionState.Superseding`), or its first
-  sequences are dropped as its predecessor's.
-- Session state a replay must follow changes only through the latch's note
-  (`World.LatchSession`, `Supersede`): a flag an install or a link event flips with
-  no note binds the replay's cursor at another tick. A change a dispatch makes needs
-  none, since the replay dispatches too (`World.TakePlace`).
-- In `meshSession`, `mode.ExecuteCommand(apps[0].Context(), "n")` then
-  `apps[0].Settle()` crosses the host's new game in the epoch at hand, and closing a
-  participant's `link.MeshPort` under its world lock drops it. The host's lead is 3
-  near tick 10 and 1 later, so a test of what lands inside a lead runs early. A mesh
-  opens no door (`Membership.GuestCount` reads 0): what the door's roster keeps is
-  tested over sockets (`mustHosting`, `mustSocketJoiner`, `arrival`). A pair led by
-  1 is a join through the host, and one whose ends are both in already is a link
-  beside (`meshOf`): a second link to the host is `{3, 1}`, after the pair that
-  brings 3 in.
+- A registered struct payload decodes from TOML, so every enum it holds at any
+  depth must take names (`TestEveryEnumAPayloadHoldsTakesNames`), and a payload
+  that is a component fails on that component's enums. Annotate the event with the
+  qualified type (`(component.KrakenBurn)`), which registers nil: right only for a
+  `[local]` event a system pushes, which is neither journaled nor sent.
 - A run's tick is `World.TickInterval`, which its host may choose (`-tick`);
   `parameter.GameUpdateInterval` is only the default. Code converting ticks to time
   reads the run's, as tests may keep the constant.
-- `World.CopyIn` overwrites `Config`, `Time`, `Player`, `Transient` and `View`
-  whole, so a goroutine off the world lock (a bot seat, the drive loop, the
-  correction loop) reads none of their fields, even one that never changes: the
-  race detector flags the copy's write.
 - `GameState.Mode` is the play mode (Normal, Visual, Insert, Search), which the
   world reads and the journal records; Command and Overlay are the operator's, held
   on the context over it (`GameMode.Operator`), and reach neither. A live run's
@@ -248,6 +163,70 @@ comment now states, and link that instead.
   replay, which has an operator of its own, still matches. One left on the ambient
   origin diverges every replay whose recording made it.
 
+## Sessions
+
+- A new bus crossing whose payload names its producer's cursor or slot adds a row to
+  `crossingActors` (`internal/system/network.go`); without one, a misbound or
+  modified participant can act as another's cursor through it.
+- A crossing only the authority may make joins the list in `admissibleFromSource`,
+  and `barrierBound` when it sets shared state from one tick on; with no payload it
+  needs no codec (`crossSession(et, nil)`). A new event type moves the number of
+  every one declared after it, so it takes the next `network.ProtocolVersion` and
+  `event.JournalSchema`.
+- A joiner's arrival can reach it inside a correction rather than as the crossing,
+  which the capture's fence then drops: state a joiner takes on arriving is derived
+  in `RebindCursorRoster` too, never only in the arrival's handler.
+- A joiner's world holds no entry for it until its arrival crosses there, while the
+  authority's may already: what the run itself is, a bot seat, is its own word
+  (`Instance.Seated`), never read off its roster entry.
+- A guest's own crossings apply a lead after it produced them even with host and
+  guest on one machine: the default lead plus the relay slack is four ticks. What a
+  crossing's resolution draws (a hit's zap) shows that late on its producer, so a
+  cell the producer captured is stale by then; draw a shot as it fires, its ends
+  naming entities (`pushDrainBolt`).
+- A reset clears the barrier and every crossing scheduled on it: what the authority
+  still owes the session past one is state its system keeps and crosses again in
+  the new game ([Multiplayer §5.4](multi-player.md#54-wraiths)). The reset's tick
+  settles on after `MetaSystem.handleGameReset` cleared the world and closes with no
+  flush; `Scheduler.executeReset` then takes the world lock again, and
+  `NetworkSystem.Init` empties the barrier bar what `keepLost` keeps before the
+  boot's spawn rebuilds the cursors. What a crossing applied at that tick raised,
+  and a goroutine in between (a correction's off-tick drain, the accept loop), meet
+  no cursor, only the roster waiting in `PlayerResource.Restores`: an event that
+  writes every cursor or Wraith writes that roster too (`JoinRestore`,
+  `RestartWaits`). A queue event pushed in between goes with the queue.
+- A held host flushes nothing, so what it crosses under a hold reaches no guest,
+  relay or successor until the resume
+  ([Multiplayer §3.6](multi-player.md#36-holding-a-session)): a guest's barrier holds no
+  roster change there, so a guest's rule reading `arrivalScheduled`, or a mark an
+  arrival clears, needs another source.
+- A session policy on the wall clock lives in `Authority.drive`, which the
+  correction loop reaches between ticks and a driven run once per `App.Tick` call,
+  however many ticks that advances. One that crosses needs a running transport,
+  which a replay has none of, and restarts its own watch as it crosses, since the
+  roster it reads (`WorldRoster`) shows the crossing only as it applies, a lead
+  later.
+- Session state a replay must follow changes only through the latch's note
+  (`World.LatchSession`, `Supersede`): a flag an install or a link event flips with
+  no note binds the replay's cursor at another tick. A change a dispatch makes needs
+  none, since the replay dispatches too (`World.TakePlace`).
+
+## Runs and their wiring
+
+- A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
+  test that builds a joiner as a join does goes through `configForJoin` into
+  `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,
+  and a test of what a join holds to then passes on nothing.
+- The platform's `Host` reaches a run only in its `runConfig` (`host`), which `Run`,
+  `RunScript` and `RunBot` fill from the `Host` handed beside the `Config`: a
+  presenting entry point built on a `Config` alone draws on the terminal, not the
+  window, page or Android view, and no test catches that for a watched script or
+  bot. A test that presents builds its run with `newApp` on a `runConfig`.
+- A type `internal/app` aliases from `internal/app/internal/config` carries its
+  exported methods to `cmd/vif` and Android, which cannot import the package, and
+  `app` cannot add methods to it: a rule that reads a run's wiring stays on `app`'s
+  `runConfig`, as `runConfig.Validate` adds the wiring's rules to `Config.Validate`'s.
+
 ## Determinism and the harness
 
 - A choice every instance must make alike is tested over two worlds holding one
@@ -264,6 +243,16 @@ comment now states, and link that instead.
   `ParticleSystem`'s map field. Rename the local, or allowlist it with its reason.
   It lints `internal/fsm`, `fsm/std`, `engine`, `event` and others too (`lintDirs`),
   keyed by function name, so renaming an allowlisted function there fails it.
+- A test proven to pin a rule by mutating the rule's line runs from a copy of the
+  tree (`tar` it out), so the working tree stays editable; a mutation that survives
+  is run against main's own tests in a `git worktree`, where surviving too makes it
+  an old gap rather than a lost pin. One that only fails to build, a name left
+  unused, proves nothing: keep the name read (`false && x`).
+- A correction leaves a cursor's owner-authored cells (D-13) alone four ways:
+  `applyShard`'s owner check, the encoder's exclusion, the owner-authored cursor
+  sets (`ownerAuthoredCursors`, `liveOwnerAuthoredCursors`) and
+  `RebindCursorRoster`'s restore. Each masks a mutation of the others, so a test
+  proving the rule turns them all off.
 - The divergence harness
   ([netcode design §3.5](netcode-design.md#35-the-divergence-harness)) compares two
   binaries: `git worktree add` main, build `go test -c ./internal/app` in each tree,
@@ -277,6 +266,27 @@ comment now states, and link that instead.
   write is checked on a copy whose drop prints the sync instead
   (`NetworkSystem.stateInRange`), over the four shapes and the `internal/app` suite
   under `-test.v -test.parallel=1`, which puts each print under the test that sent it.
+
+## Session tests
+
+- In `meshSession`, `mode.ExecuteCommand(apps[0].Context(), "n")` then
+  `apps[0].Settle()` crosses the host's new game in the epoch at hand, and closing a
+  participant's `link.MeshPort` under its world lock drops it. The host's lead is 3
+  near tick 10 and 1 later, so a test of what lands inside a lead runs early. A mesh
+  opens no door (`Membership.GuestCount` reads 0): what the door's roster keeps is
+  tested over sockets (`mustHosting`, `mustSocketJoiner`, `arrival`). A pair led by
+  1 is a join through the host, and one whose ends are both in already is a link
+  beside (`meshOf`): a second link to the host is `{3, 1}`, after the pair that
+  brings 3 in.
+- `meshSession`'s idle cursors hold no energy and run out of heat near tick 29, so
+  the game resets near tick 35; a session test that waits a fixed count of ticks
+  past that reads the reset. Wait for the condition, bounded.
+- A joiner's `LocalSlot` stays `NoPlayerSlot` until its arrival crosses on its own
+  world, which takes the joiner's own ticks: a test waiting on it ticks the joiner
+  (`arrival` in `host_test.go`).
+- A spawn request naming a participant joins a reset's roster while one waits
+  (`PlayerResource.JoinRestore`) and spawns nothing, so a unit test that leaves a
+  restore pending rebuilds through the boot's request, one with no `PeerID`.
 - A host admits `NetworkAdmitBurst` (6) dials from one address per
   `NetworkAdmitWindow` (a minute), a fixed window, and loopback is one address: a
   test lobby past six dials fills a window more per six (`lobbySession` sizes its
@@ -284,16 +294,6 @@ comment now states, and link that instead.
   A dial reaching a host with `MaxHandshakes` (8) handshakes in flight is closed
   unanswered, which the dialer reads as `io.EOF` ("connected, but no vif session
   answered there"), and is retried as a refusal is (`scriptedRun`).
-- A test proven to pin a rule by mutating the rule's line runs from a copy of the
-  tree (`tar` it out), so the working tree stays editable; a mutation that survives
-  is run against main's own tests in a `git worktree`, where surviving too makes it
-  an old gap rather than a lost pin. One that only fails to build, a name left
-  unused, proves nothing: keep the name read (`false && x`).
-- A correction leaves a cursor's owner-authored cells (D-13) alone four ways:
-  `applyShard`'s owner check, the encoder's exclusion, the owner-authored cursor
-  sets (`ownerAuthoredCursors`, `liveOwnerAuthoredCursors`) and
-  `RebindCursorRoster`'s restore. Each masks a mutation of the others, so a test
-  proving the rule turns them all off.
 - A held run takes no tick, so an event pushed at it dispatches only on `Settle`:
   end a test's hold with the request and `Settle`, as `mode.ExecuteCommand` callers
   do. A test-driven guest (`mustSocketJoiner`) applies no correction in `Tick`: run
@@ -323,19 +323,6 @@ comment now states, and link that instead.
   at a time (`midRunGate`): a raw dial's reply holds the gate (`dialSession`,
   `Complete`), a second joiner's waits behind it, and what the test crosses
   meanwhile lands before that gate reads its offer.
-- A run's wiring travels only in a `runConfig` (`wiring`), never in a `Config`: a
-  test that builds a joiner as a join does goes through `configForJoin` into
-  `newDriven`, since `NewHeadless` on its `Config` drops the session's `-players`,
-  and a test of what a join holds to then passes on nothing.
-- The platform's `Host` reaches a run only in its `runConfig` (`host`), which `Run`,
-  `RunScript` and `RunBot` fill from the `Host` handed beside the `Config`: a
-  presenting entry point built on a `Config` alone draws on the terminal, not the
-  window, page or Android view, and no test catches that for a watched script or
-  bot. A test that presents builds its run with `newApp` on a `runConfig`.
-- A type `internal/app` aliases from `internal/app/internal/config` carries its
-  exported methods to `cmd/vif` and Android, which cannot import the package, and
-  `app` cannot add methods to it: a rule that reads a run's wiring stays on `app`'s
-  `runConfig`, as `runConfig.Validate` adds the wiring's rules to `Config.Validate`'s.
 
 ## Tests that flake
 
@@ -365,9 +352,9 @@ comment now states, and link that instead.
 ## Locks
 
 - The order is the world lock (`engine.UpdateMutex`, taken by `RunSafe`, not
-  reentrant), then `App.sessionMu`, then converge's `Authority.mu`. Nothing floods
-  the mesh under `sessionMu` or the world lock; a flood runs in the correction loop,
-  between ticks.
+  reentrant), then the membership's `sessionMu`, then converge's `Authority.mu`.
+  Nothing floods the mesh under `sessionMu` or the world lock; a flood runs in the
+  correction loop, between ticks.
 - A flag a goroutine reads as it starts is raised before the call that starts it,
   and lowered again if nothing started: `Instance.Redial`'s dial loop may read
   `Authority.Redialing` before `Redial` returns, so `beginSuccession` and
@@ -377,8 +364,12 @@ comment now states, and link that instead.
 - Tests reach a play run's paths by switching a running App's `cfg.Mode` under
   `RunSafe`, so a goroutine that reads the run's config off the world lock (the
   drive loop, a bot seat) reads the copy it started with instead.
+- `World.CopyIn` overwrites `Config`, `Time`, `Player`, `Transient` and `View`
+  whole, so a goroutine off the world lock (a bot seat, the drive loop, the
+  correction loop) reads none of their fields, even one that never changes: the
+  race detector flags the copy's write.
 
-## Networking
+## Networking and admission
 
 - `io.Copy` between two sockets reaches Go's kernel `splice(2)` path only when both
   ends are a `*net.TCPConn` or `*net.UnixConn` themselves: a wrapper that renews a
@@ -389,9 +380,6 @@ comment now states, and link that instead.
   over raw JSON bytes survives a round trip only when the signer emitted compact JSON,
   which `json.Marshal` does; a token re-encoded with whitespace by another writer
   fails its signature, which is the intended refusal, not a bug to relax.
-
-## Admission
-
 - A challenge-response handshake cannot be fuzzed from a static script past its
   challenge: a proof over a random nonce is never in the corpus. The join target
   pins the nonce through `Coordinator.Nonce` and seeds proofs over it; the peer
@@ -400,20 +388,10 @@ comment now states, and link that instead.
   `RosterEntry` is compared with `slices.Equal` (`SameRoster`), a payload field is
   TOML a scenario could name, and the generated capture codec has string and slice
   kinds and no bytes kind. Decode at the boundary that verifies.
-- A door that takes a pass names the session's first authority key, never its
-  name: names differ along a route (the router rewrites a published door's; a
-  relay's `SessionName` is the route it dialled), keys do not. Match passes by key.
-- The term keys and the keep-out list are membership state, carried whole by the
-  offer and the handoff record and fed by the departure crossing, not a captured
-  resource: every door holds them with no snapshot schema or codec change.
 - `auth`'s SCRAM client refuses a challenge below the cost it was built with, and
   an empty channel binding is its error, not its unbound: pass `WithChannelBinding`
   only over TLS (`bindingOption`), and read the leaf from under a websocket
   (`tlsOf`), since `*tls.Conn` has a `NetConn` of its own to stop at.
-- A host that drops a run closes the link as the drop applies on its side, before
-  the dropped run applies it; the dropped run reads the loss as its dismissal's
-  (`NetworkSystem.dismissalScheduled`) rather than as a host lost, or it would
-  redial under the key just kept out.
 - The router intercepts exactly one frame each way of the admission exchange, the
   door's question and the dial's answer, and splices everything after, so a
   passphrase door's later steps pass through it untouched; a stand-in pod in a test
@@ -421,9 +399,9 @@ comment now states, and link that instead.
 - nginx's `proxy_protocol on` writes a version 1 header and nothing else; the
   router reads version 2 too for other edges. A probe of the front door behind the
   edge writes the header first or is closed unanswered.
-- A join address keeps its `vifs://` scheme (`Endpoint.Dialable`): `Joining` and the
-  flags once stored the bare host:port, which dialled a TLS door in the clear. A
-  sign-in is shown over TLS alone (`tlsOf`), whatever the door asks.
+- A join address keeps its `vifs://` scheme (`Endpoint.Dialable`): a bare host:port
+  stored in `Joining` or the flags dials a TLS door in the clear. A sign-in is shown
+  over TLS alone (`tlsOf`), whatever the door asks.
 - An account command runs its KDF and requests in a goroutine and reports on the
   status line: a `SessionController` method runs under the world lock, which cannot
   wait on a site.
@@ -590,9 +568,8 @@ comment now states, and link that instead.
   Alacritty 0.13 from apt also needs `libxkbcommon-x11-0` and runs under
   `LIBGL_ALWAYS_SOFTWARE=1`; it speaks the key protocol, and Xvfb autorepeats a
   key held by `xdotool keydown` (660 ms, then 25 Hz), so presses, repeats and
-  releases reach vif as from a desk. tmux in between drops the protocol.
-  Alacritty also needs `libxkbcommon-x11-0` and `LIBGL_ALWAYS_SOFTWARE=1`, and with
-  no window manager `xdotool windowfocus`, not `windowactivate`, gives it the keys.
+  releases reach vif as from a desk. tmux in between drops the protocol. With no
+  window manager `xdotool windowfocus`, not `windowactivate`, gives it the keys.
   `ffmpeg -f x11grab` records the window to set against a probe's wall-clock lines.
 - A headless probe in `internal/app` drives a scenario by intents
   (`input.IntentFireMain`) and reads the world under `RunSafe`. A vanguard crush
@@ -748,19 +725,19 @@ comment now states, and link that instead.
   GitHub does (lowercase, punctuation and `§` dropped, spaces to hyphens) over
   every `*.md`; its only false hits are `machine-design.md`'s `New[S, C](observe)`
   and `Decode[A](raw)`.
-
-## Words
-
-- Materialize names the materialize effect alone; a teleport's or a charge's line is
-  a line, never a beam.
+- A renamed or removed identifier outlives a sweep that reads prose: list every
+  backticked name and path in the docs and look each up in the sources (a
+  `go/parser` pass over this module and those it requires, and the words of every
+  file but Markdown for flags, keys and tags); a name found nowhere is stale.
 
 ## Libraries
 
-- audio, stapes (formerly soundlab), genetic and ascimage are repositories of their
-  own ([package map §8](package-map.md#8-external-module-boundary)): a change to
-  one lands there, under its own `AGENTS.md` and agent notes, and vif takes its
-  tag. Stapes keeps its verbs, the rip and the model's training; `make tools`
-  builds ascimage's command from the version `go.mod` requires.
+- audio, genetic, ascimage, transformer and stapes (formerly soundlab) left this
+  repository for their own ([package map §8](package-map.md#8-external-module-boundary)):
+  a change to one lands there, under its own `AGENTS.md` and agent notes, and vif
+  takes its tag. Stapes keeps its verbs, the rip and the model's training over
+  transformer, which vif does not require; `make tools` builds ascimage's command
+  from the version `go.mod` requires.
 - The capture carries `registry.SpeciesState`, which embeds the streaming
   engine's checkpoint, so a change to `genetic.StreamingState`'s layout bumps
   `snapshot.Schema` beside `StreamingStateVersion`.
