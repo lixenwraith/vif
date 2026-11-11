@@ -12,7 +12,4 @@ const (
 
 	// GatewayDefaultRateMultiplier is the default acceleration factor (no acceleration)
 	GatewayDefaultRateMultiplier = 1.0
-
-	// GatewayDefaultRateAccelInterval is the default period between acceleration steps (0 = disabled)
-	GatewayDefaultRateAccelInterval = 0
 )

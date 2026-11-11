@@ -22,7 +22,6 @@ const (
 	// Materialize visual parameters
 	MaterializeTailIntensity = 0.35 // The lit segment's dim end; the gradient never falls to black
 	MaterializePulseHz       = 4    // Pulse at the fill's head; 8 Hz aliased at the 20 Hz tick into a flicker
-	MaterializeWidthFalloff  = 0.5  // Side-line intensity for multi-width beams
 )
 
 // Lightning Entity

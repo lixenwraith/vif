@@ -1,22 +1,11 @@
 package parameter
 
-import (
-	"time"
-
-	"github.com/lixenwraith/vif/pkg/vmath"
-)
-
 // Snake head dimensions (5×3, appears square in terminal)
 const (
 	SnakeHeadWidth         = 5
 	SnakeHeadHeight        = 3
 	SnakeHeadHeaderOffsetX = 2 // Center of 5-wide
 	SnakeHeadHeaderOffsetY = 1 // Center of 3-tall
-)
-
-// Snake body dimensions
-const (
-	SnakeBodyWidth = 3 // 3 cells wide perpendicular to direction
 )
 
 // Snake trail and segment configuration
@@ -65,9 +54,6 @@ const (
 	CombatInitialHPSnakeHead      = 50
 	CombatInitialHPSnakeMemberMax = 50 // Head-adjacent segment (10x base)
 	CombatInitialHPSnakeMemberMin = 5  // Tail segment (base)
-
-	SnakeHeadCollisionRadiusX = 2.5  // Half of 5
-	SnakeHeadCollisionRadiusY = 1.25 // Half of 3, aspect adjusted
 )
 
 // Snake damage values
@@ -76,16 +62,8 @@ const (
 	SnakeShieldDrainPerTick = 500
 )
 
-// Snake timers
-const (
-	SnakeGrowthCooldown = 500 * time.Millisecond // Min time between growth events
-)
-
 // Pre-computed values
 var (
-	SnakeHeadCollisionInvRxSq,
-	SnakeHeadCollisionInvRySq = vmath.EllipseInvRadiiSq(SnakeHeadCollisionRadiusX, SnakeHeadCollisionRadiusY)
-
 	// Squared for distance comparison without sqrt
 	SnakeTrailSampleIntervalSq = SnakeTrailSampleInterval * SnakeTrailSampleInterval
 )
