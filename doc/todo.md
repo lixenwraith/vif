@@ -1025,6 +1025,21 @@ exclusion, both owner-authored cursor sets, `RebindCursorRoster`'s restore).
 Perturb where the successor's mirror still differs at a tick close, and show the
 test then fails with the guards off.
 
+### Split the network system's file by concern
+
+- Priority: P3
+- Affected files: `internal/system/network.go`, `internal/system/domain_test.go`
+
+`NetworkSystem` is one file of about 3,600 lines: the roster and departures,
+crossings and the barrier, the relay tree, the lead and pacing, owner syncs, the
+replay suffix and the snapshot's adoption, and telemetry. About five files by
+concern, pure moves, would let each be read alone. Two things come first. The
+domain suite credits a file to the system whose `Name` it declares (`declaredName`),
+so it must learn to credit a file by its methods' receiver, or each new file is an
+unchecked helper that `TestHelperFilesArePinned` refuses. And the move conflicts
+with every open branch that touches the file, so it waits for a pause between waves
+of netcode work.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
