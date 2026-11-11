@@ -173,6 +173,15 @@ func (m *Membership) CommitLate(id uint32) (n uint64) {
 	return n
 }
 
+func (m *Membership) Heard(id uint32) (n uint64) {
+	m.world.RunSafe(func() {
+		if r := m.world.Resources.Network; r != nil && int(id) < len(r.Heard) {
+			n = r.Heard[id].Load()
+		}
+	})
+	return n
+}
+
 func (m *Membership) Ingress(id uint32) (n uint64) {
 	m.world.RunSafe(func() {
 		if r := m.world.Resources.Network; r != nil && int(id) < len(r.Ingress) {
@@ -194,8 +203,9 @@ func (m *Membership) KeepOut() []string {
 	return slices.Clone(m.keepOut)
 }
 
-// CrossDepartures keeps the places of the participants a new host's group does not
-// hold: each departs as a Wraith, as any departure does.
+// CrossDepartures keeps the places of the participants the authority retires on its
+// own word, those a new host's group does not hold and a person it no longer hears:
+// each departs as a Wraith, as any departure does.
 func (m *Membership) CrossDepartures(away []network.RosterEntry) {
 	for _, p := range away {
 		m.crossDeparture(p.ID, p.Slot)

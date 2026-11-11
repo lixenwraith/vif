@@ -1120,6 +1120,81 @@ func TestOnlyTheParticipantThatStaysLateIsEvicted(t *testing.T) {
 	}
 }
 
+// TestAnAuthorityRetiresAPersonItNeitherLinksNorHears: a person the authority holds
+// no link to departs once it has had no news of it for the silence window, wall time
+// counted in its own ticks at the rate played, so news, a new rate or a new run
+// starts the window over; a linked person, a bot and one away are never judged, and
+// a floor still to judge, a guest and a run with no running transport judge nobody.
+func TestAnAuthorityRetiresAPersonItNeitherLinksNorHears(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	members := []network.RosterEntry{
+		{ID: 1}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}, {ID: 4, Slot: 3, Holder: 3}, {ID: 5, Slot: 4, Away: true},
+	}
+	stopped := network.NewMesh().Node(1)
+	stopped.Close()
+	hosting := func(local uint32, port engine.NetworkPort) *run {
+		r := newRun(t, local, port, slices.Clone(members))
+		r.open(1, nil, true)
+		r.world.heard = map[uint32]uint64{}
+		return r
+	}
+	window := uint64(parameter.NetworkSilenceWindow / parameter.GameUpdateInterval)
+	look := func(r *run, ticks uint64, want int, when string) {
+		t.Helper()
+		r.world.advance(ticks)
+		r.u.driveSilence()
+		if got := len(r.world.departed); got != want {
+			t.Fatalf("%s: %d departure(s) crossed, want %d: %v", when, got, want, r.world.departed)
+		}
+	}
+	host := hosting(1, mesh.Node(1))
+	// The stub's roster shows a departure as it crosses, a run's once it applies
+	pending := func() { host.world.CrossReturns([]network.RosterEntry{{ID: 3}}) }
+
+	look(host, 0, 0, "first seen")
+	look(host, window-1, 0, "a tick short of the window")
+	host.world.heard[3]++
+	look(host, 1, 0, "heard as the window ended")
+	look(host, window-1, 0, "a tick short of the window since it was heard")
+	look(host, 1, 1, "silent for the window")
+	if got := host.world.departed[0]; len(got) != 1 || got[0].ID != 3 {
+		t.Fatalf("retired %v, want person 3 alone, whose bot its crossing takes", got)
+	}
+	pending()
+	look(host, 1, 1, "a tick after its departure crossed")
+
+	host.world.rate = engine.TimeScale{Num: 8, Den: 1}
+	look(host, window-2, 1, "the rate changed a tick short of the window")
+	look(host, 8*window-1, 1, "a tick short of the window at 8x")
+	look(host, 1, 2, "silent for the window at 8x")
+	pending()
+
+	look(host, 8*window-1, 2, "a tick short of the window since its departure crossed")
+	host.world.mu.Lock()
+	host.world.stamp.Run++
+	host.world.mu.Unlock()
+	look(host, 1, 2, "a new run as the window ended")
+	look(host, 8*window-1, 2, "a tick short of the window in the new run")
+	host.u.mu.Lock()
+	host.u.reconcileAt = 1
+	host.u.mu.Unlock()
+	look(host, 1, 2, "a floor still to judge as the window ended")
+	host.u.mu.Lock()
+	host.u.reconcileAt = 0
+	host.u.mu.Unlock()
+	look(host, 0, 2, "the floor judged")
+
+	for name, idle := range map[string]*run{
+		"a guest": hosting(2, mesh.Node(2)), "a run with no transport": hosting(1, nil),
+		"a run whose transport stopped": hosting(1, stopped),
+	} {
+		look(idle, 0, 0, name)
+		look(idle, window, 0, name)
+	}
+}
+
 // TestASuccessorCarriesEveryTermsKey: an instance holds the authority key of each
 // term, the offer's then each record's; a record naming another key for a term it
 // lived through is refused, and one naming none for its own fills its author's in.

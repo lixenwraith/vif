@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/component"
@@ -456,6 +457,99 @@ func TestDepartureReachesTheWholeMesh(t *testing.T) {
 		if lag := statOf(a, "network.barrier_peer_lag_ticks"); lag != 0 {
 			t.Fatalf("participant %d reports peer lag %d after a departure", i+1, lag)
 		}
+	}
+}
+
+// TestOnlyTheNeighbourAParticipantIsBehindAnnouncesItsLostLink: 4 joined through 3
+// and holds a link beside it, to 2 or to the host. A cut of the link beside retires
+// nobody and closes no link 4 plays through. A cut of a link 4 is behind is its
+// departure: 3's, and the host's own once 3 has left, however long 4 sent nothing,
+// and 2's once 2 carries 4 in 3's place.
+func TestOnlyTheNeighbourAParticipantIsBehindAnnouncesItsLostLink(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		beside, cuts  int  // whom 4 is linked beside, and who cuts its link to 4
+		left, carried bool // 3 has left; 2 then carries 4
+		silent        bool // 4 sends nothing for longer than it stays behind a link
+		away          bool
+	}{
+		{name: "the link beside", beside: 2, cuts: 2},
+		{name: "the link it joined through", beside: 2, cuts: 3, silent: true, away: true},
+		{name: "the link carrying it in its relay's place", beside: 2, cuts: 2, left: true, carried: true, away: true},
+		{name: "the host's own, its relay gone", beside: 1, cuts: 1, left: true, silent: true, away: true},
+	} {
+		apps := meshSession(t, 0x5EEDBEEF, 4, [][2]int{{1, 2}, {1, 3}, {3, 4}, {4, tc.beside}})
+		localCursors(t, apps)
+		apps[1].ctx.Relaying.Store(tc.carried)
+		live := apps
+		if tc.left {
+			closeParticipant(apps[2])
+			live = []*App{apps[0], apps[1], apps[3]}
+		}
+		for n := 0; tc.carried && !slices.Contains(downstreamOf(apps[1]), 4); n++ {
+			if n > parameter.NetworkEpochWindow {
+				t.Fatal("2 never carried the participant its relay left behind")
+			}
+			tickAll(live)
+		}
+		for range 2*parameter.NetworkBarrierDelayTicks + 4 {
+			tickAll(live)
+		}
+		if tc.silent {
+			live = slices.DeleteFunc(slices.Clone(live), func(a *App) bool { return a == apps[3] })
+			for range parameter.NetworkEpochWindow + parameter.NetworkBarrierDelayTicks {
+				tickAll(live)
+			}
+		}
+		cutter := apps[tc.cuts-1]
+		cutter.World().RunSafe(func() { cutter.World().Resources.Network.Port.(*link.MeshPort).Disconnect(4) })
+		for range 2*parameter.NetworkBarrierDelayTicks + 4 {
+			tickAll(live)
+		}
+		for i, a := range live[:2] {
+			if away := wraithIn(a, 3); away != tc.away {
+				t.Fatalf("%s cut: participant %d holds 4 as a Wraith %t, want %t", tc.name, i+1, away, tc.away)
+			}
+		}
+		if !tc.away {
+			if port := apps[3].World().Resources.Network.Port.(*link.MeshPort); !port.Connected(3) {
+				t.Fatal("4 lost the link to its relay with the one beside it")
+			}
+			assertMeshParity(t, apps, -1)
+		}
+	}
+}
+
+// TestAPersonLeftBehindALostRelayDepartsOnceUnheard: the authority hears a person it
+// holds no link to through the relays that carry it, however long the session runs.
+// Once a relay is gone it has no news of those behind it, and a silence window later
+// crosses each one's departure, so they wait as Wraiths as the relay does; a new game
+// the session reaches meanwhile starts the window over.
+func TestAPersonLeftBehindALostRelayDepartsOnceUnheard(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA3A6, 4, [][2]int{{1, 2}, {2, 3}, {3, 4}})
+	localCursors(t, apps)
+	host, window := apps[0], int(parameter.NetworkSilenceWindow/parameter.GameUpdateInterval)
+	waiting := func() string {
+		return fmt.Sprintf("the relay %t, those behind it %t and %t", wraithIn(host, 1), wraithIn(host, 2), wraithIn(host, 3))
+	}
+	for range window + window/2 {
+		tickAll(apps)
+	}
+	if got := waiting(); got != "the relay false, those behind it false and false" {
+		t.Fatalf("carried for longer than the window, the host holds as Wraiths %s", got)
+	}
+
+	closeParticipant(apps[1])
+	for n := 0; !wraithIn(host, 2) || !wraithIn(host, 3); n++ {
+		if n > 2*window+parameter.NetworkBarrierMaxDelayTicks {
+			t.Fatalf("two windows after the relay left, the host holds as Wraiths %s", waiting())
+		}
+		if got := waiting(); n == window/2 && got != "the relay true, those behind it false and false" {
+			t.Fatalf("half a window after the relay left, the host holds as Wraiths %s", got)
+		}
+		host.Tick(1)
 	}
 }
 

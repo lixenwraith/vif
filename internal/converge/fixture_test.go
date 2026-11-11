@@ -63,8 +63,10 @@ type stub struct {
 	carried  []uint32
 	cut      bool
 
-	// What the eviction policy reads, and what it decided; a zero rate is real time.
+	// What the eviction and silence policies read, and what eviction decided; a zero
+	// rate is real time.
 	late    map[uint32]uint64
+	heard   map[uint32]uint64
 	ingress map[uint32]uint64
 	rate    engine.TimeScale
 	dropped []uint32
@@ -225,6 +227,12 @@ func (s *stub) CommitLate(id uint32) uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.late[id]
+}
+
+func (s *stub) Heard(id uint32) uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.heard[id]
 }
 
 func (s *stub) Ingress(id uint32) uint64 {

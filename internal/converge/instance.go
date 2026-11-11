@@ -83,9 +83,11 @@ type Instance interface {
 
 	// DropParticipant closes one participant's link; the departure that follows is
 	// the ordinary one. CommitLate is how many of a participant's crossings reached
-	// this instance late while it authored.
+	// this instance late while it authored, and Heard its news of one then: each
+	// epoch of its admitted and each roster change of its crossed.
 	DropParticipant(id uint32) bool
 	CommitLate(id uint32) uint64
+	Heard(id uint32) uint64
 	// ShedParticipant dismisses one participant, with its bots, for the load it
 	// costs, which every participant and the dropped one are told.
 	ShedParticipant(id uint32) bool
@@ -95,9 +97,9 @@ type Instance interface {
 
 	// AuthorityChanged moves the membership a handoff carries into the places the
 	// run reads it from, and via is the link it follows the new host through, zero
-	// for its own; CrossDepartures keeps the places of participants a new host's
-	// group lost as Wraiths; Forked says no handoff came, so the run goes on alone
-	// from the last authoritative state, with the roster it held.
+	// for its own; CrossDepartures keeps as Wraiths the places a new host's group
+	// lost and those of persons it no longer hears; Forked says no handoff came,
+	// so the run goes on alone from the last authoritative state and roster.
 	AuthorityChanged(rec network.HandoffRecord, mine bool, via link.PeerID)
 	CrossDepartures(away []network.RosterEntry)
 	// CrossReturns gives back the places of participants the floor sent away whose

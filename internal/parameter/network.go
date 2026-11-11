@@ -400,6 +400,13 @@ const (
 	// floor.
 	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
 
+	// NetworkSilenceWindow is how long an authority goes with no news of a person it
+	// holds no link to before it crosses that person's departure, in wall time over
+	// the ticks it played: three succession windows, so one cut off redials its relay
+	// for one and dials every candidate through two more, and a returning key's dial,
+	// which retries for SessionRejoinWindow, outlasts it.
+	NetworkSilenceWindow = 3 * NetworkSuccessionWindow
+
 	// NetworkRejoinPassInterval paces a survivor's walk down the succession list and
 	// its redial of the host it lost. A pass tries every candidate whose turn began
 	// once; this is the pause before the next, so a successor or a host that is

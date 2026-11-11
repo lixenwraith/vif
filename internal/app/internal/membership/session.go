@@ -715,7 +715,8 @@ func (s *staleLink) Unwrap() error { return s.Refusal }
 
 // closeStaleLink closes the link a refusal found a returning player's place held
 // on. Its departure crosses as any lost link's does, and the dial's retry takes the
-// place back; a place held through a relay waits for that relay to see its link go.
+// place back; a place held through a relay waits for that relay to see its link go,
+// or with the relay gone for the authority's silence window.
 func (m *Membership) closeStaleLink(err error, port engine.NetworkPort) {
 	var s *staleLink
 	if p, ok := port.(engine.PeerDroppingPort); ok && errors.As(err, &s) && p.Disconnect(uint32(s.id)) {
