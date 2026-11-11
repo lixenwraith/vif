@@ -585,20 +585,23 @@ the volume already carries whatever the installer puts there.
   [§5.2](multi-player.md#52-the-roster-after-a-loss),
   [§5.3](multi-player.md#53-reachability-under--authority-migrate)
 
-An instance marks a participant departed the moment its own link to it drops
-(`announceDeparture`), and the coordinator's crossing marks it on every instance
-(`removeParticipant`). Only an arrival clears the mark (`addParticipant`), and while
-it stands `receiveAuthority` and `receiveDeparture` drop whatever that participant
-sends. A reopened link clears nothing: `admitPeerLink` admits any roster member, a
-Wraith included, so the link stands and the succession hears nothing on it. A person
+An instance marks a participant departed as it announces its lost link
+(`announceDeparture`): the coordinator any link, a guest one the participant was
+behind. The coordinator's crossing marks it on every instance (`removeParticipant`).
+Only an arrival clears the mark (`addParticipant`), and while it stands
+`receiveAuthority` and `receiveDeparture` drop whatever that participant sends. A
+reopened link clears nothing: `admitPeerLink` admits any roster member, a Wraith
+included, so the link stands and the succession hears nothing on it. A person
 whose link to its host drops is unaffected, since its redial proves its key and
 the key's arrival clears the mark. Two cases are not:
-- Two guests' warm link (§5.3 item 3) drops and reopens while the host lives.
-  Neither end coordinates, so nothing crosses and nothing clears, and each ignores
-  the other for the rest of the session. When the host goes, the candidate takes
-  the term and drops the other's notices (`MsgAuthorityReport`), the other drops its
-  record (`MsgAuthorityHandoff`), and at its own turn takes the next term.
-- A survivor's link to the candidate is down when the candidate takes the term and
+- A participant that joined through a guest holds a link to the host too, as every
+  participant does to a successor (§5.3 item 3), and its link to that guest drops
+  and reopens. The guest floods a notice the host, linked to the participant,
+  ignores (`receiveDeparture`), so nothing crosses and nothing clears, and the guest
+  ignores it for the rest of the session. When the host goes and the guest takes
+  the term, it drops the other's notices (`MsgAuthorityReport`) and crosses its
+  departure at the floor, and the other takes the next term.
+- A survivor's link to the candidate drops once the candidate holds the term and
   reopens before the survivor adopts a record. The new host crossed its departure,
   so the notices on the reopened link are dropped, the survivor is never answered,
   and it takes a term of its own. Only a report another participant relays passes
@@ -606,10 +609,13 @@ the key's arrival clears the mark. Two cases are not:
 
 Either way the session splits: two hosts, each holding the other and the lost host
 as Wraiths. A survivor with no path to the candidate is meant to split off (§5.1);
-one whose link came back is not. A three-participant `meshSession` probe (links
-1-2, 2-3, 1-3; 2-3 cut with `MeshPort.Disconnect` and linked again with `Mesh.Peer`,
-before the host closes or across 2 taking term 2) ended in all five runs with 2 on
-term 2 and 3 on term 3, two Wraiths each; without the cut both were on term 2.
+one whose link came back is not. A three-participant `meshSession` probe, 2-3 cut
+with `MeshPort.Disconnect` and linked again with `Mesh.Peer`, ended with 2 on term
+2 and 3 on term 3 in both: 3 joined through 2 and linked to the host beside (links
+1-2, 2-3, 3-1), cut before the host closes, and each joined through the host (1-2,
+2-3, 1-3), cut once 2 holds term 2. The second shape cut before the host closes, or
+linked again as 2 takes the term, no longer splits: neither guest marks the other,
+and both end on term 2.
 
 What would close it:
 - A link admitted after the mark was set clears it, so a mark nothing crossed is
@@ -635,18 +641,14 @@ What would close it:
 - Guide: [Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity),
   [§5.1](multi-player.md#51-succession), [§5.4](multi-player.md#54-wraiths)
 
-A departure is announced by whichever neighbour sees a link drop, and the authority
-has no view of its own of a participant it is not linked to. Four cases follow, the
-first three each shown by a probe:
+A departure is announced by the instance its participant is behind, when that sees
+the link drop, and the authority has no view of its own of a participant it is not
+linked to. Three cases follow, the first two each shown by a probe:
 - A relay leaves, and the person behind it finds no other path and forks or quits
   (§5.1): nobody is left to see its link go. Its cursor stays live on the host,
   never a Wraith and never timed out (600 ticks and a reset later on a `meshSession`
   chain 1-2-3 with 2 closed), and its key is refused `RefusalReturning` for good,
   since `closeStaleLink` closes only a link the host holds.
-- A relayed person's warm link drops (links 1-2, 1-3, 3-4, 2-4; 2 cuts 4 with
-  `MeshPort.Disconnect`): 2 floods the notice, the host is not linked to 4
-  (`receiveDeparture`) and crosses its departure, and every instance closes its
-  links to a participant its relay still carried (`removeParticipant`).
 - A joiner's link drops after its arrival crossed and before it applies:
   `noticeDeparture` finds no cursor, frees the place and crosses nothing, and the
   arrival then spawns a cursor nobody drives, whose identity and slot read free at
@@ -660,10 +662,8 @@ What would close it: the authority keeps the tick it last admitted each
 participant's raw epoch at (`scheduleCrossings`), an arrival counting as one, and
 crosses a plain departure for a live remote cursor it is not linked to once that is
 a window old: longer than a walk down the chain (§5.1), and counted in its own ticks
-so a hold costs nothing. A neighbour then announces a lost link only for a
-participant behind it (`served`, `behind`), leaving a warm link's drop to the relay
-or the window. The window is the cost: a relayed player slower than it is retired
-while it plays. A test per case on the probes' shapes.
+so a hold costs nothing. The window is the cost: a relayed player slower than it is
+retired while it plays. A test per case on the probes' shapes.
 
 ### Refuse a combat crossing that acts as another cursor or emitter
 

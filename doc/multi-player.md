@@ -466,9 +466,12 @@ The pipeline, the descent and the playout buffer are [Netcode design §2](netcod
 
 ## 5. Membership, topology, and authority continuity
 
-Roster changes are shared artifacts produced by the coordinator. A direct
-neighbour reports a disconnect; the authority turns it into one departure at one
-apply tick, which leaves the participant's cursor waiting as a **Wraith** (§5.4).
+Roster changes are shared artifacts produced by the coordinator. The instance a
+participant is behind reports its lost link: the authority any link it holds, a
+guest one that joined through it or was behind it (`NetworkSystem.down`), since the
+loss of a link beside leaves the participant carried and its departure would close
+every link it has. The authority turns the report into one departure at one apply
+tick, which leaves the participant's cursor waiting as a **Wraith** (§5.4).
 A mid-run join is admitted to transport before its capture is read, so
 traffic produced during transfer is buffered rather than lost. The join waits for
 a capture far enough past admission to include pre-admission epochs and refuses a

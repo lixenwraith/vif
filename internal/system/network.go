@@ -1894,6 +1894,7 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound
 			s.world.PushLocal(event.EventNetworkConnect, &event.NetworkConnectPayload{PeerID: uint32(in.Peer)})
 			s.world.LatchSession()
 		case link.InboundDisconnect:
+			down := s.down(uint32(in.Peer)) // read before the link is forgotten
 			if int(in.Peer) < len(s.served) {
 				s.served[in.Peer] = false
 			}
@@ -1903,7 +1904,11 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound
 			if int(in.Peer) < len(s.closed) && s.closed[in.Peer] {
 				continue // closed here as its departure applied: no departure of another
 			}
-			s.noticeDeparture(uint32(in.Peer), dropped)
+			// Only the instance a participant is behind speaks for its link: another
+			// link's loss leaves it carried, and a notice would close every link it has
+			if down {
+				s.noticeDeparture(uint32(in.Peer), dropped)
+			}
 		case link.InboundMessage:
 			if r := s.world.Resources.Network; r != nil && in.Msg != nil && int(in.Peer) < len(r.Ingress) {
 				r.Ingress[in.Peer].Add(uint64(link.HeaderSize + len(in.Msg.Payload)))
@@ -1976,9 +1981,9 @@ func (s *NetworkSystem) dismissalScheduled() bool {
 
 // noticeDeparture changes no shared cursor: only a direct neighbour sees a lost
 // link, at a moment its transport chose, so the coordinator crosses the departure
-// and any other neighbour floods a notice. The identity returns to the pool when
-// that crossing applies, or here for a participant with no cursor. dismissed is a
-// seat this run dropped, which leaves for good.
+// and a neighbour the participant was behind floods a notice. The identity returns
+// to the pool when that crossing applies, or here for a participant with no cursor.
+// dismissed is a seat this run dropped, which leaves for good.
 func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
 	if _, crossed := s.participantSlot(peerID); !crossed && !s.world.Resources.Player.Restores(peerID) {
 		if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
@@ -2571,6 +2576,12 @@ func (s *NetworkSystem) noteDown(from uint32) {
 func (s *NetworkSystem) behind(id uint32, tick uint64) bool {
 	at := s.downAt[id]
 	return at != 0 && tick <= at+parameter.NetworkEpochWindow
+}
+
+// down reports a down link: every link at the authority, else one that joined
+// through this instance or is behind it.
+func (s *NetworkSystem) down(id uint32) bool {
+	return s.isCoordinator() || int(id) < len(s.served) && (s.served[id] || s.behind(id, s.localTick()))
 }
 
 // carries reports whether this instance passes a participant's raw artifacts on
