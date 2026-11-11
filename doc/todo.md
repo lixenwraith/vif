@@ -1025,20 +1025,31 @@ exclusion, both owner-authored cursor sets, `RebindCursorRoster`'s restore).
 Perturb where the successor's mirror still differs at a tick close, and show the
 test then fails with the guards off.
 
-### Split the network system's file by concern
+### Move the netcode out of the network system, then split what stays
 
 - Priority: P3
-- Affected files: `internal/system/network.go`, `internal/system/domain_test.go`
+- Affected files: `internal/system/network.go`, `pkg/network`, `internal/event`
+  (the wire batch), `internal/system/domain_test.go`
 
 `NetworkSystem` is one file of about 3,600 lines: the roster and departures,
 crossings and the barrier, the relay tree, the lead and pacing, owner syncs, the
-replay suffix and the snapshot's adoption, and telemetry. About five files by
-concern, pure moves, would let each be read alone. Two things come first. The
-domain suite credits a file to the system whose `Name` it declares (`declaredName`),
-so it must learn to credit a file by its methods' receiver, or each new file is an
-unchecked helper that `TestHelperFilesArePinned` refuses. And the move conflicts
-with every open branch that touches the file, so it waits for a pause between waves
-of netcode work.
+replay suffix and the snapshot's adoption, and telemetry. The netcode is meant to
+plug into other projects, so the first step moves every part that is not this
+game's to the package that should own it, `pkg/network` or one beside it: the
+sequence `window`, the barrier's schedule of artifacts by apply tick and source,
+the replay suffix, the relay tree (`up`, `down`, `carries`, `behind`,
+`Downstream`), the flooding of departures, and the lead's pacing (`paceDecision`,
+`driveOwnLead`). A `pkg/` package imports nothing under `internal/`, so what moves
+takes a frame type of its own or a type parameter where it holds `event.WireBatch`,
+and a small interface where it reads the world, the log or the status registry.
+What stays is the game's: a cursor's owner syncs (`readCursorState`, D-13), the
+actor a crossing may name (`actsAsOwn`), the status cells and the ECS hooks.
+
+Then what stays splits by concern, as pure moves. The domain suite credits a file
+to the system whose `Name` it declares (`declaredName`), so it must first credit a
+file by its methods' receiver, or each new file is an unchecked helper that
+`TestHelperFilesArePinned` refuses. Both steps conflict with every open branch on
+the file, so they wait for a pause between waves of netcode work.
 
 ## Session membership
 
