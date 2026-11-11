@@ -74,7 +74,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed: a join whose link cannot carry one whole world per floor window is refused (`Corrections.AdmitLink`). Past admission it is reported as `snapshot.cadence_floor_breached` (D-24): by the authority for a link whose plan cannot hold it, and by a guest no whole world reached within the floor plus its grace. |
 | Playout lead | Per participant (§3.5): the worst recent age at which the authority committed its epochs, read off the committed copies, plus a relay tick; a participant behind a relay reads it off the same copies. The authority's is one tick. Nobody defers by anyone else's. Changes are local, journaled events. |
 | Commit and pacing | The authority commits every guest crossing — as stamped, late at its next tick, or void past `NetworkCommitLateTicks` — and relays only the committed copy. Every guest paces its tick interval so the authority's epochs land inside its band. A participant whose own crossings stay late is evicted by policy (§3.5). |
-| Mesh and relay | The session is a tree rooted at the authority. Raw epochs and syncs go up a participant's one link toward it — the authority, else the relay it joined through or adopted — bundled with those of the participants behind it; committed epochs, owner state, correction chunks and the producer's own committed copy go down, to the links that send raw artifacts or were served a join, a leaf's own copy as its age alone; succession records and departure notices flood every link. Each has its own duplicate suppression (epoch and sequence windows, sync sequence, chunk assembly, record content). A relay serves selective repair to the participants behind it from retained authority content, bounded by the transfer ceiling since it has no whole world to send instead, asks the authority for a whole world it cannot author, which reaches them through it, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. The authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any. |
+| Mesh and relay | The session is a tree rooted at the authority. Raw epochs and syncs go up a participant's one link toward it — the authority, else the relay it joined through or adopted — bundled with those of the participants behind it; committed epochs, owner state, correction chunks and the producer's own committed copy go down, to the links that send raw artifacts or were served a join, a leaf's own copy as its age alone; succession records and departure notices flood every link. Each has its own duplicate suppression (epoch and sequence windows, sync sequence, chunk assembly, record content). A relay serves selective repair to the participants behind it from retained authority content, bounded by the transfer ceiling since it has no whole world to send instead, asks the authority for a whole world it cannot author, which reaches them through it, forwards its own committed copies to them, and names each with the tick it last proved in its own answer, which the authority's floor and flood count as a direct answer. The authority takes a participant's raw artifacts on its own link, else its holder's, else — a person behind a relay — on any, and retires one it holds no link to once it has had no news of it for the silence window (§5.4). |
 | Reachability | In a migrate session a guest binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList`. Every participant holds a link to the first candidate. `-no-advertise`, a failed bind, or `-authority host` leaves a participant a leaf: it plays normally and is never a candidate (§5.1, §5.3). |
 | Host loss | `-authority migrate` (default off `-serve`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. `-authority host` (default on `-serve`): nobody takes it, and every survivor continues alone once its redial ends. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
@@ -454,11 +454,13 @@ guest's is refused (`speedRefused`). A joiner adopts the rate its offer's anchor
 names (`configForJoin`), a script's or bot's pace included, and every driven run
 paces at its own clock's rate, which the crossing moves on a seat as on its holder.
 The authority's per-second budgets (`driveEviction`, `driveIngress`) count a second
-of game time, and a window the rate changed in starts over, grace for eviction. A
-replay presents the run at the rate its clock held, which the journal's opening
-anchor names and its records move. Nothing caps the rate: the host chooses it, every
-status bar shows it, and an authority that cannot keep it sheds load (§3.5). A guest
-on its host's machine at 8x held a lead of 3 to 4 ticks, 19 to 25 ms.
+of game time, and a window the rate changed in starts over, grace for eviction; its
+silence window (§5.4) is wall time over its ticks at the rate, 15 s at any, and
+starts over the same way. A replay presents the run at the rate its clock held,
+which the journal's opening anchor names and its records move. Nothing caps the
+rate: the host chooses it, every status bar shows it, and an authority that cannot
+keep it sheds load (§3.5). A guest on its host's machine at 8x held a lead of 3 to
+4 ticks, 19 to 25 ms.
 
 ## 4. Correction pipeline
 
@@ -471,7 +473,9 @@ participant is behind reports its lost link: the authority any link it holds, a
 guest one that joined through it or was behind it (`NetworkSystem.down`), since the
 loss of a link beside leaves the participant carried and its departure would close
 every link it has. The authority turns the report into one departure at one apply
-tick, which leaves the participant's cursor waiting as a **Wraith** (§5.4).
+tick, which leaves the participant's cursor waiting as a **Wraith** (§5.4). A
+person nobody is left to report, its relay gone, the authority retires on its own
+word once it has had no news of it for the silence window (§5.4).
 A mid-run join is admitted to transport before its capture is read, so
 traffic produced during transfer is buffered rather than lost. The join waits for
 a capture far enough past admission to include pre-admission epochs and refuses a
@@ -847,6 +851,27 @@ closed is only ever away. A Wraith counts as a guest, so a dedicated host stays
 occupied and its clock runs while one waits, which is what lets its wait run out.
 A defeat is the players left: a Wraith neither loses nor holds one up.
 
+**Unheard.** A person whose relay left, with no other path found, is behind nobody
+who would see its link go. The authority keeps its own news of each participant,
+every epoch of its it commits and every roster change of its it crosses
+(`NetworkResource.Heard`), and crosses the plain departure of a person it holds no
+link to once that news is `NetworkSilenceWindow` old (15 s, `Authority.driveSilence`).
+The window is wall time counted in the authority's own ticks at the rate played,
+300 of the default tick at 1x and 2400 at 8x, so a hold or a stalled host costs
+none and no guest's wait under one reads as silence, and a person lost under a hold
+is retired a window after it ends
+([todo](todo.md#close-what-a-relayed-players-departure-still-leaves-open)); a new
+game or a new rate starts it over, a succession's floor judges first (§5.2), a bot
+waits or goes with its holder, and a run with no transport, a replay, judges
+nobody. It is three succession windows:
+one cut off redials its relay for one and dials every candidate through two more
+(§5.1), and the dial of a key coming back, retried for `SessionRejoinWindow`,
+outlasts it. A run that sends nothing that long with its links up, a frozen loop,
+waits as a Wraith as well: its relay closes its link as the departure applies, and
+a player's run redials the relay's door and takes the place back by its key. One
+that finds another path only after the window plays on unheard
+([todo](todo.md#hear-a-participant-again-once-its-link-reopens)).
+
 **Coming back.** Each place is held under a **participant key**: an Ed25519 pair the
 participant's process makes for it (`PlaceKeeper`, `network.Key`) and whose public
 half the roster entry and the cursor carry, so a successor's roster carries it too.
@@ -911,8 +936,9 @@ driven by nobody, its own participant included, until that arrival.
 A key whose place is still linked, which the host has not yet seen go, closes that
 link (`Membership.closeStaleLink`): its departure crosses as any lost link's does, and the
 dial is refused `RefusalReturning`, which it retries in a moment into the place. A
-place held through a relay waits for the relay to see its link go, and one another
-dial is taking back is refused the same way. The roster carries public keys alone
+place held through a relay waits for the relay to see its link go, or with the
+relay gone for the silence window, and one another dial is taking back is refused
+the same way. The roster carries public keys alone
 and a proof is good for one nonce at one door, so no other peer can take a place
 from what it reads; a relay carries a dial's proofs to the authority over a
 challenge it asked the authority for (`RelayNonce`), so it can take none either. A
@@ -1237,14 +1263,15 @@ playout buffer, the knockback an artifact rather than a stream position determin
 the identity an explosion's re-derived hits inherit from it, the knockback window
 every attacker shares, the one reward a shared death pays however many times a
 rollback makes a guest derive it, the eviction that drops only the participant that
-stays late, the domain a capture's RNG streams may carry, the placement budget and
-the storm burst a shared stream draws before it reads a live position, the
-owner-state sync an install must not stall, the agreed tick a shared-identity
-crossing waits for on its own producer, and the peer link and succession chain
-rules that make a successor reachable. It also forces a capture to enter and
-retire a quasar while the receiver skips the release transition, and round-trips a
-delayed transition action by compiled identity. Run the generation and repository
-gates after focused network tests:
+stays late, the silence window that retires a person its relay left behind, the
+domain a capture's RNG streams may carry, the placement budget and the storm burst
+a shared stream draws before it reads a live position, the owner-state sync an
+install must not stall, the agreed tick a shared-identity crossing waits for on its
+own producer, and the peer link and succession chain rules that make a successor
+reachable. It also forces a capture to enter and retire a quasar while the receiver
+skips the release transition, and round-trips a delayed transition action by
+compiled identity. Run the generation and repository gates after focused network
+tests:
 
 ```sh
 go generate ./internal/manifest

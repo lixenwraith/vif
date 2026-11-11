@@ -1385,6 +1385,10 @@ type NetworkResource struct {
 	// crossing past the tick it named while it was authoring: the eviction input.
 	CommitLate [parameter.MaxPlayers + 2]atomic.Uint64
 
+	// Heard counts, per participant, the epochs this instance admitted while it was
+	// authoring and the roster changes it crossed: its news of one it holds no link to.
+	Heard [parameter.MaxPlayers + 2]atomic.Uint64
+
 	// Ingress counts, per link, the frame bytes this instance drained from it: what
 	// the authority budgets a link by, per participant it carries.
 	Ingress [parameter.MaxPlayers + 2]atomic.Uint64

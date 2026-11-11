@@ -521,6 +521,38 @@ func TestOnlyTheNeighbourAParticipantIsBehindAnnouncesItsLostLink(t *testing.T) 
 	}
 }
 
+// TestAPersonLeftBehindALostRelayDepartsOnceUnheard: the authority hears a person it
+// holds no link to through the relays that carry it, however long the session runs.
+// Once a relay is gone it has no news of those behind it, and a silence window later
+// crosses each one's departure, so they wait as Wraiths as the relay does; a new game
+// the session reaches meanwhile starts the window over.
+func TestAPersonLeftBehindALostRelayDepartsOnceUnheard(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA3A6, 4, [][2]int{{1, 2}, {2, 3}, {3, 4}})
+	localCursors(t, apps)
+	host, window := apps[0], int(parameter.NetworkSilenceWindow/parameter.GameUpdateInterval)
+	waiting := func() string {
+		return fmt.Sprintf("the relay %t, those behind it %t and %t", wraithIn(host, 1), wraithIn(host, 2), wraithIn(host, 3))
+	}
+	for range window + window/2 {
+		tickAll(apps)
+	}
+	if got := waiting(); got != "the relay false, those behind it false and false" {
+		t.Fatalf("carried for longer than the window, the host holds as Wraiths %s", got)
+	}
+
+	closeParticipant(apps[1])
+	for n := 0; !wraithIn(host, 2) || !wraithIn(host, 3); n++ {
+		if n > 2*window+parameter.NetworkBarrierMaxDelayTicks {
+			t.Fatalf("two windows after the relay left, the host holds as Wraiths %s", waiting())
+		}
+		if got := waiting(); n == window/2 && got != "the relay true, those behind it false and false" {
+			t.Fatalf("half a window after the relay left, the host holds as Wraiths %s", got)
+		}
+		host.Tick(1)
+	}
+}
+
 // wireBytes is what one participant has sent and received in total, which is the
 // measurement the relayed path is compared against the direct one by.
 func wireBytes(a *App) (manifest, shard, correction int64) {

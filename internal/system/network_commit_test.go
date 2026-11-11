@@ -258,6 +258,36 @@ func TestARawEpochOnAnotherLinkIsRefused(t *testing.T) {
 	}
 }
 
+// TestAnAuthorityCountsItsNewsOfAParticipant: each epoch of a participant the
+// authority commits is news of it, on whichever link carries one it holds no link
+// to, and so is each roster change of its the authority crosses; a copy of an epoch
+// is none, nor one claimed committed, nor one a guest passes on.
+func TestAnAuthorityCountsItsNewsOfAParticipant(t *testing.T) {
+	t.Parallel()
+	news := func(of *NetworkSystem) uint64 { return of.world.Resources.Network.Heard[3].Load() }
+	s := sessionSystem(t, 1, 100, &linkedPort{peers: []uint32{2}})
+	s.barrierActive.Store(true) // what this authority crosses, its barrier schedules
+	s.scheduleCrossings(2, rawBatch(t, 3, 99))
+	s.scheduleCrossings(2, rawBatch(t, 3, 99))
+	s.scheduleCrossings(2, boundsBatch(t, 3, 98, 105, 1, 0))
+	if got := news(s); got != 1 {
+		t.Fatalf("an epoch on its relay's link, a copy of it and one claimed committed counted %d times, want once", got)
+	}
+	s.world.RunSafe(func() {
+		s.crossSession(event.EventParticipantDeparted, &event.ParticipantDepartedPayload{Participant: 3, Slot: 2})
+		s.crossSession(event.EventParticipantJoined, &event.ParticipantJoinedPayload{Participant: 3, Slot: 2})
+	})
+	if got := news(s); got != 3 {
+		t.Fatalf("a departure and an arrival the authority crossed left the count at %d, want 3", got)
+	}
+	guest := sessionSystem(t, 2, 100, &linkedPort{peers: []uint32{1, 3}})
+	guest.Carry(3)
+	guest.scheduleCrossings(3, rawBatch(t, 3, 99))
+	if got := news(guest); got != 0 {
+		t.Fatalf("a guest counted %d of the epochs it passes on", got)
+	}
+}
+
 // TestAGuestSendsTheAuthorityWhatItCarriesThenItsOwn: a guest linked to the
 // authority sends it alone the raw epochs it carries for the participants behind
 // it, as they arrive, and its own when its tick closes; the link bundles them.

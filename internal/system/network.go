@@ -1073,9 +1073,23 @@ func (s *NetworkSystem) crossSettled(completedTick uint64, active bool) {
 	}
 }
 
+// heard counts the authority's news of a participant: an epoch of its admitted, or a
+// roster change of its crossed, which speaks for it until it applies.
+func (s *NetworkSystem) heard(participant uint32) {
+	if r := s.world.Resources.Network; r != nil && int(participant) < len(r.Heard) {
+		r.Heard[participant].Add(1)
+	}
+}
+
 // schedule encodes one own crossing into the open epoch and onto this instance's
 // barrier, at the apply tick its lead gives it.
 func (s *NetworkSystem) schedule(ev event.GameEvent) {
+	switch p := ev.Payload.(type) {
+	case *event.ParticipantJoinedPayload:
+		s.heard(p.Participant)
+	case *event.ParticipantDepartedPayload:
+		s.heard(p.Participant)
+	}
 	s.mu.Lock()
 	// Named before it is encoded, so this instance's own copy and every peer's
 	// carry one identity: a payload whose shared outcome needs a value no receiver
@@ -2535,6 +2549,9 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		if r := s.world.Resources.Network; r != nil && r.OnAuthorityAhead != nil && batch.ProducedTick > s.localTick() {
 			r.OnAuthorityAhead()
 		}
+	}
+	if committing && admitted {
+		s.heard(batch.Source)
 	}
 	if late > 0 {
 		s.statCommitLate.Add(int64(late))
