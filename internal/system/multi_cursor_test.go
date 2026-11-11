@@ -267,6 +267,66 @@ func TestAnArrivalIntoItsOwnWraithTakesItBack(t *testing.T) {
 	}
 }
 
+// TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds: a participant's spawn request
+// that finds a reset's roster pending leaves it for the boot's, which builds the
+// arrival with the rest and in slot order: this run's own under its control, and
+// one back in its Wraith's place. No slot, another's or one held live is refused.
+func TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+	failed := 0
+	ask := func(t event.EventType, p any) {
+		cursors.HandleEvent(event.GameEvent{Type: t, Payload: p})
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if ev.Type == event.EventCursorSpawnFailed {
+				failed++
+			}
+		}
+	}
+	arrive := func(slot uint8, peer uint32, control component.ControlKind) {
+		ask(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Slot: slot, Center: true,
+			Control: uint8(control), PeerID: peer, Holder: 4, Key: "key", Name: "name"})
+	}
+	w.Resources.Player.PrepareRestore([]engine.CursorRosterEntry{
+		{Slot: 0, PeerID: 1, Control: component.ControlRemote},
+		{Slot: 2, PeerID: 7, Control: component.ControlRemote, Wraith: true},
+		{Slot: 3, PeerID: 8, Control: component.ControlRemote},
+	})
+	ask(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{All: true}) // the reset clears the world
+
+	arrive(parameter.MaxPlayers, 5, component.ControlRemote) // no such slot
+	arrive(2, 6, component.ControlRemote)                    // another's Wraith
+	arrive(0, 1, component.ControlRemote)                    // its own, held live
+	arrive(1, 9, component.ControlLocal)
+	arrive(2, 7, component.ControlRemote)
+	if n := w.Resources.Player.Count(); n != 0 {
+		t.Fatalf("%d cursor(s) spawned ahead of the boot's request", n)
+	}
+	ask(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Center: true})
+	if failed != 0 {
+		t.Fatalf("the boot's request failed %d spawn(s), want every cursor of the roster built", failed)
+	}
+
+	roster := w.Resources.Player
+	var last core.Entity
+	for slot, want := range []component.CursorComponent{
+		{Slot: 0, PeerID: 1, Control: component.ControlRemote},
+		{Slot: 1, PeerID: 9, Holder: 4, Control: component.ControlLocal, Key: "key", Name: "name"},
+		{Slot: 2, PeerID: 7, Holder: 4, Control: component.ControlRemote, Key: "key", Name: "name"},
+		{Slot: 3, PeerID: 8, Control: component.ControlRemote},
+	} {
+		e := roster.Slot(uint8(slot))
+		if c, _ := w.Components.Cursor.GetComponent(e); c != want || w.Components.Wraith.HasEntity(e) || e <= last {
+			t.Fatalf("slot %d holds entity %d after %d, %+v, a Wraith %t; want %+v live, built in slot order",
+				slot, e, last, c, w.Components.Wraith.HasEntity(e), want)
+		}
+		last = e
+	}
+	if roster.LocalSlot() != 1 || roster.Entity != roster.Slot(1) {
+		t.Fatalf("this run drives slot %d, entity %d; want its own arrival in slot 1", roster.LocalSlot(), roster.Entity)
+	}
+}
+
 // TestRemoteCursorRejectsOwnerAuthoredWrites is the D-2 admission check: every
 // owner-authored writer refuses a cursor this instance does not simulate, so a
 // transported value is the single authority for that cell (D-13).

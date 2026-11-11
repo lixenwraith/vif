@@ -1822,6 +1822,63 @@ func TestAResetKeepsADepartureItInterrupted(t *testing.T) {
 	}
 }
 
+// TestAResetKeepsAnArrivalItInterrupted: a participant whose arrival crosses as a new
+// game begins plays in that game on every instance, and the game starts: its arrival
+// due at the reset's own tick, ahead of it or behind, or scheduled past it.
+func TestAResetKeepsAnArrivalItInterrupted(t *testing.T) {
+	t.Parallel()
+	for _, shape := range []struct {
+		name  string
+		ahead bool // the arrival crosses ahead of the new game
+		ticks int  // between the new game's crossing and the arrival's
+	}{{"at the reset's tick, ahead of it", true, 0}, {"at the reset's tick, behind it", false, 0}, {"past the reset", false, 1}} {
+		apps := meshSession(t, 0xA3A6, 2, [][2]int{{1, 2}})
+		localCursors(t, apps)
+		for range 10 {
+			tickAll(apps)
+		}
+		arrive := func() {
+			apps[0].World().RunSafe(func() {
+				apps[0].World().PushEventFull(event.EventParticipantJoined,
+					&event.ParticipantJoinedPayload{Participant: 3, Slot: 2}, event.OriginSession, core.DomainPlayer)
+			})
+		}
+		if shape.ahead {
+			arrive()
+		}
+		mode.ExecuteCommand(apps[0].Context(), "n")
+		if !shape.ahead {
+			if shape.ticks > 0 {
+				apps[0].Settle()
+			}
+			for range shape.ticks {
+				tickAll(apps)
+			}
+			arrive()
+		}
+		apps[0].Settle()
+		for range 2*parameter.NetworkBarrierDelayTicks + 8 {
+			tickAll(apps)
+		}
+		for i, a := range apps {
+			var seated bool
+			var state string
+			a.World().RunSafe(func() {
+				w := a.World()
+				e := w.Resources.Player.Slot(2)
+				c, _ := w.Components.Cursor.GetComponent(e)
+				seated = e != 0 && c.PeerID == 3 && !w.Components.Wraith.HasEntity(e)
+				state = w.Resources.Status.Strings.Get("fsm.state").Load()
+			})
+			if got := a.Position().Run; got != 1 || !seated || state == "" {
+				t.Fatalf("%s: participant %d in run %d holds the arrival in slot 2 %t, its game in state %q; want run 1, seated, started",
+					shape.name, i+1, got, seated, state)
+			}
+		}
+		assertMeshParity(t, apps, 0)
+	}
+}
+
 // TestOneSharedQuasarTriggerProducesOneSpawn is the MainEscalate fan-out: one shared
 // decision reaches every participant's player-domain FuseSystem. It is one logical
 // fusion and therefore must yield one shared spawn request, not N.

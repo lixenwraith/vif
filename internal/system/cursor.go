@@ -148,6 +148,13 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 	roster := s.world.Resources.Player
 	roster.SetInitialResources(p.Heat, p.Energy)
 
+	// An arrival applying at a reset's own tick joins the roster the boot rebuilds:
+	// taking it as this request's own would leave the boot's nothing to build.
+	if p.PeerID != 0 && roster.JoinRestore(engine.CursorRosterEntry{Slot: p.Slot, Control: component.ControlKind(p.Control),
+		PeerID: p.PeerID, Holder: p.Holder, Key: p.Key, Name: p.Name}) {
+		return
+	}
+
 	// A full reset rebuilds the session roster through the normal scripted boot
 	// request. The request supplies the configuration template; the pending entries
 	// supply only membership and per-instance control assignments. A Wraith is

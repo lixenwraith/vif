@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -469,7 +470,10 @@ func TestADepartureAResetInterruptedIsAnnouncedAgain(t *testing.T) {
 			w.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: 2})
 			settle(w)
 			noticed(w, net)
-		}, after: func(w *engine.World, _ *NetworkSystem) { spawnRemoteCursor(t, w, 2, 25, 5, 7) }, want: []departure{plain}},
+		}, after: func(w *engine.World, _ *NetworkSystem) { // the boot's request rebuilds the roster
+			w.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Center: true})
+			settle(w)
+		}, want: []departure{plain}},
 		"scheduled, and noticed again":                   {interrupted: scheduled(plain), after: noticed, want: []departure{plain}},
 		"discarded before it crossed, and noticed again": {interrupted: noticed, after: noticed, want: []departure{plain}},
 		"forged by a guest": {interrupted: func(_ *engine.World, net *NetworkSystem) {
@@ -505,10 +509,108 @@ func TestADepartureAResetInterruptedIsAnnouncedAgain(t *testing.T) {
 	}
 }
 
+// TestAnArrivalAResetInterruptedIsCrossedAgain: an arrival a reset finds still
+// scheduled is crossed again as it was, once, by the authority, into the Wraith its
+// participant left too; one applied already, forged, or held by a guest, is not. It
+// stands for a departure ahead of it, and one behind it is crossed after it.
+func TestAnArrivalAResetInterruptedIsCrossedAgain(t *testing.T) {
+	type world = func(*engine.World, *NetworkSystem)
+	arrival := event.ParticipantJoinedPayload{Participant: 7, Slot: 2, Key: "key", Name: "name",
+		Record: &event.CursorRecord{Charges: []int{0, 3}, Energy: 4321}}
+	left := event.ParticipantDepartedPayload{Participant: 7, Slot: 2}
+	cross := func(net *NetworkSystem, t event.EventType, p any) {
+		net.schedule(event.GameEvent{Type: t, Payload: p, Origin: event.OriginSession, Domain: core.DomainPlayer})
+	}
+	scheduled := func(_ *engine.World, net *NetworkSystem) { cross(net, event.EventParticipantJoined, &arrival) }
+	leaves := func(_ *engine.World, net *NetworkSystem) { cross(net, event.EventParticipantDeparted, &left) }
+	settle := func(w *engine.World, _ *NetworkSystem) { // the cursor system takes what was asked of it
+		cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			cursors.HandleEvent(ev)
+		}
+	}
+	waits := func(w *engine.World, net *NetworkSystem) { // its departure applied, its Wraith waits
+		leaves(w, net)
+		net.applyDue(net.lastApplyTick)
+		net.removeParticipant(&left)
+		settle(w, net)
+	}
+	dropped := func(w *engine.World, net *NetworkSystem) { // its link goes while the reset has its Wraith cleared
+		net.departed[7] = false // a reset before this one cleared a Wraith's mark
+		w.Resources.Player.PrepareRestore([]engine.CursorRosterEntry{{Slot: 2, PeerID: 7, Control: component.ControlRemote, Wraith: true}})
+		w.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: 2})
+		settle(w, net)
+		net.noticeDeparture(7, false)
+	}
+	boot := func(w *engine.World, net *NetworkSystem) { // the boot's request rebuilds the roster
+		w.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{Center: true})
+		settle(w, net)
+	}
+	all := func(steps ...world) world {
+		return func(w *engine.World, net *NetworkSystem) {
+			for _, step := range steps {
+				step(w, net)
+			}
+		}
+	}
+	crossed := func(w *engine.World) (changes []any) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.ParticipantJoinedPayload:
+				changes = append(changes, *p)
+			case *event.ParticipantDepartedPayload:
+				changes = append(changes, *p)
+			}
+		}
+		return changes
+	}
+	for name, tc := range map[string]struct {
+		interrupted world // what the reset finds
+		after       world // what the new game sees before its first flush
+		want        []any
+	}{
+		"scheduled":                      {interrupted: scheduled, want: []any{arrival}},
+		"scheduled into its Wraith":      {interrupted: all(waits, scheduled), want: []any{arrival}},
+		"scheduled behind its departure": {interrupted: all(leaves, scheduled), want: []any{arrival}},
+		"scheduled into its Wraith, ahead of its departure": {
+			interrupted: all(waits, scheduled, leaves), want: []any{arrival, left}},
+		"scheduled into its Wraith, its link lost as the reset rebuilt it": {
+			interrupted: all(waits, scheduled, dropped), after: boot, want: []any{arrival, left}},
+		"applied already": {interrupted: func(w *engine.World, net *NetworkSystem) {
+			scheduled(w, net)
+			net.applyDue(net.lastApplyTick)
+		}},
+		"forged by a guest": {interrupted: func(w *engine.World, net *NetworkSystem) {
+			scheduled(w, net)
+			net.scheduled[len(net.scheduled)-1].source = 2
+		}},
+		"held by a guest": {interrupted: scheduled,
+			after: func(w *engine.World, _ *NetworkSystem) { w.Resources.Network.Authority.Store(2) }},
+	} {
+		w, net, _ := holderWorld(t)
+		port := w.Resources.Network.Port
+		tc.interrupted(w, net)
+		w.Resources.Event.Queue.Consume() // the reset discards what was still queued
+		if net.Init(); tc.after != nil {
+			tc.after(w, net)
+		}
+		net.pushSessionRecords(port)
+		if changes := crossed(w); !reflect.DeepEqual(changes, tc.want) {
+			got, _ := json.Marshal(changes) // a record prints as its pointer otherwise
+			want, _ := json.Marshal(tc.want)
+			t.Fatalf("%s: the new game crossed %s, want %s", name, got, want)
+		}
+		if net.pushSessionRecords(port); len(w.Resources.Event.Queue.Consume()) != 0 {
+			t.Fatalf("%s: an arrival crossed again was crossed twice", name)
+		}
+	}
+}
+
 // TestADepartureWhileAResetRebuildsKeepsItsPlace: a participant whose cursor a
-// reset cleared and is about to rebuild has not left for good, whether a departure
-// or a dismissal applies or its lost link is noticed in between: its identity stays
-// taken until the new game announces it again.
+// reset cleared and is about to rebuild has left nothing yet, whether a departure
+// or a dismissal applies or its lost link is noticed in between: the session layer
+// hears of it when the new game announces it again, and until then keeps its place
+// and takes nobody back into it.
 func TestADepartureWhileAResetRebuildsKeepsItsPlace(t *testing.T) {
 	for name, leave := range map[string]func(*NetworkSystem){
 		"applied": func(net *NetworkSystem) {
@@ -523,8 +625,9 @@ func TestADepartureWhileAResetRebuildsKeepsItsPlace(t *testing.T) {
 		w.Resources.Player.PrepareRestore([]engine.CursorRosterEntry{{Slot: 2, PeerID: 7, Control: component.ControlRemote}})
 		ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorDespawnRequest,
 			Payload: &event.CursorDespawnRequestPayload{Slot: 2}})
-		if leave(net); finals[7] {
-			t.Fatalf("%s: a participant the reset is rebuilding was told gone for good", name)
+		leave(net)
+		if final, told := finals[7]; told {
+			t.Fatalf("%s: the session layer was told a participant the reset is rebuilding left (for good: %v)", name, final)
 		}
 	}
 }

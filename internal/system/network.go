@@ -92,9 +92,9 @@ type NetworkSystem struct {
 	states       []pendingState
 	stateSeen    [parameter.MaxPlayers]uint64
 	rawStateSeen [parameter.MaxPlayers]uint64
-	departed     [participantSlots]bool          // participants already announced or noticed
-	expiring     [participantSlots]bool          // Wraiths whose dismissal this authority has crossed
-	lost         [participantSlots]lostDeparture // departures a reset interrupted, for the new game to announce again
+	departed     [participantSlots]bool       // participants already announced or noticed
+	expiring     [participantSlots]bool       // Wraiths whose dismissal this authority has crossed
+	lost         [participantSlots]lostChange // roster changes a reset interrupted, for the new game to announce again
 	ticks        uint64
 	statSent     *atomic.Int64
 	statRecv     *atomic.Int64
@@ -378,12 +378,13 @@ type settlingDefeat struct {
 	settleAt uint64
 }
 
-// lostDeparture is a departure a reset interrupted: crossed is one the barrier held
-// when the reset cleared it, marked a lost link noticed while the reset had cleared
-// its participant's cursor, and how the way it leaves.
-type lostDeparture struct {
-	how             event.ParticipantDepartedPayload
-	marked, crossed bool
+// lostChange is what a reset interrupted of one participant's place: an arrival the
+// barrier still held (arrived), a departure it held (crossed), a lost link noticed
+// while the reset had cleared its cursor (marked), and how the departure has it leave.
+type lostChange struct {
+	arrival                  event.ParticipantJoinedPayload
+	how                      event.ParticipantDepartedPayload
+	arrived, marked, crossed bool
 }
 
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick,
@@ -544,24 +545,30 @@ func (s *NetworkSystem) Init() {
 	s.world.Resources.Event.Queue.SetWireSink(s)
 }
 
-// keepLost keeps, across the reset about to clear the barrier, how each departure
-// it would have applied has its participant leave: one still scheduled, or one
-// applied whose participant is still marked departed, which an arrival since would
-// have cleared. The new game rebuilds their cursors, so it announces them again
-// (announceLost); until then they alone stay marked, so a notice for one is a repeat.
+// keepLost keeps, across the reset about to clear the barrier, each roster change
+// it would have applied: an arrival or a departure still scheduled, or a departure
+// applied whose participant no arrival since has cleared the mark of. The new game
+// announces them again (announceLost); until then the departed alone stay marked,
+// so a notice for one is a repeat. An arrival stands for a departure ahead of it.
 func (s *NetworkSystem) keepLost() {
 	keep := func(artifacts []barrierArtifact, applied bool) {
 		for _, a := range artifacts {
 			et := a.frame.Event
-			if et != event.EventParticipantDeparted || !s.admissibleFromSource(et, nil, a.source, a.authored) {
+			if et != event.EventParticipantDeparted && et != event.EventParticipantJoined ||
+				!s.admissibleFromSource(et, nil, a.source, a.authored) {
 				continue
 			}
-			v, err := a.frame.Decode()
-			p, ok := v.(*event.ParticipantDepartedPayload)
-			if err != nil || !ok || int(p.Participant) >= len(s.lost) || applied && !s.departed[p.Participant] {
-				continue
+			switch v, _ := a.frame.Decode(); p := v.(type) {
+			case *event.ParticipantJoinedPayload: // one applied is in the roster the reset rebuilds
+				if int(p.Participant) < len(s.lost) && !applied {
+					l := &s.lost[p.Participant]
+					l.arrival, l.arrived, l.crossed = *p, true, false
+				}
+			case *event.ParticipantDepartedPayload:
+				if int(p.Participant) < len(s.lost) && (!applied || s.departed[p.Participant]) {
+					s.lost[p.Participant].how, s.lost[p.Participant].crossed = *p, true
+				}
 			}
-			s.lost[p.Participant].how, s.lost[p.Participant].crossed = *p, true
 		}
 	}
 	s.mu.Lock()
@@ -758,10 +765,11 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	if r := s.world.Resources.Network; r != nil && r.OnDropped != nil && p.Dropped && held && c.Key != "" {
 		r.OnDropped(c.Key, p.Slot)
 	}
-	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
-		// A participant with no cursor has nothing to wait in, so it leaves for good,
-		// unless a reset at this tick is rebuilding it: the new game announces it again.
-		r.OnDeparture(p.Participant, (p.Dismissed || !held) && !s.world.Resources.Player.Restores(p.Participant))
+	// A participant with no cursor has nothing to wait in, so it leaves for good. One
+	// a reset at this tick is rebuilding has left nothing yet: the session layer hears
+	// when the new game's announcement applies, and takes nobody back ahead of it.
+	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil && !s.world.Resources.Player.Restores(p.Participant) {
+		r.OnDeparture(p.Participant, p.Dismissed || !held)
 	}
 	if port, ok := s.port().(engine.PeerDroppingPort); ok {
 		port.Disconnect(p.Participant)
@@ -802,7 +810,7 @@ func (s *NetworkSystem) LeaveSession() {
 	// closing; the session it plays on in, or joins next, has it on again.
 	s.enabled = true
 	s.states = s.states[:0] // owner syncs are other participants'; an own one is only forwarded
-	s.lost = [participantSlots]lostDeparture{}
+	s.lost = [participantSlots]lostChange{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	local := s.localSource
@@ -1536,23 +1544,29 @@ func (s *NetworkSystem) pushSessionRecords(p engine.NetworkPort) {
 	}
 }
 
-// announceLost announces again each departure a reset interrupted, to the cursor the
-// new game has rebuilt for its participant: a live one, or any for a dismissal. The
-// authority crosses again what the barrier held, as it was; a link lost while its
-// cursor was cleared is announced by whoever saw it go.
+// announceLost announces again each roster change a reset interrupted: an arrival,
+// then a departure, to the cursor the arrival fills or the new game has rebuilt for
+// its participant, a live one, or any for a dismissal. The authority crosses again
+// what the barrier held, as it was; a link lost while its cursor was cleared is
+// announced by whoever saw it go.
 func (s *NetworkSystem) announceLost(p engine.NetworkPort) {
 	lost := s.lost
-	s.lost = [participantSlots]lostDeparture{}
+	s.lost = [participantSlots]lostChange{}
 	if p == nil || !p.IsRunning() {
 		return
 	}
 	for id, d := range lost {
+		if d.arrived && s.isCoordinator() {
+			s.world.Log().Info("session", "msg", "arrival crossed again after a reset",
+				"participant", id, "slot", int(d.arrival.Slot))
+			s.crossSession(event.EventParticipantJoined, &d.arrival)
+		}
 		if !d.marked && !d.crossed {
 			continue
 		}
 		_, rebuilt := s.participantSlot(uint32(id))
 		switch {
-		case !rebuilt || !d.how.Dismissed && s.away(uint32(id)):
+		case !d.arrived && (!rebuilt || !d.how.Dismissed && s.away(uint32(id))):
 		case d.crossed && s.isCoordinator():
 			s.world.Log().Info("session", "msg", "departure crossed again after a reset",
 				"participant", id, "slot", int(d.how.Slot), "dismissed", d.how.Dismissed)
@@ -1810,7 +1824,7 @@ func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32, dismissed 
 	if !ok {
 		// A reset cleared its cursor and is about to rebuild it: announced once it has
 		if s.world.Resources.Player.Restores(peerID) {
-			s.lost[peerID] = lostDeparture{how: event.ParticipantDepartedPayload{Dismissed: dismissed}, marked: true}
+			s.lost[peerID] = lostChange{how: event.ParticipantDepartedPayload{Dismissed: dismissed}, marked: true}
 		}
 		return true
 	}
@@ -3263,7 +3277,7 @@ type networkState struct {
 	lastSync, stateSeen, rawStateSeen          [parameter.MaxPlayers]uint64
 	states                                     []pendingState
 	departed, expiring                         [participantSlots]bool
-	lost                                       [participantSlots]lostDeparture
+	lost                                       [participantSlots]lostChange
 	suffix                                     []localCrossing
 	paceSamples                                [parameter.NetworkPaceWindow]int64
 	paceCount                                  int

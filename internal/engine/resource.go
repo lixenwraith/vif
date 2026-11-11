@@ -546,6 +546,32 @@ func (pr *PlayerResource) Restores(peerID uint32) bool {
 	return false
 }
 
+// JoinRestore adds a participant arriving at a reset's own tick to the roster pending
+// behind World.Clear, in slot order or over the entry its own Wraith left, and
+// reports whether a reset is pending: its spawn is then the boot's to make.
+func (pr *PlayerResource) JoinRestore(e CursorRosterEntry) bool {
+	if pr.restoreCount == 0 {
+		return false
+	}
+	i := 0
+	for i < pr.restoreCount && pr.restore[i].Slot < e.Slot {
+		i++
+	}
+	held := i < pr.restoreCount && pr.restore[i].Slot == e.Slot
+	if int(e.Slot) >= len(pr.restore) || held && (pr.restore[i].PeerID != e.PeerID || !pr.restore[i].Wraith) {
+		return true // no such slot, or one only its own Wraith gives up: refused as a spawn is
+	}
+	if !held {
+		copy(pr.restore[i+1:], pr.restore[i:pr.restoreCount])
+		pr.restoreCount++
+	}
+	pr.restore[i] = e
+	if e.Control == component.ControlLocal {
+		pr.restoreLocal = e.Slot
+	}
+	return true
+}
+
 // TakeRestore returns and clears the reset roster pending behind World.Clear.
 func (pr *PlayerResource) TakeRestore() ([parameter.MaxPlayers]CursorRosterEntry, int, uint8) {
 	entries, count, local := pr.restore, pr.restoreCount, pr.restoreLocal
