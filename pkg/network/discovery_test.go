@@ -18,7 +18,8 @@ var testBeacon = Beacon{
 }
 
 // loopbackDiscovery is a discovery whose only network is this machine, sending to
-// port there and nowhere on the network the test runs in.
+// its port there and nowhere on the network the test runs in. With no port named
+// it binds one the system gives it, which no other test can hold.
 func loopbackDiscovery(t *testing.T, cfg DiscoveryConfig) *Discovery {
 	t.Helper()
 	cfg.Subnets = func() []netip.Prefix { return []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")} }
@@ -29,30 +30,19 @@ func loopbackDiscovery(t *testing.T, cfg DiscoveryConfig) *Discovery {
 	return d
 }
 
-// freeUDPPort is a port nothing holds now, for a test's discovery to bind.
-func freeUDPPort(t *testing.T) int {
-	t.Helper()
-	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Close()
-	return c.LocalAddr().(*net.UDPAddr).Port
-}
-
-// visibleHost announces testBeacon on port, with a period no test outlasts: what
-// reaches a looking run is its answer to a probe.
-func visibleHost(t *testing.T, port int) *Discovery {
+// visibleHost announces testBeacon, with a period no test outlasts: what reaches a
+// looking run is its answer to a probe. It returns the port the host hears on.
+func visibleHost(t *testing.T) int {
 	t.Helper()
 	listening := make(chan bool, 1)
-	host := loopbackDiscovery(t, DiscoveryConfig{Port: port, Interval: time.Hour, Expiry: time.Hour,
+	host := loopbackDiscovery(t, DiscoveryConfig{Interval: time.Hour, Expiry: time.Hour,
 		Armed: func() bool { return true }, Beacon: func() *Beacon { return &testBeacon },
 		Listening: func(on bool) { listening <- on }})
 	host.Wake()
 	if !<-listening {
 		t.Fatal("a visible host opened no socket")
 	}
-	return host
+	return host.conn.Load().LocalAddr().(*net.UDPAddr).Port
 }
 
 // FuzzDiscoveryDatagram: a beacon decodes only from the bytes its own encoding
@@ -117,8 +107,7 @@ func TestABeaconNamesTheDoorsOthersReach(t *testing.T) {
 // TestAHostAnswersAFullSizeProbeAlone: a probe cut short is answered with nothing,
 // and a whole one with the beacon, to its source.
 func TestAHostAnswersAFullSizeProbeAlone(t *testing.T) {
-	port := freeUDPPort(t)
-	visibleHost(t, port)
+	port := visibleHost(t)
 	c, err := net.DialUDP("udp4", nil, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port})
 	if err != nil {
 		t.Fatal(err)
@@ -149,9 +138,7 @@ func TestAHostAnswersAFullSizeProbeAlone(t *testing.T) {
 // lists the host that answers at the address it answered from, with the link a
 // join dials; the port the host holds does not stop a run on its machine looking.
 func TestALookingRunListsAVisibleHostAtOnce(t *testing.T) {
-	port := freeUDPPort(t)
-	visibleHost(t, port)
-	looker := loopbackDiscovery(t, DiscoveryConfig{Port: port, Interval: time.Hour, Expiry: time.Hour})
+	looker := loopbackDiscovery(t, DiscoveryConfig{Port: visibleHost(t), Interval: time.Hour, Expiry: time.Hour})
 	deadline := time.Now().Add(5 * time.Second)
 	var found []Found
 	for len(found) == 0 && time.Now().Before(deadline) {
@@ -169,7 +156,7 @@ func TestALookingRunListsAVisibleHostAtOnce(t *testing.T) {
 // TestASessionIsListedOnceWhateverAddressesItAnswersFrom: a host on several
 // networks answers from each, and the list holds its session once, at the lowest.
 func TestASessionIsListedOnceWhateverAddressesItAnswersFrom(t *testing.T) {
-	d := loopbackDiscovery(t, DiscoveryConfig{Port: freeUDPPort(t), Interval: time.Hour, Expiry: time.Hour})
+	d := loopbackDiscovery(t, DiscoveryConfig{Interval: time.Hour, Expiry: time.Hour})
 	other := testBeacon
 	other.Nonce = "ffeeddccbbaa0099"
 	for _, f := range []Found{
@@ -188,7 +175,7 @@ func TestASessionIsListedOnceWhateverAddressesItAnswersFrom(t *testing.T) {
 // starts looking and closes once nobody has asked for the list for Expiry.
 func TestARunThatNeitherAnnouncesNorLooksHoldsNoSocket(t *testing.T) {
 	var open atomic.Int32
-	d := loopbackDiscovery(t, DiscoveryConfig{Port: freeUDPPort(t), Interval: 5 * time.Millisecond, Expiry: 40 * time.Millisecond,
+	d := loopbackDiscovery(t, DiscoveryConfig{Interval: 5 * time.Millisecond, Expiry: 40 * time.Millisecond,
 		Listening: func(on bool) {
 			if on {
 				open.Add(1)
