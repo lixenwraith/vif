@@ -136,18 +136,31 @@ height, the scale of a corner diagonal (1/√3, beside the 1/√2 of
 pattern's area gains a depth, and the slots before and behind an exclusion that
 has one. It goes beside the layer forms and changes no caller of them.
 
-#### Profile td's storm peaks
+#### Trim td's storm ticks
 
-- Priority: P2
-- Affected files: `internal/system/wall.go`, `internal/system/death.go`,
-  `internal/system/navigation.go`
+- Priority: P3
+- Affected files: `internal/system/navigation.go`, `internal/system/storm.go`,
+  `pkg/navigation/flowfield.go`
 - Guide: [Navigation §10](navigation-design.md#10-costs)
 
-Under a raised storm with eight cursors walking, td's ticks where hundreds of
-walls go reach 40–60 ms and compute no field, the wall system's event peaking at
-34–51 ms and navigation at 15–17 ms. The box characters' neighbour test, once the
-suspect, reads a bit of the index's planes now, and td's storms draw none: the
-peak is elsewhere in the walls' death, to be profiled before anything is changed.
+With eight cursors walking and a storm raised, a td storm tick averages 1.9 ms
+and its worst is 12–15 ms of the 50 ms tick (Navigation §10), the snake lock's
+reaches stopping at their choice. Walls going are no peak: 235 at once cost the
+wall and death events 0.3–2 ms, and a storm left alone takes 24 a tick at most.
+What the slowest hundredth of the storm's ticks holds, each measured there:
+
+- Fields, 43%: three fifths point fields, the private fields of the cursors the
+  snake heads lock and the drops follow, recomputed at the cooldown as each
+  cursor walks; two fifths the eyes' composite fields. Settling a field only out
+  to its farthest reader reopens a decision taken on vanguard's numbers
+  (Navigation §12).
+- The eyes' own update, 24%, and the reaches, 21%.
+- A storm circle's X and Y checks each ask for the walls they meet, so a wall in
+  both footprints is asked for twice: twice the requests where 235 go, whose wall
+  event costs 0.1–1 ms.
+
+A td reset is the one place the wall system costs tens of milliseconds, laying
+the maze again (Trim what a tick spends outside the position index).
 
 ## Bots
 
@@ -1768,7 +1781,8 @@ share is measured and none of its code changed:
   third of it under a position read.
 - The route graph (`RouteSolver.Compute`), 12%, and the maze a reset lays again
   (`executeBatchSpawn`), 15%, a third of that `World.componentMask`, a Go map
-  written once a component.
+  written once a component. A reset's tick takes about 20 ms, 15 of them the wall
+  system's event.
 - Three allocations every tick: a `Stamp` in `EventQueue.BeginTick`, one in
   `NextBoundary`, and the system list the membership's off-tick drain copies
   (`World.Systems`).

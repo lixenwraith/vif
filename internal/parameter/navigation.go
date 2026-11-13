@@ -12,6 +12,12 @@ const (
 	// still points the same way everywhere but beside the target, where sight takes over
 	NavFlowSettleTicks = 20
 
+	// NavLockHoldNum over NavLockHoldDen is the most a snake head's locked cursor may
+	// be as a multiple of the nearest's distance and stay locked: a lock holds until
+	// another route is over a third shorter
+	NavLockHoldNum = 3
+	NavLockHoldDen = 2
+
 	// NavRouteRebuildInterval is minimum game ticks between gateway route graph
 	// recomputes, unless the scenario's [navigation] route_rebuild_ticks sets another
 	NavRouteRebuildInterval = 20

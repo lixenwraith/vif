@@ -171,17 +171,22 @@ integrate their own motion.
 ## 6. The snake lock
 
 A snake head locks the cursor it reaches soonest (`LockedTarget`). One `Reach`
-from the head over its tier's grid measures every cursor at once — what a
-field seeded at each cursor would read at the head, since a step costs the same
-both ways; a blocked cursor cell from its first passable ring, a blocked head
-cell from its neighbours a diagonal away — stopping once every cursor is
-settled. It runs when the head has no reachable lock, the roster moved enough
-for its group field to fall due, or `NavFlowSettleTicks` passed; `LockTicks`
-rides the head's component, so the capture carries the phase. A reachable lock
-holds until another route is over a third shorter, a cursor the head cannot
-reach is never chosen, and a head that can reach none holds still. Sight is
-deliberately not a factor: a cursor jumps at no cost, so a head that switched to
-whichever cursor it could see would be switching all the time.
+from the head over its tier's grid ranks the cursors — what a field seeded at
+each cursor would read at the head, since a step costs the same both ways; a
+blocked cursor cell from its first passable ring, a blocked head cell from its
+neighbours a diagonal away — and stops once the choice is settled
+(`Reach.Nearest`): past the nearest cursor, so every equal is measured, and at
+the locked one or past half as far again (`NavLockHoldNum`/`NavLockHoldDen`),
+whichever comes first. A cursor the head's own search cannot reach is measured
+from those neighbours too, and only one past a corner walled on both sides can
+lead to it, so a head beside such a corner measures every cursor. It runs when
+the head has no reachable lock, the roster moved enough for its group field to
+fall due, or `NavFlowSettleTicks` passed; `LockTicks` rides the head's
+component, so the capture carries the phase. A reachable lock holds until
+another route is over a third shorter, a cursor the head cannot reach is never
+chosen, and a head that can reach none holds still. Sight is deliberately not a
+factor: a cursor jumps at no cost, so a head that switched to whichever cursor
+it could see would be switching all the time.
 
 ## 7. Loot's seam
 
@@ -244,7 +249,11 @@ groups held.
 
 Measured native on the scenario maze shape (cell 5×3, braiding 0.5) and on a
 headless td run with eight cursors walking a cell a tick, the monitor stopped
-and towers healed, 100–340 eyes, two to seven snake heads, a storm raised.
+and towers healed, a storm raised after 2,400 ticks: 180–490 eyes and four to
+eight snakes through its first 2,400 ticks, up to 1,390 and fourteen by 6,000.
+Its columns are the snake lock's reach measuring every cursor and stopping at
+its choice (§6), each the median of five alternating rounds, three for the
+storm to 6,000.
 
 ```
 Isolated                      tower 239×64   td 500×250
@@ -254,25 +263,29 @@ composite field, 8 targets    0.3 ms         1.5 ms
 route graph                   1.5 ms         3.8 ms
 route storage                 22 kB a route  36 kB a route
 
-td run                             Reading
-play, a tick on average            4.4 ms
-storm, a tick on average           6.4 ms
-storm, the worst tick              30 ms
-fields computed in the worst tick  2
+td run                               every cursor  the choice
+play, a tick on average              0.90 ms       0.77 ms
+storm, a tick on average             2.41 ms       1.86 ms
+storm, the 99th percentile tick      11.1 ms       8.2 ms
+storm, the worst tick                14.8 ms       12.3 ms
+storm to 6,000, 99th percentile      15.6 ms       9.7 ms
+storm to 6,000, the worst tick       22.7 ms       15.3 ms
 ```
 
-The cost model: a group field toward static anchors is computed once
-and repaired or rebuilt only as its tier's passability moves; group 0's fields
-and each cursor's private field recompute as cursors move, at the cooldown; the
-snake lock scales with heads, one reach each on its throttle; a drop's field
-costs its owner's instance alone; a route graph is rebuilt only when the
-composite passability changes and at most one per twenty ticks. What the storm
-tick still holds is one point field per local cursor with drops in flight, the
-reaches, and composite line of sight. td's worst ticks are walls going, not
-fields: under a raised storm with eight cursors walking, the ticks where hundreds
-of walls go reach 40–60 ms and compute no field, the wall system's event peaking
-at 34–51 ms and navigation at 15–17 ms, and no tick computes more than four
-fields.
+The cost model: a group field toward static anchors is computed once and
+repaired or rebuilt only as its tier's passability moves; group 0's fields and
+each cursor's private field recompute as cursors move, at the cooldown; the
+snake lock scales with heads, one reach each on its throttle, as far as its
+choice, or its farthest cursor beside a corner walled on both sides (§6), which
+td's maze has none of; a drop's field costs its owner's instance alone; a route
+graph is rebuilt only when the composite passability changes and at most one per
+twenty ticks. td's storm ticks are navigation's and the eyes'. A storm left
+alone takes at most 24 walls a tick; its circles moved into fresh maze to take
+235 at once, the wall and death events cost 0.3–2 ms of an 11 ms tick. A lock's
+reach measuring every cursor settled about 30,000 cells where its choice needed
+1–18% of them; stopping at the choice took the reaches from 30% of the storm's
+CPU to 7% over 6,000 ticks, and leaves the slowest hundredth of its ticks to
+fields, 43% of them, the eyes, 24%, and the reaches, 21%.
 
 Vanguard's jagged cave steps a column every tick, and more in a later cave. At
 500×254 a step turns about 350 cells and the wall upkeep is 71 µs
@@ -351,10 +364,11 @@ steers alike by a field a few ticks old.
   field at 120×40 and under a hundredth at 400×120, and a third to a half of a
   drop's, which costs under a hundredth of a tick. Repairing a field where cells
   closed pays on an open map, not on a cave, where every bend moves each column.
-- No per-tick field budget and no coarse field: td's worst ticks compute no field
-  (§10), so deferring one, which changes what a reader steers by, would bound
-  nothing that stalls, and a 2×2 field changes the answer for a cost the shared
-  grid already took.
+- No per-tick field budget and no coarse field: td's worst storm tick is 12–15 ms
+  of a 50 ms tick, and fields are two fifths of its slowest hundredth (§10), so
+  deferring one, which changes what a reader steers by, would bound nothing that
+  stalls, and a 2×2 field changes the answer for a cost the shared grid already
+  took.
 - Vanguard reads every fourth tick, not less often: past four, navigation's cost is
   the wall upkeep and sight, and a longer hold saves under 10 µs a tick.
 
