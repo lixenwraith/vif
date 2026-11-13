@@ -351,7 +351,7 @@ func (s *BehaviorSystem) spawn(i, x, y int) {
 	s.world.Components.Protection.SetComponent(header, component.ProtectionComponent{
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
-	s.world.Components.Behavior.SetComponent(header, component.BehaviorComponent{Program: uint8(i)})
+	s.world.Components.Behavior.SetComponent(header, component.BehaviorComponent{Program: uint8(i), HomeX: headerX, HomeY: headerY})
 
 	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.Center()
 	s.world.Components.Kinetic.SetComponent(header, component.KineticComponent{
@@ -575,16 +575,19 @@ func (c *behaviorCtx) targetDistance() (float64, bool) {
 
 func (c *behaviorCtx) probe(x, y int) { c.probeX, c.probeY, c.probed = x, y, true }
 
-// aim reads the cell a verb's to names: the target by default, or with "stored"
-// the cell StoreTarget kept, which holds still however the cursors move after it
+// aim reads the cell a verb's to names: the target by default, with "stored" the
+// cell StoreTarget kept, which holds still however the cursors move after it, or
+// with "home" the cell the instance spawned on
 func (a *targetArgs) aim() (func(*behaviorCtx) (int, int, bool), error) {
 	switch a.To {
 	case "", "target":
 		return (*behaviorCtx).target, nil
 	case "stored":
 		return func(c *behaviorCtx) (int, int, bool) { return c.behavior.TargetX, c.behavior.TargetY, true }, nil
+	case "home":
+		return func(c *behaviorCtx) (int, int, bool) { return c.behavior.HomeX, c.behavior.HomeY, true }, nil
 	}
-	return nil, fmt.Errorf("to %q is not one of target, stored", a.To)
+	return nil, fmt.Errorf("to %q is not one of target, stored, home", a.To)
 }
 
 // telegraphColors are the colours a program names a telegraph's splash by
