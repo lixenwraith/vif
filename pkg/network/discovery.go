@@ -72,8 +72,8 @@ func datagramBody(p []byte, kind byte) ([]byte, bool) {
 	return p[discoveryHeader:], true
 }
 
-// probe is the one probe: its header padded to DatagramSize.
-var probe = append(datagramHeader(datagramProbe), make([]byte, DatagramSize-discoveryHeader)...)
+// probeDatagram is the one probe: its header padded to DatagramSize.
+var probeDatagram = append(datagramHeader(datagramProbe), make([]byte, DatagramSize-discoveryHeader)...)
 
 // EncodeBeacon is b as its datagram, refused where DecodeBeacon would refuse it.
 func EncodeBeacon(b Beacon) ([]byte, error) {
@@ -414,7 +414,7 @@ func (d *Discovery) run() {
 						_, _ = conn.WriteToUDPAddrPort(answer, to)
 					}
 					if looking {
-						_, _ = conn.WriteToUDPAddrPort(probe, to)
+						_, _ = conn.WriteToUDPAddrPort(probeDatagram, to)
 					}
 				}
 			}
@@ -448,7 +448,7 @@ func (d *Discovery) run() {
 			d.shut(conn)
 			conn = nil
 		case n > DatagramSize || !onLink(from, local):
-		case bytes.Equal(buf[:n], probe):
+		case bytes.Equal(buf[:n], probeDatagram):
 			if answer != nil && budget.take(from, time.Now(), &d.cfg) {
 				_, _ = conn.WriteToUDPAddrPort(answer, src)
 			}

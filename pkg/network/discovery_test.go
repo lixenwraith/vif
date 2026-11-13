@@ -63,7 +63,7 @@ func FuzzDiscoveryDatagram(f *testing.F) {
 		f.Fatal(err)
 	}
 	f.Add(valid)
-	f.Add(probe)
+	f.Add(probeDatagram)
 	f.Add(valid[:len(valid)-1])
 	f.Add(append(bytes.Clone(valid), ' '))
 	f.Add(bytes.Replace(valid, []byte(`"nonce"`), []byte(`"Nonce"`), 1))
@@ -94,8 +94,8 @@ func TestTheLargestBeaconFitsADatagram(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p) > DatagramSize || len(probe) != DatagramSize {
-		t.Fatalf("the largest beacon is %d bytes and a probe %d, want at most and exactly %d", len(p), len(probe), DatagramSize)
+	if len(p) > DatagramSize || len(probeDatagram) != DatagramSize {
+		t.Fatalf("the largest beacon is %d bytes and a probe %d, want at most and exactly %d", len(p), len(probeDatagram), DatagramSize)
 	}
 }
 
@@ -125,14 +125,14 @@ func TestAHostAnswersAFullSizeProbeAlone(t *testing.T) {
 	}
 	defer c.Close()
 	buf := make([]byte, DatagramSize+1)
-	if _, err := c.Write(probe[:discoveryHeader]); err != nil {
+	if _, err := c.Write(probeDatagram[:discoveryHeader]); err != nil {
 		t.Fatal(err)
 	}
 	_ = c.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 	if n, err := c.Read(buf); err == nil {
 		t.Fatalf("a short probe was answered with %d bytes", n)
 	}
-	if _, err := c.Write(probe); err != nil {
+	if _, err := c.Write(probeDatagram); err != nil {
 		t.Fatal(err)
 	}
 	_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
