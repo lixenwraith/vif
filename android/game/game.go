@@ -6,8 +6,10 @@ package game
 import (
 	"cmp"
 	"errors"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,10 +32,14 @@ type Speaker interface {
 
 // Listener hears the run end, err being what ended it, empty when the player quit,
 // and takes the configuration menu as JSON each time it changes (native-menu.md §4),
-// empty once it closed; the app draws it with its own widgets and answers with Menu
+// empty once it closed; the app draws it with its own widgets and answers with Menu.
+// Subnets is the IPv4 networks the device is on, each address/prefix-length and
+// joined by commas, and Listening the run starting or stopping to listen on them.
 type Listener interface {
 	Exited(err string)
 	Menu(json string)
+	Subnets() string
+	Listening(on bool)
 }
 
 var (
@@ -103,7 +109,10 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	if unknown != nil {
 		cfg.Notice = paths.DropUnknown(cfg.Settings, unknown)
 	}
-	host := app.Host{Presentation: v, StartScreen: true}
+	// Android keeps a device's networks from the Go runtime and its Wi-Fi drops
+	// broadcasts with no lock held, so the app lists the one and holds the other
+	host := app.Host{Presentation: v, StartScreen: true, Listening: listener.Listening,
+		Subnets: func() []netip.Prefix { return subnets(listener.Subnets()) }}
 	if speaker != nil {
 		host.Audio = sink{speaker}
 	}
@@ -120,6 +129,17 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 		listener.Exited(msg)
 	}()
 	return nil
+}
+
+// subnets reads the networks the app listed, leaving out what does not parse
+func subnets(list string) []netip.Prefix {
+	var out []netip.Prefix
+	for s := range strings.SplitSeq(list, ",") {
+		if p, err := netip.ParsePrefix(s); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // sink is the speaker as the writer the mixer streams to

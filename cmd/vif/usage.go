@@ -300,7 +300,9 @@ a session only the host can, and its participants rejoin.
 .PP
 Multiplayer hosts this game, joins an address or link typed in its row's text
 box, requests a session from an HTTP(S) vif-router site with a player count and
-scenario, leaves the session, and relays for others. Player count 0 and a blank
+scenario, leaves the session, relays for others, and makes the games this run
+hosts visible on its local network, as :lan on does; Nearby games lists the
+visible games found there, each joined from its row. Player count 0 and a blank
 scenario use server defaults. Current session status heads the page. Hosts drop
 a player with its bots, or one bot, under Players; :player lists slots and
 :player drop <slot> removes one and keeps it out. Bots adds local bots by count and policy graph,
@@ -322,10 +324,11 @@ HUD pins, shows the navigation overlays and records a replay journal. Values in
 brackets are unavailable or read only; the selected row explains why. Launch
 options explains the file or flag that sets what a running game cannot change.
 .PP
-Settings and Relay for others are vif.toml's [play]: a run writes each back as it
-changes, so the next run starts as this one was left: to the vif.toml it read when
-that is in the user root or the \-config-dir root, else to the user root's,
-created at the first change from the one read. Every other change lasts the run.
+Settings, Relay for others and Visible on this network are vif.toml's [play]: a
+run writes each back as it changes, so the next run starts as this one was left:
+to the vif.toml it read when that is in the user root or the \-config-dir root,
+else to the user root's, created at the first change from the one read. Every
+other change lasts the run.
 A game that can pause, solo or a host whose only other participants are its own
 bots, pauses while the menu is open unless Pause in menu is off, and while the
 command line is open unless Pause in command line is off; the menu's title says

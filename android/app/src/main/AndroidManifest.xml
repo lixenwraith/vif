@@ -3,6 +3,8 @@
 
     <!-- Sessions: sockets to a host, a router site or a WebSocket route. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Nearby games: the multicast lock that lets the Wi-Fi hear broadcasts. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <!-- Back reaches the game through the dispatcher on every release since 13;
          without the opt-in a parser older than Android 16 finishes the activity. -->

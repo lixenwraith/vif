@@ -5,6 +5,7 @@ package app
 import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 	"io"
+	"net/netip"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -70,6 +71,11 @@ type Host struct {
 	// StartScreen says the host shows a start screen of its own, Android's or the
 	// page's, so the launch draws none
 	StartScreen bool
+	// Subnets lists the local networks the device is on where the system keeps them
+	// from the process, and Listening hears the run start and stop listening for
+	// games on them, for a lock the system wants held meanwhile; Android sets both
+	Subnets   func() []netip.Prefix
+	Listening func(bool)
 }
 
 const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag

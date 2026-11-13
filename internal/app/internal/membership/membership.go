@@ -8,6 +8,7 @@ package membership
 import (
 	"context"
 	"net"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 
@@ -159,6 +160,10 @@ type Membership struct {
 	// joinedThrough is the relay this run joined the session through, zero on a
 	// dial to the authority; the barrier reaches the authority through it.
 	joinedThrough link.PeerID
+
+	// nearby announces the session this run hosts to the local network and lists the
+	// ones found there (openNearby); nil in a build with no socket.
+	nearby *link.Discovery
 }
 
 // Run is what the membership reads of the run beyond its world and its session
@@ -259,6 +264,12 @@ type Wiring struct {
 	// :join, whose seat waits for their press (joinWaits). A run dialled on
 	// its own, or whose player already pressed, takes its seat once its world is built.
 	JoinPress bool
+
+	// Subnets and Listening are the platform's part in finding games on the local
+	// network (link.DiscoveryConfig): Android's, where the system keeps the device's
+	// networks from the process and its Wi-Fi drops broadcasts unasked.
+	Subnets   func() []netip.Prefix
+	Listening func(bool)
 }
 
 // Joining is s pointed at the session a :join names, as -join would have built it.
@@ -313,6 +324,7 @@ func (m *Membership) Open(run Run, cfg *config.Membership, wire *Wiring, scenari
 	m.run, m.cfg, m.wiring, m.scenario, m.log, m.glue, m.life = run, cfg, wire, scenario, log, glue, life
 	m.admissions = network.NewAdmissionLimiter()
 	m.places = wire.Places
+	m.openNearby()
 }
 
 // Bind wires the run's world and its game context once both exist.

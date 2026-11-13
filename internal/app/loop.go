@@ -38,6 +38,7 @@ func Run(c Config, host Host) error {
 	// One keeper for every run of the process, so a run that replaces another comes
 	// back to the place that one left.
 	cfg.wiring.membership.Places = membership.NewPlaceKeeper(cfg.Membership.PlaceStore)
+	cfg.wiring.membership.Subnets, cfg.wiring.membership.Listening = host.Subnets, host.Listening
 	// A host with a player plays from its first tick and opens its door once the
 	// clock runs, as :host does; only a run with nobody to play waits in a lobby.
 	cfg.Membership.HostAddress, cfg.wiring.resumeHost = "", cfg.Membership.HostAddress

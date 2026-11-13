@@ -698,8 +698,6 @@ Each in [the todo list](todo.md), with what it needs from here:
   [Split a session under a second authority](todo.md#split-a-session-under-a-second-authority)
   (P3): the redirect is signed by the term's authority, and a pass is good at the
   door it names only once that door's authority admits it.
-- [Find games on the local network](todo.md#find-games-on-the-local-network) (P2):
-  a passphrase door authenticates the host a beacon names.
 
 Adjacent, and out of scope: [Fetch a content-addressed bundle over HTTP](todo.md#fetch-a-content-addressed-bundle-over-http)
 (P1), [Promote verified images to the node](todo.md#promote-verified-images-to-the-node)

@@ -82,6 +82,26 @@ type SessionController interface {
 	JournalError() error
 	Journaling() bool
 	JournalSummary() string
+	// Nearby lists the sessions found on the local network and keeps the run
+	// looking for them a while longer; ReportNearby says them on the status line
+	// once the hosts there had a moment to answer. Announce has the run read
+	// GameContext.Lan again, which its player just changed.
+	Nearby() []NearbySession
+	ReportNearby()
+	Announce()
+}
+
+// NearbySession is a session found on the local network, as the menu lists it.
+type NearbySession struct {
+	ID       string // its own among the sessions listed
+	Name     string // what the session answers to, empty for none
+	Scenario string
+	Address  string // where its door is
+	Target   string // the link a join dials
+	Players  int
+	Ceiling  int
+	Waiting  bool   // its game has not started
+	Refusal  string // why this build cannot join it, empty when it can
 }
 
 type SessionParticipant struct {
@@ -147,6 +167,10 @@ type GameContext struct {
 	// Relaying carries any participant's artifacts toward the authority, not only
 	// those that joined through this run; off unless its player turns it on
 	Relaying atomic.Bool
+
+	// Lan announces the games this run hosts to the local network, as [play] lan
+	// sets it; off unless its player turns it on
+	Lan atomic.Bool
 
 	// WaitStart holds each new game this run starts until its player's first press;
 	// only a run a person plays turns it on

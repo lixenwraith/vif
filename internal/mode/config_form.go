@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"strconv"
@@ -187,15 +188,59 @@ func multiplayerConfigOptions(ctx *engine.GameContext) []configNode {
 			disabled:    sessionRefusal(engine.SessionController.LeaveError)},
 		configNode{kind: kindToggle, key: "relay", label: "Relay for others", description: "Carry the game for players who reach this run and not their host, as after a host loss. Off by default; one that joined through this run is carried either way. Saved for the next run.",
 			command: "relay", choices: []string{"off", "on"},
-			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Relaying.Load()) }, disabled: relayUnavailable})
+			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Relaying.Load()) }, disabled: relayUnavailable},
+		configNode{kind: kindToggle, key: "lan", label: "Visible on this network", description: "Announce the games this run hosts to players on the same network, who find them under Nearby games with no address to type. Off by default; it applies whenever this run hosts. Saved for the next run.",
+			command: "lan", choices: []string{"off", "on"},
+			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Lan.Load()) }, disabled: lanUnavailable})
 	options := []configNode{section("Session", session)}
 	if ctx.SessionCtl == nil {
 		return options
 	}
+	options = append(options, section("Nearby games", nearbyConfigOptions(ctx)))
 	if players := participantConfigOptions(ctx); len(players) > 0 {
 		options = append(options, section("Players", players))
 	}
 	return append(options, section("Bots", append([]configNode{formRow("add")}, botConfigOptions(ctx)...)))
+}
+
+// nearbyConfigOptions lists the games found on this network, each joined as :join
+// joins its address. Building the list is what keeps the run looking for them.
+func nearbyConfigOptions(ctx *engine.GameContext) []configNode {
+	if why := lanUnavailable(ctx); why != "" {
+		return []configNode{{kind: kindInfo, key: "none", label: why, read: startupValue,
+			description: "This run cannot look for games on a network. Join one by its link, or request a session."}}
+	}
+	games := ctx.SessionCtl.Nearby()
+	if len(games) == 0 {
+		return []configNode{{kind: kindInfo, key: "none", label: "No games found yet", read: startupValue,
+			description: "Games hosted on this network with Visible on this network turned on are listed here as they are found."}}
+	}
+	options := make([]configNode, 0, len(games))
+	for _, g := range games {
+		state := ""
+		if g.Waiting {
+			state = ", waiting to start"
+		}
+		options = append(options, configNode{kind: kindAction, key: "near/" + g.ID, command: "join", read: enterValue,
+			label: fmt.Sprintf("Join %s (%s, %d/%d)", cmp.Or(g.Name, g.Address), g.Scenario, g.Players, g.Ceiling),
+			description: fmt.Sprintf("Join the game at %s, as :join does: %s, %d of %d players%s. A failed connection keeps this game intact.",
+				g.Address, g.Scenario, g.Players, g.Ceiling, state),
+			disabled: func(ctx *engine.GameContext) string {
+				if g.Refusal != "" {
+					return g.Refusal
+				}
+				return sessionRefusal(engine.SessionController.JoinError)(ctx)
+			},
+			activate: func(r *Router) {
+				if err := r.ctx.SessionCtl.Join(g.Target); err != nil {
+					setCommandError(r.ctx, "Join: "+err.Error())
+					return
+				}
+				r.ctx.MacroClearFlag.Store(true)
+				r.closeOverlay()
+			}})
+	}
+	return options
 }
 
 func botConfigOptions(ctx *engine.GameContext) []configNode {

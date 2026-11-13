@@ -174,6 +174,8 @@ type menuListener struct{ menus []string }
 
 func (l *menuListener) Exited(string)    {}
 func (l *menuListener) Menu(json string) { l.menus = append(l.menus, json) }
+func (l *menuListener) Subnets() string  { return "" }
+func (l *menuListener) Listening(bool)   {}
 
 // TestTheMenuCrossesTheBindingAsJSONAndOps: a snapshot reaches the app's listener as
 // its JSON, a closed menu as the empty string; an op the app sends reaches the run's

@@ -639,6 +639,7 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	m.log.Info("session", "msg", "hosting opened mid-run", "address", bound,
 		"certificate", link.Fingerprint(m.cfg.TLS), "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
 	m.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
+	m.announce()
 	return nil
 }
 
@@ -694,6 +695,7 @@ func (m *Membership) hostTakenSessionLocked(addr string) error {
 	m.log.Info("session", "msg", "hosting opened on a session taken over",
 		"address", bound, "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
 	m.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
+	m.announce()
 	return nil
 }
 
@@ -840,6 +842,7 @@ func (m *Membership) LeaveSession() {
 		_ = port.Close()
 	}
 	m.leaving.Store(false)
+	m.announce()
 	m.world.RunSafe(func() {
 		held := lost && m.thawLocked()
 		if err != nil {

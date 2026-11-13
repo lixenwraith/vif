@@ -424,6 +424,7 @@ func (a *App) applyPlay() {
 	a.ctx.MouseDisabled.Store(!p.Mouse)
 	a.ctx.OverlayHUD.Store(p.HUD)
 	a.ctx.Relaying.Store(p.Relay)
+	a.ctx.Lan.Store(p.Lan)
 	a.ctx.WaitStart.Store(p.Wait && a.cfg.Mode.OwnsInput())
 	a.ctx.MaxFPS.Store(int32(p.MaxFPS))
 	a.ctx.PauseMenu.Store(p.PauseMenu)
@@ -439,6 +440,7 @@ func (a *App) livePlay() paths.Play {
 	p.FollowMouse = a.ctx.MouseFreeMode.Load()
 	p.HUD = a.ctx.OverlayHUD.Load()
 	p.Relay = a.ctx.Relaying.Load()
+	p.Lan = a.ctx.Lan.Load()
 	p.MaxFPS = int(a.ctx.MaxFPS.Load())
 	p.PauseMenu = a.ctx.PauseMenu.Load()
 	p.PauseCommand = a.ctx.PauseCommand.Load()
@@ -568,6 +570,7 @@ func (a *App) Close() {
 	a.log.Info("app", "msg", "shutdown started")
 	begin := time.Now()
 	a.membership.CloseDoor()
+	a.membership.CloseNearby()
 	a.membership.CloseSeats(false)
 	if a.scheduler != nil {
 		a.scheduler.Stop()

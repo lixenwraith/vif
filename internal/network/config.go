@@ -76,6 +76,20 @@ func DebugConfig(role link.Role, addr string) *Config {
 	return cfg
 }
 
+// DiscoveryConfig is finding games on the local network on the session's port,
+// timing and budget; the run adds what it announces and its host's hooks.
+func DiscoveryConfig() link.DiscoveryConfig {
+	return link.DiscoveryConfig{
+		Port:            parameter.NetworkLanPort,
+		Interval:        parameter.NetworkLanInterval,
+		Expiry:          parameter.NetworkLanExpiry,
+		Rows:            parameter.NetworkLanRows,
+		ProbeWindow:     parameter.NetworkLanProbeWindow,
+		ProbesPerSource: parameter.NetworkLanProbesPerSource,
+		Probes:          parameter.NetworkLanProbes,
+	}
+}
+
 // NewMesh returns an empty in-process link graph on the session's timing.
 func NewMesh() *link.Mesh { return link.NewMesh(&DefaultConfig().Config) }
 

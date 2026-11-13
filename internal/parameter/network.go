@@ -167,6 +167,27 @@ const (
 	// after its control connection went, for the run that held it to resume it.
 	NetworkTunnelResumeWindow = 10 * time.Minute
 
+	// NetworkLanPort is the UDP port a run announces its game and looks for games
+	// on, the default game port's twin. NetworkLanInterval is a visible host's
+	// beacon period and a looking run's probe period; NetworkLanExpiry is how long a
+	// game stays listed after its last beacon, and a run keeps looking after its
+	// list was last read; NetworkLanRows is the most games listed.
+	NetworkLanPort     = 7777
+	NetworkLanInterval = 2 * time.Second
+	NetworkLanExpiry   = 5 * time.Second
+	NetworkLanRows     = 64
+
+	// NetworkLanProbeWindow, NetworkLanProbesPerSource and NetworkLanProbes bound
+	// the probes a visible host answers in each window, from one address and in
+	// all: 16 KB a second at most. A looking run sends one a network each interval.
+	NetworkLanProbeWindow     = NetworkLanInterval
+	NetworkLanProbesPerSource = 8
+	NetworkLanProbes          = 64
+
+	// NetworkLanAnswerWait is how long :lan gives the hosts on the network to answer
+	// its first probe before it reports what it found.
+	NetworkLanAnswerWait = time.Second
+
 	// NetworkJoinConnectTimeout bounds a join's connect. A browser opens its socket
 	// through TLS, an HTTP upgrade and the site's proxy, round trips a loaded link
 	// stretches past the ConnectTimeout a session's own redials keep.
