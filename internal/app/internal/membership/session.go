@@ -120,7 +120,7 @@ func (m *Membership) admitHosted(addr net.Addr) error {
 func (m *Membership) scenarioBody(digest string) ([]byte, error) {
 	if digest != m.scenario.Digest() {
 		return nil, fmt.Errorf("this session plays %s (%s), not %s",
-			m.scenario.Name, m.scenario.Short(), shortDigest(digest))
+			m.scenario.Shown(), m.scenario.Short(), shortDigest(digest))
 	}
 	body, err := m.scenario.MarshalCompressed()
 	if err != nil {
@@ -252,10 +252,10 @@ func (m *Membership) rosterPlayers() int {
 // its min_players, or a session already holding more than its max_players.
 func (m *Membership) PlayersFit(sc resource.Scenario) error {
 	if n := m.playersSet(); n > 0 && n < sc.MinPlayers {
-		return fmt.Errorf("-players %d is below scenario %s's min_players %d", n, sc.Name, sc.MinPlayers)
+		return fmt.Errorf("-players %d is below scenario %s's min_players %d", n, sc.Shown(), sc.MinPlayers)
 	}
 	if n := m.rosterPlayers(); n > sc.MaxPlayers {
-		return fmt.Errorf("scenario %s holds at most %d players; this session has %d", sc.Name, sc.MaxPlayers, n)
+		return fmt.Errorf("scenario %s holds at most %d players; this session has %d", sc.Shown(), sc.MaxPlayers, n)
 	}
 	return nil
 }
@@ -641,10 +641,10 @@ func saveDownload(dir string, sc resource.Scenario) string {
 	at, err := resource.SaveDownload(dir, sc)
 	if err != nil {
 		vlog.Warn("app", "msg", "scenario not saved", "scenario", sc.Name, "digest", sc.Short(), "error", err.Error())
-		return "Scenario " + sc.Name + " not saved: " + err.Error()
+		return "Scenario " + sc.Shown() + " not saved: " + err.Error()
 	}
 	vlog.Info("app", "msg", "scenario saved", "scenario", sc.Name, "digest", sc.Short(), "path", at)
-	return "Scenario " + sc.Name + " saved to " + at
+	return "Scenario " + sc.Shown() + " saved to " + at
 }
 
 // previewParticipant is what a dial is shown while it prepares: the offer its seat
