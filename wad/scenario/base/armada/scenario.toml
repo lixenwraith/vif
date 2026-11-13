@@ -1,0 +1,306 @@
+description = "Hold the line under an armada: its ranks hang overhead and its ships dive at you one by one."
+min_players = 1
+max_players = 16
+
+# A fixed shooter in the line of Galaxian and Galaga: the cursor is a ship firing
+# up alone, under an armada standing in ranks. A ship breaks rank, dives at where
+# the cursor stood and flies back to its slot; the top rank's wardens fire aimed
+# bullets too. A wave shot down brings on the next: darts, then lancers over them,
+# then wardens over those. A ship shot down may drop a U, a lane more for the gun.
+
+# The eight columns' width with a margin, and the ranks' rows over a lane to dodge in
+[map]
+min_width = 56
+min_height = 22
+
+# No drains, and so nothing to fuse: the waves spawn their ships directly. No text
+# either: special fire would blast it among the ranks, and they would fall unaimed at.
+[regions.main]
+initial = "Muster"
+disabled_systems = ["nugget", "gold", "drain", "fuse", "glyph"]
+
+[regions.arms]
+initial = "ArmsWatch"
+background = true
+
+[regions.player]
+initial = "PlayerBoot"
+background = true
+
+# --- Ships ---
+
+# A ship holds its slot until its roll sends it down. It marks the cell its target
+# stands on for aim_ms, dives there over dive_ms and flies back over return_ms to
+# the cell it spawned on, so a slot shot empty stays empty. A stun sends a ship that
+# broke rank home.
+[macros.Ship]
+doc = "An armada ship: its slot, its roll to dive, the dive and the flight home."
+params = { width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", fg = "array", fg256 = "int", hp = "int", mass = "float", contact = "table", percent = "int", aim_ms = "int", dive_ms = "int", return_ms = "int" }
+
+[macros.Ship.body]
+initial = "Hold"
+suspend = { guard = "Stunned" }
+global = [{ from = ["Aim", "Dive"], guard = "Stunned", target = "Return", fallback = "hold" }]
+
+# It materializes onto its slot in half a second; a player's kill rolls the armada table
+[macros.Ship.body.prototype]
+entrance = "materialize"
+entrance_ms = 500
+drops = "armada"
+combat = "swarm"
+width = "${width}"
+height = "${height}"
+header = "${header}"
+hp = "${hp}"
+mass = "${mass}"
+contact = "${contact}"
+pattern_ms = "${pattern_ms}"
+frames = "${frames}"
+fg = "${fg}"
+fg256 = "${fg256}"
+bg256 = 0
+
+# Two rolls a tick, 1% and percent%, so ships break rank one at a time: percent in
+# a hundred seconds of holding at the default tick. With no target it holds.
+[macros.Ship.body.states.Hold]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Tick", target = "Aim", fallback = "hold", guard = "And", guard_args = { guards = [
+    { name = "Chance", args = { percent = 1 } },
+    { name = "Chance", args = { percent = "${percent}" } },
+] } }]
+
+# The charge line and the landing marker show where the dive goes before it leaves
+[macros.Ship.body.states.Aim]
+duration_ms = "${aim_ms}"
+flags = ["Enraged", "ChargeLine", "Landing"]
+probe = "ResolveTarget"
+on_enter = [{ action = "StoreTarget" }]
+on_update = [{ action = "Freeze" }]
+transitions = [{ trigger = "Timeout", target = "Dive" }]
+
+[macros.Ship.body.states.Dive]
+duration_ms = "${dive_ms}"
+flags = ["Enraged", "Landing"]
+on_update = [{ action = "ChargeToStored" }]
+transitions = [
+    { trigger = "Timeout", target = "Return", fallback = { retry_ms = 200 } },
+    { trigger = "AfterTick", guard = "HitWall", target = "Return", fallback = "hold" },
+]
+
+# Home is the slot, or the nearest room by it should a wall stand there; with no
+# room anywhere the ship waits where it is
+[macros.Ship.body.states.Return]
+duration_ms = "${return_ms}"
+probe = "FindLanding"
+probe_args = { to = "home" }
+on_enter = [{ action = "StoreTarget" }]
+on_update = [{ action = "ChargeToStored" }]
+transitions = [{ trigger = "Timeout", target = "Hold" }]
+
+# Cells index a ship's palette, 0 hull, 1 lights, 2 wings or guns. A rank up has
+# more hit points, a costlier touch and a slower dive it warns of longer; the dart
+# rolls most often. The hit flash is yellow and the enraged tint red, so no hull is.
+
+# The dart: a small skirmisher of the two lower ranks, quick to dive
+[behaviors.dart]
+macro = "Ship"
+width = 3
+height = 2
+header = { x = 1, y = 0 }
+hp = 4
+mass = 2.0
+contact = { energy = 600, heat = 6 }
+percent = 10
+aim_ms = 600
+dive_ms = 900
+return_ms = 1200
+pattern_ms = 300
+fg = [{ r = 80, g = 200, b = 255 }, { r = 255, g = 255, b = 255 }, { r = 40, g = 120, b = 200 }]
+fg256 = 14
+frames = [
+    { glyphs = ["\\o/", " v "], fg = ["212", " 0 "], attr = [" B ", "   "] },
+    { glyphs = ["-o-", " v "], fg = ["212", " 0 "], attr = [" B ", "   "] },
+]
+
+# The lancer: a winged raider of the second rank
+[behaviors.lancer]
+macro = "Ship"
+width = 4
+height = 2
+header = { x = 1, y = 0 }
+hp = 10
+mass = 2.4
+contact = { energy = 900, heat = 9 }
+percent = 8
+aim_ms = 800
+dive_ms = 1100
+return_ms = 1400
+pattern_ms = 400
+fg = [{ r = 120, g = 230, b = 120 }, { r = 255, g = 255, b = 255 }, { r = 50, g = 150, b = 70 }]
+fg256 = 10
+frames = [
+    { glyphs = ["<oo>", " \\/ "], fg = ["2112", " 00 "], attr = [" BB ", "    "] },
+    { glyphs = ["{oo}", " \\/ "], fg = ["2112", " 00 "], attr = [" BB ", "    "] },
+]
+
+# The warden: the top rank's gunship, which the arms region mounts a turret on
+[behaviors.warden]
+macro = "Ship"
+width = 5
+height = 3
+header = { x = 2, y = 1 }
+hp = 24
+mass = 3.0
+contact = { energy = 1200, heat = 12 }
+percent = 5
+aim_ms = 1000
+dive_ms = 1300
+return_ms = 1600
+pattern_ms = 500
+fg = [{ r = 200, g = 110, b = 240 }, { r = 255, g = 255, b = 255 }, { r = 130, g = 70, b = 170 }]
+fg256 = 13
+frames = [
+    { glyphs = ["/===\\", "[o=o]", " \\_/ "], fg = ["20002", "01010", " 222 "], attr = ["     ", " B B ", "     "] },
+    { glyphs = ["/===\\", "[o=o]", " |_| "], fg = ["20002", "01010", " 222 "], attr = ["     ", " B B ", "     "] },
+]
+
+# --- Loot ---
+
+# The U adds a lane to the gun, up to three. Every ship names the armada table, so
+# one a player shoots down rolls it for every player where it fell: heat at 2%, the
+# U at 10% until the gun holds its three lanes, when each energy drop is two, and
+# energy at 10%, each chance growing by as much again for each kill it misses.
+[loot.upgrade]
+rune = "U"
+color = { r = 255, g = 255, b = 0 }
+glow = { r = 100, g = 220, b = 100 }
+reward = "weapon"
+weapon = "gun"
+
+[drops.armada]
+killer = "player"
+tiers = [
+    { entries = [{ loot = "heat", rate = 0.02 }] },
+    { unique = true, entries = [{ loot = "upgrade", rate = 0.1, fallback = 1 }] },
+    { entries = [{ loot = "energy", rate = 0.1 }] },
+]
+
+# --- Waves ---
+
+[macros.Rank]
+doc = "From wave `from`, a rank of `program` on row `y`: a ship at each column `dx` right of the leftmost."
+params = { program = "string", from = "int", y = "int", dx = "int" }
+body = [
+    { action = "CopyVar", payload = { name = "slot_x", source_var = "rank_left" } },
+    { action = "IncrementVar", payload = { name = "slot_x", delta = "${dx}" } },
+    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { program = "${program}", y = "${y}" }, payload_vars = { x = "slot_x" }, guard = "VarCompare", guard_args = { var = "wave", op = "gte", value = "${from}" } },
+]
+
+# Boot: settled before the clock starts, drawn behind the start prompt; the first
+# wave comes in at the first Tick, after the press
+[states.Muster]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "Wave" },
+]
+
+# Eight columns six cells apart about the map's middle column, each offset from a
+# cell left of the first, since an increment of 0 adds 1. The first wave is the two
+# ranks of darts, the second adds the lancers over them and every wave from the
+# third the wardens over those, one to every two columns.
+[states.Wave]
+parent = "Root"
+on_enter = [
+    { action = "IncrementVar", payload = { name = "wave" } },
+    { action = "ConfigToVar", payload = { field = "map_width", name = "rank_left" } },
+    { action = "DivideVar", payload = { name = "rank_left", delta = 2 } },
+    { action = "DecrementVar", payload = { name = "rank_left", delta = 22 } },
+    { macro = "Rank", program = "warden", from = 3, y = 2, each = { dx = [4, 16, 28, 40] } },
+    { macro = "Rank", program = "lancer", from = 2, y = 5, each = { dx = [1, 7, 13, 19, 25, 31, 37, 43] } },
+    { macro = "Rank", program = "dart", from = 1, y = 8, each = { dx = [1, 7, 13, 19, 25, 31, 37, 43] } },
+    { macro = "Rank", program = "dart", from = 1, y = 11, each = { dx = [1, 7, 13, 19, 25, 31, 37, 43] } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Wave {}" }, payload_vars = { message = "wave" } },
+]
+transitions = [
+    { trigger = "Tick", target = "Cleared", guard = "StatusIntCompare", guard_args = { key = "behavior.count", op = "eq", value = 0 } },
+]
+
+# A green strobe, species damage doubles, and every energy penalty with it, as a
+# storm kill doubles it in main, and the next wave comes in two seconds on
+[states.Cleared]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 250 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Wave {} Cleared" }, payload_vars = { message = "wave" } },
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Species Damage Up" }, delay_ms = 1000 },
+]
+transitions = [
+    { trigger = "Tick", target = "Wave", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+]
+
+# --- Arms ---
+
+# Each warden takes a turret as it lands: a bullet aimed at the nearest cursor from
+# anywhere on the map, every three seconds or so, each warden on its own interval
+# so their volleys drift apart
+[states.ArmsWatch]
+parent = "Root"
+transitions = [
+    { trigger = "EventSpeciesCreated", internal = true, guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] }, capture_vars = { entity = "warden_entity" }, actions = [
+        { action = "IncrementVar", payload = { name = "warden_index" } },
+        { action = "EmitEvent", event = "EventMountRequest", payload = { weapon = "turret", range = 1000, muzzle = 2.0, energy = 300, heat = 3 }, payload_vars = { host = "warden_entity" }, pick = { field = "interval_ms", var = "warden_index", from = [2600, 3000, 3400, 3800] } },
+    ] },
+]
+
+# --- Player ---
+
+# The ship starts on the map's middle column, a row above its last
+[states.PlayerBoot]
+parent = "Root"
+on_enter = [
+    { action = "ConfigToVar", payload = { field = "map_width", name = "ship_x" } },
+    { action = "DivideVar", payload = { name = "ship_x", delta = 2 } },
+    { action = "ConfigToVar", payload = { field = "map_height", name = "ship_y" } },
+    { action = "DecrementVar", payload = { name = "ship_y", delta = 2 } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { heat = 10, energy = 100 }, payload_vars = { x = "ship_x", y = "ship_y" } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
+]
+
+[states.PlayerBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+# The gun fires up alone, a lane more a U; an instance installing the game mid-run
+# puts its own cursor on the path, with the level it carried
+[states.PlayerActive]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGunAimRequest", reconcile = true, payload = { path = [{ up = 1 }, { up = 2 }, { up = 3 }] } },
+]
+transitions = [
+    { trigger = "Tick", target = "PlayerDied", guard = "StatusBoolEquals", guard_args = { key = "session.any_defeated", value = true } },
+]
+
+# A lost game holds under a red strobe as long as main's, then starts over; the
+# reset clears the status bar, so the new game opens with what ended the last
+[states.PlayerDied]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 250 } },
+]
+transitions = [
+    { trigger = "Tick", target = "PlayerDiedReset", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
+]
+
+[states.PlayerDiedReset]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGameResetRequest" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "You Died!" } },
+]

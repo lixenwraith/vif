@@ -162,6 +162,34 @@ What the slowest hundredth of the storm's ticks holds, each measured there:
 A td reset is the one place the wall system costs tens of milliseconds, laying
 the maze again (Trim what a tick spends outside the position index).
 
+## Armada
+
+### Give the fixed shooter what its first version lacks
+
+- Priority: P2
+- Affected files: `wad/scenario/base/armada/scenario.toml`,
+  `internal/system/behavior.go`, `internal/system/cursor.go`
+- Guide: [Gameplay §10](gameplay.md#10-embedded-campaign-progression),
+  [FSM reference: Behavior Programs](fsm-reference.md#behavior-programs)
+
+The first version plays on what the machine had, plus the home cell. What a
+refinement needs from the code:
+
+- **Dive pacing.** A ship rolls for itself (`Chance`), so dives thin out as the
+  armada does and nothing caps how many fly at once. A guard reading a status row
+  (`behavior.count`) or a scenario event a program's edge can trigger on would let
+  the last ships dive hardest and hold a salvo to a few.
+- **A band for the ship.** The cursor roams the whole map; only the gun's aim
+  keeps it under the ranks. A `[map]` key bounding the rows a cursor may stand on
+  would hold it to the bottom; no event lays a wall row the width of the map.
+- **Ranks that move.** A slot is a fixed cell. A swaying armada needs an offset
+  every home cell reads, and a flown entrance a verb that follows a path instead
+  of the materialize.
+- **A backdrop.** The text is off, since special fire blasts it among the ranks.
+  A starfield needs glyphs special fire leaves alone, or a drift the blast skips.
+- **A ramp of its own.** The damage multiplier doubling a wave is the only ramp;
+  `Param` genes or a variable a program reads would let later waves dive faster.
+
 ## Bots
 
 ### Open fleet sessions to bots
