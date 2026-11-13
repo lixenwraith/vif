@@ -651,6 +651,13 @@ Branches.
   turns hundreds of cells a step. A cost per changed cell shows in the second
   alone, a cost per row or per map in the first alone, at the largest map; read
   both before calling a change to `applyWalls` or `CompositePassability` neutral.
+- td's storm is read headless with eight cursors walking a cell a tick, the
+  `td_monitor` region paused, towers healed and `EventStormSpawnRequest` pushed
+  after 2,400 ticks. A storm left alone takes at most 25 walls a tick: a tick
+  where hundreds go is made by moving its circles into untouched maze. Label each
+  tick with `pprof.Do` and profile at the default 100 Hz; at 1,000-2,000 Hz a
+  cloud container kept a quarter of the samples or fewer. `nav.recomputes` is a
+  gauge of the fields that fell due in the tick, not a count.
 - tmux can throw frames away while vif sees nothing: it reads a pane at once, so
   writes return and held frames stay near zero. Attach a client (Alacritty under
   Xvfb, or a Python pty reader sized with `TIOCSWINSZ`) and poll `tmux list-clients
