@@ -1279,8 +1279,7 @@ func (s *NavigationSystem) saveRouteGraphs() []navRouteGraph {
 // the cells and for the bodies it named, and drops every other: a receiver's own
 // graphs may be for gateways or cells the sender's are not, with route indices the
 // installed entities name. A held graph stamped on its tier as it stands for those
-// cells is kept, since recomputing it would give the same routes. Nothing is
-// emitted; an install is not a run event.
+// cells is kept, as a recompute gives the same routes; an install emits no run event.
 func (s *NavigationSystem) deriveRouteGraphs(routes []navRouteGraph) {
 	graphs := s.world.Resources.RouteGraph
 	if graphs == nil || len(s.tiers) == 0 {

@@ -7,11 +7,10 @@ import (
 )
 
 // Reach measures, from one cell, the weighted distance to each of several goals
-// over one grid: what a field seeded at a goal would report at the cell, since a
-// step costs the same both ways, a blocked goal counting from its first passable
-// ring at the ring's gap costs. A blocked cell, or a goal the cell cannot reach,
-// measures from the cell's passable neighbours a diagonal away, as a field read
-// there falls back to. Scratch is kept between calls.
+// over one grid: what a field seeded at a goal reads at the cell, as a step costs
+// the same both ways, a blocked goal counting from its first passable ring at the
+// ring's gap costs. A blocked cell, or a goal it cannot reach, measures from its
+// passable neighbours a diagonal away, as a field read does. Scratch is reused.
 type Reach struct {
 	dist    []int32
 	seen    []uint32 // generation a cell's distance was written at
@@ -42,7 +41,7 @@ func (r *Reach) Measure(g *SearchGrid, c *Costs, x, y int, goals []vmath.Point, 
 	}
 	if !g.Blocked(x, y) {
 		r.starts = append(r.starts[:0], int32(y*g.w+x))
-		if r.search(g, c, 0, out, CostUnreachable, false) == 0 {
+		if r.search(g, c, 0, out, false) == 0 {
 			return
 		}
 	}
@@ -52,23 +51,42 @@ func (r *Reach) Measure(g *SearchGrid, c *Costs, x, y int, goals []vmath.Point, 
 // Nearest is the goal Measure would measure nearest from (x, y), the first of
 // equals, or -1 when it measures none; held, a goal or -1, is chosen instead
 // while its distance is at most num/den of the nearest's. The search stops once
-// that choice is settled, short of the goals it cannot change.
+// that choice is settled, but from a pinched cell measures as Measure does.
 func (r *Reach) Nearest(g *SearchGrid, c *Costs, x, y int, goals []vmath.Point, held int, num, den int32) int {
 	r.out = grow(r.out, len(goals))
 	out := r.out
 	r.held, r.num, r.den = held, int64(num), int64(den)
+	if pinched(g, x, y) {
+		r.Measure(g, c, x, y, goals, out)
+		return r.choice(out)
+	}
 	if !r.seedGoals(g, c, goals, out) {
 		return -1
 	}
 	if g.Blocked(x, y) {
 		r.around(g, c, x, y, out, true)
-		return r.choice(out)
-	}
-	r.starts = append(r.starts[:0], int32(y*g.w+x))
-	if r.search(g, c, 0, out, CostUnreachable, true) > 0 && r.pinched(g, c, x, y, out) {
-		r.Measure(g, c, x, y, goals, out)
+	} else {
+		r.starts = append(r.starts[:0], int32(y*g.w+x))
+		r.search(g, c, 0, out, true)
 	}
 	return r.choice(out)
+}
+
+// pinched reports whether the passable (x, y) has a passable neighbour a diagonal
+// away past two blocked corners: the only neighbour its own search may not reach,
+// and so the only one Measure's fallback can find a goal through, which a search
+// stopped at the choice cannot rule out.
+func pinched(g *SearchGrid, x, y int) bool {
+	if g.Blocked(x, y) {
+		return false
+	}
+	for k := DirNE; k < DirCount; k += 2 {
+		dx, dy := DirVectors[k][0], DirVectors[k][1]
+		if !g.Blocked(x+dx, y+dy) && g.Blocked(x+dx, y) && g.Blocked(x, y+dy) {
+			return true
+		}
+	}
+	return false
 }
 
 // seedGoals readies a pass over goals, out reset, and reports whether any goal
@@ -120,45 +138,14 @@ func (r *Reach) around(g *SearchGrid, c *Costs, x, y int, out []int32, choosing 
 		}
 	}
 	if len(r.starts) > 0 {
-		r.search(g, c, c.Diag, out, CostUnreachable, choosing)
+		r.search(g, c, c.Diag, out, choosing)
 	}
-}
-
-// pinched reports whether a goal the cell's search left unmeasured could change
-// Nearest's choice from past a corner: only a diagonal neighbour with both corners
-// blocked can lie beyond what the cell reaches, so a goal measured from those
-// within the choice's distances sends the choice to a whole Measure.
-func (r *Reach) pinched(g *SearchGrid, c *Costs, x, y int, out []int32) bool {
-	r.starts = r.starts[:0]
-	for k := DirNE; k < DirCount; k += 2 {
-		dx, dy := DirVectors[k][0], DirVectors[k][1]
-		if !g.Blocked(x+dx, y+dy) && g.Blocked(x+dx, y) && g.Blocked(x, y+dy) {
-			r.starts = append(r.starts, int32((y+dy)*g.w+x+dx))
-		}
-	}
-	if len(r.starts) == 0 {
-		return false
-	}
-	limit := int32(CostUnreachable - 1)
-	if near := nearest(out); near < CostUnreachable {
-		limit = near
-		if h := r.held; h >= 0 && r.live[h] && out[h] == CostUnreachable {
-			limit = max(near, r.keepLimit(near))
-		}
-	}
-	r.search(g, c, c.Diag, out, limit+1, false)
-	for j, d := range out {
-		if r.live[j] && d <= limit {
-			return true
-		}
-	}
-	return false
 }
 
 // search runs Dijkstra from starts at startCost, measuring every live goal still
-// unmeasured short of limit, and reports how many are left. Choosing, it stops
-// once Nearest's choice can no longer change.
-func (r *Reach) search(g *SearchGrid, c *Costs, startCost int32, out []int32, limit int32, choosing bool) int {
+// unmeasured, and reports how many are left. Choosing, it stops once Nearest's
+// choice can no longer change.
+func (r *Reach) search(g *SearchGrid, c *Costs, startCost int32, out []int32, choosing bool) int {
 	if r.gen++; r.gen == 0 {
 		clear(r.seen[:cap(r.seen)])
 		r.gen = 1
@@ -177,7 +164,7 @@ func (r *Reach) search(g *SearchGrid, c *Costs, startCost int32, out []int32, li
 		r.dist[s], r.seen[s] = startCost, r.gen
 		g.push(s, startCost)
 	}
-	stop := r.stopAt(out, pending, limit, choosing)
+	stop := r.stopAt(out, pending, choosing)
 	for idx, d, ok := g.pop(); ok; idx, d, ok = g.pop() {
 		if r.dist[idx] != d {
 			continue
@@ -198,7 +185,7 @@ func (r *Reach) search(g *SearchGrid, c *Costs, startCost int32, out []int32, li
 				out[j], measured = cost, true
 			}
 			if measured {
-				stop = r.stopAt(out, pending, limit, choosing)
+				stop = r.stopAt(out, pending, choosing)
 			}
 		}
 		for m := g.open[idx]; m != 0; m &= m - 1 {
@@ -213,36 +200,35 @@ func (r *Reach) search(g *SearchGrid, c *Costs, startCost int32, out []int32, li
 	return pending
 }
 
-// stopAt is the distance a search may stop at: limit, past the farthest live
-// goal once all are measured, and choosing, past the nearest goal so every equal
-// is measured and past held's distance or the most it may be kept at.
-func (r *Reach) stopAt(out []int32, pending int, limit int32, choosing bool) int32 {
-	stop := limit
+// stopAt is the distance a search may stop at: the farthest live goal's once all
+// are measured, and choosing, past the nearest goal so every equal is measured,
+// and at held's distance or past the most it may be kept at.
+func (r *Reach) stopAt(out []int32, pending int, choosing bool) int32 {
+	stop := int32(CostUnreachable)
 	if pending == 0 {
-		far := int32(0)
+		stop = 0
 		for j, d := range out {
 			if r.live[j] {
-				far = max(far, d)
+				stop = max(stop, d)
 			}
 		}
-		stop = min(stop, far)
 	}
 	if !choosing {
 		return stop
 	}
-	if near := nearest(out); near < CostUnreachable {
+	near := int32(CostUnreachable)
+	for _, d := range out {
+		near = min(near, d)
+	}
+	if near < CostUnreachable {
 		at := near + 1
 		if h := r.held; h >= 0 && r.live[h] {
-			at = max(at, min(out[h], r.keepLimit(near)+1))
+			keep := min(int64(near)*r.num/r.den, CostUnreachable-1) // the farthest held may be kept at
+			at = max(at, min(out[h], int32(keep)+1))
 		}
 		stop = min(stop, at)
 	}
 	return stop
-}
-
-// keepLimit is the farthest held may be and be kept over a nearest goal at near.
-func (r *Reach) keepLimit(near int32) int32 {
-	return int32(min(int64(near)*r.num/r.den, CostUnreachable-1))
 }
 
 // choice is Nearest's answer from the distances its searches left.
@@ -257,15 +243,6 @@ func (r *Reach) choice(out []int32) int {
 		return h
 	}
 	return best
-}
-
-// nearest is the least distance in out
-func nearest(out []int32) int32 {
-	near := int32(CostUnreachable)
-	for _, d := range out {
-		near = min(near, d)
-	}
-	return near
 }
 
 // grow is s at n elements, keeping what it holds where it already has the room

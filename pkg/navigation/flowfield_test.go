@@ -544,9 +544,6 @@ func FuzzRouteSearchFindsACheapestLegalPath(f *testing.F) {
 	})
 }
 
-// TestASolverReusedAcrossGraphsComputesEachAfresh: the penalties, corridors and
-// searches one computation leaves must not reach the next, or a graph would depend
-// on what the solver computed before it.
 // TestCostsFollowTheAspect: the reference keeps the 10/20/22 weighting every
 // field was tuned at, a square cell costs the same on both axes, and the steering
 // vectors are unit length at either.
@@ -567,6 +564,9 @@ func TestCostsFollowTheAspect(t *testing.T) {
 	}
 }
 
+// TestASolverReusedAcrossGraphsComputesEachAfresh: the penalties, corridors and
+// searches one computation leaves must not reach the next, or a graph would depend
+// on what the solver computed before it.
 func TestASolverReusedAcrossGraphsComputesEachAfresh(t *testing.T) {
 	rng := rand.New(rand.NewPCG(3, 5))
 	const w, h = 40, 24

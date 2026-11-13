@@ -12,8 +12,8 @@ const (
 	// still points the same way everywhere but beside the target, where sight takes over
 	NavFlowSettleTicks = 20
 
-	// NavLockHoldNum over NavLockHoldDen is how much farther than the nearest
-	// cursor a snake head's locked one may be and stay locked: a lock holds until
+	// NavLockHoldNum over NavLockHoldDen is the most a snake head's locked cursor may
+	// be as a multiple of the nearest's distance and stay locked: a lock holds until
 	// another route is over a third shorter
 	NavLockHoldNum = 3
 	NavLockHoldDen = 2
