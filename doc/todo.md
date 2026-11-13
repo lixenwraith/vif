@@ -146,7 +146,7 @@ has one. It goes beside the layer forms and changes no caller of them.
 With eight cursors walking and a storm raised, a td storm tick averages 1.9 ms
 and its worst is 12–15 ms of the 50 ms tick (Navigation §10), the snake lock's
 reaches stopping at their choice. Walls going are no peak: 235 at once cost the
-wall and death events 0.3–2 ms, and a storm left alone takes 25 a tick at most.
+wall and death events 0.3–2 ms, and a storm left alone takes 24 a tick at most.
 What the slowest hundredth of the storm's ticks holds, each measured there:
 
 - Fields, 43%: three fifths point fields, the private fields of the cursors the
