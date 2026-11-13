@@ -50,7 +50,9 @@ Branches.
   at times: retry after a pause.
 - A session's scratchpad can sit on a `/tmp` that a reboot empties (a tmpfs on a
   development machine): keep a long task's notes and working files in the
-  checkout's `tmp/`, which `.gitignore` holds.
+  checkout's `tmp/`, which `.gitignore` holds. A `.go` file there is a package to
+  `go build ./...` and `go vet ./...` all the same: a scratch program or a copy of a
+  source kept under `tmp/` stops both.
 - `qemu-user-static` from apt runs a test binary built for another architecture
   (`GOARCH=arm64 go test -c`, then `qemu-aarch64-static ./x.test`): arm64's NEON
   path under `GOEXPERIMENT=simd`, and a big-endian `s390x` build, run that way.
@@ -210,6 +212,9 @@ Branches.
   (`World.LatchSession`, `Supersede`): a flag an install or a link event flips with
   no note binds the replay's cursor at another tick. A change a dispatch makes needs
   none, since the replay dispatches too (`World.TakePlace`).
+- A redial lends the run's place to its dial for the whole walk (`Membership.lent`),
+  and `m.place` is nil meanwhile: what signs for the run, a link, a notice or the
+  record that takes a term, reads `LocalKey`, which answers through the loan.
 
 ## Runs and their wiring
 
@@ -323,6 +328,14 @@ Branches.
   at a time (`midRunGate`): a raw dial's reply holds the gate (`dialSession`,
   `Complete`), a second joiner's waits behind it, and what the test crosses
   meanwhile lands before that gate reads its offer.
+- Only a play run redials the host it lost (`Membership.redial`), so the mesh and
+  headless succession tests never do: a rule about a person's run losing its host
+  sets the guest's `cfg.Mode` to `ModePlay` under `RunSafe` before the host goes
+  (`TestAGuestThatRedialsItsLostHostTakesItsTurn`).
+- `:join`, the menu's join and a redial dial on the run they replace and hand the
+  dial to the next (`wiring.dialled`): a test of that path calls
+  `membership.DialJoin` on a wiring of its own and builds its run with `driveRun`
+  on a `runConfig` carrying the dial.
 
 ## Tests that flake
 
@@ -563,6 +576,9 @@ Branches.
   reads and writes no file of the player's, so a setting it writes back never
   reaches their `vif.toml`; `-mute` keeps it silent, and a tmux server of its own
   (`tmux -L <name>`) keeps it out of their sessions.
+- A host loss is three such runs: a host opened with `:host`, two guests that
+  `:join` it mid-run, then `:q` on the host. `:session` on each guest, and its log's
+  `session` and `net` lines (`-l=<dir>`), say who took the term or why nobody did.
 - Drive it with `tmux send-keys`: `:emit <Event> { ... }` raises any event, `:god`
   arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
   `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.
