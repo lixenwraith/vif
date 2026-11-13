@@ -51,9 +51,13 @@ func TestSelectedCardScrollDeltaTraversesClippedCard(t *testing.T) {
 type menuSession struct {
 	engine.SessionController
 	bots  []engine.BotSeat
+	near  []engine.NearbySession
 	calls []string
 	err   error
 }
+
+func (s *menuSession) Nearby() []engine.NearbySession { return s.near }
+func (s *menuSession) Announce()                      { s.calls = append(s.calls, "announce") }
 
 func (s *menuSession) HostError() error                          { return nil }
 func (s *menuSession) JoinError() error                          { return nil }
@@ -453,6 +457,55 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 	r.handleOverlayActivate()
 	if session.calls[len(session.calls)-1] != "remove 11" || ctx.IsOverlayActive() {
 		t.Fatal("bot removal failed to submit and resume")
+	}
+}
+
+// TestANearbyGameIsJoinedFromItsRow: the Multiplayer page lists each game found on
+// the network; its row joins at the game's link and leaves the menu, and a game of
+// another build is listed with why its row joins nothing.
+func TestANearbyGameIsJoinedFromItsRow(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	session := &menuSession{near: []engine.NearbySession{
+		{ID: "aa/10.0.0.5", Scenario: "main", Address: "10.0.0.5:7777", Target: "vif://10.0.0.5:7777", Players: 2, Ceiling: 8, Waiting: true},
+		{ID: "bb/10.0.0.6", Name: "friday", Scenario: "td", Address: "10.0.0.6:7777", Target: "vif://10.0.0.6:7777/friday", Players: 1, Ceiling: 4,
+			Refusal: "Another build, vif 9 there and vif 1 here"},
+	}}
+	ctx.SessionCtl = session
+	r := NewRouter(ctx, input.NewMachine())
+	r.handleConfigMenu()
+	showConfigMenu(ctx, "multiplayer")
+	const open, other = "multiplayer/#Nearby games/near/aa/10.0.0.5", "multiplayer/#Nearby games/near/bb/10.0.0.6"
+	if row := menuRow(ctx, open); row.Label != "Join 10.0.0.5:7777 (main, 2/8)" || row.Disabled != "" {
+		t.Fatalf("a game found reads %q, disabled %q", row.Label, row.Disabled)
+	}
+	if row := menuRow(ctx, other); row.Label != "Join friday (td, 1/4)" || row.Disabled != session.near[1].Refusal {
+		t.Fatalf("a game of another build reads %q, disabled %q", row.Label, row.Disabled)
+	}
+	ctx.SetOverlaySelection(other)
+	r.handleOverlayActivate()
+	if len(session.calls) != 0 || !ctx.IsOverlayActive() {
+		t.Fatalf("a game of another build was joined: %v", session.calls)
+	}
+	ctx.SetOverlaySelection(open)
+	r.handleOverlayActivate()
+	if !slices.Equal(session.calls, []string{"join vif://10.0.0.5:7777"}) || ctx.IsOverlayActive() {
+		t.Fatalf("a game's row did not join it and leave the menu: %v", session.calls)
+	}
+}
+
+// TestLanSetsVisibilityAndTellsTheSession: :lan on and off set the switch [play]
+// lan keeps, and the session is told to read it again at once.
+func TestLanSetsVisibilityAndTellsTheSession(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	session := &menuSession{}
+	ctx.SessionCtl = session
+	for i, on := range []bool{true, false} {
+		ExecuteCommand(ctx, "lan "+toggleWord(on))
+		if ctx.Lan.Load() != on || len(session.calls) != i+1 || session.calls[i] != "announce" {
+			t.Fatalf(":lan %s left the switch %v and told the session %v", toggleWord(on), ctx.Lan.Load(), session.calls)
+		}
 	}
 }
 

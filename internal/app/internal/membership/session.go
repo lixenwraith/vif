@@ -168,6 +168,7 @@ func (m *Membership) admitLateJoiner(id link.PeerID) {
 func (m *Membership) OpenMidRunJoins() {
 	m.lateJoins.Store(true)
 	m.lobbyClosing.Store(false)
+	m.announce()
 }
 
 // SessionCapacity is how many guests this host will ever hold, excluding itself:
@@ -1338,6 +1339,7 @@ func (m *Membership) startHostSessionOn(port *link.SocketPort, signals <-chan os
 		"address", addr, "quorum", quorum, "capacity", capacity)
 	m.run.ShowStartupStatus(fmt.Sprintf("Hosting on %s; waiting for %d of up to %d participant(s) (Ctrl-C cancels)",
 		addr, quorum, capacity))
+	m.announce()
 
 	// The lobby is the one wait the first-guest window covers, so it is the one
 	// wait that carries its deadline. Zero on an unbounded policy, and zero again

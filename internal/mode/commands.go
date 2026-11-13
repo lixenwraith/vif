@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "leave", "relay", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps",
+	"host", "join", "leave", "relay", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps",
 	"register", "login", "logout",
 }
 
@@ -147,6 +147,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleLeaveCommand(ctx, args)
 	case "relay":
 		return handleRelayCommand(ctx, args)
+	case "lan":
+		return handleLanCommand(ctx, args)
 	case "session":
 		return handleSessionCommand(ctx)
 	case "register", "login", "logout":
@@ -1174,6 +1176,29 @@ func handleRelayCommand(ctx *engine.GameContext, args []string) CommandResult {
 // relayUnavailable refuses relaying where nobody can reach this run: a browser
 // is never dialled
 var relayUnavailable = lacking(paths.ExternalFiles(), "Relaying")
+
+// handleLanCommand sets whether this run announces the games it hosts to its local
+// network, and with no argument reports the games found there.
+// Usage: :lan [on|off]
+func handleLanCommand(ctx *engine.GameContext, args []string) CommandResult {
+	switch reason := lanUnavailable(ctx); {
+	case reason != "":
+		setCommandError(ctx, reason)
+	case ctx.SessionCtl == nil:
+		setCommandError(ctx, sessionsUnavailable)
+	case len(args) == 0:
+		ctx.SessionCtl.ReportNearby()
+	default:
+		result := applyToggle(ctx, &ctx.Lan, args, "lan", "Visible on this network")
+		ctx.SessionCtl.Announce()
+		return result
+	}
+	return CommandResult{Continue: true}
+}
+
+// lanUnavailable refuses finding games on the local network where the run has no
+// socket to look or announce with: a browser
+var lanUnavailable = lacking(paths.ExternalFiles(), "Nearby games")
 
 // handleJoinCommand replaces this solo run with one joined to a session.
 // Usage: :join <target>   the same forms -join takes

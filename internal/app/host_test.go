@@ -2685,6 +2685,35 @@ func arrival(t *testing.T, host, guest *App) (link.PeerID, uint8) {
 	}
 }
 
+// TestAHostAnnouncesTheSessionItsDoorOpens: a run announces nothing to the local
+// network while it plays alone, and once it hosts at a door others reach, its
+// session: that door, its scenario, the host as its one player, the places it
+// holds and the protocol a joiner needs.
+func TestAHostAnnouncesTheSessionItsDoorOpens(t *testing.T) {
+	a, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	tickUntilCursor(t, a)
+	if b := a.membership.Announced(); b != nil {
+		t.Fatalf("a run playing alone announces %+v", b)
+	}
+	if err := a.BeginHosting(":0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	b := a.membership.Announced()
+	if b == nil {
+		t.Fatal("a run hosting at a door every interface reaches announces nothing")
+	}
+	door := link.BeaconDoor{Scheme: "tcp", Port: uint16(portOf(t, a).Addr().(*net.TCPAddr).Port)}
+	if !slices.Equal(b.Doors, []link.BeaconDoor{door}) || b.Players != 1 || int(b.Ceiling) != a.membership.SessionCapacity()+1 ||
+		b.Scenario != a.scenario.Name || b.Protocol != network.ProtocolVersion {
+		t.Fatalf("the host announces %+v, want its door %+v, one player of %d, scenario %s and protocol %d",
+			*b, door, a.membership.SessionCapacity()+1, a.scenario.Name, network.ProtocolVersion)
+	}
+}
+
 // mustHosting is a solo run that opened a session with :host on a loopback port of
 // its own, under cfg: a mid-run host, with no lobby, whose every dial is a mid-run
 // join. The caller ticks it.

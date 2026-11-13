@@ -14,7 +14,8 @@ import (
 func TestEveryNodeHasTheKindItsFieldsServeAndAnIdOfItsOwn(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)
-	ctx.SessionCtl = &awaySession{menuSession: menuSession{bots: []engine.BotSeat{{ID: 10, Slot: 2, Graph: "default"}, {ID: 11, Slot: 3, Graph: "idle", Joining: true}}},
+	ctx.SessionCtl = &awaySession{menuSession: menuSession{bots: []engine.BotSeat{{ID: 10, Slot: 2, Graph: "default"}, {ID: 11, Slot: 3, Graph: "idle", Joining: true}},
+		near: []engine.NearbySession{{ID: "aa/10.0.0.5", Target: "vif://10.0.0.5:7777"}}},
 		participants: []engine.SessionParticipant{{Entity: 7, Slot: 1}, {Entity: 8, Slot: 4, Holder: 1}}}
 	ExecuteCommand(ctx, "g")
 	seen := map[string]bool{}
@@ -58,7 +59,7 @@ func TestEveryNodeHasTheKindItsFieldsServeAndAnIdOfItsOwn(t *testing.T) {
 		}
 	}
 	walk("", configPages)
-	for _, want := range []string{"game/pause", "scenarios/#Installed/pick/tower", "scenarios/start", "multiplayer/#Players/player/8", "multiplayer/#Bots/drop/11", "developer/#Recording/journal"} {
+	for _, want := range []string{"game/pause", "scenarios/#Installed/pick/tower", "scenarios/start", "multiplayer/#Nearby games/near/aa/10.0.0.5", "multiplayer/#Players/player/8", "multiplayer/#Bots/drop/11", "developer/#Recording/journal"} {
 		if !seen[want] {
 			t.Errorf("the tree holds no %s", want)
 		}
