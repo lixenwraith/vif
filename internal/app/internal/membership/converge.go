@@ -530,6 +530,7 @@ func (m *Membership) redial(lost link.PeerID) bool {
 	if c == nil {
 		return false
 	}
+	m.lent.Store(c)
 	m.places.release(c)
 	if relay {
 		m.log.Info("session", "msg", "redialling the lost relay", "relay", uint64(lost), "dial", link.Shown(addr))
@@ -546,6 +547,7 @@ func (m *Membership) redial(lost link.PeerID) bool {
 // run's begins the walk, which a lost host's run then rejoins through (rejoinThrough).
 // A run that stays in its session holds its place again.
 func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBase, addr string, lost link.PeerID, c *place, relay bool) {
+	defer m.lent.Store(nil) // after the place is held again, where it is
 	dial := cfg
 	dial.JoinAddress = addr
 	notice := "Host connection restored"

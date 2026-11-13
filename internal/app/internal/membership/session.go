@@ -407,7 +407,6 @@ func joinNetConfig(cfg config.Membership, wire Wiring) *network.Config {
 	netCfg.Passphrase = cfg.Passphrase
 	netCfg.SignIn = wire.SignIns.Token(cfg.JoinAddress)
 	netCfg.TLS = cfg.Trust
-	netCfg.ConnectPeer = network.PeerDialer(netCfg.Identity, wire.Links, netCfg.ConnectTimeout)
 	return netCfg
 }
 
@@ -1056,10 +1055,10 @@ func (m *Membership) ownKey() string {
 	return p.id()
 }
 
-// LocalKey is the key this run holds its place under, which signs its peer links and
-// succession messages; empty before it is in a session.
+// LocalKey is the key this run holds its place under, or lent its redial to prove,
+// which signs its peer links and succession messages; empty before it is in a session.
 func (m *Membership) LocalKey() network.Key {
-	if p := m.place.Load(); p != nil {
+	if p := cmp.Or(m.place.Load(), m.lent.Load()); p != nil {
 		return p.Key
 	}
 	return network.Key{}
