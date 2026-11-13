@@ -706,6 +706,14 @@ Branches.
 - The behavior vocabulary is built before any program compiles, so a verb whose
   arg names what programs extend (a species, a materialize style) registers with
   `Named`, whose build gets the set's payload names; `Effect` decodes without them.
+- `IncrementVar` and its kin read a `delta` of 0 as 1, so a list of offsets a macro
+  zips with `each` starts at 1, from a base one cell short (armada's `Rank`).
+- An edge into a state with a probe can fail, so the load demands a `fallback` on
+  each, a global edge included. Instances spawned on one tick time out together:
+  a roll on a `Timeout` sends a salvo, a `Chance` on a `Tick` edge one at a time.
+- To watch a scenario play, capture `tmux capture-pane -e -p` and render the SGR
+  to HTML for a headless browser screenshot; a headless `App` ticked with a
+  dispatch tap, a scratch test in `internal/app`, reads what a capture cannot.
 - A rewrite of scenario files that must leave what a scenario does alone is
   proven on the resolved tree: a program under `tmp/` writes
   `fsm.ResolveScenario`'s result for every folder holding a `scenario.toml`, keys

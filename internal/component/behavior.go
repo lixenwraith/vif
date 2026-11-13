@@ -24,6 +24,7 @@ type BehaviorComponent struct {
 	PatternElapsed time.Duration // time the frame has shown
 
 	TargetX, TargetY int // the cell StoreTarget kept, which a charge or teleport goes to
+	HomeX, HomeY     int // the cell its header spawned on, which `to = "home"` aims at
 
 	Shielded     bool // Written from the machine's flags each step: damage and stun immunity
 	TeleportLine bool // Written likewise: a teleport line runs from the header to the stored cell

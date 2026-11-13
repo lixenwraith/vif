@@ -584,8 +584,9 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 
 `wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
 scaffold, `simon` is a memory game, `dummy` is a weapon range, `vimtutor` teaches
-the motions a lesson at a time, and `vanguard` is a side-scroller whose raiders are
-species its own behavior programs define. Each entry has a short `description` for
+the motions a lesson at a time, `vanguard` is a side-scroller whose raiders are
+species its own behavior programs define, and `armada` is a fixed shooter whose
+ranks are three more. Each entry has a short `description` for
 scenario listings.
 
 `vimtutor` is the tutor, combat off: the cursor has no gun, so Enter, Space and
@@ -705,6 +706,26 @@ the gun back at one shot, species damage at one and the cave at its first pace, 
 opens with "Crushed Against The Edge!" or "You Died!". The drifting text is scenery
 (§9): rock and raiders pass it by and no key types it, so the ship earns no heat by
 typing.
+
+`armada` is a fixed shooter in the line of Galaxian and Galaga, one file with its
+three programs inline. The ship starts at the bottom of the map and its gun fires
+up alone, a lane more for each `U`, up to three. The armada materializes in ranks
+at the top, eight columns six cells apart about the map's middle: two ranks of
+darts in the first wave, lancers over them from the second and four wardens over
+those from the third. A ship holds its slot until a roll it makes each tick sends
+it down: it turns red and marks the cell its target stands on with the charge line and
+the landing marker, dives there, then flies back to the cell it spawned on
+(`FindLanding { to = "home" }`), so a slot shot empty stays empty. A rank up has
+more hit points (4, 10, 24) and a costlier touch and dives slower on a longer
+warning. Each warden takes a turret as it lands (`EventMountRequest`, the `arms`
+region) and fires an aimed bullet every three seconds or so, each on its own
+interval. A wave shot down strobes green, doubles species damage as a storm kill
+does in main ("Species Damage Up"), which is the ramp, and the next comes in two
+seconds on. A ship a player shoots down rolls the armada drop table for every
+player: heat at 2%, the `U` at 10% and energy at 10%. Defeat is vanguard's: heat
+and energy both run out, a red strobe, and the game starts over on "You Died!".
+Drains, nuggets, gold, the fuse and the text are off: special fire would blast
+text among the ranks, and they would fall with nobody aiming.
 
 ## 11. System inventory
 

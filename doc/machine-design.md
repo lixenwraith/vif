@@ -575,7 +575,9 @@ per instance:
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
   (`FindFreeAreaInside` over the footprint). `LineOfSight` and `FindLanding` read
   the live target, or with `to = "stored"` the cell `StoreTarget` kept, so a
-  lock's charge or teleport goes to the cell it stored, as vanguard's raiders' do.
+  lock's charge or teleport goes to the cell it stored, as vanguard's raiders' do,
+  or with `to = "home"` the cell the header spawned on (`BehaviorComponent.HomeX`,
+  `HomeY`), which armada's ships fly back to.
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
   `ZeroVelocity`, `Teleport`, `Telegraph` and `CancelTelegraph` (the splash
   request pair), `Lightning` (the cursor it strikes takes the contact damage),
@@ -711,7 +713,7 @@ smaller part of it.
   `BehaviorComponent.Landing`, which `LandingRenderer` reads to blink the landing
   marker there), then, unless suspended, gold breaking and contacts. `terminate` runs the state's exit (`Stop`) before the
   composite goes. It owns one manifest component, `Behavior` {program index,
-  instance, pattern frame and accumulator, stored target, `Shielded`, `TeleportLine`,
+  instance, pattern frame and accumulator, stored target, home cell, `Shielded`, `TeleportLine`,
   `ChargeLine`, `Landing`}.
 - **Engine split.** This is how the engine takes species it was not built with: a
   data species adds a program and a prototype, not a component, a system or a mask

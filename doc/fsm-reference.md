@@ -1042,14 +1042,17 @@ timeout, the `Tick` edges, the state's `on_update` and its move, then the
 
 - Guards: `TargetDistance { op, cells }` (header to target, rows scaled by the
   cell aspect), `LineOfSight { to }` (the body clears the way from where it stands
-  to the target, or with `to = "stored"` to the cell `StoreTarget` kept), `HasTarget`,
+  to the target, with `to = "stored"` to the cell `StoreTarget` kept, or with
+  `to = "home"` to the cell its header spawned on), `HasTarget`,
   `Stunned`, `HPFraction { op, value }`,
   `HitWall` (this step's move met a wall or the map edge), `Chance { percent }`
   (mixed from tick, entity and site, so no random stream moves),
   `Param { index, op, value }` (the species' genes), and `And`, `Or` and `Not`.
 - Probes: `ResolveTarget` (a target exists; its cell serves the entry) and
-  `FindLanding { to }` (the nearest place the footprint fits around the target, or
-  with `to = "stored"` around the cell `StoreTarget` kept).
+  `FindLanding { to }` (the nearest place the footprint fits around the target,
+  the stored cell or home, as `LineOfSight` names them; probed at home ahead of
+  `StoreTarget`, it sends a charge or a teleport back to the spawn cell, as
+  armada's ships fly home).
 - Effects: `StoreTarget` (the probe's cell, else the target's), `ZeroVelocity`,
   `Teleport` (to the stored cell, clearing the landing with a flash),
   `Telegraph { color }` (a `cyan` or `white` countdown over the rest of the entry)
