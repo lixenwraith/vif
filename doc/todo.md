@@ -861,6 +861,25 @@ does; today Android finishes the activity and leaves the reason in logcat. Open:
 host, list or both; a second screen or rows on this one; what a session that ends
 returns to.
 
+### Run nearby games on a phone
+
+- Priority: P1
+- Affected files: `android/app/src/main/java/com/lixen/vif/MainActivity.java`,
+  `android/game/game.go`, `pkg/network/discovery.go`
+- Guide: [Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)
+
+Finding games on the local network was run between two runs on one Linux machine;
+on Android the APK builds and no device has run it. On one Wi-Fi, a phone and a
+desktop or two phones: the host enters `:host :7777` and `:lan on`; the other
+opens Menu, Multiplayer and sees it under Nearby games within two seconds, and
+its row joins it; then the roles swap. What only a device shows:
+
+- the multicast lock is taken with no crash, and dropped when the app is left
+  (`adb shell dumpsys wifi`, the multicast locks held);
+- a phone hosting on its own hotspot is found by its guests;
+- the list empties five seconds after the host enters `:lan off`;
+- Android 17 and GrapheneOS reach the local network at target 36.
+
 ### Ask for the local network on Android at target SDK 37
 
 - Priority: P3
