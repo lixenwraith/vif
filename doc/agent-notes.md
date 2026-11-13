@@ -599,6 +599,11 @@ Branches.
   changed one. A tick reads in two modes, one binary 22 µs in a round and 28 to
   32 in the next: for a few percent, read the minimum of seven to nine rounds
   beside the median.
+- valgrind's callgrind counts the instructions one function runs
+  (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
+  tells a build that does more work from one laid out differently (Position's
+  layout note). It asserts on Go's preemption signal: run the test binary with
+  `GODEBUG=asyncpreemptoff=1 GOMAXPROCS=1`.
 - B/op can rise as retained memory falls: a smaller heap collects sooner, and
   each collection empties the event batch `sync.Pool`s, which then allocate
   again. Read both sides with `GOGC=off` before blaming an allocation: td's
