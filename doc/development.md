@@ -314,7 +314,8 @@ and the remote cursor waits as a Wraith until the joiner comes back or its wait
 runs out ([Multiplayer §5.4](multi-player.md#54-wraiths)). The map stays latched either way — a run
 that opened a session keeps its bounds — which `:session` names rather than the
 status bar, along with the peers, the tick and how many succession candidates the
-chain holds. For a LAN, bind `:7777` and join the host's reachable address.
+chain holds. For a LAN, bind `:7777` and join the host's reachable address, or
+turn `:lan on` at the host and join from the menu's Nearby games.
 Public-internet routing uses the same socket code, but a direct tcp link is
 plaintext and admits any key, so it is for trusted peers only.
 

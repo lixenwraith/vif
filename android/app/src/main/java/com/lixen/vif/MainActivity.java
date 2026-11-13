@@ -1,8 +1,10 @@
 package com.lixen.vif;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Insets;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -18,8 +20,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.Inet4Address;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Collections;
 
 /**
  * Opens on the start screen over the game's view, whose run starts behind it and
@@ -39,6 +46,8 @@ public final class MainActivity extends Activity {
     private StartScreen start; // over the view until its tap, null after
     private MenuDialog menu; // the configuration menu while the run has it open
     private long backAt;
+    private WifiManager.MulticastLock lock; // held while the run listens and the player is at the game
+    private boolean listening, resumed;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -116,6 +125,8 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        resumed = true;
+        holdLock();
         if (start == null) {
             goOn();
         }
@@ -132,6 +143,8 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        resumed = false;
+        holdLock();
         Game.pause();
         view.away(true);
         if (speaker != null) {
@@ -142,6 +155,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        listening(false);
         if (isFinishing()) {
             Game.quit();
             if (speaker != null) {
@@ -149,6 +163,59 @@ public final class MainActivity extends Activity {
             }
         }
         super.onDestroy();
+    }
+
+    /** The run started or stopped listening for games on the local network. */
+    void listening(boolean on) {
+        listening = on;
+        holdLock();
+    }
+
+    /**
+     * The Wi-Fi drops broadcasts, a nearby game's beacon and a looking run's probe,
+     * unless a multicast lock is held, which costs battery: held only while the run
+     * listens and the player is at the game.
+     */
+    private void holdLock() {
+        boolean want = listening && resumed;
+        if (lock == null) {
+            WifiManager wifi = want ? (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE) : null;
+            if (wifi == null) {
+                return;
+            }
+            lock = wifi.createMulticastLock(TAG);
+            lock.setReferenceCounted(false);
+        }
+        if (want && !lock.isHeld()) {
+            lock.acquire();
+        } else if (!want && lock.isHeld()) {
+            lock.release();
+        }
+    }
+
+    /**
+     * The IPv4 networks this device is on, each address/prefix-length and joined by
+     * commas: those of the interfaces that are up and broadcast. The Go runtime
+     * cannot list them on Android, so the run asks here each time it sends.
+     */
+    static String subnets() {
+        StringBuilder out = new StringBuilder();
+        try {
+            for (NetworkInterface nif : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!nif.isUp() || nif.isLoopback()) {
+                    continue;
+                }
+                for (InterfaceAddress a : nif.getInterfaceAddresses()) {
+                    if (a.getAddress() instanceof Inet4Address && a.getBroadcast() != null) {
+                        out.append(out.length() == 0 ? "" : ",").append(a.getAddress().getHostAddress())
+                                .append('/').append(a.getNetworkPrefixLength());
+                    }
+                }
+            }
+        } catch (SocketException | RuntimeException e) {
+            return ""; // none listed: the run still reaches the default network
+        }
+        return out.toString();
     }
 
     /** The run ended: by the player's :q, or by an error worth the log. */

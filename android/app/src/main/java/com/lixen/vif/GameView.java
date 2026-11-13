@@ -139,6 +139,16 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
                             public void menu(String json) {
                                 activity.runOnUiThread(() -> activity.menu(json));
                             }
+
+                            @Override
+                            public String subnets() {
+                                return MainActivity.subnets();
+                            }
+
+                            @Override
+                            public void listening(boolean on) {
+                                activity.runOnUiThread(() -> activity.listening(on));
+                            }
                         });
             } catch (Exception e) {
                 Log.e(MainActivity.TAG, "game not started", e);
