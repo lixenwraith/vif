@@ -321,7 +321,7 @@ func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
 func forEachShippedScenario(t *testing.T, test func(t *testing.T, a *App)) {
 	t.Helper()
 	event.EnsureRegistry()
-	for _, name := range []string{"main", "blank", "td", "simon", "vanguard", "dummy", ""} {
+	for _, name := range []string{"main", "blank", "td", "simon", "vanguard", "armada", "dummy", ""} {
 		label := name
 		if label == "" {
 			label = resource.EmbeddedLabel

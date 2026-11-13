@@ -3757,6 +3757,12 @@ func encodeColumnsBehavior(dst []byte, rows []StoreEntry[component.BehaviorCompo
 		dst = appendInt(dst, rows[i].Value.TargetY)
 	}
 	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.HomeX)
+	}
+	for i := range rows {
+		dst = appendInt(dst, rows[i].Value.HomeY)
+	}
+	for i := range rows {
 		dst = appendBool(dst, rows[i].Value.Shielded)
 	}
 	for i := range rows {
@@ -3801,6 +3807,12 @@ func decodeColumnsBehavior(r *columnReader) []StoreEntry[component.BehaviorCompo
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.TargetY, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.HomeX, r)
+	}
+	for i := range rows {
+		readInt(&rows[i].Value.HomeY, r)
 	}
 	for i := range rows {
 		readBool(&rows[i].Value.Shielded, r)

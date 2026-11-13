@@ -194,6 +194,47 @@ func TestAWardenWindsUpPastItsRangeThenChargesTheCellItStored(t *testing.T) {
 	}
 }
 
+// TestALandingProbedAtHomeFliesTheBodyBackToItsSpawnCell: to = "home" names the cell
+// the header spawned on, so a sortie that stored its target's cell stores home next
+func TestALandingProbedAtHomeFliesTheBodyBackToItsSpawnCell(t *testing.T) {
+	head, _, _ := strings.Cut(wardenProgram, "[states.Roam]")
+	program := strings.Replace(head, `initial = "Roam"`, `initial = "Sortie"`, 1) + `
+[states.Rest]
+on_update = [{ action = "Freeze" }]
+
+[states.Sortie]
+duration_ms = 500
+on_enter = [{ action = "StoreTarget" }]
+on_update = [{ action = "ChargeToStored" }]
+transitions = [{ trigger = "Timeout", target = "Return", fallback = "hold" }]
+
+[states.Return]
+duration_ms = 500
+probe = "FindLanding"
+probe_args = { to = "home" }
+on_enter = [{ action = "StoreTarget" }]
+on_update = [{ action = "ChargeToStored" }]
+transitions = [{ trigger = "Timeout", target = "Rest", actions = [{ action = "ZeroVelocity" }] }]
+`
+	const back, sortie component.BehaviorState = 1, 2
+	ctx, s, header := newProgramWorld(t, program, wardenX+30, wardenY+15)
+	w := ctx.World
+	b, _ := w.Components.Behavior.GetPtr(header)
+
+	stepWhile(t, w, s, b, sortie)
+	out, _ := w.Positions.GetPosition(header)
+	if b.Machine.State != back || out.X < wardenX+25 || out.Y < wardenY+10 {
+		t.Fatalf("after the sortie: state %d at (%d,%d), want returning from by the target", b.Machine.State, out.X, out.Y)
+	}
+	if b.TargetX != wardenX || b.TargetY != wardenY {
+		t.Fatalf("the return stored (%d,%d), want the spawn cell (%d,%d)", b.TargetX, b.TargetY, wardenX, wardenY)
+	}
+	stepWhile(t, w, s, b, back)
+	if end, _ := w.Positions.GetPosition(header); end.X != wardenX || end.Y != wardenY {
+		t.Fatalf("after the return the body stands at (%d,%d), want its spawn cell (%d,%d)", end.X, end.Y, wardenX, wardenY)
+	}
+}
+
 // TestAStunSendsAWindingWardenBackToRoamAndEndsItsTelegraph: the global edge takes
 // it out through the wind-up's exit, and the suspend then holds it where it stands
 func TestAStunSendsAWindingWardenBackToRoamAndEndsItsTelegraph(t *testing.T) {
