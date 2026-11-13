@@ -546,16 +546,24 @@ func (d *Discovery) expire(now time.Time) {
 }
 
 // subnets are this machine's IPv4 networks: its host's word where the system keeps
-// them from the process, else every interface's but the loopback's.
+// them from the process, else those of each interface that is up, has a carrier
+// and broadcasts, which the loopback and a point-to-point tunnel do not.
 func (d *Discovery) subnets() []netip.Prefix {
 	if d.cfg.Subnets != nil {
 		return d.cfg.Subnets()
 	}
-	addrs, _ := net.InterfaceAddrs()
+	const live = net.FlagUp | net.FlagRunning | net.FlagBroadcast
+	ifis, _ := net.Interfaces()
 	var out []netip.Prefix
-	for _, a := range addrs {
-		if p, err := netip.ParsePrefix(a.String()); err == nil && p.Addr().Is4() && !p.Addr().IsLoopback() {
-			out = append(out, p)
+	for _, ifi := range ifis {
+		if ifi.Flags&live != live {
+			continue
+		}
+		addrs, _ := ifi.Addrs()
+		for _, a := range addrs {
+			if p, err := netip.ParsePrefix(a.String()); err == nil && p.Addr().Is4() {
+				out = append(out, p)
+			}
 		}
 	}
 	return out
