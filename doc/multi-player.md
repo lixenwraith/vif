@@ -611,7 +611,10 @@ The procedure on each survivor is:
    window, however many other survivors lost the host too, so a host that went
    silent costs that window; a host that is gone ends it at once — nothing
    listening, a refusal no retry helps, or no place for this run. A survivor that
-   reached its host through another participant walks at once.
+   reached its host through another participant walks at once. The place is the
+   dial's to prove while the redial and the walk last, and the run is its
+   participant throughout: its key signs its notices, its links and, its turn come,
+   the record it takes the term with (`Membership.LocalKey`).
 3. **Walk the list.** A survivor dials each candidate whose turn has begun, once a
    second, and announces itself on each link it opens and again on every link each
    pass, since the notice sent as the loss was seen is dropped by a peer still
@@ -734,7 +737,8 @@ instance binds it, and authorship never leaves the machine that started the worl
 4. Two participants that dial each other exchange `MsgConnect`/`MsgAck` — who is
    calling, running which build — and nothing else: they already hold identities the
    coordinator assigned, so a peer link allocates nothing, offers nothing and
-   captures nothing. Admission is roster membership, read from the world rather than
+   captures nothing. Each signs with its own key, a run built on a dial the run
+   before it made included, a `:join`'s or a redial's (`openDial`). Admission is roster membership, read from the world rather than
    from the coordinator's own list, and deliberately *not* the term: a survivor
    still electing is exactly who needs to open one. Two that dial each other at
    once, as a new host dials its successor while that survivor walks to it, keep

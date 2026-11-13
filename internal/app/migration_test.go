@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vif/internal/app/internal/membership"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/converge"
 	"github.com/lixenwraith/vif/internal/core"
@@ -15,6 +16,7 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
+	"github.com/lixenwraith/vif/internal/resource"
 	link "github.com/lixenwraith/vif/pkg/network"
 )
 
@@ -434,6 +436,71 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	if line, want := successor.SessionSummary(), "Session hosting "+own+","; !strings.HasPrefix(line, want) {
 		t.Fatalf(":session on the successor reads %q; want it to open %q", line, want)
 	}
+}
+
+// TestAGuestThatRedialsItsLostHostTakesItsTurn: a person's run redials the host it
+// lost, its place let go for the dial to prove, and is still the participant that
+// place names: its turn come, it signs the record that takes the session over, and
+// holds the place again.
+func TestAGuestThatRedialsItsLostHostTakesItsTurn(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
+	t.Cleanup(stop)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
+	waitForCursors(t, successor, 2)
+	id := link.PeerID(successor.membership.LocalParticipant())
+	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	key := successor.membership.LocalKey()
+	successor.World().RunSafe(func() { successor.cfg.Mode = ModePlay }) // the mode whose run redials
+	stop()
+	for deadline := time.Now().Add(socketWait); (successor.authority.Holder() != id || successor.authority.Migrating()) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	if successor.authority.Holder() != id {
+		t.Fatalf("the guest that redialled did not take the session over: %s", successor.authority.Summary())
+	}
+	// The redial ends a rejoin pass after the term is taken, and holds the place again
+	// there, or the run would be left with nothing to sign with.
+	time.Sleep(parameter.NetworkRejoinPassInterval + 250*time.Millisecond) // [wall] the redial's last pass
+	if got := successor.membership.LocalKey(); got.ID() != key.ID() {
+		t.Fatal("the successor no longer holds the key it joined with")
+	}
+}
+
+// TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks: a :join or a redial is dialled by
+// the run it replaces, on that run's wiring; the run built on the dial signs its
+// peer links with its own key all the same, so its link to the first candidate opens.
+func TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+	tickUntilCursor(t, host)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	stopTicks := tickInBackground(host)
+	t.Cleanup(func() { stopTicks(); host.Close() })
+	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+
+	cfg := runConfig{Config: Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
+		Resources: resource.Options{Embedded: true}, Membership: Membership{JoinAddress: host.HostAddr()}},
+		wiring: wiring{scriptedSession: true}}
+	before := membership.Wiring{Places: membership.NewPlaceKeeper(nil), SignIns: membership.NewSignInKeeper(nil),
+		Links: &converge.PeerLinkGate{}} // the wiring of the run the dial is made on
+	d, err := membership.DialJoin(cfg.Membership, before, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.wiring.dialled = d
+	guest, _ := driveRun(t, "bot", cfg, "patrol", nil)
+	port, candidate := portOf(t, guest), first.membership.LocalParticipant()
+	waitUntil(t, func() bool { return port.Connected(candidate) }, "the guest's link to the first candidate")
 }
 
 // TestMembershipIsByteIdenticalAcrossAHandoff's other half. The

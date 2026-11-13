@@ -80,7 +80,7 @@ func (m *Membership) announcedLocked() *link.Beacon {
 	}
 	return &link.Beacon{
 		Name:     m.cfg.SessionName,
-		Scenario: link.BeaconText(m.scenario.Name),
+		Scenario: link.BeaconText(m.scenario.Shown()),
 		Players:  uint16(players),
 		Ceiling:  uint16(m.playerCapacity()),
 		Waiting:  m.ctx.TimeCtl.Holds(engine.HoldStart) || !m.lateJoins.Load(),

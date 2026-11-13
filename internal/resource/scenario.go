@@ -71,6 +71,15 @@ type scenarioFile struct {
 	data []byte
 }
 
+// Shown is the name a player reads for the scenario: the built-in one is main,
+// whatever label its record carries.
+func (s Scenario) Shown() string {
+	if s.Name == EmbeddedLabel {
+		return paths.MainScenarioName
+	}
+	return s.Name
+}
+
 // LoadScenario resolves this run's scenario and reads it whole.
 func LoadScenario(o Options) (Scenario, error) {
 	if o.Provided != nil {
@@ -110,7 +119,7 @@ func FindDownload(dir, digest string) (Scenario, bool) {
 // name a host sends leaves dir or takes another scenario's, and returns where. The
 // files land whole or not at all, and whatever holds that name already stays.
 func SaveDownload(dir string, sc Scenario) (string, error) {
-	at := filepath.Join(dir, downloadName(sc.Name, sc.Short()))
+	at := filepath.Join(dir, downloadName(sc.Shown(), sc.Short()))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return at, err
 	}
@@ -150,13 +159,10 @@ func SaveDownload(dir string, sc Scenario) (string, error) {
 	return at, err
 }
 
-// downloadName is name, the embedded label read as main, kept to letters, digits,
-// '-' and '_' and at most 48 of them ("scenario" when none are left), then a dash
-// and the digest prefix, which a name already ending in it is not given twice
+// downloadName is name kept to letters, digits, '-' and '_' and at most 48 of them
+// ("scenario" when none are left), then a dash and the digest prefix, which a name
+// already ending in it is not given twice
 func downloadName(name, short string) string {
-	if name == EmbeddedLabel {
-		name = paths.MainScenarioName
-	}
 	safe := strings.Map(func(r rune) rune {
 		if 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || r == '-' || r == '_' {
 			return r

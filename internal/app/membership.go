@@ -348,6 +348,10 @@ func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 		gate = &converge.PeerLinkGate{}
 		cfg.wiring.membership.Links = gate
 	}
+	// On this run's gate, whichever run dialled: a :join or a redial hands its dial
+	// to the run built on it, whose reach is the one that holds the roster's keys.
+	cfg.wiring.networkConfig.ConnectPeer = network.PeerDialer(membership.IdentityFromAnchor(offer.Anchor),
+		gate, cfg.wiring.networkConfig.ConnectTimeout)
 	if !offer.FixedAuthority && !cfg.Membership.NoAdvertise && config.SocketNetwork &&
 		(offer.Relay == 0 || cfg.Membership.ListenAddress != "") {
 		listener, declared = converge.BindAdvertised(cfg.Membership.ListenAddress, cfg.Membership.JoinAddress)

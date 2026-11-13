@@ -85,8 +85,11 @@ type Membership struct {
 
 	// places is what this process comes back to its sessions with, and place the one
 	// this run is in its session under: nil before it is in one, and once it has left.
+	// lent is that place while a redial of the lost host has it to prove (redial): the
+	// run is still its participant, and signs as it.
 	places *PlaceKeeper
 	place  atomic.Pointer[place]
+	lent   atomic.Pointer[place]
 
 	// relayNonces are the challenges this coordinator issued to its relays' doors,
 	// each good for one dial's proofs; guarded by sessionMu.

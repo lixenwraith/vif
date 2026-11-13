@@ -322,11 +322,8 @@ func (c Control) ChangeScenario(name string) (bool, error) {
 // and one started by a path below scenario/ to that path, as the list names it.
 func (c Control) Scenarios() ([]string, string) {
 	o := c.m.run.Resources()
-	names, current := resource.Scenarios(o), c.m.scenario.Name
-	switch {
-	case current == resource.EmbeddedLabel:
-		current = paths.MainScenarioName
-	case o.Provided == nil && slices.Contains(names, o.Scenario):
+	names, current := resource.Scenarios(o), c.m.scenario.Shown()
+	if c.m.scenario.Name != resource.EmbeddedLabel && o.Provided == nil && slices.Contains(names, o.Scenario) {
 		current = o.Scenario
 	}
 	return names, current
