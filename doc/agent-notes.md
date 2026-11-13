@@ -599,6 +599,11 @@ Branches.
   changed one. A tick reads in two modes, one binary 22 µs in a round and 28 to
   32 in the next: for a few percent, read the minimum of seven to nine rounds
   beside the median.
+- valgrind's callgrind counts the instructions one function runs
+  (`--toggle-collect='*Reach*.Nearest'`), which link layout does not move, so it
+  tells a build that does more work from one laid out differently (Position's
+  layout note). It asserts on Go's preemption signal: run the test binary with
+  `GODEBUG=asyncpreemptoff=1 GOMAXPROCS=1`.
 - B/op can rise as retained memory falls: a smaller heap collects sooner, and
   each collection empties the event batch `sync.Pool`s, which then allocate
   again. Read both sides with `GOGC=off` before blaming an allocation: td's
@@ -651,6 +656,13 @@ Branches.
   turns hundreds of cells a step. A cost per changed cell shows in the second
   alone, a cost per row or per map in the first alone, at the largest map; read
   both before calling a change to `applyWalls` or `CompositePassability` neutral.
+- td's storm is read headless with eight cursors walking a cell a tick, the
+  `td_monitor` region paused, towers healed and `EventStormSpawnRequest` pushed
+  after 2,400 ticks. A storm left alone takes few walls a tick (Navigation §10):
+  a tick where hundreds go is made by moving its circles into untouched maze.
+  Label each tick with `pprof.Do` and profile at the default 100 Hz; at
+  1,000-2,000 Hz a cloud container kept a quarter of the samples or fewer.
+  `nav.recomputes` is a gauge, not a count.
 - tmux can throw frames away while vif sees nothing: it reads a pane at once, so
   writes return and held frames stay near zero. Attach a client (Alacritty under
   Xvfb, or a Python pty reader sized with `TIOCSWINSZ`) and poll `tmux list-clients
