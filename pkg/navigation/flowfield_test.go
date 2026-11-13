@@ -77,6 +77,27 @@ func bitsOf(w, h int, blocked wallChecker) position.Bits {
 	return b
 }
 
+// randomWalls is a grid of up to 41×21 cells walled by rectangles, then cells
+// toggled at density out of 512.
+func randomWalls(rng *rand.Rand, density uint8) (w, h int, walls []bool) {
+	w, h = 2+rng.IntN(40), 2+rng.IntN(20)
+	walls = make([]bool, w*h)
+	for range rng.IntN(8) {
+		x0, y0 := rng.IntN(w), rng.IntN(h)
+		for y := y0; y < min(h, y0+1+rng.IntN(6)); y++ {
+			for x := x0; x < min(w, x0+1+rng.IntN(10)); x++ {
+				walls[y*w+x] = true
+			}
+		}
+	}
+	for i := range walls {
+		if rng.IntN(256) < int(density)/2 {
+			walls[i] = !walls[i]
+		}
+	}
+	return w, h, walls
+}
+
 func referenceCompute(f *FlowField, targets []vmath.Point, isBlocked wallChecker) {
 	if len(targets) == 0 {
 		f.Valid = false
@@ -190,21 +211,7 @@ func FuzzComputeMatchesReference(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, seed uint64, density, targets uint8) {
 		rng := rand.New(rand.NewPCG(seed, uint64(density)<<8|uint64(targets)))
-		w, h := 2+rng.IntN(40), 2+rng.IntN(20)
-		walls := make([]bool, w*h)
-		for range rng.IntN(8) { // rectangles, then cells carved out of them
-			x0, y0 := rng.IntN(w), rng.IntN(h)
-			for y := y0; y < min(h, y0+1+rng.IntN(6)); y++ {
-				for x := x0; x < min(w, x0+1+rng.IntN(10)); x++ {
-					walls[y*w+x] = true
-				}
-			}
-		}
-		for i := range walls {
-			if rng.IntN(256) < int(density)/2 {
-				walls[i] = !walls[i]
-			}
-		}
+		w, h, walls := randomWalls(rng, density)
 		oobBlocked := seed&1 == 1
 		isBlocked := func(x, y int) bool {
 			if x < 0 || y < 0 || x >= w || y >= h {
@@ -256,21 +263,7 @@ func FuzzReachMeasuresWhatTheFieldsRead(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, seed uint64, density uint8) {
 		rng := rand.New(rand.NewPCG(seed, uint64(density)))
-		w, h := 2+rng.IntN(40), 2+rng.IntN(20)
-		walls := make([]bool, w*h)
-		for range rng.IntN(8) {
-			x0, y0 := rng.IntN(w), rng.IntN(h)
-			for y := y0; y < min(h, y0+1+rng.IntN(6)); y++ {
-				for x := x0; x < min(w, x0+1+rng.IntN(10)); x++ {
-					walls[y*w+x] = true
-				}
-			}
-		}
-		for i := range walls {
-			if rng.IntN(256) < int(density)/2 {
-				walls[i] = !walls[i]
-			}
-		}
+		w, h, walls := randomWalls(rng, density)
 		isBlocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
 		goals := make([]vmath.Point, 1+rng.IntN(4))
 		for i := range goals {
@@ -309,6 +302,48 @@ func FuzzReachMeasuresWhatTheFieldsRead(f *testing.F) {
 	})
 }
 
+// FuzzNearestChoosesWhatMeasureRanks: from any cell, on any walls, Nearest names
+// the goal Measure's distances choose, the nearest and the first of equals, or
+// held while within the hold of it; stopping short never changes the choice.
+func FuzzNearestChoosesWhatMeasureRanks(f *testing.F) {
+	for seed := range uint64(16) {
+		f.Add(seed, uint8(seed*5))
+	}
+	f.Fuzz(func(t *testing.T, seed uint64, density uint8) {
+		rng := rand.New(rand.NewPCG(seed, uint64(density)))
+		w, h, walls := randomWalls(rng, density)
+		isBlocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
+		goals := make([]vmath.Point, 1+rng.IntN(8))
+		for i := range goals {
+			goals[i] = vmath.Point{X: rng.IntN(w+2) - 1, Y: rng.IntN(h+2) - 1}
+		}
+		g, costs := new(SearchGrid), make([]int32, len(goals))
+		g.Fill(w, h, bitsOf(w, h, isBlocked))
+		var r Reach
+		for from := range w * h {
+			x, y := from%w, from/w
+			r.Measure(g, &refCosts, x, y, goals, costs)
+			for _, hold := range [][2]int32{{1, 2}, {1, 1}, {3, 2}, {2, 1}} {
+				for held := -1; held < len(goals); held++ {
+					want := -1
+					for j, d := range costs {
+						if d < CostUnreachable && (want < 0 || d < costs[want]) {
+							want = j
+						}
+					}
+					if held >= 0 && want >= 0 && costs[held] < CostUnreachable &&
+						int64(costs[held])*int64(hold[1]) <= int64(costs[want])*int64(hold[0]) {
+						want = held
+					}
+					if got := r.Nearest(g, &refCosts, x, y, goals, held, hold[0], hold[1]); got != want {
+						t.Fatalf("(%d,%d) held %d hold %d/%d: chose %d, Measure ranks %d of %v", x, y, held, hold[0], hold[1], got, want, costs)
+					}
+				}
+			}
+		}
+	})
+}
+
 // FuzzOpenedRepairsAsARecomputeWould: on any walls, opening any cells leaves a
 // repaired field with the distances and directions a recompute on the new grid
 // gives, or declines where an opening would reseed a target; and a grid moved cell
@@ -319,21 +354,7 @@ func FuzzOpenedRepairsAsARecomputeWould(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, seed uint64, density uint8) {
 		rng := rand.New(rand.NewPCG(seed, uint64(density)))
-		w, h := 2+rng.IntN(40), 2+rng.IntN(20)
-		walls := make([]bool, w*h)
-		for range rng.IntN(8) {
-			x0, y0 := rng.IntN(w), rng.IntN(h)
-			for y := y0; y < min(h, y0+1+rng.IntN(6)); y++ {
-				for x := x0; x < min(w, x0+1+rng.IntN(10)); x++ {
-					walls[y*w+x] = true
-				}
-			}
-		}
-		for i := range walls {
-			if rng.IntN(256) < int(density)/2 {
-				walls[i] = !walls[i]
-			}
-		}
+		w, h, walls := randomWalls(rng, density)
 		isBlocked := func(x, y int) bool { return x < 0 || y < 0 || x >= w || y >= h || walls[y*w+x] }
 		goals := make([]vmath.Point, 1+rng.IntN(3))
 		for i := range goals {

@@ -951,10 +951,10 @@ func (s *NavigationSystem) pursue(slot uint8) bool {
 }
 
 // lockSnakeTarget holds a head on the cursor it reaches soonest. One reach from
-// the head over its tier's grid measures every cursor at once, when the head
-// has no reachable lock, the roster moved enough for its field to fall due, or
-// the settle interval passed; a lock holds until another route is over a third
-// shorter, and a cursor the head cannot reach is never chosen.
+// the head over its tier's grid ranks every cursor, as far as the choice needs,
+// when the head has no reachable lock, the roster moved enough for its field to
+// fall due, or the settle interval passed; a lock holds until another route is
+// over a third shorter, and a cursor the head cannot reach is never chosen.
 func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.NavigationComponent) {
 	groupID := uint8(0)
 	if target, ok := s.world.Components.Target.GetPtr(entity); ok {
@@ -995,23 +995,11 @@ func (s *NavigationSystem) lockSnakeTarget(entity core.Entity, nav *component.Na
 		g != nil && g.fields[tier].due || nav.LockTicks >= parameter.NavFlowSettleTicks) {
 		return
 	}
-	nav.LockTicks = 0
-	var costs [parameter.MaxPlayers]int32
-	s.reach.Measure(&s.tiers[tier].grid, &s.costs, pos.X, pos.Y, goals[:n], costs[:n])
-	best, bestCost, heldCost := core.Entity(0), navigation.CostUnreachable, navigation.CostUnreachable
-	for i := range n {
-		cost := int(costs[i])
-		if i == held {
-			heldCost = cost
-		}
-		if cost < bestCost {
-			best, bestCost = cursors[i], cost
-		}
+	nav.LockTicks, nav.LockedTarget = 0, 0
+	if i := s.reach.Nearest(&s.tiers[tier].grid, &s.costs, pos.X, pos.Y, goals[:n], held,
+		parameter.NavLockHoldNum, parameter.NavLockHoldDen); i >= 0 {
+		nav.LockedTarget = cursors[i]
 	}
-	if heldCost < navigation.CostUnreachable && bestCost*3 >= heldCost*2 {
-		return
-	}
-	nav.LockedTarget = best
 }
 
 // routeGraphFresh reports whether a graph stands on its tier as it is and its goal
