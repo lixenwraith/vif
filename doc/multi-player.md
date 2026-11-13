@@ -558,7 +558,7 @@ answers:
 |---|---|
 | Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session every other participant binds one too, for peer links and joins, which it takes once it hosts, and while its player relays for others as its `-relay` door would (§5.3): `-listen` pins it, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. `-no-advertise`, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every `-authority host` session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
-| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); there is still no discovery. A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
+| How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); on one local network a visible host is also found with no address typed (§5.7). A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the offer and the handoff record, beside the roster. |
 
 A successor is usually on another machine and cannot bind its predecessor's
 address, so a successor that authors must already be reachable at an address of its
@@ -1099,6 +1099,60 @@ router neither allocating nor authoring, which needs its listing and lifetime in
 router). A relayed topology is verified under `LinkShape`s by
 `TestARelayedTopologyConvergesUnderShape`, asserting hash-only convergence and the
 authority's per-link fan-out.
+
+### 5.7 Games on the local network
+
+Players on one home network find a host with no address typed. A run announces
+the session it hosts while its player has **Visible on this network** on
+(`:lan on`, the Multiplayer page, `[play] lan`; off by default) and it hosts at a
+door others reach: a host with a player, a dedicated host from its lobby on, and
+a run that took its session over, at its own door and by its own switch, since
+the offer and the handoff record carry nothing of it. A bot's run announces
+nothing, and neither does a door bound to this machine alone. The join, the
+session stream and the simulation are unchanged.
+
+- **Datagrams** (`pkg/network` `Discovery`). UDP on port 7777 (`NetworkLanPort`),
+  the default game port's twin; each opens with the magic `vif?`, a version and a
+  kind. A **beacon** is that header and a JSON object, 512 bytes at most: the
+  session's nonce, name, scenario, players and ceiling, whether its game waits to
+  start, its protocol and build, and its doors as scheme and port. A **probe** is
+  the header padded to 512 bytes, so no answer outweighs its question.
+  `DecodeBeacon` takes only the bytes `EncodeBeacon` writes, text held to
+  printable ASCII a JSON string carries unescaped; `FuzzDiscoveryDatagram` holds it.
+- **A visible host** broadcasts its beacon every `NetworkLanInterval` (2 s) to
+  the directed broadcast of each network it is on, those of its interfaces that
+  are up, have a carrier and broadcast, and to 255.255.255.255; it answers a probe
+  with the same beacon, unicast to its source. It answers only the probe itself,
+  from a private, link-local, loopback or on-link source, at most
+  `NetworkLanProbesPerSource` (8) a source and `NetworkLanProbes` (64) in all each
+  `NetworkLanProbeWindow` (2 s). What it announces is read once a period under
+  the world lock (`Membership.Announced`), and a probe is answered from the bytes
+  that read left, so a datagram takes no lock of the run's.
+- **A looking run** probes at once and every 2 s while the Multiplayer page shows
+  its list, on a host that draws its own menu while the menu is open, or after
+  `:lan` asked, and for `NetworkLanExpiry` (5 s) more. It lists each session once,
+  at the lowest address it answered from, until 5 s after its last beacon,
+  `NetworkLanRows` (64) at most. A row joins as `:join` joins, at the datagram's
+  source and the session's tcp door, else its first WebSocket one; a session of
+  another protocol is listed with why its row joins nothing. A beacon proves
+  nothing of who sent it: what authenticates the host a row joins is its door, a
+  passphrase's as for an address typed
+  ([Auth and session design §3.5](auth-session-design.md#35-passphrase-doors)),
+  and such a door refuses the row's join as it refuses a `:join` showing none.
+- **One socket** serves both, open only while the run announces or looks: bound
+  to 7777, or to an OS-assigned port while another run on the machine holds that
+  one. Such a run still probes, is answered and announces, and hears no broadcast.
+- **Android** lists the device's networks for the run, which its system keeps
+  from the Go runtime (golang/go#40569), and holds a Wi-Fi multicast lock while
+  the run listens and the player is at the game, since its Wi-Fi drops
+  broadcasts without one
+  ([Multi-platform §8](multi-platform.md#8-adding-another-renderer-or-android-host)).
+  **A browser** has no UDP: its list and `:lan` read "Nearby games unavailable in
+  a browser", and it plays a LAN game through a relay at a node it knows or a
+  `ws://` door. Broadcast is IPv4's, so a network with IPv6 alone finds nothing.
+- **Not chosen**: a beacon alone (no list at once, no host on its own hotspot),
+  mDNS/DNS-SD (a DNS codec, port 5353 shared with the system's daemon), a
+  multicast group, a subnet scan, listing by the site.
 
 ## 6. Current operating point
 

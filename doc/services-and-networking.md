@@ -157,6 +157,7 @@ flags so no caller can bypass the start/ready gate. The entry points:
 | `:host <doors> [host\|migrate]` | Open a run that is **already playing**, at one or more doors, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. A successor serves it beside the port its session reaches it at, or takes that port when the address names it, and hosts from then on. A run that hosts already, or is in any other session it joined, refuses it by its [session role](multi-player.md#1-vocabulary-and-boundaries). |
 | `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. The next run is built from the live seats, play settings and journal; the dial carries only its handshake and resolved scenario. A run that hosts, or is in a joined session that still has others in it, refuses it by its session role. |
 | `:leave` | Takes a host or a guest out of its session into one of its own, as the same participant under the next term, the world as it stands ([Multiplayer §5.5](multi-player.md#55-leaving-a-session)). The command only asks: the run's loop serves it outside the world lock, since closing the port it leaves waits for handshakes that take that lock, and refuses a dial at the old door meanwhile. Its bots leave first, their places kept as Wraiths in the session left, and are seated again once that door is shut. A solo run, one whose session holds only its own bots, and a server refuse it by its session role. |
+| `:lan [on\|off]` | Sets whether the run announces the session it hosts to its local network, and alone reports the sessions found there: a beacon and a probe on one UDP socket, open only while the run announces or looks ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)). |
 | `:session` | One line: hosting or joined, by the role held now, and the address (a successor hosts at the one it declared until `:host` names one), participant identity, cursor slot, peer links, tick and map latch; then the authority summary, the reachable chain and whether this instance listens; then, with a peer linked, the slowest link and the cadence's operating point. |
 
 Every address a flag or command takes is one grammar, `network.ParseEndpoint`:
@@ -407,6 +408,8 @@ corrections already absorb, and hole punching between NATed peers, which also ne
 a rendezvous and, for a browser, WebRTC. For reach it is backwards: restrictive
 networks block UDP before TCP, and what nearly all of them pass is TLS on 443, which
 the site's WebSocket route serves; a native client needs only a `wss://` dialer.
+The one thing UDP carries is finding a game on the local network, a beacon and a
+probe that need no stream ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)).
 
 ICMP echo can carry bytes, as covert tunnels show, but it is a worse datagram: raw
 sockets need root or `CAP_NET_RAW`, which the fleet pod drops and a browser never
@@ -1097,7 +1100,7 @@ session of its own — `:session` reads `Session hosting` under the same partici
 and the next term, and the host's cursor waits as a Wraith. Restarting the host
 and rejoining with `:join` is a *new* session, not a merge.
 `-players <n>` caps the roster a host admits, `-host` or a later `:host` alike, and
-so does the scenario's `max_players`; unset, both are `MaxPlayers`. Bind the host to `:7777` for a LAN. Internet routing
+so does the scenario's `max_players`; unset, both are `MaxPlayers`. Bind the host to `:7777` for a LAN, where `:lan on` lets players find it with no address typed. Internet routing
 uses the same TCP path: a tcp door is plaintext and admits any key, so it is for
 trusted peers, and a `wss://` door with `-passphrase` authenticates both ends
 ([Auth and session design §3.5](auth-session-design.md#35-passphrase-doors)).
@@ -1192,6 +1195,7 @@ metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 | Content/audio adapters | `internal/service/adapter_content.go`, `adapter_audio.go` |
 | Network adapter | `internal/service/adapter_network.go` |
 | Link layer: framing, transport, port, probe, mesh, chunking, addresses | `pkg/network` |
+| Finding sessions on the local network | `pkg/network/discovery.go`; `internal/app/internal/membership/nearby.go` |
 | Session layer: handshakes, kinds, authority term and chain, identity, admission | `internal/network` |
 | WebSocket transport | `pkg/websocket`, `pkg/network/websocket_other.go`, `websocket_wasm.go`; the router's route in `tool/vif-router/ws_proxy.go` |
 | Tick-owned ECS wire bridge | `internal/system/network.go` |

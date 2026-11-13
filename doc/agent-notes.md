@@ -409,6 +409,12 @@ Branches.
   needs WebTransport's `serverCertificateHashes`, which the route does not speak,
   so a page joins a player's door over the site or by a passphrase bound to that
   door's certificate; a native run pins the fingerprint the sessions API carries.
+- Two runs on one machine find each other over UDP broadcast
+  ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)): a datagram
+  to an interface's directed broadcast reaches local sockets too, from that
+  interface's address, and the second run to bind UDP 7777 takes an OS-assigned
+  port. `ss -lnup` names who holds the port, and a few lines of Python sending the
+  512-byte probe (`vif?`, 1, 2, then zeros) read a visible host's beacon back.
 
 ## Position
 
@@ -534,6 +540,15 @@ Branches.
   does too.
 - `tui.TextFieldOpts.Border`'s zero value is `LineSingle`, a box three rows high, so
   a one-row text box (the menu's) passes `tui.LineNone` or draws nothing.
+- The menu's rows are built again each frame the menu shows them, and a host that
+  draws its own menu takes the whole tree each frame (`Router.MenuSnapshot`), as a
+  `tui` search does: a row builder with a side effect, as Nearby games' `Look`,
+  runs on every page there.
+- A method the menu comes to call on `engine.SessionController` panics in
+  `internal/mode`'s tests, whose double (`menuSession`) embeds the interface as
+  nil, and one added to `game.Listener` stops `android/game`'s tests building
+  (`menuListener`), which no `go test ./...` at the root compiles: give both
+  doubles the method, and run `go -C android test ./game`.
 
 ## Looking at the game without a device
 
@@ -542,6 +557,12 @@ Branches.
   spans and shot with Playwright, it shows real colours. `TERM=linux COLORTERM=`
   gives the console tier. The capture carries SGR state from one line into the
   next, so a converter that resets colours at each line paints wrong backgrounds.
+- A status message longer than its room rises onto the row above the status line
+  (the bar's `spill`), and the last row reads empty: read a capture's last two rows.
+- A run started with `XDG_CONFIG_HOME` and `XDG_STATE_HOME` in a scratch directory
+  reads and writes no file of the player's, so a setting it writes back never
+  reaches their `vif.toml`; `-mute` keeps it silent, and a tmux server of its own
+  (`tmux -L <name>`) keeps it out of their sessions.
 - Drive it with `tmux send-keys`: `:emit <Event> { ... }` raises any event, `:god`
   arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
   `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.

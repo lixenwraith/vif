@@ -133,7 +133,7 @@ measured for each release.
 | FreeBSD | Tested native target | Unix behavior and optional OSS `/dev/dsp` |
 | Windows amd64 | Experimental; plays in Windows Terminal, and in Alacritty with the issues below | `CGO_ENABLED=0`; `novlog vif_noaudio` by choice, since audio and logging both compile for Windows; published as an experimental zip, not a development focus |
 | Android | Debug-signed APK in every nightly and release ([android/README.md](../android/README.md)) | `android/`, its own module: `gomobile bind` around `app.Run`, a `SurfaceView` Canvas drawer and `AudioTrack` (§8); the wad as the system root |
-| `js/wasm` | Solo play and session join; a hidden tab leaves after five minutes and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, or raw sockets, each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
+| `js/wasm` | Solo play and session join; a hidden tab leaves after five minutes and rejoins on return (§5) | The page draws the cell grid on a WebGL canvas, plays the mixer's PCM and keeps `[play]` in its storage (`pkg/browser`); no filesystem discovery, process execution, logging sink, raw sockets or nearby games ([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)), each `unavailable in a browser` where a command asks. A session is joined over a browser WebSocket (§5), never a socket |
 | Other 64-bit native Go targets | No support claim | May compile through generic files, but are not in the verification matrix |
 | 32-bit targets | Not supported | `internal/core/arch32.go` stops the build on `386`, `arm`, `mips` and `mipsle`; the code assumes a 64-bit `int`. A fork that needs one can likely drop that file and build the terminal client with `vif_nogui`, since `pkg/window` lays out Xlib for 64-bit only and purego has no FreeBSD 32-bit port; that work is left to the fork |
 
@@ -551,7 +551,16 @@ over the whole view, filtered, so no margin is left; a tap maps to its cell in
 proportion. `FromRaster`, Go's raster as pixels, is the fallback. The APK's `wad/` is copied to the app's files directory as the
 system root (`VIF_SYSTEM_ROOTS`); the user root, logs and journals live beside it
 through the XDG variables. `onPause` reaches the run as `Away`, `onResume` hands
-the drawer the whole grid. A tap is a left press and release on its cell and a
+the drawer the whole grid. Nearby games
+([Multiplayer §5.7](multi-player.md#57-games-on-the-local-network)) take two
+things of the app, both the `Listener`'s: `Subnets`, the device's IPv4 networks as
+`NetworkInterface` lists them, asked each time the run sends, and `Listening`, on
+which `MainActivity` holds a Wi-Fi multicast lock (`CHANGE_WIFI_MULTICAST_STATE`,
+granted at install) while the run listens and the activity is resumed. The app
+targets SDK 36, where local network access comes with `INTERNET`; target 37 adds
+a prompt
+([todo](todo.md#ask-for-the-local-network-on-android-at-target-sdk-37)).
+A tap is a left press and release on its cell and a
 finger moving while down a left drag, both marked as a finger's (`Event.Touch`), posted once per cell as a terminal reports
 motion, so the cursor follows it and a held one repeats fire; keys are terminal key
 events and the system keyboard's text a paste (see **paste** in the term index),

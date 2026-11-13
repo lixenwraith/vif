@@ -160,7 +160,8 @@ state it opens in, `cell` is the zoom Android and a browser open at, and
 or screen ([Rendering §1](rendering.md#1-frame-pipeline)); `[play]` is
 how a run starts and what the configuration menu changes in it: the audio channels
 (`sfx`, `music`), the sfx volume (`sfx_volume`), auto-fire, mouse input, pointer
-following, the telemetry HUD, relaying for others, each game started or restarted
+following, the telemetry HUD, relaying for others, announcing its games on the
+local network (`lan`), each game started or restarted
 waiting for its player's press, the most frames drawn a second (`max_fps`), and
 whether the menu or the command line pauses a game that can pause (`pause_menu`,
 `pause_command`). It is found like any resource, from `-config-dir` down to the

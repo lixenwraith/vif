@@ -3,7 +3,8 @@
 Press **Ctrl-G** or **F10**, hold a left press (a finger) on the status bar, or
 enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
 regions that defines a game; a **game** is a scenario running in the engine. The
-Settings page and Relay for others are `vif.toml`'s `[play]`: a run writes them
+Settings page, Relay for others and Visible on this network are `vif.toml`'s
+`[play]`: a run writes them
 back as they change, and the next run starts as this one was left; the rest
 changes this run alone, and the keymap is never rewritten. The terminal and the
 desktop window draw the menu as the overlay below; Android and the browser draw
@@ -77,7 +78,7 @@ differences are the host's:
 - **Game**: the game running now. Pause, Restart game, Game speed; a replay adds
   Restart replay.
 - **Scenarios**: what to play. The installed scenarios, Start, Other scenario.
-- **Multiplayer**: playing with others. Session, Players, Bots.
+- **Multiplayer**: playing with others. Session, Nearby games, Players, Bots.
 - **Settings**: your preferences, each saved to `[play]`. Sound, Controls,
   Display, Pause, Start.
 - **Developer**: logging, the flight recorder, profiling, telemetry, the
@@ -142,6 +143,17 @@ carries the game for a player who reaches it and not the host, as after a host
 loss; off, the default, it carries only those that joined through it, its bots and
 its `-relay` door. A browser cannot relay, and the row says so. See
 [Multiplayer §5.1](multi-player.md#51-succession).
+
+**Visible on this network** runs `:lan on|off` and is saved in `[play]`: on, the
+games this run hosts are announced to its local network; off, the default, they
+are reached by an address typed. It applies whenever the run hosts. Under
+**Nearby games** the page lists each visible game found on the network as **Join
+&lt;name or address&gt; (scenario, players/places)**; its row joins it as Join a
+session joins its address, and a game of another build is listed with why its row
+joins nothing. The run looks for games while the page shows the list, on Android
+while the menu is open, and for five seconds after. A browser cannot look, and
+its list says so. See
+[Multiplayer §5.7](multi-player.md#57-games-on-the-local-network).
 
 Under **Players**, every other participant has a **Drop &lt;slot&gt;: player|bot**
 row that only the host can activate. Dropping a player removes its bots; dropping a
