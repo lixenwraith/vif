@@ -870,7 +870,8 @@ returns to.
 
 Finding games on the local network was run between two runs on one Linux machine;
 on Android the APK builds and no device has run it. On one Wi-Fi, a phone and a
-desktop or two phones: the host enters `:host :7777` and `:lan on`; the other
+desktop or two phones, a desktop's firewall passing 7777 in for tcp and udp: the
+host enters `:host :7777` and `:lan on`; the other
 opens Menu, Multiplayer and sees it under Nearby games within two seconds, and
 its row joins it; then the roles swap. What only a device shows:
 

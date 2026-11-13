@@ -1142,6 +1142,9 @@ session stream and the simulation are unchanged.
 - **One socket** serves both, open only while the run announces or looks: bound
   to 7777, or to an OS-assigned port while another run on the machine holds that
   one. Such a run still probes, is answered and announces, and hears no broadcast.
+  A firewall has to pass UDP 7777 in for a host to hear a probe and a looking run
+  an answer or a beacon: the rule that opens a host's door covers it where it
+  names the port and no protocol.
 - **Android** lists the device's networks for the run, which its system keeps
   from the Go runtime (golang/go#40569), and holds a Wi-Fi multicast lock while
   the run listens and the player is at the game, since its Wi-Fi drops
