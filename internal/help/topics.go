@@ -181,6 +181,7 @@ var topics = []topicDef{
 			{Keys: ":n <scenario>", Desc: "Start a game of another scenario, by installed name or path; everything operator-owned restarts with it"},
 			{Keys: ":wait [on|off]", Desc: "Hold each game started or restarted until a key, click or tap starts it, in a live session the host's, and a join until the press that seats it; on by default, -nw turns it off for a run, and a scenario's own restart never waits"},
 			{Keys: ":fps [auto|n]", Desc: "Draw at most n frames a second, 10 to 120 and never under one a tick; auto, the default, is three a tick (60 at the default tick), or 24 inside tmux or screen, which drop output that comes faster. Kept in vif.toml"},
+			{Keys: ":edge [0-50]", Desc: "How near the view's sides the cursor comes before the view follows it, by keys, mouse or touch alike: a percent of the screen's size, 15 by default; 0 follows once the cursor is on the edge row or column, 50 on every move. Alone, shows it. Kept in vif.toml"},
 			{Keys: ":q", Desc: "Quit"},
 			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},

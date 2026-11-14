@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "leave", "relay", "takeover", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps",
+	"host", "join", "leave", "relay", "takeover", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps", "edge",
 	"register", "login", "logout", "console",
 }
 
@@ -110,6 +110,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return applyToggle(ctx, &ctx.WaitStart, args, "wait", "Wait to start")
 	case "fps":
 		return handleFPSCommand(ctx, args)
+	case "edge":
+		return handleEdgeCommand(ctx, args)
 	case "d", "debug":
 		return handleDebugCommand(ctx, args)
 	case "h", "help", "?":
@@ -178,7 +180,7 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 	// A replay's viewer inspects a world the recording authors
 	if ctx.Viewer.Load() {
 		switch cmd {
-		case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
+		case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
 		default:
 			return "Unavailable in a replay"
 		}
@@ -607,6 +609,21 @@ func handleFPSCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 	ctx.MaxFPS.Store(int32(fps))
 	ctx.SetStatusMessage("Max FPS "+fpsWord(int32(fps)), parameter.StatusNotice)
+	return CommandResult{Continue: true}
+}
+
+// handleEdgeCommand reports the camera's edge, or sets it and moves the view to it
+func handleEdgeCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) > 0 {
+		n, err := strconv.Atoi(strings.TrimSuffix(args[0], "%"))
+		if err != nil || len(args) > 1 || n < 0 || n > parameter.CameraEdgeMost {
+			setCommandError(ctx, fmt.Sprintf("Usage: :edge [0-%d]", parameter.CameraEdgeMost))
+			return CommandResult{Continue: true}
+		}
+		ctx.World.SetCameraEdge(n)
+		ctx.World.FollowLocalCursor()
+	}
+	ctx.SetStatusMessage(fmt.Sprintf("Camera edge %d%%", ctx.World.CameraEdge()), parameter.StatusNotice)
 	return CommandResult{Continue: true}
 }
 
