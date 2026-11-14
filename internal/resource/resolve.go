@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/service"
 )
@@ -38,6 +39,11 @@ type Options struct {
 	Keymap string
 	Music  string
 	Sounds string
+
+	// ForeignDir and ForeignKeymap mark Dir and Keymap as named by a vif.toml that is
+	// not the player's own, a checkout's or a system root's: a keymap found through
+	// one is read up to date, never written back.
+	ForeignDir, ForeignKeymap bool
 
 	// Embedded forces the built-in scenario and corpus.
 	Embedded bool
@@ -144,15 +150,51 @@ func Scenarios(o Options) []string {
 	return names
 }
 
-// Keymap returns the external keymap path, "" for the embedded default keymap, and
-// whether it is the player's own, which a run writes back brought up to date: one
-// named, or one in the -config-dir root or the user root, as vif.toml goes.
-func Keymap(o Options) (string, bool, error) {
+// Keymap returns the external keymap path, "" for the embedded default keymap.
+func Keymap(o Options) (string, error) {
+	path, _, err := keymap(o)
+	return path, err
+}
+
+// keymap is Keymap's path and whether it is the player's own, which a run writes
+// back brought up to date: one they name, or one in the -config-dir root or the
+// user root, as vif.toml goes, unless a vif.toml not theirs named it.
+func keymap(o Options) (string, bool, error) {
 	path, err := paths.ConfigFile(newResolver(o).roots, o.Keymap, paths.InputDirName, paths.KeymapConfigFile)
 	if err != nil || path == "" {
 		return "", false, err
 	}
-	return path, o.Keymap != "" || paths.OwnRoot(o.Dir, filepath.Dir(filepath.Dir(path))), nil
+	if o.Keymap != "" {
+		return path, !o.ForeignKeymap, nil
+	}
+	dir := o.Dir
+	if o.ForeignDir {
+		dir = ""
+	}
+	return path, paths.OwnRoot(dir, filepath.Dir(filepath.Dir(path))), nil
+}
+
+// UpgradeKeymap brings the player's own keymap up to this build's in place
+// (input.UpgradeKeymap), as paths.UpgradeStore does vif.toml, and returns the status
+// line naming the changes, "" when there were none; another's is left as it is, and
+// one that does not read is for the run to refuse.
+func UpgradeKeymap(o Options) string {
+	path, own, err := keymap(o)
+	if err != nil || !own {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	out, notes, err := input.UpgradeKeymap(data)
+	if err != nil || len(notes) == 0 {
+		return ""
+	}
+	if err := (paths.FileStore{Path: path}).Store(out); err != nil {
+		return "Keymap not brought up to date: " + err.Error()
+	}
+	return "Keymap brought up to date: " + strings.Join(notes, "; ")
 }
 
 // BotGraph resolves a bot graph by path or by name: an existing file wins, and a

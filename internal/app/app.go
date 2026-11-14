@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -601,13 +600,13 @@ func (a *App) Close() {
 	a.log.Info("app", "msg", "shutdown completed", "us", time.Since(begin).Microseconds())
 }
 
-// loadKeymap merges an external key table, brought up to this build's
+// loadKeymap merges an external key table, read as this build brings it up to date
 // (input.UpgradeKeymap), over the embedded default document, and the scenario's own
-// keys over both for its run. The player's own file is written back so, and the
-// status line names each change.
+// keys over both for its run. It writes nothing: the process writes the player's
+// own back once, at its start (resource.UpgradeKeymap).
 func (a *App) loadKeymap() error {
 	kt := input.DefaultKeyTable()
-	path, own, err := resource.Keymap(a.cfg.Resources)
+	path, err := resource.Keymap(a.cfg.Resources)
 	if err != nil {
 		return fmt.Errorf("keymap path: %w", err)
 	}
@@ -616,16 +615,8 @@ func (a *App) loadKeymap() error {
 		if err != nil {
 			return fmt.Errorf("keymap load: %w", err)
 		}
-		data, notes, err := input.UpgradeKeymap(data)
-		if err != nil {
+		if data, _, err = input.UpgradeKeymap(data); err != nil {
 			return fmt.Errorf("keymap config %s: %w", path, err)
-		}
-		if own && len(notes) > 0 {
-			line := "Keymap brought up to date: " + strings.Join(notes, "; ")
-			if err := (paths.FileStore{Path: path}).Store(data); err != nil {
-				line = "Keymap not brought up to date: " + err.Error()
-			}
-			a.cfg.Notice = joinNotice(a.cfg.Notice, line)
 		}
 		override, err := input.LoadKeyConfig(data)
 		if err != nil {

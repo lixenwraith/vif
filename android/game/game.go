@@ -68,13 +68,11 @@ func Zone(id string) {
 	zone = id
 }
 
-// Start runs the game on the grid the view's pixels hold in cells sized by the
-// screen's density. files is the app's own directory, holding the user root, logs
-// and journals; wad is where the APK's assets were copied, read as the system root.
-// vif.toml is read and written back as a terminal run does. raster paints frames
-// with the software raster and hands the drawer pixels. away starts the run with
-// its player away, behind the start screen: its game waits at its first tick for
-// Resume, and starts over at the view's new grid if that changes before then.
+// Start runs the game on the view's grid, in cells sized by the screen's density.
+// files is the app's own directory, holding the user root, logs and journals; wad,
+// the APK's assets, is the system root; vif.toml and the keymap are brought up to
+// date as a terminal run's are. raster paints with the software raster. away holds
+// the game behind the start screen until Resume, starting over if the grid changes.
 func Start(files, wad string, width, height int32, density float32, raster, away bool, speaker Speaker, listener Listener) error {
 	tex, err := loadTexture()
 	if err != nil {
@@ -114,8 +112,10 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	if away {
 		v.setAway(true) // before the run reads its reports, so it never starts going
 	}
+	own := paths.OwnSettings("", file)
 	cfg := app.Config{Play: settings.Play, Settings: paths.SettingsFor("", file),
 		Resources: resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap,
+			ForeignDir: !own, ForeignKeymap: !own,
 			Downloads: cmp.Or(p.Downloads, paths.DefaultDownloadsDir()), SaveDownloads: settings.Session.SaveDownloads},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
 	// The app's private files, where the state root was put above: the system ends
@@ -124,8 +124,11 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 		cfg.Membership.PlaceStore = paths.PlaceFile{Path: paths.PlacesFile()}
 		cfg.Membership.SignInStore = paths.PlaceFile{Path: paths.SignInsFile()}
 	}
-	if len(notes) > 0 && paths.OwnSettings("", file) {
+	if len(notes) > 0 && own {
 		cfg.Notice = paths.UpgradeStore(cfg.Settings)
+	}
+	if line := resource.UpgradeKeymap(cfg.Resources); line != "" {
+		cfg.Notice = strings.TrimPrefix(cfg.Notice+"; "+line, "; ")
 	}
 	// Android keeps a device's networks from the Go runtime and its Wi-Fi drops
 	// broadcasts with no lock held, so the app lists the one and holds the other

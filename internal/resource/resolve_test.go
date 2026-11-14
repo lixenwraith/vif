@@ -54,6 +54,77 @@ func TestResolutionPrecedence(t *testing.T) {
 	}
 }
 
+// TestARunWritesBackOnlyThePlayersOwnKeymap: a keymap an older build left is
+// written back brought up to date, the status line naming each change, when it is
+// the player's own: in the -config-dir root, or named by -k. One a system root holds,
+// or that a vif.toml not the player's own names, is left as it is.
+func TestARunWritesBackOnlyThePlayersOwnKeymap(t *testing.T) {
+	doc := "# mine\n[normal]\na = \"unknown_action\"\nh = \"motion_right\" # mine\n"
+	dir, system, named := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "mine.toml")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, system)
+	for _, c := range []struct {
+		o   Options
+		own bool
+	}{
+		{Options{Dir: dir}, true},
+		{Options{Keymap: named}, true},
+		{Options{}, false},
+		{Options{Dir: dir, ForeignDir: true}, false},
+		{Options{Keymap: named, ForeignKeymap: true}, false},
+	} {
+		for _, root := range []string{dir, system} {
+			writeKeymap(t, filepath.Join(root, paths.InputDirName, paths.KeymapConfigFile), doc)
+		}
+		writeKeymap(t, named, doc)
+		path, err := Keymap(c.o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		said := UpgradeKeymap(c.o)
+		got, _ := os.ReadFile(path)
+		switch {
+		case !c.own && (said != "" || string(got) != doc):
+			t.Errorf("%+v, not the player's: %q, written:\n%s", c.o, said, got)
+		case c.own && (!strings.HasPrefix(said, `Keymap brought up to date: reset to the default: [normal] key "a"`) ||
+			!strings.Contains(string(got), "# mine\n[normal]\n") || !strings.Contains(string(got), `h = "motion_right" # mine`) ||
+			strings.Contains(string(got), "unknown_action")):
+			t.Errorf("%+v, the player's own: %q, written:\n%s", c.o, said, got)
+		}
+	}
+}
+
+// TestCheckNamesAKeymapsChangesAndWritesNothing: -check names what bringing a keymap
+// up to date changes, and whether a run writes it back, leaving it as it is.
+func TestCheckNamesAKeymapsChangesAndWritesNothing(t *testing.T) {
+	doc := "[normal]\na = \"unknown_action\"\n"
+	dir := t.TempDir()
+	path := filepath.Join(dir, paths.InputDirName, paths.KeymapConfigFile)
+	writeKeymap(t, path, doc)
+	for foreign, want := range map[bool]string{false: "a run writes it back up to date", true: "a run reads it up to date"} {
+		var out strings.Builder
+		if err := checkKeymap(Options{Dir: dir, ForeignDir: foreign}, &out); err != nil {
+			t.Fatal(err)
+		}
+		if line := "keymap " + path + ": " + want + `: reset to the default: [normal] key "a"`; !strings.HasPrefix(out.String(), line) {
+			t.Errorf("-check said %q, want %q", out.String(), line)
+		}
+		if got, _ := os.ReadFile(path); string(got) != doc {
+			t.Errorf("-check wrote:\n%s", got)
+		}
+	}
+}
+
+func writeKeymap(t *testing.T, path, doc string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestCategorizedRootResolvesEveryResource covers the operator-root path end to
 // end, and the strictness the explicit overrides apply.
 func TestCategorizedRootResolvesEveryResource(t *testing.T) {
@@ -75,8 +146,8 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	if got, err := ScenarioPath(o); err != nil || got != scenario {
 		t.Fatalf("scenario = %q, %v; want %q", got, err, scenario)
 	}
-	if got, own, err := Keymap(o); err != nil || got != keymap || !own {
-		t.Fatalf("keymap = %q, own %v, %v; want %q, the player's own", got, own, err, keymap)
+	if got, err := Keymap(o); err != nil || got != keymap {
+		t.Fatalf("keymap = %q, %v; want %q", got, err, keymap)
 	}
 	if got, err := Corpus(o, Scenario{}); err != nil || got.Dir != content {
 		t.Fatalf("content = %+v, %v; want %q", got, err, content)
@@ -157,10 +228,10 @@ func TestOptionsRejectUnusableOverrides(t *testing.T) {
 	file := filepath.Join(base, "file")
 	writeFixture(t, file)
 
-	if _, _, err := Keymap(Options{Keymap: base}); err == nil {
+	if _, err := Keymap(Options{Keymap: base}); err == nil {
 		t.Fatal("directory accepted as an explicit config file")
 	}
-	if _, _, err := Keymap(Options{Keymap: filepath.Join(base, "missing.toml")}); err == nil {
+	if _, err := Keymap(Options{Keymap: filepath.Join(base, "missing.toml")}); err == nil {
 		t.Fatal("missing explicit config file accepted")
 	}
 	for _, tc := range []struct {

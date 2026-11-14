@@ -79,8 +79,8 @@ var (
 	// settings is vif.toml as the roots of -config-dir resolved it, brought up to
 	// this build's, settingsFile the file it came from ("" the embedded one), and
 	// settingsStore where the run writes it back as [play] changes; settingsNotes
-	// name what bringing it up to date changes, and settingsNotice what writing that
-	// back said.
+	// name what bringing it up to date changes, and settingsNotice what writing it,
+	// and the keymap, back said.
 	settings       paths.Settings
 	settingsFile   string
 	settingsStore  paths.SettingsStore
@@ -166,7 +166,12 @@ func main() {
 		openWindow()
 	}
 	requested := flagConfig.scenario // what a -join site is asked for; vif.toml's is this machine's
-	applySettings(settings)
+	applySettings(settings, settingsOwn)
+	if !*flagCheck && !*flagSchema {
+		if line := resource.UpgradeKeymap(flagConfig.options()); line != "" {
+			settingsNotice = strings.TrimPrefix(settingsNotice+"; "+line, "; ")
+		}
+	}
 
 	setupDiagnostics()
 
@@ -530,16 +535,19 @@ func musicWAVDir() string {
 
 // applySettings makes vif.toml the default of each path flag it names: a flag given
 // on the command line keeps its value, -d keeps the embedded scenario and content,
-// and -l and -j still decide whether a stream is written.
-func applySettings(s paths.Settings) {
-	fill := func(flag *string, file string) {
-		if *flag == "" {
-			*flag = file
+// and -l and -j still decide whether a stream is written. A root or keymap that a
+// vif.toml not the player's own names (own false) is read, never written back.
+func applySettings(s paths.Settings, own bool) {
+	fill := func(flag *string, file string) bool {
+		if *flag != "" || file == "" {
+			return false
 		}
+		*flag = file
+		return true
 	}
 	p := s.Paths
-	fill(&flagConfig.dir, p.Root)
-	fill(&flagConfig.keymap, p.Keymap)
+	flagConfig.foreignDir = fill(&flagConfig.dir, p.Root) && !own
+	flagConfig.foreignKeymap = fill(&flagConfig.keymap, p.Keymap) && !own
 	fill(&flagLogs.dir.value, p.Log)
 	fill(&flagJournal.value, p.Journal)
 	fill(&flagMusicWAV.value, p.Music)
@@ -559,6 +567,9 @@ type configFlags struct {
 	music    string
 	sounds   string
 	embedded bool
+	// foreignDir and foreignKeymap: dir and keymap came from a vif.toml not the
+	// player's own (resource.Options.ForeignDir)
+	foreignDir, foreignKeymap bool
 }
 
 func newConfigFlags() *configFlags { return &configFlags{} }
@@ -566,13 +577,15 @@ func newConfigFlags() *configFlags { return &configFlags{} }
 // options is the resolved resource override set these flags describe.
 func (f *configFlags) options() resource.Options {
 	return resource.Options{
-		Dir:      f.dir,
-		Scenario: f.scenario,
-		Content:  f.content,
-		Keymap:   f.keymap,
-		Music:    f.music,
-		Sounds:   f.sounds,
-		Embedded: f.embedded,
+		Dir:           f.dir,
+		Scenario:      f.scenario,
+		Content:       f.content,
+		Keymap:        f.keymap,
+		Music:         f.music,
+		Sounds:        f.sounds,
+		ForeignDir:    f.foreignDir,
+		ForeignKeymap: f.foreignKeymap,
+		Embedded:      f.embedded,
 	}
 }
 

@@ -252,7 +252,11 @@ func TestHeadlessSessionRequiresTheScriptGate(t *testing.T) {
 	}
 }
 
-func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
+// TestARunBindsItsKeymapUpToDateAndWritesNothing: a run binds an installed keymap
+// as this build brings it up to date, a retired binding as its successor and one it
+// refuses at the embedded one's, keeping custom bindings and unbindings, and leaves
+// the file as it is: the process writes the player's own back once, at its start.
+func TestARunBindsItsKeymapUpToDateAndWritesNothing(t *testing.T) {
 	t.Parallel()
 	cfg := scriptConfig(fixtureSeed)
 	cfg.Resources.Dir = t.TempDir()
@@ -260,7 +264,8 @@ func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("[normal]\na = \"append\"\nh = \"motion_right\"\nv = \"none\"\n"), 0o600); err != nil {
+	doc := "[normal]\na = \"append\"\nh = \"motion_right\"\nv = \"none\"\nq = \"unknown_action\"\n"
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := NewHeadless(cfg)
@@ -282,49 +287,11 @@ func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
 	if _, bound := kt.NormalRunes['v']; bound {
 		t.Fatal("explicit unbinding was lost")
 	}
-}
-
-// TestARunWritesBackOnlyThePlayersOwnKeymap: a run binds its keymap as this build
-// brings it up to date, a binding it refuses at the embedded one's; the player's
-// own, in the -config-dir root, is written back so and the status line names each
-// change, while a system root's is left as it is.
-func TestARunWritesBackOnlyThePlayersOwnKeymap(t *testing.T) {
-	doc := "# mine\n[normal]\na = \"unknown_action\"\nh = \"motion_right\" # mine\n"
-	system := t.TempDir()
-	t.Setenv(paths.SystemRootsEnv, system)
-	fire, _ := input.ActionEntry("toggle_auto_fire")
-	for _, own := range []bool{true, false} {
-		cfg := scriptConfig(fixtureSeed)
-		root := system
-		if own {
-			cfg.Resources.Dir = t.TempDir()
-			root = cfg.Resources.Dir
-		}
-		path := filepath.Join(root, paths.InputDirName, paths.KeymapConfigFile)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		a, err := NewHeadless(cfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		kt, notice := a.Context().KeyTable, a.cfg.Notice
-		a.Close()
-		if kt.NormalRunes['a'] != fire || kt.NormalRunes['h'].Motion != input.MotionRight {
-			t.Fatalf("own %v: bound a %+v, h %+v", own, kt.NormalRunes['a'], kt.NormalRunes['h'])
-		}
-		got, _ := os.ReadFile(path)
-		switch {
-		case !own && (notice != "" || string(got) != doc):
-			t.Fatalf("a system root's keymap: %q, written:\n%s", notice, got)
-		case own && (!strings.HasPrefix(notice, `Keymap brought up to date: reset to the default: [normal] key "a"`) ||
-			!strings.Contains(string(got), "# mine\n[normal]\n") || !strings.Contains(string(got), `h = "motion_right" # mine`) ||
-			!strings.Contains(string(got), `a = "toggle_auto_fire"`) || strings.Contains(string(got), "unknown_action")):
-			t.Fatalf("the player's own keymap: %q, written:\n%s", notice, got)
-		}
+	if record, _ := input.ActionEntry("macro_record_toggle"); kt.NormalRunes['q'] != record {
+		t.Fatalf("a refused binding binds %+v; want the embedded one's", kt.NormalRunes['q'])
+	}
+	if got, _ := os.ReadFile(path); string(got) != doc || a.cfg.Notice != "" {
+		t.Fatalf("the run wrote, saying %q:\n%s", a.cfg.Notice, got)
 	}
 }
 

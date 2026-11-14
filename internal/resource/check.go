@@ -47,7 +47,7 @@ func Check(o Options, w io.Writer) error {
 }
 
 func checkKeymap(o Options, w io.Writer) error {
-	path, own, err := Keymap(o)
+	path, own, err := keymap(o)
 	if err != nil {
 		return err
 	}
