@@ -1,6 +1,6 @@
 # Gameplay Design
 
-vif combines Vim-style text navigation with a real-time typing and
+vif combines vi-style text navigation with a real-time typing and
 survival game. This document describes the current mechanics as implemented.
 Key bindings and parser details are in [Input and modes](input-and-modes.md),
 while campaign sequencing is authored through the state machine described in
@@ -10,7 +10,7 @@ while campaign sequencing is authored through the state machine described in
 
 ```mermaid
 flowchart TD
-    Navigate["navigate like Vim"] --> Type["type or delete glyphs"]
+    Navigate["navigate like vi"] --> Type["type or delete glyphs"]
     Type --> Resources["change heat, energy, and boost"]
     Resources --> Defend["shield and weapons affect hostile species"]
     Defend --> Rewards["collect nuggets, gold, and loot"]

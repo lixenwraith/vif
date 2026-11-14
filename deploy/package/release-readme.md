@@ -3,9 +3,9 @@
      is the target's, and @LABEL@, @TARGET@ and @PLATFORM@ are filled in. -->
 # vif @LABEL@ for @PLATFORM@
 
-vif is a real-time roguelike typing shooter played with Vim motions, solo or with
-other players over the network. Its page is https://lixen.com/vif/, and its source
-and documentation are at https://github.com/lixenwraith/vif.
+vif is a real-time roguelike typing shooter played with vi-style motions, solo or
+with other players over the network. Its page is https://lixen.com/vif/, and its
+source and documentation are at https://github.com/lixenwraith/vif.
 
 <!-- if nightly -->
 This is a nightly build: a development build of one commit, replaced every night,

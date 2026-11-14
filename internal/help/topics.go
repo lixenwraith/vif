@@ -25,7 +25,7 @@ var topics = []topicDef{
 		Entries: []entryDef{
 			{Actions: []string{"mode_insert"}, Desc: "INSERT mode: type the glyph under the cursor to clear it and move on"},
 			{Actions: []string{"mode_insert_first_non_ws", "mode_insert_line_end"}, Desc: "INSERT at the row's first glyph, and at its last"},
-			{Actions: []string{"mode_append"}, Desc: "INSERT one cell to the right, as vim's a"},
+			{Actions: []string{"mode_append"}, Desc: "INSERT one cell to the right, as vi's a"},
 			{Actions: []string{"mode_visual"}, Desc: "Toggle VISUAL mode: motions step by the shield radius instead of one cell"},
 			{Actions: []string{"mode_search"}, Desc: "SEARCH mode: type a pattern and press Enter to jump to it"},
 			{Actions: []string{"mode_command"}, Desc: "COMMAND mode: pauses solo play unless [play] pause_command is off; a live network session continues"},

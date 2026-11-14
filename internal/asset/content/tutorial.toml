@@ -6,7 +6,7 @@ schema = 1
 id = "welcome"
 lines = [
   "welcome to vif, the cursor is you",
-  "move like vim, type to stay alive",
+  "move like vi, type to stay alive",
   "f1 opens help from any mode",
   "esc always brings you back to normal",
 ]
@@ -128,7 +128,7 @@ lines = [
 [[blocks]]
 id = "vi-keys"
 lines = [
-  "vif plays a subset of vim",
+  "vif plays a subset of vi",
   "a cycles auto fire, not append",
   "p pauses, there is nothing to put",
   "o and O find glyphs in your column",

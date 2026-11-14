@@ -7,7 +7,7 @@ Exec=vif
 Icon=vif
 Terminal=true
 Categories=Game;ArcadeGame;
-Keywords=vi;vim;typing;
+Keywords=vi;typing;
 Actions=Window;
 
 [Desktop Action Window]

@@ -8,7 +8,7 @@ until its rename to vif in September 2026.
 ## 2025-04 to 2025-11 — Prototype and core game
 
 - Repository opened in April; the prototype from November 16
-- Vim motions, counts, operators, find/till and `%`
+- vi-style motions, counts, operators, find/till and `%`
 - Normal, Insert, Search and Command modes
 - Ping grid, coordinate highlighting, heat and score
 - Decay, then a Matrix-style falling decay
