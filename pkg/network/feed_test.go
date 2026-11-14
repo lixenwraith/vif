@@ -237,32 +237,47 @@ func TestASubscriberThatFallsBehindOrSendsIsDropped(t *testing.T) {
 	}
 }
 
-// TestARelayCopiesAFeedForItsOwnSubscribers: a hub fed the records another's
+// TestAHubRepeatsAFeedForItsOwnSubscribers: a hub repeating the records another's
 // subscriber reads, none inflated, begins its own newcomers at the newest starting
-// point, hands each to those already reading, and passes on why the feed ended.
-func TestARelayCopiesAFeedForItsOwnSubscribers(t *testing.T) {
+// point, hands each to those already reading, and passes on why the feed ended; one
+// whose own link to the feed is lost ends as a feed to find again.
+func TestAHubRepeatsAFeedForItsOwnSubscribers(t *testing.T) {
 	origin, w := feedOrigin(t, feedConfig())
-	relay := NewFeedHub(feedConfig())
-	client, server := net.Pipe()
-	if err := origin.Subscribe(server); err != nil {
-		t.Fatal(err)
-	}
-	go func() {
-		r := NewFeedReader(client, feedConfig())
-		for {
-			rec, err := r.Next()
-			if err != nil {
-				relay.End(err.Error(), false)
-				return
-			}
-			relay.Publish(rec)
+	repeated := func() (*FeedHub, net.Conn, chan int) {
+		hub := NewFeedHub(feedConfig())
+		client, server := net.Pipe()
+		if err := origin.Subscribe(server); err != nil {
+			t.Fatal(err)
 		}
-	}()
+		heads := make(chan int, 8)
+		go hub.Repeat(client, func(rec []byte) {
+			if rec[0] == FeedSync {
+				heads <- len(FeedBody(rec))
+			}
+		})
+		return hub, client, heads
+	}
+	repeater, _, heads := repeated()
+	cutOff, link, _ := repeated()
 
 	w.Sync(w.Cut(0), []byte("world@0"))
-	early := feedViewer(t, relay, feedConfig())
+	early := feedViewer(t, repeater, feedConfig())
 	if head := feedHead(t, early); head != "world@0" {
-		t.Fatalf("the relay's first subscriber began at %q", head)
+		t.Fatalf("the repeating hub's first subscriber began at %q", head)
+	}
+	if n := <-heads; n != len("world@0") {
+		t.Fatalf("the repeating hub was shown a starting point of %d bytes", n)
+	}
+	stranded := feedViewer(t, cutOff, feedConfig())
+	feedHead(t, stranded)
+	_ = link.Close()
+	select {
+	case <-stranded.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("a hub that lost its feed kept its subscriber")
+	}
+	if ended := (FeedEnded{}); !errors.As(stranded.Err(), &ended) || !ended.Again {
+		t.Fatalf("a hub that lost its feed ended as %v, want a feed to find again", stranded.Err())
 	}
 	w.Frame(testEpoch, []byte("t1"))
 	w.Mark(1)
@@ -274,13 +289,13 @@ func TestARelayCopiesAFeedForItsOwnSubscribers(t *testing.T) {
 	feedWant(t, feedTickFrames(t, early, 1), "0x12:t1")
 	feedWant(t, feedTickFrames(t, early, 2), "0x12:t2")
 
-	late := feedViewer(t, relay, feedConfig())
+	late := feedViewer(t, repeater, feedConfig())
 	if head := feedHead(t, late); head != "world@1" {
-		t.Fatalf("the relay's newcomer began at %q, want world@1", head)
+		t.Fatalf("the repeating hub's newcomer began at %q, want world@1", head)
 	}
 	feedWant(t, feedTickFrames(t, late, 2), "0x12:t2")
 	if head := string(early.TakeHead()); head != "world@1" {
-		t.Fatalf("the relay handed a subscriber already reading %q, want world@1", head)
+		t.Fatalf("the repeating hub handed a subscriber already reading %q, want world@1", head)
 	}
 
 	origin.End("the host left", true)
@@ -288,7 +303,7 @@ func TestARelayCopiesAFeedForItsOwnSubscribers(t *testing.T) {
 		select {
 		case <-port.Done():
 		case <-time.After(2 * time.Second):
-			t.Fatal("a relay's subscriber never learned the feed ended")
+			t.Fatal("a repeating hub's subscriber never learned the feed ended")
 		}
 		if ended := (FeedEnded{}); !errors.As(port.Err(), &ended) || ended.Reason != "the host left" || !ended.Again {
 			t.Fatalf("the feed ended as %v, want the publisher's reason", port.Err())

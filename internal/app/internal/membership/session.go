@@ -382,9 +382,9 @@ type JoinDial struct {
 func DialJoin(cfg config.Membership, wire Wiring, base JoinBase) (*JoinDial, error) {
 	dial, netCfg := network.PreviewSession, joinNetConfig(cfg, wire)
 	if cfg.Watch {
-		// Under a key of its own, proving no place this process keeps: a viewer comes
-		// back to none, and what it proved would tell its session who watches.
-		dial, netCfg.Keys, netCfg.Passes = network.WatchSession, nil, nil
+		// Under a key of its own, proving no place this process keeps and showing no
+		// sign-in: a viewer comes back to none, and either would tell who watches.
+		dial, netCfg.Keys, netCfg.Passes, netCfg.SignIn = network.WatchSession, nil, nil, ""
 	}
 	pending, preview, err := dial(cfg.JoinAddress, netCfg)
 	switch {

@@ -426,6 +426,40 @@ func (h *FeedHub) Totals() FeedTotals {
 	return FeedTotals{Plain: h.plain.Load(), Stream: h.stream.Load(), Heads: h.heads.Load()}
 }
 
+// Repeat publishes the feed conn carries as this hub's own, each record as it came
+// and none inflated, until that feed ends, which its subscribers are told as it was
+// told, or is lost, which ends this hub's as one to find again. each is shown every
+// record before the subscribers are sent it. The caller closes conn.
+func (h *FeedHub) Repeat(conn net.Conn, each func(rec []byte)) error {
+	r := NewFeedReader(conn, h.cfg)
+	for {
+		if h.cfg.Silence > 0 {
+			_ = conn.SetReadDeadline(time.Now().Add(h.cfg.Silence)) // [wall] the link, not the game
+		}
+		rec, err := r.Next()
+		if err != nil {
+			h.End("The feed was lost", true)
+			return err
+		}
+		if each != nil {
+			each(rec)
+		}
+		h.Publish(rec)
+		if rec[0] == FeedEnd {
+			return feedEnded(rec)
+		}
+	}
+}
+
+// feedEnded reads an end record: whether the feed comes back, and why it ended.
+func feedEnded(rec []byte) FeedEnded {
+	body := FeedBody(rec)
+	if len(body) == 0 {
+		return FeedEnded{}
+	}
+	return FeedEnded{Reason: string(body[1:]), Again: body[0] != 0}
+}
+
 func (h *FeedHub) drop(s *feedSub) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -743,11 +777,7 @@ func (p *FeedPort) take(r *FeedReader, rec []byte) error {
 			return fmt.Errorf("the run fell %d ticks behind its feed", len(p.ticks))
 		}
 	case FeedEnd:
-		body := FeedBody(rec)
-		if len(body) == 0 {
-			return FeedEnded{}
-		}
-		return FeedEnded{Reason: string(body[1:]), Again: body[0] != 0}
+		return feedEnded(rec)
 	}
 	return nil
 }
