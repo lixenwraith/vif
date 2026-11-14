@@ -267,6 +267,53 @@ func FuzzUpgradingSettingsReadsAsBefore(f *testing.F) {
 	})
 }
 
+// TestAStoreKeepsTheFileThePlayerKeeps: a store writes through a link to the file
+// it names, which keeps its mode, refuses a file no one may write, and leaves no
+// temporary file behind.
+func TestAStoreKeepsTheFileThePlayerKeeps(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a link needs a privilege there")
+	}
+	dir := t.TempDir()
+	target, link := filepath.Join(dir, "dotfiles", SettingsFile), filepath.Join(dir, "root", SettingsFile)
+	for _, d := range []string{filepath.Dir(target), filepath.Dir(link)} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(target, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := (FileStore{Path: link}).Store([]byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(target); info.Mode()&os.ModeSymlink == 0 || string(got) != "new" || st.Mode().Perm() != 0o600 {
+		t.Errorf("link %v, target %q under %v", info.Mode(), got, st.Mode())
+	}
+	if err := os.Chmod(target, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if err := (FileStore{Path: link}).Store([]byte("newer")); err == nil {
+		t.Error("a read-only file was written")
+	}
+	for _, d := range []string{filepath.Dir(target), filepath.Dir(link)} {
+		if left, _ := filepath.Glob(filepath.Join(d, "*.tmp")); len(left) > 0 {
+			t.Errorf("left %v", left)
+		}
+	}
+}
+
 // TestSavePlayWritesTheChangedKeysAlone: a file not there yet starts as the
 // embedded one; in a file holding [play] the line of each key that changed is
 // replaced and a key it lacks goes after its last, every other line kept, comments

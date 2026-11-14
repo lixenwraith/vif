@@ -407,15 +407,45 @@ func (f FileStore) Load() ([]byte, error) {
 	return rebase(data, filepath.Dir(f.Seed))
 }
 
+// Store replaces the file whole by rename, through a link to the file it names: a
+// file there keeps its mode and, as far as the writer may, its owner, a new one is
+// made 0644, and one no one may write is refused. Each write has a temporary file
+// of its own, so runs that start together never tear one another's.
 func (f FileStore) Store(data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(f.Path), 0o755); err != nil {
+	path, mode := f.Path, fs.FileMode(0o644)
+	info, err := os.Lstat(path)
+	if err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		if path, err = filepath.EvalSymlinks(path); err == nil {
+			info, err = os.Stat(path)
+		}
+		if err != nil {
+			return err // a link to nothing stays as it is
+		}
+	}
+	switch {
+	case err == nil && info.Mode().Perm()&0o222 == 0:
+		return fmt.Errorf("%s is read-only", path)
+	case err == nil:
+		mode = info.Mode().Perm()
+	case !errors.Is(err, fs.ErrNotExist):
 		return err
 	}
-	tmp := f.Path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.Rename(tmp, f.Path)
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // nothing once renamed
+	_, err = tmp.Write(data)
+	if err = errors.Join(err, tmp.Chmod(mode), tmp.Sync(), tmp.Close()); err != nil {
+		return err
+	}
+	if info != nil {
+		keepOwner(tmp.Name(), info)
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // saving keeps each write back one load and one store, whichever goroutine writes
