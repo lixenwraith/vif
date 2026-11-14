@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -295,6 +296,20 @@ func (t *Transport) serveSession(addr string, accept func(net.Conn) (PeerID, err
 	t.wg.Add(1)
 	go t.acceptLoop(ln, door{join: accept, admitted: admitted})
 	return ln.Addr().String(), nil
+}
+
+// closeSession shuts the admission listener serveSession bound at bound, the
+// address it returned, and leaves every link standing. Reports whether one was.
+func (t *Transport) closeSession(bound string) bool {
+	t.listenMu.Lock()
+	defer t.listenMu.Unlock()
+	i := slices.IndexFunc(t.extraListeners, func(ln net.Listener) bool { return ln.Addr().String() == bound })
+	if i < 0 {
+		return false
+	}
+	_ = t.extraListeners[i].Close() // its accept loop ends on the close
+	t.extraListeners = slices.Delete(t.extraListeners, i, i+1)
+	return true
 }
 
 // serveConn runs one admission handshake on a stream this process opened to itself,

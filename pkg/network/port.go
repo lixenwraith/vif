@@ -147,6 +147,11 @@ func (p *SocketPort) ServeSession(addr string, accept func(net.Conn) (PeerID, er
 	return p.transport.serveSession(addr, accept, admitted)
 }
 
+// CloseSession shuts the join gate ServeSession opened, at the address it returned,
+// and leaves every link standing: another port can then serve that address before
+// this one closes the links the gate admitted.
+func (p *SocketPort) CloseSession(bound string) bool { return p.transport.closeSession(bound) }
+
 // ServeConn runs a join handshake on one end of a stream this process opened, the
 // other end of which is a participant joining through this one.
 func (p *SocketPort) ServeConn(conn net.Conn, accept func(net.Conn) (PeerID, error), admitted func(PeerID)) error {

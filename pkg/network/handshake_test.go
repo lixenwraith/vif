@@ -293,3 +293,52 @@ func linked(t *testing.T, port *SocketPort, n int) {
 		}
 	}
 }
+
+// TestClosingASessionDoorKeepsItsLinks: CloseSession shuts the join gate
+// ServeSession opened and nothing else, so the link it admitted stands, and another
+// port serves that address before this one closes: what a run that goes on in a
+// session of its own does with the door the players it carries came in by.
+func TestClosingASessionDoorKeepsItsLinks(t *testing.T) {
+	t.Parallel()
+	start := func() *SocketPort {
+		port := NewSocketPort(testConfigFor(RoleHost, ""))
+		if err := port.Start(); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		t.Cleanup(func() { _ = port.Close() })
+		return port
+	}
+	admit := func(id PeerID) func(net.Conn) (PeerID, error) {
+		return func(net.Conn) (PeerID, error) { return id, nil }
+	}
+	dial := func(addr string) {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatalf("dial %s: %v", addr, err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+	}
+
+	old := start()
+	bound, err := old.ServeSession("127.0.0.1:0", admit(2), nil)
+	if err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+	dial(bound)
+	linked(t, old, 1)
+	if !old.CloseSession(bound) {
+		t.Fatalf("no door at %s to close", bound)
+	}
+	if old.CloseSession(bound) {
+		t.Fatal("a door closed twice")
+	}
+	next := start()
+	if _, err := next.ServeSession(bound, admit(3), nil); err != nil {
+		t.Fatalf("the address the closed door stood at is not free: %v", err)
+	}
+	dial(bound)
+	linked(t, next, 1)
+	if got := old.Peers(); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("the closed door's port holds links %v, want the one it admitted, 2, alone", got)
+	}
+}
