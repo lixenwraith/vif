@@ -239,19 +239,129 @@ ignores pause keys. A person's run pauses with only its own bots; the viewer's p
 key could start the session hold `:pause` starts when the holder is its session's
 host, which already stops its seats at one tick.
 
+### Train a network bot live in vanguard
+
+- Priority: P2
+- Affected files: `internal/bot`, `cmd/vif`, `internal/paths`
+- Prerequisite: [Give `genetic` what a live network learner needs](#give-genetic-what-a-live-network-learner-needs)
+- Guide: [Bots](bots.md#fitness-and-comparing-graphs),
+  [AI §3](ai-physics-and-evolution.md#3-genetic-library)
+
+A solo watched or headless bot whose policy is a small network and whose genes are
+its weights. One candidate plays a round, a game from its start to its defeat, and
+the population learns as rounds end. Decided:
+
+- **The game is vanguard as shipped, raiders on.** Its ramp, boss and faster caves
+  are the curriculum, a ship that kills nothing starves at tick 2002, so hiding
+  cannot win, and a defeat already resets the game, which ends the round.
+- **The genome is a network's weights**, not a graph's constants: a graph asks only
+  for the nearest target within a distance, so a constant's fitness is a staircase.
+- **The learner lives with the driver**, outside the world and its captures, and
+  saves its population in the user root, which the offline trainer also writes.
+
+What was measured, at 120x40 headless and flat out, where a 60 s round takes 0.1 to
+0.2 s. Fitness is the mean of sixteen seeds of 60 s; defeats and the median round
+are over eight:
+
+```
+vanguard          fitness  defeats  round, ticks
+still               -1052       64           137
+flee within 6        -958
+flee within 12       -620
+flee within 20       -232       41           224   20 of the 41 are crushes
+flee within 30       -233
+default              -765       64           135
+
+armada            still -1656   flee 6 -150   flee 12 +2   flee 30 0   default -114
+
+cave, no raiders, columns a second     20      60     120     200
+still, median ticks to a crush      never    1064     489     288
+random mover                          715     424     293     202
+```
+
+- One number already separates graphs in vanguard against a seed spread of 150 to
+  200, but the table flatters it: a crush crosses `EventCursorCrushed`, which no
+  row weighs, so rounds lengthen 1.6 times where fitness improves 4.5 times.
+- The cave alone teaches nothing: the rock's push steers a still cursor into the
+  gap, and with no gravity a reacting one needs no lookahead.
+- Armada flattens at 0, a ship never hit that never shoots, until fitness pays for
+  damage dealt and a graph can stand under a ship.
+
+What remains:
+
+- **Sensors**, read from what the view shows: the ceiling and floor rows at the
+  cursor's column and two ahead (`Positions.Rock()`), the nearest two raiders'
+  offsets and whether each is enraged, the landing marker's offset, the cursor's
+  column, energy, the nearest `U`. About sixteen inputs, each scaled to the view.
+- **The action**: one a state runs in `on_update`, which feeds the sensors through
+  the network and points at the cell its two outputs name, an offset in view
+  cells. Free mouse puts the cursor on any shown cell, and auto-fire shoots.
+- **The network**: six `tanh` units and a direct term from the inputs to the
+  outputs, about 150 weights, so a hand-written dodge is an exact genome with the
+  hidden outputs at zero, and enters first through `BeginEvaluation`. Decide the
+  table that declares it; its digest names the layout.
+- **Fitness**: a round scores its ticks plus its kills weighted by rank hit points
+  (8, 16, 28, 44), and a crush is a defeat. Decide whether a graph declares its
+  rows or the table gains them.
+- **The learner**: a `StreamingEngine` with one evaluation in flight, a candidate's
+  score the mean of three rounds, children mostly one parent's with mutation.
+- **The store**: one file for each graph and scenario, saved by the rule a setting
+  is, so a browser keeps it; a population of another layout digest starts over.
+- **The switch**: a `[bot]` key, so `-bot`, `:bot add` and the menu share it.
+- **The pace**: weak bots' rounds last 7 to 11 s, so a run at speed 1 scores 300 to
+  500 an hour and `-speed 8` eight times that, a solo bot's alone. Networks this
+  size are expected to want thousands, an estimate: live play shows the early
+  climb and the offline trainer fills the file.
+- **Sessions** wait: any participant's defeat resets every round, and a session
+  refuses a speed change.
+- **After vanguard**: armada, with a round timer raising `EventGameResetRequest`
+  and its band for the ship; main last, where `default` already scores about 900
+  a minute. Simon is memory with no number to tune, and td's rounds run minutes
+  against an eye population that is itself evolving.
+
+### Give `genetic` what a live network learner needs
+
+- Priority: P2
+- Affected files: `lixenwraith/genetic` (`streaming.go`, `streaming_state.go`,
+  `operator.go`, `persistence/dto.go`), `go.mod`
+- Guide: [AI §3](ai-physics-and-evolution.md#3-genetic-library)
+
+The module already seeds (`BeginEvaluation`, `Inject`), continues exactly
+(`Checkpoint`) and is deterministic. What a noisy, 150-gene, one-at-a-time learner
+lacks:
+
+- **A schedule on the streaming engine.** `SetSchedule` and `AdaptiveStrength` are
+  the batch `Engine`'s; a `StreamingEngine` keeps the rate and strength it was
+  built with, and weights need a step that shrinks as the archive settles.
+- **Repeat outcomes merged.** `SetEqual` holds a genotype at its latest score, right
+  for a moving objective; a noisy fixed one wants a running mean and its count, by
+  a hook over the old score, the new and the count. With it, a call handing out the
+  archive member due a re-flight, which `examples/lander` writes by hand.
+  `StreamingState` changes, so its version and vif's capture version move.
+- **Crossover by block.** `UniformCombiner` and `NPointCombiner` split a hidden
+  unit's weights between parents; a combiner over caller-named blocks keeps a
+  unit whole.
+- **A layout tag in a saved population.** `PopulationDTO` holds a version, a
+  generation and candidates, so a file cannot say which network it fits; a caller's
+  tag and, once outcomes merge, each candidate's count.
+- **Only if the archive stalls** at this size: an evolution strategy with a step
+  per gene, as an engine of its own. Measure first.
+
 ### Train bot graphs offline
 
 - Priority: P3
 - Affected files: `internal/bot`, `lixenwraith/genetic`,
   `internal/system/nugget.go`
+- Prerequisite: [Train a network bot live in vanguard](#train-a-network-bot-live-in-vanguard)
 - Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
-First decide how a graph declares bounded tunable numbers: a `[bot.params]` table,
-or bounded macro parameters shared with the editor's macro metadata. A genome is
-those numbers as a bounded vector; `lixenwraith/genetic`'s `Engine` evaluates
-whole headless runs over a matrix of scenarios and seeds, and
-`lixenwraith/genetic/fitness` scalarises the result. A solo run depends only on
-its seed, so evaluation needs no mesh. Decide where trained values ship. Bot
+The genome is the live learner's network, and the result its population file.
+`lixenwraith/genetic`'s `Engine` evaluates whole headless runs over a matrix of
+scenarios and seeds, fixed for the run since the batch engine never scores an
+elite again, and `lixenwraith/genetic/fitness` scalarises the result. A solo run
+depends only on its seed, so evaluation needs no mesh. Decide where trained values
+ship, and whether a graph's own constants become genes too: a `[bot.params]`
+table, or bounded macro parameters shared with the editor's macro metadata. Bot
 genomes never enter the in-game genetic registry, which captures carry. Fitness
 weighs no nugget, since nothing pushes `EventNuggetCollected`: push it in
 `NuggetSystem.collectNugget` and drop that function's own `statCollected`
