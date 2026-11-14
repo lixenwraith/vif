@@ -641,6 +641,26 @@ the repository, since it spells them. What it costs:
   old commits stay reachable there and in cached views until GitHub Support
   purges them. PR titles and bodies are edited on GitHub by hand.
 
+### Ship the third-party notices with every binary
+
+- Priority: P1
+- Affected files: `Makefile`, `.github/workflows/release.yml`,
+  `android/app/build.gradle.kts`, `internal/system/meta.go`
+
+A binary carries the licences of what it links, and they ask that their notices
+travel with every binary copy: Go's standard library, `golang.org/x/sys`,
+`x/term`, `x/crypto` and, on Android, `x/mobile` (BSD-3-Clause),
+`golang-jwt/jwt/v5` (MIT), `ebitengine/purego` (Apache-2.0) and the lixenwraith
+modules (BSD-3-Clause). The archives and `make install` carry vif's `LICENSE`,
+purego's (`LICENSE.purego`, with the desktop window) and the glyph atlas's font's
+(`LICENSE.font`), and the browser bundle its page fonts' (`web/fonts/LICENSE`),
+but none carries the Go modules' notices; the APK carries no licence at all,
+vif's own included, and the Play build must before it lists. One notices file
+made from `go.sum`'s modules (each module's licence from the module cache, by a
+make target, so a dependency added later comes with its own) goes into the
+archives beside the binary and into the APK's assets with the licence files,
+and the About overlay points to it or lists the names.
+
 ### Sign the Android build with a release key
 
 - Priority: P2
