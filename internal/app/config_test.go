@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 )
@@ -185,7 +186,8 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 }
 
 // TestARestartKeepsTheCommandLineAndTakesWhatItNames: the next run is the command
-// line Run was given with what the restart named, so a pinned seed survives. A :join
+// line Run was given with what the restart named, so a pinned seed survives, and
+// its console lists on from this one's. A :join
 // leaves the -players and -authority of a session it no longer hosts, and falls back
 // to that run on its own, in no session; a run following nobody starts over on its
 // own, keeping the ceiling its session was opened with. A door that reopens does so
@@ -196,11 +198,15 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 		Membership: Membership{HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
 			Participants: 4, Migrate: true}}, wiring: wiring{membership: membership.Wiring{SessionPlayers: 3}}}
 	dialled := &membership.JoinDial{}
+	console := []engine.ConsoleLine{{Text: ":join 10.0.0.2:7777/abc", Kind: parameter.StatusInput, At: 1, Count: 1}}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
-		Join: "10.0.0.2:7777/abc", Dialled: dialled, Bots: []string{"roam"}, Journal: true})
+		Join: "10.0.0.2:7777/abc", Dialled: dialled, Bots: []string{"roam"}, Journal: true, Console: console})
 	if next.Seed != 7 || next.Resources.Scenario != "duel" || next.Resources.Embedded || next.Notice != "n" ||
 		!slices.Equal(next.Membership.Bots, []string{"roam"}) || !next.Journal || !next.wiring.journalCarried {
 		t.Fatalf("next run %+v; want the command line with what the restart named", next)
+	}
+	if !slices.Equal(next.wiring.console, console) || solo == nil || !slices.Equal(solo.wiring.console, console) {
+		t.Fatal("the next run, or the one a failed join falls back to, does not list the console's lines on")
 	}
 	if next.Membership.HostAddress != "" || next.wiring.resumeHost != "127.0.0.1:7001" {
 		t.Fatalf("hosting opens %q before the clock and %q after it; want only after",

@@ -82,6 +82,7 @@ N = "special_search_prev"
 q = "macro_record_toggle"
 "@" = "prefix_macro_play"
 p = "pause"
+"`" = "console"
 
 [operator]
 w = "motion_word_forward"
@@ -132,6 +133,8 @@ G = "motion_screen_bottom"
 space = "overlay_activate"
 q = "overlay_close"
 "/" = "overlay_filter"
+"`" = "console"
+":" = "mode_command"
 
 [overlay_keys]
 ctrl_q = "quit"

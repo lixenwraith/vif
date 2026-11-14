@@ -2,6 +2,7 @@ package engine
 
 import (
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -216,6 +217,10 @@ type GameContext struct {
 	// zero when it is. Written by a replay's presenting loop, which runs its ticks.
 	presentW, presentH int
 
+	// The rows at the surface's foot a touch host's keyboard and the strip it draws
+	// above it hide, none while it is down; written by the frame's build
+	keyboardRows int
+
 	// === Context Exclusive ===
 
 	// No sync required
@@ -232,6 +237,8 @@ type GameContext struct {
 	searchText    atomic.Pointer[string]
 	statusMessage atomic.Pointer[statusLine] // nil when none was posted
 	lastCommand   atomic.Pointer[string]
+	// Every message posted, for the console; it locks only itself
+	console consoleLog
 	// Command-mode cursor position (rune offset within command text)
 	commandCursorPos atomic.Int32
 
@@ -243,6 +250,7 @@ type GameContext struct {
 
 	// Overlay geometry, recomputed on resize; content height published by the renderer
 	overlayGeom     atomic.Pointer[OverlayGeometry]
+	consoleGeom     atomic.Pointer[OverlayGeometry]
 	overlayContentH atomic.Int32
 
 	// Card selection and pinning; snapshots are immutable once published
@@ -484,12 +492,23 @@ func (ctx *GameContext) HandleResizeLocked() {
 
 // === Overlay ===
 
-// OverlayGeometry returns the overlay window placement for the current terminal size
+// OverlayGeometry returns the overlay window placement for the current terminal size,
+// the console's band while the console is the overlay shown
 func (ctx *GameContext) OverlayGeometry() OverlayGeometry {
-	if g := ctx.overlayGeom.Load(); g != nil {
+	g := ctx.overlayGeom.Load()
+	if ctx.IsConsoleShown() {
+		g = ctx.consoleGeom.Load()
+	}
+	if g != nil {
 		return *g
 	}
 	return OverlayGeometry{}
+}
+
+// IsConsoleShown reports the console as the overlay open, under the command line too
+func (ctx *GameContext) IsConsoleShown() bool {
+	c := ctx.overlayContent.Load()
+	return c != nil && c.Layout == core.OverlayLayoutConsole
 }
 
 // SetPresentationSize places overlays on a surface other than the simulated
@@ -499,14 +518,24 @@ func (ctx *GameContext) SetPresentationSize(width, height int) {
 	ctx.recomputeOverlayGeometry()
 }
 
+// SetKeyboardRows takes the rows a touch host's keyboard and its strip hide, which
+// the console stays above
+func (ctx *GameContext) SetKeyboardRows(rows int) {
+	if rows != ctx.keyboardRows {
+		ctx.keyboardRows = rows
+		ctx.recomputeOverlayGeometry()
+	}
+}
+
 // recomputeOverlayGeometry republishes window placement and screen telemetry
 func (ctx *GameContext) recomputeOverlayGeometry() {
 	w, h := ctx.Width, ctx.Height
 	if ctx.presentW > 0 {
 		w, h = ctx.presentW, ctx.presentH
 	}
-	g := ComputeOverlayGeometry(w, h)
+	g, c := ComputeOverlayGeometry(w, h), ComputeConsoleGeometry(w, h, ctx.keyboardRows)
 	ctx.overlayGeom.Store(&g)
+	ctx.consoleGeom.Store(&c)
 	ctx.statScreenW.Store(int64(ctx.Width))
 	ctx.statScreenH.Store(int64(ctx.Height))
 }
@@ -874,10 +903,96 @@ type statusLine struct {
 	since int64
 }
 
+// ConsoleLine is a message as the console lists it: its text and kind, the wall time
+// it was last posted at (Unix nano), and how many times in a row it was posted
+type ConsoleLine struct {
+	Text  string
+	Kind  parameter.StatusKind
+	At    int64
+	Count int
+}
+
+// consoleLog keeps the last parameter.ConsoleHistory messages posted, from any
+// goroutine; seq counts its changes, so a reader copies them again only then
+type consoleLog struct {
+	mu    sync.Mutex
+	lines [parameter.ConsoleHistory]ConsoleLine
+	head  int // the next slot written
+	n     int
+	seq   atomic.Uint64
+}
+
+// add appends a line, or counts it again when it repeats the newest
+func (l *consoleLog) add(text string, kind parameter.StatusKind, at int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.put(ConsoleLine{Text: text, Kind: kind, At: at, Count: 1})
+}
+
+// put appends line, or folds it into the newest when it repeats it; l.mu is held
+func (l *consoleLog) put(line ConsoleLine) {
+	defer l.seq.Add(1)
+	if l.n > 0 {
+		if last := &l.lines[(l.head+len(l.lines)-1)%len(l.lines)]; last.Text == line.Text && last.Kind == line.Kind {
+			last.At, last.Count = line.At, last.Count+line.Count
+			return
+		}
+	}
+	l.lines[l.head] = line
+	l.head = (l.head + 1) % len(l.lines)
+	l.n = min(l.n+1, len(l.lines))
+}
+
+// appendTo appends the lines to dst, oldest first; l.mu is held
+func (l *consoleLog) appendTo(dst []ConsoleLine) []ConsoleLine {
+	for i := range l.n {
+		dst = append(dst, l.lines[(l.head-l.n+i+len(l.lines))%len(l.lines)])
+	}
+	return dst
+}
+
+// ConsoleLines appends the console's lines to dst, oldest first, and returns the
+// change count they are as of
+func (ctx *GameContext) ConsoleLines(dst []ConsoleLine) ([]ConsoleLine, uint64) {
+	l := &ctx.console
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.appendTo(dst), l.seq.Load()
+}
+
+// ConsoleSeq is the console's change count, which moves with every message posted
+func (ctx *GameContext) ConsoleSeq() uint64 { return ctx.console.seq.Load() }
+
+// ClearConsole drops every line the console lists
+func (ctx *GameContext) ClearConsole() {
+	l := &ctx.console
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.head, l.n = 0, 0
+	l.seq.Add(1)
+}
+
+// AdoptConsole puts the lines of the run this one replaces before the ones this
+// run has posted since it started, so the console reads on across the change
+func (ctx *GameContext) AdoptConsole(lines []ConsoleLine) {
+	l := &ctx.console
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	own := l.appendTo(nil)
+	l.head, l.n = 0, 0
+	for _, line := range lines {
+		l.put(line)
+	}
+	for _, line := range own {
+		l.put(line)
+	}
+}
+
 // SetStatusMessage posts msg, unless the message shown outranks it and has been up
-// for less than its kind's Min (parameter.StatusKinds).
+// for less than its kind's Min (parameter.StatusKinds). The console lists it either way.
 func (ctx *GameContext) SetStatusMessage(msg string, kind parameter.StatusKind) {
 	now := ctx.TimeCtl.RealTime().UnixNano()
+	ctx.console.add(msg, kind, now)
 	next := &statusLine{text: msg, kind: kind, since: now}
 	for {
 		cur := ctx.statusMessage.Load()

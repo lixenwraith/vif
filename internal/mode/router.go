@@ -268,6 +268,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleConfigMenu()
 	case input.IntentHelp:
 		return r.handleHelp()
+	case input.IntentConsole:
+		return r.handleConsole()
 	case input.IntentPause:
 		r.ctx.WithOrigin(event.OriginCommand, func() { handlePauseCommand(r.ctx, nil) })
 		return true
@@ -432,6 +434,10 @@ func (r *Router) handleEscape() bool {
 		r.ctx.SetCommandCursorPos(0)
 		r.resetCommandHistoryBrowse()
 		r.ctx.SetPaused(false)
+		if r.ctx.IsConsoleShown() {
+			r.returnToConsole()
+			return true
+		}
 	case core.ModeOverlay:
 		if configMenu(r.ctx) != nil {
 			return r.configMenuBack()
@@ -441,7 +447,7 @@ func (r *Router) handleEscape() bool {
 			r.setOverlayFilter("")
 			return true
 		}
-		r.ctx.SetPaused(false)
+		return r.closeOverlay()
 	case core.ModeNormal:
 		return r.handleConfigMenu() // Escape with nothing pending is a menu key here
 	}
@@ -786,6 +792,9 @@ func (r *Router) input(key rune, source event.InputSource) *event.InputPayload {
 // --- Mode Switch Handler ---
 
 func (r *Router) handleModeSwitch(intent *input.Intent) bool {
+	if r.ctx.IsOverlayMode() && (intent.ModeTarget != input.ModeTargetCommand || !r.ctx.IsConsoleShown()) {
+		return true // An overlay opens no mode but the command line under the console
+	}
 	var newMode core.GameMode
 
 	switch intent.ModeTarget {
@@ -965,10 +974,13 @@ func (r *Router) handleTextConfirm() bool {
 		r.ctx.SetCommandText("")
 		r.ctx.SetCommandCursorPos(0)
 
-		if r.ctx.GetMode() != core.ModeOverlay {
-			r.transitionMode(core.ModeNormal)
-		} else {
+		switch {
+		case r.ctx.GetMode() == core.ModeOverlay:
 			r.machine.SetMode(input.ModeOverlay)
+		case r.ctx.IsConsoleShown():
+			r.returnToConsole() // The console the line was opened over shows the answer
+		default:
+			r.transitionMode(core.ModeNormal)
 		}
 
 		return result.Continue
@@ -1008,6 +1020,14 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 			r.commandHistoryUp()
 		case input.MotionDown:
 			r.commandHistoryDown()
+		case input.MotionHalfPageUp:
+			if r.ctx.IsConsoleShown() { // The console under the line pages as it does open
+				r.handleOverlayPageScroll(-1)
+			}
+		case input.MotionHalfPageDown:
+			if r.ctx.IsConsoleShown() {
+				r.handleOverlayPageScroll(1)
+			}
 		}
 		return true
 	}
@@ -1346,7 +1366,7 @@ func (r *Router) Operates(intent *input.Intent) bool {
 	}
 	switch intent.Type {
 	case input.IntentQuit, input.IntentEscape, input.IntentToggleAudioCycle, input.IntentConfigMenu,
-		input.IntentHelp, input.IntentKeyRelease:
+		input.IntentHelp, input.IntentConsole, input.IntentKeyRelease:
 		return true
 	case input.IntentModeSwitch:
 		return intent.ModeTarget == input.ModeTargetCommand
@@ -1634,7 +1654,8 @@ func (r *Router) suspendsPlayback(intent *input.Intent) bool {
 		return true
 	}
 	switch intent.Type {
-	case input.IntentConfigMenu, input.IntentHelp, input.IntentOverlayPoint, input.IntentOverlayDrag, input.IntentOverlayWheel:
+	case input.IntentConfigMenu, input.IntentHelp, input.IntentConsole,
+		input.IntentOverlayPoint, input.IntentOverlayDrag, input.IntentOverlayWheel:
 		return true
 	case input.IntentEscape:
 		return r.ctx.IsNormalMode()

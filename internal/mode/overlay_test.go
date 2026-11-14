@@ -325,7 +325,8 @@ func TestThePointerScrollsAnOverlay(t *testing.T) {
 
 // TestAPressPicksACardAndOutsideActsAsEscape: in telemetry a press selects the card
 // under it and pins the card already selected, as Enter does; a press in a row
-// below the cards in view picks nothing, and one outside the window is Escape.
+// below the cards in view picks nothing, and one outside the window is Escape,
+// which closes it and leaves nothing of it drawn.
 func TestAPressPicksACardAndOutsideActsAsEscape(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContext(w, 80, 24)
@@ -361,8 +362,8 @@ func TestAPressPicksACardAndOutsideActsAsEscape(t *testing.T) {
 		t.Fatalf("a press on the hint row: selection %q, overlay %v", got, ctx.IsOverlayMode())
 	}
 	press(g.X+g.W, row)
-	if ctx.IsOverlayMode() {
-		t.Fatal("a press outside the window did not close telemetry")
+	if ctx.IsOverlayMode() || ctx.IsOverlayActive() {
+		t.Fatalf("a press outside the window left telemetry: mode %v, drawn %v", ctx.GetMode(), ctx.IsOverlayActive())
 	}
 }
 

@@ -129,7 +129,7 @@ func TestAnOpOnAVanishedIdIsDropped(t *testing.T) {
 
 // TestAnOpOnADisabledIdAnswersWithItsReason: a disabled row carries the sentence its
 // command refuses with, an op on it changes nothing and puts that sentence on the
-// status line, which the snapshot carries as a notice.
+// status line, which the snapshot carries as an error, as the command's refusal is.
 func TestAnOpOnADisabledIdAnswersWithItsReason(t *testing.T) {
 	ctx, r, _ := nativeMenu(t)
 	ctx.Viewer.Store(true)
@@ -140,7 +140,7 @@ func TestAnOpOnADisabledIdAnswersWithItsReason(t *testing.T) {
 	scale := ctx.TimeCtl.Scale()
 	r.MenuOp(MenuOp{"step", "game/speed", "+1"})
 	s := snapshot(t, r)
-	if ctx.TimeCtl.Scale() != scale || s.Status == nil || s.Status.Text != why || s.Status.Kind != "notice" {
+	if ctx.TimeCtl.Scale() != scale || s.Status == nil || s.Status.Text != why || s.Status.Kind != "error" {
 		t.Fatalf("a step on a disabled row: scale %v from %v, status %+v, want %q", ctx.TimeCtl.Scale(), scale, s.Status, why)
 	}
 }

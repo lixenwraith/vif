@@ -577,9 +577,10 @@ as vim's rises over the window, broken after a space or a slash where the rest
 then fits the bottom row, so a log path reads whole on a portrait phone. While a
 keyboard covers a touch host (`StatusCovered`), the row keeps its input and
 messages to the left half the host repeats above the keyboard. A
-message is a notice or an alert (`parameter.StatusKinds`): the newest replaces the
-one shown, except that a notice does not displace an alert younger than its
-minimum, and each leaves after its kind's wall time. Its
+message has a kind (`parameter.StatusKinds`): a notice, a wait's progress, a command
+typed, a refusal, an alert or a server's announcement. The newest replaces the one
+shown, except that a lower kind does not displace an alert or an announcement
+younger than its minimum, and each leaves after its kind's wall time. Its
 colors come from one palette per color mode: the theme's in truecolor, and in an
 emulator in 256 colors through xterm's cube, labelled 256; on a text console fixed
 entries, each apart from the items beside it and with the text that reads best on it. The audio state is a letter: X muted, S sfx, M music,
@@ -598,7 +599,7 @@ The relative row and column gutters number only the rows and columns the
 playfield covers and mark the rest with the void color, so the chrome agrees
 with the margin it borders rather than numbering cells no motion can reach.
 
-The overlay renderer adapts help/about/telemetry content into buffer cells. Help
+The overlay renderer adapts help/about/telemetry/console content into buffer cells. Help
 and telemetry draw with the game live and allocate nothing a frame: `tui` draws a
 box's edges as runs of cells, not a string per edge, which took fourteen telemetry
 cards in a 160×50 window from 30 allocations (3.9 KB) a frame to none and from
@@ -606,7 +607,15 @@ cards in a 160×50 window from 30 allocations (3.9 KB) a frame to none and from
 about window draws the lixen mark from its shape (`logoCells`): in truecolor as
 quadrant glyphs fitted to anti-aliased samples (`ascimage.FitQuadrant`), as an
 emulator in 256 colors does too, on a text console as whole blocks in the entry
-each cell mostly shows. Flow
+each cell mostly shows. The console is a band across the screen right above the
+status bar, `ConsoleShare` of the rows above it with `ConsoleMinRows` at least,
+under a rule with its title and the widest key hint that fits. A row starts with
+its message's local time (`ConsoleStamp`) and wraps under its text, coloured by
+kind (`visual.RgbConsoleKind`, `visual.ConsoleKind256` on a text console): input
+teal, refusals salmon, alerts orange, announcements orchid, the rest as the bar.
+`GameContext` keeps the last `ConsoleHistory` messages, a repeat of the newest
+counted on it (`(x3)`), and the renderer wraps them again only when one comes or
+the width changes. Flow
 debug can show a target group's flow field or route graph and is controlled via
 `:flow [group]` and `:graph [group]`. Debug layers are part of the normal
 pipeline but are visibility-gated.

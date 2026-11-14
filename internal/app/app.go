@@ -58,6 +58,9 @@ type restartRequest struct {
 	// Journal opens a journal in the next run from its start: this run was
 	// journaling, or asked to start, when it was replaced.
 	Journal bool
+
+	// Console is what this run's console listed, which the next one lists on from
+	Console []engine.ConsoleLine
 }
 
 // replaceWith latches req as the run to build next, and is the only thing that
@@ -326,6 +329,7 @@ func (a *App) initWorld() error {
 	} else {
 		a.ctx = engine.NewGameContext(a.world, width, height)
 	}
+	a.ctx.AdoptConsole(a.cfg.wiring.console)
 	a.membership.Bind(a.world, a.ctx)
 	a.scribe.Bind(a.world, a.ctx)
 	a.ctx.BindLog(a.log)
