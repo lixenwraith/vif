@@ -45,6 +45,15 @@ type Snapshot struct {
 	Detail map[string]string
 }
 
+// What the clock detail reads: stopped until a lobby releases tick zero and on the
+// way out, paused, running, or stalled, the one a run is not live under.
+const (
+	ClockStopped = "stopped"
+	ClockPaused  = "paused"
+	ClockRunning = "running"
+	ClockStalled = "stalled"
+)
+
 // Server is the probe endpoint. The zero value is not usable; call New.
 type Server struct {
 	addr     string

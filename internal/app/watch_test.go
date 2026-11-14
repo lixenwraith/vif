@@ -550,6 +550,20 @@ func TestAnAudienceHasACeiling(t *testing.T) {
 	}
 }
 
+// TestALobbyIsNothingToSpectate: a session still gathering its players refuses a
+// dial that only watches as not started, which no dial retries by itself, so the
+// spectator's address keeps its budget for the dial that follows.
+func TestALobbyIsNothingToSpectate(t *testing.T) {
+	t.Parallel()
+	_, addr, _ := lobbyHost(t, Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40,
+		Resources: resource.Options{Embedded: true}, Membership: Membership{Participants: 2}})
+	cfg := network.DebugConfig(link.RolePeer, "")
+	cfg.Keys = []network.Key{network.NewKey()}
+	if _, _, err := network.WatchSession(addr, cfg); !errors.Is(err, network.ErrUnstarted) || network.RetryOf(err) != network.RetryLater {
+		t.Fatalf("a dial that only watches a lobby was told %v", err)
+	}
+}
+
 // TestASpectatorLooksFromAPlayerWhoPlays: a spectator's view is one player's: the
 // slot it began at, the one a press on a player, its keys or :spectate <slot> pick,
 // and the next one playing once that player leaves. None of it plays anything.
