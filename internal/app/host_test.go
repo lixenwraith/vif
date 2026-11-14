@@ -2470,6 +2470,179 @@ func TestAPinnedForkKeepsNobodyItDidNotBring(t *testing.T) {
 	}
 }
 
+// TestAPinnedForkTakesThePeopleItRelayedAlong: under the host policy, a relay with a
+// bot forks when its host leaves, keeping its bot, the person it relayed and its
+// -relay door, for that person alone and no place it never seated; the person waits
+// on it and redials that door into its own place, though the session the relay left
+// is still closing, and the fork's role holds them from the start.
+func TestAPinnedForkTakesThePeopleItRelayedAlong(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
+		Resources: resource.Options{Embedded: true}, Membership: Membership{PlaceStore: &keptPlaces{}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(host.Close)
+	tickUntilCursor(t, host)
+	stopHost := tickInBackground(host)
+	t.Cleanup(stopHost)
+	host.World().RunSafe(func() { err = host.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityHost) })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	relayAddr := freeAddress(t)
+	relay, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight,
+		func(c *Config) { c.Membership.RelayAddress = relayAddr })
+	relay.World().RunSafe(func() {
+		relay.cfg.Membership.JoinAddress = host.HostAddr()
+		relay.cfg.Mode = ModePlay // the mode whose loop takes a fork on
+	})
+	injectExCommand(t, relay, "bot add")
+	stopRelay := tickInBackground(relay)
+	t.Cleanup(func() { stopRelay() })
+	waitListening(t, relayAddr)
+	person, _ := mustSocketJoiner(t, relayAddr, fixtureSeed, BotWidth, BotHeight,
+		func(c *Config) { c.Membership.PlaceStore = &keptPlaces{} })
+	person.World().RunSafe(func() {
+		person.cfg.Membership.JoinAddress = relayAddr
+		person.cfg.Mode = ModePlay // the mode whose loop takes a redial on
+	})
+	stopPerson := tickInBackground(person)
+	t.Cleanup(stopPerson)
+	for _, a := range []*App{host, relay, person} {
+		waitUntil(t, func() bool { return len(places(a, everyone)) == 4 }, "the host, the relay, its bot and the person on every run")
+	}
+	rid, pid := relay.membership.LocalParticipant(), person.membership.LocalParticipant()
+	if through := relayOf(person); through != link.PeerID(rid) {
+		t.Fatalf("the person goes through participant %d; want its relay, %d", through, rid)
+	}
+	held := places(relay, everyone)
+	brought := maps.Clone(held)
+	maps.DeleteFunc(brought, func(_ uint8, p [2]uint64) bool { return p[1] == uint64(host.membership.LocalParticipant()) })
+	// A link that reads nothing, a guest whose machine stalled, holds the relay's old
+	// port closing for its flush while the person redials.
+	near, far := net.Pipe()
+	t.Cleanup(func() { _ = far.Close() })
+	old := relay.membership.SessionTransport().(*link.SocketPort)
+	if err := old.ServeConn(near, func(net.Conn) (link.PeerID, error) { return 10, nil }, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, func() bool { return old.Connected(10) }, "the stalled link on the relay's port")
+
+	stopHost()
+	leaveAs(t, host)
+	waitUntil(t, relay.membership.Leaving, "the host's loss reaching the relay's loop")
+	stopRelay()
+	// A place the host's roster says is the relay's bot, which the relay never seated.
+	relay.World().RunSafe(func() {
+		w := relay.World()
+		e := w.CreateEntity(core.DomainShared)
+		w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: 6, Control: component.ControlRemote,
+			PeerID: 12, Holder: uint32(rid), Key: network.NewKey().ID()})
+		w.Components.Wraith.SetComponent(e, component.WraithComponent{X: -1, Y: -1})
+		w.Resources.Player.Bind(6, e)
+	})
+	relay.membership.LeaveSession() // as Run's loop does
+	stopRelay = tickInBackground(relay)
+	if got := places(relay, everyone); !maps.Equal(got, brought) {
+		t.Fatalf("the relay's fork holds %v (entity, participant by slot); want itself, its bot and the person, %v", got, brought)
+	}
+	var joinErr error
+	relay.World().RunSafe(func() { joinErr = relay.ctx.SessionCtl.JoinError() })
+	if joinErr == nil || !strings.Contains(joinErr.Error(), "already in a session") {
+		t.Fatalf("with the person it kept on the way back, the relay takes :join %v; want it refused", joinErr)
+	}
+
+	var req *restartRequest
+	waitUntil(t, func() bool { req = person.restart.Load(); return req != nil }, "the person admitted into its relay's session")
+	taken := false
+	t.Cleanup(func() {
+		if !taken {
+			req.Dialled.Abandon(errors.New("the test is over"))
+		}
+	})
+	if offer := req.Dialled.Offer(); offer.Host != link.PeerID(rid) || offer.Assigned != link.PeerID(pid) || offer.Relay != 0 {
+		t.Fatalf("the person was admitted as participant %d of host %d through %d; want its own place, %d, in its relay's session, %d, and no relay",
+			offer.Assigned, offer.Host, offer.Relay, pid, rid)
+	}
+	if want := "Host connection lost; playing on in your relay's session"; req.Notice != want {
+		t.Fatalf("the person says %q; want %q", req.Notice, want)
+	}
+	if person.membership.Leaving() {
+		t.Fatal("the person forked a session of its own as well as going on in its relay's")
+	}
+
+	var refusal *network.Refusal
+	newcomer := network.DebugConfig(link.RolePeer, "")
+	newcomer.Keys = []network.Key{network.NewKey()}
+	pending, _, err := network.PreviewSession(relayAddr, newcomer) // turned away before it prepares
+	if pending != nil {
+		pending.Close()
+	}
+	if !errors.As(err, &refusal) || refusal.Code != network.RefusalUnknown {
+		t.Fatalf("a newcomer at the relay's door was answered %v; want it turned away, as the door takes back the players it relayed alone", err)
+	}
+
+	// The person plays on there, in the run Run's loop builds on the redial, and the
+	// session seats nobody new through it either, a bot of its own included, until
+	// the relay's player opens it to others.
+	stopPerson()
+	person.Close()
+	next, _ := person.cfg.restarted(req)
+	next.Mode = ModeHeadless // driven here, as every run in this test is
+	taken = true
+	back, err := newScriptApp(next, joinDeadline(socketWait))
+	if err != nil {
+		t.Fatalf("the person's run in its relay's session: %v", err)
+	}
+	t.Cleanup(back.Close)
+	t.Cleanup(tickInBackground(back))
+	waitForWraiths(t, relay, 0)
+	if got := back.membership.LocalParticipant(); got != pid || !maps.Equal(places(back, everyone), brought) {
+		t.Fatalf("the person plays as participant %d among %v; want %d among the places its relay kept, %v",
+			got, places(back, everyone), pid, brought)
+	}
+	// It holds players, not its bots alone: :join would drop them, and :leave has a
+	// session to leave.
+	var hostErr, leaveErr error
+	relay.World().RunSafe(func() {
+		joinErr, hostErr, leaveErr = relay.ctx.SessionCtl.JoinError(), relay.ctx.SessionCtl.HostError(), relay.ctx.SessionCtl.LeaveError()
+	})
+	if joinErr == nil || !strings.Contains(joinErr.Error(), "already in a session") || hostErr != nil || leaveErr != nil {
+		t.Fatalf("with the players it relayed back, the relay takes :join %v, :host %v, :leave %v; want :join refused and the others taken",
+			joinErr, hostErr, leaveErr)
+	}
+	addBot := func() (err error) {
+		back.World().RunSafe(func() { err = back.ctx.SessionCtl.AddBot("roam") })
+		return err
+	}
+	if err := addBot(); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, func() bool { return strings.Contains(back.ctx.GetStatusMessage(), "takes back only the players") },
+		"the person's new bot turned away; status "+back.ctx.GetStatusMessage())
+	if got := places(relay, everyone); !maps.Equal(got, brought) {
+		t.Fatalf("the relay's session holds %v after a bot asked in through the person; want %v", got, brought)
+	}
+	var hosting string
+	relay.World().RunSafe(func() {
+		relay.ctx.ClearStatusMessage() // the fork's alert, which a notice does not replace
+		err = relay.ctx.SessionCtl.BeginHosting("127.0.0.1:0", "")
+		hosting = relay.ctx.GetStatusMessage()
+	})
+	if err != nil {
+		t.Fatalf(":host in the session the relay kept its players in: %v", err)
+	}
+	if !strings.HasPrefix(hosting, "Hosting on ") || strings.Contains(hosting, relayAddr) {
+		t.Fatalf("the relay says %q; want the door :host opened named, not the one that takes back its players alone", hosting)
+	}
+	if err := addBot(); err != nil {
+		t.Fatal(err)
+	}
+	waitForCursors(t, relay, len(brought)+1)
+}
+
 // TestADoorOpenedWhereNobodyCouldDialWaitsForItsFirstGuest: a session of a run's own
 // bots reads no link once its last bot has gone, and the door :host opens there waits
 // for its first guest as a fresh host's does, rather than reading as a link that went

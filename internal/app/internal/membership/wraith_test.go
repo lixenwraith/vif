@@ -4,6 +4,7 @@
 package membership
 
 import (
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -105,6 +106,48 @@ func TestASessionARunOpensIsAwayOnlyFromWhomItKept(t *testing.T) {
 	if want := []link.PeerID{3, 2}; !slices.Equal(m.awayOrder, want) || m.yielding != 0 || len(m.returning) != 0 || m.dismissWraith.Load() != 0 {
 		t.Fatalf("the session opened with %v away, %d yielding, %d on the way back and %d to dismiss; want %v away and nobody else",
 			m.awayOrder, m.yielding, len(m.returning), m.dismissWraith.Load(), want)
+	}
+}
+
+// TestAPinnedForkRelaysOnlyThePeopleItsDoorTookIn: whom a fork from a pinned session
+// takes along is each person linked to it at a -relay door it serves: not the host
+// it lost, the relay it came in through, a bot or anyone not linked, and nobody at
+// all when it serves no door.
+func TestAPinnedForkRelaysOnlyThePeopleItsDoorTookIn(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	for _, id := range []link.PeerID{engine.CoordinatorParticipant, 3, 4, 5} {
+		mesh.Link(2, id)
+	}
+	roster := []network.RosterEntry{{ID: engine.CoordinatorParticipant}, {ID: 2}, {ID: 3}, {ID: 4},
+		{ID: 5, Holder: 2}, {ID: 6, Holder: 4}, {ID: 7}}
+	m := &Membership{joinedThrough: 3}
+	if got := m.relayedLocked(mesh.Node(2), roster, 2); len(got) != 0 {
+		t.Fatalf("a fork serving no door takes %v along; want nobody", got)
+	}
+	m.relayBound = "127.0.0.1:1"
+	if got, want := m.relayedLocked(mesh.Node(2), roster, 2), map[link.PeerID]bool{4: true}; !maps.Equal(got, want) {
+		t.Fatalf("a fork at its door takes %v along; want the person linked to it there alone, %v", got, want)
+	}
+}
+
+// TestTheDoorAForkKeptTakesBackPeopleAlone: the -relay door a pinned fork keeps gives
+// a key the place of a person it holds and never a bot's, which comes back through
+// its holder, whoever the roster names that holder.
+func TestTheDoorAForkKeptTakesBackPeopleAlone(t *testing.T) {
+	t.Parallel()
+	person, bot := network.NewKey().ID(), network.NewKey().ID()
+	m := &Membership{sessionRoster: []network.RosterEntry{{ID: engine.CoordinatorParticipant},
+		{ID: 2, Slot: 1, Away: true, Key: person},
+		{ID: 3, Slot: 2, Away: true, Key: bot, Holder: engine.CoordinatorParticipant}}}
+	if p, err := m.keyedLocked([]string{bot}, 0, nil, true); err != nil || p.ID != 0 {
+		t.Fatalf("the kept door gave a bot's key place %d (%v); want none", p.ID, err)
+	}
+	if p, err := m.keyedLocked([]string{person}, 0, nil, true); err != nil || p.ID != 2 {
+		t.Fatalf("the kept door gave the person's key place %d (%v); want its own, 2", p.ID, err)
+	}
+	if p, err := m.keyedLocked([]string{bot}, 0, nil, false); err != nil || p.ID != 3 {
+		t.Fatalf("another door gave the authority's bot place %d (%v); want its own, 3", p.ID, err)
 	}
 }
 

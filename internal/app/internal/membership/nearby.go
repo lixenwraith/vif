@@ -62,7 +62,7 @@ func (m *Membership) announcedLocked() *link.Beacon {
 	if port == nil {
 		return nil
 	}
-	doors := link.BeaconDoors(port.Doors())
+	doors := link.BeaconDoors(m.newcomerDoors(port))
 	if len(doors) == 0 {
 		return nil
 	}

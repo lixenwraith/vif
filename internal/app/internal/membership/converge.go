@@ -594,6 +594,11 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 			continue
 		}
 		back := &RestartAsk{Notice: notice, Dialled: d}
+		if relay && d.Offer().Host == lost && m.authority.Fixed() {
+			// The relay forked a session of its own, which kept this run's place: in a
+			// pinned session nobody else takes the host's place over.
+			back.Notice = "Host connection lost; playing on in your relay's session"
+		}
 		if d.place == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 			m.log.Info("session", "msg", "the redial admitted this run back", "peer", uint64(lost))
 			return
