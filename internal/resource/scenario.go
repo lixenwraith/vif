@@ -23,6 +23,7 @@ import (
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/pkg/position"
 )
@@ -59,6 +60,9 @@ type Scenario struct {
 	// ContentBlocks is [content] blocks = true: the spawner lays a corpus block's
 	// lines together, on consecutive rows from one column, where a slot holds them
 	ContentBlocks bool
+	// Keys is [keymap], the play keys the scenario binds for its run over the
+	// player's keymap, as the tutor binds a to vim's append; nil when it binds none
+	Keys *input.KeyTable
 
 	entry   string
 	files   []scenarioFile
@@ -373,8 +377,8 @@ func UnmarshalScenario(name string, body []byte) (Scenario, error) {
 }
 
 // entryKeys are the top-level keys a scenario entry may hold
-var entryKeys = []string{"behaviors", "content", "description", "drops", "loot", "macro_files", "macros",
-	"map", "max_players", "min_players", "navigation", "regions", "states", "systems"}
+var entryKeys = []string{"behaviors", "content", "description", "drops", "keymap", "loot", "macro_files",
+	"macros", "map", "max_players", "min_players", "navigation", "regions", "states", "systems"}
 
 // validate holds every form of a scenario to one rule set: bounded, sorted,
 // .toml-only, naming nothing outside itself, its entry holding only entryKeys.
@@ -437,6 +441,15 @@ func (s *Scenario) validate() error {
 	if table, exists := doc["map"]; exists {
 		if err := s.readMap(table); err != nil {
 			return err
+		}
+	}
+	if table, exists := doc["keymap"]; exists {
+		raw, ok := table.(map[string]any)
+		if !ok {
+			return errors.New("keymap must be a table")
+		}
+		if s.Keys, err = input.ScenarioKeyTable(raw); err != nil {
+			return fmt.Errorf("keymap: %w", err)
 		}
 	}
 	if table, exists := doc["navigation"]; exists {

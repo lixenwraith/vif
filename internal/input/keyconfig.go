@@ -2,6 +2,8 @@ package input
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/lixenwraith/terminal"
@@ -83,6 +85,42 @@ func LoadKeyConfig(data []byte) (*KeyTable, error) {
 		}
 	}
 
+	return kt, nil
+}
+
+// ScenarioKeyTable reads a scenario's [keymap], which its run layers over the
+// player's keymap: the normal, operator and prefix_g sections alone, each key naming
+// an action that is no system one, or none. The special keys, which quit, leave a mode
+// and open the menu and help, stay the player's.
+func ScenarioKeyTable(raw map[string]any) (*KeyTable, error) {
+	kt := &KeyTable{}
+	for _, name := range slices.Sorted(maps.Keys(raw)) {
+		var into *map[rune]KeyEntry
+		switch name {
+		case "normal":
+			into = &kt.NormalRunes
+		case "operator":
+			into = &kt.OperatorMotions
+		case "prefix_g":
+			into = &kt.PrefixG
+		default:
+			return nil, fmt.Errorf("[%s] is not a section a scenario binds: normal, operator or prefix_g", name)
+		}
+		table, ok := raw[name].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("[%s] must be a table", name)
+		}
+		runes, err := parseRuneSection(name, table)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range slices.Sorted(maps.Keys(runes)) {
+			if runes[r].Behavior == BehaviorSystem {
+				return nil, fmt.Errorf("[%s] key %q: a scenario binds no system action", name, string(r))
+			}
+		}
+		*into = runes
+	}
 	return kt, nil
 }
 
