@@ -172,14 +172,21 @@ default, and the `vif.toml` inside its own `root` is not read. Every key is a de
 still takes the embedded scenario and content. A relative path is relative to the
 file (a scenario name, or a path below `scenario/` such as `base/td`, stays a
 name the roots resolve, as `-s` takes it; `./` makes it a path), `~/` is the home
-directory. A key this build does not know is dropped: the run reads every key it
-knows, removes each line setting another and each table another heads from the
-document it writes back to, with the comments that are theirs (a comment group
-belongs to the side fewer blank lines part it from, below on a tie), every other
-line and comment kept, and names them on its status line, so a build older than
-the file drops the newer keys too. `-check` names them and writes nothing, and
-names the file it read. Music and sound overrides stay out of it, because a run
-that creates no audio refuses them and a default must not break `-serve`.
+directory. Music and sound overrides stay out of it, because a run that creates no
+audio refuses them and a default must not break `-serve`.
+
+Every run, on every host, reads `vif.toml` as this build brings it up to date
+(`paths.UpgradeSettings`). A key this build does not take, or whose value it
+refuses, goes with the comments that are its own (a comment group belongs to the
+side fewer blank lines part it from, below on a tie), so a build older than the
+file drops the newer keys and a refused value starts at its default. Each key the
+shipped file sets that it lacks then comes with its own comments after the key the
+shipped file puts before it, a table it lacks where the shipped file heads it
+(toml `Document.Fill`). Every other line, comment and value stays, one equal to
+its default included. The run writes the result back to the player's own file
+(below) and names each change on its status line; `-check` names them, writes
+nothing, and names the file it read. The keymap is brought up to date the same way
+([Input §10](input-and-modes.md#10-keymap-override-files)).
 
 One rule holds on every host: a flag sets its value for its run alone, `vif.toml`
 holds the value every run starts from, and the menu writes back what the player
@@ -187,9 +194,9 @@ changes. A run writes each `[play]` value, and the zoom as `[presentation] cell`
 back as the player changes it, through a menu row or the command behind it, so the
 next starts the same: into the `vif.toml` it read when that is the player's own, in
 the user root or the `-config-dir` root, else into the user root's, created at the
-first change as a copy of the one it read (relative paths made absolute) that
-shadows it from then on; dropping unknown keys creates it at once. A checkout's or
-a system root's file is never written.
+first change as a copy of the one it read, brought up to date with its relative
+paths made absolute, that shadows it from then on. A checkout's or a system root's
+file is never written; a run reads it brought up to date and leaves it as it is.
 Only a value changed in the run is written, so one a flag set (`-mute`'s channels,
 `-nw`'s wait) stays out unless the player then changes it. No flag saves the
 others: a flag is what an alias, a script or a link repeats, and writing it back
@@ -208,14 +215,10 @@ make uninstall                                       # what install put under PR
 
 Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
 every shipped file and keeps files a player added. The keymap and `vif.toml` are
-the player's settings: the keymap is written only when absent, and a `vif.toml`
-already there is brought up to this build's (`tool/vif-settings`,
-`paths.UpgradeSettings`), with the player's lines, comments and values kept. A
-key this build does not take and a value it refuses go, each with its own
-comments, and each key the shipped file sets that the player's lacks comes with
-the comments the shipped file gives it (toml `Document.Fill`); a renamed key so
-starts at its default. The install names each change; it needs Go on `PATH` and
-keeps a file it cannot read as it is. `CLEAN=1` first removes the shipped
+the player's settings: one already there is brought up to this build's as a run
+brings it (§3; `tool/vif-settings`), never replaced, and the install names each
+change; it needs Go on `PATH` and keeps a file it cannot read as it is, for the
+next run to bring up to date. `CLEAN=1` first removes the shipped
 categories (`content/`, `image/`, `bot/`, and of `scenario/` its `base/` and the
 copies of shipped scenarios an install from before `base/` left at its top, which
 would shadow them) and those two files, so the root holds only the fresh install

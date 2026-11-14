@@ -358,7 +358,10 @@ User configuration root, normally
 Settings at the top of a configuration root: another root, the log, journal,
 music, scenario, content, keymap and downloads paths, the audio mixer buffer,
 whether the desktop window opens and how, the zoom Android and a browser keep, the
-[play] settings the menu writes back, and what a run keeps of its sessions.
+[play] settings the menu writes back, and what a run keeps of its sessions. A run
+brings the player's own, and its input/keymap.toml, up to this build's: what the
+build does not take goes, what it ships and the file lacks comes with its
+comments, and every other line stays.
 .TP
 .I scenario/
 Scenarios, each a directory holding scenario.toml, in groups to any depth:

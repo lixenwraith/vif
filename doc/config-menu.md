@@ -6,7 +6,7 @@ regions that defines a game; a **game** is a scenario running in the engine. The
 Settings page, Relay for others, Take over as host and Visible on this network
 are `vif.toml`'s `[play]`: a run writes them
 back as they change, and the next run starts as this one was left; the rest
-changes this run alone, and the keymap is never rewritten. The terminal and the
+changes this run alone, and the menu never changes the keymap. The terminal and the
 desktop window draw the menu as the overlay below; Android and the browser draw
 the same menu with their own widgets ([Android and the browser](#android-and-the-browser)).
 

@@ -181,12 +181,17 @@ Then `-s td` plays the tower defense map, and the settings menu saves its sound,
 mouse and HUD choices to `~/.config/vif/vif.toml`, created at the first change
 from the one installed under `/usr/local/etc`, if any, which stays as it is. Logs
 (`-l`), replay journals (`-j`) and recorded music (`-mw`) go under
-`~/.local/state/vif/`.
+`~/.local/state/vif/`. A later wad unpacked the same way replaces your `vif.toml`
+and keymap: add `--exclude vif/vif.toml --exclude vif/input/keymap.toml` to keep
+them, and the next run brings them up to date.
 
 <!-- end -->
 <!-- if windows -->
 Then `-s td` plays the tower defense map, and the settings menu saves its choices
-to `%AppData%\vif\vif.toml`, created at the first change.
+to `%AppData%\vif\vif.toml`, created at the first change. A later wad unpacked the
+same way replaces your `vif.toml` and keymap: add
+`--exclude vif/vif.toml --exclude vif/input/keymap.toml` to keep them, and the
+next run brings them up to date.
 
 <!-- end -->
 <!-- if headless -->

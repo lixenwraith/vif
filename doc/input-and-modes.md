@@ -542,16 +542,16 @@ Resolution order is:
    each system root;
 4. the embedded `internal/asset/input/keymap.toml` document.
 
-`make install-config` installs the embedded document without overwriting existing
-user files. The retired action name `append` is an alias of `toggle_auto_fire`;
+`make install-config` installs the embedded document, or brings one already there
+up to date. The retired action name `append` is an alias of `toggle_auto_fire`;
 vim's append is `mode_append`, which no default key binds, `a` cycling auto-fire.
 See [External filesystem layout](filesystem-layout.md) for the shared root policy.
 
-An override is sparse: it is merged over the embedded table, so unspecified
-bindings retain defaults. Each key names one action, and an action can have any
-number of keys: the embedded table gives `quit` both `ctrl_q` and `ctrl_c`, and
-`config_menu` both `ctrl_g` and `f10`. TOML refuses a key named twice in a section,
-so no two actions contend for one key. Naming a key adds it to an action; moving an
+An override is merged over the embedded table, so unspecified bindings retain
+defaults. Each key names one action, and an action can have any number of keys: the
+embedded table gives `quit` both `ctrl_q` and `ctrl_c`, and `config_menu` both
+`ctrl_g` and `f10`. TOML refuses a key named twice in a section; one key in two
+spellings (`space` and `SPACE`) binds as the spelling that sorts last. Naming a key adds it to an action; moving an
 action also sets its old key to `"none"`. Help reads its key column from the merged
 table, so it shows a player's own bindings: every key of an action where an entry
 documents that action alone, the first key of each where it documents several
@@ -567,9 +567,14 @@ documents that action alone, the first key of each where it documents several
 
 Values are canonical action names from `internal/input/actionnames.go`, except
 `press`, which a scenario's capture chooses the keys of. Use `"none"` to unbind a
-default. Unknown sections are ignored by the explicit
-section reader, while invalid key or action names inside supported sections
-fail loading.
+default. A run reads the file as this build brings it up to date
+(`input.UpgradeKeymap`), as it does `vif.toml` ([Filesystem §3](filesystem-layout.md#3-resolution-policy)):
+a section it does not read, a key it cannot name and a binding it refuses go, each
+with its own comments, so the embedded binding stands, and each embedded binding of
+a key the file binds in no spelling comes with its comments. Every other binding
+stays, unbindings included. The player's own file, named by `-k` or `[paths]
+keymap` or in the `-config-dir` root or the user root, is written back so and the
+status line names each change; any other is left as it is, and `-check` names them.
 
 ```toml
 [normal]

@@ -772,6 +772,16 @@ Branches.
   100 ms. To count what a client saw, replay its byte stream through `pyte`,
   sampling 60 times a second, and count the samples where a pane changed.
 
+## Settings files
+
+- A key added to the shipped `vif.toml` or `keymap.toml` reaches a player's copy
+  only through the upgrade a run makes, which carries the comment lines directly
+  above the key and none of its table's: give a new key a comment of its own, since
+  a mention in the block above `[play]` never reaches a copy that has the table.
+- A renamed key or section is a drop and an add, so the player's value starts at
+  the default; a renamed action keeps a player's bindings only through an alias in
+  `resolveAction`, as `append` does.
+
 ## Scenario TOML
 
 - A test that reads a shipped scenario skips, not fails, when it is missing (an

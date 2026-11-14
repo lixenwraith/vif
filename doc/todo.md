@@ -1832,6 +1832,17 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   leaves the cursor inside the edge, so the next key jumps the view again. Reopen if
   the edge scrolls too hard under a mouse or a finger.
 
+### Give each shipped `[play]` key a comment of its own
+
+- Priority: P3
+- Affected files: `internal/asset/vif.toml`
+- The `[play]` keys before `camera_edge` share one block above the table's header,
+  which an upgrade never brings to a player's copy that has the table, so a key
+  added there arrives bare and the block goes stale ([Filesystem §3](filesystem-layout.md#3-resolution-policy)).
+  A comment line above each key, the block cut to what the table is, carries each
+  later key's explanation with it; a copy keeps its old block until the player
+  edits it.
+
 ### Use sixteen console backgrounds on Linux
 
 - Priority: P3
