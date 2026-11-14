@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/toml"
@@ -425,9 +424,10 @@ func (s *Settings) check() error {
 	if c := s.Presentation.Cell; c != 0 && (c < parameter.CellLeast || c > parameter.CellMost) {
 		return fmt.Errorf("presentation.cell %g is not 0 or between %g and %g", c, parameter.CellLeast, parameter.CellMost)
 	}
-	if b := time.Duration(s.Audio.BufferMs) * time.Millisecond; b != 0 && (b < audio.AudioBufferMin || b > audio.AudioBufferMax || b%audio.AudioBufferStep != 0) {
-		return fmt.Errorf("audio.buffer_ms %d is not 0 or a multiple of %d from %d to %d", s.Audio.BufferMs,
-			audio.AudioBufferStep.Milliseconds(), audio.AudioBufferMin.Milliseconds(), audio.AudioBufferMax.Milliseconds())
+	// in milliseconds, as a Duration of a large count wraps into the range
+	least, most, step := audio.AudioBufferMin.Milliseconds(), audio.AudioBufferMax.Milliseconds(), audio.AudioBufferStep.Milliseconds()
+	if b := int64(s.Audio.BufferMs); b != 0 && (b < least || b > most || b%step != 0) {
+		return fmt.Errorf("audio.buffer_ms %d is not 0 or a multiple of %d from %d to %d", b, step, least, most)
 	}
 	return s.Play.check()
 }
@@ -441,11 +441,10 @@ type SettingsStore interface {
 }
 
 // SettingsFor is where a run that read the vif.toml named read ("" for the
-// embedded one) writes its settings back: that file when it is the player's own,
-// in the override root or the user root, else the user root's, created at the
-// first change from the one read, which shadows it from then on. A vif.toml in the
-// checkout or a system root is never written. Nil without a user root, or for a
-// special file in one of the player's roots, such as a link to /dev/null.
+// embedded one) writes its settings back: that file when it is the player's own
+// (OwnSettings), else the user root's, made at the first change from the one read,
+// which every later run reads but one whose -config-dir holds that one. Nil
+// without a user root, or for a special file in one of the player's roots.
 func SettingsFor(override, read string) SettingsStore {
 	user := UserRoot()
 	switch {
@@ -464,14 +463,33 @@ func OwnRoot(override, root string) bool {
 }
 
 // Shared reports whether path is or lies in the checkout's wad or a system root
-// and not in the user root: a run reads such a file but never writes it, whatever
-// named it, and only an install brings it up to date.
+// and not in the user root, links followed: a run reads such a file but never
+// writes it, whatever named it, and only an install brings it up to date.
 func Shared(path string) bool {
-	path, err := filepath.Abs(path)
-	if err != nil || within(UserRoot(), path) {
+	path = resolved(path)
+	if within(resolved(UserRoot()), path) {
 		return false
 	}
-	return slices.ContainsFunc(append(systemRoots(), checkoutRoot()), func(root string) bool { return within(root, path) })
+	return slices.ContainsFunc(append(systemRoots(), checkoutRoot()), func(root string) bool { return within(resolved(root), path) })
+}
+
+// resolved is path made absolute with every link in it followed, as far as it
+// exists, so two names of one place compare equal; "" stays ""
+func resolved(path string) string {
+	abs, err := filepath.Abs(path)
+	if path == "" || err != nil {
+		return path
+	}
+	for rest := ""; ; {
+		if at, err := filepath.EvalSymlinks(abs); err == nil {
+			return filepath.Join(at, rest)
+		}
+		up := filepath.Dir(abs)
+		if up == abs {
+			return filepath.Join(abs, rest)
+		}
+		abs, rest = up, filepath.Join(filepath.Base(abs), rest)
+	}
 }
 
 // within reports whether path is root or lies below it; "" holds nothing

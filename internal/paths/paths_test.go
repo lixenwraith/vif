@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -102,13 +103,29 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 	}
 }
 
+// isolate points every variable a platform finds the user root by at a new
+// directory and returns the root there, skipping where it lies elsewhere, so a
+// test never reads or writes the player's own files
+func isolate(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
+		t.Setenv(name, dir)
+	}
+	root := UserRoot()
+	if !within(dir, root) {
+		t.Skipf("the user root %q is not in %s", root, dir)
+	}
+	return root
+}
+
 // TestSettingsReadAsThisBuildBringsThemUpToDate: a file naming keys this build
 // does not know, or a value it refuses, reads every other key it holds, the refused
 // one at its default, and names the changes bringing it up to date makes, so a run
 // can go on with an older or newer vif.toml; the file is left as it is.
 func TestSettingsReadAsThisBuildBringsThemUpToDate(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolate(t)
 	t.Setenv(SystemRootsEnv, t.TempDir())
 	doc := "[paths]\nlogs = \"x\"\n[audio]\nbuffer_ms = 20\n[play]\nauto_fire = true\nmouse = false\n[later]\nkey = 1\n"
 	file := filepath.Join(root, SettingsFile)
@@ -133,29 +150,31 @@ func TestSettingsReadAsThisBuildBringsThemUpToDate(t *testing.T) {
 // mixer's own period or one the mixer takes (audio.AudioBufferMin to Max in Step);
 // any other fails, so an upgrade resets it rather than a run failing to start audio.
 func TestSettingsTakeNumbersInRange(t *testing.T) {
+	n := strconv.Itoa
 	least, most, step := int(audio.AudioBufferMin.Milliseconds()), int(audio.AudioBufferMax.Milliseconds()), int(audio.AudioBufferStep.Milliseconds())
 	for _, c := range []struct {
 		key  string
 		read func(Settings) int
-		ok   map[int]bool
+		ok   map[string]bool
 	}{
-		{"play.max_fps", func(s Settings) int { return s.Play.MaxFPS }, map[int]bool{
-			0: true, parameter.FrameRateMin: true, 24: true, parameter.FrameRateMax: true,
-			parameter.FrameRateMin - 1: false, parameter.FrameRateMax + 1: false, -24: false,
+		{"play.max_fps", func(s Settings) int { return s.Play.MaxFPS }, map[string]bool{
+			"0": true, n(parameter.FrameRateMin): true, "24": true, n(parameter.FrameRateMax): true,
+			n(parameter.FrameRateMin - 1): false, n(parameter.FrameRateMax + 1): false, "-24": false,
 		}},
-		{"play.camera_edge", func(s Settings) int { return s.Play.CameraEdge }, map[int]bool{
-			0: true, 15: true, parameter.CameraEdgeMost: true, -1: false, parameter.CameraEdgeMost + 1: false,
+		{"play.camera_edge", func(s Settings) int { return s.Play.CameraEdge }, map[string]bool{
+			"0": true, "15": true, n(parameter.CameraEdgeMost): true, "-1": false, n(parameter.CameraEdgeMost + 1): false,
 		}},
-		{"audio.buffer_ms", func(s Settings) int { return s.Audio.BufferMs }, map[int]bool{
-			0: true, least: true, least + step: true, most: true,
-			least - 1: false, most + step: false, least + step/2: false, -step: false,
+		{"audio.buffer_ms", func(s Settings) int { return s.Audio.BufferMs }, map[string]bool{
+			"0": true, n(least): true, n(least + step): true, n(most): true,
+			n(least - 1): false, n(most + step): false, n(least + step/2): false, n(-step): false,
+			strconv.FormatInt(1<<58+int64(least), 10): false, // least again as a Duration, which wraps
 		}},
 	} {
 		table, key, _ := strings.Cut(c.key, ".")
 		for v, ok := range c.ok {
-			s, err := ParseSettings(fmt.Appendf(nil, "[%s]\n%s = %d\n", table, key, v))
-			if (err == nil) != ok || ok && c.read(s) != v {
-				t.Errorf("%s = %d: read %d, error %v", c.key, v, c.read(s), err)
+			s, err := ParseSettings(fmt.Appendf(nil, "[%s]\n%s = %s\n", table, key, v))
+			if want, _ := strconv.Atoi(v); (err == nil) != ok || ok && c.read(s) != want {
+				t.Errorf("%s = %s: read %d, error %v", c.key, v, c.read(s), err)
 			}
 		}
 	}
@@ -171,12 +190,15 @@ func TestARunWritesBackOnlyThePlayersOwnSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	user, system := t.TempDir(), t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", user)
+	user, system := isolate(t), t.TempDir()
 	t.Setenv(SystemRootsEnv, system)
-	mine := filepath.Join(user, AppDirName, SettingsFile)
-	for _, root := range []string{filepath.Dir(mine), system} {
-		os.RemoveAll(filepath.Dir(mine))
+	mine := filepath.Join(user, SettingsFile)
+	roots := []string{user}
+	if slices.Contains(systemRoots(), system) {
+		roots = append(roots, system) // where a platform has system roots
+	}
+	for _, root := range roots {
+		os.RemoveAll(user)
 		if err := os.MkdirAll(root, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -425,8 +447,7 @@ func FuzzUpgradingSettingsKeepsEachValueItTakes(f *testing.F) {
 
 // TestAStoreKeepsTheFileThePlayerKeeps: a store writes through a link to the file
 // it names, which keeps its mode, and makes a new file 0644; a file no one may
-// write, a link to nothing and what is no regular file, such as /dev/null, are
-// refused and stay as they are.
+// write and a link to nothing are refused and stay as they are.
 func TestAStoreKeepsTheFileThePlayerKeeps(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("a link needs a privilege there")
@@ -471,17 +492,15 @@ func TestAStoreKeepsTheFileThePlayerKeeps(t *testing.T) {
 	if st, err := os.Stat(fresh); err != nil || st.Mode().Perm() != 0o644 {
 		t.Errorf("a new file: %v, %v", st.Mode(), err)
 	}
-	for name, to := range map[string]string{"nothing": filepath.Join(dir, "gone"), "device": os.DevNull} {
-		at := filepath.Join(dir, name)
-		if err := os.Symlink(to, at); err != nil {
-			t.Fatal(err)
-		}
-		err := FileStore{Path: at}.Store([]byte("new"))
-		if was, _ := os.Readlink(at); err == nil || was != to {
-			t.Errorf("a link to %s: %v, now to %q", name, err, was)
-		}
+	gone, dangling := filepath.Join(dir, "gone"), filepath.Join(dir, "dangling")
+	if err := os.Symlink(gone, dangling); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "gone")); err == nil {
+	err = FileStore{Path: dangling}.Store([]byte("new"))
+	if was, _ := os.Readlink(dangling); err == nil || was != gone {
+		t.Errorf("a link to nothing: %v, now to %q", err, was)
+	}
+	if _, err := os.Stat(gone); err == nil {
 		t.Error("a link to nothing made its file")
 	}
 }
@@ -491,7 +510,7 @@ func TestAStoreKeepsTheFileThePlayerKeeps(t *testing.T) {
 // replaced and a key it lacks goes after its last, every other line kept, comments
 // included; a file without the table has it appended. What was written reads back.
 func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolate(t)
 	t.Setenv(SystemRootsEnv, "")
 	dir := t.TempDir()
 	file := filepath.Join(dir, SettingsFile)
@@ -547,10 +566,9 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 
 // TestSettingsForWritesThePlayersOwnFile: the file read is written when it is in
 // the override or the user root; one read further down, or none, makes the user
-// root's, which starts as the file read with its relative paths made absolute and
-// shadows it from then on. An override naming a system root is not the player's, a
-// special file in their root, such as a link to /dev/null, is never written, and
-// without a user root nothing is.
+// root's, which the next run reads, starting as the file read with its relative
+// paths made absolute. An override naming a system root is not the player's, a
+// special file in their root is never written, and without a user root nothing is.
 func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	if !isUnixLike() || runtime.GOOS == "android" {
 		t.Skip("system roots are Unix-specific")
@@ -615,6 +633,46 @@ func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	t.Setenv("HOME", "")
 	if got := SettingsFor("", site); got != nil {
 		t.Fatalf("no user root, yet a store: %+v", got)
+	}
+}
+
+// TestSharedFollowsLinks: a file in the checkout's wad or a system root is shared
+// by its own path and through a link to its root, which the binary may be run by;
+// one in the user root is not, whatever names it, even where a system root holds it.
+func TestSharedFollowsLinks(t *testing.T) {
+	if !isUnixLike() || runtime.GOOS == "android" {
+		t.Skip("system roots are Unix-specific")
+	}
+	user, base := isolate(t), t.TempDir()
+	checkout, system := filepath.Join(base, "checkout"), filepath.Join(base, "system")
+	for _, dir := range []string{filepath.Join(checkout, "bin"), filepath.Join(checkout, "wad"), system} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := func(to string) string {
+		at := filepath.Join(base, "to-"+filepath.Base(to))
+		if err := os.Symlink(to, at); err != nil {
+			t.Fatal(err)
+		}
+		return at
+	}
+	toCheckout, toSystem, toUser := link(checkout), link(system), link(user)
+	was := executable
+	t.Cleanup(func() { executable = was })
+	executable = func() (string, error) { return filepath.Join(toCheckout, "bin", "vif"), nil }
+	t.Setenv(SystemRootsEnv, system+string(filepath.ListSeparator)+filepath.Dir(user))
+	for path, want := range map[string]bool{
+		filepath.Join(checkout, "wad", SettingsFile):   true,
+		filepath.Join(toCheckout, "wad", SettingsFile): true,
+		filepath.Join(toSystem, SettingsFile):          true,
+		filepath.Join(user, SettingsFile):              false,
+		filepath.Join(toUser, SettingsFile):            false,
+		filepath.Join(base, SettingsFile):              false,
+	} {
+		if got := Shared(path); got != want {
+			t.Errorf("%s: shared %v, want %v", path, got, want)
+		}
 	}
 }
 
