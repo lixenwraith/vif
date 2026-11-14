@@ -2325,7 +2325,14 @@ func guestOfALostHost(t *testing.T, policy string) lostHost {
 	host, guest, store := guestOfAHost(t, policy)
 	l := lostHost{guest: guest, id: guest.membership.LocalParticipant(), term: guest.authority.Term(),
 		key: store.key(t), held: places(guest, everyone)}
+	loseTheHost(t, host, guest)
+	return l
+}
 
+// loseTheHost has host leave its session as :leave does, and ticks guest until the
+// loss reaches its loop to take on.
+func loseTheHost(t *testing.T, host, guest *App) {
+	t.Helper()
 	leaveAs(t, host)
 	stopGuest := tickInBackground(guest)
 	for deadline := time.Now().Add(socketWait); !guest.membership.Leaving() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
@@ -2334,7 +2341,6 @@ func guestOfALostHost(t *testing.T, policy string) lostHost {
 	if !guest.membership.Leaving() {
 		t.Fatal("the guest lost its host, and nothing asked its loop to take it on")
 	}
-	return l
 }
 
 // guestOfAHost has a guest of Run's loop joined to a host hosting under policy, the
@@ -2421,6 +2427,46 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	guest.World().RunSafe(func() { state = guest.world.Resources.Status.Strings.Get("network.state").Load() })
 	if state != "idle" {
 		t.Fatalf("after its fork the guest's link reads %q; want idle", state)
+	}
+}
+
+// TestAPinnedForkKeepsNobodyItDidNotBring: a fork of a session pinned to its host
+// keeps none of the people it played with there, since nobody hosts that session
+// next: another guest of the host, linked to it as it left, waits in the fork as no
+// Wraith, and its key at the door the fork's :host opens is given a place of its own,
+// not the one it left.
+func TestAPinnedForkKeepsNobodyItDidNotBring(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, guest, _ := guestOfAHost(t, AuthorityHost)
+	stopHost, stopGuest := tickInBackground(host), tickInBackground(guest)
+	t.Cleanup(stopHost)
+	t.Cleanup(stopGuest)
+	store := &keptPlaces{}
+	other, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight, func(c *Config) { c.Membership.PlaceStore = store })
+	_, slot := arrival(t, host, other)
+	waitUntil(t, func() bool { return cursorIn(guest, slot) }, "the other guest's arrival on the guest")
+	stopHost()
+	stopGuest()
+	own, held := guest.membership.LocalSlot(), places(guest, everyone)
+	if len(held) != 3 {
+		t.Fatalf("before the loss the guest holds %v (entity, participant by slot); want the host and both guests", held)
+	}
+
+	loseTheHost(t, host, guest)
+	guest.membership.LeaveSession() // as Run's loop does
+	if got, want := places(guest, everyone), map[uint8][2]uint64{own: held[own]}; !maps.Equal(got, want) {
+		t.Fatalf("after its fork the guest holds %v (entity, participant by slot); want only its own, %v", got, want)
+	}
+	if err := guest.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("the fork opens no door: %v", err)
+	}
+	stopFork := tickInBackground(guest)
+	defer stopFork()
+	key := store.key(t)
+	back, offered := dialSession(t, guest.HostAddr(), key)
+	defer back.Close()
+	if entry, _ := offered.Entry(offered.Assigned); entry.Key == key.ID() {
+		t.Fatalf("the other guest's key at the fork's door was given the place it left, %d on slot %d; want a place of its own", offered.Assigned, entry.Slot)
 	}
 }
 
