@@ -1604,8 +1604,8 @@ reopened session keeps its own term's key first.
 
 - Priority: P3
 - Affected files: `internal/app/internal/membership/host.go` (`sessionSummaryLocked`),
-  `internal/system/network.go` (`reportDisconnect`), `internal/app/loop.go`
-  (`setAway`)
+  `internal/system/network.go` (`reportDisconnect`, `publishConnectionTelemetry`),
+  `internal/app/loop.go` (`setAway`), `internal/engine/world.go` (`LatchSession`)
 - Guide: [Multi-player §5.5](multi-player.md#55-leaving-a-session),
   [§7](multi-player.md#7-diagnostics-and-operations)
 
@@ -1624,6 +1624,10 @@ still off:
   is applied only when it changes (`setAway`); and a guest the phone froze past its
   host's Wraith wait forks on thaw saying its host connection was lost, though the
   host never went quiet.
+- A replay's badge reads the journaled session latch (`publishConnectionTelemetry`),
+  which says nothing of a door, so where the run read `idle` and showed no badge the
+  replay reads `down` and shows `Net: down` for 10 s. The latch would carry the door
+  as it carries `Peers`, for presentation only, at the cost of a journal field.
 
 ## Combat
 

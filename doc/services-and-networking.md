@@ -1096,11 +1096,12 @@ must not move and neither side may fall behind. The host's `:new` resets both
 rosters and a guest's is refused. Quit the guest; the host must show a
 participant-disconnected message and continue at `Net: down`. Quit the host; under
 `-authority migrate` a guest that takes over (`:takeover on` before it joined, or
-`-listen`) shows `Migrating` and takes the term, and under the default
-`-authority host` it says its host connection was lost and plays on in a
-session of its own — `:session` reads `Session hosting` under the same participant
-and the next term, and the host's cursor waits as a Wraith. Restarting the host
-and rejoining with `:join` is a *new* session, not a merge.
+`-listen`) shows `Migrating`, takes the term and keeps the host's cursor as a
+Wraith for its wait, and under the default `-authority host` it says its host
+connection was lost and plays on in a session of its own — `:session` reads
+`Session hosting` under the same participant and the next term, the host's cursor
+is gone and no network badge shows. Restarting the host and rejoining with `:join`
+is a *new* session, not a merge.
 `-players <n>` caps the roster a host admits, `-host` or a later `:host` alike, and
 so does the scenario's `max_players`; unset, both are `MaxPlayers`. Bind the host to `:7777` for a LAN, where `:lan on` lets players find it with no address typed. Internet routing
 uses the same TCP path: a tcp door is plaintext and admits any key, so it is for
