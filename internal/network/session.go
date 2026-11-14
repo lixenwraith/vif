@@ -367,11 +367,10 @@ type Coordinator struct {
 
 	// Watch is the session as a dial that only watches is shown it, which holds no
 	// place, or why it cannot be watched: asked for the preview and again at the
-	// seat. Feed then owns the dial's stream and copies the session's feed to it,
-	// with every later starting point for a relay. Either nil is a door nobody
-	// watches at.
+	// seat. Feed then owns the dial's stream and copies the session's feed to it.
+	// Either nil is a door nobody watches at.
 	Watch func(a Admission) (SessionOffer, error)
-	Feed  func(conn net.Conn, a Admission, relay bool) error
+	Feed  func(conn net.Conn, a Admission) error
 }
 
 // MaxSessionName is the longest name a session may answer to. A name is a short
@@ -695,7 +694,7 @@ func WatchAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) error {
 					return err
 				}
 				_ = conn.SetDeadline(time.Time{})
-				return c.Feed(conn, adm, len(msg.Payload) != 0)
+				return c.Feed(conn, adm)
 			default:
 				return fmt.Errorf("watch handshake: got message %#x, want a seat", msg.Type)
 			}
@@ -1429,9 +1428,8 @@ func (p *PendingJoin) Seat() (SessionOffer, error) {
 }
 
 // Watch asks for the session's feed and returns the stream that carries it, which
-// the caller then owns. relay asks for every later starting point too, as a front
-// door copying the feed to its own watchers needs.
-func (p *PendingJoin) Watch(relay bool) (net.Conn, error) {
+// the caller then owns.
+func (p *PendingJoin) Watch() (net.Conn, error) {
 	if p.replied || p.transferred || p.offer.Assigned != 0 {
 		return nil, errors.New("watch handshake already completed")
 	}
@@ -1439,14 +1437,10 @@ func (p *PendingJoin) Watch(relay bool) (net.Conn, error) {
 		_ = p.conn.SetDeadline(time.Now().Add(p.base.ConnectTimeout))
 		defer p.conn.SetDeadline(time.Time{})
 	}
-	var asks []byte
-	if relay {
-		asks = []byte{1}
-	}
 	dropped := func(err error) error {
 		return link.PlainError{Text: "the host dropped the watch before its feed", Cause: err}
 	}
-	if err := link.NewMessage(MsgJoinSeat, asks).Encode(p.conn); err != nil {
+	if err := link.NewMessage(MsgJoinSeat, nil).Encode(p.conn); err != nil {
 		return nil, dropped(err)
 	}
 	msg, err := link.Decode(p.conn)

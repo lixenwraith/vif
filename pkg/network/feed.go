@@ -19,12 +19,11 @@ import (
 // [kind:1][length:uvarint][body]. It runs one way: a subscriber sends nothing, so
 // what a subscriber costs is its copy of bytes the others are sent too.
 const (
-	FeedSync  byte = 1 // a starting point for a newcomer, after the cut it was taken at
-	FeedReset byte = 2 // a starting point every subscriber takes: what they held is over
-	FeedData  byte = 3 // frames and tick marks, deflated against the data since the cut
-	FeedCut   byte = 4 // the tick the stream stands at; the deflate history restarts
-	FeedEnd   byte = 5 // the feed is over; the body says why
-	FeedKeep  byte = 6 // nothing to carry: the feed is alive
+	FeedSync byte = 1 // a starting point: the publisher's state as of the cut before it
+	FeedData byte = 2 // frames and tick marks, deflated against the data since the cut
+	FeedCut  byte = 3 // the tick the stream stands at; the deflate history restarts
+	FeedEnd  byte = 4 // the feed is over; the body says why
+	FeedKeep byte = 5 // nothing to carry: the feed is alive
 )
 
 // A data record's body is the tick its first mark closes and its plain length, as
@@ -71,8 +70,8 @@ func DefaultFeedConfig() FeedConfig {
 	}
 }
 
-// FeedTotals are a feed's bytes: its frames and marks before deflate, the records
-// every subscriber is sent, and the starting points a newcomer or a relay is.
+// FeedTotals are a feed's bytes, each counted once however many subscribers it has:
+// its frames and marks before deflate, the records they became, and its starting points.
 type FeedTotals struct{ Plain, Stream, Heads uint64 }
 
 // feedRecord frames one record.
@@ -135,13 +134,14 @@ func (w *FeedWriter) Frame(kind MessageType, payload []byte) {
 	}
 }
 
-// Mark closes tick: every frame added since the mark before it is due by it.
+// Mark closes tick: every frame added since the mark before it is due by it. A tick
+// that does not follow the last one cuts the stream there, as a new game's first does.
 func (w *FeedWriter) Mark(tick uint64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if tick != w.tick+1 {
-		w.flush() // a reader counts a record's marks on from its first tick
-		w.tick = tick - 1
+		w.flush()
+		w.cut(tick - 1)
 	}
 	w.write([]byte{feedMark})
 	w.tick, w.marks = tick, w.marks+1
@@ -179,17 +179,6 @@ func (w *FeedWriter) Sync(cut uint64, body []byte) bool {
 	return true
 }
 
-// Reset cuts at tick and publishes body as the starting point every subscriber
-// takes. What had gathered is dropped: it belonged to what the reset ends.
-func (w *FeedWriter) Reset(tick uint64, body []byte) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.seg.Reset()
-	w.plain, w.marks = 0, 0
-	w.cut(tick)
-	w.hub.Publish(feedRecord(FeedReset, body))
-}
-
 func (w *FeedWriter) write(p []byte) {
 	n, _ := w.z.Write(p) // into a buffer: it cannot fail
 	w.plain += n
@@ -218,9 +207,9 @@ func (w *FeedWriter) cut(tick uint64) {
 	w.cuts++
 }
 
-// FeedHub copies one feed to its subscribers. It keeps the newest starting point and
-// the records since its cut, which is where a newcomer begins; a subscriber that
-// falls a queue behind is dropped rather than waited for.
+// FeedHub copies one feed to its subscribers, starting points included. It keeps the
+// newest of those and the records since its cut, which is where a newcomer begins; a
+// subscriber that falls a queue behind is dropped rather than waited for.
 type FeedHub struct {
 	cfg FeedConfig
 
@@ -232,7 +221,7 @@ type FeedHub struct {
 	size  int               // bytes in tail
 	ahead int               // bytes in pend
 	open  bool              // pend is being kept
-	fresh bool              // no cut or starting point has passed: a relay's first comes before its cut
+	fresh bool              // no cut or starting point has passed: a copy's first comes before its cut
 	ended bool
 	last  time.Time // the last record's wall time
 
@@ -266,15 +255,15 @@ func (h *FeedHub) Publish(rec []byte) {
 		return
 	}
 	h.last = time.Now() // [wall]
-	switch kind := rec[0]; kind {
-	case FeedSync, FeedReset:
+	switch rec[0] {
+	case FeedSync:
 		h.heads.Add(uint64(len(rec)))
 		h.start(rec)
 		for s, started := range h.subs {
 			switch {
-			case started && (s.relay || kind == FeedReset):
+			case started:
 				h.send(s, rec)
-			case !started && h.head != nil:
+			case h.head != nil:
 				h.begin(s)
 			}
 		}
@@ -358,10 +347,9 @@ func (h *FeedHub) send(s *feedSub, rec []byte) bool {
 }
 
 // Subscribe copies the feed to conn from its newest starting point, or from the
-// next one when it has none. The hub owns conn from here on; a relay is also sent
-// every later starting point, to begin its own subscribers from.
-func (h *FeedHub) Subscribe(conn net.Conn, relay bool) error {
-	s := &feedSub{conn: conn, relay: relay, ch: make(chan []byte, h.cfg.Queue), gone: make(chan struct{})}
+// next one when it has none. The hub owns conn from here on.
+func (h *FeedHub) Subscribe(conn net.Conn) error {
+	s := &feedSub{conn: conn, ch: make(chan []byte, h.cfg.Queue), gone: make(chan struct{})}
 	h.mu.Lock()
 	switch {
 	case h.ended:
@@ -461,11 +449,10 @@ func (h *FeedHub) keepalive() {
 
 // feedSub is one subscriber: its link and the records it is owed.
 type feedSub struct {
-	conn  net.Conn
-	relay bool
-	ch    chan []byte
-	gone  chan struct{}
-	once  sync.Once
+	conn net.Conn
+	ch   chan []byte
+	gone chan struct{}
+	once sync.Once
 }
 
 // write sends a subscriber its records, small ones gathered into one write.
@@ -521,8 +508,8 @@ func (s *feedSub) watch(h *FeedHub) {
 	h.drop(s)
 }
 
-// FeedReader reads a feed's records. A relay publishes each as it came; only a
-// subscriber's own port has data records inflated.
+// FeedReader reads a feed's records. A hub copying the feed on publishes each as it
+// came; only a subscriber's own port has data records inflated.
 type FeedReader struct {
 	br   *bufio.Reader
 	head int
@@ -531,8 +518,6 @@ type FeedReader struct {
 	z     io.Reader
 	plain []byte
 	tick  uint64 // the last tick marked
-	fresh bool   // a starting point came since the last data
-	jump  bool   // a cut moved tick: only a starting point may follow
 }
 
 func NewFeedReader(r io.Reader, cfg FeedConfig) *FeedReader {
@@ -553,7 +538,7 @@ func (r *FeedReader) Next() ([]byte, error) {
 	}
 	limit := feedDataMax + 2*binary.MaxVarintLen64
 	switch kind {
-	case FeedSync, FeedReset:
+	case FeedSync:
 		limit = r.head
 	case FeedData, FeedCut, FeedEnd, FeedKeep:
 	default:
@@ -571,16 +556,13 @@ func (r *FeedReader) Next() ([]byte, error) {
 	return rec, nil
 }
 
-// started notes a starting point: the cut beside it may stand at any tick.
-func (r *FeedReader) started() { r.fresh, r.jump = true, false }
-
-// cut restarts the inflater and takes the tick the stream stands at.
+// cut restarts the inflater and takes the tick the stream stands at, which only a
+// newcomer's first cut and a new game's move.
 func (r *FeedReader) cut(rec []byte) error {
 	tick, n := binary.Uvarint(FeedBody(rec))
 	if n <= 0 {
 		return errors.New("feed cut names no tick")
 	}
-	r.jump = tick != r.tick && !r.fresh
 	r.tick = tick
 	r.src = feedSource{}
 	return r.z.(flate.Resetter).Reset(&r.src, nil)
@@ -595,10 +577,9 @@ func (r *FeedReader) data(rec []byte, frame func(MessageType, []byte), mark func
 	if n <= 0 || m <= 0 || plain == 0 || plain > feedDataMax {
 		return errors.New("feed data record malformed")
 	}
-	if r.jump || first != r.tick+1 {
+	if first != r.tick+1 {
 		return fmt.Errorf("feed skipped from tick %d to %d", r.tick, first)
 	}
-	r.fresh = false
 	r.src.add(body[n+m:])
 	if uint64(cap(r.plain)) < plain {
 		r.plain = make([]byte, plain)
@@ -660,9 +641,9 @@ func (s *feedSource) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// FeedPort is a feed's receiving end as a session port, for a run that follows the
-// feed tick for tick. It sends nothing, and releases a tick's frames to Drain once
-// Ready was asked for that tick and its mark has arrived.
+// FeedPort is a feed's receiving end as a session port, for a run that begins at a
+// starting point and follows the feed tick for tick. It sends nothing, and releases a
+// tick's frames to Drain once Ready was asked for that tick and its mark has arrived.
 type FeedPort struct {
 	conn    net.Conn
 	kinds   Kinds
@@ -670,8 +651,9 @@ type FeedPort struct {
 
 	mu      sync.Mutex
 	peer    PeerID     // whom the frames are from, to the run
-	head    []byte     // a starting point not yet taken
+	head    []byte     // the newest starting point not yet taken
 	begun   bool       // a starting point has come
+	taken   bool       // the run took one: ticks are released
 	ticks   []feedTick // whole ticks not yet released, the oldest first
 	open    Bundle     // the frames of the tick whose mark has not come
 	out     []Message  // released, awaiting Drain
@@ -720,8 +702,6 @@ func (p *FeedPort) read(r *FeedReader, silence time.Duration) {
 	}
 }
 
-// take applies one record. A starting point past the first is taken only as a
-// reset, and drops every tick held: they belonged to what the reset ended.
 func (p *FeedPort) take(r *FeedReader, rec []byte) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -729,13 +709,8 @@ func (p *FeedPort) take(r *FeedReader, rec []byte) error {
 		return p.err
 	}
 	switch rec[0] {
-	case FeedSync, FeedReset:
-		r.started()
-		if rec[0] == FeedSync && p.begun {
-			return nil
-		}
-		p.begun = true
-		p.head, p.ticks, p.out, p.open = FeedBody(rec), nil, nil, Bundle{}
+	case FeedSync:
+		p.begun, p.head = true, FeedBody(rec)
 		select {
 		case p.heads <- struct{}{}:
 		default:
@@ -773,13 +748,14 @@ func (p *FeedPort) mark(tick uint64) {
 // Heads signals a starting point waiting to be taken.
 func (p *FeedPort) Heads() <-chan struct{} { return p.heads }
 
-// TakeHead is the starting point the feed last gave, nil once taken. The ticks
-// after it are released only from here on: a run is asked to begin again first.
+// TakeHead is the newest starting point not yet taken, nil with none. No tick is
+// released before the first was taken, which a run begins from; a later one, which
+// may stand ahead of the run, is what it checks itself against.
 func (p *FeedPort) TakeHead() []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	head := p.head
-	p.head, p.granted = nil, 0
+	p.head, p.taken = nil, p.taken || head != nil
 	return head
 }
 
@@ -796,20 +772,19 @@ func (p *FeedPort) Attribute(peer uint32) {
 func (p *FeedPort) Ready(tick uint64) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if tick == p.granted {
+	waits := p.taken && p.err == nil && len(p.ticks) != 0
+	switch {
+	case waits && p.ticks[0].tick == tick: // first: a new game's may bear the number last released
+		p.out = append(p.out, p.ticks[0].frames...)
+		p.ticks, p.granted = p.ticks[1:], tick
 		return true
-	}
-	if p.head != nil || p.err != nil || len(p.ticks) == 0 {
-		return false
-	}
-	if next := p.ticks[0].tick; next != tick {
-		p.err = fmt.Errorf("the run is at tick %d and its feed at %d", tick, next)
+	case tick == p.granted:
+		return true
+	case waits:
+		p.err = fmt.Errorf("the run is at tick %d and its feed at %d", tick, p.ticks[0].tick)
 		_ = p.conn.SetReadDeadline(time.Now()) // wakes the reader, which ends the port
-		return false
 	}
-	p.out = append(p.out, p.ticks[0].frames...)
-	p.ticks, p.granted = p.ticks[1:], tick
-	return true
+	return false
 }
 
 // Backlog is how many whole ticks wait past the last one released.
