@@ -437,14 +437,15 @@ func TestARestartOwedHoldsOnlyAPersonsWait(t *testing.T) {
 		}
 		net.expireWraiths()
 		if got := departures(w); !slices.Equal(got, tc.want) {
-			t.Errorf("%s: at their time the authority dismissed %+v, want %+v", name, got, tc.want)
+			t.Errorf("%s: the authority dismissed %+v, want %+v", name, got, tc.want)
 		}
 	}
 }
 
 // TestADoorOpenedStartsEveryWaitOver: for the door its session opens the authority
-// crosses one restart, and dismisses nobody until it applies; from that tick every
-// wait runs from zero, a person's included, on a world a reset has cleared too.
+// crosses one restart, and dismisses no person, nor a bot waiting with one, until it
+// applies; from that tick every wait runs from zero, a person's included, on a world
+// a reset has cleared too.
 func TestADoorOpenedStartsEveryWaitOver(t *testing.T) {
 	w, net, wait := wraithWorld(t)
 	cursors := ready(NewCursorSystem(w)).(*CursorSystem)

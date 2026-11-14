@@ -1795,7 +1795,7 @@ func (s *NetworkSystem) expireWraiths() {
 
 // waitRestart is where the restart of every Wraith's wait stands, which the
 // authority owes a door opened on a session that had none: no person could come
-// back while those waits ran, so none runs out until the restart has applied.
+// back while those waits ran, so no person's runs out until the restart has applied.
 type waitRestart uint8
 
 const (

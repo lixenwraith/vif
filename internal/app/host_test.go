@@ -2322,7 +2322,26 @@ type lostHost struct {
 
 func guestOfALostHost(t *testing.T, policy string) lostHost {
 	t.Helper()
-	store := &keptPlaces{}
+	host, guest, store := guestOfAHost(t, policy)
+	l := lostHost{guest: guest, id: guest.membership.LocalParticipant(), term: guest.authority.Term(),
+		key: store.key(t), held: places(guest, everyone)}
+
+	leaveAs(t, host)
+	stopGuest := tickInBackground(guest)
+	for deadline := time.Now().Add(socketWait); !guest.membership.Leaving() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	stopGuest()
+	if !guest.membership.Leaving() {
+		t.Fatal("the guest lost its host, and nothing asked its loop to take it on")
+	}
+	return l
+}
+
+// guestOfAHost has a guest of Run's loop joined to a host hosting under policy, the
+// pair rostered and ticked by hand from there, and the store the guest's key went to.
+func guestOfAHost(t *testing.T, policy string) (host, guest *App, store *keptPlaces) {
+	t.Helper()
+	store = &keptPlaces{}
 	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
 		Resources: resource.Options{Embedded: true}, Membership: Membership{PlaceStore: store}})
 	if err != nil {
@@ -2336,25 +2355,33 @@ func guestOfALostHost(t *testing.T, policy string) lostHost {
 	if err != nil {
 		t.Fatal(err)
 	}
-	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
+	guest, _ = mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
 	guest.World().RunSafe(func() {
 		guest.cfg.Membership.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
 		guest.cfg.Mode = ModePlay                          // the mode whose loop takes a fork on
 	})
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	l := lostHost{guest: guest, id: guest.membership.LocalParticipant(), term: guest.authority.Term(),
-		key: store.key(t), held: places(guest, everyone)}
+	return host, guest, store
+}
 
-	leaveAs(t, host)
-	stopGuest := tickInBackground(guest)
-	for deadline := time.Now().Add(socketWait); !guest.membership.Leaving() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+// TestAFrozenGuestSaysWhatItWaitsFor: a guest its host's loss freezes says it
+// reconnects where its session is pinned to the host, and that it waits for the next
+// host where the session migrates.
+func TestAFrozenGuestSaysWhatItWaitsFor(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, tt := range []struct{ policy, notice string }{
+		{AuthorityHost, "Host lost; reconnecting"},
+		{AuthorityMigrate, "Host lost; waiting for the next host"},
+	} {
+		t.Run(tt.policy, func(t *testing.T) {
+			_, guest, _ := guestOfAHost(t, tt.policy)
+			guest.membership.Freeze() // as its session asks while the host changes or it redials
+			if msg := guest.Context().GetStatusMessage(); msg != tt.notice {
+				t.Fatalf("a guest frozen under the %s policy says %q; want %q", tt.policy, msg, tt.notice)
+			}
+		})
 	}
-	stopGuest()
-	if !guest.membership.Leaving() {
-		t.Fatal("the guest lost its host, and nothing asked its loop to take it on")
-	}
-	return l
 }
 
 // TestAForkGoesOnInASessionOfItsOwn: a run its session gives up, here a guest whose
@@ -2412,6 +2439,7 @@ func TestADoorOpenedWhereNobodyCouldDialWaitsForItsFirstGuest(t *testing.T) {
 	}
 	injectExCommand(t, a, "bot add")
 	stopTicking := tickInBackground(a)
+	defer stopTicking()
 	ctl := a.ctx.SessionCtl
 	// A seat learns its slot from its own gate, which can finish after the holder
 	// has applied its arrival; dropped before, :bot drop would dismiss its cursor.
