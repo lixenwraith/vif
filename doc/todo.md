@@ -617,6 +617,30 @@ Tag the selected commit `v0.1.0` and publish the draft release the tag creates,
 which already carries the source archive and its checksum; then drop the "no final
 release" lines in `README.md` and [Packaging](packaging.md) §2.
 
+### Rewrite the history without the third-party names and files
+
+- Priority: P1
+- Affected files: every commit
+- Prerequisite: the names PR merged and no other PR open
+
+The names audit (2026-11-14) took third-party game, brand and song names out of
+the tree, replaced a downloaded picture (`wad/image/test.aimg`) and deleted a
+stray 13.5 MB binary (`vif-router`). Older trees, commit messages and squash
+titles still carry them. One `git filter-repo` pass closes it:
+`--strip-blobs-with-ids` with the binary's blob
+`d6c2405eab3fc7ddc344b63a0513af09ebf1703d` and the old picture's
+`dfede4b85aa34b34e968bba8b73180e11876cfed`, and `--replace-text` with
+`--replace-message` from the list of names kept in the project's files, outside
+the repository, since it spells them. What it costs:
+
+- Every hash changes: each clone and fork re-clones, open branches are rebased
+  by hand, signed commits lose their signatures, and each release tag is set
+  again on its rewritten commit; release assets already uploaded keep the old
+  files.
+- GitHub keeps every PR's `refs/pull/<n>/head`, which no push deletes, so the
+  old commits stay reachable there and in cached views until GitHub Support
+  purges them. PR titles and bodies are edited on GitHub by hand.
+
 ### Sign the Android build with a release key
 
 - Priority: P2
