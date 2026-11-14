@@ -13,13 +13,12 @@ _arguments \
   '-name[Name this host answers to, so one address can serve several sessions]:name: ' \
   '-players[Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested]:n: ' \
   '-bot[Add bots alongside you (default 1:default); -host/-join keep your player]' \
-  '-authority[Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise]:value:(host migrate)' \
+  '-authority[What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares]:value:(host migrate)' \
   '-slow-window[Window a participant'\''s lateness is judged over; host only, 0 never evicts (default 20s)]:dur: ' \
   '-slow-late[Evict at this many late epochs per second of game time over the window; 0 ignores lateness (default 5)]:n: ' \
   '-slow-bytes[...and at least this many bytes per second of it on its link; 0 ignores throughput (default 8192)]:n: ' \
   '-shed-window[Window the host'\''s own tick keeping is judged over; past 10% of its ticks dropped, it drops its newest bot, then player; host only, 0 never sheds (default 10s)]:dur: ' \
-  '-listen[Address this participant is dialled back on; -join only, default the host'\''s port then an ephemeral one]:addr: ' \
-  '-no-advertise[Keep this participant'\''s address out of the session; -join only, never a succession candidate]' \
+  '-listen[Listen here so this run can take a migrate session over, whatever \[play\] takeover says; -join only, and the session shares the address]:addr: ' \
   '-relay[Admit participants that cannot reach the host here and carry their traffic, or at a door published through vif://<router>; -join only]:addr: ' \
   '-size[Terminal-equivalent size for a run that has no terminal]:WxH: ' \
   '-probe[Health and metrics endpoint; -serve only]:addr: ' \

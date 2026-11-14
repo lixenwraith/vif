@@ -501,6 +501,7 @@ var codecNetworkDisconnectPayload = structCodec{size: unsafe.Sizeof(NetworkDisco
 
 var codecCursorRecord = structCodec{size: unsafe.Sizeof(CursorRecord{}), fields: []field{
 	{off: unsafe.Offsetof(CursorRecord{}.Charges), kind: kindSlice, elem: &field{kind: kindInt, size: unsafe.Sizeof(int(0))}, stride: unsafe.Sizeof(int(0)), make: func(p unsafe.Pointer, n int) { *(*[]int)(p) = make([]int, n) }},
+	{off: unsafe.Offsetof(CursorRecord{}.Run), kind: kindUint, size: unsafe.Sizeof(uint64(0))},
 	{off: unsafe.Offsetof(CursorRecord{}.Energy), kind: kindInt, size: unsafe.Sizeof(int64(0))},
 	{off: unsafe.Offsetof(CursorRecord{}.Heat), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(CursorRecord{}.HitPoints), kind: kindInt, size: unsafe.Sizeof(int(0))},

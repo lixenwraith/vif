@@ -64,7 +64,7 @@ var configForms = map[string]configFormSpec{
 		label: "Host this game", description: "Open this running game to other players at a listening address.", command: "host",
 		fields: []configFormField{
 			{"Address", ":4242", "Listen address, e.g. :4242, 127.0.0.1:4242 or ws://:4242. Share a reachable address with guests.", inputURI},
-			{"Authority", "", "Blank keeps the startup policy. host ends the session when you leave; migrate allows a successor.", inputText},
+			{"Authority", "", "Blank keeps this run's policy, host unless it asked for migrate. host ends the session when you leave; migrate moves it to a guest that turned Take over as host on, whose address the session shares.", inputText},
 		},
 		unavailable: engine.SessionController.HostError,
 		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
@@ -189,6 +189,9 @@ func multiplayerConfigOptions(ctx *engine.GameContext) []configNode {
 		configNode{kind: kindToggle, key: "relay", label: "Relay for others", description: "Carry the game for players who reach this run and not their host, as after a host loss. Off by default; one that joined through this run is carried either way. Saved for the next run.",
 			command: "relay", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Relaying.Load()) }, disabled: relayUnavailable},
+		configNode{kind: kindToggle, key: "takeover", label: "Take over as host", description: "Let a session whose host chose migrate move to this run when that host leaves. This run then listens on a port in each session it joins from now, and the session shares its address with the other players. Off by default; off, this run also passes its turn in the session it is in. Saved for the next run.",
+			command: "takeover", choices: []string{"off", "on"},
+			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Takeover.Load()) }, disabled: takeoverUnavailable},
 		configNode{kind: kindToggle, key: "lan", label: "Visible on this network", description: "Announce the games this run hosts to players on the same network, who find them under Nearby games with no address to type. Off by default; it applies whenever this run hosts. Saved for the next run.",
 			command: "lan", choices: []string{"off", "on"},
 			read: func(ctx *engine.GameContext) string { return toggleWord(ctx.Lan.Load()) }, disabled: lanUnavailable})

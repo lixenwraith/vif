@@ -43,6 +43,25 @@ func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
 	return a
 }
 
+// takingOver is the play settings of a player who lets a session move to its run,
+// whole because a Config's zero Play is replaced by the default.
+func takingOver() paths.Play {
+	p := paths.DefaultPlay()
+	p.Takeover = true
+	return p
+}
+
+// hostMigrating opens a's door as :host <address> migrate does: its session moves to
+// a guest that allowed it when a goes, where a door opened with no word ends there.
+func hostMigrating(t *testing.T, a *App) {
+	t.Helper()
+	var err error
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityMigrate) })
+	if err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+}
+
 // portOf is the socket a run's session runs on, as its world holds it: a host's
 // door, whether opened at start or with :host, or a joiner's link to its session
 // and the door it takes joins at once it hosts.

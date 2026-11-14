@@ -509,6 +509,29 @@ func TestLanSetsVisibilityAndTellsTheSession(t *testing.T) {
 	}
 }
 
+// TestTakeoverSetsWhetherASessionMayMoveHere: a run lets no session move to it until
+// its player says so; :takeover on and off set the switch [play] takeover keeps,
+// which the Multiplayer page's row reads.
+func TestTakeoverSetsWhetherASessionMayMoveHere(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	ctx.SessionCtl = &menuSession{}
+	r := NewRouter(ctx, input.NewMachine())
+	r.handleConfigMenu()
+	showConfigMenu(ctx, "multiplayer")
+	const row = "multiplayer/#Session/takeover"
+	if got := menuRow(ctx, row); ctx.Takeover.Load() || got.Label != "Take over as host" || got.Value != "off" {
+		t.Fatalf("a run nobody asked reads %q %q, the switch %v; want it off", got.Label, got.Value, ctx.Takeover.Load())
+	}
+	for _, on := range []bool{true, false} {
+		ExecuteCommand(ctx, "takeover "+toggleWord(on))
+		showConfigMenu(ctx, "multiplayer")
+		if got := menuRow(ctx, row).Value; ctx.Takeover.Load() != on || got != toggleWord(on) {
+			t.Fatalf(":takeover %s left the switch %v and its row %q", toggleWord(on), ctx.Takeover.Load(), got)
+		}
+	}
+}
+
 // menuRow is the menu's row keyed key, a zero row when it shows none
 func menuRow(ctx *engine.GameContext, key string) core.OverlayMenuRow {
 	m := configMenu(ctx)

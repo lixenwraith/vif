@@ -60,6 +60,8 @@ func meshSessionOf(t *testing.T, cfg Config, n int, links [][2]int, chain ...lin
 			t.Fatalf("headless: %v", err)
 		}
 		a.HoldKey(keys[i])
+		// A candidate is a run whose player let the session move to it.
+		a.ctx.Takeover.Store(slices.Contains(chain, link.PeerID(i+1)))
 		apps[i] = a
 	}
 	t.Cleanup(func() {

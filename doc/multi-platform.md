@@ -189,7 +189,8 @@ messages, one frame per write, deadlines passed to the socket.
 
 The browser is refused `-host` and `-serve` before initialization, because it can
 bind nothing, and a `-join` or `:join` naming a `host:port`, because it can dial no
-socket. A browser guest never advertises a port, even in a migrate session.
+socket. A browser guest never declares a port, even in a migrate session, and
+`:takeover` is refused there as `:relay` is.
 
 ### What the browser adds to a link
 

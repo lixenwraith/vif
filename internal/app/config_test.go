@@ -188,12 +188,13 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 // line Run was given with what the restart named, so a pinned seed survives. A :join
 // leaves the -players and -authority of a session it no longer hosts, and falls back
 // to that run on its own, in no session; a run following nobody starts over on its
-// own, keeping the ceiling its session was opened with.
+// own, keeping the ceiling its session was opened with. A door that reopens does so
+// under the policy its session held, not the command line's.
 func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
 	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
 		Membership: Membership{HostAddress: "127.0.0.1:7000", JoinAddress: "10.0.0.1:7777", SessionName: "old",
-			Participants: 4, FixedAuthority: true}}, wiring: wiring{membership: membership.Wiring{SessionPlayers: 3}}}
+			Participants: 4, Migrate: true}}, wiring: wiring{membership: membership.Wiring{SessionPlayers: 3}}}
 	dialled := &membership.JoinDial{}
 	next, solo := line.restarted(&restartRequest{Notice: "n", Scenario: "duel", Host: "127.0.0.1:7001",
 		Join: "10.0.0.2:7777/abc", Dialled: dialled, Bots: []string{"roam"}, Journal: true})
@@ -210,9 +211,9 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 		t.Fatalf("a :join builds %q/%q on %p; want the target on its own dial",
 			next.Membership.JoinAddress, next.Membership.SessionName, next.wiring.dialled)
 	}
-	if next.Membership.Participants != 0 || next.Membership.FixedAuthority {
-		t.Fatalf("a :join keeps -players %d and a pinned authority %t; want neither, its session's coming with its offer",
-			next.Membership.Participants, next.Membership.FixedAuthority)
+	if next.Membership.Participants != 0 || next.Membership.Migrate {
+		t.Fatalf("a :join keeps -players %d and a migrating authority %t; want neither, its session's coming with its offer",
+			next.Membership.Participants, next.Membership.Migrate)
 	}
 	if solo == nil || solo.Seed != 7 || solo.Membership.JoinAddress != "" || solo.Membership.SessionName != "" ||
 		solo.wiring.membership.SessionPlayers != 0 || solo.wiring.dialled != nil {
@@ -224,9 +225,16 @@ func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 			moved.Membership.JoinAddress, moved.Membership.SessionName)
 	}
 	if alone, solo := line.restarted(&restartRequest{}); alone.Membership.JoinAddress != "" || solo != nil ||
-		alone.wiring.membership.SessionPlayers != 3 {
-		t.Fatalf("a run following nobody dials %q under a ceiling of %d; want nothing dialled, the session's 3 kept",
-			alone.Membership.JoinAddress, alone.wiring.membership.SessionPlayers)
+		alone.wiring.membership.SessionPlayers != 3 || !alone.Membership.Migrate {
+		t.Fatalf("a run following nobody dials %q under a ceiling of %d, migrating %t; want nothing dialled, the session's 3 and the command line's policy kept",
+			alone.Membership.JoinAddress, alone.wiring.membership.SessionPlayers, alone.Membership.Migrate)
+	}
+	if pinned, _ := line.restarted(&restartRequest{Scenario: "duel", Host: "127.0.0.1:7001"}); pinned.Membership.Migrate {
+		t.Fatal("a door reopened for a session that ends with its host migrates, as the command line asked of another")
+	}
+	line.Membership.Migrate = false
+	if moving, _ := line.restarted(&restartRequest{Scenario: "duel", Host: "127.0.0.1:7001", Migrate: true}); !moving.Membership.Migrate {
+		t.Fatal("a door reopened for a migrating session ends with its host, as the command line's default would")
 	}
 }
 
@@ -300,14 +308,18 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	if _, err := os.Stat(file); err == nil {
 		t.Fatal("nothing changed, yet the settings file was written")
 	}
+	if ctx.Takeover.Load() {
+		t.Fatal("a run whose [play] says nothing of it lets a session move to it")
+	}
 	ctx.AutoFire.Store(engine.AutoFireMain)
 	ctx.MouseDisabled.Store(false)
 	ctx.MaxFPS.Store(24)
 	ctx.PauseCommand.Store(true)
+	ctx.Takeover.Store(true)
 	a.persistPlay()
 	s, path, err := paths.LoadSettings(dir)
 	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.MaxFPS != 24 || s.Play.HUD != paths.DefaultPlay().HUD ||
-		!s.Play.PauseCommand {
+		!s.Play.PauseCommand || !s.Play.Takeover {
 		t.Fatalf("written back: %+v from %q, %v", s.Play, path, err)
 	}
 	ctx.ResetSessionState()

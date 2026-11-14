@@ -35,13 +35,11 @@ type Membership struct {
 	// it. Empty on both is an address with one session on it.
 	SessionName string
 
-	// ListenAddress pins the port this participant is dialled back on, and
-	// NoAdvertise refuses to publish one. Only a migrate session uses either. The
-	// default is the coordinator's own port — one firewall rule for a session —
-	// falling back to an OS-assigned one, and a bind that fails leaves the
-	// participant a leaf rather than failing the run.
+	// ListenAddress pins the port this participant is dialled back on in a migrate
+	// session, and has it listen there whatever [play] takeover says. Without it a
+	// run that may take over binds the coordinator's own port, one firewall rule for
+	// a session, else an OS-assigned one; a bind that fails leaves it a leaf.
 	ListenAddress string
-	NoAdvertise   bool
 
 	// RelayAddress is where a joined run admits participants that cannot reach the
 	// host, carrying their artifacts on its own link: an address to bind, or, with the
@@ -49,12 +47,12 @@ type Membership struct {
 	// relays only its bots.
 	RelayAddress string
 
-	// FixedAuthority pins authorship to the participant that opens the session, so
-	// losing it ends the session rather than moving it. It is a session property:
-	// the coordinator's value travels in the offer. Default on for a dedicated host,
-	// which an orchestrator replaces at the same address, off for an interactive
-	// one. See doc/multi-player.md §5.
-	FixedAuthority bool
+	// Migrate lets a session this run opens move to a guest that allowed it when
+	// the run goes, rather than end there: -authority migrate, or :host's word. Off
+	// unless asked for, since a migrating session shares such a guest's address. It
+	// is a session property: the offer carries it (SessionOffer.FixedAuthority, its
+	// negation). See doc/multi-player.md §5.
+	Migrate bool
 
 	// SlowPolicy is when this run, while authoring, evicts a participant that cannot
 	// keep up, and ShedPolicy what it drops when it cannot keep its own tick; nil

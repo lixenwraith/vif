@@ -141,10 +141,10 @@ What bounds a stranger:
   refused before the upgrade. The front door, the router's one Internet-facing
   socket, places at most 32 connections at once, reads one name-sized frame from
   each within five seconds, and refuses before it dials a pod (§9);
-- `-authority host`, which is the fleet's default and what keeps that one port the
-  only one. A migrate session gives every participant a listening port and publishes
-  the addresses inside the session; a fleet session is its address, so it has no
-  reason to want the other shape.
+- `-authority host`, which is every run's default and what keeps that one port the
+  only one. A migrate session gives each guest that takes over a listening port and
+  publishes the addresses inside the session; a fleet session is its address, so it
+  has no reason to want the other shape.
 
 The firewall requirements in [Deployment §2](kube-docker-deploy.md#2-the-public-edge)
 are what stand in front of the rest: the forwarded surface is the front door's 7777

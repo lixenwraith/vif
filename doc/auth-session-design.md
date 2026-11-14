@@ -188,8 +188,9 @@ What each surface checks, and what it trusts:
 - **A peer link** (`network.PeerAcceptor`, `converge.Reach.admitPeerLink`): a
   challenge both ways, each end proving the roster's key for itself over the
   other's nonce and the session, so a name alone opens nothing; the acceptor admits
-  any roster member but itself. A fleet pod runs `-authority host`, one port; a
-  player's session every participant that advertises a port.
+  any roster member but itself. A session that does not migrate, a fleet pod's
+  and the default, has one port; a migrate session one more for each guest that
+  takes over.
 - **Succession messages** (`MsgAuthorityReport`, `MsgAuthorityHandoff`) carry
   their author's signature, which a receiver checks against the roster's key for
   the participant they name before it acts; `MsgPeerList` is unsigned, and a forged
@@ -340,7 +341,9 @@ bytes an entry.
 printed once and shown by `:session`), eight bytes at least (`CheckPassphrase`). The
 host derives one SCRAM credential from it when its first door opens
 (`PassphraseDoor`, `auth.NewCredential` under the fixed name `door`, Argon2id at
-`parameter.DoorArgon*`) and serves its `ScramServer` at every door of its own; the
+`parameter.DoorArgon*`) and serves its `ScramServer` at every door of its own,
+each reading the credential as a dial arrives (`Coordinator.Passphrase`), so a
+phrase typed once the port stands gates the door it was typed for; the
 question names `scram` alone, with `pass`. A dial given the passphrase
 (`-passphrase`, `:join <target> <passphrase>`) opens the exchange in its answer
 beside its proofs, the challenge comes back in the door's second question, the proof
@@ -358,7 +361,9 @@ websocket too), so a self-signed door is authenticated both ways; on tcp and ws 
 authenticates the handshake alone. The offer carries the credential's verifier
 (`SessionOffer.Door`, `DoorVerifier`: the salt, the cost and the two keys, never
 the phrase), which every participant proved, so a relay's door and a successor's
-serve the exchange from it (`OpenDoor`) and a newcomer joins there as at the host's.
+serve the exchange from it (`OpenDoor`) and a newcomer joins there as at the host's;
+a scenario change hands it to the run that reopens the door (`RestartAsk.Door`),
+and a run's own bots, on a stream inside the process, are asked for none.
 A gated door with no verifier, a fixture's, admits a pass alone (`Coordinator.Gated`).
 What a participant is trusted with, the verifier among it, is
 [the todo's](todo.md#tighten-what-a-relay-and-a-successor-are-trusted-with) to audit.

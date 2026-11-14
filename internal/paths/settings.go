@@ -73,6 +73,7 @@ type Play struct {
 	FollowMouse bool    `toml:"follow_mouse"`
 	HUD         bool    `toml:"hud"`
 	Relay       bool    `toml:"relay"`
+	Takeover    bool    `toml:"takeover"`
 	Lan         bool    `toml:"lan"`
 	Wait        bool    `toml:"wait"`
 	// MaxFPS caps the frames drawn a second; 0 is the presentation's own rate

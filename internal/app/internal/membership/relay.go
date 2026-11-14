@@ -47,7 +47,7 @@ func (m *Membership) serveRelay() {
 		m.publishDoor(port, router)
 		return
 	}
-	bound, err := port.ServeSession(m.cfg.RelayAddress, m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner)
+	bound, err := port.ServeSession(m.cfg.RelayAddress, m.relayAcceptor(m.admissions.Admit, true), m.releaseRelayedJoiner)
 	if err != nil {
 		m.log.Warn("session", "msg", "relay address not bound", "address", m.cfg.RelayAddress, "error", err.Error())
 		m.ctx.SetStatusMessage("Relay: "+err.Error(), parameter.StatusAlert)
@@ -77,7 +77,7 @@ func (m *Membership) publishDoor(port *link.SocketPort, router string) {
 			m.ctx.SetStatusMessage("Relaying joins at "+door, parameter.StatusNotice)
 			m.tellAuthority(network.RelayJoin{Step: network.RelayDoor, Door: door})
 		}, func(conn net.Conn) {
-			if err := port.ServeConn(conn, m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner); err != nil {
+			if err := port.ServeConn(conn, m.relayAcceptor(m.admissions.Admit, true), m.releaseRelayedJoiner); err != nil {
 				_ = conn.Close()
 			}
 		}, func(err error) {
@@ -96,14 +96,14 @@ func (m *Membership) CloseDoor() {
 	}
 }
 
-// relayAcceptor is the join handshake this run serves for its bots and for the
-// people it relays, at its -relay door and, when its player relays for others, at
-// its own port (admitHosted): a coordinator's, with the authority asked for each
-// answer. Once this run holds the term it is that coordinator and the door admits
-// as the host's does (relayDoorHosts), read at each step since the term moves.
-func (m *Membership) relayAcceptor(admit func(net.Addr) error) func(net.Conn) (link.PeerID, error) {
+// relayAcceptor is the join handshake this run serves for its bots, whose streams
+// ask no credential, and at a door for the people it relays: its -relay door and,
+// when its player relays for others, its own port (admitHosted). The authority is
+// asked for each answer; once this run holds the term the door admits as the
+// host's does (relayDoorHosts), read at each step since the term moves.
+func (m *Membership) relayAcceptor(admit func(net.Addr) error, door bool) func(net.Conn) (link.PeerID, error) {
 	local := func() link.PeerID { return link.PeerID(m.localParticipant()) }
-	return network.HostAcceptor(network.Coordinator{
+	c := network.Coordinator{
 		Preview: func(a network.Admission) (network.SessionOffer, error) {
 			if m.relayDoorHosts() {
 				return m.previewParticipant(a)
@@ -140,11 +140,13 @@ func (m *Membership) relayAcceptor(admit func(net.Addr) error) func(net.Conn) (l
 		Name:        m.cfg.SessionName,
 		Authority:   m.firstTermKey,
 		Pass:        m.checkPass,
-		Passphrase:  m.passphraseDoor(),
-		Gated:       m.gated,
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
-	}, network.DefaultConfig().ConnectTimeout)
+	}
+	if door {
+		c.Passphrase, c.Gated = m.passphraseDoor, m.gated
+	}
+	return network.HostAcceptor(c, network.DefaultConfig().ConnectTimeout)
 }
 
 // relayDoorHosts reports that the run behind the -relay door authors its session, so
@@ -164,11 +166,11 @@ func (m *Membership) relayPreview(local link.PeerID) (network.SessionOffer, erro
 	anchor := m.JoinAnchor()
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
-	o := m.offerLocked(anchor, 0)
+	o := handshake(m.offerLocked(anchor, 0))
 	// What the authority's offers say, which this run's own carried: it does not
-	// keep the roster, nor set the policy.
+	// keep the roster, nor set the ceiling.
 	o.Roster = slices.Clone(m.sessionOffer.Roster)
-	o.FixedAuthority, o.Players, o.Relay = m.sessionOffer.FixedAuthority, m.sessionOffer.Players, local
+	o.Players, o.Relay = m.sessionOffer.Players, local
 	return o, nil
 }
 
@@ -251,6 +253,9 @@ func (m *Membership) releaseRelayedJoiner(id link.PeerID) {
 	offer, report := m.relay.offers[id], m.relay.reports[id]
 	delete(m.relay.reports, id)
 	m.relay.mu.Unlock()
+	// The authority's answer was a handshake's, naming no address: the gate carries
+	// the chain as this run holds it, which is the authority's as last published.
+	offer.Chain = m.sessionChain()
 	port, err := m.socketPort()
 	if err == nil {
 		err = m.sendRelayedGate(port, offer, report)

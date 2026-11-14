@@ -34,6 +34,14 @@ func (m *Membership) Seated() bool {
 	return seated
 }
 
+// TakesOver is whether this run's player lets a session move to it: the switch as it
+// stands now, or -listen, which asked for the whole run.
+func (m *Membership) TakesOver() bool {
+	var pinned bool
+	m.world.RunSafe(func() { pinned = m.cfg.ListenAddress != "" })
+	return pinned || m.ctx.Takeover.Load()
+}
+
 // WorldRoster reads the roster off the cursors rather than off the lobby the offer
 // described: arrivals and departures are barrier-bound crossings, so this is the
 // same list on every instance.

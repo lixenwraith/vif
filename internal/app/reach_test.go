@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // TestSuccessionSkipsALeaf is what the chain buys the election: a survivor that
@@ -80,6 +81,94 @@ func TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor(t *testing.T) {
 			t.Fatalf("participant %d forked with a peer it could still reach", i+3)
 		}
 	}
+}
+
+// TestAGuestListensOnlyWhereItsPlayerLetTheSessionMoveToIt: a guest binds a port and
+// declares it, which the session shares with its players, only in a session whose
+// host chose migrate and only with Take over as host on or -listen; any other guest
+// is a leaf, and the host's chain names nobody.
+func TestAGuestListensOnlyWhereItsPlayerLetTheSessionMoveToIt(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, tt := range []struct {
+		name     string
+		policy   string
+		guest    func(*Config)
+		declares bool
+	}{
+		{"a migrate session, nothing asked", AuthorityMigrate, func(*Config) {}, false},
+		{"a migrate session, taking over on", AuthorityMigrate, func(c *Config) { c.Play = takingOver() }, true},
+		{"a migrate session, -listen", AuthorityMigrate, func(c *Config) { c.Membership.ListenAddress = freeAddress(t) }, true},
+		{"a session that ends with its host, taking over on", AuthorityHost, func(c *Config) { c.Play = takingOver() }, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+			tickUntilCursor(t, host)
+			var err error
+			host.World().RunSafe(func() { err = host.ctx.SessionCtl.BeginHosting("127.0.0.1:0", tt.policy) })
+			if err != nil {
+				t.Fatalf("begin hosting: %v", err)
+			}
+			stop := tickInBackground(host)
+			t.Cleanup(func() { stop(); host.Close() })
+			cfg := Config{Membership: Membership{JoinAddress: host.HostAddr()}}
+			tt.guest(&cfg)
+			guest, _ := driveBot(t, cfg, "patrol", nil)
+			waitForCursors(t, host, 2)
+			id := link.PeerID(guest.membership.LocalParticipant())
+			declared := guest.reach.DeclaredAddr()
+			if (declared != "") != tt.declares || boolOf(guest, "network.listening") != tt.declares {
+				t.Fatalf("the guest declares %q, listening %t; want an address declared: %t",
+					declared, boolOf(guest, "network.listening"), tt.declares)
+			}
+			if !tt.declares {
+				if chain := host.authority.Chain(); len(chain) != 0 {
+					t.Fatalf("the host's chain names %v; want nobody", chain)
+				}
+				return
+			}
+			waitUntil(t, func() bool { addr, ok := host.authority.Chain().Lookup(id); return ok && addr != "" },
+				"the guest's address in the host's chain")
+		})
+	}
+}
+
+// TestAJoinHandshakeNamesNoAddress: neither the preview a dial prepares on nor the
+// offer its seat carries says where a player listens, at the host's door or a
+// relay's; the chain comes with the start gate, to a run that joined, directly or
+// behind a relay.
+func TestAJoinHandshakeNamesNoAddress(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr, door := freeAddress(t), freeAddress(t)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Migrate: true, Bots: []string{"roam"}}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: door}, Play: takingOver()}, "patrol", nil)
+	id := link.PeerID(first.membership.LocalParticipant())
+	named := func(a *App) func() bool {
+		return func() bool { at, ok := a.authority.Chain().Lookup(id); return ok && at != "" }
+	}
+	waitUntil(t, named(host), "the candidate's address in the host's chain")
+	waitListening(t, door)
+
+	for _, at := range []string{addr, door} {
+		pending, preview, err := network.PreviewSession(at, network.DebugConfig(link.RolePeer, ""))
+		if err != nil {
+			t.Fatalf("preview at %s: %v", at, err)
+		}
+		_ = pending.Close()
+		if len(preview.Chain) != 0 {
+			t.Fatalf("a preview at %s names %v; want no address before a place is held", at, preview.Chain)
+		}
+	}
+	seated, offer := dialSession(t, addr)
+	_ = seated.Close()
+	if len(offer.Chain) != 0 {
+		t.Fatalf("a seat's offer names %v; want no address before the join completes", offer.Chain)
+	}
+
+	leaf, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, "patrol", nil)
+	waitUntil(t, named(leaf), "the candidate's address in the chain of a run that joined")
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: door}}, "patrol", nil)
+	waitUntil(t, named(person), "the candidate's address in the chain of a run that joined behind a relay")
 }
 
 // TestALeafDeclaresNothing is the privacy decision: a participant that binds no

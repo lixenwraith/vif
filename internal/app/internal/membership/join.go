@@ -445,10 +445,11 @@ func (m *Membership) restartWaitsLocked() {
 }
 
 // keepRecord keeps what this run's own cursor holds as its sync sends it, which is
-// what its player brings back should the run leave the session.
+// what its player brings back should the run leave the session, under the game the
+// run was playing: a reset starts another, which takes none of it.
 func (m *Membership) keepRecord(p *event.CursorStatePayload) {
 	if c := m.place.Load(); c != nil {
-		m.places.keep(c, p.Record())
+		m.places.keep(c, p.Record(m.run.Position().Run))
 	}
 }
 

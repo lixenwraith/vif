@@ -185,6 +185,7 @@ var topics = []topicDef{
 			{Keys: ":join <target>", Desc: "Leave this solo game for the session at target, in any form -join takes, which seats you at your press; a failed join plays on solo"},
 			{Keys: ":leave", Desc: "Leave the session and play on in one of your own from where it stands; your bots come along, and :host or :join opens or finds another"},
 			{Keys: ":relay [on|off]", Desc: "Carry the game for players who reach this run and not their host, as after a host loss; off by default, and one that joined through this run is carried either way"},
+			{Keys: ":takeover [on|off]", Desc: "Let a session whose host chose migrate move to this run when that host leaves; off by default. On, this run listens on a port in each session it joins from then, and the session shares its address with the other players; off, it also passes its turn in the session it is in"},
 			{Keys: ":lan [on|off]", Desc: "on announces the games this run hosts to players on the same network, off by default; alone it reports the games found there, which Menu / Multiplayer lists under Nearby games"},
 			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},
 			{Keys: ":bot [add [N[:graph]|graph]|drop <slot>]", Desc: "List this run's bots, seat bots playing graph (default: default) or drop one; a solo game opens a session only they can join and still pauses. 10, A and 0xA name one slot"},

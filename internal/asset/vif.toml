@@ -47,8 +47,10 @@ tmux_frame_cap = true
 # as this one was left: the two audio channels, sound effects (sfx) and music, the
 # sfx volume (0 to 1), auto-fire (off, main or on), mouse input, the cursor
 # following the pointer, the telemetry HUD, relaying for players who reach this run
-# and not their host, announcing the games this run hosts to its local network
-# (lan), each game started or restarted waiting for a key, click or
+# and not their host, taking over a session whose host chose migrate when that host
+# goes (takeover: this run then listens on a port in such a session, which shares
+# its address with the other players), announcing the games this run hosts to its
+# local network (lan), each game started or restarted waiting for a key, click or
 # tap, the most frames drawn a second (max_fps, 10 to 120, never under one a tick;
 # 0 is three a tick, 60 at the default, and 24 inside tmux or screen, which drop
 # what a terminal sends them faster), and whether a game that may pause (solo, or
@@ -67,6 +69,7 @@ mouse = true
 follow_mouse = true
 hud = false
 relay = false
+takeover = false
 lan = false
 wait = true
 max_fps = 0

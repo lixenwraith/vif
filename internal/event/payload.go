@@ -867,15 +867,17 @@ type CursorStatePayload struct {
 	BoostActive  bool      `toml:"boost_active,omitempty"`
 }
 
-// Record is the part of an owner's sync its player brings back to its Wraith.
-func (p *CursorStatePayload) Record() CursorRecord {
-	return CursorRecord{Charges: slices.Clone(p.WeaponCharges), Energy: p.Energy, Heat: p.Heat, HitPoints: p.HitPoints}
+// Record is the part of an owner's sync its player brings back to its Wraith, made
+// in the game run counts.
+func (p *CursorStatePayload) Record(run uint64) CursorRecord {
+	return CursorRecord{Charges: slices.Clone(p.WeaponCharges), Run: run, Energy: p.Energy, Heat: p.Heat,
+		HitPoints: p.HitPoints}
 }
 
 // CursorSpawnRequestPayload asks for a cursor entity
 // Center overrides X/Y; Auto overrides Slot with the lowest free index. A request
 // for a slot its participant's own Wraith holds takes the Wraith back, at its cell
-// and with Record over the template.
+// and with Record over the template where the game it names is still the one played.
 type CursorSpawnRequestPayload struct {
 	Record  *CursorRecord `toml:"record"`
 	Key     string        `toml:"key,omitempty"`  // the participant key its participant returns with
@@ -893,12 +895,14 @@ type CursorSpawnRequestPayload struct {
 }
 
 // CursorRecord is what a player brings back to its Wraith of the game it left: the
-// energy, heat, health and loadout its cursor last synced there.
+// energy, heat, health and loadout its cursor last synced there, and the game that
+// sync was made in (Stamp.Run). A reset starts another game, which takes none of it.
 type CursorRecord struct {
-	Charges   []int `toml:"charges" json:"charges,omitempty"`
-	Energy    int64 `toml:"energy" json:"energy"`
-	Heat      int   `toml:"heat" json:"heat"`
-	HitPoints int   `toml:"hit_points" json:"hit_points"`
+	Charges   []int  `toml:"charges" json:"charges,omitempty"`
+	Run       uint64 `toml:"run" json:"run"`
+	Energy    int64  `toml:"energy" json:"energy"`
+	Heat      int    `toml:"heat" json:"heat"`
+	HitPoints int    `toml:"hit_points" json:"hit_points"`
 }
 
 // CursorArmRequestPayload sets heat, energy and the ember on the cursor this instance

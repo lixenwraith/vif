@@ -336,11 +336,11 @@ func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 		return nil, err
 	}
 
-	// Bound before the reply that declares it (internal/converge/reach.go), and only
-	// where authorship can move: elsewhere a guest's port is for nothing. A browser is
-	// never dialled, and js/wasm's net would bind a port nobody reaches. A guest that
-	// joined through a relay could not reach the host, so it is a leaf unless -listen
-	// names an address the session can reach it at.
+	// Bound before the reply that declares it (internal/converge/reach.go), only
+	// where authorship can move and this run's player lets it move here: the session
+	// shares what is declared with every player. A browser is never dialled. A guest
+	// that joined through a relay could not reach the host, so it is a leaf unless
+	// -listen names an address the session can reach it at.
 	var listener net.Listener
 	var declared string
 	gate, _ := cfg.wiring.membership.Links.(*converge.PeerLinkGate)
@@ -352,8 +352,8 @@ func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 	// to the run built on it, whose reach is the one that holds the roster's keys.
 	cfg.wiring.networkConfig.ConnectPeer = network.PeerDialer(membership.IdentityFromAnchor(offer.Anchor),
 		gate, cfg.wiring.networkConfig.ConnectTimeout)
-	if !offer.FixedAuthority && !cfg.Membership.NoAdvertise && config.SocketNetwork &&
-		(offer.Relay == 0 || cfg.Membership.ListenAddress != "") {
+	pinned := cfg.Membership.ListenAddress != ""
+	if !offer.FixedAuthority && (cfg.Play.Takeover || pinned) && config.SocketNetwork && (offer.Relay == 0 || pinned) {
 		listener, declared = converge.BindAdvertised(cfg.Membership.ListenAddress, cfg.Membership.JoinAddress)
 	}
 	if listener != nil {

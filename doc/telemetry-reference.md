@@ -284,7 +284,7 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.shed` (int) | Participants this authority dismissed to keep its own tick, bots first (`Authority.driveShedding`) |
 | `network.chain` (int) | Candidates in the succession chain, the participants with an address. `:session` reports it as "confirmed reachable" and names the doors beside it. A participant that declared no port plays, and is never a candidate, listed by its door alone if it relays ([Multiplayer](multi-player.md) §5.3, §5.6) |
 | `network.rejoin_attempts` (int) | Passes down the succession list, one a second, while this instance walks it or has no path to its authority |
-| `network.listening` (bool) | This instance bound a port peers can dial back. False on a leaf: a `-no-advertise` run, or one whose bind failed |
+| `network.listening` (bool) | This instance bound a port peers can dial back. False on a leaf: a guest that does not take over, or one whose bind failed |
 
 ### Snapshot and correction
 

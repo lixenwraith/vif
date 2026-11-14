@@ -183,7 +183,7 @@ func (m *Membership) seatConfigLocked() (SeatPlay, error) {
 	width, height := m.run.SeatScreenLocked()
 	return SeatPlay{
 		Config: config.Config{Mode: config.ModeHeadless, Resources: m.run.Resources(), Width: width, Height: height,
-			StatTicks: -1, RecTicks: -1, Membership: config.Membership{NoAdvertise: true, JoinAddress: seatJoin,
+			StatTicks: -1, RecTicks: -1, Membership: config.Membership{JoinAddress: seatJoin,
 				SessionName: m.cfg.SessionName}},
 		Wiring: Wiring{Holder: link.PeerID(m.world.LocalParticipant()),
 			Relay: m.seatLink, Places: m.places},
@@ -202,9 +202,9 @@ func (m *Membership) seatLink() (net.Conn, error) {
 	m.world.RunSafe(func() {
 		port, _ = m.sessionTransportLocked().(*link.SocketPort)
 		if m.world.IsSessionCoordinator() {
-			accept, admitted = m.sessionAcceptor(m.admissions.Admit), m.admitLateJoiner
+			accept, admitted = m.sessionAcceptor(m.admissions.Admit, false), m.admitLateJoiner
 		} else {
-			accept, admitted = m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner
+			accept, admitted = m.relayAcceptor(m.admissions.Admit, false), m.releaseRelayedJoiner
 		}
 	})
 	if port == nil {

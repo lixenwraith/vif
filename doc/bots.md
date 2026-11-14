@@ -66,7 +66,7 @@ into the session it joins, and `:leave` takes them out of one with the run.
   that comes back seats its bots again, and each takes back its own place.
 - A seated bot belongs to its holder, so it is never a candidate: the
   succession list holds only independent participants. A watched or headless bot is one and
-  follows `-no-advertise` like any other.
+  takes over as any other does, where its run says so (`-listen`, `[play] takeover`).
 - `:bot drop <slot>` drops one of your bots; the host may drop any bot.
   `:player drop <slot>` (host only) drops a player with all its bots, or one bot.
 - `:leave` takes your bots out of the session with you: they leave it first and
