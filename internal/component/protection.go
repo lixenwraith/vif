@@ -15,6 +15,7 @@ const (
 	ProtectFromSpecies
 
 	// ProtectFromDelete makes entity with glyph component immune to delete operators
+	// and to r, which retypes what a delete would reach
 	ProtectFromDelete
 
 	// ProtectFromDeath makes entity immune to death (e.g. out-of-bounds cleanup)

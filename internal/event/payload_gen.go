@@ -87,6 +87,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventBoostReward:                     func() any { return new(BoostRewardPayload) },
 	EventCharacterTyped:                  func() any { return new(CharacterTypedPayload) },
 	EventDeleteRequest:                   func() any { return new(DeleteRequestPayload) },
+	EventGlyphReplaceRequest:             func() any { return new(GlyphReplaceRequestPayload) },
 	EventKeyCaptureRequest:               func() any { return new(KeyCapturePayload) },
 	EventInputPressed:                    func() any { return new(InputPayload) },
 	EventInputReleased:                   func() any { return new(InputPayload) },
@@ -260,6 +261,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventBoostReward:                     &codecBoostRewardPayload,
 	EventCharacterTyped:                  &codecCharacterTypedPayload,
 	EventDeleteRequest:                   &codecDeleteRequestPayload,
+	EventGlyphReplaceRequest:             &codecGlyphReplaceRequestPayload,
 	EventKeyCaptureRequest:               &codecKeyCapturePayload,
 	EventInputPressed:                    &codecInputPayload,
 	EventInputReleased:                   &codecInputPayload,
@@ -1052,6 +1054,17 @@ var codecDeleteRequestPayload = structCodec{size: unsafe.Sizeof(DeleteRequestPay
 	{off: unsafe.Offsetof(DeleteRequestPayload{}.EndX), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(DeleteRequestPayload{}.StartY), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(DeleteRequestPayload{}.EndY), kind: kindInt, size: unsafe.Sizeof(int(0))},
+}}
+
+func (p *GlyphReplaceRequestPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGlyphReplaceRequestPayload, unsafe.Pointer(p)
+}
+
+var codecGlyphReplaceRequestPayload = structCodec{size: unsafe.Sizeof(GlyphReplaceRequestPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.StartX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.EndX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
 }}
 
 func (p *KeyCapturePayload) codec() (*structCodec, unsafe.Pointer) {

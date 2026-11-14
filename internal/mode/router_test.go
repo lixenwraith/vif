@@ -295,3 +295,78 @@ func TestEveryPointerPressesAButton(t *testing.T) {
 		t.Fatalf("crossed %q, want %q", got, want)
 	}
 }
+
+// lineWorld is a bare world holding text as the player's glyphs on row 0 from column
+// 0, the local cursor at column x of it, and a router fed by keys, which places the
+// cursor where each key asks, as CursorSystem would, and returns the deletes asked
+// for, as "x-x" spans or "line"
+func lineWorld(t *testing.T, text string, x int) (*engine.GameContext, func(keys string) []string) {
+	t.Helper()
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	for i, ch := range text {
+		if ch != ' ' {
+			e := w.CreateEntity(core.DomainPlayer)
+			w.Positions.SetPosition(e, component.PositionComponent{X: i, Y: 0})
+			w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: ch})
+		}
+	}
+	w.Resources.Player.Entity = w.CreateEntity(core.DomainPlayer)
+	w.Positions.SetPosition(w.Resources.Player.Entity, component.PositionComponent{X: x, Y: 0})
+	machine := input.NewMachine()
+	appends, _ := input.ActionEntry("mode_append")
+	machine.SetKeyTable(input.MergeKeyTable(input.DefaultKeyTable(), &input.KeyTable{NormalRunes: map[rune]input.KeyEntry{'a': appends}}))
+	r := NewRouter(ctx, machine)
+	return ctx, func(keys string) (deletes []string) {
+		for _, ch := range keys {
+			k := terminal.KeyRune
+			if ch == '\x1b' {
+				k = terminal.KeyEscape
+			}
+			press(machine, r, k, ch)
+			for _, ev := range w.Resources.Event.Queue.Consume() {
+				switch p := ev.Payload.(type) {
+				case *event.CursorMoveRequestPayload:
+					w.Positions.SetPosition(p.Entity, component.PositionComponent{X: p.X, Y: p.Y})
+				case *event.DeleteRequestPayload:
+					if p.RangeType == event.DeleteRangeLine {
+						deletes = append(deletes, "line")
+					} else {
+						deletes = append(deletes, fmt.Sprintf("%d-%d", p.StartX, p.EndX))
+					}
+				}
+			}
+		}
+		return deletes
+	}
+}
+
+// TestAnActionNamingInsertEntersItOnceItActs: c deletes as d does, over its line when
+// doubled as dd is, and enters Insert once its range holds; C does after D's delete;
+// A, I and vim's a after their move, A to the last glyph however often it is pressed.
+func TestAnActionNamingInsertEntersItOnceItActs(t *testing.T) {
+	ctx, keys := lineWorld(t, "  one two", 2)
+	cursor := func() int { pos, _ := ctx.World.LocalCursor(); return pos.X }
+	for _, c := range []struct {
+		keys    string
+		deletes []string
+		insert  bool
+		x       int
+	}{
+		{"cw", []string{"2-5"}, true, 2},
+		{"\x1bcfz", nil, false, 2},
+		{"cc", []string{"line"}, true, 2},
+		{"\x1bdd", []string{"line"}, false, 2},
+		{"C", []string{"2-8"}, true, 2},
+		{"\x1bA", nil, true, 8},
+		{"\x1bA", nil, true, 8},
+		{"\x1bI", nil, true, 2},
+		{"\x1ba", nil, true, 3},
+	} {
+		got := keys(c.keys)
+		if !slices.Equal(got, c.deletes) || ctx.IsInsertMode() != c.insert || cursor() != c.x {
+			t.Fatalf("%q: deletes %q, insert %v, cursor %d; want %q, %v, %d",
+				c.keys, got, ctx.IsInsertMode(), cursor(), c.deletes, c.insert, c.x)
+		}
+	}
+}
