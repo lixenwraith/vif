@@ -631,6 +631,10 @@ Libraries · Branches.
 - A host loss is three such runs: a host opened with `:host`, two guests that
   `:join` it mid-run, then `:q` on the host. `:session` on each guest, and its log's
   `session` and `net` lines (`-l=<dir>`), say who took the term or why nobody did.
+- A takeover needs the host's `-authority migrate` and a guest's `[play] takeover =
+  true` in its scratch `vif.toml` before it starts. `kill -STOP` on the host is one
+  gone silent: the loss shows a link timeout later, as the guest's convergence floor
+  breaches, and the two alerts race by milliseconds, so compare builds by their log.
 - Drive it with `tmux send-keys`: `:emit <Event> { ... }` raises any event, `:god`
   arms every weapon, `a` toggles auto-fire and `:log on` writes the JSONL log under
   `~/.local/state/vif`, where every install logs; vif never writes `/var/log`.

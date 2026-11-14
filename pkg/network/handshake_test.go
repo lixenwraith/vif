@@ -197,3 +197,148 @@ func TestBindPeerFallsBackWhenThePortIsTaken(t *testing.T) {
 		t.Fatal("two listeners bound the same address")
 	}
 }
+
+// TestADoorStartsTheLinkHistoryOverOnlyWhereNobodyCouldDial: a host's port at no door
+// reads no link once its last stream has gone, and the door Serve opens there waits
+// for its first joiner as a fresh host's does. A stream that stands as the door opens,
+// or links while it opens, keeps the history, so its going reads as a link that went
+// down; and so does a second door, opened on a port that already listened.
+func TestADoorStartsTheLinkHistoryOverOnlyWhereNobodyCouldDial(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		open func(t *testing.T, port *SocketPort, link func() (release func()), serve func())
+		want ConnState
+	}{
+		{"its stream gone before the door", func(t *testing.T, port *SocketPort, link func() func(), serve func()) {
+			link()()
+			linked(t, port, 1)
+			port.Disconnect(2)
+			linked(t, port, 0)
+			if got := port.ConnectionState(); got != StateIdle {
+				t.Fatalf("a host at no door whose stream went reads %d, want idle", got)
+			}
+			serve()
+		}, StateConnecting},
+		{"its stream standing at the door", func(t *testing.T, port *SocketPort, link func() func(), serve func()) {
+			link()()
+			linked(t, port, 1)
+			serve()
+		}, StateDisconnected},
+		{"its stream linking as the door opens", func(t *testing.T, port *SocketPort, link func() func(), serve func()) {
+			release := link()
+			// Held here, Serve stands where it has yet to read the links: the stream
+			// registers there, before the history could start over
+			port.transport.listenMu.Lock()
+			served := make(chan struct{})
+			go func() { serve(); close(served) }()
+			time.Sleep(20 * time.Millisecond)
+			release()
+			linked(t, port, 1)
+			port.transport.listenMu.Unlock()
+			<-served
+		}, StateDisconnected},
+		{"a second door", func(t *testing.T, port *SocketPort, link func() func(), serve func()) {
+			serve()
+			link()()
+			linked(t, port, 1)
+			port.Disconnect(2)
+			linked(t, port, 0)
+			serve()
+		}, StateDisconnected},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			port := NewSocketPort(testConfigFor(RoleHost, ""))
+			if err := port.Start(); err != nil {
+				t.Fatalf("start: %v", err)
+			}
+			defer port.Close()
+			link := func() (release func()) {
+				gate := make(chan struct{})
+				near, far := Pipe()
+				t.Cleanup(func() { _ = far.Close() })
+				if err := port.ServeConn(near, func(net.Conn) (PeerID, error) { <-gate; return 2, nil }, nil); err != nil {
+					t.Fatalf("link: %v", err)
+				}
+				return func() { close(gate) }
+			}
+			serve := func() {
+				ln, err := net.Listen("tcp", "127.0.0.1:0")
+				if err != nil {
+					t.Errorf("listen: %v", err)
+					return
+				}
+				if err := port.Serve(ln); err != nil {
+					t.Errorf("serve: %v", err)
+				}
+			}
+			tt.open(t, port, link, serve)
+			if port.PeerCount() > 0 {
+				port.Disconnect(2)
+				linked(t, port, 0)
+			}
+			if got := port.ConnectionState(); got != tt.want {
+				t.Fatalf("the door, with nobody linked since, reads %d, want %d (connecting %d is waiting, disconnected %d is down)",
+					got, tt.want, StateConnecting, StateDisconnected)
+			}
+		})
+	}
+}
+
+// linked waits for the port to hold n links.
+func linked(t *testing.T, port *SocketPort, n int) {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); port.PeerCount() != n; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the port holds %d links, want %d", port.PeerCount(), n)
+		}
+	}
+}
+
+// TestClosingASessionDoorKeepsItsLinks: CloseSession shuts the join gate
+// ServeSession opened and nothing else, so the link it admitted stands, and another
+// port serves that address before this one closes: what a run that goes on in a
+// session of its own does with the door the players it carries came in by.
+func TestClosingASessionDoorKeepsItsLinks(t *testing.T) {
+	t.Parallel()
+	start := func() *SocketPort {
+		port := NewSocketPort(testConfigFor(RoleHost, ""))
+		if err := port.Start(); err != nil {
+			t.Fatalf("start: %v", err)
+		}
+		t.Cleanup(func() { _ = port.Close() })
+		return port
+	}
+	admit := func(id PeerID) func(net.Conn) (PeerID, error) {
+		return func(net.Conn) (PeerID, error) { return id, nil }
+	}
+	dial := func(addr string) {
+		c, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatalf("dial %s: %v", addr, err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+	}
+
+	old := start()
+	bound, err := old.ServeSession("127.0.0.1:0", admit(2), nil)
+	if err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+	dial(bound)
+	linked(t, old, 1)
+	if !old.CloseSession(bound) {
+		t.Fatalf("no door at %s to close", bound)
+	}
+	if old.CloseSession(bound) {
+		t.Fatal("a door closed twice")
+	}
+	next := start()
+	if _, err := next.ServeSession(bound, admit(3), nil); err != nil {
+		t.Fatalf("the address the closed door stood at is not free: %v", err)
+	}
+	dial(bound)
+	linked(t, next, 1)
+	if got := old.Peers(); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("the closed door's port holds links %v, want the one it admitted, 2, alone", got)
+	}
+}

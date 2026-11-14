@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -124,9 +125,9 @@ func TestTheTermGateRefusesWhatNobodyHandedThisInstance(t *testing.T) {
 }
 
 // TestASurvivorStandsFrozenThroughTheWalk: a survivor stops its run when its
-// authority goes, and with no record it stands until the last candidate's turn has
-// passed on the wall clock, since no tick passes to count it; the fork it ends in is
-// told to the run.
+// authority goes, reading as a migration, and with no record it stands until the last
+// candidate's turn has passed on the wall clock, since no tick passes to count it;
+// the fork it ends in is told to the run.
 func TestASurvivorStandsFrozenThroughTheWalk(t *testing.T) {
 	t.Parallel()
 	run := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
@@ -136,8 +137,8 @@ func TestASurvivorStandsFrozenThroughTheWalk(t *testing.T) {
 	// and the drive that reads it.
 	rewind(run, turns-parameter.NetworkSuccessionWindow/2)
 	run.u.drive()
-	if !run.world.frozen || run.u.State().Fork {
-		t.Fatalf("inside the walk: frozen %v, fork %v", run.world.frozen, run.u.State().Fork)
+	if migrating := run.reg.Bools.Get("network.migrating").Load(); !run.world.frozen || run.u.State().Fork || !migrating {
+		t.Fatalf("inside the walk: frozen %v, fork %v, migrating %v", run.world.frozen, run.u.State().Fork, migrating)
 	}
 	rewind(run, parameter.NetworkSuccessionWindow)
 	run.u.drive()
@@ -252,7 +253,8 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 			guest.world.forked, len(guest.world.forkedAs))
 	}
 
-	// A pinned guest walks to nobody; the one wait it has is its redial of the host.
+	// A pinned guest walks to nobody; the one wait it has is its redial of the host,
+	// which reads as the host lost rather than as a migration.
 	redialing := newRun(t, 2, nil, roster(2))
 	redialing.world.redial = true
 	redialing.u.Open(network.SessionOffer{
@@ -262,10 +264,122 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	if redialing.u.State().Fork || !redialing.world.frozen {
 		t.Fatal("a pinned guest forked, or played on, before its redial ended")
 	}
+	if redialing.reg.Bools.Get("network.migrating").Load() || strings.Contains(redialing.u.Summary(), "succession") {
+		t.Fatalf("a pinned guest's redial reads as a migration: %q", redialing.u.Summary())
+	}
 	redialing.u.RedialRefused(1)
 	redialing.u.drive()
 	if !redialing.u.State().Fork {
 		t.Fatal("a pinned guest whose redial was refused did not fork")
+	}
+}
+
+// TestAPinnedRelayedPersonFollowsItsRelay: a person a relay carries in a pinned
+// session holds on through that relay's notice while it stays linked, for
+// NetworkFollowWindow, and once that link goes redials the relay at its door,
+// whichever came first and however often the notice comes again. A bot, a run with
+// no loop and a person in a migrate session wait on no relay.
+func TestAPinnedRelayedPersonFollowsItsRelay(t *testing.T) {
+	t.Parallel()
+	notice := signed(network.AuthorityReport{Term: network.FirstTerm, From: 2, Lost: 1})
+	relayed := func(linked, fixed bool, shape func(*stub)) (*run, *link.Mesh) {
+		mesh := network.NewMesh()
+		mesh.Link(1, 2)
+		if linked {
+			mesh.Link(2, 3)
+		}
+		r := newRun(t, 3, mesh.Node(3), roster(3))
+		if shape != nil {
+			shape(r.world)
+		}
+		r.u.Open(network.SessionOffer{
+			Host: 1, Assigned: 3, Relay: 2, Term: network.FirstTerm,
+			Roster: roster(3), Chain: chainOf(2, 3), FixedAuthority: fixed,
+		}, 3)
+		return r, mesh
+	}
+	lostHost := func(r *run) bool {
+		return r.reg.Bools.Get("network.host_lost").Load() && !r.reg.Bools.Get("network.migrating").Load()
+	}
+
+	held, _ := relayed(true, true, nil)
+	held.u.onReport(2, notice)
+	if held.u.State().Fork || !held.world.frozen {
+		t.Fatal("a person its relay carries forked, or played on, on that relay's notice")
+	}
+	if !lostHost(held) || !strings.Contains(held.u.Summary(), "waiting on its relay") {
+		t.Fatalf("following its relay, the person does not read as having lost a pinned host: %q", held.u.Summary())
+	}
+	rewind(held, parameter.NetworkSuccessionWindow)
+	held.u.drive()
+	if held.u.State().Fork {
+		t.Fatal("the person forked within the window its relay redials the host in")
+	}
+	rewind(held, parameter.NetworkFollowWindow-parameter.NetworkSuccessionWindow)
+	held.u.drive()
+	if !held.u.State().Fork || held.world.forked != 1 || strings.Contains(held.u.Summary(), "its relay") {
+		t.Fatalf("its relay still linked past the follow window: fork %v, told %d times, %q; want it forked once",
+			held.u.State().Fork, held.world.forked, held.u.Summary())
+	}
+
+	gone, mesh := relayed(true, true, nil)
+	gone.u.onReport(2, notice)
+	mesh.Node(3).Disconnect(2)
+	gone.world.cut, gone.world.redial = true, true
+	gone.u.drive() // ends the follow, the relay unlinked
+	gone.u.drive() // cut off, so it redials the relay
+	if !lostHost(gone) || !strings.Contains(gone.u.Summary(), "redialling its relay") {
+		t.Fatalf("redialling its relay, the person does not read as having lost a pinned host: %q", gone.u.Summary())
+	}
+	gone.u.onReport(2, notice) // the notice again, as a frame the relay sent first is read late
+	if gone.u.State().Fork || !slices.Equal(gone.world.redials, []link.PeerID{2}) || !gone.u.Redialing(2) {
+		t.Fatalf("its relay unlinked: fork %v, redials %v, redialling %v; want the relay redialled and no fork",
+			gone.u.State().Fork, gone.world.redials, gone.u.Redialing(2))
+	}
+	if !gone.u.RedialAdmitted(2) || !gone.u.State().Fork || strings.Contains(gone.u.Summary(), "its relay") {
+		t.Fatalf("admitted back through its relay's door, the run was not left to the one admitted: %q", gone.u.Summary())
+	}
+
+	// Its relay's link went first: read with the notice in one drain, or seen by a
+	// pass of its own before the notice came.
+	for _, cutFirst := range []bool{false, true} {
+		early, _ := relayed(false, true, func(s *stub) { s.cut, s.redial = true, true })
+		if cutFirst {
+			early.u.drive()
+		}
+		early.u.onReport(2, notice)
+		early.u.onReport(2, notice)
+		early.u.drive()
+		if early.u.State().Fork || !slices.Equal(early.world.redials, []link.PeerID{2}) || !early.u.Redialing(2) {
+			t.Fatalf("its relay gone before the notice (cut off first %v): fork %v, redials %v; want the relay redialled once and no fork",
+				cutFirst, early.u.State().Fork, early.world.redials)
+		}
+		if !early.world.frozen || !lostHost(early) {
+			t.Fatalf("redialling the relay it lost first (cut off first %v), the person played on or did not read the host lost", cutFirst)
+		}
+		if !early.u.RedialAdmitted(2) {
+			t.Fatalf("admitted back through its relay's door (cut off first %v), the run was not left to the one admitted", cutFirst)
+		}
+	}
+
+	for name, shape := range map[string]func(*stub){
+		"a bot, which shares its holder's fate": func(s *stub) { s.seated = true },
+		"a run with no loop to redial on":       func(s *stub) { s.loopless = true },
+	} {
+		r, _ := relayed(true, true, shape)
+		r.u.onReport(2, notice)
+		if !r.u.State().Fork || len(r.world.redials) != 0 {
+			t.Fatalf("%s waited on its relay rather than forking with it: fork %v, redials %v",
+				name, r.u.State().Fork, r.world.redials)
+		}
+	}
+
+	moving, mesh := relayed(true, false, nil)
+	moving.u.onReport(2, notice)
+	mesh.Node(3).Disconnect(2)
+	moving.u.drive()
+	if !moving.u.State().Migrating || moving.u.State().Fork {
+		t.Fatal("a person in a migrate session gave its walk up when its relay's link went, as a follower does")
 	}
 }
 
@@ -306,6 +420,38 @@ func TestALeavingInstanceAuthorsOnlyTheSessionItReopens(t *testing.T) {
 	guest.c.authorityMu.Unlock()
 	if inbox != 0 || frames != 0 {
 		t.Fatalf("the left session still has %d corrections and %d succession messages queued", inbox, frames)
+	}
+}
+
+// TestOnlyAReceiverSaysItsAuthorityArrivesAgain: a guest whose authority's world
+// stays away past the convergence floor says so, and says the link recovered once a
+// world comes; a run that takes the term, as a successor or in a fork, says no such
+// thing, since nothing arrives at the world's own source.
+func TestOnlyAReceiverSaysItsAuthorityArrivesAgain(t *testing.T) {
+	t.Parallel()
+	const recovered = "Link recovered; the authority is arriving again"
+	for _, authors := range []bool{false, true} {
+		guest := newRun(t, 2, nil, roster(2))
+		guest.open(1, chainOf(1, 2), false)
+		guest.c.installedMu.Lock()
+		guest.c.haveBase = true
+		guest.c.installedMu.Unlock()
+		guest.world.stamp.Tick = parameter.SnapshotFloorKeyframeTicks + parameter.SnapshotFloorGraceTicks + 1
+		guest.c.observeFloor()
+		if !guest.reg.Bools.Get("snapshot.cadence_floor_breached").Load() {
+			t.Fatalf("a guest past its floor reads no breach; it said %q", guest.world.said)
+		}
+		if authors {
+			guest.open(2, chainOf(2), false)
+		} else {
+			guest.c.installedMu.Lock()
+			guest.c.keyTick = guest.world.stamp.Tick
+			guest.c.installedMu.Unlock()
+		}
+		guest.c.observeFloor()
+		if said := slices.Contains(guest.world.said, recovered); said == authors {
+			t.Fatalf("authoring %v, the run said %q", authors, guest.world.said)
+		}
 	}
 }
 

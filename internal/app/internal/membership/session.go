@@ -654,14 +654,22 @@ func saveDownload(dir string, sc resource.Scenario) string {
 // it and no player who left holds one: whether a place is taken back or given up is
 // the seat's to settle, so a dial that never seats moves nobody.
 func (m *Membership) previewParticipant(a network.Admission) (network.SessionOffer, error) {
+	return m.previewSeat(a, seatAnyone)
+}
+
+// previewSeat is previewParticipant at a door that seats as seats says.
+func (m *Membership) previewSeat(a network.Admission, seats seating) (network.SessionOffer, error) {
 	anchor := m.JoinAnchor()
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
-	if err := m.refusedLocked(); err != nil {
+	if err := m.refusedLocked(seats); err != nil {
 		return network.SessionOffer{}, err
 	}
 	if k := m.keptOutLocked(a.Keys()); k != "" {
 		return network.SessionOffer{}, m.droppedRefusalLocked(k)
+	}
+	if seats == seatReturning && !m.holdsPersonLocked(a.Keys()) {
+		return network.SessionOffer{}, errNotReturning
 	}
 	// Counted as the seat counts it, the coordinator's own entry among them, with no
 	// roster opened for a dial that may never seat (openRosterLocked).
@@ -684,10 +692,26 @@ func handshake(o network.SessionOffer) network.SessionOffer {
 // connection: the roster is the lobby so far, and the roster a participant actually
 // builds from arrives later, at the start gate.
 func (m *Membership) assignParticipant(a network.Admission) (network.SessionOffer, error) {
+	return m.assignWith(a, seatAnyone)
+}
+
+// seating is whom a door seats: anyone the session has room for; through one of the
+// players of a session a pinned fork kept, a key's own place alone; or at the -relay
+// door that fork kept, the place of a player it relayed alone (returnAcceptor).
+type seating uint8
+
+const (
+	seatAnyone seating = iota
+	seatKeyed
+	seatReturning
+)
+
+// assignWith is assignParticipant at a door that seats as seats says.
+func (m *Membership) assignWith(a network.Admission, seats seating) (network.SessionOffer, error) {
 	var anchor event.JoinAnchor
 	var departing []uint32
 	m.world.RunSafe(func() { anchor, departing = m.joinAnchorLocked(), m.departingLocked() })
-	o, err := m.assignFor(anchor, 0, departing, a.Keys(), a.Pass, a.Ticket)
+	o, err := m.assignFor(anchor, 0, departing, a.Keys(), a.Pass, a.Ticket, seats)
 	m.closeStaleLink(err, m.SessionTransport())
 	return o, err
 }
@@ -738,11 +762,11 @@ func (m *Membership) closeStaleLink(err error, port engine.NetworkPort) {
 // recorded now because the bot never reports to this instance. A key among those
 // proved takes back the place its Wraith keeps, a full session's too, or one of the
 // departing its held session has yet to turn; the first is the one a new place is
-// held under. Caller must not hold sessionMu.
-func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, departing []uint32, keys []string, shown *network.PassBody, ticket *network.TicketBody) (network.SessionOffer, error) {
+// held under, at a door that seats anyone. Caller must not hold sessionMu.
+func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, departing []uint32, keys []string, shown *network.PassBody, ticket *network.TicketBody, seats seating) (network.SessionOffer, error) {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
-	if err := m.refusedLocked(); err != nil {
+	if err := m.refusedLocked(seats); err != nil {
 		return network.SessionOffer{}, err
 	}
 	if k := m.keptOutLocked(keys); k != "" {
@@ -761,7 +785,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 			return network.SessionOffer{}, errors.New("a bot's holder must be a participant that is not itself a bot")
 		}
 	}
-	if entry, err := m.keyedLocked(keys, holder, departing); err != nil || entry.ID != 0 {
+	if entry, err := m.keyedLocked(keys, holder, departing, seats == seatReturning); err != nil || entry.ID != 0 {
 		if err != nil {
 			return network.SessionOffer{}, err
 		}
@@ -773,6 +797,9 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 		offer := handshake(m.sessionOffer)
 		offer.Pass = m.issuePassLocked(entry, shown)
 		return offer, offer.Validate()
+	}
+	if seats != seatAnyone {
+		return network.SessionOffer{}, errNotReturning
 	}
 	if len(m.sessionRoster) >= limit {
 		if m.yieldLocked() {
@@ -942,7 +969,7 @@ func (m *Membership) issuePassLocked(entry network.RosterEntry, shown *network.P
 
 // refusedLocked is why this session takes no dial now, whoever dials: what a preview
 // and a seat both refuse before anything is allocated. Caller holds sessionMu.
-func (m *Membership) refusedLocked() error {
+func (m *Membership) refusedLocked(seats seating) error {
 	// A dial mid-succession is refused: the offer would name a term that is about to
 	// end, so the participant would hold a roster slot the successor's record does
 	// not carry. The refusal is distinguishable, so the joiner retries against
@@ -959,7 +986,12 @@ func (m *Membership) refusedLocked() error {
 		return errSessionStarting
 	}
 	// A dial while this run leaves its session would be offered a term that ends with
-	// it, on a door about to shut; its bots go back in once the run has left.
+	// it, on a door about to shut; its bots go back in once the run has left. The door
+	// a pinned fork keeps opens before the session it left has closed, which is what
+	// drops the links of the players it takes back, so each retries until that is done.
+	if m.leaving.Load() && seats == seatReturning {
+		return errSessionStarting
+	}
 	if m.leaving.Load() {
 		return sessionEnding("its host is leaving it")
 	}
@@ -988,12 +1020,21 @@ func (m *Membership) holdsPlaceLocked(keys []string) bool {
 	})
 }
 
+// holdsPersonLocked is holdsPlaceLocked for a person's place, which a bot's is not:
+// what the -relay door a pinned fork kept takes back (returnAcceptor). Caller holds
+// sessionMu.
+func (m *Membership) holdsPersonLocked(keys []string) bool {
+	return slices.ContainsFunc(keys, func(k string) bool {
+		return k != "" && slices.ContainsFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.Key == k && p.Holder == 0 })
+	})
+}
+
 // keyedLocked is the place one of the keys a dial proved takes back: an away entry
 // its Wraith keeps, or one of the departing, away from here on, held for the dial
-// until its arrival crosses. A bot comes back through its own holder. A place still
-// linked, or coming back on another dial, refuses this one for a retry. Caller
-// holds sessionMu.
-func (m *Membership) keyedLocked(keys []string, holder link.PeerID, departing []uint32) (network.RosterEntry, error) {
+// until its arrival crosses. A bot comes back through its own holder, and never where
+// people alone come back. A place still linked, or coming back on another dial,
+// refuses this one for a retry. Caller holds sessionMu.
+func (m *Membership) keyedLocked(keys []string, holder link.PeerID, departing []uint32, people bool) (network.RosterEntry, error) {
 	var refused error
 	for _, k := range keys {
 		if k == "" {
@@ -1006,7 +1047,8 @@ func (m *Membership) keyedLocked(keys []string, holder link.PeerID, departing []
 		p := m.sessionRoster[i]
 		_, back := m.returning[p.ID]
 		switch {
-		case p.ID == m.authorityID() || p.ID == m.yielding || p.Holder != 0 && p.Holder != cmp.Or(holder, m.authorityID()):
+		case p.ID == m.authorityID() || p.ID == m.yielding || p.Holder != 0 && p.Holder != cmp.Or(holder, m.authorityID()),
+			people && p.Holder != 0:
 			continue
 		case back:
 			refused = &network.Refusal{Code: network.RefusalReturning, Reason: "this player's place is being taken back by another join"}
@@ -1629,16 +1671,23 @@ func (m *Membership) socketPort() (*link.SocketPort, error) {
 	return m.networkSvc.Port(), nil
 }
 
-// DoorErrors is where the port this run takes joins at reports a dial it refused or
-// lost, nil for a run with none; the loop shows each, as a lobby does, since only
-// the log heard a playing host's.
-func (m *Membership) DoorErrors() <-chan error {
+// joinPort is the port this run takes joins at now: the one it opened a session on,
+// after :host or a fork, else the one it joined with; nil with neither.
+func (m *Membership) joinPort() *link.SocketPort {
 	m.sessionMu.Lock()
 	port := m.midRunPort
 	m.sessionMu.Unlock()
 	if port == nil {
 		port, _ = m.socketPort()
 	}
+	return port
+}
+
+// DoorErrors is where the port this run takes joins at reports a dial it refused or
+// lost, nil for a run with none; the loop shows each, as a lobby does, since only
+// the log heard a playing host's.
+func (m *Membership) DoorErrors() <-chan error {
+	port := m.joinPort()
 	if port == nil {
 		return nil
 	}

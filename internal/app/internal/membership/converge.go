@@ -231,6 +231,18 @@ func (m *Membership) CrossReturns(back []network.RosterEntry) {
 
 func (m *Membership) Redial(lost link.PeerID) bool { return m.redial(lost) }
 
+func (m *Membership) Redials() bool {
+	var redials bool
+	m.world.RunSafe(func() { redials = m.redialsLocked() })
+	return redials
+}
+
+// redialsLocked reports a run that redials a path it loses (redial): a person's, in
+// play, that joined at a door. Caller MUST hold updateMutex.
+func (m *Membership) redialsLocked() bool {
+	return m.run.Mode() == config.ModePlay && m.wiring.Holder == 0 && m.cfg.JoinAddress != ""
+}
+
 func (m *Membership) Forked(roster []network.RosterEntry, local link.PeerID) {
 	m.forked(roster, local)
 }
@@ -436,16 +448,21 @@ func (m *Membership) awayOrderLocked(roster []network.RosterEntry) []link.PeerID
 	return out
 }
 
-// freeze stops this run while its session's host changes, through the request the
-// session makes, settled at once as releaseHold settles its end, so a replay stands
-// still in the pass the run did. A hold standing already stays the host's.
+// freeze stops this run while its session's host changes, or while it redials a host
+// it is pinned to, through the request the session makes, settled at once as
+// releaseHold settles its end, so a replay stands still in the pass the run did. A
+// hold standing already stays the host's.
 func (m *Membership) freeze() {
+	notice := "Host lost; waiting for the next host"
+	if m.fixedAuthority() {
+		notice = "Host lost; reconnecting"
+	}
 	m.world.RunSafe(func() {
 		if !m.ctx.TimeCtl.Held() {
 			m.ctx.PushLocalOrigin(event.EventGameHoldRequest, &event.GamePausePayload{Paused: true}, event.OriginSession)
 			m.scheduler.SettleLocked()
 		}
-		m.ctx.SetStatusMessage("Host lost; waiting for the next host", parameter.StatusAlert)
+		m.ctx.SetStatusMessage(notice, parameter.StatusAlert)
 	})
 }
 
@@ -473,8 +490,8 @@ func (m *Membership) thawLocked() (held bool) {
 // forked goes on with a run its session gave up. The place it was in that session
 // under keeps its record as it stood, whatever links it still holds: what a fork
 // plays is not what its player brings back. A play run's loop takes it into a
-// session of its own (LeaveSession), keeping every other player's place for
-// whoever hosts next; a run with no loop drops them and plays on as the fork.
+// session of its own (LeaveSession), with the places a session that outlives its
+// host keeps; a run with no loop drops them and plays on as the fork.
 func (m *Membership) forked(roster []network.RosterEntry, local link.PeerID) {
 	if m.run.Mode() == config.ModePlay {
 		// Leaving before the place goes, as a redial holds its place again before it
@@ -521,8 +538,7 @@ func (m *Membership) redial(lost link.PeerID) bool {
 	door, relay := false, false
 	m.world.RunSafe(func() {
 		cfg, wire, base = *m.cfg, *m.wiring, m.run.JoinBase()
-		door = m.run.Mode() == config.ModePlay && wire.Holder == 0 && cfg.JoinAddress != "" &&
-			!m.leaving.Load() && !m.run.Replacing()
+		door = m.redialsLocked() && !m.leaving.Load() && !m.run.Replacing()
 		relay = lost == m.joinedThrough
 	})
 	if !door || !relay && lost != m.authority.Holder() {
@@ -578,6 +594,11 @@ func (m *Membership) redialDoor(cfg config.Membership, wire Wiring, base JoinBas
 			continue
 		}
 		back := &RestartAsk{Notice: notice, Dialled: d}
+		if relay && d.Offer().Host == lost && m.authority.Fixed() {
+			// The relay forked a session of its own, which kept this run's place: in a
+			// pinned session nobody else takes the host's place over.
+			back.Notice = "Host connection lost; playing on in your relay's session"
+		}
 		if d.place == c && m.authority.RedialAdmitted(lost) && m.run.ReplaceWith(back) {
 			m.log.Info("session", "msg", "the redial admitted this run back", "peer", uint64(lost))
 			return

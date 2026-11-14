@@ -29,9 +29,11 @@ Use these terms consistently:
   relay of its own bots, and with `-relay <addr>` of the people who join there.
 - A run's **session role** is what it is to its session, read from what the
   session wrote: solo, seats (a session of its own with no door: one it opened for
-  its bots, or the one `:leave` or a fork goes on in), host, server, guest, left
-  (a guest whose session has nobody left but its own bots), or successor (a guest
-  that took the term over, hosting at its own port until `:host` opens a door).
+  its bots, or the one `:leave` or a fork goes on in), kept (the one a relay's fork
+  goes on in while it holds a place of a person it relayed, §5.5), host, server,
+  guest, left (a guest whose session has nobody left but its own bots), or successor
+  (a guest that took the term over, hosting at its own port until `:host` opens a
+  door).
   `:join`, `:host`, `:leave` and `:session` answer by it from one table.
 - The **authority term** is a monotonically increasing session generation.
   Authoritative artifacts carry it; a term advances once per successful handoff
@@ -556,7 +558,7 @@ answers:
 
 | Question | Answer |
 |---|---|
-| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it. In a **migrate** session a participant whose player turned Take over as host on binds one too, for peer links and joins, which it takes once it hosts, and while its player relays for others as its `-relay` door would (§5.3): `-listen` pins it, and asks for it by itself, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. A player who did not ask, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every host-policy session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
+| Who binds a port? | The coordinator: the instance started with `-host` or `-serve`, or a solo run that opened itself with `:host`; a session a solo run opens for its bots, or goes on in after `:leave` or a fork, binds none until `:host` opens it, but for a relay's fork from a host-policy session, whose `-relay` door goes on for the people it relayed (§5.5). In a **migrate** session a participant whose player turned Take over as host on binds one too, for peer links and joins, which it takes once it hosts, and while its player relays for others as its `-relay` door would (§5.3): `-listen` pins it, and asks for it by itself, the default is the coordinator's own port, and a machine already using that port falls back to an OS-assigned one; a successor's `:host` can open a second beside it. A player who did not ask, a bind that fails, a bot, a browser build, a person who joined through a relay without `-listen`, and every host-policy session leave a participant with no port of its own. A joined participant may also bind a `-relay` address, which admits people who cannot reach the host, and as the host's door once its run hosts. |
 | Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
 | How is a participant reached? | The coordinator is reached by `-join <address>`, or by the `vif://address/name` link a deployment issues when one address serves several sessions, or through a guest's `-relay` door when the coordinator's cannot be, which the chain names and `vif-router` reaches through a reverse tunnel (§5.6); on one local network a visible host is also found with no address typed (§5.7). A participant that took the session over is joined the same way, at the address its `:session` names. Everyone else is reached through the **succession chain**: every participant that declared a port, in join order, with the address it declared and the door it admits people at, if one. The coordinator publishes it whole on `MsgPeerList` and carries it in the start gate's offer and the handoff record, beside the roster; a preview and a seat's offer carry none of it (`handshake`), so a dial learns where a session's players listen only once it holds a place and its build was checked. |
 
@@ -578,7 +580,9 @@ saved and off by default) or pinned `-listen`. Both are off unless asked because
 migrating session shares the address of each guest that may take it over with the
 other players, and a session whose host drops would otherwise expose a guest's
 address on the open internet for a game its player never offered to host. With no
-guest willing, a migrate session ends as a host one does. The policy is the
+guest willing, nobody takes a migrate session over: each survivor redials, finds no
+candidate and forks, as under `host`, but it reads `Migrating` meanwhile and its
+fork keeps every other player's place (§5.5). The policy is the
 session's from its first offer (`SessionOffer.FixedAuthority`, `Authority.Fixed`):
 a successor keeps offering it, a scenario change reopens the door under it
 (`RestartAsk.Migrate`), and `:session` names it. Under `host` the address *is* the
@@ -623,7 +627,15 @@ The procedure on each survivor is:
    window, however many other survivors lost the host too, so a host that went
    silent costs that window; a host that is gone ends it at once — nothing
    listening, a refusal no retry helps, or no place for this run. A survivor that
-   reached its host through another participant walks at once. The place is the
+   reached its host through another participant walks at once, but for a person
+   in play a relay carries in a session that does not migrate: that relay redials
+   the host and then forks keeping the person's place (§5.5), so the person waits
+   on it, frozen, while its link to the relay stands, up to `NetworkFollowWindow`
+   (two windows), and once that link goes it redials the relay at the door it
+   joined it at, as a person cut off from its relay does (below), and goes on in the
+   session the relay opened (`Authority.following`, `Authority.endFollow`). The
+   link's going and the notice may reach it in either order, and the notice again
+   later; a bot and a script's run fork with the relay. The place is the
    dial's to prove while the redial and the walk last, and the run is its
    participant throughout: its key signs its notices, its links and, its turn come,
    the record it takes the term with (`Membership.LocalKey`).
@@ -647,9 +659,11 @@ The procedure on each survivor is:
    host's first epoch past its own tick, as from a hold (§3.6).
 5. **Past the last candidate's turn, give up.** No record arrived, so this instance
    continues as an explicit local fork. In a session that does not migrate nothing
-   walks: a survivor forks once its redial ends, at once without one, and only a
-   redial freezes it. A migrate session none of whose guests takes over has no
-   candidate, and each survivor forks as its walk opens.
+   walks: a survivor forks once its redial ends, at once without one, and a person
+   its relay carries once `NetworkFollowWindow` passes with that relay linked, or as a
+   person cut off from its relay does once that relay has gone (step 2); only a
+   redial or that wait freezes it. A migrate session none of whose guests takes
+   over has no candidate, and each survivor forks as its walk opens.
 
 Retention *ordering* is deliberately not an eligibility test: the list decides who
 is next, and a host a cadence behind a peer costs that peer one correction.
@@ -683,12 +697,13 @@ back, and the guest plays on behind that candidate; a port not relaying refuses,
 it refuses every join while another participant hosts.
 
 A person's run that forks goes on in a session of its own, as `:leave` takes it
-(§5.5): the same identity, the next term, every other player's place kept as a
-Wraith, and `:host` or `:join` at once. In a session that does not migrate, the
-default, every guest does so the moment its host goes, so whichever hosts next
-takes the others back with their progress. A run with no loop to serve that, a script's or a bot's, stays
-the fork, with `network.fork` and a persistent `Host lost` badge; it refuses a
-higher term met later, because partition merging is not implemented.
+(§5.5): the same identity, the next term, and `:host` at once, `:join` too but while
+it holds the people it relayed, with every other player's place kept as a Wraith
+where the session migrates, and where it does not none but theirs, who come back to
+it. A run
+with no loop to take it there, a script's or a bot's,
+stays the fork, with `network.fork` and a persistent `Host lost` badge; it refuses
+a higher term met later, because partition merging is not implemented.
 
 ### 5.2 The roster after a loss
 
@@ -710,8 +725,8 @@ A fork with no loop to take it into a session of its own (§5.1), left with **no
 at all**, drops every cursor it does not simulate. Having no link is what makes the
 drop exact rather than convenient: a departure is produced once at one agreed tick
 because two instances must destroy the same shared entity together, and here there is
-no second instance. A person's fork drops nobody: every place waits as a Wraith in
-the session it goes on in (§5.5). A fork still linked keeps its roster while a link
+no second instance. A person's fork goes on in a session of its own with the places
+§5.5 keeps. A fork still linked keeps its roster while a link
 stands: a run with no loop sees its seats end on its fork (§5.5), and the last of
 them going leaves it with none, when it drops as one left with none at the fork
 does (`Membership.reportPeerLost`).
@@ -833,24 +848,22 @@ link (§5.2), and the authority's own two, which it crosses once
   turned; a bot whose holder waits too goes in its holder's dismissal. A reset
   rebuilds a Wraith as a Wraith, its wait going on from the last game's, so no run
   of resets keeps one, and as the new game's cursor, which takes nothing of the last
-  (Coming back). A person's wait runs out only where a door stands for it to
-  come back through: the session a run opens for its bots, or goes on in after
-  `:leave` or a fork, has none until `:host` (§5.0, `NetworkResource.Doorless`), so
-  its authority dismisses no person there, nor the bots waiting with one, however
-  long the Wraiths age; a bot whose holder is there goes at its time, since no door
-  brings it back, and a browser run, which opens none, dismisses as ever.
+  (Coming back). The wait is the same in every session, one with no door (§5.0)
+  included, where no person comes back before `:host` opens one.
 - **Yield.** A dial a full session cannot otherwise admit has the participant away
   longest dismissed for it (`Membership.yieldLocked`) and is refused `RefusalYielding`,
   which seats and first joins retry in a moment; the retry takes the freed place.
   A successor orders who is away by their Wraiths' waits. A session with no door
   yields all the same: its bots dial through no door.
 
-The door `:host` opens on such a session starts every wait over where somebody is
-away (`Membership.restartWaitsLocked`): the authority crosses
+The door `:host` opens on a session with none starts every wait over where somebody
+is away (`Membership.restartWaitsLocked`): the authority crosses
 `EventWraithWaitRestart` as it closes its next tick, authority-only and
 barrier-bound as a roster change is, `CursorSystem` zeroes every Wraith's wait at
-its tick, those a pending reset is rebuilding too, and nobody is dismissed for a
-wait between the opening and that tick. A reset that clears the restart has the new
+its tick, those a pending reset is rebuilding too, and no person is dismissed for a
+wait between the opening and that tick, nor a bot waiting with one; a bot whose
+holder is here goes at its time, since no door brings it back, and a newcomer is
+given a person's place all the same. A reset that clears the restart has the new
 game cross it again (`NetworkSystem.Init`). Who was away before the door has then
 waited the same, so a successor orders them by roster; the run that opened the
 session keeps the order they left in.
@@ -1037,15 +1050,34 @@ host that left run §5.1, which in a session that does not migrate is the fork.
 
 A person's fork leaves the same way. `converge.Instance.Forked` hands the run the
 roster it held, and its loop serves the fork as it serves `:leave` (`Membership.forked`,
-`Membership.LeaveSession`), except that it keeps every place rather than its bots' alone:
-each other player's cursor waits as a Wraith in the session it opens, for its player
-to take back once `:host` opens the door, however long that takes: no wait runs out
-on a person before it, and each starts over at it (§5.4). The host's `:player drop`
-removes one sooner. A hold the lost host set stands
-there for this run's own `:pause`, and a freeze ends; the status bar says which. A
-seat under such a run ends only when the run halts it (`seatEnds`), never on its
-own fork or the run's, so the leave finds every bot to seat again. A run with no
-loop to serve the fork stays the fork (§5.1).
+`Membership.LeaveSession`). A session pinned to its host has no next host, and nobody
+in it signed up to come back to this run, so its fork keeps its bots' places, as
+`:leave` does, and the people's it relayed, and the rest go at once. Those people came
+in at its `-relay` door and lose their path with it, and its notice that the host went
+holds them (§5.1, step 2): the fork keeps the place of each person linked to it at a
+door it serves, with their bots', but not the relay it came in through, nor a place
+the host's roster named its bot that it never seated, and moves the door, at its
+address, onto the session it opens before the old port closes
+(`Membership.relayedLocked`, `Membership.reopenRelayDoor`; a door published through
+the router stays published). Each redials that door as its link drops, retried while
+the session left still closes, and takes its own place back, and the status bar says
+"Host connection lost; playing on in your relay's session", the relay's "playing on
+with the players you relay", or why the door could not be bound again, when it keeps
+nobody. Nobody else comes in: the door takes back a person's place alone, a bot coming
+back through its holder, and refuses any other dial (`returnAcceptor`), and no
+newcomer is seated through those players, their bots or a door of their own, until
+this run's player opens the session with `:host` (`Membership.relaySeatingLocked`).
+While it holds a place of theirs, linked or on the way back, its role, kept, refuses
+`:join`, which would drop them, and a scenario change, and takes `:leave` and `:host`.
+Whether a relay should host the people it relays without choosing to is open (todo,
+Review what a relay hosts once its host is gone). One that migrates keeps every
+place: each other player's cursor waits as a Wraith in the session the fork opens,
+for its player to take back once `:host` opens the door, within its wait, which
+starts over at the door (§5.4).
+A hold the lost host set stands there for this run's own `:pause`, and a freeze
+ends; the status bar says which. A seat under such a run ends only when the run
+halts it (`seatEnds`), never on its own fork or the run's, so the leave finds every
+bot to seat again. A run with no loop to serve the fork stays the fork (§5.1).
 
 The run keeps its identity and authors the term after the one it held. Its cursor,
 its crossings still scheduled and its journal all name that identity, and nobody it
@@ -1127,6 +1159,15 @@ pod out of reach does. So a door behind a NAT is reached at the site's address, 
 the budget, the ceiling and the refusals the pods have, the router never dialling an
 address a caller named, and the run never binding a port the world can reach. A
 browser relays nothing and publishes nothing, as before.
+
+**A fork keeps its door for its people.** A relay that forks from a session pinned
+to its host takes the people it relayed along (§5.5), and its door, at the address
+they joined at or as the router publishes it, goes on into the session it opens and
+takes back them alone: a dial whose key holds a person's place there, under the left
+session's name, with no passphrase, its key being the proof, and no newcomer
+(`returnAcceptor`, refused with `RefusalUnknown`). `:host` opens a door that takes
+newcomers; the `-relay` door stays the people's, and is not among the doors `:host`
+names or the local network beacon offers (`Membership.newcomerDoors`).
 
 **What was not chosen.** Hole punching needs a rendezvous and UDP or WebRTC, which
 the networks that need a relay most block first (services §7.3); a rendezvous in
@@ -1276,9 +1317,13 @@ worse fact hides a lesser one rather than sitting beside it: `Migrating [n]`,
 `<players>P:<local hex slot> <round trip>` with at most one qualifier — `slow!`,
 `desync <ticks>`, `loss <pct>%` or `slow` — and a
 background that is green, amber or red by the worst of the round trip and that
-qualifier. The rest of the measurements — jitter, cadence, keyframe interval,
-byte rate, the D-14 latch — are read in the status snapshot and in `:session`,
-where they can be compared against each other.
+qualifier. A run in no session shows none, nor does one hosting at no door with
+nobody linked, which nobody can reach (`link.StateIdle`); a door `:host` opens there
+reads `Net: wait` as a fresh host's does, whoever the session held before.
+`Net: down` leaves after `StatusNetworkDownDuration` (10 s); `Host lost` and
+`Migrating` stay while the loss lasts. The rest of the measurements — jitter,
+cadence, keyframe interval, byte rate, the D-14 latch — are read in the status
+snapshot and in `:session`, where they can be compared.
 
 ## 8. Remaining gaps
 
@@ -1430,13 +1475,14 @@ exercise the paths a two-terminal session reaches and nothing else does:
   Wraith kept, with the energy and health it left with. While it waits at the start
   gate it is not yet in a session and has no world, but the wait is still leavable:
   Ctrl-Q, Ctrl-C and a terminal resize are answered there.
-- The host leaves instead. The guest takes the term — `:session` names it as the
-  authority, `network.migrations` reads 1, and the `Host lost` badge clears — and
-  the host's cursor must wait where it was left as a Wraith rather than play on. A
-  guest that could reach no candidate says its host connection was lost and
-  plays on in a session of its own, which is the fork: `:session` reads `Session
-  hosting` under the same participant, and the host and every other player wait on
-  its map as Wraiths.
+- The host leaves instead. The guest says its host connection was lost and plays
+  on in a session of its own, which is the fork: `:session` reads `Session hosting`
+  under the same participant, the host's cursor is gone and no network badge
+  shows. A host stopped rather than closed (`kill -STOP`) first holds the guest
+  frozen under `Host lost` for its redial. On `-authority migrate` a guest with
+  `[play] takeover` takes the term instead: `:session` names it as the authority,
+  `network.migrations` reads 1, the `Migrating` badge clears, and the host's
+  cursor must wait where it was left as a Wraith rather than play on.
 - Either leaves with `:leave` instead and plays on. Its world goes on from where it
   stood, `:session` reads `Session hosting` with no address under the same
   participant, and its bots come back to the places they had. The others see the

@@ -569,13 +569,15 @@ func (r *StatusBarRenderer) renderItems(buf *render.RenderBuffer, y, width int, 
 func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	now := r.gameCtx.TimeCtl.RealTime() // [wall] readability, not simulation
 	state, ok := r.networkShown()
-	// A link that went down is news for a while, then noise beside a solo game
+	// A link that went down is news for a while, then noise beside a solo game; a
+	// lost host or a succession stays news for as long as it lasts, the link's own
+	// time running beneath it
 	if down := ok && state == "down"; !down {
 		r.downSince = time.Time{}
 	} else if r.downSince.IsZero() {
 		r.downSince = now
 	} else if now.Sub(r.downSince) >= parameter.StatusNetworkDownDuration {
-		ok = false
+		ok = r.statMigrating.Load() || r.statHostLost.Load()
 	}
 	switch {
 	case !ok:
@@ -588,10 +590,11 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	return r.netHeld, true
 }
 
-// networkShown reports whether the session shows a badge, and the link state it reads
+// networkShown reports whether the session shows a badge, and the link state it
+// reads: none for a run with no link, nor for one hosting where nobody can dial.
 func (r *StatusBarRenderer) networkShown() (state string, ok bool) {
 	state = r.statNet.Load()
-	return state, r.statMigrating.Load() || r.statHostLost.Load() || (state != "" && state != "off")
+	return state, r.statMigrating.Load() || r.statHostLost.Load() || (state != "" && state != "off" && state != "idle")
 }
 
 // networkBadge is the session in one badge: the round trip, which is the reading

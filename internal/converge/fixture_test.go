@@ -37,6 +37,8 @@ type stub struct {
 	key    network.Key
 	seated bool
 	waits  bool // for its own arrival, in a place it took back
+	// loopless is a person's run with no loop to take a redial on, a script's.
+	loopless bool
 	// declines is a player that turned taking over off: the zero stub takes its turn.
 	declines bool
 	roster   []network.RosterEntry
@@ -124,6 +126,8 @@ func (s *stub) LocalKey() network.Key { return s.key }
 func (s *stub) KeepOut() []string { return nil }
 
 func (s *stub) Seated() bool { return s.seated }
+
+func (s *stub) Redials() bool { return !s.seated && !s.loopless }
 
 func (s *stub) TakesOver() bool { return !s.declines }
 
