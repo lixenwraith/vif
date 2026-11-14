@@ -19,6 +19,8 @@ Branches.
 - The `gofmt` on a container's `PATH` can be older than the module's Go and reject
   generic methods ("method must have no type parameters"); run
   `"$(go env GOROOT)/bin/gofmt" -l`.
+- `git ls-files <path>` before creating a file: `internal/app` names its test files
+  for concepts (`door_test.go`), and a write to a path that exists replaces it.
 - `android/` is its own module: a dependency bump in the root `go.mod` also needs
   `go -C android mod tidy`, which `android/toolchain.sh` checks before Gradle. A
   container without egress to `dl.google.com` cannot build the APK; with it, the
@@ -236,6 +238,10 @@ Branches.
   exported methods to `cmd/vif` and Android, which cannot import the package, and
   `app` cannot add methods to it: a rule that reads a run's wiring stays on `app`'s
   `runConfig`, as `runConfig.Validate` adds the wiring's rules to `Config.Validate`'s.
+- The run a restart builds starts from the launch line and what earlier restarts
+  named (`runConfig.restarted`), never from the live `m.cfg`: what a command wrote
+  there, a phrase, a policy, a door, is gone at the next restart unless the ask
+  carries it (`RestartAsk`, `restartRequest`, which `replaceWith` alone latches).
 
 ## Determinism and the harness
 
@@ -346,6 +352,19 @@ Branches.
   dial to the next (`wiring.dialled`): a test of that path calls
   `membership.DialJoin` on a wiring of its own and builds its run with `driveRun`
   on a `runConfig` carrying the dial.
+- A fixture's session takes the default policy, `host`, and its guests join as
+  leaves: a test of the succession opens with `hostMigrating` and joins with
+  `takingOver()` or a `ListenAddress`, or nothing walks and each guest forks as its
+  host goes.
+- A guest whose host closed its link plays on as a fork or a successor, on its own
+  clock, and still applies what that host crossed before the close: a departure
+  crossed for the guest itself turns its bots Wraith there a lead later, and a
+  successor's freeze only delays it. A test reading that guest's world reads a
+  race; read the instance the rule belongs to.
+- One goroutine ticks a run. `waitForRosterPair` ticks both of its runs, so a run
+  already under `tickInBackground`, which `gatedHost` returns, is waited on with
+  `waitForCursors` or `waitUntil`, which only read. A second ticker passes
+  `go test` and fails CI's race run: run a new socket test once under `-race`.
 
 ## Tests that flake
 
@@ -428,6 +447,15 @@ Branches.
 - An account command runs its KDF and requests in a goroutine and reports on the
   status line: a `SessionController` method runs under the world lock, which cannot
   wait on a site.
+- A door reads what gates it as each dial arrives (`Coordinator.Passphrase` is a
+  func): a run's port is made before its player's `:host ... passphrase`, behind
+  its bots or a session it left, so a credential captured as the acceptor is built
+  is the wrong one. The run's bots dial the same acceptor on a stream inside the
+  process (`seatLink`) holding no phrase or ticket, so a gate is set only for a
+  door (`sessionAcceptor`'s `door`).
+- What a dial reads before it holds a place, the preview and a seat's offer, goes
+  through `handshake`, which strips the chain: a `SessionOffer` field only a seated
+  participant should hold is stripped there too.
 - A browser trusts a self-signed door only by being told to: pinning from a page
   needs WebTransport's `serverCertificateHashes`, which the route does not speak,
   so a page joins a player's door over the site or by a passphrase bound to that

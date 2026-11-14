@@ -713,11 +713,17 @@ What would close it:
   through `CrossReturns`, whose arrival clears the mark everywhere. `takeBack`
   declines a report that lands before the floor (`reconcileAt` still set), and
   `recordReport` never offers it again, so the floor has to give back an away
-  participant that reported at its term.
+  participant that reported at its term. One that lands after the floor crossed
+  the departure and before it applies finds nobody away yet and is lost the same
+  way (read off `takeBack`, not reproduced).
 - The coordinator still crosses one departure per participant: clearing the mark
   must not let a second drop of the same link cross a second departure for a Wraith.
 - A test per case on the probe's shape, with `meshSession` handing back its mesh:
   participant 3 follows 2 at term 2, and no Wraith but the lost host's remains.
+  `TestALateSurvivorsPlaceIsGivenBackWithItsBots` reads the host alone: the host
+  closes a survivor's own link as the floor's departure applies
+  (`removeParticipant`), so the survivor's side of a place given back needs the
+  reopened link this item brings.
 
 ### Close what a relayed player's departure still leaves open
 
@@ -1151,7 +1157,10 @@ the prompt. A prompt proper would ask in place, in the command line's form on a
 terminal and in the launcher's join row on a page, and dial again with the answer;
 the same form takes `:login`'s name and password, which today ride the command
 line and so the terminal's history. Implication: the account commands become
-usable on a page, where a password on the command line is not.
+usable on a page, where a password on the command line is not. The same form is
+where a phrase would be cleared: `:host <doors> passphrase` sets or replaces one
+and nothing takes it off, so a run that set one opens every later door gated
+until it restarts.
 
 ### Tighten what a relay and a successor are trusted with
 
@@ -1173,6 +1182,82 @@ it, decide which of it needs a check (the authority confirming a relay's admissi
 a successor's record carrying no more than the roster lets it, the verifier's reach),
 which needs a limit, and which is accepted as the price of play without a server; then
 plug the holes found, one PR each.
+
+### Widen how a guest offers to take a session over
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/converge.go` (`TakesOver`),
+  `join.go`, `internal/converge/reach.go`, `internal/network` (`ChainEntry`),
+  `internal/mode` (`handleJoinCommand`, the join form)
+- Guide: [Multi-player §5.0](multi-player.md#50-who-listens-who-authors-who-can-be-reached),
+  [§5.3](multi-player.md#53-reachability-under--authority-migrate)
+
+A session migrates only where its host asked, and only to a guest whose player
+turned Take over as host on: a saved switch, off by default, read as the run joins
+(§5.3). That was chosen over two other shapes, and leaves two gaps.
+- **Asked at each join, not taken.** A word on `:join`, `-join` and the join form,
+  nothing saved: no standing exposure, since each session gets its own yes, but
+  typed every time, and the menu's join rows, the page's launcher and Android each
+  grow a field. The saved switch won as one habit in the place Relay for others
+  already lives. It reopens if a switch left on from a private game is found
+  sharing an address with a public one.
+- **The host's migrate covering its guests, not taken.** Guests of a migrate
+  session declare a port unless they opt out, as before this rule: least change,
+  and a session never lacks a candidate, but a phone is exposed without its own
+  yes, which is what the rule exists to stop. It reopens only for a session whose
+  players already see each other's addresses, as one found on the local network.
+- **The switch is the next session's.** Turned on in a session, it binds nothing
+  there: the port is bound and declared as the offer is answered. The chain is
+  append-only, so a late declaration is legal; it needs the bind moved behind the
+  gate (`Reach`) and a message, or the join's declaration sent again.
+- **Relaying needs the port taking over binds.** Relay for others takes a dropped
+  guest's rejoin at the run's own port (`admitHosted`), which a guest that does
+  not take over never binds, so the switch alone now carries nobody but those at
+  its `-relay` door. A chain entry naming a door and no address, as a leaf's
+  `-relay` door has (`SuccessionChain.WithDoor`), would publish the port for
+  rejoins without making the run a candidate.
+
+### Keep a site's certificate pin for the session it joined
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`joinSessionLocked`),
+  `membership.go` (`RestartAsk`), `internal/app/config.go` (`restarted`),
+  `internal/app/internal/config/membership.go`
+- Guide: [Multi-player §5.6](multi-player.md#56-relay-doors-and-the-router),
+  [Auth and session design §3.5](auth-session-design.md#35-passphrase-doors)
+
+A site hands out a door's certificate fingerprint with its link, and the dial pins
+it where `-ca` named nothing (`joinSessionLocked`, `link.TrustTLS`). The pin lives
+on the dial's own copy of the config: the run the join builds holds none, so its
+redial of that door after a dropped link verifies against the system roots and a
+door the router certified itself is refused, the run forking where it should have
+come back. What would close it: the restart carries the pin (`RestartAsk`) into a
+field of its own, which the session's dials read ahead of `Trust` and the next
+`:join` clears, so one site's pin never answers for another's door.
+
+### Decide what going away ahead of a loss costs
+
+- Priority: P2, a rule of play to choose before anything is built
+- Affected files: `internal/system/cursor.go` (`restore`, `wraith`),
+  `internal/system/meta.go` (`publishDefeatState`),
+  `internal/app/internal/membership/session.go`
+- Guide: [Multi-player §5.4](multi-player.md#54-wraiths)
+
+A Wraith is out of play: nothing reaches it, a session counts none toward its
+defeat, and its player comes back with what the cursor held where the game is
+still the one it left (§5.4). A reset ends that, so leaving ahead of a defeat
+brings nothing into the next game. Inside one game it still pays: a player who
+drops its link as its cursor is about to die waits untouched and returns whole,
+while those who stayed took the damage. The choices, none of them the netcode's:
+- **A return costs something**: the record held to a floor, or a wait before the
+  place is given back. Small (`CursorSystem.restore`, the door), but an honest
+  drop pays it too.
+- **A Wraith stays in play for a grace**: the world reaches it for some seconds
+  after its link goes. Closes the dodge exactly, but the authority has to drive a
+  cursor it does not own through the grace (D-13), and the Wraith's stores rest on
+  it holding nothing.
+- **Leave it**: a drop is a drop, and friends police themselves; a public session
+  is where it would bite.
 
 ### Drop a participant and drain from the router
 
