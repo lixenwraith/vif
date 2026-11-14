@@ -40,6 +40,10 @@ func upgrade(path string) error {
 	default:
 		return fmt.Errorf("neither a %s nor a %s", paths.SettingsFile, paths.KeymapConfigFile)
 	}
+	if paths.Special(path) { // such as a link to /dev/null, which every run reads as it stands
+		fmt.Println("keep    " + path)
+		return nil
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err

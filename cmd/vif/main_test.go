@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/app"
 	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/vlog"
 	link "github.com/lixenwraith/vif/pkg/network"
 )
@@ -150,9 +153,45 @@ func TestConfigFlagAliasesShareOneConfig(t *testing.T) {
 	if err := fs.Parse(args); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.dir != "root" || cfg.scenario != "scenario.toml" || cfg.content != "content" ||
-		cfg.keymap != "keys.toml" || cfg.music != "music.toml" || cfg.sounds != "sounds.toml" || cfg.embedded {
+	if cfg.Dir != "root" || cfg.Scenario != "scenario.toml" || cfg.Content != "content" ||
+		cfg.Keymap != "keys.toml" || cfg.Music != "music.toml" || cfg.Sounds != "sounds.toml" || cfg.Embedded {
 		t.Fatalf("config flags = %+v", cfg)
+	}
+}
+
+// TestOnlyARunThatWritesBringsTheFilesUpToDate: -check and -schema read the player's
+// own vif.toml and keymap and leave them as they are; any other run writes each back
+// brought up to date, once, the status line naming the changes.
+func TestOnlyARunThatWritesBringsTheFilesUpToDate(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv(paths.SystemRootsEnv, "")
+	was, wasOptions := settingsStore, flagConfig.Options
+	t.Cleanup(func() { settingsStore, flagConfig.Options = was, wasOptions })
+	settings := filepath.Join(paths.UserRoot(), paths.SettingsFile)
+	keymap := filepath.Join(paths.UserRoot(), paths.InputDirName, paths.KeymapConfigFile)
+	docs := map[string]string{settings: "[play]\neffects = false\n", keymap: "[normal]\na = \"unknown_action\"\n"}
+	for _, readOnly := range []bool{true, false} {
+		for path, doc := range docs {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		settingsStore, flagConfig.Options = paths.SettingsFor("", settings), resource.Options{}
+		said := upgradeOwn(readOnly, true)
+		for path, doc := range docs {
+			if got, _ := os.ReadFile(path); (string(got) == doc) != readOnly {
+				t.Errorf("-check or -schema %v: %s now:\n%s", readOnly, path, got)
+			}
+		}
+		if readOnly && said != "" || !readOnly && (!strings.HasPrefix(said, "Settings brought up to date: ") || !strings.Contains(said, "; Keymap brought up to date: ")) {
+			t.Errorf("-check or -schema %v: %q", readOnly, said)
+		}
+		if again := upgradeOwn(readOnly, true); !readOnly && again != "" {
+			t.Errorf("an up-to-date start said %q", again)
+		}
 	}
 }
 

@@ -24,16 +24,16 @@ func init() {
 		pres = &menuHost{browserHost: &browserHost{}, ops: make(chan mode.MenuOp, menuOps)}
 	}
 	platformHost = app.Host{Presentation: pres, Audio: browser.Speaker(), Pressed: true, StartScreen: true}
-	pageSettings = keptSettings
+	pageSettings = func(s *paths.Settings) (paths.SettingsStore, []string) { return keptSettings(browser.Settings(), s) }
 	pagePlaces = tabPlaces{}
 }
 
-// keptSettings reads the settings document the page kept from an earlier visit
+// keptSettings reads doc, the settings document the page kept from an earlier visit,
 // over s, as this build brings it up to date (paths.UpgradeSettings), naming the
 // changes; one it cannot bring up to date is read as it stands, for writing it back
 // to say why, and one this build cannot read at all is replaced at the first change.
-func keptSettings(s *paths.Settings) (paths.SettingsStore, []string) {
-	kept := &pageStore{doc: browser.Settings()}
+func keptSettings(doc []byte, s *paths.Settings) (paths.SettingsStore, []string) {
+	kept := &pageStore{doc: doc}
 	if len(kept.doc) == 0 {
 		return kept, nil
 	}

@@ -114,10 +114,8 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	}
 	own := paths.OwnSettings("", file)
 	cfg := app.Config{Play: settings.Play, Settings: paths.SettingsFor("", file),
-		Resources: resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap,
-			ForeignDir: !own, ForeignKeymap: !own,
-			Downloads: cmp.Or(p.Downloads, paths.DefaultDownloadsDir()), SaveDownloads: settings.Session.SaveDownloads},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
+	cfg.Resources.ApplySettings(settings, own)
 	// The app's private files, where the state root was put above: the system ends
 	// a backgrounded process, and its places come back with the next.
 	if settings.Session.ResumeAfterRestart {
@@ -127,9 +125,7 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	if len(notes) > 0 && own {
 		cfg.Notice = paths.UpgradeStore(cfg.Settings)
 	}
-	if line := resource.UpgradeKeymap(cfg.Resources); line != "" {
-		cfg.Notice = strings.TrimPrefix(cfg.Notice+"; "+line, "; ")
-	}
+	cfg.Notice = app.JoinNotice(cfg.Notice, resource.UpgradeKeymap(cfg.Resources))
 	// Android keeps a device's networks from the Go runtime and its Wi-Fi drops
 	// broadcasts with no lock held, so the app lists the one and holds the other
 	host := app.Host{Presentation: v, StartScreen: true, Listening: listener.Listening,

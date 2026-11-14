@@ -234,9 +234,7 @@ func (a *App) init() error {
 		if err != nil {
 			return err
 		}
-		if notice != "" {
-			a.cfg.Notice = joinNotice(a.cfg.Notice, notice)
-		}
+		a.cfg.Notice = JoinNotice(a.cfg.Notice, notice)
 	}
 	// After the journal opens, so a run that starts in a session notes it first.
 	a.world.RunSafe(a.world.LatchSession)

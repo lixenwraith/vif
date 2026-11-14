@@ -5,6 +5,7 @@
 package resource
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -158,20 +159,44 @@ func Keymap(o Options) (string, error) {
 
 // keymap is Keymap's path and whether it is the player's own, which a run writes
 // back brought up to date: one they name, or one in the -config-dir root or the
-// user root, as vif.toml goes, unless a vif.toml not theirs named it.
+// user root, as vif.toml goes, unless a vif.toml not theirs named it; never one in
+// a shared root (paths.Shared) or a special file (paths.Special), such as -k /dev/null.
 func keymap(o Options) (string, bool, error) {
 	path, err := paths.ConfigFile(newResolver(o).roots, o.Keymap, paths.InputDirName, paths.KeymapConfigFile)
 	if err != nil || path == "" {
 		return "", false, err
 	}
-	if o.Keymap != "" {
-		return path, !o.ForeignKeymap, nil
-	}
 	dir := o.Dir
 	if o.ForeignDir {
 		dir = ""
 	}
-	return path, paths.OwnRoot(dir, filepath.Dir(filepath.Dir(path))), nil
+	own := paths.OwnRoot(dir, filepath.Dir(filepath.Dir(path)))
+	if o.Keymap != "" {
+		own = !o.ForeignKeymap
+	}
+	return path, own && !paths.Special(path) && !paths.Shared(path), nil
+}
+
+// ApplySettings gives each of Dir, Scenario, Content and Keymap a flag left empty
+// what vif.toml's [paths] names, Scenario and Content not under Embedded, and its
+// downloads; a Dir or Keymap a vif.toml not the player's own (own false) names is
+// foreign, read and never written back. Every host builds its Options so.
+func (o *Options) ApplySettings(s paths.Settings, own bool) {
+	fill := func(v *string, named string) bool {
+		if *v != "" || named == "" {
+			return false
+		}
+		*v = named
+		return true
+	}
+	p := s.Paths
+	o.ForeignDir = fill(&o.Dir, p.Root) && !own || o.ForeignDir
+	o.ForeignKeymap = fill(&o.Keymap, p.Keymap) && !own || o.ForeignKeymap
+	if !o.Embedded {
+		fill(&o.Scenario, p.Scenario)
+		fill(&o.Content, p.Content)
+	}
+	o.Downloads, o.SaveDownloads = cmp.Or(p.Downloads, paths.DefaultDownloadsDir()), s.Session.SaveDownloads
 }
 
 // UpgradeKeymap brings the player's own keymap up to this build's in place

@@ -67,7 +67,7 @@ func checkKeymap(o Options, w io.Writer) error {
 	case len(notes) == 0:
 		fmt.Fprintln(w, "keymap ok:", path)
 	case own:
-		fmt.Fprintf(w, "keymap %s: a run writes it back up to date: %s\n", path, strings.Join(notes, "; "))
+		fmt.Fprintf(w, "keymap %s: %s: %s\n", path, paths.WriteBack(path), strings.Join(notes, "; "))
 	default:
 		fmt.Fprintf(w, "keymap %s: a run reads it up to date: %s\n", path, strings.Join(notes, "; "))
 	}
