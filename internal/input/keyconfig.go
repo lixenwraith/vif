@@ -94,7 +94,8 @@ func LoadKeyConfig(data []byte) (*KeyTable, error) {
 // as paths.UpgradeSettings does vif.toml: a section this build does not read, a key
 // it cannot name and a binding it refuses go with their own comments, then each
 // embedded binding for a key the document binds in no spelling comes with its
-// comments. It names the changes, counting many adds.
+// comments. It names the changes, counting many adds, and refuses (errNotKeymap) a
+// document that sets something yet no section of a keymap, which another file is.
 func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	doc, err := toml.ParseDocument(data)
 	if err != nil {
@@ -108,6 +109,14 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	var dropped, why []string
 	bound := make(map[string]map[any]string) // per section, the spelling each key is bound under
 	tree := doc.Tree()
+	keymap := len(tree) == 0
+	for name := range tree {
+		_, known := sectionKind(name)
+		keymap = keymap || known
+	}
+	if !keymap {
+		return nil, nil, errNotKeymap
+	}
 	for _, name := range slices.Sorted(maps.Keys(tree)) {
 		special, known := sectionKind(name)
 		table, ok := tree[name].(map[string]any)
@@ -162,10 +171,8 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 			}
 		}
 	}
-	for _, k := range slices.Concat(gone, refused) {
-		if err := drop(doc, k); err != nil {
-			return nil, nil, err
-		}
+	if err := drop(doc, slices.Concat(gone, refused)); err != nil {
+		return nil, nil, err
 	}
 	for _, k := range spelt {
 		if _, err := shipped.Delete(k); err != nil {
@@ -179,6 +186,7 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	added = slices.DeleteFunc(added, func(k toml.Key) bool {
 		return slices.ContainsFunc(reset, func(r toml.Key) bool { return sameKey(k, r) })
 	})
+	slices.SortFunc(added, slices.Compare) // named in order, as the dropped keys are
 	switch {
 	case len(added) > parameter.UpgradeNamed:
 		notes = append(notes, fmt.Sprintf("added %d bindings", len(added)))
@@ -195,16 +203,41 @@ func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	return doc.Bytes(), notes, nil
 }
 
-// drop removes key from doc with the comments that are its own; one in a section
-// written as an inline table goes as that table is written again without it
-func drop(doc *toml.Document, key toml.Key) error {
-	_, err := doc.Delete(key)
-	if table, ok := doc.Tree()[key[0]].(map[string]any); err != nil && ok && len(key) == 2 {
-		table = maps.Clone(table)
-		delete(table, key[1])
-		err = doc.Set(key[:1], table)
+// errNotKeymap refuses a document no section of which is a keymap's
+var errNotKeymap = fmt.Errorf("not a keymap: it has none of the sections %s", sectionNames())
+
+// sectionNames lists the sections a keymap binds keys in, as a player reads them
+func sectionNames() string {
+	names := make([]string, len(sectionDefs))
+	for i, d := range sectionDefs {
+		names[i] = "[" + d.name + "]"
 	}
-	return err
+	return strings.Join(names, ", ")
+}
+
+// drop removes keys from doc with the comments that are their own; those in a
+// section written as an inline table go as that table is written again without
+// them, once
+func drop(doc *toml.Document, keys []toml.Key) error {
+	inline := make(map[string]map[string]any)
+	for _, key := range keys {
+		if _, err := doc.Delete(key); err != nil {
+			table, ok := doc.Tree()[key[0]].(map[string]any)
+			if !ok || len(key) != 2 {
+				return err
+			}
+			if inline[key[0]] == nil {
+				inline[key[0]] = maps.Clone(table)
+			}
+			delete(inline[key[0]], key[1])
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(inline)) {
+		if err := doc.Set(toml.Key{name}, inline[name]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // binding names a keymap key as a player reads it: [section] for a table, [section]
