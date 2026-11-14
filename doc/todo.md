@@ -786,7 +786,10 @@ session does not. What it needs:
   lifetime no first join opens and no vacancy ends (`lifecycle.Policy`).
 - Its keeper: a router setting naming the scenario and the bots, which creates
   the session at start and again whenever it is gone, at the session Job's
-  deadline too, charged to no address's budget and counted in the quota.
+  deadline too, charged to no address's budget and counted in the quota. A
+  spectator of the one that went is told it ended and starts a local game
+  (`Membership.feedEnded`): a name the router answers for whichever stands, or
+  a feed's end that names its successor, keeps a page watching.
 - Its cost while nobody looks: a bot's game runs a pod around the clock. The
   router knows a session with no spectator past its linger (`audiences`), and a
   pod its idle hub (`FeedHub.Idle`), so a game of bots alone can hold until a

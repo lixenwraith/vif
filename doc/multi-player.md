@@ -1269,8 +1269,11 @@ since a lobby can outlast the budget a dial retrying in moments would spend.
 slots and names. Nothing in it takes, keeps or comes back to a place or says where
 anyone listens: no assignment, relay, succession chain, term keys, keep-out list,
 pass or door, and no roster key or account. `DecodeWatchHead` cuts whatever a feed
-says to the same view. When its feed ends a viewer watches again where the host
-serves the session anew or only its link went, and otherwise starts a local game
+says to the same view. The world it builds is the players' Shared world, whose
+cursors carry what every participant reads there (`CursorComponent`): a name, and
+the public half of a key made for that place, which takes no place without the
+private half. When its feed ends a viewer watches again where the host serves the
+session anew or only its link went, and otherwise starts a local game
 (`Membership.feedEnded`); a driven run ends.
 
 **The run** looks from one player's cursor (`PlayerResource.Follow`, `World.Follow`):

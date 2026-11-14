@@ -677,7 +677,9 @@ Branches.
 - The browser launcher runs end to end in the container: `GOOS=js GOARCH=wasm go
   build -o <copy>/vif.wasm ./cmd/vif` into a copy of `web/`, serve the copy with
   `python3 -m http.server` and drive it with Playwright. `?arg=-join=ws://127.0.0.1:9/x`
-  ends the run at once with a refused join's message. A `devices['Pixel 7']`
+  ends the run at once with a refused join's message, and a native
+  `-host ws://127.0.0.1:<port> -bot 2` in tmux is a session the page joins or
+  spectates, its status line read beside the page's. A `devices['Pixel 7']`
   context is the phone's page, where a held `mouse.down` on the canvas's last
   rows is the finger that opens the menu; `page.keyboard.press('Control+g')` is
   the desktop's. `pkg/browser`'s tests run under node with
