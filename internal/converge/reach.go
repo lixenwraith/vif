@@ -116,7 +116,8 @@ func (r *Reach) AdoptListener(ln net.Listener, declared string) {
 	r.mu.Unlock()
 	r.statListening.Store(true)
 	r.inst.SetStatusMessage(
-		fmt.Sprintf("Listening on %s; the session will share it with the other peers", ln.Addr()), parameter.StatusNotice)
+		fmt.Sprintf("Listening on %s to take over as host; the session shares it with the other players", ln.Addr()),
+		parameter.StatusNotice)
 	r.log.Info("net", "msg", "peer listener bound",
 		"bound", ln.Addr().String(), "declared", declared)
 }

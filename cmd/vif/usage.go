@@ -47,7 +47,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 				parameter.MaxPlayers, parameter.MaxPlayers)},
 			{names: []string{"bot"}, arg: "[N[:graph]|graph]", hint: "Add bots alongside you (default 1:default); -host/-join keep your player"},
 			{names: []string{"authority"}, arg: "host|migrate",
-				hint: "Where authorship goes when the authoring participant leaves; default host with -serve, migrate otherwise"},
+				hint: "What a session does when its host goes: host ends it, the default; migrate moves it to a guest that allowed taking over, whose address the session shares"},
 			{names: []string{"slow-window"}, arg: "<dur>",
 				hint: fmt.Sprintf("Window a participant's lateness is judged over; host only, 0 never evicts (default %s)", parameter.NetworkSlowWindow)},
 			{names: []string{"slow-late"}, arg: "<n>",
@@ -58,9 +58,7 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 				hint: fmt.Sprintf("Window the host's own tick keeping is judged over; past %.0f%% of its ticks dropped, it drops its newest bot, then player; host only, 0 never sheds (default %s)",
 					parameter.NetworkShedShare*100, parameter.NetworkShedWindow)},
 			{names: []string{"listen"}, arg: "<addr>",
-				hint: "Address this participant is dialled back on; -join only, default the host's port then an ephemeral one"},
-			{names: []string{"no-advertise"},
-				hint: "Keep this participant's address out of the session; -join only, never a succession candidate"},
+				hint: "Listen here so this run can take a migrate session over, whatever [play] takeover says; -join only, and the session shares the address"},
 			{names: []string{"relay"}, arg: "<addr>",
 				hint: "Admit participants that cannot reach the host here and carry their traffic, or at a door published through vif://<router>; -join only"},
 			{names: []string{"size"}, arg: "<WxH>", hint: "Terminal-equivalent size for a run that has no terminal"},
@@ -304,7 +302,12 @@ box, requests a session from an HTTP(S) vif-router site with a player count and
 scenario, leaves the session, relays for others, and makes the games this run
 hosts visible on its local network, as :lan on does; Nearby games lists the
 visible games found there, each joined from its row. Player count 0 and a blank
-scenario use server defaults. Current session status heads the page. Hosts drop
+scenario use server defaults. Current session status heads the page. A session
+ends when its host leaves, each player going on alone, unless the host chose
+migrate: \-authority migrate, the Authority field, or :host <address> migrate.
+A migrate session moves to a guest that turned Take over as host on, as
+:takeover on does; such a guest listens on a port in each session it joins, and
+the session shares its address with the other players. Hosts drop
 a player with its bots, or one bot, under Players; :player lists slots and
 :player drop <slot> removes one and keeps it out. Bots adds local bots by count and policy graph,
 and removes this run's bots by cursor slot or cancels a joining bot; :bot drop
@@ -325,8 +328,9 @@ HUD pins, shows the navigation overlays and records a replay journal. Values in
 brackets are unavailable or read only; the selected row explains why. Launch
 options explains the file or flag that sets what a running game cannot change.
 .PP
-Settings, Relay for others and Visible on this network are vif.toml's [play]: a
-run writes each back as it changes, so the next run starts as this one was left:
+Settings, Relay for others, Take over as host and Visible on this network are
+vif.toml's [play]: a run writes each back as it changes, so the next run starts as
+this one was left:
 to the vif.toml it read when that is in the user root or the \-config-dir root,
 else to the user root's, created at the first change from the one read. Every
 other change lasts the run.

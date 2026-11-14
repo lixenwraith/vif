@@ -49,7 +49,8 @@ type SessionController interface {
 	Login(site, name, password string) error
 	Logout(site string) error
 	// SetPassphrase sets what this run's doors take and its dials show, the phrase
-	// given or one made for "new", and returns it to be shown once.
+	// given or one made for "new", and returns it to be shown once; a run in a
+	// session others hold is refused, since that session's doors keep theirs.
 	SetPassphrase(phrase string) (string, error)
 	RequestSession(site string, players int, scenario string) error
 	HostError() error
@@ -167,6 +168,11 @@ type GameContext struct {
 	// Relaying carries any participant's artifacts toward the authority, not only
 	// those that joined through this run; off unless its player turns it on
 	Relaying atomic.Bool
+
+	// Takeover lets a session whose host chose migrate move to this run when that
+	// host goes, as [play] takeover sets it: a session joined with it on is told a
+	// port this run listens on. Off unless its player turns it on
+	Takeover atomic.Bool
 
 	// Lan announces the games this run hosts to the local network, as [play] lan
 	// sets it; off unless its player turns it on

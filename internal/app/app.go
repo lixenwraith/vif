@@ -48,7 +48,9 @@ type restartRequest struct {
 	provided *resource.Scenario
 
 	// Bots are the graphs of the seats this run held, which the next one seats again.
-	Bots []string
+	// Passphrase is the phrase its doors took and its dials showed, the next one's too.
+	Bots       []string
+	Passphrase string
 
 	// Play is how this run was left, which the next one starts as.
 	Play paths.Play
@@ -63,7 +65,7 @@ type restartRequest struct {
 // may be the session closing, which ends them before this run is replaced. The
 // first request stands; a later one is refused.
 func (a *App) replaceWith(req *restartRequest) bool {
-	req.Bots = a.membership.SeatGraphs()
+	req.Bots, req.Passphrase = a.membership.SeatGraphs(), a.membership.Passphrase()
 	return a.restart.CompareAndSwap(nil, req)
 }
 
@@ -424,6 +426,7 @@ func (a *App) applyPlay() {
 	a.ctx.MouseDisabled.Store(!p.Mouse)
 	a.ctx.OverlayHUD.Store(p.HUD)
 	a.ctx.Relaying.Store(p.Relay)
+	a.ctx.Takeover.Store(p.Takeover)
 	a.ctx.Lan.Store(p.Lan)
 	a.ctx.WaitStart.Store(p.Wait && a.cfg.Mode.OwnsInput())
 	a.ctx.MaxFPS.Store(int32(p.MaxFPS))
@@ -440,6 +443,7 @@ func (a *App) livePlay() paths.Play {
 	p.FollowMouse = a.ctx.MouseFreeMode.Load()
 	p.HUD = a.ctx.OverlayHUD.Load()
 	p.Relay = a.ctx.Relaying.Load()
+	p.Takeover = a.ctx.Takeover.Load()
 	p.Lan = a.ctx.Lan.Load()
 	p.MaxFPS = int(a.ctx.MaxFPS.Load())
 	p.PauseMenu = a.ctx.PauseMenu.Load()

@@ -101,8 +101,7 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 			receiver.cfg.Resources.Sounds = "local-sounds.toml"
 			receiver.cfg.Membership.SessionName = "local-session"
 			receiver.cfg.Membership.ListenAddress = "127.0.0.1:7777"
-			receiver.cfg.Membership.NoAdvertise = true
-			receiver.cfg.Membership.FixedAuthority = true
+			receiver.cfg.Membership.Migrate = true
 
 			staged, err := receiver.StageShared(cap)
 			if err != nil {
@@ -113,7 +112,7 @@ func TestCaptureStagingIgnoresLocalRuntimeOptions(t *testing.T) {
 				stageCfg.LogScope != "" || stageCfg.Resources.Keymap != "" ||
 				stageCfg.Resources.Music != "" || stageCfg.Resources.Sounds != "" ||
 				stageCfg.Membership.SessionName != "" || stageCfg.Membership.ListenAddress != "" ||
-				stageCfg.Membership.NoAdvertise || stageCfg.Membership.FixedAuthority {
+				stageCfg.Membership.Migrate {
 				t.Fatalf("staging inherited local runtime options: %+v", stageCfg)
 			}
 			if stageCfg.Seed != receiver.cfg.Seed || stageCfg.Session != cap.Header.Session ||

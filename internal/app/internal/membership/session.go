@@ -63,7 +63,7 @@ func (m *Membership) HostNetworkConfig() *link.Config {
 	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = m.SessionCapacity()
 	netCfg.OnError = logSessionError
-	netCfg.AcceptSession = m.sessionAcceptor(m.joinBudget())
+	netCfg.AcceptSession = m.sessionAcceptor(m.joinBudget(), true)
 	// Every host outlives its guests, so every host admits a dial after its lobby
 	// closed: a dropped participant comes back through the one gate a reconnect has
 	// ever had. The hook answers nothing until the run arms it, because until then
@@ -72,11 +72,12 @@ func (m *Membership) HostNetworkConfig() *link.Config {
 	return netCfg
 }
 
-// sessionAcceptor is the join handshake this run serves as its session's coordinator,
-// on its listener and on its bots' in-process streams, which spend no join budget.
-// admit takes or refuses a dial before anything is allocated for it.
-func (m *Membership) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) (link.PeerID, error) {
-	return network.HostAcceptor(network.Coordinator{
+// sessionAcceptor is the join handshake this run serves as its session's coordinator:
+// at a door, which asks a dial the session's credential, and on its bots' in-process
+// streams, which are the run's own and ask none. admit takes or refuses a dial
+// before anything is allocated for it.
+func (m *Membership) sessionAcceptor(admit func(net.Addr) error, door bool) func(net.Conn) (link.PeerID, error) {
+	c := network.Coordinator{
 		Preview:     m.previewParticipant,
 		Assign:      m.assignParticipant,
 		Release:     m.releaseParticipant,
@@ -86,13 +87,14 @@ func (m *Membership) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) 
 		Name:        m.cfg.SessionName,
 		Authority:   m.firstTermKey,
 		Pass:        m.checkPass,
-		Passphrase:  m.passphraseDoor(),
-		Ticket:      m.ticketHook(),
-		Gated:       m.gated,
 		Binding:     network.LeafBinding(m.cfg.TLS),
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
-	}, network.DefaultConfig().ConnectTimeout)
+	}
+	if door {
+		c.Passphrase, c.Ticket, c.Gated = m.passphraseDoor, m.ticketHook(), m.gated
+	}
+	return network.HostAcceptor(c, network.DefaultConfig().ConnectTimeout)
 }
 
 // showJoinerPrepared tells this run's player who is about to join: a dialer whose
@@ -666,7 +668,15 @@ func (m *Membership) previewParticipant(a network.Admission) (network.SessionOff
 	if max(len(m.sessionRoster), 1) > m.SessionCapacity() && !m.holdsPlaceLocked(a.Keys()) && !m.mayYieldLocked() {
 		return network.SessionOffer{}, m.fullLocked()
 	}
-	return m.offerLocked(anchor, 0), nil
+	return handshake(m.offerLocked(anchor, 0)), nil
+}
+
+// handshake is o as a dial reads it before it holds a place, in its preview and at
+// its seat: with no chain, which is where its players listen. That comes with the
+// start gate, to a run whose build this one checked and whose place is taken.
+func handshake(o network.SessionOffer) network.SessionOffer {
+	o.Chain = nil
+	return o
 }
 
 // assignParticipant allocates the next identity, or the place a key the dialer
@@ -760,7 +770,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 			entry = m.sessionRoster[i]
 		}
 		m.sessionOffer = m.offerLocked(anchor, entry.ID)
-		offer := m.sessionOffer
+		offer := handshake(m.sessionOffer)
 		offer.Pass = m.issuePassLocked(entry, shown)
 		return offer, offer.Validate()
 	}
@@ -779,7 +789,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 	m.sessionRoster = append(m.sessionRoster, assigned)
 
 	m.sessionOffer = m.offerLocked(anchor, assigned.ID)
-	offer := m.sessionOffer
+	offer := handshake(m.sessionOffer)
 	offer.Pass = m.issuePassLocked(assigned, shown)
 	return offer, offer.Validate()
 }
@@ -1277,7 +1287,7 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		KeepOut:        slices.Clone(m.keepOut),
 		Gated:          m.gatedLocked(),
 		Door:           m.doorVerifierLocked(),
-		FixedAuthority: m.cfg.FixedAuthority,
+		FixedAuthority: m.fixedAuthority(),
 		Players:        m.playersSet(),
 		// Derived from the anchor this offer carries rather than read again, so
 		// what the coordinator later compares a joiner's report against is exactly
@@ -1285,6 +1295,16 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		// mismatch or the reverse.
 		Identity: IdentityFromAnchor(anchor),
 	}
+}
+
+// fixedAuthority is whether the session this run offers pins its authority: the
+// session's own word once it is in one, which a guest that took it over holds from
+// the offer it joined on, and this run's policy for the one a lobby is opening.
+func (m *Membership) fixedAuthority() bool {
+	if m.authorityTerm() != 0 {
+		return m.authority.Fixed()
+	}
+	return !m.cfg.Migrate
 }
 
 // hostOffer closes the lobby and returns the roster every participant builds from.

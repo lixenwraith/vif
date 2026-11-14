@@ -731,6 +731,41 @@ func TestTheFirstRestartAskedForStands(t *testing.T) {
 	}
 }
 
+// TestAScenarioChangeReopensTheDoorUnderTheSessionsPolicy: the run a host's scenario
+// change builds reopens its door under the policy the session held, here :host's
+// word over a command line that asked for the other.
+func TestAScenarioChangeReopensTheDoorUnderTheSessionsPolicy(t *testing.T) {
+	// Not parallel: a real socket.
+	for _, word := range []string{AuthorityHost, AuthorityMigrate} {
+		t.Run(word, func(t *testing.T) {
+			root := t.TempDir()
+			writeScenario(t, root, "other", "A scenario this root holds.")
+			line := runConfig{Config: Config{Seed: fixtureSeed, Width: 80, Height: 24, Resources: resource.Options{Dir: root},
+				Membership: Membership{Migrate: word == AuthorityHost}}}
+			a, err := NewHeadless(line.Config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer a.Close()
+			a.cfg.Mode = ModePlay
+			tickUntilCursor(t, a)
+			a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", word) })
+			if err != nil {
+				t.Fatalf("begin hosting: %v", err)
+			}
+			var changed bool
+			a.World().RunSafe(func() { changed, err = a.ctx.SessionCtl.ChangeScenario("other") })
+			req := a.restart.Load()
+			if err != nil || !changed || req == nil || req.Host == "" {
+				t.Fatalf("changed %v, %v, restart %+v; want one that reopens the door", changed, err, req)
+			}
+			if next, _ := line.restarted(req); next.Membership.Migrate != (word == AuthorityMigrate) {
+				t.Fatalf("the next run migrates: %t; want the %s policy its session held", next.Membership.Migrate, word)
+			}
+		})
+	}
+}
+
 // TestABotToldToLeaveIsNotSeatedAgain: a restart asked for while a removed bot is
 // still leaving does not bring it back in the next run.
 func TestABotToldToLeaveIsNotSeatedAgain(t *testing.T) {
@@ -808,7 +843,7 @@ func TestARunWithOnlyItsBotsOpensTheirSessionToOthers(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForSeats(t, a, 1)
-	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityHost) })
+	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityMigrate) })
 	if err != nil {
 		t.Fatalf(":host beside its own bot: %v", err)
 	}
@@ -818,7 +853,7 @@ func TestARunWithOnlyItsBotsOpensTheirSessionToOthers(t *testing.T) {
 	}
 	pending, offer := dialSession(t, a.HostAddr())
 	_ = pending.Close()
-	if !offer.FixedAuthority {
+	if offer.FixedAuthority {
 		t.Fatal("the door opened under the bots' policy, not the one :host named")
 	}
 	mustSocketJoiner(t, a.HostAddr(), fixtureSeed, BotWidth, BotHeight)
@@ -974,28 +1009,50 @@ func TestAnInputsHorizonOpensWithTheSession(t *testing.T) {
 	}
 }
 
-// TestHostCarriesItsAuthorityPolicy: the word :host is given is the policy every
-// offer it makes names, and a word that is neither is refused before binding.
+// TestHostCarriesItsAuthorityPolicy: a session ends with its host unless its host
+// asked for migrate, on its command line or by :host's word, which wins over the
+// line. Every offer names the policy and :session reads it, and a word that is
+// neither is refused before binding.
 func TestHostCarriesItsAuthorityPolicy(t *testing.T) {
-	a := mustHeadless(t, 0x3019, 120, 40)
-	defer a.Close()
-	tickUntilCursor(t, a)
+	for _, tt := range []struct {
+		name    string
+		migrate bool // the run's own policy: -authority migrate
+		word    string
+		want    string
+	}{
+		{"no word on a run that asked for nothing", false, "", AuthorityHost},
+		{"no word on a run started with -authority migrate", true, "", AuthorityMigrate},
+		{"host over a command line's migrate", true, AuthorityHost, AuthorityHost},
+		{"migrate", false, AuthorityMigrate, AuthorityMigrate},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			a := mustHeadless(t, 0x3019, 120, 40)
+			defer a.Close()
+			tickUntilCursor(t, a)
 
-	var err error
-	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", "leader") })
-	if err == nil {
-		t.Fatal("an unknown authority policy was accepted")
-	}
-	a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityHost) })
-	if err != nil {
-		t.Fatalf("begin hosting: %v", err)
-	}
-	stop := tickInBackground(a)
-	defer stop()
-	pending, offer := dialSession(t, a.HostAddr())
-	defer pending.Close()
-	if !offer.FixedAuthority {
-		t.Fatal("a host opened with the host policy offered a migrating session")
+			var err error
+			a.World().RunSafe(func() {
+				a.cfg.Membership.Migrate = tt.migrate
+				err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", "leader")
+			})
+			if err == nil {
+				t.Fatal("an unknown authority policy was accepted")
+			}
+			a.World().RunSafe(func() { err = a.ctx.SessionCtl.BeginHosting("127.0.0.1:0", tt.word) })
+			if err != nil {
+				t.Fatalf("begin hosting: %v", err)
+			}
+			stop := tickInBackground(a)
+			defer stop()
+			pending, offer := dialSession(t, a.HostAddr())
+			defer pending.Close()
+			if offer.FixedAuthority != (tt.want == AuthorityHost) {
+				t.Fatalf("the offer pins its authority: %t; want the %s policy", offer.FixedAuthority, tt.want)
+			}
+			if line := a.SessionSummary(); !strings.Contains(line, "authority "+tt.want) {
+				t.Fatalf(":session reads %q; want the %s policy named", line, tt.want)
+			}
+		})
 	}
 }
 
@@ -1037,7 +1094,7 @@ func scriptedRun(cfg Config, wait time.Duration) (*App, error) {
 // host must be ticking meanwhile. configure edits the run's Config before it dials.
 func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int, configure ...func(*Config)) (*App, *link.SocketPort) {
 	t.Helper()
-	cfg := Config{Mode: ModeHeadless, Width: w, Height: h, Membership: Membership{JoinAddress: addr, NoAdvertise: true}}
+	cfg := Config{Mode: ModeHeadless, Width: w, Height: h, Membership: Membership{JoinAddress: addr}}
 	for _, f := range configure {
 		f(&cfg)
 	}
@@ -1065,7 +1122,7 @@ func lobbySession(t *testing.T, host Config, players int, guest Config) []*App {
 	wait := socketWait + time.Duration(windows)*(parameter.NetworkAdmitWindow+admitPace)
 	addr := freeAddress(t)
 	host.Mode, host.Membership.HostAddress, host.Membership.Participants = ModeHeadless, addr, players
-	guest.Mode, guest.Membership.JoinAddress, guest.Membership.NoAdvertise = ModeHeadless, addr, true
+	guest.Mode, guest.Membership.JoinAddress = ModeHeadless, addr
 	type started struct {
 		a   *App
 		err error

@@ -54,14 +54,17 @@ func (c Control) Leave() error              { return c.m.leaveLocked() }
 func (c Control) LeaveError() error         { return c.m.leaveErrorLocked() }
 
 // SetPassphrase sets what this run's doors take and its dials show: the phrase
-// given, or one made for "new" or none, returned to be shown once. A door derived
-// already is derived again at its next open.
+// given, or one made for "new" or none, returned to be shown once. A run in a
+// session others hold keeps the one it has, which every door of that session takes.
 func (c Control) SetPassphrase(phrase string) (string, error) {
 	if phrase == "" || phrase == "new" {
 		phrase = network.GeneratePassphrase()
 	}
 	if err := network.CheckPassphrase(phrase); err != nil {
 		return "", err
+	}
+	if role := c.m.sessionRoleLocked(); role != roleSolo && role != roleSeats && role != roleLeft {
+		return "", errors.New("this session keeps the passphrase it was opened with")
 	}
 	c.m.sessionMu.Lock()
 	defer c.m.sessionMu.Unlock()
@@ -71,10 +74,18 @@ func (c Control) SetPassphrase(phrase string) (string, error) {
 	return phrase, nil
 }
 
-// passphraseDoor is the credential this run's doors take: the session's verifier
-// where it joined one (SessionOffer.Door), else one derived from its own passphrase
-// at the first door's open, once; nil opens them. One that cannot be had leaves the
-// doors gated rather than open, since what gates them stands.
+// Passphrase is the phrase this run's doors take and its dials show as it stands,
+// the launch's or one its player typed since, which the run built next takes up.
+func (m *Membership) Passphrase() string {
+	m.sessionMu.Lock()
+	defer m.sessionMu.Unlock()
+	return m.cfg.Passphrase
+}
+
+// passphraseDoor is the credential this run's doors take, derived once: its own
+// passphrase's in a session it opened, the session's verifier in one it joined or
+// reopened holding no phrase (SessionOffer.Door); nil opens them. One that cannot
+// be had leaves the doors gated rather than open, since what gates them stands.
 func (m *Membership) passphraseDoor() *network.PassphraseDoor {
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
@@ -89,10 +100,11 @@ func (m *Membership) passphraseDoorLocked() *network.PassphraseDoor {
 	var d *network.PassphraseDoor
 	var err error
 	switch {
+	// A session this run opened takes its phrase before what it last offered.
+	case m.cfg.Passphrase != "" && (m.midRunPort != nil || m.sessionOffer.Door == nil):
+		d, err = network.NewPassphraseDoor(m.cfg.Passphrase)
 	case m.sessionOffer.Door != nil:
 		d, err = network.OpenDoor(m.sessionOffer.Door)
-	case m.cfg.Passphrase != "":
-		d, err = network.NewPassphraseDoor(m.cfg.Passphrase)
 	default:
 		return nil
 	}
@@ -371,6 +383,10 @@ func (m *Membership) changeScenarioLocked(name string) (bool, error) {
 		if req.Host == "" && !m.seatsOnly() {
 			return false, errors.New("this participant has no address its session can return to")
 		}
+		req.Migrate = !m.authority.Fixed()
+		m.sessionMu.Lock()
+		req.Door = m.doorVerifierLocked()
+		m.sessionMu.Unlock()
 	}
 	if !m.run.ReplaceWith(req) {
 		return false, scribe.ErrRunReplaced
@@ -594,9 +610,9 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	if successor {
 		return m.hostTakenSessionLocked(addr)
 	}
-	fixed := m.cfg.FixedAuthority
+	migrate := m.cfg.Migrate
 	if authority != "" {
-		m.cfg.FixedAuthority = authority == AuthorityHost
+		m.cfg.Migrate = authority == AuthorityMigrate
 	}
 
 	// Bound before anything is written, so a port this run cannot have leaves it as
@@ -605,25 +621,27 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	m.wiring.HostListeners = nil
 	if lns == nil {
 		if lns, err = BindDoors(*m.cfg, addr); err != nil {
-			m.cfg.FixedAuthority = fixed
+			m.cfg.Migrate = migrate
 			return fmt.Errorf("host %s: %w", addr, err)
 		}
 	}
 	if m.sessionTransportLocked() == nil {
 		if err := m.openSessionLocked(nil); err != nil {
 			CloseDoors(lns)
-			m.cfg.FixedAuthority = fixed
+			m.cfg.Migrate = migrate
 			return err
 		}
 	}
+	// Derived here, not in the first dial's handshake: the KDF takes a moment.
 	m.sessionMu.Lock()
 	port := m.midRunPort
+	m.passphraseDoorLocked()
 	m.sessionMu.Unlock()
 
 	for _, ln := range lns {
 		if err := port.Serve(ln); err != nil {
 			CloseDoors(lns)
-			m.cfg.FixedAuthority = fixed
+			m.cfg.Migrate = migrate
 			return fmt.Errorf("host: %w", err)
 		}
 	}
@@ -631,7 +649,7 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	// The policy is the session's from here: only this run's bots were offered one.
 	m.cfg.HostAddress = addr
 	m.restartWaitsLocked()
-	m.authority.Pin(m.cfg.FixedAuthority)
+	m.authority.Pin(!m.cfg.Migrate)
 	bound := doorsText(port.Doors())
 	m.log.Info("session", "msg", "hosting opened mid-run", "address", bound,
 		"certificate", link.Fingerprint(m.cfg.TLS), "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
@@ -732,7 +750,12 @@ func (m *Membership) openSessionLocked(kept []network.RosterEntry) error {
 	m.midRunPort = port
 	self.Key = m.ownKey()
 	m.sessionRoster = append([]network.RosterEntry{self}, kept...)
-	m.sessionOffer = network.SessionOffer{}
+	// The door is this session's own, not one this run left: its phrase's, or what
+	// gated the door a scenario change rebuilt this run to reopen.
+	m.sessionOffer = network.SessionOffer{Door: m.wiring.Door, Gated: m.wiring.Door != nil}
+	m.wiring.Door = nil
+	m.door.Close()
+	m.door = nil
 	m.keepOut = nil
 	m.openAwayLocked(kept)
 	roster := slices.Clone(m.sessionRoster)
@@ -752,7 +775,7 @@ func (m *Membership) openSessionLocked(kept []network.RosterEntry) error {
 	// handshake assigns, which is what lets a later handoff move it.
 	m.openAuthorityLocked(network.SessionOffer{
 		Anchor: m.joinAnchorLocked(), Host: self.ID, Assigned: self.ID,
-		Term: m.authorityTerm() + 1, Roster: roster, FixedAuthority: m.cfg.FixedAuthority,
+		Term: m.authorityTerm() + 1, Roster: roster, FixedAuthority: !m.cfg.Migrate,
 	}, self.ID)
 
 	// Attaching latches the world as shared (D-14) and installs the session hooks;
@@ -888,10 +911,6 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	m.takeOwnPlaceLocked()
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
 	local := link.PeerID(m.world.LocalParticipant())
-	m.sessionMu.Lock()
-	m.door.Close()
-	m.door = nil
-	m.sessionMu.Unlock()
 	// A leave keeps its bots' places, and a run its session gave up every place, for
 	// whoever hosts next to give back. A bot of this run's goes on under a key of its
 	// own over the record it left with, which stays the left session's.
@@ -1010,8 +1029,13 @@ func (m *Membership) sessionSummaryLocked() string {
 	if reg.Bools.Get("network.map_latched").Load() {
 		latch = "map latched"
 	}
-	line := fmt.Sprintf("Session %s, peer %d (%s), %d peer link(s), tick %d, %s",
-		where, participant, cursor, peers, m.run.Position().Tick, latch)
+	// The policy by the word a host names it with: what losing the host does here.
+	policy := AuthorityMigrate
+	if m.fixedAuthority() {
+		policy = AuthorityHost
+	}
+	line := fmt.Sprintf("Session %s, peer %d (%s), %d peer link(s), tick %d, %s, authority %s",
+		where, participant, cursor, peers, m.run.Position().Tick, latch, policy)
 	if m.authority != nil {
 		if s := m.authority.Summary(); s != "" {
 			line += "; " + s
