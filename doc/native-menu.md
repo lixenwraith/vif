@@ -9,7 +9,7 @@ node's id. The terminal and the desktop window keep the `tui` menu.
 - A `tui` menu row is one cell, 12 dp tall at Android's default zoom, against its
   48 dp touch target: the text is hard to read and a tap lands on a neighbour.
 - In scope: the [menu](config-menu.md) alone, however it is summoned (Ctrl-G, F10,
-  `:menu`/`:g`/`:config`, a press held on the status bar). Help, telemetry, about,
+  Escape in Normal, `:menu`/`:g`/`:config`, a press held on the status bar). Help, telemetry, about,
   the profiler report and the command line stay `tui` overlays.
 - Not in scope: new rows, editing launch options or the keymap.
 

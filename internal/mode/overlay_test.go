@@ -658,6 +658,48 @@ func TestTheHelpKeyOpensHelpOverAnyModeAndClosesIt(t *testing.T) {
 	}
 }
 
+// TestEscapeInNormalOpensTheMenuAndAHoldOutlastsIt: Escape with no key pending
+// opens the menu as Ctrl-G does, asking a solo game to pause, and Escape closes it,
+// asking to resume; neither asks a hold made with p to end. Escape over a pending
+// key only drops it.
+func TestEscapeInNormalOpensTheMenuAndAHoldOutlastsIt(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContext(w, 80, 24)
+	machine := input.NewMachine()
+	r := NewRouter(ctx, machine)
+	key := menuKeys(t, machine, r)
+	// asked is the pause and hold requests made since the last call
+	asked := func() (pauses, holds []bool) {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.GamePausePayload); ok {
+				switch ev.Type {
+				case event.EventGamePauseRequest:
+					pauses = append(pauses, p.Paused)
+				case event.EventGameHoldRequest:
+					holds = append(holds, p.Paused)
+				}
+			}
+		}
+		return pauses, holds
+	}
+
+	key(terminal.KeyRune, 'd')
+	key(terminal.KeyEscape, 0)
+	if configMenu(ctx) != nil || !ctx.IsNormalMode() {
+		t.Fatal("Escape over a pending d opened the menu")
+	}
+	ctx.TimeCtl.SetHeld(true) // as p leaves the game
+	asked()
+	key(terminal.KeyEscape, 0)
+	if pauses, holds := asked(); configMenu(ctx) == nil || !slices.Equal(pauses, []bool{true}) || len(holds) != 0 {
+		t.Fatalf("Escape in Normal: menu %v, pauses asked %v, holds asked %v", configMenu(ctx) != nil, pauses, holds)
+	}
+	key(terminal.KeyEscape, 0)
+	if pauses, holds := asked(); configMenu(ctx) != nil || !ctx.IsNormalMode() || !slices.Equal(pauses, []bool{false}) || len(holds) != 0 {
+		t.Fatalf("Escape in the menu: menu %v, pauses asked %v, holds asked %v", configMenu(ctx) != nil, pauses, holds)
+	}
+}
+
 func TestConfigMenuKeyCanBeRemapped(t *testing.T) {
 	custom, err := input.LoadKeyConfig([]byte("[normal_keys]\nctrl_g = \"none\"\nf2 = \"config_menu\"\n"))
 	if err != nil {

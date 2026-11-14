@@ -162,11 +162,12 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 }
 
 // toggles reports an intent that flips a state each time it acts, so a held key's
-// repeats would leave it wherever the release caught it
+// repeats would leave it wherever the release caught it. Escape and an overlay's
+// close are among them: Escape in Normal opens the menu they close.
 func (i *Intent) toggles() bool {
 	switch i.Type {
 	case IntentToggleAudioCycle, IntentToggleAutoFire, IntentPause, IntentConfigMenu, IntentHelp,
-		IntentMacroRecordToggle, IntentOverlayActivate:
+		IntentMacroRecordToggle, IntentOverlayActivate, IntentEscape, IntentOverlayClose:
 		return true
 	case IntentModeSwitch:
 		return i.ModeTarget == ModeTargetVisual

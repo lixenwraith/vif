@@ -102,7 +102,7 @@ stateDiagram-v2
     Normal --> Visual: v
     Normal --> Search: slash
     Normal --> Command: colon
-    Normal --> Overlay: Ctrl-G, F10, F1
+    Normal --> Overlay: Ctrl-G, F10, F1, Escape
     Insert --> Normal: Escape
     Visual --> Normal: Escape or v
     Search --> Normal: confirm or Escape
@@ -120,9 +120,10 @@ stateDiagram-v2
 | Command | Edit and execute a colon command with history. | Pauses a single-instance game unless `[play] pause_command` is off; a live network session continues. |
 | Overlay | Navigate help, about, telemetry, the profiler report or the [menu](config-menu.md); `/` filters telemetry cards and searches the menu. | Pauses a single-instance game unless `[play] pause_menu` is off; a live network session continues. |
 
-Escape in Normal cancels a pending key sequence, or with none pending flashes the
-ping grid; from any other mode it returns to Normal, and in the configuration menu
-it goes back one level, as Android's Back does in the menu the app draws. The router unpauses before it runs a command: an overlay
+Escape in Normal cancels a pending key sequence, or with none pending opens the
+configuration menu as Ctrl-G does, and a held Escape acts once; from any other
+mode it returns to Normal, and in the configuration menu it goes back one level,
+as Android's Back does in the menu the app draws. The router unpauses before it runs a command: an overlay
 command (`:help`, `:t`, `:g`) requests the pause again, and a reset pauses until the
 scheduler has rebuilt the run. `MetaSystem` refuses a pause in a live session unless
 every other participant is one of this run's bots (§9), which leaves Command and
@@ -156,8 +157,8 @@ Ctrl or Alt, or a left or right click with the mouse on, off the status bar. Its
 keys go down the same pipe as a held game's, so the operator's work over the wait
 as over the hold and seat nobody: `:` opens the command line on the status bar,
 Ctrl+G the configuration menu, F1 help, Ctrl+S cycles the audio, Escape closes what
-is open, and Ctrl-C, Ctrl-Q or `:q` leaves; Tab and the other function keys do
-nothing there (`Router.Operates`, `App.joinPressed`;
+is open or, with nothing open, opens the menu, and Ctrl-C, Ctrl-Q or `:q` leaves;
+Tab and the other function keys do nothing there (`Router.Operates`, `App.joinPressed`;
 [Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity)).
 
 ## 3. Normal-mode grammar
@@ -196,10 +197,10 @@ cell shows the keys of a pending sequence, else the last one completed.
 |---|---|
 | `Ctrl-Q`, `Ctrl-C` | Quit, from any mode; `[overlay_keys]` binds them too. |
 | `Ctrl-S` | Cycle audio mute state, from any mode. |
-| `Ctrl-G`, `F10` | Open or close the [configuration menu](config-menu.md), from any mode; a left press held on the status bar opens it too (§7). |
+| `Ctrl-G`, `F10` | Open or close the [configuration menu](config-menu.md), from any mode; Escape in Normal and a left press held on the status bar open it too (§7). |
 | `F1` | Open or close help, from any mode; over another overlay it takes that one's place. |
 | `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
-| `Esc` | Cancel pending input, flash the ping grid in Normal, or return to Normal (§2). |
+| `Esc` | Cancel pending input; in Normal with none, open the [configuration menu](config-menu.md); elsewhere return to Normal (§2). |
 | Arrow keys, `Home`, `End` | Move in the applicable mode. |
 | `Tab` | Jump to the active nugget. |
 | `Shift-Tab` | Jump to the first remaining gold character. |
@@ -266,9 +267,10 @@ entries. These are session interaction structures, not persisted editor files.
 
 Macros record semantic intents after parsing, so they replay the same actions
 even when they contain multi-key motions. Command and Overlay mode stay out of a
-recording, the `:`, menu or help key that enters them included, and so does an
-overlay's pointer, which Search mode hands the overlay too: playback waits in
-both, so a macro replays Normal, Insert, Visual and Search actions only.
+recording, the `:`, menu or help key that enters them included (Escape in Normal
+among them), and so does an overlay's pointer, which Search mode hands the
+overlay too: playback waits in both, so a macro replays Normal, Insert, Visual
+and Search actions only.
 
 | Sequence | Behavior |
 |---|---|

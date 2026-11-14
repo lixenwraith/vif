@@ -275,9 +275,10 @@ the [play] settings; a flag given on the command line wins.
 	}
 	fmt.Fprint(w, `.fi
 .SH IN-GAME MENU
-Ctrl-G or F10, :menu (:g, :config) or a press held on the status bar opens the
-menu, and F1 or :help the help. Select a page or row with Up/Down or j/k; section
-titles are skipped. Left/Right or h/l changes values; Enter/Space chooses. A press
+Ctrl-G or F10, Escape in normal mode, :menu (:g, :config) or a press held on the
+status bar opens the menu, and F1 or :help the help. Select a page or row with
+Up/Down or j/k; section titles are skipped. Left/Right or h/l changes values;
+Enter/Space chooses. A press
 selects a row, and on the selected row acts as Enter. / searches every page: the
 rows matching all the words typed list with their page and act in place; Enter
 keeps the search and Escape clears it. Escape or q returns to the pages, then

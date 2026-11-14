@@ -75,7 +75,8 @@ func TestOnlyACapturedKeyReleases(t *testing.T) {
 }
 
 // TestAToggleActsOncePerPress: a held toggle's repeats are nothing, in the mode its
-// press opened too, while the same key's repeat that types still types.
+// press opened too, Escape's among them, while the same key's repeat that types
+// still types.
 func TestAToggleActsOncePerPress(t *testing.T) {
 	m := NewMachine()
 	key := func(k terminal.Key, r rune, action terminal.KeyAction) *Intent {
@@ -94,6 +95,13 @@ func TestAToggleActsOncePerPress(t *testing.T) {
 	m.SetMode(ModeOverlay)
 	if in := key(terminal.KeyCtrlG, 0, terminal.KeyRepeat); in != nil {
 		t.Fatalf("Ctrl+G repeat over the menu it opened = %+v, want nothing", in)
+	}
+	if in := key(terminal.KeyEscape, 0, terminal.KeyRepeat); in != nil {
+		t.Fatalf("Esc repeat over the menu Esc opens in Normal = %+v, want nothing", in)
+	}
+	m.SetMode(ModeNormal)
+	if in := key(terminal.KeyEscape, 0, terminal.KeyRepeat); in != nil {
+		t.Fatalf("Esc repeat in Normal = %+v, want nothing", in)
 	}
 	m.SetMode(ModeInsert)
 	if in := key(terminal.KeyRune, 'a', terminal.KeyRepeat); in == nil || in.Type != IntentTextChar {

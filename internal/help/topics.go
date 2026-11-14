@@ -11,7 +11,7 @@ var topics = []topicDef{
 		Key: "general", Title: "GENERAL",
 		Entries: []entryDef{
 			{Keys: "[count]", Desc: "Repeat the next motion or operator, e.g. 3w or d2j"},
-			{Actions: []string{"escape"}, Desc: "Return to NORMAL; already in NORMAL, flash the ping grid"},
+			{Actions: []string{"escape"}, Desc: "Return to NORMAL; already in NORMAL, open the menu"},
 			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio: music and effects, music only, effects only, silent"},
 			{Actions: []string{"help"}, Desc: "Open or close this help, from any mode"},
 			{Actions: []string{"config_menu"}, Desc: "Open or close the menu, from any mode"},

@@ -1,7 +1,7 @@
 # Menu
 
-Press **Ctrl-G** or **F10**, hold a left press (a finger) on the status bar, or
-enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
+Press **Ctrl-G**, **F10** or, in Normal mode, **Escape**, hold a left press (a
+finger) on the status bar, or enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
 regions that defines a game; a **game** is a scenario running in the engine. The
 Settings page, Relay for others and Visible on this network are `vif.toml`'s
 `[play]`: a run writes them
@@ -209,7 +209,8 @@ they are how a game is paused from the keyboard.
 
 The `config_menu` action is bound to `ctrl_g` and `f10` in `normal_keys`,
 `text_keys` and `overlay_keys`, and `pause` to `p` in `normal`, in
-`input/keymap.toml`. Override those sections (or use `-k`) to add or change keys;
+`input/keymap.toml`; the `escape` action opens the menu from Normal mode with no
+key pending. Override those sections (or use `-k`) to add or change keys;
 `:menu` remains available. Forms and text boxes use the text-key bindings, while
 menu navigation uses overlay bindings.
 

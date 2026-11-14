@@ -91,7 +91,7 @@ See it live at: [Lixen](https://lixen.com/vif)
 
 Each new game waits for a key or click to start it, and a join for one to take
 your place in the session (`-nw` skips both). `F1` (or `:help`) lists the keys,
-`Ctrl-G` or `F10` (or `:g`) opens the [configuration menu](doc/config-menu.md),
+`Ctrl-G`, `F10` or `Esc` in Normal mode (or `:g`) opens the [configuration menu](doc/config-menu.md),
 and `:q` quits. Sound is on: `Ctrl-S` cycles through the channels, and `-mute`
 starts muted. A flag sets its value for that run only. `vif.toml` holds every
 run's defaults, and the menu writes its sound, controls, HUD, relay and Wait to
