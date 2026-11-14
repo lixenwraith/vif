@@ -252,7 +252,8 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 			guest.world.forked, len(guest.world.forkedAs))
 	}
 
-	// A pinned guest walks to nobody; the one wait it has is its redial of the host.
+	// A pinned guest walks to nobody; the one wait it has is its redial of the host,
+	// which reads as the host lost rather than as a migration.
 	redialing := newRun(t, 2, nil, roster(2))
 	redialing.world.redial = true
 	redialing.u.Open(network.SessionOffer{
@@ -261,6 +262,9 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	redialing.u.peerLost(1)
 	if redialing.u.State().Fork || !redialing.world.frozen {
 		t.Fatal("a pinned guest forked, or played on, before its redial ended")
+	}
+	if redialing.reg.Bools.Get("network.migrating").Load() {
+		t.Fatal("a pinned guest's redial reads as a migration")
 	}
 	redialing.u.RedialRefused(1)
 	redialing.u.drive()

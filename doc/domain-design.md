@@ -654,10 +654,10 @@ qualifier shows, worst first:
 
 Three states replace the badge, in this order: `Host lost` (this guest lost its
 link to the authority or continues as a local fork, until a handoff is adopted),
-`Migrating [k]` (a succession is open or a handoff was just adopted, k passes down
-the succession list so far), and `Net: down` or `Net: wait` while the link is down
-or still connecting. The measurements behind each are in the status snapshot and in
-`:session`.
+`Migrating [k]` (a succession is open in a session that migrates or a handoff was
+just adopted, k passes down the succession list so far), and `Net: down` or `Net:
+wait` while the link is down or still connecting. The measurements behind each are
+in the status snapshot and in `:session`.
 
 ### 4.4 Membership and session control
 

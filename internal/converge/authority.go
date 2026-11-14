@@ -603,7 +603,7 @@ func (u *Authority) beginSuccession(lost link.PeerID) {
 	if !fixed || redial {
 		u.inst.Freeze()
 	}
-	u.statMigrating.Store(true)
+	u.statMigrating.Store(!fixed) // a pinned session reads Host lost while it redials
 	u.log.Warn("session", "msg", "authority lost; walking the succession list",
 		"peer", uint64(lost), "term", uint64(held), "local", uint64(local), "redial", redial)
 	u.sendReport()

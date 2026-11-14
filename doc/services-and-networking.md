@@ -894,8 +894,8 @@ local continuation rather than part of a session; `network.host_lost`, raised wh
 a guest loses its link to the authority or a succession ends as a fork, which draws
 `Host lost` while no succession is open; both clear once a handoff is adopted or the
 run opens a session of its own; and
-`network.migrating`, which draws `Migrating` over it while a succession is open and
-for `NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
+`network.migrating`, which draws `Migrating` over it while a succession is open in a
+session that migrates and for `NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
 `network.rejoin_attempts` beside it while a survivor with no link is walking the
 succession list. `:session` prints the term, the authority when it is somebody
 else, the handoff count once there has been one, a succession in progress, the
