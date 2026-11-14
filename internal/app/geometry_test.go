@@ -928,3 +928,34 @@ func TestAHostDrawingTheMenuIsHandedItAsItChanges(t *testing.T) {
 		t.Fatal("the loop did not end on the closed event")
 	}
 }
+
+// TestAPageClosingItsMenuAsItsPlayerLeavesKeepsTheGamePaused: a page closes its menu
+// on the way to its start screen, the close queued ahead of the away. The close is
+// taken first, so the menu's pause ends before the away pauses the solo game, which
+// waits behind the screen and goes on when its player comes back.
+func TestAPageClosingItsMenuAsItsPlayerLeavesKeepsTheGamePaused(t *testing.T) {
+	// Not parallel: an interactive run is built on a presentation of its own.
+	screen := &menuScreen{awayScreen: awayScreen{framePresentation: framePresentation{w: 80, h: 24},
+		away: make(chan bool, 1), events: make(chan terminal.Event, 1)}, ops: make(chan mode.MenuOp, 1)}
+	a, err := newApp(runConfig{Config: Config{Mode: ModePlay, Resources: resource.Options{Embedded: true}, Seed: 0x5748},
+		host: Host{Presentation: screen}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	a.takeEvent(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape}) // Escape in Normal: the menu
+	if !a.ctx.IsOverlayActive() || !a.ctx.TimeCtl.IsPaused() {
+		t.Fatalf("after Escape the menu is open %v, the game paused %v; want both", a.ctx.IsOverlayActive(), a.ctx.TimeCtl.IsPaused())
+	}
+
+	screen.ops <- mode.MenuOp{Op: "close"}
+	a.takeAway(true, screen.ops)
+	if a.ctx.IsOverlayActive() || !a.ctx.TimeCtl.IsPaused() || !a.awayPaused {
+		t.Fatalf("away: the menu is open %v, the game paused %v by the away %v; want it closed and the game paused by the away",
+			a.ctx.IsOverlayActive(), a.ctx.TimeCtl.IsPaused(), a.awayPaused)
+	}
+	a.takeAway(false, screen.ops)
+	if a.ctx.TimeCtl.IsPaused() {
+		t.Fatal("the game stayed paused once its player came back")
+	}
+}

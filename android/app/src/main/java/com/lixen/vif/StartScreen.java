@@ -33,7 +33,7 @@ final class StartScreen extends FrameLayout {
             {"Drag", "Drag the cursor with your finger"},
             {"Double tap", "Fire the special weapon as well"},
             {"Pinch", "Zoom in or out; the zoom is kept for next time"},
-            {"Back", "Escape; twice quickly, leave with the game paused"},
+            {"Back", "Escape: open or close the menu, or leave a mode"},
     };
     private static final String BAR_TITLE = "Status bar";
     private static final String BAR = "The strip along the bottom edge of the screen: the mode, messages and what you type.";

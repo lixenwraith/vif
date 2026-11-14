@@ -220,11 +220,13 @@ stay one mechanism. The `vif_headless` profile builds without it.
   sheet; the sheets are nested `<dialog>`s. Every browser draws it, touch or not,
   so each host has one look. Rows are keyed by id and rewritten in place, as on
   Android, and the search field under the title lists the rows found.
-- Back and Escape take the innermost sheet, then a search, then send `close`; a
-  browser that closes the window on Escape regardless has the run told, so no menu
-  stands unseen. `j`/`k`, `h`/`l`, `/`, `q`, Ctrl-G, F10 and F1 work as in §7. The
-  browser's Back button is the game's Escape, as it was, which the run answers by
-  clearing the search or closing the menu.
+- Back and Escape take the innermost sheet, then a search, then send `close`, and
+  a held Escape acts once; a browser that closes the window on Escape regardless has
+  the run told, so no menu stands unseen. `j`/`k`, `h`/`l`, `/`, `q`, Ctrl-G, F10
+  and F1 work as in §7. The browser's Back button is the game's Escape, as it was,
+  which the run answers by clearing the search or closing the menu, and from Normal
+  mode by opening it. The Back that brings the start screen back closes the menu
+  first, its `close` sent ahead of the away, which the run takes after it.
 
 ## 9. Verification
 

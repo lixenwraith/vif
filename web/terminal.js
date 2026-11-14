@@ -1307,9 +1307,10 @@ void main() {
     }
 
     // === Back ===
-    /* Back is the game's Escape, as on Android, and a second back the start screen
-       again, over the game kept as it was: a solo game waits for its player (away,
-       as Android's app in the background), a shared one goes on. A tap or key there
+    /* Back is the game's Escape, as on Android, which in Normal opens the menu, and
+       a second back the start screen again, over the game kept as it was, the menu
+       closed on the way: a solo game waits for its player (away, as Android's app in
+       the background), a shared one goes on. A tap or key there
        returns to it; Reload, and for a joined game Play solo and its link, are at
        hand, since some browsers keep this page from being pulled down to reload.
        From there back leaves the page as it would have. A browser passes over
@@ -1344,6 +1345,12 @@ void main() {
 
     function showAway() {
         away = true;
+        // Its close goes before the away, which the run takes after it, so the pause
+        // the menu held is the away's and not ended behind the screen
+        if (menuJSON) {
+            closeMenu();
+            menuOp('close', '', '');
+        }
         lost();
         send({ type: 'blur' });
         send({ type: 'away', away: true });
@@ -1868,12 +1875,13 @@ void main() {
         }
     }
 
-    // closeMenu is the run's word that the menu closed: the window goes, whatever is up with it
+    // closeMenu is the run's word that the menu closed: the window goes, whatever is up
+    // with it, and the keys go back to the game unless its player is away from it
     function closeMenu() {
         menuJSON = '';
         closeSheet();
         if (config.open) config.close();
-        focus();
+        if (!away) focus();
     }
 
     function rowOf(el) {
@@ -1890,6 +1898,11 @@ void main() {
             ev.preventDefault();
             back();
         });
+        // A held Escape acts once, as in the run: its repeats would close what its press
+        // left open, the menu it opened or the one under a sheet it closed
+        document.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Escape' && ev.repeat && (config.open || sheet)) ev.preventDefault();
+        }, true);
         config.addEventListener('close', function() {
             if (menuJSON) {
                 menuJSON = '';

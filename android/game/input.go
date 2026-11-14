@@ -15,7 +15,7 @@ const (
 )
 
 // androidKeys maps Android key codes to the keys a terminal reports for them; Back
-// is Escape, the key that leaves a mode
+// is Escape, the key that leaves a mode and in Normal opens the menu
 var androidKeys = map[int32]terminal.Key{
 	4:   terminal.KeyEscape, // KEYCODE_BACK
 	111: terminal.KeyEscape,

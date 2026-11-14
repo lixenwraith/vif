@@ -68,7 +68,9 @@ differences are the host's:
   status bar's line, a refusal included, shows at the menu's foot while it is up.
 - Back closes the innermost of a confirm, a list and a sheet, then clears a search,
   then closes the menu; so does a tap outside the window, and Escape in a browser.
-  × closes it.
+  × closes it. Outside the menu Back is the game's Escape, so from Normal mode it
+  opens the menu; a browser's second Back shows the page's start screen, closing
+  the menu on the way.
 - A hardware keyboard works as in the overlay, except in a field being typed in:
   `j`/`k` move, `h`/`l` change the focused row, `/` finds the search field, `q` and
   Escape go back, and Ctrl-G, F10 and F1 close the menu or open help over it.

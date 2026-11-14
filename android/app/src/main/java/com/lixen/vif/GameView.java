@@ -350,7 +350,9 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     @Override
     public boolean onKeyDown(int code, KeyEvent e) {
         if (code == KeyEvent.KEYCODE_BACK && android.os.Build.VERSION.SDK_INT < 33) {
-            activity.back();
+            if (e.getRepeatCount() == 0) {
+                activity.back(); // once a press: Escape opens the menu its repeats would close
+            }
             return true;
         }
         if (pasteKey(code, e)) {
