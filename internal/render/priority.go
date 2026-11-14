@@ -6,7 +6,6 @@ type RenderPriority int
 const (
 	// === Background Layer ===
 	PriorityBackground RenderPriority = iota
-	PriorityGrid
 	PriorityPing
 
 	// === Environment ===

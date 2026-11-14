@@ -625,6 +625,15 @@ Branches.
   rows is the finger that opens the menu; `page.keyboard.press('Control+g')` is
   the desktop's. `pkg/browser`'s tests run under node with
   `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"`.
+- An init script wrapping `window.Worker` hears the worker's `atlas` and `frame`
+  messages before the page does: the atlas's runes, read as `runesOf` reads them,
+  and each frame's cell slots, kept as `applyFrame` keeps them, give the screen's
+  text. The status bar is two rows, its items (`PAUSED` for a hold, `GT:` the tick)
+  above its line; a menu's or an away's pause shows nothing there, but the map
+  cells changed over a second tell a running game from a paused one, and the first
+  frame after a return against the last before it tells whether the game ran
+  while away. `page.goBack({ waitUntil: 'commit' })` is the Back button, landing
+  on the entries the page pushes in a gesture, which a key `press` in the game is.
 
 ## Measuring
 
@@ -768,6 +777,9 @@ Branches.
 - A shipped scenario written in a form an older build's expander refuses takes
   the next `network.ProtocolVersion`: a joiner is sent the scenario's files and
   expands them itself, so the older build is refused at the door instead.
+- A system the manifest drops leaves every `only_systems` that names it, which
+  `-check` and `internal/resource`'s systems test refuse as unknown: search
+  `wad/scenario/` for its name (`vimtutor` lists its systems one by one).
 
 ## Corpus
 

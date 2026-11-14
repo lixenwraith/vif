@@ -14,7 +14,6 @@ func BuildSystems(w *engine.World) []engine.System {
 	systems := []engine.System{
 		system.NewNetworkSystem(w),
 		system.NewCursorSystem(w),
-		system.NewPingSystem(w),
 		system.NewTransientSystem(w),
 		system.NewCameraSystem(w),
 		system.NewEnergySystem(w),
@@ -72,7 +71,6 @@ func ActiveSystems() []string {
 	systems := []string{
 		"network",
 		"cursor",
-		"ping",
 		"transient",
 		"camera",
 		"energy",
@@ -130,7 +128,6 @@ func ActiveSystems() []string {
 var systemProfiles = map[string]engine.SystemProfile{
 	"network":        {Domain: engine.SystemDual, Requires: engine.Require("cursor")},
 	"cursor":         {Domain: engine.SystemShared, Requires: nil},
-	"ping":           {Domain: engine.SystemPlayer, Requires: engine.Require("cursor")},
 	"transient":      {Domain: engine.SystemPlayer, Requires: nil},
 	"camera":         {Domain: engine.SystemPlayer, Requires: engine.Require("cursor")},
 	"energy":         {Domain: engine.SystemPlayer, Requires: engine.Require("cursor")},
@@ -192,7 +189,6 @@ var systemProfiles = map[string]engine.SystemProfile{
 var systemSnapshots = map[string]engine.SnapshotProfile{
 	"network":        engine.SnapshotNone,
 	"cursor":         engine.SnapshotNone,
-	"ping":           engine.SnapshotNone,
 	"transient":      engine.SnapshotNone,
 	"camera":         engine.SnapshotNone,
 	"energy":         engine.SnapshotNone,

@@ -252,7 +252,7 @@ Renderers call `SetWriteMask` before drawing. Current mask categories are:
 
 | Mask | Content |
 |---|---|
-| `MaskPing` | Cursor crosshair/grid guidance. |
+| `MaskPing` | Cursor crosshair guidance. |
 | `MaskGlyph` | Normal typeable text. |
 | `MaskField` | Shield/ember and related fields. |
 | `MaskTransient` | Projectiles, particles, materialization, lines, sigils. |

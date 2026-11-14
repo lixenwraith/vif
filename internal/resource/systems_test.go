@@ -94,7 +94,7 @@ func TestCheckSystemsAcceptsDependentDisabledToo(t *testing.T) {
 	m := loadSystemsConfig(t, `
 [regions.main]
 initial = "Root"
-disabled_systems = ["cursor","camera","energy","heat","ping","shield","boost","weapon","typing","splash","motion_marker","missile","network"]
+disabled_systems = ["cursor","camera","energy","heat","shield","boost","weapon","typing","splash","motion_marker","missile","network"]
 `)
 	if err := checkSystems(m); err != nil {
 		t.Fatalf("checkSystems rejected a self-consistent disable set: %v", err)

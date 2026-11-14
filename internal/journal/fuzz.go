@@ -300,10 +300,12 @@ func (d *FuzzDriver) actType() bool {
 	return d.a.Inject(&input.Intent{Type: input.IntentTextChar, Char: d.char(), Count: 1})
 }
 
-// actMode switches mode, or leaves the current one with Escape
+// actMode switches mode, or enters Insert and leaves it with Escape, which in Normal
+// would open the menu instead
 func (d *FuzzDriver) actMode() bool {
 	if d.rng.Intn(4) == 0 {
-		return d.a.Inject(&input.Intent{Type: input.IntentEscape, Count: 1})
+		return d.a.Inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetInsert, Count: 1},
+			&input.Intent{Type: input.IntentEscape, Count: 1})
 	}
 	return d.a.Inject(&input.Intent{
 		Type:       input.IntentModeSwitch,
@@ -353,9 +355,9 @@ func (d *FuzzDriver) actOverlay() bool {
 	return d.a.Inject(&input.Intent{Type: input.IntentOverlayClose, Count: 1})
 }
 
-// actSearch enters search mode, types a short pattern and confirms it
+// actSearch enters search mode from Normal, types a short pattern and confirms it
 func (d *FuzzDriver) actSearch() bool {
-	if !d.a.Inject(&input.Intent{Type: input.IntentEscape, Count: 1}) ||
+	if !d.a.Inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetNormal, Count: 1}) ||
 		!d.a.Inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetSearch, Count: 1}) {
 		return false
 	}

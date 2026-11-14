@@ -28,7 +28,7 @@ func TestNoRegisteredRendererDrawsOutsideTheMap(t *testing.T) {
 	cursor := world.CreateEntity(core.DomainShared)
 	world.Components.Cursor.SetComponent(cursor, component.CursorComponent{})
 	world.Positions.SetPosition(cursor, component.PositionComponent{X: cfg.MapWidth / 2, Y: cfg.MapHeight / 2})
-	world.Components.Ping.SetComponent(cursor, component.PingComponent{ShowCrosshair: true, GridActive: true})
+	world.Components.Ping.SetComponent(cursor, component.PingComponent{ShowCrosshair: true})
 	world.Resources.Player.Bind(0, cursor)
 	world.Resources.Player.SetLocal(0)
 

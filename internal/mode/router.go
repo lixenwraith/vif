@@ -402,12 +402,7 @@ func (r *Router) handleEscape() bool {
 		}
 		r.ctx.SetPaused(false)
 	case core.ModeNormal:
-		// ESC in Normal mode triggers ping grid, no mode change
-		r.ctx.PushLocal(event.EventPingGridRequest, &event.PingGridRequestPayload{
-			Entity:   r.ctx.World.Resources.Player.Entity,
-			Duration: parameter.PingGridDuration,
-		})
-		return true
+		return r.handleConfigMenu() // Escape with nothing pending is a menu key here
 	}
 
 	// Return to Normal mode via centralized transition
@@ -1600,6 +1595,8 @@ func (r *Router) suspendsPlayback(intent *input.Intent) bool {
 	switch intent.Type {
 	case input.IntentConfigMenu, input.IntentHelp, input.IntentOverlayPoint, input.IntentOverlayDrag, input.IntentOverlayWheel:
 		return true
+	case input.IntentEscape:
+		return r.ctx.IsNormalMode()
 	}
 	return intent.Type == input.IntentModeSwitch && intent.ModeTarget == input.ModeTargetCommand
 }

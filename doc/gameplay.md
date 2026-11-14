@@ -55,7 +55,7 @@ template applied to every admitted cursor, not only slot zero.
 | Boost | Timed reward from correct typing or credited kills that protects ordinary energy penalties and accelerates heat gain. |
 | Shield | Elliptical defensive/collection area active whenever energy is nonzero. |
 | Weapon | Charge counts, orbiting indicators, and independent cooldowns per weapon kind; see [Combat and weapons](combat.md). |
-| Ping | Crosshair, selection/grid feedback, and cursor movement visuals. |
+| Ping | Crosshair, and the bounds Visual mode moves within while the shield is active. |
 | Combat | Player ownership/type and hit-point metadata used by the combat matrix. |
 
 Cursor entities cannot be destroyed through ordinary gameplay because their
@@ -740,7 +740,7 @@ declares for itself:
 | Group | Systems |
 |---|---|
 | Transport | `network` |
-| Frame/player | `cursor`, `ping`, `transient`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
+| Frame/player | `cursor`, `transient`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
 | Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `particle`, `gold` |
 | Spawning/effects | `materialize`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/environment/combat | `navigation`, `soft_collision`, `environment`, `combat` |

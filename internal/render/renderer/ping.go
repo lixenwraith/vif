@@ -11,7 +11,8 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// PingRenderer draws cursor row/column highlights and optional grid lines
+// PingRenderer draws the local cursor's crosshair: the rows and columns its ping
+// bounds cover, across the map
 type PingRenderer struct {
 	gameCtx *engine.GameContext
 
@@ -29,41 +30,21 @@ func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 	}
 }
 
-// Render draws the ping highlights and grid
+// Render draws the crosshair, sparing the cells a shield covers
 func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
 	pingComp, ok := r.gameCtx.World.Components.Ping.GetPtr(r.gameCtx.World.Resources.Player.Entity)
-	if !ok {
-		return
-	}
-
-	// Early exit if nothing to draw
-	if !pingComp.ShowCrosshair && !pingComp.GridActive {
+	if !ok || !pingComp.ShowCrosshair {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskPing)
-
-	// 1. Compute shield exclusion mask sized to viewport
 	r.computeExclusionMask(r.gameCtx.World, ctx)
-	// Get cursor position in viewport coordinates
-	cursorVX, cursorVY := ctx.CursorViewportPos()
 
-	// 2. Draw Crosshair (Row/Column Highlights)
-	if pingComp.ShowCrosshair {
-		var lineColor color.RGB
-		if r.gameCtx.IsInsertMode() {
-			lineColor = visual.RgbPingHighlight
-		} else {
-			lineColor = visual.RgbPingLineNormal
-		}
-		r.drawCrosshair(ctx, buf, cursorVX, cursorVY, lineColor)
+	lineColor := visual.RgbPingLineNormal
+	if r.gameCtx.IsInsertMode() {
+		lineColor = visual.RgbPingHighlight
 	}
-
-	// 3. Draw Grid Lines
-	if pingComp.GridActive {
-		r.drawGrid(ctx, buf, cursorVX, cursorVY, visual.RgbPingGridNormal)
-	}
+	r.drawCrosshair(ctx, buf, lineColor)
 }
 
 // computeExclusionMask builds a 1-bit mask of all active shields in viewport space
@@ -159,7 +140,7 @@ func (r *PingRenderer) isExcluded(vx, vy int) bool {
 // drawCrosshair draws the crosshair lines in viewport space, spanning the map
 // rather than the viewport: on a terminal wider than the map the two differ, and
 // a line crossing the centring margin is a line drawn outside the world
-func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, c color.RGB) {
+func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, c color.RGB) {
 	pf := ctx.PlayfieldViewportRect()
 	if pf.Empty() {
 		return
@@ -197,79 +178,6 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 			if !r.isExcluded(vx, vy) {
 				buf.Set(screenX, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
-		}
-	}
-}
-
-// drawGrid draws the 5-cell grid in viewport space, bounded by the visible map
-func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, c color.RGB) {
-	pf := ctx.PlayfieldViewportRect()
-	if pf.Empty() {
-		return
-	}
-
-	drawColumn := func(vx int) {
-		for vy := pf.Y0; vy < pf.Y1; vy++ {
-			if !r.isExcluded(vx, vy) {
-				buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
-			}
-		}
-	}
-	drawRow := func(vy int) {
-		for vx := pf.X0; vx < pf.X1; vx++ {
-			if !r.isExcluded(vx, vy) {
-				buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
-			}
-		}
-	}
-
-	// Vertical lines at ±5, ±10, etc. from cursor
-	for n := 1; ; n++ {
-		offset := 5 * n
-		colRight := cursorVX + offset
-		colLeft := cursorVX - offset
-		inBounds := false
-
-		if colRight < pf.X1 {
-			inBounds = true
-			if colRight >= pf.X0 {
-				drawColumn(colRight)
-			}
-		}
-		if colLeft >= pf.X0 {
-			inBounds = true
-			if colLeft < pf.X1 {
-				drawColumn(colLeft)
-			}
-		}
-
-		if !inBounds {
-			break
-		}
-	}
-
-	// Horizontal lines at ±5, ±10, etc. from cursor
-	for n := 1; ; n++ {
-		offset := 5 * n
-		rowDown := cursorVY + offset
-		rowUp := cursorVY - offset
-		inBounds := false
-
-		if rowDown < pf.Y1 {
-			inBounds = true
-			if rowDown >= pf.Y0 {
-				drawRow(rowDown)
-			}
-		}
-		if rowUp >= pf.Y0 {
-			inBounds = true
-			if rowUp < pf.Y1 {
-				drawRow(rowUp)
-			}
-		}
-
-		if !inBounds {
-			break
 		}
 	}
 }

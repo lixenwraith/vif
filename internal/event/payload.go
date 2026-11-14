@@ -685,14 +685,6 @@ type GlyphReplaceRequestPayload struct {
 	Char   rune `toml:"char"`
 }
 
-// --- Ping ---
-
-// PingGridRequestPayload carries configuration for the ping grid activation
-type PingGridRequestPayload struct {
-	Entity   core.Entity   `toml:"entity"`
-	Duration time.Duration `toml:"duration"`
-}
-
 // --- Materialize ---
 
 // MaterializeRequestPayload starts a materialize over a body's footprint with its

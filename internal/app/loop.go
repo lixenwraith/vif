@@ -284,7 +284,7 @@ func (a *App) Loop() (*restartRequest, error) {
 			}
 
 		case away = <-awayChan:
-			a.setAway(away)
+			a.takeAway(away, menuOps)
 			if away {
 				sleep()
 			} else {
@@ -430,6 +430,22 @@ func (a *App) handleResize(width, height int) {
 	if a.cfg.Mode.OwnsGeometry() {
 		a.seatScreen.Store(&screen{a.ctx.Width, a.ctx.Height})
 	}
+}
+
+// takeAway takes the player's leaving or return after the menu ops their host
+// queued before it, in the order it sent them. A page closes its menu on the way to
+// its start screen, and that close taken after the away would end the pause the away
+// found standing, leaving a solo game running behind the screen.
+func (a *App) takeAway(away bool, ops <-chan mode.MenuOp) {
+	for queued := true; queued; {
+		select {
+		case op := <-ops:
+			a.menuOp(op)
+		default:
+			queued = false
+		}
+	}
+	a.setAway(away)
 }
 
 // setAway pauses a solo run while its player is away and resumes it on return; a

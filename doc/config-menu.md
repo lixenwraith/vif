@@ -1,7 +1,7 @@
 # Menu
 
-Press **Ctrl-G** or **F10**, hold a left press (a finger) on the status bar, or
-enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
+Press **Ctrl-G**, **F10** or, in Normal mode, **Escape**, hold a left press (a
+finger) on the status bar, or enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
 regions that defines a game; a **game** is a scenario running in the engine. The
 Settings page, Relay for others and Visible on this network are `vif.toml`'s
 `[play]`: a run writes them
@@ -68,7 +68,9 @@ differences are the host's:
   status bar's line, a refusal included, shows at the menu's foot while it is up.
 - Back closes the innermost of a confirm, a list and a sheet, then clears a search,
   then closes the menu; so does a tap outside the window, and Escape in a browser.
-  × closes it.
+  × closes it. Outside the menu Back is the game's Escape, so from Normal mode it
+  opens the menu; a browser's second Back shows the page's start screen, closing
+  the menu on the way.
 - A hardware keyboard works as in the overlay, except in a field being typed in:
   `j`/`k` move, `h`/`l` change the focused row, `/` finds the search field, `q` and
   Escape go back, and Ctrl-G, F10 and F1 close the menu or open help over it.
@@ -209,7 +211,8 @@ they are how a game is paused from the keyboard.
 
 The `config_menu` action is bound to `ctrl_g` and `f10` in `normal_keys`,
 `text_keys` and `overlay_keys`, and `pause` to `p` in `normal`, in
-`input/keymap.toml`. Override those sections (or use `-k`) to add or change keys;
+`input/keymap.toml`; the `escape` action opens the menu from Normal mode with no
+key pending. Override those sections (or use `-k`) to add or change keys;
 `:menu` remains available. Forms and text boxes use the text-key bindings, while
 menu navigation uses overlay bindings.
 
