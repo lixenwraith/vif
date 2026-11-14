@@ -61,7 +61,7 @@ type Kraken struct {
 
 	// Tuning Controls
 	BodyRadius   float64
-	BodyProfile  float64 // 0: Dome, 1: Void, 2: Dark Core, 3: Lava Lamp
+	BodyProfile  float64 // 0: Lit Dome, 1: Void Hole, 2: Dark Core, 3: Plasma
 	LegLength    float64
 	LegThickness float64
 	AttackReach  float64
@@ -407,7 +407,7 @@ func renderKrakenBody(k *Kraken, cells []terminal.Cell, w, h int) {
 			case 2: // Dark Core
 				litColor = color.RGB{R: 8, G: 4, B: 12} // Very dark purple/black
 
-			case 3: // Lava Lamp
+			case 3: // Plasma
 				px := dx * 3.5
 				py := dy * 3.5
 				pattern := math.Sin(px+k.Time*1.5)*math.Cos(py-k.Time*1.1) + math.Sin((px+py)*1.8+k.Time*0.8)
