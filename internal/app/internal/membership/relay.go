@@ -166,9 +166,9 @@ func (m *Membership) relayPreview(local link.PeerID) (network.SessionOffer, erro
 	defer m.sessionMu.Unlock()
 	o := m.offerLocked(anchor, 0)
 	// What the authority's offers say, which this run's own carried: it does not
-	// keep the roster, nor set the policy.
+	// keep the roster, nor set the ceiling.
 	o.Roster = slices.Clone(m.sessionOffer.Roster)
-	o.FixedAuthority, o.Players, o.Relay = m.sessionOffer.FixedAuthority, m.sessionOffer.Players, local
+	o.Players, o.Relay = m.sessionOffer.Players, local
 	return o, nil
 }
 

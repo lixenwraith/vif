@@ -473,6 +473,13 @@ func (u *Authority) Pin(fixed bool) {
 	u.mu.Unlock()
 }
 
+// Fixed reports whether the session pins its authority, as its offer or Pin said.
+func (u *Authority) Fixed() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.fixed
+}
+
 // Term, Holder and Local are the three identities the rest of the session reads.
 func (u *Authority) Term() network.AuthorityTerm {
 	u.mu.Lock()
@@ -930,8 +937,9 @@ func (u *Authority) restartRun(tick uint64) {
 // trySucceed takes a term when this instance's turn on the list has come and no
 // record reached it first. Candidate k takes the term k past the lost one's once
 // k-1 turns of a window each passed, so no two hosts' records share a term and an
-// earlier candidate's record wins wherever it arrives in time. The one self-check is
-// retention: without a baseline it lets its turn pass.
+// earlier candidate's record wins wherever it arrives in time. Its turn passes
+// without a baseline to author from, or with its player no longer letting the
+// session move here (Instance.TakesOver).
 func (u *Authority) trySucceed(now time.Time) {
 	roster := u.currentRoster()
 	u.mu.Lock()
@@ -946,7 +954,7 @@ func (u *Authority) trySucceed(now time.Time) {
 		return
 	}
 	evidenceTick, retained := u.corrections.retentionEvidence()
-	if retained == 0 {
+	if retained == 0 || !u.inst.TakesOver() {
 		return
 	}
 

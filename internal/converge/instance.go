@@ -35,6 +35,9 @@ type Instance interface {
 	LocalParticipant() uint32
 	LocalKey() network.Key
 	Seated() bool
+	// TakesOver reports whether this run's player lets a session move to it, asked
+	// as its turn on the list comes: one who turned that off since the join passes it.
+	TakesOver() bool
 	// Superseding reports a run still waiting for its own arrival in the place it
 	// took back, which the authority it came back through scheduled and no other holds.
 	Superseding() bool

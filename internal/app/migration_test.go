@@ -300,14 +300,12 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
 	host.cfg.Membership.Participants = 5
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatal(err)
-	}
+	hostMigrating(t, host)
 	stopTicks := tickInBackground(host)
 	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
 	t.Cleanup(stop)
-	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
-	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
 	waitForCursors(t, host, 3)
 	// The first candidate is whichever guest's port the host confirmed first.
 	var chain network.SuccessionChain
@@ -356,6 +354,9 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 	if got := authorityOf(player); got.Authority != id || got.Term != network.FirstTerm+1 {
 		t.Fatalf("a player that joined the successor holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
 	}
+	if player.authority.Fixed() {
+		t.Fatal("the successor offers a session that ends with it; want the migrate policy its players hold")
+	}
 	waitForCursors(t, successor, 4) // the first host's Wraith among them
 
 	at := freeAddress(t)
@@ -372,8 +373,9 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 		t.Fatalf(":session on the successor after :host reads %q; want it to open %q", line, want)
 	}
 	late, _ := driveBot(t, Config{Membership: Membership{JoinAddress: at}}, "patrol", nil)
-	if got := authorityOf(late); got.Authority != id || got.Term != network.FirstTerm+1 {
-		t.Fatalf("a player that joined at the door :host opened holds %+v; want participant %d's term, %d", got, id, network.FirstTerm+1)
+	if got := authorityOf(late); got.Authority != id || got.Term != network.FirstTerm+1 || late.authority.Fixed() {
+		t.Fatalf("a player that joined at the door :host opened holds %+v, pinned %t; want participant %d's term, %d, migrating",
+			got, late.authority.Fixed(), id, network.FirstTerm+1)
 	}
 	waitForCursors(t, successor, 5)
 
@@ -406,13 +408,11 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatal(err)
-	}
+	hostMigrating(t, host)
 	stopTicks := tickInBackground(host)
 	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
 	t.Cleanup(stop)
-	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
 	waitForCursors(t, successor, 2)
 	id := link.PeerID(successor.membership.LocalParticipant())
 	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
@@ -446,13 +446,11 @@ func TestAGuestThatRedialsItsLostHostTakesItsTurn(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatal(err)
-	}
+	hostMigrating(t, host)
 	stopTicks := tickInBackground(host)
 	stop := sync.OnceFunc(func() { stopTicks(); host.Close() })
 	t.Cleanup(stop)
-	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
+	successor, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
 	waitForCursors(t, successor, 2)
 	id := link.PeerID(successor.membership.LocalParticipant())
 	for deadline := time.Now().Add(socketWait); len(successor.authority.Chain()) != 1 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
@@ -480,12 +478,10 @@ func TestARunBuiltOnAnotherRunsDialOpensItsPeerLinks(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
 	tickUntilCursor(t, host)
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatal(err)
-	}
+	hostMigrating(t, host)
 	stopTicks := tickInBackground(host)
 	t.Cleanup(func() { stopTicks(); host.Close() })
-	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}}, "patrol", nil)
+	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: host.HostAddr()}, Play: takingOver()}, "patrol", nil)
 	waitForCursors(t, host, 2)
 
 	cfg := runConfig{Config: Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
@@ -580,9 +576,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 		t.Cleanup(host.Close)
 		tickUntilCursor(t, host)
 		host.Tick(20)
-		if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-			t.Fatalf("begin hosting: %v", err)
-		}
+		hostMigrating(t, host)
 		return host
 	}
 	host := hosting(0x3017)
@@ -623,7 +617,7 @@ func TestAJoinerDiallingMidHandoffIsRefused(t *testing.T) {
 	// was reached through a relay, so nothing is redialled first.
 	other := hosting(fixtureSeed)
 	t.Cleanup(tickInBackground(other))
-	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: other.HostAddr()}}, "patrol", nil)
+	guest, _ := driveBot(t, Config{Membership: Membership{JoinAddress: other.HostAddr()}, Play: takingOver()}, "patrol", nil)
 	joined := func() bool {
 		return guest.authority.Holder() == engine.CoordinatorParticipant && guest.authority.Local() != 0
 	}

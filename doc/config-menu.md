@@ -3,8 +3,8 @@
 Press **Ctrl-G**, **F10** or, in Normal mode, **Escape**, hold a left press (a
 finger) on the status bar, or enter **`:menu`** (`:g`, `:config`) during play. A **scenario** is the set of
 regions that defines a game; a **game** is a scenario running in the engine. The
-Settings page, Relay for others and Visible on this network are `vif.toml`'s
-`[play]`: a run writes them
+Settings page, Relay for others, Take over as host and Visible on this network
+are `vif.toml`'s `[play]`: a run writes them
 back as they change, and the next run starts as this one was left; the rest
 changes this run alone, and the keymap is never rewritten. The terminal and the
 desktop window draw the menu as the overlay below; Android and the browser draw
@@ -114,8 +114,9 @@ participants rejoin.
 
 **Current session** heads the page with the session's summary. **Host this
 game** takes a listening address such as `:4242`, `127.0.0.1:4242` or
-`ws://:4242`, and an Authority: blank keeps the startup policy, `host` ends the
-session when its authority leaves, `migrate` allows a successor. The status bar
+`ws://:4242`, and an Authority: blank keeps this run's policy, `host` unless it
+asked for `migrate`; `host` ends the session when its authority leaves, `migrate`
+moves it to a guest that turned Take over as host on. The status bar
 reports the bound address; share one your guests can reach, since the menu does
 not change network reachability. A browser can join a session but not host one,
 since a page cannot accept connections; the row says so.
@@ -145,6 +146,13 @@ carries the game for a player who reaches it and not the host, as after a host
 loss; off, the default, it carries only those that joined through it, its bots and
 its `-relay` door. A browser cannot relay, and the row says so. See
 [Multiplayer §5.1](multi-player.md#51-succession).
+
+**Take over as host** runs `:takeover on|off` and is saved in `[play]`: on, a
+session whose host chose `migrate` may move to this run when that host leaves, so
+the run listens on a port in each session it joins from then and the session
+shares its address with the other players; off, the default, it also passes its
+turn in the session it is in. A browser cannot, and the row says so. See
+[Multiplayer §5.3](multi-player.md#53-reachability-under--authority-migrate).
 
 **Visible on this network** runs `:lan on|off` and is saved in `[play]`: on, the
 games this run hosts are announced to its local network; off, the default, they

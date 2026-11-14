@@ -181,6 +181,9 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 		c.Resources.Scenario, c.Resources.Embedded = next.Scenario, false
 	}
 	c.Membership.HostAddress, c.wiring.resumeHost = "", next.Host
+	if next.Host != "" {
+		c.Membership.Migrate = next.Migrate // the session's, whoever set it: :host's word, or the host it came from
+	}
 	switch {
 	case next.Rejoin:
 		if next.Join != "" {

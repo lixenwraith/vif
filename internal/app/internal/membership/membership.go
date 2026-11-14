@@ -209,8 +209,9 @@ type RestartAsk struct {
 	// Host is the address to open hosting on once the next run's clock is running.
 	// A coordinator changing scenario does not go back into a startup lobby: its
 	// guests are already redialling, and the mid-run gate is the door they arrive
-	// at — the same one a reconnect has always used.
-	Host string
+	// at. Migrate is the policy the session held, which the door reopens under.
+	Host    string
+	Migrate bool
 
 	// Rejoin says the next run follows this session rather than leads it, and Join
 	// where to dial now that succession moved the door. Join alone is a :join target
@@ -283,7 +284,7 @@ func Joining(s config.Membership, target string) (config.Membership, error) {
 	if err != nil {
 		return s, err
 	}
-	s.HostAddress, s.Participants, s.FixedAuthority = "", 0, false
+	s.HostAddress, s.Participants, s.Migrate = "", 0, false
 	s.JoinAddress, s.SessionName = e.Dialable(), e.Name
 	return s, nil
 }

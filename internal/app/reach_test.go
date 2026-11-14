@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vif/internal/network"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // TestSuccessionSkipsALeaf is what the chain buys the election: a survivor that
@@ -79,6 +80,55 @@ func TestSuccessionSurvivesLosingTheAuthorityAndThenTheSuccessor(t *testing.T) {
 		if got.Fork {
 			t.Fatalf("participant %d forked with a peer it could still reach", i+3)
 		}
+	}
+}
+
+// TestAGuestListensOnlyWhereItsPlayerLetTheSessionMoveToIt: a guest binds a port and
+// declares it, which the session shares with its players, only in a session whose
+// host chose migrate and only with Take over as host on or -listen; any other guest
+// is a leaf, and the host's chain names nobody.
+func TestAGuestListensOnlyWhereItsPlayerLetTheSessionMoveToIt(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, tt := range []struct {
+		name     string
+		policy   string
+		guest    func(*Config)
+		declares bool
+	}{
+		{"a migrate session, nothing asked", AuthorityMigrate, func(*Config) {}, false},
+		{"a migrate session, taking over on", AuthorityMigrate, func(c *Config) { c.Play = takingOver() }, true},
+		{"a migrate session, -listen", AuthorityMigrate, func(c *Config) { c.Membership.ListenAddress = freeAddress(t) }, true},
+		{"a session that ends with its host, taking over on", AuthorityHost, func(c *Config) { c.Play = takingOver() }, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
+			tickUntilCursor(t, host)
+			var err error
+			host.World().RunSafe(func() { err = host.ctx.SessionCtl.BeginHosting("127.0.0.1:0", tt.policy) })
+			if err != nil {
+				t.Fatalf("begin hosting: %v", err)
+			}
+			stop := tickInBackground(host)
+			t.Cleanup(func() { stop(); host.Close() })
+			cfg := Config{Membership: Membership{JoinAddress: host.HostAddr()}}
+			tt.guest(&cfg)
+			guest, _ := driveBot(t, cfg, "patrol", nil)
+			waitForCursors(t, host, 2)
+			id := link.PeerID(guest.membership.LocalParticipant())
+			declared := guest.reach.DeclaredAddr()
+			if (declared != "") != tt.declares || boolOf(guest, "network.listening") != tt.declares {
+				t.Fatalf("the guest declares %q, listening %t; want an address declared: %t",
+					declared, boolOf(guest, "network.listening"), tt.declares)
+			}
+			if !tt.declares {
+				if chain := host.authority.Chain(); len(chain) != 0 {
+					t.Fatalf("the host's chain names %v; want nobody", chain)
+				}
+				return
+			}
+			waitUntil(t, func() bool { addr, ok := host.authority.Chain().Lookup(id); return ok && addr != "" },
+				"the guest's address in the host's chain")
+		})
 	}
 }
 

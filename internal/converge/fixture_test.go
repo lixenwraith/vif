@@ -37,10 +37,12 @@ type stub struct {
 	key    network.Key
 	seated bool
 	waits  bool // for its own arrival, in a place it took back
-	roster []network.RosterEntry
-	port   engine.NetworkPort
-	world  snapshot.SharedCapture
-	enc    snapshot.Encoder
+	// declines is a player that turned taking over off: the zero stub takes its turn.
+	declines bool
+	roster   []network.RosterEntry
+	port     engine.NetworkPort
+	world    snapshot.SharedCapture
+	enc      snapshot.Encoder
 
 	installed []snapshot.SharedCapture
 	adopted   []snapshot.CaptureHeader
@@ -122,6 +124,8 @@ func (s *stub) LocalKey() network.Key { return s.key }
 func (s *stub) KeepOut() []string { return nil }
 
 func (s *stub) Seated() bool { return s.seated }
+
+func (s *stub) TakesOver() bool { return !s.declines }
 
 func (s *stub) Superseding() bool { return s.waits }
 

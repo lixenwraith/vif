@@ -168,6 +168,11 @@ type GameContext struct {
 	// those that joined through this run; off unless its player turns it on
 	Relaying atomic.Bool
 
+	// Takeover lets a session whose host chose migrate move to this run when that
+	// host goes, as [play] takeover sets it: a session joined with it on is told a
+	// port this run listens on. Off unless its player turns it on
+	Takeover atomic.Bool
+
 	// Lan announces the games this run hosts to the local network, as [play] lan
 	// sets it; off unless its player turns it on
 	Lan atomic.Bool

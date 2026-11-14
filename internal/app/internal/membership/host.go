@@ -371,6 +371,7 @@ func (m *Membership) changeScenarioLocked(name string) (bool, error) {
 		if req.Host == "" && !m.seatsOnly() {
 			return false, errors.New("this participant has no address its session can return to")
 		}
+		req.Migrate = !m.authority.Fixed()
 	}
 	if !m.run.ReplaceWith(req) {
 		return false, scribe.ErrRunReplaced
@@ -594,9 +595,9 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	if successor {
 		return m.hostTakenSessionLocked(addr)
 	}
-	fixed := m.cfg.FixedAuthority
+	migrate := m.cfg.Migrate
 	if authority != "" {
-		m.cfg.FixedAuthority = authority == AuthorityHost
+		m.cfg.Migrate = authority == AuthorityMigrate
 	}
 
 	// Bound before anything is written, so a port this run cannot have leaves it as
@@ -605,14 +606,14 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	m.wiring.HostListeners = nil
 	if lns == nil {
 		if lns, err = BindDoors(*m.cfg, addr); err != nil {
-			m.cfg.FixedAuthority = fixed
+			m.cfg.Migrate = migrate
 			return fmt.Errorf("host %s: %w", addr, err)
 		}
 	}
 	if m.sessionTransportLocked() == nil {
 		if err := m.openSessionLocked(nil); err != nil {
 			CloseDoors(lns)
-			m.cfg.FixedAuthority = fixed
+			m.cfg.Migrate = migrate
 			return err
 		}
 	}
@@ -623,7 +624,7 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	for _, ln := range lns {
 		if err := port.Serve(ln); err != nil {
 			CloseDoors(lns)
-			m.cfg.FixedAuthority = fixed
+			m.cfg.Migrate = migrate
 			return fmt.Errorf("host: %w", err)
 		}
 	}
@@ -631,7 +632,7 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	// The policy is the session's from here: only this run's bots were offered one.
 	m.cfg.HostAddress = addr
 	m.restartWaitsLocked()
-	m.authority.Pin(m.cfg.FixedAuthority)
+	m.authority.Pin(!m.cfg.Migrate)
 	bound := doorsText(port.Doors())
 	m.log.Info("session", "msg", "hosting opened mid-run", "address", bound,
 		"certificate", link.Fingerprint(m.cfg.TLS), "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
@@ -752,7 +753,7 @@ func (m *Membership) openSessionLocked(kept []network.RosterEntry) error {
 	// handshake assigns, which is what lets a later handoff move it.
 	m.openAuthorityLocked(network.SessionOffer{
 		Anchor: m.joinAnchorLocked(), Host: self.ID, Assigned: self.ID,
-		Term: m.authorityTerm() + 1, Roster: roster, FixedAuthority: m.cfg.FixedAuthority,
+		Term: m.authorityTerm() + 1, Roster: roster, FixedAuthority: !m.cfg.Migrate,
 	}, self.ID)
 
 	// Attaching latches the world as shared (D-14) and installs the session hooks;
@@ -1010,8 +1011,13 @@ func (m *Membership) sessionSummaryLocked() string {
 	if reg.Bools.Get("network.map_latched").Load() {
 		latch = "map latched"
 	}
-	line := fmt.Sprintf("Session %s, peer %d (%s), %d peer link(s), tick %d, %s",
-		where, participant, cursor, peers, m.run.Position().Tick, latch)
+	// The policy by the word a host names it with: what losing the host does here.
+	policy := AuthorityMigrate
+	if m.fixedAuthority() {
+		policy = AuthorityHost
+	}
+	line := fmt.Sprintf("Session %s, peer %d (%s), %d peer link(s), tick %d, %s, authority %s",
+		where, participant, cursor, peers, m.run.Position().Tick, latch, policy)
 	if m.authority != nil {
 		if s := m.authority.Summary(); s != "" {
 			line += "; " + s

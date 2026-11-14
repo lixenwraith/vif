@@ -188,8 +188,9 @@ What each surface checks, and what it trusts:
 - **A peer link** (`network.PeerAcceptor`, `converge.Reach.admitPeerLink`): a
   challenge both ways, each end proving the roster's key for itself over the
   other's nonce and the session, so a name alone opens nothing; the acceptor admits
-  any roster member but itself. A fleet pod runs `-authority host`, one port; a
-  player's session every participant that advertises a port.
+  any roster member but itself. A session that does not migrate, a fleet pod's
+  and the default, has one port; a migrate session one more for each guest that
+  takes over.
 - **Succession messages** (`MsgAuthorityReport`, `MsgAuthorityHandoff`) carry
   their author's signature, which a receiver checks against the roster's key for
   the participant they name before it acts; `MsgPeerList` is unsigned, and a forged

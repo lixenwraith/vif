@@ -183,7 +183,7 @@ func (m *Membership) seatConfigLocked() (SeatPlay, error) {
 	width, height := m.run.SeatScreenLocked()
 	return SeatPlay{
 		Config: config.Config{Mode: config.ModeHeadless, Resources: m.run.Resources(), Width: width, Height: height,
-			StatTicks: -1, RecTicks: -1, Membership: config.Membership{NoAdvertise: true, JoinAddress: seatJoin,
+			StatTicks: -1, RecTicks: -1, Membership: config.Membership{JoinAddress: seatJoin,
 				SessionName: m.cfg.SessionName}},
 		Wiring: Wiring{Holder: link.PeerID(m.world.LocalParticipant()),
 			Relay: m.seatLink, Places: m.places},

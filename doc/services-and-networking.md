@@ -737,8 +737,8 @@ nobody. A host's one self-check is retention, because an instance with nothing
 retained has no baseline for a delta to name; a receiver's check is that the record
 names the candidate its own list puts at that term, and that it replaces the host
 this receiver followed. A survivor whose turn passes and to which no record came
-continues locally, and says so. A session opened under `-authority host` (the
-default for `-serve`) or `:host <addr> host` pins its authority: the loss is still
+continues locally, and says so. A session pins its authority unless its host asked
+for `migrate` (`-authority migrate`, `:host <addr> migrate`): the loss is still
 flooded, and every survivor continues locally once its redial of the host ends.
 
 The closed roster the succession counts against is read from the *world* rather
@@ -1094,8 +1094,9 @@ or `loss`. Give the two terminals different sizes and resize one mid-run: the ma
 must not move and neither side may fall behind. The host's `:new` resets both
 rosters and a guest's is refused. Quit the guest; the host must show a
 participant-disconnected message and continue at `Net: down`. Quit the host; under
-the default `-authority migrate` the guest shows `Migrating` and takes the term,
-and under `-authority host` it says its host connection was lost and plays on in a
+`-authority migrate` a guest that takes over (`:takeover on` before it joined, or
+`-listen`) shows `Migrating` and takes the term, and under the default
+`-authority host` it says its host connection was lost and plays on in a
 session of its own — `:session` reads `Session hosting` under the same participant
 and the next term, and the host's cursor waits as a Wraith. Restarting the host
 and rejoining with `:join` is a *new* session, not a merge.

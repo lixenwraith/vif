@@ -467,6 +467,46 @@ func TestTheWalkGoesDownTheList(t *testing.T) {
 	}
 }
 
+// TestACandidateWhosePlayerTurnedTakingOverOffPassesItsTurn: a candidate whose
+// player no longer lets the session move to it takes no term at its turn, and
+// follows the next one down the list once that one's turn comes.
+func TestACandidateWhosePlayerTurnedTakingOverOffPassesItsTurn(t *testing.T) {
+	t.Parallel()
+	mesh := network.NewMesh()
+	mesh.Link(1, 2)
+	mesh.Link(1, 3)
+	mesh.Peer(2, 3)
+	runs := make([]*run, 3)
+	for i := range runs {
+		runs[i] = newRun(t, uint32(i+1), mesh.Node(link.PeerID(i+1)), roster(3))
+		runs[i].open(1, chainOf(2, 3), false)
+	}
+	if err := runs[0].c.PublishDue(); err != nil {
+		t.Fatalf("keyframe: %v", err)
+	}
+	deliver(runs, 2)
+	_ = mesh.Node(1).Close()
+	first, second := runs[1], runs[2]
+	first.world.declines = true
+	survivors := runs[1:]
+	for _, r := range survivors {
+		r.c.QueuePeerLost(1)
+	}
+	deliver(survivors, 3)
+	if first.u.Term() != network.FirstTerm || second.u.Term() != network.FirstTerm {
+		t.Fatal("a term was taken in the turn of a candidate that passes it")
+	}
+	for _, r := range survivors {
+		rewind(r, parameter.NetworkSuccessionWindow)
+	}
+	deliver(survivors, 3)
+	for _, r := range survivors {
+		if got := r.u.State(); got.Authority != 3 || got.Term != network.FirstTerm+2 {
+			t.Fatalf("participant %d holds %+v; want the second candidate's term", r.world.local, got)
+		}
+	}
+}
+
 // TestALateSurvivorIsTakenBack: a survivor whose membership report reaches the host
 // after the floor, a hop or a wait too late for it, is given its place back as a
 // key's return gives one; the same report again, or one from a participant the

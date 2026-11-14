@@ -168,10 +168,10 @@ for that run alone and is never written back; `vif.toml` holds the defaults
 | `-name <name>` | With `-host` or `-serve`, the session name this host answers to, so one address serves several. |
 | `-players <n>` | Roster ceiling including self, `2`..`parameter.MaxPlayers`, beside the scenario's `max_players`, the lower holding; with a `-join` site, the size requested. Unset holds the whole roster; under the scenario's `min_players` it is refused. With `-serve` it counts guests from `1`, because the server is not one of them, and the session starts on its first guest and admits the rest as they arrive. |
 | `-bot [N[:graph]\|graph]` | Add bots beside this run's participant, which under `-headless` or `-watch` is the first bot; operands default to `1:default`, and a count of 0 adds none. With `-serve`, bots keep the session occupied. See [Bots](bots.md). |
-| `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host` keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` walks the succession chain, each surviving member that declared a port taking a term of its own in its turn, never a bot. Default `host` with `-serve`, `migrate` otherwise. |
+| `-authority host\|migrate` | With `-host` or `-serve`, where authorship goes when the authoring participant leaves; a guest adopts the host's policy. `host`, the default, keeps it with the starting machine, so losing that machine leaves each survivor playing alone; `migrate` walks the succession chain, each surviving member that declared a port taking a term of its own in its turn, never a bot. |
 | `-slow-window <dur>`, `-slow-late <n>`, `-slow-bytes <n>` | A host's eviction policy for a participant that cannot keep up: this many late epochs per second of game time over the window, on a link carrying at least this many bytes per second of it. A zero window never evicts; a zero rate drops its condition. See [Multiplayer](multi-player.md) §3.5. |
 | `-shed-window <dur>` | A host's shedding when it cannot keep its own tick: past a tenth of the ticks it owed dropped over the window, it dismisses its newest bot, then its newest player, one a window. `0` never sheds. See [Multiplayer](multi-player.md) §3.5. |
-| `-listen <addr>`, `-no-advertise` | With `-join`, the address the other participants reach this one at in a migrate session, or none at all, which keeps it a leaf, never a candidate ([Multiplayer](multi-player.md) §5.3). |
+| `-listen <addr>` | With `-join`, the address the other participants reach this one at in a migrate session, which makes it a candidate whatever `[play] takeover` says; a guest with neither is a leaf, never a candidate ([Multiplayer](multi-player.md) §5.3). |
 | `-relay <addr>` | With `-join`, admit participants that cannot reach the host here and carry their traffic, or at a door published through `vif://<router>` ([Multiplayer](multi-player.md) §5.6). |
 | `-passphrase <phrase\|new>` | With `-host` or `-serve`, the passphrase the doors take through an Argon2-SCRAM exchange, or `new` for one made and printed; with `-join`, the one shown to a door that asks. Eight bytes at least; `:session` shows a host's ([Multiplayer](multi-player.md) §5.4). |
 | `-admit <open\|ticket:key>` | What a `-host` or `-serve` door admits beside a pass: `open`, any key; or the site's tickets under the router's public key(s), comma-separated, and no bare key, which a fleet pod's Job sets ([fleet design §4](kubernetes-fleet.md#4-security-posture)). |
@@ -280,7 +280,7 @@ that ends a process must not silently do nothing.
 `-serve` is a host of its own and does not combine with `-host` or `-join`. `-host`
 and `-join` are mutually exclusive and available on interactive play and on driven
 `-script` and bot runs. They, `-serve`, `-probe`, `-players`, `-bot`, `-authority`,
-`-listen`, `-no-advertise`, `-name` and the lifetime bounds are an error beside
+`-listen`, `-name` and the lifetime bounds are an error beside
 `-check`, `-schema` or `-replay`. An interactive `-host` plays at once and opens its
 port once the clock runs; `:host <addr> [host|migrate]` does the same on a run that
 is **already playing**, at whatever tick it has reached — same acceptor, same

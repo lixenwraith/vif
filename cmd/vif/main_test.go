@@ -238,6 +238,31 @@ func TestSessionFlags(t *testing.T) {
 	}
 }
 
+// TestASessionMigratesOnlyWhereItsHostAskedForIt: -authority migrate is the one word
+// that lets a session move to a guest, whatever shape the run hosts in; with none,
+// a session ends with its host, a dedicated one's and a person's alike.
+func TestASessionMigratesOnlyWhereItsHostAskedForIt(t *testing.T) {
+	saved := flagSession
+	t.Cleanup(func() { flagSession = saved })
+	for _, tt := range []struct {
+		flags   sessionFlags
+		migrate bool
+	}{
+		{sessionFlags{}, false}, // a solo run, which may :host later
+		{sessionFlags{host: ":7777"}, false},
+		{sessionFlags{serve: ":7777"}, false},
+		{sessionFlags{host: ":7777", authority: authorityHost}, false},
+		{sessionFlags{host: ":7777", authority: authorityMigrate}, true},
+		{sessionFlags{serve: ":7777", authority: authorityMigrate}, true},
+	} {
+		flagSession = tt.flags
+		if got := buildConfig().Membership.Migrate; got != tt.migrate {
+			t.Errorf("-host %q -serve %q -authority %q migrates: %t; want %t",
+				tt.flags.host, tt.flags.serve, tt.flags.authority, got, tt.migrate)
+		}
+	}
+}
+
 // TestAnAddressNamesItsSchemeAndSession pins the one address grammar every flag
 // and command reads: the scheme picks the transport, tcp when none is given.
 func TestAnAddressNamesItsSchemeAndSession(t *testing.T) {

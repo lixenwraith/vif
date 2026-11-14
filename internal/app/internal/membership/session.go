@@ -1277,7 +1277,7 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		KeepOut:        slices.Clone(m.keepOut),
 		Gated:          m.gatedLocked(),
 		Door:           m.doorVerifierLocked(),
-		FixedAuthority: m.cfg.FixedAuthority,
+		FixedAuthority: m.fixedAuthority(),
 		Players:        m.playersSet(),
 		// Derived from the anchor this offer carries rather than read again, so
 		// what the coordinator later compares a joiner's report against is exactly
@@ -1285,6 +1285,16 @@ func (m *Membership) offerLocked(anchor event.JoinAnchor, assigned link.PeerID) 
 		// mismatch or the reverse.
 		Identity: IdentityFromAnchor(anchor),
 	}
+}
+
+// fixedAuthority is whether the session this run offers pins its authority: the
+// session's own word once it is in one, which a guest that took it over holds from
+// the offer it joined on, and this run's policy for the one a lobby is opening.
+func (m *Membership) fixedAuthority() bool {
+	if m.authorityTerm() != 0 {
+		return m.authority.Fixed()
+	}
+	return !m.cfg.Migrate
 }
 
 // hostOffer closes the lobby and returns the roster every participant builds from.

@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "leave", "relay", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps",
+	"host", "join", "leave", "relay", "takeover", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps",
 	"register", "login", "logout",
 }
 
@@ -147,6 +147,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleLeaveCommand(ctx, args)
 	case "relay":
 		return handleRelayCommand(ctx, args)
+	case "takeover":
+		return handleTakeoverCommand(ctx, args)
 	case "lan":
 		return handleLanCommand(ctx, args)
 	case "session":
@@ -1176,6 +1178,22 @@ func handleRelayCommand(ctx *engine.GameContext, args []string) CommandResult {
 // relayUnavailable refuses relaying where nobody can reach this run: a browser
 // is never dialled
 var relayUnavailable = lacking(paths.ExternalFiles(), "Relaying")
+
+// handleTakeoverCommand sets whether a session whose host chose migrate may move to
+// this run when that host goes. On reaches the sessions joined from then on, which
+// are told a port this run listens on; off also has this run pass its turn in the
+// one it is in. Usage: :takeover [on|off]
+func handleTakeoverCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if reason := takeoverUnavailable(ctx); reason != "" {
+		setCommandError(ctx, reason)
+		return CommandResult{Continue: true}
+	}
+	return applyToggle(ctx, &ctx.Takeover, args, "takeover", "Taking over as host")
+}
+
+// takeoverUnavailable refuses taking a session over where no survivor could dial
+// this run: a browser binds no port
+var takeoverUnavailable = lacking(paths.ExternalFiles(), "Taking over as host")
 
 // handleLanCommand sets whether this run announces the games it hosts to its local
 // network, and with no argument reports the games found there.

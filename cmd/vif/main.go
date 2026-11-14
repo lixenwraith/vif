@@ -443,7 +443,6 @@ func buildConfig() app.Config {
 		Membership: app.Membership{
 			SessionName:  flagSession.name,
 			Participants: flagSession.players,
-			NoAdvertise:  flagSession.noAdvertise,
 		},
 	}
 
@@ -466,16 +465,12 @@ func buildConfig() app.Config {
 		cfg.ProbeAddress = flagSession.probe
 		cfg.Lifetime = flagSession.lifetime()
 	}
-	// The default differs by shape and the flag overrides either way: a dedicated
-	// host *is* the session, so an orchestrator replacing it at the same address is
-	// the reconnect its guests want; a person's machine is not, so there the
-	// surviving guest continuing the game is worth more than the address staying put.
-	cfg.Membership.FixedAuthority = flagSession.serve != ""
+	// A session ends with its host unless the host asks for it to move: migrating
+	// shares the address of each guest that may take it over, which nobody is
+	// signed up for by a default.
+	cfg.Membership.Migrate = flagSession.authority == authorityMigrate
 	cfg.Membership.SlowPolicy = &flagSession.slow
 	cfg.Membership.ShedPolicy = &flagSession.shed
-	if flagSession.authority != "" {
-		cfg.Membership.FixedAuthority = flagSession.authority == authorityHost
-	}
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
@@ -599,22 +594,21 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 
 // sessionFlags expose startup hosting/joining and the cap a later :host inherits.
 type sessionFlags struct {
-	host        string
-	join        string
-	serve       string
-	probe       string
-	size        string
-	players     int
-	bot         string
-	authority   string
-	listen      string
-	noAdvertise bool
-	relay       string
-	cert, key   string
-	selfsign    bool
-	ca          string
-	passphrase  string
-	admit       string
+	host       string
+	join       string
+	serve      string
+	probe      string
+	size       string
+	players    int
+	bot        string
+	authority  string
+	listen     string
+	relay      string
+	cert, key  string
+	selfsign   bool
+	ca         string
+	passphrase string
+	admit      string
 
 	// slow is the eviction policy a host applies to a participant that cannot keep
 	// up, and shed what it drops when it cannot keep its own tick; see
@@ -666,12 +660,10 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.bot, "bot", "", fmt.Sprintf(
 		"Add bots using [N[:graph]|graph] (default 1:%s)", app.DefaultBotGraph))
 	fs.StringVar(&f.listen, "listen", "", fmt.Sprintf(
-		"With -join in a %q session, the address this participant is dialled back on. "+
-			"Default the host's own port, falling back to an OS-assigned one when that "+
-			"port is taken; whatever is bound is what the session publishes",
+		"With -join in a %q session, listen at this address so this run can take the session over, "+
+			"whatever [play] takeover says; the session shares what is bound with its players. "+
+			"A run with takeover on and no -listen binds the host's own port, else an OS-assigned one",
 		authorityMigrate))
-	fs.BoolVar(&f.noAdvertise, "no-advertise", false,
-		"With -join, keep this participant's address out of the session. It plays normally and is never a succession candidate")
 	fs.StringVar(&f.relay, "relay", "",
 		"With -join, admit participants that cannot reach the host at this address and carry their traffic on this participant's link")
 	fs.DurationVar(&f.slow.Window, "slow-window", parameter.NetworkSlowWindow,
@@ -685,10 +677,10 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 		"With -host or -serve, the window the host's own tick keeping is judged over: dropping more than %.0f%% of its ticks there, it drops its newest bot, then its newest player; 0 never sheds",
 		parameter.NetworkShedShare*100))
 	fs.StringVar(&f.authority, "authority", "", fmt.Sprintf(
-		"What losing the authoring participant does: %q hands the session down the "+
-			"succession list, %q ends it and leaves every survivor playing alone. "+
-			"Default %q with -serve and %q otherwise",
-		authorityMigrate, authorityHost, authorityHost, authorityMigrate))
+		"What losing the authoring participant does: %q ends the session and leaves every "+
+			"survivor playing alone, %q hands it to a guest that allowed taking over "+
+			"([play] takeover), whose address the session shares. Default %q",
+		authorityHost, authorityMigrate, authorityHost))
 }
 
 // authorityMigrate and authorityHost are the two -authority words, the ones
@@ -706,9 +698,9 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		return fmt.Errorf("-authority is the policy a host sets for its session; a guest adopts the one it is offered")
 	}
 	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 || f.bot != "" ||
-		f.authority != "" || f.listen != "" || f.noAdvertise || f.relay != "" || f.name != "" || f.cert != "" || f.key != "" ||
+		f.authority != "" || f.listen != "" || f.relay != "" || f.name != "" || f.cert != "" || f.key != "" ||
 		f.selfsign || f.ca != "" || f.lifetime().Bounded()) && (schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bot, -authority, -listen, -no-advertise, -relay, -name, -cert, -key, -selfsign, -ca and the session lifetime bounds are available only in interactive play")
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bot, -authority, -listen, -relay, -name, -cert, -key, -selfsign, -ca and the session lifetime bounds are available only in interactive play")
 	}
 	if f.key != "" && f.cert == "" {
 		return fmt.Errorf("-key is the key of a -cert certificate")
@@ -766,11 +758,8 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 			return fmt.Errorf("%s: %w", a.flag, err)
 		}
 	}
-	if (f.listen != "" || f.noAdvertise || f.relay != "") && f.join == "" {
-		return fmt.Errorf("-listen, -no-advertise and -relay describe a participant that joined a session; a host already binds one")
-	}
-	if f.listen != "" && f.noAdvertise {
-		return fmt.Errorf("-listen names an address to publish and -no-advertise refuses to publish one")
+	if (f.listen != "" || f.relay != "") && f.join == "" {
+		return fmt.Errorf("-listen and -relay describe a participant that joined a session; a host already binds one")
 	}
 	if f.serve != "" && (f.host != "" || f.join != "") {
 		return fmt.Errorf("-serve is a host of its own; it does not combine with -host or -join")
