@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"cmp"
 	"errors"
 	"io"
 	"maps"
+	"math"
 	"sort"
 	"strconv"
 	"sync"
@@ -290,10 +292,6 @@ type ConfigResource struct {
 	// TextConsole is a 256-color frame shown on a text console; false is an emulator in 256
 	// colors, whose theme draws entries 0-15 but xterm's cube as it is
 	TextConsole bool `toml:"-"`
-
-	// pointer records that the pointer made the last local placement; FollowCamera
-	// holds its narrower margins until another input moves the cursor.
-	pointer bool
 }
 
 // FloorMapSize raises a map size to the scenario's floor and bounds it to the grid,
@@ -889,11 +887,39 @@ func (r *RandResource) sessionRoot() uint64 {
 	return vmath.DeriveSeed(r.root, "session:"+strconv.FormatUint(s, 10))
 }
 
+// EdgeCells is the camera's edge in cells from each side: pct percent of the side of
+// a square of the view's area, as far in from every side, until the short side's
+// edges meet; then the long side's close in, so at CameraEdgeMost every move
+// follows. 0 is the edge cell itself, which a pointer can reach.
+func (c *ConfigResource) EdgeCells(pct int) (x, y int) {
+	if c.ViewportWidth <= 0 || c.ViewportHeight <= 0 {
+		return 0, 0
+	}
+	aspect := float64(cmp.Or(c.CellAspect, vmath.RefAspect))
+	wide, tall := float64(c.ViewportWidth), float64(c.ViewportHeight)/aspect // in cell widths
+	short, long := min(wide, tall), max(wide, tall)
+	side := math.Sqrt(wide * tall)
+	p := float64(min(max(pct, 0), parameter.CameraEdgeMost)) / parameter.CameraEdgeMost
+	dx, dy := p*side/2, p*side/2
+	if met := short / side; p > met {
+		closing := short/2 + (p-met)/(1-met)*(long-short)/2
+		if wide >= tall {
+			dx, dy = closing, short/2
+		} else {
+			dx, dy = short/2, closing
+		}
+	}
+	x = min(max(1, int(math.Round(dx))), c.ViewportWidth/2)
+	y = min(max(1, int(math.Round(dy*aspect))), c.ViewportHeight/2)
+	return x, y
+}
+
 // FollowCamera soft-follows one cursor: the camera shifts by the least amount that
-// brings the cell back inside the dead zone, then clamps to the map. It lives here
-// so a resize re-anchors the view without announcing a cursor move, a shared event
-// whose flow-field throttle would put two instances on different phases.
-func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
+// keeps the cell edge percent of the screen (EdgeCells) inside every side, then
+// clamps to the map. It lives here so a resize re-anchors the view without
+// announcing a cursor move, a shared event whose flow-field throttle would put two
+// instances on different phases.
+func (c *ConfigResource) FollowCamera(cursorX, cursorY, edge int) {
 	if !parameter.CameraEnabled {
 		return
 	}
@@ -903,21 +929,19 @@ func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
 		return
 	}
 
-	marginX, marginY := parameter.CameraDeadZoneMarginX, parameter.CameraDeadZoneMarginY
-	if c.pointer {
-		marginX, marginY = parameter.CameraPointerMarginX, parameter.CameraPointerMarginY
-	}
-	marginX = min(marginX, c.ViewportWidth/2)
-	marginY = min(marginY, c.ViewportHeight/2)
+	marginX, marginY := c.EdgeCells(edge)
 
 	shift := func(v, camera, viewport, margin int, scroll bool) int {
 		if !scroll {
 			return 0
 		}
+		// Edges that meet leave the cursor one cell: on an even view the near edge
+		// stops a cell short, or the view would flip between the two middle cells
+		near := min(margin, (viewport-1)/2)
 		rel := v - camera
 		switch {
-		case rel < margin:
-			return rel - margin
+		case rel < near:
+			return rel - near
 		case rel > viewport-margin-1:
 			return rel - (viewport - margin - 1)
 		}

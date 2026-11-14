@@ -156,7 +156,6 @@ func (c *WorldCopy) LoadStreams(r *RandResource) []string {
 type PlayerSide struct {
 	CameraX    int                    `json:"camera_x"`
 	CameraY    int                    `json:"camera_y"`
-	Pointer    bool                   `json:"pointer"`
 	APM        APMState               `json:"apm"`
 	Explosions []ExplosionCenter      `json:"explosions,omitempty"`
 	Burns      []component.KrakenBurn `json:"burns,omitempty"`
@@ -169,7 +168,7 @@ type PlayerSide struct {
 func (w *World) CapturePlayerSide() PlayerSide {
 	r := w.Resources
 	return PlayerSide{
-		CameraX: r.Config.CameraX, CameraY: r.Config.CameraY, Pointer: r.Config.pointer,
+		CameraX: r.Config.CameraX, CameraY: r.Config.CameraY,
 		APM:        r.Game.State.APM(),
 		Explosions: slices.Clone(r.Transient.ExplosionBacking[:r.Transient.ExplosionCount]),
 		Burns:      slices.Clone(r.Transient.KrakenBurns()),
@@ -183,7 +182,7 @@ func (w *World) CapturePlayerSide() PlayerSide {
 // Caller MUST hold updateMutex.
 func (w *World) InstallPlayerSide(s PlayerSide) []string {
 	r := w.Resources
-	r.Config.CameraX, r.Config.CameraY, r.Config.pointer = s.CameraX, s.CameraY, s.Pointer
+	r.Config.CameraX, r.Config.CameraY = s.CameraX, s.CameraY
 	r.Game.State.SetAPM(s.APM)
 	r.Transient.ExplosionCount = copy(r.Transient.ExplosionBacking[:], s.Explosions)
 	r.Transient.BurnCount = copy(r.Transient.BurnBacking[:], s.Burns)

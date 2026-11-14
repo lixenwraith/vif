@@ -946,7 +946,7 @@ type CursorWraithRequestPayload struct {
 
 // CursorMoveRequestPayload asks for an absolute placement of an explicitly named cursor;
 // the producer has already validated the destination. Pointer marks a cell the mouse
-// named, which the camera follows with its pointer margins and APM admits at a lower rate.
+// named, which APM admits at a lower rate.
 type CursorMoveRequestPayload struct {
 	Entity  core.Entity `toml:"entity"`
 	X       int         `toml:"x"`

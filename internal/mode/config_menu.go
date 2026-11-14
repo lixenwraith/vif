@@ -110,6 +110,11 @@ var configPages = []configNode{
 			{kind: kindToggle, key: "hud", label: "Telemetry HUD", description: "Show pinned telemetry cards over the game. The command :t opens the telemetry view, where Enter or a press pins a card.",
 				command: "hud", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.OverlayHUD.Load()) }},
+			{kind: kindStep, key: "edge", label: "Camera edge", description: "How near the view's sides the cursor comes before the view follows it, whether keys, a mouse or a finger moved it: a share of the screen's size, as far from every side, in steps of 5%. 0 follows once the cursor is on the edge row or column, 50 on every move.",
+				command: "edge", read: func(ctx *engine.GameContext) string { return strconv.Itoa(ctx.World.CameraEdge()) + "%" },
+				change: func(ctx *engine.GameContext, d int) {
+					handleEdgeCommand(ctx, []string{strconv.Itoa(edgeStep(ctx.World.CameraEdge(), d))})
+				}},
 		}),
 		section("Pause", []configNode{
 			{kind: kindToggle, key: "pause_menu", label: "Pause in menu", description: "Pause the game while this menu, help, telemetry or the console is open. Applies where the game can pause: solo, or hosting only your own bots; a session with other players plays on.",
@@ -239,6 +244,16 @@ func fpsStep(fps, d int) int {
 		i-- // i is the first step above fps
 	}
 	return steps[(i%len(steps)+len(steps))%len(steps)]
+}
+
+// edgeStep moves a camera edge d multiples of CameraEdgeStep, the first down from
+// between two being the one below, and keeps it in range
+func edgeStep(pct, d int) int {
+	base := pct / parameter.CameraEdgeStep * parameter.CameraEdgeStep
+	if d < 0 && base < pct {
+		d++
+	}
+	return min(max(base+d*parameter.CameraEdgeStep, 0), parameter.CameraEdgeMost)
 }
 
 func withDisabled(n configNode, disabled func(*engine.GameContext) string) configNode {

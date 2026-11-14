@@ -82,6 +82,11 @@ type World struct {
 	// reproduce. Set from the join anchor at construction and by AttachTransport.
 	sessionShared atomic.Bool
 
+	// cameraEdge is [play] camera_edge, the percent FollowCamera keeps the cursor
+	// from the view's sides. Outside Resources, so a world copied in, as a replay's
+	// seek installs, never takes back the viewer's setting
+	cameraEdge atomic.Int32
+
 	// degradedSystems remembers the disabled systems that already reported an
 	// optional dependent, so a region re-applying its config reports once
 	degradedSystems sync.Map
@@ -1125,8 +1130,7 @@ func (w *World) PushInputRelease(p *event.InputPayload) {
 	w.PushCrossing(event.EventInputReleased, p)
 }
 
-// PushPointerMove is PushCursorMove for a cell the pointer named, which the camera
-// follows with its pointer margins (see CameraPointerMarginX). The view moves at
+// PushPointerMove is PushCursorMove for a cell the pointer named. The view moves at
 // once; the placement waits for the next tick, retargeted by every later report,
 // so a sweep crosses its newest cell once a tick rather than every cell it passed.
 // Caller MUST hold updateMutex
@@ -1167,7 +1171,6 @@ func (w *World) predictCursorMove(e core.Entity, x, y int, pointer bool) bool {
 	if !w.Resources.Player.IsLocal(e) || !w.SimulatesLocally(e) {
 		return false
 	}
-	w.Resources.Config.pointer = pointer
 	if _, ok := w.Positions.GetPosition(e); !ok {
 		return false // move announces nothing for a cursor with no cell, so nothing reconciles
 	}
@@ -1192,9 +1195,15 @@ func (w *World) predictCursorMove(e core.Entity, x, y int, pointer bool) bool {
 // Caller MUST hold updateMutex
 func (w *World) FollowLocalCursor() {
 	if pos, ok := w.CursorCell(w.Resources.Player.Viewed()); ok {
-		w.Resources.Config.FollowCamera(pos.X, pos.Y)
+		w.Resources.Config.FollowCamera(pos.X, pos.Y, w.CameraEdge())
 	}
 }
+
+// SetCameraEdge sets the percent FollowCamera keeps the cursor from the view's sides;
+// the view takes it at its next follow
+func (w *World) SetCameraEdge(pct int) { w.cameraEdge.Store(int32(pct)) }
+
+func (w *World) CameraEdge() int { return int(w.cameraEdge.Load()) }
 
 // Follow points a viewer at the cursor step slots on from the one it follows, among
 // those somebody plays, or at slot itself with step zero; it reports the slot now

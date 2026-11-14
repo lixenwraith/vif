@@ -439,6 +439,7 @@ func (a *App) applyPlay() {
 	a.ctx.MaxFPS.Store(int32(p.MaxFPS))
 	a.ctx.PauseMenu.Store(p.PauseMenu)
 	a.ctx.PauseCommand.Store(p.PauseCommand)
+	a.world.SetCameraEdge(p.CameraEdge)
 }
 
 // livePlay is the run's [play] as it stands: what the next run starts from and
@@ -455,6 +456,7 @@ func (a *App) livePlay() paths.Play {
 	p.MaxFPS = int(a.ctx.MaxFPS.Load())
 	p.PauseMenu = a.ctx.PauseMenu.Load()
 	p.PauseCommand = a.ctx.PauseCommand.Load()
+	p.CameraEdge = a.world.CameraEdge()
 	if a.cfg.Mode.OwnsInput() { // a run nobody plays never waits, whatever the setting
 		p.Wait = a.ctx.WaitStart.Load()
 	}

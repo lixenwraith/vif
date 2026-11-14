@@ -638,6 +638,43 @@ func TestMaxFPSStepsInTheMenuAndTakesRatesInRange(t *testing.T) {
 	}
 }
 
+// TestCameraEdgeStepsInTheMenuAndTakesPercentsInRange: the Display row steps the
+// edge by parameter.CameraEdgeStep within 0 and CameraEdgeMost, a value between
+// steps moving to the step on that side, and :edge takes a percent in range and
+// refuses others.
+func TestCameraEdgeStepsInTheMenuAndTakesPercentsInRange(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	r := NewRouter(ctx, input.NewMachine())
+	ExecuteCommand(ctx, "g")
+	ctx.SetOverlaySelection("settings")
+	r.handleOverlayActivate()
+	for _, c := range []struct{ from, d, want int }{
+		{0, -1, 0}, {0, 1, 5}, {15, 1, 20}, {15, -1, 10}, {17, 1, 20}, {17, -1, 15},
+		{parameter.CameraEdgeMost, 1, parameter.CameraEdgeMost},
+	} {
+		w.SetCameraEdge(c.from)
+		ctx.SetOverlaySelection("settings/#Display/edge")
+		r.changeConfigMenu(c.d, false)
+		if got := w.CameraEdge(); got != c.want {
+			t.Errorf("%d stepped %d: edge %d, want %d", c.from, c.d, got, c.want)
+		}
+	}
+	w.SetCameraEdge(15)
+	for _, c := range []struct {
+		command string
+		want    int
+	}{
+		{"edge 20", 20}, {"edge", 20}, {"edge 51", 20}, {"edge -1", 20}, {"edge x", 20}, {"edge 1 2", 20},
+		{"edge 0", 0}, {"edge 35%", 35}, {"edge 50", 50},
+	} {
+		ExecuteCommand(ctx, c.command)
+		if got := w.CameraEdge(); got != c.want {
+			t.Errorf("%q: edge %d, want %d", c.command, got, c.want)
+		}
+	}
+}
+
 // TestTheHelpKeyOpensHelpOverAnyModeAndClosesIt: F1 asks for help from NORMAL and
 // from a text mode, takes the place of the menu and drops its form, and closes help
 // where help is shown; F10 opens the menu over help as Ctrl-G does.

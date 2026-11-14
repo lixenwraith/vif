@@ -1176,9 +1176,11 @@ func TestCameraAnchorsOnThePredictedCell(t *testing.T) {
 
 // TestAPointerHeldStillLeavesTheMapStill: a pointer names a screen cell, so a view
 // that scrolls under it moves the cursor on every report until the map edge. Inside
-// the screen it does not scroll; at the edge each report scrolls a bounded step.
+// the camera's edge it does not scroll; past it each report scrolls by at most the
+// edge's width.
 func TestAPointerHeldStillLeavesTheMapStill(t *testing.T) {
 	w, local, _ := testCursorWorld(t)
+	w.SetCameraEdge(15)
 	config := w.Resources.Config
 	config.MapWidth, config.MapHeight = 400, 100
 	w.Positions.Resize(config.MapWidth, config.MapHeight)
@@ -1199,14 +1201,40 @@ func TestAPointerHeldStillLeavesTheMapStill(t *testing.T) {
 			t.Fatalf("a still pointer moved the view from (%d,%d) to (%d,%d)", camX, camY, x, y)
 		}
 	}
+	edge, _ := config.EdgeCells(w.CameraEdge())
 	for range 5 {
 		before := config.CameraX
-		if x, _ := report(0, config.ViewportHeight/2); before-x > parameter.CameraPointerMarginX {
+		if x, _ := report(0, config.ViewportHeight/2); before-x > edge {
 			t.Fatalf("one report at the edge scrolled %d cells", before-x)
 		}
 	}
 	if config.CameraX >= camX {
 		t.Fatal("a pointer at the edge did not scroll the view")
+	}
+}
+
+// TestTheViewHoldsWhenKeysTakeOverFromThePointer: every input keeps the cursor the
+// one camera edge from the view's sides, so a key moving a cursor the pointer left
+// at the edge, along it or away from it, never moves the view.
+func TestTheViewHoldsWhenKeysTakeOverFromThePointer(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	w.SetCameraEdge(15)
+	config := w.Resources.Config
+	config.MapWidth, config.MapHeight = 400, 100
+	w.Positions.Resize(config.MapWidth, config.MapHeight)
+	w.PushCursorMove(local, 200, 50) // the view clear of the map's sides
+	x, y, ok := config.ViewportToMap(config.ViewportWidth-2, config.ViewportHeight/2)
+	if !ok {
+		t.Fatal("the viewport's right side is off the map")
+	}
+	w.PushPointerMove(local, x, y)
+	camX, camY := config.CameraX, config.CameraY
+	for _, step := range [][2]int{{-1, 0}, {0, 1}, {0, -1}} {
+		x, y = x+step[0], y+step[1]
+		w.PushCursorMove(local, x, y)
+		if config.CameraX != camX || config.CameraY != camY {
+			t.Fatalf("a key move by %v moved the view from (%d,%d) to (%d,%d)", step, camX, camY, config.CameraX, config.CameraY)
+		}
 	}
 }
 
