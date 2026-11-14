@@ -197,7 +197,8 @@ operations are `:bot add [N[:graph]|graph]` and `:bot drop <slot>`; see
 
 - **Sound**: sound effects, their volume in 5% steps, music.
 - **Controls**: auto-fire (`off`, `main`, `on`), mouse input, pointer following.
-- **Display**: Max FPS, the telemetry HUD.
+- **Display**: Max FPS, the telemetry HUD, Camera edge (`[play] camera_edge`,
+  `:edge`; 15% by default, 5% a step; [Rendering §2](rendering.md#2-render-context-and-coordinates)).
 - **Pause**: Pause in menu (`[play] pause_menu`, `:pause menu`) and Pause in
   command line (`pause_command`, `:pause command`), both on by default; see
   Pausing below.

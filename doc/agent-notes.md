@@ -414,6 +414,11 @@ Branches.
   whole, so a goroutine off the world lock (a bot seat, the drive loop, the
   correction loop) reads none of their fields, even one that never changes: the
   race detector flags the copy's write.
+- A player's setting the engine reads, as the camera edge, is a `World` atomic
+  outside `Resources`, not a `Config` field: a copy a seek installs would put back
+  the value it was captured with, and `livePlay` reads it off the lock. A replay's
+  `player.adopt` must carry each such setting to the copy it presents (HUD, frame
+  rate, camera edge), or the viewer's choice is lost at the next seek.
 
 ## Networking and admission
 

@@ -82,6 +82,9 @@ type Play struct {
 	// another window, or the command line, is open
 	PauseMenu    bool `toml:"pause_menu"`
 	PauseCommand bool `toml:"pause_command"`
+	// CameraEdge is the percent of the screen's size the view keeps the cursor from
+	// each side (engine ConfigResource.EdgeCells)
+	CameraEdge int `toml:"camera_edge"`
 }
 
 func (p Play) check() error {
@@ -95,6 +98,9 @@ func (p Play) check() error {
 	}
 	if p.MaxFPS != 0 && (p.MaxFPS < parameter.FrameRateMin || p.MaxFPS > parameter.FrameRateMax) {
 		return fmt.Errorf("play.max_fps %d is not 0 or between %d and %d", p.MaxFPS, parameter.FrameRateMin, parameter.FrameRateMax)
+	}
+	if p.CameraEdge < 0 || p.CameraEdge > parameter.CameraEdgeMost {
+		return fmt.Errorf("play.camera_edge %d is not between 0 and %d", p.CameraEdge, parameter.CameraEdgeMost)
 	}
 	return nil
 }

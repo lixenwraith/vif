@@ -55,7 +55,8 @@ tmux_frame_cap = true
 # 0 is three a tick, 60 at the default, and 24 inside tmux or screen, which drop
 # what a terminal sends them faster), and whether a game that may pause (solo, or
 # hosting only your own bots) pauses while the menu or another window is open
-# (pause_menu) and while the command line is open (pause_command).
+# (pause_menu) and while the command line is open (pause_command), and the camera's
+# edge (camera_edge, below).
 # A run writes this file when it is in the user root or the
 # -config-dir root, and otherwise the user root's, made from this one at the first
 # change. A flag naming one of these, -mute for both channels or -nw for the wait,
@@ -75,6 +76,10 @@ wait = true
 max_fps = 0
 pause_menu = true
 pause_command = true
+# How near the view's sides the cursor comes before the view follows it, whatever
+# moved it: a percent of the screen's size, 0 to 50, as far from every side. 0
+# follows once the cursor is on the edge row or column, 50 on every move.
+camera_edge = 15
 
 # Whether a run keeps the places it holds in its sessions past the process, so a
 # restart, a crash or a reboot comes back to the place its Wraith kept for it: the
