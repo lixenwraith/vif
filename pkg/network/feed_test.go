@@ -21,7 +21,7 @@ func feedConfig() FeedConfig {
 func feedOrigin(t *testing.T, cfg FeedConfig) (*FeedHub, *FeedWriter) {
 	t.Helper()
 	hub := NewFeedHub(cfg)
-	t.Cleanup(func() { hub.End("the test is over") })
+	t.Cleanup(func() { hub.End("the test is over", false) })
 	return hub, NewFeedWriter(hub)
 }
 
@@ -252,7 +252,7 @@ func TestARelayCopiesAFeedForItsOwnSubscribers(t *testing.T) {
 		for {
 			rec, err := r.Next()
 			if err != nil {
-				relay.End(err.Error())
+				relay.End(err.Error(), false)
 				return
 			}
 			relay.Publish(rec)
@@ -283,14 +283,14 @@ func TestARelayCopiesAFeedForItsOwnSubscribers(t *testing.T) {
 		t.Fatalf("the relay handed a subscriber already reading %q, want world@1", head)
 	}
 
-	origin.End("the host left")
+	origin.End("the host left", true)
 	for _, port := range []*FeedPort{early, late} {
 		select {
 		case <-port.Done():
 		case <-time.After(2 * time.Second):
 			t.Fatal("a relay's subscriber never learned the feed ended")
 		}
-		if ended := (FeedEnded{}); !errors.As(port.Err(), &ended) || ended.Reason != "the host left" {
+		if ended := (FeedEnded{}); !errors.As(port.Err(), &ended) || ended.Reason != "the host left" || !ended.Again {
 			t.Fatalf("the feed ended as %v, want the publisher's reason", port.Err())
 		}
 	}

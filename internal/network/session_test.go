@@ -122,7 +122,7 @@ func TestAWatchDialIsShownTheSessionAndHandedItsFeed(t *testing.T) {
 	shown := offer
 	shown.Assigned = 0
 	hub := link.NewFeedHub(link.DefaultFeedConfig())
-	defer hub.End("the test is over")
+	defer hub.End("the test is over", false)
 	w := link.NewFeedWriter(hub)
 	w.Sync(w.Cut(5), []byte("world@5"))
 
