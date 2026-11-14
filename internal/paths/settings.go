@@ -181,22 +181,63 @@ func upgradeStore(s SettingsStore) ([]string, error) {
 	return notes, s.Store(out)
 }
 
-// drop removes keys from doc, each with the comments that are its own
+// drop removes keys from doc, each with the comments that are its own; one inside
+// an inline value goes as that value is written again without it
 func drop(doc *toml.Document, keys []toml.Key) error {
 	for _, k := range keys {
-		if _, err := doc.Delete(k); err != nil {
+		if _, err := doc.Delete(k); err != nil && !dropInside(doc, k) {
 			return err
 		}
 	}
 	return nil
 }
 
+// dropInside writes again, without key, the inline value holding it: that of the
+// key above it the document sets. It reports whether one held it.
+func dropInside(doc *toml.Document, key toml.Key) bool {
+	for i := len(key) - 1; i > 0; i-- {
+		if v, ok := valueAt(doc.Tree(), key[:i]); ok && doc.Set(key[:i], without(v, key[i:])) == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// valueAt is the value tree holds at key
+func valueAt(tree map[string]any, key toml.Key) (any, bool) {
+	var v any = tree
+	for _, k := range key {
+		table, ok := v.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		if v, ok = table[k]; !ok {
+			return nil, false
+		}
+	}
+	return v, true
+}
+
+// without is a copy of the table v less the key rest names in it
+func without(v any, rest toml.Key) any {
+	table, ok := v.(map[string]any)
+	if !ok {
+		return v
+	}
+	table = maps.Clone(table)
+	if len(rest) == 1 {
+		delete(table, rest[0])
+	} else if sub, ok := table[rest[0]]; ok {
+		table[rest[0]] = without(sub, rest[1:])
+	}
+	return table
+}
+
 // UpgradeSettings brings a settings document an earlier build left up to this
-// build's, as a run does the one it reads and an install the one it finds: each key
-// this build does not take, or whose value it refuses, goes with the comments that
-// are its own, then each key the embedded document sets that it lacks comes with
-// its comments where that document puts it (toml Document.Fill). Every other line
-// stays, every value this build takes kept. It names each change it made.
+// build's: each key this build does not take, or whose value it refuses, goes with
+// the comments that are its own, then each key the embedded document sets that it
+// lacks comes with its comments where that document puts it (toml Document.Fill).
+// Every other line and value stays. It names the changes, counting many adds.
 func UpgradeSettings(data []byte) ([]byte, []string, error) {
 	doc, err := toml.ParseDocument(data)
 	if err != nil {
@@ -269,9 +310,9 @@ func (s Settings) refuses(key toml.Key, value any) error {
 	return s.check()
 }
 
-// ParseSettings reads a settings document over the embedded one, as LoadSettings
-// reads a file; a path in it stays as it is written. Unknown keys fail as
-// UnknownKeys with the settings read in full.
+// ParseSettings reads a settings document over the embedded one as it is written,
+// not brought up to date: a path in it stays as written, a refused value fails, and
+// unknown keys fail as UnknownKeys with the settings read in full.
 func ParseSettings(data []byte) (Settings, error) {
 	var s Settings
 	if err := decodeSettings(asset.DefaultSettings, &s); err != nil {
@@ -365,7 +406,7 @@ type SettingsStore interface {
 // first change from the one read. A vif.toml in the checkout or a system root is
 // never written; the user root's shadows it from then on. Nil without a user root.
 func SettingsFor(override, read string) SettingsStore {
-	if read != "" && OwnRoot(override, filepath.Dir(read)) {
+	if OwnSettings(override, read) {
 		return FileStore{Path: read}
 	}
 	user := UserRoot()
@@ -379,6 +420,12 @@ func SettingsFor(override, read string) SettingsStore {
 // back: the override root or the user root.
 func OwnRoot(override, root string) bool {
 	return root == UserRoot() || override != "" && root == filepath.Clean(override)
+}
+
+// OwnSettings reports whether the vif.toml read ("" for the embedded one) is the
+// player's own, at the top of one of their roots, which a run writes back
+func OwnSettings(override, read string) bool {
+	return read != "" && OwnRoot(override, filepath.Dir(read))
 }
 
 // FileStore is the vif.toml at Path, or a keymap a run stores whole. One not there

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -131,10 +130,12 @@ func main() {
 		os.Exit(exitFailure)
 	}
 	settingsStore = paths.SettingsFor(flagConfig.dir, settingsFile)
+	settingsOwn := paths.OwnSettings(flagConfig.dir, settingsFile)
 	if pageSettings != nil {
 		settingsStore, settingsNotes = pageSettings(&settings)
+		settingsOwn = true
 	}
-	if len(settingsNotes) > 0 && !*flagCheck && !*flagSchema {
+	if settingsOwn && len(settingsNotes) > 0 && !*flagCheck && !*flagSchema {
 		settingsNotice = paths.UpgradeStore(settingsStore)
 	}
 	// -g given either way decides, and -cli over it; unset, vif.toml's
@@ -216,7 +217,7 @@ func main() {
 		switch {
 		case len(settingsNotes) == 0:
 			fmt.Println("settings ok:", cmp.Or(settingsFile, "embedded default"))
-		case paths.OwnRoot(flagConfig.dir, filepath.Dir(settingsFile)):
+		case settingsOwn:
 			fmt.Printf("settings %s: a run writes it back up to date: %s\n", settingsFile, strings.Join(settingsNotes, "; "))
 		default:
 			fmt.Printf("settings %s: a run reads it up to date: %s\n", settingsFile, strings.Join(settingsNotes, "; "))

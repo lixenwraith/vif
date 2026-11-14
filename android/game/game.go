@@ -124,7 +124,7 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 		cfg.Membership.PlaceStore = paths.PlaceFile{Path: paths.PlacesFile()}
 		cfg.Membership.SignInStore = paths.PlaceFile{Path: paths.SignInsFile()}
 	}
-	if len(notes) > 0 {
+	if len(notes) > 0 && paths.OwnSettings("", file) {
 		cfg.Notice = paths.UpgradeStore(cfg.Settings)
 	}
 	// Android keeps a device's networks from the Go runtime and its Wi-Fi drops

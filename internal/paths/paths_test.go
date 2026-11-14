@@ -3,6 +3,7 @@ package paths
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/parameter"
 )
@@ -241,18 +243,67 @@ func TestUpgradingSettingsKeepsThePlayersLines(t *testing.T) {
 	}
 }
 
-// FuzzUpgradingSettingsReadsAsBefore: whatever settings document parses, its
-// upgrade reads whole and is up to date, and one whose values this build takes
-// reads as it did.
+// TestAnUpgradePutsBackEachShippedKeyAsShipped: the embedded document lacking any
+// one key or table it sets upgrades to itself byte for byte, so what a build adds
+// reaches an older file where and as the embedded one has it, each key named.
+func TestAnUpgradePutsBackEachShippedKeyAsShipped(t *testing.T) {
+	shipped, err := toml.ParseDocument(asset.DefaultSettings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range slices.Sorted(maps.Keys(shipped.Tree())) {
+		keys := []toml.Key{{table}}
+		for _, k := range slices.Sorted(maps.Keys(shipped.Tree()[table].(map[string]any))) {
+			keys = append(keys, toml.Key{table, k})
+		}
+		for _, key := range keys {
+			doc, _ := toml.ParseDocument(asset.DefaultSettings)
+			if _, err := doc.Delete(key); err != nil {
+				t.Fatal(err)
+			}
+			out, notes, err := UpgradeSettings(doc.Bytes())
+			if err != nil || string(out) != string(asset.DefaultSettings) {
+				t.Errorf("without %s, %q, %v:\n%s", key, notes, err, out)
+			}
+			if len(key) == 2 && !slices.Equal(notes, []string{fmt.Sprintf("added key %q", key.String())}) {
+				t.Errorf("without %s: notes %q", key, notes)
+			}
+		}
+	}
+}
+
+// TestUpgradingSettingsEditsInlineTables: a key to drop or a value to reset inside a
+// table written inline goes as that table is written again without it, its other
+// values and the comment on its line kept.
+func TestUpgradingSettingsEditsInlineTables(t *testing.T) {
+	out, notes, err := UpgradeSettings([]byte("play = { mouse = false, effects = 1, camera_edge = 99 } # mine\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(out), "play = { mouse = false } # mine\n") || len(notes) != 3 ||
+		notes[0] != `dropped unknown key "play.effects"` || !strings.HasPrefix(notes[1], "reset to the default: play.camera_edge 99") {
+		t.Errorf("notes %q:\n%s", notes, out)
+	}
+	if s, err := ParseSettings(out); err != nil || s.Play.Mouse || s.Play.CameraEdge != DefaultPlay().CameraEdge {
+		t.Errorf("reads %+v, %v", s.Play, err)
+	}
+}
+
+// FuzzUpgradingSettingsReadsAsBefore: every settings document that parses
+// upgrades, its upgrade reads whole and is up to date, and one whose values this
+// build takes reads as it did.
 func FuzzUpgradingSettingsReadsAsBefore(f *testing.F) {
 	f.Add(string(asset.DefaultSettings))
 	f.Add("# mine\n[play]\nmouse = false # mine\neffects = 1\n\n[later.sub]\nx = 1\n")
 	f.Add("play.hud = true\n[audio]\nbuffer_ms = \"x\"\n")
 	f.Add("[[play]]\nsfx = true\n[presentation]\ncell = { a = 1 }\n")
+	f.Add("play = { mouse = false, effects = 1, camera_edge = 99 }\npresentation = { window = { x = 1 } }\n")
 	f.Fuzz(func(t *testing.T, doc string) {
 		out, _, err := UpgradeSettings([]byte(doc))
-		if err != nil {
+		if _, parse := toml.ParseDocument([]byte(doc)); parse != nil {
 			return
+		} else if err != nil {
+			t.Fatalf("a document that parses does not upgrade: %v\n%s", err, doc)
 		}
 		after, err := ParseSettings(out)
 		if err != nil {
