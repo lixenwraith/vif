@@ -692,6 +692,17 @@ func (pm *PeerManager) Totals() LinkTotals {
 	return t
 }
 
+// whileEmpty runs f under the lock a link registers under, and only while no link
+// stands: a link that registers meanwhile does so before f, which then does not run,
+// or after it.
+func (pm *PeerManager) whileEmpty(f func()) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	if len(pm.peers) == 0 {
+		f()
+	}
+}
+
 // PeerCount returns current connected peer count
 func (pm *PeerManager) PeerCount() int {
 	pm.mu.RLock()

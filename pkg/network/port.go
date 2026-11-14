@@ -111,13 +111,18 @@ func (p *SocketPort) Close() error {
 // only this process's own streams takes dials from here, and a participant that
 // already listens takes them at a second door. A door opened where nobody could dial
 // starts the link's history over, as nobody has dialled it: it waits for its first
-// joiner as a fresh host's does, whatever streams the port held before.
+// joiner as a fresh host's does, whatever streams the port held before. A stream
+// that links as the door opens is counted, before the history starts over or after.
 func (p *SocketPort) Serve(ln net.Listener) error {
-	if p.ConnectionState() == StateIdle {
-		p.ever.Store(false)
+	if p.IsRunning() && p.unreachable() {
+		p.transport.peers.whileEmpty(func() { p.ever.Store(false) })
 	}
 	return p.transport.serve(ln, nil)
 }
+
+// unreachable reports a host's port at no door, which only this process's own
+// streams can link to.
+func (p *SocketPort) unreachable() bool { return p.config.Role == RoleHost && p.Addr() == nil }
 
 // ListensOn reports whether the port this participant bound for its peers, which
 // takes joins too, answers at addr already: a TCP address on that port with no host,
@@ -298,7 +303,7 @@ func (p *SocketPort) ConnectionState() ConnState {
 	if p.PeerCount() > 0 {
 		return StateConnected
 	}
-	if p.config.Role == RoleHost && p.Addr() == nil {
+	if p.unreachable() {
 		return StateIdle
 	}
 	if p.ever.Load() {
