@@ -1410,7 +1410,7 @@ void main() {
         location.replace(url.href);
     }
 
-    // share copies this page's address, which opens the same game joined
+    // share copies this page's address, which opens the same game as this page did
     let shareTimer = 0;
     function share() {
         const done = document.getElementById('share-done');
