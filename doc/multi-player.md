@@ -1272,9 +1272,10 @@ worse fact hides a lesser one rather than sitting beside it: `Migrating [n]`,
 `<players>P:<local hex slot> <round trip>` with at most one qualifier — `slow!`,
 `desync <ticks>`, `loss <pct>%` or `slow` — and a
 background that is green, amber or red by the worst of the round trip and that
-qualifier. The rest of the measurements — jitter, cadence, keyframe interval,
-byte rate, the D-14 latch — are read in the status snapshot and in `:session`,
-where they can be compared against each other.
+qualifier. A run with no link shows none, nor does one hosting at no door with
+nobody linked, which nobody can reach (`link.StateIdle`). The rest of the
+measurements — jitter, cadence, keyframe interval, byte rate, the D-14 latch — are
+read in the status snapshot and in `:session`, where they can be compared.
 
 ## 8. Remaining gaps
 

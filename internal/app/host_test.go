@@ -2360,7 +2360,8 @@ func guestOfALostHost(t *testing.T, policy string) lostHost {
 // TestAForkGoesOnInASessionOfItsOwn: a run its session gives up, here a guest whose
 // pinned host left, is taken on as :leave takes it: a session of its own under the
 // identity it had and the next term, :host and :join open to it, and the loss said
-// as one. The session ended with its host, so the host's place goes with it.
+// as one. The session ended with its host, so the host's place goes with it, and a
+// session nobody can dial reads no link.
 func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	l := guestOfALostHost(t, AuthorityHost)
@@ -2387,6 +2388,12 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	}
 	if msg := guest.Context().GetStatusMessage(); msg != "Host connection lost; playing on in a session of your own" {
 		t.Fatalf("after its fork the guest says %q; want the loss said", msg)
+	}
+	guest.Tick(1)
+	var state string
+	guest.World().RunSafe(func() { state = guest.world.Resources.Status.Strings.Get("network.state").Load() })
+	if state != "idle" {
+		t.Fatalf("after its fork the guest's link reads %q; want idle", state)
 	}
 }
 

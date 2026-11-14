@@ -282,13 +282,17 @@ func (p *SocketPort) PeerCount() int { return p.transport.PeerCount() }
 // IsRunning reports whether the listener or client transport is active.
 func (p *SocketPort) IsRunning() bool { return p.transport.IsRunning() }
 
-// ConnectionState distinguishes initial wait from a lost established peer.
+// ConnectionState distinguishes initial wait from a lost established peer, and both
+// from a host nobody can dial, which waits for nobody.
 func (p *SocketPort) ConnectionState() ConnState {
 	if !p.IsRunning() {
 		return StateDisconnected
 	}
 	if p.PeerCount() > 0 {
 		return StateConnected
+	}
+	if p.config.Role == RoleHost && p.Addr() == nil {
+		return StateIdle
 	}
 	if p.ever.Load() {
 		return StateDisconnected

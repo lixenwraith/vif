@@ -588,10 +588,11 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	return r.netHeld, true
 }
 
-// networkShown reports whether the session shows a badge, and the link state it reads
+// networkShown reports whether the session shows a badge, and the link state it
+// reads: none for a run with no link, nor for one hosting where nobody can dial.
 func (r *StatusBarRenderer) networkShown() (state string, ok bool) {
 	state = r.statNet.Load()
-	return state, r.statMigrating.Load() || r.statHostLost.Load() || (state != "" && state != "off")
+	return state, r.statMigrating.Load() || r.statHostLost.Load() || (state != "" && state != "off" && state != "idle")
 }
 
 // networkBadge is the session in one badge: the round trip, which is the reading

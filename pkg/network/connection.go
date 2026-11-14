@@ -29,6 +29,7 @@ const (
 	StateConnecting
 	StateConnected
 	StateDisconnecting
+	StateIdle // a port hosting at no door with no peer: nobody to reach or expect
 )
 
 // Peer represents a remote endpoint

@@ -42,6 +42,10 @@ func TestStatusBarNetworkBadgeIsOneCellChosenBySeverity(t *testing.T) {
 	if item, ok := r.networkBadge(); ok {
 		t.Fatalf("a solo run renders %#v", item)
 	}
+	r.statNet.Store("idle")
+	if item, ok := r.networkBadge(); ok {
+		t.Fatalf("a run hosting where nobody can dial renders %#v", item)
+	}
 
 	r.statNet.Store("waiting")
 	if item, ok := r.networkBadge(); !ok || item.text != " Net: wait " {

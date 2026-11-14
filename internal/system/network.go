@@ -2159,6 +2159,8 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 				state = "connected"
 			case link.StateConnecting:
 				state = "waiting"
+			case link.StateIdle:
+				state = "idle"
 			default:
 				state = "down"
 			}
