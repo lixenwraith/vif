@@ -78,7 +78,7 @@ have somewhere to go.
   would spare the scenario its arithmetic.
 - **The magnifier**: a cursor resting on a glyph shows it large some way off, which
   a lesson could do without; the splash system has no switch for it yet.
-- **Sound**: a chime on a lesson cleared and a buzz on a taken key, as simon cues.
+- **Sound**: a chime on a lesson cleared and a buzz on a taken key, as recall cues.
 
 ## 4. Decisions taken
 

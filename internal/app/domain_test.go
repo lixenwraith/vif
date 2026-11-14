@@ -89,7 +89,7 @@ func scenarioTrees(t *testing.T) map[string]func() (map[string]any, error) {
 			return fsm.ResolveScenario(asset.MainScenario, asset.MainScenarioEntry)
 		},
 	}
-	for _, dir := range []string{"scenario/base/td", "scenario/base/blank", "scenario/base/simon", "scenario/base/vanguard", "scenario/base/dummy"} {
+	for _, dir := range []string{"scenario/base/td", "scenario/base/blank", "scenario/base/recall", "scenario/base/vanguard", "scenario/base/dummy"} {
 		d := filepath.Join(root, "wad", dir)
 		if _, err := os.Stat(filepath.Join(d, "scenario.toml")); err != nil {
 			continue

@@ -32,7 +32,7 @@ author may replace that progression entirely with external TOML configuration.
 
 The world starts with an empty, 16-slot cursor roster. Every shipped scenario's
 boot state requests a cursor (the campaign, `blank` and `td` at the map centre,
-`simon` below its buttons); `CursorSystem` places it on the
+`recall` below its buttons); `CursorSystem` places it on the
 nearest free cell and attaches cursor, view, protection, ping, energy, heat,
 shield, boost, weapon (holding the innate gun) and combat components, or under a
 `[map]` with `cursors = false` the cursor and protection components alone: an
@@ -586,7 +586,7 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `simon` is a memory game, `dummy` is a weapon range, `vimtutor` teaches
+scaffold, `recall` is a memory game, `dummy` is a weapon range, `vimtutor` teaches
 the motions a lesson at a time, `vanguard` is a side-scroller whose raiders are
 species its own behavior programs define, and `armada` is a fixed shooter whose
 ranks are three more. Each entry has a short `description` for
@@ -605,7 +605,7 @@ own corpus: code laid in blocks, so `%` finds a bracket's pair across rows ([Vim
 tutorial](vim-tutorial.md)). Its `[keymap]` makes `a` vim's append and `p`
 nothing for the run ([Input §10](input-and-modes.md#10-keymap-override-files)).
 
-`simon` lays four buttons across the map on keys 1-4, each with its note, rising
+`recall` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its
 button lights. The buttons run up once before the first game, and any press cuts
 that short. A level plays the sequence, one note longer than the last; after a

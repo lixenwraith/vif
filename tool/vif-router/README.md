@@ -111,16 +111,16 @@ and the room the site has: `sessions_max`, the fleet's size, and `doors` and
   "sessions_max": 10,
   "doors": 0,
   "doors_max": 16,
-  "scenarios": ["main", "blank", "simon", "td"],
+  "scenarios": ["main", "blank", "recall", "td"],
   "scenario_descriptions": {
     "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
     "blank": "An empty arena for experimenting with commands and building scenarios.",
-    "simon": "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons.",
+    "recall": "Recall: repeat the sequence with keys 1-4 or by clicking the buttons; each level adds a step.",
     "td": "Defend two central towers in a sprawling maze against escalating enemy waves."
   },
   "scenario_fixed_maps": {"td": "500x250"},
-  "scenario_min_players": {"main": 1, "blank": 1, "simon": 1, "td": 1},
-  "scenario_max_players": {"main": 16, "blank": 16, "simon": 16, "td": 16}
+  "scenario_min_players": {"main": 1, "blank": 1, "recall": 1, "td": 1},
+  "scenario_max_players": {"main": 16, "blank": 16, "recall": 16, "td": 16}
 }
 ```
 

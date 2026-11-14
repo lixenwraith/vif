@@ -173,7 +173,7 @@ until its rename to vif in September 2026.
 - Bot fitness and threat evasion; genetic archive dedup
 - Snapshot row reuse, owed busy links, bot relays
 - Timer slots, tick-closing settle, dust into particles
-- Parallax glyph drift; the input hook and simon
+- Parallax glyph drift; the input hook and recall
 - Component logic moved into its systems
 - Docs swept against the code; a term index
 - Netplay stalls, lead and repairs; the session as a tree

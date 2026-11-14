@@ -214,7 +214,7 @@ program of a look, stats and timings, the four ranks written over it, each fixin
 its stats and timings, and each cave's palette and console colour, which `Raider`
 invokes by name (`{ macro = "${theme}Fg" }`). A raider type's program file is one
 invocation at its root: its rank's macro with its cave and its look, frames given
-as `[[frames]]`. `wad/scenario/base/simon` is one document that defines its own.
+as `[[frames]]`. `wad/scenario/base/recall` is one document that defines its own.
 
 ## 7. Rejected alternatives
 

@@ -38,7 +38,7 @@ coordinator's, sent under the same bounds, held in memory and saved in its
 │   ├── downloads/             # what sessions' hosts sent, as td-3f2a9c1b0e7d/
 │   └── base/                  # the shipped scenarios
 │       ├── blank/scenario.toml
-│       ├── simon/scenario.toml
+│       ├── recall/scenario.toml
 │       ├── vimtutor/
 │       │   ├── scenario.toml
 │       │   └── lessons.toml   # the corpus the scenario carries
@@ -528,7 +528,7 @@ owner-authored ones (energy, heat, boost, shield, weapon; D-13) act only on a cu
 this instance owns, the rest (move, typing, gold jump, tower) on any live one.
 A captured entity names the first cursor on every instance, so to set each
 participant's own heat, energy and ember emit `EventCursorArmRequest { heat, energy,
-ember }`, which acts on the cursor this instance drives, as `wad/scenario/base/simon` does.
+ember }`, which acts on the cursor this instance drives, as `wad/scenario/base/recall` does.
 
 ---
 
@@ -736,7 +736,7 @@ release, so a machine judges a press and never plays its tone.
 in the row, counted from 1, with its sound; a spawn on a key that already has a
 button is refused. A button shows its key in the splash font once it is about ten
 cells square, so a scenario sets a `[map]` floor that leaves room for its row.
-`wad/scenario/base/simon` is the worked example.
+`wad/scenario/base/recall` is the worked example.
 
 ### Splash text and glyph lines
 

@@ -1,4 +1,4 @@
-description = "Simon: listen to the notes, then repeat them with keys 1-4 or by clicking the buttons."
+description = "Recall: repeat the sequence with keys 1-4 or by clicking the buttons; each level adds a step."
 min_players = 1
 max_players = 16
 
@@ -16,7 +16,7 @@ min_height = 20
 [systems]
 only_systems = ["button", "timer", "death", "glyph", "environment", "particle", "transient", "audio", "cursor", "energy", "heat"]
 
-[regions.simon]
+[regions.recall]
 initial = "Intro"
 
 [regions.player]
@@ -113,7 +113,7 @@ doc = "Drift towards `rad` when variable heading is `idx`."
 params = { idx = "int", rad = "float" }
 body = { action = "EmitEvent", event = "EventDriftStart", payload = { direction = "${rad}", speed = 6.0, duration_ms = 0 }, guard = "VarEquals", guard_args = { var = "heading", value = "${idx}" } }
 
-# --- Simon ---
+# --- Recall ---
 
 # Keys open with the board: a press cuts the legend short and starts the first game,
 # which the bell and a flash open
@@ -130,8 +130,7 @@ transitions = [
 
 # Boot: settled before the clock starts, drawn behind the start prompt; the game
 # begins at the first Tick, after the press. Buttons ascend in pitch left to
-# right, the A major notes of the classic game, and the legend runs up them once
-# from that Tick
+# right, the A major notes, and the legend runs up them once from that Tick
 [states.Intro]
 parent = "Start"
 on_enter = [
@@ -140,7 +139,7 @@ on_enter = [
     { macro = "Button", key = "3", color = { r = 220, g = 0, b = 0 }, sound = "tone_a4" },
     { macro = "Button", key = "4", color = { r = 0, g = 200, b = 0 }, sound = "tone_e5" },
     { macro = "Show", each = { button = [1, 2, 3, 4], delay_ms = [300, 500, 700, 900] } },
-    { macro = "Say", message = "Simon: listen, then repeat the notes" },
+    { macro = "Say", message = "Recall: repeat the sequence" },
 ]
 transitions = [
     { trigger = "Tick", target = "Ready", guard = "StateTimeExceeds", guard_args = { ms = 1200 } },

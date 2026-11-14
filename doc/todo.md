@@ -316,7 +316,7 @@ What remains:
   refuses a speed change.
 - **After vanguard**: armada, with a round timer raising `EventGameResetRequest`
   and its band for the ship; main last, where `default` already scores about 900
-  a minute. Simon is memory with no number to tune, and td's rounds run minutes
+  a minute. Recall is memory with no number to tune, and td's rounds run minutes
   against an eye population that is itself evolving.
 
 ### Give `genetic` what a live network learner needs
@@ -1614,7 +1614,7 @@ the joiner's report, and drop the record from the keeper and the report.
 
 A participant's cursor lands on the map centre whatever the scenario's boot request
 asked: `addParticipant` and a joiner's roster both push `Center: true` with the
-template's heat and energy, so a simon guest starts at the centre and not below the
+template's heat and energy, so a recall guest starts at the centre and not below the
 buttons where the boot cursor stands. Anything hostile a scenario puts at the centre
 strikes each arrival on its first ticks. Keep the boot request's placement beside
 the heat and energy template (`PlayerResource.SetInitialResources`) and spawn
