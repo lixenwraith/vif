@@ -1244,6 +1244,33 @@ file by its methods' receiver, or each new file is an unchecked helper that
 `TestHelperFilesArePinned` refuses. Both steps conflict with every open branch on
 the file, so they wait for a pause between waves of netcode work.
 
+### Tell a host that stalls from one that is gone
+
+- Priority: P2
+- Affected files: `internal/converge/authority.go` (`driveShedding`, `peerLost`),
+  `internal/converge/correction.go` (`observeFloor`), `internal/converge/reach.go`
+  (`Reach.cutOff`), `internal/render/renderer/status_bar.go`
+- Guide: [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing),
+  [§5.1](multi-player.md#51-succession)
+
+A guest reads its host's silence from its link alone: one that stops answering is
+dead at `NetworkLinkDeadAfter`, and the guest redials or walks (§5.1). Two stalls
+fall between that and a host that only slows:
+- **A host whose loop stalls while its transport answers**, a deadlock on the world
+  lock or a pathological tick: the probe is answered on transport goroutines, so the
+  link stays up and the guest predicts alone for as long as the stall lasts. Its
+  badge stays green, since `slow!` needs a cadence only a publisher writes, and the
+  one sign is the floor's 8 s alert. What would close it: a floor that stays
+  breached over a link that answers counts as the authority's loss and opens the
+  walk `Reach.cutOff` opens, and the badge shows a breach with no cadence.
+- **A host frozen for 1.1 to 5 s**, which every link survives: its clock projects
+  through the freeze, the scheduler drops the debt at once, and `driveShedding`
+  takes that one drop for overload, shedding the newest bot, else the newest guest
+  ("Removed by the host to keep its tick"). In a scratch converge test a 1 s freeze
+  shed nobody, and 1.5 s and 4 s shed the guest. What would close it: a single drop
+  longer than the link-dead time is not counted, or the share has to hold over two
+  windows.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -1555,6 +1582,48 @@ with nobody in it, such as td's two sides attacking each other's towers, needs a
 lobby quorum of 0 so a server starts without a guest, `holdVacant` parking only
 below the scenario's minimum, the ownerless boot cursor dropped without a park, and
 spawns that do not anchor on a cursor: the gold cycle fails and retries with none.
+
+### Issue a pass in a session opened past its first term
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`openSessionLocked`),
+  `internal/app/internal/membership/session.go` (`issuePassLocked`, `checkPass`),
+  `internal/converge/authority.go` (`extendTermKeys`)
+- Guide: [Multi-player §5.4](multi-player.md#54-wraiths) (the pass)
+
+A pass names the session's first authority key, `TermKeys[0]`. A session a run opens
+after `:leave` or a fork starts at the next term with no term keys, so `Open` fills
+the earlier terms with empty keys: `issuePassLocked` signs over an empty authority
+key and fails ("pass not issued", logged for every bot the leave seats again), and
+`checkPass` holds every pass shown to that empty key. Nobody there is given a pass,
+so a passphrase `:host` sets on such a session later spares no redial its phrase.
+What would close it: a pass names the first key the session's own terms hold, or a
+reopened session keeps its own term's key first.
+
+### Say what a run alone after a loss is
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`sessionSummaryLocked`),
+  `internal/system/network.go` (`reportDisconnect`), `internal/app/loop.go`
+  (`setAway`)
+- Guide: [Multi-player §5.5](multi-player.md#55-leaving-a-session),
+  [§7](multi-player.md#7-diagnostics-and-operations)
+
+A fork, a `:leave` and a dropped player go on in a session with no door, which
+shows no badge and keeps the places §5.5 says. What the run says of itself is
+still off:
+- `:session` reads `Session hosting` there, in a browser too, which cannot host,
+  and a run frozen for a redial or a walk reads "continuing locally from the last
+  authoritative state".
+- A relayed person cut off from its relay is told "Host connection lost", though
+  its host may be alive, and reads `Net: down` for 10 s and then nothing while it
+  redials the relay and walks.
+- A run with its own bots shows their in-process links as a network session's,
+  `2P:0 4ms`.
+- On Android, a fork made while the player is away plays on unpaused, since away
+  is applied only when it changes (`setAway`); and a guest the phone froze past its
+  host's Wraith wait forks on thaw saying its host connection was lost, though the
+  host never went quiet.
 
 ## Combat
 
