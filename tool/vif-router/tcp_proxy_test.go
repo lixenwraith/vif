@@ -446,7 +446,7 @@ func startAskingPod(t *testing.T, router network.Key) *askingPod {
 				c := network.Coordinator{
 					Name: routedID,
 					Ticket: func(shown *network.Signed, keys []string) (*network.TicketBody, error) {
-						body, err := pod.gate.Admit(shown, keys)
+						body, err := pod.gate.Admit(shown, keys, network.AdmitPlay)
 						if err == nil {
 							pod.tickets <- *body
 							pod.keys <- keys

@@ -112,6 +112,113 @@ func TestProbesKeepAQuietLinkAlive(t *testing.T) {
 	}
 }
 
+// TestAWatchDialIsShownTheSessionAndHandedItsFeed: a dial that opens with the watch
+// frame, at a door that takes joins too, passes the door's admission, is shown the
+// session with no place in it and served its scenario, and at its seat reads the
+// feed on the stream it dialled, as no peer of the host. The door's ticket gate
+// admits a ticket to watch and not one to play; a door with no feed says so.
+func TestAWatchDialIsShownTheSessionAndHandedItsFeed(t *testing.T) {
+	offer := testOffer()
+	shown := offer
+	shown.Assigned = 0
+	hub := link.NewFeedHub(link.DefaultFeedConfig())
+	defer hub.End("the test is over")
+	w := link.NewFeedWriter(hub)
+	w.Sync(w.Cut(5), []byte("world@5"))
+
+	router := NewKey()
+	gate := &TicketGate{Keys: [][]byte{router.Public()}, Session: "match"}
+	relayed := make(chan bool, 1)
+	door := Coordinator{
+		Name:     "match",
+		Assign:   func(Admission) (SessionOffer, error) { return offer, nil },
+		Watch:    func(Admission) (SessionOffer, error) { return shown, nil },
+		Scenario: func(digest string) ([]byte, error) { return []byte("scenario " + digest), nil },
+		Ticket:   func(s *Signed, keys []string) (*TicketBody, error) { return gate.Admit(s, keys, AdmitWatch) },
+		Feed: func(conn net.Conn, _ Admission, relay bool) error {
+			relayed <- relay
+			return hub.Subscribe(conn, relay)
+		},
+	}
+	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Name: "match", Assign: door.Assign}, time.Second)
+	hostCfg.AcceptWatch = WatchAcceptor(door, time.Second)
+	host := link.NewSocketPort(&hostCfg.Config)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+	dial := func(kind AdmissionKind) *Config {
+		cfg := DebugConfig(link.RolePeer, "")
+		cfg.SessionName, cfg.Keys = "match", []Key{NewKey()}
+		ticket, err := SignTicket(router, TicketBody{Session: "match", Kind: kind, Subject: "router", Key: cfg.Keys[0].Public()}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.Ticket = ticket
+		return cfg
+	}
+
+	if _, _, err := WatchSession(host.Addr().String(), dial(AdmitPlay)); !errors.Is(err, &Refusal{Code: RefusalCredential}) {
+		t.Fatalf("a ticket to play opened the watch door: %v", err)
+	}
+	pending, preview, err := WatchSession(host.Addr().String(), dial(AdmitWatch))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pending.Close()
+	if preview.Host != offer.Host || preview.Assigned != 0 || len(preview.Roster) != len(offer.Roster) {
+		t.Fatalf("the watcher was shown %+v, want the session with no place in it", preview)
+	}
+	if body, err := pending.RequestScenario("abc"); err != nil || string(body) != "scenario abc" {
+		t.Fatalf("the scenario came as %q, %v", body, err)
+	}
+	conn, err := pending.Watch(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := link.NewFeedPort(conn, DefaultConfig().Kinds, link.DefaultFeedConfig())
+	defer port.Close()
+	select {
+	case <-port.Heads():
+	case <-time.After(2 * time.Second):
+		t.Fatalf("no starting point reached the watcher: %v", port.Err())
+	}
+	if head := string(port.TakeHead()); head != "world@5" || !<-relayed {
+		t.Fatalf("the feed began at %q, or the dial's relay ask was lost", head)
+	}
+	w.Frame(MsgEvent, []byte("epoch"))
+	w.Mark(6)
+	w.Flush()
+	waitForPeer(t, func() bool { return port.Ready(6) }, "the feed's tick never reached the watcher")
+	var buf [2]link.Inbound
+	if n := port.Drain(buf[:]); n != 1 || buf[0].Msg.Type != link.MsgBundle {
+		t.Fatalf("the watcher drained %d frames, want the tick's one bundle", n)
+	}
+	if host.PeerCount() != 0 {
+		t.Fatal("a watcher became a peer of the host")
+	}
+
+	joined, seated, err := DialSession(host.Addr().String(), dial(AdmitPlay))
+	if err != nil || seated.Assigned != offer.Assigned {
+		t.Fatalf("a join at the door that takes watchers was seated as %d, %v", seated.Assigned, err)
+	}
+	joined.Close()
+
+	bareCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
+	bareCfg.AcceptSession = hostCfg.AcceptSession
+	bareCfg.AcceptWatch = WatchAcceptor(Coordinator{Name: "match"}, time.Second)
+	bare := link.NewSocketPort(&bareCfg.Config)
+	defer bare.Close()
+	if err := bare.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := WatchSession(bare.Addr().String(), dial(AdmitWatch)); !errors.Is(err, &Refusal{Code: RefusalUnknown}) {
+		t.Fatalf("a door with no feed answered a watch dial with %v", err)
+	}
+}
+
 // TestTheCoordinatorAssignsWithTheKeysADialProves: a place is assigned knowing
 // exactly the keys the dialer proved over the door's nonce, a fresh one first for a
 // dial that kept none, and a dialer whose proof fails, or that answers the question

@@ -163,27 +163,33 @@ func (t *Transport) serve(ln net.Listener, peer func(net.Conn) (PeerID, error)) 
 		t.extraListeners = append(t.extraListeners, ln)
 	}
 	t.wg.Add(1)
-	go t.acceptLoop(ln, door{peer: peer, join: t.config.AcceptSession, admitted: t.config.OnAdmit})
+	go t.acceptLoop(ln, door{peer: peer, join: t.config.AcceptSession, watch: t.config.AcceptWatch, admitted: t.config.OnAdmit})
 	return nil
 }
 
 // door is what a listener serves: links from participants already in the session
-// (peer), joins (join), or both, and what runs once a join is a peer. Every dialer
-// speaks first, a peer link and a join each with the kind Kinds names for it, so a
-// door taking both reads which this is off the first byte.
+// (peer), joins (join), dials that only watch (watch), or several, and what runs
+// once a join is a peer. Every dialer speaks first, with the kind Kinds names for
+// what it opens, so a door taking more than one reads which this is off the first
+// byte.
 type door struct {
 	peer, join func(net.Conn) (PeerID, error)
+	watch      func(net.Conn) error
 	admitted   func(PeerID)
 }
 
+// watching is the watch handshake as an accept that names no peer: on success the
+// stream is its handler's and never joins the peer set.
+func (d door) watching(conn net.Conn) (PeerID, error) { return 0, d.watch(conn) }
+
 // open picks the handshake conn runs, and the stream that handshake reads: one the
 // first byte was read from gives it back. served is a join's. cfg says within what
-// time the byte comes and which kinds open a peer link and a join.
+// time the byte comes and which kind opens which handshake.
 func (d door) open(conn net.Conn, cfg *Config) (accept func(net.Conn) (PeerID, error), served bool, link net.Conn, err error) {
 	switch {
-	case d.join == nil:
+	case d.join == nil && d.watch == nil:
 		return d.peer, false, conn, nil
-	case d.peer == nil:
+	case d.peer == nil && d.watch == nil:
 		return d.join, true, conn, nil
 	}
 	if cfg.ConnectTimeout > 0 {
@@ -194,13 +200,15 @@ func (d door) open(conn net.Conn, cfg *Config) (accept func(net.Conn) (PeerID, e
 	if _, err := io.ReadFull(conn, first.b[:]); err != nil {
 		return nil, false, nil, err
 	}
-	switch MessageType(first.b[0]) {
-	case cfg.Kinds.PeerLink:
+	switch kind := MessageType(first.b[0]); {
+	case kind == cfg.Kinds.PeerLink && d.peer != nil:
 		return d.peer, false, first, nil
-	case cfg.Kinds.Join:
+	case kind == cfg.Kinds.Join && d.join != nil:
 		return d.join, true, first, nil
+	case kind == cfg.Kinds.Watch && d.watch != nil:
+		return d.watching, false, first, nil
 	}
-	return nil, false, nil, fmt.Errorf("transport: %s opened with message %#x, neither a peer link nor a join",
+	return nil, false, nil, fmt.Errorf("transport: %s opened with message %#x, which this door takes no dial by",
 		conn.RemoteAddr(), first.b[0])
 }
 
@@ -218,6 +226,9 @@ func (c *firstByte) Read(p []byte) (int, error) {
 	c.read, p[0] = true, c.b[0]
 	return 1, nil
 }
+
+// NetConn is the stream beneath, which a handshake reads a TLS binding from.
+func (c *firstByte) NetConn() net.Conn { return c.Conn }
 
 // Listen binds addr as a host serves it, so a caller learns it cannot have the port
 // before anything depends on it; Config.PreboundListener then hands it to the port.
@@ -293,7 +304,7 @@ func (t *Transport) serveSession(addr string, accept func(net.Conn) (PeerID, err
 	}
 	t.extraListeners = append(t.extraListeners, ln)
 	t.wg.Add(1)
-	go t.acceptLoop(ln, door{join: accept, admitted: admitted})
+	go t.acceptLoop(ln, door{join: accept, watch: t.config.AcceptWatch, admitted: admitted})
 	return ln.Addr().String(), nil
 }
 
@@ -355,7 +366,7 @@ func (t *Transport) acceptLoop(ln net.Listener, d door) {
 		// Accept order is not an identity: the barrier's per-source epoch window and
 		// every roster lookup are keyed by canonical participant ID, so admitting a
 		// stream under a connection-local number would corrupt both silently.
-		if d.peer == nil && d.join == nil {
+		if d.peer == nil && d.join == nil && d.watch == nil {
 			_ = conn.Close()
 			t.report(errors.New("transport: host accepted a connection with no session handshake"))
 			continue
@@ -391,11 +402,14 @@ func (t *Transport) handshake(conn net.Conn, d door) {
 	}
 	t.releasePending(conn)
 	<-t.handshakes
-	if err == nil {
+	switch {
+	case err != nil:
+		_ = conn.Close()
+	case id == 0:
+		return // a dial that only watches: its handshake took the stream
+	default:
 		// AddConnectionAs closes the connection on every failure of its own.
 		_, err = t.peers.AddConnectionAs(link, id, served)
-	} else {
-		_ = conn.Close()
 	}
 	if err != nil {
 		if !errors.Is(err, ErrLinkStands) {
