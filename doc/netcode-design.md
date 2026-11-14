@@ -48,6 +48,13 @@ gets costs the host one pass and the link none. A run that would end on the
 inflater's window keeps the raw frame due next, whose last frame is delivered
 before the flush marker is read.
 
+An audience reads none of them. A **feed** (multi-player §5.8, `pkg/network`
+`FeedWriter`) is the authority's committed epochs and owner syncs once more, with
+a mark closing each tick, gathered ten ticks a record and deflated against one
+history every viewer shares, and a whole world every 600 ticks in the correction
+exchange's place. A hub copies each record to every viewer, the host's own or the
+router's for a fleet session, so it is encoded once whatever the audience: §3.8.
+
 The port packs what a link is sent of epochs and syncs into one `MsgBundle`
 (`MessageType.Bundles`) and releases each link's when a drain ends and when the tick
 closes, so a link reads one or two frames a tick whatever the roster; a frame of any
@@ -239,7 +246,8 @@ reconciled after the handoff as the roster is (multi-player §5.2).
 §3.1 counts bytes framed before deflate on the in-process mesh, which does not
 deflate, and times stages rather than their parts; §3.3 reads the socket path, §3.5
 the harness, §3.7 a td keyframe's bytes by section and layout, the install's lock by
-part and the heap by owner, which decided §4's last batch. Still unread: repairs by
+part and the heap by owner, which decided §4's last batch, §3.8 the feed an
+audience reads and what a copy of it costs. Still unread: repairs by
 cause, the sections carried and whether the authority committed one of the
 receiver's crossings late or void since its last proof, where the next divergence
 fix would start; and keyframes by reason.
@@ -769,6 +777,45 @@ store's index was built afresh each publication before, 6 MB of rows, pages and
 per-row arrays a time, since its entities change every tick; it is 200 kB of
 indices now, and a page whose cells and bytes held keeps its hash unhashed.
 
+### 3.8 The feed
+
+`TestAFeedOverAFightReadsItsCost` (`VIF_FEED=1`, `VIF_FEED_PLAYERS`,
+`VIF_FEED_TICKS`) on 2026-11-14: the embedded `main` scenario at 120x40 over
+loopback sockets, protocol 38, the players under `:god`, each moving one tick in
+three and firing one in six as §3.5's do, 2,400 ticks stepped with one viewer in
+step. The feed's bytes are counted once, however many viewers are sent them,
+beside what the host sent each guest meanwhile:
+
+```
+Players  Feed B/s  Starting points B/s  Host to a guest B/s  Starting point  Capture on the tick  Encode off it
+2             680                  187                 1820  3.9-7.7 kB      0.25-0.95 ms         0.43-0.62 ms
+4            1724                  191                 2463  4.1-9.1 kB      0.29-0.51 ms         0.37-0.74 ms
+```
+
+A viewer costs its feeder 0.9 kB/s at two players and 1.9 at four, under a guest's
+1.8 to 2.5 and with nothing encoded for it: the feed has no correction exchange,
+and a starting point every 30 s in its place. Each starting point sent to a viewer
+already reading moved no entry of its world, and the viewer ran 9 to 13 ticks
+behind its host. §3.5's four shapes read the same in every count with the feed in
+the build and nobody watching, since an unwatched authority copies nothing.
+
+What a copy costs the hub that makes it was read once, the same day, with a
+harness not kept: a `FeedHub` publishing an 860-byte record, a four-player
+record's size, every 2 ms to N loopback subscribers that discard it, four cores,
+the process's CPU from `getrusage`, so both ends of each socket are counted:
+
+```
+Subscribers  CPU a record  CPU a session second, two records
+64           0.64 ms       1.3 ms
+256          2.6 ms        5.2 ms
+1024         8.9 ms        17.8 ms
+```
+
+About 10 µs a record a subscriber. The router's 256 spectators of a four-player
+session therefore cost it about half a percent of a core and 490 kB/s of egress,
+and the pod one subscriber's 1.9 kB/s; the bytes are what grow with an audience,
+which [segments a cache serves](todo.md#serve-a-sessions-feed-as-cacheable-segments)
+would take off the node.
 
 ## 4. Phase 2
 

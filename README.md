@@ -115,6 +115,7 @@ install. The ones most runs want:
 ```bash
 ./bin/vif -host :7777                      # play, and let others join
 ./bin/vif -join 127.0.0.1:7777             # from a second terminal
+./bin/vif -spectate 127.0.0.1:7777         # or only watch it, in no seat
 ./bin/vif -serve :7777 -size 120x40        # a game server nobody plays at
 ./bin/vif -join vif://lixen.com:7777/<game>
 ./bin/vif -join https://lixen.com          # host a new game there and join it

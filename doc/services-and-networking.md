@@ -153,6 +153,8 @@ flags so no caller can bypass the start/ready gate. The entry points:
 |---|---|
 | `-host <bind-address>` | Bind before the terminal starts, so a port the run cannot have ends it with the reason on stderr, as a `-join` that cannot dial does; then play at once and serve the listener when the clock starts, exactly as `:host` does. A rebuilt run that cannot reopen its door plays on solo. |
 | `-join <addr>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
+| `-spectate <addr> [slot]`, `:spectate <target> [slot]` | The targets `-join` takes, dialled to watch: the run takes no place in the session, and looks from the player on `slot`, else the first playing. The command dials while this run plays on and replaces the run, its bots and its journal once the session answers, so a refusal leaves the game as it was; while spectating, `:spectate <slot>` follows another player ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
+| `-spectators <n>` | How many spectators a session this run hosts feeds at once, 0 to 1024; 8 unless set, 0 takes none. |
 | `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. A host that sets one refuses a dial that names nothing, so it is taken with a front door that routes on the name or not at all. |
 | `:host <doors> [host\|migrate]` | Open a run that is **already playing**, at one or more doors, under the authority policy named. The port is bound before anything is written, so one the run cannot have leaves it solo; then the session's port is created, attached and started, unless the run's bots already opened one; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick; last the port serves the listener. A successor serves it beside the port its session reaches it at, or takes that port when the address names it, and hosts from then on. A run that hosts already, or is in any other session it joined, refuses it by its [session role](multi-player.md#1-vocabulary-and-boundaries). |
 | `:join <target>` | The targets `-join` takes. Dials while this run plays on and replaces the run only once the host has admitted it, so a refusal leaves the game as it was. The next run is built from the live seats, play settings and journal; the dial carries only its handshake and resolved scenario. A run that hosts, or is in a joined session that still has others in it, refuses it by its session role. |
@@ -220,8 +222,9 @@ and marks only its own cursor human-controlled.
 
 The status bar draws one network badge, chosen by severity: `Migrating`, then
 `Host lost`, then `Net: down` or `Net: wait`, otherwise `<players>P` with this
-instance's slot when it has one and the round trip to its slowest link (§9). The
-D-14 latch is not on it: a session run holds the latch from before its first
+instance's slot when it has one and the round trip to its slowest link (§9); a
+spectator's reads `Spectating <slot> of <players>P`, its feed having no round trip
+to read. The D-14 latch is not on it: a session run holds the latch from before its first
 joiner to after its last one leaves, and a solo run never does, so it is a fact
 about the run that `:session` names and the `network.session` card exposes beside
 state, peer count and connected state.
@@ -537,7 +540,12 @@ chain (`RelayDoor`); the first two are answered on that link with
 open a connection back for a dial with `MsgTunnelOpen` (0x34), which the run opens
 naming its ticket with `MsgTunnelAccept` (0x35), and either end keeps the control
 connection alive with `MsgTunnelKeep` (0x36) ([Multiplayer
-§5.6](multi-player.md#56-relay-doors-and-the-router)). An epoch or a sync is the binary envelope: a flag byte
+§5.6](multi-player.md#56-relay-doors-and-the-router)). A dial that only watches
+opens with `MsgSessionWatch` (0x37) in the route frame's place, which a door tells
+it from a join by; it is admitted and previewed as a join is, asks for no place,
+and its seat request is answered by `MsgStart`, after which the stream carries a
+feed's records one way and no frames
+([Multiplayer §5.8](multi-player.md#58-watching-a-session)). An epoch or a sync is the binary envelope: a flag byte
 (committed, leaf), then source, run, produced tick, hops, age and frame count, and
 per frame its event as the registry's index, a flag byte holding the producer's
 domain, its sequence as a delta from the frame before, its apply tick as a delta
@@ -1203,4 +1211,5 @@ metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 | Authority, succession, reach and corrections | `internal/converge` |
 | Startup session assembly | `internal/app/internal/membership/session.go`; `internal/app/membership.go`, `app.go`, `loop.go`, `network_socket.go`, `network_wasm.go` |
 | Session commands, mid-run gate and a joiner's install | `internal/app/internal/membership/host.go`, `join.go` |
+| An audience's feed, its hub and a viewer's port; the watch dial; a host's audience and a viewer's run; the router's | `pkg/network/feed.go`; `internal/network/session.go` (`WatchAcceptor`, `ServeWatch`); `internal/app/internal/membership/watch.go`; `tool/vif-router/audience.go` |
 | Supervised run's endpoint | `internal/probe`, `internal/app/probe.go` |

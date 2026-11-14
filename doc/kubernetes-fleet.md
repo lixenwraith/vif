@@ -67,9 +67,12 @@ What stands between this deployment and one a stranger can install is in
 full-roster measurement for the resource values, the failures a cluster has not
 yet been put through, and promoting verified images to the node. Until
 [Open fleet sessions to bots](todo.md#open-fleet-sessions-to-bots) holds, the
-deployment keeps a session's own bots closed (`VIF_ROUTER_BOTS_MAX=0`). Each
-address creates one session per first-join window and joins six times a minute,
-loose for a player whose link drops and comes back; one NAT is one address.
+deployment keeps a session's own bots closed (`VIF_ROUTER_BOTS_MAX=0`), and the
+lobby has no standing session to show: a session is spectated through the router
+(§9), and [the bot's game the site always runs](todo.md#keep-a-standing-session-for-the-lobby)
+waits on those bots. Each address creates one session per first-join window and
+joins or spectates six times a minute, loose for a player whose link drops and
+comes back; one NAT is one address.
 
 ## 4. Security posture
 
@@ -141,6 +144,14 @@ What bounds a stranger:
   refused before the upgrade. The front door, the router's one Internet-facing
   socket, places at most 32 connections at once, reads one name-sized frame from
   each within five seconds, and refuses before it dials a pod (§9);
+- a spectator being nobody in the session: the router answers a dial that only
+  watches itself, from its copy of the session's feed, charged to the dialler's
+  join budget and bounded by `-spectators` a session and `-spectators-per-address`
+  of them an address (an IPv6 one's /64), a dial still being answered included.
+  The pod is dialled once, under a ticket of kind `watch` the router signs for
+  itself, sees no spectator's address or count, and sends nothing that takes a
+  place or says where anyone listens (§9,
+  [Multiplayer §5.8](multi-player.md#58-watching-a-session));
 - `-authority host`, which is every run's default and what keeps that one port the
   only one. A migrate session gives each guest that takes over a listening port and
   publishes the addresses inside the session; a fleet session is its address, so it
@@ -288,6 +299,10 @@ What a cluster has not yet been put through is
   door behind a NAT is reached at the site and the router dials nothing a caller
   named. Allocation stays Kubernetes'; a player's own session published the same
   way is later work (Multiplayer §5.6).
+- **Spectators are fed by the router, from one subscription.** A spectator spliced
+  to its pod as a player is would cost the pod a stream each and the session its
+  `-route-max`; the router holds the session's feed once and copies it, so a pod's
+  cost does not grow with its audience and nothing of a spectator reaches it (§9).
 - **No public delete endpoint.** The API is anonymous behind the site, so one player
   must not be able to end another's match.
 - **Docker builds; K3s runs.** Docker and its system containerd stay disabled except
@@ -351,6 +366,40 @@ pod's name or another's. Tunnels are not listed and are not sessions, though the
 listing's limits count them: a door's run joined a session the fleet or a player
 hosts. Every connection placed, on a pod or a door, is accounted for as it closes,
 by the session's name and never the dialler's address.
+
+**Spectators.** A dial that only watches (`MsgSessionWatch`,
+[Multiplayer §5.8](multi-player.md#58-watching-a-session)) is answered by the
+router and not spliced. On either route it is placed as a join is, by the frame,
+the identifier and the dialler's budget, and then served the watch handshake by
+the router itself (`network.ServeWatch`), holding no connection to the pod and
+none of `-route-max`. The first to watch a session opens the router's one
+subscription to its pod (`audiences`, `tcpRouter.subscribe`): a watch dial of the
+router's own, under a ticket of kind `watch` it signs for itself (subject
+`router:feed`), which takes the session as shown, its scenario and its feed. A hub
+repeats that feed to every spectator, each record as it came (`FeedHub.Repeat`),
+and shows a new dial the session of the feed's newest starting point, so the world
+a dial builds is the one its feed begins from.
+
+- **Cost.** A pod serves one subscriber however many watch, and with nobody
+  watching copies nothing. A spectator costs the router a copy: the feed's 0.9 to
+  1.9 kB/s and about 10 µs of CPU a record, two records a second
+  ([Netcode design §3.8](netcode-design.md#38-the-feed)).
+- **Ceilings.** `-spectators` (256; 1024 at most; 0 shows no session) bounds a
+  session's audience and `-spectators-per-address` (4; 0 leaves it to the first)
+  one address's share of it, counted as the join budget counts an address, and so
+  not at all on the browser route without `-client-address-header`. A dial past
+  either is refused as `RefusalAudience`, which a client retries when a spectator
+  leaves. A session with no seat free is still shown, a spectator taking none; one
+  that is not live is refused as a join is, and one still in its lobby as not
+  started (`ErrUnstarted`), read off its health before its pod is dialled.
+- **Lifetime.** The subscription is dropped `audienceLinger` (15 s) after its last
+  spectator left, so a page that reloads finds it. A feed the pod ends reaches each
+  spectator with the pod's reason; one whose link is lost tells each to find it
+  again, and the redial opens a new subscription.
+- **Listing.** `GET /vif/api/sessions` carries `spectators` in each session and
+  `spectators_max` in `limits`, for a lobby to offer what would be granted.
+- **Not fed.** A tunnel's door is a guest's and writes no feed, so a dial that only
+  watches one is refused (`ErrUnwatched`), as it is with `-spectators 0`.
 
 **The front door.** `vif-router` listens on `-route-listen` beside its API,
 placing at most 32 connections at once and closing any past them. It reads exactly
