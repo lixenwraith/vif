@@ -128,6 +128,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         if (!started) {
             try {
+                Game.zone(java.util.TimeZone.getDefault().getID());
                 Game.start(files, wad, width, height, getResources().getDisplayMetrics().density, raster,
                         activity.waiting(), speaker, new Listener() {
                             @Override
