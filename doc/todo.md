@@ -1320,6 +1320,56 @@ a successor's record carrying no more than the roster lets it, the verifier's re
 which needs a limit, and which is accepted as the price of play without a server; then
 plug the holes found, one PR each.
 
+### Review what a relay hosts once its host is gone
+
+- Priority: P2, an audit (2026-11-14)
+- Affected files: `internal/app/internal/membership/host.go` (`LeaveSession`,
+  `leaveSessionLocked`, `relayedLocked`, `sessionRoleLocked`),
+  `internal/app/internal/membership/relay.go` (`reopenRelayDoor`, `returnAcceptor`,
+  `relaySeatingLocked`), `internal/converge/authority.go` (`beginSuccession`,
+  `driveWalk`, `endFollow`, `followGone`)
+- Guide: [Multi-player §5.1](multi-player.md#51-succession),
+  [§5.5](multi-player.md#55-leaving-a-session),
+  [§5.6](multi-player.md#56-relay-doors-and-the-router); Tighten what a relay and a
+  successor are trusted with, above
+
+The concern, Lixen's: a relay in a session pinned to its host, which never chose to
+be a candidate to host the whole game, now goes on hosting one for the people it
+relays once that host is gone. That is fine in general, since running `-relay` already
+shared its resources, and what passes through it, with those people, in a limited
+scope; but it needs a second look that the boundaries hold.
+
+What the fork does: it keeps the places of the people linked to it at its door as it
+forks and their bots', and nobody else's (`relayedLocked`); its `-relay` door, at the
+address they joined at, goes on into the session it opens and takes back a key that
+holds a person's place there, under the left session's name and with no passphrase,
+refusing any other (`returnAcceptor`); nobody new is seated through those people
+either, by a bot of theirs or a door of their own, until its player runs `:host`
+(`relaySeatingLocked`); each person waits on its relay up to `NetworkFollowWindow`,
+frozen, before it forks alone; and while it holds their places the session's role
+refuses `:join` and takes `:leave` and `:host`.
+
+What to look at:
+- Whether a relay hosts its people only once it is asked to, by a switch of its own as
+  Take over as host is, off by default, or by the `-relay` flag's word, rather than by
+  default. Nothing is shared that was not before: each person dials the address it
+  already used, and nobody's address goes to anyone new.
+- Whether the door, which asks no passphrase, should ask the session's, and what it
+  trusts a returning player's record with.
+- The fork issues no passes (Issue a pass in a session opened past its first term).
+- Gaps seen while building it, none worse than before, when each person forked alone at
+  once: a person behind a relay of its own (a relay chain) is not linked to the fork, so
+  its place goes and its relay's dial for it is refused as a newcomer's; a person whose
+  link to the relay blipped as it forked is not kept; a host that stalled rather than
+  went takes its relay back, and the person redials that relay's new run, whose host
+  may still hold the person's place as linked; and a door the router publishes is
+  covered by no test.
+- A person behind a relay seats no bot in the session at all: its bot's join through
+  the relay stays "joining" (`tellAuthority`), so keeping a relayed person's bots is
+  read in code alone. A holder is the joiner's own word at the host
+  (`noteJoinerReport`), so a place a direct guest of the host claimed was a relayed
+  person's bot is kept too, and that person's own `-relay` door could seat it.
+
 ### Widen how a guest offers to take a session over
 
 - Priority: P3
@@ -1657,10 +1707,11 @@ still off:
 - Guide: [Multi-player §5.5](multi-player.md#55-leaving-a-session),
   [§5.4](multi-player.md#54-wraiths)
 
-The choice made: a fork in a session pinned to its host keeps its own place and its
-bots' alone, so the host's Wraith, the host's bots and every other guest's place go
-at the fork. Another guest of that host that later dials the door the fork's `:host`
-opens comes in as a new player, without the cursor and record it had in that world.
+The choice made: a fork in a session pinned to its host keeps its own place, its
+bots' and those of the people it relayed (Multi-player §5.5), so the host's Wraith,
+the host's bots and every other guest's place go at the fork. Another guest of that
+host that later dials the door the fork's `:host` opens comes in as a new player,
+without the cursor and record it had in that world.
 
 What the other option does: the fork drops only the lost host and its bots, the
 places of the authority `giveUp` leaves named (`m.authorityID()`), and keeps every
@@ -1671,7 +1722,8 @@ this rule, when those Wraiths waited for a door with no limit.
 What it entails: those Wraiths stand on the fork's map for their 2 minutes whether
 anyone comes back or not, as the host's did in the report that led here. A return
 takes the fork's player opening a door and the other guest finding it: a host-policy
-guest has no door, nothing tells the others its address (§5.0), and local network
+guest has no door for them, its `-relay` door taking back the people it relayed alone,
+nothing tells the others its address (§5.0), and local network
 visibility is off by default (§5.7). The three-player test inverts, and §5.1 and
 §5.5 change with it.
 
