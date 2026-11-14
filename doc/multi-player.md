@@ -812,7 +812,8 @@ link (§5.2), and the authority's own two, which it crosses once
 - **Timeout.** A Wraith is dismissed `WraithTimeout` (2 min) of game time after it
   turned; a bot whose holder waits too goes in its holder's dismissal. A reset
   rebuilds a Wraith as a Wraith, its wait going on from the last game's, so no run
-  of resets keeps one. A person's wait runs out only where a door stands for it to
+  of resets keeps one, and as the new game's cursor, which takes nothing of the last
+  (Coming back). A person's wait runs out only where a door stands for it to
   come back through: the session a run opens for its bots, or goes on in after
   `:leave` or a fork, has none until `:host` (§5.0, `NetworkResource.Doorless`), so
   its authority dismisses no person there, nor the bots waiting with one, however
@@ -928,14 +929,19 @@ offer carries the credential's verifier, never the phrase, so a relay's door and
 successor's serve the same exchange, and a newcomer joins there as at the host's.
 
 A player brings back what its cursor held when it left (`event.CursorRecord`: energy,
-heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnState`).
+heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnState`),
+under the game it was sent in (`Stamp.Run`).
 The record stops once the run is out of the session: it closed, or plays on after a
 fork (`converge.Instance.Forked`), its own bots still linked or not, while a
 successor carrying the session keeps its own; a run redialling the host it lost
 stops it at the drop and keeps it again if it stays; a dismissal forgets the place. The
-arrival crossing carries it, and `CursorSystem.reclaim` writes it over the template
-at the free cell nearest the one the Wraith held, on every instance. A Wraith is
-driven by nobody, its own participant included, until that arrival.
+arrival crossing carries it, and `CursorSystem.reclaim` equips the Wraith at the free
+cell nearest the one it held, on every instance, and writes the record over the
+template only where it names the game being played and holds what a sync may
+(`CursorSystem.restore`, `heldInRange`). A reset starts another game, at `:n` or a
+defeat, so a player back after one, or whose arrival the reset crossed again, plays
+the cursor the new game built: leaving ahead of a loss brings nothing back. A Wraith
+is driven by nobody, its own participant included, until that arrival.
 
 A key whose place is still linked, which the host has not yet seen go, closes that
 link (`Membership.closeStaleLink`): its departure crosses as any lost link's does, and the

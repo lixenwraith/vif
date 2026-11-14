@@ -215,6 +215,11 @@ Branches.
 - A redial lends the run's place to its dial for the whole walk (`Membership.lent`),
   and `m.place` is nil meanwhile: what signs for the run, a link, a notice or the
   record that takes a term, reads `LocalKey`, which answers through the loan.
+- What a player brings back to its Wraith (`event.CursorRecord`) is judged where it
+  is written, `CursorSystem.restore` on every instance, never at the door: by the
+  game it names (`Run` against the queue's run, which a reset advances) and by
+  `heldInRange`, which the owner sync's check shares. A field added to the record
+  that play bounds joins `heldInRange`.
 
 ## Runs and their wiring
 

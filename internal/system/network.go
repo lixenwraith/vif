@@ -3463,22 +3463,11 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 func (s *NetworkSystem) stateInRange(p *event.CursorStatePayload) bool {
 	cfg := s.world.Resources.Config
 	span := math.Hypot(float64(cfg.MapWidth), cfg.CellAspect.Circular(float64(cfg.MapHeight)))
-	if !upTo(p.Heat, parameter.HeatMax) || !upTo(p.Overheat, parameter.HeatMaxOverheat) ||
+	if !heldInRange(p.Heat, p.HitPoints, p.WeaponCharges) || !upTo(p.Overheat, parameter.HeatMaxOverheat) ||
 		!upTo(p.ShieldRadius, span) || p.BoostRemaining < 0 || p.BoostTotal < 0 ||
 		!upTo(time.Duration(p.MainFireCooldown), parameter.WeaponCooldownMain) ||
-		!upTo(p.HitPoints, parameter.CombatInitialHPCursor) ||
 		!upTo(time.Duration(p.DamageImmunity), parameter.CombatDamageImmunityDuration) {
 		return false
-	}
-	for wt := range min(component.WeaponCount, component.WeaponType(len(p.WeaponCharges))) {
-		spec := &component.WeaponSpecs[wt]
-		most := spec.MaxCharges
-		if spec.Delivery == component.DeliveryTracer {
-			most = max(most, parameter.GunPathMax) // a scenario's path, which the sync omits
-		}
-		if !upTo(p.WeaponCharges[wt], most) {
-			return false
-		}
 	}
 	for wt := range min(component.WeaponCount, component.WeaponType(len(p.WeaponCooldown))) {
 		spec := &component.WeaponSpecs[wt]
@@ -3488,6 +3477,26 @@ func (s *NetworkSystem) stateInRange(p *event.CursorStatePayload) bool {
 	}
 	for _, spent := range p.DamageImmunitySpent {
 		if spent >= unownedAttacker<<1 { // a bit per slot, then the unowned attacker's
+			return false
+		}
+	}
+	return true
+}
+
+// heldInRange reports whether a cursor's heat, health and charges are values play
+// produces: the part of a sync its player's record keeps, which a return is held to
+// as the sync was (CursorSystem.restore).
+func heldInRange(heat, hitPoints int, charges []int) bool {
+	if !upTo(heat, parameter.HeatMax) || !upTo(hitPoints, parameter.CombatInitialHPCursor) {
+		return false
+	}
+	for wt := range min(component.WeaponCount, component.WeaponType(len(charges))) {
+		spec := &component.WeaponSpecs[wt]
+		most := spec.MaxCharges
+		if spec.Delivery == component.DeliveryTracer {
+			most = max(most, parameter.GunPathMax) // a scenario's path, which the sync omits
+		}
+		if !upTo(charges[wt], most) {
 			return false
 		}
 	}

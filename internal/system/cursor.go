@@ -318,7 +318,7 @@ func (s *CursorSystem) wraith(slot uint8, waited time.Duration) {
 
 // reclaim gives a Wraith back to its participant: equipped again at the free cell
 // nearest the one it held, or the map's centre for one it held off the map, with
-// what its player brought back of the game it left over the template.
+// what its player brought back of the game still played over the template.
 func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.WraithComponent, p *event.CursorSpawnRequestPayload) {
 	w := s.world
 	config := w.Resources.Config
@@ -343,9 +343,7 @@ func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.Wrait
 	}
 	if x >= 0 {
 		s.equip(e, x, y, p.Heat, p.Energy)
-		if r := p.Record; r != nil {
-			s.restore(e, r)
-		}
+		s.restore(e, slot, p.Record)
 		w.UpdateBoundsRadius()
 	}
 	s.publishRoster()
@@ -357,9 +355,17 @@ func (s *CursorSystem) reclaim(e core.Entity, slot uint8, wraith component.Wrait
 	}
 }
 
-// restore writes what a returning player brought back of the game it left over the
-// template its cursor was equipped with.
-func (s *CursorSystem) restore(e core.Entity, r *event.CursorRecord) {
+// restore writes what a returning player brought back over the template its cursor
+// was equipped with, where that is of the game being played and holds what play
+// produces. A reset starts another game, so a Wraith it rebuilt comes back as new.
+func (s *CursorSystem) restore(e core.Entity, slot uint8, r *event.CursorRecord) {
+	if r == nil {
+		return
+	}
+	if run := s.world.Resources.Event.Queue.Stamp().Run; r.Run != run || !heldInRange(r.Heat, r.HitPoints, r.Charges) {
+		s.world.Log().Info("app", "msg", "cursor record left out", "slot", int(slot), "run", r.Run, "playing", run)
+		return
+	}
 	c := s.world.Components
 	if energy, ok := c.Energy.GetPtr(e); ok {
 		energy.Current = r.Energy

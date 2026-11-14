@@ -274,6 +274,46 @@ func TestAnArrivalIntoItsOwnPlaceTakesItsCursorBack(t *testing.T) {
 	}
 }
 
+// TestAReturnBringsBackOnlyTheGameStillPlayed: a record a reset's new game was not
+// played under, or one holding more than play produces, leaves the Wraith taken
+// back with the template, as a cursor the new game built.
+func TestAReturnBringsBackOnlyTheGameStillPlayed(t *testing.T) {
+	const template = 100
+	for name, tc := range map[string]struct {
+		record event.CursorRecord
+		reset  bool
+	}{
+		"the game a reset ended":           {record: event.CursorRecord{Energy: 4321, Heat: 9, HitPoints: 37}, reset: true},
+		"more health than a cursor has":    {record: event.CursorRecord{Energy: 4321, HitPoints: parameter.CombatInitialHPCursor + 1}},
+		"more heat than the meter holds":   {record: event.CursorRecord{Energy: 4321, Heat: parameter.HeatMax + 1}},
+		"more charges than a weapon takes": {record: event.CursorRecord{Energy: 4321, Charges: []int{parameter.WeaponMaxChargeRod + 1}}},
+	} {
+		w, _, _ := testCursorWorld(t)
+		remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+		cursors := ready(NewCursorSystem(w)).(*CursorSystem)
+		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+			Payload: &event.CursorWraithRequestPayload{Slot: 2}})
+		if tc.reset {
+			w.Resources.Event.Queue.NextRun()
+		}
+		cursors.HandleEvent(event.GameEvent{Type: event.EventCursorSpawnRequest, Payload: &event.CursorSpawnRequestPayload{
+			Slot: 2, Control: uint8(component.ControlRemote), PeerID: 7, Energy: template, Record: &tc.record}})
+
+		energy, _ := w.Components.Energy.GetComponent(remote)
+		heat, _ := w.Components.Heat.GetComponent(remote)
+		combat, held := w.Components.Combat.GetComponent(remote)
+		weapon, _ := w.Components.Weapon.GetComponent(remote)
+		if !held || w.Components.Wraith.HasEntity(remote) {
+			t.Fatalf("%s: the Wraith was not taken back", name)
+		}
+		if energy.Current != template || heat.Current != 0 || combat.HitPoints != parameter.CombatInitialHPCursor ||
+			weapon.Charges[component.WeaponRod] != 0 {
+			t.Fatalf("%s: taken back with energy %d heat %d health %d charges %v; want the template",
+				name, energy.Current, heat.Current, combat.HitPoints, weapon.Charges)
+		}
+	}
+}
+
 // TestAnArrivalAtAResetsTickJoinsTheRosterItRebuilds: a participant's spawn request
 // that finds a reset's roster pending leaves it for the boot's, which builds the
 // arrival with the rest and in slot order: this run's own under its control, and
