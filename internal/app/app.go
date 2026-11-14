@@ -48,7 +48,9 @@ type restartRequest struct {
 	provided *resource.Scenario
 
 	// Bots are the graphs of the seats this run held, which the next one seats again.
-	Bots []string
+	// Passphrase is the phrase its doors took and its dials showed, the next one's too.
+	Bots       []string
+	Passphrase string
 
 	// Play is how this run was left, which the next one starts as.
 	Play paths.Play
@@ -63,7 +65,7 @@ type restartRequest struct {
 // may be the session closing, which ends them before this run is replaced. The
 // first request stands; a later one is refused.
 func (a *App) replaceWith(req *restartRequest) bool {
-	req.Bots = a.membership.SeatGraphs()
+	req.Bots, req.Passphrase = a.membership.SeatGraphs(), a.membership.Passphrase()
 	return a.restart.CompareAndSwap(nil, req)
 }
 

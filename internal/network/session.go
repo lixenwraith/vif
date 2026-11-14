@@ -323,11 +323,12 @@ type Coordinator struct {
 	Authority func() string
 	Pass      func(shown *Signed, keys []string) (*PassBody, error)
 
-	// Passphrase is the credential this door takes the exchange against, a host's
-	// own doors'; Gated says the session's doors take no bare key, for a door with
-	// none to check, which then admits a pass alone; Binding is the leaf this door
-	// serves over TLS (LeafBinding), which the exchange is bound to there.
-	Passphrase *PassphraseDoor
+	// Passphrase is the credential this door takes the exchange against as each dial
+	// arrives, since a run sets it after its port is made; Gated says the session's
+	// doors take no bare key, for a door with none to check, which then admits a pass
+	// alone; Binding is the leaf this door serves over TLS (LeafBinding), which the
+	// exchange is bound to there.
+	Passphrase func() *PassphraseDoor
 	Gated      func() bool
 	Binding    []byte
 
@@ -662,9 +663,13 @@ func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admissio
 	// What the door takes: a bare key where it is open, the exchange where it holds
 	// the passphrase, the site's ticket on a fleet pod, a pass alone where it holds
 	// neither for a gated session.
-	open := c.Passphrase == nil && c.Ticket == nil && (c.Gated == nil || !c.Gated())
-	question := AuthResponse{Nonce: nonce}
+	var door *PassphraseDoor
 	if c.Passphrase != nil {
+		door = c.Passphrase()
+	}
+	open := door == nil && c.Ticket == nil && (c.Gated == nil || !c.Gated())
+	question := AuthResponse{Nonce: nonce}
+	if door != nil {
 		question.Methods = append(question.Methods, MethodScram)
 	}
 	if c.Ticket != nil {
@@ -716,15 +721,15 @@ func askAdmission(conn net.Conn, c Coordinator, timeout time.Duration) (Admissio
 		switch {
 		case c.Ticket != nil && ans.Ticket != nil:
 			adm.Ticket, err = c.Ticket(ans.Ticket, keys)
-		case c.Passphrase != nil && len(ans.Scram) != 0:
+		case door != nil && len(ans.Scram) != 0:
 			var binding []byte
 			if tlsOf(conn) != nil {
 				binding = c.Binding
 			}
-			err = c.Passphrase.serve(conn, ans.Scram, binding)
+			err = door.serve(conn, ans.Scram, binding)
 		case c.Ticket != nil:
 			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes the site's ticket, and the dial came with none"}
-		case c.Passphrase != nil:
+		case door != nil:
 			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes a passphrase, and the dial showed none"}
 		default:
 			err = &Refusal{Code: RefusalSignIn, Reason: "this door takes a pass alone; the host's door takes the passphrase"}

@@ -1084,7 +1084,7 @@ func TestAPassphraseDoorAdmitsTheDialThatShowsIt(t *testing.T) {
 		}
 		return err
 	}
-	host, addr := serve(Coordinator{Passphrase: door})
+	host, addr := serve(Coordinator{Passphrase: func() *PassphraseDoor { return door }})
 	defer host.Close()
 	if err := dial(addr, "correct horse battery", nil); err != nil {
 		t.Fatalf("the passphrase was refused: %v", err)
@@ -1110,7 +1110,7 @@ func TestAPassphraseDoorAdmitsTheDialThatShowsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	relay, addr := serve(Coordinator{Passphrase: opened})
+	relay, addr := serve(Coordinator{Passphrase: func() *PassphraseDoor { return opened }})
 	defer relay.Close()
 	if err := dial(addr, "correct horse battery", nil); err != nil {
 		t.Fatalf("a door opened from the verifier refused the passphrase: %v", err)
@@ -1156,7 +1156,7 @@ func TestAWssPassphraseDoorBindsItsExchange(t *testing.T) {
 	hostCfg.ParticipantID = offer.Host
 	hostCfg.AcceptSession = HostAcceptor(Coordinator{
 		Assign:     func(Admission) (SessionOffer, error) { return offer, nil },
-		Passphrase: door,
+		Passphrase: func() *PassphraseDoor { return door },
 		Binding:    LeafBinding(serverTLS),
 	}, 5*time.Second)
 	host := link.NewSocketPort(&hostCfg.Config)

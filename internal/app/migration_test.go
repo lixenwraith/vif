@@ -403,7 +403,7 @@ func TestASuccessorTakesPlayersAsTheFirstHostDid(t *testing.T) {
 
 // TestASuccessorHostsAtItsOwnPort: :host on a successor naming the port its session
 // reaches it at opens nothing more, where a second bind would only collide with it,
-// and the run hosts there.
+// and the run hosts there, behind what gates the session: it sets no passphrase.
 func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHeadless(t, fixtureSeed, BotWidth, BotHeight)
@@ -425,11 +425,15 @@ func TestASuccessorHostsAtItsOwnPort(t *testing.T) {
 	}
 	port := portOf(t, successor)
 	own := port.ListenAddr()
-	var opened, again error
+	var gate, opened, again error
 	successor.World().RunSafe(func() {
+		_, gate = successor.ctx.SessionCtl.SetPassphrase("a phrase of its own")
 		opened = successor.ctx.SessionCtl.BeginHosting(own, "")
 		again = successor.ctx.SessionCtl.HostError()
 	})
+	if gate == nil || !strings.Contains(gate.Error(), "keeps the passphrase") {
+		t.Fatalf("a passphrase set on the successor: %v; want the session's kept", gate)
+	}
 	if opened != nil || again == nil || !strings.Contains(again.Error(), "already hosting") {
 		t.Fatalf(":host %s on the successor: %v, then %v; want it hosting there", own, opened, again)
 	}

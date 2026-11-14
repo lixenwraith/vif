@@ -947,6 +947,15 @@ wss door both ends bind the exchange to the certificate the door serves, so a
 self-signed door is proved both ways. A pass spares the phrase on every redial. The
 offer carries the credential's verifier, never the phrase, so a relay's door and a
 successor's serve the same exchange, and a newcomer joins there as at the host's.
+A door reads its credential as each dial arrives (`Coordinator.Passphrase`), so a
+phrase typed after the run's port was made, behind its bots or a session it left,
+gates the door it was typed for. From there the phrase is the session's: a run in
+a session others hold sets none (`Control.SetPassphrase`), nor does a `:host` or
+`:join` the run refuses; a restart keeps the phrase its player typed
+(`restartRequest.Passphrase`), and a scenario change reopens the door under the
+verifier it took (`RestartAsk.Door`), which a host that took the session over
+holds without the phrase. A run's own bots join on a stream inside the process and
+are asked no credential (`sessionAcceptor`).
 
 A player brings back what its cursor held when it left (`event.CursorRecord`: energy,
 heat, health and loadout), the last sync its run sent (`NetworkResource.OnOwnState`),

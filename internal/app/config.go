@@ -175,6 +175,7 @@ func joinNotice(notice, line string) string {
 // reopening a door its guests are already at.
 func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	c.Notice, c.wiring.dialled, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
+	c.Membership.Passphrase, c.wiring.membership.Door = next.Passphrase, next.Door
 	c.Journal, c.wiring.journalCarried = next.Journal, next.Journal
 	c.wiring.membership.JoinPress, c.Resources.Provided = next.Press, next.provided
 	if next.Scenario != "" {

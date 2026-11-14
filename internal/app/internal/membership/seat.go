@@ -202,9 +202,9 @@ func (m *Membership) seatLink() (net.Conn, error) {
 	m.world.RunSafe(func() {
 		port, _ = m.sessionTransportLocked().(*link.SocketPort)
 		if m.world.IsSessionCoordinator() {
-			accept, admitted = m.sessionAcceptor(m.admissions.Admit), m.admitLateJoiner
+			accept, admitted = m.sessionAcceptor(m.admissions.Admit, false), m.admitLateJoiner
 		} else {
-			accept, admitted = m.relayAcceptor(m.admissions.Admit), m.releaseRelayedJoiner
+			accept, admitted = m.relayAcceptor(m.admissions.Admit, false), m.releaseRelayedJoiner
 		}
 	})
 	if port == nil {

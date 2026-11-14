@@ -49,7 +49,8 @@ type SessionController interface {
 	Login(site, name, password string) error
 	Logout(site string) error
 	// SetPassphrase sets what this run's doors take and its dials show, the phrase
-	// given or one made for "new", and returns it to be shown once.
+	// given or one made for "new", and returns it to be shown once; a run in a
+	// session others hold is refused, since that session's doors keep theirs.
 	SetPassphrase(phrase string) (string, error)
 	RequestSession(site string, players int, scenario string) error
 	HostError() error

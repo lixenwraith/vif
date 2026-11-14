@@ -209,9 +209,11 @@ type RestartAsk struct {
 	// Host is the address to open hosting on once the next run's clock is running.
 	// A coordinator changing scenario does not go back into a startup lobby: its
 	// guests are already redialling, and the mid-run gate is the door they arrive
-	// at. Migrate is the policy the session held, which the door reopens under.
+	// at. Migrate is the policy the session held and Door the verifier its doors
+	// took, which the door reopens under.
 	Host    string
 	Migrate bool
+	Door    *network.DoorVerifier
 
 	// Rejoin says the next run follows this session rather than leads it, and Join
 	// where to dial now that succession moved the door. Join alone is a :join target
@@ -259,6 +261,11 @@ type Wiring struct {
 	// SessionPlayers is the -players of the session this run joined, which it holds
 	// to should it take that session over; Participants is a host's own.
 	SessionPlayers int
+
+	// Door is the verifier the doors took before a scenario change rebuilt this run.
+	// The first session it opens takes it up, and is gated by it where the run holds
+	// no passphrase of its own: a session it took over, whose phrase it never held.
+	Door *network.DoorVerifier
 
 	// HostListeners are the first run's -host doors, bound before its terminal
 	// started; the run serves them once its clock runs.
@@ -350,7 +357,7 @@ func (m *Membership) SetNetworkService(s *service.NetworkService) { m.networkSvc
 // and the gate that completes one it admitted: the relay's, admitting as admitHosted
 // says.
 func (m *Membership) GuestDoor() (accept func(net.Conn) (link.PeerID, error), admitted func(link.PeerID)) {
-	return m.relayAcceptor(m.admitHosted), m.releaseRelayedJoiner
+	return m.relayAcceptor(m.admitHosted, true), m.releaseRelayedJoiner
 }
 
 // Control is the membership's half of the operator's session surface.

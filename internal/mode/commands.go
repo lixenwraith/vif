@@ -1148,8 +1148,12 @@ func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
 		if len(rest) == 2 {
 			phrase = rest[1]
 		}
-		var err error
-		if shown, err = ctx.SessionCtl.SetPassphrase(phrase); err != nil {
+		// A :host this run refuses sets no phrase: its doors keep the one they took.
+		err := ctx.SessionCtl.HostError()
+		if err == nil {
+			shown, err = ctx.SessionCtl.SetPassphrase(phrase)
+		}
+		if err != nil {
 			setCommandError(ctx, sentence(err))
 			return CommandResult{Continue: true}
 		}
@@ -1230,8 +1234,13 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true}
 	}
 	if len(args) == 2 {
-		if _, err := ctx.SessionCtl.SetPassphrase(args[1]); err != nil {
-			setCommandError(ctx, "Join: "+sentence(err))
+		// A :join this run refuses sets no phrase: its doors keep the one they took.
+		err := ctx.SessionCtl.JoinError()
+		if err == nil {
+			_, err = ctx.SessionCtl.SetPassphrase(args[1])
+		}
+		if err != nil {
+			setCommandError(ctx, "Join: "+err.Error())
 			return CommandResult{Continue: true}
 		}
 	}

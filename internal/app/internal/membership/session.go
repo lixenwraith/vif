@@ -63,7 +63,7 @@ func (m *Membership) HostNetworkConfig() *link.Config {
 	netCfg.ParticipantID = engine.CoordinatorParticipant
 	netCfg.MaxPeers = m.SessionCapacity()
 	netCfg.OnError = logSessionError
-	netCfg.AcceptSession = m.sessionAcceptor(m.joinBudget())
+	netCfg.AcceptSession = m.sessionAcceptor(m.joinBudget(), true)
 	// Every host outlives its guests, so every host admits a dial after its lobby
 	// closed: a dropped participant comes back through the one gate a reconnect has
 	// ever had. The hook answers nothing until the run arms it, because until then
@@ -72,11 +72,12 @@ func (m *Membership) HostNetworkConfig() *link.Config {
 	return netCfg
 }
 
-// sessionAcceptor is the join handshake this run serves as its session's coordinator,
-// on its listener and on its bots' in-process streams, which spend no join budget.
-// admit takes or refuses a dial before anything is allocated for it.
-func (m *Membership) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) (link.PeerID, error) {
-	return network.HostAcceptor(network.Coordinator{
+// sessionAcceptor is the join handshake this run serves as its session's coordinator:
+// at a door, which asks a dial the session's credential, and on its bots' in-process
+// streams, which are the run's own and ask none. admit takes or refuses a dial
+// before anything is allocated for it.
+func (m *Membership) sessionAcceptor(admit func(net.Addr) error, door bool) func(net.Conn) (link.PeerID, error) {
+	c := network.Coordinator{
 		Preview:     m.previewParticipant,
 		Assign:      m.assignParticipant,
 		Release:     m.releaseParticipant,
@@ -86,13 +87,14 @@ func (m *Membership) sessionAcceptor(admit func(net.Addr) error) func(net.Conn) 
 		Name:        m.cfg.SessionName,
 		Authority:   m.firstTermKey,
 		Pass:        m.checkPass,
-		Passphrase:  m.passphraseDoor(),
-		Ticket:      m.ticketHook(),
-		Gated:       m.gated,
 		Binding:     network.LeafBinding(m.cfg.TLS),
 		Scenario:    m.scenarioBody,
 		PressWindow: parameter.NetworkJoinPressWindow,
-	}, network.DefaultConfig().ConnectTimeout)
+	}
+	if door {
+		c.Passphrase, c.Ticket, c.Gated = m.passphraseDoor, m.ticketHook(), m.gated
+	}
+	return network.HostAcceptor(c, network.DefaultConfig().ConnectTimeout)
 }
 
 // showJoinerPrepared tells this run's player who is about to join: a dialer whose
