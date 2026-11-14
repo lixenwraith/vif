@@ -666,7 +666,15 @@ func (m *Membership) previewParticipant(a network.Admission) (network.SessionOff
 	if max(len(m.sessionRoster), 1) > m.SessionCapacity() && !m.holdsPlaceLocked(a.Keys()) && !m.mayYieldLocked() {
 		return network.SessionOffer{}, m.fullLocked()
 	}
-	return m.offerLocked(anchor, 0), nil
+	return handshake(m.offerLocked(anchor, 0)), nil
+}
+
+// handshake is o as a dial reads it before it holds a place, in its preview and at
+// its seat: with no chain, which is where its players listen. That comes with the
+// start gate, to a run whose build this one checked and whose place is taken.
+func handshake(o network.SessionOffer) network.SessionOffer {
+	o.Chain = nil
+	return o
 }
 
 // assignParticipant allocates the next identity, or the place a key the dialer
@@ -760,7 +768,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 			entry = m.sessionRoster[i]
 		}
 		m.sessionOffer = m.offerLocked(anchor, entry.ID)
-		offer := m.sessionOffer
+		offer := handshake(m.sessionOffer)
 		offer.Pass = m.issuePassLocked(entry, shown)
 		return offer, offer.Validate()
 	}
@@ -779,7 +787,7 @@ func (m *Membership) assignFor(anchor event.JoinAnchor, holder link.PeerID, depa
 	m.sessionRoster = append(m.sessionRoster, assigned)
 
 	m.sessionOffer = m.offerLocked(anchor, assigned.ID)
-	offer := m.sessionOffer
+	offer := handshake(m.sessionOffer)
 	offer.Pass = m.issuePassLocked(assigned, shown)
 	return offer, offer.Validate()
 }

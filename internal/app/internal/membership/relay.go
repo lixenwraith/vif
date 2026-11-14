@@ -164,7 +164,7 @@ func (m *Membership) relayPreview(local link.PeerID) (network.SessionOffer, erro
 	anchor := m.JoinAnchor()
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
-	o := m.offerLocked(anchor, 0)
+	o := handshake(m.offerLocked(anchor, 0))
 	// What the authority's offers say, which this run's own carried: it does not
 	// keep the roster, nor set the ceiling.
 	o.Roster = slices.Clone(m.sessionOffer.Roster)
@@ -251,6 +251,9 @@ func (m *Membership) releaseRelayedJoiner(id link.PeerID) {
 	offer, report := m.relay.offers[id], m.relay.reports[id]
 	delete(m.relay.reports, id)
 	m.relay.mu.Unlock()
+	// The authority's answer was a handshake's, naming no address: the gate carries
+	// the chain as this run holds it, which is the authority's as last published.
+	offer.Chain = m.sessionChain()
 	port, err := m.socketPort()
 	if err == nil {
 		err = m.sendRelayedGate(port, offer, report)

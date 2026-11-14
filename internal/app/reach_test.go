@@ -132,6 +132,45 @@ func TestAGuestListensOnlyWhereItsPlayerLetTheSessionMoveToIt(t *testing.T) {
 	}
 }
 
+// TestAJoinHandshakeNamesNoAddress: neither the preview a dial prepares on nor the
+// offer its seat carries says where a player listens, at the host's door or a
+// relay's; the chain comes with the start gate, to a run that joined, directly or
+// behind a relay.
+func TestAJoinHandshakeNamesNoAddress(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	addr, door := freeAddress(t), freeAddress(t)
+	host, _ := driveBot(t, Config{Membership: Membership{HostAddress: addr, Migrate: true, Bots: []string{"roam"}}}, "patrol", nil)
+	waitForCursors(t, host, 2)
+	first, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr, RelayAddress: door}, Play: takingOver()}, "patrol", nil)
+	id := link.PeerID(first.membership.LocalParticipant())
+	named := func(a *App) func() bool {
+		return func() bool { at, ok := a.authority.Chain().Lookup(id); return ok && at != "" }
+	}
+	waitUntil(t, named(host), "the candidate's address in the host's chain")
+	waitListening(t, door)
+
+	for _, at := range []string{addr, door} {
+		pending, preview, err := network.PreviewSession(at, network.DebugConfig(link.RolePeer, ""))
+		if err != nil {
+			t.Fatalf("preview at %s: %v", at, err)
+		}
+		_ = pending.Close()
+		if len(preview.Chain) != 0 {
+			t.Fatalf("a preview at %s names %v; want no address before a place is held", at, preview.Chain)
+		}
+	}
+	seated, offer := dialSession(t, addr)
+	_ = seated.Close()
+	if len(offer.Chain) != 0 {
+		t.Fatalf("a seat's offer names %v; want no address before the join completes", offer.Chain)
+	}
+
+	leaf, _ := driveBot(t, Config{Membership: Membership{JoinAddress: addr}}, "patrol", nil)
+	waitUntil(t, named(leaf), "the candidate's address in the chain of a run that joined")
+	person, _ := driveBot(t, Config{Membership: Membership{JoinAddress: door}}, "patrol", nil)
+	waitUntil(t, named(person), "the candidate's address in the chain of a run that joined behind a relay")
+}
+
 // TestALeafDeclaresNothing is the privacy decision: a participant that binds no
 // port of its own plays normally and publishes no address.
 func TestALeafDeclaresNothing(t *testing.T) {
