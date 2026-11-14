@@ -101,9 +101,8 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 			return err
 		}
 	}
-	settings, file, err := paths.LoadSettings("")
-	var unknown paths.UnknownKeys
-	if err != nil && !errors.As(err, &unknown) {
+	settings, file, notes, err := paths.LoadSettings("")
+	if err != nil {
 		return err
 	}
 	p := settings.Paths
@@ -125,8 +124,8 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 		cfg.Membership.PlaceStore = paths.PlaceFile{Path: paths.PlacesFile()}
 		cfg.Membership.SignInStore = paths.PlaceFile{Path: paths.SignInsFile()}
 	}
-	if unknown != nil {
-		cfg.Notice = paths.DropUnknown(cfg.Settings, unknown)
+	if len(notes) > 0 {
+		cfg.Notice = paths.UpgradeStore(cfg.Settings)
 	}
 	// Android keeps a device's networks from the Go runtime and its Wi-Fi drops
 	// broadcasts with no lock held, so the app lists the one and holds the other

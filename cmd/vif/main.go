@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -76,15 +77,16 @@ var (
 	flagMusicWAV     = newSetFlag(true, parseOutputDirFlag)
 	flagDev          = newSetFlag(true, parseBoolFlag)
 
-	// settings is vif.toml as the roots of -config-dir resolved it, settingsFile the
-	// file it came from ("" the embedded one), and settingsStore where the run
-	// writes it back as [play] changes; settingsUnknown are the keys it held that
-	// this build does not know, and settingsNotice what dropping them said.
-	settings        paths.Settings
-	settingsFile    string
-	settingsStore   paths.SettingsStore
-	settingsUnknown paths.UnknownKeys
-	settingsNotice  string
+	// settings is vif.toml as the roots of -config-dir resolved it, brought up to
+	// this build's, settingsFile the file it came from ("" the embedded one), and
+	// settingsStore where the run writes it back as [play] changes; settingsNotes
+	// name what bringing it up to date changes, and settingsNotice what writing that
+	// back said.
+	settings       paths.Settings
+	settingsFile   string
+	settingsStore  paths.SettingsStore
+	settingsNotes  []string
+	settingsNotice string
 )
 
 func init() {
@@ -124,16 +126,16 @@ func main() {
 		return
 	}
 	var err error
-	if settings, settingsFile, err = paths.LoadSettings(flagConfig.dir); err != nil && !errors.As(err, &settingsUnknown) {
+	if settings, settingsFile, settingsNotes, err = paths.LoadSettings(flagConfig.dir); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
 	settingsStore = paths.SettingsFor(flagConfig.dir, settingsFile)
 	if pageSettings != nil {
-		settingsStore, settingsUnknown = pageSettings(&settings)
+		settingsStore, settingsNotes = pageSettings(&settings)
 	}
-	if settingsUnknown != nil && !*flagCheck && !*flagSchema {
-		settingsNotice = paths.DropUnknown(settingsStore, settingsUnknown)
+	if len(settingsNotes) > 0 && !*flagCheck && !*flagSchema {
+		settingsNotice = paths.UpgradeStore(settingsStore)
 	}
 	// -g given either way decides, and -cli over it; unset, vif.toml's
 	// [presentation] or the build does. The window's state follows the same rule.
@@ -211,10 +213,13 @@ func main() {
 	case *flagSchema:
 		err = manifest.Schema(os.Stdout)
 	case *flagCheck:
-		if settingsUnknown != nil {
-			fmt.Printf("settings %s: %v, which a run drops\n", settingsFile, settingsUnknown)
-		} else {
+		switch {
+		case len(settingsNotes) == 0:
 			fmt.Println("settings ok:", cmp.Or(settingsFile, "embedded default"))
+		case paths.OwnRoot(flagConfig.dir, filepath.Dir(settingsFile)):
+			fmt.Printf("settings %s: a run writes it back up to date: %s\n", settingsFile, strings.Join(settingsNotes, "; "))
+		default:
+			fmt.Printf("settings %s: a run reads it up to date: %s\n", settingsFile, strings.Join(settingsNotes, "; "))
 		}
 		err = resource.Check(buildConfig().Resources, os.Stdout)
 	case *flagReplay != "" && *flagHeadless:
@@ -422,7 +427,7 @@ var (
 	openWindow                        func()
 	windowByDefault                   bool
 	windowMaximized, windowFullscreen bool
-	pageSettings                      func(*paths.Settings) (paths.SettingsStore, paths.UnknownKeys)
+	pageSettings                      func(*paths.Settings) (paths.SettingsStore, []string)
 	pagePlaces                        app.PlaceStore
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 	sessionTickets                    [][]byte    // the router's public keys -admit ticket names

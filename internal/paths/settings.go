@@ -115,72 +115,70 @@ var DefaultPlay = sync.OnceValue(func() Play {
 })
 
 // UnknownKeys names the keys a settings document holds that this build has no
-// field for, every key it does know read by the time this is returned. A run drops
-// them from the document it writes back to (DropUnknown).
+// field for, every key it does know read by the time ParseSettings returns it;
+// UpgradeSettings drops them.
 type UnknownKeys = toml.UnknownKeys
 
-// LoadSettings reads the first vif.toml the roots of override hold, over the
-// embedded one, and names the file it read: "" when the embedded one stands alone.
-// A file naming keys this build does not know fails with UnknownKeys, the settings
-// and the file read in full alongside it.
-func LoadSettings(override string) (Settings, string, error) {
+// LoadSettings reads the first vif.toml the roots of override hold over the
+// embedded one, as this build brings it up to date (UpgradeSettings), and names
+// the file it read, "" when the embedded one stands alone, and each change bringing
+// it up to date makes; the file stays as it is, for UpgradeStore to write.
+func LoadSettings(override string) (Settings, string, []string, error) {
 	path := FindFile(ConfigRoots(override), "", SettingsFile)
 	if path == "" {
 		s, err := ParseSettings(nil)
-		return s, "", err
+		return s, "", nil, err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Settings{}, "", err
+		return Settings{}, "", nil, err
+	}
+	data, notes, err := UpgradeSettings(data)
+	if err != nil {
+		return Settings{}, "", nil, fmt.Errorf("%s: %w", path, err)
 	}
 	s, err := ParseSettings(data)
-	var unknown UnknownKeys
-	if err != nil && !errors.As(err, &unknown) {
-		return Settings{}, "", fmt.Errorf("%s: %w", path, err)
+	if err != nil {
+		return Settings{}, "", nil, fmt.Errorf("%s: %w", path, err)
 	}
 	s.resolve(filepath.Dir(path))
 	if err := CheckRoot(s.Paths.Root); err != nil {
-		return Settings{}, "", fmt.Errorf("%s: paths.root: %w", path, err)
+		return Settings{}, "", nil, fmt.Errorf("%s: paths.root: %w", path, err)
 	}
-	if unknown != nil {
-		return s, path, fmt.Errorf("%s: %w", path, unknown)
-	}
-	return s, path, nil
+	return s, path, notes, nil
 }
 
-// DropUnknown removes keys from the store's document, each line setting one and
-// each table one names with the comments that are theirs (toml Document.Delete),
-// every other line kept. It writes only a document that then reads whole, and
-// returns the status line saying which it did.
-func DropUnknown(s SettingsStore, keys UnknownKeys) string {
-	err := errors.New("nowhere to write the settings back")
-	if s != nil {
-		err = dropUnknown(s, keys)
+// UpgradeStore brings the document the store holds up to this build's
+// (UpgradeSettings), as a run starts by doing, and stores it when that changed it.
+// A FileStore whose file is not there yet holds the one it starts from, which is up
+// to date, and makes the file at the first change. It returns the status line
+// naming each change, "" when there was none.
+func UpgradeStore(s SettingsStore) string {
+	notes, err := upgradeStore(s)
+	switch {
+	case err != nil:
+		return "Settings not brought up to date: " + err.Error()
+	case len(notes) == 0:
+		return ""
 	}
-	if err != nil {
-		return "Ignored " + keys.Error() + ", not dropped: " + err.Error()
-	}
-	return "Dropped " + keys.Error()
+	return "Settings brought up to date: " + strings.Join(notes, "; ")
 }
 
-func dropUnknown(s SettingsStore, keys UnknownKeys) error {
+func upgradeStore(s SettingsStore) ([]string, error) {
+	if s == nil {
+		return nil, errors.New("nowhere to write them back")
+	}
 	saving.Lock()
 	defer saving.Unlock()
 	data, err := s.Load()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	doc, err := toml.ParseDocument(data)
-	if err != nil {
-		return err
+	out, notes, err := UpgradeSettings(data)
+	if err != nil || len(notes) == 0 {
+		return nil, err
 	}
-	if err := drop(doc, keys); err != nil {
-		return err
-	}
-	if _, err := ParseSettings(doc.Bytes()); err != nil {
-		return err
-	}
-	return s.Store(doc.Bytes())
+	return notes, s.Store(out)
 }
 
 // drop removes keys from doc, each with the comments that are its own
@@ -194,10 +192,11 @@ func drop(doc *toml.Document, keys []toml.Key) error {
 }
 
 // UpgradeSettings brings a settings document an earlier build left up to this
-// build's, as an install does the vif.toml it finds: each key this build does not
-// take, or whose value it refuses, goes with the comments that are its own, then
-// each key the embedded document sets that it lacks comes with its comments
-// (toml Document.Fill). Every other line stays. It names each change it made.
+// build's, as a run does the one it reads and an install the one it finds: each key
+// this build does not take, or whose value it refuses, goes with the comments that
+// are its own, then each key the embedded document sets that it lacks comes with
+// its comments where that document puts it (toml Document.Fill). Every other line
+// stays, every value this build takes kept. It names each change it made.
 func UpgradeSettings(data []byte) ([]byte, []string, error) {
 	doc, err := toml.ParseDocument(data)
 	if err != nil {
@@ -246,7 +245,10 @@ func UpgradeSettings(data []byte) ([]byte, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if added = slices.DeleteFunc(added, func(k toml.Key) bool { return reset[k.String()] }); len(added) > 0 {
+	switch added = slices.DeleteFunc(added, func(k toml.Key) bool { return reset[k.String()] }); {
+	case len(added) > parameter.UpgradeNamed:
+		notes = append(notes, fmt.Sprintf("added %d keys", len(added)))
+	case len(added) > 0:
 		notes = append(notes, "added "+strings.TrimPrefix(UnknownKeys(added).Error(), "unknown "))
 	}
 	if _, err := ParseSettings(doc.Bytes()); err != nil {
@@ -302,7 +304,7 @@ func (s *Settings) resolve(dir string) {
 // so a copy elsewhere names the same files; "~/" stays as written.
 func rebase(data []byte, dir string) ([]byte, error) {
 	s, err := ParseSettings(data)
-	if err != nil && !errors.As(err, new(UnknownKeys)) {
+	if err != nil {
 		return nil, err
 	}
 	doc, err := toml.ParseDocument(data)
@@ -363,20 +365,26 @@ type SettingsStore interface {
 // first change from the one read. A vif.toml in the checkout or a system root is
 // never written; the user root's shadows it from then on. Nil without a user root.
 func SettingsFor(override, read string) SettingsStore {
-	user := UserRoot()
-	if dir := filepath.Dir(read); read != "" && (dir == user || override != "" && dir == filepath.Clean(override)) {
+	if read != "" && OwnRoot(override, filepath.Dir(read)) {
 		return FileStore{Path: read}
 	}
+	user := UserRoot()
 	if user == "" {
 		return nil
 	}
 	return FileStore{Path: filepath.Join(user, SettingsFile), Seed: read}
 }
 
-// FileStore is the vif.toml at Path. One not there yet starts as Seed, the file
-// the run read, its relative paths made absolute so they name what they named
-// there; with no Seed, as the embedded one, so its comments travel with the
-// player's values.
+// OwnRoot reports whether root is one of the player's own, whose files a run writes
+// back: the override root or the user root.
+func OwnRoot(override, root string) bool {
+	return root == UserRoot() || override != "" && root == filepath.Clean(override)
+}
+
+// FileStore is the vif.toml at Path, or a keymap a run stores whole. One not there
+// yet starts as Seed, the file the run read, brought up to date with its relative
+// paths made absolute so they name what they named there; with no Seed, as the
+// embedded one, so its comments travel with the player's values.
 type FileStore struct {
 	Path string
 	Seed string
@@ -391,6 +399,9 @@ func (f FileStore) Load() ([]byte, error) {
 		return asset.DefaultSettings, nil
 	}
 	if data, err = os.ReadFile(f.Seed); err != nil {
+		return nil, err
+	}
+	if data, _, err = UpgradeSettings(data); err != nil {
 		return nil, err
 	}
 	return rebase(data, filepath.Dir(f.Seed))

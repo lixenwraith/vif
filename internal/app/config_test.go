@@ -325,7 +325,7 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	ctx.Takeover.Store(true)
 	a.world.SetCameraEdge(25)
 	a.persistPlay()
-	s, path, err := paths.LoadSettings(dir)
+	s, path, _, err := paths.LoadSettings(dir)
 	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.MaxFPS != 24 || s.Play.HUD != paths.DefaultPlay().HUD ||
 		!s.Play.PauseCommand || !s.Play.Takeover || s.Play.CameraEdge != 25 {
 		t.Fatalf("written back: %+v from %q, %v", s.Play, path, err)
@@ -365,7 +365,7 @@ func TestAZoomIsWrittenBackAsLeft(t *testing.T) {
 	}
 	z.cell = 9.5
 	a.persistCell()
-	if s, _, err := paths.LoadSettings(dir); err != nil || s.Presentation.Cell != 9.5 || s.Play != paths.DefaultPlay() {
+	if s, _, _, err := paths.LoadSettings(dir); err != nil || s.Presentation.Cell != 9.5 || s.Play != paths.DefaultPlay() {
 		t.Fatalf("written back: cell %g, play %+v, %v", s.Presentation.Cell, s.Play, err)
 	}
 }

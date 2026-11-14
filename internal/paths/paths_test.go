@@ -78,7 +78,7 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 	write(system, "[audio]\nbuffer_ms = 100\n")
 	write(user, "[paths]\nlog = \"logs\"\nscenario = \"base/td\"\nkeymap = \"~/k.toml\"\n")
 
-	s, path, err := LoadSettings("")
+	s, path, _, err := LoadSettings("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,24 +99,28 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 	}
 }
 
-// TestSettingsNameEveryUnknownKey: a file naming keys this build does not know
-// fails naming each one while the keys it knows read in full, so a run can go on
-// with an older or newer vif.toml.
-func TestSettingsNameEveryUnknownKey(t *testing.T) {
+// TestSettingsReadAsThisBuildBringsThemUpToDate: a file naming keys this build
+// does not know, or a value it refuses, reads every other key it holds, the refused
+// one at its default, and names each change bringing it up to date makes, so a run
+// can go on with an older or newer vif.toml; the file is left as it is.
+func TestSettingsReadAsThisBuildBringsThemUpToDate(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(SystemRootsEnv, t.TempDir())
-	doc := "[paths]\nlogs = \"x\"\n[audio]\nbuffer_ms = 20\n[later]\nkey = 1\n"
-	if err := os.WriteFile(filepath.Join(root, SettingsFile), []byte(doc), 0o644); err != nil {
+	doc := "[paths]\nlogs = \"x\"\n[audio]\nbuffer_ms = 20\n[play]\nauto_fire = true\nmouse = false\n[later]\nkey = 1\n"
+	file := filepath.Join(root, SettingsFile)
+	if err := os.WriteFile(file, []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, path, err := LoadSettings(root)
-	var unknown UnknownKeys
-	if !errors.As(err, &unknown) || !slices.EqualFunc(unknown, UnknownKeys{{"later"}, {"paths", "logs"}}, slices.Equal) {
-		t.Fatalf("error = %v, want UnknownKeys naming later and paths.logs", err)
+	s, path, notes, err := LoadSettings(root)
+	if err != nil || path != file || s.Audio.BufferMs != 20 || s.Play.Mouse || s.Play.AutoFire != DefaultPlay().AutoFire {
+		t.Fatalf("read %+v from %q, %v", s, path, err)
 	}
-	if s.Audio.BufferMs != 20 || path != filepath.Join(root, SettingsFile) {
-		t.Errorf("read %q with buffer_ms %d, want the file's 20 read alongside", path, s.Audio.BufferMs)
+	if len(notes) != 3 || notes[0] != `dropped unknown keys "later", "paths.logs"` || !strings.Contains(notes[1], "play.auto_fire") {
+		t.Errorf("notes %q", notes)
+	}
+	if got, _ := os.ReadFile(file); string(got) != doc {
+		t.Errorf("reading the file wrote it:\n%s", got)
 	}
 }
 
@@ -146,60 +150,74 @@ func TestSettingsTakePlayNumbersInRange(t *testing.T) {
 	}
 }
 
-// TestDroppingUnknownKeysKeepsEveryOtherLine: the keys this build does not know go
-// from the file the run writes back to with the comments that are theirs, tables
-// they head included, and every other line stays, comments too; a system root's
-// file is left as it is and the user root's copy is made without them.
-func TestDroppingUnknownKeysKeepsEveryOtherLine(t *testing.T) {
-	doc := "# mine\n[paths]\nlogs = \"x\" # misspelt\nlog = \"l\"\n\n[play]\n# kept\nmouse = false # mine\n" +
-		"# the old names\neffects = false\n\"volume\" = 0.25\n\n[later] # a newer build's\n# about later\n" +
-		"key = 1\n[later.sub]\ndeep = 2\n\n[audio]\nbuffer_ms = 20\n"
-	want := "# mine\n[paths]\nlog = \"%s\"\n\n[play]\n# kept\nmouse = false # mine\n\n[audio]\nbuffer_ms = 20\n"
+// TestARunWritesBackOnlyThePlayersOwnSettings: the vif.toml a run read is written
+// back brought up to date when it is the player's own, and is up to date then; a
+// system root's is left as it is with no copy made, and the copy its first change
+// makes in the user root starts up to date.
+func TestARunWritesBackOnlyThePlayersOwnSettings(t *testing.T) {
+	doc := "# mine\n[play]\nmouse = false # mine\n# the old name\neffects = false\n"
+	want, _, err := UpgradeSettings([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
 	user, system := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", user)
-	for _, c := range []struct{ name, root, wrote, log string }{
-		{"user root", filepath.Join(user, AppDirName), filepath.Join(user, AppDirName, SettingsFile), "l"},
-		{"system root", system, filepath.Join(user, AppDirName, SettingsFile), filepath.Join(system, "l")},
-	} {
-		t.Setenv(SystemRootsEnv, system)
-		os.RemoveAll(filepath.Join(user, AppDirName))
-		if err := os.MkdirAll(c.root, 0o755); err != nil {
+	t.Setenv(SystemRootsEnv, system)
+	mine := filepath.Join(user, AppDirName, SettingsFile)
+	for _, root := range []string{filepath.Dir(mine), system} {
+		os.RemoveAll(filepath.Dir(mine))
+		if err := os.MkdirAll(root, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(c.root, SettingsFile), []byte(doc), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, SettingsFile), []byte(doc), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		_, read, err := LoadSettings("")
-		var unknown UnknownKeys
-		if !errors.As(err, &unknown) {
-			t.Fatalf("%s: %v, want UnknownKeys", c.name, err)
+		_, read, notes, err := LoadSettings("")
+		if err != nil || len(notes) == 0 {
+			t.Fatalf("%s read with %q, %v", read, notes, err)
 		}
-		if said := DropUnknown(SettingsFor("", read), unknown); !strings.HasPrefix(said, "Dropped unknown keys") {
-			t.Fatalf("%s: %s", c.name, said)
+		said := UpgradeStore(SettingsFor("", read))
+		got, _ := os.ReadFile(read)
+		if root == system {
+			if _, err := os.Stat(mine); said != "" || string(got) != doc || err == nil {
+				t.Fatalf("a system root's file: %q, wrote %v:\n%s", said, err == nil, got)
+			}
+			continue
 		}
-		if got, _ := os.ReadFile(c.wrote); string(got) != fmt.Sprintf(want, c.log) {
-			t.Errorf("%s wrote:\n%s\nwant:\n%s", c.name, got, fmt.Sprintf(want, c.log))
+		if !strings.HasPrefix(said, `Settings brought up to date: dropped unknown key "play.effects"`) || string(got) != string(want) {
+			t.Fatalf("the player's own: %q:\n%s", said, got)
 		}
-		if got, _ := os.ReadFile(filepath.Join(c.root, SettingsFile)); c.root == system && string(got) != doc {
-			t.Errorf("the system root's file was rewritten:\n%s", got)
+		if again := UpgradeStore(SettingsFor("", read)); again != "" {
+			t.Fatalf("an up-to-date file upgraded again: %q", again)
 		}
-		if s, _, err := LoadSettings(""); err != nil || s.Play.Mouse || s.Audio.BufferMs != 20 {
-			t.Errorf("%s reads back as %+v, %v", c.name, s.Play, err)
-		}
+	}
+	s, read, _, err := LoadSettings("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := s.Play
+	now.HUD = !now.HUD
+	if err := SavePlay(SettingsFor("", read), s.Play, now); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(mine); strings.Contains(string(got), "effects") || UpgradeStore(FileStore{Path: mine}) != "" {
+		t.Fatalf("the copy the first change made is not up to date:\n%s", got)
 	}
 }
 
 // TestUpgradingSettingsKeepsThePlayersLines: an older file loses the keys this
-// build does not take and the values it refuses, each with its own comments, and
-// gains what the embedded document sets that it lacks, comments included; every
-// other line stays. The result, like the embedded document, upgrades to itself.
+// build does not take, tables they head included, and the values it refuses, each
+// with its own comments, and gains what the embedded document sets that it lacks,
+// comments included; every other line stays. The result, like the embedded
+// document, upgrades to itself.
 func TestUpgradingSettingsKeepsThePlayersLines(t *testing.T) {
-	old := "# my settings\n\n[paths]\nlog = \"~/logs\" # mine\n\n[play]\nsfx = false\n# the old name\neffects = false\nauto_fire = true\nmouse = false\n"
+	old := "# my settings\n\n[paths]\nlog = \"~/logs\" # mine\n\n[play]\nsfx = false\n# the old name\neffects = false\nauto_fire = true\nmouse = false\n" +
+		"\n[later] # a newer build's\n# about later\nkey = 1\n[later.sub]\ndeep = 2\n"
 	out, notes, err := UpgradeSettings([]byte(old))
 	if err != nil {
 		t.Fatal(err)
 	}
-	gone := []string{"# the old name", "effects = false", "auto_fire = true"}
+	gone := []string{"# the old name", "effects = false", "auto_fire = true", "[later] # a newer build's", "# about later", "key = 1", "[later.sub]", "deep = 2"}
 	for _, line := range strings.Split(strings.TrimSpace(old), "\n") {
 		if kept := slices.Contains(strings.Split(string(out), "\n"), line); kept == slices.Contains(gone, line) {
 			t.Errorf("line %q kept %v", line, kept)
@@ -208,8 +226,8 @@ func TestUpgradingSettingsKeepsThePlayersLines(t *testing.T) {
 	if _, session, _ := strings.Cut(string(asset.DefaultSettings), "\n\n# Whether a run keeps"); !strings.Contains(string(out), "# Whether a run keeps"+session) {
 		t.Errorf("[session] came without its comments:\n%s", out)
 	}
-	if len(notes) != 3 || !strings.HasPrefix(notes[0], `dropped unknown key "play.effects"`) ||
-		!strings.Contains(notes[1], "play.auto_fire") || !strings.HasPrefix(notes[2], `added keys "paths.root"`) {
+	if len(notes) != 3 || !strings.HasPrefix(notes[0], `dropped unknown keys "later", "play.effects"`) ||
+		!strings.Contains(notes[1], "play.auto_fire") || !strings.HasPrefix(notes[2], "added ") || !strings.HasSuffix(notes[2], " keys") {
 		t.Errorf("notes %q", notes)
 	}
 	s, err := ParseSettings(out)
@@ -221,6 +239,32 @@ func TestUpgradingSettingsKeepsThePlayersLines(t *testing.T) {
 			t.Errorf("an up-to-date document changed, %q, %v:\n%s", notes, err, again)
 		}
 	}
+}
+
+// FuzzUpgradingSettingsReadsAsBefore: whatever settings document parses, its
+// upgrade reads whole and is up to date, and one whose values this build takes
+// reads as it did.
+func FuzzUpgradingSettingsReadsAsBefore(f *testing.F) {
+	f.Add(string(asset.DefaultSettings))
+	f.Add("# mine\n[play]\nmouse = false # mine\neffects = 1\n\n[later.sub]\nx = 1\n")
+	f.Add("play.hud = true\n[audio]\nbuffer_ms = \"x\"\n")
+	f.Add("[[play]]\nsfx = true\n[presentation]\ncell = { a = 1 }\n")
+	f.Fuzz(func(t *testing.T, doc string) {
+		out, _, err := UpgradeSettings([]byte(doc))
+		if err != nil {
+			return
+		}
+		after, err := ParseSettings(out)
+		if err != nil {
+			t.Fatalf("the upgrade does not read: %v\n%s", err, out)
+		}
+		if again, notes, err := UpgradeSettings(out); err != nil || len(notes) > 0 || string(again) != string(out) {
+			t.Fatalf("the upgrade is not up to date, %q, %v:\n%s", notes, err, again)
+		}
+		if before, err := ParseSettings([]byte(doc)); (err == nil || errors.As(err, new(UnknownKeys))) && before != after {
+			t.Fatalf("read %+v after the upgrade, %+v before:\n%s", after, before, out)
+		}
+	})
 }
 
 // TestSavePlayWritesTheChangedKeysAlone: a file not there yet starts as the
@@ -239,7 +283,7 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	if err := SavePlay(store, was, now); err != nil {
 		t.Fatal(err)
 	}
-	s, path, err := LoadSettings(dir)
+	s, path, _, err := LoadSettings(dir)
 	if err != nil || path != file || s.Play != now || s.Audio.BufferMs != 50 {
 		t.Fatalf("saved anew: %+v from %q, %v", s.Play, path, err)
 	}
@@ -261,7 +305,7 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 	if got, _ := os.ReadFile(file); string(got) != want {
 		t.Fatalf("written keys:\n%s\nwant:\n%s", got, want)
 	}
-	if s, _, err = LoadSettings(dir); err != nil || s.Play.Mouse || s.Play.SfxVolume != 0.25 || s.Audio.BufferMs != 20 || filepath.Base(s.Paths.Log) != "logs" {
+	if s, _, _, err = LoadSettings(dir); err != nil || s.Play.Mouse || s.Play.SfxVolume != 0.25 || s.Audio.BufferMs != 20 || filepath.Base(s.Paths.Log) != "logs" {
 		t.Fatalf("after the write: %+v %+v, %v", s.Play, s.Paths, err)
 	}
 	if err := SavePlay(store, now, now); err != nil {
@@ -318,7 +362,7 @@ func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	if err := os.WriteFile(site, []byte(text), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, read, err := LoadSettings("")
+	s, read, _, err := LoadSettings("")
 	if err != nil || read != site {
 		t.Fatalf("read %q, %v", read, err)
 	}
@@ -327,7 +371,7 @@ func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	if err := SavePlay(SettingsFor("", read), s.Play, now); err != nil {
 		t.Fatal(err)
 	}
-	s, read, err = LoadSettings("")
+	s, read, _, err = LoadSettings("")
 	if err != nil || read != mine || !s.Play.HUD || s.Audio.BufferMs != 100 ||
 		s.Paths.Content != filepath.Join(system, "words") || s.Paths.Scenario != "td" || s.Paths.Keymap != filepath.Join(home, "k.toml") {
 		t.Fatalf("the user root's copy: %+v from %q, %v", s, read, err)
