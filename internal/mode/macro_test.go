@@ -10,7 +10,7 @@ import (
 
 // Playback waits in Command and Overlay mode, so a recording that kept the `:`,
 // the command's characters and its confirm stalled at the open command line and
-// played the rest in Normal mode once it was left.
+// played the rest in Normal mode once it was left. Escape in Normal opens the menu.
 func TestARecordingLeavesCommandAndOverlayModeOut(t *testing.T) {
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -25,6 +25,8 @@ func TestARecordingLeavesCommandAndOverlayModeOut(t *testing.T) {
 	}
 	key(terminal.KeyEnter, 0)
 	key(terminal.KeyCtrlG, 0)
+	key(terminal.KeyEscape, 0)
+	key(terminal.KeyEscape, 0)
 	key(terminal.KeyEscape, 0)
 	key(terminal.KeyRune, 'k')
 	key(terminal.KeyRune, 'q')

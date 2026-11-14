@@ -17,8 +17,8 @@ lines = [
   "normal mode moves, insert mode types",
   "i enters insert at the cursor",
   "v toggles visual mode",
-  "esc in normal mode pings the grid",
-  "and drops a key half pressed",
+  "esc in normal mode opens the menu",
+  "or drops a key half pressed",
 ]
 
 [[blocks]]

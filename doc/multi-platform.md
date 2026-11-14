@@ -577,8 +577,8 @@ keyboard covers the view instead of resizing it, so a `crop_on_resize` map keeps
 its cells; the run hears of the keyboard (`Covered`, which the status bar reads as
 `StatusCovered`) and keeps its input to the left half of the bar's bottom row,
 which the view draws again above the keyboard at twice its size from the same
-picture. A second Back within a second and a half sends the app to the
-background. A tap held on the status bar opens the configuration menu, the hold
+picture. Back, being Escape, opens the menu from Normal mode, and Home sends the
+app to the background. A tap held on the status bar opens the configuration menu, the hold
 every host shares (`MenuHoldDuration`); the app draws it with its own widgets from
 the run's snapshot, a `Dialog` the view's `menuPresentation` hands each change to and
 whose taps come back as ops on a node's id ([Native menu](native-menu.md), [Menu:
@@ -600,10 +600,12 @@ unseen by the game, and Escape, Tab, the F keys and chords start nothing. The pr
 is the first game's (`Host.Pressed`), so that game does not wait again; a later new
 game waits in the game as a terminal's does, unless `[play] wait` is off, and the
 start screen opens every launch either way. A lobby's
-`-join` link waits for it too. A browser's Back is the game's Escape too, and a
-second Back brings the start screen back over the game rather than leaving it: the
-page reports its player away (`Host.Away`, as Android's background does), so a
-solo run waits and a shared one goes on, and a tap or key returns to it. Under the
+`-join` link waits for it too. A browser's Back is the game's Escape too, which
+opens the menu from Normal mode, and a second Back brings the start screen back over
+the game rather than leaving it, closing the menu on the way: the page reports its
+player away (`Host.Away`, as Android's background does) after the menu's close,
+which the run takes first, so a solo run waits and a shared one goes on, and a tap
+or key returns to it. Under the
 logo there are Reload, which a browser that will not pull the page down to reload
 lacks, and for a joined game Play solo and, in the corner, its link to copy; Back
 from there leaves the page. The page pushes the two history entries Back lands on

@@ -712,6 +712,9 @@ func (p *player) offer(ev terminal.Event) bool {
 	if intent == nil {
 		return true
 	}
+	if intent.Type == input.IntentEscape {
+		intent.Type = input.IntentConfigMenu // a menu key in NORMAL, whatever mode was recorded
+	}
 	switch intent.Type {
 	case input.IntentQuit:
 		return false

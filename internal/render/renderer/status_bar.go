@@ -193,8 +193,8 @@ type StatusBarRenderer struct {
 	slots  []int
 	runes  []rune
 
-	phaseText, energyText, damageText, boostText, gridText statusText
-	apmText, gtText, fpsText, recordText, timeText         statusText
+	phaseText, energyText, damageText, boostText   statusText
+	apmText, gtText, fpsText, recordText, timeText statusText
 }
 
 // NewStatusBarRenderer creates a status bar renderer
@@ -350,20 +350,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		})))
 	}
 
-	// Priority 5: Grid (conditional)
-	if ping, ok := r.gameCtx.World.Components.Ping.GetPtr(playerEntity); ok && ping.GridActive {
-		gridRemaining := ping.GridRemaining.Seconds()
-		if gridRemaining < 0 {
-			gridRemaining = 0
-		}
-		items = append(items, statusItem{
-			text: r.gridText.hold(tenths(gridRemaining), "", "", func() string { return fmt.Sprintf(" Grid: %.1fs ", gridRemaining) }),
-			fg:   visual.RgbGridTimerFg,
-			bg:   visual.RgbBackground,
-		})
-	}
-
-	// Priority 6-9: Metrics (lowest priority, dropped first)
+	// Priority 5-8: Metrics (lowest priority, dropped first)
 	apm, ticks, fps := r.statAPM.Load(), r.statTicks.Load(), r.statFPS.Load()
 	items = append(items,
 		r.pal.apm.with(r.apmText.hold(apm, "", "", func() string { return fmt.Sprintf(" APM: %d ", apm) })),

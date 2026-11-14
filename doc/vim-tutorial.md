@@ -91,5 +91,4 @@ have somewhere to go.
 - The practice text is the scenario's own corpus, not the run's, and block
   placement is the tutor's choice: the main scenario and `td` spread lines as
   before.
-- The ping grid stays; the tutor's cursor has no shield, so Visual mode pings from
-  the cursor alone.
+- The tutor's cursor has no shield, so Visual mode moves as Normal does.

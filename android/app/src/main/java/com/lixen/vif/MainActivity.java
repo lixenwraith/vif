@@ -37,15 +37,11 @@ import java.util.Collections;
  */
 public final class MainActivity extends Activity {
     static final String TAG = "vif";
-    // Back within this of the last Back sends the app to the background, the game
-    // paused there; one Back is the game's Escape
-    private static final long BACK_TWICE_MS = 1500;
 
     private Speaker speaker;
     private GameView view;
     private StartScreen start; // over the view until its tap, null after
     private MenuDialog menu; // the configuration menu while the run has it open
-    private long backAt;
     private WifiManager.MulticastLock lock; // held while the run listens and the player is at the game
     private boolean listening, resumed;
 
@@ -102,7 +98,8 @@ public final class MainActivity extends Activity {
         start = null;
         view.takeKeys();
         goOn();
-        // Back is the game's Escape, which leaves a mode; the run is quit with :q. On
+        // Back is the game's Escape, which leaves a mode and in Normal opens the menu,
+        // whose window then takes Back; Home leaves the app and :q quits the run. On
         // the start screen Back is the system's
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
@@ -110,16 +107,9 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** Escape to the game, and to the background on a second Back soon after. */
+    /** Escape to the game. */
     void back() {
         Game.key(KeyEvent.KEYCODE_BACK, 0, 0);
-        long now = android.os.SystemClock.uptimeMillis();
-        if (now - backAt <= BACK_TWICE_MS) {
-            backAt = 0;
-            moveTaskToBack(true);
-        } else {
-            backAt = now;
-        }
     }
 
     @Override

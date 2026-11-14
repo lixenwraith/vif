@@ -870,8 +870,12 @@ a solo run, unless `[play] pause_command` or `pause_menu` is off
 (`GameContext.PauseForCommand`, `PauseForMenu`), its player away, a breakpoint hit,
 `:step` — and a hold (`SetHeld`, `Held`), which `:pause`, `p` or Game → Pause
 starts and only another ends, so closing a menu leaves it standing; the status bar
-shows `PAUSED` while it stands. Pause freezes simulation ticks through `PausableClock` and the
-scheduler's pause gate. It does not freeze the whole process:
+shows `PAUSED` while it stands. The own pauses share one flag, so a menu's close
+taken after an away would end the pause the away found standing: the loop takes
+an away after the menu ops its host queued ahead of it (`App.takeAway`), and a page
+that closes its menu on the way to its start screen leaves its solo run paused.
+Pause freezes simulation ticks through `PausableClock` and the scheduler's pause
+gate. It does not freeze the whole process:
 
 - terminal input and signals still arrive;
 - the event loop still dispatches queued events;

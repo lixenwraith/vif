@@ -243,12 +243,8 @@ const (
 	SplashMinDistance = 25
 )
 
-// Ping
-const (
-	PingBoundFactor = 2
-
-	PingGridDuration = 500 * time.Millisecond
-)
+// PingBoundFactor divides the shield reach into the half-extents of the ping bounds
+const PingBoundFactor = 2
 
 // Overlay hint variants per layout, longest first; the renderer draws the widest that fits
 var (

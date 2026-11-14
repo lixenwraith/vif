@@ -232,7 +232,7 @@ func TestEveryLayerDeclaresItsClip(t *testing.T) {
 		PriorityOverlay: true, PriorityDebug: true,
 	}
 	playfield := map[RenderPriority]bool{
-		PriorityBackground: true, PriorityGrid: true, PriorityPing: true,
+		PriorityBackground: true, PriorityPing: true,
 		PriorityWall: true, PriorityChargeLine: true,
 		PrioritySigil: true, PriorityGlyph: true, PriorityGold: true,
 		PriorityNugget: true, PriorityHealthBar: true,

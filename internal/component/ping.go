@@ -1,18 +1,11 @@
 package component
 
-import (
-	"time"
-)
-
+// PingComponent is a cursor's guidance: the crosshair through its cell, and the
+// bounds Visual mode moves within while its shield stands.
 type PingComponent struct {
-	// Crosshair (Ping)
 	ShowCrosshair bool
 
-	// Grid (PingGrid)
-	GridActive    bool
-	GridRemaining time.Duration // Remaining time in seconds
-
-	// Ping bounds: half-extents around the cursor cell, active in visual mode with a live shield
+	// Half-extents around the cursor cell
 	BoundsRadiusX int
 	BoundsRadiusY int
 	BoundsActive  bool
