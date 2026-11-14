@@ -242,6 +242,7 @@ never written. Every platform writes it the same way: the `vif.toml` the run rea
 when it is the player's own, else the user root's, created at the first change; a
 browser keeps it in the site's storage
 ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)). Only a run
-with no user root, or a browser refused its storage, keeps it to itself. The game
+with no user root or whose `vif.toml` is a special file, such as a link to
+`/dev/null`, or a browser refused its storage, keeps it to itself. The game
 speed, HUD pins and standing breakpoints stay this run's. Exact values outside
 menu presets remain available through commands such as `:log stat N`.

@@ -1846,13 +1846,49 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
 ### Let toml edit a key inside an inline value
 
 - Priority: P3
-- Affected files: `lixenwraith/toml` (`Document.Set`, `Document.Delete`),
-  `internal/paths/settings.go` (`dropInside`, `saveTable`), `internal/input/keyconfig.go` (`drop`)
+- Affected files: `lixenwraith/toml` (`Document.Set`, `Document.Delete`,
+  `Document.Fill`), `internal/paths/settings.go` (`dropInside`, `saveTable`),
+  `internal/input/keyconfig.go` (`drop`)
 - toml's `Delete` and `Set` refuse a key inside an inline value (`play = { mouse =
-  false }`). The upgrades write such a value again without the key, its line's
-  comment kept, but `saveTable` does not, so a menu change to an inline `[play]`
-  reads `[play] not written`. Both edits inside an inline value in the library
-  retire the two workarounds and let the save write there.
+  false }`), and `Fill` adds none there. The upgrades write such a value again
+  without the keys that go, its line's comment kept but the comments inside it and
+  its spelling lost, and add nothing to it, so a key a later build ships reads as
+  its default without its line; `saveTable` does not write there, so a menu change
+  to an inline `[play]` reads `[play] not written`. Edits and adds inside an inline
+  value in the library retire the workarounds and let the save and the upgrades
+  write there.
+
+### Drop a settings file's keys in one read
+
+- Priority: P3
+- Affected files: `lixenwraith/toml` (`Document.Delete`), `internal/paths/settings.go`
+  (`drop`), `internal/input/keyconfig.go` (`drop`)
+- Each `Delete` reads the document again, so an upgrade dropping n keys costs n
+  reads: a `vif.toml` or keymap holding 3000 unknown keys takes seconds to start.
+  A `Delete` of many keys in one edit makes it one read. No file vif writes comes
+  near; one a player pastes another program's settings into could.
+
+### Write a hard-linked settings file in place
+
+- Priority: P3
+- Affected files: `internal/paths/settings.go` (`FileStore.Store`)
+- A store replaces `vif.toml` or a keymap by rename, which leaves a hard link's
+  other names on the old file. Writing in place keeps every name but tears the
+  file for a run reading it, or for good when the write is cut short; a link count
+  above one could choose it, with the tear the price. The rename stays, as the
+  write before the upgrades did.
+
+### Keep what a system root's vif.toml names shared in the player's copy
+
+- Priority: P3
+- Affected files: `internal/paths/settings.go` (`FileStore.Load`),
+  `internal/resource/resolve.go` (`Options.ApplySettings`)
+- A system root's `vif.toml` naming a `[paths] root` or `keymap` outside the
+  system roots makes it another's, read and never written. The user root's copy
+  its first change makes names it too, as the player's own, so a run writes a
+  keymap there back up to date where it may. The copy could leave out what the
+  seed's `[paths]` names, or mark it; one inside a system root stays shared
+  (`paths.Shared`).
 
 ### Use sixteen console backgrounds on Linux
 

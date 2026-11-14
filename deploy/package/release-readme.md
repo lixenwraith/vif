@@ -183,7 +183,8 @@ from the one installed under `/usr/local/etc`, if any, which stays as it is. Log
 (`-l`), replay journals (`-j`) and recorded music (`-mw`) go under
 `~/.local/state/vif/`. A later wad unpacked the same way replaces your `vif.toml`
 and keymap: add `--exclude vif/vif.toml --exclude vif/input/keymap.toml` to keep
-them, and the next run brings them up to date.
+them. A run reads the ones kept brought up to date and writes those under
+`~/.config` back so; those under `/usr/local/etc` it never writes.
 
 <!-- end -->
 <!-- if windows -->

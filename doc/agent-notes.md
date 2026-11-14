@@ -784,9 +784,22 @@ Libraries · Branches.
 - A changed shipped default reaches only a copy that lacks the key: a run writes
   every default into the player's own file and keeps it from then on as their
   value. A default every player must get takes a new key name, dropping the old.
-- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { ... }`):
-  the upgrades write that value again without the key, and `saveTable` still
-  refuses it ([TODO](todo.md#let-toml-edit-a-key-inside-an-inline-value)).
+- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { ... }`)
+  and `Fill` adds none there: the upgrades write that value again without every
+  key that goes from it at once, since `Set` refuses a value nested past 1000 that
+  the parser takes through dotted keys, and `saveTable` still refuses it
+  ([TODO](todo.md#let-toml-edit-a-key-inside-an-inline-value)).
+- `Fill` puts a key it adds above the comments that close its table, and copies the
+  comments above a table's header but not those that open the file: compare an
+  upgrade by what it reads or binds, never by the embedded file's text.
+- Each `Delete` reads the document again, so dropping n keys costs n reads: an
+  upgrade of thousands of unknown keys takes seconds
+  ([TODO](todo.md#drop-a-settings-files-keys-in-one-read)).
+- Which file is the player's own is `paths.OwnRoot`, `paths.Shared` and
+  `paths.Special`, and every host builds its `resource.Options` from `vif.toml` with
+  `Options.ApplySettings`, which marks a root or keymap another's `vif.toml` names
+  foreign: a host never decides it alone. A `-k` file holding no keymap section is
+  refused rather than upgraded, so a wrong path never has its file replaced.
 
 ## Scenario TOML
 
