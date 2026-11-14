@@ -61,7 +61,7 @@ Focused references:
 - [TODO](todo.md) is the prioritized running work list for every area.
 - [Agent notes](agent-notes.md) holds what agents learned working on the
   repository that no rule or design document states.
-- [Keymap example](../internal/input/README.md) shows sparse key overrides.
+- [Keymap example](../internal/input/README.md) shows key overrides.
 - [Genetic library](https://github.com/lixenwraith/genetic) documents the
   reusable optimization library, a module of its own.
 - [Audio library](https://github.com/lixenwraith/audio) documents the synthesis, mixing,

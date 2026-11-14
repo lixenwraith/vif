@@ -178,14 +178,17 @@ audio refuses them and a default must not break `-serve`.
 Every run, on every host, reads `vif.toml` as this build brings it up to date
 (`paths.UpgradeSettings`). A key this build does not take, or whose value it
 refuses, goes with the comments that are its own (a comment group belongs to the
-side fewer blank lines part it from, below on a tie), so a build older than the
-file drops the newer keys and a refused value starts at its default. Each key the
-shipped file sets that it lacks then comes with its own comments after the key the
-shipped file puts before it, a table it lacks where the shipped file heads it
-(toml `Document.Fill`). Every other line, comment and value stays, one equal to
-its default included. The run writes the result back to the player's own file
-(below) and names each change on its status line; `-check` names them, writes
-nothing, and names the file it read. The keymap is brought up to date the same way
+side fewer blank lines part it from, below on a tie), one in an inline table as
+that table is written again without it, so a build older than the file drops the
+newer keys and a refused value starts at its default. Each key the shipped file
+sets that it lacks then comes with its own comments after the key the shipped file
+puts before it, a table it lacks where the shipped file heads it (toml
+`Document.Fill`). Every other line, comment and value stays, one equal to its
+default included, so a default a later build changes reaches only a file that
+lacks the key. Starting, vif writes the result back to the player's own file
+(below), once, and names the changes on its status line, counting the added keys
+past five (`parameter.UpgradeNamed`); `-check` names them, writes nothing, and
+names the file it read. The keymap is brought up to date the same way
 ([Input §10](input-and-modes.md#10-keymap-override-files)).
 
 One rule holds on every host: a flag sets its value for its run alone, `vif.toml`
@@ -197,11 +200,14 @@ the user root or the `-config-dir` root, else into the user root's, created at t
 first change as a copy of the one it read, brought up to date with its relative
 paths made absolute, that shadows it from then on. A checkout's or a system root's
 file is never written; a run reads it brought up to date and leaves it as it is.
-Only a value changed in the run is written, so one a flag set (`-mute`'s channels,
-`-nw`'s wait) stays out unless the player then changes it. No flag saves the
-others: a flag is what an alias, a script or a link repeats, and writing it back
-would let the last command line decide every later run. A browser keeps them in
-the site's storage ([Multi-platform §7](multi-platform.md#7-external-maps-and-assets)).
+A write replaces the file whole by rename, through a link to the file it names,
+keeping its mode and, as far as the writer may, its owner; one no one may write is
+refused, and the status line says so. Only a value changed in the run is written,
+so one a flag set (`-mute`'s channels, `-nw`'s wait) stays out unless the player
+then changes it. No flag saves the others: a flag is what an alias, a script or a
+link repeats, and writing it back would let the last command line decide every
+later run. A browser keeps them in the site's storage
+([Multi-platform §7](multi-platform.md#7-external-maps-and-assets)).
 
 ## 4. Installation
 
@@ -216,21 +222,22 @@ make uninstall                                       # what install put under PR
 Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
 every shipped file and keeps files a player added. The keymap and `vif.toml` are
 the player's settings: one already there is brought up to this build's as a run
-brings it (§3; `tool/vif-settings`), never replaced, and the install names each
-change; it needs Go on `PATH` and keeps a file it cannot read as it is, for the
-next run to bring up to date. `CLEAN=1` first removes the shipped
-categories (`content/`, `image/`, `bot/`, and of `scenario/` its `base/` and the
-copies of shipped scenarios an install from before `base/` left at its top, which
-would shadow them) and those two files, so the root holds only the fresh install
-plus `audio/`, a player's own scenarios and anything else a player put beside
-them. `install` adds the binary, licence, manual, desktop entry and icons,
-completion and documentation under `PREFIX` with the wad at `$(SYSCONFDIR)/vif`.
-A user who cannot write `/usr/local/bin` gets, unstaged, `PREFIX=~/.local` and the
-user root as the defaults; `sudo make install` installs system-wide, and `make
-help` prints the values in effect. `install` writes nothing until it can write
-all of `PREFIX` and the root, and leaves the mode of existing directories alone.
-`uninstall` keeps the root, which in a user install holds the player's settings.
-See [Packaging](packaging.md).
+brings it and written as §3 writes (`tool/vif-settings`), and the install names
+the changes. Without Go on `PATH` it keeps the file as it is, for the next run to
+bring up to date; one that does not parse it keeps for the player to fix, as a run
+refuses it too, and one no one may write it leaves as a run does. `CLEAN=1` first
+removes the shipped categories (`content/`, `image/`, `bot/`, and of `scenario/`
+its `base/` and the copies of shipped scenarios an install from before `base/`
+left at its top, which would shadow them) and those two files, so the root holds
+only the fresh install plus `audio/`, a player's own scenarios and anything else a
+player put beside them. `install` adds the binary, licence, manual, desktop entry
+and icons, completion and documentation under `PREFIX` with the wad at
+`$(SYSCONFDIR)/vif`. A user who cannot write `/usr/local/bin` gets, unstaged,
+`PREFIX=~/.local` and the user root as the defaults; `sudo make install` installs
+system-wide, and `make help` prints the values in effect. `install` writes nothing
+until it can write all of `PREFIX` and the root, and leaves the mode of existing
+directories alone. `uninstall` keeps the root, which in a user install holds the
+player's settings. See [Packaging](packaging.md).
 
 ## 5. Logs, journals, and runtime output
 

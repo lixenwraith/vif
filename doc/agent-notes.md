@@ -11,8 +11,8 @@ that a document or a code comment now states, and link that instead.
 Topics: Toolchain · Events and ticks · Sessions · Runs and their wiring ·
 Determinism and the harness · Session tests · Tests that flake · Locks · Networking
 and admission · Position · Math and physics · Glyphs and widgets · Looking at the
-game without a device · Measuring · Scenario TOML · Corpus · Docs · Libraries ·
-Branches.
+game without a device · Measuring · Settings files · Scenario TOML · Corpus · Docs ·
+Libraries · Branches.
 
 ## Toolchain
 
@@ -781,6 +781,12 @@ Branches.
 - A renamed key or section is a drop and an add, so the player's value starts at
   the default; a renamed action keeps a player's bindings only through an alias in
   `resolveAction`, as `append` does.
+- A changed shipped default reaches only a copy that lacks the key: a run writes
+  every default into the player's own file and keeps it from then on as their
+  value. A default every player must get takes a new key name, dropping the old.
+- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { ... }`):
+  the upgrades write that value again without the key, and `saveTable` still
+  refuses it ([TODO](todo.md#let-toml-edit-a-key-inside-an-inline-value)).
 
 ## Scenario TOML
 

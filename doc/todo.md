@@ -1843,6 +1843,17 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   later key's explanation with it; a copy keeps its old block until the player
   edits it.
 
+### Let toml edit a key inside an inline value
+
+- Priority: P3
+- Affected files: `lixenwraith/toml` (`Document.Set`, `Document.Delete`),
+  `internal/paths/settings.go` (`dropInside`, `saveTable`), `internal/input/keyconfig.go` (`drop`)
+- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { mouse =
+  false }`). The upgrades write such a value again without the key, its line's
+  comment kept, but `saveTable` does not, so a menu change to an inline `[play]`
+  reads `[play] not written`. Both edits inside an inline value in the library
+  retire the two workarounds and let the save write there.
+
 ### Use sixteen console backgrounds on Linux
 
 - Priority: P3

@@ -121,7 +121,7 @@ type UnknownKeys = toml.UnknownKeys
 
 // LoadSettings reads the first vif.toml the roots of override hold over the
 // embedded one, as this build brings it up to date (UpgradeSettings), and names
-// the file it read, "" when the embedded one stands alone, and each change bringing
+// the file it read, "" when the embedded one stands alone, and the changes bringing
 // it up to date makes; the file stays as it is, for UpgradeStore to write.
 func LoadSettings(override string) (Settings, string, []string, error) {
 	path := FindFile(ConfigRoots(override), "", SettingsFile)
@@ -152,7 +152,7 @@ func LoadSettings(override string) (Settings, string, []string, error) {
 // (UpgradeSettings), as a run starts by doing, and stores it when that changed it.
 // A FileStore whose file is not there yet holds the one it starts from, which is up
 // to date, and makes the file at the first change. It returns the status line
-// naming each change, "" when there was none.
+// naming the changes, "" when there were none.
 func UpgradeStore(s SettingsStore) string {
 	notes, err := upgradeStore(s)
 	switch {

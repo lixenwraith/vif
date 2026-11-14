@@ -109,7 +109,7 @@ help:
 	@echo "           cannot write /usr/local/bin gets ~/.local and the user root"
 	@echo "  uninstall Remove what install put under $(PREFIX), keeping $(SYSCONFDIR)/vif"
 	@echo "  install-config Install the wad, default keymap, bot graphs and vif.toml under $(VIF_CONFIG_DIR)"
-	@echo "           (both: a vif.toml already there is brought up to date, its lines kept;"
+	@echo "           (both: a keymap or vif.toml already there is brought up to date, its lines kept;"
 	@echo "           CLEAN=1 first removes what an earlier install put there)"
 	@echo "  wad-archive Pack the wad as vif/, the config root a player extracts ($(WAD_ARCHIVE))"
 	@echo "  release-readme Print the README of a release archive (RELEASE_TARGET=$(RELEASE_TARGET), RELEASE_LABEL=$(RELEASE_LABEL))"

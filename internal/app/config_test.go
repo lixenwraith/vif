@@ -186,12 +186,10 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 }
 
 // TestARestartKeepsTheCommandLineAndTakesWhatItNames: the next run is the command
-// line Run was given with what the restart named, so a pinned seed survives, and
-// its console lists on from this one's. A :join
-// leaves the -players and -authority of a session it no longer hosts, and falls back
-// to that run on its own, in no session; a run following nobody starts over on its
-// own, keeping the ceiling its session was opened with. A door that reopens does so
-// under the policy its session held, not the command line's.
+// line with what the restart named, keeping a pinned seed and the console's lines.
+// A :join drops the -players and -authority of a session it no longer hosts and
+// falls back to that run alone; a run following nobody keeps its session's ceiling,
+// and a door reopens under the policy its session held, not the command line's.
 func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
 	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
