@@ -981,8 +981,9 @@ What the operator surface does not cover:
   ([Auth and session design §3.5](auth-session-design.md#35-passphrase-doors));
 - host loss hands the term down the succession list (§8), and every survivor
   that reaches no candidate, or every survivor when the session pinned its
-  authority, goes on apart: a person's run in a session of its own that keeps every
-  place, a script or bot as an explicit independent local fork. Losing the host in
+  authority, goes on apart: a person's run in a session of its own, keeping every
+  place where the session migrates and its bots' alone where it ended with its host,
+  a script or bot as an explicit independent local fork. Losing the host in
   turn runs the next succession among those still linked. Partition merging is
   not built, and refusing to merge is what happens instead: a fork that meets a
   higher term refuses it and reports it;

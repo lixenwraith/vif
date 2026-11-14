@@ -710,8 +710,8 @@ A fork with no loop to take it into a session of its own (§5.1), left with **no
 at all**, drops every cursor it does not simulate. Having no link is what makes the
 drop exact rather than convenient: a departure is produced once at one agreed tick
 because two instances must destroy the same shared entity together, and here there is
-no second instance. A person's fork drops nobody: every place waits as a Wraith in
-the session it goes on in (§5.5). A fork still linked keeps its roster while a link
+no second instance. A person's fork goes on in a session of its own with the places
+§5.5 keeps. A fork still linked keeps its roster while a link
 stands: a run with no loop sees its seats end on its fork (§5.5), and the last of
 them going leaves it with none, when it drops as one left with none at the fork
 does (`Membership.reportPeerLost`).
@@ -1037,11 +1037,13 @@ host that left run §5.1, which in a session that does not migrate is the fork.
 
 A person's fork leaves the same way. `converge.Instance.Forked` hands the run the
 roster it held, and its loop serves the fork as it serves `:leave` (`Membership.forked`,
-`Membership.LeaveSession`), except that it keeps every place rather than its bots' alone:
-each other player's cursor waits as a Wraith in the session it opens, for its player
-to take back once `:host` opens the door, however long that takes: no wait runs out
-on a person before it, and each starts over at it (§5.4). The host's `:player drop`
-removes one sooner. A hold the lost host set stands
+`Membership.LeaveSession`). A session pinned to its host ended with it, and nobody in it
+signed up to come back to this run, so its fork keeps its bots' places alone, as `:leave`
+does, and the rest go at once. One that migrates keeps every place: each other player's
+cursor waits as a Wraith in the session the fork opens, for its player to take back
+once `:host` opens the door, however long that takes: no wait runs out on a person
+before it, and each starts over at it (§5.4). The host's `:player drop` removes one
+sooner. A hold the lost host set stands
 there for this run's own `:pause`, and a freeze ends; the status bar says which. A
 seat under such a run ends only when the run halts it (`seatEnds`), never on its
 own fork or the run's, so the leave finds every bot to seat again. A run with no
