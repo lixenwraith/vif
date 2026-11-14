@@ -400,7 +400,7 @@ func (r *Router) handleEscape() bool {
 			r.setOverlayFilter("")
 			return true
 		}
-		r.ctx.SetPaused(false)
+		return r.closeOverlay()
 	case core.ModeNormal:
 		return r.handleConfigMenu() // Escape with nothing pending is a menu key here
 	}
