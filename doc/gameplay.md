@@ -711,7 +711,7 @@ opens with "Crushed Against The Edge!" or "You Died!". The drifting text is scen
 (§9): rock and raiders pass it by and no key types it, so the ship earns no heat by
 typing.
 
-`armada` is a fixed shooter in the line of Galaxian and Galaga, one file with its
+`armada` is a fixed shooter of diving formations, one file with its
 three programs inline. The ship starts at the bottom of the map and its gun fires
 up alone, a lane more for each `U`, up to three. The armada materializes in ranks
 at the top, eight columns six cells apart about the map's middle: two ranks of
