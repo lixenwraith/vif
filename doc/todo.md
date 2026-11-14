@@ -1901,6 +1901,42 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   the price of the copy shadowing what `-config-dir` names; the shared file stays
   unwritten.
 
+### Review the settings store's write path
+
+- Priority: P1
+- Affected files: `internal/paths/settings.go` (`FileStore.Store`, `storeTarget`),
+  `internal/paths/owner_unix.go` (`keepOwner`), `tool/vif-settings`
+- A start rewrites the player's own `vif.toml` and keymap, and `make install` the
+  installed ones through `tool/vif-settings`, as root under `sudo`: by rename,
+  through a link, keeping the file's mode and owner. No review of that path's
+  safety has been finished. One reading the code, with tests only in temporary
+  directories, closes it, asking whether the file a link names can change between
+  `storeTarget`'s stat and the rename, what mode and owner the temporary file has
+  before its `Chmod`, what `keepOwner` does in a run as root, and what a link into
+  a directory other users may write leads to.
+
+### Review when a start writes the settings and what it shows
+
+- Priority: P2
+- Affected files: `cmd/vif/main.go` (`upgradeOwn`, `sayNotice`),
+  `internal/app/play.go` (`player.begin`), `internal/paths/settings.go` (`Shared`,
+  `resolved`), `internal/parameter/audio.go`
+- The last fixes to the upgrade have tests but no second reader, as their review
+  stopped before it reported: the upgrade runs once the invocation is validated
+  and its site session taken, so a refused run writes nothing; a replay, script or
+  bot shows the notice on the status line; a shared root is found through links;
+  and the `[audio] buffer_ms` bounds sit in `internal/parameter`, keeping headless
+  and audio-free builds off the audio library. An independent reading closes it.
+
+### Check in CI that a headless build links no audio
+
+- Priority: P2
+- Affected files: `.github/workflows/test.yml`, `Makefile` (`verify`)
+- `make verify` fails when a `vif_headless` build of `cmd/vif` imports
+  `internal/render` or the `lixenwraith/audio` package. CI builds the profile but
+  never asks, so it passes a change that links either, as the `[audio] buffer_ms`
+  check once did. The same `go list -deps` step in `test.yml` closes it.
+
 ### Use sixteen console backgrounds on Linux
 
 - Priority: P3
