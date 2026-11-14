@@ -525,8 +525,10 @@ const (
 	// world drifted. Every viewer is sent each one, so a shorter period costs bytes.
 	FeedSyncTicks = 600
 
-	// FeedAudience is how many viewers a host's own feed takes when nothing says.
-	FeedAudience = 8
+	// FeedAudience is how many viewers a host's own feed takes when nothing says, and
+	// FeedAudienceMax the most it may be told to: each is a stream it writes itself.
+	FeedAudience    = 8
+	FeedAudienceMax = 1024
 )
 
 // A feed's wall cadences [wall]

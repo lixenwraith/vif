@@ -1185,15 +1185,71 @@ func (w *World) predictCursorMove(e core.Entity, x, y int, pointer bool) bool {
 	return true
 }
 
-// FollowLocalCursor re-anchors the view on the cell this instance's cursor occupies,
-// which is the D-18 prediction while one is outstanding. The camera is local view
-// state (D-14), so it follows the cell the renderer draws rather than the announced
-// one a playout lead behind it.
+// FollowLocalCursor re-anchors the view on the cell the cursor this instance looks
+// from occupies: its own, at the D-18 prediction while one is outstanding, or the one
+// a viewer follows. The camera is local view state (D-14), so it follows the cell
+// the renderer draws rather than the announced one a playout lead behind it.
 // Caller MUST hold updateMutex
 func (w *World) FollowLocalCursor() {
-	if pos, ok := w.LocalCursor(); ok {
+	if pos, ok := w.CursorCell(w.Resources.Player.Viewed()); ok {
 		w.Resources.Config.FollowCamera(pos.X, pos.Y)
 	}
+}
+
+// Follow points a viewer at the cursor step slots on from the one it follows, among
+// those somebody plays, or at slot itself with step zero; it reports the slot now
+// followed and whether a cursor is there. Caller MUST hold updateMutex.
+func (w *World) Follow(slot uint8, step int) (uint8, bool) {
+	roster := w.Resources.Player
+	if step != 0 {
+		slot = w.nextView(slot, step)
+	}
+	if roster.Slot(slot) == 0 {
+		return slot, false
+	}
+	roster.Follow(slot)
+	w.FollowLocalCursor()
+	return slot, true
+}
+
+// KeepView keeps a viewer looking from a cursor somebody plays: the one it follows,
+// or the next slot on once that one left or its player went away.
+// Caller MUST hold updateMutex.
+func (w *World) KeepView() {
+	if slot := w.Resources.Player.ViewSlot(); w.watches.Load() && !w.played(slot) {
+		if next := w.nextView(slot, 1); next != slot {
+			w.Follow(next, 0)
+		}
+	}
+}
+
+// played reports a slot whose cursor somebody drives now, not a Wraith's
+func (w *World) played(slot uint8) bool {
+	e := w.Resources.Player.Slot(slot)
+	return e != 0 && !w.Components.Wraith.HasEntity(e)
+}
+
+// nextView is the first slot step by step from slot, around the roster, that
+// somebody plays; failing one, that a Wraith holds; failing that, slot.
+func (w *World) nextView(slot uint8, step int) uint8 {
+	from := int(slot)
+	if from >= parameter.MaxPlayers {
+		from = -1 // nobody followed yet: the roster's first slot is the next one on
+		if step < 0 {
+			from = parameter.MaxPlayers
+		}
+	}
+	held := slot
+	for i := 1; i <= parameter.MaxPlayers; i++ {
+		at := uint8(((from+step*i)%parameter.MaxPlayers + parameter.MaxPlayers) % parameter.MaxPlayers)
+		switch {
+		case w.played(at):
+			return at
+		case held == slot && w.Resources.Player.Slot(at) != 0:
+			held = at
+		}
+	}
+	return held
 }
 
 // ReconcileLocalCursor settles an announced placement against the D-18 prediction

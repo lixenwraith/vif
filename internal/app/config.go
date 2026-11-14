@@ -144,7 +144,7 @@ func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 // ValidateWith checks this configuration with s as its session half: a join's,
 // before anything is dialled.
 func (c runConfig) ValidateWith(s Membership) error {
-	c.Membership = s
+	c.Membership, c.Journal = s, c.Journal && !s.Watch // the journal ends with the run a viewer's replaces
 	return c.Validate()
 }
 
@@ -205,6 +205,11 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 			next.Dialled.Abandon(err)
 			solo.Notice = "Join failed: " + err.Error()
 			return *solo, nil
+		}
+		if next.Watch {
+			// A viewer's run holds nothing of its own: the bots and the journal of the
+			// run it replaces end with that run
+			joined, c.Journal = membership.Watching(joined, next.Follow), false
 		}
 		c.Membership, c.wiring.dialled = joined, next.Dialled
 		return c, solo

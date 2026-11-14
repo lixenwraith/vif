@@ -86,6 +86,10 @@ func (s *menuSession) Join(target string) error {
 	s.calls = append(s.calls, "join "+target)
 	return nil
 }
+func (s *menuSession) Spectate(target string, slot uint8) error {
+	s.calls = append(s.calls, fmt.Sprintf("spectate %s %d", target, slot))
+	return nil
+}
 func (s *menuSession) RequestSession(site string, players int, scenario string) error {
 	s.calls = append(s.calls, fmt.Sprintf("request %s %d %s", site, players, scenario))
 	return nil
@@ -123,6 +127,15 @@ func TestAnAwayPlayerIsListedAsAway(t *testing.T) {
 	}
 	if want := []string{"Drop 1: player", "Drop 2: player, away"}; !slices.Equal(labels, want) {
 		t.Fatalf("the menu's drop rows read %q, want %q", labels, want)
+	}
+	// A spectator can drop nobody: the same rows pick whom it looks from
+	w.Watch()
+	labels = labels[:0]
+	for _, o := range participantConfigOptions(ctx) {
+		labels = append(labels, o.label)
+	}
+	if want := []string{"Follow 1: player", "Follow 2: player, away"}; !slices.Equal(labels, want) {
+		t.Fatalf("a spectator's player rows read %q, want %q", labels, want)
 	}
 }
 
@@ -420,6 +433,7 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 		{"multiplayer", "multiplayer/#Bots/add", []string{"2", "default"}, "add 2:default"},
 		{"multiplayer", "multiplayer/#Session/host", []string{"127.0.0.1:0", "host"}, "host 127.0.0.1:0 host"},
 		{"multiplayer", "multiplayer/#Session/join", []string{"vif://example.test:4242/run"}, "join vif://example.test:4242/run"},
+		{"multiplayer", "multiplayer/#Session/spectate", []string{"vif://example.test:4242/run"}, "spectate vif://example.test:4242/run 0"},
 		{"multiplayer", "multiplayer/#Session/request", []string{"https://example.test", "3", "tower"}, "request https://example.test 3 tower"},
 	} {
 		r.handleConfigMenu()
@@ -444,12 +458,12 @@ func TestConfigSessionActionsRevalidateAndForwardFormValues(t *testing.T) {
 	showConfigMenu(ctx, "multiplayer")
 	ctx.SetOverlaySelection("multiplayer/#Bots/drop/10")
 	r.moveConfigMenu(input.MotionRight, 0)
-	if len(session.calls) != 4 {
+	if len(session.calls) != 5 {
 		t.Fatal("arrow key removed a bot")
 	}
 	session.bots[0].ID = 11
 	r.handleOverlayActivate()
-	if len(session.calls) != 4 {
+	if len(session.calls) != 5 {
 		t.Fatal("stale selection removed a replacement on the same slot")
 	}
 	r.RefreshConfigMenu()

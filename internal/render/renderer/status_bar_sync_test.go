@@ -31,6 +31,23 @@ func seatPlayers(r *StatusBarRenderer, n int) {
 	}
 }
 
+// TestASpectatorsBadgeNamesWhomItFollows: a spectator has no slot or round trip to
+// read, so its badge says it spectates, from which player and among how many.
+func TestASpectatorsBadgeNamesWhomItFollows(t *testing.T) {
+	r, _ := newStatusBar(t)
+	w := r.gameCtx.World
+	w.Watch()
+	r.statNet.Store("connected")
+	if item, ok := r.networkBadge(); !ok || item.text != " Spectating 0P " {
+		t.Fatalf("a spectator of nobody reads %#v, %t", item, ok)
+	}
+	seatPlayers(r, 3)
+	w.Follow(2, 0)
+	if item, ok := r.networkBadge(); !ok || item.text != " Spectating 2 of 3P " || item.bg != visual.RgbNetGoodBg {
+		t.Fatalf("a spectator following slot 2 of three reads %#v, %t", item, ok)
+	}
+}
+
 // TestStatusBarNetworkBadgeIsOneCellChosenBySeverity pins the collapse.
 //
 // One badge for the whole session: the round trip, coloured by how well this

@@ -41,6 +41,9 @@ func helpSections(logDir, journalDir, musicDir string) []flagSection {
 			{names: []string{"admit"}, arg: "<open|ticket:key>", hint: "What a -host or -serve door admits beside a pass: open, or the site's tickets under the router's public key(s), comma-separated, and no bare key"},
 			{names: []string{"ca"}, arg: "<file|sha256:hex>", hint: "What a wss:// host's certificate is trusted by when joining, beyond the system's roots and a self-signed one taken as it is: a PEM file of its issuer, or the certificate's own fingerprint"},
 			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at [tcp://|vif://|vifs://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given"},
+			{names: []string{"spectate"}, arg: "<addr>", hint: "Spectate a session at an address -join takes: watch it from one of its players, taking no place in it; a slot after the address names the player looked from first"},
+			{names: []string{"spectators"}, arg: "<n>", hint: fmt.Sprintf(
+				"How many spectators a session this run hosts feeds at once, 0..%d; 0 takes none (default %d)", parameter.FeedAudienceMax, parameter.FeedAudience)},
 			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
 				"Roster ceiling including self, 2..%d (with -serve, guests only, 1..%d); unset holds the whole roster; with a -join site, the one requested",
@@ -297,11 +300,11 @@ marked current: Enter or a press marks one, and Start starts a game of it. Other
 scenario is a text box on its row for a name or path the list does not hold. In
 a session only the host can, and its participants rejoin.
 .PP
-Multiplayer hosts this game, joins an address or link typed in its row's text
-box, requests a session from an HTTP(S) vif-router site with a player count and
-scenario, leaves the session, relays for others, and makes the games this run
-hosts visible on its local network, as :lan on does; Nearby games lists the
-visible games found there, each joined from its row. Player count 0 and a blank
+Multiplayer hosts this game, joins or spectates an address or link typed in its
+row's text box, requests a session from an HTTP(S) vif-router site with a player
+count and scenario, leaves the session, relays for others, and makes the games
+this run hosts visible on its local network, as :lan on does; Nearby games lists
+the visible games found there, each joined from its row. Player count 0 and a blank
 scenario use server defaults. Current session status heads the page. A session
 ends when its host leaves, each player going on alone, unless the host chose
 migrate: \-authority migrate, the Authority field, or :host <address> migrate.
@@ -318,6 +321,16 @@ join. Forms use Up/Down between fields, Left/Right and Home/End to move the text
 cursor, Backspace/Delete to edit, Enter to submit, and Escape to cancel.
 Successful submissions resume play; asynchronous progress and failures appear in
 the status bar. A failed join preserves the current game.
+.PP
+A spectator watches a session and takes no place in it: \-spectate, :spectate
+<address> [slot] or the Spectate a session row replaces this run, its bots and
+its journal with one that only watches. It looks from one player's cursor, whose
+slot the status bar names: the keys that move left or up follow the player
+before, right or down the one after, a press on a player's cursor follows that
+one, and :spectate <slot> or its row under Players names one. When that player
+leaves, the view moves to the next one playing. Nothing else it types plays;
+:leave starts a local game. Players are not told who watches. A host feeds
+\-spectators spectators at once, and :session counts them.
 .PP
 Settings holds sound effects, their volume and music; auto-fire, mouse input and
 pointer following; the frame cap and the telemetry HUD; whether the menu and

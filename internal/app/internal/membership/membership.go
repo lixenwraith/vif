@@ -234,6 +234,11 @@ type RestartAsk struct {
 	// Press says the next run's player started its join, so its seat waits for
 	// their press.
 	Press bool
+
+	// Watch says Join names a session the next run only watches, looking from the
+	// slot Follow names first.
+	Watch  bool
+	Follow uint8
 }
 
 // JoinBase is the run's Config and wiring as a join dialled from it builds on, copied
@@ -301,6 +306,14 @@ func Joining(s config.Membership, target string) (config.Membership, error) {
 	s.HostAddress, s.Participants, s.Migrate = "", 0, false
 	s.JoinAddress, s.SessionName, s.Watch = e.Dialable(), e.Name, false
 	return s, nil
+}
+
+// Watching is s, Joining its target, as a run that only watches it and looks from
+// slot first: it holds no place a bot, a relay door or a listener could go with.
+func Watching(s config.Membership, slot uint8) config.Membership {
+	s.Watch, s.Follow = true, slot
+	s.Bots, s.RelayAddress, s.ListenAddress = nil, "", ""
+	return s
 }
 
 // hostNetwork is the transport the doors s's run opens at addr are served with.

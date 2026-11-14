@@ -33,7 +33,10 @@ func (c Control) BeginHosting(addr, authority string) error {
 	return c.m.beginHostingLocked(addr, authority)
 }
 func (c Control) Join(target string) error { return c.m.joinLocked(target) }
-func (c Control) SessionSummary() string   { return c.m.sessionSummaryLocked() }
+func (c Control) Spectate(target string, slot uint8) error {
+	return c.m.spectateLocked(target, slot)
+}
+func (c Control) SessionSummary() string { return c.m.sessionSummaryLocked() }
 func (c Control) DropBot(slot int) error {
 	if err := c.m.dropSeat(slot); err == nil {
 		return nil
@@ -304,7 +307,7 @@ func (c Control) RequestSession(site string, players int, scenario string) error
 	if players < 0 || players > parameter.MaxPlayers {
 		return fmt.Errorf("players must be 0 (server default) or 1..%d", parameter.MaxPlayers)
 	}
-	return c.m.joinSessionLocked(site, players, scenario)
+	return c.m.joinSessionLocked(site, players, scenario, nil)
 }
 
 func (c Control) AddBot(graph string) error {
@@ -312,7 +315,7 @@ func (c Control) AddBot(graph string) error {
 	case c.m.dialling.Load():
 		return errors.New("a join is already being dialled")
 	case c.m.world.Watches():
-		return errors.New("a run that watches a session holds no place a bot could play from")
+		return errors.New("a run that spectates holds no place a bot could play from")
 	}
 	specs, err := BotSpecs(cmp.Or(graph, DefaultBotGraph))
 	if err != nil {
@@ -427,7 +430,17 @@ func (m *Membership) receiveSessionRestart(from uint32, addr string) {
 // by its session may join another, and so may one whose session is its own bots',
 // which the next run seats in the new one. Caller MUST hold updateMutex.
 func (m *Membership) joinLocked(target string) error {
-	return m.joinSessionLocked(target, 0, "")
+	return m.joinSessionLocked(target, 0, "", nil)
+}
+
+// spectateLocked is joinLocked for a session this run only watches, looking from
+// slot first: the run it replaces closes its own session, bots and journal with it.
+// Caller MUST hold updateMutex.
+func (m *Membership) spectateLocked(target string, slot uint8) error {
+	if e, err := link.ParseEndpoint(target); err == nil && e.Scheme == link.SchemeSite {
+		return errors.New("a site makes sessions to join; spectate one by its own link")
+	}
+	return m.joinSessionLocked(target, 0, "", &slot)
 }
 
 // sessionRole is what a run is to its session, read from what the session wrote
@@ -459,7 +472,7 @@ var sessionRoles = [...]struct{ join, host, leave string }{
 	roleGuest:     {inSession, inSession, ""},
 	roleLeft:      {"", inSession, ""},
 	roleSuccessor: {inSession, "", ""},
-	roleViewer:    {"", "this run watches a session", ""},
+	roleViewer:    {"", "this run spectates a session", ""},
 }
 
 func (r sessionRole) joined() bool { return r == roleGuest || r == roleLeft }
@@ -501,15 +514,29 @@ func (m *Membership) joinErrorLocked() error {
 	return nil
 }
 
-func (m *Membership) joinSessionLocked(target string, players int, scenario string) error {
+// joinSessionLocked dials target off the lock, a site's new session where it names
+// one, and replaces this run with one in that session: playing in it, or only
+// watching it from the slot watch names. Caller MUST hold updateMutex.
+func (m *Membership) joinSessionLocked(target string, players int, scenario string, watch *uint8) error {
 	if err := m.joinErrorLocked(); err != nil {
 		return err
+	}
+	entering := func(s config.Membership, target string) (config.Membership, error) {
+		s, err := Joining(s, target)
+		if err == nil && watch != nil {
+			s = Watching(s, *watch)
+		}
+		return s, err
+	}
+	doing, failed, ask := "Joining ", "Join failed: ", RestartAsk{Press: true}
+	if watch != nil {
+		doing, failed, ask = "Spectating ", "Spectate failed: ", RestartAsk{Watch: true, Follow: *watch}
 	}
 	// A site is asked for a session off the lock, since it answers once the pod is up.
 	site, err := link.ParseEndpoint(target)
 	next, wire, base := *m.cfg, *m.wiring, m.run.JoinBase()
 	if err == nil && site.Scheme != link.SchemeSite {
-		if next, err = Joining(*m.cfg, target); err == nil {
+		if next, err = entering(*m.cfg, target); err == nil {
 			err = base.ValidateWith(next)
 		}
 	}
@@ -523,17 +550,17 @@ func (m *Membership) joinSessionLocked(target string, players int, scenario stri
 	if site.Scheme == link.SchemeSite {
 		m.ctx.SetStatusMessage("Requesting a session from "+site.Addr+"...", parameter.StatusProgress)
 	} else {
-		m.ctx.SetStatusMessage("Joining "+link.Shown(target)+"...", parameter.StatusProgress)
+		m.ctx.SetStatusMessage(doing+link.Shown(target)+"...", parameter.StatusProgress)
 	}
-	m.log.Info("session", "msg", "join requested", "target", target)
+	m.log.Info("session", "msg", "join requested", "target", target, "watch", watch != nil)
 	core.Go(func() {
 		defer m.dialling.Store(false)
 		door, err := target, error(nil)
 		if site.Scheme == link.SchemeSite {
 			var fingerprint string
 			if door, fingerprint, err = network.RequestSession(site.Addr, players, scenario, m.wiring.SignIns.Token(site.Addr)); err == nil {
-				m.ctx.SetStatusMessage("Joining "+link.Shown(door)+"...", parameter.StatusProgress)
-				if next, err = Joining(next, door); err == nil {
+				m.ctx.SetStatusMessage(doing+link.Shown(door)+"...", parameter.StatusProgress)
+				if next, err = entering(next, door); err == nil {
 					err = base.ValidateWith(next)
 				}
 			}
@@ -547,11 +574,12 @@ func (m *Membership) joinSessionLocked(target string, players int, scenario stri
 		if err == nil {
 			d, err = DialJoin(next, wire, base)
 		}
+		ask.Join, ask.Dialled = door, d
 		switch {
 		case err != nil:
 			m.log.Warn("session", "msg", "join failed; playing on", "target", target, "error", err.Error())
-			m.ctx.SetStatusMessage("Join failed: "+err.Error(), parameter.StatusAlert)
-		case !m.run.ReplaceWith(&RestartAsk{Join: door, Dialled: d, Press: true}):
+			m.ctx.SetStatusMessage(failed+err.Error(), parameter.StatusAlert)
+		case !m.run.ReplaceWith(&ask):
 			d.Abandon(errors.New("the run that dialled is being replaced"))
 		}
 	})
@@ -1016,16 +1044,20 @@ func (m *Membership) sessionSummaryLocked() string {
 		}
 		return "Solo run; :host <addr> opens it to participants, :join <target> joins one"
 	}
+	if roster := m.world.Resources.Player; m.world.Watches() {
+		line := fmt.Sprintf("Spectating %s, tick %d: %d player(s)", link.Shown(m.cfg.JoinAddress), m.run.Position().Tick, roster.Count())
+		if roster.Viewed() != 0 {
+			line += fmt.Sprintf(", following slot %X", roster.ViewSlot())
+		}
+		return line + "; :spectate <slot> follows another, :leave starts a local game"
+	}
 	peers := m.world.Resources.Status.Ints.Get("network.peers").Load()
 	participant := m.world.LocalParticipant()
 	// A guest that took the term over hosts at the address it declared, which its
 	// session dials, not the one it dialled. A harness binds no address, so the word
 	// stands alone rather than trailing a blank.
 	where, addr := "hosting", cmp.Or(m.cfg.HostAddress, m.reach.DeclaredAddr())
-	switch role := m.sessionRoleLocked(); {
-	case role == roleViewer:
-		where, addr = "watched", m.cfg.JoinAddress
-	case role.joined():
+	if m.sessionRoleLocked().joined() {
 		where, addr = "joined", m.cfg.JoinAddress
 	}
 	if addr != "" {
@@ -1055,6 +1087,9 @@ func (m *Membership) sessionSummaryLocked() string {
 	}
 	line := fmt.Sprintf("Session %s, peer %d (%s), %d peer link(s), tick %d, %s, authority %s",
 		where, participant, cursor, peers, m.run.Position().Tick, latch, policy)
+	if viewers, _ := m.Audience(); viewers > 0 {
+		line += fmt.Sprintf(", %d spectator(s)", viewers)
+	}
 	if m.authority != nil {
 		if s := m.authority.Summary(); s != "" {
 			line += "; " + s

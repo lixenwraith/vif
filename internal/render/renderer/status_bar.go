@@ -11,7 +11,6 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/parameter/visual"
@@ -301,10 +300,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 2: Energy
-	var playerEntity core.Entity
-	if r.gameCtx.World.Resources.Player.Valid() {
-		playerEntity = r.gameCtx.World.Resources.Player.Entity
-	}
+	playerEntity := r.gameCtx.World.Resources.Player.Viewed() // a spectator reads the player it follows
 	energyComp, hasEnergy := r.gameCtx.World.Components.Energy.GetPtr(playerEntity)
 	var energyVal int64
 	if hasEnergy {
@@ -635,6 +631,14 @@ func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	rtt := r.statRTT.Load()
 	// Players rather than links: a guest holds one link whatever the session's size.
 	players := r.gameCtx.World.Resources.Player
+	// A spectator's feed has no round trip to read: the badge says whom it follows
+	if r.gameCtx.World.Watches() {
+		text := fmt.Sprintf(" Spectating %dP ", players.Count())
+		if slot := players.ViewSlot(); players.Viewed() != 0 {
+			text = fmt.Sprintf(" Spectating %X of %dP ", slot, players.Count())
+		}
+		return r.pal.net[severitySettled].with(text), true
+	}
 	identity := fmt.Sprintf("%dP", players.Count())
 	if slot := players.LocalSlot(); slot != parameter.NoPlayerSlot {
 		identity += fmt.Sprintf(":%X", slot)

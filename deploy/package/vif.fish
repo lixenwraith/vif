@@ -9,6 +9,8 @@ complete -c vif -o passphrase -x -d 'Doors take this passphrase (Argon2-SCRAM), 
 complete -c vif -o admit -x -d 'What a -host or -serve door admits beside a pass: open, or the site\'s tickets under the router\'s public key(s), comma-separated, and no bare key'
 complete -c vif -o ca -x -d 'What a wss:// host\'s certificate is trusted by when joining, beyond the system\'s roots and a self-signed one taken as it is: a PEM file of its issuer, or the certificate\'s own fingerprint'
 complete -c vif -o join -x -d 'Join a session at [tcp://|vif://|vifs://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given'
+complete -c vif -o spectate -x -d 'Spectate a session at an address -join takes: watch it from one of its players, taking no place in it; a slot after the address names the player looked from first'
+complete -c vif -o spectators -x -d 'How many spectators a session this run hosts feeds at once, 0..1024; 0 takes none (default 8)'
 complete -c vif -o name -x -d 'Name this host answers to, so one address can serve several sessions'
 complete -c vif -o players -x -d 'Roster ceiling including self, 2..16 (with -serve, guests only, 1..16); unset holds the whole roster; with a -join site, the one requested'
 complete -c vif -o bot -d 'Add bots alongside you (default 1:default); -host/-join keep your player'

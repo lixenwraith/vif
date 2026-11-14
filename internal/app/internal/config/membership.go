@@ -32,7 +32,9 @@ type Membership struct {
 	// Watch makes the run a viewer of the session JoinAddress names: it holds no
 	// place there, drives no cursor and sends nothing, and runs from the feed that
 	// session's host copies to everyone watching it (doc/multi-player.md §5.8).
-	Watch bool
+	// Follow is the slot it looks from first, the next one played while that is empty.
+	Watch  bool
+	Follow uint8
 
 	// SessionName is what one address calls this session, so a deployment can put
 	// several behind one. A host answers to it and refuses a dial that named

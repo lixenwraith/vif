@@ -389,7 +389,7 @@ func DialJoin(cfg config.Membership, wire Wiring, base JoinBase) (*JoinDial, err
 	pending, preview, err := dial(cfg.JoinAddress, netCfg)
 	switch {
 	case err != nil && cfg.Watch:
-		return nil, fmt.Errorf("watch %s: %w", link.Shown(cfg.JoinAddress), err)
+		return nil, fmt.Errorf("spectate %s: %w", link.Shown(cfg.JoinAddress), err)
 	case err != nil && wire.Relay != nil:
 		return nil, fmt.Errorf("join through the holder: %w", err)
 	case err != nil:

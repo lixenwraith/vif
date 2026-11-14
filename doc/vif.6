@@ -55,6 +55,12 @@ What a wss:// host's certificate is trusted by when joining, beyond the system's
 .B \-join <addr>
 Join a session at [tcp://|vif://|vifs://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given
 .TP
+.B \-spectate <addr>
+Spectate a session at an address \-join takes: watch it from one of its players, taking no place in it; a slot after the address names the player looked from first
+.TP
+.B \-spectators <n>
+How many spectators a session this run hosts feeds at once, 0..1024; 0 takes none (default 8)
+.TP
 .B \-name <name>
 Name this host answers to, so one address can serve several sessions
 .TP
@@ -249,11 +255,11 @@ marked current: Enter or a press marks one, and Start starts a game of it. Other
 scenario is a text box on its row for a name or path the list does not hold. In
 a session only the host can, and its participants rejoin.
 .PP
-Multiplayer hosts this game, joins an address or link typed in its row's text
-box, requests a session from an HTTP(S) vif-router site with a player count and
-scenario, leaves the session, relays for others, and makes the games this run
-hosts visible on its local network, as :lan on does; Nearby games lists the
-visible games found there, each joined from its row. Player count 0 and a blank
+Multiplayer hosts this game, joins or spectates an address or link typed in its
+row's text box, requests a session from an HTTP(S) vif-router site with a player
+count and scenario, leaves the session, relays for others, and makes the games
+this run hosts visible on its local network, as :lan on does; Nearby games lists
+the visible games found there, each joined from its row. Player count 0 and a blank
 scenario use server defaults. Current session status heads the page. A session
 ends when its host leaves, each player going on alone, unless the host chose
 migrate: \-authority migrate, the Authority field, or :host <address> migrate.
@@ -270,6 +276,16 @@ join. Forms use Up/Down between fields, Left/Right and Home/End to move the text
 cursor, Backspace/Delete to edit, Enter to submit, and Escape to cancel.
 Successful submissions resume play; asynchronous progress and failures appear in
 the status bar. A failed join preserves the current game.
+.PP
+A spectator watches a session and takes no place in it: \-spectate, :spectate
+<address> [slot] or the Spectate a session row replaces this run, its bots and
+its journal with one that only watches. It looks from one player's cursor, whose
+slot the status bar names: the keys that move left or up follow the player
+before, right or down the one after, a press on a player's cursor follows that
+one, and :spectate <slot> or its row under Players names one. When that player
+leaves, the view moves to the next one playing. Nothing else it types plays;
+:leave starts a local game. Players are not told who watches. A host feeds
+\-spectators spectators at once, and :session counts them.
 .PP
 Settings holds sound effects, their volume and music; auto-fire, mouse input and
 pointer following; the frame cap and the telemetry HUD; whether the menu and

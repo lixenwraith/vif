@@ -42,6 +42,9 @@ type SessionController interface {
 	// Empty authority keeps the run's policy.
 	BeginHosting(addr, authority string) error
 	Join(target string) error
+	// Spectate replaces the run with one that only watches target's session, from
+	// the slot named first: it takes no place there.
+	Spectate(target string, slot uint8) error
 	// Register, Login and Logout run against a site's account service in the
 	// background and report on the status line; a native run keeps the sign-in for
 	// the site's front door, a page's browser keeps the cookie the site set.
