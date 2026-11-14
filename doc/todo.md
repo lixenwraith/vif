@@ -2226,7 +2226,7 @@ of each. Measured through the trained models on twelve recordings (stapes'
 audit of 9 November): the stream finds 95 in a hundred of the offline rip's
 notes, but reads its bar grid on three recordings only, since tempo, meter and
 phase hold from the first six bars (five read at another tempo, a rubato piano
-take keeps 5 to 38 in a hundred of the offline downbeats, Billie Jean's intro
+take keeps 5 to 38 in a hundred of the offline downbeats, the pop song's intro
 sits half a bar off); it costs three times the offline rip, each model run
 three times over where its half-second steps overlap, and its worst block took
 a second of CPU, so it runs off the audio thread.
