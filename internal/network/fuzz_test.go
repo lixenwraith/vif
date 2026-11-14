@@ -233,3 +233,47 @@ func FuzzAPeerLinkOpensOnlyForAnAdmittedParticipant(f *testing.F) {
 		}
 	})
 }
+
+// FuzzAWatchHeadGivesAViewerNoPlace: whatever bytes a feed carries as a starting
+// point, a viewer reads the world and lists that were written beside an offer with
+// nothing in it that takes, keeps or comes back to a place, or says where anyone
+// listens; or it refuses them, never a panic.
+func FuzzAWatchHeadGivesAViewerNoPlace(f *testing.F) {
+	offer := testOffer()
+	offer.Assigned = 0
+	head := WatchHead{Offer: offer, World: []byte("world"), Epochs: [][]byte{{1}, {2, 3}}, States: [][]byte{{4}}}
+	whole, _ := head.Encode()
+	head.Offer.Relay, head.Offer.Chain = 2, SuccessionChain{{ID: 2, Addr: "192.0.2.1:7777"}}
+	head.Offer.TermKeys, head.Offer.KeepOut, head.Offer.Pass = []string{"term"}, []string{"out"}, &Signed{}
+	head.Offer.Door, head.Offer.Roster[1].Key, head.Offer.Roster[1].Account = &DoorVerifier{}, "key", "account"
+	placed, _ := head.Encode()
+	f.Add(whole)
+	f.Add(placed)
+	f.Add(whole[:len(whole)-1])
+	f.Add([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01})
+	f.Add([]byte{})
+	f.Fuzz(func(t *testing.T, b []byte) {
+		h, err := DecodeWatchHead(b)
+		if err != nil {
+			return
+		}
+		o := h.Offer
+		if o.Assigned != 0 || o.Relay != 0 || o.Chain != nil || o.TermKeys != nil || o.KeepOut != nil || o.Pass != nil || o.Door != nil {
+			t.Fatalf("a viewer was handed a place's keeping: %+v", o)
+		}
+		for _, e := range o.Roster {
+			if e.Key != "" || e.Account != "" {
+				t.Fatalf("a viewer was told who %d is: %+v", e.ID, e)
+			}
+		}
+		again, err := h.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := DecodeWatchHead(again)
+		if err != nil || !bytes.Equal(back.World, h.World) || !slices.EqualFunc(back.Epochs, h.Epochs, bytes.Equal) ||
+			!slices.EqualFunc(back.States, h.States, bytes.Equal) {
+			t.Fatalf("a head read whole does not read back: %v", err)
+		}
+	})
+}

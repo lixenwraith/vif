@@ -129,11 +129,11 @@ func (m *Membership) gatedLocked() bool {
 	return m.cfg.Passphrase != "" || len(m.cfg.TicketKeys) != 0 || m.sessionOffer.Gated
 }
 
-// ticketHook is the door's check of the site's ticket, for a host whose doors take
-// them (-admit ticket); nil for doors that take none. Every dial reaches such a
-// host from the router's address, so the join budget is charged to the player the
-// ticket names, the address or account the router budgeted, and not to the address.
-func (m *Membership) ticketHook() func(*network.Signed, []string) (*network.TicketBody, error) {
+// ticketHook is the door's check of the site's ticket to play or to watch, for a
+// host whose doors take them (-admit ticket); nil for doors that take none. Every
+// dial reaches such a host from the router's address, so the join budget is charged
+// to whom the ticket names, the address or account the router budgeted, not to it.
+func (m *Membership) ticketHook(kind network.AdmissionKind) func(*network.Signed, []string) (*network.TicketBody, error) {
 	if len(m.cfg.TicketKeys) == 0 {
 		return nil
 	}
@@ -143,7 +143,7 @@ func (m *Membership) ticketHook() func(*network.Signed, []string) (*network.Tick
 		m.tickets = &network.TicketGate{Keys: m.cfg.TicketKeys, Session: m.cfg.SessionName}
 	}
 	return func(shown *network.Signed, keys []string) (*network.TicketBody, error) {
-		body, err := m.tickets.Admit(shown, keys, network.AdmitPlay)
+		body, err := m.tickets.Admit(shown, keys, kind)
 		if err != nil {
 			return nil, err
 		}
@@ -308,8 +308,11 @@ func (c Control) RequestSession(site string, players int, scenario string) error
 }
 
 func (c Control) AddBot(graph string) error {
-	if c.m.dialling.Load() {
+	switch {
+	case c.m.dialling.Load():
 		return errors.New("a join is already being dialled")
+	case c.m.world.Watches():
+		return errors.New("a run that watches a session holds no place a bot could play from")
 	}
 	specs, err := BotSpecs(cmp.Or(graph, DefaultBotGraph))
 	if err != nil {
@@ -441,6 +444,7 @@ const (
 	roleGuest                        // in one it joined
 	roleLeft                         // in one it joined, which has nobody left but its own bots
 	roleSuccessor                    // coordinating one it joined, at its own port
+	roleViewer                       // watching one it holds no place in
 )
 
 const inSession = "this run is already in a session"
@@ -455,6 +459,7 @@ var sessionRoles = [...]struct{ join, host, leave string }{
 	roleGuest:     {inSession, inSession, ""},
 	roleLeft:      {"", inSession, ""},
 	roleSuccessor: {inSession, "", ""},
+	roleViewer:    {"", "this run watches a session", ""},
 }
 
 func (r sessionRole) joined() bool { return r == roleGuest || r == roleLeft }
@@ -469,6 +474,8 @@ func (m *Membership) sessionRoleLocked() sessionRole {
 		return roleServer
 	case m.sessionTransportLocked() == nil:
 		return roleSolo
+	case m.world.Watches():
+		return roleViewer
 	case m.cfg.JoinAddress != "" && m.world.IsSessionCoordinator():
 		return roleSuccessor
 	case m.cfg.JoinAddress != "" && m.seatsOnly():
@@ -837,6 +844,14 @@ func (m *Membership) leaveLocked() error {
 	if err := m.leaveErrorLocked(); err != nil {
 		return err
 	}
+	// A viewer holds nothing of the session to play on with: its next run is its own.
+	if m.world.Watches() {
+		if !m.run.ReplaceWith(&RestartAsk{Notice: "Left the session; started a local game"}) {
+			return scribe.ErrRunReplaced
+		}
+		m.log.Info("session", "msg", "viewer left", "tick", m.run.Position().Tick)
+		return nil
+	}
 	m.leaving.Store(true)
 	m.ctx.SetStatusMessage("Leaving the session...", parameter.StatusNotice)
 	m.log.Info("session", "msg", "leave requested", "tick", m.run.Position().Tick)
@@ -852,6 +867,7 @@ func (m *Membership) LeaveSession() {
 	lost := ForkCell(m.world).Load() // read before the reopen clears it
 	bots := m.SeatGraphs()
 	m.CloseSeats(true)
+	m.closeAudience("The host left the session", false, nil)
 	var old engine.NetworkPort
 	err := m.corrections.Leave(func() error {
 		var err error
@@ -1006,7 +1022,10 @@ func (m *Membership) sessionSummaryLocked() string {
 	// session dials, not the one it dialled. A harness binds no address, so the word
 	// stands alone rather than trailing a blank.
 	where, addr := "hosting", cmp.Or(m.cfg.HostAddress, m.reach.DeclaredAddr())
-	if m.sessionRoleLocked().joined() {
+	switch role := m.sessionRoleLocked(); {
+	case role == roleViewer:
+		where, addr = "watched", m.cfg.JoinAddress
+	case role.joined():
 		where, addr = "joined", m.cfg.JoinAddress
 	}
 	if addr != "" {
@@ -1237,15 +1256,7 @@ func (m *Membership) pendingAt(run, tick uint64) ([][]byte, error) {
 	if !stood {
 		return nil, errors.New("the session resumed while its world was read")
 	}
-	bodies := make([][]byte, 0, len(batches))
-	for _, b := range batches {
-		body, err := event.EncodeWireBatch(b)
-		if err != nil {
-			return nil, err
-		}
-		bodies = append(bodies, body)
-	}
-	return bodies, nil
+	return encodeBatches(batches)
 }
 
 // sendGate releases each participant named into the world body encodes at tick: the
@@ -1348,6 +1359,9 @@ func (m *Membership) ResumeJoinedSession() error {
 	if m.pendingJoin == nil {
 		return nil
 	}
+	if m.cfg.Watch {
+		return m.resumeWatchedSession()
+	}
 	port, err := m.injectPort()
 	if err != nil {
 		return err
@@ -1358,20 +1372,10 @@ func (m *Membership) ResumeJoinedSession() error {
 		port.Inject(from, uint8(msg.Type), msg.Payload)
 	}
 
-	// A held session's joiner holds at the world it installed. Only the host's next
-	// epoch ends that, and it may be among what the rounds below drain: then the
-	// gap is closed as any other. A new game its host has yet to start holds at its
-	// first tick, which is why this comes before the tick-zero case.
-	if m.sessionOffer.Held {
-		m.world.RunSafe(func() {
-			switch {
-			case m.sessionOffer.Start:
-				m.ctx.HoldAs(engine.HoldStart)
-			case m.ctx.Hold(true):
-				m.ctx.SetStatusMessage("Paused by the host", parameter.StatusNotice)
-			}
-		})
-	}
+	// Only the host's next epoch ends the hold, and it may be among what the rounds
+	// below drain: then the gap is closed as any other. A new game its host has yet
+	// to start holds at its first tick, which is why this comes before the tick-zero case.
+	m.landHeld()
 	// A tick-zero lobby has no gap by construction: the host is frozen at tick zero
 	// until every participant is ready, so it has produced nothing, and a probe tick
 	// here would put this instance one tick ahead of a session that has not started.
@@ -1399,6 +1403,22 @@ func (m *Membership) ResumeJoinedSession() error {
 		caught += step
 	}
 	return m.finishCatchUp(held, caught)
+}
+
+// landHeld holds this run at the world it installed, where its session was held as
+// that world was read: for a new game its host has yet to start, or by a pause.
+func (m *Membership) landHeld() {
+	if !m.sessionOffer.Held {
+		return
+	}
+	m.world.RunSafe(func() {
+		switch {
+		case m.sessionOffer.Start:
+			m.ctx.HoldAs(engine.HoldStart)
+		case m.ctx.Hold(true):
+			m.ctx.SetStatusMessage("Paused by the host", parameter.StatusNotice)
+		}
+	})
 }
 
 // awaitSessionTick drains the transport until a peer epoch newer than local shows

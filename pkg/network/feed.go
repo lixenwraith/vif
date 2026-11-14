@@ -22,7 +22,7 @@ const (
 	FeedSync byte = 1 // a starting point: the publisher's state as of the cut before it
 	FeedData byte = 2 // frames and tick marks, deflated against the data since the cut
 	FeedCut  byte = 3 // the tick the stream stands at; the deflate history restarts
-	FeedEnd  byte = 4 // the feed is over; the body says why
+	FeedEnd  byte = 4 // the feed is over; the body says whether it comes back, and why
 	FeedKeep byte = 5 // nothing to carry: the feed is alive
 )
 
@@ -43,8 +43,12 @@ var (
 	ErrFeedEnded = errors.New("the feed has ended")
 )
 
-// FeedEnded is how a feed its publisher ended reads: the reason it gave.
-type FeedEnded struct{ Reason string }
+// FeedEnded is how a feed its publisher ended reads: the reason it gave, and Again
+// where the publisher is to serve it anew where a subscriber found it.
+type FeedEnded struct {
+	Reason string
+	Again  bool
+}
 
 func (e FeedEnded) Error() string { return e.Reason }
 
@@ -395,17 +399,28 @@ func (h *FeedHub) Subscribers() int {
 	return len(h.subs)
 }
 
-// Forget drops the starting point: a feed that stopped being written cannot be
-// begun from where it was.
-func (h *FeedHub) Forget() {
+// Idle reports a feed with no subscriber, and drops its starting point: its writer
+// may stop then, and a feed that stopped cannot be begun from where it was.
+func (h *FeedHub) Idle() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if len(h.subs) != 0 {
+		return false
+	}
 	h.head, h.tail, h.size = nil, nil, 0
 	h.pend, h.ahead, h.open = nil, 0, false
+	return true
 }
 
-// End tells every subscriber why the feed is over and closes it.
-func (h *FeedHub) End(reason string) { h.Publish(feedRecord(FeedEnd, []byte(reason))) }
+// End tells every subscriber why the feed is over, and whether its publisher is to
+// serve it anew where they found it, and closes it.
+func (h *FeedHub) End(reason string, again bool) {
+	flag := []byte{0}
+	if again {
+		flag[0] = 1
+	}
+	h.Publish(feedRecord(FeedEnd, flag, []byte(reason)))
+}
 
 func (h *FeedHub) Totals() FeedTotals {
 	return FeedTotals{Plain: h.plain.Load(), Stream: h.stream.Load(), Heads: h.heads.Load()}
@@ -728,7 +743,11 @@ func (p *FeedPort) take(r *FeedReader, rec []byte) error {
 			return fmt.Errorf("the run fell %d ticks behind its feed", len(p.ticks))
 		}
 	case FeedEnd:
-		return FeedEnded{Reason: string(FeedBody(rec))}
+		body := FeedBody(rec)
+		if len(body) == 0 {
+			return FeedEnded{}
+		}
+		return FeedEnded{Reason: string(body[1:]), Again: body[0] != 0}
 	}
 	return nil
 }
@@ -764,6 +783,14 @@ func (p *FeedPort) Attribute(peer uint32) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.peer = PeerID(peer)
+}
+
+// Inject hands the run a frame ahead of the feed's own: what a starting point
+// carried beside its state, which the run takes before its first tick.
+func (p *FeedPort) Inject(_ uint32, kind uint8, payload []byte) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.out = append(p.out, Message{Type: MessageType(kind), Payload: payload})
 }
 
 // Ready reports whether tick may run: its mark has arrived, and what the feed

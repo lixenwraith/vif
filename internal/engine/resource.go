@@ -1246,6 +1246,23 @@ type NetworkSessionPort interface {
 	ParticipantID() uint32
 }
 
+// FollowingPort is a viewer's transport: it delivers the ticks its session's host
+// closed, whole. Ready reports that all the host committed by tick has arrived,
+// and releases it to Drain: what lets that tick run with nothing late. Backlog is
+// how many closed ticks wait behind the one last released.
+type FollowingPort interface {
+	Ready(tick uint64) bool
+	Backlog() int
+}
+
+// FeedSink takes what the authority commits, in the order it commits it, and the
+// close of each tick's intake, for an audience that follows the session without a
+// link of its own (link.FeedWriter). Every call is made under the world lock.
+type FeedSink interface {
+	Frame(kind link.MessageType, payload []byte)
+	Mark(tick uint64)
+}
+
 // LinkMeasuringPort is a transport that measures its own links; optional, since
 // only the cadence depends on it. SetLinkReport is the one hint the world gives the
 // transport and LinkMetric the one reading it gets back, for transport scheduling
@@ -1399,9 +1416,13 @@ type NetworkResource struct {
 	OnTickClosed func(completedTick uint64)
 
 	// OnAuthorityAhead reports an epoch the authority produced past this instance's
-	// own tick: what ends a guest's hold, since a host that resumed sends one. Called
-	// under the world lock; it must not block.
+	// own tick, or a tick a viewer's feed closed past its own: what ends a hold, since
+	// a host that resumed sends one. Called under the world lock; it must not block.
 	OnAuthorityAhead func()
+
+	// Feed is where the authority copies what it commits while an audience watches,
+	// nil with none. Set and cleared under the world lock by the session layer.
+	Feed FeedSink
 }
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.

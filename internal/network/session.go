@@ -2,6 +2,7 @@ package network
 
 import (
 	"cmp"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -685,6 +686,10 @@ func WatchAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) error {
 				if err := serveScenario(conn, c, string(msg.Payload), timeout); err != nil {
 					return err
 				}
+			case msg.Type == MsgJoinReply:
+				var reply sessionReply
+				_ = json.Unmarshal(msg.Payload, &reply)
+				return fmt.Errorf("the dial left before its feed: %s", cmp.Or(reply.Error, "it gave no reason"))
 			case msg.Type == MsgJoinSeat:
 				// Asked again: the session a dial prepared on may have ended, or filled.
 				if _, err := c.Watch(adm); err != nil {
@@ -700,6 +705,117 @@ func WatchAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) error {
 			}
 		}
 	}
+}
+
+// Watched is o as a dial that only watches is shown it, in its preview and in every
+// starting point of the feed: the game and who plays it, under what names. Nothing
+// in it takes, keeps or comes back to a place, and nothing says where anyone listens.
+func (o SessionOffer) Watched() SessionOffer {
+	o.Assigned, o.Relay, o.Chain, o.TermKeys, o.KeepOut, o.Pass, o.Door = 0, 0, nil, nil, nil, nil, nil
+	o.Roster = slices.Clone(o.Roster)
+	for i := range o.Roster {
+		o.Roster[i].Key, o.Roster[i].Account = "", ""
+	}
+	return o
+}
+
+// WatchHead is a feed's starting point as a session writes it: the session as a
+// watching dial is shown it, the host's world at the tick the feed was cut at, and
+// the epochs and owner syncs the host had committed past that tick, which went out
+// before the cut. A viewer that begins from it needs nothing the feed carried before.
+type WatchHead struct {
+	Offer          SessionOffer
+	World          []byte
+	Epochs, States [][]byte
+}
+
+// Encode lays the head out as the offer's JSON and the world, then each list's
+// count and bodies, every body behind its length.
+func (h WatchHead) Encode() ([]byte, error) {
+	offer, err := json.Marshal(h.Offer)
+	if err != nil {
+		return nil, err
+	}
+	lists := [][][]byte{h.Epochs, h.States}
+	n := len(offer) + len(h.World) + 4*binary.MaxVarintLen64
+	for _, list := range lists {
+		for _, b := range list {
+			n += len(b) + binary.MaxVarintLen64
+		}
+	}
+	out := make([]byte, 0, n)
+	put := func(b []byte) { out = append(binary.AppendUvarint(out, uint64(len(b))), b...) }
+	put(offer)
+	put(h.World)
+	for _, list := range lists {
+		out = binary.AppendUvarint(out, uint64(len(list)))
+		for _, b := range list {
+			put(b)
+		}
+	}
+	return out, nil
+}
+
+// DecodeWatchHead reads what Encode wrote, with the offer cut to what a watching dial
+// is shown, whoever wrote it. The world and the lists alias b.
+func DecodeWatchHead(b []byte) (WatchHead, error) {
+	short := errors.New("watch head is cut short")
+	count := func() (uint64, bool) {
+		n, k := binary.Uvarint(b)
+		if k <= 0 || n > uint64(len(b)-k) {
+			return 0, false
+		}
+		b = b[k:]
+		return n, true
+	}
+	take := func() ([]byte, bool) {
+		n, ok := count()
+		if !ok {
+			return nil, false
+		}
+		body := b[:n:n]
+		b = b[n:]
+		return body, true
+	}
+	var h WatchHead
+	offer, ok := take()
+	if !ok {
+		return h, short
+	}
+	if err := json.Unmarshal(offer, &h.Offer); err != nil {
+		return h, fmt.Errorf("watch head offer: %w", err)
+	}
+	if h.World, ok = take(); !ok {
+		return h, short
+	}
+	for _, list := range []*[][]byte{&h.Epochs, &h.States} {
+		n, ok := count() // each body is a byte at least, so a count past what is left is refused
+		if !ok {
+			return h, short
+		}
+		for range n {
+			body, ok := take()
+			if !ok {
+				return h, short
+			}
+			*list = append(*list, body)
+		}
+	}
+	err := h.Offer.ValidatePreview()
+	h.Offer = h.Offer.Watched() // whatever its feed says, a viewer holds nothing of a place
+	return h, err
+}
+
+// FeedConfig sizes a session's feed for audience viewers, and a viewer's end of one.
+func FeedConfig(audience int) link.FeedConfig {
+	cfg := link.DefaultFeedConfig()
+	cfg.Marks, cfg.Subscribers = parameter.FeedRecordTicks, audience
+	return cfg
+}
+
+// NewFeedPort is a viewer's end of the feed conn carries, as its run's session port.
+func NewFeedPort(conn net.Conn) *link.FeedPort {
+	return link.NewFeedPort(conn, kinds, FeedConfig(0))
 }
 
 // Admission is what a dial proved at the door: the nonce it was asked and the keys
@@ -907,6 +1023,7 @@ const (
 	RefusalSignIn                            // the door admits a pass, a ticket or a passphrase, and the dial showed none
 	RefusalCredential                        // what the dial showed was refused: a bad proof, pass, ticket or passphrase
 	RefusalDropped                           // the authority dropped this participant, and its key or account stays out
+	RefusalAudience                          // the session feeds every viewer it takes
 )
 
 // Retry is what a refused dialer can do about it.
@@ -938,6 +1055,7 @@ var refusals = [...]struct {
 	RefusalSignIn:     {RetryLater, "sign in, or ask the host for the passphrase, then retry"},
 	RefusalCredential: {RetryNever, ""},
 	RefusalDropped:    {RetryNever, ""},
+	RefusalAudience:   {RetryLater, "retry when a viewer leaves"},
 }
 
 // Refusal is a join turned away. Code is the kind and Reason what the player

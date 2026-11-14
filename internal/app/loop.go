@@ -65,16 +65,20 @@ func Run(c Config, host Host) error {
 	cfg.wiring.membership.JoinPress = cfg.Membership.JoinAddress != "" && !cfg.host.Pressed
 	cfg.wiring.startScreen = !cfg.host.StartScreen
 	rejoin := false
-	var solo *runConfig // what a :join that fails after its dial plays on as
+	var solo *runConfig // what a run plays on as when the session it asked for is not entered
 	for {
 		next, err := runScenario(cfg, rejoin)
 		// The press the host took and the start screen were the first game's
 		cfg.wiring.membership.HostListeners, cfg.host.Pressed, cfg.wiring.startScreen = nil, false, false
 		if err != nil && solo != nil && !errors.Is(err, membership.ErrSessionSignalled) {
-			vlog.Warn("session", "msg", "join failed; playing solo",
-				"join", cfg.Membership.JoinAddress, "error", err.Error())
+			failed := "Join failed: "
+			if cfg.Membership.Watch {
+				failed = "Watch failed: "
+			}
+			vlog.Warn("session", "msg", "session not entered; playing solo",
+				"join", cfg.Membership.JoinAddress, "watch", cfg.Membership.Watch, "error", err.Error())
 			cfg, solo = *solo, nil
-			cfg.Notice = "Join failed: " + err.Error()
+			cfg.Notice = failed + err.Error()
 			continue
 		}
 		if err != nil && !errors.Is(err, membership.ErrSessionCanceled) {
@@ -154,7 +158,8 @@ func (a *App) Loop() (*restartRequest, error) {
 		if err := a.pollTerminalEarly(); err != nil {
 			return nil, err
 		}
-		if !a.membership.HoldsPlace() {
+		// A viewer takes no place to press for.
+		if !a.membership.HoldsPlace() && !a.cfg.Membership.Watch {
 			if next, err := a.awaitJoinPress(sigChan); next != nil || err != nil {
 				return next, err
 			}
@@ -476,6 +481,9 @@ func (a *App) setAway(away bool) {
 // unless the run joined a host, whose game it lands in, or its host took the press.
 // The launch waits behind the start screen where its host has none of its own.
 func (a *App) holdFirstGame(reports <-chan bool) {
+	if a.cfg.Membership.Watch {
+		return // a viewer's game is its session's, held and started by its host
+	}
 	for drained := false; !drained; {
 		select {
 		case a.unseen = <-reports:

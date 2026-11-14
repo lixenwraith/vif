@@ -101,6 +101,9 @@ type Scheduler struct {
 	paceTrim int32
 	paceStep int64
 
+	// waiting marks a tick asked for that a viewer's feed had not closed: none ran.
+	waiting bool
+
 	eventDispatch [event.EventTypeCount]int64
 	eventDead     [event.EventTypeCount]int64
 	eventTypeBuf  []byte
@@ -765,6 +768,10 @@ func (s *Scheduler) schedulerLoop() {
 
 				trim, step := s.TakePace()
 				s.nextTickDeadline = anchor.Add(PacedInterval(s.tickInterval, trim, step))
+				if s.waiting {
+					// Looked for again soon, and owed nothing for the wait
+					s.nextTickDeadline = s.ctl.Now().Add(s.tickInterval / parameter.FollowPollDivisor)
+				}
 
 				// Re-read after the tick: the debt is what the tick consumed,
 				// not what was owed when it started
@@ -1371,6 +1378,7 @@ func (s *Scheduler) DispatchEventsImmediately() {
 
 // processTick executes one clock cycle
 func (s *Scheduler) processTick() {
+	s.waiting = false
 	if s.ctl.IsPaused() && !s.stepping {
 		return
 	}
@@ -1412,6 +1420,11 @@ func (s *Scheduler) processTick() {
 		}
 		s.settleLocked(src)
 		if ended = s.ResetPending(); ended {
+			return
+		}
+		// A viewer's tick waits for its feed to close it: every artifact the tick
+		// applies is in hand by then, so none lands late
+		if s.waiting = !s.world.TickGranted(); s.waiting {
 			return
 		}
 		if r := s.world.Resources.Network; r != nil {
@@ -1535,8 +1548,8 @@ func (s *Scheduler) processTick() {
 		slot = s.world.Resources.Player.LocalSlot()
 	})
 	// The new run is at tick 0 with nothing to flush, digest or sample; executeReset
-	// anchors it before its first tick
-	if ended {
+	// anchors it before its first tick. A tick still waited for took none either.
+	if ended || s.waiting {
 		return
 	}
 

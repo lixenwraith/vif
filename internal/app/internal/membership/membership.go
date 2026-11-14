@@ -164,6 +164,13 @@ type Membership struct {
 	// dial to the authority; the barrier reaches the authority through it.
 	joinedThrough link.PeerID
 
+	// audience is who watches the session this run hosts, opened by its first
+	// viewer; unwatched is what its doors refuse a watching dial with once the run
+	// is over. Both are guarded by sessionMu. feedOver is a viewer's own feed, ended.
+	audience  *audience
+	unwatched error
+	feedOver  atomic.Bool
+
 	// nearby announces the session this run hosts to the local network and lists the
 	// ones found there (openNearby); nil in a build with no socket.
 	nearby *link.Discovery
@@ -285,14 +292,14 @@ type Wiring struct {
 
 // Joining is s pointed at the session a :join names, as -join would have built it.
 // -players and -authority go: they set a session this run no longer hosts, and the
-// one it joins has its own, which its offer carries.
+// one it joins has its own, which its offer carries. A viewer that joins takes a place.
 func Joining(s config.Membership, target string) (config.Membership, error) {
 	e, err := link.ParseEndpoint(target)
 	if err != nil {
 		return s, err
 	}
 	s.HostAddress, s.Participants, s.Migrate = "", 0, false
-	s.JoinAddress, s.SessionName = e.Dialable(), e.Name
+	s.JoinAddress, s.SessionName, s.Watch = e.Dialable(), e.Name, false
 	return s, nil
 }
 

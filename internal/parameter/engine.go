@@ -59,6 +59,10 @@ const (
 	// PausedPollInterval is the scheduler's wall-clock poll period while paused
 	PausedPollInterval = 50 * time.Millisecond
 
+	// FollowPollDivisor is the share of a tick interval after which a viewer looks
+	// again for a tick its feed had not closed
+	FollowPollDivisor = 8
+
 	// StepBurstMax caps the ticks one :step request may advance
 	StepBurstMax = 10000
 

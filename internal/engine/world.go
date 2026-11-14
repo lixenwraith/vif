@@ -96,6 +96,7 @@ type World struct {
 	session                 atomic.Pointer[SessionState] // latched; see LatchSession
 	followJournal           atomic.Bool                  // a replay: session state and settlements are records
 	projects                atomic.Bool                  // a projection: it re-runs ticks another world reached
+	watches                 atomic.Bool                  // a viewer: it runs the ticks its session's host closed
 	statPredictionPending   *atomic.Int64
 	statPredictionConfirmed *atomic.Int64
 	statPredictionDropped   *atomic.Int64
@@ -601,6 +602,25 @@ func (w *World) Project() { w.projects.Store(true) }
 // journal or a projection's live world does. A hold stops neither.
 func (w *World) Reproduces() bool { return w.followJournal.Load() || w.projects.Load() }
 
+// Watch makes this world a viewer's: it drives no cursor and runs each tick from
+// all its session's host committed for it, so what it derives is the host's own.
+// Call before the first world is installed.
+func (w *World) Watch() { w.watches.Store(true) }
+
+// Watches reports a viewer's world.
+func (w *World) Watches() bool { return w.watches.Load() }
+
+// TickGranted reports whether the next tick may run: any may, but a viewer's, which
+// waits for its feed to close it. Caller MUST hold updateMutex.
+func (w *World) TickGranted() bool {
+	r := w.Resources.Network
+	if r == nil {
+		return true
+	}
+	f, ok := r.Port.(FollowingPort)
+	return !ok || f.Ready(w.Resources.Game.State.GetGameTicks()+1)
+}
+
 // FollowsTransitions reports a world whose shared machine moves only by the
 // transitions the authority committed (D-20): a live guest's, a replay's of a live
 // session, or a projection's, which re-applies what its instance applied.
@@ -727,7 +747,8 @@ func (w *World) TakePlace() {
 }
 
 // PredictsShared reports whether a derivation now is provisional; see Predicting.
-func (w *World) PredictsShared() bool { return w.Session().Predicting() }
+// A viewer's is not: it derives a tick from everything the authority did.
+func (w *World) PredictsShared() bool { return w.Session().Predicting() && !w.watches.Load() }
 
 // LatchSession reads the transport into the latch and journals a change. It runs
 // when a tick opens and wherever the session's transport, links or authority move,
