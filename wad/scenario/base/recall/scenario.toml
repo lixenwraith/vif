@@ -134,10 +134,10 @@ transitions = [
 [states.Intro]
 parent = "Start"
 on_enter = [
-    { macro = "Button", key = "1", color = { r = 230, g = 200, b = 0 }, sound = "tone_cs4" },
-    { macro = "Button", key = "2", color = { r = 0, g = 90, b = 255 }, sound = "tone_e4" },
-    { macro = "Button", key = "3", color = { r = 220, g = 0, b = 0 }, sound = "tone_a4" },
-    { macro = "Button", key = "4", color = { r = 0, g = 200, b = 0 }, sound = "tone_e5" },
+    { macro = "Button", key = "1", color = { r = 220, g = 0, b = 0 }, sound = "tone_cs4" },
+    { macro = "Button", key = "2", color = { r = 0, g = 200, b = 0 }, sound = "tone_e4" },
+    { macro = "Button", key = "3", color = { r = 0, g = 90, b = 255 }, sound = "tone_a4" },
+    { macro = "Button", key = "4", color = { r = 230, g = 200, b = 0 }, sound = "tone_e5" },
     { macro = "Show", each = { button = [1, 2, 3, 4], delay_ms = [300, 500, 700, 900] } },
     { macro = "Say", message = "Recall: repeat the sequence" },
 ]
