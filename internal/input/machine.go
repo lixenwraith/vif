@@ -179,7 +179,7 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 func (i *Intent) toggles() bool {
 	switch i.Type {
 	case IntentToggleAudioCycle, IntentToggleAutoFire, IntentPause, IntentConfigMenu, IntentHelp,
-		IntentMacroRecordToggle, IntentOverlayActivate, IntentEscape, IntentOverlayClose:
+		IntentMacroRecordToggle, IntentOverlayActivate, IntentEscape, IntentOverlayClose, IntentConsole:
 		return true
 	case IntentModeSwitch:
 		return i.ModeTarget == ModeTargetVisual
@@ -285,8 +285,9 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 				}
 			}
 		}
-	case ModeOverlay, ModeSearch:
-		// The router resolves these against the overlay it draws, if one is open
+	case ModeOverlay, ModeSearch, ModeCommand:
+		// The router resolves these against the overlay it draws, if one is open: the
+		// command line's against the console, which stays open under it
 		switch {
 		case ev.MouseBtn == terminal.MouseBtnLeft && ev.MouseAction == terminal.MouseActionPress:
 			return &Intent{Type: IntentOverlayPoint, X: ev.MouseX, Y: ev.MouseY}
@@ -784,7 +785,8 @@ func (m *Machine) processOverlay(ev terminal.Event) *Intent {
 }
 
 // handleOverlayEntry emits overlay intents; Motion carries the axis so the
-// router can resolve it against the overlay's layout
+// router can resolve it against the overlay's layout. A mode switch is the router's
+// to take: the console opens the command line under it, other overlays none.
 func (m *Machine) handleOverlayEntry(entry KeyEntry) *Intent {
 	switch entry.Behavior {
 	case BehaviorMotion:
@@ -802,6 +804,8 @@ func (m *Machine) handleOverlayEntry(entry KeyEntry) *Intent {
 		}
 	case BehaviorSystem:
 		return &Intent{Type: entry.IntentType}
+	case BehaviorModeSwitch:
+		return &Intent{Type: IntentModeSwitch, ModeTarget: entry.ModeTarget}
 	}
 	return nil
 }

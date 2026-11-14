@@ -74,7 +74,24 @@ func (r *Router) scrollOverlay(delta int) {
 	if delta == 0 || visible == 0 {
 		return
 	}
-	r.ctx.SetOverlayScroll(min(max(r.ctx.GetOverlayScroll()+delta, 0), max(total-visible, 0)))
+	r.showOverlayFrom(r.overlayOffset(visible, total)+delta, visible, total)
+}
+
+// overlayOffset is the first content row shown: the console's while it follows is
+// the one its foot leaves at the bottom
+func (r *Router) overlayOffset(visible, total int) int {
+	return min(r.ctx.GetOverlayScroll(), max(total-visible, 0))
+}
+
+// showOverlayFrom scrolls to row o, clamped to the content; the console follows its
+// newest row again once scrolled back to it
+func (r *Router) showOverlayFrom(o, visible, total int) {
+	last := max(total-visible, 0)
+	o = min(max(o, 0), last)
+	if o == last && r.ctx.IsConsoleShown() {
+		o = parameter.ConsoleFollow
+	}
+	r.ctx.SetOverlayScroll(o)
 }
 
 // overlayView is the rows the overlay shows and the rows it scrolls through, as
@@ -104,11 +121,14 @@ func (r *Router) handleOverlayPoint(intent *input.Intent) bool {
 	g := r.ctx.OverlayGeometry()
 	x, y := intent.X-g.X, intent.Y-g.Y
 	if x < 0 || y < 0 || x >= g.W || y >= g.H {
+		if r.ctx.IsCommandMode() {
+			return true // The line typed under the console keeps its text
+		}
 		return r.handleEscape()
 	}
 	if visible, total := r.overlayView(); visible > 0 && g.ScrollW > 0 && x >= g.ContentX+g.ContentW &&
 		y >= g.ContentY && y < g.ContentY+visible {
-		r.ctx.SetOverlayScroll(r.overlayBar.Press(y-g.ContentY, visible, r.ctx.GetOverlayScroll(), visible, total))
+		r.showOverlayFrom(r.overlayBar.Press(y-g.ContentY, visible, r.overlayOffset(visible, total), visible, total), visible, total)
 		return true
 	}
 	x, y = x-g.ContentX, y-g.ContentY
@@ -142,7 +162,7 @@ func (r *Router) handleOverlayDrag(intent *input.Intent) bool {
 	if r.overlayBar.Active {
 		g := r.ctx.OverlayGeometry()
 		visible, total := r.overlayView()
-		r.ctx.SetOverlayScroll(r.overlayBar.Drag(intent.Y-g.Y-g.ContentY, visible, r.ctx.GetOverlayScroll(), visible, total))
+		r.showOverlayFrom(r.overlayBar.Drag(intent.Y-g.Y-g.ContentY, visible, r.overlayOffset(visible, total), visible, total), visible, total)
 	}
 	return true
 }
