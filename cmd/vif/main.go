@@ -79,13 +79,14 @@ var (
 	// settings is vif.toml as the roots of -config-dir resolved it, brought up to
 	// this build's, settingsFile the file it came from ("" the embedded one), and
 	// settingsStore where the run writes it back as [play] changes; settingsNotes
-	// name what bringing it up to date changes, and settingsNotice what writing it,
-	// and the keymap, back said.
+	// name what bringing it up to date changes, settingsNotice what writing it and
+	// the keymap back said, and noticeSaid whether stdout has said it.
 	settings       paths.Settings
 	settingsFile   string
 	settingsStore  paths.SettingsStore
 	settingsNotes  []string
 	settingsNotice string
+	noticeSaid     bool
 )
 
 func init() {
@@ -167,12 +168,8 @@ func main() {
 	}
 	requested := flagConfig.Scenario // what a -join site is asked for; vif.toml's is this machine's
 	applySettings(settings, settingsOwn)
-	settingsNotice = upgradeOwn(*flagCheck || *flagSchema, settingsOwn && len(settingsNotes) > 0)
 
 	setupDiagnostics()
-	if settingsNotice != "" {
-		vlog.Info("settings", "msg", settingsNotice)
-	}
 
 	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagWatch, flagSession)
 	bots := flagSession.botCount()
@@ -211,6 +208,11 @@ func main() {
 	}
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
+	}
+	if sessionErr == nil { // a refused invocation writes nothing
+		if settingsNotice = upgradeOwn(settingsOwn && len(settingsNotes) > 0); settingsNotice != "" {
+			vlog.Info("app", "msg", "settings upgraded", "notice", settingsNotice)
+		}
 	}
 	switch {
 	case sessionErr != nil:
@@ -264,6 +266,9 @@ func main() {
 	shutdownDiagnostics()
 
 	if err != nil {
+		if settingsNotice != "" && !noticeSaid {
+			fmt.Fprintln(os.Stderr, settingsNotice) // the run may have ended before showing it
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitCode(err))
 	}
@@ -293,8 +298,8 @@ func verifyJournal(path string) error {
 // upgradeOwn writes the player's own vif.toml back brought up to this build's when
 // settings says it is not, and their own keymap so, once, unless the run only reads
 // them (-check, -schema); it returns the status line naming the changes.
-func upgradeOwn(readOnly, settings bool) string {
-	if readOnly {
+func upgradeOwn(settings bool) string {
+	if *flagCheck || *flagSchema {
 		return ""
 	}
 	notice := ""
@@ -309,6 +314,7 @@ func upgradeOwn(readOnly, settings bool) string {
 func sayNotice() {
 	if settingsNotice != "" {
 		fmt.Println(settingsNotice)
+		noticeSaid = true
 	}
 }
 

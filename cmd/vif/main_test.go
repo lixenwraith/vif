@@ -163,14 +163,16 @@ func TestConfigFlagAliasesShareOneConfig(t *testing.T) {
 // own vif.toml and keymap and leave them as they are; any other run writes each back
 // brought up to date, once, the status line naming the changes.
 func TestOnlyARunThatWritesBringsTheFilesUpToDate(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(paths.SystemRootsEnv, "")
-	was, wasOptions := settingsStore, flagConfig.Options
-	t.Cleanup(func() { settingsStore, flagConfig.Options = was, wasOptions })
-	settings := filepath.Join(paths.UserRoot(), paths.SettingsFile)
-	keymap := filepath.Join(paths.UserRoot(), paths.InputDirName, paths.KeymapConfigFile)
+	was, wasOptions, wasCheck, wasSchema := settingsStore, flagConfig.Options, *flagCheck, *flagSchema
+	t.Cleanup(func() {
+		settingsStore, flagConfig.Options, *flagCheck, *flagSchema = was, wasOptions, wasCheck, wasSchema
+	})
+	dir := t.TempDir() // a -config-dir root, which holds the player's own files
+	settings := filepath.Join(dir, paths.SettingsFile)
+	keymap := filepath.Join(dir, paths.InputDirName, paths.KeymapConfigFile)
 	docs := map[string]string{settings: "[play]\neffects = false\n", keymap: "[normal]\na = \"unknown_action\"\n"}
-	for _, readOnly := range []bool{true, false} {
+	for _, only := range []*bool{flagCheck, flagSchema, nil} {
 		for path, doc := range docs {
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				t.Fatal(err)
@@ -179,17 +181,18 @@ func TestOnlyARunThatWritesBringsTheFilesUpToDate(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		settingsStore, flagConfig.Options = paths.SettingsFor("", settings), resource.Options{}
-		said := upgradeOwn(readOnly, true)
+		*flagCheck, *flagSchema = only == flagCheck, only == flagSchema
+		settingsStore, flagConfig.Options = paths.SettingsFor(dir, settings), resource.Options{Dir: dir}
+		readOnly, said := only != nil, upgradeOwn(true)
 		for path, doc := range docs {
 			if got, _ := os.ReadFile(path); (string(got) == doc) != readOnly {
-				t.Errorf("-check or -schema %v: %s now:\n%s", readOnly, path, got)
+				t.Errorf("-check %v, -schema %v: %s now:\n%s", *flagCheck, *flagSchema, path, got)
 			}
 		}
 		if readOnly && said != "" || !readOnly && (!strings.HasPrefix(said, "Settings brought up to date: ") || !strings.Contains(said, "; Keymap brought up to date: ")) {
-			t.Errorf("-check or -schema %v: %q", readOnly, said)
+			t.Errorf("-check %v, -schema %v: %q", *flagCheck, *flagSchema, said)
 		}
-		if again := upgradeOwn(readOnly, true); !readOnly && again != "" {
+		if again := upgradeOwn(true); !readOnly && again != "" {
 			t.Errorf("an up-to-date start said %q", again)
 		}
 	}

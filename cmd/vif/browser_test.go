@@ -23,7 +23,7 @@ func TestBrowserBringsTheKeptSettingsUpToDateOnce(t *testing.T) {
 		t.Fatalf("read %+v, notes %q", s.Play, notes)
 	}
 	settingsStore = store
-	if said := upgradeOwn(false, true); !strings.HasPrefix(said, "Settings brought up to date: "+notes[0]) {
+	if said := upgradeOwn(true); !strings.HasPrefix(said, "Settings brought up to date: "+notes[0]) {
 		t.Fatalf("the start said %q", said)
 	}
 	doc, err := store.Load()

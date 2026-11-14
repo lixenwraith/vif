@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -62,9 +63,14 @@ func TestResolutionPrecedence(t *testing.T) {
 // as /dev/null, and a file that is no keymap are left as they are.
 func TestARunWritesBackOnlyThePlayersOwnKeymap(t *testing.T) {
 	doc := "# mine\n[normal]\na = \"unknown_action\"\nh = \"motion_right\" # mine\n"
-	dir, system, named := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "mine.toml")
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir, system, named, home := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "mine.toml"), t.TempDir()
+	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
+		t.Setenv(name, home) // every variable a platform finds the user root by
+	}
 	t.Setenv(paths.SystemRootsEnv, system)
+	if rel, err := filepath.Rel(home, paths.UserRoot()); err != nil || !filepath.IsLocal(rel) || !slices.Contains(paths.ConfigRoots(""), system) {
+		t.Skip("the user root lies elsewhere, or system roots are not read here")
+	}
 	user := filepath.Join(paths.UserRoot(), paths.InputDirName, paths.KeymapConfigFile)
 	site := filepath.Join(system, paths.InputDirName, paths.KeymapConfigFile)
 	for _, c := range []struct {
