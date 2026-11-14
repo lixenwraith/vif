@@ -14,6 +14,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/app/internal/membership"
+	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/input"
@@ -141,28 +142,40 @@ func TestAViewerHoldsItsHostsWorldTickForTick(t *testing.T) {
 	t.Parallel()
 	players := hostedSession(t, 2)
 	host, guest := players[0], players[1]
+	var source uint32
+	guest.World().RunSafe(func() { source = guest.World().LocalParticipant() })
 	pending := func() (n int) {
 		host.World().RunSafe(func() {
 			for _, sys := range host.World().Systems() {
 				if p, ok := sys.(interface {
 					PendingAfter(uint64) []event.WireBatch
 				}); ok {
-					n = len(p.PendingAfter(host.Position().Tick))
+					for _, b := range p.PendingAfter(host.Position().Tick) {
+						if b.Source == source {
+							n++
+						}
+					}
 				}
 			}
 		})
 		return n
 	}
+	// A move that reaches the host on the tick it applies at is never held between
+	// two ticks, so the guest moves until one is
 	moved := localCursorEntity(guest)
-	from := cursorPosition(host, moved)
-	inject(t, guest, intentMotion(input.MotionRight, 1))
-	for deadline := time.Now().Add(socketWait); pending() == 0; play(1, guest, host) {
-		if time.Now().After(deadline) {
-			t.Fatal("the host never committed its guest's move")
+	var from component.PositionComponent
+	for deadline, step := time.Now().Add(socketWait), 0; ; step++ { // [wall] a link bound
+		from = cursorPosition(host, moved)
+		inject(t, guest, intentMotion([...]input.MotionOp{input.MotionRight, input.MotionLeft}[step%2], 1))
+		for pending() == 0 && cursorPosition(host, moved) == from {
+			if time.Now().After(deadline) {
+				t.Fatal("the host never held a move of its guest's committed and not yet applied")
+			}
+			play(1, guest, host)
 		}
-	}
-	if cursorPosition(host, moved) != from {
-		t.Fatal("the guest's move applied as it was committed; no viewer could begin before it")
+		if cursorPosition(host, moved) == from {
+			break
+		}
 	}
 	first := mustWatching(t, host.HostAddr())
 	play(parameter.NetworkBarrierMaxDelayTicks+2, guest, host)
@@ -295,10 +308,10 @@ func TestAViewerIsNobodyInItsSession(t *testing.T) {
 		t.Fatalf("the host seats %d players, want 2", got)
 	}
 
-	inject(t, viewer, intentMotion(input.MotionRight, 3))
+	inject(t, viewer, intentMotion(input.MotionRight, 3), &input.Intent{Type: input.IntentFireMain, Count: 1})
 	mode.ExecuteCommand(viewer.Context(), "pause")
 	viewer.Settle()
-	if got := viewer.Context().GetStatusMessage(); got != "Only the host can pause a live session" {
+	if got := viewer.Context().GetStatusMessage(); got != "Unavailable while spectating: :pause" {
 		t.Fatalf("a viewer's :pause was told %q", got)
 	}
 	play(parameter.NetworkBarrierMaxDelayTicks+2, guest, host)
@@ -515,6 +528,9 @@ func TestAnAudienceHasACeiling(t *testing.T) {
 	if err := watch(host); !errors.Is(err, &network.Refusal{Code: network.RefusalAudience}) || network.RetryOf(err) != network.RetryLater {
 		t.Fatalf("a second viewer of an audience of one was told %v", err)
 	}
+	if line := ex(host, "session"); !strings.Contains(line, ", 1 spectator(s)") {
+		t.Fatalf(":session on a host one spectator watches reads %q", line)
+	}
 	viewer.Close()
 	for deadline := time.Now().Add(socketWait); ; time.Sleep(time.Millisecond) { // [wall] a link bound
 		if n, _ := host.membership.Audience(); n == 0 {
@@ -529,7 +545,113 @@ func TestAnAudienceHasACeiling(t *testing.T) {
 	}
 
 	closed := mustHosting(t, Membership{Spectators: -1})
-	if err := watch(closed); err == nil || !strings.Contains(err.Error(), "takes no viewers") || network.RetryOf(err) != network.RetryNever {
-		t.Fatalf("a session that takes no viewers told one %v", err)
+	if err := watch(closed); err == nil || !strings.Contains(err.Error(), "takes no spectators") || network.RetryOf(err) != network.RetryNever {
+		t.Fatalf("a session that takes no spectators told one %v", err)
+	}
+}
+
+// TestASpectatorLooksFromAPlayerWhoPlays: a spectator's view is one player's: the
+// slot it began at, the one a press on a player, its keys or :spectate <slot> pick,
+// and the next one playing once that player leaves. None of it plays anything.
+func TestASpectatorLooksFromAPlayerWhoPlays(t *testing.T) {
+	t.Parallel()
+	apps := hostedSession(t, 2)
+	host, guest := apps[0], apps[1]
+	// Half the map's width, so the view holds one of two players at its ends
+	viewer, err := scriptedRun(Config{Mode: ModeHeadless, Width: 60, Height: 20,
+		Membership: Membership{JoinAddress: host.HostAddr(), Watch: true, Follow: 1}}, socketWait)
+	if err != nil {
+		t.Fatalf("watch: %v", err)
+	}
+	t.Cleanup(viewer.Close)
+	cell := func(slot uint8) (at component.PositionComponent, shown bool) {
+		w := viewer.World()
+		at, _ = w.Positions.GetPosition(w.Resources.Player.Slot(slot))
+		_, _, shown = w.Resources.Config.MapToViewport(at.X, at.Y)
+		return at, shown
+	}
+	looksFrom := func(slot uint8, alone bool, after string) {
+		t.Helper()
+		viewer.World().RunSafe(func() {
+			_, own := cell(slot)
+			_, other := cell(1 - slot)
+			if got := viewer.World().Resources.Player.ViewSlot(); got != slot || !own || alone && other {
+				t.Fatalf("%s the spectator looks from slot %X, slot %X in view %t and the other %t; want %X alone in view",
+					after, got, slot, own, other, slot)
+			}
+		})
+	}
+	looksFrom(1, false, "started at slot 1,")
+
+	inject(t, host, intentMotion(input.MotionLeft, 3))
+	play(parameter.NetworkBarrierMaxDelayTicks+2, host, guest)
+	followTo(t, host, viewer)
+	var at component.PositionComponent
+	viewer.World().RunSafe(func() { at, _ = cell(0) })
+	inject(t, viewer, &input.Intent{Type: input.IntentMouseLeftDown, X: at.X, Y: at.Y, MapCell: true, Count: 1})
+	looksFrom(0, false, "after a press on slot 0's player")
+
+	for range 30 { // the players part to the map's two ends
+		inject(t, host, intentMotion(input.MotionLeft, 3))
+		inject(t, guest, intentMotion(input.MotionRight, 3))
+		play(1, host, guest)
+	}
+	play(parameter.NetworkBarrierMaxDelayTicks+2, host, guest)
+	followTo(t, host, viewer)
+	looksFrom(0, true, "with the players apart")
+	inject(t, viewer, intentMotion(input.MotionRight, 1))
+	looksFrom(1, true, "after the key for the next player")
+	for _, tc := range []struct{ line, told string }{
+		{"spectate 0", "Spectating slot 0"}, {"spectate 5", "Nobody plays on slot 5"}, {"spectate 1", "Spectating slot 1"},
+	} {
+		if got := ex(viewer, tc.line); got != tc.told {
+			t.Fatalf(":%s was told %q, want %q", tc.line, got, tc.told)
+		}
+	}
+	if line := ex(viewer, "session"); !strings.Contains(line, "2 player(s), following slot 1;") {
+		t.Fatalf(":session on a spectator reads %q", line)
+	}
+	looksFrom(1, true, "after :spectate 1")
+
+	guest.Close()
+	waitForHostWraith(t, host)
+	play(1, host) // the view moves on the tick after its player's cursor turned Wraith
+	followTo(t, host, viewer)
+	looksFrom(0, true, "after slot 1's player left")
+	assertSharedParity(t, host, viewer, 0)
+}
+
+// TestSpectatingReplacesARunOnceItsDialIsTaken: :spectate dials while the run plays
+// on and replaces it only once the session took the dial, with a viewer looking from
+// the slot named that brings no bots and keeps no journal; a refusal leaves the game.
+func TestSpectatingReplacesARunOnceItsDialIsTaken(t *testing.T) {
+	t.Parallel()
+	line := runConfig{Config: Config{Seed: fixtureSeed, Width: 120, Height: 40,
+		Resources: resource.Options{Embedded: true}, Membership: Membership{Bots: []string{"default"}}}}
+	solo, err := NewHeadless(line.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(solo.Close)
+	tickUntilCursor(t, solo)
+	solo.World().RunSafe(func() { solo.cfg.Mode = ModePlay }) // :spectate serves Run's loop
+
+	closed := mustHosting(t, Membership{Spectators: -1})
+	ex(solo, "spectate "+closed.HostAddr())
+	waitUntil(t, func() bool { return strings.HasPrefix(solo.Context().GetStatusMessage(), "Spectate failed: ") },
+		"the refused dial reported; status "+solo.Context().GetStatusMessage())
+	if got := solo.Context().GetStatusMessage(); !strings.Contains(got, "this session takes no spectators") || solo.restart.Load() != nil {
+		t.Fatalf("a refused spectator was told %q and its run replaced with %+v", got, solo.restart.Load())
+	}
+
+	host := mustHosting(t, Membership{})
+	ex(solo, "spectate "+host.HostAddr()+" 1")
+	waitUntil(t, func() bool { return solo.restart.Load() != nil }, "the spectator's dial taken; status "+solo.Context().GetStatusMessage())
+	req := solo.restart.Load()
+	defer req.Dialled.Abandon(errors.New("the test is over"))
+	line.Journal = true // as a run that keeps one is replaced
+	next, _ := line.restarted(req)
+	if m := next.Membership; !m.Watch || m.Follow != 1 || m.JoinAddress != host.HostAddr() || len(m.Bots) != 0 || next.Journal {
+		t.Fatalf("the run that spectates is %+v, journal %t; want a viewer at slot 1 with no bots or journal", m, next.Journal)
 	}
 }

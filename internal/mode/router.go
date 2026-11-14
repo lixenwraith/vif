@@ -219,6 +219,12 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return true
 	}
 
+	// A spectator's play reaches no session: it picks whom the run looks from
+	if r.ctx.World.Watches() && !r.ctx.IsCommandMode() && !r.ctx.IsOverlayMode() && !r.Operates(intent) {
+		r.spectate(intent)
+		return true
+	}
+
 	if r.ctx.TimeCtl.Held() && !r.heldAdmits(intent) {
 		return true
 	}
@@ -378,6 +384,41 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	}
 
 	return true
+}
+
+// spectate reads a spectator's play as a change of view: left or up follows the
+// player before the one followed, right or down the one after, and a press on a
+// player's cell that player. Everything else of play is dropped.
+func (r *Router) spectate(intent *input.Intent) {
+	w := r.ctx.World
+	slot, step := w.Resources.Player.ViewSlot(), 0
+	switch intent.Type {
+	case input.IntentMotion:
+		switch intent.Motion {
+		case input.MotionLeft, input.MotionUp:
+			step = -1
+		case input.MotionRight, input.MotionDown:
+			step = 1
+		default:
+			return
+		}
+	case input.IntentMouseLeftDown:
+		x, y, ok := r.pointerCell(intent)
+		at := w.Resources.Player.ViewSlot()
+		w.Components.Cursor.Each(func(e core.Entity, c *component.CursorComponent) bool {
+			if pos, placed := w.Positions.GetPosition(e); ok && placed && pos.X == x && pos.Y == y {
+				at = c.Slot
+			}
+			return at == slot
+		})
+		if at == slot {
+			return
+		}
+		slot = at
+	default:
+		return
+	}
+	reportSpectated(r.ctx, slot, step)
 }
 
 // --- System Handlers ---
@@ -1452,8 +1493,8 @@ func (r *Router) ProcessInputTick() bool {
 		r.handleConfigMenu()
 		return false
 	}
-	if r.inputSuspended() {
-		return false
+	if r.inputSuspended() || r.ctx.World.Watches() {
+		return false // nothing fires: play is suspended, or this run plays nothing
 	}
 
 	now := r.ctx.TimeCtl.Now()

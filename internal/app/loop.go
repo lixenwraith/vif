@@ -73,7 +73,7 @@ func Run(c Config, host Host) error {
 		if err != nil && solo != nil && !errors.Is(err, membership.ErrSessionSignalled) {
 			failed := "Join failed: "
 			if cfg.Membership.Watch {
-				failed = "Watch failed: "
+				failed = "Spectate failed: "
 			}
 			vlog.Warn("session", "msg", "session not entered; playing solo",
 				"join", cfg.Membership.JoinAddress, "watch", cfg.Membership.Watch, "error", err.Error())

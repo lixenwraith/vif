@@ -72,10 +72,10 @@ func (m *Membership) watchParticipant(network.Admission) (network.SessionOffer, 
 	case !m.lateJoins.Load():
 		err = errSessionStarting
 	case ceiling == 0:
-		err = &network.Refusal{Code: network.RefusalUnknown, Reason: "this session takes no viewers"}
+		err = &network.Refusal{Code: network.RefusalUnknown, Reason: "this session takes no spectators"}
 	case m.audience != nil && m.audience.hub.Subscribers() >= ceiling:
 		err = &network.Refusal{Code: network.RefusalAudience,
-			Reason: fmt.Sprintf("session has the %d viewer(s) it takes", ceiling)}
+			Reason: fmt.Sprintf("session has the %d spectator(s) it takes", ceiling)}
 	}
 	if err != nil {
 		return network.SessionOffer{}, err
@@ -299,7 +299,7 @@ func (m *Membership) Audience() (viewers int, totals link.FeedTotals) {
 // world is ErrSessionMoved, as at a join's gate.
 func (m *Membership) startWatchSession(signals <-chan os.Signal) error {
 	shown := link.Shown(m.cfg.JoinAddress)
-	m.run.ShowJoinStatus("Watching " + shown + "; waiting for the session's world")
+	m.run.ShowJoinStatus("Spectating " + shown + "; waiting for the session's world")
 	conn, err := m.pendingJoin.Watch()
 	if err != nil {
 		return err
@@ -326,9 +326,9 @@ func (m *Membership) startWatchSession(signals <-chan os.Signal) error {
 	}
 	m.run.ShowJoinStatus(fmt.Sprintf("Installing the session world at tick %d (%d bytes)", cap.Header.Tick, len(head.World)))
 	if err := m.watchSessionAt(port, head, cap); err != nil {
-		return fail(fmt.Errorf("watch: %w", err))
+		return fail(fmt.Errorf("spectate: %w", err))
 	}
-	m.run.ShowStartupStatus(fmt.Sprintf("Watching %s: %d participant(s)", shown, head.Offer.ParticipantCount()))
+	m.run.ShowStartupStatus(fmt.Sprintf("Spectating %s: %d participant(s)", shown, head.Offer.ParticipantCount()))
 	return nil
 }
 
@@ -345,9 +345,9 @@ func (m *Membership) awaitHead(port *link.FeedPort, signals <-chan os.Signal) ([
 				return body, nil
 			}
 		case <-port.Done():
-			return nil, fmt.Errorf("watch: the feed ended before its first world: %w", port.Err())
+			return nil, fmt.Errorf("spectate: the session ended before its first world: %w", port.Err())
 		case <-timeout.C:
-			return nil, fmt.Errorf("watch: the session sent no world within %s", parameter.FeedHeadTimeout)
+			return nil, fmt.Errorf("spectate: the session sent no world within %s", parameter.FeedHeadTimeout)
 		case <-signals:
 			return nil, ErrSessionSignalled
 		case ev := <-m.run.LobbyEvents():
@@ -388,6 +388,8 @@ func (m *Membership) watchSessionAt(port *link.FeedPort, head network.WatchHead,
 		r := engine.NewNetworkResource(port)
 		r.ParticipantID = 0
 		m.attachResourceLocked(r)
+		m.world.Follow(m.cfg.Follow, 0) // the next slot played, where nobody plays there
+		m.world.KeepView()
 	})
 	m.sessionMu.Lock()
 	m.sessionOffer = o
@@ -403,7 +405,7 @@ func (m *Membership) watchSessionAt(port *link.FeedPort, head network.WatchHead,
 func (m *Membership) resumeWatchedSession() error {
 	port, ok := m.SessionTransport().(*link.FeedPort)
 	if !ok {
-		return errors.New("watch: this run reads no feed")
+		return errors.New("spectate: this run reads no feed")
 	}
 	m.landHeld()
 	caught := 0
@@ -457,10 +459,10 @@ func (m *Membership) feedEnded(err error) {
 	case over:
 		m.run.ReplaceWith(&RestartAsk{Notice: cmp.Or(ended.Reason, "The session ended") + "; started a local game"})
 	case ended.Again:
-		m.ctx.SetStatusMessage("Session restarting; watching again...", parameter.StatusProgress)
+		m.ctx.SetStatusMessage("Session restarting; spectating again...", parameter.StatusProgress)
 		m.run.ReplaceWith(&RestartAsk{Rejoin: true})
 	default:
-		m.ctx.SetStatusMessage("The session's feed was lost; watching again...", parameter.StatusProgress)
+		m.ctx.SetStatusMessage("Lost the session; spectating again...", parameter.StatusProgress)
 		m.run.ReplaceWith(&RestartAsk{Rejoin: true})
 	}
 }
