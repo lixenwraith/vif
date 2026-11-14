@@ -41,6 +41,9 @@ term it follows; a roster slot binds it to a cursor. The coordinator of a dedica
 host holds `parameter.NoPlayerSlot`: it authors the Shared world and puts nobody on
 the map. It is the only roster entry allowed no cursor, and anything that counts
 participants, `parameter.MaxPlayers` included, counts cursors, not roster entries.
+A run that only watches a session
+([Multi-player §5.8](multi-player.md#58-watching-a-session)) is no peer: it holds
+no identity, roster entry or cursor, and so no Player domain.
 
 ## 2. Domain rules
 
