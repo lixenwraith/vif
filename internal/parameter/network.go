@@ -394,6 +394,12 @@ const (
 	// that overlap on skewed clocks never put two hosts on one term.
 	NetworkSuccessionWindow = 5 * time.Second
 
+	// NetworkFollowWindow is how long a person a relay carries in a session pinned to
+	// its host waits on that relay once the host has gone, before it forks alone: the
+	// relay's redial of the host, one window, then its fork, which takes the person's
+	// link to it down.
+	NetworkFollowWindow = 2 * NetworkSuccessionWindow
+
 	// NetworkSuccessionTicks is how long a host that took the term plays on before
 	// the participants its group does not hold depart as Wraiths: one convergence
 	// floor.

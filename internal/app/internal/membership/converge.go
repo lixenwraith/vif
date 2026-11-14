@@ -231,6 +231,18 @@ func (m *Membership) CrossReturns(back []network.RosterEntry) {
 
 func (m *Membership) Redial(lost link.PeerID) bool { return m.redial(lost) }
 
+func (m *Membership) Redials() bool {
+	var redials bool
+	m.world.RunSafe(func() { redials = m.redialsLocked() })
+	return redials
+}
+
+// redialsLocked reports a run that redials a path it loses (redial): a person's, in
+// play, that joined at a door. Caller MUST hold updateMutex.
+func (m *Membership) redialsLocked() bool {
+	return m.run.Mode() == config.ModePlay && m.wiring.Holder == 0 && m.cfg.JoinAddress != ""
+}
+
 func (m *Membership) Forked(roster []network.RosterEntry, local link.PeerID) {
 	m.forked(roster, local)
 }
@@ -526,8 +538,7 @@ func (m *Membership) redial(lost link.PeerID) bool {
 	door, relay := false, false
 	m.world.RunSafe(func() {
 		cfg, wire, base = *m.cfg, *m.wiring, m.run.JoinBase()
-		door = m.run.Mode() == config.ModePlay && wire.Holder == 0 && cfg.JoinAddress != "" &&
-			!m.leaving.Load() && !m.run.Replacing()
+		door = m.redialsLocked() && !m.leaving.Load() && !m.run.Replacing()
 		relay = lost == m.joinedThrough
 	})
 	if !door || !relay && lost != m.authority.Holder() {
