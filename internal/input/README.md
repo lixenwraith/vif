@@ -2,12 +2,15 @@
 
 The complete runtime default is [`internal/asset/input/keymap.toml`](../asset/input/keymap.toml).
 It is embedded into every native and WASM build, and `make install-config` installs
-it as `input/keymap.toml` in the user config root (`$XDG_CONFIG_HOME/vif` on Linux)
-unless one is already there.
+it as `input/keymap.toml` in the user config root (`$XDG_CONFIG_HOME/vif` on Linux),
+or brings one already there up to date.
 
-User documents may remain sparse: only supplied keys override the embedded
-table, and `"none"` removes a binding. Each key names one action, and several keys
-may name the same one (`f2` below joins Ctrl+G and F10 on the menu). For example:
+A document's keys override the embedded table, and `"none"` removes a binding. A
+run brings the player's own up to date, adding each embedded binding of a key it
+binds in no spelling, so it comes to hold every binding, its own bindings and
+unbindings kept; a section written inline gains none. Each key names one action,
+and several keys may name the same one (`f2` below joins Ctrl+G and F10 on the
+menu). For example:
 
 ```toml
 [normal]

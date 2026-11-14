@@ -11,8 +11,8 @@ that a document or a code comment now states, and link that instead.
 Topics: Toolchain · Events and ticks · Sessions · Runs and their wiring ·
 Determinism and the harness · Session tests · Tests that flake · Locks · Networking
 and admission · Position · Math and physics · Glyphs and widgets · Looking at the
-game without a device · Measuring · Scenario TOML · Corpus · Docs · Libraries ·
-Branches.
+game without a device · Measuring · Settings files · Scenario TOML · Corpus · Docs ·
+Libraries · Branches.
 
 ## Toolchain
 
@@ -75,6 +75,11 @@ Branches.
 - `internal/app`'s tests do not build with `-tags vif_headless`: `config_test.go`,
   `geometry_test.go` and `join_press_test.go` drive the presentation that profile
   leaves out, so its gate is `go build -tags vif_headless ./...` alone.
+- A `vif_headless` or `vif_noaudio` build links no `lixenwraith/audio` (its `model`
+  package aside): `make verify` checks `go list -deps`, CI does not, and a build
+  passes either way. A package those builds import takes an audio bound from
+  `internal/parameter` (`AudioBufferMsMin`), which an audio-tagged test holds equal
+  to the library's.
 - `go generate ./internal/manifest` type-checks `internal/event` from source, its
   generated files included, so removing a payload struct, a field of one or an
   event stops the generator on the stale use of it ("type-check ...: has no field",
@@ -771,6 +776,41 @@ Branches.
   -F '#{client_discarded}'`; a rising count means the client is repainted every
   100 ms. To count what a client saw, replay its byte stream through `pyte`,
   sampling 60 times a second, and count the samples where a pane changed.
+
+## Settings files
+
+- A key added to the shipped `vif.toml` or `keymap.toml` reaches a player's copy
+  only through the upgrade a run makes, which carries the comment lines directly
+  above the key and none of its table's: give a new key a comment of its own, since
+  a mention in the block above `[play]` never reaches a copy that has the table.
+- A renamed key or section is a drop and an add, so the player's value starts at
+  the default; a renamed action keeps a player's bindings only through an alias in
+  `resolveAction`, as `append` does.
+- A changed shipped default reaches only a copy that lacks the key: a run writes
+  every default into the player's own file and keeps it from then on as their
+  value. A default every player must get takes a new key name, dropping the old.
+- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { ... }`)
+  and `Fill` adds none there: the upgrades write that value again without every
+  key that goes from it at once, since `Set` refuses a value nested past 1000 that
+  the parser takes through dotted keys, and `saveTable` still refuses it
+  ([TODO](todo.md#let-toml-edit-a-key-inside-an-inline-value)).
+- `Fill` puts a key it adds above the comments that close its table, and copies the
+  comments above a table's header but not those that open the file: compare an
+  upgrade by what it reads or binds, never by the embedded file's text.
+- Each `Delete` reads the document again, so dropping n keys costs n reads: an
+  upgrade of thousands of unknown keys takes seconds
+  ([TODO](todo.md#drop-a-settings-files-keys-in-one-read)).
+- Which file is the player's own is `paths.OwnRoot`, `paths.Shared` and
+  `paths.Special`, and every host builds its `resource.Options` from `vif.toml` with
+  `Options.ApplySettings`, which marks a root or keymap another's `vif.toml` names
+  foreign: a host never decides it alone. A `-k` file setting something but no
+  keymap section is refused rather than upgraded, so a wrong path never has its
+  file replaced; an empty one is a keymap binding nothing of its own.
+- `os.UserConfigDir` reads `XDG_CONFIG_HOME` only on Linux and the BSDs, so a test
+  setting it alone writes the developer's own files on macOS and Windows: point
+  `HOME` and `AppData` there too and skip where `paths.UserRoot` still lies
+  elsewhere, or write a `-config-dir` root instead. A store test never names
+  `/dev/null`, which a broken refusal renames over as root: use a FIFO.
 
 ## Scenario TOML
 

@@ -24,30 +24,43 @@ func init() {
 		pres = &menuHost{browserHost: &browserHost{}, ops: make(chan mode.MenuOp, menuOps)}
 	}
 	platformHost = app.Host{Presentation: pres, Audio: browser.Speaker(), Pressed: true, StartScreen: true}
-	pageSettings = keptSettings
+	pageSettings = func(s *paths.Settings) (paths.SettingsStore, []string) { return keptSettings(browser.Settings(), s) }
 	pagePlaces = tabPlaces{}
 }
 
-// keptSettings reads the settings document the page kept from an earlier visit
-// over s, naming the keys in it this build does not know; one this build cannot
-// read at all is left out, and replaced at the first change.
-func keptSettings(s *paths.Settings) (paths.SettingsStore, paths.UnknownKeys) {
-	kept := &pageStore{doc: browser.Settings()}
-	parsed, err := paths.ParseSettings(kept.doc)
-	var unknown paths.UnknownKeys
-	if err == nil || errors.As(err, &unknown) {
-		*s = parsed
-	} else {
-		kept.doc = nil
+// keptSettings reads doc, the settings document the page kept from an earlier visit,
+// over s, as this build brings it up to date (paths.UpgradeSettings), naming the
+// changes; one it cannot bring up to date is read as it stands, for writing it back
+// to say why, and one this build cannot read at all is replaced at the first change.
+func keptSettings(doc []byte, s *paths.Settings) (paths.SettingsStore, []string) {
+	kept := &pageStore{doc: doc}
+	if len(kept.doc) == 0 {
+		return kept, nil
 	}
-	return kept, unknown
+	doc, notes, err := paths.UpgradeSettings(kept.doc)
+	if err != nil {
+		doc, notes = kept.doc, []string{err.Error()}
+	}
+	parsed, err := paths.ParseSettings(doc)
+	if err != nil && !errors.As(err, new(paths.UnknownKeys)) {
+		kept.doc = nil
+		return kept, nil
+	}
+	*s = parsed
+	return kept, notes
 }
 
 // pageStore is the settings document as the page keeps it, in the browser's
-// storage for this site
+// storage for this site; until the first change, the embedded one, as a vif.toml
+// not there yet starts (paths.FileStore)
 type pageStore struct{ doc []byte }
 
-func (p *pageStore) Load() ([]byte, error) { return p.doc, nil }
+func (p *pageStore) Load() ([]byte, error) {
+	if len(p.doc) == 0 {
+		return asset.DefaultSettings, nil
+	}
+	return p.doc, nil
+}
 
 func (p *pageStore) Store(doc []byte) error {
 	p.doc = doc

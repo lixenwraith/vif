@@ -219,6 +219,32 @@ func TestAPresentedScriptInASessionKeepsOnlyPanAndQuit(t *testing.T) {
 	}
 }
 
+// TestAPresentedRunOpensWithWhatTheStartChanged: a replay, script or bot on the
+// screen opens its bar with the start's notice, such as a file brought up to date,
+// as a played run does; the stream's own line waits while the notice is up.
+func TestAPresentedRunOpensWithWhatTheStartChanged(t *testing.T) {
+	t.Parallel()
+	script, err := journal.ParseScript([]byte("schema = 1\nticks = 4\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := mustHeadless(t, fixtureSeed, 120, 40)
+	defer a.Close()
+	d, err := journal.NewScriptDriver(scriptTarget{a: a}, script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notice := "Settings brought up to date: added 3 keys"
+	a.pres, a.cfg.Notice = &framePresentation{w: 120, h: 40}, notice
+	p := &player{a: a, src: scriptSource{d}, driven: true, interval: parameter.GameUpdateInterval,
+		scale: engine.ScaleNormal}
+	p.begin()
+	p.report()
+	if got := a.ctx.GetStatusMessage(); got != notice {
+		t.Fatalf("the bar opened with %q, want %q", got, notice)
+	}
+}
+
 func TestNetworkJournalPlaybackRemainsBoundedAndPausable(t *testing.T) {
 	capture := journal.NewCapture()
 	source, _ := playBot(t, "default", fixtureSeed, 20, capture)

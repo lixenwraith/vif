@@ -110,7 +110,7 @@ func runScenario(cfg runConfig, rejoin bool) (next *restartRequest, err error) {
 		next.Console, _ = a.ctx.ConsoleLines(nil)
 		// A seat's journal closes with this run, which is the last its holder hears of it
 		for _, line := range a.seatJournalNotices() {
-			next.Notice = joinNotice(next.Notice, line)
+			next.Notice = JoinNotice(next.Notice, line)
 		}
 	}
 	return next, err

@@ -172,14 +172,33 @@ default, and the `vif.toml` inside its own `root` is not read. Every key is a de
 still takes the embedded scenario and content. A relative path is relative to the
 file (a scenario name, or a path below `scenario/` such as `base/td`, stays a
 name the roots resolve, as `-s` takes it; `./` makes it a path), `~/` is the home
-directory. A key this build does not know is dropped: the run reads every key it
-knows, removes each line setting another and each table another heads from the
-document it writes back to, with the comments that are theirs (a comment group
-belongs to the side fewer blank lines part it from, below on a tie), every other
-line and comment kept, and names them on its status line, so a build older than
-the file drops the newer keys too. `-check` names them and writes nothing, and
-names the file it read. Music and sound overrides stay out of it, because a run
-that creates no audio refuses them and a default must not break `-serve`.
+directory. Music and sound overrides stay out of it, because a run that creates no
+audio refuses them and a default must not break `-serve`.
+
+Every run, on every host, reads `vif.toml` as this build brings it up to date
+(`paths.UpgradeSettings`). A key this build does not take, or whose value it
+refuses (a `buffer_ms` the mixer cannot run at among them), goes with the comments
+that are its own (a comment group belongs to the side fewer blank lines part it
+from, below on a tie), so a build older than the file drops the newer keys and a
+refused value starts at its default. Each key the shipped file sets that it lacks
+then comes with its own comments after the key the shipped file puts before it, a
+table it lacks where the shipped file heads it (toml `Document.Fill`). Every other
+line, comment and value stays, one equal to its default included, so a default a
+later build changes reaches only a file that lacks the key. A table written inline
+(`play = { mouse = false }`) is the exception, since toml edits no key inside a
+value: a key dropped from it goes as the table is written again without it, in
+toml's own spelling and without the comments inside it, and a key it lacks is not
+added but reads as its default ([TODO](todo.md#let-toml-edit-a-key-inside-an-inline-value)).
+Starting, vif writes the result back to the player's own file (below), once, and
+names the changes on its status line, a watched replay's, script's or bot's too, or
+on standard output for a run that draws nothing (a headless bot or replay,
+`-script` without `-watch`, `-serve`), counting the added keys past five
+(`parameter.UpgradeNamed`). It writes once it has taken the command line: a run its
+flags refuse writes nothing, and one that fails after writing names the changes on
+standard error beside its error. `-check` names them, writes
+nothing, and says of the file it read whether a run writes it back, or reads it up
+to date as another's or as one a write refuses (below). The keymap is brought up to
+date the same way ([Input §10](input-and-modes.md#10-keymap-override-files)).
 
 One rule holds on every host: a flag sets its value for its run alone, `vif.toml`
 holds the value every run starts from, and the menu writes back what the player
@@ -187,14 +206,24 @@ changes. A run writes each `[play]` value, and the zoom as `[presentation] cell`
 back as the player changes it, through a menu row or the command behind it, so the
 next starts the same: into the `vif.toml` it read when that is the player's own, in
 the user root or the `-config-dir` root, else into the user root's, created at the
-first change as a copy of the one it read (relative paths made absolute) that
-shadows it from then on; dropping unknown keys creates it at once. A checkout's or
-a system root's file is never written.
-Only a value changed in the run is written, so one a flag set (`-mute`'s channels,
-`-nw`'s wait) stays out unless the player then changes it. No flag saves the
-others: a flag is what an alias, a script or a link repeats, and writing it back
-would let the last command line decide every later run. A browser keeps them in
-the site's storage ([Multi-platform §7](multi-platform.md#7-external-maps-and-assets)).
+first change as a copy of the one it read, brought up to date with its relative
+paths made absolute, which every later run reads in its place but one whose
+`-config-dir` holds the file it copied
+([TODO](todo.md#let-a-run-on-a-shared-config-root-keep-its-changes)). A file in
+the checkout's `wad/` or a system root is never written, whatever names it,
+`-config-dir` included, and neither is a special file such as a link to
+`/dev/null` or a pipe: a run reads it brought up to date and leaves it as it is,
+and only an install brings a system root's up to date (§4). A write replaces the
+file whole by rename, through a link to the file it names, keeping its mode and,
+as far as the writer may, its owner; a new file is made 0644. One no one may
+write, or a link to nothing, is refused, and the status line says so. A rename
+leaves a hard link's other names on the old file
+([TODO](todo.md#write-a-hard-linked-settings-file-in-place)). Only a value changed in the run is written,
+so one a flag set (`-mute`'s channels, `-nw`'s wait) stays out unless the player
+then changes it. No flag saves the others: a flag is what an alias, a script or a
+link repeats, and writing it back would let the last command line decide every
+later run. A browser keeps them in the site's storage
+([Multi-platform §7](multi-platform.md#7-external-maps-and-assets)).
 
 ## 4. Installation
 
@@ -208,26 +237,24 @@ make uninstall                                       # what install put under PR
 
 Both copy `wad/`, the bot graphs, the keymap and `vif.toml`. A reinstall replaces
 every shipped file and keeps files a player added. The keymap and `vif.toml` are
-the player's settings: the keymap is written only when absent, and a `vif.toml`
-already there is brought up to this build's (`tool/vif-settings`,
-`paths.UpgradeSettings`), with the player's lines, comments and values kept. A
-key this build does not take and a value it refuses go, each with its own
-comments, and each key the shipped file sets that the player's lacks comes with
-the comments the shipped file gives it (toml `Document.Fill`); a renamed key so
-starts at its default. The install names each change; it needs Go on `PATH` and
-keeps a file it cannot read as it is. `CLEAN=1` first removes the shipped
-categories (`content/`, `image/`, `bot/`, and of `scenario/` its `base/` and the
-copies of shipped scenarios an install from before `base/` left at its top, which
-would shadow them) and those two files, so the root holds only the fresh install
-plus `audio/`, a player's own scenarios and anything else a player put beside
-them. `install` adds the binary, licence, manual, desktop entry and icons,
-completion and documentation under `PREFIX` with the wad at `$(SYSCONFDIR)/vif`.
-A user who cannot write `/usr/local/bin` gets, unstaged, `PREFIX=~/.local` and the
-user root as the defaults; `sudo make install` installs system-wide, and `make
-help` prints the values in effect. `install` writes nothing until it can write
-all of `PREFIX` and the root, and leaves the mode of existing directories alone.
-`uninstall` keeps the root, which in a user install holds the player's settings.
-See [Packaging](packaging.md).
+the player's settings: one already there is brought up to this build's as a run
+brings it and written as §3 writes (`tool/vif-settings`), and the install names
+the changes. Without Go on `PATH` it keeps the file as it is, which a run reads
+brought up to date and writes back only when it is the player's own (§3); one that
+does not parse it keeps for the player to fix, as a run refuses it too, and a
+special file or one no one may write it leaves as a run does. `CLEAN=1` first
+removes the shipped categories (`content/`, `image/`, `bot/`, and of `scenario/`
+its `base/` and the copies of shipped scenarios an install from before `base/`
+left at its top, which would shadow them) and those two files, so the root holds
+only the fresh install plus `audio/`, a player's own scenarios and anything else a
+player put beside them. `install` adds the binary, licence, manual, desktop entry
+and icons, completion and documentation under `PREFIX` with the wad at
+`$(SYSCONFDIR)/vif`. A user who cannot write `/usr/local/bin` gets, unstaged,
+`PREFIX=~/.local` and the user root as the defaults; `sudo make install` installs
+system-wide, and `make help` prints the values in effect. `install` writes nothing
+until it can write all of `PREFIX` and the root, and leaves the mode of existing
+directories alone. `uninstall` keeps the root, which in a user install holds the
+player's settings. See [Packaging](packaging.md).
 
 ## 5. Logs, journals, and runtime output
 

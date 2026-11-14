@@ -234,9 +234,7 @@ func (a *App) init() error {
 		if err != nil {
 			return err
 		}
-		if notice != "" {
-			a.cfg.Notice = joinNotice(a.cfg.Notice, notice)
-		}
+		a.cfg.Notice = JoinNotice(a.cfg.Notice, notice)
 	}
 	// After the journal opens, so a run that starts in a session notes it first.
 	a.world.RunSafe(a.world.LatchSession)
@@ -600,8 +598,10 @@ func (a *App) Close() {
 	a.log.Info("app", "msg", "shutdown completed", "us", time.Since(begin).Microseconds())
 }
 
-// loadKeymap merges an external key table over the embedded default document, and
-// the scenario's own keys over both for its run.
+// loadKeymap merges an external key table, read as this build brings it up to date
+// (input.UpgradeKeymap), over the embedded default document, and the scenario's own
+// keys over both for its run. It writes nothing: the process writes the player's
+// own back once, at its start (resource.UpgradeKeymap).
 func (a *App) loadKeymap() error {
 	kt := input.DefaultKeyTable()
 	path, err := resource.Keymap(a.cfg.Resources)
@@ -612,6 +612,9 @@ func (a *App) loadKeymap() error {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("keymap load: %w", err)
+		}
+		if data, _, err = input.UpgradeKeymap(data); err != nil {
+			return fmt.Errorf("keymap config %s: %w", path, err)
 		}
 		override, err := input.LoadKeyConfig(data)
 		if err != nil {

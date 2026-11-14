@@ -542,22 +542,23 @@ Resolution order is:
    each system root;
 4. the embedded `internal/asset/input/keymap.toml` document.
 
-`make install-config` installs the embedded document without overwriting existing
-user files. The retired action name `append` is an alias of `toggle_auto_fire`;
+`make install-config` installs the embedded document, or brings one already there
+up to date. The retired action name `append` is an alias of `toggle_auto_fire`;
 vim's append is `mode_append`, which no default key binds, `a` cycling auto-fire.
 See [External filesystem layout](filesystem-layout.md) for the shared root policy.
 
-An override is sparse: it is merged over the embedded table, so unspecified
-bindings retain defaults. Each key names one action, and an action can have any
-number of keys: the embedded table gives `quit` both `ctrl_q` and `ctrl_c`, and
-`config_menu` both `ctrl_g` and `f10`. TOML refuses a key named twice in a section,
-so no two actions contend for one key. Naming a key adds it to an action; moving an
-action also sets its old key to `"none"`. Help reads its key column from the merged
-table, so it shows a player's own bindings: every key of an action where an entry
-documents that action alone, the first key of each where it documents several
-(`h/j/k/l`). The accepted TOML sections, a rune section's keys one rune, `space`,
-`backslash` or `zero`, a special one's a terminal key name (`ctrl_g`, `f10`,
-`page_up`...):
+A file is merged over the embedded table, and a run fills the player's own with
+each embedded binding it lacks (below), so every binding in it is then the
+player's. Each key names one action, and an action can have any number of keys:
+the embedded table gives `quit` both `ctrl_q` and `ctrl_c`, and `config_menu` both
+`ctrl_g` and `f10`. TOML refuses a key named twice in a section; one key in two
+spellings (`space` and `SPACE`) binds as the spelling that sorts last. Naming a key
+adds it to an action; moving an action also sets its old key to `"none"`. Help
+reads its key column from the merged table, so it shows a player's own bindings:
+every key of an action where an entry documents that action alone, the first key
+of each where it documents several (`h/j/k/l`). The accepted TOML sections, a rune
+section's keys one rune, `space`, `backslash` or `zero`, a special one's a terminal
+key name (`ctrl_g`, `f10`, `page_up`...):
 
 - Rune: `[normal]`, Normal and Visual; `[operator]`, the motions after `d` and `c`;
   `[prefix_g]`, the key after `g`; `[overlay]`, an overlay's.
@@ -567,9 +568,25 @@ documents that action alone, the first key of each where it documents several
 
 Values are canonical action names from `internal/input/actionnames.go`, except
 `press`, which a scenario's capture chooses the keys of. Use `"none"` to unbind a
-default. Unknown sections are ignored by the explicit
-section reader, while invalid key or action names inside supported sections
-fail loading.
+default. A run reads the file as this build brings it up to date
+(`input.UpgradeKeymap`), as it does `vif.toml`
+([Filesystem §3](filesystem-layout.md#3-resolution-policy)): a section it does not
+read, a key it cannot name and a binding it refuses go, each with its own comments,
+so the embedded binding stands unless another spelling of the key binds it; each
+embedded binding of a key the file binds in no spelling then comes with its
+comments. Every other binding stays, unbindings included. A section written inline
+(`normal = { h = "undo" }`) is written again without what goes and gains no
+binding, as a `vif.toml` table written inline does. A file setting something yet
+none of the sections above is no keymap: a run refuses it, as one that does not
+parse, and nothing writes it; an empty one, or one of comments alone, binds nothing
+of its own and is brought up to date as any other. Starting, vif writes the
+player's own file back so, once, and names the changes, counting the added
+bindings past five. The player's own is the file `-k` names, or the one in the
+`-config-dir` root or the user root; a `[paths] keymap` or `root` counts as `-k` or
+`-config-dir` only from the player's own `vif.toml`, and a file in the checkout's
+`wad/` or a system root, however named, or a special file such as
+`-k /dev/null`, is never the player's. Any other is read up to date and left as it
+is, and `-check` names the changes and writes nothing.
 
 ```toml
 [normal]
