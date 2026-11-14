@@ -60,6 +60,8 @@ var configPages = []configNode{
 			description: "Stop the game until Resume, as the command :pause or the key p in Normal mode does; the menu closes and leaves it stopped. In a session only the host can, and every participant stops at the same tick."},
 		{kind: kindAction, key: "restart", label: "Restart game", command: "new", read: enterValue, confirm: true, disabled: hostOnly("Only the host can restart the game in a session"),
 			description: "Start this game over from its scenario's first tick. In a session only the host can, and every participant restarts with it."},
+		{kind: kindAction, key: "console", label: "Console", command: "console", read: enterValue, activate: (*Router).showConsole,
+			description: "The messages of this run and the commands typed in it, newest last, each with the time it came; the backtick key and :console open it too, and : in it opens the command line."},
 		{kind: kindStep, key: "speed", label: "Game speed", description: "1x is real time; range 1/8x to 8x. In a session only the host can, and every participant changes with it.",
 			command: "speed", read: func(ctx *engine.GameContext) string { return ctx.TimeCtl.Scale().String() + "x" },
 			change: func(ctx *engine.GameContext, d int) {
@@ -110,7 +112,7 @@ var configPages = []configNode{
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.OverlayHUD.Load()) }},
 		}),
 		section("Pause", []configNode{
-			{kind: kindToggle, key: "pause_menu", label: "Pause in menu", description: "Pause the game while this menu, help or telemetry is open. Applies where the game can pause: solo, or hosting only your own bots; a session with other players plays on.",
+			{kind: kindToggle, key: "pause_menu", label: "Pause in menu", description: "Pause the game while this menu, help, telemetry or the console is open. Applies where the game can pause: solo, or hosting only your own bots; a session with other players plays on.",
 				command: "pause menu", choices: []string{"off", "on"},
 				read: func(ctx *engine.GameContext) string { return toggleWord(ctx.PauseMenu.Load()) }},
 			{kind: kindToggle, key: "pause_command", label: "Pause in command line", description: "Pause the game while the command line is open. Applies where the game can pause: solo, or hosting only your own bots. With it off, the command :pause and the key p still pause.",

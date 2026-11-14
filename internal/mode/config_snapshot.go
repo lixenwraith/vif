@@ -29,7 +29,15 @@ var (
 // toggleChoices is what a toggle without choices of its own reads and takes
 var toggleChoices = []string{"off", "on"}
 
-var statusKindWords = [parameter.StatusKindCount]string{"notice", "progress", "alert"}
+// statusKindWords names each status kind to a host's own menu, which colours it
+var statusKindWords = [parameter.StatusKindCount]string{
+	parameter.StatusNotice:   "notice",
+	parameter.StatusProgress: "progress",
+	parameter.StatusInput:    "input",
+	parameter.StatusError:    "error",
+	parameter.StatusAlert:    "alert",
+	parameter.StatusAnnounce: "announce",
+}
 
 // menuSnapshot is the menu as a host draws it: the tree with each row's live label,
 // value and reason, the status line, a failed submit's error and a search's matches

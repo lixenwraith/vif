@@ -1,6 +1,9 @@
 package visual
 
-import "github.com/lixenwraith/color"
+import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/vif/internal/parameter"
+)
 
 // The sixteen colors of a text console, which 256-color mode draws for; a 256-color table names
 // these to get exactly the console color it means. On a console with eight backgrounds, a bright
@@ -143,3 +146,16 @@ func cubeLevel(l uint8) uint8 {
 	}
 	return 55 + 40*l
 }
+
+// ConsoleKind256 is RgbConsoleKind on a text console, each kind its own entry, and
+// ConsoleStamp256 its stamps
+var ConsoleKind256 = [parameter.StatusKindCount]uint8{
+	parameter.StatusNotice:   ConWhite,
+	parameter.StatusProgress: ConWhite,
+	parameter.StatusInput:    ConBrightCyan,
+	parameter.StatusError:    ConBrightRed,
+	parameter.StatusAlert:    ConBrightYellow,
+	parameter.StatusAnnounce: ConBrightMagenta,
+}
+
+const ConsoleStamp256 = ConGray

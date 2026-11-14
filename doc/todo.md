@@ -1759,32 +1759,40 @@ reads as farther; a distinct attribute for bright would separate the three.
 
 ## Rendering
 
-### Open a console of the command and message history on backtick
+### Console follow-ups
 
-- Priority: P1
-- Affected files: `internal/asset/input/keymap.toml`, `internal/mode/router.go`,
-  `internal/mode/commands.go`, `internal/engine/game_context.go`,
-  `internal/render/renderer/status_bar.go`, a console renderer and its row in
-  `internal/manifest/definition.go`, `android/app/src/main/java/com/lixen/vif/GameView.java`,
-  `web/terminal.js`, `doc/input-and-modes.md`, `doc/rendering.md`
+- Priority: P3
+- Affected files: `internal/mode/console.go`, `internal/engine/overlay_geometry.go`,
+  `internal/render/renderer/overlay_console.go`, `internal/mode/overlay.go`
 
-Backtick, unbound in normal mode today, drops a panel from the top of the screen
-as Quake's console does: several rows of the messages the run posted and the
-commands typed, newest at the foot, scrolled back with the keys an overlay
-already takes, over the command line; backtick again or Escape raises it. The
-status bar keeps showing the newest message, rising onto the items' row when it
-needs two lines, and cuts a longer one: Android's 85-character log path at 18 dp
-in portrait, and anything past about 15 characters in the one-row strip above its
-keyboard at the default zoom. The console is where such a message reads whole, on
-every host alike. `GameContext` keeps only the message shown (`statusMessage`),
-so it needs a bounded history of them (kind, wall time, text); the router's
-256-command ring (`cmdHistory`) already holds the commands. Open for its own
-session: whether the console's line is command mode's or a second one; how a
-touch host opens it, as no soft keyboard shows backtick on its first page (a key
-strip button, a gesture, a tap on the bar's message); what a backtick is in
-insert mode, where it types; whether a solo run pauses while it is down, as the
-menu does; its height and what a resize does; and whether the history outlives
-the run in the state directory, as a shell's does.
+The console landed ([Input §9](input-and-modes.md#9-command-mode)). Open:
+
+- `StatusAnnounce` has its rank and colours, but nothing posts one: a server's word
+  to its players needs a message on the wire first.
+- A finger scrolls the console, as it does help, only on its one-cell scrollbar; a
+  drag over its rows would suit a phone better.
+- Help and telemetry still centre on the whole screen under a touch keyboard, whose
+  covered rows only the console keeps above (`ComputeConsoleGeometry`).
+
+The options Lixen did not take (2026-11-14), each with what would reopen it:
+
+- Placement: a drop-down from the top, as Quake's, or help's centred window. The band
+  at the foot keeps the newest line beside the status bar it came from and leaves the
+  pinned HUD at the top-left in view. Reopen if a scenario needs its map's foot seen
+  while the console is open.
+- A line of the console's own for commands: command mode's line, opened under it,
+  already edits, completes and recalls, and a second would be two mechanisms for one
+  job. Reopen if the console comes to take input that is not a command, as chat.
+- On a touch screen, a key strip button (the page has a strip, Android none, so the
+  hosts would differ) or a tap on the bar's message (the hosts' triple tap reaches
+  the run tap by tap, so telling a lone tap apart waits 500 ms). The menu's Console
+  row and `:console` work on every host. Reopen when Android has a key strip.
+- History kept in the state directory, as a shell's: its lines carry addresses
+  (`:session`) and what the run did, which the address privacy rule keeps off the
+  disk by default. Reopen if players ask for it across launches, behind a setting
+  that is off by default.
+- Under a touch keyboard, hanging from the screen's top while it is up (Go alone,
+  but landscape still hides its foot), or staying under it.
 
 ### Configuration menu follow-up
 

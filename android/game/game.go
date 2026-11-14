@@ -46,6 +46,10 @@ var (
 	mu  sync.Mutex
 	run *view // the running game's screen, nil between runs
 
+	// zone is the device's time zone, which the first Start makes local
+	zone      string
+	localZone sync.Once
+
 	loadTexture = sync.OnceValues(func() (*glyph.Texture, error) {
 		a, err := glyph.Parse(asset.DefaultFont)
 		if err != nil {
@@ -54,6 +58,15 @@ var (
 		return glyph.NewTexture(a), nil
 	})
 )
+
+// Zone names the device's time zone as tzdata does (TimeZone.getDefault().getID()),
+// called before Start: Go takes UTC for local time on Android, and the console stamps
+// its rows in local time, as the log and profile file names are.
+func Zone(id string) {
+	mu.Lock()
+	defer mu.Unlock()
+	zone = id
+}
 
 // Start runs the game on the grid the view's pixels hold in cells sized by the
 // screen's density. files is the app's own directory, holding the user root, logs
@@ -72,6 +85,12 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	if run != nil {
 		return errors.New("a game is already running")
 	}
+	// Once, before any run reads the time: a run's goroutines can outlive it
+	localZone.Do(func() {
+		if loc, err := time.LoadLocation(zone); zone != "" && err == nil {
+			time.Local = loc
+		}
+	})
 	for k, v := range map[string]string{
 		"HOME":               files,
 		"XDG_CONFIG_HOME":    filepath.Join(files, "config"),
@@ -287,12 +306,12 @@ func Menu(op, id, arg string) {
 	}
 }
 
-// Keyboard says whether the system keyboard covers the view: while it does, the
-// status bar keeps its input to the bottom row's left half, which the view repeats
-// above it
-func Keyboard(shown bool) {
+// Keyboard is the pixels at the view's foot the system keyboard covers, 0 while it
+// is down: the status bar keeps its input to the bottom row's left half, which the
+// view repeats above it, and the console stays above both
+func Keyboard(px int32) {
 	if v := current(); v != nil {
-		v.covered.Store(shown)
+		v.covered.Store(max(px, 0))
 	}
 }
 
