@@ -1648,6 +1648,41 @@ still off:
   `down`) as it carries `Peers`, for presentation only, at the cost of a journal
   field.
 
+### Keep the other guests' places in a host-policy fork
+
+- Priority: P3, an option not taken (2026-11-14)
+- Affected files: `internal/app/internal/membership/host.go` (`LeaveSession`,
+  `leaveSessionLocked`), `internal/app/host_test.go`
+  (`TestAPinnedForkKeepsNobodyItDidNotBring`)
+- Guide: [Multi-player §5.5](multi-player.md#55-leaving-a-session),
+  [§5.4](multi-player.md#54-wraiths)
+
+The choice made: a fork in a session pinned to its host keeps its own place and its
+bots' alone, so the host's Wraith, the host's bots and every other guest's place go
+at the fork. Another guest of that host that later dials the door the fork's `:host`
+opens comes in as a new player, without the cursor and record it had in that world.
+
+What the other option does: the fork drops only the lost host and its bots, the
+places of the authority `giveUp` leaves named (`m.authorityID()`), and keeps every
+other place as a Wraith for `WraithTimeout`, which `:host` starts over. A guest that
+dials a door opened in that time takes its place back by its key, as it could before
+this rule, when those Wraiths waited for a door with no limit.
+
+What it entails: those Wraiths stand on the fork's map for their 2 minutes whether
+anyone comes back or not, as the host's did in the report that led here. A return
+takes the fork's player opening a door and the other guest finding it: a host-policy
+guest has no door, nothing tells the others its address (§5.0), and local network
+visibility is off by default (§5.7). The three-player test inverts, and §5.1 and
+§5.5 change with it.
+
+Why it was not chosen: nobody in a host-policy session signed up to come back to a
+guest's run, any more than that guest signed up for its host's Wraith, and keeping a
+session's people together is what `-authority migrate` with a guest that takes over
+is for.
+
+Reopen it if players of a host-policy session regroup in one guest's fork often
+enough that losing their progress there is felt.
+
 ## Combat
 
 ### Let mounted weapons strike more than cursors
