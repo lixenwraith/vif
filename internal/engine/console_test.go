@@ -65,12 +65,13 @@ func TestAdoptedLinesGoBeforeTheRunsOwn(t *testing.T) {
 }
 
 // TestTheConsoleIsABandOverTheStatusBar: the console spans the screen right above
-// the status bar, its edge row toward the map and its scrollbar in the last column,
-// and the overlay's geometry is the band's while the console is shown
+// the status bar, or the rows a keyboard hides, its edge row toward the map and its
+// scrollbar in the last column, and the overlay's geometry is the band's while the
+// console is shown
 func TestTheConsoleIsABandOverTheStatusBar(t *testing.T) {
-	for _, size := range [][2]int{{80, 24}, {200, 60}, {parameter.ConsoleMinWidth, 6}} {
-		g := ComputeConsoleGeometry(size[0], size[1])
-		rows := size[1] - parameter.StatusRows
+	for _, size := range [][3]int{{80, 24, 0}, {200, 60, 0}, {parameter.ConsoleMinWidth, 6, 0}, {60, 40, 18}} {
+		g := ComputeConsoleGeometry(size[0], size[1], size[2])
+		rows := size[1] - max(parameter.StatusRows, size[2])
 		switch {
 		case !g.Valid || g.X != 0 || g.W != size[0] || g.Y+g.H != rows:
 			t.Fatalf("size %v: band %+v, want the full width ending at row %d", size, g, rows)
@@ -80,15 +81,18 @@ func TestTheConsoleIsABandOverTheStatusBar(t *testing.T) {
 			t.Fatalf("size %v: band %+v, want the scrollbar alone in the last column", size, g)
 		}
 	}
-	if ComputeConsoleGeometry(parameter.ConsoleMinWidth-1, 24).Valid || ComputeConsoleGeometry(80, parameter.StatusRows+1).Valid {
+	if ComputeConsoleGeometry(parameter.ConsoleMinWidth-1, 24, 0).Valid || ComputeConsoleGeometry(80, parameter.StatusRows+1, 0).Valid {
 		t.Fatal("a screen too narrow or too short for the console placed one")
 	}
 
 	ctx, _ := newMessageContext(t)
 	window := ctx.OverlayGeometry()
 	ctx.SetOverlayContent(&core.OverlayContent{Layout: core.OverlayLayoutConsole})
-	if g := ctx.OverlayGeometry(); g != ComputeConsoleGeometry(80, 24) || !ctx.IsConsoleShown() {
+	if g := ctx.OverlayGeometry(); g != ComputeConsoleGeometry(80, 24, 0) || !ctx.IsConsoleShown() {
 		t.Fatalf("the console shown has the geometry %+v", g)
+	}
+	if ctx.SetKeyboardRows(10); ctx.OverlayGeometry() != ComputeConsoleGeometry(80, 24, 10) {
+		t.Fatalf("the console under a keyboard of 10 rows has the geometry %+v", ctx.OverlayGeometry())
 	}
 	ctx.SetOverlayContent(&core.OverlayContent{Layout: core.OverlayLayoutDoc})
 	if g := ctx.OverlayGeometry(); g != window || ctx.IsConsoleShown() {

@@ -287,12 +287,12 @@ func Menu(op, id, arg string) {
 	}
 }
 
-// Keyboard says whether the system keyboard covers the view: while it does, the
-// status bar keeps its input to the bottom row's left half, which the view repeats
-// above it
-func Keyboard(shown bool) {
+// Keyboard is the pixels at the view's foot the system keyboard covers, 0 while it
+// is down: the status bar keeps its input to the bottom row's left half, which the
+// view repeats above it, and the console stays above both
+func Keyboard(px int32) {
 	if v := current(); v != nil {
-		v.covered.Store(shown)
+		v.covered.Store(max(px, 0))
 	}
 }
 

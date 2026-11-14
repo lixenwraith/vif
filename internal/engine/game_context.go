@@ -214,6 +214,10 @@ type GameContext struct {
 	// zero when it is. Written by a replay's presenting loop, which runs its ticks.
 	presentW, presentH int
 
+	// The rows at the surface's foot a touch host's keyboard and the strip it draws
+	// above it hide, none while it is down; written by the frame's build
+	keyboardRows int
+
 	// === Context Exclusive ===
 
 	// No sync required
@@ -511,13 +515,22 @@ func (ctx *GameContext) SetPresentationSize(width, height int) {
 	ctx.recomputeOverlayGeometry()
 }
 
+// SetKeyboardRows takes the rows a touch host's keyboard and its strip hide, which
+// the console stays above
+func (ctx *GameContext) SetKeyboardRows(rows int) {
+	if rows != ctx.keyboardRows {
+		ctx.keyboardRows = rows
+		ctx.recomputeOverlayGeometry()
+	}
+}
+
 // recomputeOverlayGeometry republishes window placement and screen telemetry
 func (ctx *GameContext) recomputeOverlayGeometry() {
 	w, h := ctx.Width, ctx.Height
 	if ctx.presentW > 0 {
 		w, h = ctx.presentW, ctx.presentH
 	}
-	g, c := ComputeOverlayGeometry(w, h), ComputeConsoleGeometry(w, h)
+	g, c := ComputeOverlayGeometry(w, h), ComputeConsoleGeometry(w, h, ctx.keyboardRows)
 	ctx.overlayGeom.Store(&g)
 	ctx.consoleGeom.Store(&c)
 	ctx.statScreenW.Store(int64(ctx.Width))

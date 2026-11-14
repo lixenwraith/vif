@@ -232,9 +232,7 @@ final class GameView extends SurfaceView implements SurfaceHolder.Callback, Chor
         if (covered == px) {
             return;
         }
-        if ((covered > 0) != (px > 0)) {
-            Game.keyboard(px > 0);
-        }
+        Game.keyboard(px);
         covered = px;
         if (handler != null) {
             handler.post(this::present);

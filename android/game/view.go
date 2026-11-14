@@ -24,6 +24,10 @@ const eventQueue = 256
 // much map as 9x18 dp shows.
 const cellDP = 12
 
+// stripRows is the rows the strip above the keyboard takes, the bottom row drawn
+// at twice its height (CellDrawer.stripHeight)
+const stripRows = 2
+
 // view is the activity's SurfaceView as an app.Presentation. Frames wait in the
 // embedded glyph.Frames for the drawer to take them; the grid is the cells the
 // view's pixels hold, and the drawer stretches it over them, so a touch maps in
@@ -41,8 +45,8 @@ type view struct {
 	menuOps chan mode.MenuOp
 	keys    hostkey.Report
 	pointer atomic.Bool
-	covered atomic.Bool // the keyboard is up: the status bar keeps to the half it repeats
-	finger  struct {    // the cell a pressed finger last reported; the UI thread's alone
+	covered atomic.Int32 // the pixels at the view's foot the keyboard covers, 0 while it is down
+	finger  struct {     // the cell a pressed finger last reported; the UI thread's alone
 		down bool
 		x, y int
 	}
@@ -99,7 +103,18 @@ func (v *view) Surface() render.Surface       { return v }
 func (v *view) Events() <-chan terminal.Event { return v.events }
 func (v *view) Away() <-chan bool             { return v.away }
 func (v *view) MenuOps() <-chan mode.MenuOp   { return v.menuOps }
-func (v *view) Covered() bool                 { return v.covered.Load() }
+
+// Covered is the grid's rows the keyboard hides with the strip above it, the drawer
+// stretching the grid over the view's pixels
+func (v *view) Covered() int {
+	px := int(v.covered.Load())
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if px == 0 || v.h == 0 {
+		return 0
+	}
+	return min((px*v.rows+v.h-1)/v.h+stripRows, v.rows)
+}
 
 // Menu hands the app the menu to draw, as gomobile passes a tree: JSON in a string,
 // empty for a closed menu
