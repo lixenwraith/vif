@@ -332,6 +332,11 @@ Libraries · Branches.
   which shows what a player crossed only a lead later: play the lead out on the
   players first. A fight (`brawl`) whose players are not `:god`'s ends in a defeat
   and a new game, which starts the tick count over.
+- A viewer's world holds no cursor of its own (`World.Watches`), and a system that
+  lays Player-domain entities with none, as `GlyphSystem` and `NuggetSystem` did,
+  draws them on a spectator's screen, where nobody plays them. Such a system
+  returns early there (`TestAViewersWorldLaysNoFieldOfItsOwn`); no viewer test
+  compares the Player domain, so only a spectating page shows the next one.
 - A held run takes no tick, so an event pushed at it dispatches only on `Settle`:
   end a test's hold with the request and `Settle`, as `mode.ExecuteCommand` callers
   do. A test-driven guest (`mustSocketJoiner`) applies no correction in `Tick`: run
@@ -467,6 +472,11 @@ Libraries · Branches.
 - The router counts per address by `network.AdmissionKey`, an IPv6 address's /64,
   as the join budget does: a count keyed by the whole host (`addressHost`) lets one
   prefix's addresses take a share each.
+- A port a run opens serves a dial that only watches at every door it answers at,
+  a second one's included (`link.Config.AcceptWatch`), and
+  `Membership.watchParticipant` decides whether the session is shown: a door that
+  must show it to nobody, as the one a pinned fork keeps for the players it
+  relayed, is refused there, and its test dials it with `network.WatchSession` too.
 - nginx's `proxy_protocol on` writes a version 1 header and nothing else; the
   router reads version 2 too for other edges. A probe of the front door behind the
   edge writes the header first or is closed unanswered.
@@ -935,3 +945,8 @@ Libraries · Branches.
 - Take the next `snapshot.Schema`, `event.JournalSchema` or `manifest.SchemaVersion`
   past main's, and check again after merging main, where another PR may have taken
   it.
+- A rebase replays each commit on main as it stands, so what the branch's merges of
+  main settled comes back as conflicts, and what a merge commit changed beyond them
+  is lost. Merge main on a scratch branch first: the rebase is done when `git diff
+  <rebased> <scratch>` is empty and `git rebase -x 'go build ./...' origin/main`
+  passes each commit.
