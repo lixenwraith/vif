@@ -52,13 +52,17 @@ func (m *Membership) watchAcceptor() func(net.Conn) error {
 }
 
 // watchParticipant is the session as a dial that only watches is shown it, or why
-// it is not fed: what refuses any dial, a session this run does not author or has
-// not started, and an audience at its ceiling. Nothing is held for it, and the
-// keep-out list does not apply: that keeps a place from being taken, and it takes none.
+// it is not fed: what refuses any dial, a session this run does not author, has not
+// started or keeps for the players it relayed alone, and an audience at its ceiling.
+// Nothing is held for it, and the keep-out list does not apply: that keeps a place
+// from being taken, and it takes none.
 func (m *Membership) watchParticipant(network.Admission) (network.SessionOffer, error) {
 	var anchor event.JoinAnchor
-	hosting := false
-	m.world.RunSafe(func() { anchor, hosting = m.joinAnchorLocked(), m.world.IsSessionCoordinator() })
+	hosting, kept := false, false
+	m.world.RunSafe(func() {
+		anchor, hosting = m.joinAnchorLocked(), m.world.IsSessionCoordinator()
+		kept = m.relaySeatingLocked() != seatAnyone
+	})
 	ceiling := m.audienceCeiling()
 	m.sessionMu.Lock()
 	defer m.sessionMu.Unlock()
@@ -69,6 +73,8 @@ func (m *Membership) watchParticipant(network.Admission) (network.SessionOffer, 
 	case err != nil:
 	case !hosting:
 		err = errNotHosting
+	case kept:
+		err = errNotReturning
 	case !m.lateJoins.Load() && !m.lobbyClosing.Load():
 		err = network.ErrUnstarted
 	case !m.lateJoins.Load():

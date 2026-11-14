@@ -1475,10 +1475,11 @@ forks and their bots', and nobody else's (`relayedLocked`); its `-relay` door, a
 address they joined at, goes on into the session it opens and takes back a key that
 holds a person's place there, under the left session's name and with no passphrase,
 refusing any other (`returnAcceptor`); nobody new is seated through those people
-either, by a bot of theirs or a door of their own, until its player runs `:host`
-(`relaySeatingLocked`); each person waits on its relay up to `NetworkFollowWindow`,
-frozen, before it forks alone; and while it holds their places the session's role
-refuses `:join` and takes `:leave` and `:host`.
+either, by a bot of theirs or a door of their own, and no spectator is shown the
+session, until its player runs `:host` (`relaySeatingLocked`, `watchParticipant`);
+each person waits on its relay up to `NetworkFollowWindow`, frozen, before it forks
+alone; and while it holds their places the session's role refuses `:join` and takes
+`:leave` and `:host`.
 
 What to look at:
 - Whether a relay hosts its people only once it is asked to, by a switch of its own as

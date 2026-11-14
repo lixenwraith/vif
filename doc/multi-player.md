@@ -1071,8 +1071,9 @@ the session left still closes, and takes its own place back, and the status bar 
 with the players you relay", or why the door could not be bound again, when it keeps
 nobody. Nobody else comes in: the door takes back a person's place alone, a bot coming
 back through its holder, and refuses any other dial (`returnAcceptor`), and no
-newcomer is seated through those players, their bots or a door of their own, until
-this run's player opens the session with `:host` (`Membership.relaySeatingLocked`).
+newcomer is seated through those players, their bots or a door of their own, and no
+spectator is shown the session (§5.8), until this run's player opens it with `:host`
+(`Membership.relaySeatingLocked`).
 While it holds a place of theirs, linked or on the way back, its role, kept, refuses
 `:join`, which would drop them, and a scenario change, and takes `:leave` and `:host`.
 Whether a relay should host the people it relays without choosing to is open (todo,
@@ -1300,7 +1301,8 @@ scenario if the dial lacks it, and a seat request answered by `MsgStart`, after
 which the stream is the feed's. It proves a key made for the dial and none of its
 process's, takes no pass and shows no sign-in: a viewer comes back to no place,
 and each would tell who watches. It is refused at a door that does not author the
-session, as `RefusalAudience` past the ceiling, `-spectators` (8, `FeedAudience`;
+session, at a session a fork keeps for the players it relayed until `:host` opens
+it (§5.5), as `RefusalAudience` past the ceiling, `-spectators` (8, `FeedAudience`;
 1024 at most; 0 takes none), and as `ErrUnstarted` while the session is in its
 lobby, which holds players alone: a refusal a person retries and a dial does not,
 since a lobby can outlast the budget a dial retrying in moments would spend.
@@ -1330,7 +1332,7 @@ is its session's bandwidth for nothing.
 the pod's feed and repeats it to every spectator (`FeedHub.Repeat`), so the pod
 serves one subscriber however many watch
 ([Session fleet §9](kubernetes-fleet.md#9-the-session-routes)). A door a run
-published is a guest's and carries no feed.
+published carries no feed: it is a guest's, or one a fork keeps for its own players.
 
 **Not chosen**, each kept in the todo with what would reopen it:
 [the feed as segments a cache serves](todo.md#serve-a-sessions-feed-as-cacheable-segments),

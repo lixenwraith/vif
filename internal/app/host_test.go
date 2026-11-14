@@ -2472,9 +2472,9 @@ func TestAPinnedForkKeepsNobodyItDidNotBring(t *testing.T) {
 
 // TestAPinnedForkTakesThePeopleItRelayedAlong: under the host policy, a relay with a
 // bot forks when its host leaves, keeping its bot, the person it relayed and its
-// -relay door, for that person alone and no place it never seated; the person waits
-// on it and redials that door into its own place, though the session the relay left
-// is still closing, and the fork's role holds them from the start.
+// -relay door, for that person alone, no place it never seated and no spectator; the
+// person waits on it and redials that door into its own place, though the session the
+// relay left is still closing, and the fork's role holds them from the start.
 func TestAPinnedForkTakesThePeopleItRelayedAlong(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
@@ -2583,6 +2583,17 @@ func TestAPinnedForkTakesThePeopleItRelayedAlong(t *testing.T) {
 	if !errors.As(err, &refusal) || refusal.Code != network.RefusalUnknown {
 		t.Fatalf("a newcomer at the relay's door was answered %v; want it turned away, as the door takes back the players it relayed alone", err)
 	}
+	// Nor is the session shown there: its player opened it to nobody.
+	spectating := func(addr string) error {
+		pending, _, err := network.WatchSession(addr, newcomer)
+		if pending != nil {
+			pending.Close()
+		}
+		return err
+	}
+	if err := spectating(relayAddr); !errors.As(err, &refusal) || !strings.Contains(refusal.Reason, "takes back only the players") {
+		t.Fatalf("a spectator at the relay's door was answered %v; want it turned away as the newcomer was", err)
+	}
 
 	// The person plays on there, in the run Run's loop builds on the redial, and the
 	// session seats nobody new through it either, a bot of its own included, until
@@ -2636,6 +2647,9 @@ func TestAPinnedForkTakesThePeopleItRelayedAlong(t *testing.T) {
 	}
 	if !strings.HasPrefix(hosting, "Hosting on ") || strings.Contains(hosting, relayAddr) {
 		t.Fatalf("the relay says %q; want the door :host opened named, not the one that takes back its players alone", hosting)
+	}
+	if err := spectating(relay.HostAddr()); err != nil {
+		t.Fatalf("a spectator of the session :host opened was answered %v; want it shown", err)
 	}
 	if err := addBot(); err != nil {
 		t.Fatal(err)
