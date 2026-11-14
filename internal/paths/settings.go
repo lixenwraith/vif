@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -424,9 +423,8 @@ func (s *Settings) check() error {
 	if c := s.Presentation.Cell; c != 0 && (c < parameter.CellLeast || c > parameter.CellMost) {
 		return fmt.Errorf("presentation.cell %g is not 0 or between %g and %g", c, parameter.CellLeast, parameter.CellMost)
 	}
-	// in milliseconds, as a Duration of a large count wraps into the range
-	least, most, step := audio.AudioBufferMin.Milliseconds(), audio.AudioBufferMax.Milliseconds(), audio.AudioBufferStep.Milliseconds()
-	if b := int64(s.Audio.BufferMs); b != 0 && (b < least || b > most || b%step != 0) {
+	least, most, step := parameter.AudioBufferMsMin, parameter.AudioBufferMsMax, parameter.AudioBufferMsStep
+	if b := s.Audio.BufferMs; b != 0 && (b < least || b > most || b%step != 0) {
 		return fmt.Errorf("audio.buffer_ms %d is not 0 or a multiple of %d from %d to %d", b, step, least, most)
 	}
 	return s.Play.check()

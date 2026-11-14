@@ -75,6 +75,11 @@ Libraries · Branches.
 - `internal/app`'s tests do not build with `-tags vif_headless`: `config_test.go`,
   `geometry_test.go` and `join_press_test.go` drive the presentation that profile
   leaves out, so its gate is `go build -tags vif_headless ./...` alone.
+- A `vif_headless` or `vif_noaudio` build links no `lixenwraith/audio` (its `model`
+  package aside): `make verify` checks `go list -deps`, CI does not, and a build
+  passes either way. A package those builds import takes an audio bound from
+  `internal/parameter` (`AudioBufferMsMin`), which an audio-tagged test holds equal
+  to the library's.
 - `go generate ./internal/manifest` type-checks `internal/event` from source, its
   generated files included, so removing a payload struct, a field of one or an
   event stops the generator on the stale use of it ("type-check ...: has no field",

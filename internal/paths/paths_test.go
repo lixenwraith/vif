@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -146,12 +145,12 @@ func TestSettingsReadAsThisBuildBringsThemUpToDate(t *testing.T) {
 
 // TestSettingsTakeNumbersInRange: [play] max_fps is 0 for the presentation's own
 // rate or a rate between parameter.FrameRateMin and FrameRateMax, camera_edge a
-// percent from 0 to parameter.CameraEdgeMost, and [audio] buffer_ms 0 for the
-// mixer's own period or one the mixer takes (audio.AudioBufferMin to Max in Step);
-// any other fails, so an upgrade resets it rather than a run failing to start audio.
+// percent from 0 to parameter.CameraEdgeMost, and [audio] buffer_ms 0 for the mixer's
+// own period or one it takes (parameter.AudioBufferMsMin to Max in Step); any other
+// fails, so an upgrade resets it rather than a run failing to start audio.
 func TestSettingsTakeNumbersInRange(t *testing.T) {
 	n := strconv.Itoa
-	least, most, step := int(audio.AudioBufferMin.Milliseconds()), int(audio.AudioBufferMax.Milliseconds()), int(audio.AudioBufferStep.Milliseconds())
+	least, most, step := parameter.AudioBufferMsMin, parameter.AudioBufferMsMax, parameter.AudioBufferMsStep
 	for _, c := range []struct {
 		key  string
 		read func(Settings) int
@@ -167,7 +166,7 @@ func TestSettingsTakeNumbersInRange(t *testing.T) {
 		{"audio.buffer_ms", func(s Settings) int { return s.Audio.BufferMs }, map[string]bool{
 			"0": true, n(least): true, n(least + step): true, n(most): true,
 			n(least - 1): false, n(most + step): false, n(least + step/2): false, n(-step): false,
-			strconv.FormatInt(1<<58+int64(least), 10): false, // least again as a Duration, which wraps
+			strconv.FormatInt(1<<58+int64(least), 10): false, // a count that wraps to least as a Duration
 		}},
 	} {
 		table, key, _ := strings.Cut(c.key, ".")
