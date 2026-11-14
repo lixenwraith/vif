@@ -427,9 +427,9 @@ map layer and point markers; root `[[expand]]` blocks and library copies.
 - Priority: P3
 - Affected files: `internal/input/machine.go`, `actionnames.go`, `keyconfig.go`,
   `internal/mode/router.go`, `internal/system/typing.go`,
-  `internal/asset/input/keymap.toml`, `wad/scenario/base/vimtutor/scenario.toml`
+  `internal/asset/input/keymap.toml`, `wad/scenario/base/tutor/scenario.toml`
 - Guide: [Input and modes §3](input-and-modes.md#3-normal-mode-grammar),
-  [§10](input-and-modes.md#10-keymap-override-files), [Vim tutorial](vim-tutorial.md)
+  [§10](input-and-modes.md#10-keymap-override-files), [Tutor](tutor.md)
 
 The cheap keys are in: `c cc C`, `A I`, `r`, `* #` and `.`, with vim's `a` as
 `mode_append`, which no default key binds, and a scenario `[keymap]` through which
@@ -486,11 +486,11 @@ carry; the keymap won for `a` and `p`, whose meanings an action names. Rewriting
 intents in the router for one scenario stays out: a second mechanism beside the key
 table and the capture.
 
-### Grow the vim tutor
+### Grow the tutor
 
 - Priority: P3
-- Affected files: `wad/scenario/base/vimtutor/`
-- Guide: [Vim tutorial §3](vim-tutorial.md#3-the-next-round)
+- Affected files: `wad/scenario/base/tutor/`
+- Guide: [Tutor §3](tutor.md#3-the-next-round)
 
 The first round teaches `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x` then
 `dd`, `i` and typing, `%`, `/ n`, `gg G`, then the taken keys and free practice;

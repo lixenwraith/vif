@@ -16,10 +16,10 @@ import (
 // A tutor lesson clears itself as it exits and the next lays its own text, with
 // the cursor stood on the practice line's first glyph: the first lesson's x and
 // notes are gone once the cursor reaches the x, and the second's stand.
-func TestVimtutorALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
-	opts := resource.Options{Dir: soakRoot, Scenario: "vimtutor"}
+func TestTutorALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
+	opts := resource.Options{Dir: soakRoot, Scenario: "tutor"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vimtutor scenario not present")
+		t.Skip("tutor scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
 	if err != nil {
@@ -65,10 +65,10 @@ func TestVimtutorALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
 // The tutor's keymap holds over the player's for its run: with an installed keymap
 // binding a to auto fire and p to pause, as a copy of the defaults does, a steps
 // right into Insert, as vim's append, and p does nothing.
-func TestVimtutorsKeysHoldOverThePlayersKeymap(t *testing.T) {
-	sc, err := resource.LoadScenario(resource.Options{Dir: soakRoot, Scenario: "vimtutor"})
+func TestTutorsKeysHoldOverThePlayersKeymap(t *testing.T) {
+	sc, err := resource.LoadScenario(resource.Options{Dir: soakRoot, Scenario: "tutor"})
 	if err != nil {
-		t.Skip("vimtutor scenario not present")
+		t.Skip("tutor scenario not present")
 	}
 	opts := resource.Options{Dir: t.TempDir(), Provided: &sc}
 	path := filepath.Join(opts.Dir, paths.InputDirName, paths.KeymapConfigFile)

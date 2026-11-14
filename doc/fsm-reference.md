@@ -39,13 +39,13 @@ coordinator's, sent under the same bounds, held in memory and saved in its
 │   └── base/                  # the shipped scenarios
 │       ├── blank/scenario.toml
 │       ├── recall/scenario.toml
-│       ├── vimtutor/
-│       │   ├── scenario.toml
-│       │   └── lessons.toml   # the corpus the scenario carries
 │       ├── td/
 │       │   ├── scenario.toml
 │       │   ├── td_macros.toml # macro library
 │       │   └── td_*.toml      # region files
+│       ├── tutor/
+│       │   ├── scenario.toml
+│       │   └── lessons.toml   # the corpus the scenario carries
 │       └── vanguard/
 │           ├── scenario.toml
 │           ├── macros.toml
@@ -765,7 +765,7 @@ lesson leaves no dust behind: dust-all turns text into dust that orbits the curs
 and hides what is laid next. The glyph system lays and clears whether or not it is
 enabled, so a scenario that wants no corpus text disables the system and lays its
 own. All three are player-domain presentation each instance makes for itself, as a
-status message is. `wad/scenario/base/vimtutor` is the worked example.
+status message is. `wad/scenario/base/tutor` is the worked example.
 
 ### PayloadSpeciesIn
 

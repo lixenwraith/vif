@@ -586,13 +586,13 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    also retains its objective-failure and victory conditions.
 
 `wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `recall` is a memory game, `dummy` is a weapon range, `vimtutor` teaches
+scaffold, `recall` is a memory game, `dummy` is a weapon range, `tutor` teaches
 the motions a lesson at a time, `vanguard` is a side-scroller whose raiders are
 species its own behavior programs define, and `armada` is a fixed shooter whose
 ranks are three more. Each entry has a short `description` for
 scenario listings.
 
-`vimtutor` is the tutor, combat off: the cursor has no gun, so Enter, Space and
+`tutor` runs with combat off: the cursor has no gun, so Enter, Space and
 auto-fire do nothing, and the glyph spawner is off until the last lesson. Each
 lesson lays its heading in the small splash face, three or four lines that explain
 and a practice line or block, stands the cursor on it, prompts on the status bar
@@ -601,8 +601,8 @@ skips a lesson and `S` goes back one. The lessons are `h j k l`, `w b e`, `0 ^ $
 `f t ; ,`, counts, `x` then `dd`, `i` and typing, `%`, `/ n N`, `gg G`, then the
 keys vif reads its own way (`a p o O u m y`), each answered on a press in the
 small face and on the status bar, and `s` opens free practice on the scenario's
-own corpus: code laid in blocks, so `%` finds a bracket's pair across rows ([Vim
-tutorial](vim-tutorial.md)). Its `[keymap]` makes `a` vim's append and `p`
+own corpus: code laid in blocks, so `%` finds a bracket's pair across rows
+([Tutor](tutor.md)). Its `[keymap]` makes `a` vi's append and `p`
 nothing for the run ([Input §10](input-and-modes.md#10-keymap-override-files)).
 
 `recall` lays four buttons across the map on keys 1-4, each with its note, rising

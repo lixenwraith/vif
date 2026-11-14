@@ -874,7 +874,7 @@ Libraries · Branches.
   expands them itself, so the older build is refused at the door instead.
 - A system the manifest drops leaves every `only_systems` that names it, which
   `-check` and `internal/resource`'s systems test refuse as unknown: search
-  `wad/scenario/` for its name (`vimtutor` lists its systems one by one).
+  `wad/scenario/` for its name (`tutor` lists its systems one by one).
 
 ## Corpus
 

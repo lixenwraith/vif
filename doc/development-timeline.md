@@ -225,7 +225,7 @@ until its rename to vif in September 2026.
 - `internal/app` split: corrector, config, membership
 - Fusion of drains and composites into any species
 - Dead code swept; cursor syncs bounded
-- The vim tutor: eleven lessons
+- The tutor: eleven lessons
 - Participant keys, session passes, keep-out list
 - Passphrase doors over Argon2-SCRAM
 - Router tickets, a TLS front door, accounts

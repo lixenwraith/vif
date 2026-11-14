@@ -126,7 +126,7 @@ lines = [
 ]
 
 [[blocks]]
-id = "vim-keys"
+id = "vi-keys"
 lines = [
   "vif plays a subset of vim",
   "a cycles auto fire, not append",
@@ -136,7 +136,7 @@ lines = [
 ]
 
 [[blocks]]
-id = "vim-keys-more"
+id = "vi-keys-more"
 lines = [
   "H J K L leap, they never join lines",
   "m is the middle column, not a mark",
