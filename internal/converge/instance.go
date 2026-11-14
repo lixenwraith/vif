@@ -115,6 +115,9 @@ type Instance interface {
 	// It dials while Authority.Redialing, replaces the run once RedialAdmitted, and
 	// reports a door that turned it away through RedialRefused.
 	Redial(lost link.PeerID) bool
+	// Redials reports whether this run takes a lost path back by a redial at all: a
+	// person's run, with a loop to take one on, which a bot's and a script's are not.
+	Redials() bool
 
 	// Freeze stops the run while its authority moves; Thaw is the successor's end of
 	// that window, which leaves standing a hold the lost host set.

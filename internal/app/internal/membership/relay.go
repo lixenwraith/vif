@@ -12,6 +12,7 @@ import (
 
 	"github.com/lixenwraith/vif/internal/app/internal/config"
 	"github.com/lixenwraith/vif/internal/core"
+	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -44,7 +45,7 @@ func (m *Membership) serveRelay() {
 		return
 	}
 	if router, ok := config.RelayRouter(m.cfg.RelayAddress); ok {
-		m.publishDoor(port, router)
+		m.publishDoor(router)
 		return
 	}
 	bound, err := port.ServeSession(m.cfg.RelayAddress, m.relayAcceptor(m.admissions.Admit, true), m.releaseRelayedJoiner)
@@ -53,6 +54,9 @@ func (m *Membership) serveRelay() {
 		m.ctx.SetStatusMessage("Relay: "+err.Error(), parameter.StatusAlert)
 		return
 	}
+	m.tunnelMu.Lock()
+	m.relayBound = bound
+	m.tunnelMu.Unlock()
 	m.log.Info("session", "msg", "relaying joins", "address", bound)
 	m.ctx.SetStatusMessage("Relaying joins at "+bound, parameter.StatusNotice)
 	// The chain names the door, so a run with no path to its authority finds it.
@@ -61,8 +65,9 @@ func (m *Membership) serveRelay() {
 
 // publishDoor publishes this run's door through a router (network.DoorTunnel): each
 // connection the router opens back runs the door's handshake as a stream the relay
-// listener took would, and the link the router names is the door the chain carries.
-func (m *Membership) publishDoor(port *link.SocketPort, router string) {
+// listener took would, on the port the run holds then (doorHandshake), and the link
+// the router names is the door the chain carries.
+func (m *Membership) publishDoor(router string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.tunnelMu.Lock()
 	if m.tunnelStop != nil {
@@ -77,7 +82,8 @@ func (m *Membership) publishDoor(port *link.SocketPort, router string) {
 			m.ctx.SetStatusMessage("Relaying joins at "+door, parameter.StatusNotice)
 			m.tellAuthority(network.RelayJoin{Step: network.RelayDoor, Door: door})
 		}, func(conn net.Conn) {
-			if err := port.ServeConn(conn, m.relayAcceptor(m.admissions.Admit, true), m.releaseRelayedJoiner); err != nil {
+			port, accept := m.doorHandshake()
+			if port == nil || port.ServeConn(conn, accept, m.releaseRelayedJoiner) != nil {
 				_ = conn.Close()
 			}
 		}, func(err error) {
@@ -86,7 +92,8 @@ func (m *Membership) publishDoor(port *link.SocketPort, router string) {
 	})
 }
 
-// CloseDoor ends the door this run publishes through a router, if any.
+// CloseDoor ends the door this run publishes through a router, if any, and whatever
+// the -relay door took back for a fork: the session it served is being left.
 func (m *Membership) CloseDoor() {
 	m.tunnelMu.Lock()
 	defer m.tunnelMu.Unlock()
@@ -94,6 +101,134 @@ func (m *Membership) CloseDoor() {
 		m.tunnelStop()
 		m.tunnelStop = nil
 	}
+	m.relayBound, m.returnDoor = "", nil
+}
+
+// doorHandshake is the port a connection at the -relay door joins and the
+// handshake it runs there: the relay's, or once a pinned fork kept the people it
+// relayed, the one that takes them back (returnAcceptor). Nil with no port.
+func (m *Membership) doorHandshake() (*link.SocketPort, func(net.Conn) (link.PeerID, error)) {
+	port := m.joinPort()
+	if port == nil {
+		return nil, nil
+	}
+	m.tunnelMu.Lock()
+	name := m.returnDoor
+	m.tunnelMu.Unlock()
+	if name != nil {
+		return port, m.returnAcceptor(*name)
+	}
+	return port, m.relayAcceptor(m.admissions.Admit, true)
+}
+
+// reopenRelayDoor moves the -relay door to the session a pinned fork goes on in, for
+// the people it relayed and kept the places of, who redial it once their links here
+// go and take those places back (returnAcceptor). It runs before the port it stood on
+// closes, which drops those links, so it is open at their first dial; one a router
+// publishes stays published, and takes them on whichever port the run holds.
+func (m *Membership) reopenRelayDoor(old engine.NetworkPort) error {
+	m.tunnelMu.Lock()
+	bound, name, tunnel := m.relayBound, m.returnDoor, m.tunnelStop != nil
+	m.relayBound = ""
+	m.tunnelMu.Unlock()
+	if tunnel || bound == "" || name == nil {
+		return nil
+	}
+	if p, ok := old.(interface{ CloseSession(string) bool }); ok {
+		p.CloseSession(bound)
+	}
+	err := errors.New("the session it goes on in has no socket port")
+	if port := m.joinPort(); port != nil {
+		bound, err = port.ServeSession(bound, m.returnAcceptor(*name), m.releaseRelayedJoiner)
+	}
+	if err != nil {
+		m.log.Warn("session", "msg", "relay door not kept for the players it relayed", "error", err.Error())
+		m.CloseDoor() // nobody comes back through it, so the session keeps it for nobody
+		return err
+	}
+	m.tunnelMu.Lock()
+	m.relayBound = bound
+	m.tunnelMu.Unlock()
+	m.log.Info("session", "msg", "relay door kept for the players this run relayed", "address", bound)
+	return nil
+}
+
+// returnAcceptor is the -relay door of the session a pinned fork goes on in: the
+// host's handshake, for a dial whose key holds the place of a person this run relayed
+// into the session it left (reopenRelayDoor). It answers to that session's name, which
+// they dial, and asks no passphrase: the key it proves is the place's. Nobody new is
+// let in at it; :host opens a door that lets them in.
+func (m *Membership) returnAcceptor(name string) func(net.Conn) (link.PeerID, error) {
+	c := network.Coordinator{
+		Preview: func(a network.Admission) (network.SessionOffer, error) {
+			return m.previewSeat(a, seatReturning)
+		},
+		Assign: func(a network.Admission) (network.SessionOffer, error) {
+			return m.assignWith(a, seatReturning)
+		},
+		Release:     m.releaseParticipant,
+		Admit:       m.admissions.Admit,
+		Report:      m.noteJoinerReport,
+		Prepared:    m.showJoinerPrepared,
+		Name:        name,
+		Authority:   m.firstTermKey,
+		Pass:        m.checkPass,
+		Scenario:    m.scenarioBody,
+		PressWindow: parameter.NetworkJoinPressWindow,
+	}
+	return network.HostAcceptor(c, network.DefaultConfig().ConnectTimeout)
+}
+
+// errNotReturning turns away a dial whose key holds no place in the session a pinned
+// fork goes on in for the players its run relayed: at its -relay door, or through one
+// of theirs (relaySeatingLocked). It takes them back, and nobody new.
+var errNotReturning = &network.Refusal{Code: network.RefusalUnknown,
+	Reason: "this session takes back only the players its host relayed before its own host left"}
+
+// relaySeatingLocked is whom a join this run's session takes through one of its
+// players may seat: anyone, but in the one a pinned fork goes on in for the players
+// it relayed a key's own place alone, theirs and their bots', as at its -relay door
+// (returnAcceptor), until its player opens it to others with :host. Caller MUST hold
+// updateMutex.
+func (m *Membership) relaySeatingLocked() seating {
+	if m.cfg.HostAddress != "" || !m.keepsRelayed() {
+		return seatAnyone
+	}
+	return seatKeyed
+}
+
+// keepsRelayed reports that this run's session is the one a pinned fork went on in
+// for the players it relayed, whose -relay door takes back them alone.
+func (m *Membership) keepsRelayed() bool {
+	m.tunnelMu.Lock()
+	defer m.tunnelMu.Unlock()
+	return m.returnDoor != nil
+}
+
+// keptPlayersLocked reports that such a session still holds a place of a player it
+// relayed, linked or on the way back: what :join would drop, and a restart strand.
+// Caller MUST hold updateMutex.
+func (m *Membership) keptPlayersLocked() bool {
+	local := link.PeerID(m.world.LocalParticipant())
+	return m.keepsRelayed() && slices.ContainsFunc(m.worldRosterLocked(), func(p network.RosterEntry) bool {
+		return p.ID != local && p.Holder == 0
+	})
+}
+
+// newcomerDoors is every door port answers at but the -relay door a pinned fork
+// kept, which lets nobody new in: the doors :host names and the LAN beacon offers.
+func (m *Membership) newcomerDoors(port *link.SocketPort) []net.Addr {
+	doors := port.Doors()
+	m.tunnelMu.Lock()
+	kept := m.relayBound
+	if m.returnDoor == nil {
+		kept = ""
+	}
+	m.tunnelMu.Unlock()
+	if kept == "" {
+		return doors
+	}
+	return slices.DeleteFunc(doors, func(d net.Addr) bool { return d.String() == kept })
 }
 
 // relayAcceptor is the join handshake this run serves for its bots, whose streams
@@ -407,7 +542,7 @@ func (m *Membership) decideRelayJoinLocked(relay link.PeerID, body []byte) {
 			pass, err = m.checkPass(req.Pass, keys)
 		}
 		if err == nil {
-			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, m.departingLocked(), keys, pass, nil)
+			ans.Offer, err = m.assignFor(m.joinAnchorLocked(), relay, m.departingLocked(), keys, pass, nil, m.relaySeatingLocked())
 			m.closeStaleLink(err, m.sessionTransportLocked())
 		}
 	case req.Step == network.RelayReady:

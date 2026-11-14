@@ -63,7 +63,7 @@ func (c Control) SetPassphrase(phrase string) (string, error) {
 	if err := network.CheckPassphrase(phrase); err != nil {
 		return "", err
 	}
-	if role := c.m.sessionRoleLocked(); role != roleSolo && role != roleSeats && role != roleLeft {
+	if role := c.m.sessionRoleLocked(); role != roleSolo && role != roleSeats && role != roleLeft && role != roleKept {
 		return "", errors.New("this session keeps the passphrase it was opened with")
 	}
 	c.m.sessionMu.Lock()
@@ -380,7 +380,7 @@ func (m *Membership) changeScenarioLocked(name string) (bool, error) {
 		if req.Host == "" {
 			req.Host = m.reach.DeclaredAddr()
 		}
-		if req.Host == "" && !m.seatsOnly() {
+		if req.Host == "" && (!m.seatsOnly() || m.keptPlayersLocked()) {
 			return false, errors.New("this participant has no address its session can return to")
 		}
 		req.Migrate = !m.authority.Fixed()
@@ -441,6 +441,7 @@ const (
 	roleGuest                        // in one it joined
 	roleLeft                         // in one it joined, which has nobody left but its own bots
 	roleSuccessor                    // coordinating one it joined, at its own port
+	roleKept                         // coordinating, with its -relay door alone, the players it relayed when its host left
 )
 
 const inSession = "this run is already in a session"
@@ -455,6 +456,7 @@ var sessionRoles = [...]struct{ join, host, leave string }{
 	roleGuest:     {inSession, inSession, ""},
 	roleLeft:      {"", inSession, ""},
 	roleSuccessor: {inSession, "", ""},
+	roleKept:      {inSession, "", ""},
 }
 
 func (r sessionRole) joined() bool { return r == roleGuest || r == roleLeft }
@@ -475,6 +477,8 @@ func (m *Membership) sessionRoleLocked() sessionRole {
 		return roleLeft
 	case m.cfg.JoinAddress != "":
 		return roleGuest
+	case opened && m.cfg.HostAddress == "" && m.keptPlayersLocked():
+		return roleKept
 	case opened && m.cfg.HostAddress == "":
 		return roleSeats
 	}
@@ -650,7 +654,7 @@ func (m *Membership) beginHostingLocked(addr, authority string) error {
 	m.cfg.HostAddress = addr
 	m.restartWaitsLocked()
 	m.authority.Pin(!m.cfg.Migrate)
-	bound := doorsText(port.Doors())
+	bound := doorsText(m.newcomerDoors(port))
 	m.log.Info("session", "msg", "hosting opened mid-run", "address", bound,
 		"certificate", link.Fingerprint(m.cfg.TLS), "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
 	m.ctx.SetStatusMessage("Hosting on "+bound, parameter.StatusNotice)
@@ -705,7 +709,7 @@ func (m *Membership) hostTakenSessionLocked(addr string) error {
 			return fmt.Errorf("host: %w", err)
 		}
 	}
-	bound := doorsText(port.Doors())
+	bound := doorsText(m.newcomerDoors(port))
 	m.cfg.HostAddress, m.cfg.JoinAddress = addr, ""
 	m.log.Info("session", "msg", "hosting opened on a session taken over",
 		"address", bound, "tick", m.run.Position().Tick, "capacity", m.SessionCapacity()+1)
@@ -849,15 +853,23 @@ func (m *Membership) leaveLocked() error {
 // door it had is shut. Runs on Loop, which holds no lock: the port it closes waits
 // for handshakes that take the world lock.
 func (m *Membership) LeaveSession() {
-	lost := ForkCell(m.world).Load() // read before the reopen clears it
+	lost := ForkCell(m.world).Load()       // read before the reopen clears it
+	keepAll := lost && !m.fixedAuthority() // and before it pins this run's own policy
 	bots := m.SeatGraphs()
 	m.CloseSeats(true)
 	var old engine.NetworkPort
+	var doorErr error
+	relayed := 0
 	err := m.corrections.Leave(func() error {
 		var err error
-		m.world.RunSafe(func() { old, err = m.leaveSessionLocked(lost) })
+		m.world.RunSafe(func() { old, relayed, err = m.leaveSessionLocked(keepAll, lost && !keepAll) })
 		return err
 	})
+	// The door the people it kept came in by moves first: closing the port it stood on
+	// drops their links, and each redials that door at once.
+	if err == nil && relayed > 0 {
+		doorErr = m.reopenRelayDoor(old)
+	}
 	if port, ok := old.(interface{ Close() error }); ok {
 		_ = port.Close()
 	}
@@ -871,7 +883,10 @@ func (m *Membership) LeaveSession() {
 			m.log.Info("session", "msg", "session left", "tick", m.run.Position().Tick,
 				"bots", len(bots), "host_lost", lost, "held", held)
 		}
-		m.ctx.SetStatusMessage(leftNotice(err, lost, held, len(bots) > 0))
+		m.ctx.SetStatusMessage(leftNotice(err, lost, held, len(bots) > 0, relayed > 0 && doorErr == nil))
+		if doorErr != nil {
+			m.ctx.SetStatusMessage("Relay: "+doorErr.Error(), parameter.StatusAlert) // after, or the notice replaces it
+		}
 		// Into whichever session the run is in now: the one it could not leave, else its own.
 		for _, spec := range bots {
 			if err := m.addSeatLocked(spec); err != nil {
@@ -883,15 +898,20 @@ func (m *Membership) LeaveSession() {
 }
 
 // leftNotice is what a run says once it plays on in a session of its own: after
-// :leave, or after its session gave it up, lost, which is an alert.
-func leftNotice(err error, lost, held, bots bool) (string, parameter.StatusKind) {
+// :leave, or after its session gave it up, lost, which is an alert, with the people it
+// relayed or without.
+func leftNotice(err error, lost, held, bots, relayed bool) (string, parameter.StatusKind) {
 	switch {
 	case err != nil && lost:
 		return "Host connection lost: " + err.Error(), parameter.StatusAlert
 	case err != nil:
 		return "Leave: " + err.Error(), parameter.StatusAlert
+	case lost && held && relayed:
+		return "Host connection lost; paused with the players you relay", parameter.StatusAlert
 	case lost && held:
 		return "Host connection lost; paused in a session of your own", parameter.StatusAlert
+	case lost && relayed:
+		return "Host connection lost; playing on with the players you relay", parameter.StatusAlert
 	case lost:
 		return "Host connection lost; playing on in a session of your own", parameter.StatusAlert
 	case bots:
@@ -902,26 +922,37 @@ func leftNotice(err error, lost, held, bots bool) (string, parameter.StatusKind)
 
 // leaveSessionLocked reopens the world in a session of this run's own and forgets
 // the one it was in, whose transport it returns for the caller to close off the
-// lock. Caller MUST hold updateMutex.
-func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
+// lock, with how many people it relayed it kept the places of. Caller MUST hold
+// updateMutex.
+func (m *Membership) leaveSessionLocked(keepAll, pinned bool) (engine.NetworkPort, int, error) {
 	// A run being replaced is not left: what replaces it decides where it goes.
 	if m.dismissed.Load() || m.run.Replacing() {
-		return nil, scribe.ErrRunReplaced
+		return nil, 0, scribe.ErrRunReplaced
 	}
 	m.takeOwnPlaceLocked()
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
 	local := link.PeerID(m.world.LocalParticipant())
-	// A leave keeps its bots' places, and a run its session gave up every place, for
-	// whoever hosts next to give back. A bot of this run's goes on under a key of its
-	// own over the record it left with, which stays the left session's.
+	// A leave keeps its bots' places. A run its session gave up keeps every place, for
+	// whoever hosts next to give back, unless the session is pinned: nobody hosts it
+	// next, but the people this run relayed go on with it, and their bots
+	// (relayedLocked). A bot of this run's goes on under a key of its own over the
+	// record it left with, which stays the left session's.
+	var relayed map[link.PeerID]bool
+	if pinned {
+		relayed = m.relayedLocked(old, roster, local)
+	}
 	var kept []network.RosterEntry
 	var carried []*place
 	for _, p := range roster {
-		if p.ID == local || !lost && p.Holder != local {
+		if p.ID == local || !keepAll && p.Holder != local && !relayed[p.ID] && !relayed[p.Holder] {
 			continue
 		}
 		if p.Holder == local {
-			if c := m.places.carry(p.Key); c != nil {
+			c := m.places.carry(p.Key)
+			if c == nil && !keepAll {
+				continue // no bot of this run's, whatever its holder told the host
+			}
+			if c != nil {
 				p.Key = c.id()
 				carried = append(carried, c)
 			}
@@ -931,6 +962,7 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	}
 	// Nothing names the session left: not the address a restart would go back to,
 	// nor the name the next one would answer to, nor the ceiling it was opened with.
+	// The -relay door alone answers to that name, for the people it kept.
 	cfg, wire := *m.cfg, *m.wiring
 	m.cfg.JoinAddress, m.cfg.HostAddress, m.cfg.SessionName, m.wiring.SessionPlayers = "", "", "", 0
 	// The place the run left keeps its record as it stands, for a return to that
@@ -942,7 +974,7 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 		for _, c := range carried {
 			m.places.forget(c)
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	if prior != nil {
 		m.places.release(prior)
@@ -953,7 +985,15 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 		}
 	}
 	m.reach.Close()
-	m.CloseDoor()
+	if len(relayed) > 0 {
+		// Before the session is anyone's to dial: from here the door takes back the
+		// people kept, and nobody else (returnAcceptor).
+		m.tunnelMu.Lock()
+		m.returnDoor = &cfg.SessionName
+		m.tunnelMu.Unlock()
+	} else {
+		m.CloseDoor()
+	}
 	// Every link the drops were for closes unread with the port.
 	m.seatsMu.Lock()
 	m.dropped = nil
@@ -963,7 +1003,30 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	// pending removes.
 	m.dropAbandonedLocked(roster, kept, local)
 	m.scheduler.SettleLocked()
-	return old, nil
+	return old, len(relayed), nil
+}
+
+// relayedLocked is each person linked to this run as it forks from a pinned session
+// at a -relay door it serves: no guest of such a session binds a port for others to
+// link to (openDial), so such a person joined at that door, and goes on back through
+// it (reopenRelayDoor). Its bots, the relay it joined through and the authority it
+// lost are none of them. Caller MUST hold updateMutex.
+func (m *Membership) relayedLocked(port engine.NetworkPort, roster []network.RosterEntry, local link.PeerID) map[link.PeerID]bool {
+	p, ok := port.(interface{ Peers() []uint32 })
+	m.tunnelMu.Lock()
+	door := m.relayBound != "" || m.tunnelStop != nil
+	m.tunnelMu.Unlock()
+	if !ok || !door {
+		return nil
+	}
+	linked, lost := p.Peers(), m.authorityID()
+	relayed := make(map[link.PeerID]bool)
+	for _, e := range roster {
+		if e.ID != local && e.ID != lost && e.ID != m.joinedThrough && e.Holder == 0 && slices.Contains(linked, uint32(e.ID)) {
+			relayed[e.ID] = true
+		}
+	}
+	return relayed
 }
 
 // SessionTransport returns the attached endpoint, nil when this run has none. The

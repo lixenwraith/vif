@@ -156,9 +156,14 @@ type Membership struct {
 	seatSerial uint64
 
 	relay relayDesk
-	// tunnelStop ends the door this run publishes through a router (publishDoor).
+	// tunnelMu guards the -relay door: tunnelStop ends one this run publishes through
+	// a router (publishDoor), relayBound is where it bound one itself (serveRelay),
+	// and returnDoor names the session a pinned fork kept the people it relayed from,
+	// whom alone the door takes back from then on (reopenRelayDoor).
 	tunnelMu   sync.Mutex
 	tunnelStop context.CancelFunc
+	relayBound string
+	returnDoor *string
 
 	// joinedThrough is the relay this run joined the session through, zero on a
 	// dial to the authority; the barrier reaches the authority through it.

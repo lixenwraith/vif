@@ -109,6 +109,12 @@ type Authority struct {
 	redialing bool
 	published bool
 
+	// following marks a person a relay carries in a pinned session whose host went:
+	// it holds its walk open while that relay redials the host and forks, keeping
+	// it, then redials the relay as one cut off from it does, and gives the session
+	// up only once that ends (driveWalk, endFollow, followGone).
+	following bool
+
 	// reports is each notice and membership report seen since the authority of term
 	// reportsFor went, by sender and named term: what ends the flood and tells a host
 	// who joined it. It outlives the handoff; resumeBy is when that host resumes, zero
@@ -457,6 +463,7 @@ func (u *Authority) Open(o network.SessionOffer, local link.PeerID) {
 	clear(u.accepted)
 	u.contested, u.lost, u.opened, u.walkFrom = 0, 0, time.Time{}, time.Time{}
 	u.redialing, u.published, u.cutSince, u.cutRedialing = false, false, time.Time{}, false
+	u.following = false
 	u.reports, u.reportsFor, u.resumeBy = nil, u.term, time.Time{}
 	u.reconcileAt, u.badgeUntil = 0, 0
 	u.mu.Unlock()
@@ -575,8 +582,17 @@ func (u *Authority) peerLost(id uint32) {
 // beginSuccession opens the walk down the candidates for the authority that went and
 // floods this survivor's notice. One with a link of its own to that authority
 // redials it first, and its walk begins when the redial ends; any other walks at
-// once.
+// once, but a person a relay carries in a pinned session waits on that relay
+// (following), or redials it at once if it has gone already (followGone).
 func (u *Authority) beginSuccession(lost link.PeerID) {
+	redials := u.inst.Redials() // asked off the lock, as linked is
+	u.mu.Lock()
+	relay, follows := u.relay, u.fixed && !u.direct && u.relay != 0 && redials
+	u.mu.Unlock()
+	if follows && !u.linked(relay) {
+		u.followGone(lost)
+		return
+	}
 	u.mu.Lock()
 	if u.contested != 0 || u.term == 0 || u.fork {
 		u.mu.Unlock()
@@ -587,26 +603,65 @@ func (u *Authority) beginSuccession(lost link.PeerID) {
 	// Raised before the redial starts, since its dial loop reads it at once, and
 	// lowered again for a run that will not redial.
 	u.walkFrom, u.redialing, u.published = time.Time{}, u.direct, false
+	u.following = u.fixed && !u.direct && u.relay != 0 && redials
 	u.reportsFor = u.term
 	maps.DeleteFunc(u.reports, func(k reportKey, _ struct{}) bool { return k.term < u.term })
-	held, local, fixed, direct := u.contested, u.local, u.fixed, u.direct
+	held, local, fixed, direct, following := u.contested, u.local, u.fixed, u.direct, u.following
 	u.mu.Unlock()
 
 	redial := direct && u.inst.Redial(lost)
 	u.mu.Lock()
-	if u.contested == held && !redial {
+	if u.contested == held && !redial && !following {
 		u.redialing, u.walkFrom = false, now
 	}
 	u.mu.Unlock()
 	// Nobody plays on in a world the next host is about to replace, so the session
-	// stands still until it resumes; a pinned one forks once its redial ends.
-	if !fixed || redial {
+	// stands still until it resumes; a pinned one forks once its redial ends, or once
+	// the relay it follows has gone and its redial of that relay ended.
+	if !fixed || redial || following {
 		u.inst.Freeze()
 	}
-	u.statMigrating.Store(true)
+	u.statMigrating.Store(!fixed) // a pinned session reads Host lost while it redials
+	if following {
+		// As a survivor reads the loss its own link saw (NetworkSystem.reportDisconnect).
+		u.statHostLost.Store(true)
+	}
 	u.log.Warn("session", "msg", "authority lost; walking the succession list",
-		"peer", uint64(lost), "term", uint64(held), "local", uint64(local), "redial", redial)
+		"peer", uint64(lost), "term", uint64(held), "local", uint64(local), "redial", redial,
+		"following", following)
 	u.sendReport()
+	u.drive()
+}
+
+// endFollow closes the walk a follower held open on its relay, which has gone: to a
+// fork that kept this instance's place, or back to the authority that holds it.
+// Either way this instance is cut off, and redials the door it joined at, where
+// that relay answers, for a window before it goes on alone (driveCutOff).
+func (u *Authority) endFollow() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.following && u.contested != 0 {
+		u.contested, u.lost, u.walkFrom = 0, 0, time.Time{}
+	}
+}
+
+// followGone is the loss for a would-be follower whose relay went before word of it,
+// or of it again, came: the redial of that relay the cut-off path runs is the follow,
+// which a walk opened now would end (driveCutOff). It stands frozen meanwhile,
+// reading Host lost, as one that waited on its relay does.
+func (u *Authority) followGone(lost link.PeerID) {
+	u.mu.Lock()
+	first := u.contested == 0 && u.term != 0 && !u.fork && !u.following
+	u.following = u.following || first
+	held, local := u.term, u.local
+	u.mu.Unlock()
+	if first {
+		u.inst.Freeze()
+		u.statHostLost.Store(true)
+		u.log.Warn("session", "msg", "authority lost; walking the succession list",
+			"peer", uint64(lost), "term", uint64(held), "local", uint64(local), "redial", false,
+			"following", true)
+	}
 	u.drive()
 }
 
@@ -631,6 +686,7 @@ func (u *Authority) RedialAdmitted(lost link.PeerID) bool {
 		return false
 	}
 	u.contested, u.redialing, u.cutRedialing, u.fork = 0, false, false, true
+	u.following = false
 	return true
 }
 
@@ -792,12 +848,26 @@ func (u *Authority) drive() {
 
 // driveWalk takes this instance's turn on the list when it comes, and gives the
 // session up past the last one, or at once in a pinned session, which has nobody
-// to walk to. A redial nothing ended runs one window.
+// to walk to. A redial nothing ended runs one window, and a follower waits on its
+// relay for NetworkFollowWindow, or until that relay's link goes.
 func (u *Authority) driveWalk(now time.Time) {
 	roster := u.currentRoster()
 	u.mu.Lock()
-	if u.walkFrom.IsZero() && now.Sub(u.opened) >= parameter.NetworkSuccessionWindow {
-		u.walkFrom = u.opened.Add(parameter.NetworkSuccessionWindow)
+	relay, following := u.relay, u.following
+	u.mu.Unlock()
+	// Read on every pass, not at the loss: the notice that opened the walk and the
+	// relay's link going reach this instance in either order.
+	if following && !u.linked(relay) {
+		u.endFollow()
+		return
+	}
+	u.mu.Lock()
+	wait := parameter.NetworkSuccessionWindow
+	if u.following {
+		wait = parameter.NetworkFollowWindow
+	}
+	if u.walkFrom.IsZero() && now.Sub(u.opened) >= wait {
+		u.walkFrom = u.opened.Add(wait)
 	}
 	contested, from, fixed := u.contested, u.walkFrom, u.fixed
 	turns := len(network.SuccessionCandidates(roster, u.lost, u.chain))
@@ -1021,6 +1091,7 @@ func (u *Authority) giveUp(why string) {
 	}
 	held, holder, local := u.term, u.holder, u.local
 	u.contested, u.published, u.redialing, u.cutRedialing = 0, false, false, false
+	u.following = false
 	u.walkFrom, u.cutSince = time.Time{}, time.Time{}
 	u.fork = true
 	u.mu.Unlock()
@@ -1097,7 +1168,7 @@ func (u *Authority) adopt(rec network.HandoffRecord, from uint32) error {
 		u.lost, u.reportsFor = rec.Predecessor, held
 		maps.DeleteFunc(u.reports, func(k reportKey, _ struct{}) bool { return k.term < held })
 	}
-	u.contested, u.published, u.redialing = 0, false, false
+	u.contested, u.published, u.redialing, u.following = 0, false, false, false
 	u.walkFrom, u.direct, u.relay = time.Time{}, direct, 0
 	if !direct {
 		u.relay = link.PeerID(from)
@@ -1502,7 +1573,7 @@ func (u *Authority) publish() {
 // Summary is `:session`'s authority line.
 func (u *Authority) Summary() string {
 	u.mu.Lock()
-	term, holder, local, fork, contested := u.term, u.holder, u.local, u.fork, u.contested
+	term, holder, local, fork, contested, fixed, following := u.term, u.holder, u.local, u.fork, u.contested, u.fixed, u.following
 	migrations := u.statMigrations.Load()
 	u.mu.Unlock()
 	if term == 0 {
@@ -1518,7 +1589,16 @@ func (u *Authority) Summary() string {
 	if migrations > 0 {
 		line += fmt.Sprintf(", %d handoff(s)", migrations)
 	}
-	if contested != 0 {
+	// A pinned session walks no list: it redials, then forks, and a person its relay
+	// carries waits on that relay and then redials it.
+	switch {
+	case contested != 0 && following:
+		line += "; host lost, waiting on its relay"
+	case following:
+		line += "; host lost, redialling its relay"
+	case contested != 0 && fixed:
+		line += "; host lost, redialling it"
+	case contested != 0:
 		line += "; host lost, walking the succession list"
 	}
 	if fork {

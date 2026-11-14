@@ -1244,6 +1244,33 @@ file by its methods' receiver, or each new file is an unchecked helper that
 `TestHelperFilesArePinned` refuses. Both steps conflict with every open branch on
 the file, so they wait for a pause between waves of netcode work.
 
+### Tell a host that stalls from one that is gone
+
+- Priority: P2
+- Affected files: `internal/converge/authority.go` (`driveShedding`, `peerLost`),
+  `internal/converge/correction.go` (`observeFloor`), `internal/converge/reach.go`
+  (`Reach.cutOff`), `internal/render/renderer/status_bar.go`
+- Guide: [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing),
+  [§5.1](multi-player.md#51-succession)
+
+A guest reads its host's silence from its link alone: one that stops answering is
+dead at `NetworkLinkDeadAfter`, and the guest redials or walks (§5.1). Two stalls
+fall between that and a host that only slows:
+- **A host whose loop stalls while its transport answers**, a deadlock on the world
+  lock or a pathological tick: the probe is answered on transport goroutines, so the
+  link stays up and the guest predicts alone for as long as the stall lasts. Its
+  badge stays green, since `slow!` needs a cadence only a publisher writes, and the
+  one sign is the floor's 8 s alert. What would close it: a floor that stays
+  breached over a link that answers counts as the authority's loss and opens the
+  walk `Reach.cutOff` opens, and the badge shows a breach with no cadence.
+- **A host frozen for 1.1 to 5 s**, which every link survives: its clock projects
+  through the freeze, the scheduler drops the debt at once, and `driveShedding`
+  takes that one drop for overload, shedding the newest bot, else the newest guest
+  ("Removed by the host to keep its tick"). In a scratch converge test a 1 s freeze
+  shed nobody, and 1.5 s and 4 s shed the guest. What would close it: a single drop
+  longer than the link-dead time is not counted, or the share has to hold over two
+  windows.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -1292,6 +1319,56 @@ it, decide which of it needs a check (the authority confirming a relay's admissi
 a successor's record carrying no more than the roster lets it, the verifier's reach),
 which needs a limit, and which is accepted as the price of play without a server; then
 plug the holes found, one PR each.
+
+### Review what a relay hosts once its host is gone
+
+- Priority: P2, an audit (2026-11-14)
+- Affected files: `internal/app/internal/membership/host.go` (`LeaveSession`,
+  `leaveSessionLocked`, `relayedLocked`, `sessionRoleLocked`),
+  `internal/app/internal/membership/relay.go` (`reopenRelayDoor`, `returnAcceptor`,
+  `relaySeatingLocked`), `internal/converge/authority.go` (`beginSuccession`,
+  `driveWalk`, `endFollow`, `followGone`)
+- Guide: [Multi-player §5.1](multi-player.md#51-succession),
+  [§5.5](multi-player.md#55-leaving-a-session),
+  [§5.6](multi-player.md#56-relay-doors-and-the-router); Tighten what a relay and a
+  successor are trusted with, above
+
+The concern, Lixen's: a relay in a session pinned to its host, which never chose to
+be a candidate to host the whole game, now goes on hosting one for the people it
+relays once that host is gone. That is fine in general, since running `-relay` already
+shared its resources, and what passes through it, with those people, in a limited
+scope; but it needs a second look that the boundaries hold.
+
+What the fork does: it keeps the places of the people linked to it at its door as it
+forks and their bots', and nobody else's (`relayedLocked`); its `-relay` door, at the
+address they joined at, goes on into the session it opens and takes back a key that
+holds a person's place there, under the left session's name and with no passphrase,
+refusing any other (`returnAcceptor`); nobody new is seated through those people
+either, by a bot of theirs or a door of their own, until its player runs `:host`
+(`relaySeatingLocked`); each person waits on its relay up to `NetworkFollowWindow`,
+frozen, before it forks alone; and while it holds their places the session's role
+refuses `:join` and takes `:leave` and `:host`.
+
+What to look at:
+- Whether a relay hosts its people only once it is asked to, by a switch of its own as
+  Take over as host is, off by default, or by the `-relay` flag's word, rather than by
+  default. Nothing is shared that was not before: each person dials the address it
+  already used, and nobody's address goes to anyone new.
+- Whether the door, which asks no passphrase, should ask the session's, and what it
+  trusts a returning player's record with.
+- The fork issues no passes (Issue a pass in a session opened past its first term).
+- Gaps seen while building it, none worse than before, when each person forked alone at
+  once: a person behind a relay of its own (a relay chain) is not linked to the fork, so
+  its place goes and its relay's dial for it is refused as a newcomer's; a person whose
+  link to the relay blipped as it forked is not kept; a host that stalled rather than
+  went takes its relay back, and the person redials that relay's new run, whose host
+  may still hold the person's place as linked; and a door the router publishes is
+  covered by no test.
+- A person behind a relay seats no bot in the session at all: its bot's join through
+  the relay stays "joining" (`tellAuthority`), so keeping a relayed person's bots is
+  read in code alone. A holder is the joiner's own word at the host
+  (`noteJoinerReport`), so a place a direct guest of the host claimed was a relayed
+  person's bot is kept too, and that person's own `-relay` door could seat it.
 
 ### Widen how a guest offers to take a session over
 
@@ -1555,6 +1632,108 @@ with nobody in it, such as td's two sides attacking each other's towers, needs a
 lobby quorum of 0 so a server starts without a guest, `holdVacant` parking only
 below the scenario's minimum, the ownerless boot cursor dropped without a park, and
 spawns that do not anchor on a cursor: the gold cycle fails and retries with none.
+
+### Issue a pass in a session opened past its first term
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`openSessionLocked`),
+  `internal/app/internal/membership/session.go` (`issuePassLocked`, `checkPass`),
+  `internal/converge/authority.go` (`extendTermKeys`)
+- Guide: [Multi-player §5.4](multi-player.md#54-wraiths) (the pass)
+
+A pass names the session's first authority key, `TermKeys[0]`. A session a run opens
+after `:leave` or a fork starts at the next term with no term keys, so `Open` fills
+the earlier terms with empty keys: `issuePassLocked` signs over an empty authority
+key and fails ("pass not issued", logged for every bot the leave seats again), and
+`checkPass` holds every pass shown to that empty key. Nobody there is given a pass,
+so a passphrase `:host` sets on such a session later spares no redial its phrase.
+What would close it: a pass names the first key the session's own terms hold, or a
+reopened session keeps its own term's key first.
+
+### Publish a new session's link once its port runs
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`openSessionLocked`),
+  `internal/system/network.go` (`publishConnectionTelemetry`)
+- Guide: [Multi-player §7](multi-player.md#7-diagnostics-and-operations)
+
+`openSessionLocked` activates the session, which publishes `network.state`, before
+it starts the port, so a port not yet running reads `down` from inside the command
+until the next tick. The frame loop draws between ticks, so `:host` on a solo run,
+`:bot add`, `:leave` and a fork can show `Net: down` until that tick, and after
+`:host` the badge's 500 ms hold (`StatusNetworkHoldDuration`) keeps it up before
+`Net: wait`; where the next tick reads `idle` the badge goes at once. Read in review,
+not seen on a screen. What would close it: publish again once the port runs, or
+start it before the session activates.
+
+### Say what a run alone after a loss is
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`sessionSummaryLocked`),
+  `internal/system/network.go` (`reportDisconnect`, `publishConnectionTelemetry`),
+  `internal/app/loop.go` (`setAway`), `internal/engine/world.go` (`LatchSession`)
+- Guide: [Multi-player §5.5](multi-player.md#55-leaving-a-session),
+  [§7](multi-player.md#7-diagnostics-and-operations)
+
+A fork, a `:leave` and a dropped player go on in a session with no door, which
+shows no badge and keeps the places §5.5 says. What the run says of itself is
+still off:
+- `:session` reads `Session hosting` there, in a browser too, which cannot host,
+  and a run frozen for a redial or a walk reads "continuing locally from the last
+  authoritative state".
+- A relayed person cut off from its relay is told "Host connection lost", though
+  its host may be alive, and reads `Net: down` for 10 s and then nothing while it
+  redials the relay and walks.
+- A run with its own bots shows their in-process links as a network session's,
+  `2P:0 4ms`.
+- On Android, a fork made while the player is away plays on unpaused, since away
+  is applied only when it changes (`setAway`); and a guest the phone froze past its
+  host's Wraith wait forks on thaw saying its host connection was lost, though the
+  host never went quiet.
+- A replay's badge reads the journaled session latch (`publishConnectionTelemetry`),
+  which says only whether a peer is linked, so a replay never reads `idle` or
+  `waiting`: where the run showed no badge (`idle`) or `Net: wait`, at a fresh door or
+  at one opened where the run's bots had been, the replay shows `Net: down` for 10 s,
+  then nothing. The latch would carry what the port reads (`idle`, `waiting` or
+  `down`) as it carries `Peers`, for presentation only, at the cost of a journal
+  field.
+
+### Keep the other guests' places in a host-policy fork
+
+- Priority: P3, an option not taken (2026-11-14)
+- Affected files: `internal/app/internal/membership/host.go` (`LeaveSession`,
+  `leaveSessionLocked`), `internal/app/host_test.go`
+  (`TestAPinnedForkKeepsNobodyItDidNotBring`)
+- Guide: [Multi-player §5.5](multi-player.md#55-leaving-a-session),
+  [§5.4](multi-player.md#54-wraiths)
+
+The choice made: a fork in a session pinned to its host keeps its own place, its
+bots' and those of the people it relayed (Multi-player §5.5), so the host's Wraith,
+the host's bots and every other guest's place go at the fork. Another guest of that
+host that later dials the door the fork's `:host` opens comes in as a new player,
+without the cursor and record it had in that world.
+
+What the other option does: the fork drops only the lost host and its bots, the
+places of the authority `giveUp` leaves named (`m.authorityID()`), and keeps every
+other place as a Wraith for `WraithTimeout`, which `:host` starts over. A guest that
+dials a door opened in that time takes its place back by its key, as it could before
+this rule, when those Wraiths waited for a door with no limit.
+
+What it entails: those Wraiths stand on the fork's map for their 2 minutes whether
+anyone comes back or not, as the host's did in the report that led here. A return
+takes the fork's player opening a door and the other guest finding it: a host-policy
+guest has no door for them, its `-relay` door taking back the people it relayed alone,
+nothing tells the others its address (§5.0), and local network
+visibility is off by default (§5.7). The three-player test inverts, and §5.1 and
+§5.5 change with it.
+
+Why it was not chosen: nobody in a host-policy session signed up to come back to a
+guest's run, any more than that guest signed up for its host's Wraith, and keeping a
+session's people together is what `-authority migrate` with a guest that takes over
+is for.
+
+Reopen it if players of a host-policy session regroup in one guest's fork often
+enough that losing their progress there is felt.
 
 ## Combat
 

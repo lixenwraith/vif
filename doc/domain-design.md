@@ -652,12 +652,12 @@ qualifier shows, worst first:
 - `loss p%`: probes went unanswered often enough for the link to be the cause;
 - `slow`: the cadence backed off and prediction is carrying more.
 
-Three states replace the badge, in this order: `Host lost` (this guest lost its
-link to the authority or continues as a local fork, until a handoff is adopted),
-`Migrating [k]` (a succession is open or a handoff was just adopted, k passes down
-the succession list so far), and `Net: down` or `Net: wait` while the link is down
-or still connecting. The measurements behind each are in the status snapshot and in
-`:session`.
+Three states replace the badge, in this order: `Migrating [k]` (a succession is
+open in a session that migrates or a handoff was just adopted, k passes down the
+succession list so far), `Host lost` (this guest lost its link to the authority or
+continues as a local fork, until a handoff is adopted), and `Net: down` or `Net:
+wait` while the link is down or still connecting. The measurements behind each are
+in the status snapshot and in `:session`.
 
 ### 4.4 Membership and session control
 
@@ -683,7 +683,8 @@ Wraiths; one that reaches none continues as an explicit local fork.
 The one instance that departs a participant without a crossing is a fork with no
 link left. Nothing there can produce or receive one, so it departs every cursor it
 does not simulate as local roster state: a person's fork keeps each as a Wraith in
-the session it goes on in, a script's or a bot's drops them. Agreeing on a tick
+the session it goes on in, only its own bots' where the session does not migrate;
+a script's or a bot's drops them. Agreeing on a tick
 needs a second instance, and there is none; a fork that still holds links leaves its
 roster alone, which is part of the unimplemented partition case below.
 

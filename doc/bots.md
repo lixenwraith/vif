@@ -72,7 +72,7 @@ into the session it joins, and `:leave` takes them out of one with the run.
 - `:leave` takes your bots out of the session with you: they leave it first and
   are seated again in the session your run goes on in, each taking back the place
   it had. A run that loses its host and finds nobody to take over goes on the same
-  way, keeping every other player's place too.
+  way, keeping every other player's place too where its session migrates.
 - A dropped person starts a new local game without its bots; a dropped watched or
   headless run stops. Dropping ends membership; it is not a ban.
 - A headless bot ends once its host leaves and no participant, itself included,
