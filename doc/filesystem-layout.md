@@ -51,7 +51,7 @@ Unix-like targets `internal/paths` lists, not on macOS or Windows.
 vif/
 ├── vif.toml     settings: flag defaults (§3)
 ├── scenario/    scenarios, each rooted at scenario.toml, in groups
-│   ├── base/    the shipped ones; vanguard/behavior/ holds its programs
+│   ├── base/    the shipped ones; cave/behavior/ holds its programs
 │   ├── downloads/  what sessions' hosts sent, when the player saves it
 │   ├── main/    optional default override
 │   └── test/puzzle/tic-tac-toe/  a player's own, filed as they like
@@ -64,7 +64,7 @@ vif/
 
 A directory under `scenario/` holding `scenario.toml` is a scenario, and what lies
 below it is its own: its region, macro and behavior program files sit beside the
-entry or below it, as the shipped `vanguard` keeps its raiders' programs in
+entry or below it, as the shipped `cave` keeps its raiders' programs in
 `behavior/` ([FSM reference](fsm-reference.md#behavior-programs)). Any other
 directory is a group of scenarios and groups, to any depth, so a player can file
 their own as `test/puzzle/tic-tac-toe/`. A name beginning with a dot is passed

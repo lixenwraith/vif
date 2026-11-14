@@ -1,4 +1,4 @@
-// Command raider shows vanguard's raider types as its scenario declares them: a
+// Command raider shows the cave scenario's raider types as it declares them: a
 // band for each stone art, its types weakest rank first between a ceiling and a
 // floor of that art's rock, in the colours their programs give them or one hue a
 // slider picks, on the game's truecolor tier or its console tier as a VGA or
@@ -129,7 +129,7 @@ type app struct {
 }
 
 func main() {
-	dir := flag.String("s", "wad/scenario/base/vanguard", "the scenario directory whose raiders to show")
+	dir := flag.String("s", "wad/scenario/base/cave", "the scenario directory whose raiders to show")
 	flag.Parse()
 	caves, err := load(*dir)
 	if err != nil {

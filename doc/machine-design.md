@@ -512,7 +512,7 @@ and a `payload_vars` key against the decoded payload
 A behavior program defines a species: a `[prototype]` body and a state machine
 over the game's verbs. A scenario lists up to `BehaviorProgramsMax` of them, each
 compiled at load into a `machine.Graph` that `BehaviorSystem` steps for every
-instance, over the scaffold every composite species shares. `wad/scenario/base/vanguard`
+instance, over the scaffold every composite species shares. `wad/scenario/base/cave`
 is the worked example: thirty-two raider types, eight to each stone art, each a
 program over one macro of states.
 
@@ -521,8 +521,8 @@ program over one macro of states.
 A program uses the fsm dialect's keys with the machine's additions: `duration_ms`,
 `flags`, `probe`, `cues`, `suspend`, `[[global]]`, a candidate list as `target`,
 `fallback`, the `Timeout` and `AfterTick` triggers, and a `[prototype]` table. The
-scarab's lock, as vanguard's `RaiderStates` macro expands it with the scarab's
-timings:
+scarab's lock, as the `cave` scenario's `RaiderStates` macro expands it with the
+scarab's timings:
 
 ```toml
 [states.Lock]
@@ -575,7 +575,7 @@ per instance:
   (`resolveBaseTarget`, the nearest cursor) and `FindLanding`
   (`FindFreeAreaInside` over the footprint). `LineOfSight` and `FindLanding` read
   the live target, or with `to = "stored"` the cell `StoreTarget` kept, so a
-  lock's charge or teleport goes to the cell it stored, as vanguard's raiders' do,
+  lock's charge or teleport goes to the cell it stored, as the raiders in `cave` do,
   or with `to = "home"` the cell the header spawned on (`BehaviorComponent.HomeX`,
   `HomeY`), which armada's ships fly back to.
 - Effects run on an enter, an exit, a cue or an edge: `StoreTarget`,
@@ -723,8 +723,8 @@ smaller part of it.
 
 A program draws itself from its prototype's look, plain data the renderers read, so
 a new species needs no renderer of its own and no code. The keys are in the
-[FSM reference](fsm-reference.md#behavior-programs); vanguard's thirty-two raiders
-(`wad/scenario/base/vanguard/behavior/<cave>/*.toml`) are the shipped examples, each
+[FSM reference](fsm-reference.md#behavior-programs); `cave`'s thirty-two raiders
+(`wad/scenario/base/cave/behavior/<art>/*.toml`) are the shipped examples, each
 its look under its tier's macro. To define one:
 
 - **Frames.** `frames` holds a table per frame whose `glyphs` are `height` strings
@@ -873,13 +873,13 @@ captures, one a tick, read the frames. Per species:
   the spirits arrive, with no materialize. `:emit EventFuseRequest { sources =
   [{ species = "drain" }], target = "quasar", effect = "materialize" }` lands its
   quasar the tick its materialize's last cells go.
-- Data species: `:n vanguard`, with `:god` to outlast the raid. A raider
+- Data species: `:n cave`, with `:god` to outlast the raid. A raider
   materializes at the right edge every two seconds while fewer than three fly or
   materialize, lands as its half-second materialize ends, chases, locks red
   under the cyan countdown, and charges the cell it saw where its body clears the
   way, else teleports beside it; a disruptor stun drops it back to its chase;
   `:emit EventBehaviorCancelRequest { program = "scarab" }` removes the scarabs.
-  `bin/vif -check -s wad/scenario/base/vanguard` prints
+  `bin/vif -check -s wad/scenario/base/cave` prints
   `behaviors ok: 32 (bat, beetle, chomper, … wraith)`, `loot ok: 1 (upgrade)` and
   `drops ok: 2 (kraken, raider)`. A look shows best in tmux
   pane captures with colour, on a 256-colour `TERM` and on `TERM=linux`;

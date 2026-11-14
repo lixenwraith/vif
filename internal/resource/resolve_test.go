@@ -277,8 +277,8 @@ func TestAScenarioNameResolvesAtAnyDepthAndAPathExactly(t *testing.T) {
 	}
 	td, puzzle := entry("base/td"), entry("a/puzzle/td")
 	entry("zz/td")
-	entry("base/vanguard")
-	entry("base/vanguard/behavior/inner")
+	entry("base/cave")
+	entry("base/cave/behavior/inner")
 	entry(".trash/old")
 
 	for name, want := range map[string]string{"td": td, "a/puzzle/td": puzzle} {

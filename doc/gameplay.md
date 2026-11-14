@@ -456,10 +456,10 @@ wall's edge is the median of the five columns around it, so no bump or notch two
 columns wide or less stands. The rock is a field of ceiling and floor rows per
 column, not wall entities, which every wall query reads. It draws in `visual`, or
 in the stone art preset `art` names (`none` for bare stone, `strata`, `cracked`,
-`moss`, `crystal`, `masonry`); vanguard picks one per cave by its seed, with
-`EmitEvent`'s `pick`. A cell's glyph and colours follow from the preset, the seed,
-its profile column and row, and how deep it lies from the nearest opening on which
-side, so the stone moves with the rock and reads on a text console. The cave
+`moss`, `crystal`, `masonry`); the `cave` scenario picks one per cave by its seed,
+with `EmitEvent`'s `pick`. A cell's glyph and colours follow from the preset, the
+seed, its profile column and row, and how deep it lies from the nearest opening on
+which side, so the stone moves with the rock and reads on a text console. The cave
 scrolls at `speed` columns a second, at most the soft cap `CaveMaxSpeed`, as an
 integer rate and phase, and each whole column the phase carries is a step, as many
 a tick as it carries. Each step moves the rock and every shared wall a column left,
@@ -521,7 +521,7 @@ phase per axis that advances by simulated time, so drift follows game speed, dra
 no RNG, and every instance steps a layer on the same tick. A layer moves its tick's
 step as one rigid group, each glyph's way read a column and then a row at a time,
 so no step crosses a wall's corner; moving each glyph once a tick rather than a
-cell at a time took vanguard's tick at 200×60 from 458 to 304 µs
+cell at a time took the `cave` scenario's tick at 200×60 from 458 to 304 µs
 (`BenchmarkHeadlessTicks`). A glyph whose way leaves the map or meets rock or a
 wall, or whose cell is full, is removed with no reward or effect; scenery passes
 into rock and walls. Composite members (gold) and glyphs
@@ -587,7 +587,7 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
 
 `wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
 scaffold, `recall` is a memory game, `dummy` is a weapon range, `tutor` teaches
-the motions a lesson at a time, `vanguard` is a side-scroller whose raiders are
+the motions a lesson at a time, `cave` is a side-scroller whose raiders are
 species its own behavior programs define, and `armada` is a fixed shooter whose
 ranks are three more. Each entry has a short `description` for
 scenario listings.
@@ -639,7 +639,7 @@ around the cursor would burn its heat or drain its shield. Whenever the cursor's
 energy is 0, an energy drop homes on it from the dummy's centre. Drains, nuggets,
 gold, the fuse and music are off, and `:n` lays the range again.
 
-`vanguard` flies the cursor through a cave (§9) scrolling left at twenty columns a
+The `cave` scenario's cave (§9) scrolls left past the cursor at twenty columns a
 second at first, a column every tick: only a whole-tick period steps evenly, and
 eight a second stepped two and three ticks apart, which read as dropped frames. The
 cave is jagged, four octaves from 64 columns: its gap runs from nine rows to all but
@@ -660,7 +660,7 @@ fewer than three fly or materialize, on a row drawn across the map, in the neare
 open rows when rock fills it. Each lands as its half-second materialize ends, too
 soon for much scrolling rock to come over it, and is of a type drawn at random
 between the two of the rank the raid has reached among the cave's own eight. Every
-type is a program of the scenario's own (`behavior/<cave>/<type>.toml`), the
+type is a program of the scenario's own (`behavior/<art>/<type>.toml`), the
 template for a species of one's own ([FSM
 reference](fsm-reference.md#behavior-programs)), running one cycle, a chase, a lock,
 then a charge or a teleport (`RaiderStates` in `macros.toml`), its landing marked
@@ -695,8 +695,8 @@ in the cracked stone (gremlin, chomper; imp, slime; ghost, skull; wraith, demon)
 orange animals in the moss (hedgehog, mouse; frog, hopper; bat, puffer; owl, lynx)
 and orchid constructs among the crystals (drone, shard; saucer, trooper; jelly,
 squid; djinn, robot), each one colour on a console. A raider lives until killed, and
-the rock pushes it as it pushes the cursor. Every type rolls the raider drop table
-vanguard declares, so one a player shoots down rolls it for every player where it
+the rock pushes it as it pushes the cursor. Every type rolls the scenario's raider
+drop table, so one a player shoots down rolls it for every player where it
 fell, each tier on its own: heat at 1%, a `U`, its own loot kind, at 50%, and energy
 at 10%, each chance growing by as much again for each kill in a row it misses, so a
 `U` drops within two kills. All 32 types share the table's streaks, which run on
@@ -726,7 +726,7 @@ region) and fires an aimed bullet every three seconds or so, each on its own
 interval. A wave shot down strobes green, doubles species damage as a storm kill
 does in main ("Species Damage Up"), which is the ramp, and the next comes in two
 seconds on. A ship a player shoots down rolls the armada drop table for every
-player: heat at 2%, the `U` at 10% and energy at 10%. Defeat is vanguard's: heat
+player: heat at 2%, the `U` at 10% and energy at 10%. Defeat is as in `cave`: heat
 and energy both run out, a red strobe, and the game starts over on "You Died!".
 Drains, nuggets, gold, the fuse and the text are off: special fire would blast
 text among the ranks, and they would fall with nobody aiming.

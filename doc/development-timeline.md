@@ -202,7 +202,7 @@ until its rename to vif in September 2026.
 - Soundlab editors, mixer and keyboard
 - `vif.toml` written back with its comments kept
 - Behavior machines: `pkg/machine`, data species
-- Vanguard: a cave side-scroller with raiders
+- The cave scenario: a side-scroller with raiders
 - Payload enums by name in scenarios
 - Load shedding; the host sets the session's rate
 - One pulse system for every pulse

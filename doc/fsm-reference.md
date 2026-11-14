@@ -38,18 +38,18 @@ coordinator's, sent under the same bounds, held in memory and saved in its
 │   ├── downloads/             # what sessions' hosts sent, as td-3f2a9c1b0e7d/
 │   └── base/                  # the shipped scenarios
 │       ├── blank/scenario.toml
+│       ├── cave/
+│       │   ├── scenario.toml
+│       │   ├── macros.toml
+│       │   └── behavior/strata/scarab.toml  # a behavior program, one per raider type
 │       ├── recall/scenario.toml
 │       ├── td/
 │       │   ├── scenario.toml
 │       │   ├── td_macros.toml # macro library
 │       │   └── td_*.toml      # region files
-│       ├── tutor/
-│       │   ├── scenario.toml
-│       │   └── lessons.toml   # the corpus the scenario carries
-│       └── vanguard/
+│       └── tutor/
 │           ├── scenario.toml
-│           ├── macros.toml
-│           └── behavior/strata/scarab.toml  # a behavior program, one per raider type
+│           └── lessons.toml   # the corpus the scenario carries
 └── input/
     └── keymap.toml
 ```
@@ -323,7 +323,7 @@ authored script's event decode a payload the same way.
 
 `pick` sets one payload field to an entry of `from`: the one its `var`'s value
 names, modulo the list's length, a negative value counting back from the last entry.
-The draw behind it need not know the list: vanguard's cave wears the stone art its
+The draw behind it need not know the list: `cave`'s rock wears the stone art its
 seed picks, and the raid draws `raid_type` from 20 bits, takes it modulo eight and
 adds eight times the art's index, so it spawns one of that cave's eight raider
 programs from a list of all thirty-two. `field` is a dot path, as a `payload_vars`
@@ -929,7 +929,7 @@ no program of the scenario fails the load where it is authored, and one arriving
 otherwise raises nothing (`behavior.unknown_program_rejects`), nor one finding no
 room (`behavior.<name>.spawn_failures`). `EventBehaviorCancelRequest { program }`
 removes instances and the materializes still bringing them, every program's when
-it names none. `wad/scenario/base/vanguard` is the worked example: its raider types,
+it names none. `wad/scenario/base/cave` is the worked example: its raider types,
 materializing in, fly one attack cycle, a chase, a lock, then a charge or a
 teleport, as thirty-two programs over one macro (`RaiderStates` in its
 `macros.toml`). Each program file is one invocation of its rank's macro
@@ -1023,7 +1023,7 @@ target = "Roam"
   `Behavior*` values in `internal/parameter`: speed 8, accel 6, drag 2, no arrival
   steering, the homing's half-cell snap and restitution 0.5.
   `Home` steers by all but the restitution, which every move bounces by. Each value
-  is finite and at least 0, accel above it, and restitution at most 1. Vanguard's
+  is finite and at least 0, accel above it, and restitution at most 1. `cave`'s
   first raider rank gives the snake's values and each later rank its own, slower.
 - `trigger`: `Timeout` (a timed entry ran out; it takes no guard, so guard its
   candidates), `Tick` (before the state's tick) or `AfterTick` (after it, so

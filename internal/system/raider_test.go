@@ -18,16 +18,16 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath/physics"
 )
 
-// newRaiderWorld spawns vanguard's scarab, compiled from its shipped program as
-// the scenario expands it, at (20, 10) of an 80x40 world whose one target stands at
-// (50, 10), behind rock open only along row 10: the header's line runs through, the
-// scarab's 4x2 body with its header at (1, 0) does not. Every raider type flies
-// the one cycle. It returns the raider's states by name.
+// newRaiderWorld spawns the cave scenario's scarab, compiled from its shipped
+// program as the scenario expands it, at (20, 10) of an 80x40 world whose one
+// target stands at (50, 10), behind rock open only along row 10: the header's line
+// runs through, the scarab's 4x2 body with its header at (1, 0) does not. Every
+// raider type flies the one cycle. It returns the raider's states by name.
 func newRaiderWorld(t *testing.T) (*engine.World, *BehaviorSystem, core.Entity, map[string]component.BehaviorState) {
 	t.Helper()
-	const dir = "../../wad/scenario/base/vanguard"
+	const dir = "../../wad/scenario/base/cave"
 	if _, err := os.Stat(dir); err != nil {
-		t.Skipf("vanguard scenario not present: %v", err)
+		t.Skipf("cave scenario not present: %v", err)
 	}
 	merged, err := fsm.ResolveScenario(os.DirFS(dir), "scenario.toml")
 	if err != nil {
@@ -209,19 +209,19 @@ func TestAStunDuringARaidersTeleportMovesNothing(t *testing.T) {
 	}
 }
 
-// vanguardBehaviors compiles every program of the shipped vanguard scenario, as the
+// raiderBehaviors compiles every program of the shipped cave scenario, as the
 // scenario expands them, and returns the expanded documents beside them
-func vanguardBehaviors(t *testing.T) (*BehaviorSet, map[string]map[string]any) {
-	set, docs, _ := vanguardScenario(t)
+func raiderBehaviors(t *testing.T) (*BehaviorSet, map[string]map[string]any) {
+	set, docs, _ := raiderScenario(t)
 	return set, docs
 }
 
-// vanguardScenario is vanguardBehaviors with the expanded scenario beside them
-func vanguardScenario(t *testing.T) (*BehaviorSet, map[string]map[string]any, map[string]any) {
+// raiderScenario is raiderBehaviors with the expanded scenario beside them
+func raiderScenario(t *testing.T) (*BehaviorSet, map[string]map[string]any, map[string]any) {
 	t.Helper()
-	const dir = "../../wad/scenario/base/vanguard"
+	const dir = "../../wad/scenario/base/cave"
 	if _, err := os.Stat(dir); err != nil {
-		t.Skipf("vanguard scenario not present: %v", err)
+		t.Skipf("cave scenario not present: %v", err)
 	}
 	merged, err := fsm.ResolveScenario(os.DirFS(dir), "scenario.toml")
 	if err != nil {
@@ -243,7 +243,7 @@ func vanguardScenario(t *testing.T) (*BehaviorSet, map[string]map[string]any, ma
 // type against that edge on the row or column it named, whatever its size and
 // header offset; a scenario scrolling from any side spawns at its edge alike
 func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
-	set, _ := vanguardBehaviors(t)
+	set, _ := raiderBehaviors(t)
 	newWorld := func() *engine.World {
 		w := engine.NewWorld()
 		engine.NewGameContextWithClock(w, 80, 40, engine.NewManualClock())
@@ -287,11 +287,11 @@ func TestARaiderRequestedAtAnEdgeStandsFlushAgainstIt(t *testing.T) {
 	}
 }
 
-// TestEveryVanguardRaiderTypeFliesTheCycle: each raider type, compiled as the
+// TestEveryRaiderTypeFliesTheCycle: each raider type, compiled as the
 // scenario expands it, chases, locks, charges along a clear line, brakes and chases
 // again, closing on its target, and wears a look of its own footprint
-func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
-	set, docs := vanguardBehaviors(t)
+func TestEveryRaiderTypeFliesTheCycle(t *testing.T) {
+	set, docs := raiderBehaviors(t)
 	for i, p := range set.Prototypes() {
 		t.Run(p.Name, func(t *testing.T) {
 			for f, frame := range p.Look.Frames {
@@ -348,14 +348,14 @@ func TestEveryVanguardRaiderTypeFliesTheCycle(t *testing.T) {
 	}
 }
 
-// TestEachVanguardCaveRaidsWithTheSameRanks: the raid's pick lists eight raider
+// TestEachCaveRaidsWithTheSameRanks: the raid's pick lists eight raider
 // types to each stone art, in the order CaveStart's pick lists the arts, and every
 // program once. Each cave's eight wear one palette and console colour, and fly the
 // same ranks in the same order, its hit points rising, so caves differ in looks
 // alone. Every type drops from the raider table: heat, then the U, which a full gun
 // passes over for two energy a drop, then energy.
-func TestEachVanguardCaveRaidsWithTheSameRanks(t *testing.T) {
-	set, _, merged := vanguardScenario(t)
+func TestEachCaveRaidsWithTheSameRanks(t *testing.T) {
+	set, _, merged := raiderScenario(t)
 	path := func(v any, keys ...any) any {
 		for _, k := range keys {
 			switch k := k.(type) {

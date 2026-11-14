@@ -665,7 +665,7 @@ Libraries · Branches.
   window manager `xdotool windowfocus`, not `windowactivate`, gives it the keys.
   `ffmpeg -f x11grab` records the window to set against a probe's wall-clock lines.
 - A headless probe in `internal/app` drives a scenario by intents
-  (`input.IntentFireMain`) and reads the world under `RunSafe`. A vanguard crush
+  (`input.IntentFireMain`) and reads the world under `RunSafe`. A crush in `cave`
   starts a new game, which `Positions.Rock().Origin` stepping back marks, so a probe
   clears what it recorded there.
 - The browser launcher runs end to end in the container: `GOOS=js GOARCH=wasm go
@@ -707,7 +707,7 @@ Libraries · Branches.
 - A bot graph is compared in seconds: a 60 s round at 120x40 under `-headless
   -speed max` takes 0.1 to 0.2 s (td 0.8 s). Read rounds from the log, not the
   fitness, which weighs no crush: at `-lv debug -log-stdout` each FSM transition
-  carries a tick that restarts with the game, so vanguard's `"to":"PlayerCrushed"`
+  carries a tick that restarts with the game, so `cave`'s `"to":"PlayerCrushed"`
   and `"to":"PlayerDied"` lines are round lengths. A scenario copied to
   `<dir>/scenario/base/<name>` runs as `-config-dir <dir> -s <name>`.
 - valgrind's callgrind counts the instructions one function runs
@@ -754,7 +754,7 @@ Libraries · Branches.
   a frame does, or `KeepExact`'s rects pile up as bytes with no allocation behind
   them. A bare `engine.NewWorld` draws as an emulator in 256 colors, `ColorMode`'s
   zero value.
-- Navigation's cost in vanguard depends on how the ship is flown: one that keeps
+- Navigation's cost in `cave` depends on how the ship is flown: one that keeps
   still keeps sight of the raiders and shows little of it. Measure as a player
   flies, headless under `:god` with auto-fire, the ship sweeping between the map's
   middle and near its left edge every three seconds; a group cache's
@@ -847,8 +847,8 @@ Libraries · Branches.
   beyond reading its files into the container.
 - A drop table's rolls are player-domain, each instance rolling its own: a test of a
   kill whose drop is below certain shoots until the table's pity makes it certain
-  (vanguard's U within two kills), and counts a kill's drops as the loot new since
-  it, since earlier drops may still be flying (`internal/app/vanguard_test.go`).
+  (`cave`'s U within two kills), and counts a kill's drops as the loot new since
+  it, since earlier drops may still be flying (`internal/app/cave_test.go`).
 - The behavior vocabulary is built before any program compiles, so a verb whose
   arg names what programs extend (a species, a materialize style) registers with
   `Named`, whose build gets the set's payload names; `Effect` decodes without them.

@@ -20,8 +20,8 @@ const (
 	// MultiplexerFrameInterval is the frame interval inside tmux or screen [wall].
 	// tmux drops a client's output once more than eight bytes a cell back up and
 	// from then on repaints it every 100 ms, about 10 frames a second, until a quiet
-	// 100 ms that a scrolling playfield never gives. Two vanguard panes at 8x get
-	// there at 60 frames a second and at times at 30; at 24 tmux kept up
+	// 100 ms that a scrolling playfield never gives. Two panes of the cave scenario
+	// at 8x get there at 60 frames a second and at times at 30; at 24 tmux kept up
 	MultiplexerFrameInterval = time.Second / 24
 
 	// FrameRateMin and FrameRateMax bound [play] max_fps, frames a second [wall]; 0

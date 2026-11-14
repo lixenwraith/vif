@@ -227,7 +227,7 @@ region the boot spawns runs its own entry in the same settle, and a timer armed
 there would stand frozen on the held map until the press. Every shipped scenario
 opens so, its boot state marked: the campaign's `MonitorArm` spawns `main` from the
 state its first `Tick` enters, td's `TdSetup` lays the maze and raises its towers
-after a `Tick`, and vanguard's `RaidWait`, recall's `Intro`, dummy's `PlayerStart` and
+after a `Tick`, and `cave`'s `RaidWait`, recall's `Intro`, dummy's `PlayerStart` and
 blank's `MainBoot` each leave on one. A `delay_ms` counts from that `Tick` too.
 
 ## 6. Event processing

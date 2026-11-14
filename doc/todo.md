@@ -8,7 +8,7 @@ code-originated item names its source here.
 Priorities: P0 blocks a release or leads the feature development push, P1 is
 wanted next, P2 is convenient follow-up, and P3 is an idea.
 
-## Vanguard
+## Cave
 
 The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
 by area so an agent can take a group. The faster scroll, the jagged cave, the stone
@@ -20,7 +20,7 @@ follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
 
 ### Machine follow-ups
 
-What vanguard met in the machine and is still open, its certain faults having
+What `cave` met in the machine and is still open, its certain faults having
 landed.
 
 #### Give a program's entrance an entering state
@@ -152,7 +152,7 @@ What the slowest hundredth of the storm's ticks holds, each measured there:
 - Fields, 43%: three fifths point fields, the private fields of the cursors the
   snake heads lock and the drops follow, recomputed at the cooldown as each
   cursor walks; two fifths the eyes' composite fields. Settling a field only out
-  to its farthest reader reopens a decision taken on vanguard's numbers
+  to its farthest reader reopens a decision taken on the `cave` scenario's numbers
   (Navigation §12).
 - The eyes' own update, 24%, and the reaches, 21%.
 - A storm circle's X and Y checks each ask for the walls they meet, so a wall in
@@ -239,7 +239,7 @@ ignores pause keys. A person's run pauses with only its own bots; the viewer's p
 key could start the session hold `:pause` starts when the holder is its session's
 host, which already stops its seats at one tick.
 
-### Train a network bot live in vanguard
+### Train a network bot live in `cave`
 
 - Priority: P2
 - Affected files: `internal/bot`, `cmd/vif`, `internal/paths`
@@ -251,7 +251,7 @@ A solo watched or headless bot whose policy is a small network and whose genes a
 its weights. One candidate plays a round, a game from its start to its defeat, and
 the population learns as rounds end. Decided:
 
-- **The game is vanguard as shipped, raiders on.** Its ramp, boss and faster caves
+- **The game is `cave` as shipped, raiders on.** Its ramp, boss and faster caves
   are the curriculum, a ship that kills nothing starves at tick 2002, so hiding
   cannot win, and a defeat already resets the game, which ends the round.
 - **The genome is a network's weights**, not a graph's constants: a graph asks only
@@ -264,7 +264,7 @@ What was measured, at 120x40 headless and flat out, where a 60 s round takes 0.1
 are over eight:
 
 ```
-vanguard          fitness  defeats  round, ticks
+cave              fitness  defeats  round, ticks
 still               -1052       64           137
 flee within 6        -958
 flee within 12       -620
@@ -279,7 +279,7 @@ still, median ticks to a crush      never    1064     489     288
 random mover                          715     424     293     202
 ```
 
-- One number already separates graphs in vanguard against a seed spread of 150 to
+- One number already separates graphs in `cave` against a seed spread of 150 to
   200, but the table flatters it: a crush crosses `EventCursorCrushed`, which no
   row weighs, so rounds lengthen 1.6 times where fitness improves 4.5 times.
 - The cave alone teaches nothing: the rock's push steers a still cursor into the
@@ -314,7 +314,7 @@ What remains:
   climb and the offline trainer fills the file.
 - **Sessions** wait: any participant's defeat resets every round, and a session
   refuses a speed change.
-- **After vanguard**: armada, with a round timer raising `EventGameResetRequest`
+- **After `cave`**: armada, with a round timer raising `EventGameResetRequest`
   and its band for the ship; main last, where `default` already scores about 900
   a minute. Recall is memory with no number to tune, and td's rounds run minutes
   against an eye population that is itself evolving.
@@ -352,7 +352,7 @@ lacks:
 - Priority: P3
 - Affected files: `internal/bot`, `lixenwraith/genetic`,
   `internal/system/nugget.go`
-- Prerequisite: [Train a network bot live in vanguard](#train-a-network-bot-live-in-vanguard)
+- Prerequisite: [Train a network bot live in `cave`](#train-a-network-bot-live-in-cave)
 - Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
 The genome is the live learner's network, and the result its population file.
@@ -513,7 +513,7 @@ The page plays the embedded `main` alone: a guest is served its coordinator's
 scenario and a native player unpacks the wad, but nothing reaches a client with no
 config root and no peer, so `wad/scenario/` is out of the site's solo Play. The
 corpus needs no route, being player domain. A URL cannot carry one: the launcher
-takes 1,024 characters an argument, `vanguard` deflates to about 13 KB, and a query
+takes 1,024 characters an argument, `cave` deflates to about 13 KB, and a query
 is logged and kept in history
 ([Multi-platform §6](multi-platform.md#6-browser-launch-arguments)).
 
@@ -541,7 +541,7 @@ how the site's edge caches and precompresses it (the site's `doc/nginx.md`); eve
 `wad/scenario/` or only those a scenario marks for publishing; where the site
 offers them (a picker by the lobby's Play solo, links per scenario); a visitor's
 own scenario, picked or dropped on the start screen or carried in a link's
-fragment, which no server sees (about 17 KB for `vanguard`), and whether one from
+fragment, which no server sees (about 17 KB for `cave`), and whether one from
 a stranger may run; a native `-s https://…`, which needs an index at a fixed path,
 and from another origin a publisher's signature; any cache by digest beyond
 HTTP's own, which a native run has in its downloads.

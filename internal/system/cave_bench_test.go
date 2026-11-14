@@ -17,7 +17,7 @@ import (
 // is (parameter.MaxMapCells)
 var caveBenchSizes = []struct{ w, h int }{{200, 60}, {400, 120}, {500, 254}}
 
-// newCaveBench starts vanguard's cave on a w×h map with no cursor
+// newCaveBench starts the cave scenario's cave on a w×h map with no cursor
 func newCaveBench(b testing.TB, w, h int) (*engine.World, *WallSystem) {
 	b.Helper()
 	world := engine.NewWorld()

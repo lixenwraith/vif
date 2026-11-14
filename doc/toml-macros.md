@@ -167,17 +167,17 @@ an error:
   than 32, a base counting as one;
 - more than 2^18 values written through one set: each value a body writes, a
   copied argument's or default's among them, so a scenario's files share one
-  budget (td spends 1830, vanguard 6281);
+  budget (td spends 1830, `cave` 6281);
 - a file or a result nested deeper than 1000 levels;
 - a macro of more than 64 parameters, those its base leaves open among them;
 - more than 2^16 parameters left open by bases through one set: each costs its
   macro what a declared one does, though no file writes it (td's four macros
-  over a base take 14, vanguard's four ranks 24).
+  over a base take 14, `cave`'s four ranks 24).
 
 A body is compiled when its macro is defined and instantiated in one pass, and an
 error's path is built only when one is shown, so an expansion costs what it reads
 and writes. Parsed and expanded, td (28 KB in 8 files) takes 1.09 ms where it took
-2.73 ms, and vanguard (55 KB in 34 files) 2.17 ms where it took 7.7 ms; what the
+2.73 ms, and `cave` (55 KB in 34 files) 2.17 ms where it took 7.7 ms; what the
 bounds are for is the file that took seconds: a 196 KB file of one long key over
 a long array took 6.1 s with no macro in it, and takes 1.5 ms.
 
@@ -208,7 +208,7 @@ resets. `Tower` and `Pylon` are written over `SpawnAwait`, `QuadrantTower` over
 (`l_dead`, `r_p2_done`), so one `side` parameter names them. The embedded
 campaign's `macros.toml` holds the tower region's corner pylon and gateway pair
 and the quasar and storm regions' left-the-map exit.
-`wad/scenario/base/vanguard`'s `macros.toml` holds the raiders' one attack cycle
+`wad/scenario/base/cave`'s `macros.toml` holds the raiders' one attack cycle
 (`RaiderStates`) and the stun edge (`RaiderStun`), `Raider`, which makes a whole
 program of a look, stats and timings, the four ranks written over it, each fixing
 its stats and timings, and each cave's palette and console colour, which `Raider`
