@@ -77,8 +77,8 @@ differences are the host's:
 
 ## Pages
 
-- **Game**: the game running now. Pause, Restart game, Game speed; a replay adds
-  Restart replay.
+- **Game**: the game running now. Pause, Restart game, Console, Game speed; a
+  replay adds Restart replay.
 - **Scenarios**: what to play. The installed scenarios, Start, Other scenario.
 - **Multiplayer**: playing with others. Session, Nearby games, Players, Bots.
 - **Settings**: your preferences, each saved to `[play]`. Sound, Controls,
@@ -97,7 +97,10 @@ host can, the row reads Pause everyone, every participant stops at the same tick
 anyone joining lands paused, and the host's Resume resumes everyone. A game waiting
 for its first press, or a session frozen while its host changes, refuses it with
 the reason. **Restart game** starts the game over from its scenario's first tick, as
-`:n` does. **Game speed** runs from 1/8x through 8x, in a session the host's.
+`:n` does. **Console** opens the console in the menu's place, as backtick and
+`:console` do ([Input §9](input-and-modes.md#9-command-mode)): on a touch screen,
+whose keyboard shows no backtick on its first page, it is the way there. **Game
+speed** runs from 1/8x through 8x, in a session the host's.
 
 ### Scenarios
 
@@ -206,8 +209,8 @@ operations are `:bot add [N[:graph]|graph]` and `:bot drop <slot>`; see
 ## Pausing
 
 A game that can pause, solo or a host whose only other participants are its own
-bots, pauses while the menu, help or telemetry is open unless Pause in menu is
-off, and while the command line is open unless Pause in command line is off; a
+bots, pauses while the menu, help, telemetry or the console is open unless Pause in
+menu is off, and while the command line is open unless Pause in command line is off; a
 new arrival resumes such a host. A session with other people keeps running. The
 menu's title ends with what the game does meanwhile: `game paused`, `game running`
 or `game waiting to start`; turning Pause in menu on or off with the menu open
@@ -218,8 +221,8 @@ they are how a game is paused from the keyboard.
 ## Key binding and persistence
 
 The `config_menu` action is bound to `ctrl_g` and `f10` in `normal_keys`,
-`text_keys` and `overlay_keys`, and `pause` to `p` in `normal`, in
-`input/keymap.toml`; the `escape` action opens the menu from Normal mode with no
+`text_keys` and `overlay_keys`, `pause` to `p` in `normal`, and `console` to the
+backtick in `normal` and `overlay`, in `input/keymap.toml`; the `escape` action opens the menu from Normal mode with no
 key pending. Override those sections (or use `-k`) to add or change keys;
 `:menu` remains available. Forms and text boxes use the text-key bindings, while
 menu navigation uses overlay bindings.
@@ -227,7 +230,7 @@ menu navigation uses overlay bindings.
 Action rows (`Enter`) run the command they name and close the menu: `:pause`,
 `:n`, `:leave`, `:t unpin`, `:t save`, `:log rec flush`, `:d cpu|heap|mutex|trace`
 and `:replay restart`; Start and Other scenario submit `:n <scenario>` the same
-way. Views (`:t`, `:d`, help), developer state commands (`:god`, `:energy` and the
+way, and Console opens the console in the menu's place. Views (`:t`, `:d`, help), developer state commands (`:god`, `:energy` and the
 like), `:step`, `:d break`, `:emit`, `:system`, `:region` and `:replay tick|time`
 stay on the command line.
 

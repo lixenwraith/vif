@@ -45,8 +45,8 @@ releases the capture.
 
 A held key repeats. Where the keyboard reports releases (the Release item below),
 a repeat redoes a motion, text, fire or scroll but no toggle: the mute cycle,
-auto-fire, pause, the menu, help, `q`, `v` and an overlay's activate act once a
-press (`Machine.processKey`). Elsewhere a repeat is a press, so a toggle held past
+auto-fire, pause, the menu, help, the console, `q`, `v` and an overlay's activate
+act once a press (`Machine.processKey`). Elsewhere a repeat is a press, so a toggle held past
 the keyboard's repeat delay flips again at its rate.
 
 A captured key is the scenario's one input hook, whatever produces it:
@@ -102,12 +102,13 @@ stateDiagram-v2
     Normal --> Visual: v
     Normal --> Search: slash
     Normal --> Command: colon
-    Normal --> Overlay: Ctrl-G, F10, F1, Escape
+    Normal --> Overlay: Ctrl-G, F10, F1, Escape, backtick
     Insert --> Normal: Escape
     Visual --> Normal: Escape or v
     Search --> Normal: confirm or Escape
     Command --> Normal: execute or Escape
-    Command --> Overlay: help, about, t, d, g
+    Command --> Overlay: help, about, t, d, g, console, or leaving it over the console
+    Overlay --> Command: colon in the console
     Overlay --> Normal: close
 ```
 
@@ -118,18 +119,19 @@ stateDiagram-v2
 | Insert | Type glyphs at the cursor; arrows move; Delete/Space/Backspace support edit-like deletion. | Continues in real time. |
 | Search | Type a pattern; Enter jumps to the next match, wrapping round the map; `n`/`N` repeat later. | Continues. |
 | Command | Edit and execute a colon command with history. | Pauses a single-instance game unless `[play] pause_command` is off; a live network session continues. |
-| Overlay | Navigate help, about, telemetry, the profiler report or the [menu](config-menu.md); `/` filters telemetry cards and searches the menu. | Pauses a single-instance game unless `[play] pause_menu` is off; a live network session continues. |
+| Overlay | Navigate help, about, telemetry, the profiler report, the console (§9) or the [menu](config-menu.md); `/` filters telemetry cards and searches the menu. | Pauses a single-instance game unless `[play] pause_menu` is off; a live network session continues. |
 
 Escape in Normal cancels a pending key sequence, or with none pending opens the
 configuration menu as Ctrl-G does, and a held Escape acts once; from any other
-mode it returns to Normal, and in the configuration menu it goes back one level,
-as Android's Back does in the menu the app draws. The router unpauses before it runs a command: an overlay
+mode it returns to Normal, on the command line opened over the console to the
+console, and in the configuration menu it goes back one level, as Android's Back
+does in the menu the app draws. The router unpauses before it runs a command: an overlay
 command (`:help`, `:t`, `:g`) requests the pause again, and a reset pauses until the
 scheduler has rebuilt the run. `MetaSystem` refuses a pause in a live session unless
 every other participant is one of this run's bots (§9), which leaves Command and
 Overlay as non-blocking inspection there. `:pause` (and `p`) is a hold, which no
-mode change ends: under it Normal takes no play, only `:`, the menu, help, `p`,
-quit, the audio toggle and a key's release.
+mode change ends: under it Normal takes no play, only `:`, the menu, help, the
+console, `p`, quit, the audio toggle and a key's release.
 
 Normal, Visual, Insert and Search are play modes: the run's world holds the
 current one (`GameState`), each change is an event the journal records, and a
@@ -137,7 +139,8 @@ replay plays through them. Command and Overlay are the operator's
 (`GameMode.Operator`): they open over the play mode and leave it in place, and the
 world, the journal and a reset never see them, nor the pause a solo game takes for
 them, nor what an overlay shows. Leaving one returns to Normal, recorded when that
-changes the play mode.
+changes the play mode, but for the command line the console opens, which returns
+to the console.
 
 A new game a person plays waits at its first tick in a start hold, the `:pause`
 hold marked `engine.HoldStart`: at launch, on `:n`, the menu's Restart game and Start and a
@@ -156,7 +159,7 @@ Space, Backspace, Delete, an arrow, Home, End, Page Up, Page Down, Insert) witho
 Ctrl or Alt, or a left or right click with the mouse on, off the status bar. Its
 keys go down the same pipe as a held game's, so the operator's work over the wait
 as over the hold and seat nobody: `:` opens the command line on the status bar,
-Ctrl+G the configuration menu, F1 help, Ctrl+S cycles the audio, Escape closes what
+Ctrl+G the configuration menu, F1 help, backtick the console, Ctrl+S cycles the audio, Escape closes what
 is open or, with nothing open, opens the menu, and Ctrl-C, Ctrl-Q or `:q` leaves;
 Tab and the other function keys do nothing there (`Router.Operates`, `App.joinPressed`;
 [Multi-player §5](multi-player.md#5-membership-topology-and-authority-continuity)).
@@ -217,6 +220,7 @@ An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
 | `Ctrl-S` | Cycle audio mute state, from any mode. |
 | `Ctrl-G`, `F10` | Open or close the [configuration menu](config-menu.md), from any mode; Escape in Normal and a left press held on the status bar open it too (§7). |
 | `F1` | Open or close help, from any mode; over another overlay it takes that one's place. |
+| `` ` `` | Open or close the console (§9) in Normal and Visual, and over another overlay in its place; Insert, Search and Command type it. |
 | `a` in Normal | Cycle auto-fire: both weapons → off → main only. |
 | `Esc` | Cancel pending input; in Normal with none, open the [configuration menu](config-menu.md); elsewhere return to Normal (§2). |
 | Arrow keys, `Home`, `End` | Move in the applicable mode. |
@@ -328,7 +332,7 @@ When terminal mouse reporting is enabled:
 | Wheel over a button | Press the button's key for one notch, released at once (§1); never moves. |
 | Left press held on the status bar | Open the [configuration menu](config-menu.md) after `MenuHoldDuration`, as Ctrl-G does; never moves or fires. A release or a drift past `MenuHoldSlack` cells first is nothing. A finger is this press on Android and in the browser, where it may land within 48 dp of the screen's foot, and the menu it opens there is the host's own ([Menu: Android and the browser](config-menu.md#android-and-the-browser)), whose taps never reach the run as presses. The hold, and every overlay, take the pointer with mouse input disabled too, so a phone can enable it again. |
 | Left release | End held fire; release a held button or scrollbar thumb. Passed on from every mode. |
-| Left press in an overlay | Outside its window, act as Escape: the configuration menu goes back a level, the telemetry filter's edit ends, any other overlay closes. On the scrollbar, move the thumb's middle to the press, or take hold where it lands on the thumb. In the configuration menu, select and act on its rows or focus a form field ([Config menu](config-menu.md#navigation)); in telemetry, select a card, or pin the one selected as Enter does. |
+| Left press in an overlay | Outside its window, act as Escape: the configuration menu goes back a level, the telemetry filter's edit ends, any other overlay closes; the command line over the console keeps its text. On the scrollbar, move the thumb's middle to the press, or take hold where it lands on the thumb. In the configuration menu, select and act on its rows or focus a form field ([Config menu](config-menu.md#navigation)); in telemetry, select a card, or pin the one selected as Enter does. |
 | Left drag in an overlay | Carry the scrollbar thumb a press holds, keeping the row it holds under the pointer. |
 | Wheel in an overlay | Scroll its view `OverlayWheelRows` rows a notch, wherever the pointer is; a selected row or card stays selected. |
 | Left drag | Continue moving the cursor. A finger moving while down is this drag on a phone, one per cell. |
@@ -360,7 +364,8 @@ An overlay's own left press, left drag and wheel are separate intents
 (`IntentOverlayPoint`, `IntentOverlayDrag`, `IntentOverlayWheel`) that the router
 resolves against the window it draws, through the same `OverlayGeometry` and
 `tui.ScrollThumb` the renderer draws with, so a press lands on the row, card or
-thumb under it. A wheel tilted left or right, and the side buttons, report as
+thumb under it; Search and Command pass them on for the telemetry filter's edit
+and the command line under the console. A wheel tilted left or right, and the side buttons, report as
 their own buttons and do nothing in a run.
 
 Automatic fire starts in both-weapons mode. `a` in Normal mode or bare `:auto`
@@ -408,6 +413,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:new!`, `:n!` | Reset, clear the initiating operator's telemetry HUD, pins and breakpoints, and return free mouse, auto-fire and speed to their startup values; a live session keeps its host's speed. |
 | `:n <scenario>` | Rebuild the run on another scenario, by installed name or path. A scenario declares its own regions, so a different one needs a run of its own; naming the one already loaded resets in place instead. In a live session only the host may ask, and every guest rebuilds and rejoins with it. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
+| `:console [clear]` | Open the console; `clear` empties it. |
 | `:g`, `:config` | Open the [configuration menu](config-menu.md). |
 | `:content` | Show corpus telemetry. |
 | `:free [on\|off]`, `:f` | Toggle or set free mouse. |
@@ -500,6 +506,20 @@ it. Pinning a card turns the HUD on. The live HUD starts at the viewport's
 top-left and wraps pinned cards into columns. If the viewport cannot fit every
 whole card, a `hidden` line names the omitted groups; the HUD intentionally has
 no focus or navigation mode of its own.
+
+The console, which backtick, `:console` and the menu's Console row open, lists the
+messages the status bar posted and the commands typed, newest at its foot, each
+under the local time it came ([Rendering §9](rendering.md#9-ui-and-debug-projections)). It
+follows its foot as lines come in until it is scrolled off, and again once scrolled
+back: `j`/`k` and the arrows move a row, Page Up and Page Down a page, `g`/`G`
+and Home/End to the oldest and newest, and the wheel and the scrollbar as in any
+overlay. `:` opens the command line under it, which keeps those pages, the wheel
+and the bar: Enter runs the command and Escape drops it, each back to the console
+at its foot, where the command and its answer are. A secret typed (`:join`'s and
+`:host`'s passphrase, `:register`'s and `:login`'s password) echoes as `***` there
+and on the status bar; Up still recalls it whole. The console keeps the last
+`ConsoleHistory` lines in memory: a restart, a scenario change, `:join` and
+`:leave` carry them to the next run, and nothing writes them to disk.
 
 Viewer keys are not entries in this command table or the keymap. A replay, and a
 watched script or bot, reserve `SPACE . , + - h j k l 0 q` for viewer pause, step,
@@ -598,7 +618,7 @@ When adding interaction behavior:
 | Mode routing | `internal/mode/router.go`, `actions.go`, `motions*.go`, `operators.go` |
 | Search | `internal/mode/search.go` |
 | Commands | `internal/mode/commands.go` |
-| Overlays and configuration menu | `internal/mode/overlay.go`, `config_menu.go`, `config_form.go` |
+| Overlays and configuration menu | `internal/mode/overlay.go`, `console.go`, `config_menu.go`, `config_form.go` |
 | Help content | `internal/help` |
 | Macros | `internal/mode/macro.go` |
 | APM | `internal/parameter/apm.go`, `internal/engine/game_state.go`, admission in `internal/engine/scheduler.go` |

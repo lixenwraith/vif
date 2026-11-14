@@ -125,10 +125,10 @@ func (a *App) shareOperator(what string, et event.EventType, payload any) bool {
 	if a.world.LiveSession() {
 		switch {
 		case event.ClassOf(et) != event.ClassBus:
-			a.ctx.SetStatusMessage("Cannot "+what+" in a live session", parameter.StatusNotice)
+			a.ctx.SetStatusMessage("Cannot "+what+" in a live session", parameter.StatusError)
 			return false
 		case !a.world.IsSessionCoordinator():
-			a.ctx.SetStatusMessage("Only the host can "+what+" in a live session", parameter.StatusNotice)
+			a.ctx.SetStatusMessage("Only the host can "+what+" in a live session", parameter.StatusError)
 			return false
 		}
 		a.ctx.PushCrossing(et, payload)

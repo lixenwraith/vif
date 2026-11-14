@@ -97,7 +97,7 @@ func (h *browserHost) Blocked() time.Duration              { return h.host.Block
 func (h *browserHost) CellAspect() vmath.Aspect            { return h.aspect }
 func (h *browserHost) Events() <-chan terminal.Event       { return h.host.Events() }
 func (h *browserHost) SetPointerMode(enabled, motion bool) { h.host.SetPointerMode(enabled, motion) }
-func (h *browserHost) Covered() bool                       { return h.host.Covered() }
+func (h *browserHost) Covered() int                        { return h.host.Covered() }
 func (h *browserHost) Cell() float64                       { return h.host.Cell() }
 func (h *browserHost) Away() <-chan bool                   { return h.host.Away() }
 

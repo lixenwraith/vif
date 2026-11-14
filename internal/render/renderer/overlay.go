@@ -119,6 +119,8 @@ type OverlayRenderer struct {
 	console *render.Console
 
 	exact bool // an emulator in 256 colors: the window keeps its own colors, see Render
+
+	consoleView consoleView
 }
 
 // NewOverlayRenderer creates a new overlay renderer
@@ -148,6 +150,10 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	}
 	content := r.gameCtx.GetOverlayContent()
 	if ctx.NativeMenu && content != nil && content.Layout == core.OverlayLayoutMenu {
+		return
+	}
+	if content != nil && content.Layout == core.OverlayLayoutConsole {
+		r.renderConsole(buf, g)
 		return
 	}
 

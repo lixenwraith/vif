@@ -79,6 +79,9 @@ type wiring struct {
 	// unjournaled, not unstarted.
 	journalCarried bool
 
+	// console is the console's lines the run this one replaces listed
+	console []engine.ConsoleLine
+
 	// log is a secondary runtime's handle: a seat's or a staging world's is tagged,
 	// a replay copy's muted until presented. Nil takes the process's or, driven, its own.
 	log *vlog.Log
@@ -177,6 +180,7 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	c.Notice, c.wiring.dialled, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
 	c.Membership.Passphrase, c.wiring.membership.Door = next.Passphrase, next.Door
 	c.Journal, c.wiring.journalCarried = next.Journal, next.Journal
+	c.wiring.console = next.Console
 	c.wiring.membership.JoinPress, c.Resources.Provided = next.Press, next.provided
 	if next.Scenario != "" {
 		c.Resources.Scenario, c.Resources.Embedded = next.Scenario, false

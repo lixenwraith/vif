@@ -712,7 +712,7 @@ func (s *MetaSystem) handleAboutRequest() {
 // the change; each system applies it to its own domain (audio → AudioSystem)
 func (s *MetaSystem) handlePauseRequest(paused bool) {
 	if paused && !s.world.Session().Pausable() {
-		s.ctx.SetStatusMessage("Pause is unavailable in a live session", parameter.StatusNotice)
+		s.ctx.SetStatusMessage("Pause is unavailable in a live session", parameter.StatusError)
 		return
 	}
 	if !s.ctx.TimeCtl.SetPaused(paused) {
@@ -815,7 +815,7 @@ func (s *MetaSystem) setScale(scale engine.TimeScale) bool {
 // rate move through their single owner here
 func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 	if s.world.Session().Live {
-		s.ctx.SetStatusMessage("Step control is unavailable in a live session", parameter.StatusNotice)
+		s.ctx.SetStatusMessage("Step control is unavailable in a live session", parameter.StatusError)
 		return
 	}
 	if p == nil || p.Off {
@@ -853,7 +853,7 @@ func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 	case "event", "ev":
 		et, ok := event.GetEventType(p.Event)
 		if !ok || et == event.EventNone {
-			s.ctx.SetStatusMessage("Unknown event: "+p.Event, parameter.StatusNotice)
+			s.ctx.SetStatusMessage("Unknown event: "+p.Event, parameter.StatusError)
 			return
 		}
 		bs.Mode = engine.StepEvent

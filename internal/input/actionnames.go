@@ -25,6 +25,7 @@ func buildActionRegistry() map[string]KeyEntry {
 		"config_menu":        {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentConfigMenu},
 		"help":               {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentHelp},
 		"pause":              {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentPause},
+		"console":            {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentConsole},
 
 		// Basic motions
 		"motion_left":             {BehaviorMotion, MotionLeft, SpecialNone, ModeTargetNone, IntentNone},

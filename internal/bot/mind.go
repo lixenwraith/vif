@@ -634,14 +634,14 @@ func compileIntent(p *intentPayload) (intentChoice, error) {
 const releaseAction = "release"
 
 // intentFor is input.IntentFor with the release of a key the bot holds. It refuses the
-// command line and the menu, which offers the same operations: a bot plays and issues
-// no commands.
+// command line, the menu, which offers the same operations, and the console, which
+// opens the command line: a bot plays and issues no commands.
 func intentFor(name string, count int, char string) (input.Intent, error) {
 	if name != releaseAction {
 		intent, err := input.IntentFor(name, count, char)
-		if err == nil && (intent.Type == input.IntentConfigMenu || intent.Type == input.IntentPause ||
+		if err == nil && (intent.Type == input.IntentConfigMenu || intent.Type == input.IntentPause || intent.Type == input.IntentConsole ||
 			intent.Type == input.IntentModeSwitch && intent.ModeTarget == input.ModeTargetCommand) {
-			err = fmt.Errorf("intent %q opens the command line or the menu, or pauses; a bot issues no commands", name)
+			err = fmt.Errorf("intent %q opens the command line, the menu or the console, or pauses; a bot issues no commands", name)
 		}
 		return intent, err
 	}

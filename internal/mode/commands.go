@@ -40,7 +40,7 @@ var commandNames = []string{
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
 	"host", "join", "leave", "relay", "takeover", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps",
-	"register", "login", "logout",
+	"register", "login", "logout", "console",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -53,8 +53,9 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	if command == "" {
 		return CommandResult{Continue: true}
 	}
-	// The answer a command that says nothing else leaves; one that answers replaces it
-	ctx.SetStatusMessage(":"+command, parameter.StatusNotice)
+	// The answer a command that says nothing else leaves; one that answers replaces it.
+	// The console keeps it as the player's input, so no secret typed in it stays.
+	ctx.SetStatusMessage(":"+echoed(command), parameter.StatusInput)
 
 	// Parse command into parts (space-separated)
 	parts := strings.Fields(command)
@@ -113,6 +114,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleDebugCommand(ctx, args)
 	case "h", "help", "?":
 		return handleHelpCommand(ctx)
+	case "console":
+		return handleConsoleCommand(ctx, args)
 	case "r", "region":
 		return handleRegionCommand(ctx, args)
 	case "replay":
@@ -175,7 +178,7 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 	// A replay's viewer inspects a world the recording authors
 	if ctx.Viewer.Load() {
 		switch cmd {
-		case "menu", "g", "config", "h", "help", "?", "about", "t", "telemetry", "hud", "fps", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
+		case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
 		default:
 			return "Unavailable in a replay"
 		}
@@ -348,7 +351,34 @@ func reportLogState(ctx *engine.GameContext) {
 }
 
 func setCommandError(ctx *engine.GameContext, message string) {
-	ctx.SetStatusMessage(message, parameter.StatusNotice)
+	ctx.SetStatusMessage(message, parameter.StatusError)
+}
+
+// echoed is a command as the status line and the console show it, every word that
+// carries a secret replaced: a :join's passphrase, a :host's after its passphrase
+// word, a :register's or :login's password. The history the line recalls keeps them.
+func echoed(command string) string {
+	parts := strings.Fields(command)
+	from := len(parts)
+	switch {
+	case len(parts) == 0:
+		return command
+	case parts[0] == "join":
+		from = 2
+	case parts[0] == "register", parts[0] == "login":
+		from = 3
+	case parts[0] == "host":
+		if i := slices.Index(parts, "passphrase"); i > 0 {
+			from = i + 1
+		}
+	}
+	if from >= len(parts) {
+		return command
+	}
+	for i := from; i < len(parts); i++ {
+		parts[i] = parameter.ConsoleSecret
+	}
+	return strings.Join(parts, " ")
 }
 
 // sessionsUnavailable refuses a session, scenario or journal command in a run

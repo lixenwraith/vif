@@ -41,9 +41,10 @@ type menuPresentation interface {
 }
 
 // coveredPresentation is one a keyboard can cover: while it does, the host shows
-// the left half of the status bar's bottom row again above the keyboard, and the
-// bar keeps its input to that half
-type coveredPresentation interface{ Covered() bool }
+// the left half of the status bar's bottom row again above the keyboard, the bar
+// keeps its input to that half, and the console stays above both. Covered is the
+// grid's rows at the foot they hide, 0 with the keyboard down.
+type coveredPresentation interface{ Covered() int }
 
 // pacedPresentation is one that cannot show frames as fast as the run draws them:
 // FrameFloor is the shortest frame interval it keeps up with, zero for any

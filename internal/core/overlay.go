@@ -4,10 +4,11 @@ package core
 type OverlayLayout uint8
 
 const (
-	OverlayLayoutCards OverlayLayout = iota // Masonry cards (telemetry)
-	OverlayLayoutDoc                        // Single-column sections (help)
-	OverlayLayoutAbout                      // Logo and info panel
-	OverlayLayoutMenu                       // Live configuration
+	OverlayLayoutCards   OverlayLayout = iota // Masonry cards (telemetry)
+	OverlayLayoutDoc                          // Single-column sections (help)
+	OverlayLayoutAbout                        // Logo and info panel
+	OverlayLayoutMenu                         // Live configuration
+	OverlayLayoutConsole                      // The messages and commands of the run, at the screen's edge
 )
 
 // OverlayHelpTitle heads the help overlay, which the help key closes by it

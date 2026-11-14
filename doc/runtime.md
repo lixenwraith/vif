@@ -977,7 +977,8 @@ was given and what the restart names. A scenario change, a restart and a `:join`
 the run's bots again, read when the restart is asked for, since a session closing
 ends them before the switch; a bot told to leave is not among them, and a removal
 by the host seats none.
-Everything operator-owned restarts with it. The screen does not: every run presents
+Everything operator-owned restarts with it but the console's lines, which the next
+run takes (`restartRequest.Console`). The screen does not: every run presents
 on the platform `Host`'s `Presentation`, handed to `Run` beside its `Config`, or on
 the one terminal `Run` opens for the process where that `Host` names none, so a
 replacement redraws the screen rather than leaving and re-entering it. See

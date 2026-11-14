@@ -107,6 +107,7 @@ func runScenario(cfg runConfig, rejoin bool) (next *restartRequest, err error) {
 	if next != nil {
 		next.Play = a.livePlay()
 		next.Journal = a.scribe.Journaling()
+		next.Console, _ = a.ctx.ConsoleLines(nil)
 		// A seat's journal closes with this run, which is the last its holder hears of it
 		for _, line := range a.seatJournalNotices() {
 			next.Notice = joinNotice(next.Notice, line)
@@ -649,8 +650,13 @@ func (a *App) renderContext() render.RenderContext {
 		cursorValid      bool
 		out              render.RenderContext
 		menu             []byte
+		covered          int
 	)
+	if p, ok := a.pres.(coveredPresentation); ok {
+		covered = p.Covered()
+	}
 	a.world.RunSafe(func() {
+		a.ctx.SetKeyboardRows(covered)
 		a.router.RefreshConfigMenu()
 		if a.menuHost != nil {
 			menu = a.router.MenuSnapshot()
@@ -671,9 +677,7 @@ func (a *App) renderContext() render.RenderContext {
 	if a.startScreen {
 		out.StartHelp = a.startHelpLabel()
 	}
-	if p, ok := a.pres.(coveredPresentation); ok {
-		out.StatusCovered = p.Covered()
-	}
+	out.StatusCovered = covered > 0
 	// A pause made for an away player is not theirs, and a game waiting for its start
 	// has not begun: either is drawn as it is, the picture Android's start screen
 	// lifts off at its tap

@@ -69,7 +69,7 @@ type Host struct {
 	keys    hostkey.Report
 	barRows int           // the bottom rows a finger still presses with the pointer off
 	pointer atomic.Bool   // the run takes pointer events
-	covered atomic.Bool   // a keyboard covers the page's bottom rows
+	covered atomic.Int32  // the grid's rows at the foot a keyboard and the strip above it hide
 	cell    atomic.Uint64 // the zoom, float64 bits
 	finger  bool          // a finger's press was taken; the event loop's alone
 	fitted  chan struct{} // closed once the page has fitted its grid to the zoom
@@ -158,9 +158,9 @@ func (h *Host) SetPointerMode(enabled, motion bool) {
 	js.Global().Call(jsPointer, enabled, motion)
 }
 
-// Covered reports a keyboard over the page's bottom rows, where the page draws the
-// last row's left half again above it
-func (h *Host) Covered() bool { return h.covered.Load() }
+// Covered is the grid's rows at the foot a keyboard hides with the strip the page
+// draws above it, the last row's left half again; 0 with no keyboard
+func (h *Host) Covered() int { return int(h.covered.Load()) }
 
 // HasMenu reports whether the page draws the configuration menu itself: its worker
 // defines vifMenu. An older page keeps the tui menu.
@@ -243,7 +243,7 @@ func (h *Host) handle(_ js.Value, args []js.Value) any {
 			h.post(ev)
 		}
 	case "covered":
-		h.covered.Store(msg.Get("covered").Truthy())
+		h.covered.Store(int32(max(msg.Get("rows").Int(), 0)))
 	case "zoom":
 		h.cell.Store(math.Float64bits(msg.Get("cell").Float()))
 	case "resize":

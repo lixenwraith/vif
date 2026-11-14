@@ -155,12 +155,19 @@ void main() {
         return { cols: half, row: d.rows - 1, x: ox, y: bottom - 2 * d.ch, w: 2 * half * d.cw, h: 2 * d.ch };
     }
 
-    // setCovered keeps the device pixels a keyboard covers, tells Go when one comes or
-    // goes, and draws the strip where it now belongs
+    // setCovered keeps the device pixels a keyboard covers, tells Go the grid's rows
+    // it and the strip hide, which the console stays above, and draws the strip where
+    // it now belongs; fit calls it again as the grid changes under a keyboard
+    let coveredRows = 0;
     function setCovered(px) {
         px = Math.max(0, px);
+        const ch = drawer.ch || 1;
+        const hidden = px ? Math.min(rows, Math.max(1, rows - Math.floor((canvas.height - px - 2 * ch) / ch))) : 0;
+        if (hidden !== coveredRows) {
+            coveredRows = hidden;
+            send({ type: 'covered', rows: hidden });
+        }
         if (px === covered) return;
-        if ((covered > 0) !== (px > 0)) send({ type: 'covered', covered: px > 0 });
         covered = px;
         drawer.draw();
     }

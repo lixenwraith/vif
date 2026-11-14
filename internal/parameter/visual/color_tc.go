@@ -2,6 +2,7 @@ package visual
 
 import (
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // color.RGB color definitions for all game systems
@@ -228,6 +229,11 @@ var (
 	RgbCommandInputText   = color.White
 	RgbStatusMessageText  = color.LightGray
 
+	// The console's stamps, and its edge's line and title
+	RgbConsoleStamp = color.Gray
+	RgbConsoleEdge  = color.Cyan
+	RgbConsoleTitle = color.Yellow
+
 	// Wall colors
 	RgbWallStone = color.Taupe
 
@@ -318,4 +324,15 @@ var RgbPeerCursor = [...]color.RGB{
 	color.LightSkyBlue,
 	color.Sienna,
 	color.Silver,
+}
+
+// RgbConsoleKind is a message's colour in the console by its kind: what was typed
+// apart from what answered it, and an error or alert apart from both
+var RgbConsoleKind = [parameter.StatusKindCount]color.RGB{
+	parameter.StatusNotice:   RgbStatusMessageText,
+	parameter.StatusProgress: RgbStatusMessageText,
+	parameter.StatusInput:    color.SkyTeal,
+	parameter.StatusError:    color.Salmon,
+	parameter.StatusAlert:    color.Orange,
+	parameter.StatusAnnounce: color.Orchid,
 }

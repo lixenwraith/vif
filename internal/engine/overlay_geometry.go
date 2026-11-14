@@ -61,6 +61,27 @@ func ComputeOverlayGeometry(screenW, screenH int) OverlayGeometry {
 	return g
 }
 
+// ComputeConsoleGeometry places the console: a band across the whole screen, its
+// share of the rows above the status bar, which stays in view under it with the
+// command line, or above the covered rows a touch host's keyboard and its strip hide.
+// The edge row toward the map carries the title and the hint; the band's last column
+// is its scrollbar.
+func ComputeConsoleGeometry(screenW, screenH, covered int) OverlayGeometry {
+	avail := screenH - max(parameter.StatusRows, covered)
+	rows := min(max(int(float64(avail)*parameter.ConsoleShare), parameter.ConsoleMinRows)+1, avail)
+	if screenW < parameter.ConsoleMinWidth || rows < 2 {
+		return OverlayGeometry{}
+	}
+	return OverlayGeometry{
+		X: 0, Y: avail - rows, W: screenW, H: rows,
+		ContentX: 1, ContentY: 1,
+		ContentW: screenW - 3, ContentH: rows - 1,
+		ScrollX: screenW - 1, ScrollW: 1,
+		HintY: 0,
+		Valid: true,
+	}
+}
+
 // ListH is the content rows a menu or form list takes; the rest explain its selection
 func (g OverlayGeometry) ListH() int { return max(g.ContentH-parameter.OverlayMenuDetailRows, 1) }
 

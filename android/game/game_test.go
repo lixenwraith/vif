@@ -148,6 +148,27 @@ func TestTheStatusBarTakesATapWithThePointerOff(t *testing.T) {
 	}
 }
 
+// TestTheKeyboardHidesTheRowsUnderItAndTheStrip: the rows the run keeps the console
+// above are those reaching into the keyboard's pixels or the strip over them, the
+// grid stretched over the view; no keyboard hides none and a whole one every row.
+func TestTheKeyboardHidesTheRowsUnderItAndTheStrip(t *testing.T) {
+	v := testView(t, false, 2.625)
+	v.setGrid(1008, 2244)
+	_, rows := v.Size()
+	row := 2244 / float64(rows)
+	for _, px := range []int32{0, 1, 900, 1300, 2244} {
+		v.covered.Store(px)
+		hidden := v.Covered()
+		top := 2244 - float64(px) - stripRows*row // the strip's top edge
+		switch {
+		case px == 0 && hidden != 0, px == 2244 && hidden != rows:
+			t.Fatalf("a keyboard of %d px hides %d of %d rows", px, hidden, rows)
+		case px > 0 && px < 2244 && (float64(rows-hidden)*row > top+1e-9 || float64(rows-hidden+1)*row <= top):
+			t.Fatalf("a keyboard of %d px hides %d of %d rows, the strip starting at %.1f px", px, hidden, rows, top)
+		}
+	}
+}
+
 // TestAPinchZoomsTheCellWithinBounds: a pinch scales the cell in CellStep steps,
 // and the grid the same pixels hold follows; it stops at CellMost, and short of
 // CellLeast at the atlas, which a 420 dpi phone reaches at 9.5 dp.

@@ -226,7 +226,11 @@ Print the module version and commit a package should report
 .fi
 .SH IN-GAME MENU
 Ctrl-G or F10, Escape in normal mode, :menu (:g, :config) or a press held on the
-status bar opens the menu, and F1 or :help the help. Select a page or row with
+status bar opens the menu, F1 or :help the help, and the backtick key (\(ga) or
+:console the console: this run's messages and commands, newest at its foot, each
+with its time. There j/k, PageUp/PageDown, g/G and the wheel scroll, : opens the
+command line under it, whose Enter and Escape come back to it, and the backtick or
+Escape closes it; :console clear empties it. Select a page or row with
 Up/Down or j/k; section titles are skipped. Left/Right or h/l changes values;
 Enter/Space chooses. A press
 selects a row, and on the selected row acts as Enter. / searches every page: the
@@ -241,7 +245,8 @@ work from a keyboard.
 .PP
 Game pauses the game until Resume, as :pause (:p) or p does, restarts it from its
 scenario's first tick, as :n does, and sets its speed; in a session only the host
-can, and every participant follows at the same tick. A replay adds its restart.
+can, and every participant follows at the same tick. Its Console row opens the
+console. A replay adds its restart.
 .PP
 Scenarios lists the scenarios the configuration roots hold, each by its name,
 or by its path below scenario/ where the name reaches another, the running one
@@ -287,12 +292,13 @@ to the vif.toml it read when that is in the user root or the \-config-dir root,
 else to the user root's, created at the first change from the one read. Every
 other change lasts the run.
 A game that can pause, solo or a host whose only other participants are its own
-bots, pauses while the menu is open unless Pause in menu is off, and while the
-command line is open unless Pause in command line is off; the menu's title says
-whether the game is paused or running. Any other session keeps running. The menu
+bots, pauses while the menu or the console is open unless Pause in menu is off,
+and while the command line is open unless Pause in command line is off; the menu's
+title says whether the game is paused or running. Any other session keeps running. The menu
 shares the command line's replay and session restrictions. The keymap binds
-config_menu and help in normal_keys, text_keys and overlay_keys, and pause in
-normal; a key names one action, and an action can have several keys.
+config_menu and help in normal_keys, text_keys and overlay_keys, pause in normal,
+and console in normal and overlay; a key names one action, and an action can have
+several keys.
 .SH FILES
 .TP
 .I $XDG_CONFIG_HOME/vif

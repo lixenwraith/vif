@@ -39,23 +39,66 @@ const (
 // every terminal font has, which says the state without its color
 var AudioText = [4]string{" X ", " S ", " M ", " O "}
 
-// StatusKind ranks a status message. One replaces the message shown unless that one
-// outranks it and has been up for less than its kind's Min; Shown is how long a
-// message stays. Both are wall time, so a message is read at the rate it was written.
+// StatusKind ranks a status message and colours it in the console. One replaces the
+// message shown unless that one outranks it and has been up for less than its kind's
+// Min; Shown is how long a message stays. Both are wall time, so a message is read
+// at the rate it was written.
 type StatusKind uint8
 
 const (
 	StatusNotice   StatusKind = iota // an answer to the player, or what the run reports
 	StatusProgress                   // what the run is waiting on, until it says otherwise
+	StatusInput                      // a command the player ran, as it was typed
+	StatusError                      // a command refused or failed: an answer, still
 	StatusAlert                      // a failure or session change the player did not ask about
+	StatusAnnounce                   // what a server tells its players; nothing posts one yet
 	StatusKindCount
 )
 
 var StatusKinds = [StatusKindCount]struct{ Min, Shown time.Duration }{
 	StatusNotice:   {Shown: 5 * time.Second},
 	StatusProgress: {Shown: NetworkSessionRequestTimeout}, // the longest wait a run reports on
+	StatusInput:    {Shown: 5 * time.Second},
+	StatusError:    {Shown: 5 * time.Second},
 	StatusAlert:    {Min: 3 * time.Second, Shown: 8 * time.Second},
+	StatusAnnounce: {Min: 3 * time.Second, Shown: 8 * time.Second},
 }
+
+// The console backtick opens is a band across the screen right above the status bar:
+// the messages the run posted and the commands it ran, newest at its foot, each
+// stamped with its wall time
+const (
+	// ConsoleShare is the share of the rows above the status bar the console takes;
+	// ConsoleMinRows the fewest message rows it drops, a shorter screen giving it all
+	ConsoleShare   = 0.5
+	ConsoleMinRows = 3
+
+	// ConsoleHistory is the messages kept, the oldest dropped first
+	ConsoleHistory = 512
+
+	// ConsoleStamp is a message's wall time as its row starts with it
+	ConsoleStamp = "15:04:05"
+
+	// ConsoleTitle names the console on its edge, ConsoleEdgeInset cells of rule from
+	// its start, as the hint is from its end; ConsoleEdgeGap is the least rule between
+	ConsoleTitle     = "CONSOLE"
+	ConsoleEdgeInset = 2
+	ConsoleEdgeGap   = 4
+
+	// ConsoleMinWidth is the narrowest screen the console draws on: a stamp and a word
+	ConsoleMinWidth = 24
+
+	// ConsoleFollow is the console's scroll while it shows its newest row and keeps
+	// to it as messages come in; any offset short of the foot holds still
+	ConsoleFollow = 1<<31 - 1
+
+	// ConsoleRepeat is what a message posted again in a row ends with: the count
+	ConsoleRepeat = " (x%d)"
+
+	// ConsoleSecret stands for a word of a command that carries a passphrase or a
+	// password, as the status line and the console echo it; its length is none of theirs
+	ConsoleSecret = "***"
+)
 
 // Status Bar & Modes
 const (
@@ -295,6 +338,18 @@ var (
 		"ESC close",
 	}
 	OverlayHintsAbout = []string{"ESC close"}
+	// The console's, on its edge toward the map
+	OverlayHintsConsole = []string{
+		"` close · j/k scroll · PgUp/PgDn page · g/G oldest/newest · : command",
+		"` close · j/k scroll · : command",
+		"` close · : command",
+		"` close",
+	}
+	// The console's while the command line under it takes the keys
+	OverlayHintsConsoleCommand = []string{
+		"Enter run · Esc back · PgUp/PgDn page · wheel scroll",
+		"Enter run · Esc back",
+	}
 )
 
 // Pinned Stats HUD

@@ -83,6 +83,7 @@ const (
 	IntentOverlayDrag  // Left drag while an overlay has the keys: X, Y
 	IntentOverlayWheel // Wheel step while an overlay has the keys: X, Y, ScrollDir
 	IntentPause        // p - :pause, the pause only another ends
+	IntentConsole      // ` - the console of messages and commands, opened or closed
 )
 
 // MotionOp identifies motion algorithm
