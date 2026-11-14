@@ -23,7 +23,7 @@ const (
 	IntentOperatorCharMotion // d + f/t + char (e.g., df;)
 
 	// Normal mode special commands
-	IntentSpecial     // x, D, n, N, ;, ,
+	IntentSpecial     // x, D, C, r, n, N, *, #, ;, ,
 	IntentNuggetJump  // Tab
 	IntentGoldJump    // Shift+Tab
 	IntentFireMain    // Enter in Normal mode
@@ -127,6 +127,7 @@ const (
 	MotionColoredGlyphLeft             // gh + color
 	MotionColoredGlyphUp               // gk + color
 	MotionColoredGlyphDown             // gj + color
+	MotionLastGlyph                    // A: the line's last glyph, never $'s step past it
 )
 
 // OperatorOp identifies operator type
@@ -141,13 +142,16 @@ const (
 type SpecialOp uint8
 
 const (
-	SpecialNone          SpecialOp = iota
-	SpecialDeleteChar              // x
-	SpecialDeleteToEnd             // D
-	SpecialSearchNext              // n
-	SpecialSearchPrev              // N
-	SpecialRepeatFind              // ;
-	SpecialRepeatFindRev           // ,
+	SpecialNone              SpecialOp = iota
+	SpecialDeleteChar                  // x
+	SpecialDeleteToEnd                 // D
+	SpecialSearchNext                  // n
+	SpecialSearchPrev                  // N
+	SpecialRepeatFind                  // ;
+	SpecialRepeatFindRev               // ,
+	SpecialReplaceChar                 // r + char
+	SpecialSearchWordForward           // *
+	SpecialSearchWordBack              // #
 )
 
 // ModeTarget identifies mode switch destination
@@ -179,10 +183,10 @@ type Intent struct {
 	Motion        MotionOp
 	Operator      OperatorOp
 	Special       SpecialOp
-	ModeTarget    ModeTarget
+	ModeTarget    ModeTarget // A switch's mode, or the one a motion, operator or special enters after
 	ScrollDir     ScrollDir
 	Count         int  // Effective count (minimum 1)
-	Char          rune // Target char for f/t motions or typed char
+	Char          rune // Target char of f/t, the glyph r types, or a typed char
 	X, Y          int  // Pointer cell of a mouse intent, in terminal coordinates
 	MapCell       bool // X, Y name a map cell instead, as a bot's pointer does
 	Touch         bool // A left press a finger made, on a host that reports one

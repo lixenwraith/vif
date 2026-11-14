@@ -49,9 +49,11 @@ plays it, `vif -s vimtutor -check` validates it with its corpus. What it stands 
   between blocks; where no slot holds it, and in every scenario that leaves the
   key unset, line by line, spread as before.
 - `EventKeyCaptureRequest` takes `modes` and `idle`: the tutor captures `s` and
-  `S`, and in its last lesson `a p o O u m y c r` as well, in Normal and Visual
-  with nothing pending, so `fa` and `qa` still take their letter and Insert types
-  it.
+  `S`, and in its last lesson `a p o O u m y` as well, in Normal and Visual with
+  nothing pending, so `fa` and `qa` still take their letter and Insert types it.
+- The entry's `[keymap.normal]` binds `a` to `mode_append` and `p` to nothing for
+  the run, over the player's keymap
+  ([Input §10](input-and-modes.md#10-keymap-override-files)).
 
 A lesson is a state under `Lesson` whose own exit clears it (`Clear`: every glyph,
 the heading and the answer, under a white flash; the parent's exit runs only when
@@ -66,7 +68,8 @@ have somewhere to go.
 ## 3. The next round
 
 - **More lessons**: `o O [ ]`, `gl` and the colour markers, `q` and `@` macros,
-  `d` with a motion and `D`, `v`, `N` and `M m` practised rather than told.
+  `d` with a motion and `D`, `v`, `N` and `M m` practised rather than told, and
+  the keys vif now plays as vim does: `c cc C`, `a A I`, `r`, `* #` and `.`.
 - **Re-layout on resize**: a lesson laid for one map stays where it was laid; a
   transition on `EventScreenResize` through a relay state would lay it again,
   since a state re-entering itself runs no entry actions.
@@ -79,11 +82,12 @@ have somewhere to go.
 
 ## 4. Decisions taken
 
-- The vim keys vif lacks or reads its own way are not added in code for now: the
-  tutor captures them, answers each press with the key's meaning here, and says
-  they cannot be tutored yet. The todo item on the cheap ones (`c`, `*` `#`, `A`
-  `I`, `.`, `r`) and on the tutor overriding `a` and `p`, which have nothing to
-  fire or pause there, is the next step.
+- The cheap vim keys are in code: `c cc C`, `A I`, `r`, `* #` and `.`, with vim's
+  `a` as `mode_append`, which no default key binds. The tutor gives `a` and `p`
+  their vim reading through a scenario keymap over the player's, rather than a
+  capture answering `a` by asking for Insert (kept in the todo). Its last lesson
+  still captures `a` and the keys vif reads its own way, `p o O u m y`, and answers
+  each press; their second round, with Visual mode's part, is a todo item.
 - The practice text is the scenario's own corpus, not the run's, and block
   placement is the tutor's choice: the main scenario and `td` spread lines as
   before.

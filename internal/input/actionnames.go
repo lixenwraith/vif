@@ -69,14 +69,16 @@ func buildActionRegistry() map[string]KeyEntry {
 		"motion_column_up":   {BehaviorMotion, MotionColumnUp, SpecialNone, ModeTargetNone, IntentNone},
 		"motion_column_down": {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
 
-		// Char-wait (f/F/t/T)
+		// Char-wait (f/F/t/T); r's char completes a special in place of a motion
 		"char_find_forward": {BehaviorCharWait, MotionFindForward, SpecialNone, ModeTargetNone, IntentNone},
 		"char_find_back":    {BehaviorCharWait, MotionFindBack, SpecialNone, ModeTargetNone, IntentNone},
 		"char_till_forward": {BehaviorCharWait, MotionTillForward, SpecialNone, ModeTargetNone, IntentNone},
 		"char_till_back":    {BehaviorCharWait, MotionTillBack, SpecialNone, ModeTargetNone, IntentNone},
+		"char_replace":      {BehaviorCharWait, MotionNone, SpecialReplaceChar, ModeTargetNone, IntentNone},
 
-		// Operator
+		// Operators; c deletes as d does, then enters Insert
 		"operator_delete": {BehaviorOperator, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
+		"operator_change": {BehaviorOperator, MotionNone, SpecialNone, ModeTargetInsert, IntentNone},
 
 		// Prefix keys
 		"prefix_g":          {BehaviorPrefix, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
@@ -88,19 +90,29 @@ func buildActionRegistry() map[string]KeyEntry {
 		"marker_glyph_up":    {BehaviorMarkerStart, MotionColoredGlyphUp, SpecialNone, ModeTargetNone, IntentNone},
 		"marker_glyph_down":  {BehaviorMarkerStart, MotionColoredGlyphDown, SpecialNone, ModeTargetNone, IntentNone},
 
-		// Mode switches
-		"mode_insert":  {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetInsert, IntentNone},
-		"mode_visual":  {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetVisual, IntentNone},
-		"mode_search":  {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetSearch, IntentNone},
-		"mode_command": {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetCommand, IntentNone},
+		// Mode switches; a motion naming a mode enters it once moved. vim's append
+		// is no default key's, since a cycles auto fire: a keymap or scenario binds it.
+		"mode_insert":              {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetInsert, IntentNone},
+		"mode_visual":              {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetVisual, IntentNone},
+		"mode_search":              {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetSearch, IntentNone},
+		"mode_command":             {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetCommand, IntentNone},
+		"mode_append":              {BehaviorMotion, MotionRight, SpecialNone, ModeTargetInsert, IntentNone},
+		"mode_insert_first_non_ws": {BehaviorMotion, MotionFirstNonWS, SpecialNone, ModeTargetInsert, IntentNone},
+		"mode_insert_line_end":     {BehaviorMotion, MotionLastGlyph, SpecialNone, ModeTargetInsert, IntentNone},
 
 		// Special commands
-		"special_delete_char":     {BehaviorSpecial, MotionNone, SpecialDeleteChar, ModeTargetNone, IntentNone},
-		"special_delete_to_end":   {BehaviorSpecial, MotionNone, SpecialDeleteToEnd, ModeTargetNone, IntentNone},
-		"special_search_next":     {BehaviorSpecial, MotionNone, SpecialSearchNext, ModeTargetNone, IntentNone},
-		"special_search_prev":     {BehaviorSpecial, MotionNone, SpecialSearchPrev, ModeTargetNone, IntentNone},
-		"special_repeat_find":     {BehaviorSpecial, MotionNone, SpecialRepeatFind, ModeTargetNone, IntentNone},
-		"special_repeat_find_rev": {BehaviorSpecial, MotionNone, SpecialRepeatFindRev, ModeTargetNone, IntentNone},
+		"special_delete_char":         {BehaviorSpecial, MotionNone, SpecialDeleteChar, ModeTargetNone, IntentNone},
+		"special_delete_to_end":       {BehaviorSpecial, MotionNone, SpecialDeleteToEnd, ModeTargetNone, IntentNone},
+		"special_search_next":         {BehaviorSpecial, MotionNone, SpecialSearchNext, ModeTargetNone, IntentNone},
+		"special_search_prev":         {BehaviorSpecial, MotionNone, SpecialSearchPrev, ModeTargetNone, IntentNone},
+		"special_repeat_find":         {BehaviorSpecial, MotionNone, SpecialRepeatFind, ModeTargetNone, IntentNone},
+		"special_repeat_find_rev":     {BehaviorSpecial, MotionNone, SpecialRepeatFindRev, ModeTargetNone, IntentNone},
+		"special_change_to_end":       {BehaviorSpecial, MotionNone, SpecialDeleteToEnd, ModeTargetInsert, IntentNone},
+		"special_search_word_forward": {BehaviorSpecial, MotionNone, SpecialSearchWordForward, ModeTargetNone, IntentNone},
+		"special_search_word_back":    {BehaviorSpecial, MotionNone, SpecialSearchWordBack, ModeTargetNone, IntentNone},
+
+		// . completes the last change again
+		"repeat_change": {BehaviorRepeat, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
 
 		// Actions
 		"fire_main":           {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentFireMain},
@@ -157,7 +169,7 @@ func IntentFor(name string, count int, char string) (Intent, error) {
 	if count == 0 {
 		count = 1
 	}
-	intent := Intent{Count: count, Command: name}
+	intent := Intent{Count: count, Command: name, ModeTarget: entry.ModeTarget}
 	switch entry.Behavior {
 	case BehaviorMotion:
 		intent.Type, intent.Motion = IntentMotion, entry.Motion
@@ -165,14 +177,19 @@ func IntentFor(name string, count int, char string) (Intent, error) {
 		if utf8.RuneCountInString(char) != 1 {
 			return Intent{}, fmt.Errorf("intent %q requires one char", name)
 		}
-		intent.Type, intent.Motion = IntentCharMotion, entry.Motion
+		intent.Type, intent.Motion, intent.Special = IntentCharMotion, entry.Motion, entry.Special
+		if entry.Special != SpecialNone {
+			intent.Type = IntentSpecial
+		}
 		intent.Char, _ = utf8.DecodeRuneInString(char)
 	case BehaviorModeSwitch:
-		intent.Type, intent.ModeTarget = IntentModeSwitch, entry.ModeTarget
+		intent.Type = IntentModeSwitch
 	case BehaviorSpecial:
 		intent.Type, intent.Special = IntentSpecial, entry.Special
 	case BehaviorSystem, BehaviorAction:
 		intent.Type = entry.IntentType
+	case BehaviorRepeat:
+		return Intent{}, fmt.Errorf("intent action %q repeats the parser's last change; name that change", name)
 	default:
 		return Intent{}, fmt.Errorf("intent action %q is a parser prefix; use command or a complete semantic action", name)
 	}

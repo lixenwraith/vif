@@ -24,6 +24,7 @@ const (
 	BehaviorSystem
 	BehaviorAction
 	BehaviorMarkerStart // g+direction triggers marker show, transitions to color await
+	BehaviorRepeat      // . completes the last change the parser completed, again
 )
 
 // KeyEntry describes a key's behavior without function pointers.

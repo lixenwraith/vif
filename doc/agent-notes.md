@@ -271,6 +271,11 @@ Branches.
   write is checked on a copy whose drop prints the sync instead
   (`NetworkSystem.stateInRange`), over the four shapes and the `internal/app` suite
   under `-test.v -test.parallel=1`, which puts each print under the test that sent it.
+- In a bare world whose cursor entity carries no `CursorComponent`,
+  `PushCursorMove` predicts nothing and only crosses `EventCursorMoveRequest`, which
+  no `CursorSystem` applies, so `LocalCursor` stays put. A router test that chains
+  keys, a motion then what acts from its cell, applies each move from the queue
+  itself (`lineWorld` in `internal/mode/router_test.go`).
 
 ## Session tests
 

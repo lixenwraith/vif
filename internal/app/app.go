@@ -590,29 +590,28 @@ func (a *App) Close() {
 	a.log.Info("app", "msg", "shutdown completed", "us", time.Since(begin).Microseconds())
 }
 
-// loadKeymap merges an external key table over the embedded default document.
+// loadKeymap merges an external key table over the embedded default document, and
+// the scenario's own keys over both for its run.
 func (a *App) loadKeymap() error {
-	base := input.DefaultKeyTable()
+	kt := input.DefaultKeyTable()
 	path, err := resource.Keymap(a.cfg.Resources)
 	if err != nil {
 		return fmt.Errorf("keymap path: %w", err)
 	}
-	if path == "" {
-		a.inputMachine.SetKeyTable(base)
-		a.ctx.KeyTable = base
-		return nil
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("keymap load: %w", err)
+		}
+		override, err := input.LoadKeyConfig(data)
+		if err != nil {
+			return fmt.Errorf("keymap config %s: %w", path, err)
+		}
+		kt = input.MergeKeyTable(kt, override)
 	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("keymap load: %w", err)
+	if a.scenario.Keys != nil {
+		kt = input.MergeKeyTable(kt, a.scenario.Keys)
 	}
-
-	override, err := input.LoadKeyConfig(data)
-	if err != nil {
-		return fmt.Errorf("keymap config %s: %w", path, err)
-	}
-	kt := input.MergeKeyTable(base, override)
 	a.inputMachine.SetKeyTable(kt)
 	a.ctx.KeyTable = kt
 	return nil

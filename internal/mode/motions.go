@@ -341,6 +341,24 @@ func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
+// MotionLastGlyph is A's motion: the line's last glyph, which Insert types from,
+// never $'s step on from there to the edge; it stays put on a line with none
+func MotionLastGlyph(ctx *engine.GameContext, x, y, count int) MotionResult {
+	endX := findLineEndInBounds(ctx, ctx.World.GetPingAbsoluteBounds())
+	if endX < 0 {
+		endX = x
+	}
+	for endX > x && isCursorBlocked(ctx, endX, y) {
+		endX--
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: endX != x,
+	}
+}
+
 // MotionScreenVerticalMid implements 'M' motion
 func MotionScreenVerticalMid(ctx *engine.GameContext, x, y, count int) MotionResult {
 	midY := ctx.World.Resources.Config.MapHeight / 2

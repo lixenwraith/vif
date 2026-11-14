@@ -106,7 +106,10 @@ Delete operators are spatial actions, not simulated keystrokes. Characterwise
 ranges clamp X on their first and last rows; linewise ranges cover every glyph
 on selected rows. Glyphs with `ProtectFromDelete` survive. Deletion gathers
 targets before publishing a batched death request, avoiding mutation during
-store iteration.
+store iteration. `r` reaches what `x` with its count would and retypes each
+glyph there as its character (`EventGlyphReplaceRequest`); being an edit, not
+typing, it scores nothing: no reward, heat or streak, and no error where it
+reaches no glyph.
 
 ## 4. Glyph production and decay
 
@@ -596,10 +599,11 @@ and a practice line or block, stands the cursor on it, prompts on the status bar
 and waits for the result, the cursor on a cell, a delete or the lines typed; `s`
 skips a lesson and `S` goes back one. The lessons are `h j k l`, `w b e`, `0 ^ $`,
 `f t ; ,`, counts, `x` then `dd`, `i` and typing, `%`, `/ n N`, `gg G`, then the
-keys vif reads its own way (`a p o O u m y c r`), each answered on a press in the
+keys vif reads its own way (`a p o O u m y`), each answered on a press in the
 small face and on the status bar, and `s` opens free practice on the scenario's
 own corpus: code laid in blocks, so `%` finds a bracket's pair across rows ([Vim
-tutorial](vim-tutorial.md)).
+tutorial](vim-tutorial.md)). Its `[keymap]` makes `a` vim's append and `p`
+nothing for the run ([Input §10](input-and-modes.md#10-keymap-override-files)).
 
 `simon` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its

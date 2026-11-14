@@ -1,11 +1,15 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vif/internal/component"
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/input"
+	"github.com/lixenwraith/vif/internal/paths"
 	"github.com/lixenwraith/vif/internal/resource"
 )
 
@@ -55,5 +59,45 @@ func TestVimtutorALessonClearsItselfAndTheNextLaysItsOwn(t *testing.T) {
 	}
 	if cursor != (component.PositionComponent{X: 4, Y: 14}) {
 		t.Fatalf("the cursor stands at %v, want the practice line's first glyph (4, 14)", cursor)
+	}
+}
+
+// The tutor's keymap holds over the player's for its run: with an installed keymap
+// binding a to auto fire and p to pause, as a copy of the defaults does, a steps
+// right into Insert, as vim's append, and p does nothing.
+func TestVimtutorsKeysHoldOverThePlayersKeymap(t *testing.T) {
+	sc, err := resource.LoadScenario(resource.Options{Dir: soakRoot, Scenario: "vimtutor"})
+	if err != nil {
+		t.Skip("vimtutor scenario not present")
+	}
+	opts := resource.Options{Dir: t.TempDir(), Provided: &sc}
+	path := filepath.Join(opts.Dir, paths.InputDirName, paths.KeymapConfigFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[normal]\na = \"toggle_auto_fire\"\np = \"pause\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 100, Height: 30, Resources: opts})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	t.Cleanup(a.Close)
+	a.Tick(10)
+	key := func(k terminal.Key, r rune) {
+		if intent := a.inputMachine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: r}); intent != nil {
+			inject(t, a, intent)
+		}
+	}
+	before, _ := a.World().LocalCursor()
+	key(terminal.KeyRune, 'a')
+	after, _ := a.World().LocalCursor()
+	if !a.Context().IsInsertMode() || after.X != before.X+1 || after.Y != before.Y {
+		t.Fatalf("a took the cursor from %v to %v, Insert %v; want one cell right, in Insert", before, after, a.Context().IsInsertMode())
+	}
+	key(terminal.KeyEscape, 0)
+	key(terminal.KeyRune, 'p')
+	if a.Context().TimeCtl.IsPaused() || !a.Context().IsNormalMode() {
+		t.Fatalf("p paused the tutor or left Normal mode")
 	}
 }

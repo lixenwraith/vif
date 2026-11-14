@@ -10,6 +10,7 @@ import (
 // because their meaning depends on what follows them
 var documentedByLiteral = map[string]string{
 	"operator_delete":     "EDITING d{motion}",
+	"operator_change":     "EDITING c{motion}",
 	"prefix_g":            "MOVEMENT gg and the g-prefixed motions",
 	"prefix_macro_play":   "MACROS @{a-z}",
 	"macro_record_toggle": "MACROS q{a-z}",
@@ -33,6 +34,12 @@ func TestBindingsDocumented(t *testing.T) {
 	}
 }
 
+// unboundByDefault lists documented actions no default key takes, since the game's
+// own action has it; a keymap or a scenario binds them, and their entry shows then
+var unboundByDefault = map[string]string{
+	"mode_append": "a cycles auto fire; the vim tutor binds append",
+}
+
 // TestEntriesResolve fails on a typo or on documentation left behind by an
 // unbound action
 func TestEntriesResolve(t *testing.T) {
@@ -52,7 +59,7 @@ func TestEntriesResolve(t *testing.T) {
 					t.Errorf("%s: unknown action %q", topics[i].Title, a)
 					continue
 				}
-				if len(kt.Bindings(e.Scope, a)) == 0 {
+				if _, spare := unboundByDefault[a]; !spare && len(kt.Bindings(e.Scope, a)) == 0 {
 					t.Errorf("%s: action %q is unbound in section %d", topics[i].Title, a, e.Scope)
 				}
 			}
