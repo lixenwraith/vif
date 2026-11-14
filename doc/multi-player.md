@@ -844,8 +844,10 @@ The door `:host` opens on a session with none starts every wait over where someb
 is away (`Membership.restartWaitsLocked`): the authority crosses
 `EventWraithWaitRestart` as it closes its next tick, authority-only and
 barrier-bound as a roster change is, `CursorSystem` zeroes every Wraith's wait at
-its tick, those a pending reset is rebuilding too, and nobody is dismissed for a
-wait between the opening and that tick. A reset that clears the restart has the new
+its tick, those a pending reset is rebuilding too, and no person is dismissed for a
+wait between the opening and that tick, nor a bot waiting with one; a bot whose
+holder is here goes at its time, since no door brings it back, and a newcomer is
+given a person's place all the same. A reset that clears the restart has the new
 game cross it again (`NetworkSystem.Init`). Who was away before the door has then
 waited the same, so a successor orders them by roster; the run that opened the
 session keeps the order they left in.

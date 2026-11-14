@@ -403,6 +403,45 @@ func TestAYieldedWraithIsDroppedAtOnce(t *testing.T) {
 	}
 }
 
+// TestARestartOwedHoldsOnlyAPersonsWait: while the restart a door owes stands, the
+// authority dismisses no person at its time, nor the bot that waits with one; a bot
+// whose holder is here goes at its time, since no door brings it back, and a newcomer
+// is given a person's place all the same.
+func TestARestartOwedHoldsOnlyAPersonsWait(t *testing.T) {
+	person := event.ParticipantDepartedPayload{Participant: 7, Slot: 2, Dismissed: true}
+	seat := event.ParticipantDepartedPayload{Participant: 9, Slot: 4, Dismissed: true}
+	for name, tc := range map[string]struct {
+		yield   uint32
+		restart bool
+		want    []event.ParticipantDepartedPayload
+	}{
+		"a restart owed":                          {restart: true, want: []event.ParticipantDepartedPayload{seat}},
+		"a restart owed, and a place asked for":   {restart: true, yield: 7, want: []event.ParticipantDepartedPayload{person, seat}},
+		"no restart":                              {want: []event.ParticipantDepartedPayload{person, seat}},
+		"a restart owed, short of anybody's time": {restart: true},
+	} {
+		w, net, wait := wraithWorld(t)
+		own := spawnRemoteCursor(t, w, 4, 35, 5, 9)
+		if c, ok := w.Components.Cursor.GetPtr(own); ok {
+			c.Holder = 1 // this run's own seat, which no door brings back
+		}
+		ready(NewCursorSystem(w)).(*CursorSystem).HandleEvent(event.GameEvent{Type: event.EventCursorWraithRequest,
+			Payload: &event.CursorWraithRequestPayload{Slot: 4}})
+		w.Resources.Event.Queue.Consume()
+		w.Resources.Network.DismissWraith = func() uint32 { return tc.yield }
+		if wait(parameter.WraithTimeout - time.Millisecond); tc.want != nil {
+			wait(time.Millisecond)
+		}
+		if tc.restart {
+			net.RestartWraithWaits()
+		}
+		net.expireWraiths()
+		if got := departures(w); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: at their time the authority dismissed %+v, want %+v", name, got, tc.want)
+		}
+	}
+}
+
 // TestADoorOpenedStartsEveryWaitOver: for the door its session opens the authority
 // crosses one restart, and dismisses nobody until it applies; from that tick every
 // wait runs from zero, a person's included, on a world a reset has cleared too.
