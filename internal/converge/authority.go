@@ -1502,7 +1502,7 @@ func (u *Authority) publish() {
 // Summary is `:session`'s authority line.
 func (u *Authority) Summary() string {
 	u.mu.Lock()
-	term, holder, local, fork, contested := u.term, u.holder, u.local, u.fork, u.contested
+	term, holder, local, fork, contested, fixed := u.term, u.holder, u.local, u.fork, u.contested, u.fixed
 	migrations := u.statMigrations.Load()
 	u.mu.Unlock()
 	if term == 0 {
@@ -1518,7 +1518,10 @@ func (u *Authority) Summary() string {
 	if migrations > 0 {
 		line += fmt.Sprintf(", %d handoff(s)", migrations)
 	}
-	if contested != 0 {
+	switch {
+	case contested != 0 && fixed: // a pinned session walks no list: it redials, then forks
+		line += "; host lost, redialling it"
+	case contested != 0:
 		line += "; host lost, walking the succession list"
 	}
 	if fork {

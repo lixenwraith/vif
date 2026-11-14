@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -263,8 +264,8 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	if redialing.u.State().Fork || !redialing.world.frozen {
 		t.Fatal("a pinned guest forked, or played on, before its redial ended")
 	}
-	if redialing.reg.Bools.Get("network.migrating").Load() {
-		t.Fatal("a pinned guest's redial reads as a migration")
+	if redialing.reg.Bools.Get("network.migrating").Load() || strings.Contains(redialing.u.Summary(), "succession") {
+		t.Fatalf("a pinned guest's redial reads as a migration: %q", redialing.u.Summary())
 	}
 	redialing.u.RedialRefused(1)
 	redialing.u.drive()
