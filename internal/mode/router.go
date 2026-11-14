@@ -65,10 +65,10 @@ type Router struct {
 	undoCount int // valid entry count
 
 	// Input state (find/search repeat)
-	lastSearchText  string // Preserved for n/N repeat
-	lastFindChar    rune   // Target character for f/F/t/T
-	lastFindForward bool   // true for f/t, false for F/T
-	lastFindType    rune   // Motion type: 'f', 'F', 't', or 'T'
+	lastSearch      searchQuery // What n and N repeat
+	lastFindChar    rune        // Target character for f/F/t/T
+	lastFindForward bool        // true for f/t, false for F/T
+	lastFindType    rune        // Motion type: 'f', 'F', 't', or 'T'
 
 	// Command history ring buffer
 	cmdHistory    [cmdHistorySize]string
@@ -156,6 +156,7 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 		input.MotionHalfPageDown:        MotionHalfPageDown,
 		input.MotionColumnUp:            MotionColumnUp,
 		input.MotionColumnDown:          MotionColumnDown,
+		input.MotionLastGlyph:           MotionLastGlyph,
 	}
 
 	r.charLUT = map[input.MotionOp]CharMotionFunc{
@@ -419,13 +420,16 @@ func (r *Router) handleToggleAudioCycle() bool {
 
 // --- Motion Handlers ---
 
-// applyOperator hands a resolved range to the intent's operator. One arm today;
-// this is where a second operator attaches, and it is why the three call sites do
-// not each carry their own switch.
+// applyOperator hands a resolved range to the intent's operator, then enters the
+// mode the operator names once it acted, as c enters Insert. One arm today; this is
+// where a second operator attaches, and why the three call sites carry no switch.
 func (r *Router) applyOperator(intent *input.Intent, result MotionResult) {
 	switch intent.Operator {
 	case input.OperatorDelete:
 		OpDelete(r.ctx, result)
+	}
+	if result.Valid {
+		r.handleModeSwitch(intent)
 	}
 }
 
@@ -462,7 +466,7 @@ func (r *Router) handleMotion(intent *input.Intent) bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
 		OpMove(r.ctx, motionFn(r.ctx, pos.X, pos.Y, intent.Count))
 	}
-	return true
+	return r.handleModeSwitch(intent) // A, I and vim's a enter Insert once moved
 }
 
 func (r *Router) handleCharMotion(intent *input.Intent) bool {
@@ -572,21 +576,37 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 
 func (r *Router) handleSpecial(intent *input.Intent) bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
+		// x and r reach the cells from the cursor on, one a count
+		span := charCells(pos.X, pos.Y, min(pos.X+intent.Count-1, r.ctx.World.Resources.Config.MapWidth-1))
 		switch intent.Special {
 		case input.SpecialDeleteChar:
-			// x = delete chars forward
-			OpDelete(r.ctx, charCells(pos.X, pos.Y,
-				min(pos.X+intent.Count-1, r.ctx.World.Resources.Config.MapWidth-1)))
+			OpDelete(r.ctx, span)
 
 		case input.SpecialDeleteToEnd:
-			// D = d$
+			// D = d$, and C enters Insert after
 			OpDelete(r.ctx, MotionLineEnd(r.ctx, pos.X, pos.Y, 1))
 
+		case input.SpecialReplaceChar:
+			// A glyph's char is printable ASCII and never blank: the font draws it
+			if intent.Char > ' ' && input.Capturable(intent.Char) {
+				r.ctx.PushLocal(event.EventGlyphReplaceRequest, &event.GlyphReplaceRequestPayload{
+					StartX: span.StartX, EndX: span.EndX, Y: pos.Y, Char: intent.Char,
+				})
+			}
+
 		case input.SpecialSearchNext:
-			RepeatSearch(r.ctx, r.lastSearchText, true)
+			PerformSearch(r.ctx, r.lastSearch.text, r.lastSearch.forward, r.lastSearch.whole)
 
 		case input.SpecialSearchPrev:
-			RepeatSearch(r.ctx, r.lastSearchText, false)
+			PerformSearch(r.ctx, r.lastSearch.text, !r.lastSearch.forward, r.lastSearch.whole)
+
+		case input.SpecialSearchWordForward, input.SpecialSearchWordBack:
+			// From the run's start, so # passes over the word the cursor is in
+			q, start := wordAt(r.ctx, pos.X, pos.Y)
+			q.forward = intent.Special == input.SpecialSearchWordForward
+			if searchFrom(r.ctx, start, pos.Y, q.text, q.forward, q.whole) {
+				r.lastSearch = q
+			}
 
 		case input.SpecialRepeatFind:
 			r.executeRepeatFind(false)
@@ -595,7 +615,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 			r.executeRepeatFind(true)
 		}
 	}
-	return true
+	return r.handleModeSwitch(intent)
 }
 
 func (r *Router) handleNuggetJump() bool {
@@ -877,11 +897,8 @@ func (r *Router) handleTextConfirm() bool {
 
 	switch currentMode {
 	case core.ModeSearch:
-		searchText := r.ctx.GetSearchText()
-		if searchText != "" {
-			if PerformSearch(r.ctx, searchText, true) {
-				r.lastSearchText = searchText
-			}
+		if text := r.ctx.GetSearchText(); PerformSearch(r.ctx, text, true, false) {
+			r.lastSearch = searchQuery{text: text, forward: true}
 		}
 		r.ctx.SetSearchText("")
 		r.transitionMode(core.ModeNormal)

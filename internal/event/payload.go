@@ -676,6 +676,15 @@ type DeleteRequestPayload struct {
 	EndY      int             `toml:"end_y"`
 }
 
+// GlyphReplaceRequestPayload names the cells of row Y from StartX to EndX whose
+// glyphs r retypes as Char, the cells a delete of that span would reach
+type GlyphReplaceRequestPayload struct {
+	StartX int  `toml:"start_x"`
+	EndX   int  `toml:"end_x"`
+	Y      int  `toml:"y"`
+	Char   rune `toml:"char"`
+}
+
 // --- Materialize ---
 
 // MaterializeRequestPayload starts a materialize over a body's footprint with its

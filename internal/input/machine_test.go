@@ -150,3 +150,38 @@ func TestAScopedCaptureYieldsToInsertAndToPendingGrammar(t *testing.T) {
 		t.Fatalf("Insert: a = %+v, want the typed character", in)
 	}
 }
+
+// TestDotCompletesTheLastChangeAgain: '.' completes the last change the parser
+// completed, an operator's, x's or r's, and not a motion; a count before it
+// replaces the change's own, and the next '.' keeps that count.
+func TestDotCompletesTheLastChangeAgain(t *testing.T) {
+	m := NewMachine()
+	keys := func(s string) (last *Intent) {
+		for _, r := range s {
+			if i := m.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}); i != nil {
+				last = i
+			}
+		}
+		return last
+	}
+	if got := keys("."); got != nil {
+		t.Fatalf("'.' before any change made %+v", got)
+	}
+	change := Intent{Type: IntentOperatorMotion, Operator: OperatorDelete, Motion: MotionWordForward, ModeTarget: ModeTargetInsert}
+	keys("c2wl")
+	for _, c := range []struct {
+		keys  string
+		count int
+	}{{".", 2}, {"3.", 3}, {".", 3}} {
+		want := change
+		want.Count, want.Command = c.count, c.keys
+		if got := keys(c.keys); got == nil || *got != want {
+			t.Fatalf("%q made %+v, want %+v", c.keys, got, want)
+		}
+	}
+	keys("2rz")
+	want := Intent{Type: IntentSpecial, Special: SpecialReplaceChar, Char: 'z', Count: 2, Command: "."}
+	if got := keys("."); got == nil || *got != want {
+		t.Fatalf("'.' after 2rz made %+v, want %+v", got, want)
+	}
+}

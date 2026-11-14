@@ -74,11 +74,17 @@ type Machine struct {
 	capture  *KeyCapture
 
 	// Normal mode state
-	count1     int
-	count2     int
-	operator   OperatorOp
-	charMotion MotionOp
-	prefix     rune
+	count1      int
+	count2      int
+	operator    OperatorOp
+	opKey       rune       // the operator's key, which doubled acts on whole lines
+	opMode      ModeTarget // the mode the operator enters once it acts: c's Insert
+	charMotion  MotionOp
+	charSpecial SpecialOp // r's replace, which a char completes in place of a motion
+	prefix      rune
+
+	// lastChange is the last change completed, which '.' completes again
+	lastChange Intent
 
 	// Marker state - direction pending color selection
 	markerDirection MotionOp
@@ -122,7 +128,10 @@ func (m *Machine) Reset() {
 	m.count1 = 0
 	m.count2 = 0
 	m.operator = OperatorNone
+	m.opKey = 0
+	m.opMode = ModeTargetNone
 	m.charMotion = MotionNone
+	m.charSpecial = SpecialNone
 	m.prefix = 0
 	m.markerDirection = MotionNone
 	m.cmdBuffer = m.cmdBuffer[:0]
@@ -158,6 +167,9 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 	if ev.Action == terminal.KeyRepeat && intent != nil && intent.toggles() {
 		return nil // a toggle flips once a press; motion, text and fire repeat
 	}
+	if intent != nil && intent.changes() {
+		m.lastChange = *intent
+	}
 	return intent
 }
 
@@ -171,6 +183,18 @@ func (i *Intent) toggles() bool {
 		return true
 	case IntentModeSwitch:
 		return i.ModeTarget == ModeTargetVisual
+	}
+	return false
+}
+
+// changes reports an intent that edits glyphs, which '.' completes again: an
+// operator over a range, x, D, C and r. Insert's typing is not kept.
+func (i *Intent) changes() bool {
+	switch i.Type {
+	case IntentOperatorMotion, IntentOperatorLine, IntentOperatorCharMotion:
+		return true
+	case IntentSpecial:
+		return i.Special == SpecialDeleteChar || i.Special == SpecialDeleteToEnd || i.Special == SpecialReplaceChar
 	}
 	return false
 }
@@ -362,15 +386,15 @@ func (m *Machine) processIdleOrCount(key rune) *Intent {
 func (m *Machine) handleNormalEntry(entry KeyEntry, key rune) *Intent {
 	switch entry.Behavior {
 	case BehaviorMotion:
-		return m.buildMotionIntent(entry.Motion)
+		return m.buildMotionIntent(entry)
 
 	case BehaviorCharWait:
-		m.charMotion = entry.Motion
+		m.charMotion, m.charSpecial = entry.Motion, entry.Special
 		m.state = StateCharWait
 		return nil
 
 	case BehaviorOperator:
-		m.operator = OperatorDelete
+		m.operator, m.opKey, m.opMode = OperatorDelete, key, entry.ModeTarget
 		m.state = StateOperatorWait
 		return nil
 
@@ -388,13 +412,16 @@ func (m *Machine) handleNormalEntry(entry KeyEntry, key rune) *Intent {
 		return m.buildModeSwitchIntent(entry.ModeTarget)
 
 	case BehaviorSpecial:
-		return m.buildSpecialIntent(entry.Special)
+		return m.buildSpecialIntent(entry)
 
 	case BehaviorSystem:
 		return m.buildSystemIntent(entry.IntentType)
 
 	case BehaviorAction:
 		return m.buildActionIntent(entry.IntentType)
+
+	case BehaviorRepeat:
+		return m.repeatChange()
 	}
 
 	return nil
@@ -402,18 +429,29 @@ func (m *Machine) handleNormalEntry(entry KeyEntry, key rune) *Intent {
 
 func (m *Machine) completeCharMotion(char rune) *Intent {
 	m.cmdBuffer = append(m.cmdBuffer, char)
-	count := m.effectiveCount()
-	motion := m.charMotion
-	cmd := m.captureCommand()
-	m.Reset()
-
-	return &Intent{
-		Type:    IntentCharMotion,
-		Motion:  motion,
-		Count:   count,
-		Char:    char,
-		Command: cmd,
+	intent := &Intent{Type: IntentCharMotion, Motion: m.charMotion, Special: m.charSpecial, Count: m.effectiveCount(), Char: char}
+	if m.charSpecial != SpecialNone {
+		intent.Type = IntentSpecial
 	}
+	intent.Command = m.captureCommand()
+	m.Reset()
+	return intent
+}
+
+// repeatChange completes the last change again; a count typed before '.' replaces
+// the change's own, and the next '.' keeps it, as in vim
+func (m *Machine) repeatChange() *Intent {
+	if m.lastChange.Type == IntentNone {
+		m.Reset()
+		return nil
+	}
+	if m.count1 > 0 {
+		m.lastChange.Count = m.effectiveCount()
+	}
+	intent := m.lastChange
+	intent.Command = m.captureCommand()
+	m.Reset()
+	return &intent
 }
 
 func (m *Machine) processOperatorWait(key rune) *Intent {
@@ -429,17 +467,9 @@ func (m *Machine) processOperatorWait(key rune) *Intent {
 		return nil
 	}
 
-	// Doubled operator (dd)
-	if key == 'd' && m.operator == OperatorDelete {
-		count := m.effectiveCount()
-		cmd := m.captureCommand()
-		m.Reset()
-		return &Intent{
-			Type:     IntentOperatorLine,
-			Operator: OperatorDelete,
-			Count:    count,
-			Command:  cmd,
-		}
+	// The operator's own key again acts on whole lines: dd, cc
+	if key == m.opKey {
+		return m.completeOperator(IntentOperatorLine, MotionNone, 0)
 	}
 
 	entry, ok := m.keyTable.OperatorMotions[key]
@@ -460,37 +490,20 @@ func (m *Machine) processOperatorWait(key rune) *Intent {
 		return nil
 	}
 
-	// Standard motion after operator
-	count := m.effectiveCount()
-	operator := m.operator
-	cmd := m.captureCommand()
-	m.Reset()
-
-	return &Intent{
-		Type:     IntentOperatorMotion,
-		Operator: operator,
-		Motion:   entry.Motion,
-		Count:    count,
-		Command:  cmd,
-	}
+	return m.completeOperator(IntentOperatorMotion, entry.Motion, 0)
 }
 
 func (m *Machine) completeOperatorCharMotion(char rune) *Intent {
 	m.cmdBuffer = append(m.cmdBuffer, char)
-	count := m.effectiveCount()
-	motion := m.charMotion
-	operator := m.operator
-	cmd := m.captureCommand()
-	m.Reset()
+	return m.completeOperator(IntentOperatorCharMotion, m.charMotion, char)
+}
 
-	return &Intent{
-		Type:     IntentOperatorCharMotion,
-		Operator: operator,
-		Motion:   motion,
-		Count:    count,
-		Char:     char,
-		Command:  cmd,
-	}
+// completeOperator ends the pending operator over a motion, or over lines
+func (m *Machine) completeOperator(t IntentType, motion MotionOp, char rune) *Intent {
+	intent := &Intent{Type: t, Operator: m.operator, ModeTarget: m.opMode, Motion: motion, Count: m.effectiveCount(), Char: char}
+	intent.Command = m.captureCommand()
+	m.Reset()
+	return intent
 }
 
 func (m *Machine) processPrefixG(key rune) *Intent {
@@ -512,7 +525,7 @@ func (m *Machine) processPrefixG(key rune) *Intent {
 		}
 	}
 
-	return m.buildMotionIntent(entry.Motion)
+	return m.buildMotionIntent(entry)
 }
 
 func (m *Machine) processOperatorPrefixG(key rune) *Intent {
@@ -523,19 +536,7 @@ func (m *Machine) processOperatorPrefixG(key rune) *Intent {
 		m.Reset()
 		return nil
 	}
-
-	count := m.effectiveCount()
-	operator := m.operator
-	cmd := m.captureCommand()
-	m.Reset()
-
-	return &Intent{
-		Type:     IntentOperatorMotion,
-		Operator: operator,
-		Motion:   entry.Motion,
-		Count:    count,
-		Command:  cmd,
-	}
+	return m.completeOperator(IntentOperatorMotion, entry.Motion, 0)
 }
 
 func (m *Machine) processMarkerAwaitColor(key rune) *Intent {
@@ -821,16 +822,17 @@ func (m *Machine) handleTextModeEntry(entry KeyEntry) *Intent {
 
 // === Helper Methods ===
 
-func (m *Machine) buildMotionIntent(motion MotionOp) *Intent {
+func (m *Machine) buildMotionIntent(entry KeyEntry) *Intent {
 	count := m.effectiveCount()
 	cmd := m.captureCommand()
 	m.Reset()
 
 	return &Intent{
-		Type:    IntentMotion,
-		Motion:  motion,
-		Count:   count,
-		Command: cmd,
+		Type:       IntentMotion,
+		Motion:     entry.Motion,
+		ModeTarget: entry.ModeTarget,
+		Count:      count,
+		Command:    cmd,
 	}
 }
 
@@ -842,16 +844,17 @@ func (m *Machine) buildModeSwitchIntent(target ModeTarget) *Intent {
 	}
 }
 
-func (m *Machine) buildSpecialIntent(special SpecialOp) *Intent {
+func (m *Machine) buildSpecialIntent(entry KeyEntry) *Intent {
 	count := m.effectiveCount()
 	cmd := m.captureCommand()
 	m.Reset()
 
 	return &Intent{
-		Type:    IntentSpecial,
-		Special: special,
-		Count:   count,
-		Command: cmd,
+		Type:       IntentSpecial,
+		Special:    entry.Special,
+		ModeTarget: entry.ModeTarget,
+		Count:      count,
+		Command:    cmd,
 	}
 }
 

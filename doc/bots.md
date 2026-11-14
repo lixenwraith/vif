@@ -152,7 +152,7 @@ Allowance left idle builds up to one second's worth.
 
 | Action | Payload | Queues |
 |---|---|---|
-| `Intent` | `name`: an action of the [default keymap](../internal/asset/input/keymap.toml), or a list drawn from, or `press` or `release`; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action, or the key `press` presses and `release` lets go; `hold` for `press`: ticks, or `true` until its `release` | one key press or release |
+| `Intent` | `name`: a canonical action name (`internal/input/actionnames.go`), `mode_append` among them though no default key binds it, or a list drawn from, or `press` or `release`; `count`: a number or a `[min, max]` range drawn from; `char` for a char-wait action, or the key `press` presses and `release` lets go; `hold` for `press`: ticks, or `true` until its `release` | one key press or release |
 | `Text` | `text` | one character per rune |
 | `TypeGlyph` | none | the glyph under the cursor, switching to Insert first; nothing when there is none |
 | `PointAt` | `target`; `key` picks the `button` on that key; `fire = true` clicks instead of moving; `away = true` aims away | a pointer move or click |

@@ -17,12 +17,12 @@ flowchart LR
 
 The terminal service polls in its own goroutine and writes to a bounded event
 channel. The application input loop passes events to `input.Machine`, which
-maintains only parsing context. The router owns engine-aware interaction state:
-the last search pattern and find target, command history, cursor undo, macros,
-mouse and button holds, and the fire anchors held buttons share with auto-fire.
-It drives only the roster's selected local cursor; `CursorSystem` applies and
-announces placement so live input, replay, bots, and remote producers share the
-same entity-owned path.
+maintains only parsing context and the last change `.` repeats (§3). The router
+owns engine-aware interaction state: the last search and find target, command
+history, cursor undo, macros, mouse and button holds, and the fire anchors held
+buttons share with auto-fire. It drives only the roster's selected local cursor;
+`CursorSystem` applies and announces placement so live input, replay, bots, and
+remote producers share the same entity-owned path.
 
 `Intent` is a data structure, not a callback. It includes intent type, motion,
 operator, special action, target mode, scroll direction, count, optional character,
@@ -98,7 +98,7 @@ A captured key is the scenario's one input hook, whatever produces it:
 ```mermaid
 stateDiagram-v2
     [*] --> Normal
-    Normal --> Insert: i
+    Normal --> Insert: i, I, A, c, C
     Normal --> Visual: v
     Normal --> Search: slash
     Normal --> Command: colon
@@ -168,10 +168,12 @@ key sequences:
 
 ```text
 [count] motion
-[count] d [count] motion
-[count] d d
+[count] d|c [count] motion
+[count] d d | c c
 [count] f|F|t|T character
-[count] d f|F|t|T character
+[count] d|c f|F|t|T character
+[count] r character
+[count] .
 g command
 g direction color
 q register / @ register
@@ -188,6 +190,22 @@ motion when idle. Each count caps at 9999, and operator and motion counts multip
 Motions are clamped by map bounds and apply game-specific definitions of words,
 paragraphs, columns, and map positions over the glyph grid. The status bar's key
 cell shows the keys of a pending sequence, else the last one completed.
+
+An action naming a mode enters it once it acts (`KeyEntry.ModeTarget`):
+
+- **Change.** `c` is `d`'s grammar, then Insert, entered only on a range the
+  motion found, so `cfz` with no `z` on the row stays in Normal; `C` is `D`, then
+  Insert. An operator's own key doubled acts on the row: `dd`, `cc`.
+- **Append and insert.** `A` moves to the row's last glyph and `I` to its first, as `^`
+  does, and each enters Insert, staying put on a row with none. vim's `a`, a step
+  right then Insert, is `mode_append`, which no default key binds (§10).
+- **Replace.** `r` and a printable character other than space retype the glyph
+  under the cursor, a count that many rightward, and the cursor stays; it reaches
+  what `x` would and scores nothing ([Gameplay §3](gameplay.md#3-typing-rules)).
+- **Repeat.** `.` completes the parser's last change again: `d` or `c` with its
+  motion or find, `dd`, `cc`, `x`, `D`, `C`, or `r` with its character. A count
+  typed before `.` replaces the change's own, for that repeat and the later ones.
+  The text typed in Insert after a `c` is no part of it.
 
 ## 4. Default bindings
 
@@ -228,20 +246,20 @@ cell shows the keys of a pending sequence, else the last one completed.
 
 ### Prefixes, editing, and modes
 
-| Keys | Action |
-|---|---|
-| `gg` | Map top row. |
-| `go`, `g$`, `gm` | Map origin, map end, map center. |
-| `gh`, `gj`, `gk`, `gl` then `r`, `g`, or `b` | Show and jump to a red, green, or blue glyph in that direction. Repeating the direction key (`gll`) jumps to the nearest glyph of any colour. |
-| `d` + motion | Delete the motion range. |
-| `dd` | Delete the current line. |
-| `x`, `D` | Delete current glyph / through line end. |
-| `u` | Cursor-motion undo. |
-| `i` | Enter Insert at the cursor. |
-| `v` | Enter Visual mode. |
-| `/` | Enter Search mode. |
-| `:` | Enter Command mode. |
-| `n`, `N` | Repeat search forward/backward. |
+- **`g`.** `gg` the map's top row; `go`, `g$`, `gm` its origin, end and centre.
+  `gh`, `gj`, `gk`, `gl` then `r`, `g` or `b` show and jump to a red, green or blue
+  glyph that way; the direction key again (`gll`) jumps to the nearest of any colour.
+- **Editing.**
+  - `d` + motion, `dd`: delete the motion's range, the current row; `c` + motion,
+    `cc`: the same, then Insert.
+  - `x`, `D`, `C`: delete the current glyph, through the row's end, through the
+    row's end then Insert.
+  - `r` + character: retype the current glyph as it. `.`: repeat the last change.
+  - `u`: cursor-motion undo.
+- **Modes.** `i`, `I`, `A` Insert at the cursor, at the row's first glyph and at
+  its last; `v` Visual, `/` Search, `:` Command.
+- **Search.** `n`, `N` the last search again, the way it went and the other way;
+  `*`, `#` search forward and back for the word under the cursor.
 
 The implementation is Vim-inspired, not an attempt to reproduce every Vim
 edge case. Commands operate on the two-dimensional game grid and delete glyph
@@ -258,7 +276,11 @@ deletion semantics in addition to moving the cursor.
 Command keeps an editable line with a cursor: Left/Right and Home/End move within
 it, and Up/Down browse command history. Search only appends typed characters, and
 Backspace removes the last. Search remembers its last matched pattern and find
-commands remember their last target/direction for `n`, `N`, `;`, and `,`.
+commands their last target and direction, for `n`, `N`, `;` and `,`. `*` and `#`
+search forward and back for the word under the cursor, or else the first after it
+on its row, whole, so no word glyph adjoins a match; on a row with no word from the
+cursor on, the first run of punctuation from it, matched anywhere. Each becomes the
+search `n` and `N` repeat. Neither `n`, `N`, `*` nor `#` takes a count yet.
 
 The router retains up to 256 cursor undo positions and 256 command-history
 entries. These are session interaction structures, not persisted editor files.
@@ -499,7 +521,8 @@ Resolution order is:
 4. the embedded `internal/asset/input/keymap.toml` document.
 
 `make install-config` installs the embedded document without overwriting existing
-user files. The action name `append` is an alias of `toggle_auto_fire`.
+user files. The retired action name `append` is an alias of `toggle_auto_fire`;
+vim's append is `mode_append`, which no default key binds, `a` cycling auto-fire.
 See [External filesystem layout](filesystem-layout.md) for the shared root policy.
 
 An override is sparse: it is merged over the embedded table, so unspecified
@@ -510,17 +533,15 @@ so no two actions contend for one key. Naming a key adds it to an action; moving
 action also sets its old key to `"none"`. Help reads its key column from the merged
 table, so it shows a player's own bindings: every key of an action where an entry
 documents that action alone, the first key of each where it documents several
-(`h/j/k/l`). The accepted TOML sections are:
+(`h/j/k/l`). The accepted TOML sections, a rune section's keys one rune, `space`,
+`backslash` or `zero`, a special one's a terminal key name (`ctrl_g`, `f10`,
+`page_up`...):
 
-| Section | Key form | Context |
-|---|---|---|
-| `[normal]` | one rune, `space`, `backslash`, or `zero` | Normal and Visual rune bindings. |
-| `[normal_keys]` | terminal key name: `ctrl_g`, `f10`, `page_up`... | Normal and Visual special keys. |
-| `[operator]` | as `[normal]` | Motions accepted after `d`. |
-| `[prefix_g]` | as `[normal]` | Second key after `g`. |
-| `[overlay]` | as `[normal]` | Overlay rune bindings. |
-| `[overlay_keys]` | terminal key name | Overlay special keys. |
-| `[text_keys]` | terminal key name | Insert/Search/Command navigation/edit keys, and configuration-menu forms. |
+- Rune: `[normal]`, Normal and Visual; `[operator]`, the motions after `d` and `c`;
+  `[prefix_g]`, the key after `g`; `[overlay]`, an overlay's.
+- Special: `[normal_keys]`, Normal and Visual; `[overlay_keys]`, an overlay's;
+  `[text_keys]`, Insert, Search and Command navigation and editing, and the
+  configuration menu's forms.
 
 Values are canonical action names from `internal/input/actionnames.go`, except
 `press`, which a scenario's capture chooses the keys of. Use `"none"` to unbind a
@@ -541,6 +562,15 @@ f2 = "help"
 [prefix_g]
 m = "motion_origin"
 ```
+
+A scenario binds play keys for its run in its entry's `[keymap.normal]`,
+`[keymap.operator]` and `[keymap.prefix_g]`, merged over the default and the
+player's keymap, after the player's: an installed keymap is a full copy of the
+defaults, which would otherwise undo it (`input.ScenarioKeyTable`,
+`resource.Scenario.Keys`). It binds no system action and no other section, so the
+special keys, which quit, leave a mode and open the menu and help, stay the
+player's; a scenario breaking either rule fails to load. The vim tutor binds `a` to
+`mode_append` and `p` to `"none"`, having no gun to cycle and no clock to stop.
 
 ## 11. Change checklist
 

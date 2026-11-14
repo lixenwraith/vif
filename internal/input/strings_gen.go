@@ -214,6 +214,8 @@ func (i MotionOp) String() string {
 		return "MotionColoredGlyphUp"
 	case MotionColoredGlyphDown:
 		return "MotionColoredGlyphDown"
+	case MotionLastGlyph:
+		return "MotionLastGlyph"
 	default:
 		return fmt.Sprintf("MotionOp(%d)", i)
 	}
@@ -259,6 +261,12 @@ func (i SpecialOp) String() string {
 		return "SpecialRepeatFind"
 	case SpecialRepeatFindRev:
 		return "SpecialRepeatFindRev"
+	case SpecialReplaceChar:
+		return "SpecialReplaceChar"
+	case SpecialSearchWordForward:
+		return "SpecialSearchWordForward"
+	case SpecialSearchWordBack:
+		return "SpecialSearchWordBack"
 	default:
 		return fmt.Sprintf("SpecialOp(%d)", i)
 	}

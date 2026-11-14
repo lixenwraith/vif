@@ -20,6 +20,11 @@ blocks = true
 [systems]
 only_systems = ["cursor", "typing", "timer", "death", "glyph", "particle", "transient", "audio", "energy", "heat", "splash", "flash", "fadeout"]
 
+# With no gun to cycle and no clock to stop, a is vim's append here and p nothing
+[keymap.normal]
+a = "mode_append"
+p = "none"
+
 [regions.tutor]
 initial = "Wait"
 
@@ -374,25 +379,23 @@ on_exit = [
     { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "sS", modes = ["normal", "visual"], idle = true }, reconcile = true },
 ]
 on_enter = [
-    { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "apoOumycrsS", modes = ["normal", "visual"], idle = true }, reconcile = true },
+    { action = "EmitEvent", event = "EventKeyCaptureRequest", payload = { keys = "apoOumysS", modes = ["normal", "visual"], idle = true }, reconcile = true },
     { macro = "Heading", text = "a p o u m" },
     { macro = "Note", text = "vif plays a subset of vim: some keys belong to the game, not the editor.", row = 8 },
-    { macro = "Note", text = "Press a p o O u m y c or r to read what each of them does here.", row = 9 },
-    { macro = "Note", text = "They cannot be tutored yet; s goes on to free practice.", row = 10 },
+    { macro = "Note", text = "Press a p o O u m or y to read what each of them does here.", row = 9 },
+    { macro = "Note", text = "This tutor gives a back to vim; s goes on to free practice.", row = 10 },
     { macro = "Line", text = "press the keys above, then s", row = 14 },
     { macro = "Stand", x = 4, y = 14 },
-    { macro = "Say", message = "Lesson 11 of 11: a p o O u m y c r, then s" },
+    { macro = "Say", message = "Lesson 11 of 11: a p o O u m y, then s" },
 ]
 transitions = [
-    { macro = "Taken", key = "a", text = "auto fire", color = { r = 255, g = 120, b = 0 }, message = "a cycles auto fire, not append" },
-    { macro = "Taken", key = "p", text = "pause", color = { r = 120, g = 160, b = 255 }, message = "p pauses the game; there is nothing to put" },
+    { macro = "Taken", key = "a", text = "append", color = { r = 255, g = 120, b = 0 }, message = "a appends in this tutor, as in vim; in a game it cycles auto fire" },
+    { macro = "Taken", key = "p", text = "pause", color = { r = 120, g = 160, b = 255 }, message = "p pauses a game and does nothing here; there is nothing to put" },
     { macro = "Taken", key = "o", text = "column find", color = { r = 0, g = 220, b = 120 }, message = "o finds the next glyph below, O above" },
     { macro = "Taken", key = "O", text = "column find", color = { r = 0, g = 220, b = 120 }, message = "O finds the next glyph above, o below" },
     { macro = "Taken", key = "u", text = "move undo", color = { r = 220, g = 80, b = 220 }, message = "u undoes a move, not a delete" },
     { macro = "Taken", key = "m", text = "mid column", color = { r = 255, g = 255, b = 120 }, message = "m is the middle column, not a mark; M the middle row" },
     { macro = "Taken", key = "y", text = "no yank", color = { r = 160, g = 160, b = 160 }, message = "y does nothing: there is nothing to yank" },
-    { macro = "Taken", key = "c", text = "not yet", color = { r = 160, g = 160, b = 160 }, message = "c does nothing yet" },
-    { macro = "Taken", key = "r", text = "not yet", color = { r = 160, g = 160, b = 160 }, message = "r does nothing yet" },
     { macro = "Next", target = "Free" },
     { macro = "Back", target = "Map" },
 ]

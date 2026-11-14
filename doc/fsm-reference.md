@@ -94,6 +94,9 @@ scarab = { file = "behavior/strata/scarab.toml" }  # A species of the scenario's
 [loot.upgrade]                      # A loot kind of the scenario's own, its keys in Loot
 [drops.raider]                      # A drop table kills roll, its keys in Loot
 
+[keymap.normal]                     # Play keys over the player's keymap for the run; also
+a = "mode_append"                   # [keymap.operator], [keymap.prefix_g]; no system action
+
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
 file = "file.toml"                  # External state definitions
