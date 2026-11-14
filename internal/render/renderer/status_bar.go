@@ -570,14 +570,14 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 	now := r.gameCtx.TimeCtl.RealTime() // [wall] readability, not simulation
 	state, ok := r.networkShown()
 	// A link that went down is news for a while, then noise beside a solo game; a
-	// lost host or a succession stays news for as long as it lasts
-	lost := r.statMigrating.Load() || r.statHostLost.Load()
-	if down := ok && state == "down" && !lost; !down {
+	// lost host or a succession stays news for as long as it lasts, the link's own
+	// time running beneath it
+	if down := ok && state == "down"; !down {
 		r.downSince = time.Time{}
 	} else if r.downSince.IsZero() {
 		r.downSince = now
 	} else if now.Sub(r.downSince) >= parameter.StatusNetworkDownDuration {
-		ok = false
+		ok = r.statMigrating.Load() || r.statHostLost.Load()
 	}
 	switch {
 	case !ok:

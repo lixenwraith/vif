@@ -308,8 +308,8 @@ func TestConsoleStatusItemsReadOnTheirBackgrounds(t *testing.T) {
 
 // TestStatusBarDownBadgeLeavesAfterItsDuration: a link that went down shows for
 // StatusNetworkDownDuration and then leaves, a loss read once being noise beside a
-// solo game; a link that comes back and goes down again starts its time over, and
-// a lost host or a succession over a link down for good stays while it lasts.
+// solo game; a link that comes back and goes down again starts its time over; and
+// a lost host or a succession stays while it lasts, the link's time running beneath.
 func TestStatusBarDownBadgeLeavesAfterItsDuration(t *testing.T) {
 	r, clock := newStatusBar(t)
 	r.statNet.Store("down")
@@ -339,5 +339,8 @@ func TestStatusBarDownBadgeLeavesAfterItsDuration(t *testing.T) {
 			t.Fatalf("a loss over a link down for good shows %q %v", item.text, ok)
 		}
 		cell.Store(false)
+		if item, ok := r.networkItem(); ok {
+			t.Fatalf("the down badge %q outlived its time beneath a loss", item.text)
+		}
 	}
 }
