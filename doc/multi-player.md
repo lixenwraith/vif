@@ -683,12 +683,11 @@ back, and the guest plays on behind that candidate; a port not relaying refuses,
 it refuses every join while another participant hosts.
 
 A person's run that forks goes on in a session of its own, as `:leave` takes it
-(§5.5): the same identity, the next term, every other player's place kept as a
-Wraith, and `:host` or `:join` at once. In a session that does not migrate, the
-default, every guest does so the moment its host goes, so whichever hosts next
-takes the others back with their progress. A run with no loop to serve that, a script's or a bot's, stays
-the fork, with `network.fork` and a persistent `Host lost` badge; it refuses a
-higher term met later, because partition merging is not implemented.
+(§5.5): the same identity, the next term, and `:host` or `:join` at once, with
+every other player's place kept as a Wraith where the session migrates and none
+where it ended with its host. A run with no loop to take it there, a script's or a
+bot's, stays the fork, with `network.fork` and a persistent `Host lost` badge; it
+refuses a higher term met later, because partition merging is not implemented.
 
 ### 5.2 The roster after a loss
 
@@ -1427,13 +1426,14 @@ exercise the paths a two-terminal session reaches and nothing else does:
   Wraith kept, with the energy and health it left with. While it waits at the start
   gate it is not yet in a session and has no world, but the wait is still leavable:
   Ctrl-Q, Ctrl-C and a terminal resize are answered there.
-- The host leaves instead. The guest takes the term — `:session` names it as the
-  authority, `network.migrations` reads 1, and the `Host lost` badge clears — and
-  the host's cursor must wait where it was left as a Wraith rather than play on. A
-  guest that could reach no candidate says its host connection was lost and
-  plays on in a session of its own, which is the fork: `:session` reads `Session
-  hosting` under the same participant, and the host and every other player wait on
-  its map as Wraiths.
+- The host leaves instead. The guest says its host connection was lost and plays
+  on in a session of its own, which is the fork: `:session` reads `Session hosting`
+  under the same participant, the host's cursor is gone and no network badge
+  shows. A host stopped rather than closed (`kill -STOP`) first holds the guest
+  frozen under `Host lost` for its redial. On `-authority migrate` a guest with
+  `[play] takeover` takes the term instead: `:session` names it as the authority,
+  `network.migrations` reads 1, the `Migrating` badge clears, and the host's
+  cursor must wait where it was left as a Wraith rather than play on.
 - Either leaves with `:leave` instead and plays on. Its world goes on from where it
   stood, `:session` reads `Session hosting` with no address under the same
   participant, and its bots come back to the places they had. The others see the

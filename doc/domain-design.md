@@ -683,7 +683,8 @@ Wraiths; one that reaches none continues as an explicit local fork.
 The one instance that departs a participant without a crossing is a fork with no
 link left. Nothing there can produce or receive one, so it departs every cursor it
 does not simulate as local roster state: a person's fork keeps each as a Wraith in
-the session it goes on in, a script's or a bot's drops them. Agreeing on a tick
+the session it goes on in, only its own bots' where the session ended with its
+host; a script's or a bot's drops them. Agreeing on a tick
 needs a second instance, and there is none; a fork that still holds links leaves its
 roster alone, which is part of the unimplemented partition case below.
 
