@@ -291,24 +291,25 @@ func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
 }
 
 // TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft: [play] sets auto-fire, the
-// mouse and the HUD before the first tick; an unchanged run writes no file, each
-// value changed is written to the settings file and nothing else, and a purge
-// returns to the run's start.
+// mouse, the HUD and the camera's edge before the first tick; an unchanged run
+// writes no file, each value changed is written to the settings file and nothing
+// else, and a purge returns to the run's start.
 func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv(paths.SystemRootsEnv, "")
 	dir := t.TempDir()
 	file := filepath.Join(dir, paths.SettingsFile)
 	a, err := NewHeadless(Config{Seed: 1, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
-		Play: paths.Play{AutoFire: "off", HUD: true, SfxVolume: 0.5}, Settings: paths.FileStore{Path: file}})
+		Play: paths.Play{AutoFire: "off", HUD: true, SfxVolume: 0.5, CameraEdge: 20}, Settings: paths.FileStore{Path: file}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(a.Close)
 	ctx := a.ctx
-	if ctx.AutoFire.Load() != engine.AutoFireOff || !ctx.MouseDisabled.Load() || ctx.MouseFreeMode.Load() || !ctx.OverlayHUD.Load() {
-		t.Fatalf("the run did not start as [play] says: auto %d mouse off %v free %v hud %v",
-			ctx.AutoFire.Load(), ctx.MouseDisabled.Load(), ctx.MouseFreeMode.Load(), ctx.OverlayHUD.Load())
+	if ctx.AutoFire.Load() != engine.AutoFireOff || !ctx.MouseDisabled.Load() || ctx.MouseFreeMode.Load() || !ctx.OverlayHUD.Load() ||
+		a.world.CameraEdge() != 20 {
+		t.Fatalf("the run did not start as [play] says: auto %d mouse off %v free %v hud %v camera edge %d",
+			ctx.AutoFire.Load(), ctx.MouseDisabled.Load(), ctx.MouseFreeMode.Load(), ctx.OverlayHUD.Load(), a.world.CameraEdge())
 	}
 	a.persistPlay()
 	if _, err := os.Stat(file); err == nil {
@@ -322,10 +323,11 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	ctx.MaxFPS.Store(24)
 	ctx.PauseCommand.Store(true)
 	ctx.Takeover.Store(true)
+	a.world.SetCameraEdge(25)
 	a.persistPlay()
 	s, path, err := paths.LoadSettings(dir)
 	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.MaxFPS != 24 || s.Play.HUD != paths.DefaultPlay().HUD ||
-		!s.Play.PauseCommand || !s.Play.Takeover {
+		!s.Play.PauseCommand || !s.Play.Takeover || s.Play.CameraEdge != 25 {
 		t.Fatalf("written back: %+v from %q, %v", s.Play, path, err)
 	}
 	ctx.ResetSessionState()
