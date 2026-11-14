@@ -90,12 +90,11 @@ func LoadKeyConfig(data []byte) (*KeyTable, error) {
 	return kt, nil
 }
 
-// UpgradeKeymap brings a keymap document an earlier build left up to this build's,
-// as paths.UpgradeSettings does vif.toml: a section this build does not read, a key
-// it cannot name and a binding it refuses go with their own comments, then each
-// embedded binding for a key the document binds in no spelling comes with its
-// comments. It names the changes, counting many adds, and refuses (errNotKeymap) a
-// document that sets something yet no section of a keymap, which another file is.
+// UpgradeKeymap brings a keymap an earlier build left up to this build's, as
+// paths.UpgradeSettings does vif.toml: a section it does not read, a key it cannot
+// name and a binding it refuses go with their own comments, then each embedded
+// binding of a key bound in no spelling comes with its comments. It names the
+// changes, and refuses a document setting something but no keymap section (errNotKeymap).
 func UpgradeKeymap(data []byte) ([]byte, []string, error) {
 	doc, err := toml.ParseDocument(data)
 	if err != nil {

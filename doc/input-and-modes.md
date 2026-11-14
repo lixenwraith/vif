@@ -576,15 +576,17 @@ so the embedded binding stands unless another spelling of the key binds it; each
 embedded binding of a key the file binds in no spelling then comes with its
 comments. Every other binding stays, unbindings included. A section written inline
 (`normal = { h = "undo" }`) is written again without what goes and gains no
-binding, as a `vif.toml` table written inline does. A file holding none of the
-sections above is no keymap: a run refuses it, as one that does not parse, and
-nothing writes it. Starting, vif writes the player's own file back so, once, and
-names the changes, counting the added bindings past five. The player's own is the
-file `-k` names, or the one in the `-config-dir` root or the user root; a `[paths]
-keymap` or `root` counts as `-k` or `-config-dir` only from the player's own
-`vif.toml`, and a file in the checkout's `wad/` or a system root, however named, or
-a special file such as `-k /dev/null`, is never the player's. Any other is read up
-to date and left as it is, and `-check` names the changes and writes nothing.
+binding, as a `vif.toml` table written inline does. A file setting something yet
+none of the sections above is no keymap: a run refuses it, as one that does not
+parse, and nothing writes it; an empty one, or one of comments alone, binds nothing
+of its own and is brought up to date as any other. Starting, vif writes the
+player's own file back so, once, and names the changes, counting the added
+bindings past five. The player's own is the file `-k` names, or the one in the
+`-config-dir` root or the user root; a `[paths] keymap` or `root` counts as `-k` or
+`-config-dir` only from the player's own `vif.toml`, and a file in the checkout's
+`wad/` or a system root, however named, or a special file such as
+`-k /dev/null`, is never the player's. Any other is read up to date and left as it
+is, and `-check` names the changes and writes nothing.
 
 ```toml
 [normal]

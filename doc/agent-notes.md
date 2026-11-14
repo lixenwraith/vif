@@ -798,8 +798,14 @@ Libraries · Branches.
 - Which file is the player's own is `paths.OwnRoot`, `paths.Shared` and
   `paths.Special`, and every host builds its `resource.Options` from `vif.toml` with
   `Options.ApplySettings`, which marks a root or keymap another's `vif.toml` names
-  foreign: a host never decides it alone. A `-k` file holding no keymap section is
-  refused rather than upgraded, so a wrong path never has its file replaced.
+  foreign: a host never decides it alone. A `-k` file setting something but no
+  keymap section is refused rather than upgraded, so a wrong path never has its
+  file replaced; an empty one is a keymap binding nothing of its own.
+- `os.UserConfigDir` reads `XDG_CONFIG_HOME` only on Linux and the BSDs, so a test
+  setting it alone writes the developer's own files on macOS and Windows: point
+  `HOME` and `AppData` there too and skip where `paths.UserRoot` still lies
+  elsewhere, or write a `-config-dir` root instead. A store test never names
+  `/dev/null`, which a broken refusal renames over as root: use a FIFO.
 
 ## Scenario TOML
 

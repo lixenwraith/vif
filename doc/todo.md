@@ -1890,6 +1890,17 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   seed's `[paths]` names, or mark it; one inside a system root stays shared
   (`paths.Shared`).
 
+### Let a run on a shared config root keep its changes
+
+- Priority: P3
+- Affected files: `internal/paths/settings.go` (`SettingsFor`, `LoadSettings`)
+- A `-config-dir` naming the checkout's `wad/` or a system root reads that root's
+  `vif.toml` before the user root's, while the copy the first change makes in the
+  user root takes every later one, so such a run starts from the shared file each
+  time. Reading the user root's copy first when there is one would keep them, at
+  the price of the copy shadowing what `-config-dir` names; the shared file stays
+  unwritten.
+
 ### Use sixteen console backgrounds on Linux
 
 - Priority: P3

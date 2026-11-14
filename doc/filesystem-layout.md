@@ -190,9 +190,12 @@ value: a key dropped from it goes as the table is written again without it, in
 toml's own spelling and without the comments inside it, and a key it lacks is not
 added but reads as its default ([TODO](todo.md#let-toml-edit-a-key-inside-an-inline-value)).
 Starting, vif writes the result back to the player's own file (below), once, and
-names the changes on its status line, or on standard output for a run that draws
-nothing (a headless bot or replay, `-script` without `-watch`, `-serve`), counting
-the added keys past five (`parameter.UpgradeNamed`). `-check` names them, writes
+names the changes on its status line, a watched replay's, script's or bot's too, or
+on standard output for a run that draws nothing (a headless bot or replay,
+`-script` without `-watch`, `-serve`), counting the added keys past five
+(`parameter.UpgradeNamed`). It writes once it has taken the command line: a run its
+flags refuse writes nothing, and one that fails after writing names the changes on
+standard error beside its error. `-check` names them, writes
 nothing, and says of the file it read whether a run writes it back, or reads it up
 to date as another's or as one a write refuses (below). The keymap is brought up to
 date the same way ([Input §10](input-and-modes.md#10-keymap-override-files)).
@@ -204,14 +207,17 @@ back as the player changes it, through a menu row or the command behind it, so t
 next starts the same: into the `vif.toml` it read when that is the player's own, in
 the user root or the `-config-dir` root, else into the user root's, created at the
 first change as a copy of the one it read, brought up to date with its relative
-paths made absolute, that shadows it from then on. A file in the checkout's `wad/`
-or a system root is never written, whatever names it, `-config-dir` included, and
-neither is a special file such as a link to `/dev/null` or a pipe: a run reads it
-brought up to date and leaves it as it is, and only an install brings a system
-root's up to date (§4). A write replaces the file whole by rename, through a link to
-the file it names, keeping its mode and, as far as the writer may, its owner; a new
-file is made 0644. One no one may write, or a link to nothing, is refused, and the
-status line says so. A rename leaves a hard link's other names on the old file
+paths made absolute, which every later run reads in its place but one whose
+`-config-dir` holds the file it copied
+([TODO](todo.md#let-a-run-on-a-shared-config-root-keep-its-changes)). A file in
+the checkout's `wad/` or a system root is never written, whatever names it,
+`-config-dir` included, and neither is a special file such as a link to
+`/dev/null` or a pipe: a run reads it brought up to date and leaves it as it is,
+and only an install brings a system root's up to date (§4). A write replaces the
+file whole by rename, through a link to the file it names, keeping its mode and,
+as far as the writer may, its owner; a new file is made 0644. One no one may
+write, or a link to nothing, is refused, and the status line says so. A rename
+leaves a hard link's other names on the old file
 ([TODO](todo.md#write-a-hard-linked-settings-file-in-place)). Only a value changed in the run is written,
 so one a flag set (`-mute`'s channels, `-nw`'s wait) stays out unless the player
 then changes it. No flag saves the others: a flag is what an alias, a script or a
