@@ -849,13 +849,14 @@ func (m *Membership) leaveLocked() error {
 // door it had is shut. Runs on Loop, which holds no lock: the port it closes waits
 // for handshakes that take the world lock.
 func (m *Membership) LeaveSession() {
-	lost := ForkCell(m.world).Load() // read before the reopen clears it
+	lost := ForkCell(m.world).Load()       // read before the reopen clears it
+	keepAll := lost && !m.fixedAuthority() // and before it pins this run's own policy
 	bots := m.SeatGraphs()
 	m.CloseSeats(true)
 	var old engine.NetworkPort
 	err := m.corrections.Leave(func() error {
 		var err error
-		m.world.RunSafe(func() { old, err = m.leaveSessionLocked(lost) })
+		m.world.RunSafe(func() { old, err = m.leaveSessionLocked(keepAll) })
 		return err
 	})
 	if port, ok := old.(interface{ Close() error }); ok {
@@ -903,7 +904,7 @@ func leftNotice(err error, lost, held, bots bool) (string, parameter.StatusKind)
 // leaveSessionLocked reopens the world in a session of this run's own and forgets
 // the one it was in, whose transport it returns for the caller to close off the
 // lock. Caller MUST hold updateMutex.
-func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
+func (m *Membership) leaveSessionLocked(keepAll bool) (engine.NetworkPort, error) {
 	// A run being replaced is not left: what replaces it decides where it goes.
 	if m.dismissed.Load() || m.run.Replacing() {
 		return nil, scribe.ErrRunReplaced
@@ -911,13 +912,14 @@ func (m *Membership) leaveSessionLocked(lost bool) (engine.NetworkPort, error) {
 	m.takeOwnPlaceLocked()
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
 	local := link.PeerID(m.world.LocalParticipant())
-	// A leave keeps its bots' places, and a run its session gave up every place, for
-	// whoever hosts next to give back. A bot of this run's goes on under a key of its
-	// own over the record it left with, which stays the left session's.
+	// A leave keeps its bots' places. A run its session gave up keeps every place, for
+	// whoever hosts next to give back, unless the session is pinned: nobody hosts it
+	// next, nor signed up to come back here. A bot of this run's goes on under a key of
+	// its own over the record it left with, which stays the left session's.
 	var kept []network.RosterEntry
 	var carried []*place
 	for _, p := range roster {
-		if p.ID == local || !lost && p.Holder != local {
+		if p.ID == local || !keepAll && p.Holder != local {
 			continue
 		}
 		if p.Holder == local {

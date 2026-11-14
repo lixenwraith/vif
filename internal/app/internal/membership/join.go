@@ -374,7 +374,6 @@ func (m *Membership) BindSessionHooks(r *engine.NetworkResource) {
 	r.OnAuthorityAhead = m.authorityAhead
 	r.DismissWraith = func() uint32 { return m.dismissWraith.Swap(0) }
 	r.WraithKept = m.wraithKept
-	r.Doorless = m.doorless
 	// Read as each artifact arrives, since the context is built after the world.
 	r.Relaying = func() bool { return m.ctx.Relaying.Load() }
 	r.OnOwnState = m.keepRecord
@@ -417,14 +416,6 @@ func (m *Membership) wraithKept(participant uint32) bool {
 	}
 	i := slices.IndexFunc(m.sessionRoster, func(p network.RosterEntry) bool { return p.ID == id })
 	return i >= 0 && !m.sessionRoster[i].Away
-}
-
-// doorless reports a session nobody can come back to until :host opens it: the one
-// this run opened for its bots, or went on in after a leave or a fork. A build
-// that binds no socket never opens one, so its waits run as any other's. Caller
-// MUST hold updateMutex.
-func (m *Membership) doorless() bool {
-	return config.SocketNetwork && m.sessionRoleLocked() == roleSeats
 }
 
 // restartWaitsLocked has the authority start every Wraith's wait over once a door

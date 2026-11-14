@@ -2310,8 +2310,8 @@ func TestALeavingGuestPlaysOnInASessionOfItsOwn(t *testing.T) {
 	waitForWraiths(t, host, 1)
 }
 
-// lostHost is a guest its pinned host has left, as the loss reaches its loop: who it
-// was, what it held, and the key the host's place waits under.
+// lostHost is a guest its host has left, under the policy it hosted by, as the loss
+// reaches its loop: who it was, what it held, and the key the host's place is under.
 type lostHost struct {
 	guest *App
 	id    uint32
@@ -2320,9 +2320,34 @@ type lostHost struct {
 	held  map[uint8][2]uint64
 }
 
-func guestOfALostHost(t *testing.T) lostHost {
+func guestOfALostHost(t *testing.T, policy string) lostHost {
 	t.Helper()
-	store := &keptPlaces{}
+	host, guest, store := guestOfAHost(t, policy)
+	l := lostHost{guest: guest, id: guest.membership.LocalParticipant(), term: guest.authority.Term(),
+		key: store.key(t), held: places(guest, everyone)}
+	loseTheHost(t, host, guest)
+	return l
+}
+
+// loseTheHost has host leave its session as :leave does, and ticks guest until the
+// loss reaches its loop to take on.
+func loseTheHost(t *testing.T, host, guest *App) {
+	t.Helper()
+	leaveAs(t, host)
+	stopGuest := tickInBackground(guest)
+	for deadline := time.Now().Add(socketWait); !guest.membership.Leaving() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	stopGuest()
+	if !guest.membership.Leaving() {
+		t.Fatal("the guest lost its host, and nothing asked its loop to take it on")
+	}
+}
+
+// guestOfAHost has a guest of Run's loop joined to a host hosting under policy, the
+// pair rostered and ticked by hand from there, and the store the guest's key went to.
+func guestOfAHost(t *testing.T, policy string) (host, guest *App, store *keptPlaces) {
+	t.Helper()
+	store = &keptPlaces{}
 	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: BotWidth, Height: BotHeight,
 		Resources: resource.Options{Embedded: true}, Membership: Membership{PlaceStore: store}})
 	if err != nil {
@@ -2332,38 +2357,47 @@ func guestOfALostHost(t *testing.T) lostHost {
 	tickUntilCursor(t, host)
 	stopTicking := tickInBackground(host)
 	t.Cleanup(stopTicking)
-	host.World().RunSafe(func() { err = host.ctx.SessionCtl.BeginHosting("127.0.0.1:0", AuthorityHost) })
+	host.World().RunSafe(func() { err = host.ctx.SessionCtl.BeginHosting("127.0.0.1:0", policy) })
 	if err != nil {
 		t.Fatal(err)
 	}
-	guest, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
+	guest, _ = mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight)
 	guest.World().RunSafe(func() {
 		guest.cfg.Membership.JoinAddress = host.HostAddr() // what -join sets; a headless run refuses it
 		guest.cfg.Mode = ModePlay                          // the mode whose loop takes a fork on
 	})
 	stopTicking()
 	waitForRosterPair(t, host, guest)
-	l := lostHost{guest: guest, id: guest.membership.LocalParticipant(), term: guest.authority.Term(),
-		key: store.key(t), held: places(guest, everyone)}
+	return host, guest, store
+}
 
-	leaveAs(t, host)
-	stopGuest := tickInBackground(guest)
-	for deadline := time.Now().Add(socketWait); !guest.membership.Leaving() && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+// TestAFrozenGuestSaysWhatItWaitsFor: a guest its host's loss freezes says it
+// reconnects where its session is pinned to the host, and that it waits for the next
+// host where the session migrates.
+func TestAFrozenGuestSaysWhatItWaitsFor(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, tt := range []struct{ policy, notice string }{
+		{AuthorityHost, "Host lost; reconnecting"},
+		{AuthorityMigrate, "Host lost; waiting for the next host"},
+	} {
+		t.Run(tt.policy, func(t *testing.T) {
+			_, guest, _ := guestOfAHost(t, tt.policy)
+			guest.membership.Freeze() // as its session asks while the host changes or it redials
+			if msg := guest.Context().GetStatusMessage(); msg != tt.notice {
+				t.Fatalf("a guest frozen under the %s policy says %q; want %q", tt.policy, msg, tt.notice)
+			}
+		})
 	}
-	stopGuest()
-	if !guest.membership.Leaving() {
-		t.Fatal("the guest lost its pinned host, and nothing asked its loop to take it on")
-	}
-	return l
 }
 
 // TestAForkGoesOnInASessionOfItsOwn: a run its session gives up, here a guest whose
 // pinned host left, is taken on as :leave takes it: a session of its own under the
 // identity it had and the next term, :host and :join open to it, and the loss said
-// as one. The host's place stays, its cursor a Wraith.
+// as one. The session ended with its host, so the host's place goes with it, and a
+// session nobody can dial reads no link.
 func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
-	l := guestOfALostHost(t)
+	l := guestOfALostHost(t, AuthorityHost)
 	guest, id, term, held := l.guest, l.id, l.term, l.held
 	guest.membership.LeaveSession() // as Run's loop does
 
@@ -2378,9 +2412,9 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 		t.Fatalf("after its fork, participant %d authoring %t at term %d; want it authoring as %d at term %d",
 			guest.membership.LocalParticipant(), authoring, guest.authority.Term(), id, term+1)
 	}
-	if got := places(guest, everyone); len(held) != 2 || !maps.Equal(got, held) || !wraithIn(guest, 0) {
-		t.Fatalf("after its fork the guest holds %v (entity, participant by slot), the host's a Wraith %t; want %v, the host's a Wraith",
-			got, wraithIn(guest, 0), held)
+	own := map[uint8][2]uint64{1: held[1]}
+	if got := places(guest, everyone); len(held) != 2 || !maps.Equal(got, own) {
+		t.Fatalf("after its fork the guest holds %v (entity, participant by slot); want only its own, %v", got, own)
 	}
 	if hostErr != nil || joinErr != nil || leaveErr == nil || !strings.Contains(leaveErr.Error(), "only its own bots") {
 		t.Fatalf("after its fork, :host %v, :join %v, :leave %v; want the first two taken and a session of its own to leave", hostErr, joinErr, leaveErr)
@@ -2388,24 +2422,117 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	if msg := guest.Context().GetStatusMessage(); msg != "Host connection lost; playing on in a session of your own" {
 		t.Fatalf("after its fork the guest says %q; want the loss said", msg)
 	}
-}
-
-// TestAForksWraithsWaitForItsDoor: a fork dismisses nobody it kept a place for while
-// its session has no door, however long they wait; :host starts every wait over,
-// in its replay as in the run, and from there the lost host's key takes its place
-// back, or the place goes at its time.
-func TestAForksWraithsWaitForItsDoor(t *testing.T) {
-	// Not parallel: real sockets against wall-clock deadlines.
-	for name, returns := range map[string]bool{"its key comes back": true, "nobody comes back": false} {
-		t.Run(name, func(t *testing.T) { aForksWraithsWaitForItsDoor(t, returns) })
+	guest.Tick(1)
+	var state string
+	guest.World().RunSafe(func() { state = guest.world.Resources.Status.Strings.Get("network.state").Load() })
+	if state != "idle" {
+		t.Fatalf("after its fork the guest's link reads %q; want idle", state)
 	}
 }
 
-func aForksWraithsWaitForItsDoor(t *testing.T, returns bool) {
-	l := guestOfALostHost(t)
+// TestAPinnedForkKeepsNobodyItDidNotBring: a fork of a session pinned to its host
+// keeps none of the people it played with there, since nobody hosts that session
+// next: another guest of the host, linked to it as it left, waits in the fork as no
+// Wraith, and its key at the door the fork's :host opens is given a place of its own,
+// not the one it left.
+func TestAPinnedForkKeepsNobodyItDidNotBring(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	host, guest, _ := guestOfAHost(t, AuthorityHost)
+	stopHost, stopGuest := tickInBackground(host), tickInBackground(guest)
+	t.Cleanup(stopHost)
+	t.Cleanup(stopGuest)
+	store := &keptPlaces{}
+	other, _ := mustSocketJoiner(t, host.HostAddr(), fixtureSeed, BotWidth, BotHeight, func(c *Config) { c.Membership.PlaceStore = store })
+	_, slot := arrival(t, host, other)
+	waitUntil(t, func() bool { return cursorIn(guest, slot) }, "the other guest's arrival on the guest")
+	stopHost()
+	stopGuest()
+	own, held := guest.membership.LocalSlot(), places(guest, everyone)
+	if len(held) != 3 {
+		t.Fatalf("before the loss the guest holds %v (entity, participant by slot); want the host and both guests", held)
+	}
+
+	loseTheHost(t, host, guest)
+	guest.membership.LeaveSession() // as Run's loop does
+	if got, want := places(guest, everyone), map[uint8][2]uint64{own: held[own]}; !maps.Equal(got, want) {
+		t.Fatalf("after its fork the guest holds %v (entity, participant by slot); want only its own, %v", got, want)
+	}
+	if err := guest.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("the fork opens no door: %v", err)
+	}
+	stopFork := tickInBackground(guest)
+	defer stopFork()
+	key := store.key(t)
+	back, offered := dialSession(t, guest.HostAddr(), key)
+	defer back.Close()
+	if entry, _ := offered.Entry(offered.Assigned); entry.Key == key.ID() {
+		t.Fatalf("the other guest's key at the fork's door was given the place it left, %d on slot %d; want a place of its own", offered.Assigned, entry.Slot)
+	}
+}
+
+// TestADoorOpenedWhereNobodyCouldDialWaitsForItsFirstGuest: a session of a run's own
+// bots reads no link once its last bot has gone, and the door :host opens there waits
+// for its first guest as a fresh host's does, rather than reading as a link that went
+// down: nobody has dialled it.
+func TestADoorOpenedWhereNobodyCouldDialWaitsForItsFirstGuest(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	a := mustHeadless(t, 0x3037, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	state := func() (s string) {
+		a.World().RunSafe(func() { s = a.world.Resources.Status.Strings.Get("network.state").Load() })
+		return s
+	}
+	injectExCommand(t, a, "bot add")
+	stopTicking := tickInBackground(a)
+	defer stopTicking()
+	ctl := a.ctx.SessionCtl
+	// A seat learns its slot from its own gate, which can finish after the holder
+	// has applied its arrival; dropped before, :bot drop would dismiss its cursor.
+	waitUntil(t, func() bool {
+		return slices.ContainsFunc(ctl.Bots(), func(b engine.BotSeat) bool { return !b.Joining && b.Slot == 1 })
+	}, "the bot on slot 1 to learn its slot")
+	waitUntil(t, func() bool { return state() == "connected" }, "the bot's link")
+	var err error
+	a.World().RunSafe(func() { err = ctl.DropBot(1) })
+	if err != nil {
+		t.Fatalf("dropping the bot on slot 1: %v", err)
+	}
+	waitUntil(t, func() bool { return state() == "idle" }, "a session nobody can dial to read no link")
+	stopTicking()
+	if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	a.Tick(1)
+	if s := state(); s != "waiting" {
+		t.Fatalf("the door :host opened where the run's bot had been reads %q; want waiting, as a fresh host's", s)
+	}
+}
+
+// TestAForksWraithsWaitTheirTime: a fork of a session that outlives its host keeps
+// the host's place, whose wait runs with no door as any other's: with no door it goes
+// at its time, in its replay as in the run; :host starts every wait over, in its
+// replay as in the run, and from there the lost host's key takes its place back, or
+// the place goes at its time.
+func TestAForksWraithsWaitTheirTime(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	for _, tt := range []struct {
+		name          string
+		door, returns bool
+	}{
+		{"no door opens", false, false},
+		{"its key comes back", true, true},
+		{"nobody comes back", true, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) { aForksWraithsWaitTheirTime(t, tt.door, tt.returns) })
+	}
+}
+
+func aForksWraithsWaitTheirTime(t *testing.T, door, returns bool) {
+	l := guestOfALostHost(t, AuthorityMigrate)
 	guest := l.guest
 	guest.membership.LeaveSession() // as Run's loop does
-	waiting := func() (d time.Duration, doorless bool) {
+	waiting := func() (d time.Duration) {
 		guest.World().RunSafe(func() {
 			w := guest.world
 			if wraith, away := w.Components.Wraith.GetComponent(w.Resources.Player.Slot(0)); away {
@@ -2413,16 +2540,20 @@ func aForksWraithsWaitForItsDoor(t *testing.T, returns bool) {
 			} else {
 				d = -1
 			}
-			doorless = w.Resources.Network.Doorless()
 		})
-		return d, doorless
+		return d
 	}
 	var dt time.Duration
 	guest.World().RunSafe(func() { dt = guest.world.Resources.Time.DeltaTime })
-	guest.Tick(int((parameter.WraithTimeout + time.Second) / dt))
-	if d, doorless := waiting(); d < parameter.WraithTimeout || !doorless {
-		t.Fatalf("past its time with no door, the host's place has waited %v (-1: gone) in a session doorless %t; want it waiting still",
-			d, doorless)
+	guest.Tick(int(parameter.WraithTimeout / 2 / dt))
+	if d := waiting(); d < parameter.WraithTimeout/2-dt {
+		t.Fatalf("half its time on with no door, the host's place has waited %v (-1: gone); want it waiting, the wait running", d)
+	}
+	if !door { // on to just short of its time, so the journal holds its going
+		guest.Tick(int((parameter.WraithTimeout/2 - 2*time.Second) / dt))
+		if d := waiting(); d < 0 {
+			t.Fatal("with no door, the host's place went before its time")
+		}
 	}
 
 	rec := journal.NewCapture()
@@ -2438,15 +2569,33 @@ func aForksWraithsWaitForItsDoor(t *testing.T, returns bool) {
 			want[event.Stamp{Run: p.Run, Tick: p.Tick}] = guestSurface(guest)
 		}
 	}
+	const settle = 2 * parameter.NetworkBarrierMaxDelayTicks
+	if !door {
+		play(int(4*time.Second/dt) + settle)
+		if d := waiting(); d != -1 {
+			t.Fatalf("past its time with no door, the host's place has waited %v; want it dismissed", d)
+		}
+		guest.World().RunSafe(func() { _ = guest.scribe.StopJournalLocked(-1) })
+		guest.scribe.ServeJournal()
+		departures := 0
+		for _, r := range rec.Records() {
+			if r.Type == event.EventParticipantDeparted {
+				departures++
+			}
+		}
+		if departures != 1 {
+			t.Fatalf("the place's going is journaled as %d departures, want one", departures)
+		}
+		replayMatches(t, rec, want, guestSurface)
+		return
+	}
 	play(20)
 	if err := guest.BeginHosting("127.0.0.1:0"); err != nil {
 		t.Fatalf("the fork opens no door: %v", err)
 	}
-	const settle = 2 * parameter.NetworkBarrierMaxDelayTicks
 	play(settle)
-	if d, doorless := waiting(); d < 0 || d > settle*dt || doorless {
-		t.Fatalf("%d ticks after :host the host's place has waited %v (-1: gone) in a session doorless %t; want a wait begun at the door",
-			settle, d, doorless)
+	if d := waiting(); d < 0 || d > settle*dt {
+		t.Fatalf("%d ticks after :host the host's place has waited %v (-1: gone); want a wait begun at the door", settle, d)
 	}
 	guest.World().RunSafe(func() { _ = guest.scribe.StopJournalLocked(-1) })
 	guest.scribe.ServeJournal()
@@ -2463,7 +2612,7 @@ func aForksWraithsWaitForItsDoor(t *testing.T, returns bool) {
 
 	if !returns {
 		guest.Tick(int(parameter.WraithTimeout / dt))
-		if d, _ := waiting(); d != -1 {
+		if d := waiting(); d != -1 {
 			t.Fatalf("its time after :host the host's place has waited %v, want it dismissed", d)
 		}
 		return

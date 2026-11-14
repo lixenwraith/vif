@@ -183,7 +183,8 @@ is tcp, which participants link to each other over; any other scheme is refused
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
 the mid-run gate. Only `-serve`, or a script or bot run's `-host`, holds tick zero
 in a lobby until its guests are ready. After a
-connected peer leaves, the remote cursor is removed and the survivor continues; the
+connected peer leaves, its cursor waits as a Wraith
+([Multiplayer §5.4](multi-player.md#54-wraiths)) and the survivor continues; the
 listener stays active and the same participant may dial again, which is the
 reconnect path and is not a separate mechanism.
 
@@ -892,10 +893,10 @@ cost, how many artifacts the term gate ignored or refused, how many participants
 it evicted, and the run-level facts: `network.fork`, set when this instance is a
 local continuation rather than part of a session; `network.host_lost`, raised when
 a guest loses its link to the authority or a succession ends as a fork, which draws
-`Host lost` while no succession is open; both clear once a handoff is adopted or the
-run opens a session of its own; and
-`network.migrating`, which draws `Migrating` over it while a succession is open and
-for `NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
+`Host lost` unless `Migrating` stands over it; both clear once a handoff is adopted or
+the run opens a session of its own; and
+`network.migrating`, which draws `Migrating` over it while a succession is open in a
+session that migrates and for `NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
 `network.rejoin_attempts` beside it while a survivor with no link is walking the
 succession list. `:session` prints the term, the authority when it is somebody
 else, the handoff count once there has been one, a succession in progress, the
@@ -981,8 +982,9 @@ What the operator surface does not cover:
   ([Auth and session design §3.5](auth-session-design.md#35-passphrase-doors));
 - host loss hands the term down the succession list (§8), and every survivor
   that reaches no candidate, or every survivor when the session pinned its
-  authority, goes on apart: a person's run in a session of its own that keeps every
-  place, a script or bot as an explicit independent local fork. Losing the host in
+  authority, goes on apart: a person's run in a session of its own, keeping every
+  place where the session migrates and its bots' alone where it does not,
+  a script or bot as an explicit independent local fork. Losing the host in
   turn runs the next succession among those still linked. Partition merging is
   not built, and refusing to merge is what happens instead: a fork that meets a
   higher term refuses it and reports it;
@@ -1095,11 +1097,12 @@ must not move and neither side may fall behind. The host's `:new` resets both
 rosters and a guest's is refused. Quit the guest; the host must show a
 participant-disconnected message and continue at `Net: down`. Quit the host; under
 `-authority migrate` a guest that takes over (`:takeover on` before it joined, or
-`-listen`) shows `Migrating` and takes the term, and under the default
-`-authority host` it says its host connection was lost and plays on in a
-session of its own — `:session` reads `Session hosting` under the same participant
-and the next term, and the host's cursor waits as a Wraith. Restarting the host
-and rejoining with `:join` is a *new* session, not a merge.
+`-listen`) shows `Migrating`, takes the term and keeps the host's cursor as a
+Wraith for its wait, and under the default `-authority host` it says its host
+connection was lost and plays on in a session of its own — `:session` reads
+`Session hosting` under the same participant and the next term, the host's cursor
+is gone and no network badge shows. Restarting the host and rejoining with `:join`
+is a *new* session, not a merge.
 `-players <n>` caps the roster a host admits, `-host` or a later `:host` alike, and
 so does the scenario's `max_players`; unset, both are `MaxPlayers`. Bind the host to `:7777` for a LAN, where `:lan on` lets players find it with no address typed. Internet routing
 uses the same TCP path: a tcp door is plaintext and admits any key, so it is for

@@ -1244,6 +1244,33 @@ file by its methods' receiver, or each new file is an unchecked helper that
 `TestHelperFilesArePinned` refuses. Both steps conflict with every open branch on
 the file, so they wait for a pause between waves of netcode work.
 
+### Tell a host that stalls from one that is gone
+
+- Priority: P2
+- Affected files: `internal/converge/authority.go` (`driveShedding`, `peerLost`),
+  `internal/converge/correction.go` (`observeFloor`), `internal/converge/reach.go`
+  (`Reach.cutOff`), `internal/render/renderer/status_bar.go`
+- Guide: [Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing),
+  [§5.1](multi-player.md#51-succession)
+
+A guest reads its host's silence from its link alone: one that stops answering is
+dead at `NetworkLinkDeadAfter`, and the guest redials or walks (§5.1). Two stalls
+fall between that and a host that only slows:
+- **A host whose loop stalls while its transport answers**, a deadlock on the world
+  lock or a pathological tick: the probe is answered on transport goroutines, so the
+  link stays up and the guest predicts alone for as long as the stall lasts. Its
+  badge stays green, since `slow!` needs a cadence only a publisher writes, and the
+  one sign is the floor's 8 s alert. What would close it: a floor that stays
+  breached over a link that answers counts as the authority's loss and opens the
+  walk `Reach.cutOff` opens, and the badge shows a breach with no cadence.
+- **A host frozen for 1.1 to 5 s**, which every link survives: its clock projects
+  through the freeze, the scheduler drops the debt at once, and `driveShedding`
+  takes that one drop for overload, shedding the newest bot, else the newest guest
+  ("Removed by the host to keep its tick"). In a scratch converge test a 1 s freeze
+  shed nobody, and 1.5 s and 4 s shed the guest. What would close it: a single drop
+  longer than the link-dead time is not counted, or the share has to hold over two
+  windows.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -1555,6 +1582,106 @@ with nobody in it, such as td's two sides attacking each other's towers, needs a
 lobby quorum of 0 so a server starts without a guest, `holdVacant` parking only
 below the scenario's minimum, the ownerless boot cursor dropped without a park, and
 spawns that do not anchor on a cursor: the gold cycle fails and retries with none.
+
+### Issue a pass in a session opened past its first term
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`openSessionLocked`),
+  `internal/app/internal/membership/session.go` (`issuePassLocked`, `checkPass`),
+  `internal/converge/authority.go` (`extendTermKeys`)
+- Guide: [Multi-player §5.4](multi-player.md#54-wraiths) (the pass)
+
+A pass names the session's first authority key, `TermKeys[0]`. A session a run opens
+after `:leave` or a fork starts at the next term with no term keys, so `Open` fills
+the earlier terms with empty keys: `issuePassLocked` signs over an empty authority
+key and fails ("pass not issued", logged for every bot the leave seats again), and
+`checkPass` holds every pass shown to that empty key. Nobody there is given a pass,
+so a passphrase `:host` sets on such a session later spares no redial its phrase.
+What would close it: a pass names the first key the session's own terms hold, or a
+reopened session keeps its own term's key first.
+
+### Publish a new session's link once its port runs
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`openSessionLocked`),
+  `internal/system/network.go` (`publishConnectionTelemetry`)
+- Guide: [Multi-player §7](multi-player.md#7-diagnostics-and-operations)
+
+`openSessionLocked` activates the session, which publishes `network.state`, before
+it starts the port, so a port not yet running reads `down` from inside the command
+until the next tick. The frame loop draws between ticks, so `:host` on a solo run,
+`:bot add`, `:leave` and a fork can show `Net: down` until that tick, and after
+`:host` the badge's 500 ms hold (`StatusNetworkHoldDuration`) keeps it up before
+`Net: wait`; where the next tick reads `idle` the badge goes at once. Read in review,
+not seen on a screen. What would close it: publish again once the port runs, or
+start it before the session activates.
+
+### Say what a run alone after a loss is
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`sessionSummaryLocked`),
+  `internal/system/network.go` (`reportDisconnect`, `publishConnectionTelemetry`),
+  `internal/app/loop.go` (`setAway`), `internal/engine/world.go` (`LatchSession`)
+- Guide: [Multi-player §5.5](multi-player.md#55-leaving-a-session),
+  [§7](multi-player.md#7-diagnostics-and-operations)
+
+A fork, a `:leave` and a dropped player go on in a session with no door, which
+shows no badge and keeps the places §5.5 says. What the run says of itself is
+still off:
+- `:session` reads `Session hosting` there, in a browser too, which cannot host,
+  and a run frozen for a redial or a walk reads "continuing locally from the last
+  authoritative state".
+- A relayed person cut off from its relay is told "Host connection lost", though
+  its host may be alive, and reads `Net: down` for 10 s and then nothing while it
+  redials the relay and walks.
+- A run with its own bots shows their in-process links as a network session's,
+  `2P:0 4ms`.
+- On Android, a fork made while the player is away plays on unpaused, since away
+  is applied only when it changes (`setAway`); and a guest the phone froze past its
+  host's Wraith wait forks on thaw saying its host connection was lost, though the
+  host never went quiet.
+- A replay's badge reads the journaled session latch (`publishConnectionTelemetry`),
+  which says only whether a peer is linked, so a replay never reads `idle` or
+  `waiting`: where the run showed no badge (`idle`) or `Net: wait`, at a fresh door or
+  at one opened where the run's bots had been, the replay shows `Net: down` for 10 s,
+  then nothing. The latch would carry what the port reads (`idle`, `waiting` or
+  `down`) as it carries `Peers`, for presentation only, at the cost of a journal
+  field.
+
+### Keep the other guests' places in a host-policy fork
+
+- Priority: P3, an option not taken (2026-11-14)
+- Affected files: `internal/app/internal/membership/host.go` (`LeaveSession`,
+  `leaveSessionLocked`), `internal/app/host_test.go`
+  (`TestAPinnedForkKeepsNobodyItDidNotBring`)
+- Guide: [Multi-player §5.5](multi-player.md#55-leaving-a-session),
+  [§5.4](multi-player.md#54-wraiths)
+
+The choice made: a fork in a session pinned to its host keeps its own place and its
+bots' alone, so the host's Wraith, the host's bots and every other guest's place go
+at the fork. Another guest of that host that later dials the door the fork's `:host`
+opens comes in as a new player, without the cursor and record it had in that world.
+
+What the other option does: the fork drops only the lost host and its bots, the
+places of the authority `giveUp` leaves named (`m.authorityID()`), and keeps every
+other place as a Wraith for `WraithTimeout`, which `:host` starts over. A guest that
+dials a door opened in that time takes its place back by its key, as it could before
+this rule, when those Wraiths waited for a door with no limit.
+
+What it entails: those Wraiths stand on the fork's map for their 2 minutes whether
+anyone comes back or not, as the host's did in the report that led here. A return
+takes the fork's player opening a door and the other guest finding it: a host-policy
+guest has no door, nothing tells the others its address (§5.0), and local network
+visibility is off by default (§5.7). The three-player test inverts, and §5.1 and
+§5.5 change with it.
+
+Why it was not chosen: nobody in a host-policy session signed up to come back to a
+guest's run, any more than that guest signed up for its host's Wraith, and keeping a
+session's people together is what `-authority migrate` with a guest that takes over
+is for.
+
+Reopen it if players of a host-policy session regroup in one guest's fork often
+enough that losing their progress there is felt.
 
 ## Combat
 

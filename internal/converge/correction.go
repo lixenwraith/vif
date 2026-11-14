@@ -1576,6 +1576,9 @@ func (c *Corrections) observeFloor() {
 		return
 	}
 	if !breached {
+		if c.authority.isAuthority() {
+			return // it took the term, here or in a fork: nothing arrived, nor need it
+		}
 		c.log.Info("converge", "msg", "authoritative world arrived inside the convergence floor",
 			"age_ticks", age)
 		c.inst.SetStatusMessage("Link recovered; the authority is arriving again", parameter.StatusAlert)

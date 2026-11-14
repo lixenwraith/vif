@@ -603,7 +603,7 @@ func (u *Authority) beginSuccession(lost link.PeerID) {
 	if !fixed || redial {
 		u.inst.Freeze()
 	}
-	u.statMigrating.Store(true)
+	u.statMigrating.Store(!fixed) // a pinned session reads Host lost while it redials
 	u.log.Warn("session", "msg", "authority lost; walking the succession list",
 		"peer", uint64(lost), "term", uint64(held), "local", uint64(local), "redial", redial)
 	u.sendReport()
@@ -1502,7 +1502,7 @@ func (u *Authority) publish() {
 // Summary is `:session`'s authority line.
 func (u *Authority) Summary() string {
 	u.mu.Lock()
-	term, holder, local, fork, contested := u.term, u.holder, u.local, u.fork, u.contested
+	term, holder, local, fork, contested, fixed := u.term, u.holder, u.local, u.fork, u.contested, u.fixed
 	migrations := u.statMigrations.Load()
 	u.mu.Unlock()
 	if term == 0 {
@@ -1518,7 +1518,10 @@ func (u *Authority) Summary() string {
 	if migrations > 0 {
 		line += fmt.Sprintf(", %d handoff(s)", migrations)
 	}
-	if contested != 0 {
+	switch {
+	case contested != 0 && fixed: // a pinned session walks no list: it redials, then forks
+		line += "; host lost, redialling it"
+	case contested != 0:
 		line += "; host lost, walking the succession list"
 	}
 	if fork {

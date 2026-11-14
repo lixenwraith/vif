@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -124,9 +125,9 @@ func TestTheTermGateRefusesWhatNobodyHandedThisInstance(t *testing.T) {
 }
 
 // TestASurvivorStandsFrozenThroughTheWalk: a survivor stops its run when its
-// authority goes, and with no record it stands until the last candidate's turn has
-// passed on the wall clock, since no tick passes to count it; the fork it ends in is
-// told to the run.
+// authority goes, reading as a migration, and with no record it stands until the last
+// candidate's turn has passed on the wall clock, since no tick passes to count it;
+// the fork it ends in is told to the run.
 func TestASurvivorStandsFrozenThroughTheWalk(t *testing.T) {
 	t.Parallel()
 	run := session(t, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})[2]
@@ -136,8 +137,8 @@ func TestASurvivorStandsFrozenThroughTheWalk(t *testing.T) {
 	// and the drive that reads it.
 	rewind(run, turns-parameter.NetworkSuccessionWindow/2)
 	run.u.drive()
-	if !run.world.frozen || run.u.State().Fork {
-		t.Fatalf("inside the walk: frozen %v, fork %v", run.world.frozen, run.u.State().Fork)
+	if migrating := run.reg.Bools.Get("network.migrating").Load(); !run.world.frozen || run.u.State().Fork || !migrating {
+		t.Fatalf("inside the walk: frozen %v, fork %v, migrating %v", run.world.frozen, run.u.State().Fork, migrating)
 	}
 	rewind(run, parameter.NetworkSuccessionWindow)
 	run.u.drive()
@@ -252,7 +253,8 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 			guest.world.forked, len(guest.world.forkedAs))
 	}
 
-	// A pinned guest walks to nobody; the one wait it has is its redial of the host.
+	// A pinned guest walks to nobody; the one wait it has is its redial of the host,
+	// which reads as the host lost rather than as a migration.
 	redialing := newRun(t, 2, nil, roster(2))
 	redialing.world.redial = true
 	redialing.u.Open(network.SessionOffer{
@@ -261,6 +263,9 @@ func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
 	redialing.u.peerLost(1)
 	if redialing.u.State().Fork || !redialing.world.frozen {
 		t.Fatal("a pinned guest forked, or played on, before its redial ended")
+	}
+	if redialing.reg.Bools.Get("network.migrating").Load() || strings.Contains(redialing.u.Summary(), "succession") {
+		t.Fatalf("a pinned guest's redial reads as a migration: %q", redialing.u.Summary())
 	}
 	redialing.u.RedialRefused(1)
 	redialing.u.drive()
@@ -306,6 +311,38 @@ func TestALeavingInstanceAuthorsOnlyTheSessionItReopens(t *testing.T) {
 	guest.c.authorityMu.Unlock()
 	if inbox != 0 || frames != 0 {
 		t.Fatalf("the left session still has %d corrections and %d succession messages queued", inbox, frames)
+	}
+}
+
+// TestOnlyAReceiverSaysItsAuthorityArrivesAgain: a guest whose authority's world
+// stays away past the convergence floor says so, and says the link recovered once a
+// world comes; a run that takes the term, as a successor or in a fork, says no such
+// thing, since nothing arrives at the world's own source.
+func TestOnlyAReceiverSaysItsAuthorityArrivesAgain(t *testing.T) {
+	t.Parallel()
+	const recovered = "Link recovered; the authority is arriving again"
+	for _, authors := range []bool{false, true} {
+		guest := newRun(t, 2, nil, roster(2))
+		guest.open(1, chainOf(1, 2), false)
+		guest.c.installedMu.Lock()
+		guest.c.haveBase = true
+		guest.c.installedMu.Unlock()
+		guest.world.stamp.Tick = parameter.SnapshotFloorKeyframeTicks + parameter.SnapshotFloorGraceTicks + 1
+		guest.c.observeFloor()
+		if !guest.reg.Bools.Get("snapshot.cadence_floor_breached").Load() {
+			t.Fatalf("a guest past its floor reads no breach; it said %q", guest.world.said)
+		}
+		if authors {
+			guest.open(2, chainOf(2), false)
+		} else {
+			guest.c.installedMu.Lock()
+			guest.c.keyTick = guest.world.stamp.Tick
+			guest.c.installedMu.Unlock()
+		}
+		guest.c.observeFloor()
+		if said := slices.Contains(guest.world.said, recovered); said == authors {
+			t.Fatalf("authoring %v, the run said %q", authors, guest.world.said)
+		}
 	}
 }
 

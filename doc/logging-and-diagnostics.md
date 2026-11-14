@@ -293,7 +293,7 @@ beside `TRACE` — while the node-local file keeps it for an operator.
 | `correction not applied` / `repair failed its proof` | WARN | `tick`, `error` / `error` | `Corrections`; a failed proof asks the authority for a keyframe |
 | `keyframe fallback sent` | DEBUG | `peer`, `tick`, `bytes` | the authority answering a peer selective repair could not serve |
 | `link cannot sustain the convergence floor` / `link is carrying the convergence floor again` | WARN / INFO | `peer`, `floor_ticks`, `floor_bps`, `budget_bps` / `floor_ticks` | the relevance budget, once on onset and once on recovery |
-| `no authoritative world inside the convergence floor` / `authoritative world arrived inside the convergence floor` | WARN / INFO | `age_ticks`, plus `floor_ticks`, `grace_ticks` on the loss | `Corrections`; the instance predicts alone between them |
+| `no authoritative world inside the convergence floor` / `authoritative world arrived inside the convergence floor` | WARN / INFO | `age_ticks`, plus `floor_ticks`, `grace_ticks` on the loss | `Corrections`; the instance predicts alone between them, and one that takes the term meanwhile, as a successor or in a fork, logs no arrival, since it authors the world |
 
 ### `sub="journal"`
 

@@ -578,7 +578,9 @@ saved and off by default) or pinned `-listen`. Both are off unless asked because
 migrating session shares the address of each guest that may take it over with the
 other players, and a session whose host drops would otherwise expose a guest's
 address on the open internet for a game its player never offered to host. With no
-guest willing, a migrate session ends as a host one does. The policy is the
+guest willing, nobody takes a migrate session over: each survivor redials, finds no
+candidate and forks, as under `host`, but it reads `Migrating` meanwhile and its
+fork keeps every other player's place (§5.5). The policy is the
 session's from its first offer (`SessionOffer.FixedAuthority`, `Authority.Fixed`):
 a successor keeps offering it, a scenario change reopens the door under it
 (`RestartAsk.Migrate`), and `:session` names it. Under `host` the address *is* the
@@ -683,12 +685,11 @@ back, and the guest plays on behind that candidate; a port not relaying refuses,
 it refuses every join while another participant hosts.
 
 A person's run that forks goes on in a session of its own, as `:leave` takes it
-(§5.5): the same identity, the next term, every other player's place kept as a
-Wraith, and `:host` or `:join` at once. In a session that does not migrate, the
-default, every guest does so the moment its host goes, so whichever hosts next
-takes the others back with their progress. A run with no loop to serve that, a script's or a bot's, stays
-the fork, with `network.fork` and a persistent `Host lost` badge; it refuses a
-higher term met later, because partition merging is not implemented.
+(§5.5): the same identity, the next term, and `:host` or `:join` at once, with
+every other player's place kept as a Wraith where the session migrates and none
+where it does not. A run with no loop to take it there, a script's or a bot's,
+stays the fork, with `network.fork` and a persistent `Host lost` badge; it refuses
+a higher term met later, because partition merging is not implemented.
 
 ### 5.2 The roster after a loss
 
@@ -710,8 +711,8 @@ A fork with no loop to take it into a session of its own (§5.1), left with **no
 at all**, drops every cursor it does not simulate. Having no link is what makes the
 drop exact rather than convenient: a departure is produced once at one agreed tick
 because two instances must destroy the same shared entity together, and here there is
-no second instance. A person's fork drops nobody: every place waits as a Wraith in
-the session it goes on in (§5.5). A fork still linked keeps its roster while a link
+no second instance. A person's fork goes on in a session of its own with the places
+§5.5 keeps. A fork still linked keeps its roster while a link
 stands: a run with no loop sees its seats end on its fork (§5.5), and the last of
 them going leaves it with none, when it drops as one left with none at the fork
 does (`Membership.reportPeerLost`).
@@ -833,24 +834,22 @@ link (§5.2), and the authority's own two, which it crosses once
   turned; a bot whose holder waits too goes in its holder's dismissal. A reset
   rebuilds a Wraith as a Wraith, its wait going on from the last game's, so no run
   of resets keeps one, and as the new game's cursor, which takes nothing of the last
-  (Coming back). A person's wait runs out only where a door stands for it to
-  come back through: the session a run opens for its bots, or goes on in after
-  `:leave` or a fork, has none until `:host` (§5.0, `NetworkResource.Doorless`), so
-  its authority dismisses no person there, nor the bots waiting with one, however
-  long the Wraiths age; a bot whose holder is there goes at its time, since no door
-  brings it back, and a browser run, which opens none, dismisses as ever.
+  (Coming back). The wait is the same in every session, one with no door (§5.0)
+  included, where no person comes back before `:host` opens one.
 - **Yield.** A dial a full session cannot otherwise admit has the participant away
   longest dismissed for it (`Membership.yieldLocked`) and is refused `RefusalYielding`,
   which seats and first joins retry in a moment; the retry takes the freed place.
   A successor orders who is away by their Wraiths' waits. A session with no door
   yields all the same: its bots dial through no door.
 
-The door `:host` opens on such a session starts every wait over where somebody is
-away (`Membership.restartWaitsLocked`): the authority crosses
+The door `:host` opens on a session with none starts every wait over where somebody
+is away (`Membership.restartWaitsLocked`): the authority crosses
 `EventWraithWaitRestart` as it closes its next tick, authority-only and
 barrier-bound as a roster change is, `CursorSystem` zeroes every Wraith's wait at
-its tick, those a pending reset is rebuilding too, and nobody is dismissed for a
-wait between the opening and that tick. A reset that clears the restart has the new
+its tick, those a pending reset is rebuilding too, and no person is dismissed for a
+wait between the opening and that tick, nor a bot waiting with one; a bot whose
+holder is here goes at its time, since no door brings it back, and a newcomer is
+given a person's place all the same. A reset that clears the restart has the new
 game cross it again (`NetworkSystem.Init`). Who was away before the door has then
 waited the same, so a successor orders them by roster; the run that opened the
 session keeps the order they left in.
@@ -1037,15 +1036,16 @@ host that left run §5.1, which in a session that does not migrate is the fork.
 
 A person's fork leaves the same way. `converge.Instance.Forked` hands the run the
 roster it held, and its loop serves the fork as it serves `:leave` (`Membership.forked`,
-`Membership.LeaveSession`), except that it keeps every place rather than its bots' alone:
-each other player's cursor waits as a Wraith in the session it opens, for its player
-to take back once `:host` opens the door, however long that takes: no wait runs out
-on a person before it, and each starts over at it (§5.4). The host's `:player drop`
-removes one sooner. A hold the lost host set stands
-there for this run's own `:pause`, and a freeze ends; the status bar says which. A
-seat under such a run ends only when the run halts it (`seatEnds`), never on its
-own fork or the run's, so the leave finds every bot to seat again. A run with no
-loop to serve the fork stays the fork (§5.1).
+`Membership.LeaveSession`). A session pinned to its host has no next host, and nobody
+in it signed up to come back to this run, so its fork keeps its bots' places alone,
+as `:leave` does, and the rest go at once. One that migrates keeps every place: each
+other player's cursor waits as a Wraith in the session the fork opens, for its
+player to take back once `:host` opens the door, within its wait, which starts over
+at the door (§5.4).
+A hold the lost host set stands there for this run's own `:pause`, and a freeze
+ends; the status bar says which. A seat under such a run ends only when the run
+halts it (`seatEnds`), never on its own fork or the run's, so the leave finds every
+bot to seat again. A run with no loop to serve the fork stays the fork (§5.1).
 
 The run keeps its identity and authors the term after the one it held. Its cursor,
 its crossings still scheduled and its journal all name that identity, and nobody it
@@ -1276,9 +1276,13 @@ worse fact hides a lesser one rather than sitting beside it: `Migrating [n]`,
 `<players>P:<local hex slot> <round trip>` with at most one qualifier — `slow!`,
 `desync <ticks>`, `loss <pct>%` or `slow` — and a
 background that is green, amber or red by the worst of the round trip and that
-qualifier. The rest of the measurements — jitter, cadence, keyframe interval,
-byte rate, the D-14 latch — are read in the status snapshot and in `:session`,
-where they can be compared against each other.
+qualifier. A run in no session shows none, nor does one hosting at no door with
+nobody linked, which nobody can reach (`link.StateIdle`); a door `:host` opens there
+reads `Net: wait` as a fresh host's does, whoever the session held before.
+`Net: down` leaves after `StatusNetworkDownDuration` (10 s); `Host lost` and
+`Migrating` stay while the loss lasts. The rest of the measurements — jitter,
+cadence, keyframe interval, byte rate, the D-14 latch — are read in the status
+snapshot and in `:session`, where they can be compared.
 
 ## 8. Remaining gaps
 
@@ -1430,13 +1434,14 @@ exercise the paths a two-terminal session reaches and nothing else does:
   Wraith kept, with the energy and health it left with. While it waits at the start
   gate it is not yet in a session and has no world, but the wait is still leavable:
   Ctrl-Q, Ctrl-C and a terminal resize are answered there.
-- The host leaves instead. The guest takes the term — `:session` names it as the
-  authority, `network.migrations` reads 1, and the `Host lost` badge clears — and
-  the host's cursor must wait where it was left as a Wraith rather than play on. A
-  guest that could reach no candidate says its host connection was lost and
-  plays on in a session of its own, which is the fork: `:session` reads `Session
-  hosting` under the same participant, and the host and every other player wait on
-  its map as Wraiths.
+- The host leaves instead. The guest says its host connection was lost and plays
+  on in a session of its own, which is the fork: `:session` reads `Session hosting`
+  under the same participant, the host's cursor is gone and no network badge
+  shows. A host stopped rather than closed (`kill -STOP`) first holds the guest
+  frozen under `Host lost` for its redial. On `-authority migrate` a guest with
+  `[play] takeover` takes the term instead: `:session` names it as the authority,
+  `network.migrations` reads 1, the `Migrating` badge clears, and the host's
+  cursor must wait where it was left as a Wraith rather than play on.
 - Either leaves with `:leave` instead and plays on. Its world goes on from where it
   stood, `:session` reads `Session hosting` with no address under the same
   participant, and its bots come back to the places they had. The others see the
