@@ -1808,6 +1808,30 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   colour depth remain startup settings; `:d break` stays on the command line,
   since a row cannot take its arguments.
 
+### Camera edge follow-ups
+
+- Priority: P3
+- Affected files: `internal/engine/resource.go` (`EdgeCells`, `FollowCamera`),
+  `internal/engine/world.go` (`PushPointerMove`)
+
+One `[play] camera_edge` holds for every input ([Rendering §2](rendering.md#2-render-context-and-coordinates)).
+The options Lixen did not take (2026-11-14), each with what would reopen it:
+
+- The edge as a share of the shorter side, as far from every side: a wide screen's
+  long sides get the short side's distance, so the view looks less far ahead there
+  than the area's side gives. Reopen if wide screens feel cramped beside tall ones.
+- The same share of each side: simplest, but a wide screen's sides sit further in
+  than its top and bottom, so the view follows sooner sideways than up and down.
+  Reopen if a percent should read as a share of each side.
+- A narrower edge for a pointer than for keys, as before: a key after the mouse moved
+  the view by the gap when the cursor sat between the two. Reopen with a camera that
+  eases to its new place rather than jumping, which would smooth the change of hands.
+- A cap on how far one pointer report scrolls: a pointer pushed into the edge scrolls
+  by its depth each report, so a slow pass over the 15% edge scrolls about 280
+  columns on a full terminal, against 36 over the old 8-column pointer margin. A cap
+  leaves the cursor inside the edge, so the next key jumps the view again. Reopen if
+  the edge scrolls too hard under a mouse or a finger.
+
 ### Use sixteen console backgrounds on Linux
 
 - Priority: P3

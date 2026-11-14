@@ -103,6 +103,18 @@ renderers should still intersect their iteration bounds with `VisibleMapBounds`
 to avoid the wasted work; the quasar zap ellipse does, and walks only the row's
 band of cells its test admits rather than the box, since its radius spans the map.
 
+The camera follows the local cursor (`ConfigResource.FollowCamera`) by the least
+shift that keeps it the camera edge inside every side, one edge whether keys, a
+mouse or a finger moved it, so handing the cursor between them never moves the view.
+`[play] camera_edge` (`:edge`, Display → Camera edge) is a percent of the screen's
+size, the side of a square of the viewport's area in cell widths (`EdgeCells`): the
+edge is as far in from every side and keeps its share as a pinch or a browser's zoom
+changes how many cells show. Once the short side's edges meet, the long side's close
+in, so 50 follows every move (a view of even size leaves its near edge a cell short,
+or the camera would flip between the middle cells); 0 is the edge row or column,
+which a pointer can reach. A pointer report inside the edge shifts the view by its
+depth, so pushing a mouse or finger deeper scrolls faster.
+
 ### 2.1 The playfield clip
 
 A map smaller than the viewport is centered inside it, and the margin that
