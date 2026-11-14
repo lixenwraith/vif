@@ -11,7 +11,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -181,26 +183,52 @@ func upgradeStore(s SettingsStore) ([]string, error) {
 	return notes, s.Store(out)
 }
 
-// drop removes keys from doc, each with the comments that are its own; one inside
-// an inline value goes as that value is written again without it
+// drop removes keys from doc, each with the comments that are its own; those inside
+// an inline value go as that value is written again without them, once
 func drop(doc *toml.Document, keys []toml.Key) error {
+	var inside []toml.Key
 	for _, k := range keys {
-		if _, err := doc.Delete(k); err != nil && !dropInside(doc, k) {
+		if _, err := doc.Delete(k); err != nil {
+			inside = append(inside, k)
+		}
+	}
+	for len(inside) > 0 {
+		var err error
+		if inside, err = dropInside(doc, inside); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// dropInside writes again, without key, the inline value holding it: that of the
-// key above it the document sets. It reports whether one held it.
-func dropInside(doc *toml.Document, key toml.Key) bool {
+// dropInside writes again the inline value holding keys[0], that of the key above it
+// the document sets, without it or any other of keys it holds, and returns the rest
+func dropInside(doc *toml.Document, keys []toml.Key) ([]toml.Key, error) {
+	key := keys[0]
+	var why []error
 	for i := len(key) - 1; i > 0; i-- {
-		if v, ok := valueAt(doc.Tree(), key[:i]); ok && doc.Set(key[:i], without(v, key[i:])) == nil {
-			return true
+		v, ok := valueAt(doc.Tree(), key[:i])
+		if !ok {
+			continue
 		}
+		var rest []toml.Key
+		for _, k := range keys {
+			if len(k) > i && slices.Equal(k[:i], key[:i]) {
+				v = without(v, k[i:])
+			} else {
+				rest = append(rest, k)
+			}
+		}
+		err := doc.Set(key[:i], v)
+		if err == nil {
+			return rest, nil
+		}
+		why = append(why, err)
 	}
-	return false
+	if len(why) == 0 {
+		return nil, fmt.Errorf("%s: no value holds it", key)
+	}
+	return nil, errors.Join(why...)
 }
 
 // valueAt is the value tree holds at key
@@ -252,41 +280,49 @@ func UpgradeSettings(data []byte) ([]byte, []string, error) {
 		return nil, nil, err
 	}
 	var notes []string
-	if unknown := UnknownKeys(doc.Unmapped(&base)); len(unknown) > 0 {
-		if err := drop(doc, unknown); err != nil {
-			return nil, nil, err
-		}
+	unknown := UnknownKeys(doc.Unmapped(&base))
+	if len(unknown) > 0 {
 		notes = append(notes, "dropped "+unknown.Error())
 	}
-	reset := make(map[string]bool)
+	var reset []toml.Key
 	// the embedded document's tables say where a value is a table to walk
-	var refused func(tree, shape map[string]any, at toml.Key) error
-	refused = func(tree, shape map[string]any, at toml.Key) error {
+	var refused func(tree, shape map[string]any, at toml.Key)
+	refused = func(tree, shape map[string]any, at toml.Key) {
 		for _, k := range slices.Sorted(maps.Keys(tree)) {
 			key := append(slices.Clip(at), k)
 			sub, table := tree[k].(map[string]any)
-			if want, ok := shape[k].(map[string]any); table && ok {
-				if err := refused(sub, want, key); err != nil {
-					return err
-				}
-			} else if why := base.refuses(key, tree[k]); why != nil {
-				if err := drop(doc, []toml.Key{key}); err != nil {
-					return err
-				}
-				reset[key.String()] = true
+			want, shaped := shape[k].(map[string]any)
+			var why error
+			switch {
+			case table && shaped:
+				refused(sub, want, key)
+				continue
+			case shaped:
+				why = fmt.Errorf("%s is not a table", key)
+			case table && shape[k] != nil:
+				why = fmt.Errorf("%s takes a value, not a table", key)
+			default:
+				why = base.refuses(key, tree[k]) // nil for a key unknown, which Decode skips
+			}
+			if why != nil {
+				reset = append(reset, key)
 				notes = append(notes, "reset to the default: "+why.Error())
 			}
 		}
-		return nil
 	}
-	if err := refused(doc.Tree(), shipped.Tree(), nil); err != nil {
+	refused(doc.Tree(), shipped.Tree(), nil)
+	if err := drop(doc, slices.Concat([]toml.Key(unknown), reset)); err != nil {
 		return nil, nil, err
 	}
 	added, err := doc.Fill(shipped)
 	if err != nil {
 		return nil, nil, err
 	}
-	switch added = slices.DeleteFunc(added, func(k toml.Key) bool { return reset[k.String()] }); {
+	added = slices.DeleteFunc(added, func(k toml.Key) bool {
+		return slices.ContainsFunc(reset, func(r toml.Key) bool { return len(k) >= len(r) && slices.Equal(k[:len(r)], r) })
+	})
+	slices.SortFunc(added, slices.Compare) // named in order, as the dropped keys are
+	switch {
 	case len(added) > parameter.UpgradeNamed:
 		notes = append(notes, fmt.Sprintf("added %d keys", len(added)))
 	case len(added) > 0:
@@ -389,6 +425,10 @@ func (s *Settings) check() error {
 	if c := s.Presentation.Cell; c != 0 && (c < parameter.CellLeast || c > parameter.CellMost) {
 		return fmt.Errorf("presentation.cell %g is not 0 or between %g and %g", c, parameter.CellLeast, parameter.CellMost)
 	}
+	if b := time.Duration(s.Audio.BufferMs) * time.Millisecond; b != 0 && (b < audio.AudioBufferMin || b > audio.AudioBufferMax || b%audio.AudioBufferStep != 0) {
+		return fmt.Errorf("audio.buffer_ms %d is not 0 or a multiple of %d from %d to %d", s.Audio.BufferMs,
+			audio.AudioBufferStep.Milliseconds(), audio.AudioBufferMin.Milliseconds(), audio.AudioBufferMax.Milliseconds())
+	}
 	return s.Play.check()
 }
 
@@ -403,29 +443,55 @@ type SettingsStore interface {
 // SettingsFor is where a run that read the vif.toml named read ("" for the
 // embedded one) writes its settings back: that file when it is the player's own,
 // in the override root or the user root, else the user root's, created at the
-// first change from the one read. A vif.toml in the checkout or a system root is
-// never written; the user root's shadows it from then on. Nil without a user root.
+// first change from the one read, which shadows it from then on. A vif.toml in the
+// checkout or a system root is never written. Nil without a user root, or for a
+// special file in one of the player's roots, such as a link to /dev/null.
 func SettingsFor(override, read string) SettingsStore {
-	if OwnSettings(override, read) {
-		return FileStore{Path: read}
-	}
 	user := UserRoot()
-	if user == "" {
+	switch {
+	case OwnSettings(override, read):
+		return FileStore{Path: read}
+	case user == "" || read != "" && Special(read) && OwnRoot(override, filepath.Dir(read)):
 		return nil
 	}
 	return FileStore{Path: filepath.Join(user, SettingsFile), Seed: read}
 }
 
 // OwnRoot reports whether root is one of the player's own, whose files a run writes
-// back: the override root or the user root.
+// back: the user root, or the override root unless that is a shared one.
 func OwnRoot(override, root string) bool {
-	return root == UserRoot() || override != "" && root == filepath.Clean(override)
+	return root == UserRoot() || override != "" && root == filepath.Clean(override) && !Shared(root)
+}
+
+// Shared reports whether path is or lies in the checkout's wad or a system root
+// and not in the user root: a run reads such a file but never writes it, whatever
+// named it, and only an install brings it up to date.
+func Shared(path string) bool {
+	path, err := filepath.Abs(path)
+	if err != nil || within(UserRoot(), path) {
+		return false
+	}
+	return slices.ContainsFunc(append(systemRoots(), checkoutRoot()), func(root string) bool { return within(root, path) })
+}
+
+// within reports whether path is root or lies below it; "" holds nothing
+func within(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return root != "" && err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// Special reports whether path names, through any link, something that is no regular
+// file, such as /dev/null or a pipe: a run reads it as it stands, never writing it back
+func Special(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.Mode().IsRegular()
 }
 
 // OwnSettings reports whether the vif.toml read ("" for the embedded one) is the
-// player's own, at the top of one of their roots, which a run writes back
+// player's own, at the top of one of their roots and no special file, which a run
+// writes back
 func OwnSettings(override, read string) bool {
-	return read != "" && OwnRoot(override, filepath.Dir(read))
+	return read != "" && OwnRoot(override, filepath.Dir(read)) && !Special(read)
 }
 
 // FileStore is the vif.toml at Path, or a keymap a run stores whole. One not there
@@ -456,26 +522,16 @@ func (f FileStore) Load() ([]byte, error) {
 
 // Store replaces the file whole by rename, through a link to the file it names: a
 // file there keeps its mode and, as far as the writer may, its owner, a new one is
-// made 0644, and one no one may write is refused. Each write has a temporary file
-// of its own, so runs that start together never tear one another's.
+// made 0644, and one no one may write, or no regular file, is refused. Each write
+// has a temporary file of its own, so runs that start together never tear one another's.
 func (f FileStore) Store(data []byte) error {
-	path, mode := f.Path, fs.FileMode(0o644)
-	info, err := os.Lstat(path)
-	if err == nil && info.Mode()&fs.ModeSymlink != 0 {
-		if path, err = filepath.EvalSymlinks(path); err == nil {
-			info, err = os.Stat(path)
-		}
-		if err != nil {
-			return err // a link to nothing stays as it is
-		}
-	}
-	switch {
-	case err == nil && info.Mode().Perm()&0o222 == 0:
-		return fmt.Errorf("%s is read-only", path)
-	case err == nil:
-		mode = info.Mode().Perm()
-	case !errors.Is(err, fs.ErrNotExist):
+	path, info, err := storeTarget(f.Path)
+	if err != nil {
 		return err
+	}
+	mode := fs.FileMode(0o644)
+	if info != nil {
+		mode = info.Mode().Perm()
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -485,14 +541,48 @@ func (f FileStore) Store(data []byte) error {
 		return err
 	}
 	defer os.Remove(tmp.Name()) // nothing once renamed
+	if info != nil {
+		keepOwner(tmp, info)
+	}
 	_, err = tmp.Write(data)
 	if err = errors.Join(err, tmp.Chmod(mode), tmp.Sync(), tmp.Close()); err != nil {
 		return err
 	}
-	if info != nil {
-		keepOwner(tmp.Name(), info)
-	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// WriteBack is what -check says a run does with the player's own file at path when
+// it is not up to date: writes it back, or reads it so where a store refuses it
+func WriteBack(path string) string {
+	if _, _, err := storeTarget(path); err != nil {
+		return "a run reads it up to date, as " + err.Error()
+	}
+	return "a run writes it back up to date"
+}
+
+// storeTarget is the file a store writes for path, the one a link names, and its
+// info, nil when there is none yet
+func storeTarget(path string) (string, fs.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		if path, err = filepath.EvalSymlinks(path); err == nil {
+			info, err = os.Stat(path)
+		}
+		if err != nil {
+			return "", nil, err // a link to nothing stays as it is
+		}
+	}
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return path, nil, nil
+	case err != nil:
+		return "", nil, err
+	case !info.Mode().IsRegular():
+		return "", nil, fmt.Errorf("%s is not a regular file", path)
+	case info.Mode().Perm()&0o222 == 0:
+		return "", nil, fmt.Errorf("%s is read-only", path)
+	}
+	return path, info, nil
 }
 
 // saving keeps each write back one load and one store, whichever goroutine writes

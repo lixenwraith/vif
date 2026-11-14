@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/audio"
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/asset"
 	"github.com/lixenwraith/vif/internal/parameter"
@@ -103,7 +104,7 @@ func TestSettingsFileSetsOnlyWhatItNames(t *testing.T) {
 
 // TestSettingsReadAsThisBuildBringsThemUpToDate: a file naming keys this build
 // does not know, or a value it refuses, reads every other key it holds, the refused
-// one at its default, and names each change bringing it up to date makes, so a run
+// one at its default, and names the changes bringing it up to date makes, so a run
 // can go on with an older or newer vif.toml; the file is left as it is.
 func TestSettingsReadAsThisBuildBringsThemUpToDate(t *testing.T) {
 	root := t.TempDir()
@@ -126,27 +127,35 @@ func TestSettingsReadAsThisBuildBringsThemUpToDate(t *testing.T) {
 	}
 }
 
-// TestSettingsTakePlayNumbersInRange: [play] max_fps is 0 for the presentation's
-// own rate or a rate between parameter.FrameRateMin and FrameRateMax, and
-// camera_edge a percent from 0 to parameter.CameraEdgeMost; any other fails.
-func TestSettingsTakePlayNumbersInRange(t *testing.T) {
+// TestSettingsTakeNumbersInRange: [play] max_fps is 0 for the presentation's own
+// rate or a rate between parameter.FrameRateMin and FrameRateMax, camera_edge a
+// percent from 0 to parameter.CameraEdgeMost, and [audio] buffer_ms 0 for the
+// mixer's own period or one the mixer takes (audio.AudioBufferMin to Max in Step);
+// any other fails, so an upgrade resets it rather than a run failing to start audio.
+func TestSettingsTakeNumbersInRange(t *testing.T) {
+	least, most, step := int(audio.AudioBufferMin.Milliseconds()), int(audio.AudioBufferMax.Milliseconds()), int(audio.AudioBufferStep.Milliseconds())
 	for _, c := range []struct {
 		key  string
-		read func(Play) int
+		read func(Settings) int
 		ok   map[int]bool
 	}{
-		{"max_fps", func(p Play) int { return p.MaxFPS }, map[int]bool{
+		{"play.max_fps", func(s Settings) int { return s.Play.MaxFPS }, map[int]bool{
 			0: true, parameter.FrameRateMin: true, 24: true, parameter.FrameRateMax: true,
 			parameter.FrameRateMin - 1: false, parameter.FrameRateMax + 1: false, -24: false,
 		}},
-		{"camera_edge", func(p Play) int { return p.CameraEdge }, map[int]bool{
+		{"play.camera_edge", func(s Settings) int { return s.Play.CameraEdge }, map[int]bool{
 			0: true, 15: true, parameter.CameraEdgeMost: true, -1: false, parameter.CameraEdgeMost + 1: false,
 		}},
+		{"audio.buffer_ms", func(s Settings) int { return s.Audio.BufferMs }, map[int]bool{
+			0: true, least: true, least + step: true, most: true,
+			least - 1: false, most + step: false, least + step/2: false, -step: false,
+		}},
 	} {
+		table, key, _ := strings.Cut(c.key, ".")
 		for v, ok := range c.ok {
-			s, err := ParseSettings(fmt.Appendf(nil, "[play]\n%s = %d\n", c.key, v))
-			if (err == nil) != ok || ok && c.read(s.Play) != v {
-				t.Errorf("%s = %d: read %d, error %v", c.key, v, c.read(s.Play), err)
+			s, err := ParseSettings(fmt.Appendf(nil, "[%s]\n%s = %d\n", table, key, v))
+			if (err == nil) != ok || ok && c.read(s) != v {
+				t.Errorf("%s = %d: read %d, error %v", c.key, v, c.read(s), err)
 			}
 		}
 	}
@@ -245,7 +254,8 @@ func TestUpgradingSettingsKeepsThePlayersLines(t *testing.T) {
 
 // TestAnUpgradePutsBackEachShippedKeyAsShipped: the embedded document lacking any
 // one key or table it sets upgrades to itself byte for byte, so what a build adds
-// reaches an older file where and as the embedded one has it, each key named.
+// reaches an older file where and as the embedded one has it, each key named up to
+// parameter.UpgradeNamed of them and counted past that.
 func TestAnUpgradePutsBackEachShippedKeyAsShipped(t *testing.T) {
 	shipped, err := toml.ParseDocument(asset.DefaultSettings)
 	if err != nil {
@@ -270,6 +280,60 @@ func TestAnUpgradePutsBackEachShippedKeyAsShipped(t *testing.T) {
 			}
 		}
 	}
+	var keys []toml.Key
+	leaves(shipped.Tree(), nil, func(k toml.Key, _ any) { keys = append(keys, k) })
+	slices.SortFunc(keys, slices.Compare)
+	for n, want := range map[int]string{
+		parameter.UpgradeNamed:     "added " + strings.TrimPrefix(UnknownKeys(keys[:parameter.UpgradeNamed]).Error(), "unknown "),
+		parameter.UpgradeNamed + 1: fmt.Sprintf("added %d keys", parameter.UpgradeNamed+1),
+	} {
+		doc, _ := toml.ParseDocument(asset.DefaultSettings)
+		for _, k := range keys[:n] {
+			if _, err := doc.Delete(k); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, notes, err := UpgradeSettings(doc.Bytes()); err != nil || !slices.Equal(notes, []string{want}) {
+			t.Errorf("without %d keys: notes %q, %v, want %q", n, notes, err, want)
+		}
+	}
+}
+
+// leaves calls f with each value tree holds that is no table, under its key
+func leaves(tree map[string]any, at toml.Key, f func(toml.Key, any)) {
+	for k, v := range tree {
+		key := append(slices.Clip(at), k)
+		if sub, ok := v.(map[string]any); ok {
+			leaves(sub, key, f)
+		} else {
+			f(key, v)
+		}
+	}
+}
+
+// TestSettingsUpgradeNotesNameEachChangeOnce: a table written as a value, or a value
+// written as a table, is reset once, its keys not named again as the shipped table
+// put back brings them.
+func TestSettingsUpgradeNotesNameEachChangeOnce(t *testing.T) {
+	for _, c := range []struct {
+		key        toml.Key
+		with, want string
+	}{
+		{toml.Key{"session"}, "session = true\n", "reset to the default: session is not a table"},
+		{toml.Key{"play", "sfx"}, "\n[play.sfx]\na = 1\n", "reset to the default: play.sfx takes a value, not a table"},
+	} {
+		doc, _ := toml.ParseDocument(asset.DefaultSettings)
+		if _, err := doc.Delete(c.key); err != nil {
+			t.Fatal(err)
+		}
+		text := string(doc.Bytes()) + c.with
+		if c.key[0] == "session" {
+			text = c.with + string(doc.Bytes())
+		}
+		if _, notes, err := UpgradeSettings([]byte(text)); err != nil || !slices.Equal(notes, []string{c.want}) {
+			t.Errorf("notes %q, %v, want %q:\n%s", notes, err, c.want, text)
+		}
+	}
 }
 
 // TestUpgradingSettingsEditsInlineTables: a key to drop or a value to reset inside a
@@ -289,38 +353,80 @@ func TestUpgradingSettingsEditsInlineTables(t *testing.T) {
 	}
 }
 
-// FuzzUpgradingSettingsReadsAsBefore: every settings document that parses
-// upgrades, its upgrade reads whole and is up to date, and one whose values this
-// build takes reads as it did.
-func FuzzUpgradingSettingsReadsAsBefore(f *testing.F) {
+// FuzzUpgradingSettingsKeepsEachValueItTakes: every settings document that parses
+// upgrades, its upgrade reads whole and is up to date, and it changes something
+// exactly when it names a change. Each value it holds that this build takes alone
+// stays as it is; any other value the upgrade holds is the embedded one's.
+func FuzzUpgradingSettingsKeepsEachValueItTakes(f *testing.F) {
 	f.Add(string(asset.DefaultSettings))
 	f.Add("# mine\n[play]\nmouse = false # mine\neffects = 1\n\n[later.sub]\nx = 1\n")
 	f.Add("play.hud = true\n[audio]\nbuffer_ms = \"x\"\n")
 	f.Add("[[play]]\nsfx = true\n[presentation]\ncell = { a = 1 }\n")
 	f.Add("play = { mouse = false, effects = 1, camera_edge = 99 }\npresentation = { window = { x = 1 } }\n")
+	f.Add("session = true\n[play.sfx]\na = 1\n[audio]\nbuffer_ms = 15\n")
+	f.Add("play = { a = 1, mouse = false, x" + strings.Repeat(".x", 999) + " = 1 }\n")
+	shipped, err := toml.ParseDocument(asset.DefaultSettings)
+	if err != nil {
+		f.Fatal(err)
+	}
+	// takes reports whether this build reads value at key, alone in a document
+	takes := func(key toml.Key, value any) bool {
+		tree := map[string]any{key[len(key)-1]: value}
+		for i := len(key) - 2; i >= 0; i-- {
+			tree = map[string]any{key[i]: tree}
+		}
+		data, err := toml.Marshal(tree)
+		if err != nil {
+			return false
+		}
+		_, err = ParseSettings(data)
+		return err == nil
+	}
+	same := func(a, b any) bool { return fmt.Sprintf("%#v", a) == fmt.Sprintf("%#v", b) }
 	f.Fuzz(func(t *testing.T, doc string) {
-		out, _, err := UpgradeSettings([]byte(doc))
-		if _, parse := toml.ParseDocument([]byte(doc)); parse != nil {
+		before, err := toml.ParseDocument([]byte(doc))
+		if err != nil {
 			return
-		} else if err != nil {
+		}
+		out, notes, err := UpgradeSettings([]byte(doc))
+		if err != nil {
 			t.Fatalf("a document that parses does not upgrade: %v\n%s", err, doc)
 		}
-		after, err := ParseSettings(out)
+		read, err := ParseSettings(out)
 		if err != nil {
 			t.Fatalf("the upgrade does not read: %v\n%s", err, out)
 		}
-		if again, notes, err := UpgradeSettings(out); err != nil || len(notes) > 0 || string(again) != string(out) {
-			t.Fatalf("the upgrade is not up to date, %q, %v:\n%s", notes, err, again)
+		if again, more, err := UpgradeSettings(out); err != nil || len(more) > 0 || string(again) != string(out) {
+			t.Fatalf("the upgrade is not up to date, %q, %v:\n%s", more, err, again)
 		}
-		if before, err := ParseSettings([]byte(doc)); (err == nil || errors.As(err, new(UnknownKeys))) && before != after {
-			t.Fatalf("read %+v after the upgrade, %+v before:\n%s", after, before, out)
+		if (len(notes) == 0) != (string(out) == doc) {
+			t.Fatalf("notes %q, yet the upgrade changed the document %v:\n%s", notes, string(out) != doc, out)
+		}
+		after, err := toml.ParseDocument(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		leaves(before.Tree(), nil, func(key toml.Key, was any) {
+			if now, ok := valueAt(after.Tree(), key); takes(key, was) && (!ok || !same(now, was)) {
+				t.Fatalf("%s = %#v, which this build takes, became %#v:\n%s", key, was, now, out)
+			}
+		})
+		leaves(after.Tree(), nil, func(key toml.Key, now any) {
+			was, held := valueAt(before.Tree(), key)
+			if want, ok := valueAt(shipped.Tree(), key); !(held && same(was, now)) && !(ok && same(want, now)) {
+				t.Fatalf("%s = %#v is neither the document's nor the embedded one's:\n%s", key, now, out)
+			}
+		})
+		if was, err := ParseSettings([]byte(doc)); (err == nil || errors.As(err, new(UnknownKeys))) && was != read {
+			t.Fatalf("read %+v after the upgrade, %+v before:\n%s", read, was, out)
 		}
 	})
 }
 
 // TestAStoreKeepsTheFileThePlayerKeeps: a store writes through a link to the file
-// it names, which keeps its mode, refuses a file no one may write, and leaves no
-// temporary file behind.
+// it names, which keeps its mode, and makes a new file 0644; a file no one may
+// write, a link to nothing and what is no regular file, such as /dev/null, are
+// refused and stay as they are.
 func TestAStoreKeepsTheFileThePlayerKeeps(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("a link needs a privilege there")
@@ -358,10 +464,25 @@ func TestAStoreKeepsTheFileThePlayerKeeps(t *testing.T) {
 	if err := (FileStore{Path: link}).Store([]byte("newer")); err == nil {
 		t.Error("a read-only file was written")
 	}
-	for _, d := range []string{filepath.Dir(target), filepath.Dir(link)} {
-		if left, _ := filepath.Glob(filepath.Join(d, "*.tmp")); len(left) > 0 {
-			t.Errorf("left %v", left)
+	fresh := filepath.Join(dir, "new", SettingsFile)
+	if err := (FileStore{Path: fresh}).Store([]byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(fresh); err != nil || st.Mode().Perm() != 0o644 {
+		t.Errorf("a new file: %v, %v", st.Mode(), err)
+	}
+	for name, to := range map[string]string{"nothing": filepath.Join(dir, "gone"), "device": os.DevNull} {
+		at := filepath.Join(dir, name)
+		if err := os.Symlink(to, at); err != nil {
+			t.Fatal(err)
 		}
+		err := FileStore{Path: at}.Store([]byte("new"))
+		if was, _ := os.Readlink(at); err == nil || was != to {
+			t.Errorf("a link to %s: %v, now to %q", name, err, was)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gone")); err == nil {
+		t.Error("a link to nothing made its file")
 	}
 }
 
@@ -427,7 +548,9 @@ func TestSavePlayWritesTheChangedKeysAlone(t *testing.T) {
 // TestSettingsForWritesThePlayersOwnFile: the file read is written when it is in
 // the override or the user root; one read further down, or none, makes the user
 // root's, which starts as the file read with its relative paths made absolute and
-// shadows it from then on. Without a user root nothing is written.
+// shadows it from then on. An override naming a system root is not the player's, a
+// special file in their root, such as a link to /dev/null, is never written, and
+// without a user root nothing is.
 func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	if !isUnixLike() || runtime.GOOS == "android" {
 		t.Skip("system roots are Unix-specific")
@@ -441,14 +564,15 @@ func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	site := filepath.Join(system, SettingsFile)
 	for _, c := range []struct {
 		name, override, read string
-		want                 FileStore
+		want                 SettingsStore
 	}{
 		{"user root", "", mine, FileStore{Path: mine}},
 		{"override", override, filepath.Join(override, SettingsFile), FileStore{Path: filepath.Join(override, SettingsFile)}},
 		{"system root", override, site, FileStore{Path: mine, Seed: site}},
+		{"override naming a system root", system, site, FileStore{Path: mine, Seed: site}},
 		{"embedded", override, "", FileStore{Path: mine}},
 	} {
-		if got := SettingsFor(c.override, c.read); got != SettingsStore(c.want) {
+		if got := SettingsFor(c.override, c.read); got != c.want {
 			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
 		}
 	}
@@ -476,6 +600,15 @@ func TestSettingsForWritesThePlayersOwnFile(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(site); string(got) != text {
 		t.Fatalf("the system root's file was written:\n%s", got)
+	}
+	if err := os.Remove(mine); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(os.DevNull, mine); err != nil {
+		t.Fatal(err)
+	}
+	if got := SettingsFor("", mine); got != nil || OwnSettings("", mine) {
+		t.Fatalf("a link to %s is written: %+v", os.DevNull, got)
 	}
 
 	t.Setenv("XDG_CONFIG_HOME", "")

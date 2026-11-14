@@ -2,7 +2,10 @@
 
 package paths
 
-import "io/fs"
+import (
+	"io/fs"
+	"os"
+)
 
 // keepOwner leaves the owner be where a writer sets none
-func keepOwner(string, fs.FileInfo) {}
+func keepOwner(*os.File, fs.FileInfo) {}
