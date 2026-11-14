@@ -2311,7 +2311,7 @@ Where the beat is made, each a choice with what it costs:
    player and voice, and the beat is an ear offset of a constant `Δ` Hz on a
    tonal voice (the pad), so every partial pair beats at `Δ` inside the music.
    Most musical, and it brings panning per track with it, which the engine lacks
-   ([Can it run Doom](can-it-run-doom.md) notes `PlayBuffer` has no pan); but it
+   (`AudioEngine.PlayBuffer` takes no pan); but it
    touches the whole pipeline, doubles the voices' render cost, the offline
    renders (`RenderMusic`, `RenderTimeline`) and stapes' with it, and the beat
    sounds only while the pad plays.
