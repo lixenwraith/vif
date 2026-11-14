@@ -27,11 +27,17 @@ Use these terms consistently:
   them, retains authoritative captures so it can answer their selective repair
   requests, and reports their proofs upstream. It authors nothing. A guest is the
   relay of its own bots, and with `-relay <addr>` of the people who join there.
+- A **viewer** watches a session and is nobody in it: it holds no identity, roster
+  slot or link of the host's, sends nothing, and runs the Shared simulation from
+  the one **feed** the authority writes for everyone watching, a little behind
+  (§5.8). A person reads it as a spectator (`-spectate`); `-watch` and a watched
+  bot are a bot looked at on its own run's screen, which is another thing.
 - A run's **session role** is what it is to its session, read from what the
   session wrote: solo, seats (a session of its own with no door: one it opened for
   its bots, or the one `:leave` or a fork goes on in), host, server, guest, left
-  (a guest whose session has nobody left but its own bots), or successor (a guest
-  that took the term over, hosting at its own port until `:host` opens a door).
+  (a guest whose session has nobody left but its own bots), successor (a guest
+  that took the term over, hosting at its own port until `:host` opens a door), or
+  viewer (a run that only watches one, §5.8).
   `:join`, `:host`, `:leave` and `:session` answer by it from one table.
 - The **authority term** is a monotonically increasing session generation.
   Authoritative artifacts carry it; a term advances once per successful handoff
@@ -78,6 +84,7 @@ identity, and giving it a second name would cost the identity space its sentinel
 | Reachability | In a migrate session a guest whose player lets it take over (`[play] takeover`, or a pinned `-listen`) binds a port of its own and declares it, and the coordinator publishes the whole succession chain on `MsgPeerList` and with the start gate. Every participant holds a link to the first candidate. A guest that did not ask, a failed bind, or a host-policy session leaves a participant a leaf: it plays normally and is never a candidate (§5.1, §5.3). |
 | Host loss | The session's policy, its host's to choose and `host` unless it asked for `migrate`. `host`: nobody takes the session, and every survivor continues alone once its redial ends. `migrate` (`-authority migrate`, `:host <doors> migrate`): every survivor walks **the succession list**, each candidate taking a term of its own in its turn, with no vote, because every survivor reads the list from state it already holds identically; a guest whose own link dropped redials its host first. |
 | Hold | Only the host stops a session: its `:pause` crosses, every participant stops after the same tick, a joiner lands held, and the host's next epoch resumes everyone (§3.6). |
+| Audience | A session is watched by viewers that are no part of it. While anyone watches, the authority copies what it commits into one feed, encoded once, and a hub sends every viewer the same bytes: the host's own hub, or the router's for a fleet session, whose pod then serves one subscriber. A viewer runs each tick from all the authority committed for it, about half a second behind, and predicts and corrects nothing (§5.8). |
 | Trust | A player's own tcp and ws doors are plaintext, TLS carrying wss doors and the fleet's front door, and a door without a passphrase or a ticket gate admits any key by decision; what a participant proves is the key its place waits under (§5.4), and the passphrase where the host set one, and peer links, reports and handoff records are proved and signed under it. What the coordinator *does* check beside that is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, and the seed, session and scenario digest its built world carries, and a peer that does not match the offer is refused before it takes a roster slot. The seed, session and scenario are adopted from the offer first, so that half catches a world that came out different; a scenario no local root holds arrives over the wire, as does any but the built-in one under `-d`. The corpus is neither adopted nor compared: glyphs are player domain, so each participant reads its own and a peer with different text still joins. Every instance refuses, where it applies, a crossing or cursor sync that acts as another participant's cursor (`crossingActors`); the direct combat request and either combat request's emitter are not yet among them ([todo](todo.md#refuse-a-combat-crossing-that-acts-as-another-cursor-or-emitter)). |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial as ending (`RefusalEnding`), distinct from the retryable `errSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
@@ -1196,6 +1203,102 @@ session stream and the simulation are unchanged.
   mDNS/DNS-SD (a DNS codec, port 5353 shared with the system's daemon), a
   multicast group, a subnet scan, listing by the site.
 
+### 5.8 Watching a session
+
+A **viewer** watches a session without being in it: no identity, slot or place, no
+link of the host's, nothing sent. The roster does not count it, players are not
+told who watches, and it never takes a session over. A person reads spectate
+(`-spectate <link> [slot]`, `:spectate`, the Multiplayer page); identifiers say
+watch, viewer and audience.
+
+**One feed, encoded once** (`pkg/network/feed.go`, no game types). While anyone
+watches, the authority copies what it commits to a `FeedWriter`
+(`NetworkResource.Feed`): its own epochs and owner syncs as sent, each committed
+copy it relays down, and a mark as each tick's intake closes
+(`NetworkSystem.sendOwn`, `forwardDown`, `follow`). The writer gathers `FeedRecordTicks`
+(10) ticks into a record, deflated against the records since the last cut, and a
+`FeedHub` sends each record once to every subscriber. So a viewer costs its feeder
+a copy of bytes the others are sent too and no encoding of its own, and with
+nobody watching the authority copies nothing. A record is `[kind][length][body]`:
+
+- `FeedSync`, a **starting point** (`WatchHead`): the session as a viewer is shown
+  it, the host's world at the cut before it, and the epochs and owner syncs the
+  host had committed past that tick.
+- `FeedData`, frames and tick marks; `FeedCut`, the tick the stream stands at,
+  where the deflate history restarts; `FeedEnd`, why the feed is over and whether
+  it is served again; `FeedKeep`, a quiet feed that is alive.
+
+The hub keeps the newest starting point and the records since its cut, which is
+where a newcomer begins, so a second viewer costs the host no capture. A subscriber
+a queue (256 records) behind, one whose write stalls 5 s and one that sends
+anything is dropped, never waited for.
+
+**Why a viewer is exact.** A record for tick T holds everything the authority
+committed that applies at or before T, so a viewer's world (`World.Watch`) runs a
+tick only once its feed closed it (`TickGranted`, `FeedPort.Ready`), from all that
+tick's inputs. It drives no cursor, issues no crossing and predicts nothing, so it
+derives the host's Shared world tick for tick and needs no correction, which is
+why one stream fits every viewer. With no cursor of its own it has no Player
+domain. It stands a record and its slack behind, 9 to 13 ticks measured, pacing
+its tick interval by the closed ticks it has in hand (`paceViewer`,
+`FeedSlackTicks`); a hold stops it on the tick that stops the players.
+
+**Starting points** (`Membership.syncAudience`) are written when a viewer waits for
+one (`FeedHub.Wanted`), when the game changed, and every `FeedSyncTicks` (600,
+30 s) while anyone watches. The feed is cut, the world captured and what is
+committed past it read under one lock; the rest is encoded off it. A viewer already
+reading checks its world against each as a correction, which moved nothing in
+every reading (netcode design §3.8). A new game cuts the stream and restarts its
+ticks, so a viewer follows it in place; one whose built world is another game's is
+`ErrSessionMoved` and dials again.
+
+**The watch dial** is told from a join by its first frame (`MsgSessionWatch` in the
+route frame's place) and served at the door a join uses (`WatchAcceptor`,
+`ServeWatch`): the door's budget and admission, the passphrase where the host set
+one and a ticket of kind `watch` at a fleet pod, then the session as shown, the
+scenario if the dial lacks it, and a seat request answered by `MsgStart`, after
+which the stream is the feed's. It proves a key made for the dial and none of its
+process's, takes no pass and shows no sign-in: a viewer comes back to no place,
+and each would tell who watches. It is refused at a door that does not author the
+session, as `RefusalAudience` past the ceiling, `-spectators` (8, `FeedAudience`;
+1024 at most; 0 takes none), and as `ErrUnstarted` while the session is in its
+lobby, which holds players alone: a refusal a person retries and a dial does not,
+since a lobby can outlast the budget a dial retrying in moments would spend.
+
+**What a viewer is shown** is `SessionOffer.Watched()`: the game, and the roster's
+slots and names. Nothing in it takes, keeps or comes back to a place or says where
+anyone listens: no assignment, relay, succession chain, term keys, keep-out list,
+pass or door, and no roster key or account. `DecodeWatchHead` cuts whatever a feed
+says to the same view. The world it builds is the players' Shared world, whose
+cursors carry what every participant reads there (`CursorComponent`): a name, and
+the public half of a key made for that place, which takes no place without the
+private half. When its feed ends a viewer watches again where the host serves the
+session anew or only its link went, and otherwise starts a local game
+(`Membership.feedEnded`); a driven run ends.
+
+**The run** looks from one player's cursor (`PlayerResource.Follow`, `World.Follow`):
+the slot `-spectate` named, else the first played. Left or up follows the player
+before, right or down the one after, a press on a cursor that player, and
+`:spectate <slot>` or a Players row names one; when that player leaves or goes
+away the view moves to the next one playing (`World.KeepView`). Its other play
+keys do nothing, its commands are those that inspect the run or change its own
+settings, and `:leave` starts a local game. A page spectates with
+`?arg=-spectate=<link>` and leaves after 30 s hidden, since a feed nobody looks at
+is its session's bandwidth for nothing.
+
+**A fleet session** is watched through the router, which holds one subscription to
+the pod's feed and repeats it to every spectator (`FeedHub.Repeat`), so the pod
+serves one subscriber however many watch
+([Session fleet §9](kubernetes-fleet.md#9-the-session-routes)). A door a run
+published is a guest's and carries no feed.
+
+**Not chosen**, each kept in the todo with what would reopen it:
+[the feed as segments a cache serves](todo.md#serve-a-sessions-feed-as-cacheable-segments),
+flat at the node only where a cache fronts the site, and 3 to 6 s behind; and
+[spectators as guest links](todo.md#seat-a-spectator-as-a-guest-with-no-cursor),
+live to the tick at a guest's cost each. What spectating still lacks is
+[its own item](todo.md#watch-a-session-as-a-spectator).
+
 ## 6. Current operating point
 
 The operating point and the readings behind it are [Netcode design §3](netcode-design.md#3-readings).
@@ -1364,8 +1467,9 @@ stays late, the silence window that retires a person its relay left behind, the
 domain a capture's RNG streams may carry, the placement budget and the storm burst
 a shared stream draws before it reads a live position, the owner-state sync an
 install must not stall, the agreed tick a shared-identity crossing waits for on its
-own producer, and the peer link and succession chain rules that make a successor
-reachable. It also forces a capture to enter and retire a quasar while the receiver
+own producer, the peer link and succession chain rules that make a successor
+reachable, and the feed a viewer runs its host's world from, tick for tick, with
+the audience a router repeats it to. It also forces a capture to enter and retire a quasar while the receiver
 skips the release transition, and round-trips a delayed transition action by
 compiled identity. Run the generation and repository gates after focused network
 tests:

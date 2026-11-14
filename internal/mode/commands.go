@@ -39,7 +39,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "w", "weapon", "blossom", "decay", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region", "replay",
-	"host", "join", "leave", "relay", "takeover", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps", "edge",
+	"host", "join", "spectate", "leave", "relay", "takeover", "lan", "session", "bot", "player", "menu", "g", "config", "journal", "wait", "fps", "edge",
 	"register", "login", "logout", "console",
 }
 
@@ -148,6 +148,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleHostCommand(ctx, args)
 	case "join":
 		return handleJoinCommand(ctx, args)
+	case "spectate":
+		return handleSpectateCommand(ctx, args)
 	case "leave":
 		return handleLeaveCommand(ctx, args)
 	case "relay":
@@ -183,6 +185,17 @@ func commandUnavailable(ctx *engine.GameContext, cmd string) string {
 		case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit", "replay":
 		default:
 			return "Unavailable in a replay"
+		}
+	}
+
+	// A spectator holds no place: it inspects its run, changes what it looks from and
+	// its own settings, and leaves; nothing it types plays
+	if ctx.World.Watches() {
+		switch cmd {
+		case "menu", "g", "config", "h", "help", "?", "about", "console", "t", "telemetry", "hud", "fps", "edge", "d", "debug", "content", "flow", "graph", "l", "log", "q", "quit",
+			"m", "mouse", "session", "player", "spectate", "join", "leave", "lan", "relay", "takeover", "register", "login", "logout":
+		default:
+			return spectatingUnavailable
 		}
 	}
 
@@ -1299,6 +1312,55 @@ func handleJoinCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true}
 }
 
+// spectatingUnavailable refuses what a run that only watches a session cannot do
+const spectatingUnavailable = "Unavailable while spectating"
+
+// handleSpectateCommand replaces this run with one that only watches a session, from
+// the slot named first, or moves a spectator's view to another of its session's players.
+// Usage: :spectate <target> [slot]   the forms -join takes; :spectate [slot] while spectating
+func handleSpectateCommand(ctx *engine.GameContext, args []string) CommandResult {
+	result := CommandResult{Continue: true}
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, sessionsUnavailable)
+		return result
+	}
+	slot, named := 0, false
+	if n := len(args); n > 0 {
+		if at, err := ParsePlayerSlot(args[n-1]); err == nil {
+			slot, named, args = at, true, args[:n-1]
+		}
+	}
+	switch watching := ctx.World.Watches(); {
+	case len(args) == 0 && watching && !named:
+		ctx.SetStatusMessage(ctx.SessionCtl.SessionSummary(), parameter.StatusNotice)
+	case len(args) == 0 && watching:
+		reportSpectated(ctx, uint8(slot), 0)
+	case len(args) != 1:
+		setCommandError(ctx, "Usage: :spectate <target> [slot]  (e.g. :spectate host:7777, or a ws(s):// URL); :spectate <slot> while spectating")
+	default:
+		if err := ctx.SessionCtl.Spectate(args[0], uint8(slot)); err != nil {
+			setCommandError(ctx, "Spectate: "+err.Error())
+			return result
+		}
+		ctx.MacroClearFlag.Store(true)
+	}
+	return result
+}
+
+// reportSpectated moves a spectator's view to the player on slot, or step players
+// on from it, and says whom it follows.
+func reportSpectated(ctx *engine.GameContext, slot uint8, step int) {
+	slot, ok := ctx.World.Follow(slot, step)
+	switch {
+	case ok:
+		ctx.SetStatusMessage(fmt.Sprintf("Spectating slot %X", slot), parameter.StatusNotice)
+	case int(slot) < parameter.MaxPlayers:
+		setCommandError(ctx, fmt.Sprintf("Nobody plays on slot %X", slot))
+	default:
+		setCommandError(ctx, "Nobody plays in this session yet")
+	}
+}
+
 // handleLeaveCommand takes this run out of its session into one of its own, the
 // world as it stands. The run's loop serves it; the status line says how it went.
 func handleLeaveCommand(ctx *engine.GameContext, args []string) CommandResult {
@@ -1336,7 +1398,7 @@ func handleJournalCommand(ctx *engine.GameContext, args []string) CommandResult 
 		setCommandError(ctx, usage)
 		return CommandResult{Continue: true}
 	case len(args) == 2:
-		n, err := parsePlayerSlot(args[1])
+		n, err := ParsePlayerSlot(args[1])
 		if err != nil {
 			setCommandError(ctx, sentence(err))
 			return CommandResult{Continue: true}
@@ -1427,7 +1489,7 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 			ctx.SetStatusMessage("Bot joining; :bot lists this run's bots", parameter.StatusNotice)
 		}
 	case args[0] == "drop" && len(args) == 2:
-		slot, perr := parsePlayerSlot(args[1])
+		slot, perr := ParsePlayerSlot(args[1])
 		if err = perr; err == nil {
 			err = ctx.SessionCtl.DropBot(slot)
 			if err == nil {
@@ -1444,7 +1506,9 @@ func handleBotCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true}
 }
 
-func parsePlayerSlot(value string) (int, error) {
+// ParsePlayerSlot reads a roster slot as a command or a launch flag names one: in
+// decimal, or in hexadecimal as a cursor is labelled.
+func ParsePlayerSlot(value string) (int, error) {
 	base := 10
 	if strings.HasPrefix(strings.ToLower(value), "0x") {
 		base, value = 16, value[2:]
@@ -1496,7 +1560,7 @@ func handlePlayerCommand(ctx *engine.GameContext, args []string) CommandResult {
 		setCommandError(ctx, "Usage: :player [drop <slot>]")
 		return result
 	}
-	slot, err := parsePlayerSlot(args[1])
+	slot, err := ParsePlayerSlot(args[1])
 	if err == nil {
 		err = ctx.SessionCtl.DropPlayer(slot)
 	}

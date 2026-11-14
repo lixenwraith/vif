@@ -499,6 +499,48 @@ const (
 	NetworkSequenceWindow = 512
 )
 
+// A viewer's feed: the one stream a host copies to its audience, which each viewer
+// runs its own world from, a little behind.
+const (
+	// FeedRecordTicks is how many ticks the feed gathers into one record: fewer
+	// records deflate better and a viewer stands that much further behind its host.
+	FeedRecordTicks = 10
+
+	// FeedSlackTicks is how many closed ticks a viewer keeps in hand as the next
+	// record lands: how late a record may come before the viewer waits on it.
+	FeedSlackTicks = 4
+
+	// FeedPaceWindow is how many of a viewer's ticks one pace decision reads: past
+	// two records, so the least it had in hand is read where a record was due.
+	FeedPaceWindow = 2*FeedRecordTicks + FeedSlackTicks
+
+	// FeedPaceGainPermille and FeedPacePermilleMax trim a viewer's tick interval per
+	// tick in hand past its slack, and bound it: one that fell behind runs up to
+	// twice as fast until it is back, and one too close a tenth slower.
+	FeedPaceGainPermille = 25
+	FeedPacePermilleMax  = 500
+
+	// FeedSyncTicks is how often a feed carries a starting point, a whole world: what
+	// a newcomer begins from and catches up past, and what repairs a viewer whose
+	// world drifted. Every viewer is sent each one, so a shorter period costs bytes.
+	FeedSyncTicks = 600
+
+	// FeedAudience is how many viewers a host's own feed takes when nothing says, and
+	// FeedAudienceMax the most it may be told to: each is a stream it writes itself.
+	FeedAudience    = 8
+	FeedAudienceMax = 1024
+)
+
+// A feed's wall cadences [wall]
+const (
+	// FeedPollInterval is how often a watched host looks at its feed: for a starting
+	// point come due, and for ticks a stopped clock closed and left unsent.
+	FeedPollInterval = 250 * time.Millisecond
+
+	// FeedHeadTimeout is how long a viewer waits for its first starting point.
+	FeedHeadTimeout = 20 * time.Second
+)
+
 // A dedicated host's cadences [wall]
 const (
 	// ServeReportInterval is how often a server logs what it is holding; a log

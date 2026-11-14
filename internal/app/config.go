@@ -147,7 +147,7 @@ func configForJoin(local runConfig, o network.SessionOffer) (runConfig, error) {
 // ValidateWith checks this configuration with s as its session half: a join's,
 // before anything is dialled.
 func (c runConfig) ValidateWith(s Membership) error {
-	c.Membership = s
+	c.Membership, c.Journal = s, c.Journal && !s.Watch // the journal ends with the run a viewer's replaces
 	return c.Validate()
 }
 
@@ -173,9 +173,10 @@ func joinNotice(notice, line string) string {
 }
 
 // restarted is the run next asks for, built on this one's command line, and the
-// solo run a :join that fails after its dial plays on as. Hosting resumes after the
-// clock rather than before it: the next run is not waiting for a lobby, it is
-// reopening a door its guests are already at.
+// solo run it plays on as when the session it asks for is not entered: a :join that
+// fails after its dial, or a viewer's session that does not come back. Hosting
+// resumes after the clock rather than before it: the next run is not waiting for a
+// lobby, it is reopening a door its guests are already at.
 func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 	c.Notice, c.wiring.dialled, c.Membership.Bots, c.Play = next.Notice, nil, next.Bots, next.Play
 	c.Membership.Passphrase, c.wiring.membership.Door = next.Passphrase, next.Door
@@ -194,28 +195,41 @@ func (c runConfig) restarted(next *restartRequest) (runConfig, *runConfig) {
 		if next.Join != "" {
 			c.Membership.JoinAddress = next.Join
 		}
+		if c.Membership.Watch {
+			return c, c.alone() // no place waits for a viewer whose session stays away
+		}
 	case next.Join == "" && next.Dialled != nil:
-		solo := c
-		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.SessionPlayers = "", "", 0
+		solo := c.alone()
 		c.wiring.dialled = next.Dialled
-		return c, &solo
+		return c, solo
 	case next.Join != "":
-		solo := c
-		solo.Membership.JoinAddress, solo.Membership.SessionName, solo.wiring.membership.SessionPlayers = "", "", 0
+		solo := c.alone()
 		joined, err := membership.Joining(c.Membership, next.Join)
 		if err != nil { // parsed when latched, so a solo run is what is left
 			next.Dialled.Abandon(err)
 			solo.Notice = "Join failed: " + err.Error()
-			return solo, nil
+			return *solo, nil
+		}
+		if next.Watch {
+			// A viewer's run holds nothing of its own: the bots and the journal of the
+			// run it replaces end with that run
+			joined, c.Journal = membership.Watching(joined, next.Follow), false
 		}
 		c.Membership, c.wiring.dialled = joined, next.Dialled
-		return c, &solo
+		return c, solo
 	default:
-		// Not following anyone: a run that led its session, and one that
-		// inherited it and has nobody left, both start over on their own.
-		c.Membership.JoinAddress = ""
+		// Not following anyone: a run that led its session, one that inherited it
+		// and has nobody left, and one that watched it all start over on their own.
+		c.Membership.JoinAddress, c.Membership.Watch = "", false
 	}
 	return c, nil
+}
+
+// alone is c as a run in no session.
+func (c runConfig) alone() *runConfig {
+	c.Membership.JoinAddress, c.Membership.SessionName, c.Membership.Watch = "", "", false
+	c.wiring.membership.SessionPlayers = 0
+	return &c
 }
 
 // Normalize is Config's, noting a size it supplied (geometryDefaulted), and gives a

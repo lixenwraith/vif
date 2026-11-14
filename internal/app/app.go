@@ -289,6 +289,9 @@ func (a *App) initServices() error {
 func (a *App) initWorld() error {
 	// Services take no world argument, so placement relative to InitAll is free
 	a.world = engine.NewWorld()
+	if a.cfg.Membership.Watch {
+		a.world.Watch()
+	}
 	a.world.Resources.Rand = engine.NewRandResource(a.cfg.Seed)
 	// A run reproducing a session draws that session's streams, and a session's
 	// streams are drawn one below the number it reports: construction draws them and
@@ -582,6 +585,9 @@ func (a *App) Close() {
 	a.membership.CloseDoor()
 	a.membership.CloseNearby()
 	a.membership.CloseSeats(false)
+	// Its viewers watch again where the run replacing this one reopens the door.
+	req := a.restart.Load()
+	a.membership.CloseFeed(req != nil && req.Host != "")
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}

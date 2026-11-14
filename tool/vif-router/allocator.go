@@ -27,6 +27,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/probe"
 )
 
 var (
@@ -60,6 +61,10 @@ type allocatorConfig struct {
 	DoorsPerAddress int
 	// browser route together; see holds.
 	RouteMax int
+	// Spectators is how many one session is shown to at once through this router,
+	// 0 for none, and SpectatorsPerAddress those one address may be; see audiences.
+	Spectators           int
+	SpectatorsPerAddress int
 	// ClientAddressHeader is the header the site's edge overwrites with the player's
 	// address; ClientJoins and ClientCreates are that address's budgets, and
 	// AccountCreates the budget of an account a sign-in names in place of them.
@@ -115,10 +120,12 @@ type fleetLimits struct {
 	MaxPlayers      map[string]int    `json:"scenario_max_players,omitempty"`
 	// SessionsMax is the fleet's size (-sessions-max); Doors and DoorsMax the doors
 	// runs publish through the router and the most it carries, for a page to say
-	// what the site has room for.
-	SessionsMax int `json:"sessions_max"`
-	Doors       int `json:"doors"`
-	DoorsMax    int `json:"doors_max"`
+	// what the site has room for. SpectatorsMax is how many one session is shown to
+	// at once (-spectators), 0 where the router shows none.
+	SessionsMax   int `json:"sessions_max"`
+	Doors         int `json:"doors"`
+	DoorsMax      int `json:"doors_max"`
+	SpectatorsMax int `json:"spectators_max"`
 }
 
 type session struct {
@@ -133,11 +140,13 @@ type session struct {
 	// as "this fleet is for native clients".
 	WebSocketURL string `json:"ws_url,omitempty"`
 	// Scenario and Size are what it was created with; State.Map is the map it has.
-	Scenario  string        `json:"scenario,omitempty"`
-	Size      string        `json:"size,omitempty"`
-	CreatedAt string        `json:"created_at,omitempty"`
-	Routable  bool          `json:"routable"`
-	State     sessionHealth `json:"state"`
+	Scenario  string `json:"scenario,omitempty"`
+	Size      string `json:"size,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	Routable  bool   `json:"routable"`
+	// Spectators is how many watch it through this router now (audiences).
+	Spectators int           `json:"spectators"`
+	State      sessionHealth `json:"state"`
 }
 
 type reconcileResult struct {
@@ -168,7 +177,7 @@ func (a *allocator) limits() fleetLimits {
 	w := a.cfg.Workload
 	out := fleetLimits{PlayersMax: a.cfg.PlayersMax, PlayersDefault: w.Players, BotsMax: a.cfg.BotsMax,
 		LogLevels: a.cfg.LogLevels, LogLevelDefault: w.LogLevel, SizeDefault: w.Size,
-		SessionsMax: a.cfg.SessionsMax}
+		SessionsMax: a.cfg.SessionsMax, SpectatorsMax: a.cfg.Spectators}
 	var dirs map[string]string
 	out.Scenarios, dirs = a.scenarios()
 	a.describe(&out, dirs)
@@ -624,8 +633,9 @@ func (a *allocator) listSessions(ctx context.Context) ([]session, error) {
 // routeSession resolves one session identifier to the address of its one ready
 // pod. The identifier is a routing key looked up in Kubernetes state; no caller
 // ever names an upstream, which is the whole of why this is a lookup rather than
-// a parameter.
-func (a *allocator) routeSession(ctx context.Context, id string) (string, error) {
+// a parameter. kind is what the dial is for: one that only watches takes no place,
+// so a session with none free is still its to reach.
+func (a *allocator) routeSession(ctx context.Context, id string, kind network.AdmissionKind) (string, error) {
 	pods, err := a.kube.listPods(ctx, labelSession+"="+id)
 	if err != nil {
 		return "", fmt.Errorf("list Pods: %w", err)
@@ -653,8 +663,12 @@ func (a *allocator) routeSession(ctx context.Context, id string) (string, error)
 		// The same answer the create path waits for. A session at capacity or
 		// draining refuses the dial itself; refusing here costs it nothing and
 		// tells the caller which of the two it is.
-		if !state.Ready {
+		if !state.Ready && kind != network.AdmitWatch {
 			return "", sessionRefusing(state.Phase)
+		}
+		// A lobby holds players alone, and its pod would say so to each dial.
+		if kind == network.AdmitWatch && state.Tick == 0 && state.Clock == probe.ClockStopped {
+			return "", network.ErrUnstarted
 		}
 		return item.Status.PodIP, nil
 	}

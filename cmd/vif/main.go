@@ -19,6 +19,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/lifecycle"
 	"github.com/lixenwraith/vif/internal/manifest"
+	"github.com/lixenwraith/vif/internal/mode"
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
@@ -185,7 +186,7 @@ func main() {
 		sessionTrust, sessionErr = link.TrustTLS(flagSession.ca)
 	}
 	if sessionErr == nil && flagSession.passphrase == "new" {
-		if flagSession.join != "" {
+		if flagSession.join != "" || flagSession.spectate != "" {
 			sessionErr = errors.New("-passphrase new makes a host's passphrase; a joiner gives the host's")
 		} else {
 			flagSession.passphrase = network.GeneratePassphrase()
@@ -447,12 +448,15 @@ func buildConfig() app.Config {
 	}
 
 	// Validated in validateInvocation; a link's name overrides nothing, because a
-	// joiner has no -name of its own.
-	if flagSession.join != "" {
-		join := endpoint(flagSession.join)
+	// joiner has no -name of its own. A spectator dials as a joiner does.
+	watched, follow, _ := flagSession.spectated()
+	if target := cmp.Or(flagSession.join, watched); target != "" {
+		join := endpoint(target)
 		cfg.Membership.JoinAddress = join.Dialable()
 		cfg.Membership.SessionName = cmp.Or(join.Name, cfg.Membership.SessionName)
+		cfg.Membership.Watch, cfg.Membership.Follow = watched != "", follow
 	}
+	cfg.Membership.Spectators, _ = flagSession.audience()
 	cfg.Membership.HostAddress = doorList(flagSession.host)
 	cfg.Membership.ListenAddress = endpoint(flagSession.listen).Addr
 	cfg.Membership.RelayAddress = relayTarget(flagSession.relay)
@@ -610,6 +614,12 @@ type sessionFlags struct {
 	passphrase string
 	admit      string
 
+	// spectate is the session a run only watches and, after a space, the slot it
+	// looks from first, as :spectate takes them; spectators is how many a hosted
+	// session feeds at once, a count kept as given so that none given is the default.
+	spectate   string
+	spectators string
+
 	// slow is the eviction policy a host applies to a participant that cannot keep
 	// up, and shed what it drops when it cannot keep its own tick; see
 	// converge.SlowPolicy and converge.ShedPolicy.
@@ -638,6 +648,10 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session at one or more doors, comma-separated: :7777 for tcp, ws://:7777 or wss://:7777 for WebSocket")
 	fs.StringVar(&f.join, "join", "", "Join a session at [tcp://|vif://]host:port[/name] or a ws(s):// URL, or a new one an http(s):// site creates; tcp when no scheme is given")
+	fs.StringVar(&f.spectate, "spectate", "", "Spectate a session at an address -join takes: watch it from one of its players, taking no place in it; a slot after the address names the player looked from first")
+	fs.StringVar(&f.spectators, "spectators", "", fmt.Sprintf(
+		"How many spectators a session this run hosts feeds at once, 0..%d; 0 takes none (default %d)",
+		parameter.FeedAudienceMax, parameter.FeedAudience))
 	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player at one or more doors, e.g. :7777 or :7777,wss://:7778")
 	fs.StringVar(&f.cert, "cert", "", "Certificate chain a wss:// host serves, a PEM file; for -host, -serve or :host")
@@ -699,8 +713,17 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	}
 	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 || f.bot != "" ||
 		f.authority != "" || f.listen != "" || f.relay != "" || f.name != "" || f.cert != "" || f.key != "" ||
-		f.selfsign || f.ca != "" || f.lifetime().Bounded()) && (schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -bot, -authority, -listen, -relay, -name, -cert, -key, -selfsign, -ca and the session lifetime bounds are available only in interactive play")
+		f.selfsign || f.ca != "" || f.spectate != "" || f.spectators != "" || f.lifetime().Bounded()) && (schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, -spectate, -serve, -probe, -players, -spectators, -bot, -authority, -listen, -relay, -name, -cert, -key, -selfsign, -ca and the session lifetime bounds are available only in interactive play")
+	}
+	if f.spectate != "" && (f.host != "" || f.join != "" || f.serve != "") {
+		return fmt.Errorf("-spectate only watches a session; it does not combine with -host, -join or -serve")
+	}
+	if _, _, err := f.spectated(); err != nil {
+		return err
+	}
+	if _, err := f.audience(); err != nil {
+		return err
 	}
 	if f.key != "" && f.cert == "" {
 		return fmt.Errorf("-key is the key of a -cert certificate")
@@ -708,8 +731,8 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if f.selfsign && f.cert != "" {
 		return fmt.Errorf("-selfsign makes a certificate for this run; -cert names one")
 	}
-	if f.ca != "" && f.join == "" {
-		return fmt.Errorf("-ca is what a joiner trusts a wss:// host by; it takes a -join")
+	if f.ca != "" && f.join == "" && f.spectate == "" {
+		return fmt.Errorf("-ca is what a joiner trusts a wss:// host by; it takes a -join or a -spectate")
 	}
 	if _, err := app.BotSpecs(f.bot); err != nil {
 		return err
@@ -731,10 +754,11 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 			return fmt.Errorf("%s: %w", a.flag, err)
 		}
 	}
+	watched, _, _ := f.spectated()
 	for _, a := range []struct {
 		flag, target string
 		binds        bool
-	}{{"-join", f.join, false}, {"-listen", f.listen, true}, {"-relay", f.relay, true}} {
+	}{{"-join", f.join, false}, {"-spectate", watched, false}, {"-listen", f.listen, true}, {"-relay", f.relay, true}} {
 		if a.target == "" {
 			continue
 		}
@@ -744,6 +768,8 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		router := a.flag == "-relay" && strings.HasPrefix(a.target, "vif://")
 		switch {
 		case err != nil:
+		case a.flag == "-spectate" && e.Scheme == link.SchemeSite:
+			err = errors.New("a site makes sessions to join; spectate one by its own link")
 		case a.binds && e.Name != "":
 			err = errors.New("a bound address names no session; a host answers to -name")
 		case a.binds && e.Scheme == link.SchemeWebSocket:
@@ -779,6 +805,39 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		}
 	}
 	return nil
+}
+
+// spectated is -spectate's session and the slot looked from first, the first when
+// it names none.
+func (f sessionFlags) spectated() (target string, slot uint8, err error) {
+	switch parts := strings.Fields(f.spectate); len(parts) {
+	case 0:
+	case 1, 2:
+		target = parts[0]
+		if len(parts) == 2 {
+			n, err := mode.ParsePlayerSlot(parts[1])
+			if err != nil {
+				return "", 0, fmt.Errorf("-spectate: %w", err)
+			}
+			slot = uint8(n)
+		}
+	default:
+		err = errors.New("-spectate takes a session's address and, after it, one slot")
+	}
+	return target, slot, err
+}
+
+// audience is -spectators as the configuration keeps it: zero for the default when
+// the flag is not given, and a negative count for a 0 that takes none.
+func (f sessionFlags) audience() (int, error) {
+	if f.spectators == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(f.spectators)
+	if err != nil || n < 0 || n > parameter.FeedAudienceMax {
+		return 0, fmt.Errorf("-spectators %q is not a count from 0 to %d", f.spectators, parameter.FeedAudienceMax)
+	}
+	return cmp.Or(n, -1), nil
 }
 
 // endpoint is a target validateInvocation has already parsed; "" is the zero value.
@@ -877,7 +936,8 @@ func (f sessionFlags) botCount() int {
 	return len(bots)
 }
 
-// Go's flag parser has no optional string operand; preserve the next option.
+// Go's flag parser has no optional operand: -bot's spec and the slot after
+// -spectate's address are folded into their flag's value, and the next option kept.
 func botArgs(fs *flag.FlagSet, args []string) []string {
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
@@ -886,6 +946,18 @@ func botArgs(fs *flag.FlagSet, args []string) []string {
 			return append(out, args[i:]...)
 		}
 		name := strings.TrimLeft(arg, "-")
+		if flag, value, given := strings.Cut(name, "="); flag == "spectate" {
+			if !given && i+1 < len(args) {
+				i++
+				value = args[i]
+			}
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+				value += " " + args[i]
+			}
+			out = append(out, "-spectate="+value)
+			continue
+		}
 		if strings.Contains(name, "=") {
 			out = append(out, arg)
 			continue

@@ -317,6 +317,19 @@ func (c Config) Validate() error {
 	if c.Membership.Participants != 0 && c.Membership.JoinAddress != "" {
 		return errors.New("-players configures a host, not a joining guest")
 	}
+	if c.Membership.Watch {
+		// A viewer holds no place: nothing of its run is in the session it watches.
+		switch {
+		case c.Membership.JoinAddress == "":
+			return errors.New("-spectate names the session to watch")
+		case len(c.Membership.Bots) != 0:
+			return errors.New("-spectate holds no place a bot could play from")
+		case c.Membership.RelayAddress != "" || c.Membership.ListenAddress != "":
+			return errors.New("-spectate opens no door: -relay and -listen are a participant's")
+		case c.Journal:
+			return errors.New("-spectate keeps no journal")
+		}
+	}
 	if len(c.Membership.Bots) > parameter.MaxPlayers {
 		return fmt.Errorf("-bot %d is more than the %d a session holds", len(c.Membership.Bots), parameter.MaxPlayers)
 	}

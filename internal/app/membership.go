@@ -22,6 +22,7 @@ import (
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/resource"
 	"github.com/lixenwraith/vif/internal/snapshot"
+	link "github.com/lixenwraith/vif/pkg/network"
 )
 
 // The authority policies a host names and the graph a bot seat plays when none is
@@ -348,13 +349,19 @@ func openDial(d *membership.JoinDial, cfg runConfig) (*App, error) {
 		gate = &converge.PeerLinkGate{}
 		cfg.wiring.membership.Links = gate
 	}
-	// On this run's gate, whichever run dialled: a :join or a redial hands its dial
-	// to the run built on it, whose reach is the one that holds the roster's keys.
-	cfg.wiring.networkConfig.ConnectPeer = network.PeerDialer(membership.IdentityFromAnchor(offer.Anchor),
-		gate, cfg.wiring.networkConfig.ConnectTimeout)
 	pinned := cfg.Membership.ListenAddress != ""
-	if !offer.FixedAuthority && (cfg.Play.Takeover || pinned) && config.SocketNetwork && (offer.Relay == 0 || pinned) {
-		listener, declared = converge.BindAdvertised(cfg.Membership.ListenAddress, cfg.Membership.JoinAddress)
+	if cfg.Membership.Watch {
+		// A viewer's transport is its feed, attached once it holds a world: it runs
+		// no port, so it dials no peer and declares no door a session could move to.
+		cfg.wiring.networkConfig = link.DefaultConfig()
+	} else {
+		// On this run's gate, whichever run dialled: a :join or a redial hands its dial
+		// to the run built on it, whose reach is the one that holds the roster's keys.
+		cfg.wiring.networkConfig.ConnectPeer = network.PeerDialer(membership.IdentityFromAnchor(offer.Anchor),
+			gate, cfg.wiring.networkConfig.ConnectTimeout)
+		if !offer.FixedAuthority && (cfg.Play.Takeover || pinned) && config.SocketNetwork && (offer.Relay == 0 || pinned) {
+			listener, declared = converge.BindAdvertised(cfg.Membership.ListenAddress, cfg.Membership.JoinAddress)
+		}
 	}
 	if listener != nil {
 		// Installed before newApp, because newApp is what builds the port that serves

@@ -29,6 +29,13 @@ type Membership struct {
 	// identity before the App is constructed.
 	JoinAddress string
 
+	// Watch makes the run a viewer of the session JoinAddress names: it holds no
+	// place there, drives no cursor and sends nothing, and runs from the feed that
+	// session's host copies to everyone watching it (doc/multi-player.md §5.8).
+	// Follow is the slot it looks from first, the next one played while that is empty.
+	Watch  bool
+	Follow uint8
+
 	// SessionName is what one address calls this session, so a deployment can put
 	// several behind one. A host answers to it and refuses a dial that named
 	// another; a joiner sends it before the handshake, where a front door can read
@@ -66,6 +73,10 @@ type Membership struct {
 	// a dedicated host, the lobby starts on its first guest and the rest arrive
 	// through the mid-run gate; an interactive host has no lobby.
 	Participants int
+
+	// Spectators is how many viewers a session this run hosts feeds at once: zero is
+	// parameter.FeedAudience and a negative count none.
+	Spectators int
 
 	// Bots names the graph of each bot seat this run holds, one entry a bot. Seats
 	// join the session the run is in, and a run in none opens one with no listener.

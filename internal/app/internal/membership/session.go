@@ -64,6 +64,7 @@ func (m *Membership) HostNetworkConfig() *link.Config {
 	netCfg.MaxPeers = m.SessionCapacity()
 	netCfg.OnError = logSessionError
 	netCfg.AcceptSession = m.sessionAcceptor(m.joinBudget(), true)
+	netCfg.AcceptWatch = m.watchAcceptor()
 	// Every host outlives its guests, so every host admits a dial after its lobby
 	// closed: a dropped participant comes back through the one gate a reconnect has
 	// ever had. The hook answers nothing until the run arms it, because until then
@@ -92,7 +93,7 @@ func (m *Membership) sessionAcceptor(admit func(net.Addr) error, door bool) func
 		PressWindow: parameter.NetworkJoinPressWindow,
 	}
 	if door {
-		c.Passphrase, c.Ticket, c.Gated = m.passphraseDoor, m.ticketHook(), m.gated
+		c.Passphrase, c.Ticket, c.Gated = m.passphraseDoor, m.ticketHook(network.AdmitPlay), m.gated
 	}
 	return network.HostAcceptor(c, network.DefaultConfig().ConnectTimeout)
 }
@@ -379,11 +380,19 @@ type JoinDial struct {
 // proves every place of its kind it keeps, so a place one of them waits under is the
 // one its seat is offered.
 func DialJoin(cfg config.Membership, wire Wiring, base JoinBase) (*JoinDial, error) {
-	pending, preview, err := network.PreviewSession(cfg.JoinAddress, joinNetConfig(cfg, wire))
-	if err != nil {
-		if wire.Relay != nil {
-			return nil, fmt.Errorf("join through the holder: %w", err)
-		}
+	dial, netCfg := network.PreviewSession, joinNetConfig(cfg, wire)
+	if cfg.Watch {
+		// Under a key of its own, proving no place this process keeps and showing no
+		// sign-in: a viewer comes back to none, and either would tell who watches.
+		dial, netCfg.Keys, netCfg.Passes, netCfg.SignIn = network.WatchSession, nil, nil, ""
+	}
+	pending, preview, err := dial(cfg.JoinAddress, netCfg)
+	switch {
+	case err != nil && cfg.Watch:
+		return nil, fmt.Errorf("spectate %s: %w", link.Shown(cfg.JoinAddress), err)
+	case err != nil && wire.Relay != nil:
+		return nil, fmt.Errorf("join through the holder: %w", err)
+	case err != nil:
 		return nil, fmt.Errorf("join %s: %w", link.Shown(cfg.JoinAddress), err)
 	}
 	d := &JoinDial{pending: pending, offer: preview, places: wire.Places}
@@ -464,6 +473,8 @@ func (m *Membership) TakeDial(d *JoinDial) error {
 		return err
 	}
 	switch {
+	case m.cfg.Watch:
+		return nil // a viewer takes no seat: its feed is asked for once its loop runs
 	case d.seated():
 		return m.bindSeat(pending, offer, d.place)
 	case m.joinWaits():
@@ -1505,6 +1516,9 @@ func (m *Membership) settleLobbyHandshakes(port *link.SocketPort) {
 func (m *Membership) StartJoinSession(signals <-chan os.Signal) error {
 	if m.pendingJoin == nil {
 		return errors.New("join session has no pending stream")
+	}
+	if m.cfg.Watch {
+		return m.startWatchSession(signals)
 	}
 	m.run.ShowJoinStatus("Join accepted; waiting for host start gate")
 	final, err := m.awaitStartGate(signals)

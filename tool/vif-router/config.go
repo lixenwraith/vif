@@ -139,6 +139,10 @@ func parseConfig(args []string, output io.Writer) (runtimeConfig, error) {
 		"doors one address may publish at once; 0 leaves it to -tunnels")
 	set.IntVar(&cfg.Allocator.RouteMax, "route-max", 8,
 		"concurrent connections one session may hold through the front door and the browser route together")
+	set.IntVar(&cfg.Allocator.Spectators, "spectators", 256,
+		"spectators one session is shown to at once through this router, each sent a copy of the one feed its pod writes; 0 shows no session (at most 1024)")
+	set.IntVar(&cfg.Allocator.SpectatorsPerAddress, "spectators-per-address", 4,
+		"spectators one address may be in one session at once; 0 leaves it to -spectators")
 	set.StringVar(&cfg.Allocator.ClientAddressHeader, "client-address-header", "",
 		"header the site's edge overwrites with the player's address, e.g. X-Real-IP; empty budgets no address on the API or browser route")
 	set.IntVar(&cfg.Allocator.ClientJoins, "client-joins", parameter.NetworkAdmitBurst,
@@ -234,6 +238,12 @@ func validateConfig(cfg runtimeConfig) error {
 	}
 	if cfg.Allocator.RouteMax < 1 || cfg.Allocator.RouteMax > 16 {
 		return fmt.Errorf("-route-max must be between 1 and 16")
+	}
+	if n := cfg.Allocator.Spectators; n < 0 || n > parameter.FeedAudienceMax {
+		return fmt.Errorf("-spectators %d must be 0 to %d", n, parameter.FeedAudienceMax)
+	}
+	if n := cfg.Allocator.SpectatorsPerAddress; n < 0 || n > parameter.FeedAudienceMax {
+		return fmt.Errorf("-spectators-per-address %d must be 0 to %d", n, parameter.FeedAudienceMax)
 	}
 	if h := cfg.Allocator.ClientAddressHeader; h != "" && !headerPattern.MatchString(h) {
 		return fmt.Errorf("invalid -client-address-header %q", h)

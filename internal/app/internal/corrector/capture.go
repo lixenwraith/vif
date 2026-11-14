@@ -111,11 +111,21 @@ func InstallStatusLocked(w *engine.World, state snapshot.StatusState) {
 // taken inside one critical section: one assembled across two ticks would describe
 // a world that never existed.
 func (c *Corrector) CaptureShared() (snapshot.SharedCapture, error) {
+	return c.CaptureSharedWith(nil)
+}
+
+// CaptureSharedWith is CaptureShared with beside run in the capture's own critical
+// section, for what must be read at the tick the capture describes.
+func (c *Corrector) CaptureSharedWith(beside func()) (snapshot.SharedCapture, error) {
 	var (
 		cap snapshot.SharedCapture
 		err error
 	)
-	c.world.RunSafe(func() { cap, err = c.CaptureSharedLocked() })
+	c.world.RunSafe(func() {
+		if cap, err = c.CaptureSharedLocked(); err == nil && beside != nil {
+			beside()
+		}
+	})
 	if err != nil {
 		return snapshot.SharedCapture{}, err
 	}

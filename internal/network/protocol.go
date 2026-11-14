@@ -130,6 +130,12 @@ const (
 	MsgTunnelOpen       link.MessageType = 0x34 // Live: the router asking the run to open a connection back
 	MsgTunnelAccept     link.MessageType = 0x35 // Live: the run's connection back, naming its ticket
 	MsgTunnelKeep       link.MessageType = 0x36 // Live: either end keeping the control connection alive
+
+	// MsgSessionWatch opens a dial that only watches, in the route frame's place and
+	// with its payload, so a door and a front door tell it from a join by its first
+	// byte. Its handshake is a join's as far as the preview; its seat is answered by
+	// MsgStart and the session's feed (link.FeedHub), which carries nothing back.
+	MsgSessionWatch link.MessageType = 0x37 // Live: the session name a watching dialer is holding
 )
 
 // kinds is what a link knows of the session's kinds: the family each counts under,
@@ -146,7 +152,7 @@ var kinds = link.NewKinds(map[link.MessageType]link.Traits{
 	MsgStateShard:      {Kind: link.KindRepair, Precompressed: true},
 	MsgStateUnserved:   {Kind: link.KindRepair},
 	MsgScenarioBody:    {Kind: link.KindControl, Precompressed: true},
-}, MsgReady, MsgConnect, MsgSessionRoute)
+}, MsgReady, MsgConnect, MsgSessionRoute, MsgSessionWatch)
 
 // Bundles reports whether frames of kind t travel bundled: what a link is sent of a
 // tick's epochs and syncs leaves as one MsgBundle frame.

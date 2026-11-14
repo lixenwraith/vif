@@ -321,7 +321,12 @@ func (m *Membership) AttachTransport(port engine.NetworkPort) {
 // world lock — the operator command path does, because mode/ runs inside it.
 // Caller MUST hold updateMutex.
 func (m *Membership) attachTransportLocked(port engine.NetworkPort) {
-	r := engine.NewNetworkResource(port)
+	m.attachResourceLocked(engine.NewNetworkResource(port))
+}
+
+// attachResourceLocked binds r, a transport under the identity this run has on it,
+// to the world. Caller MUST hold updateMutex.
+func (m *Membership) attachResourceLocked(r *engine.NetworkResource) {
 	m.BindSessionHooks(r)
 	term, holder := m.AuthorityStamp()
 	if holder != 0 {

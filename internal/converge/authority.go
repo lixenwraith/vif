@@ -508,6 +508,14 @@ func (u *Authority) isAuthority() bool {
 	return u.term > 0 && u.local != 0 && u.local == u.holder
 }
 
+// watching reports an instance that follows a session it holds no place in, a
+// viewer: it is sent whole worlds on its feed's period, and never succeeds anyone.
+func (u *Authority) watching() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.term > 0 && u.local == 0
+}
+
 // Migrating reports whether a succession is in progress, which is what refuses a
 // join rather than admitting it into a term that is about to end.
 func (u *Authority) Migrating() bool {

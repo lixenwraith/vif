@@ -200,7 +200,8 @@ refinement needs from the code:
   `deploy/k3s/10-quota.yaml`
 - Guide: [Session fleet](kubernetes-fleet.md) §6
 
-The router takes `bots`, but `bots_max` stays 0 until these hold:
+The router takes `bots`, but `bots_max` stays 0 until these hold; the lobby's
+[standing session](#keep-a-standing-session-for-the-lobby) waits on them too:
 - The site's `vif-lobby.js` sends `bots` and reads `bots_max`; the native client
   (`network.RequestSession`, the menu's request form) sends `bots`.
 - The quota's 1000m of CPU fills at three sessions of three bots: raise it, or
@@ -234,10 +235,12 @@ graph to. The fleet request carries it once the site exposes one.
 - Priority: P3
 - Affected files: `internal/app/play.go`, `internal/app/internal/membership/seat.go`
 
-A watched bot with seats is in a session, so the viewer forces it unpaused and
-ignores pause keys. A person's run pauses with only its own bots; the viewer's pause
-key could start the session hold `:pause` starts when the holder is its session's
-host, which already stops its seats at one tick.
+A watched bot with seats is in a session, so the terminal watching it (`-watch`,
+the bot's own run, not a spectator's) forces it unpaused and ignores pause keys. A
+person's run pauses with only its own bots; the pause key there could start the
+session hold `:pause` starts when the holder is its session's host, which already
+stops its seats at one tick, and its spectators' runs on the same one
+([Multiplayer §5.8](multi-player.md#58-watching-a-session)).
 
 ### Train a network bot live in vanguard
 
@@ -763,6 +766,39 @@ the template. `scenario` and `image` are on it. `audio` goes on it the day a
 dedicated host renders anything, and `content` never does. Nothing else changes;
 the volume already carries whatever the installer puts there.
 
+### Keep a standing session for the lobby
+
+- Priority: P2, after [Open fleet sessions to bots](#open-fleet-sessions-to-bots)
+- Affected files: `tool/vif-router` (`allocator.go`, `config.go`),
+  `internal/lifecycle`, `deploy/guest/vif-router.env`,
+  `deploy/k3s/30-session.yaml`, the Hugo site's `vif-lobby.js`
+- Guide: [Session fleet §9](kubernetes-fleet.md#9-the-session-routes),
+  [Multiplayer §5.8](multi-player.md#58-watching-a-session)
+
+The site's lobby is to show one game always: a bot's, which a visitor spectates
+through the router at a copy's cost each (fleet §9). Spectating stands; the
+session does not. What it needs:
+
+- A session of bots alone that starts: the router's own create with `bots` set
+  and no person, which waits on fleet bots; a lobby that starts on its bots'
+  quorum, or on none
+  ([Run a scenario with no players](#run-a-scenario-with-no-players)); and a
+  lifetime no first join opens and no vacancy ends (`lifecycle.Policy`).
+- Its keeper: a router setting naming the scenario and the bots, which creates
+  the session at start and again whenever it is gone, at the session Job's
+  deadline too, charged to no address's budget and counted in the quota. A
+  spectator of the one that went is told it ended and starts a local game
+  (`Membership.feedEnded`): a name the router answers for whichever stands, or
+  a feed's end that names its successor, keeps a page watching.
+- Its cost while nobody looks: a bot's game runs a pod around the clock. The
+  router knows a session with no spectator past its linger (`audiences`), and a
+  pod its idle hub (`FeedHub.Idle`), so a game of bots alone can hold until a
+  watch dial resumes it.
+- Whether a visitor may also take a seat in it, which makes it an ordinary
+  session with a bot until it empties, or only watches.
+- The lobby showing it first, with Watch as what its row offers
+  ([Watch a session as a spectator](#watch-a-session-as-a-spectator)).
+
 ## Multiplayer
 
 ### Hear a participant again once its link reopens
@@ -965,6 +1001,10 @@ What the feature itself needs, best shaped by deploying it step by step:
   slower than a native core: `main` with eight participants takes under half the
   page's thread and `td` does not fit, so the authority belongs in a Worker of its
   own.
+- `-doors-per-address` counted as the join budget counts an address. It counts the
+  dialler's whole host (`addressHost`), so one IPv6 /64 holds that many doors an
+  address, up to `-tunnels`; the join budget and a session's spectators are
+  counted by `network.AdmissionKey`.
 
 ### Project a correction outside the live lock
 
@@ -1060,67 +1100,158 @@ permission, but it finds mDNS services, which vif does not announce.
 ### Watch a session as a spectator
 
 - Priority: P2
+- Affected files: `internal/app/internal/membership/watch.go`, `host.go`,
+  `internal/mode/commands.go` (`handleSpectateCommand`), `config_form.go`,
+  `cmd/vif`, `tool/vif-router/audience.go`,
+  `internal/app/internal/scribe/journal.go`, the Hugo site's `vif-lobby.js`
+- Guide: [Multiplayer §5.8](multi-player.md#58-watching-a-session),
+  [Session fleet §9](kubernetes-fleet.md#9-the-session-routes)
+
+A run spectates a session from the one feed its authority writes, a fleet
+session's through the router, and looks from any player's cursor (§5.8). What
+that leaves:
+
+- **The site's Watch link.** The listing carries `spectators` in each session and
+  `spectators_max` in `limits`, and the lobby reads neither. Beside Play, a Watch
+  link that opens the page with `?arg=-spectate=<ws_url>`, offered where
+  `spectators_max` is above 0 and the game has started, with the count in the row.
+- **Consent.** Who may be watched is a ceiling set where a session is served:
+  `-spectators` on a host, 8 unless set and a flag alone, and the router's for its
+  whole fleet. Missing: "Let others watch" on the Multiplayer page, saved with the
+  rest of `Play`, and a ceiling a host changes mid-session; a fleet session whose
+  creator asks for none (a field of the create request, the pod's `-spectators 0`,
+  the listing saying so); and a player's own switch that keeps the view off its
+  cursor, carried on the roster entry as `Key` is, seats taking their holder's.
+  Players are told nothing: only a host's `:session` counts its spectators, and a
+  fleet pod counts one, the router.
+- **A passphrase on `:spectate` and the menu's form.** A spectator shows a gated
+  door the phrase its run already holds (`-passphrase`, an earlier `:join`);
+  neither `:spectate <target> [slot]` nor Spectate a session takes one, as
+  `:join <target> [passphrase]` does.
+- **A session whose host went.** A viewer that lost its feed's link dials the
+  address it watched and starts a local game when nothing answers
+  (`Membership.feedEnded`). Under `-authority migrate` the session plays on at a
+  successor's port, which a viewer is never shown (`SessionOffer.Watched()` carries
+  no chain), so that nobody's address reaches a run that only watches. Following
+  takes a door that names no participant: the session's own at the router
+  ([Publish a player's session at the router](#publish-a-players-session-at-the-router)).
+- **A door a run published, and a relay's.** A guest's door serves joins alone and
+  refuses a watch dial (`errNotHosting`; the router's `ErrUnwatched` for a tunnel).
+  A guest subscribed to its host's feed could repeat it at its door
+  (`FeedHub.Repeat`, as the router does), which would also take the audience's
+  bytes off the host.
+- **A lobby that has not started.** A watch dial at a session in its lobby is
+  refused as not started (`ErrUnstarted`), for a person to retry; held at the door
+  and fed from the first tick, a spectator would see the start.
+- **Spectators behind one address.** A watch dial is one of an address's six a
+  minute at a host's door, and the router adds `-spectators-per-address` (4): a
+  classroom behind one NAT shares both. A viewer shows no sign-in, so no account's
+  budget applies. Options: a wider budget for a dial that only watches, or an
+  account's share for a viewer that chooses to show one.
+- **A spectator's journal.** A viewer keeps none: `-spectate` refuses `-journal`
+  and `:journal` is unavailable while spectating. Its feed from a starting point
+  on is a whole recording of the shared world: written to a file as it arrives, a
+  viewer replays the session from it, with its changes of view journaled as local
+  events so the replay looks from the same players.
+- **The periodic world.** Every `FeedSyncTicks` (600) each viewer is sent a whole
+  world, 3.9 to 9.1 kB and a tenth to a fifth of the feed, which one already
+  reading only checks itself against. A digest would check the same in a few
+  bytes, the whole world kept for a newcomer alone; read what that does to the
+  tail a newcomer catches up through (netcode design §3.8, `VIF_FEED=1`).
+- **A shorter record.** `FeedRecordTicks` (10) puts a viewer 9 to 13 ticks behind.
+  Fewer ticks a record bring it closer for more records and less to deflate
+  against: read both at 5 before choosing.
+- **An audience on the node.** The copy's cost was read on loopback in a container
+  (netcode design §3.8). Read 256 spectators of a four-player session through the
+  edge: the router's CPU and egress beside the pod's, and what the edge's own
+  connection limits pass.
+
+A spectator sees the shared world, what any remote participant sees, from the
+player it follows, whose owner-synced values the status bar reads. Player-domain
+state is never rebuilt on another instance (D-2), so that player's glyphs, drains,
+nuggets, projectiles and loot stay on its run.
+
+Beside it, from the same review of the journal's slot handling: a journal records
+its slot from `LocalSlot` at the opening (`JournalCapture.Slot`,
+`JournalAnchor.Slot`), its replay binds input there (`Scribe.OpenedLocked`), and
+later installs bind by identity (`RebindCursorRoster`). One a joiner opens before
+its arrival may record `NoPlayerSlot` and must bind when the arrival or a
+correction brings the cursor, which wants a test.
+
+### Serve a session's feed as cacheable segments
+
+- Priority: P3, to evaluate when a cache fronts the site or an audience outgrows
+  the sockets one router holds
+- Affected files: `pkg/network/feed.go`, `tool/vif-router/audience.go`,
+  `internal/app/internal/membership/watch.go`, `web/terminal.js`
+- Guide: [Multiplayer §5.8](multi-player.md#58-watching-a-session),
+  [Netcode design §3.8](netcode-design.md#38-the-feed)
+
+The choice made: one feed, written once and copied to every viewer down a socket
+each holds open, by the host's hub or the router's. A viewer stands half a second
+behind, and each costs its feeder the feed's bytes again, 0.9 to 1.9 kB/s, and
+about 10 µs of CPU a record.
+
+What the other form does: the router also cuts the feed into segments, a few
+seconds each, and serves them over HTTP beside a short list of the newest, as
+live video is served. A viewer fetches the list, a starting point and each segment
+as it appears, and holds no socket. A cache in front of the site answers every
+viewer after the first, so the node sends each segment about once however many
+watch.
+
+What it entails: a segment is the records between two cuts (`FeedCut` restarts the
+deflate history already), named by its session, game and first tick, with the
+starting point fetched apart, since a segment carrying one would be mostly world;
+a route at the router serving them with cache headers and expiring them; a
+`FeedPort` that reads fetched segments, `net/http` natively and `fetch` in a page;
+and a viewer three to six seconds behind, a segment's length and its fetch,
+against half a second. It can sit on the feed as built: the router's subscription
+is the source of both.
+
+Why it was not chosen: its cost is flat only where a cache fronts the site, which
+is the edge's to say and no part of this repository. With none, the node answers
+every fetch itself, a request a viewer a segment, which costs more than a held
+socket's copy; and the lag is paid either way.
+
+Evaluate it when a cache or CDN serves the site's paths, or when an audience is
+wanted past what one router holds open (`FeedAudienceMax`, 1024 a session). Ask
+which the site has; the repository cannot say.
+
+### Seat a spectator as a guest with no cursor
+
+- Priority: P3, to evaluate if a spectator must stand on its host's tick
 - Affected files: `internal/network/session.go` (`RosterEntry`, `SessionOffer`),
-  `internal/app/internal/membership/session.go`, `join.go`,
-  `internal/engine/world.go` (`FollowLocalCursor`), `internal/mode/config_menu.go`,
-  `cmd/vif`, `web/terminal.js`,
-  `internal/app/internal/scribe/journal.go`, `internal/app/replay.go`
-- Guide: [Domain design §1](domain-design.md#1-domains-and-identity),
-  [Multi-player §1](multi-player.md#1-vocabulary-and-boundaries)
+  `internal/app/internal/membership/join.go`, `internal/converge`,
+  `internal/engine/world.go`
+- Guide: [Multiplayer §5.8](multi-player.md#58-watching-a-session),
+  [Domain design §1](domain-design.md#1-domains-and-identity)
 
-A spectator joins a session to watch: it holds no cursor and views the world from
-one it picks, a person's or a bot's, among those whose owners allow it. It is
-reached by a flag (`-spectate <link> [slot]`; `-watch` already means a watched
-bot), a command (`:spectate <link> [slot]`, and `:spectate <slot>` or a key to
-switch target inside the session), the Multiplayer page, and the page's launch
-arguments as `-join` is passed, with a Watch link beside Play in the site's lobby.
+The choice made: a viewer is nobody in its session. It reads the one feed every
+viewer is sent, runs a tick only once the feed closed it, and so needs no
+correction and sends nothing.
 
-Most of it exists. A dedicated host's coordinator is a cursorless roster entry
-(`NoPlayerSlot`), and a joiner holds the sentinel until its own cursor exists, so
-every "is this my cursor" test already answers no for one. The shared world
-reaches it the ordinary way, a capture at join and then committed epochs and
-corrections, not a journal, and it crosses nothing. Each cursor's owner-authored
-values reach every instance through the syncs (D-13), so a HUD can show the
-target's. What is new:
-- A second kind of cursorless entry: admitted, paced like a guest, not counted in
-  `MaxPlayers` (domain design §1 allows only the coordinator none today), never a
-  successor, and not a stall for the start gate or the hold.
-- A follow target apart from the input slot: the camera follows the target's
-  cursor and the status bar reads its values; a target that leaves, or turns
-  watching off, moves the view to the next allowed cursor.
-- Consent: a game option ("Let others watch", on by default for now) on the
-  Multiplayer page, saved with the rest of `Play` and carried on the roster entry
-  as `Key` is, so the authority and every spectator read the same answer. Seats
-  take their holder's.
-- Capacity: spectators cost the authority a link and its corrections each, so a
-  `-spectators N` ceiling, reported in the router's listing; relay doors can fan
-  them out ([Multi-player §5.6](multi-player.md#56-relay-doors-and-the-router)).
-- Admission, as the auth design left it: `AdmissionKind` already names `watch`
-  beside `play`, on the wire by name, so a ticket's and a pass's kind tells a
-  spectator from a player at every door, the router mints a `watch` ticket for a
-  dial that asks (an `AuthRequest` field, the same frames), `TicketGate` admits the
-  kind the door allows, and the pass a spectator is issued spares its redials the
-  gate as a player's does; the keep-out list, the budgets by address and account,
-  and the roster entry's `Account` and `Name` apply unchanged, and a dropped
-  spectator is kept out as a player is
-  ([Auth and session design §3.1](auth-session-design.md#31-primitives),
-  [§3.4](auth-session-design.md#34-session-passes)).
+What the other form does: a spectator joins as a participant with no cursor, a
+second kind of cursorless roster entry beside a dedicated host's coordinator. It
+holds a peer link, predicts the shared world on its own clock as a guest does and
+is corrected over that link, so it stands on the session's tick, not a record
+behind.
 
-A spectator sees the shared world, what any remote participant sees, centred on
-the target: Player-domain state is never rebuilt on another instance (D-2), so the
-target's glyphs, drains, nuggets, projectiles and loot stay on its run, and nothing
-beyond admission and the follow target goes over the wire for it.
+What it entails: the least new code, since the join, the capture at the seat and
+the corrections exist; an entry not counted in `MaxPlayers`, never a successor and
+no stall for the start gate or the hold; and a link each at the authority, with
+its cadence, manifests and repairs, 1.8 to 2.5 kB/s measured to a guest against
+0.9 to 1.9 for the feed every viewer shares. The spectator is in the roster, so
+the players' runs are told of it, and it sends: one more link a session must
+bound and can be stalled by.
 
-The journal's slot handling needs a review alongside. A journal records its slot
-from `LocalSlot` at the opening (`JournalCapture.Slot`, `JournalAnchor.Slot`),
-its replay binds input there (`Scribe.OpenedLocked`), and later installs bind by
-identity (`RebindCursorRoster`). Three cases want a test: a journal a joiner opens
-before its arrival, which may now record `NoPlayerSlot` and must bind when the arrival
-or a correction brings the cursor; a spectator's journal, whose target switches are
-presentation and must be journaled local events so its replay shows the same view;
-and `:journal start <slot>` on a spectator, which journals its own run, since a
-remote player's run cannot be journaled. A bot-only session is the natural thing
-to watch: [Run a scenario with no players](#run-a-scenario-with-no-players).
+Why it was not chosen: each spectator costs a guest's share of the host's CPU and
+uplink, which holds an audience to about what a session seats, far from a lobby's
+hundreds; and a roster entry is a place, which a spectator is kept from holding,
+so that it never takes a session over and nothing names it or where it listens.
+
+Evaluate it for a few spectators who must be live to the tick, as a referee or a
+commentator. The feed's half second is `FeedRecordTicks`, and a shorter record is
+the cheaper answer to try first.
 
 ## Netcode
 

@@ -59,6 +59,9 @@ Branches.
   checkout's `tmp/`, which `.gitignore` holds. A `.go` file there is a package to
   `go build ./...` and `go vet ./...` all the same: a scratch program or a copy of a
   source kept under `tmp/` stops both.
+- `vif-router` at the repository's root is a tracked binary, and `go build
+  ./tool/vif-router/` run there writes over it: gate with `go build ./...`, which
+  writes nothing, and `git checkout -- vif-router` after a slip.
 - `qemu-user-static` from apt runs a test binary built for another architecture
   (`GOARCH=arm64 go test -c`, then `qemu-aarch64-static ./x.test`): arm64's NEON
   path under `GOEXPERIMENT=simd`, and a big-endian `s390x` build, run that way.
@@ -319,6 +322,11 @@ Branches.
   A dial reaching a host with `MaxHandshakes` (8) handshakes in flight is closed
   unanswered, which the dialer reads as `io.EOF` ("connected, but no vif session
   answered there"), and is retried as a refusal is (`scriptedRun`).
+- A run that only watches is `mustWatching` (`internal/app/watch_test.go`), its
+  dial one more in its host's budget above. `followTo` steps it to its host's tick,
+  which shows what a player crossed only a lead later: play the lead out on the
+  players first. A fight (`brawl`) whose players are not `:god`'s ends in a defeat
+  and a new game, which starts the tick count over.
 - A held run takes no tick, so an event pushed at it dispatches only on `Settle`:
   end a test's hold with the request and `Settle`, as `mode.ExecuteCommand` callers
   do. A test-driven guest (`mustSocketJoiner`) applies no correction in `Tick`: run
@@ -447,6 +455,13 @@ Branches.
   door's question and the dial's answer, and splices everything after, so a
   passphrase door's later steps pass through it untouched; a stand-in pod in a test
   hands its connection to `HostAcceptor` whole, which reads the route frame itself.
+- A refusal that passes in moments (`RetrySoon`) is redialled every 250 ms, by a
+  first dial as by a rejoin, and six dials spend an address's budget for a minute:
+  a state that can last, as a lobby does for a dial that only watches, takes a
+  refusal a person retries (`ErrUnstarted`).
+- The router counts per address by `network.AdmissionKey`, an IPv6 address's /64,
+  as the join budget does: a count keyed by the whole host (`addressHost`) lets one
+  prefix's addresses take a share each.
 - nginx's `proxy_protocol on` writes a version 1 header and nothing else; the
   router reads version 2 too for other edges. A probe of the front door behind the
   edge writes the header first or is closed unanswered.
@@ -662,7 +677,9 @@ Branches.
 - The browser launcher runs end to end in the container: `GOOS=js GOARCH=wasm go
   build -o <copy>/vif.wasm ./cmd/vif` into a copy of `web/`, serve the copy with
   `python3 -m http.server` and drive it with Playwright. `?arg=-join=ws://127.0.0.1:9/x`
-  ends the run at once with a refused join's message. A `devices['Pixel 7']`
+  ends the run at once with a refused join's message, and a native
+  `-host ws://127.0.0.1:<port> -bot 2` in tmux is a session the page joins or
+  spectates, its status line read beside the page's. A `devices['Pixel 7']`
   context is the phone's page, where a held `mouse.down` on the canvas's last
   rows is the finger that opens the menu; `page.keyboard.press('Control+g')` is
   the desktop's. `pkg/browser`'s tests run under node with

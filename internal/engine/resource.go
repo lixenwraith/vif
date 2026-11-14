@@ -389,6 +389,11 @@ type PlayerResource struct {
 	local uint8
 	count int
 
+	// view is the slot a viewer looks from, and follows marks its run: one that
+	// drives no cursor and shows the session from one of its players'.
+	view    uint8
+	follows bool
+
 	// The first scripted spawn declares the configuration's starting resources.
 	// Session admission and late arrivals reuse the declaration instead of
 	// hard-coding one game's values in app or NetworkSystem.
@@ -488,16 +493,41 @@ func (pr *PlayerResource) SetLocal(slot uint8) {
 }
 
 // publishLocalSlot points the bare per-player metric keys at the slot this
-// instance drives. A slot outside the roster mirrors nothing.
+// instance looks from. A slot outside the roster mirrors nothing.
 func (pr *PlayerResource) publishLocalSlot() {
 	if pr.status == nil {
 		return
 	}
-	if int(pr.local) >= parameter.MaxPlayers {
+	slot := pr.ViewSlot()
+	if int(slot) >= parameter.MaxPlayers {
 		pr.status.SetLocalSlot(-1)
 		return
 	}
-	pr.status.SetLocalSlot(int(pr.local))
+	pr.status.SetLocalSlot(int(slot))
+}
+
+// Follow points a viewer at slot: its camera and the bare per-player metrics
+// describe the cursor there, as they describe its own on a run that plays.
+func (pr *PlayerResource) Follow(slot uint8) {
+	pr.follows, pr.view = true, slot
+	pr.publishLocalSlot()
+}
+
+// ViewSlot is the slot this instance looks from: the one it drives, or the one a
+// viewer follows.
+func (pr *PlayerResource) ViewSlot() uint8 {
+	if pr.follows {
+		return pr.view
+	}
+	return pr.local
+}
+
+// Viewed is the cursor on ViewSlot, 0 when none exists
+func (pr *PlayerResource) Viewed() core.Entity {
+	if pr.follows {
+		return pr.Slot(pr.view)
+	}
+	return pr.Entity
 }
 
 // Slot returns the entity in a roster slot, 0 when empty
@@ -1270,6 +1300,23 @@ type NetworkSessionPort interface {
 	ParticipantID() uint32
 }
 
+// FollowingPort is a viewer's transport: it delivers the ticks its session's host
+// closed, whole. Ready reports that all the host committed by tick has arrived,
+// and releases it to Drain: what lets that tick run with nothing late. Backlog is
+// how many closed ticks wait behind the one last released.
+type FollowingPort interface {
+	Ready(tick uint64) bool
+	Backlog() int
+}
+
+// FeedSink takes what the authority commits, in the order it commits it, and the
+// close of each tick's intake, for an audience that follows the session without a
+// link of its own (link.FeedWriter). Every call is made under the world lock.
+type FeedSink interface {
+	Frame(kind link.MessageType, payload []byte)
+	Mark(tick uint64)
+}
+
 // LinkMeasuringPort is a transport that measures its own links; optional, since
 // only the cadence depends on it. SetLinkReport is the one hint the world gives the
 // transport and LinkMetric the one reading it gets back, for transport scheduling
@@ -1423,9 +1470,13 @@ type NetworkResource struct {
 	OnTickClosed func(completedTick uint64)
 
 	// OnAuthorityAhead reports an epoch the authority produced past this instance's
-	// own tick: what ends a guest's hold, since a host that resumed sends one. Called
-	// under the world lock; it must not block.
+	// own tick, or a tick a viewer's feed closed past its own: what ends a hold, since
+	// a host that resumed sends one. Called under the world lock; it must not block.
 	OnAuthorityAhead func()
+
+	// Feed is where the authority copies what it commits while an audience watches,
+	// nil with none. Set and cleared under the world lock by the session layer.
+	Feed FeedSink
 }
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.

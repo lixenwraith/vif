@@ -17,6 +17,7 @@ vif -bot -watch                       # watch one bot play; no player of yours
 vif -bot default -headless -speed max -j   # record a solo bot flat out; Ctrl-C ends it
 vif -replay <journal>                 # replay what it recorded
 vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room for people
+vif -spectate 127.0.0.1:7777          #   spectating it from another terminal, in no seat
 ```
 
 ## Flags
@@ -24,7 +25,7 @@ vif -serve :7777 -size 120x40 -bot 2  # dedicated host with two bots and room fo
 | Flag | Effect |
 |---|---|
 | `-bot [N[:graph]\|graph]` | Add N bots playing graph. N is 0..16 and 0 adds none; omitted operands mean `1:default`. |
-| `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. |
+| `-watch` | Show the first bot on this terminal in place of a player; any further bots are seated beside it. Not with `-serve`. A session another run hosts is watched with `-spectate` ([Multiplayer §5.8](multi-player.md#58-watching-a-session)). |
 | `-headless` | Run the first bot with no terminal, then print `Bot stopped: N ticks, M actions, fitness F`. Not with `-watch` or `-serve`. |
 | `-speed <rate>` | A watched or headless bot's pace: `1/8`..`8`, or `max` for no pacing. A watched bot defaults to `1`; a solo headless bot runs flat out unless set. |
 | `-size <WxH>` | A headless bot's view, default 120x40; a watched bot takes the terminal's unless one is given. A seat takes its holder's screen: a person's terminal as it resizes, or the holder's `-size`, else 120x40. With `-serve` it sizes the map, which otherwise the first person sets, or a server's own bots at 120x40. |

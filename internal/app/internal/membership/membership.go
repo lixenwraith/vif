@@ -164,6 +164,13 @@ type Membership struct {
 	// dial to the authority; the barrier reaches the authority through it.
 	joinedThrough link.PeerID
 
+	// audience is who watches the session this run hosts, opened by its first
+	// viewer; unwatched is what its doors refuse a watching dial with once the run
+	// is over. Both are guarded by sessionMu. feedOver is a viewer's own feed, ended.
+	audience  *audience
+	unwatched error
+	feedOver  atomic.Bool
+
 	// nearby announces the session this run hosts to the local network and lists the
 	// ones found there (openNearby); nil in a build with no socket.
 	nearby *link.Discovery
@@ -227,6 +234,11 @@ type RestartAsk struct {
 	// Press says the next run's player started its join, so its seat waits for
 	// their press.
 	Press bool
+
+	// Watch says Join names a session the next run only watches, looking from the
+	// slot Follow names first.
+	Watch  bool
+	Follow uint8
 }
 
 // JoinBase is the run's Config and wiring as a join dialled from it builds on, copied
@@ -285,15 +297,23 @@ type Wiring struct {
 
 // Joining is s pointed at the session a :join names, as -join would have built it.
 // -players and -authority go: they set a session this run no longer hosts, and the
-// one it joins has its own, which its offer carries.
+// one it joins has its own, which its offer carries. A viewer that joins takes a place.
 func Joining(s config.Membership, target string) (config.Membership, error) {
 	e, err := link.ParseEndpoint(target)
 	if err != nil {
 		return s, err
 	}
 	s.HostAddress, s.Participants, s.Migrate = "", 0, false
-	s.JoinAddress, s.SessionName = e.Dialable(), e.Name
+	s.JoinAddress, s.SessionName, s.Watch = e.Dialable(), e.Name, false
 	return s, nil
+}
+
+// Watching is s, Joining its target, as a run that only watches it and looks from
+// slot first: it holds no place a bot, a relay door or a listener could go with.
+func Watching(s config.Membership, slot uint8) config.Membership {
+	s.Watch, s.Follow = true, slot
+	s.Bots, s.RelayAddress, s.ListenAddress = nil, "", ""
+	return s
 }
 
 // hostNetwork is the transport the doors s's run opens at addr are served with.

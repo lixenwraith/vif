@@ -51,10 +51,11 @@ func NewPeerCursorRenderer(gameCtx *engine.GameContext) *PeerCursorRenderer {
 	return r
 }
 
-// IsVisible reports whether the roster holds a cursor other than this one's.
-// A solo run draws nothing and pays one integer compare for the privilege.
+// IsVisible reports whether the roster holds a cursor other than this one's, which
+// a run driving none does with one. A solo run draws nothing and pays two compares.
 func (r *PeerCursorRenderer) IsVisible() bool {
-	return r.gameCtx.World.Resources.Player.Count() > 1
+	roster := r.gameCtx.World.Resources.Player
+	return roster.Count() > 1 || roster.Count() == 1 && !roster.Valid()
 }
 
 // Render draws every rostered cursor this instance does not simulate.

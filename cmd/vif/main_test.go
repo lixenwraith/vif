@@ -238,6 +238,47 @@ func TestSessionFlags(t *testing.T) {
 	}
 }
 
+// TestSpectateFlags: -spectate takes the address -join takes and, after it, the slot
+// looked from first, and combines with no flag that hosts or joins; -spectators is a
+// host's count, whose 0 takes none and whose absence is the default.
+func TestSpectateFlags(t *testing.T) {
+	saved := flagSession
+	t.Cleanup(func() { flagSession = saved })
+	fs := flag.NewFlagSet("spectate", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var session sessionFlags
+	session.register(fs)
+	mute := fs.Bool("mute", false, "")
+	if err := fs.Parse(botArgs(fs, []string{"-spectate", "host.example:7777/duel", "A", "-mute"})); err != nil {
+		t.Fatal(err)
+	}
+	if !*mute || fs.NArg() != 0 {
+		t.Fatalf("the slot took the flag after it: mute %t, rest %v", *mute, fs.Args())
+	}
+	flagSession = session
+	if cfg := buildConfig().Membership; !cfg.Watch || cfg.Follow != 0xA || cfg.JoinAddress != "host.example:7777" || cfg.SessionName != "duel" || cfg.Spectators != 0 {
+		t.Fatalf("-spectate host.example:7777/duel A built %+v", cfg)
+	}
+	for _, ok := range []sessionFlags{{spectate: "host.example:7777"}, {spectate: "wss://host.example/vif 3"},
+		{host: ":7777", spectators: "0"}, {spectators: "64"}} {
+		if err := ok.validateInvocation(false, false, ""); err != nil {
+			t.Errorf("%+v refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []sessionFlags{{spectate: "host.example:7777 G"}, {spectate: "host.example:7777 1 2"},
+		{spectate: "https://host.example"}, {spectate: "host.example:7777", join: "host.example:7777"},
+		{spectate: "host.example:7777", host: ":7777"}, {spectate: "host.example:7777", serve: ":7777"},
+		{spectators: "-1"}, {spectators: "many"}, {spectators: "4096"}} {
+		if err := bad.validateInvocation(false, false, ""); err == nil {
+			t.Errorf("%+v was accepted", bad)
+		}
+	}
+	flagSession = sessionFlags{host: ":7777", spectators: "0"}
+	if n := buildConfig().Membership.Spectators; n >= 0 {
+		t.Fatalf("-spectators 0 feeds %d, want none", n)
+	}
+}
+
 // TestASessionMigratesOnlyWhereItsHostAskedForIt: -authority migrate is the one word
 // that lets a session move to a guest, whatever shape the run hosts in; with none,
 // a session ends with its host, a dedicated one's and a person's alike.

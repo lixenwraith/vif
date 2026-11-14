@@ -47,7 +47,7 @@ atomically without restarting the router. See
 | `GET /readyz` | Verifies that the current token can reach the Kubernetes API. |
 | `GET /vif/api/logs` | Proxies the loopback LogWisp SSE response byte-for-byte. An unavailable upstream returns `503 log_stream_unavailable`. |
 | `HEAD /vif/api/logs` | `200` and the stream's headers, answered here: upstream refuses a HEAD on the stream path, and a probe should not open a stream. Only the `GET` reports upstream availability. |
-| `GET /vif/ws/<session>` | `101` and one browser participant, whose socket this router terminates and splices to the resolved pod's game port. Published only where `-web-origin` is set; elsewhere `501 web_route_not_configured`. |
+| `GET /vif/ws/<session>` | `101` and one browser participant, whose socket this router terminates and splices to the resolved pod's game port, or one spectator, which it feeds itself (Spectators, below). Published only where `-web-origin` is set; elsewhere `501 web_route_not_configured`. |
 
 An error is `{"error":{"code":"…","message":"…"}}`. A create can also answer
 `413 request_too_large` for a body over 1 KiB, `415 content_type` for one not sent
@@ -66,6 +66,7 @@ One session row has this shape:
   "size": "first",
   "created_at": "2026-09-11T12:00:00Z",
   "routable": true,
+  "spectators": 0,
   "state": {
     "live": true,
     "ready": true,
@@ -92,13 +93,16 @@ whose probe fails, reports `live=false` with its pod phase or `starting`, and
 what the session was created with, kept as annotations on its Job; `map` is the map
 it has, from the first tick on. `build` is the binary the session runs, named as a
 refusal of another build names it, so a page can be told before it dials one.
+`spectators` is how many watch the session through this router now, a dial still
+being answered included.
 
 `limits` names what this deployment will accept — `players_max`, `bots_max`, the
 allowed `log_levels`, most verbose first, and the installed `scenarios`, default
 first — and what an omitted choice gets, so a caller offers only choices that would
 be granted, and can name the defaults, rather than discovering either by refusal;
-and the room the site has: `sessions_max`, the fleet's size, and `doors` and
-`doors_max`, the doors runs publish through the router and the most it carries:
+and the room the site has: `sessions_max`, the fleet's size, `doors` and
+`doors_max`, the doors runs publish through the router and the most it carries, and
+`spectators_max`, how many one session is shown to at once, 0 where none is:
 
 ```json
 {
@@ -111,6 +115,7 @@ and the room the site has: `sessions_max`, the fleet's size, and `doors` and
   "sessions_max": 10,
   "doors": 0,
   "doors_max": 16,
+  "spectators_max": 256,
   "scenarios": ["main", "blank", "simon", "td"],
   "scenario_descriptions": {
     "main": "Survive escalating storms, lure Krakens through mazes, and defend the tower.",
@@ -253,6 +258,25 @@ no run takes a pod's name or another's. Doors are not listed and are not session
 though the listing's `limits` count them (`doors`, `doors_max`). The design is
 [Multiplayer §5.6](../../doc/multi-player.md#56-relay-doors-and-the-router).
 
+## Spectators
+
+A dial that only watches a session (`vif -spectate <link>`, a page's
+`?arg=-spectate=<ws_url>`) opens with `MsgSessionWatch` in the route frame's place
+and is answered here, on the front door and the browser route alike: placed as a
+join is, by the frame, the identifier and the dialler's join budget, then served the
+watch handshake by the router, with no connection to the pod and none of
+`-route-max`. The first spectator of a session opens the router's one subscription
+to its pod's feed, under a ticket of kind `watch` the router signs for itself where
+it signs tickets, and every spectator is sent a copy of that feed, so a pod serves
+one subscriber however many watch. `-spectators` bounds a session's audience and
+`-spectators-per-address` one address's share of it, a dial past either refused as
+a full audience for a retry; a session with no seat free is still shown, and one
+still in its lobby is refused as not started before its pod is dialled. The
+subscription is dropped 15 s after its last spectator left. A door a run published
+carries no feed, and a dial that only watches one is told so. The design is
+[Fleet §9](../../doc/kubernetes-fleet.md#9-the-session-routes) and
+[Multiplayer §5.8](../../doc/multi-player.md#58-watching-a-session).
+
 ## Settings
 
 The production unit sets the flags it names from the installed copy of
@@ -283,6 +307,8 @@ their defaults; `vif-router -h` lists every flag.
 | `-route-max` | `8` | connections one session may hold over both proxied routes (1–16) |
 | `-tunnels` | `16` | doors runs may publish through this router at once (0–64); 0 publishes none |
 | `-doors-per-address` | `4` | doors one address may publish at once (0–64); 0 leaves it to `-tunnels` |
+| `-spectators` | `256` | spectators one session is shown to at once through this router, each sent a copy of the one feed its pod writes (0–1024); 0 shows no session |
+| `-spectators-per-address` | `4` | spectators one address, an IPv6 one's /64, may be in one session at once (0–1024); 0 leaves it to `-spectators` |
 | `-client-address-header` | empty | the header the site's edge overwrites with the player's address; empty charges no budget on the API or the browser route |
 | `-client-joins`, `-client-creates` | `6`, `1` | joins per address per minute over both proxied routes; sessions per address per `-first-join` window |
 | `-account-creates` | `4` | sessions per signed-in account per `-first-join` window, charged in place of the address's budget; an account's joins count under the account at `-client-joins`; 0 budgets every create by address |

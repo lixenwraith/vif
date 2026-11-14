@@ -21,7 +21,7 @@ func TestATicketedDoorBudgetsTheTicketsSubject(t *testing.T) {
 	if m.joinBudget() != nil {
 		t.Fatal("a ticketed door charges the address")
 	}
-	hook := m.ticketHook()
+	hook := m.ticketHook(network.AdmitPlay)
 	mint := func(subject string) *network.Signed {
 		t.Helper()
 		ticket, err := network.SignTicket(router, network.TicketBody{Session: "s", Kind: network.AdmitPlay,
@@ -44,7 +44,7 @@ func TestATicketedDoorBudgetsTheTicketsSubject(t *testing.T) {
 		t.Fatalf("the subject's second ticket in the window: %v", err)
 	}
 	m.cfg.TicketKeys = nil
-	if m.joinBudget() == nil || m.ticketHook() != nil {
+	if m.joinBudget() == nil || m.ticketHook(network.AdmitPlay) != nil {
 		t.Fatal("an open door's budget or gate")
 	}
 }

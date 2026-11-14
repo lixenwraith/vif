@@ -759,12 +759,12 @@ void main() {
                 send({ type: 'blur' });
                 if (joined && playing && program && !hiddenAt) {
                     hiddenAt = Date.now();
-                    leaveTimer = setTimeout(leave, LEAVE_HIDDEN_MS);
+                    leaveTimer = setTimeout(leave, hiddenLimit);
                 }
                 return;
             }
             clearTimeout(leaveTimer);
-            if (left || hiddenAt && Date.now() - hiddenAt >= LEAVE_HIDDEN_MS) location.reload();
+            if (left || hiddenAt && Date.now() - hiddenAt >= hiddenLimit) location.reload();
             hiddenAt = 0;
         });
         wireHandlers();
@@ -775,8 +775,10 @@ void main() {
        else plays ends on its grace. Shown again after that long hidden, whether ended
        here or frozen by the browser past it, the page reloads, which rejoins with the
        tab's claim while the place waits and as a new player after. A shorter absence
-       costs the others nothing: the Worker keeps the link up while hidden. */
-    const LEAVE_HIDDEN_MS = 5 * 60 * 1000;
+       costs the others nothing: the Worker keeps the link up while hidden. A page
+       that only spectates holds no place to keep, so it goes sooner: a feed nobody
+       looks at is the session's bandwidth for nothing. */
+    const LEAVE_HIDDEN_MS = 5 * 60 * 1000, SPECTATE_HIDDEN_MS = 30 * 1000;
     let hiddenAt = 0, leaveTimer = 0, left = false;
 
     function leave() {
@@ -1323,13 +1325,17 @@ void main() {
        From there back leaves the page as it would have. A browser passes over
        entries a page pushed without a gesture of the player's, so the two back lands
        on are pushed in one: the start's, a press in the game, the return. */
-    const joined = (function() {
+    const sessionArg = /^-(join|spectate)(=|$)/;   // a session played in, or only spectated
+    const launched = (function() {
         try {
-            return launchArguments().slice(1).some(function(arg) { return /^-join(=|$)/.test(arg); });
+            return launchArguments().slice(1);
         } catch (err) {
-            return false;   // refused as the load starts, which says so
+            return [];   // refused as the load starts, which says so
         }
     })();
+    const joined = launched.some(function(arg) { return sessionArg.test(arg); });
+    const hiddenLimit = launched.some(function(arg) { return /^-spectate(=|$)/.test(arg); })
+        ? SPECTATE_HIDDEN_MS : LEAVE_HIDDEN_MS;
     let playing = false;   // the first frame came
     let away = false;      // the start screen is up over the game
     let traps = 0;         // entries above the page's own for back to land on
@@ -1385,20 +1391,26 @@ void main() {
         arm();
     }
 
-    // playSolo opens this page without its join, in its place: the same build alone
+    // playSolo opens this page without its session, in its place: the same build alone
     function playSolo() {
         const url = new URL(location.href);
         const args = url.searchParams.getAll('arg');
         url.searchParams.delete('arg');
         for (let i = 0; i < args.length; i++) {
-            if (args[i] === '-join') i++;   // the address as the next argument
-            else if (!/^-join=/.test(args[i])) url.searchParams.append('arg', args[i]);
+            const session = sessionArg.exec(args[i]);
+            if (!session) {
+                url.searchParams.append('arg', args[i]);
+                continue;
+            }
+            if (!session[2]) i++;   // the address as the next argument
+            // The slot a spectator looks from may follow its address
+            if (session[1] === 'spectate' && /^[0-9a-fA-F]{1,2}$/.test(args[i + 1] || '')) i++;
         }
         url.hash = '';
         location.replace(url.href);
     }
 
-    // share copies this page's address, which opens the same game joined
+    // share copies this page's address, which opens the same game as this page did
     let shareTimer = 0;
     function share() {
         const done = document.getElementById('share-done');

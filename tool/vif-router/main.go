@@ -106,8 +106,10 @@ func run(args []string, logger *slog.Logger) error {
 	if cfg.Allocator.Tunnels > 0 {
 		tunnels = network.NewTunnelHub(cfg.Allocator.joinTarget, cfg.Allocator.Tunnels, cfg.Allocator.DoorsPerAddress)
 	}
+	watched := newAudiences(cfg.Allocator.Spectators, cfg.Allocator.SpectatorsPerAddress)
 	handler := newAPIServer(controller, logger, logStreamURL, cfg.Allocator, held, joins)
 	handler.routeDoors(tunnels)
+	handler.showSessions(watched)
 	handler.admitWith(ticket)
 	handler.serveAccounts(accounts)
 	server := &http.Server{
@@ -145,11 +147,11 @@ func run(args []string, logger *slog.Logger) error {
 		logger.Info("router listening", "address", cfg.Listen, "route", cfg.RouteListen,
 			"image", cfg.Allocator.Workload.Image, "proxy_protocol", cfg.RouteProxyProtocol,
 			"route_tls", routeTLS != nil, "door_fingerprint", cfg.Allocator.DoorFingerprint,
-			"tickets", ticket.Valid(), "accounts", accounts != nil)
+			"tickets", ticket.Valid(), "accounts", accounts != nil, "spectators", cfg.Allocator.Spectators)
 		errCh <- server.Serve(listener)
 	}()
 	frontDoor := newTCPRouter(controller, held, joins, logger)
-	frontDoor.tunnels = tunnels
+	frontDoor.tunnels, frontDoor.audiences = tunnels, watched
 	frontDoor.ticket, frontDoor.proxyProtocol, frontDoor.tls = ticket, cfg.RouteProxyProtocol, routeTLS
 	frontDoor.accounts = accounts
 	go frontDoor.serve(routeListener)

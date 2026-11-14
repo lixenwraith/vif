@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -1302,8 +1303,12 @@ func (c *Corrections) hold(cap snapshot.SharedCapture) bool {
 	return true
 }
 
-// holdWindow is how far ahead of the clock a correction is worth waiting for.
+// holdWindow is how far ahead of the clock a correction is worth waiting for. A
+// viewer's is never jumped to: its feed carries every tick up to the one described.
 func (c *Corrections) holdWindow() uint64 {
+	if c.authority.watching() {
+		return math.MaxUint64
+	}
 	return parameter.NetworkHoldTicks
 }
 
@@ -1560,8 +1565,9 @@ func (c *Corrections) observeFloor() {
 
 	// The authoring instance is not a receiver: it produces the world every floor
 	// window is measured against, so a successor that installed until it took the
-	// term would report its own publication as an absence.
-	breached := !c.authority.isAuthority() &&
+	// term would report its own publication as an absence. Nor is a viewer held to
+	// the floor: it predicts nothing, and its worlds come on its feed's period.
+	breached := !c.authority.isAuthority() && !c.authority.watching() &&
 		age > parameter.SnapshotFloorKeyframeTicks+parameter.SnapshotFloorGraceTicks
 	m.FloorBreached.Store(breached)
 	if breached {

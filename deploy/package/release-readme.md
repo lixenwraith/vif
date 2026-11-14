@@ -215,7 +215,8 @@ vif -host :7777
 vif -join <host-address>:7777
 ```
 
-`-bot` seats a bot beside you, and `-bot 3` three.
+`-bot` seats a bot beside you, and `-bot 3` three. `-spectate <address>` watches a
+game and takes no seat in it.
 
 <!-- end -->
 <!-- if web -->

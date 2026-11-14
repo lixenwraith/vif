@@ -964,8 +964,9 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (taken bool) {
 	if !s.barrierActive.Load() {
 		return false
 	}
-	if s.world.FollowsJournal() {
-		// The recorded run's barrier applied this one where the journal records it
+	if s.world.FollowsJournal() || s.world.Watches() {
+		// The recorded run's barrier applied this one where the journal records it,
+		// and a viewer's crosses nothing: all it applies is its host's
 		event.ReleaseDeferredPayload(ev.Payload)
 		return true
 	}
@@ -1359,6 +1360,20 @@ func (s *NetworkSystem) PendingAfter(tick uint64) []event.WireBatch {
 	return out
 }
 
+// PendingStates is PendingAfter for the owner-authored syncs committed and not yet
+// written. Caller MUST hold updateMutex.
+func (s *NetworkSystem) PendingStates(tick uint64) []event.WireBatch {
+	run := s.localRun()
+	var out []event.WireBatch
+	for _, st := range s.states {
+		if st.applyTick > tick {
+			out = append(out, event.WireBatch{Source: st.source, Run: run, Committed: true,
+				Frames: []event.ScheduledWireFrame{{Frame: stateFrame(st.payload), ApplyTick: st.applyTick}}})
+		}
+	}
+	return out
+}
+
 // retainedContainedLocked is snapshotContainsLocked against a capture being
 // projected rather than the one last installed. Caller MUST hold mu.
 func (s *NetworkSystem) retainedContainedLocked(a barrierArtifact, tick uint64, fences link.CrossingFences) bool {
@@ -1675,9 +1690,48 @@ func (s *NetworkSystem) Receive(nextTick uint64) (live bool) {
 		s.drain(p)
 		s.release(p)
 	}
+	s.follow(p, nextTick)
 	s.applyDue(nextTick)
 	s.publishBarrierTelemetry(nextTick, p)
 	return s.barrierActive.Load()
+}
+
+// follow closes nextTick's intake for an audience: all the authority committed
+// since the last close is due by this tick, so a viewer that runs a tick from what
+// its close gathered applies what the authority did. A viewer is paced here too.
+func (s *NetworkSystem) follow(p engine.NetworkPort, nextTick uint64) {
+	if f := s.feed(); f != nil {
+		f.Mark(nextTick)
+	}
+	if f, ok := p.(engine.FollowingPort); ok {
+		s.paceViewer(f)
+	}
+}
+
+// feed is where this instance copies what it commits, the authority's alone and
+// only while an audience watches.
+func (s *NetworkSystem) feed() engine.FeedSink {
+	if r := s.world.Resources.Network; r != nil && r.Feed != nil && s.isCoordinator() {
+		return r.Feed
+	}
+	return nil
+}
+
+// paceViewer trims a viewer's tick interval by the closed ticks it has in hand. The
+// least over a window is its slack against a record that comes late: it runs faster
+// with more than FeedSlackTicks and slower with less, and a tick not closed waits.
+func (s *NetworkSystem) paceViewer(f engine.FollowingPort) {
+	r := s.world.Resources.Network
+	if r == nil {
+		return
+	}
+	window := s.paceSamples[:parameter.FeedPaceWindow]
+	window[s.paceCount%len(window)] = int64(f.Backlog())
+	s.paceCount++
+	over := slices.Min(window[:min(s.paceCount, len(window))]) - parameter.FeedSlackTicks
+	trim := -int32(max(min(over*parameter.FeedPaceGainPermille, parameter.FeedPacePermilleMax), -parameter.FeedPacePermilleMax))
+	s.statPaceTrim.Store(int64(trim))
+	r.Pace.Store(trim)
 }
 
 // Flush closes completedTick's production epoch, including an empty marker.
@@ -1876,9 +1930,12 @@ func (s *NetworkSystem) linkReport(completedTick uint64) link.LinkReport {
 	return r
 }
 
-// drain translates one tick's transport notifications into events
+// drain translates one tick's transport notifications into events: one poll, and a
+// viewer's every one, since its tick runs from all its feed carried for it.
 func (s *NetworkSystem) drain(p engine.NetworkPort) {
-	s.drainWith(p, p.Drain)
+	_, follows := p.(engine.FollowingPort)
+	for s.drainWith(p, p.Drain) == len(s.buf) && follows {
+	}
 }
 
 // DrainOffTick translates what the endpoint already holds without the poll
@@ -1892,6 +1949,13 @@ func (s *NetworkSystem) DrainOffTick() {
 		return
 	}
 	s.refreshLink(p)
+	// A viewer's feed closing the tick past its own is its host going on, which a
+	// held viewer hears nowhere else: its ticks, and so its feed's, are stopped
+	if f, ok := p.(engine.FollowingPort); ok && f.Ready(s.localTick()+1) {
+		if r := s.world.Resources.Network; r != nil && r.OnAuthorityAhead != nil {
+			r.OnAuthorityAhead()
+		}
+	}
 	poll := p.Drain
 	if off, ok := p.(engine.OffTickDrainPort); ok {
 		poll = off.DrainOffTick
@@ -1900,12 +1964,13 @@ func (s *NetworkSystem) DrainOffTick() {
 	s.release(p)
 }
 
-// drainWith is one poll of the endpoint, whichever door it came through.
-func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound) int) {
+// drainWith is one poll of the endpoint, whichever door it came through, and
+// returns how many notifications it took.
+func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound) int) int {
 	n := poll(s.buf[:])
 	for i := range n {
 		if !s.enabled {
-			return
+			return 0
 		}
 		in := &s.buf[i]
 		switch in.Kind {
@@ -1947,6 +2012,7 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]link.Inbound
 			s.dispatchMessage(uint32(in.Peer), in.Msg)
 		}
 	}
+	return n
 }
 
 // reportDisconnect names link loss when it happens. Losing the authority is
@@ -2393,9 +2459,9 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 		return
 	}
 	// The barrier can own a tick that has nobody to send it to: a lobby still
-	// waiting, a session whose peers have all left, or a run being reproduced. The
-	// artifacts are still scheduled and still apply locally at their own tick.
-	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
+	// waiting with no audience, a session whose peers have all left, a viewer's or a
+	// run being reproduced. The artifacts still apply locally at their own tick.
+	if p == nil || !p.IsRunning() || s.world.Watches() || p.PeerCount() == 0 && s.feed() == nil {
 		return
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{
@@ -2781,6 +2847,9 @@ func (s *NetworkSystem) sendDown(except uint32, kind link.MessageType, body []by
 func (s *NetworkSystem) sendOwn(p engine.NetworkPort, kind link.MessageType, body []byte) {
 	if s.isCoordinator() {
 		p.Broadcast(uint8(kind), body)
+		if f := s.feed(); f != nil {
+			f.Frame(kind, body)
+		}
 		return
 	}
 	s.sendUp(kind, body)
@@ -2834,8 +2903,8 @@ func (s *NetworkSystem) observeAuthorityEpoch(produced uint64) {
 	r := s.world.Resources.Network
 	tick := s.localTick()
 	serving := tick < s.paceSettled && tick+parameter.NetworkPaceServedTicks >= s.paceSettled
-	if r == nil || s.participantID() == s.authorityParticipant() || serving {
-		return
+	if r == nil || s.participantID() == s.authorityParticipant() || serving || s.world.Watches() {
+		return // a viewer is paced by its feed's closed ticks (paceViewer)
 	}
 	s.paceSamples[s.paceCount%len(s.paceSamples)] = int64(tick) - int64(produced)
 	s.paceCount++
@@ -2886,7 +2955,7 @@ func paceDecision(latest, earliest int64) (trimPermille int32, stepTicks int64) 
 // lowering waits until every higher reading has aged out.
 func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 	r := s.world.Resources.Network
-	if r == nil || p == nil || !p.IsRunning() || p.PeerCount() == 0 {
+	if r == nil || p == nil || !p.IsRunning() || p.PeerCount() == 0 || s.world.Watches() {
 		return
 	}
 	target := s.ownLead()
@@ -2948,6 +3017,9 @@ func (s *NetworkSystem) leadOf(target uint64) uint64 {
 // artifact identical everywhere, so a relay never restamps them. A leaf's own copy
 // returns to it as its age alone, and its own sync not at all.
 func (s *NetworkSystem) forwardDown(from uint32, kind link.MessageType, batch event.WireBatch) {
+	if s.world.Watches() {
+		return // nobody is behind a viewer
+	}
 	if batch.Hops >= parameter.NetworkRelayHopLimit {
 		s.statDrop.Add(1)
 		s.world.Log().Warn("net", "msg", "relay hop limit reached",
@@ -2969,6 +3041,9 @@ func (s *NetworkSystem) forwardDown(from uint32, kind link.MessageType, batch ev
 	source := uint32(0)
 	if batch.Leaf && batch.Committed {
 		source = batch.Source
+	}
+	if f := s.feed(); f != nil {
+		f.Frame(kind, body)
 	}
 	if s.sendDown(from, kind, body, source, own) {
 		s.statRelayed.Add(1)
