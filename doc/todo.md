@@ -1832,6 +1832,111 @@ The options Lixen did not take (2026-11-14), each with what would reopen it:
   leaves the cursor inside the edge, so the next key jumps the view again. Reopen if
   the edge scrolls too hard under a mouse or a finger.
 
+### Give each shipped `[play]` key a comment of its own
+
+- Priority: P3
+- Affected files: `internal/asset/vif.toml`
+- The `[play]` keys before `camera_edge` share one block above the table's header,
+  which an upgrade never brings to a player's copy that has the table, so a key
+  added there arrives bare and the block goes stale ([Filesystem §3](filesystem-layout.md#3-resolution-policy)).
+  A comment line above each key, the block cut to what the table is, carries each
+  later key's explanation with it; a copy keeps its old block until the player
+  edits it.
+
+### Let toml edit a key inside an inline value
+
+- Priority: P3
+- Affected files: `lixenwraith/toml` (`Document.Set`, `Document.Delete`,
+  `Document.Fill`), `internal/paths/settings.go` (`dropInside`, `saveTable`),
+  `internal/input/keyconfig.go` (`drop`)
+- toml's `Delete` and `Set` refuse a key inside an inline value (`play = { mouse =
+  false }`), and `Fill` adds none there. The upgrades write such a value again
+  without the keys that go, its line's comment kept but the comments inside it and
+  its spelling lost, and add nothing to it, so a key a later build ships reads as
+  its default without its line; `saveTable` does not write there, so a menu change
+  to an inline `[play]` reads `[play] not written`. Edits and adds inside an inline
+  value in the library retire the workarounds and let the save and the upgrades
+  write there.
+
+### Drop a settings file's keys in one read
+
+- Priority: P3
+- Affected files: `lixenwraith/toml` (`Document.Delete`), `internal/paths/settings.go`
+  (`drop`), `internal/input/keyconfig.go` (`drop`)
+- Each `Delete` reads the document again, so an upgrade dropping n keys costs n
+  reads: a `vif.toml` or keymap holding 3000 unknown keys takes seconds to start.
+  A `Delete` of many keys in one edit makes it one read. No file vif writes comes
+  near; one a player pastes another program's settings into could.
+
+### Write a hard-linked settings file in place
+
+- Priority: P3
+- Affected files: `internal/paths/settings.go` (`FileStore.Store`)
+- A store replaces `vif.toml` or a keymap by rename, which leaves a hard link's
+  other names on the old file. Writing in place keeps every name but tears the
+  file for a run reading it, or for good when the write is cut short; a link count
+  above one could choose it, with the tear the price. The rename stays, as the
+  write before the upgrades did.
+
+### Keep what a system root's vif.toml names shared in the player's copy
+
+- Priority: P3
+- Affected files: `internal/paths/settings.go` (`FileStore.Load`),
+  `internal/resource/resolve.go` (`Options.ApplySettings`)
+- A system root's `vif.toml` naming a `[paths] root` or `keymap` outside the
+  system roots makes it another's, read and never written. The user root's copy
+  its first change makes names it too, as the player's own, so a run writes a
+  keymap there back up to date where it may. The copy could leave out what the
+  seed's `[paths]` names, or mark it; one inside a system root stays shared
+  (`paths.Shared`).
+
+### Let a run on a shared config root keep its changes
+
+- Priority: P3
+- Affected files: `internal/paths/settings.go` (`SettingsFor`, `LoadSettings`)
+- A `-config-dir` naming the checkout's `wad/` or a system root reads that root's
+  `vif.toml` before the user root's, while the copy the first change makes in the
+  user root takes every later one, so such a run starts from the shared file each
+  time. Reading the user root's copy first when there is one would keep them, at
+  the price of the copy shadowing what `-config-dir` names; the shared file stays
+  unwritten.
+
+### Review the settings store's write path
+
+- Priority: P1
+- Affected files: `internal/paths/settings.go` (`FileStore.Store`, `storeTarget`),
+  `internal/paths/owner_unix.go` (`keepOwner`), `tool/vif-settings`
+- A start rewrites the player's own `vif.toml` and keymap, and `make install` the
+  installed ones through `tool/vif-settings`, as root under `sudo`: by rename,
+  through a link, keeping the file's mode and owner. No review of that path's
+  safety has been finished. One reading the code, with tests only in temporary
+  directories, closes it, asking whether the file a link names can change between
+  `storeTarget`'s stat and the rename, what mode and owner the temporary file has
+  before its `Chmod`, what `keepOwner` does in a run as root, and what a link into
+  a directory other users may write leads to.
+
+### Review when a start writes the settings and what it shows
+
+- Priority: P2
+- Affected files: `cmd/vif/main.go` (`upgradeOwn`, `sayNotice`),
+  `internal/app/play.go` (`player.begin`), `internal/paths/settings.go` (`Shared`,
+  `resolved`), `internal/parameter/audio.go`
+- The last fixes to the upgrade have tests but no second reader, as their review
+  stopped before it reported: the upgrade runs once the invocation is validated
+  and its site session taken, so a refused run writes nothing; a replay, script or
+  bot shows the notice on the status line; a shared root is found through links;
+  and the `[audio] buffer_ms` bounds sit in `internal/parameter`, keeping headless
+  and audio-free builds off the audio library. An independent reading closes it.
+
+### Check in CI that a headless build links no audio
+
+- Priority: P2
+- Affected files: `.github/workflows/test.yml`, `Makefile` (`verify`)
+- `make verify` fails when a `vif_headless` build of `cmd/vif` imports
+  `internal/render` or the `lixenwraith/audio` package. CI builds the profile but
+  never asks, so it passes a change that links either, as the `[audio] buffer_ms`
+  check once did. The same `go list -deps` step in `test.yml` closes it.
+
 ### Use sixteen console backgrounds on Linux
 
 - Priority: P3

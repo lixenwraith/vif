@@ -131,7 +131,8 @@ type Config struct {
 	Settings paths.SettingsStore
 
 	// Notice is what the run's status line opens with: what the host's start found,
-	// such as settings it dropped, or the failure of the run this one replaces.
+	// such as the settings or keymap it brought up to date, or the failure of the
+	// run this one replaces.
 	Notice string
 
 	// MusicWAV is the directory the music is recorded to as a WAV file; "" records none.

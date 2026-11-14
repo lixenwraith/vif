@@ -68,13 +68,11 @@ func Zone(id string) {
 	zone = id
 }
 
-// Start runs the game on the grid the view's pixels hold in cells sized by the
-// screen's density. files is the app's own directory, holding the user root, logs
-// and journals; wad is where the APK's assets were copied, read as the system root.
-// vif.toml is read and written back as a terminal run does. raster paints frames
-// with the software raster and hands the drawer pixels. away starts the run with
-// its player away, behind the start screen: its game waits at its first tick for
-// Resume, and starts over at the view's new grid if that changes before then.
+// Start runs the game on the view's grid, in cells sized by the screen's density.
+// files is the app's own directory, holding the user root, logs and journals; wad,
+// the APK's assets, is the system root; vif.toml and the keymap are brought up to
+// date as a terminal run's are. raster paints with the software raster. away holds
+// the game behind the start screen until Resume, starting over if the grid changes.
 func Start(files, wad string, width, height int32, density float32, raster, away bool, speaker Speaker, listener Listener) error {
 	tex, err := loadTexture()
 	if err != nil {
@@ -101,9 +99,8 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 			return err
 		}
 	}
-	settings, file, err := paths.LoadSettings("")
-	var unknown paths.UnknownKeys
-	if err != nil && !errors.As(err, &unknown) {
+	settings, file, notes, err := paths.LoadSettings("")
+	if err != nil {
 		return err
 	}
 	p := settings.Paths
@@ -115,19 +112,20 @@ func Start(files, wad string, width, height int32, density float32, raster, away
 	if away {
 		v.setAway(true) // before the run reads its reports, so it never starts going
 	}
+	own := paths.OwnSettings("", file)
 	cfg := app.Config{Play: settings.Play, Settings: paths.SettingsFor("", file),
-		Resources: resource.Options{Dir: p.Root, Scenario: p.Scenario, Content: p.Content, Keymap: p.Keymap,
-			Downloads: cmp.Or(p.Downloads, paths.DefaultDownloadsDir()), SaveDownloads: settings.Session.SaveDownloads},
 		AudioBuffer: time.Duration(settings.Audio.BufferMs) * time.Millisecond}
+	cfg.Resources.ApplySettings(settings, own)
 	// The app's private files, where the state root was put above: the system ends
 	// a backgrounded process, and its places come back with the next.
 	if settings.Session.ResumeAfterRestart {
 		cfg.Membership.PlaceStore = paths.PlaceFile{Path: paths.PlacesFile()}
 		cfg.Membership.SignInStore = paths.PlaceFile{Path: paths.SignInsFile()}
 	}
-	if unknown != nil {
-		cfg.Notice = paths.DropUnknown(cfg.Settings, unknown)
+	if len(notes) > 0 && own {
+		cfg.Notice = paths.UpgradeStore(cfg.Settings)
 	}
+	cfg.Notice = app.JoinNotice(cfg.Notice, resource.UpgradeKeymap(cfg.Resources))
 	// Android keeps a device's networks from the Go runtime and its Wi-Fi drops
 	// broadcasts with no lock held, so the app lists the one and holds the other
 	host := app.Host{Presentation: v, StartScreen: true, Listening: listener.Listening,

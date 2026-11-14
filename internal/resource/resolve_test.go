@@ -1,8 +1,10 @@
 package resource
 
 import (
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -51,6 +53,147 @@ func TestResolutionPrecedence(t *testing.T) {
 	}
 	if got := r.dir(paths.ContentDirName); got != userContent {
 		t.Fatalf("content dir = %q, want the user root %q", got, userContent)
+	}
+}
+
+// TestARunWritesBackOnlyThePlayersOwnKeymap: a keymap an older build left is
+// written back brought up to date, the status line naming the changes, when it is
+// the player's own: in the user or -config-dir root, or named by -k. One in a system
+// root however named, one a vif.toml not the player's own names, a special file such
+// as /dev/null, and a file that is no keymap are left as they are.
+func TestARunWritesBackOnlyThePlayersOwnKeymap(t *testing.T) {
+	doc := "# mine\n[normal]\na = \"unknown_action\"\nh = \"motion_right\" # mine\n"
+	dir, system, named, home := t.TempDir(), t.TempDir(), filepath.Join(t.TempDir(), "mine.toml"), t.TempDir()
+	for _, name := range []string{"XDG_CONFIG_HOME", "HOME", "AppData", "home"} {
+		t.Setenv(name, home) // every variable a platform finds the user root by
+	}
+	t.Setenv(paths.SystemRootsEnv, system)
+	if rel, err := filepath.Rel(home, paths.UserRoot()); err != nil || !filepath.IsLocal(rel) || !slices.Contains(paths.ConfigRoots(""), system) {
+		t.Skip("the user root lies elsewhere, or system roots are not read here")
+	}
+	user := filepath.Join(paths.UserRoot(), paths.InputDirName, paths.KeymapConfigFile)
+	site := filepath.Join(system, paths.InputDirName, paths.KeymapConfigFile)
+	for _, c := range []struct {
+		o         Options
+		user, own bool
+	}{
+		{Options{Dir: dir}, false, true},
+		{Options{Keymap: named}, false, true},
+		{Options{}, true, true},
+		{Options{}, false, false},
+		{Options{Dir: dir, ForeignDir: true}, false, false},
+		{Options{Keymap: named, ForeignKeymap: true}, false, false},
+		{Options{Dir: system}, true, false},
+		{Options{Keymap: site}, false, false},
+		{Options{Keymap: os.DevNull}, false, false},
+	} {
+		for _, root := range []string{dir, system} {
+			writeKeymap(t, filepath.Join(root, paths.InputDirName, paths.KeymapConfigFile), doc)
+		}
+		writeKeymap(t, named, doc)
+		if os.Remove(user); c.user {
+			writeKeymap(t, user, doc)
+		}
+		path, own, err := keymap(c.o)
+		if err != nil || own != c.own {
+			t.Fatalf("%+v: %s is the player's own %v, %v", c.o, path, own, err)
+		}
+		before, _ := os.ReadFile(path)
+		said := UpgradeKeymap(c.o)
+		got, _ := os.ReadFile(path)
+		switch {
+		case !c.own && (said != "" || string(got) != string(before)):
+			t.Errorf("%+v, not the player's: %q, written:\n%s", c.o, said, got)
+		case c.own && (!strings.HasPrefix(said, `Keymap brought up to date: reset to the default: [normal] key "a"`) ||
+			!strings.Contains(string(got), "# mine\n[normal]\n") || !strings.Contains(string(got), `h = "motion_right" # mine`) ||
+			strings.Contains(string(got), "unknown_action")):
+			t.Errorf("%+v, the player's own: %q, written:\n%s", c.o, said, got)
+		}
+	}
+	settings := "schema = 1\n[map]\nwidth = 80\n"
+	writeKeymap(t, named, settings)
+	if said, err := UpgradeKeymap(Options{Keymap: named}), checkKeymap(Options{Keymap: named}, io.Discard); said != "" || err == nil {
+		t.Errorf("a file that is no keymap: %q, -check %v", said, err)
+	}
+	if got, _ := os.ReadFile(named); string(got) != settings {
+		t.Errorf("a file that is no keymap was written:\n%s", got)
+	}
+}
+
+// TestApplySettingsFillsWhatNoFlagNamed: vif.toml's [paths] gives each of the root,
+// scenario, content and keymap no flag named its value, scenario and content not
+// under -d; a root or keymap that a vif.toml not the player's own names is foreign.
+// Its downloads directory, or the default one, and switch are taken.
+func TestApplySettingsFillsWhatNoFlagNamed(t *testing.T) {
+	var s paths.Settings
+	s.Paths.Root, s.Paths.Scenario, s.Paths.Content, s.Paths.Keymap, s.Paths.Downloads = "/r", "td", "/c", "/k.toml", "/dl"
+	s.Session.SaveDownloads = true
+	named := Options{Dir: "/r", Scenario: "td", Content: "/c", Keymap: "/k.toml", Downloads: "/dl", SaveDownloads: true}
+	foreign := named
+	foreign.ForeignDir, foreign.ForeignKeymap = true, true
+	for _, c := range []struct {
+		name        string
+		flags, want Options
+		own         bool
+	}{
+		{"own", Options{}, named, true},
+		{"foreign", Options{}, foreign, false},
+		{"flags", Options{Dir: "/f", Keymap: "/f.toml", Scenario: "s"},
+			Options{Dir: "/f", Keymap: "/f.toml", Scenario: "s", Content: "/c", Downloads: "/dl", SaveDownloads: true}, false},
+		{"embedded", Options{Embedded: true},
+			Options{Embedded: true, Dir: "/r", Keymap: "/k.toml", Downloads: "/dl", SaveDownloads: true}, true},
+	} {
+		o := c.flags
+		if o.ApplySettings(s, c.own); o != c.want {
+			t.Errorf("%s: %+v, want %+v", c.name, o, c.want)
+		}
+	}
+	var o Options
+	if o.ApplySettings(paths.Settings{}, true); o != (Options{Downloads: paths.DefaultDownloadsDir()}) {
+		t.Errorf("an empty [paths]: %+v", o)
+	}
+}
+
+// TestCheckSaysWhatARunDoesWithAKeymap: -check names what bringing a keymap up to
+// date changes and whether a run writes it back, reads it so as another's, or reads
+// it so as its file may not be written, leaving it as it is.
+func TestCheckSaysWhatARunDoesWithAKeymap(t *testing.T) {
+	doc := "[normal]\na = \"unknown_action\"\n"
+	dir := t.TempDir()
+	path := filepath.Join(dir, paths.InputDirName, paths.KeymapConfigFile)
+	writeKeymap(t, path, doc)
+	for _, c := range []struct {
+		foreign bool
+		mode    os.FileMode
+		want    string
+	}{
+		{false, 0o644, "a run writes it back up to date"},
+		{true, 0o644, "a run reads it up to date"},
+		{false, 0o444, "a run reads it up to date, as " + path + " is read-only"},
+	} {
+		if err := os.Chmod(path, c.mode); err != nil {
+			t.Fatal(err)
+		}
+		var out strings.Builder
+		if err := checkKeymap(Options{Dir: dir, ForeignDir: c.foreign}, &out); err != nil {
+			t.Fatal(err)
+		}
+		if line := "keymap " + path + ": " + c.want + `: reset to the default: [normal] key "a"`; !strings.HasPrefix(out.String(), line) {
+			t.Errorf("-check said %q, want %q", out.String(), line)
+		}
+		if got, _ := os.ReadFile(path); string(got) != doc {
+			t.Errorf("-check wrote:\n%s", got)
+		}
+	}
+}
+
+func writeKeymap(t *testing.T, path, doc string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

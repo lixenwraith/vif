@@ -76,15 +76,17 @@ var (
 	flagMusicWAV     = newSetFlag(true, parseOutputDirFlag)
 	flagDev          = newSetFlag(true, parseBoolFlag)
 
-	// settings is vif.toml as the roots of -config-dir resolved it, settingsFile the
-	// file it came from ("" the embedded one), and settingsStore where the run
-	// writes it back as [play] changes; settingsUnknown are the keys it held that
-	// this build does not know, and settingsNotice what dropping them said.
-	settings        paths.Settings
-	settingsFile    string
-	settingsStore   paths.SettingsStore
-	settingsUnknown paths.UnknownKeys
-	settingsNotice  string
+	// settings is vif.toml as the roots of -config-dir resolved it, brought up to
+	// this build's, settingsFile the file it came from ("" the embedded one), and
+	// settingsStore where the run writes it back as [play] changes; settingsNotes
+	// name what bringing it up to date changes, settingsNotice what writing it and
+	// the keymap back said, and noticeSaid whether stdout has said it.
+	settings       paths.Settings
+	settingsFile   string
+	settingsStore  paths.SettingsStore
+	settingsNotes  []string
+	settingsNotice string
+	noticeSaid     bool
 )
 
 func init() {
@@ -124,26 +126,28 @@ func main() {
 		return
 	}
 	var err error
-	if settings, settingsFile, err = paths.LoadSettings(flagConfig.dir); err != nil && !errors.As(err, &settingsUnknown) {
+	if settings, settingsFile, settingsNotes, err = paths.LoadSettings(flagConfig.Dir); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
-	settingsStore = paths.SettingsFor(flagConfig.dir, settingsFile)
+	settingsStore = paths.SettingsFor(flagConfig.Dir, settingsFile)
+	settingsOwn := paths.OwnSettings(flagConfig.Dir, settingsFile)
 	if pageSettings != nil {
-		settingsStore, settingsUnknown = pageSettings(&settings)
-	}
-	if settingsUnknown != nil && !*flagCheck && !*flagSchema {
-		settingsNotice = paths.DropUnknown(settingsStore, settingsUnknown)
+		settingsStore, settingsNotes = pageSettings(&settings)
+		settingsOwn = true
 	}
 	// -g given either way decides, and -cli over it; unset, vif.toml's
 	// [presentation] or the build does. The window's state follows the same rule.
 	window := windowByDefault || settings.Presentation.Window
 	windowMaximized, windowFullscreen = settings.Presentation.Maximized, settings.Presentation.Fullscreen
-	cli := false
+	cli, asked := false, "-g" // asked: what asked for the window, named when the build has none
+	if settings.Presentation.Window {
+		asked = cmp.Or(settingsFile, paths.SettingsFile) + ": presentation.window"
+	}
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "g", "gui":
-			window = *flagGUI
+			window, asked = *flagGUI, "-g"
 		case "cli":
 			cli = *flagCLI
 		case "maximized":
@@ -157,13 +161,13 @@ func main() {
 	}
 	if window {
 		if openWindow == nil {
-			fmt.Fprintln(os.Stderr, "-g: this build has no desktop window; one is built on Linux and FreeBSD without vif_nogui")
+			fmt.Fprintln(os.Stderr, asked+": this build has no desktop window; one is built on Linux and FreeBSD without vif_nogui")
 			os.Exit(exitFailure)
 		}
 		openWindow()
 	}
-	requested := flagConfig.scenario // what a -join site is asked for; vif.toml's is this machine's
-	applySettings(settings)
+	requested := flagConfig.Scenario // what a -join site is asked for; vif.toml's is this machine's
+	applySettings(settings, settingsOwn)
 
 	setupDiagnostics()
 
@@ -205,19 +209,28 @@ func main() {
 	if sessionErr == nil {
 		sessionErr = requestSiteSession(requested)
 	}
+	if sessionErr == nil { // a refused invocation writes nothing
+		if settingsNotice = upgradeOwn(settingsOwn && len(settingsNotes) > 0); settingsNotice != "" {
+			vlog.Info("app", "msg", "settings upgraded", "notice", settingsNotice)
+		}
+	}
 	switch {
 	case sessionErr != nil:
 		err = sessionErr
 	case *flagSchema:
 		err = manifest.Schema(os.Stdout)
 	case *flagCheck:
-		if settingsUnknown != nil {
-			fmt.Printf("settings %s: %v, which a run drops\n", settingsFile, settingsUnknown)
-		} else {
+		switch {
+		case len(settingsNotes) == 0:
 			fmt.Println("settings ok:", cmp.Or(settingsFile, "embedded default"))
+		case settingsOwn:
+			fmt.Printf("settings %s: %s: %s\n", settingsFile, paths.WriteBack(settingsFile), strings.Join(settingsNotes, "; "))
+		default:
+			fmt.Printf("settings %s: a run reads it up to date: %s\n", settingsFile, strings.Join(settingsNotes, "; "))
 		}
 		err = resource.Check(buildConfig().Resources, os.Stdout)
 	case *flagReplay != "" && *flagHeadless:
+		sayNotice()
 		err = verifyJournal(*flagReplay)
 	case *flagReplay != "":
 		err = app.PlayJournal(buildConfig(), *flagReplay)
@@ -225,6 +238,8 @@ func main() {
 		cfg := buildConfig()
 		if *flagWatch {
 			cfg.Mode = app.ModeScript
+		} else {
+			sayNotice()
 		}
 		_, err = app.RunScript(cfg, platformHost, *flagScript)
 	case (*flagWatch || *flagHeadless) && bots > 0:
@@ -234,6 +249,7 @@ func main() {
 		if *flagWatch {
 			cfg.Mode = app.ModeScript
 		} else {
+			sayNotice()
 			botNotice(cfg, graph)
 		}
 		var st bot.Stats
@@ -241,6 +257,7 @@ func main() {
 			fmt.Printf("Bot stopped: %d ticks, %d actions, fitness %d\n", st.Ticks, st.Injected, st.Fitness)
 		}
 	case flagSession.serve != "":
+		sayNotice()
 		err = app.RunServer(buildConfig())
 	default:
 		err = app.Run(buildConfig(), platformHost)
@@ -249,6 +266,9 @@ func main() {
 	shutdownDiagnostics()
 
 	if err != nil {
+		if settingsNotice != "" && !noticeSaid {
+			fmt.Fprintln(os.Stderr, settingsNotice) // the run may have ended before showing it
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitCode(err))
 	}
@@ -273,6 +293,29 @@ func verifyJournal(path string) error {
 	fmt.Printf("Replay verified to run %d tick %d: %d records, %d worlds written, %d digests reproduced\n",
 		st.End.Run, st.End.Tick, st.Injected, st.Installed, st.Digests)
 	return nil
+}
+
+// upgradeOwn writes the player's own vif.toml back brought up to this build's when
+// settings says it is not, and their own keymap so, once, unless the run only reads
+// them (-check, -schema); it returns the status line naming the changes.
+func upgradeOwn(settings bool) string {
+	if *flagCheck || *flagSchema {
+		return ""
+	}
+	notice := ""
+	if settings {
+		notice = paths.UpgradeStore(settingsStore)
+	}
+	return app.JoinNotice(notice, resource.UpgradeKeymap(flagConfig.Options))
+}
+
+// sayNotice prints what the start changed for a run that draws nothing, which has
+// no status line to open with it
+func sayNotice() {
+	if settingsNotice != "" {
+		fmt.Println(settingsNotice)
+		noticeSaid = true
+	}
 }
 
 // botNotice says what a headless bot run is doing, since it draws nothing: solo it
@@ -422,7 +465,7 @@ var (
 	openWindow                        func()
 	windowByDefault                   bool
 	windowMaximized, windowFullscreen bool
-	pageSettings                      func(*paths.Settings) (paths.SettingsStore, paths.UnknownKeys)
+	pageSettings                      func(*paths.Settings) (paths.SettingsStore, []string)
 	pagePlaces                        app.PlaceStore
 	sessionTLS, sessionTrust          *tls.Config // -cert and -key or -selfsign, and -ca, read once validated
 	sessionTickets                    [][]byte    // the router's public keys -admit ticket names
@@ -432,7 +475,7 @@ var (
 func buildConfig() app.Config {
 	cfg := app.Config{
 		AudioBackend:  flagAudioBackend,
-		Resources:     flagConfig.options(),
+		Resources:     flagConfig.Options,
 		LogScope:      flagLogs.scope.value,
 		StatTicks:     flagLogs.stat.value,
 		RecTicks:      flagLogs.rec.value,
@@ -477,8 +520,6 @@ func buildConfig() app.Config {
 	cfg.Membership.Bots, _ = app.BotSpecs(flagSession.bot)
 
 	cfg.Play, cfg.Settings, cfg.Notice = settings.Play, settingsStore, settingsNotice
-	cfg.Resources.Downloads = cmp.Or(settings.Paths.Downloads, paths.DefaultDownloadsDir())
-	cfg.Resources.SaveDownloads = settings.Session.SaveDownloads
 	// A page keeps its places for its tab; a terminal or a window keeps them past the
 	// process in the user's state directory while [session] resume_after_restart says.
 	// A dedicated host has no place to come back to, and a pod's filesystem is read-only.
@@ -522,74 +563,44 @@ func musicWAVDir() string {
 	return cmp.Or(flagMusicWAV.value, paths.DefaultMusicDir())
 }
 
-// applySettings makes vif.toml the default of each path flag it names: a flag given
-// on the command line keeps its value, -d keeps the embedded scenario and content,
-// and -l and -j still decide whether a stream is written.
-func applySettings(s paths.Settings) {
-	fill := func(flag *string, file string) {
-		if *flag == "" {
-			*flag = file
-		}
-	}
+// applySettings makes vif.toml the default of each path flag it names
+// (resource.Options.ApplySettings, own false for a vif.toml not the player's own): a
+// flag given on the command line keeps its value, and -l and -j still decide
+// whether a stream is written.
+func applySettings(s paths.Settings, own bool) {
+	flagConfig.ApplySettings(s, own)
 	p := s.Paths
-	fill(&flagConfig.dir, p.Root)
-	fill(&flagConfig.keymap, p.Keymap)
-	fill(&flagLogs.dir.value, p.Log)
-	fill(&flagJournal.value, p.Journal)
-	fill(&flagMusicWAV.value, p.Music)
-	if !flagConfig.embedded {
-		fill(&flagConfig.scenario, p.Scenario)
-		fill(&flagConfig.content, p.Content)
-	}
+	flagLogs.dir.value = cmp.Or(flagLogs.dir.value, p.Log)
+	flagJournal.value = cmp.Or(flagJournal.value, p.Journal)
+	flagMusicWAV.value = cmp.Or(flagMusicWAV.value, p.Music)
 }
 
 // configFlags groups every runtime file override. Short flags remain for
 // compatibility; config-* aliases make the family discoverable in CLI help.
-type configFlags struct {
-	dir      string
-	scenario string
-	content  string
-	keymap   string
-	music    string
-	sounds   string
-	embedded bool
-}
+type configFlags struct{ resource.Options }
 
 func newConfigFlags() *configFlags { return &configFlags{} }
 
-// options is the resolved resource override set these flags describe.
-func (f *configFlags) options() resource.Options {
-	return resource.Options{
-		Dir:      f.dir,
-		Scenario: f.scenario,
-		Content:  f.content,
-		Keymap:   f.keymap,
-		Music:    f.music,
-		Sounds:   f.sounds,
-		Embedded: f.embedded,
-	}
-}
-
 func (f *configFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.dir, "config-dir", "", "Configuration root holding scenario/ input/ audio/ content/ image/ bot/")
-	fs.StringVar(&f.music, "config-music", "", "Music pattern override TOML")
-	fs.StringVar(&f.sounds, "config-sounds", "", "Sound definition override TOML")
+	fs.StringVar(&f.Dir, "config-dir", "", "Configuration root holding scenario/ input/ audio/ content/ image/ bot/")
+	fs.StringVar(&f.Music, "config-music", "", "Music pattern override TOML")
+	fs.StringVar(&f.Sounds, "config-sounds", "", "Sound definition override TOML")
 
 	for _, alias := range []struct {
 		short, long, hint string
 		into              *string
 	}{
-		{"s", "config-scenario", "Installed scenario name or path below scenario/, scenario.toml, or a scenario directory", &f.scenario},
-		{"f", "config-content", "Content directory, or a single content file", &f.content},
-		{"k", "config-keymap", "Keymap TOML", &f.keymap},
+		{"s", "config-scenario", "Installed scenario name or path below scenario/, scenario.toml, or a scenario directory", &f.Scenario},
+		{"f", "config-content", "Content directory, or a single content file", &f.Content},
+		{"k", "config-keymap", "Keymap TOML", &f.Keymap},
 	} {
 		fs.StringVar(alias.into, alias.short, "", alias.hint)
 		fs.StringVar(alias.into, alias.long, "", alias.hint)
 	}
 
 	embedded := "Use the embedded scenario and content; refuses -s and -f and ignores vif.toml's scenario and content"
-	fs.BoolVar(&f.embedded, "d", false, embedded)
-	fs.BoolVar(&f.embedded, "config-embedded", false, embedded)
+	fs.BoolVar(&f.Embedded, "d", false, embedded)
+	fs.BoolVar(&f.Embedded, "config-embedded", false, embedded)
 }
 
 // sessionFlags expose startup hosting/joining and the cap a later :host inherits.

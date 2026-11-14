@@ -21,7 +21,7 @@ import (
 // PlayJournal replays a recorded run on the terminal; several paths reassemble a
 // rotated set. The anchor decides everything simulated; viewer supplies what is the
 // watcher's: where the scenario it names is found, as the run's -config-dir did,
-// and the speakers, colour and music recording.
+// the speakers, colour and music recording, and what its start changed (Notice).
 func PlayJournal(viewer Config, paths ...string) error {
 	set, cfg, err := loadJournal(viewer, paths)
 	if err != nil {
@@ -33,7 +33,7 @@ func PlayJournal(viewer Config, paths ...string) error {
 	an := set.Anchors[0]
 	cfg.Play, cfg.AudioBackend, cfg.AudioBuffer = viewer.Play, viewer.AudioBackend, viewer.AudioBuffer
 	cfg.MusicWAV, cfg.ColorMode, cfg.ColorModeSet = viewer.MusicWAV, viewer.ColorMode, viewer.ColorModeSet
-	cfg.NoTmuxFrameCap = viewer.NoTmuxFrameCap
+	cfg.NoTmuxFrameCap, cfg.Notice = viewer.NoTmuxFrameCap, viewer.Notice
 	// A replay's clock opens at the rate its journal did, and its records move it as
 	// the run's moved, which is the rate it is presented at.
 	rate := parseSpeed(an.Speed)
@@ -118,6 +118,18 @@ func runPresented(a *App, src pacedSource, kind, name string, paced bool, signal
 	return p.run()
 }
 
+// begin sizes the run to the viewer's screen and opens the bar with what the start
+// changed (Config.Notice), as a played run does, then the stream's own line, which
+// takes the bar once the notice has been up for its kind's Min
+func (p *player) begin() {
+	p.termW, p.termH = p.a.pres.Size()
+	p.a.ctx.SetPresentationSize(p.termW, p.termH)
+	if p.a.cfg.Notice != "" {
+		p.a.ctx.SetStatusMessage(p.a.cfg.Notice, parameter.StatusAlert)
+	}
+	p.report()
+}
+
 // parseSpeed resolves the recorded rate, defaulting to real time
 func parseSpeed(tok string) engine.TimeScale {
 	if s, ok := engine.ParseScale(tok); ok {
@@ -195,9 +207,7 @@ func (p *player) run() error {
 		results = p.rw.results
 	}
 
-	p.termW, p.termH = p.a.pres.Size()
-	p.a.ctx.SetPresentationSize(p.termW, p.termH)
-	p.report()
+	p.begin()
 	last := time.Now()
 
 	for {

@@ -8,6 +8,8 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // Rune aliases for keys that can't be bare single-char TOML keys
@@ -88,6 +90,223 @@ func LoadKeyConfig(data []byte) (*KeyTable, error) {
 	return kt, nil
 }
 
+// UpgradeKeymap brings a keymap an earlier build left up to this build's, as
+// paths.UpgradeSettings does vif.toml: a section it does not read, a key it cannot
+// name and a binding it refuses go with their own comments, then each embedded
+// binding of a key bound in no spelling comes with its comments. It names the
+// changes, and refuses a document setting something but no keymap section (errNotKeymap).
+func UpgradeKeymap(data []byte) ([]byte, []string, error) {
+	doc, err := toml.ParseDocument(data)
+	if err != nil {
+		return nil, nil, fmt.Errorf("keymap parse: %w", err)
+	}
+	shipped, err := toml.ParseDocument(asset.DefaultKeymap)
+	if err != nil {
+		return nil, nil, err
+	}
+	var gone, refused []toml.Key
+	var dropped, why []string
+	bound := make(map[string]map[any]string) // per section, the spelling each key is bound under
+	tree := doc.Tree()
+	keymap := len(tree) == 0
+	for name := range tree {
+		_, known := sectionKind(name)
+		keymap = keymap || known
+	}
+	if !keymap {
+		return nil, nil, errNotKeymap
+	}
+	for _, name := range slices.Sorted(maps.Keys(tree)) {
+		special, known := sectionKind(name)
+		table, ok := tree[name].(map[string]any)
+		switch {
+		case !known:
+			gone, dropped = append(gone, toml.Key{name}), append(dropped, binding(toml.Key{name}, ok))
+			continue
+		case !ok:
+			refused, why = append(refused, toml.Key{name}), append(why, fmt.Sprintf("section [%s]: expected table, got %T", name, tree[name]))
+			continue
+		}
+		bound[name] = make(map[any]string, len(table))
+		for _, k := range slices.Sorted(maps.Keys(table)) {
+			key, err := keyOf(special, k)
+			if err != nil {
+				gone, dropped = append(gone, toml.Key{name, k}), append(dropped, binding(toml.Key{name, k}, false))
+				continue
+			}
+			if _, err := bindingOf(table[k]); err != nil {
+				refused, why = append(refused, toml.Key{name, k}), append(why, fmt.Sprintf("[%s] key %q: %v", name, k, err))
+				continue
+			}
+			bound[name][key] = k
+		}
+	}
+	var notes []string
+	if len(dropped) > 0 {
+		notes = append(notes, "dropped "+strings.Join(dropped, ", "))
+	}
+	boundAs := func(k toml.Key) string { // the spelling the document binds k's key under
+		key, err := keyOf(isSpecial(k[0]), k[1])
+		if err != nil {
+			return ""
+		}
+		return bound[k[0]][key]
+	}
+	var reset []toml.Key // the refused keys the embedded binding now stands for
+	for i, k := range refused {
+		if len(k) == 2 && boundAs(k) != "" {
+			notes = append(notes, "dropped "+why[i]) // another spelling binds it
+			continue
+		}
+		reset = append(reset, k)
+		notes = append(notes, "reset to the default: "+why[i])
+	}
+	var spelt []toml.Key // the shipped bindings of keys the document binds in another spelling
+	for name, v := range shipped.Tree() {
+		table, _ := v.(map[string]any)
+		for k := range table {
+			if as := boundAs(toml.Key{name, k}); as != "" && as != k {
+				spelt = append(spelt, toml.Key{name, k})
+			}
+		}
+	}
+	if err := drop(doc, slices.Concat(gone, refused)); err != nil {
+		return nil, nil, err
+	}
+	for _, k := range spelt {
+		if _, err := shipped.Delete(k); err != nil {
+			return nil, nil, err
+		}
+	}
+	added, err := doc.Fill(shipped)
+	if err != nil {
+		return nil, nil, err
+	}
+	added = slices.DeleteFunc(added, func(k toml.Key) bool {
+		return slices.ContainsFunc(reset, func(r toml.Key) bool { return sameKey(k, r) })
+	})
+	slices.SortFunc(added, slices.Compare) // named in order, as the dropped keys are
+	switch {
+	case len(added) > parameter.UpgradeNamed:
+		notes = append(notes, fmt.Sprintf("added %d bindings", len(added)))
+	case len(added) > 0:
+		names := make([]string, len(added))
+		for i, k := range added {
+			names[i] = binding(k, len(k) == 1)
+		}
+		notes = append(notes, "added "+strings.Join(names, ", "))
+	}
+	if _, err := LoadKeyConfig(doc.Bytes()); err != nil {
+		return nil, nil, err
+	}
+	return doc.Bytes(), notes, nil
+}
+
+// errNotKeymap refuses a document no section of which is a keymap's
+var errNotKeymap = fmt.Errorf("not a keymap: it has none of the sections %s", sectionNames())
+
+// sectionNames lists the sections a keymap binds keys in, as a player reads them
+func sectionNames() string {
+	names := make([]string, len(sectionDefs))
+	for i, d := range sectionDefs {
+		names[i] = "[" + d.name + "]"
+	}
+	return strings.Join(names, ", ")
+}
+
+// drop removes keys from doc with the comments that are their own; those in a
+// section written as an inline table go as that table is written again without
+// them, once
+func drop(doc *toml.Document, keys []toml.Key) error {
+	inline := make(map[string]map[string]any)
+	for _, key := range keys {
+		if _, err := doc.Delete(key); err != nil {
+			table, ok := doc.Tree()[key[0]].(map[string]any)
+			if !ok || len(key) != 2 {
+				return err
+			}
+			if inline[key[0]] == nil {
+				inline[key[0]] = maps.Clone(table)
+			}
+			delete(inline[key[0]], key[1])
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(inline)) {
+		if err := doc.Set(toml.Key{name}, inline[name]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// binding names a keymap key as a player reads it: [section] for a table, [section]
+// "key" for a binding, "key" for a value outside any section
+func binding(k toml.Key, table bool) string {
+	switch {
+	case len(k) > 1:
+		return fmt.Sprintf("[%s] %q", k[0], k[1])
+	case table:
+		return "[" + k[0] + "]"
+	}
+	return fmt.Sprintf("%q", k[0])
+}
+
+// sameKey reports whether a, a key Fill added, stands for b, a refused one: a key
+// in the section b names, or the key b binds in any spelling
+func sameKey(a, b toml.Key) bool {
+	switch {
+	case a[0] != b[0]:
+		return false
+	case len(b) == 1:
+		return true
+	case len(a) == 1:
+		return false
+	}
+	ka, errA := keyOf(isSpecial(a[0]), a[1])
+	kb, errB := keyOf(isSpecial(b[0]), b[1])
+	return a[1] == b[1] || errA == nil && errB == nil && ka == kb
+}
+
+// isSpecial reports whether section binds special keys rather than runes
+func isSpecial(section string) bool {
+	special, _ := sectionKind(section)
+	return special
+}
+
+// sectionKind reports whether this build reads the section name, and whether it
+// binds special keys there rather than runes
+func sectionKind(name string) (special, known bool) {
+	for _, d := range sectionDefs {
+		if d.name == name {
+			return d.isSpecial, true
+		}
+	}
+	return false, false
+}
+
+// keyOf is the key a section binds under the name k: a terminal.Key where it binds
+// special keys, else a rune
+func keyOf(special bool, k string) (any, error) {
+	if !special {
+		r, err := resolveRune(k)
+		return r, err
+	}
+	key, ok := terminal.KeyByName(strings.ToLower(k))
+	if !ok {
+		return nil, fmt.Errorf("unknown key name: %q", k)
+	}
+	return key, nil
+}
+
+// bindingOf is the action a key's value names
+func bindingOf(v any) (KeyEntry, error) {
+	name, ok := v.(string)
+	if !ok {
+		return KeyEntry{}, fmt.Errorf("value must be string, got %T", v)
+	}
+	return resolveAction(name)
+}
+
 // ScenarioKeyTable reads a scenario's [keymap], which its run layers over the
 // player's keymap: the normal, operator and prefix_g sections alone, each key naming
 // an action that is no system one, or none. The special keys, which quit, leave a mode
@@ -128,18 +347,14 @@ func ScenarioKeyTable(raw map[string]any) (*KeyTable, error) {
 func parseRuneSection(section string, data map[string]any) (map[rune]KeyEntry, error) {
 	result := make(map[rune]KeyEntry, len(data))
 
-	for keyStr, val := range data {
+	for _, keyStr := range slices.Sorted(maps.Keys(data)) { // the spelling of a key that sorts last binds it
+		val := data[keyStr]
 		r, err := resolveRune(keyStr)
 		if err != nil {
 			return nil, fmt.Errorf("[%s] key %q: %w", section, keyStr, err)
 		}
 
-		actionName, ok := val.(string)
-		if !ok {
-			return nil, fmt.Errorf("[%s] key %q: value must be string, got %T", section, keyStr, val)
-		}
-
-		entry, err := resolveAction(actionName)
+		entry, err := bindingOf(val)
 		if err != nil {
 			return nil, fmt.Errorf("[%s] key %q: %w", section, keyStr, err)
 		}
@@ -154,18 +369,14 @@ func parseRuneSection(section string, data map[string]any) (map[rune]KeyEntry, e
 func parseSpecialKeySection(section string, data map[string]any) (map[terminal.Key]KeyEntry, error) {
 	result := make(map[terminal.Key]KeyEntry, len(data))
 
-	for keyStr, val := range data {
+	for _, keyStr := range slices.Sorted(maps.Keys(data)) { // the spelling of a key that sorts last binds it
+		val := data[keyStr]
 		k, ok := terminal.KeyByName(strings.ToLower(keyStr))
 		if !ok {
 			return nil, fmt.Errorf("[%s] unknown key name: %q", section, keyStr)
 		}
 
-		actionName, ok := val.(string)
-		if !ok {
-			return nil, fmt.Errorf("[%s] key %q: value must be string, got %T", section, keyStr, val)
-		}
-
-		entry, err := resolveAction(actionName)
+		entry, err := bindingOf(val)
 		if err != nil {
 			return nil, fmt.Errorf("[%s] key %q: %w", section, keyStr, err)
 		}

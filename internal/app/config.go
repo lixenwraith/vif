@@ -164,10 +164,13 @@ func (c runConfig) Prepare(s Membership, pending *network.PendingJoin, preview n
 	return c.Resources, notice, err
 }
 
-// joinNotice adds one line to what the next run's status line opens with.
-func joinNotice(notice, line string) string {
-	if notice == "" {
+// JoinNotice adds one line, "" for none, to what a run's status line opens with.
+func JoinNotice(notice, line string) string {
+	switch {
+	case notice == "":
 		return line
+	case line == "":
+		return notice
 	}
 	return notice + "; " + line
 }

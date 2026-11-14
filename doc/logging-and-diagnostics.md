@@ -216,6 +216,7 @@ greps for rather than enumerating every refusal.
 | `shutdown started` / `shutdown completed` | INFO | — / `us` | `app.Close` |
 | `signal received` | INFO | `signal`, plus `phase`, `guests`, `reason` under `-serve` | main loop, the `-serve` loop |
 | `runtime capture started` | INFO | `path`, `reason`, `race` | `setupDiagnostics` |
+| `settings upgraded` | INFO | `notice` | the start, writing the player's own `vif.toml` and keymap back brought up to date |
 | `logging started` / `logging stopped by command` | INFO | `path`, `level` / — | `:log on`/`off` |
 | `log level changed` / `log scope changed` | INFO | `level` / `scope` | `:log` |
 | `stat interval changed` / `recorder depth changed` | INFO | `ticks` | `:log stat`, `:log rec N` |

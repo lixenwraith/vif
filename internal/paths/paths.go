@@ -102,10 +102,13 @@ func DefaultDownloadsDir() string {
 	return filepath.Join(user, ScenarioDirName, DownloadsDirName)
 }
 
+// executable names the running binary, which places the checkout's wad
+var executable = os.Executable
+
 // checkoutRoot is the wad/ beside the bin/ holding this binary, so a build plays
 // its checkout's scenarios uninstalled; "" for a binary anywhere else.
 func checkoutRoot() string {
-	exe, err := os.Executable()
+	exe, err := executable()
 	if err != nil {
 		return ""
 	}

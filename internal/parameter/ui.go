@@ -35,6 +35,10 @@ const (
 	CellStep  = 0.5
 )
 
+// UpgradeNamed is the most keys a vif.toml or keymap upgrade names as added on
+// the status line and at an install; more are counted
+const UpgradeNamed = 5
+
 // AudioText is the audio indicator by channel mask (muted, effects, music, both): a letter
 // every terminal font has, which says the state without its color
 var AudioText = [4]string{" X ", " S ", " M ", " O "}

@@ -6,7 +6,7 @@ regions that defines a game; a **game** is a scenario running in the engine. The
 Settings page, Relay for others, Take over as host and Visible on this network
 are `vif.toml`'s `[play]`: a run writes them
 back as they change, and the next run starts as this one was left; the rest
-changes this run alone, and the keymap is never rewritten. The terminal and the
+changes this run alone, and the menu never changes the keymap. The terminal and the
 desktop window draw the menu as the overlay below; Android and the browser draw
 the same menu with their own widgets ([Android and the browser](#android-and-the-browser)).
 
@@ -242,6 +242,8 @@ never written. Every platform writes it the same way: the `vif.toml` the run rea
 when it is the player's own, else the user root's, created at the first change; a
 browser keeps it in the site's storage
 ([Filesystem layout §3](filesystem-layout.md#3-resolution-policy)). Only a run
-with no user root, or a browser refused its storage, keeps it to itself. The game
-speed, HUD pins and standing breakpoints stay this run's. Exact values outside
-menu presets remain available through commands such as `:log stat N`.
+with no user root, or whose `vif.toml` in the player's own root is a special file
+such as a link to `/dev/null`, or a browser refused its storage, keeps it to
+itself. The game speed, HUD pins and standing breakpoints stay this run's. Exact
+values outside menu presets remain available through commands such as
+`:log stat N`.

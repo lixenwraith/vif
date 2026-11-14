@@ -388,8 +388,10 @@ A browser has no config root: solo, it plays the embedded scenario, content and
 keymap, and CLI arguments alone cannot give it the editable `wad/` tree a native
 build resolves. What a native run writes back to `vif.toml`'s `[play]` the page
 keeps in the site's storage (`localStorage`, handed to the Worker at the start,
-since a Worker has none), so each visit starts as the last was left; a private
-window, or a site whose storage is blocked, keeps them to the run. The participant
+since a Worker has none), so each visit starts as the last was left: a settings
+document made from the embedded one at the first change and brought up to date at
+each visit, as a `vif.toml` is ([Filesystem §3](filesystem-layout.md#3-resolution-policy)).
+A private window, or a site whose storage is blocked, keeps them to the run. The participant
 keys a run comes back to its session with live in the site's storage
 (`localStorage`), held by the first tab under a Web Lock, so a reload or a new tab
 after a closed one takes back the place it left; a second tab beside the first

@@ -186,12 +186,10 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 }
 
 // TestARestartKeepsTheCommandLineAndTakesWhatItNames: the next run is the command
-// line Run was given with what the restart named, so a pinned seed survives, and
-// its console lists on from this one's. A :join
-// leaves the -players and -authority of a session it no longer hosts, and falls back
-// to that run on its own, in no session; a run following nobody starts over on its
-// own, keeping the ceiling its session was opened with. A door that reopens does so
-// under the policy its session held, not the command line's.
+// line with what the restart named, keeping a pinned seed and the console's lines.
+// A :join drops the -players and -authority of a session it no longer hosts and
+// falls back to that run alone; a run following nobody keeps its session's ceiling,
+// and a door reopens under the policy its session held, not the command line's.
 func TestARestartKeepsTheCommandLineAndTakesWhatItNames(t *testing.T) {
 	t.Parallel()
 	line := runConfig{Config: Config{Seed: 7, Resources: resource.Options{Scenario: "main", Embedded: true},
@@ -252,7 +250,11 @@ func TestHeadlessSessionRequiresTheScriptGate(t *testing.T) {
 	}
 }
 
-func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
+// TestARunBindsItsKeymapUpToDateAndWritesNothing: a run binds an installed keymap
+// as this build brings it up to date, a retired binding as its successor and one it
+// refuses at the embedded one's, keeping custom bindings and unbindings, and leaves
+// the file as it is: the process writes the player's own back once, at its start.
+func TestARunBindsItsKeymapUpToDateAndWritesNothing(t *testing.T) {
 	t.Parallel()
 	cfg := scriptConfig(fixtureSeed)
 	cfg.Resources.Dir = t.TempDir()
@@ -260,7 +262,8 @@ func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("[normal]\na = \"append\"\nh = \"motion_right\"\nv = \"none\"\n"), 0o600); err != nil {
+	doc := "[normal]\na = \"append\"\nh = \"motion_right\"\nv = \"none\"\nq = \"unknown_action\"\n"
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := NewHeadless(cfg)
@@ -282,11 +285,11 @@ func TestInstalledKeymapMigratesRetiredAppendBinding(t *testing.T) {
 	if _, bound := kt.NormalRunes['v']; bound {
 		t.Fatal("explicit unbinding was lost")
 	}
-	if err := os.WriteFile(path, []byte("[normal]\na = \"unknown_action\"\n"), 0o600); err != nil {
-		t.Fatal(err)
+	if record, _ := input.ActionEntry("macro_record_toggle"); kt.NormalRunes['q'] != record {
+		t.Fatalf("a refused binding binds %+v; want the embedded one's", kt.NormalRunes['q'])
 	}
-	if err := a.loadKeymap(); err == nil || !strings.Contains(err.Error(), "unknown_action") {
-		t.Fatalf("unknown action was not rejected: %v", err)
+	if got, _ := os.ReadFile(path); string(got) != doc || a.cfg.Notice != "" {
+		t.Fatalf("the run wrote, saying %q:\n%s", a.cfg.Notice, got)
 	}
 }
 
@@ -325,7 +328,7 @@ func TestPlaySettingsStartTheRunAndAreWrittenBackAsLeft(t *testing.T) {
 	ctx.Takeover.Store(true)
 	a.world.SetCameraEdge(25)
 	a.persistPlay()
-	s, path, err := paths.LoadSettings(dir)
+	s, path, _, err := paths.LoadSettings(dir)
 	if err != nil || path != file || s.Play.AutoFire != "main" || !s.Play.Mouse || s.Play.MaxFPS != 24 || s.Play.HUD != paths.DefaultPlay().HUD ||
 		!s.Play.PauseCommand || !s.Play.Takeover || s.Play.CameraEdge != 25 {
 		t.Fatalf("written back: %+v from %q, %v", s.Play, path, err)
@@ -365,7 +368,7 @@ func TestAZoomIsWrittenBackAsLeft(t *testing.T) {
 	}
 	z.cell = 9.5
 	a.persistCell()
-	if s, _, err := paths.LoadSettings(dir); err != nil || s.Presentation.Cell != 9.5 || s.Play != paths.DefaultPlay() {
+	if s, _, _, err := paths.LoadSettings(dir); err != nil || s.Presentation.Cell != 9.5 || s.Play != paths.DefaultPlay() {
 		t.Fatalf("written back: cell %g, play %+v, %v", s.Presentation.Cell, s.Play, err)
 	}
 }
