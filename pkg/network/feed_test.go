@@ -29,7 +29,7 @@ func feedOrigin(t *testing.T, cfg FeedConfig) (*FeedHub, *FeedWriter) {
 func feedViewer(t *testing.T, hub *FeedHub, cfg FeedConfig) *FeedPort {
 	t.Helper()
 	client, server := net.Pipe()
-	if err := hub.Subscribe(server, false); err != nil {
+	if err := hub.Subscribe(server); err != nil {
 		t.Fatal(err)
 	}
 	port := NewFeedPort(client, testConfig().Kinds, cfg)
@@ -129,9 +129,9 @@ func TestAFeedPortReleasesATickOnlyOnItsMark(t *testing.T) {
 }
 
 // TestANewcomerBeginsAtTheNewestStartingPoint: a subscriber is sent the newest
-// starting point and the records since its cut, never the feed before it, and a
-// subscriber already reading is sent the stream through the cut and no starting
-// point of anyone else's. A starting point whose cut was replaced is not published.
+// starting point and the records since its cut, never the feed before it. One
+// already reading is sent each starting point too, to check itself against, and is
+// held back by none. A starting point whose cut was replaced is not published.
 func TestANewcomerBeginsAtTheNewestStartingPoint(t *testing.T) {
 	hub, w := feedOrigin(t, feedConfig())
 	w.Sync(w.Cut(0), []byte("world@0"))
@@ -165,37 +165,33 @@ func TestANewcomerBeginsAtTheNewestStartingPoint(t *testing.T) {
 	for n := uint64(1); n <= 5; n++ {
 		feedWant(t, feedTickFrames(t, early, n), fmt.Sprintf("0x12:t%d", n))
 	}
-	if head := early.TakeHead(); head != nil {
-		t.Fatalf("a subscriber already reading was sent the starting point %q", head)
+	if head := string(early.TakeHead()); head != "world@3" {
+		t.Fatalf("a subscriber already reading was handed %q, want world@3", head)
 	}
 }
 
-// TestAResetReachesEverySubscriber: a reset is the one starting point a subscriber
-// already reading is sent, and nothing after it is released until the run took it.
-func TestAResetReachesEverySubscriber(t *testing.T) {
+// TestANewGameRestartsAFeedsTicks: a mark that does not follow the last one cuts the
+// stream at the tick before it, so a subscriber already reading and a newcomer that
+// began before it both follow into the new count with no starting point between.
+func TestANewGameRestartsAFeedsTicks(t *testing.T) {
 	hub, w := feedOrigin(t, feedConfig())
-	w.Sync(w.Cut(0), []byte("world@0"))
-	port := feedViewer(t, hub, feedConfig())
-	feedHead(t, port)
-	w.Frame(testEpoch, []byte("old"))
+	w.Sync(w.Cut(40), []byte("world@40"))
+	early := feedViewer(t, hub, feedConfig())
+	feedHead(t, early)
+	w.Frame(testEpoch, []byte("last"))
+	w.Mark(41)
+	w.Frame(testEpoch, []byte("first"))
 	w.Mark(1)
-	w.Reset(100, []byte("world@100"))
-	w.Frame(testEpoch, []byte("new"))
-	w.Mark(101)
+	w.Frame(testEpoch, []byte("second"))
+	w.Mark(2)
 	w.Flush()
-
-	select {
-	case <-port.Heads():
-	case <-time.After(2 * time.Second):
-		t.Fatalf("the reset never arrived: %v", port.Err())
+	late := feedViewer(t, hub, feedConfig())
+	feedHead(t, late)
+	for _, port := range []*FeedPort{early, late} {
+		feedWant(t, feedTickFrames(t, port, 41), "0x12:last")
+		feedWant(t, feedTickFrames(t, port, 1), "0x12:first")
+		feedWant(t, feedTickFrames(t, port, 2), "0x12:second")
 	}
-	if port.Ready(1) || port.Ready(101) {
-		t.Fatal("a tick was released across a reset the run has not taken")
-	}
-	if head := string(port.TakeHead()); head != "world@100" {
-		t.Fatalf("the reset carried %q", head)
-	}
-	feedWant(t, feedTickFrames(t, port, 101), "0x12:new")
 }
 
 // TestASubscriberThatFallsBehindOrSendsIsDropped: the publisher never waits on a
@@ -210,12 +206,12 @@ func TestASubscriberThatFallsBehindOrSendsIsDropped(t *testing.T) {
 
 	stalled, server := net.Pipe()
 	defer stalled.Close()
-	if err := hub.Subscribe(server, false); err != nil {
+	if err := hub.Subscribe(server); err != nil {
 		t.Fatal(err)
 	}
 	talker, server := net.Pipe()
 	defer talker.Close()
-	if err := hub.Subscribe(server, false); err != nil {
+	if err := hub.Subscribe(server); err != nil {
 		t.Fatal(err)
 	}
 	go func() {
@@ -241,14 +237,14 @@ func TestASubscriberThatFallsBehindOrSendsIsDropped(t *testing.T) {
 	}
 }
 
-// TestARelayCopiesAFeedForItsOwnSubscribers: a relay publishes the records it reads
-// without inflating them, is sent every starting point so its newcomers begin at
-// the newest, and passes on why the feed ended.
+// TestARelayCopiesAFeedForItsOwnSubscribers: a hub fed the records another's
+// subscriber reads, none inflated, begins its own newcomers at the newest starting
+// point, hands each to those already reading, and passes on why the feed ended.
 func TestARelayCopiesAFeedForItsOwnSubscribers(t *testing.T) {
 	origin, w := feedOrigin(t, feedConfig())
 	relay := NewFeedHub(feedConfig())
 	client, server := net.Pipe()
-	if err := origin.Subscribe(server, true); err != nil {
+	if err := origin.Subscribe(server); err != nil {
 		t.Fatal(err)
 	}
 	go func() {
@@ -283,8 +279,8 @@ func TestARelayCopiesAFeedForItsOwnSubscribers(t *testing.T) {
 		t.Fatalf("the relay's newcomer began at %q, want world@1", head)
 	}
 	feedWant(t, feedTickFrames(t, late, 2), "0x12:t2")
-	if head := early.TakeHead(); head != nil {
-		t.Fatalf("the relay sent a subscriber already reading the starting point %q", head)
+	if head := string(early.TakeHead()); head != "world@1" {
+		t.Fatalf("the relay handed a subscriber already reading %q, want world@1", head)
 	}
 
 	origin.End("the host left")

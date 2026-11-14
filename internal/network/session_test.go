@@ -128,17 +128,13 @@ func TestAWatchDialIsShownTheSessionAndHandedItsFeed(t *testing.T) {
 
 	router := NewKey()
 	gate := &TicketGate{Keys: [][]byte{router.Public()}, Session: "match"}
-	relayed := make(chan bool, 1)
 	door := Coordinator{
 		Name:     "match",
 		Assign:   func(Admission) (SessionOffer, error) { return offer, nil },
 		Watch:    func(Admission) (SessionOffer, error) { return shown, nil },
 		Scenario: func(digest string) ([]byte, error) { return []byte("scenario " + digest), nil },
 		Ticket:   func(s *Signed, keys []string) (*TicketBody, error) { return gate.Admit(s, keys, AdmitWatch) },
-		Feed: func(conn net.Conn, _ Admission, relay bool) error {
-			relayed <- relay
-			return hub.Subscribe(conn, relay)
-		},
+		Feed:     func(conn net.Conn, _ Admission) error { return hub.Subscribe(conn) },
 	}
 	hostCfg := DebugConfig(link.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
@@ -174,7 +170,7 @@ func TestAWatchDialIsShownTheSessionAndHandedItsFeed(t *testing.T) {
 	if body, err := pending.RequestScenario("abc"); err != nil || string(body) != "scenario abc" {
 		t.Fatalf("the scenario came as %q, %v", body, err)
 	}
-	conn, err := pending.Watch(true)
+	conn, err := pending.Watch()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,8 +181,8 @@ func TestAWatchDialIsShownTheSessionAndHandedItsFeed(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatalf("no starting point reached the watcher: %v", port.Err())
 	}
-	if head := string(port.TakeHead()); head != "world@5" || !<-relayed {
-		t.Fatalf("the feed began at %q, or the dial's relay ask was lost", head)
+	if head := string(port.TakeHead()); head != "world@5" {
+		t.Fatalf("the feed began at %q, want world@5", head)
 	}
 	w.Frame(MsgEvent, []byte("epoch"))
 	w.Mark(6)
