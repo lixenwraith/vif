@@ -271,11 +271,6 @@ const (
 	// EventInputReport (InputReportPayload) [bus] signals whether a roster slot's keys release or tap while keys are captured
 	EventInputReport
 
-	// --- Ping ---
-
-	// EventPingGridRequest (PingGridRequestPayload) [local] signals a request to show the ping grid
-	EventPingGridRequest
-
 	// --- Materialize ---
 
 	// EventMaterializeRequest (MaterializeRequestPayload) [stamped] starts a materialize over a body's footprint, of any size

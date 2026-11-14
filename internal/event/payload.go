@@ -676,14 +676,6 @@ type DeleteRequestPayload struct {
 	EndY      int             `toml:"end_y"`
 }
 
-// --- Ping ---
-
-// PingGridRequestPayload carries configuration for the ping grid activation
-type PingGridRequestPayload struct {
-	Entity   core.Entity   `toml:"entity"`
-	Duration time.Duration `toml:"duration"`
-}
-
 // --- Materialize ---
 
 // MaterializeRequestPayload starts a materialize over a body's footprint with its

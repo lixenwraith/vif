@@ -880,10 +880,9 @@ index](https://github.com/lixenwraith/stapes/blob/main/doc/term-index.md).
 
 **grayout** (also: EventGrayoutStart) — A post-process that desaturates glyph layers while held, sparing guidance, fields, transients, composites, health bars and UI. `EventGrayoutStart` and `EventGrayoutEnd` raise and lift it, scoped to one cursor's instance when the payload names one, as the quasar encounter does for the cursor it fused from. [Rendering §5](rendering.md#5-semantic-masks-and-post-processing) · [FSM: Installing a captured machine](fsm-and-configuration.md#installing-a-captured-machine) · `internal/render/renderer` `GrayoutRenderer`
 
-**grid** — five senses.
+**grid** — four senses.
 - *Spatial*: the spatial grid, the position index every entity's cell is registered in. See **spatial grid**. [ECS §3](ecs-and-events.md#3-position-and-spatial-queries) · `pkg/position` `Grid`
 - *Navigation*: the wall, or passability, grid that flow fields and route graphs are computed over; it moves only where the **wall log** says a wall turned and is named by a generation. [Navigation §3](navigation-design.md#3-passability-tiers-and-wall-changes) · `internal/system` `NavigationSystem`
-- *Ping*: the ping grid, guide lines every five cells across the visible map from the cursor, flashed by `Esc` in Normal mode. [Input §2](input-and-modes.md#2-modes) · `internal/component` `PingComponent`
 - *Physics*: grid traversal: `GridTraverser` walks every cell a segment crosses (supercover DDA) without allocating, and `Line` walks a segment's Bresenham cells, the line of sight, ray, bolt and charge and teleport line walks, as a value kept in registers; `GridTraverser3` and `Line3` are the two through a volume, `Line3` too large for registers and stepped in place (`Advance`). [AI §6](ai-physics-and-evolution.md#6-numeric-model-and-determinism) · `pkg/vmath` `GridTraverser`, `Line`, `GridTraverser3`, `Line3`
 - *Maze*: a generated maze's `[][]bool` grid of walls and passages. [AI §7](ai-physics-and-evolution.md#7-maze-generation) · `pkg/maze` `Result`
 
@@ -1452,7 +1451,7 @@ index](https://github.com/lixenwraith/stapes/blob/main/doc/term-index.md).
 - *Content*: `-f <file>` pins block delivery to one eligible corpus file, cycled forever; pinning fails if the file was rejected or yields no blocks, and the journal anchor records the pin (`ContentPin`). [Content §6](content-assets-and-tools.md#6-block-selection) · `internal/content` `Cursor.Pin`
 
 **ping** — two senses.
-- *Cursor*: The cursor's crosshair, selection grid and movement guidance (`PingComponent`); Escape in Normal flashes the grid, its bounds drive Visual mode, and it is owner-authored but never synced because nothing reads a remote copy. [Gameplay §2](gameplay.md#2-cursor-and-player-state) · [Domain design D-13](domain-design.md#d-13--owner-authored-shared-values-have-one-writer) · `internal/component` `PingComponent`
+- *Cursor*: The cursor's crosshair and the bounds Visual mode moves within (`PingComponent`), owner-authored but never synced because nothing reads a remote copy. [Gameplay §2](gameplay.md#2-cursor-and-player-state) · [Domain design D-13](domain-design.md#d-13--owner-authored-shared-values-have-one-writer) · `internal/component` `PingComponent`
 - *WebSocket*: A ping control frame answered by a pong, part of the minimal RFC 6455 surface. [Multi-platform: Where WebSocket is spoken](multi-platform.md#where-websocket-is-spoken) · `pkg/websocket`
 
 **:player** (also: `:player drop`) — Lists every cursor slot, in hex, as `3 player` or `4 bot of 3`; `:player drop <slot>` dismisses another participant with all the bots it holds, or one bot alone, through one `EventParticipantDeparted` marked `Dropped`, which puts their keys on the **keep-out list**; the dropped person plays on alone, as after `:leave`, told why. Only the coordinator may drop, and an instance leaves the session itself with `:leave`, or `:q`. See also **departure**, **bot**, **roster**. [Bots: Commands and the menu](bots.md#commands-and-the-menu) · [Input §9](input-and-modes.md#9-command-mode) · `internal/mode` `handlePlayerCommand` · `internal/app/internal/membership` `Membership.dropPlayerLocked`

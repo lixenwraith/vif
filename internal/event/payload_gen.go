@@ -93,7 +93,6 @@ var payloadNew = [EventTypeCount]func() any{
 	EventInputPressEcho:                  func() any { return new(InputPayload) },
 	EventInputReleaseEcho:                func() any { return new(InputPayload) },
 	EventInputReport:                     func() any { return new(InputReportPayload) },
-	EventPingGridRequest:                 func() any { return new(PingGridRequestPayload) },
 	EventMaterializeRequest:              func() any { return new(MaterializeRequestPayload) },
 	EventMaterializeComplete:             func() any { return new(MaterializeCompletedPayload) },
 	EventFlashSpawnOneRequest:            func() any { return new(FlashRequestPayload) },
@@ -266,7 +265,6 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventInputPressEcho:                  &codecInputPayload,
 	EventInputReleaseEcho:                &codecInputPayload,
 	EventInputReport:                     &codecInputReportPayload,
-	EventPingGridRequest:                 &codecPingGridRequestPayload,
 	EventMaterializeRequest:              &codecMaterializeRequestPayload,
 	EventMaterializeComplete:             &codecMaterializeCompletedPayload,
 	EventFlashSpawnOneRequest:            &codecFlashRequestPayload,
@@ -1085,15 +1083,6 @@ func (p *InputReportPayload) codec() (*structCodec, unsafe.Pointer) {
 var codecInputReportPayload = structCodec{size: unsafe.Sizeof(InputReportPayload{}), fields: []field{
 	{off: unsafe.Offsetof(InputReportPayload{}.Slot), kind: kindUint, size: unsafe.Sizeof(uint8(0))},
 	{off: unsafe.Offsetof(InputReportPayload{}.Releases), kind: kindBool},
-}}
-
-func (p *PingGridRequestPayload) codec() (*structCodec, unsafe.Pointer) {
-	return &codecPingGridRequestPayload, unsafe.Pointer(p)
-}
-
-var codecPingGridRequestPayload = structCodec{size: unsafe.Sizeof(PingGridRequestPayload{}), fields: []field{
-	{off: unsafe.Offsetof(PingGridRequestPayload{}.Entity), kind: kindUint, size: unsafe.Sizeof(core.Entity(0))},
-	{off: unsafe.Offsetof(PingGridRequestPayload{}.Duration), kind: kindInt, size: unsafe.Sizeof(time.Duration(0))},
 }}
 
 var codecVmathFootprint = structCodec{size: unsafe.Sizeof(vmath.Footprint{}), fields: []field{

@@ -401,11 +401,6 @@ func (r *Router) handleEscape() bool {
 		}
 		r.ctx.SetPaused(false)
 	case core.ModeNormal:
-		// ESC in Normal mode triggers ping grid, no mode change
-		r.ctx.PushLocal(event.EventPingGridRequest, &event.PingGridRequestPayload{
-			Entity:   r.ctx.World.Resources.Player.Entity,
-			Duration: parameter.PingGridDuration,
-		})
 		return true
 	}
 

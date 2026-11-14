@@ -1530,12 +1530,6 @@ func encodeColumnsPing(dst []byte, rows []StoreEntry[component.PingComponent]) [
 		dst = appendBool(dst, rows[i].Value.ShowCrosshair)
 	}
 	for i := range rows {
-		dst = appendBool(dst, rows[i].Value.GridActive)
-	}
-	for i := range rows {
-		dst = appendInt(dst, rows[i].Value.GridRemaining)
-	}
-	for i := range rows {
 		dst = appendInt(dst, rows[i].Value.BoundsRadiusX)
 	}
 	for i := range rows {
@@ -1556,12 +1550,6 @@ func decodeColumnsPing(r *columnReader) []StoreEntry[component.PingComponent] {
 	readEntityColumn(rows, r)
 	for i := range rows {
 		readBool(&rows[i].Value.ShowCrosshair, r)
-	}
-	for i := range rows {
-		readBool(&rows[i].Value.GridActive, r)
-	}
-	for i := range rows {
-		readInt(&rows[i].Value.GridRemaining, r)
 	}
 	for i := range rows {
 		readInt(&rows[i].Value.BoundsRadiusX, r)

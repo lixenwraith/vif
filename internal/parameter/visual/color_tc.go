@@ -63,7 +63,6 @@ var (
 
 	RgbPingHighlight  = color.DimGray
 	RgbPingLineNormal = color.Charcoal
-	RgbPingGridNormal = color.DimGray
 	RgbPingOrange     = color.DarkAmber
 	RgbPingGreen      = color.BlackGreen
 	RgbPingRed        = color.BlackRed
@@ -224,7 +223,6 @@ var (
 
 	// Status bar auxiliary colors
 	RgbColorModeIndicator = color.LightGray
-	RgbGridTimerFg        = color.White
 	RgbLastCommandText    = color.Yellow
 	RgbSearchInputText    = color.White
 	RgbCommandInputText   = color.White

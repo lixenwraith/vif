@@ -18,7 +18,7 @@ files = ["lessons.toml"]
 blocks = true
 
 [systems]
-only_systems = ["cursor", "typing", "timer", "death", "glyph", "particle", "transient", "audio", "energy", "heat", "splash", "ping", "flash", "fadeout"]
+only_systems = ["cursor", "typing", "timer", "death", "glyph", "particle", "transient", "audio", "energy", "heat", "splash", "flash", "fadeout"]
 
 [regions.tutor]
 initial = "Wait"

@@ -17,7 +17,7 @@ import (
 )
 
 // SchemaVersion is the FSM schema contract version -schema prints.
-const SchemaVersion = 23
+const SchemaVersion = 24
 
 // Schema writes the machine schema as JSON for -schema and authoring tools. It
 // needs no terminal, services or World instance.
