@@ -130,7 +130,8 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 
 // Update runs the nugget system logic
 func (s *NuggetSystem) Update() {
-	if !s.enabled {
+	// A nugget is a player's own, and a viewer's world has no player
+	if !s.enabled || s.world.Watches() {
 		return
 	}
 

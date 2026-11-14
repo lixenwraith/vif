@@ -1279,10 +1279,14 @@ committed that applies at or before T, so a viewer's world (`World.Watch`) runs 
 tick only once its feed closed it (`TickGranted`, `FeedPort.Ready`), from all that
 tick's inputs. It drives no cursor, issues no crossing and predicts nothing, so it
 derives the host's Shared world tick for tick and needs no correction, which is
-why one stream fits every viewer. With no cursor of its own it has no Player
-domain. It stands a record and its slack behind, 9 to 13 ticks measured, pacing
-its tick interval by the closed ticks it has in hand (`paceViewer`,
-`FeedSlackTicks`); a hold stops it on the tick that stops the players.
+why one stream fits every viewer. It owns no cursor, so it simulates no player
+(D-2) and lays no glyph or nugget of its own (`GlyphSystem`, `NuggetSystem`): its
+screen is the Shared domain, with the session-wide effects every instance raises
+for it (D-6), and a player's glyphs, weapons, projectiles and loot stay on that
+player's run, as they do between players. It stands a record and its slack behind,
+9 to 13 ticks measured, pacing its tick interval by the closed ticks it has in
+hand (`paceViewer`, `FeedSlackTicks`); a hold stops it on the tick that stops the
+players.
 
 **Starting points** (`Membership.syncAudience`) are written when a viewer waits for
 one (`FeedHub.Wanted`), when the game changed, and every `FeedSyncTicks` (600,

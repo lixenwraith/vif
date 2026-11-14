@@ -42,8 +42,10 @@ host holds `parameter.NoPlayerSlot`: it authors the Shared world and puts nobody
 the map. It is the only roster entry allowed no cursor, and anything that counts
 participants, `parameter.MaxPlayers` included, counts cursors, not roster entries.
 A run that only watches a session
-([Multi-player §5.8](multi-player.md#58-watching-a-session)) is no peer: it holds
-no identity, roster entry or cursor, and so no Player domain.
+([Multi-player §5.8](multi-player.md#58-watching-a-session)) is no peer. It holds
+no identity, roster entry or cursor and lays no glyph or nugget of its own, so its
+screen is the Shared domain with the session-wide effects every instance raises
+for it (D-6); no player's domain is rebuilt there (D-2).
 
 ## 2. Domain rules
 

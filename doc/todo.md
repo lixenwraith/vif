@@ -1166,9 +1166,11 @@ that leaves:
   edge: the router's CPU and egress beside the pod's, and what the edge's own
   connection limits pass.
 
-A spectator sees the shared world, what any remote participant sees, from the
-player it follows, whose owner-synced values the status bar reads. Player-domain
-state is never rebuilt on another instance (D-2), so that player's glyphs, drains,
+A spectator sees the Shared domain, what any remote participant sees, from the
+cursor of the player it follows, whose owner-synced values the status bar reads;
+its own run lays no glyph or nugget. Showing a player's own domain is not pursued
+(Lixen, 2026-11-14): Player-domain state is never rebuilt on another instance
+(D-2) and the authority holds none of it, so that player's glyphs, drains,
 nuggets, projectiles and loot stay on its run.
 
 Beside it, from the same review of the journal's slot handling: a journal records
