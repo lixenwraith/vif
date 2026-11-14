@@ -1757,7 +1757,6 @@ func (s *NetworkSystem) announceLost(p engine.NetworkPort) {
 // time, and the one the session layer gives a newcomer the place of, once each: the
 // authority decides it as it decides every roster change, a bot whose holder waits
 // too goes in its holder's crossing, and one on its way back waits for its arrival.
-// A person's wait runs out only where a door stands for it to come back through.
 func (s *NetworkSystem) expireWraiths() {
 	var yield uint32
 	kept := func(uint32) bool { return false }
@@ -1769,7 +1768,6 @@ func (s *NetworkSystem) expireWraiths() {
 		if r.WraithKept != nil {
 			kept = r.WraithKept
 		}
-		held = held || r.Doorless != nil && r.Doorless()
 	}
 	if s.restart == restartDue {
 		s.restart = restartCrossed

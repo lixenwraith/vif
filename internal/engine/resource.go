@@ -1371,11 +1371,6 @@ type NetworkResource struct {
 	// to, which no wait may run out on while its arrival is on its way.
 	WraithKept func(participant uint32) bool
 
-	// Doorless reports a session with no door for a player to come back through,
-	// which :host can still open: the authority runs out no person's wait there
-	// (multi-player.md §5.4). Called under the world lock.
-	Doorless func() bool
-
 	// Relaying reports that this run's player lets it carry any participant's
 	// artifacts toward the authority, not only those that joined through it. Called
 	// under the world lock; it must not block.
