@@ -11,7 +11,7 @@ until its rename to vif in September 2026.
 - vi-style motions, counts, operators, find/till and `%`
 - Normal, Insert, Search and Command modes
 - Ping grid, coordinate highlighting, heat and score
-- Decay, then a Matrix-style falling decay
+- Decay, then a decay of falling characters
 - Code blocks from files as the text to type
 - Gold, cleaners, nuggets with the `Tab` jump, drains
 - Sound effects, then an audio engine with `Ctrl-S` mute

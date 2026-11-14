@@ -12,7 +12,7 @@ const (
 	ParticleMaxSpeed = 15.0
 	// ParticleAcceleration is acceleration (velocity increase) per second
 	ParticleAcceleration = 2.0
-	// ParticleChangeChance is the chance of character change of particles when moving from one cell to next (Matrix-style char swap probability)
+	// ParticleChangeChance is the chance a falling particle changes its glyph as it moves into the next cell
 	ParticleChangeChance = 0.4
 )
 
