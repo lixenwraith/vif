@@ -913,9 +913,9 @@ func (m *Membership) leaveSessionLocked(keepAll bool) (engine.NetworkPort, error
 	old, roster := m.sessionTransportLocked(), m.worldRosterLocked()
 	local := link.PeerID(m.world.LocalParticipant())
 	// A leave keeps its bots' places. A run its session gave up keeps every place, for
-	// whoever hosts next to give back, unless the session ended with its host: nobody
-	// in it signed up to come back here. A bot of this run's goes on under a key of its
-	// own over the record it left with, which stays the left session's.
+	// whoever hosts next to give back, unless the session is pinned: nobody hosts it
+	// next, nor signed up to come back here. A bot of this run's goes on under a key of
+	// its own over the record it left with, which stays the left session's.
 	var kept []network.RosterEntry
 	var carried []*place
 	for _, p := range roster {

@@ -685,9 +685,9 @@ it refuses every join while another participant hosts.
 A person's run that forks goes on in a session of its own, as `:leave` takes it
 (§5.5): the same identity, the next term, and `:host` or `:join` at once, with
 every other player's place kept as a Wraith where the session migrates and none
-where it ended with its host. A run with no loop to take it there, a script's or a
-bot's, stays the fork, with `network.fork` and a persistent `Host lost` badge; it
-refuses a higher term met later, because partition merging is not implemented.
+where it does not. A run with no loop to take it there, a script's or a bot's,
+stays the fork, with `network.fork` and a persistent `Host lost` badge; it refuses
+a higher term met later, because partition merging is not implemented.
 
 ### 5.2 The roster after a loss
 
@@ -1032,11 +1032,12 @@ host that left run §5.1, which in a session that does not migrate is the fork.
 
 A person's fork leaves the same way. `converge.Instance.Forked` hands the run the
 roster it held, and its loop serves the fork as it serves `:leave` (`Membership.forked`,
-`Membership.LeaveSession`). A session pinned to its host ended with it, and nobody in it
-signed up to come back to this run, so its fork keeps its bots' places alone, as `:leave`
-does, and the rest go at once. One that migrates keeps every place: each other player's
-cursor waits as a Wraith in the session the fork opens, for its player to take back
-once `:host` opens the door, within its wait, which starts over at the door (§5.4).
+`Membership.LeaveSession`). A session pinned to its host has no next host, and nobody
+in it signed up to come back to this run, so its fork keeps its bots' places alone,
+as `:leave` does, and the rest go at once. One that migrates keeps every place: each
+other player's cursor waits as a Wraith in the session the fork opens, for its
+player to take back once `:host` opens the door, within its wait, which starts over
+at the door (§5.4).
 A hold the lost host set stands there for this run's own `:pause`, and a freeze
 ends; the status bar says which. A seat under such a run ends only when the run
 halts it (`seatEnds`), never on its own fork or the run's, so the leave finds every
