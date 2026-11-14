@@ -30,7 +30,7 @@ func testConfig() *Config {
 		MsgBundle:      {Kind: KindEpoch},
 		testCorrection: {Kind: KindCorrection, Precompressed: true},
 		testShard:      {Kind: KindRepair, Precompressed: true},
-	}, testReady, 0x02, 0x05)
+	}, testReady, 0x02, 0x05, 0x37)
 	return cfg
 }
 

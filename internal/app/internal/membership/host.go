@@ -143,7 +143,7 @@ func (m *Membership) ticketHook() func(*network.Signed, []string) (*network.Tick
 		m.tickets = &network.TicketGate{Keys: m.cfg.TicketKeys, Session: m.cfg.SessionName}
 	}
 	return func(shown *network.Signed, keys []string) (*network.TicketBody, error) {
-		body, err := m.tickets.Admit(shown, keys)
+		body, err := m.tickets.Admit(shown, keys, network.AdmitPlay)
 		if err != nil {
 			return nil, err
 		}

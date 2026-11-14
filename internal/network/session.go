@@ -364,6 +364,14 @@ type Coordinator struct {
 	// package carries bytes. Nil serves nothing, which refuses the request rather
 	// than pretending the transfer is not part of the protocol.
 	Scenario func(digest string) ([]byte, error)
+
+	// Watch is the session as a dial that only watches is shown it, which holds no
+	// place, or why it cannot be watched: asked for the preview and again at the
+	// seat. Feed then owns the dial's stream and copies the session's feed to it,
+	// with every later starting point for a relay. Either nil is a door nobody
+	// watches at.
+	Watch func(a Admission) (SessionOffer, error)
+	Feed  func(conn net.Conn, a Admission, relay bool) error
 }
 
 // MaxSessionName is the longest name a session may answer to. A name is a short
@@ -380,7 +388,7 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (link.Pee
 	return func(conn net.Conn) (id link.PeerID, err error) {
 		// Before Admit, because a link that named another session costs the budget
 		// Admit holds for the players of this one.
-		if err = readSessionName(conn, c.Name, timeout); err != nil {
+		if err = readSessionName(conn, MsgSessionRoute, c.Name, timeout); err != nil {
 			RefuseJoin(conn, err, timeout)
 			return 0, err
 		}
@@ -592,12 +600,12 @@ func serveScenario(conn net.Conn, c Coordinator, digest string, timeout time.Dur
 // readSessionName consumes the dialer's routing frame. The name is not echoed
 // back: it is a stranger's bytes, the dialer already knows what it sent, and the
 // one thing worth saying is that this is not the session it named.
-func readSessionName(conn net.Conn, name string, timeout time.Duration) error {
+func readSessionName(conn net.Conn, kind link.MessageType, name string, timeout time.Duration) error {
 	if timeout > 0 {
 		_ = conn.SetReadDeadline(time.Now().Add(timeout))
 		defer conn.SetReadDeadline(time.Time{})
 	}
-	got, err := ReadSessionRoute(conn)
+	got, err := readRoute(conn, kind)
 	if err != nil {
 		return err
 	}
@@ -607,17 +615,92 @@ func readSessionName(conn net.Conn, name string, timeout time.Duration) error {
 	return nil
 }
 
-// ReadSessionRoute reads the frame a dialer sends before it reads and returns the
-// name it carries. A named host checks it; a front door places the connection on it.
-func ReadSessionRoute(r io.Reader) (string, error) {
+// ReadSessionRoute reads the frame a joining dialer sends before it reads and
+// returns the name it carries. A named host checks it; a front door places the
+// connection on it.
+func ReadSessionRoute(r io.Reader) (string, error) { return readRoute(r, MsgSessionRoute) }
+
+// readRoute reads the opening frame of a dial of kind, a join's or a watch's.
+func readRoute(r io.Reader, kind link.MessageType) (string, error) {
 	msg, err := link.DecodeWithin(r, MaxSessionName)
 	if err != nil {
 		return "", err
 	}
-	if msg.Type != MsgSessionRoute {
+	if msg.Type != kind {
 		return "", fmt.Errorf("join handshake: got message %#x, want a session name", msg.Type)
 	}
 	return string(msg.Payload), nil
+}
+
+// errUnwatched refuses a watch dial at a door whose session carries no feed.
+var errUnwatched = &Refusal{Code: RefusalUnknown, Reason: "this door shows no session to watch"}
+
+// WatchAcceptor returns the handshake a door runs for a dial that only watches: the
+// route, the budget and the admission a join passes, then the session as it stands
+// and its scenario if asked. Its seat is answered by MsgStart, after which the
+// stream is the feed's. Nothing in the session is held for it: a watcher has no place.
+func WatchAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) error {
+	return func(conn net.Conn) error {
+		refuse := func(err error) error {
+			RefuseJoin(conn, err, timeout)
+			return err
+		}
+		if err := readSessionName(conn, MsgSessionWatch, c.Name, timeout); err != nil {
+			return refuse(err)
+		}
+		if c.Watch == nil || c.Feed == nil {
+			return refuse(errUnwatched)
+		}
+		if c.Admit != nil {
+			if err := c.Admit(conn.RemoteAddr()); err != nil {
+				return fmt.Errorf("%s: %w", conn.RemoteAddr(), refuse(err))
+			}
+		}
+		adm, err := askAdmission(conn, c, timeout)
+		if err != nil {
+			return err
+		}
+		preview, err := c.Watch(adm)
+		if err != nil {
+			return refuse(err)
+		}
+		body, err := json.Marshal(preview)
+		if err != nil {
+			return err
+		}
+		defer conn.SetDeadline(time.Time{})
+		if timeout > 0 {
+			_ = conn.SetDeadline(time.Now().Add(timeout))
+		}
+		if err := link.NewMessage(MsgJoinPreview, body).Encode(conn); err != nil {
+			return err
+		}
+		for asked := false; ; {
+			msg, err := link.Decode(conn)
+			if err != nil {
+				return err
+			}
+			switch {
+			case msg.Type == MsgScenarioRequest && !asked:
+				asked = true
+				if err := serveScenario(conn, c, string(msg.Payload), timeout); err != nil {
+					return err
+				}
+			case msg.Type == MsgJoinSeat:
+				// Asked again: the session a dial prepared on may have ended, or filled.
+				if _, err := c.Watch(adm); err != nil {
+					return refuse(err)
+				}
+				if err := link.NewMessage(MsgStart, nil).Encode(conn); err != nil {
+					return err
+				}
+				_ = conn.SetDeadline(time.Time{})
+				return c.Feed(conn, adm, len(msg.Payload) != 0)
+			default:
+				return fmt.Errorf("watch handshake: got message %#x, want a seat", msg.Type)
+			}
+		}
+	}
 }
 
 // Admission is what a dial proved at the door: the nonce it was asked and the keys
@@ -768,7 +851,10 @@ func answerAdmission(conn net.Conn, base *Config, question *link.Message) (*link
 	}
 	// A door that takes the site's ticket is answered with the keys alone: the
 	// router between adds the ticket, and a dial that reached it by another way is
-	// refused there.
+	// refused there. The router's own dial carries the one it signed.
+	if slices.Contains(ask.Methods, MethodTicket) {
+		answer.Ticket = base.Ticket
+	}
 	// A sign-in crosses TLS alone: the router reads it on its front door and never
 	// passes it on, and a plain stream would show it to whoever listens.
 	if base.SignIn != "" && tlsOf(conn) != nil {
@@ -1146,7 +1232,24 @@ func readChunked(p *PendingJoin, want link.MessageType) (uint64, []byte, error) 
 // build half of the identity is checked here, before a world is built on the
 // preview; the session half once one is.
 func PreviewSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
-	p, err := openJoinStream(addr, cfg)
+	return previewed(openJoinStream(addr, cfg, MsgSessionRoute))
+}
+
+// WatchSession dials addr to watch and reads the session it would be shown, as
+// PreviewSession reads the one a join would be offered. Watch then asks for the feed.
+func WatchSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
+	return previewed(openJoinStream(addr, cfg, MsgSessionWatch))
+}
+
+// WatchOver is WatchSession on a stream the caller opened, which the dial then owns:
+// a front door's own dial to the session it placed the stream on.
+func WatchOver(conn net.Conn, cfg *Config) (*PendingJoin, SessionOffer, error) {
+	return previewed(openJoinOn(conn, dialConfig("", cfg), MsgSessionWatch))
+}
+
+// previewed checks the preview a dial read, closing the dial on one it cannot
+// prepare on.
+func previewed(p *PendingJoin, err error) (*PendingJoin, SessionOffer, error) {
 	if err != nil {
 		return nil, SessionOffer{}, err
 	}
@@ -1167,7 +1270,7 @@ func PreviewSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error
 // harness, or a coordinator that previews nothing. The scenario, if asked for, comes
 // after the offer.
 func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
-	p, err := openJoinStream(addr, cfg)
+	p, err := openJoinStream(addr, cfg, MsgSessionRoute)
 	if err != nil {
 		return nil, SessionOffer{}, err
 	}
@@ -1179,10 +1282,8 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 	return p, offer, nil
 }
 
-// openJoinStream dials addr, names the session and the claims the dial keeps, and
-// reads the preview the coordinator answers with, unchecked: a coordinator that
-// previews nothing is still one a dial can seat at once with.
-func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
+// dialConfig is the configuration a dial to addr runs on: cfg's, or the defaults.
+func dialConfig(addr string, cfg *Config) *Config {
 	base := DefaultConfig()
 	if cfg != nil {
 		copy := *cfg
@@ -1194,6 +1295,13 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 	if len(base.Keys) == 0 {
 		base.Keys = []Key{NewKey()}
 	}
+	return base
+}
+
+// openJoinStream dials addr and opens the handshake kind names on it, a join's
+// route or a watch's.
+func openJoinStream(addr string, cfg *Config, kind link.MessageType) (*PendingJoin, error) {
+	base := dialConfig(addr, cfg)
 	conn, err := link.Dial(addr, &base.Config)
 	if err != nil && base.Dial == nil && base.SessionName != "" && !link.RouteAnswered(err) {
 		conn, err = dialListed(base, err)
@@ -1201,13 +1309,20 @@ func openJoinStream(addr string, cfg *Config) (*PendingJoin, error) {
 	if err != nil {
 		return nil, err
 	}
+	return openJoinOn(conn, base, kind)
+}
+
+// openJoinOn names the session and the claims the dial keeps on conn, and reads the
+// preview the coordinator answers with, unchecked: a coordinator that previews
+// nothing is still one a dial can seat at once with.
+func openJoinOn(conn net.Conn, base *Config, kind link.MessageType) (*PendingJoin, error) {
 	if base.ConnectTimeout > 0 {
 		_ = conn.SetDeadline(time.Now().Add(base.ConnectTimeout))
 	}
 	// Before the preview is read, because the coordinator reads this before it writes
 	// one and a front door has to place the connection before either happens; sent
 	// unnamed too, so a port that also takes peer links tells this is a join.
-	if err = link.NewMessage(MsgSessionRoute, []byte(base.SessionName)).Encode(conn); err != nil {
+	if err := link.NewMessage(kind, []byte(base.SessionName)).Encode(conn); err != nil {
 		_ = conn.Close()
 		return nil, err
 	}
@@ -1311,6 +1426,40 @@ func (p *PendingJoin) Seat() (SessionOffer, error) {
 	}
 	p.offer = offer
 	return offer, nil
+}
+
+// Watch asks for the session's feed and returns the stream that carries it, which
+// the caller then owns. relay asks for every later starting point too, as a front
+// door copying the feed to its own watchers needs.
+func (p *PendingJoin) Watch(relay bool) (net.Conn, error) {
+	if p.replied || p.transferred || p.offer.Assigned != 0 {
+		return nil, errors.New("watch handshake already completed")
+	}
+	if p.base.ConnectTimeout > 0 {
+		_ = p.conn.SetDeadline(time.Now().Add(p.base.ConnectTimeout))
+		defer p.conn.SetDeadline(time.Time{})
+	}
+	var asks []byte
+	if relay {
+		asks = []byte{1}
+	}
+	dropped := func(err error) error {
+		return link.PlainError{Text: "the host dropped the watch before its feed", Cause: err}
+	}
+	if err := link.NewMessage(MsgJoinSeat, asks).Encode(p.conn); err != nil {
+		return nil, dropped(err)
+	}
+	msg, err := link.Decode(p.conn)
+	switch {
+	case err != nil:
+		return nil, dropped(err)
+	case msg.Type == MsgJoinReply:
+		return nil, refusalFrom(msg)
+	case msg.Type != MsgStart:
+		return nil, fmt.Errorf("watch handshake: got message %#x, want the feed's start", msg.Type)
+	}
+	p.transferred = true
+	return p.conn, nil
 }
 
 // dialListed dials base's session by another link its site lists, once nothing
