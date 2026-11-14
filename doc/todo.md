@@ -1103,7 +1103,8 @@ permission, but it finds mDNS services, which vif does not announce.
 - Affected files: `internal/app/internal/membership/watch.go`, `host.go`,
   `internal/mode/commands.go` (`handleSpectateCommand`), `config_form.go`,
   `cmd/vif`, `tool/vif-router/audience.go`,
-  `internal/app/internal/scribe/journal.go`, the Hugo site's `vif-lobby.js`
+  `internal/app/internal/scribe/journal.go`, `internal/system/particle.go`,
+  `glyph.go`, the Hugo site's `vif-lobby.js`
 - Guide: [Multiplayer §5.8](multi-player.md#58-watching-a-session),
   [Session fleet §9](kubernetes-fleet.md#9-the-session-routes)
 
@@ -1165,6 +1166,12 @@ that leaves:
   (netcode design §3.8). Read 256 spectators of a four-player session through the
   edge: the router's CPU and egress beside the pod's, and what the edge's own
   connection limits pass.
+- **Waves and a scenario's lines.** The decay and blossom waves a shared state
+  machine raises fall on a spectator's screen as on every run's
+  (`ParticleSystem.spawnWave`), over no text, while the lines a scenario lays, a
+  tutorial's lessons and scenery, are glyphs and so are not drawn there
+  (`EventGlyphLineRequest`). If either reads wrong, a viewer's world skips the waves
+  as it skips the field, or draws a scenario's scenery lines.
 
 A spectator sees the Shared domain, what any remote participant sees, from the
 cursor of the player it follows, whose owner-synced values the status bar reads;

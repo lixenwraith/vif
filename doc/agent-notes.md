@@ -940,8 +940,10 @@ Libraries · Branches.
 
 ## Branches
 
-- A session pushes only its own branch and a force push is refused, so a branch
-  whose PR merged starts again from main only once its owner deletes it: ask.
+- A session pushes only its own branch. A rebase its owner asked for goes up with
+  `git push --force-with-lease=<branch>:<the head its PR shows>`, which is taken;
+  a force push with no lease was refused, so a branch whose PR merged starts again
+  from main only once its owner deletes it: ask.
 - Take the next `snapshot.Schema`, `event.JournalSchema` or `manifest.SchemaVersion`
   past main's, and check again after merging main, where another PR may have taken
   it.
