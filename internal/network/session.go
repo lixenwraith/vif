@@ -632,8 +632,8 @@ func readRoute(r io.Reader, kind link.MessageType) (string, error) {
 	return string(msg.Payload), nil
 }
 
-// errUnwatched refuses a watch dial at a door whose session carries no feed.
-var errUnwatched = &Refusal{Code: RefusalUnknown, Reason: "this door shows no session to watch"}
+// ErrUnwatched refuses a watch dial at a door whose session carries no feed.
+var ErrUnwatched = &Refusal{Code: RefusalUnknown, Reason: "this door shows no session to watch"}
 
 // WatchAcceptor returns the handshake a door runs for a dial that only watches: the
 // route, the budget and the admission a join passes, then the session as it stands
@@ -641,68 +641,77 @@ var errUnwatched = &Refusal{Code: RefusalUnknown, Reason: "this door shows no se
 // stream is the feed's. Nothing in the session is held for it: a watcher has no place.
 func WatchAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) error {
 	return func(conn net.Conn) error {
-		refuse := func(err error) error {
+		if err := readSessionName(conn, MsgSessionWatch, c.Name, timeout); err != nil {
 			RefuseJoin(conn, err, timeout)
 			return err
 		}
-		if err := readSessionName(conn, MsgSessionWatch, c.Name, timeout); err != nil {
-			return refuse(err)
-		}
-		if c.Watch == nil || c.Feed == nil {
-			return refuse(errUnwatched)
-		}
 		if c.Admit != nil {
 			if err := c.Admit(conn.RemoteAddr()); err != nil {
-				return fmt.Errorf("%s: %w", conn.RemoteAddr(), refuse(err))
+				RefuseJoin(conn, err, timeout)
+				return fmt.Errorf("%s: %w", conn.RemoteAddr(), err)
 			}
 		}
-		adm, err := askAdmission(conn, c, timeout)
+		return ServeWatch(conn, c, timeout)
+	}
+}
+
+// ServeWatch is the watch handshake past its route frame and its budget, for a
+// front door that read the one to place the dial and charged the other to the
+// address it came from: the admission, the session as it stands, the feed.
+func ServeWatch(conn net.Conn, c Coordinator, timeout time.Duration) error {
+	refuse := func(err error) error {
+		RefuseJoin(conn, err, timeout)
+		return err
+	}
+	if c.Watch == nil || c.Feed == nil {
+		return refuse(ErrUnwatched)
+	}
+	adm, err := askAdmission(conn, c, timeout)
+	if err != nil {
+		return err
+	}
+	preview, err := c.Watch(adm)
+	if err != nil {
+		return refuse(err)
+	}
+	body, err := json.Marshal(preview)
+	if err != nil {
+		return err
+	}
+	defer conn.SetDeadline(time.Time{})
+	if timeout > 0 {
+		_ = conn.SetDeadline(time.Now().Add(timeout))
+	}
+	if err := link.NewMessage(MsgJoinPreview, body).Encode(conn); err != nil {
+		return err
+	}
+	for asked := false; ; {
+		msg, err := link.Decode(conn)
 		if err != nil {
 			return err
 		}
-		preview, err := c.Watch(adm)
-		if err != nil {
-			return refuse(err)
-		}
-		body, err := json.Marshal(preview)
-		if err != nil {
-			return err
-		}
-		defer conn.SetDeadline(time.Time{})
-		if timeout > 0 {
-			_ = conn.SetDeadline(time.Now().Add(timeout))
-		}
-		if err := link.NewMessage(MsgJoinPreview, body).Encode(conn); err != nil {
-			return err
-		}
-		for asked := false; ; {
-			msg, err := link.Decode(conn)
-			if err != nil {
+		switch {
+		case msg.Type == MsgScenarioRequest && !asked:
+			asked = true
+			if err := serveScenario(conn, c, string(msg.Payload), timeout); err != nil {
 				return err
 			}
-			switch {
-			case msg.Type == MsgScenarioRequest && !asked:
-				asked = true
-				if err := serveScenario(conn, c, string(msg.Payload), timeout); err != nil {
-					return err
-				}
-			case msg.Type == MsgJoinReply:
-				var reply sessionReply
-				_ = json.Unmarshal(msg.Payload, &reply)
-				return fmt.Errorf("the dial left before its feed: %s", cmp.Or(reply.Error, "it gave no reason"))
-			case msg.Type == MsgJoinSeat:
-				// Asked again: the session a dial prepared on may have ended, or filled.
-				if _, err := c.Watch(adm); err != nil {
-					return refuse(err)
-				}
-				if err := link.NewMessage(MsgStart, nil).Encode(conn); err != nil {
-					return err
-				}
-				_ = conn.SetDeadline(time.Time{})
-				return c.Feed(conn, adm)
-			default:
-				return fmt.Errorf("watch handshake: got message %#x, want a seat", msg.Type)
+		case msg.Type == MsgJoinReply:
+			var reply sessionReply
+			_ = json.Unmarshal(msg.Payload, &reply)
+			return fmt.Errorf("the dial left before its feed: %s", cmp.Or(reply.Error, "it gave no reason"))
+		case msg.Type == MsgJoinSeat:
+			// Asked again: the session a dial prepared on may have ended, or filled.
+			if _, err := c.Watch(adm); err != nil {
+				return refuse(err)
 			}
+			if err := link.NewMessage(MsgStart, nil).Encode(conn); err != nil {
+				return err
+			}
+			_ = conn.SetDeadline(time.Time{})
+			return c.Feed(conn, adm)
+		default:
+			return fmt.Errorf("watch handshake: got message %#x, want a seat", msg.Type)
 		}
 	}
 }

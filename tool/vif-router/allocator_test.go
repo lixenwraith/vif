@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/network"
 )
 
 type fakeKube struct {
@@ -361,6 +362,25 @@ func TestReadyAddressesStayScopedToTheirService(t *testing.T) {
 	}
 	if !addresses["vif-session-two"]["10.42.0.21"] || addresses["vif-session-two"]["10.42.0.20"] {
 		t.Fatalf("unexpected second Service addresses: %v", addresses["vif-session-two"])
+	}
+}
+
+// TestADialThatOnlyWatchesReachesASessionWithNoSeatFree: a full session refuses a
+// join before its pod is dialled, and is still a spectator's to reach, who takes
+// no seat.
+func TestADialThatOnlyWatchesReachesASessionWithNoSeatFree(t *testing.T) {
+	controller := newAllocator(&fakeKube{}, fakeHealth{state: sessionHealth{Live: true, Ready: true, Capacity: 4}},
+		testAllocatorConfig(t))
+	created, err := controller.createSession(context.Background(), sessionRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller.health = fakeHealth{state: sessionHealth{Live: true, Phase: "occupied"}}
+	if _, err := controller.routeSession(context.Background(), created.ID, network.AdmitPlay); !errors.Is(err, &network.Refusal{Code: network.RefusalFull}) {
+		t.Fatalf("a join was routed to a full session: %v", err)
+	}
+	if ip, err := controller.routeSession(context.Background(), created.ID, network.AdmitWatch); err != nil || ip != "10.42.0.20" {
+		t.Fatalf("a dial that only watches was routed to %q, %v; want the full session's pod", ip, err)
 	}
 }
 

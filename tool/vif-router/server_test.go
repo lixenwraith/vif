@@ -44,7 +44,7 @@ func (f *fakeSessionAllocator) listSessions(context.Context) ([]session, error) 
 
 func (f *fakeSessionAllocator) ready(context.Context) error { return f.readyErr }
 
-func (f *fakeSessionAllocator) routeSession(context.Context, string) (string, error) {
+func (f *fakeSessionAllocator) routeSession(context.Context, string, network.AdmissionKind) (string, error) {
 	return f.podIP, f.routeErr
 }
 
@@ -126,7 +126,7 @@ func TestGetSessionsAlwaysReturnsArray(t *testing.T) {
 
 	want := `{"sessions":[],"limits":{"players_max":4,"players_default":4,"bots_max":0,` +
 		`"log_levels":["info"],"log_level_default":"info","size_default":"first","scenarios":["main"],` +
-		`"sessions_max":0,"doors":0,"doors_max":0}}`
+		`"sessions_max":0,"doors":0,"doors_max":0,"spectators_max":0}}`
 	if response.Code != http.StatusOK || strings.TrimSpace(response.Body.String()) != want {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}

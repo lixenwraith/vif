@@ -32,17 +32,21 @@ const (
 	// spliceStall bounds one write, so a peer that stopped reading ends its splice
 	// rather than holding it, and its session's ceiling, while TCP retransmits.
 	spliceStall = 10 * time.Second
+	// podDialTimeout bounds the connect to a pod the lookup found ready.
+	podDialTimeout = 2 * time.Second
 )
 
 var errRouteBusy = &network.Refusal{Code: network.RefusalFull,
 	Reason: "this session is carrying as many connections as it accepts"}
 
 // placement is what a connection was placed on: its session's pod, or a door a run
-// published under the session's name.
+// published under the session's name; or, for a dial that only watches, the session
+// whose feed it is to be copied (watch), which holds no pod connection of its own.
 type placement struct {
-	id   string
-	name string // the name sent upstream: the pod's, or the one a door answers to
-	door bool
+	id    string
+	name  string // the name sent upstream: the pod's, or the one a door answers to
+	door  bool
+	watch bool
 }
 
 // tcpRouter is the native front door: one port for every session, which places a
@@ -51,14 +55,15 @@ type placement struct {
 // it, and the browser route places its streams with it too; see
 // doc/kubernetes-fleet.md §9.
 type tcpRouter struct {
-	sessions sessionAllocator
-	holds    *holds
-	admit    *network.AdmissionLimiter
-	tunnels  *network.TunnelHub // nil publishes no doors
-	opens    time.Duration      // how long a door's run has to open a connection back
-	log      *slog.Logger
-	game     string // the pod port dialled; a test points it at a stand-in
-	placing  chan struct{}
+	sessions  sessionAllocator
+	holds     *holds
+	admit     *network.AdmissionLimiter
+	tunnels   *network.TunnelHub // nil publishes no doors
+	audiences *audiences         // the sessions being watched; nil shows none
+	opens     time.Duration      // how long a door's run has to open a connection back
+	log       *slog.Logger
+	game      string // the pod port dialled; a test points it at a stand-in
+	placing   chan struct{}
 
 	// ticket signs the admission tickets the router mints in band; an empty key
 	// mints none and splices from the first byte. proxyProtocol reads an edge's
@@ -90,17 +95,23 @@ func (r *tcpRouter) serve(listener net.Listener) {
 			continue
 		}
 		go func() {
-			conn, from, ok := r.accept(conn)
-			if !ok {
-				return
+			if conn, from, ok := r.accept(conn); ok {
+				r.route(conn, from, "")
 			}
-			upstream, release, at := r.place(conn, from)
-			if upstream == nil {
-				return
-			}
-			defer release()
-			r.carry(conn, upstream, at, from, "")
 		}()
+	}
+}
+
+// route places client and stays with it to its end: spliced to the pod or the door
+// it named, or served that session's feed when it dialled only to watch.
+func (r *tcpRouter) route(client net.Conn, from net.Addr, signIn string) {
+	upstream, release, at := r.place(client, from)
+	switch {
+	case at.watch:
+		r.watch(client, from, at.id)
+	case upstream != nil:
+		defer release()
+		r.carry(client, upstream, at, from, signIn)
 	}
 }
 
@@ -228,10 +239,10 @@ func (r *tcpRouter) closed(at placement, in, out int64, started time.Time) {
 }
 
 // place answers the route frame with the session's pod, the frame replayed to it,
-// or with a refusal the dialer reads as its reason. Every refusal precedes a dial.
-// from is the dialler's address, which the join budget is charged to. A run's
-// publication or connection back (tunnels) is taken here too, since it opens on the
-// same port, and holds no placement past this frame.
+// or with a refusal the dialer reads as its reason; every refusal precedes a dial,
+// and the join budget is charged to from. A run's publication or connection back
+// (tunnels) opens on the same port and is taken here, holding no placement. A dial
+// that only watches is named and charged as a join is, and dials no pod.
 func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), placement) {
 	select {
 	case r.placing <- struct{}{}:
@@ -242,7 +253,7 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 	}
 	_ = client.SetDeadline(time.Now().Add(routeTimeout))
 	first, err := link.DecodeWithin(client, network.MaxTunnelFrame)
-	if err != nil || first.Type != network.MsgSessionRoute {
+	if err != nil || (first.Type != network.MsgSessionRoute && first.Type != network.MsgSessionWatch) {
 		// Not a vif dialer, or one that said nothing: no reply would be read.
 		if err == nil && r.tunnels != nil {
 			r.tunnel(client, from, first)
@@ -266,32 +277,25 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 	if err := r.admit.Admit(from); err != nil {
 		return refuse(err)
 	}
+	if first.Type == network.MsgSessionWatch {
+		// A door a run published is a guest's, which writes no feed to copy.
+		if r.audiences == nil || (r.tunnels != nil && r.tunnels.Has(id)) {
+			return refuse(network.ErrUnwatched)
+		}
+		return nil, nil, placement{id: id, name: id, watch: true}
+	}
 	if r.tunnels != nil && r.tunnels.Has(id) {
 		return r.placeDoor(client, id, refuse)
 	}
-	lookup, cancel := context.WithTimeout(context.Background(), routeTimeout)
-	podIP, err := r.sessions.routeSession(lookup, id)
-	cancel()
+	podIP, err := r.lookup(id, network.AdmitPlay)
 	if err != nil {
-		var refused *network.Refusal
-		switch {
-		case errors.As(err, &refused):
-		case errors.Is(err, errSessionUnroutable):
-			// Which check found the pod out of reach is for the log; the dialer is
-			// told only that it is.
-			r.log.Warn("session unroutable", "session", id, "error", err)
-			err = errSessionUnroutable
-		default:
-			r.log.Error("route session", "session", id, "error", err)
-			err = errors.New("could not resolve the session")
-		}
 		return refuse(err)
 	}
 	release, ok := r.holds.hold(id)
 	if !ok {
 		return refuse(errRouteBusy)
 	}
-	upstream, err := net.DialTimeout("tcp", net.JoinHostPort(podIP, r.game), 2*time.Second)
+	upstream, err := net.DialTimeout("tcp", net.JoinHostPort(podIP, r.game), podDialTimeout)
 	if err == nil {
 		// Re-encoded rather than copied: the pod reads the name, and nothing else a
 		// stranger put in that header reaches it.
@@ -309,6 +313,26 @@ func (r *tcpRouter) place(client net.Conn, from net.Addr) (net.Conn, func(), pla
 	_ = client.SetDeadline(time.Time{})
 	r.log.Info("session route opened", "session", id)
 	return upstream, release, placement{id: id, name: id}
+}
+
+// lookup is the pod a dial of kind is routed to, or what its dialer is told: a
+// refusal as it stands, and otherwise no more than that the pod is out of reach.
+func (r *tcpRouter) lookup(id string, kind network.AdmissionKind) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), routeTimeout)
+	defer cancel()
+	podIP, err := r.sessions.routeSession(ctx, id, kind)
+	var refused *network.Refusal
+	switch {
+	case err == nil || errors.As(err, &refused):
+	case errors.Is(err, errSessionUnroutable):
+		// Which check found the pod out of reach is for the log.
+		r.log.Warn("session unroutable", "session", id, "error", err)
+		err = errSessionUnroutable
+	default:
+		r.log.Error("route session", "session", id, "error", err)
+		err = errors.New("could not resolve the session")
+	}
+	return podIP, err
 }
 
 // placeDoor places a dial on a door a run published: the run opens a connection
