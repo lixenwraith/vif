@@ -75,8 +75,8 @@ func TestCategorizedRootResolvesEveryResource(t *testing.T) {
 	if got, err := ScenarioPath(o); err != nil || got != scenario {
 		t.Fatalf("scenario = %q, %v; want %q", got, err, scenario)
 	}
-	if got, err := Keymap(o); err != nil || got != keymap {
-		t.Fatalf("keymap = %q, %v; want %q", got, err, keymap)
+	if got, own, err := Keymap(o); err != nil || got != keymap || !own {
+		t.Fatalf("keymap = %q, own %v, %v; want %q, the player's own", got, own, err, keymap)
 	}
 	if got, err := Corpus(o, Scenario{}); err != nil || got.Dir != content {
 		t.Fatalf("content = %+v, %v; want %q", got, err, content)
@@ -157,10 +157,10 @@ func TestOptionsRejectUnusableOverrides(t *testing.T) {
 	file := filepath.Join(base, "file")
 	writeFixture(t, file)
 
-	if _, err := Keymap(Options{Keymap: base}); err == nil {
+	if _, _, err := Keymap(Options{Keymap: base}); err == nil {
 		t.Fatal("directory accepted as an explicit config file")
 	}
-	if _, err := Keymap(Options{Keymap: filepath.Join(base, "missing.toml")}); err == nil {
+	if _, _, err := Keymap(Options{Keymap: filepath.Join(base, "missing.toml")}); err == nil {
 		t.Fatal("missing explicit config file accepted")
 	}
 	for _, tc := range []struct {

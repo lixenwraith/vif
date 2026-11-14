@@ -144,10 +144,15 @@ func Scenarios(o Options) []string {
 	return names
 }
 
-// Keymap returns the external keymap path. An empty path selects the embedded
-// default keymap.
-func Keymap(o Options) (string, error) {
-	return paths.ConfigFile(newResolver(o).roots, o.Keymap, paths.InputDirName, paths.KeymapConfigFile)
+// Keymap returns the external keymap path, "" for the embedded default keymap, and
+// whether it is the player's own, which a run writes back brought up to date: one
+// named, or one in the -config-dir root or the user root, as vif.toml goes.
+func Keymap(o Options) (string, bool, error) {
+	path, err := paths.ConfigFile(newResolver(o).roots, o.Keymap, paths.InputDirName, paths.KeymapConfigFile)
+	if err != nil || path == "" {
+		return "", false, err
+	}
+	return path, o.Keymap != "" || paths.OwnRoot(o.Dir, filepath.Dir(filepath.Dir(path))), nil
 }
 
 // BotGraph resolves a bot graph by path or by name: an existing file wins, and a

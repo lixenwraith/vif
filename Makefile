@@ -261,17 +261,16 @@ run: dev
 # put creates only missing directories, so an install changes no existing mode.
 # BSD install makes missing parents under the umask, and a private one carried
 # through sudo would hide a system root from every other user. settings runs Go,
-# which sudo can leave off PATH: without it, a vif.toml there is kept as it is.
+# which sudo can leave off PATH: without it, a file there is kept as it is.
 INSTALL_FUNCS = umask 022; put() { [ -d "$${3%/*}" ] || install -d -m 0755 "$${3%/*}"; install -m "$$1" "$$2" "$$3"; echo "install $$3"; }; \
-	keep() { if [ -e "$$3" ]; then echo "keep    $$3"; else put "$$@"; fi; }; \
-	settings() { if [ ! -e "$$1" ]; then put 0644 $(SETTINGS_SRC) "$$1"; \
-		elif ! command -v $(GO) >/dev/null 2>&1; then echo "keep    $$1, not brought up to date: no $(GO) on PATH"; \
-		else $(GO) run ./tool/vif-settings "$$1" || echo "keep    $$1, not brought up to date"; fi; }
+	settings() { if [ ! -e "$$2" ]; then put 0644 "$$1" "$$2"; \
+		elif ! command -v $(GO) >/dev/null 2>&1; then echo "keep    $$2, not brought up to date: no $(GO) on PATH"; \
+		else $(GO) run ./tool/vif-settings "$$2" || echo "keep    $$2, not brought up to date"; fi; }
 # The wad mirrors the installed layout, so a copy is the install: shipped files are
-# replaced, a player's kept, the keymap written only when absent and a vif.toml
-# already there brought up to this build's (tool/vif-settings). CLEAN=1 first
-# removes the shipped categories, those two files and of scenario/ base/ and the
-# copies an older install left beside it. A variable, as make -n runs a sub-make.
+# replaced, a player's kept, and the keymap and vif.toml already there brought up
+# to this build's (tool/vif-settings). CLEAN=1 first removes the shipped
+# categories, those two files and of scenario/ base/ and the copies an older
+# install left beside it. A variable, as make -n runs a sub-make.
 INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >&2; exit 1 ;; esac; \
 	if [ '$(CLEAN)' = 1 ]; then \
 		for dir in $(WAD_DIR)/*/ bot/ $(WAD_DIR)/scenario/base/ $(WAD_DIR)/scenario/base/*/; do \
@@ -282,8 +281,8 @@ INSTALL_ROOT = case "$$root" in ''|/) echo "refusing to install into '$$root'" >
 	fi; \
 	for src in $$(find $(WAD_DIR) -type f); do put 0644 "$$src" "$$root/$${src\#$(WAD_DIR)/}"; done; \
 	for src in $(BOT_DIR)/*.toml; do put 0644 "$$src" "$$root/bot/$${src\#\#*/}"; done; \
-	keep 0644 $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
-	settings "$$root/vif.toml"; \
+	settings $(KEYMAP_SRC) "$$root/input/keymap.toml"; \
+	settings $(SETTINGS_SRC) "$$root/vif.toml"; \
 	[ -d "$$root/audio" ] || install -d -m 0755 "$$root/audio"; \
 	[ -d "$$root/scenario/downloads" ] || install -d -m 0755 "$$root/scenario/downloads"
 

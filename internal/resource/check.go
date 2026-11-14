@@ -47,7 +47,7 @@ func Check(o Options, w io.Writer) error {
 }
 
 func checkKeymap(o Options, w io.Writer) error {
-	path, err := Keymap(o)
+	path, own, err := Keymap(o)
 	if err != nil {
 		return err
 	}
@@ -60,10 +60,17 @@ func checkKeymap(o Options, w io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("keymap %s: %w", path, err)
 	}
-	if _, err := input.LoadKeyConfig(data); err != nil {
+	_, notes, err := input.UpgradeKeymap(data)
+	switch {
+	case err != nil:
 		return fmt.Errorf("keymap %s: %w", path, err)
+	case len(notes) == 0:
+		fmt.Fprintln(w, "keymap ok:", path)
+	case own:
+		fmt.Fprintf(w, "keymap %s: a run writes it back up to date: %s\n", path, strings.Join(notes, "; "))
+	default:
+		fmt.Fprintf(w, "keymap %s: a run reads it up to date: %s\n", path, strings.Join(notes, "; "))
 	}
-	fmt.Fprintln(w, "keymap ok:", path)
 	return nil
 }
 

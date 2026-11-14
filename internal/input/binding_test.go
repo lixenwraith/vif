@@ -1,6 +1,14 @@
 package input
 
-import "testing"
+import (
+	"reflect"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vif/internal/asset"
+)
 
 // TestActionEntriesUnique guards the KeyEntry inversion: two action names
 // sharing one entry would make the reverse lookup arbitrary
@@ -36,4 +44,76 @@ func TestBindingsResolve(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestUpgradingAKeymapKeepsThePlayersBindings: an older keymap loses the sections
+// this build does not read, the keys it cannot name and the bindings it refuses,
+// each with its own comments, and gains each embedded binding of a key it binds in
+// no spelling; every other line stays, unbindings included. The result, like the
+// embedded keymap, upgrades to itself.
+func TestUpgradingAKeymapKeepsThePlayersBindings(t *testing.T) {
+	old := "# mine\n[normal]\nh = \"motion_right\" # mine\nSPACE = \"fire_main\"\nv = \"none\"\n# a typo\nq = \"macro_record\"\n" +
+		"xy = \"undo\"\n\n# gone\n[later]\nkey = \"undo\"\n\n[text_keys]\nShift_Tab = \"help\"\nctrl_q = 3\n"
+	out, notes, err := UpgradeKeymap([]byte(old))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(out), "\n")
+	gone := []string{"# a typo", `q = "macro_record"`, `xy = "undo"`, "# gone", "[later]", `key = "undo"`, "ctrl_q = 3"}
+	for _, line := range strings.Split(old, "\n") {
+		if kept := slices.Contains(lines, line); kept == slices.Contains(gone, line) {
+			t.Errorf("line %q kept %v", line, kept)
+		}
+	}
+	kt, err := LoadKeyConfig(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, _ := ActionEntry("macro_record_toggle")
+	fire, _ := ActionEntry("fire_main")
+	quit, _ := ActionEntry("quit")
+	help, _ := ActionEntry("help")
+	if kt.NormalRunes['q'] != record || kt.NormalRunes[' '] != fire || slices.Contains(lines, `space = "fire_special"`) ||
+		kt.NormalRunes['v'].Behavior != BehaviorNone || kt.TextNavKeys[terminal.KeyCtrlQ] != quit || kt.TextNavKeys[terminal.KeyBacktab] != help {
+		t.Errorf("bindings after the upgrade:\n%s", out)
+	}
+	if len(notes) != 4 || notes[0] != `dropped [later], [normal] "xy"` ||
+		notes[1] != `reset to the default: [normal] key "q": unknown action: "macro_record"` ||
+		notes[2] != `reset to the default: [text_keys] key "ctrl_q": value must be string, got int64` || !strings.HasSuffix(notes[3], " bindings") {
+		t.Errorf("notes %q", notes)
+	}
+	for _, doc := range [][]byte{out, asset.DefaultKeymap} {
+		if again, notes, err := UpgradeKeymap(doc); err != nil || len(notes) > 0 || string(again) != string(doc) {
+			t.Errorf("an up-to-date keymap changed, %q, %v:\n%s", notes, err, again)
+		}
+	}
+}
+
+// FuzzUpgradingAKeymapBindsAsBefore: whatever keymap document parses, its upgrade
+// reads whole and is up to date, and one this build reads binds every key as it did.
+func FuzzUpgradingAKeymapBindsAsBefore(f *testing.F) {
+	f.Add(string(asset.DefaultKeymap))
+	f.Add("# mine\n[normal]\nh = \"motion_right\" # mine\nSPACE = \"none\"\n\n[later]\nx = 1\n")
+	f.Add("normal.h = \"undo\"\n[text_keys]\nShift_Tab = \"help\"\nctrl_q = 3\n")
+	f.Add("[[normal]]\nh = \"undo\"\n[overlay]\nq = { a = 1 }\n")
+	f.Fuzz(func(t *testing.T, doc string) {
+		out, _, err := UpgradeKeymap([]byte(doc))
+		if err != nil {
+			return
+		}
+		after, err := LoadKeyConfig(out)
+		if err != nil {
+			t.Fatalf("the upgrade does not read: %v\n%s", err, out)
+		}
+		if again, notes, err := UpgradeKeymap(out); err != nil || len(notes) > 0 || string(again) != string(out) {
+			t.Fatalf("the upgrade is not up to date, %q, %v:\n%s", notes, err, again)
+		}
+		before, err := LoadKeyConfig([]byte(doc))
+		if err != nil {
+			return
+		}
+		if def := DefaultKeyTable(); !reflect.DeepEqual(MergeKeyTable(def, before), MergeKeyTable(def, after)) {
+			t.Fatalf("the upgrade binds otherwise:\n%s", out)
+		}
+	})
 }
