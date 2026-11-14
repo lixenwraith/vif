@@ -47,7 +47,7 @@ func rgb(r, g, b uint8) color.RGB { return color.RGB{R: r, G: g, B: b} }
 
 // The slider's first stop is each program's own palette; the rest colour every
 // raider in one hue, its eyes the palest and its limbs the darkest
-const ownStop = "Vanguard"
+const ownStop = "Cave"
 
 var hues = []hue{
 	{"Purple", [parts]color.RGB{rgb(170, 90, 230), rgb(232, 205, 255), rgb(115, 60, 165), rgb(205, 145, 255)}, visual.ConBrightMagenta},
@@ -494,8 +494,7 @@ func (a *app) drawHeader() {
 	a.buf.SetWriteMask(visual.MaskUI)
 	a.clearRow(0)
 	a.clearRow(1)
-	a.text(1, 0, "VANGUARD RAIDERS", rgb(255, 255, 255), terminal.AttrBold)
-	a.text(19, 0, "each cave's types by tier, T1 the weakest", rgb(150, 150, 165), terminal.AttrNone)
+	a.text(1, 0, "each cave's types by rank, R1 the weakest", rgb(150, 150, 165), terminal.AttrNone)
 	help := "←/→ colour  c tier  b backdrop  s state  ↑/↓ scroll  q quit"
 	if a.native {
 		help = "←/→ colour  b backdrop  s state  ↑/↓ scroll  q quit"
