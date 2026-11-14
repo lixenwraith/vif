@@ -22,7 +22,9 @@ var topics = []topicDef{
 	{
 		Key: "modes", Title: "MODES",
 		Entries: []entryDef{
-			{Actions: []string{"mode_insert"}, Desc: "INSERT mode: typed characters become glyphs at the cursor"},
+			{Actions: []string{"mode_insert"}, Desc: "INSERT mode: type the glyph under the cursor to clear it and move on"},
+			{Actions: []string{"mode_insert_first_non_ws", "mode_insert_line_end"}, Desc: "INSERT at the row's first glyph, and at its last"},
+			{Actions: []string{"mode_append"}, Desc: "INSERT one cell to the right, as vim's a"},
 			{Actions: []string{"mode_visual"}, Desc: "Toggle VISUAL mode: motions step by the shield radius instead of one cell"},
 			{Actions: []string{"mode_search"}, Desc: "SEARCH mode: type a pattern and press Enter to jump to it"},
 			{Actions: []string{"mode_command"}, Desc: "COMMAND mode: pauses solo play unless [play] pause_command is off; a live network session continues"},
@@ -72,6 +74,10 @@ var topics = []topicDef{
 			{Keys: "dd", Desc: "Delete the entire row"},
 			{Actions: []string{"special_delete_to_end"}, Desc: "Delete from the cursor to the end of the row"},
 			{Actions: []string{"special_delete_char"}, Desc: "Delete the glyph under the cursor; a count deletes that many forward"},
+			{Keys: "c{motion}  cc", Desc: "Delete as d{motion} and dd do, then INSERT, e.g. cw, c2e"},
+			{Actions: []string{"special_change_to_end"}, Desc: "Delete to the end of the row, then INSERT"},
+			{Actions: []string{"char_replace"}, Suffix: "{c}", Desc: "Retype the glyph under the cursor as c, a count that many; it scores nothing"},
+			{Actions: []string{"repeat_change"}, Desc: "Repeat the last change, d c x D C or r; a count replaces its own"},
 			{Actions: []string{"undo"}, Desc: "Step back through previous cursor positions"},
 		},
 	},
@@ -88,7 +94,7 @@ var topics = []topicDef{
 	{
 		Key: "insert", Title: "INSERT MODE",
 		Entries: []entryDef{
-			{Keys: "Printable", Desc: "Type the character as a glyph at the cursor"},
+			{Keys: "Printable", Desc: "Type the glyph under the cursor to clear it and move right; a miss costs heat"},
 			{Keys: "Space", Desc: "Delete the glyph at the cursor and move right"},
 			{Keys: "Backspace", Desc: "Delete the glyph to the left and move there"},
 			{Actions: []string{"text_delete_current"}, Scope: input.SectionText, Desc: "Delete the glyph at the cursor without moving"},
@@ -101,7 +107,8 @@ var topics = []topicDef{
 		Key: "search", Title: "SEARCH",
 		Entries: []entryDef{
 			{Keys: "/{text} Enter", Desc: "Move the cursor to the first match, wrapping around the map"},
-			{Actions: []string{"special_search_next", "special_search_prev"}, Desc: "Next and previous match of the last pattern"},
+			{Actions: []string{"special_search_next", "special_search_prev"}, Desc: "Next match of the last search the way it went, and the other way"},
+			{Actions: []string{"special_search_word_forward", "special_search_word_back"}, Desc: "Search forward and back for the word under the cursor, whole"},
 			{Keys: "Backspace  ESC", Desc: "Edit the pattern, or cancel the search"},
 		},
 	},

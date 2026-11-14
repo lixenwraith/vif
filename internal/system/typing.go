@@ -92,12 +92,13 @@ func (s *TypingSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCharacterTyped,
 		event.EventDeleteRequest,
+		event.EventGlyphReplaceRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 	}
 }
 
-// HandleEvent processes typing and deletion requests
+// HandleEvent processes typing, deletion and replace requests
 func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
@@ -136,6 +137,11 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventDeleteRequest:
 		if payload, ok := ev.Payload.(*event.DeleteRequestPayload); ok {
 			s.handleDeleteRequest(payload)
+		}
+
+	case event.EventGlyphReplaceRequest:
+		if payload, ok := ev.Payload.(*event.GlyphReplaceRequestPayload); ok {
+			s.handleReplaceRequest(payload)
 		}
 	}
 }
@@ -441,6 +447,24 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 
 	if len(s.deleteBuf) > 0 {
 		event.EmitDeath(s.world.Resources.Event.Queue, component.DeathSilent, s.deleteBuf...)
+	}
+}
+
+// handleReplaceRequest retypes the drawn glyph of each cell in the span. A replace
+// edits as a delete does, reaching what it would, so it scores nothing: no reward,
+// heat or streak, and no error on a cell it cannot reach.
+func (s *TypingSystem) handleReplaceRequest(payload *event.GlyphReplaceRequestPayload) {
+	for x := payload.StartX; x <= payload.EndX; x++ {
+		e, ok := s.world.Positions.TopGlyphAt(x, payload.Y)
+		if !ok || e.Domain() != core.DomainPlayer {
+			continue
+		}
+		if prot, ok := s.world.Components.Protection.GetComponent(e); ok && prot.Mask&component.ProtectFromDelete != 0 {
+			continue
+		}
+		if glyph, ok := s.world.Components.Glyph.GetPtr(e); ok {
+			glyph.Rune = payload.Char
+		}
 	}
 }
 

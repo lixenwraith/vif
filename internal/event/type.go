@@ -258,6 +258,8 @@ const (
 	EventCharacterTyped
 	// EventDeleteRequest (DeleteRequestPayload) [local] signals a deletion operation (x, d, etc.)
 	EventDeleteRequest
+	// EventGlyphReplaceRequest (GlyphReplaceRequestPayload) [local] signals r retyping the glyphs of a row's cells as one char
+	EventGlyphReplaceRequest
 	// EventKeyCaptureRequest (KeyCapturePayload) [local] replaces the keys a scenario takes from Normal, Visual and Insert parsing
 	EventKeyCaptureRequest
 	// EventInputPressed (InputPayload) [bus] signals a captured key pressed from a roster slot, typed or clicked on its button

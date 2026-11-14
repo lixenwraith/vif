@@ -20,6 +20,7 @@ import (
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vif/internal/content"
 	"github.com/lixenwraith/vif/internal/fsm"
+	"github.com/lixenwraith/vif/internal/input"
 )
 
 // writeScenario lays down a two-file scenario under dir and returns its root.
@@ -454,6 +455,35 @@ func TestNavigationTakesTickCounts(t *testing.T) {
 			t.Errorf("%q: %v", c.table, err)
 		case !c.refused && (s.NavRefreshTicks != c.refresh || s.NavRebuildTicks != c.rebuild):
 			t.Errorf("%q: refresh %d, rebuild %d, want %d and %d", c.table, s.NavRefreshTicks, s.NavRebuildTicks, c.refresh, c.rebuild)
+		}
+	}
+}
+
+// TestAScenarioKeymapBindsPlayKeysAlone: [keymap] takes the normal, operator and
+// prefix_g sections, each key a play action or none. A system action, which could
+// take the quit or the menu from a player who joined, and any other section are refused.
+func TestAScenarioKeymapBindsPlayKeysAlone(t *testing.T) {
+	appends, _ := input.ActionEntry("mode_append")
+	for _, c := range []struct {
+		table   string
+		refused bool
+	}{
+		{"[keymap.normal]\na = \"mode_append\"\np = \"none\"\n", false},
+		{"[keymap.normal]\nj = \"quit\"\n", true},
+		{"[keymap.overlay]\nq = \"overlay_activate\"\n", true},
+		{"[keymap.normal]\na = \"no_such_action\"\n", true},
+		{"keymap = 1\n", true},
+	} {
+		entry := c.table + "[regions.main]\nfile = \"main.toml\"\n"
+		fsys := fstest.MapFS{"scenario.toml": {Data: []byte(entry)}, "main.toml": {Data: []byte(scenarioRegion)}}
+		s, err := ReadScenario("keys", fsys, "scenario.toml")
+		switch {
+		case c.refused && err == nil:
+			t.Errorf("%q was taken", c.table)
+		case !c.refused && err != nil:
+			t.Errorf("%q: %v", c.table, err)
+		case !c.refused && (s.Keys.NormalRunes['a'] != appends || s.Keys.NormalRunes['p'].Behavior != input.BehaviorNone):
+			t.Errorf("%q read as %+v", c.table, s.Keys.NormalRunes)
 		}
 	}
 }

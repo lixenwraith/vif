@@ -357,8 +357,10 @@ behavior programs among its species, when the script binds. Local and Bus events
 default to the player domain, Shared events to shared; Stamped events require
 `domain = "player"` or `"shared"`.
 Unknown top-level and action fields are errors. `run` and `tick` default to zero;
-`count` applies only to an intent, and the four char-wait intents and `press`
-additionally require a one-rune `char`. Geometry must either omit both dimensions or set both.
+`count` applies only to an intent, and the five char-wait intents (`f F t T` and
+`r`'s) and `press` additionally require a one-rune `char`; a parser prefix, such as
+an operator, and `repeat_change`, with no change of the parser's to repeat, are
+refused. Geometry must either omit both dimensions or set both.
 
 Pacing defaults to a property of the run rather than of the flags
 (`scriptPacing`, `internal/app/script.go`). A solo script executes flat out; a run
