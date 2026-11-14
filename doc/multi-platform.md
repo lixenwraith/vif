@@ -522,7 +522,9 @@ keyboard would, to cycle the channels.
 Android follows that path in `android/` ([its README](../android/README.md)), a
 module of its own bound by `gomobile bind`. `game.Start` builds a `Config` and a
 `Host` of the view and an `AudioTrack` at 44.1 kHz 16-bit stereo, and hands both to
-`app.Run`. The app opens on a start screen (`StartScreen`) over the view, in
+`app.Run`. Go reads Android's local time as UTC, so the view names the device's
+zone first (`game.Zone`), which the first start makes `time.Local`. The app opens
+on a start screen (`StartScreen`) over the view, in
 lixen.com's dark theme as every host's is: the logo, "Tap to start" under it on the
 site's blue button and a `?` in a ring of that blue that opens the touch controls.
 Android shows its own splash screen while the app loads, an icon at most 192 dp
@@ -575,22 +577,25 @@ foot, which a press for the menu's hold shares, its finger wobbling there as it 
 raise or drop the system keyboard through the input method manager, whose state is read
 from the window's insets rather than a flag of the app's; the
 keyboard covers the view instead of resizing it, so a `crop_on_resize` map keeps
-its cells; the run hears of the keyboard (`Covered`, which the status bar reads as
-`StatusCovered`) and keeps its input to the left half of the bar's bottom row,
-which the view draws again above the keyboard at twice its size from the same
-picture. Back, being Escape, opens the menu from Normal mode, and Home sends the
-app to the background. A tap held on the status bar opens the configuration menu, the hold
+its cells; the run hears the pixels it covers (`game.Keyboard`) and keeps its input
+to the left half of the bar's bottom row, which the view draws again above the
+keyboard at twice its size from the same picture, and the console above both
+(`Covered`, the rows they hide, which the status bar reads as `StatusCovered`).
+Back, being Escape, opens the menu from Normal mode, and Home sends the app to the
+background. A tap held on the status bar opens the configuration menu, the hold
 every host shares (`MenuHoldDuration`); the app draws it with its own widgets from
 the run's snapshot, a `Dialog` the view's `menuPresentation` hands each change to and
 whose taps come back as ops on a node's id ([Native menu](native-menu.md), [Menu:
 Android and the browser](config-menu.md#android-and-the-browser)), while the `tui`
 overlay stays undrawn under it.
 With mouse input off a press on the bar's rows still reaches the run, and an open
-`tui` overlay (help, telemetry) takes the pointer: a tap picks a card or moves the
-scrollbar's thumb, a finger drags the thumb, and a tap outside the window is Escape. The page does each of these
-on a touch screen, timed alike: the triple
-tap (or the key strip's button), a keyboard measured from `visualViewport`, the
-bottom row drawn again above it, and the hold. Every page opens on the same start
+`tui` overlay (help, telemetry, the console) takes the pointer: a tap picks a card
+or moves the scrollbar's thumb, a finger drags the thumb, and a tap outside the window
+is Escape. A soft keyboard shows no backtick on its first page, so a touch screen
+opens the console from the menu's Console row or `:console`. The page does each of
+these on a touch screen, timed alike: the triple tap (or the key strip's button), a
+keyboard measured from `visualViewport`, the bottom row drawn again above it, the
+rows they hide sent to the run, and the hold. Every page opens on the same start
 screen in the same words, the key strip listed beside Back; a
 desktop's asks for a click or a key, and its `?` lists the mouse and the first keys.
 The Worker holds the compiled program until that press, made at any point of the

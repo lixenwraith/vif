@@ -37,6 +37,10 @@ Branches.
   `compileSdk` names: `16-robolectric-13921718` for `android-36.1`) over
   `android/app/src/main/java` and stubs for `R` and the bound `Game`, `Speaker` and
   `Listener`; the jar's `UnsupportedAppUsage` warnings are noise.
+- Go on Android reads local time as UTC whatever the device's zone (`time` sets
+  `Local` to UTC there), so a wall-clock time the player reads, as the console's
+  stamps, takes the zone the app names (`game.Zone`), which the first `game.Start`
+  makes `time.Local`.
 - The emulator boots without KVM (`-no-window -gpu swiftshader_indirect -accel
   off`, about 14 minutes on 4 vCPUs) but runs some 30x slower than a phone, so
   Android's 5 s input limit swallows taps behind "isn't responding" dialogs: a
@@ -657,7 +661,10 @@ Branches.
   context is the phone's page, where a held `mouse.down` on the canvas's last
   rows is the finger that opens the menu; `page.keyboard.press('Control+g')` is
   the desktop's. `pkg/browser`'s tests run under node with
-  `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"`.
+  `GOOS=js GOARCH=wasm go test -exec="$(go env GOROOT)/lib/wasm/go_js_wasm_exec"`;
+  in a container whose environment is large, Go's `wasm_exec.js` refuses it ("total
+  length of command line and environment variables exceeds limit"): run it under
+  `env -i` with `HOME`, `PATH`, `GOCACHE` and `GOMODCACHE`.
 - An init script wrapping `window.Worker` hears the worker's `atlas` and `frame`
   messages before the page does: the atlas's runes, read as `runesOf` reads them,
   and each frame's cell slots, kept as `applyFrame` keeps them, give the screen's
