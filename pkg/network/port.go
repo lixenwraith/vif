@@ -109,8 +109,15 @@ func (p *SocketPort) Close() error {
 
 // Serve opens this port to joiners on ln, which it then owns: a session that held
 // only this process's own streams takes dials from here, and a participant that
-// already listens takes them at a second door.
-func (p *SocketPort) Serve(ln net.Listener) error { return p.transport.serve(ln, nil) }
+// already listens takes them at a second door. A door opened where nobody could dial
+// starts the link's history over, as nobody has dialled it: it waits for its first
+// joiner as a fresh host's does, whatever streams the port held before.
+func (p *SocketPort) Serve(ln net.Listener) error {
+	if p.ConnectionState() == StateIdle {
+		p.ever.Store(false)
+	}
+	return p.transport.serve(ln, nil)
+}
 
 // ListensOn reports whether the port this participant bound for its peers, which
 // takes joins too, answers at addr already: a TCP address on that port with no host,

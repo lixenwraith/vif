@@ -2397,6 +2397,44 @@ func TestAForkGoesOnInASessionOfItsOwn(t *testing.T) {
 	}
 }
 
+// TestADoorOpenedWhereNobodyCouldDialWaitsForItsFirstGuest: a session of a run's own
+// bots reads no link once its last bot has gone, and the door :host opens there waits
+// for its first guest as a fresh host's does, rather than reading as a link that went
+// down: nobody has dialled it.
+func TestADoorOpenedWhereNobodyCouldDialWaitsForItsFirstGuest(t *testing.T) {
+	// Not parallel: real sockets against wall-clock deadlines.
+	a := mustHeadless(t, 0x3037, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	state := func() (s string) {
+		a.World().RunSafe(func() { s = a.world.Resources.Status.Strings.Get("network.state").Load() })
+		return s
+	}
+	injectExCommand(t, a, "bot add")
+	stopTicking := tickInBackground(a)
+	ctl := a.ctx.SessionCtl
+	// A seat learns its slot from its own gate, which can finish after the holder
+	// has applied its arrival; dropped before, :bot drop would dismiss its cursor.
+	waitUntil(t, func() bool {
+		return slices.ContainsFunc(ctl.Bots(), func(b engine.BotSeat) bool { return !b.Joining && b.Slot == 1 })
+	}, "the bot on slot 1 to learn its slot")
+	waitUntil(t, func() bool { return state() == "connected" }, "the bot's link")
+	var err error
+	a.World().RunSafe(func() { err = ctl.DropBot(1) })
+	if err != nil {
+		t.Fatalf("dropping the bot on slot 1: %v", err)
+	}
+	waitUntil(t, func() bool { return state() == "idle" }, "a session nobody can dial to read no link")
+	stopTicking()
+	if err := a.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("host: %v", err)
+	}
+	a.Tick(1)
+	if s := state(); s != "waiting" {
+		t.Fatalf("the door :host opened where the run's bot had been reads %q; want waiting, as a fresh host's", s)
+	}
+}
+
 // TestAForksWraithsWaitTheirTime: a fork of a session that outlives its host keeps
 // the host's place, whose wait runs with no door as any other's: with no door it goes
 // at its time, in its replay as in the run; :host starts every wait over, in its
