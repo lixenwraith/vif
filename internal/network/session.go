@@ -635,6 +635,11 @@ func readRoute(r io.Reader, kind link.MessageType) (string, error) {
 // ErrUnwatched refuses a watch dial at a door whose session carries no feed.
 var ErrUnwatched = &Refusal{Code: RefusalUnknown, Reason: "this door shows no session to watch"}
 
+// ErrUnstarted refuses a watch dial at a session still in its lobby, which holds
+// players alone. It is no refusal that passes in moments: a dial retrying one
+// would spend its address's budget on a game with nothing to show yet.
+var ErrUnstarted = &Refusal{Code: RefusalUnstarted, Reason: "session has not started"}
+
 // WatchAcceptor returns the handshake a door runs for a dial that only watches: the
 // route, the budget and the admission a join passes, then the session as it stands
 // and its scenario if asked. Its seat is answered by MsgStart, after which the
@@ -1033,6 +1038,7 @@ const (
 	RefusalCredential                        // what the dial showed was refused: a bad proof, pass, ticket or passphrase
 	RefusalDropped                           // the authority dropped this participant, and its key or account stays out
 	RefusalAudience                          // the session feeds every viewer it takes
+	RefusalUnstarted                         // the game has not started, and its lobby holds players alone
 )
 
 // Retry is what a refused dialer can do about it.
@@ -1064,7 +1070,8 @@ var refusals = [...]struct {
 	RefusalSignIn:     {RetryLater, "sign in, or ask the host for the passphrase, then retry"},
 	RefusalCredential: {RetryNever, ""},
 	RefusalDropped:    {RetryNever, ""},
-	RefusalAudience:   {RetryLater, "retry when a viewer leaves"},
+	RefusalAudience:   {RetryLater, "retry when a spectator leaves"},
+	RefusalUnstarted:  {RetryLater, "retry once it has"},
 }
 
 // Refusal is a join turned away. Code is the kind and Reason what the player

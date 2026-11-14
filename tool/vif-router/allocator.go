@@ -27,6 +27,7 @@ import (
 	"github.com/lixenwraith/vif/internal/network"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/paths"
+	"github.com/lixenwraith/vif/internal/probe"
 )
 
 var (
@@ -664,6 +665,10 @@ func (a *allocator) routeSession(ctx context.Context, id string, kind network.Ad
 		// tells the caller which of the two it is.
 		if !state.Ready && kind != network.AdmitWatch {
 			return "", sessionRefusing(state.Phase)
+		}
+		// A lobby holds players alone, and its pod would say so to each dial.
+		if kind == network.AdmitWatch && state.Tick == 0 && state.Clock == probe.ClockStopped {
+			return "", network.ErrUnstarted
 		}
 		return item.Status.PodIP, nil
 	}

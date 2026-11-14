@@ -69,6 +69,8 @@ func (m *Membership) watchParticipant(network.Admission) (network.SessionOffer, 
 	case err != nil:
 	case !hosting:
 		err = errNotHosting
+	case !m.lateJoins.Load() && !m.lobbyClosing.Load():
+		err = network.ErrUnstarted
 	case !m.lateJoins.Load():
 		err = errSessionStarting
 	case ceiling == 0:
