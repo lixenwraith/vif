@@ -578,7 +578,9 @@ saved and off by default) or pinned `-listen`. Both are off unless asked because
 migrating session shares the address of each guest that may take it over with the
 other players, and a session whose host drops would otherwise expose a guest's
 address on the open internet for a game its player never offered to host. With no
-guest willing, a migrate session ends as a host one does. The policy is the
+guest willing, nobody takes a migrate session over: each survivor redials, finds no
+candidate and forks, as under `host`, but it reads `Migrating` meanwhile and its
+fork keeps every other player's place (§5.5). The policy is the
 session's from its first offer (`SessionOffer.FixedAuthority`, `Authority.Fixed`):
 a successor keeps offering it, a scenario change reopens the door under it
 (`RestartAsk.Migrate`), and `:session` names it. Under `host` the address *is* the
@@ -833,7 +835,7 @@ link (§5.2), and the authority's own two, which it crosses once
   rebuilds a Wraith as a Wraith, its wait going on from the last game's, so no run
   of resets keeps one, and as the new game's cursor, which takes nothing of the last
   (Coming back). The wait is the same in every session, one with no door (§5.0)
-  included, where nobody comes back before `:host` opens one.
+  included, where no person comes back before `:host` opens one.
 - **Yield.** A dial a full session cannot otherwise admit has the participant away
   longest dismissed for it (`Membership.yieldLocked`) and is refused `RefusalYielding`,
   which seats and first joins retry in a moment; the retry takes the freed place.
@@ -1274,7 +1276,7 @@ worse fact hides a lesser one rather than sitting beside it: `Migrating [n]`,
 `<players>P:<local hex slot> <round trip>` with at most one qualifier — `slow!`,
 `desync <ticks>`, `loss <pct>%` or `slow` — and a
 background that is green, amber or red by the worst of the round trip and that
-qualifier. A run with no link shows none, nor does one hosting at no door with
+qualifier. A run in no session shows none, nor does one hosting at no door with
 nobody linked, which nobody can reach (`link.StateIdle`); a door `:host` opens there
 reads `Net: wait` as a fresh host's does, whoever the session held before.
 `Net: down` leaves after `StatusNetworkDownDuration` (10 s); `Host lost` and

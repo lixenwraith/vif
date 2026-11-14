@@ -652,10 +652,10 @@ qualifier shows, worst first:
 - `loss p%`: probes went unanswered often enough for the link to be the cause;
 - `slow`: the cadence backed off and prediction is carrying more.
 
-Three states replace the badge, in this order: `Host lost` (this guest lost its
-link to the authority or continues as a local fork, until a handoff is adopted),
-`Migrating [k]` (a succession is open in a session that migrates or a handoff was
-just adopted, k passes down the succession list so far), and `Net: down` or `Net:
+Three states replace the badge, in this order: `Migrating [k]` (a succession is
+open in a session that migrates or a handoff was just adopted, k passes down the
+succession list so far), `Host lost` (this guest lost its link to the authority or
+continues as a local fork, until a handoff is adopted), and `Net: down` or `Net:
 wait` while the link is down or still connecting. The measurements behind each are
 in the status snapshot and in `:session`.
 

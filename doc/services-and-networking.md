@@ -183,7 +183,8 @@ is tcp, which participants link to each other over; any other scheme is refused
 takes the roster, then the world it names, as a chunked `MsgStateSnapshot` from
 the mid-run gate. Only `-serve`, or a script or bot run's `-host`, holds tick zero
 in a lobby until its guests are ready. After a
-connected peer leaves, the remote cursor is removed and the survivor continues; the
+connected peer leaves, its cursor waits as a Wraith
+([Multiplayer §5.4](multi-player.md#54-wraiths)) and the survivor continues; the
 listener stays active and the same participant may dial again, which is the
 reconnect path and is not a separate mechanism.
 
@@ -892,8 +893,8 @@ cost, how many artifacts the term gate ignored or refused, how many participants
 it evicted, and the run-level facts: `network.fork`, set when this instance is a
 local continuation rather than part of a session; `network.host_lost`, raised when
 a guest loses its link to the authority or a succession ends as a fork, which draws
-`Host lost` while no succession is open; both clear once a handoff is adopted or the
-run opens a session of its own; and
+`Host lost` unless `Migrating` stands over it; both clear once a handoff is adopted or
+the run opens a session of its own; and
 `network.migrating`, which draws `Migrating` over it while a succession is open in a
 session that migrates and for `NetworkMigrationBadgeTicks` after a handoff is adopted — carrying
 `network.rejoin_attempts` beside it while a survivor with no link is walking the

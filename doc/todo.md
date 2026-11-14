@@ -1600,6 +1600,22 @@ so a passphrase `:host` sets on such a session later spares no redial its phrase
 What would close it: a pass names the first key the session's own terms hold, or a
 reopened session keeps its own term's key first.
 
+### Publish a new session's link once its port runs
+
+- Priority: P3
+- Affected files: `internal/app/internal/membership/host.go` (`openSessionLocked`),
+  `internal/system/network.go` (`publishConnectionTelemetry`)
+- Guide: [Multi-player §7](multi-player.md#7-diagnostics-and-operations)
+
+`openSessionLocked` activates the session, which publishes `network.state`, before
+it starts the port, so a port not yet running reads `down` from inside the command
+until the next tick. The frame loop draws between ticks, so `:host` on a solo run,
+`:bot add`, `:leave` and a fork can show `Net: down` until that tick, and after
+`:host` the badge's 500 ms hold (`StatusNetworkHoldDuration`) keeps it up before
+`Net: wait`; where the next tick reads `idle` the badge goes at once. Read in review,
+not seen on a screen. What would close it: publish again once the port runs, or
+start it before the session activates.
+
 ### Say what a run alone after a loss is
 
 - Priority: P3
@@ -1625,9 +1641,12 @@ still off:
   host's Wraith wait forks on thaw saying its host connection was lost, though the
   host never went quiet.
 - A replay's badge reads the journaled session latch (`publishConnectionTelemetry`),
-  which says nothing of a door, so where the run read `idle` and showed no badge the
-  replay reads `down` and shows `Net: down` for 10 s. The latch would carry the door
-  as it carries `Peers`, for presentation only, at the cost of a journal field.
+  which says only whether a peer is linked, so a replay never reads `idle` or
+  `waiting`: where the run showed no badge (`idle`) or `Net: wait`, at a fresh door or
+  at one opened where the run's bots had been, the replay shows `Net: down` for 10 s,
+  then nothing. The latch would carry what the port reads (`idle`, `waiting` or
+  `down`) as it carries `Peers`, for presentation only, at the cost of a journal
+  field.
 
 ## Combat
 
