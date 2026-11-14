@@ -3,6 +3,7 @@ package renderer
 import (
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -307,7 +308,8 @@ func TestConsoleStatusItemsReadOnTheirBackgrounds(t *testing.T) {
 
 // TestStatusBarDownBadgeLeavesAfterItsDuration: a link that went down shows for
 // StatusNetworkDownDuration and then leaves, a loss read once being noise beside a
-// solo game; a link that comes back and goes down again starts its time over.
+// solo game; a link that comes back and goes down again starts its time over, and
+// a lost host or a succession over a link down for good stays while it lasts.
 func TestStatusBarDownBadgeLeavesAfterItsDuration(t *testing.T) {
 	r, clock := newStatusBar(t)
 	r.statNet.Store("down")
@@ -329,5 +331,13 @@ func TestStatusBarDownBadgeLeavesAfterItsDuration(t *testing.T) {
 	clock.Step(parameter.StatusNetworkHoldDuration)
 	if item, ok := r.networkItem(); !ok || item.text != " Net: down " {
 		t.Fatalf("a link down again shows %q %v", item.text, ok)
+	}
+	for _, cell := range []*atomic.Bool{r.statHostLost, r.statMigrating} {
+		cell.Store(true)
+		clock.Step(parameter.StatusNetworkDownDuration + parameter.StatusNetworkHoldDuration)
+		if item, ok := r.networkItem(); !ok || item.text == " Net: down " {
+			t.Fatalf("a loss over a link down for good shows %q %v", item.text, ok)
+		}
+		cell.Store(false)
 	}
 }
