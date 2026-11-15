@@ -384,7 +384,10 @@ pod verifies it with the public key its Job's arguments carry (`-admit ticket
 (`SpentTickets`) and checks the dialer's proof over the key the ticket names. A
 player's host may verify the site's tickets too, from `GET /vif/api/keys`, for a
 session open to the site's players alone. A ticket admits once; the pass it is
-exchanged for admits every redial after.
+exchanged for admits every redial after. A dial that only watches is given none:
+the router answers it itself and dials the pod once for them all, under a ticket
+of kind `watch` it signs for a key of its own (subject `router:feed`), which a
+pod's watch door alone takes ([Fleet §9](kubernetes-fleet.md#9-the-session-routes)).
 
 An anonymous ticket's subject is the dial's address (`SubjectOf`), so the router
 names the player to the pod, and a pod run with `-admit ticket` refuses a new
@@ -690,9 +693,9 @@ Each in [the todo list](todo.md), with what it needs from here:
   (P2): the audit of what admission grants, now that every mechanism is in place.
 - [A passphrase prompt in the TUI and the launcher](todo.md#a-passphrase-prompt-in-the-tui-and-the-launcher)
   (P3): the refusal is the prompt today; the same form takes a sign-in.
-- [Watch a session as a spectator](todo.md#watch-a-session-as-a-spectator) (P2): a
-  second kind of admission, which a ticket's and a pass's kind already tells from a
-  player's.
+- [Watch a session as a spectator](todo.md#watch-a-session-as-a-spectator) (P2):
+  consent, and a budget for spectators behind one address. The `watch` kind is the
+  router's own ticket (§3.6); a spectator shows no sign-in and holds no pass.
 - [Offer lixen.com games on the start screen](todo.md#offer-lixencom-games-on-the-start-screen)
   (P1): builds on the API as it stands, with `:register` and `:login` on Android.
 - [Hear a participant again once its link reopens](todo.md#hear-a-participant-again-once-its-link-reopens)

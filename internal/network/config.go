@@ -28,6 +28,11 @@ type Config struct {
 	// SCRAM exchange whose KDF runs here; empty shows none, and such a door refuses it.
 	Passphrase string
 
+	// Ticket is the admission ticket the dial shows a door that takes one, over the
+	// first of Keys: a router's own dial. A player's dial carries none; the router
+	// between adds it.
+	Ticket *Signed
+
 	// SignIn is the site's sign-in the dial shows a front door reached over TLS
 	// (AuthRequest.SignIn), which the router between reads and strips; over a plain
 	// stream it is kept back. Empty dials anonymously.

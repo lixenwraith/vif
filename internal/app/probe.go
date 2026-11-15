@@ -124,12 +124,12 @@ func (a *App) observeTick(tick uint64, now time.Time, running, paused bool) (boo
 		// Not started, or stopped on the way out. Neither is a fault: the lobby
 		// has not released tick zero yet, and a run that is shutting down is not
 		// one to restart.
-		return true, "stopped"
+		return true, probe.ClockStopped
 	case paused:
 		a.probeAt = now // a pause is not a stall; do not accumulate one under it
-		return true, "paused"
+		return true, probe.ClockPaused
 	case now.Sub(a.probeAt) > parameter.ProbeStallInterval:
-		return false, "stalled"
+		return false, probe.ClockStalled
 	}
-	return true, "running"
+	return true, probe.ClockRunning
 }
