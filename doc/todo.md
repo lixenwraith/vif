@@ -378,6 +378,20 @@ what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
 
+### Hold armada and the tutor to the shared-region rule
+
+- Priority: P2
+- Affected files: `internal/app/domain_test.go` (`scenarioTrees`),
+  `wad/scenario/base/tutor/scenario.toml`
+
+`TestFSMTriggersAreReplicated` reads the scenarios `scenarioTrees` lists, which
+leaves out `armada` and `tutor`. Listed, armada passes and the tutor fails: its
+lessons step on `EventDeleteRequest` and count `EventEnergyGlyphConsumed`, both
+local events, so in a session of its up to 16 players only the authority's
+player's keys would move them (D-20). What closes it: the tutor's lessons
+advance on what every instance sees, or the tutor seats one player, and both
+scenarios listed.
+
 ### Build the map and scenario editor
 
 - Priority: P2
