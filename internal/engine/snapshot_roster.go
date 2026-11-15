@@ -157,9 +157,9 @@ func dropOwned[T any](rows []StoreEntry[T], authored map[core.Entity]bool) []Sto
 
 // RebindCursorRoster rebuilds the roster from the installed cursor store in slot
 // order and restores this instance's control (the handshake identity in a session,
-// bar a Wraith or a cursor it supersedes, which nobody drives; the held assignment
-// outside one), input and view on its slot, and owner-authored state for cursors it
-// still authors; a joiner's new slot keeps the host's template. Caller MUST hold updateMutex.
+// bar a Wraith or a cursor it supersedes, which nobody drives; none on a viewer; the
+// held assignment outside one), input and view on its slot, and its cursors' owner-
+// authored state; a joiner's new slot keeps the host's template. Caller MUST hold updateMutex.
 func (w *World) RebindCursorRoster(prior LocalControl) {
 	roster := w.Resources.Player
 	slots := [parameter.MaxPlayers]core.Entity{}
@@ -179,6 +179,10 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 	// An install that brings a joiner its cursor fences off the arrival that would
 	// have bound it, so the identity binds input as it binds control.
 	local := prior.local
+	watching := w.watches.Load()
+	if watching {
+		local = parameter.NoPlayerSlot
+	}
 	roster.Clear()
 	for slot := range parameter.MaxPlayers {
 		e := slots[slot]
@@ -187,6 +191,8 @@ func (w *World) RebindCursorRoster(prior LocalControl) {
 		}
 		if c, ok := w.Components.Cursor.GetPtr(e); ok {
 			switch {
+			case watching:
+				c.Control = component.ControlRemote
 			case localID != 0:
 				c.Control = component.ControlRemote
 				switch {

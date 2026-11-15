@@ -77,6 +77,11 @@ type Config struct {
 	// loop.
 	AcceptSession func(net.Conn) (PeerID, error)
 
+	// AcceptWatch runs the handshake of a dial that only watches, at every door that
+	// takes joins, and on success owns the stream: it never becomes a peer. Nil
+	// leaves such a dial unanswered.
+	AcceptWatch func(net.Conn) error
+
 	// ListenAddress and AcceptPeer let a participant that is not the coordinator
 	// bind a port of its own, so the session can reach it after a handoff. Its port
 	// runs AcceptSession too, for a join, which the opening frame tells from a peer

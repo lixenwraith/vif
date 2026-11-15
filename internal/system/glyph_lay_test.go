@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vif/internal/core"
 	"github.com/lixenwraith/vif/internal/engine"
 	"github.com/lixenwraith/vif/internal/event"
+	"github.com/lixenwraith/vif/internal/parameter"
 )
 
 // oneBlock hands the spawner one block, then nothing
@@ -73,5 +74,31 @@ func TestAGlyphClearTakesARectangleOrTheMap(t *testing.T) {
 	glyphs.clear(&event.GlyphClearPayload{})
 	if n := w.Components.Glyph.CountEntities(); n != 1 || !w.Components.Glyph.HasEntity(member) {
 		t.Fatalf("after clearing the map, %d glyphs stand, want the gold member alone", n)
+	}
+}
+
+// A viewer's world is its session's Shared world alone: where a player's lays a
+// corpus line, takes the line a scenario lays and spawns a nugget, it holds none.
+func TestAViewersWorldLaysNoFieldOfItsOwn(t *testing.T) {
+	for _, watches := range []bool{false, true} {
+		w, _, _ := testCursorWorld(t)
+		if watches {
+			w.Watch()
+		}
+		w.Resources.Content = &engine.ContentResource{Provider: &oneBlock{lines: []string{"a corpus line"}}}
+		w.Resources.Time.DeltaTime = parameter.GameUpdateInterval
+		w.Resources.Time.GameTime = engine.SimEpoch.Add(2 * parameter.NuggetSpawnInterval)
+		glyphs, nuggets := ready(NewGlyphSystem(w)).(*GlyphSystem), ready(NewNuggetSystem(w)).(*NuggetSystem)
+
+		glyphs.HandleEvent(event.GameEvent{Type: event.EventGlyphLineRequest,
+			Payload: &event.GlyphLinePayload{Text: "a lesson", X: 2, Y: 10}})
+		scenario := w.Components.Glyph.CountEntities()
+		glyphs.Update()
+		nuggets.Update()
+		corpus, nugget := w.Components.Glyph.CountEntities()-scenario, w.Components.Nugget.CountEntities()
+		if watches && scenario+corpus+nugget != 0 || !watches && (scenario == 0 || corpus == 0 || nugget == 0) {
+			t.Fatalf("watching %t: the world holds %d glyphs of a scenario's line, %d of the corpus and %d nuggets",
+				watches, scenario, corpus, nugget)
+		}
 	}
 }

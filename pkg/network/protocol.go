@@ -41,17 +41,17 @@ type Traits struct {
 
 // Kinds is the session layer's table over the kind byte, which a link reads and
 // never writes: each kind's traits, and the kinds the link acts on itself. Ready
-// confirms a start gate on the link that carries it; PeerLink and Join are what a
-// dialer opens a stream with, which tell a door which handshake runs.
+// confirms a start gate on the link that carries it; PeerLink, Join and Watch are
+// what a dialer opens a stream with, which tell a door which handshake runs.
 type Kinds struct {
-	traits                [256]Traits
-	Ready, PeerLink, Join MessageType
+	traits                       [256]Traits
+	Ready, PeerLink, Join, Watch MessageType
 }
 
 // NewKinds tabulates traits; a kind not named counts as control, travels alone and
 // arrives plain.
-func NewKinds(traits map[MessageType]Traits, ready, peerLink, join MessageType) Kinds {
-	k := Kinds{Ready: ready, PeerLink: peerLink, Join: join}
+func NewKinds(traits map[MessageType]Traits, ready, peerLink, join, watch MessageType) Kinds {
+	k := Kinds{Ready: ready, PeerLink: peerLink, Join: join, Watch: watch}
 	for i := range k.traits {
 		k.traits[i].Kind = KindControl
 	}

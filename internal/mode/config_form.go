@@ -83,6 +83,18 @@ var configForms = map[string]configFormSpec{
 			return nil
 		},
 	},
+	"spectate": {
+		label: "Spectate a session", description: "Type a session address or link, as Join takes one. This run only watches the session: it takes no place there, and its own game, bots and journal end. A failed connection keeps this game intact.", command: "spectate",
+		fields:      []configFormField{{"Target", "", "", inputURI}},
+		unavailable: engine.SessionController.JoinError,
+		submit: func(ctx *engine.GameContext, f *tui.FormState) error {
+			if err := ctx.SessionCtl.Spectate(strings.TrimSpace(f.Value(0)), 0); err != nil {
+				return err
+			}
+			ctx.MacroClearFlag.Store(true)
+			return nil
+		},
+	},
 	"scenario": {
 		label: "Other scenario", description: "Type a scenario the list does not hold, by name or path as the launch flag -s takes it: a scenario.toml or a scenario directory. In a session only the host can, and its participants rejoin it.", command: "new",
 		fields: []configFormField{{"Scenario", "", "", inputText}},
@@ -182,7 +194,7 @@ func multiplayerConfigOptions(ctx *engine.GameContext) []configNode {
 		session = append(session, configNode{kind: kindInfo, key: "status", label: "Current session", description: ctx.SessionCtl.SessionSummary(), read: startupValue})
 	}
 	session = append(session,
-		formRow("host"), formRow("join"), formRow("request"),
+		formRow("host"), formRow("join"), formRow("spectate"), formRow("request"),
 		configNode{kind: kindAction, key: "leave", label: "Leave the session", command: "leave", read: enterValue, confirm: true,
 			description: "Play on in a session of your own from where this one stands; your bots come along, and the others play on without you.",
 			disabled:    sessionRefusal(engine.SessionController.LeaveError)},
@@ -276,6 +288,8 @@ func botConfigOptions(ctx *engine.GameContext) []configNode {
 	return options
 }
 
+// participantConfigOptions lists the session's other participants: each a row its
+// host drops it from, or on a spectator's run the row that follows it.
 func participantConfigOptions(ctx *engine.GameContext) []configNode {
 	var out []configNode
 	for _, p := range ctx.SessionCtl.Participants() {
@@ -288,6 +302,22 @@ func participantConfigOptions(ctx *engine.GameContext) []configNode {
 		}
 		if p.Away {
 			kind += ", away"
+		}
+		if ctx.World.Watches() {
+			out = append(out, configNode{kind: kindAction, key: fmt.Sprintf("follow/%d", p.Slot),
+				label: fmt.Sprintf("Follow %X: %s", p.Slot, kind), command: "spectate",
+				description: "Look from this player's cursor, as :spectate <slot> does; left and right in the game step through the players.",
+				read: func(ctx *engine.GameContext) string {
+					if ctx.World.Resources.Player.ViewSlot() == p.Slot {
+						return "following"
+					}
+					return "Enter"
+				},
+				activate: func(r *Router) {
+					reportSpectated(r.ctx, p.Slot, 0)
+					r.closeOverlay()
+				}})
+			continue
 		}
 		out = append(out, configNode{kind: kindAction, key: fmt.Sprintf("player/%d", p.Entity),
 			label: fmt.Sprintf("Drop %X: %s", p.Slot, kind), description: description, confirm: true,

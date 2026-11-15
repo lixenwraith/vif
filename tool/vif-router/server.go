@@ -36,13 +36,14 @@ const (
 type sessionAllocator interface {
 	createSession(context.Context, sessionRequest) (session, error)
 	listSessions(context.Context) ([]session, error)
-	routeSession(context.Context, string) (string, error)
+	routeSession(context.Context, string, network.AdmissionKind) (string, error)
 	limits() fleetLimits
 	ready(context.Context) error
 }
 
 type apiServer struct {
 	tunnels   *network.TunnelHub // the doors runs publish, counted in the listing's limits; nil publishes none
+	audiences *audiences         // the sessions being watched, counted in the listing; nil shows none
 	allocator sessionAllocator
 	log       *slog.Logger
 	logProxy  *httputil.ReverseProxy
@@ -121,6 +122,15 @@ func (s *apiServer) routeDoors(tunnels *network.TunnelHub) {
 	s.tunnels = tunnels
 	if s.ws != nil {
 		s.ws.route.tunnels = tunnels
+	}
+}
+
+// showSessions has the browser route serve a dial that only watches from the
+// audiences the front door serves; nil shows no session.
+func (s *apiServer) showSessions(watched *audiences) {
+	s.audiences = watched
+	if s.ws != nil {
+		s.ws.route.audiences = watched
 	}
 }
 
@@ -275,6 +285,9 @@ func (s *apiServer) readFleet(read *fleetRead) {
 	read.limits = s.allocator.limits()
 	if s.tunnels != nil {
 		read.limits.Doors, read.limits.DoorsMax = s.tunnels.Count(), s.tunnels.Max()
+	}
+	for i := range read.sessions {
+		read.sessions[i].Spectators = s.audiences.watching(read.sessions[i].ID)
 	}
 	l := &s.list
 	l.mu.Lock()

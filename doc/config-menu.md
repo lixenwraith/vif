@@ -130,6 +130,15 @@ defaults. Joining replaces the current solo game only after admission succeeds.
 An active session, a pending join, or a driven run without a restart loop
 disables it.
 
+**Spectate a session** takes what Join takes and only watches: the run takes no
+place in the session, plays nothing and is not named to its players, and its own
+game, bots and journal end once the session answers; a failed dial keeps this
+game. While spectating, the rows under **Players** read **Follow &lt;slot&gt;:
+player|bot** and look from that player's cursor, as `:spectate <slot>`, the left
+and right keys and a press on a cursor do; Leave the session starts a local game.
+A host feeds `-spectators` of them at once (8 unless set) and `:session` counts
+them. See [Multiplayer §5.8](multi-player.md#58-watching-a-session).
+
 **Request a session** asks a vif-router site for a session and joins it: **Site**
 (default `https://lixen.com`), **Players** (total slots including you; `0` the
 server default) and **Scenario** (the server's name; blank its default, local files
