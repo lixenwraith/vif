@@ -453,17 +453,15 @@ func TestAGuestStampsWithTheAgeItsEpochsCommitAt(t *testing.T) {
 	}
 }
 
-// TestAnAuthorityWithNoPeerStillDrivesItsLead: a host alone adopts its one tick once
-// the default has aged out of the window, and a guest alone, with no path to read,
-// keeps the lead it has.
-func TestAnAuthorityWithNoPeerStillDrivesItsLead(t *testing.T) {
+// TestAnAuthorityStampsItsOneTickFromItsFirstReading: nothing commits the
+// authority's crossings late, so it holds no reading: alone, with a peer, or on
+// taking the term with a guest's readings in its window, it pushes its one tick
+// at once. A guest alone, with no path to read, keeps the lead it has.
+func TestAnAuthorityStampsItsOneTickFromItsFirstReading(t *testing.T) {
 	t.Parallel()
-	alone := &linkedPort{}
-	pushed := func(local uint32) (leads []uint64) {
-		s := sessionSystem(t, local, 100, alone)
-		for range parameter.NetworkBarrierRenegotiateTicks {
-			s.driveOwnLead(alone)
-		}
+	alone, linked := &linkedPort{}, &linkedPort{peers: []uint32{2}}
+	pushed := func(s *NetworkSystem, port *linkedPort) (leads []uint64) {
+		s.driveOwnLead(port)
 		for _, ev := range s.world.Resources.Event.Queue.Consume() {
 			if p, ok := ev.Payload.(*event.PlayoutLeadPayload); ok {
 				leads = append(leads, p.Ticks)
@@ -471,10 +469,20 @@ func TestAnAuthorityWithNoPeerStillDrivesItsLead(t *testing.T) {
 		}
 		return leads
 	}
-	if got := pushed(1); !slices.Equal(got, []uint64{parameter.NetworkBarrierMinDelayTicks}) {
-		t.Fatalf("an authority alone for a window pushed the leads %v, want its one tick once", got)
+	one := []uint64{parameter.NetworkBarrierMinDelayTicks}
+	for _, port := range []*linkedPort{alone, linked} {
+		if got := pushed(sessionSystem(t, 1, 100, port), port); !slices.Equal(got, one) {
+			t.Fatalf("an authority with %d peers pushed the leads %v at its first reading, want %v", port.PeerCount(), got, one)
+		}
 	}
-	if got := pushed(3); len(got) != 0 {
+	successor := sessionSystem(t, 3, 100, linked)
+	successor.leadOf(9)
+	successor.world.Resources.Network.BarrierDelayTicks = 9
+	successor.world.Resources.Network.Authority.Store(3)
+	if got := pushed(successor, linked); !slices.Equal(got, one) {
+		t.Fatalf("a guest taking the term with a 9 in its window pushed the leads %v, want %v", got, one)
+	}
+	if got := pushed(sessionSystem(t, 3, 100, alone), alone); len(got) != 0 {
 		t.Fatalf("a guest alone pushed the leads %v, want none", got)
 	}
 }
