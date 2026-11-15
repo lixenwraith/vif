@@ -1,6 +1,7 @@
 package input
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/terminal"
@@ -183,5 +184,87 @@ func TestDotCompletesTheLastChangeAgain(t *testing.T) {
 	want := Intent{Type: IntentSpecial, Special: SpecialReplaceChar, Char: 'z', Count: 2, Command: "."}
 	if got := keys("."); got == nil || *got != want {
 		t.Fatalf("'.' after 2rz made %+v, want %+v", got, want)
+	}
+}
+
+// TestDotTypesWhatInsertTypedAfterItsChange: a change that enters Insert keeps what
+// is typed there until the mode ends, and '.' owes it after the change, then the
+// return to Normal, each time; text typed after i makes it a change, and a text
+// past the bound is play and no part of one. A change entering no Insert owes none.
+func TestDotTypesWhatInsertTypedAfterItsChange(t *testing.T) {
+	m := NewMachine()
+	enters := true // whether the router enters the Insert a change asks for
+	keys := func(s string) (out string) {
+		for _, r := range s {
+			ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r}
+			if r == '\x1b' {
+				ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape}
+			}
+			for in := m.Process(ev); in != nil; in = m.Next() {
+				switch {
+				case in.Type == IntentTextChar:
+					out += string(in.Char)
+				case in.Type == IntentEscape || in.Type == IntentModeSwitch && in.ModeTarget == ModeTargetNormal:
+					out += "<"
+					m.SetMode(ModeNormal)
+				case in.ModeTarget == ModeTargetInsert && enters:
+					out += ">"
+					m.SetMode(ModeInsert)
+				default:
+					out += "-"
+				}
+			}
+		}
+		return out
+	}
+	for _, c := range []struct {
+		keys, want string
+		enters     bool
+	}{
+		{"cwab\x1b", ">ab<", true},
+		{".", ">ab<", true},
+		{"2.", ">ab<", true},
+		{".", "-", false},
+		{".", ">ab<", true},
+		{"ix\x1b.", ">x<>x<", true},
+		{"i\x1b.", "><>x<", true},
+		{"cw" + strings.Repeat("z", insertTextMax+1) + "\x1b.", ">" + strings.Repeat("z", insertTextMax+1) + "<><", true},
+	} {
+		enters = c.enters
+		if got := keys(c.keys); got != c.want {
+			t.Fatalf("%q routed %q, want %q", c.keys, got, c.want)
+		}
+	}
+}
+
+// TestAnOperatorInVisualTakesTheBoundsAtOnce: in Normal an operator waits for its
+// motion, and y doubled yanks its row; in Visual d, c and y complete at once over
+// the ping bounds, c naming Insert. A yank is no change for '.' to repeat.
+func TestAnOperatorInVisualTakesTheBoundsAtOnce(t *testing.T) {
+	m := NewMachine()
+	key := func(r rune) *Intent {
+		return m.Process(terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: r})
+	}
+	if in := key('y'); in != nil {
+		t.Fatalf("y in Normal made %+v, want it to wait for a motion", in)
+	}
+	if in := key('y'); in == nil || in.Type != IntentOperatorLine || in.Operator != OperatorYank {
+		t.Fatalf("yy made %+v, want a yank of the row", in)
+	}
+	if in := key('.'); in != nil {
+		t.Fatalf("'.' after a yank made %+v, want nothing to repeat", in)
+	}
+	m.SetMode(ModeVisual)
+	for _, c := range []struct {
+		key  rune
+		want Intent
+	}{
+		{'d', Intent{Type: IntentOperatorBounds, Operator: OperatorDelete, Count: 1, Command: "d"}},
+		{'c', Intent{Type: IntentOperatorBounds, Operator: OperatorDelete, ModeTarget: ModeTargetInsert, Count: 1, Command: "c"}},
+		{'y', Intent{Type: IntentOperatorBounds, Operator: OperatorYank, Count: 1, Command: "y"}},
+	} {
+		if in := key(c.key); in == nil || *in != c.want {
+			t.Fatalf("%q in Visual made %+v, want %+v", c.key, in, c.want)
+		}
 	}
 }

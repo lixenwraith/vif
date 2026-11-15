@@ -25,13 +25,14 @@ func TestSearchBackspaceDeletesARune(t *testing.T) {
 
 // TestStarAndHashFindTheWordAtTheCursorWhole: * and # search for the word under the
 // cursor, passing over a match inside a longer word, and # from the word's start, so
-// it leaves the word it is in; n keeps the way the search went and N turns it.
+// it leaves the word it is in; n keeps the way the search went and N turns it, and
+// a count goes that many matches on, round the map as often as it takes.
 func TestStarAndHashFindTheWordAtTheCursorWhole(t *testing.T) {
 	ctx, keys := lineWorld(t, "ab xab ab abc ab", 0)
 	for _, c := range []struct {
 		keys string
 		x    int
-	}{{"*", 7}, {"n", 14}, {"n", 0}, {"#", 14}, {"n", 7}, {"N", 14}, {"l#", 7}} {
+	}{{"*", 7}, {"n", 14}, {"n", 0}, {"#", 14}, {"n", 7}, {"N", 14}, {"l#", 7}, {"2n", 14}, {"2*", 7}, {"9998n", 0}} {
 		keys(c.keys)
 		if pos, _ := ctx.World.LocalCursor(); pos.X != c.x {
 			t.Fatalf("%q left the cursor at %d, want %d", c.keys, pos.X, c.x)

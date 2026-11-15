@@ -2,7 +2,7 @@ package mode
 
 import (
 	"slices"
-	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/terminal/tui"
@@ -13,12 +13,19 @@ import (
 	"github.com/lixenwraith/vif/internal/input"
 	"github.com/lixenwraith/vif/internal/parameter"
 	"github.com/lixenwraith/vif/internal/vlog"
+	"github.com/lixenwraith/vif/pkg/position"
 )
 
 const undoStackSize = 256
 
 type undoPosition struct {
 	x, y int
+}
+
+// mark is a cell mark_set named, for the mark jumps to return to
+type mark struct {
+	x, y int
+	set  bool
 }
 
 const cmdHistorySize = 256
@@ -64,6 +71,12 @@ type Router struct {
 	undoRing  [undoStackSize]undoPosition
 	undoHead  int // next write index
 	undoCount int // valid entry count
+
+	// marks are the cells named a to z; edit is the register and the changes an
+	// undo takes back, which end at the glyph clears the glyph system counts
+	marks   [26]mark
+	edit    edits
+	cleared *atomic.Int64
 
 	// Input state (find/search repeat)
 	lastSearch      searchQuery // What n and N repeat
@@ -124,6 +137,7 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 		machine:       machine,
 		macro:         NewMacroManager(),
 		cmdHistBrowse: -1,
+		cleared:       ctx.World.Resources.Status.Ints.Get("glyph.cleared"),
 	}
 	machine.SetCapture(&ctx.KeyCapture)
 
@@ -158,6 +172,8 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 		input.MotionColumnUp:            MotionColumnUp,
 		input.MotionColumnDown:          MotionColumnDown,
 		input.MotionLastGlyph:           MotionLastGlyph,
+		input.MotionOpenBelow:           MotionOpenBelow,
+		input.MotionOpenAbove:           MotionOpenAbove,
 	}
 
 	r.charLUT = map[input.MotionOp]CharMotionFunc{
@@ -165,6 +181,8 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 		input.MotionFindBack:    MotionFindBack,
 		input.MotionTillForward: MotionTillForward,
 		input.MotionTillBack:    MotionTillBack,
+		input.MotionMark:        r.motionMark,
+		input.MotionMarkLine:    r.motionMarkLine,
 	}
 
 	return r
@@ -292,6 +310,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleOperatorLine(intent)
 	case input.IntentOperatorCharMotion:
 		return r.handleOperatorCharMotion(intent)
+	case input.IntentOperatorBounds:
+		return r.handleOperatorBounds(intent)
 
 	// Normal mode special
 	case input.IntentSpecial:
@@ -469,22 +489,20 @@ func (r *Router) handleToggleAudioCycle() bool {
 // --- Motion Handlers ---
 
 // applyOperator hands a resolved range to the intent's operator, then enters the
-// mode the operator names once it acted, as c enters Insert. One arm today; this is
-// where a second operator attaches, and why the three call sites carry no switch.
+// mode the operator names once it acted, as c enters Insert
 func (r *Router) applyOperator(intent *input.Intent, result MotionResult) {
-	switch intent.Operator {
-	case input.OperatorDelete:
-		OpDelete(r.ctx, result)
+	if p, ok := rangeOf(r.ctx, result); ok {
+		r.operate(intent.Operator, p)
 	}
 	if result.Valid {
 		r.handleModeSwitch(intent)
 	}
 }
 
-// rememberFind stores what ';' and ',' repeat. Both the plain and the operator
-// char-motion handler need it and neither owns it.
+// rememberFind stores the find ';' and ',' repeat, which a mark jump is not. Both
+// the plain and the operator char-motion handler need it and neither owns it.
 func (r *Router) rememberFind(intent *input.Intent, result MotionResult) {
-	if !result.Valid {
+	if !result.Valid || motionOpToRune(intent.Motion) == 0 {
 		return
 	}
 	r.lastFindChar = intent.Char
@@ -588,20 +606,44 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 	}
 
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		r.applyOperator(intent, motionFn(r.ctx, pos.X, pos.Y, intent.Count))
+		result := motionFn(r.ctx, pos.X, pos.Y, intent.Count)
+		// vim's cw ends at its word's last glyph, where dw runs on to the next word
+		big := intent.Motion == input.MotionWORDForward
+		if intent.ModeTarget == input.ModeTargetInsert && (big || intent.Motion == input.MotionWordForward) {
+			result = MotionChangeWord(r.ctx, pos.X, pos.Y, intent.Count, big)
+		}
+		r.applyOperator(intent, result)
 	}
 	return true
 }
 
 func (r *Router) handleOperatorLine(intent *input.Intent) bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		cfg := r.ctx.World.Resources.Config
-		r.applyOperator(intent, MotionResult{
-			StartX: 0, StartY: pos.Y,
-			EndX: cfg.MapWidth - 1, EndY: min(pos.Y+intent.Count-1, cfg.MapHeight-1),
-			Type: RangeLine, Style: StyleInclusive,
-			Valid: true,
+		r.applyOperator(intent, r.lineRange(pos.Y, intent.Count))
+	}
+	return true
+}
+
+// lineRange is count whole rows from row y down
+func (r *Router) lineRange(y, count int) MotionResult {
+	cfg := r.ctx.World.Resources.Config
+	return MotionResult{
+		StartX: 0, StartY: y,
+		EndX: cfg.MapWidth - 1, EndY: min(y+count-1, cfg.MapHeight-1),
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: true,
+	}
+}
+
+// handleOperatorBounds is d, c or y in Visual, where the ping bounds are the range:
+// every glyph they cover. d and y stay in Visual; c leaves it for Insert.
+func (r *Router) handleOperatorBounds(intent *input.Intent) bool {
+	if _, ok := r.ctx.World.LocalCursor(); ok {
+		b := r.ctx.World.GetPingAbsoluteBounds()
+		r.operate(intent.Operator, event.DeleteRequestPayload{
+			RangeType: event.DeleteRangeBlock, StartX: b.MinX, StartY: b.MinY, EndX: b.MaxX, EndY: b.MaxY,
 		})
+		r.handleModeSwitch(intent)
 	}
 	return true
 }
@@ -623,47 +665,157 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 // --- Special Command Handlers ---
 
 func (r *Router) handleSpecial(intent *input.Intent) bool {
-	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		// x and r reach the cells from the cursor on, one a count
-		span := charCells(pos.X, pos.Y, min(pos.X+intent.Count-1, r.ctx.World.Resources.Config.MapWidth-1))
-		switch intent.Special {
-		case input.SpecialDeleteChar:
-			OpDelete(r.ctx, span)
+	pos, ok := r.ctx.World.LocalCursor()
+	if !ok {
+		return r.handleModeSwitch(intent)
+	}
+	// x, r and ~ reach the cells from the cursor on, one a count; in Visual r and ~
+	// reach every cell of the bounds, as its operators do
+	maxX := r.ctx.World.Resources.Config.MapWidth - 1
+	span := charCells(pos.X, pos.Y, min(pos.X+intent.Count-1, maxX))
+	box := position.Rect{MinX: span.StartX, MaxX: span.EndX, MinY: pos.Y, MaxY: pos.Y}
+	bounds := r.ctx.World.GetPingAbsoluteBounds()
+	if r.ctx.IsVisualMode() {
+		box = bounds.Rect
+	}
+	switch intent.Special {
+	case input.SpecialDeleteChar:
+		r.applyRange(span) // s enters Insert after
 
-		case input.SpecialDeleteToEnd:
-			// D = d$, and C enters Insert after
-			OpDelete(r.ctx, MotionLineEnd(r.ctx, pos.X, pos.Y, 1))
-
-		case input.SpecialReplaceChar:
-			// A glyph's char is printable ASCII and never blank: the font draws it
-			if intent.Char > ' ' && input.Capturable(intent.Char) {
-				r.ctx.PushLocal(event.EventGlyphReplaceRequest, &event.GlyphReplaceRequestPayload{
-					X: span.StartX, Y: pos.Y, Text: strings.Repeat(string(intent.Char), span.EndX-span.StartX+1),
-				})
-			}
-
-		case input.SpecialSearchNext:
-			PerformSearch(r.ctx, r.lastSearch.text, r.lastSearch.forward, r.lastSearch.whole)
-
-		case input.SpecialSearchPrev:
-			PerformSearch(r.ctx, r.lastSearch.text, !r.lastSearch.forward, r.lastSearch.whole)
-
-		case input.SpecialSearchWordForward, input.SpecialSearchWordBack:
-			// From the run's start, so # passes over the word the cursor is in
-			q, start := wordAt(r.ctx, pos.X, pos.Y)
-			q.forward = intent.Special == input.SpecialSearchWordForward
-			if searchFrom(r.ctx, start, pos.Y, q.text, q.forward, q.whole) {
-				r.lastSearch = q
-			}
-
-		case input.SpecialRepeatFind:
-			r.executeRepeatFind(false)
-
-		case input.SpecialRepeatFindRev:
-			r.executeRepeatFind(true)
+	case input.SpecialDeleteCharBack:
+		// X takes the cells left of the cursor as far as it can step, and steps there
+		if to := r.stepsTo(pos.X, pos.Y, -intent.Count); to < pos.X {
+			r.applyRange(charCells(to, pos.Y, pos.X-1))
+			OpJump(r.ctx, to, pos.Y)
 		}
+
+	case input.SpecialDeleteToEnd:
+		// D = d$, and C enters Insert after
+		r.applyRange(MotionLineEnd(r.ctx, pos.X, pos.Y, 1))
+
+	case input.SpecialDeleteLine:
+		r.applyRange(r.lineRange(pos.Y, intent.Count)) // S = cc
+
+	case input.SpecialReplaceChar:
+		// A glyph's char is printable ASCII and never blank: the font draws it
+		if component.GlyphRune(intent.Char) {
+			r.retype(box.MinX, box.MinY, box.MaxX, box.MaxY, func(rune) rune { return intent.Char })
+		}
+
+	case input.SpecialToggleCase:
+		r.retype(box.MinX, box.MinY, box.MaxX, box.MaxY, flipCase)
+		if to := r.stepsTo(pos.X, pos.Y, intent.Count); to != pos.X && !r.ctx.IsVisualMode() {
+			OpJump(r.ctx, to, pos.Y) // vim's ~ moves on
+		}
+
+	case input.SpecialPutAfter, input.SpecialPutBefore:
+		r.put(pos.X, pos.Y, intent.Count, intent.Special == input.SpecialPutBefore)
+
+	case input.SpecialUndoChange:
+		r.undoChange()
+
+	case input.SpecialRedoChange:
+		r.redoChange()
+
+	case input.SpecialMarkSet:
+		if i := intent.Char - 'a'; i >= 0 && int(i) < len(r.marks) {
+			r.marks[i] = mark{x: pos.X, y: pos.Y, set: true}
+		}
+
+	case input.SpecialSearchNext, input.SpecialSearchPrev:
+		q := r.lastSearch
+		q.forward = q.forward == (intent.Special == input.SpecialSearchNext)
+		search(r.ctx, pos.X, pos.Y, q, intent.Count)
+
+	case input.SpecialSearchWordForward, input.SpecialSearchWordBack:
+		// From the run's start, so # passes over the word the cursor is in. In
+		// Visual the search is for the run the bounds select.
+		q, start := wordAt(r.ctx, pos.X, pos.Y)
+		if r.ctx.IsVisualMode() {
+			q, start = runAt(r.ctx, pos.X, pos.Y, bounds)
+		}
+		q.forward = intent.Special == input.SpecialSearchWordForward
+		if search(r.ctx, start, pos.Y, q, intent.Count) {
+			r.lastSearch = q
+		}
+
+	case input.SpecialRepeatFind:
+		r.executeRepeatFind(false)
+
+	case input.SpecialRepeatFindRev:
+		r.executeRepeatFind(true)
 	}
 	return r.handleModeSwitch(intent)
+}
+
+// applyRange deletes a range a special names, as d over the same range would
+func (r *Router) applyRange(result MotionResult) {
+	if p, ok := rangeOf(r.ctx, result); ok {
+		r.delete(p)
+	}
+}
+
+// stepsTo is the column n cells from x on row y, left for a negative n, short of
+// the map's edge and of any cell the cursor cannot enter
+func (r *Router) stepsTo(x, y, n int) int {
+	dx := 1
+	if n < 0 {
+		dx, n = -1, -n
+	}
+	for ; n > 0 && !isCursorBlocked(r.ctx, x+dx, y); n-- {
+		x += dx
+	}
+	return x
+}
+
+// flipCase is ~'s retype: a letter in its other case, any other rune as it is
+func flipCase(r rune) rune {
+	switch {
+	case r >= 'a' && r <= 'z':
+		return r - 'a' + 'A'
+	case r >= 'A' && r <= 'Z':
+		return r - 'A' + 'a'
+	}
+	return r
+}
+
+// markAt is the cell a mark's letter names, if it was set
+func (r *Router) markAt(char rune) (mark, bool) {
+	if i := char - 'a'; i >= 0 && int(i) < len(r.marks) {
+		return r.marks[i], r.marks[i].set
+	}
+	return mark{}, false
+}
+
+// motionMark is vim's backtick: the cell a mark names, which an operator stops
+// short of
+func (r *Router) motionMark(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
+	m, ok := r.markAt(char)
+	if !ok || isCursorBlocked(ctx, m.x, m.y) {
+		return MotionResult{StartX: x, StartY: y, EndX: x, EndY: y}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: m.x, EndY: m.y,
+		Type: RangeChar, Style: StyleExclusive,
+		Valid: m.x != x || m.y != y,
+	}
+}
+
+// motionMarkLine is vim's ': the row a mark names, at its first glyph, whole rows
+// to an operator
+func (r *Router) motionMarkLine(ctx *engine.GameContext, x, y, count int, char rune) MotionResult {
+	m, ok := r.markAt(char)
+	endX := rowStart(ctx, m.y, m.x)
+	if !ok || isCursorBlocked(ctx, endX, m.y) {
+		return MotionResult{StartX: x, StartY: y, EndX: x, EndY: y}
+	}
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: m.y,
+		Type: RangeLine, Style: StyleInclusive,
+		Valid: true,
+	}
 }
 
 func (r *Router) handleNuggetJump() bool {
@@ -948,8 +1100,9 @@ func (r *Router) handleTextConfirm() bool {
 
 	switch currentMode {
 	case core.ModeSearch:
-		if text := r.ctx.GetSearchText(); PerformSearch(r.ctx, text, true, false) {
-			r.lastSearch = searchQuery{text: text, forward: true}
+		q := searchQuery{text: r.ctx.GetSearchText(), forward: true}
+		if pos, ok := r.ctx.World.LocalCursor(); ok && search(r.ctx, pos.X, pos.Y, q, 1) {
+			r.lastSearch = q
 		}
 		r.ctx.SetSearchText("")
 		r.transitionMode(core.ModeNormal)
@@ -1052,7 +1205,7 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 
 func (r *Router) handleInsertDeleteCurrent() bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		OpDelete(r.ctx, charCells(pos.X, pos.Y, pos.X))
+		r.applyRange(charCells(pos.X, pos.Y, pos.X))
 	}
 	return true
 }
@@ -1062,7 +1215,7 @@ func (r *Router) handleInsertDeleteForward() bool {
 	if !ok {
 		return true
 	}
-	OpDelete(r.ctx, charCells(pos.X, pos.Y, pos.X))
+	r.applyRange(charCells(pos.X, pos.Y, pos.X))
 	OpMove(r.ctx, MotionRight(r.ctx, pos.X, pos.Y, 1))
 	return true
 }
@@ -1072,7 +1225,7 @@ func (r *Router) handleInsertDeleteBack() bool {
 	if !ok || pos.X == 0 {
 		return true
 	}
-	OpDelete(r.ctx, charCells(pos.X-1, pos.Y, pos.X-1))
+	r.applyRange(charCells(pos.X-1, pos.Y, pos.X-1))
 	OpMove(r.ctx, MotionLeft(r.ctx, pos.X, pos.Y, 1))
 	return true
 }

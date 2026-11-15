@@ -364,7 +364,8 @@ func (a *App) takeEventWith(ev terminal.Event, press func(terminal.Event, *input
 	if ev.Type == terminal.EventKey {
 		a.ctx.SetLastCommand(a.inputMachine.Feedback())
 	}
-	if intent != nil {
+	// A repeated change owes the text Insert typed after it, each key settled in turn
+	for ; intent != nil; intent = a.inputMachine.Next() {
 		before := a.pushed()
 		if !a.handleIntent(intent) {
 			return false

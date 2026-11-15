@@ -25,6 +25,7 @@ const (
 	BehaviorAction
 	BehaviorMarkerStart // g+direction triggers marker show, transitions to color await
 	BehaviorRepeat      // . completes the last change the parser completed, again
+	BehaviorYank        // y: an operator that fills the register and deletes nothing
 )
 
 // KeyEntry describes a key's behavior without function pointers.

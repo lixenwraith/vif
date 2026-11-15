@@ -70,16 +70,22 @@ func buildActionRegistry() map[string]KeyEntry {
 		"motion_column_up":   {BehaviorMotion, MotionColumnUp, SpecialNone, ModeTargetNone, IntentNone},
 		"motion_column_down": {BehaviorMotion, MotionColumnDown, SpecialNone, ModeTargetNone, IntentNone},
 
-		// Char-wait (f/F/t/T); r's char completes a special in place of a motion
+		// Char-wait (f/F/t/T, a mark's letter); r's char and a mark set's complete a
+		// special in place of a motion. m is the middle column and ` the console, so
+		// mark_set and mark_jump are no default key's.
 		"char_find_forward": {BehaviorCharWait, MotionFindForward, SpecialNone, ModeTargetNone, IntentNone},
 		"char_find_back":    {BehaviorCharWait, MotionFindBack, SpecialNone, ModeTargetNone, IntentNone},
 		"char_till_forward": {BehaviorCharWait, MotionTillForward, SpecialNone, ModeTargetNone, IntentNone},
 		"char_till_back":    {BehaviorCharWait, MotionTillBack, SpecialNone, ModeTargetNone, IntentNone},
 		"char_replace":      {BehaviorCharWait, MotionNone, SpecialReplaceChar, ModeTargetNone, IntentNone},
+		"mark_set":          {BehaviorCharWait, MotionNone, SpecialMarkSet, ModeTargetNone, IntentNone},
+		"mark_jump":         {BehaviorCharWait, MotionMark, SpecialNone, ModeTargetNone, IntentNone},
+		"mark_jump_line":    {BehaviorCharWait, MotionMarkLine, SpecialNone, ModeTargetNone, IntentNone},
 
-		// Operators; c deletes as d does, then enters Insert
+		// Operators; c deletes as d does, then enters Insert, and y only fills the register
 		"operator_delete": {BehaviorOperator, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
 		"operator_change": {BehaviorOperator, MotionNone, SpecialNone, ModeTargetInsert, IntentNone},
+		"operator_yank":   {BehaviorYank, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
 
 		// Prefix keys
 		"prefix_g":          {BehaviorPrefix, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
@@ -91,8 +97,9 @@ func buildActionRegistry() map[string]KeyEntry {
 		"marker_glyph_up":    {BehaviorMarkerStart, MotionColoredGlyphUp, SpecialNone, ModeTargetNone, IntentNone},
 		"marker_glyph_down":  {BehaviorMarkerStart, MotionColoredGlyphDown, SpecialNone, ModeTargetNone, IntentNone},
 
-		// Mode switches; a motion naming a mode enters it once moved. vim's append
-		// is no default key's, since a cycles auto fire: a keymap or scenario binds it.
+		// Mode switches; a motion naming a mode enters it once moved. vim's append and
+		// its o and O are no default key's, since a cycles auto fire and o and O find
+		// in a column: a keymap or scenario binds them.
 		"mode_insert":              {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetInsert, IntentNone},
 		"mode_visual":              {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetVisual, IntentNone},
 		"mode_search":              {BehaviorModeSwitch, MotionNone, SpecialNone, ModeTargetSearch, IntentNone},
@@ -100,6 +107,8 @@ func buildActionRegistry() map[string]KeyEntry {
 		"mode_append":              {BehaviorMotion, MotionRight, SpecialNone, ModeTargetInsert, IntentNone},
 		"mode_insert_first_non_ws": {BehaviorMotion, MotionFirstNonWS, SpecialNone, ModeTargetInsert, IntentNone},
 		"mode_insert_line_end":     {BehaviorMotion, MotionLastGlyph, SpecialNone, ModeTargetInsert, IntentNone},
+		"mode_open_below":          {BehaviorMotion, MotionOpenBelow, SpecialNone, ModeTargetInsert, IntentNone},
+		"mode_open_above":          {BehaviorMotion, MotionOpenAbove, SpecialNone, ModeTargetInsert, IntentNone},
 
 		// Special commands
 		"special_delete_char":         {BehaviorSpecial, MotionNone, SpecialDeleteChar, ModeTargetNone, IntentNone},
@@ -111,6 +120,17 @@ func buildActionRegistry() map[string]KeyEntry {
 		"special_change_to_end":       {BehaviorSpecial, MotionNone, SpecialDeleteToEnd, ModeTargetInsert, IntentNone},
 		"special_search_word_forward": {BehaviorSpecial, MotionNone, SpecialSearchWordForward, ModeTargetNone, IntentNone},
 		"special_search_word_back":    {BehaviorSpecial, MotionNone, SpecialSearchWordBack, ModeTargetNone, IntentNone},
+		"special_delete_char_back":    {BehaviorSpecial, MotionNone, SpecialDeleteCharBack, ModeTargetNone, IntentNone},
+		"special_substitute_char":     {BehaviorSpecial, MotionNone, SpecialDeleteChar, ModeTargetInsert, IntentNone},
+		"special_change_line":         {BehaviorSpecial, MotionNone, SpecialDeleteLine, ModeTargetInsert, IntentNone},
+		"special_toggle_case":         {BehaviorSpecial, MotionNone, SpecialToggleCase, ModeTargetNone, IntentNone},
+
+		// The register's puts and the change undo: p pauses and u undoes a cursor
+		// move, so a keymap or scenario binds these
+		"put_after":   {BehaviorSpecial, MotionNone, SpecialPutAfter, ModeTargetNone, IntentNone},
+		"put_before":  {BehaviorSpecial, MotionNone, SpecialPutBefore, ModeTargetNone, IntentNone},
+		"undo_change": {BehaviorSpecial, MotionNone, SpecialUndoChange, ModeTargetNone, IntentNone},
+		"redo_change": {BehaviorSpecial, MotionNone, SpecialRedoChange, ModeTargetNone, IntentNone},
 
 		// . completes the last change again
 		"repeat_change": {BehaviorRepeat, MotionNone, SpecialNone, ModeTargetNone, IntentNone},

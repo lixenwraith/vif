@@ -73,9 +73,10 @@ func TestARecordingLeavesAnOverlaysPointerOut(t *testing.T) {
 	}
 }
 
-// press parses one key as the game would and routes what it makes of it.
+// press parses one key as the game would and routes what it makes of it, the text
+// a repeated change owes included.
 func press(machine *input.Machine, r *Router, k terminal.Key, ch rune) {
-	if intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); intent != nil {
+	for intent := machine.Process(terminal.Event{Type: terminal.EventKey, Key: k, Rune: ch}); intent != nil; intent = machine.Next() {
 		r.Handle(intent)
 	}
 }

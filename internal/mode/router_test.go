@@ -3,6 +3,7 @@ package mode
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -296,77 +297,325 @@ func TestEveryPointerPressesAButton(t *testing.T) {
 	}
 }
 
-// lineWorld is a bare world holding text as the player's glyphs on row 0 from column
-// 0, the local cursor at column x of it, and a router fed by keys, which places the
-// cursor where each key asks, as CursorSystem would, and returns the deletes asked
-// for, as "x-x" spans or "line"
+// lineWorld is a bare world holding text's lines as the player's glyphs from row 0,
+// the local cursor at column x of the first, and a router fed by keys. It applies
+// what each key asks for before the next, as the systems would, and returns the
+// edits: a delete as its span "x-x", "line" or "block", a put as "put", a retype as
+// "retype" and its text.
 func lineWorld(t *testing.T, text string, x int) (*engine.GameContext, func(keys string) []string) {
 	t.Helper()
 	w := engine.NewWorld()
 	ctx := engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
-	for i, ch := range text {
-		if ch != ' ' {
-			e := w.CreateEntity(core.DomainPlayer)
-			w.Positions.SetPosition(e, component.PositionComponent{X: i, Y: 0})
-			w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: ch})
+	lay := func(x, y int, g component.GlyphComponent) {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
+		w.Components.Glyph.SetComponent(e, g)
+	}
+	for y, line := range strings.Split(text, "\n") {
+		for i, ch := range line {
+			if ch != ' ' {
+				lay(i, y, component.GlyphComponent{Rune: ch})
+			}
 		}
 	}
 	w.Resources.Player.Entity = w.CreateEntity(core.DomainPlayer)
 	w.Positions.SetPosition(w.Resources.Player.Entity, component.PositionComponent{X: x, Y: 0})
 	machine := input.NewMachine()
-	appends, _ := input.ActionEntry("mode_append")
-	machine.SetKeyTable(input.MergeKeyTable(input.DefaultKeyTable(), &input.KeyTable{NormalRunes: map[rune]input.KeyEntry{'a': appends}}))
+	machine.SetKeyTable(input.MergeKeyTable(input.DefaultKeyTable(), vimKeys(t)))
 	r := NewRouter(ctx, machine)
-	return ctx, func(keys string) (deletes []string) {
-		for _, ch := range keys {
-			k := terminal.KeyRune
-			if ch == '\x1b' {
-				k = terminal.KeyEscape
-			}
-			press(machine, r, k, ch)
-			for _, ev := range w.Resources.Event.Queue.Consume() {
-				switch p := ev.Payload.(type) {
-				case *event.CursorMoveRequestPayload:
-					w.Positions.SetPosition(p.Entity, component.PositionComponent{X: p.X, Y: p.Y})
-				case *event.DeleteRequestPayload:
-					if p.RangeType == event.DeleteRangeLine {
-						deletes = append(deletes, "line")
-					} else {
-						deletes = append(deletes, fmt.Sprintf("%d-%d", p.StartX, p.EndX))
+	apply := func(edits []string) []string {
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			switch p := ev.Payload.(type) {
+			case *event.CursorMoveRequestPayload:
+				w.Positions.SetPosition(p.Entity, component.PositionComponent{X: p.X, Y: p.Y})
+			case *event.DeleteRequestPayload:
+				var gone []core.Entity
+				w.Components.Glyph.Each(func(e core.Entity, _ *component.GlyphComponent) bool {
+					if pos, _ := w.Positions.GetPosition(e); p.Covers(pos.X, pos.Y) {
+						gone = append(gone, e)
+					}
+					return true
+				})
+				w.DestroyEntitiesBatch(gone)
+				edits = append(edits, [...]string{fmt.Sprintf("%d-%d", p.StartX, p.EndX), "line", "block"}[p.RangeType])
+			case *event.GlyphReplaceRequestPayload:
+				for i, ch := range []rune(p.Text) {
+					if e, ok := w.Positions.EditableGlyphAt(p.X+i, p.Y); ok && ch != ' ' {
+						g, _ := w.Components.Glyph.GetPtr(e)
+						g.Rune = ch
+					}
+				}
+				edits = append(edits, "retype "+p.Text)
+			case *event.GlyphPutPayload:
+				for _, c := range p.Cells {
+					if w.Positions.TakesGlyph(c.X, c.Y) {
+						lay(c.X, c.Y, component.GlyphComponent{Rune: c.Rune, Type: c.Type, Level: c.Level})
+					}
+				}
+				edits = append(edits, "put")
+			case *event.CharacterTypedPayload:
+				// A match clears its glyph and moves on, as typing does
+				if e, ok := w.Positions.TopGlyphAt(p.X, p.Y); ok {
+					if g, _ := w.Components.Glyph.GetComponent(e); g.Rune == p.Char {
+						w.DestroyEntity(e)
+						w.Positions.SetPosition(p.Entity, component.PositionComponent{X: p.X + 1, Y: p.Y})
 					}
 				}
 			}
 		}
-		return deletes
+		return edits
+	}
+	return ctx, func(keys string) (edits []string) {
+		for _, ch := range keys {
+			ev := terminal.Event{Type: terminal.EventKey, Key: terminal.KeyRune, Rune: ch}
+			switch ch {
+			case '\x1b':
+				ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyEscape}
+			case '\x12':
+				ev = terminal.Event{Type: terminal.EventKey, Key: terminal.KeyCtrlR}
+			}
+			for intent := machine.Process(ev); intent != nil; intent = machine.Next() {
+				r.Handle(intent)
+				edits = apply(edits)
+			}
+		}
+		return edits
 	}
 }
 
+// vimKeys binds the vim actions no default key has to vim's own keys, as the tutor
+// does, a, p, P, o, O, u, Ctrl-R and m, and the backtick to mark_jump, as a keymap may
+func vimKeys(t *testing.T) *input.KeyTable {
+	t.Helper()
+	kt := &input.KeyTable{NormalRunes: map[rune]input.KeyEntry{}, SpecialKeys: map[terminal.Key]input.KeyEntry{}}
+	for key, action := range map[rune]string{'a': "mode_append", 'p': "put_after", 'P': "put_before",
+		'o': "mode_open_below", 'O': "mode_open_above", 'u': "undo_change", 'm': "mark_set", '`': "mark_jump"} {
+		kt.NormalRunes[key], _ = input.ActionEntry(action)
+	}
+	kt.OperatorMotions = map[rune]input.KeyEntry{'`': kt.NormalRunes['`']}
+	kt.SpecialKeys[terminal.KeyCtrlR], _ = input.ActionEntry("redo_change")
+	return kt
+}
+
+// screen reads the world's glyphs back as text, a row a line, down to the last row
+// holding one
+func screen(ctx *engine.GameContext) string {
+	var rows []string
+	ctx.World.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
+		pos, _ := ctx.World.Positions.GetPosition(e)
+		for len(rows) <= pos.Y {
+			rows = append(rows, "")
+		}
+		row := []rune(rows[pos.Y] + strings.Repeat(" ", max(0, pos.X+1-len(rows[pos.Y]))))
+		row[pos.X] = g.Rune
+		rows[pos.Y] = string(row)
+		return true
+	})
+	return strings.Join(rows, "\n")
+}
+
 // TestAnActionNamingInsertEntersItOnceItActs: c deletes as d does, over its line when
-// doubled as dd is, and enters Insert once its range holds; C does after D's delete;
-// A, I and vim's a after their move, A to the last glyph however often it is pressed.
+// doubled as dd is, and enters Insert once its range holds, cw ending at its word's
+// last glyph; C, s and S do after their delete; A, I and vim's a and o after their
+// move, A to the last glyph however often it is pressed.
 func TestAnActionNamingInsertEntersItOnceItActs(t *testing.T) {
-	ctx, keys := lineWorld(t, "  one two", 2)
-	cursor := func() int { pos, _ := ctx.World.LocalCursor(); return pos.X }
+	ctx, keys := lineWorld(t, "  one two\n    three", 2)
+	cursor := func() [2]int { pos, _ := ctx.World.LocalCursor(); return [2]int{pos.X, pos.Y} }
 	for _, c := range []struct {
-		keys    string
-		deletes []string
-		insert  bool
-		x       int
+		keys   string
+		edits  []string
+		insert bool
+		at     [2]int
 	}{
-		{"cw", []string{"2-5"}, true, 2},
-		{"\x1bcfz", nil, false, 2},
-		{"cc", []string{"line"}, true, 2},
-		{"\x1bdd", []string{"line"}, false, 2},
-		{"C", []string{"2-8"}, true, 2},
-		{"\x1bA", nil, true, 8},
-		{"\x1bA", nil, true, 8},
-		{"\x1bI", nil, true, 2},
-		{"\x1ba", nil, true, 3},
+		{"cw", []string{"2-4"}, true, [2]int{2, 0}},
+		{"\x1bcfz", nil, false, [2]int{2, 0}},
+		{"A", nil, true, [2]int{8, 0}},
+		{"\x1bA", nil, true, [2]int{8, 0}},
+		{"\x1bI", nil, true, [2]int{6, 0}},
+		{"\x1ba", nil, true, [2]int{7, 0}},
+		{"\x1bs", []string{"7-7"}, true, [2]int{7, 0}},
+		{"\x1bC", []string{"7-8"}, true, [2]int{7, 0}},
+		{"\x1bo", nil, true, [2]int{4, 1}},
+		{"\x1bO", nil, true, [2]int{6, 0}},
+		{"\x1bS", []string{"line"}, true, [2]int{6, 0}},
+		{"\x1bjcc", []string{"line"}, true, [2]int{6, 1}},
+		{"\x1bdd", []string{"line"}, false, [2]int{6, 1}},
 	} {
 		got := keys(c.keys)
-		if !slices.Equal(got, c.deletes) || ctx.IsInsertMode() != c.insert || cursor() != c.x {
-			t.Fatalf("%q: deletes %q, insert %v, cursor %d; want %q, %v, %d",
-				c.keys, got, ctx.IsInsertMode(), cursor(), c.deletes, c.insert, c.x)
+		if !slices.Equal(got, c.edits) || ctx.IsInsertMode() != c.insert || cursor() != c.at {
+			t.Fatalf("%q: edits %q, insert %v, cursor %v; want %q, %v, %v",
+				c.keys, got, ctx.IsInsertMode(), cursor(), c.edits, c.insert, c.at)
 		}
+	}
+}
+
+// TestEveryDeleteFillsTheRegisterAndAPutLaysItOutward: y fills the register and
+// deletes nothing, and each delete fills it too. A put lays a span right of the
+// cursor, or for P left of it, and rows below or above, a count that many, passing
+// over a held cell; the cursor goes to its far end, so a repeat goes on from there.
+func TestEveryDeleteFillsTheRegisterAndAPutLaysItOutward(t *testing.T) {
+	for _, c := range []struct {
+		text       string
+		x          int
+		keys, want string
+		at         [2]int
+	}{
+		{"ab cd", 0, "yw$p", "ab cdab", [2]int{6, 0}},
+		{"ab cd", 0, "yw$p.", "ab cdabab", [2]int{8, 0}},
+		{"ab   cd", 5, "xhP", "ab c  d", [2]int{3, 0}},
+		{"ab cd", 0, "ywwp", "ab cdb", [2]int{5, 0}},
+		{"ab", 0, "yy2p", "ab\nab\nab", [2]int{0, 2}},
+		{"\n\nab", 0, "jjddkP", "ab", [2]int{0, 0}},
+	} {
+		ctx, keys := lineWorld(t, c.text, c.x)
+		keys(c.keys)
+		if pos, _ := ctx.World.LocalCursor(); screen(ctx) != c.want || [2]int{pos.X, pos.Y} != c.at {
+			t.Errorf("%q on %q left %q with the cursor at %d,%d; want %q at %v", c.keys, c.text, screen(ctx), pos.X, pos.Y, c.want, c.at)
+		}
+	}
+}
+
+// TestAChangeIsTakenBackAndMadeAgainWhileItsCellsStand: undo_change takes back the
+// last delete, retype or put and redo_change makes it again, a new change ending
+// what could be redone. A change whose cells changed under it is dropped for the
+// one before, and a glyph clear or a new game ends the history.
+func TestAChangeIsTakenBackAndMadeAgainWhileItsCellsStand(t *testing.T) {
+	for _, c := range []struct{ text, keys, want string }{
+		{"one two", "dwu", "one two"},
+		{"one two", "dwu\x12", "    two"},
+		{"one two", "rx3~u", "xne two"},
+		{"one two", "rx3~uu\x12\x12", "XNE two"},
+		{"ab", "yypu", "ab"},
+		{"ab", "yypu\x12", "ab\nab"},
+		{"one two", "xuwx\x12", "one  wo"},
+		{"abc", "xlrziz\x1bu", "a c"},
+	} {
+		ctx, keys := lineWorld(t, c.text, 0)
+		if keys(c.keys); screen(ctx) != c.want {
+			t.Errorf("%q on %q left %q, want %q", c.keys, c.text, screen(ctx), c.want)
+		}
+	}
+	ctx, keys := lineWorld(t, "abc", 0)
+	keys("x")
+	ctx.World.Resources.Status.Ints.Get("glyph.cleared").Add(1)
+	keys("ulx")
+	ctx.World.Resources.Event.Queue.NextRun()
+	if keys("u"); screen(ctx) != "  c" {
+		t.Fatalf("undos past a glyph clear and a new game left %q, want both deletes to stand", screen(ctx))
+	}
+}
+
+// TestAMarkNamesACellItsJumpsReturnTo: mark_set names the cursor's cell with a
+// letter; mark_jump_line returns to its row at the row's first glyph, taking whole
+// rows for an operator, and mark_jump to the cell, an operator stopping short of it.
+// An unset mark moves nothing, and a jump is no find for ; to repeat.
+func TestAMarkNamesACellItsJumpsReturnTo(t *testing.T) {
+	ctx, keys := lineWorld(t, "  one two\nthree\nfour", 0)
+	for _, c := range []struct {
+		keys  string
+		edits []string
+		at    [2]int
+	}{
+		{"fomajj'a", nil, [2]int{2, 0}},
+		{"'b", nil, [2]int{2, 0}},
+		{";", nil, [2]int{8, 0}},
+		{"mbG`b", nil, [2]int{8, 0}},
+		{"0d`b", []string{"0-7"}, [2]int{0, 0}},
+		{"jjd'a", []string{"line"}, [2]int{0, 2}},
+	} {
+		got := keys(c.keys)
+		if pos, _ := ctx.World.LocalCursor(); !slices.Equal(got, c.edits) || [2]int{pos.X, pos.Y} != c.at {
+			t.Fatalf("%q: edits %q, cursor %d,%d; want %q at %v", c.keys, got, pos.X, pos.Y, c.edits, c.at)
+		}
+	}
+}
+
+// TestVisualsOperatorsTakeEveryGlyphItsBoundsCover: in Visual with the shield up d
+// takes every glyph the ping bounds cover and stays in Visual, y fills the register
+// with them, r and ~ retype each, * searches for the run they select and c leaves
+// for Insert; with no shield the bounds are the cursor's cell.
+func TestVisualsOperatorsTakeEveryGlyphItsBoundsCover(t *testing.T) {
+	const field = "abcdefghi\nabcdefghi\nabcdefghi\nabcdefghi\nabcdefghi"
+	ctx, keys := lineWorld(t, field, 4)
+	player := ctx.World.Resources.Player.Entity
+	ctx.World.Components.Ping.SetComponent(player, component.PingComponent{})
+	ctx.World.Components.Shield.SetComponent(player, component.ShieldComponent{Active: true, Radius: 4})
+	keys("jjv")
+	b := ctx.World.GetPingAbsoluteBounds()
+	if !b.Active || b.MaxX-b.MinX != 4 || b.MaxY-b.MinY != 2 {
+		t.Fatalf("the bounds are %+v, want a box five by three about the cursor", b)
+	}
+	// boxed is the field with each glyph in the bounds made what to makes of it
+	boxed := func(to func(rune) rune) string {
+		rows := strings.Split(field, "\n")
+		for y := b.MinY; y <= b.MaxY; y++ {
+			row := []rune(rows[y])
+			for x := b.MinX; x <= b.MaxX; x++ {
+				row[x] = to(row[x])
+			}
+			rows[y] = string(row)
+		}
+		return strings.Join(rows, "\n")
+	}
+	for _, c := range []struct {
+		keys, want string
+		visual     bool
+	}{
+		{"d", boxed(func(rune) rune { return ' ' }), true},
+		{"u", field, true},
+		{"rz", boxed(func(rune) rune { return 'z' }), true},
+		{"~", boxed(func(rune) rune { return 'Z' }), true},
+		{"uuy", field, true},
+		{"v7jp", field + strings.Repeat("\n", 5) + strings.Repeat("     cdefg\n", 2) + "     cdefg", false},
+	} {
+		keys(c.keys)
+		if got := screen(ctx); got != c.want || ctx.IsVisualMode() != c.visual {
+			t.Fatalf("%q left Visual %v and\n%s\nwant %v and\n%s", c.keys, ctx.IsVisualMode(), got, c.visual, c.want)
+		}
+	}
+	keys("gg0jj4lv*")
+	if pos, _ := ctx.World.LocalCursor(); pos.X != 2 || pos.Y != 3 {
+		t.Fatalf("* in Visual left the cursor at %d,%d, want the next cdefg, at 2,3", pos.X, pos.Y)
+	}
+	if edits := keys("c"); !slices.Equal(edits, []string{"block"}) || !ctx.IsInsertMode() {
+		t.Fatalf("c in Visual made %q and left Insert %v, want the bounds deleted and Insert", edits, ctx.IsInsertMode())
+	}
+
+	ctx, keys = lineWorld(t, "abc", 1)
+	if keys("vd"); screen(ctx) != "a c" || !ctx.IsVisualMode() {
+		t.Fatalf("d in Visual with no shield left %q, Visual %v; want the cursor's cell gone, in Visual", screen(ctx), ctx.IsVisualMode())
+	}
+}
+
+// TestXTakesTheCellsLeftAndTildeFlipsCaseOnward: X deletes count cells left of the
+// cursor and steps there; ~ flips the case of count glyphs from the cursor, a rune
+// with no case as it is, and moves past them.
+func TestXTakesTheCellsLeftAndTildeFlipsCaseOnward(t *testing.T) {
+	ctx, keys := lineWorld(t, "ab-cd eF", 4)
+	for _, c := range []struct {
+		keys, want string
+		x          int
+	}{
+		{"2X", "ab  d eF", 2},
+		{"9X", "    d eF", 0},
+		{"4l4~", "    D Ef", 8},
+	} {
+		keys(c.keys)
+		if pos, _ := ctx.World.LocalCursor(); screen(ctx) != c.want || pos.X != c.x {
+			t.Fatalf("%q left %q with the cursor at %d, want %q at %d", c.keys, screen(ctx), pos.X, c.want, c.x)
+		}
+	}
+}
+
+// TestDotTypesItsInsertTextOverWhatStandsThere: '.' makes its change again, types
+// what Insert typed after it over the glyphs standing there now, and returns to
+// Normal.
+func TestDotTypesItsInsertTextOverWhatStandsThere(t *testing.T) {
+	ctx, keys := lineWorld(t, "abab ab", 3)
+	if keys("Iab\x1b"); screen(ctx) != "  ab ab" {
+		t.Fatalf("I and its text left %q, want the first ab typed away", screen(ctx))
+	}
+	if keys("."); screen(ctx) != "     ab" || !ctx.IsNormalMode() {
+		t.Fatalf("'.' left %q in Normal %v, want the next ab typed away, in Normal", screen(ctx), ctx.IsNormalMode())
 	}
 }

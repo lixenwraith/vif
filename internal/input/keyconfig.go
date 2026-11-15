@@ -308,9 +308,10 @@ func bindingOf(v any) (KeyEntry, error) {
 }
 
 // ScenarioKeyTable reads a scenario's [keymap], which its run layers over the
-// player's keymap: the normal, operator and prefix_g sections alone, each key naming
-// an action that is no system one, or none. The special keys, which quit, leave a mode
-// and open the menu and help, stay the player's.
+// player's keymap: the normal, operator and prefix_g sections, and normal_keys for
+// a special key the default keymap gives no system action. Each key names an action
+// that is no system one, or none, so the keys that quit, leave a mode and open the
+// menu and help stay the player's.
 func ScenarioKeyTable(raw map[string]any) (*KeyTable, error) {
 	kt := &KeyTable{}
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
@@ -322,12 +323,26 @@ func ScenarioKeyTable(raw map[string]any) (*KeyTable, error) {
 			into = &kt.OperatorMotions
 		case "prefix_g":
 			into = &kt.PrefixG
+		case "normal_keys":
 		default:
-			return nil, fmt.Errorf("[%s] is not a section a scenario binds: normal, operator or prefix_g", name)
+			return nil, fmt.Errorf("[%s] is not a section a scenario binds: normal, normal_keys, operator or prefix_g", name)
 		}
 		table, ok := raw[name].(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("[%s] must be a table", name)
+		}
+		if into == nil {
+			keys, err := parseSpecialKeySection(name, table)
+			if err != nil {
+				return nil, err
+			}
+			for _, k := range slices.Sorted(maps.Keys(keys)) {
+				if keys[k].Behavior == BehaviorSystem || defaultKeyTable().SpecialKeys[k].Behavior == BehaviorSystem {
+					return nil, fmt.Errorf("[%s] key %q: a scenario binds no system action or key", name, SpecialKeyName(k))
+				}
+			}
+			kt.SpecialKeys = keys
+			continue
 		}
 		runes, err := parseRuneSection(name, table)
 		if err != nil {
