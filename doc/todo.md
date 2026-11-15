@@ -629,9 +629,11 @@ stray 13.5 MB binary (`vif-router`). Older trees, commit messages and squash
 titles still carry them. One `git filter-repo` pass closes it:
 `--strip-blobs-with-ids` with the binary's blob
 `d6c2405eab3fc7ddc344b63a0513af09ebf1703d` and the old picture's
-`dfede4b85aa34b34e968bba8b73180e11876cfed`, and `--replace-text` with
-`--replace-message` from the list of names kept in the project's files, outside
-the repository, since it spells them. What it costs:
+`dfede4b85aa34b34e968bba8b73180e11876cfed`, `--invert-paths` for the deleted
+plan doc, `--path-rename` for each renamed scenario, test and doc, since a text
+replacement renames no path, and `--replace-text` with `--replace-message`, from
+the list of names and paths kept in the project's files, outside the repository,
+since it spells them. What it costs:
 
 - Every hash changes: each clone and fork re-clones, open branches are rebased
   by hand, signed commits lose their signatures, and each release tag is set
