@@ -453,6 +453,32 @@ func TestAGuestStampsWithTheAgeItsEpochsCommitAt(t *testing.T) {
 	}
 }
 
+// TestAnAuthorityWithNoPeerStillDrivesItsLead: a host alone adopts its one tick once
+// the default has aged out of the window, and a guest alone, with no path to read,
+// keeps the lead it has.
+func TestAnAuthorityWithNoPeerStillDrivesItsLead(t *testing.T) {
+	t.Parallel()
+	alone := &linkedPort{}
+	pushed := func(local uint32) (leads []uint64) {
+		s := sessionSystem(t, local, 100, alone)
+		for range parameter.NetworkBarrierRenegotiateTicks {
+			s.driveOwnLead(alone)
+		}
+		for _, ev := range s.world.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.PlayoutLeadPayload); ok {
+				leads = append(leads, p.Ticks)
+			}
+		}
+		return leads
+	}
+	if got := pushed(1); !slices.Equal(got, []uint64{parameter.NetworkBarrierMinDelayTicks}) {
+		t.Fatalf("an authority alone for a window pushed the leads %v, want its one tick once", got)
+	}
+	if got := pushed(3); len(got) != 0 {
+		t.Fatalf("a guest alone pushed the leads %v, want none", got)
+	}
+}
+
 // seqBatch is one guest's epoch carrying the given sequences, all for one tick.
 func seqBatch(t *testing.T, source uint32, produced, applyTick uint64, seqs ...uint64) []byte {
 	t.Helper()

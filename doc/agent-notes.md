@@ -304,8 +304,9 @@ Libraries · Branches.
 
 - In `meshSession`, `mode.ExecuteCommand(apps[0].Context(), "n")` then
   `apps[0].Settle()` crosses the host's new game in the epoch at hand, and closing a
-  participant's `link.MeshPort` under its world lock drops it. The host's lead is 3
-  near tick 10 and 1 later, so a test of what lands inside a lead runs early. A mesh
+  participant's `link.MeshPort` under its world lock drops it. An authority's lead
+  is 3 for its first `NetworkBarrierRenegotiateTicks`, alone or not, and 1 after,
+  so a test of what lands inside a lead runs early. A mesh
   opens no door (`Membership.GuestCount` reads 0): what the door's roster keeps is
   tested over sockets (`mustHosting`, `mustSocketJoiner`, `arrival`). A pair led by
   1 is a join through the host, and one whose ends are both in already is a link
