@@ -24,17 +24,17 @@ import (
 	"github.com/lixenwraith/vif/pkg/vmath"
 )
 
-// TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock plays the shipped
-// vanguard scenario with nobody steering, through the resets its crushes and
+// TestRaidersMaterializeAtTheRightEdgeAndNeverStandInRock plays the shipped
+// cave scenario with nobody steering, through the resets its crushes and
 // collisions bring: raiders of several types materialize at the right edge, each
 // landing as its materialize ends, no drain ever standing, at most three fly at
 // once, and no tick ends with one standing in rock, which pushes them as it scrolls
 // and which their landings and teleports keep clear of.
-func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
+func TestRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
 	if err != nil {
@@ -108,16 +108,16 @@ func TestVanguardRaidersMaterializeAtTheRightEdgeAndNeverStandInRock(t *testing.
 	}
 }
 
-// TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun plays the shipped scenario
+// TestAShotDownRaiderDropsAUThatRaisesTheGun plays the shipped scenario
 // and ends raiders as they arrive: one that dies by no player's hand drops nothing,
 // and within two the player shoots down, the U's even odds certain after a miss,
 // one drops a U where it fell, which flies to the ship and raises its gun a level
-// of vanguard's path; a new game starts the path over.
-func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
+// of the scenario's path; a new game starts the path over.
+func TestAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
 	if err != nil {
@@ -139,7 +139,7 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	// drops are where the U's on the map stand
 	drops := func() (cells []component.PositionComponent) {
 		w.RunSafe(func() {
-			for _, e := range vanguardUs(w) {
+			for _, e := range upgradeDrops(w) {
 				if pos, ok := w.Positions.GetPosition(e); ok {
 					cells = append(cells, pos)
 				}
@@ -189,7 +189,7 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 		a.Tick(1)
 	}
 	if charges, levels := gun(); charges != 1 || levels != 9 {
-		t.Fatalf("the ship's gun holds %d charges on %d levels, want the first of vanguard's nine", charges, levels)
+		t.Fatalf("the ship's gun holds %d charges on %d levels, want the first of the scenario's nine", charges, levels)
 	}
 
 	end(false)
@@ -237,8 +237,8 @@ func TestVanguardAShotDownRaiderDropsAUThatRaisesTheGun(t *testing.T) {
 	}
 }
 
-// vanguardUs are the drops of vanguard's U on w's map; the caller holds its lock
-func vanguardUs(w *engine.World) []core.Entity {
+// upgradeDrops are the U's dropped on w's map; the caller holds its lock
+func upgradeDrops(w *engine.World) []core.Entity {
 	i := slices.Index(w.Resources.Loot.Names(), "upgrade")
 	if i < 0 {
 		return nil
@@ -252,17 +252,17 @@ func vanguardUs(w *engine.World) []core.Entity {
 	return out
 }
 
-// TestVanguardAKillInAPairDropsEachPlayerOneU ends raiders by the host player's
+// TestARaiderKilledInAPairDropsEachPlayerOneU ends raiders by the host player's
 // shot on a mesh pair until each instance has dropped its player a U, two kills at
 // most. Each instance rolls the raider table once a kill for the player it
 // simulates, the guest when its ledger confirms the death, and each player's ship
 // takes its own U's and goes up a level a U. The rank counts each kill by an
 // internal transition on it, which each instance crosses once.
-func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
+func TestARaiderKilledInAPairDropsEachPlayerOneU(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	host, err := NewHeadless(Config{Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
 	if err != nil {
@@ -325,7 +325,7 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 		for i, a := range apps {
 			w := a.World()
 			w.RunSafe(func() {
-				for _, e := range vanguardUs(w) {
+				for _, e := range upgradeDrops(w) {
 					drops[i][e] = true
 				}
 			})
@@ -381,7 +381,7 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 		}
 		for i, a := range apps {
 			if c := charges(a); n == 0 && c != 1 {
-				t.Fatalf("instance %d: the ship's gun holds %d charges before the kill, want vanguard's first level", i, c)
+				t.Fatalf("instance %d: the ship's gun holds %d charges before the kill, want the scenario's first level", i, c)
 			}
 		}
 		for _, a := range apps {
@@ -421,15 +421,15 @@ func TestVanguardAKillInAPairDropsEachPlayerOneU(t *testing.T) {
 	}
 }
 
-// TestVanguardABotSeatFliesTheShipsGunPath seats a bot on a vanguard run. Its
+// TestABotSeatFliesTheShipsGunPath seats a bot on a run of the cave scenario. Its
 // instance installs the game, the aim with it, before its cursor arrives, and that
-// cursor's gun climbs vanguard's path from its first ticks as the player's does,
-// not from the next game, whose start aims it afresh.
-func TestVanguardABotSeatFliesTheShipsGunPath(t *testing.T) {
+// cursor's gun climbs the scenario's path from its first ticks as the player's
+// does, not from the next game, whose start aims it afresh.
+func TestABotSeatFliesTheShipsGunPath(t *testing.T) {
 	// Not parallel: a paced run against wall-clock deadlines.
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	holder, _ := driveBot(t, Config{Membership: Membership{Bots: []string{"roam"}}, Resources: opts}, "patrol", nil)
 	waitForCursors(t, holder, 2)
@@ -458,26 +458,26 @@ func TestVanguardABotSeatFliesTheShipsGunPath(t *testing.T) {
 		case !armed:
 		case levels == 9:
 			if _, own := gun(holder); own != 9 {
-				t.Fatalf("the player's gun climbs %d levels, want vanguard's nine", own)
+				t.Fatalf("the player's gun climbs %d levels, want the scenario's nine", own)
 			}
 			return
 		case armedAt == 0:
 			armedAt = tick
 		case tick > armedAt+settle:
-			t.Fatalf("the seat's gun climbs %d levels %d ticks after its cursor armed, want vanguard's nine", levels, tick-armedAt)
+			t.Fatalf("the seat's gun climbs %d levels %d ticks after its cursor armed, want the scenario's nine", levels, tick-armedAt)
 		}
 	}
 	t.Fatalf("no seat's cursor armed within %s (seat %v)", socketWait, seat != nil)
 }
 
-// TestVanguardsCaveWearsOneOfItsStoneArts boots the shipped scenario: its rock draws
+// TestTheCaveWearsOneOfItsStoneArts boots the shipped scenario: its rock draws
 // one of the four stone arts the cave start lists, from the cave's seed, and a new
 // game's cave draws one again
-func TestVanguardsCaveWearsOneOfItsStoneArts(t *testing.T) {
+func TestTheCaveWearsOneOfItsStoneArts(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
 	if err != nil {
@@ -496,7 +496,7 @@ func TestVanguardsCaveWearsOneOfItsStoneArts(t *testing.T) {
 		})
 		art := pattern.ArtPreset(look.Art).String()
 		if !look.Stone || look.Seed == 0 || !slices.Contains([]string{"strata", "cracked", "moss", "crystal"}, art) {
-			t.Fatalf("game %d: the cave's rock draws %+v (%s), want one of vanguard's stone arts", game, look, art)
+			t.Fatalf("game %d: the cave's rock draws %+v (%s), want one of the scenario's stone arts", game, look, art)
 		}
 		if !a.Reset(false) {
 			t.Fatal("the reset was refused")
@@ -504,14 +504,14 @@ func TestVanguardsCaveWearsOneOfItsStoneArts(t *testing.T) {
 	}
 }
 
-// TestVanguardsCaveOpensOnOpenMap boots the shipped scenario: its cave starts with a
+// TestTheCaveOpensOnOpenMap boots the shipped scenario: its cave starts with a
 // mouth of open map as wide as the view, no rock at all, and its rock comes in past
 // the right edge as it scrolls
-func TestVanguardsCaveOpensOnOpenMap(t *testing.T) {
+func TestTheCaveOpensOnOpenMap(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
 	if err != nil {
@@ -560,14 +560,14 @@ func TestVanguardsCaveOpensOnOpenMap(t *testing.T) {
 	}
 }
 
-// TestVanguardsCaveStepsOnAnEvenCadence boots the shipped scenario: its cave steps a
+// TestTheCaveStepsOnAnEvenCadence boots the shipped scenario: its cave steps a
 // column on whole ticks, the same number apart every time, since a period between
 // whole ticks falls alternately short and long and reads as dropped frames
-func TestVanguardsCaveStepsOnAnEvenCadence(t *testing.T) {
+func TestTheCaveStepsOnAnEvenCadence(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
 	if err != nil {
@@ -608,14 +608,14 @@ func TestVanguardsCaveStepsOnAnEvenCadence(t *testing.T) {
 	}
 }
 
-// TestVanguardsCaveOpensTheRowsATallMapAdds boots the shipped scenario on a map a
+// TestTheCaveOpensTheRowsATallMapAdds boots the shipped scenario on a map a
 // phone held upright gives: each wall keeps at most the 29 rows it keeps on a map of
 // 40, so the rows past those open, and at least 32 of 90 stay open in every column
-func TestVanguardsCaveOpensTheRowsATallMapAdds(t *testing.T) {
+func TestTheCaveOpensTheRowsATallMapAdds(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	const width, height, deepest = 80, 90, 29
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: width, Height: height, Resources: opts})
@@ -647,13 +647,13 @@ func TestVanguardsCaveOpensTheRowsATallMapAdds(t *testing.T) {
 	}
 }
 
-// TestVanguardsDecayFallsDownOneColumnOfTheCaveThroughItsRock fires the ship on
+// TestDecayFallsDownOneColumnOfTheCaveThroughItsRock fires the ship on
 // negative energy, which sheds decay: each decay keeps one column of the cave, its map
 // column plus the rock's origin, never rises, and falls on from the open into the
 // floor, which lets it pass. A new game lays a new cave and starts the count again.
-func TestVanguardsDecayFallsDownOneColumnOfTheCaveThroughItsRock(t *testing.T) {
+func TestDecayFallsDownOneColumnOfTheCaveThroughItsRock(t *testing.T) {
 	t.Parallel()
-	a := newVanguard(t)
+	a := newCaveRun(t)
 	w := a.World()
 	w.RunSafe(func() {
 		player := w.Resources.Player.Entity
@@ -705,12 +705,12 @@ func TestVanguardsDecayFallsDownOneColumnOfTheCaveThroughItsRock(t *testing.T) {
 	}
 }
 
-// newVanguard is a headless 120x40 vanguard run past its boot, the ship armed
-func newVanguard(t *testing.T) *App {
+// newCaveRun is the cave scenario headless at 120x40 past its boot, the ship armed
+func newCaveRun(t *testing.T) *App {
 	t.Helper()
-	opts := resource.Options{Dir: soakRoot, Scenario: "vanguard"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "cave"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("vanguard scenario not present")
+		t.Skip("cave scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 120, Height: 40, Resources: opts})
 	if err != nil {
@@ -733,10 +733,10 @@ func newVanguard(t *testing.T) *App {
 	return nil
 }
 
-// TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver: a crush and a defeat
+// TestALostCaveGameFreezesUnderARedStrobeThenStartsOver: a crush and a defeat
 // by heat and energy alike halt the rock and the drift under a red strobe, and the
 // game starts over once the strobe has run, opening on what ended the last
-func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
+func TestALostCaveGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 	for _, tc := range []struct {
 		name, message string
 		lose          func(w *engine.World)
@@ -751,7 +751,7 @@ func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			a := newVanguard(t)
+			a := newCaveRun(t)
 			w := a.World()
 			var seen []event.EventType
 			var red bool
@@ -796,22 +796,22 @@ func TestVanguardsLostGameFreezesUnderARedStrobeThenStartsOver(t *testing.T) {
 	}
 }
 
-// TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave: raiders the player
+// TestTheRaidClimbsToTheKrakenAndStartsOverInTheNextCave: raiders the player
 // shoots down as they arrive come from the first rank's two types until three fall,
 // then the next rank's, to the fourth, whose third kill holds the raid and, with no
 // raider left, strobes green and ends the cave. No raider comes while the cave opens
 // to no rock, the rock and the drift at twice their pace, and its scroll halts, and
-// the Kraken rises at the right edge with vanguard's hit points, twice the last
+// the Kraken rises at the right edge with the scenario's hit points, twice the last
 // one's in the next tier. The player's kill of it drops a missile charge, heat and
 // two energy, doubles species damage and lays the next cave in another stone art,
 // the raider table's streaks carried into it, scrolling a fifth faster once its pace
 // has eased in, its drift four times that, where the climb starts over at the first
 // rank of that cave's types.
-func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) {
+func TestTheRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) {
 	t.Parallel()
-	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/base/vanguard"), "scenario.toml")
+	merged, err := fsm.ResolveScenario(os.DirFS(soakRoot+"/scenario/base/cave"), "scenario.toml")
 	if err != nil {
-		t.Skipf("vanguard scenario not present: %v", err)
+		t.Skipf("cave scenario not present: %v", err)
 	}
 	// rankOf is each type's rank, read from the guard counting its kills
 	rankOf := map[string]int{}
@@ -833,7 +833,7 @@ func TestVanguardsRaidClimbsToTheKrakenAndStartsOverInTheNextCave(t *testing.T) 
 	spawn := states["RaidSpawn"].(map[string]any)["transitions"].([]any)[0].(map[string]any)["actions"].([]any)[0]
 	types = spawn.(map[string]any)["pick"].(map[string]any)["from"].([]any)
 
-	a := newVanguard(t)
+	a := newCaveRun(t)
 	w := a.World()
 	var spawned []string
 	var krakens []event.SpeciesCreatedPayload

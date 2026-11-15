@@ -50,7 +50,11 @@ These hold regardless of which repository is targeted first.
   archive and every install carry it (the content loader reads only `.txt` and
   `.toml`); and a Linux or FreeBSD binary links purego (Apache-2.0) for its
   desktop window, so `deploy/package/LICENSE.purego` travels in those archives and
-  `make install` puts it beside `LICENSE`; a `vif_nogui` build links none.
+  `make install` puts it beside `LICENSE`; a `vif_nogui` build links none. The
+  desktop window and `vif.wasm` draw cells with an embedded font atlas,
+  `internal/asset/font/mono.toml`, rendered from a font under the Bitstream-Vera
+  licence, so `internal/asset/font/LICENSE` travels as `LICENSE.font` in the
+  client and browser archives and `make install` puts it beside `LICENSE` too.
 
 ## 2. Release surface
 
@@ -61,7 +65,8 @@ Windows amd64 zip, the browser bundle, the wad, the Android APK, and
 publishes nothing. Each binary and browser archive unpacks into one directory
 named for it, and every tarball's entries are root's, so extracting one as root
 neither scatters files nor hands them to the builder's uid; a client archive
-carries `LICENSE.purego` for the desktop window its binary links. Each archive's
+carries `LICENSE.purego` for the desktop window its binary links, and it and the
+browser bundle carry `LICENSE.font` for the font atlas they embed. Each archive's
 `README.md` is written for its platform: `make release-readme` renders
 `deploy/package/release-readme.md`, one source whose blocks are tagged by target.
 

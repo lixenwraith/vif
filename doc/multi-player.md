@@ -488,10 +488,12 @@ A mid-run join is admitted to transport before its capture is read, so
 traffic produced during transfer is buffered rather than lost. The join waits for
 a capture far enough past admission to include pre-admission epochs and refuses a
 catch-up gap past `NetworkJoinCatchUpTicks`, or one still wider than
-`NetworkJoinLagTicks` (the default lead) once it has caught up; a bot seat retries
-either, since a fresh attempt brings a fresher world. A joiner drives no cursor until
-its own exists: the arrival binds it, or a correction that already holds the arrival,
-whose fence drops the crossing, binds it by identity (`RebindCursorRoster`).
+`NetworkJoinLagTicks` (the default lead) once it has caught up. A gate with no world
+to send by `NetworkJoinReadyTimeout`, as a relay's is while its proof has not come,
+refuses its joiner the same way (`joinBehind`); a bot seat retries each, since a
+fresh attempt brings a fresher world. A joiner drives no cursor until its own
+exists: the arrival binds it, or a correction that already holds the arrival, whose
+fence drops the crossing, binds it by identity (`RebindCursorRoster`).
 
 A gate's lead counts the ticks of the game its offer names. A new game that starts
 under it ends the wait (`KeyframeAt`, `ProvedWorld`), and the host refuses the
@@ -846,8 +848,8 @@ with it, and its identity and slot stay taken.
 
 A **dismissal** (`ParticipantDepartedPayload.Dismissed`) removes the cursor and its
 bots for good and returns the identity and slot to the pool: the host's `:player
-drop`, a holder dropping its seat, an abandoned relayed join, an instance with no
-link (§5.2), and the authority's own two, which it crosses once
+drop`, a holder dropping its seat, an abandoned relayed join that crossed in, an
+instance with no link (§5.2), and the authority's own two, which it crosses once
 (`NetworkSystem.expireWraiths`):
 
 - **Timeout.** A Wraith is dismissed `WraithTimeout` (2 min) of game time after it
@@ -885,7 +887,10 @@ rebuilding stays taken, and the session layer hears of its leaving when the new
 game's announcement applies, so it takes nobody back ahead of the Wraith
 (`PlayerResource.Restores`). At the new game's first flush the authority crosses
 each again as it was, an arrival first and a dismissal with its flags, bar a
-departure with no arrival ahead of it whose Wraith already waits (`announceLost`).
+departure with no arrival ahead of it whose Wraith already waits or that has no
+cursor to remove (`announceLost`). So a relayed join abandoned before its arrival
+crossed gives its identity back at once, never by a dismissal a new game would drop
+with its place still taken (`NetworkSystem.CrossedIn`).
 An arrival applying at the reset's own tick joins the roster the reset rebuilds, in
 its slot or over its own cursor's entry, a Wraith or not, and the boot's spawn
 builds it with the rest from the template (`PlayerResource.JoinRestore`).

@@ -118,7 +118,7 @@ func computePerimeter(w, h int) []borderCell {
 var bestiary = []EnemyTemplate{
 
 	// ================================================================
-	// VOID EYE — 5x3, slow contemplative blink
+	// eye 0 — 5x3, slow contemplative blink
 	// Deep ocean abyss. Slow rotating aura suggests submerged current
 	// Edge: [---] solid opaque box
 	// Fg: 0=DimGray 1=SteelBlue 2=White 3=CeruleanBlue 4=NavyBlue
@@ -126,7 +126,7 @@ var bestiary = []EnemyTemplate{
 	// Bg: 0=DeepNavy 1=Gunmetal 2=CobaltBlue
 	// ================================================================
 	{
-		Name: "VOID EYE", Width: 5, Height: 3,
+		Name: "eye 0", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
 			color.DimGray, color.SteelBlue, color.White,
 			color.CeruleanBlue, color.NavyBlue, color.LightSkyBlue,
@@ -173,14 +173,14 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// FLAME EYE — 5x3, aggressive flicker
+	// eye 1 — 5x3, aggressive flicker
 	// Edge: # corners, thick hot border
 	// Fg: 0=LemonYellow 1=FlameOrange 2=White 3=BrightRed 4=Amber
 	//     5=DarkCrimson 6=Vermilion 7=WarmOrange
 	// Bg: 0=BlackRed 1=DarkAmber 2=Red
 	// ================================================================
 	{
-		Name: "FLAME EYE", Width: 5, Height: 3,
+		Name: "eye 1", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
 			color.LemonYellow, color.FlameOrange, color.White,
 			color.BrightRed, color.Amber, color.DarkCrimson,
@@ -220,14 +220,14 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// FROST EYE — 5x3, crystalline pulse
+	// eye 2 — 5x3, crystalline pulse
 	// Edge: * decorative corners, icy
 	// Fg: 0=BrightCyan 1=White 2=LightSkyBlue 3=CeruleanBlue
 	//     4=SteelBlue 5=CoolSilver 6=AliceBlue 7=PaleCyan
 	// Bg: 0=DeepNavy 1=CobaltBlue 2=SteelBlue
 	// ================================================================
 	{
-		Name: "FROST EYE", Width: 5, Height: 3,
+		Name: "eye 2", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
 			color.BrightCyan, color.White, color.LightSkyBlue,
 			color.CeruleanBlue, color.SteelBlue, color.CoolSilver,
@@ -268,14 +268,14 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// STORM EYE — 6x3, electric, programmatic rotating border
+	// eye 3 — 6x3, electric, programmatic rotating border
 	// Edge: + corners with rotating bg highlight
 	// Fg: 0=BrightCyan 1=CeruleanBlue 2=White 3=LemonYellow
 	//     4=SteelBlue 5=DodgerBlue 6=SkyTeal 7=LightSkyBlue
 	// Bg: 0=DeepNavy 1=CobaltBlue
 	// ================================================================
 	{
-		Name: "STORM EYE", Width: 6, Height: 3,
+		Name: "eye 3", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
 			color.BrightCyan, color.CeruleanBlue, color.White,
 			color.LemonYellow, color.SteelBlue, color.DodgerBlue,
@@ -311,14 +311,14 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// BLOOD EYE — 5x3, veined, pulsing
+	// eye 4 — 5x3, veined, pulsing
 	// Edge: > < pointed sides
 	// Fg: 0=DarkCrimson 1=BrightRed 2=White 3=Vermilion
 	//     4=Coral 5=Red 6=Salmon 7=LightCoral
 	// Bg: 0=BlackRed 1=DarkCrimson 2=Red
 	// ================================================================
 	{
-		Name: "BLOOD EYE", Width: 5, Height: 3,
+		Name: "eye 4", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
 			color.DarkCrimson, color.BrightRed, color.White,
 			color.Vermilion, color.Coral, color.Red,
@@ -358,14 +358,14 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// GOLDEN EYE — 6x3, warm amber, programmatic rotating border
+	// eye 5 — 6x3, warm amber, programmatic rotating border
 	// Edge: | sides, = top/bottom. Slow warm rotation
 	// Fg: 0=Gold 1=Amber 2=White 3=LemonYellow 4=DarkGold
 	//     5=PaleGold 6=Buttercream 7=WarmOrange
 	// Bg: 0=DarkAmber 1=Amber 2=Gold
 	// ================================================================
 	{
-		Name: "GOLDEN EYE", Width: 6, Height: 3,
+		Name: "eye 5", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
 			color.Gold, color.Amber, color.White,
 			color.LemonYellow, color.DarkGold, color.PaleGold,
@@ -407,7 +407,7 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// ABYSS EYE — 5x3, dimensional rift, transparent corners
+	// eye 6 — 5x3, dimensional rift, transparent corners
 	// Edge: . ' corners (NO bg), - | sides (with bg)
 	// Corner cells show aura through, creating bleed effect
 	// Fg: 0=PaleLavender 1=ElectricViolet 2=White 3=SoftLavender
@@ -415,7 +415,7 @@ var bestiary = []EnemyTemplate{
 	// Bg: 0=Obsidian 1=DeepPurple
 	// ================================================================
 	{
-		Name: "ABYSS EYE", Width: 5, Height: 3,
+		Name: "eye 6", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
 			color.PaleLavender, color.ElectricViolet, color.White,
 			color.SoftLavender, color.DarkViolet, color.MutedPurple,
@@ -583,7 +583,7 @@ func renderFrame(term terminal.Terminal, tick int) {
 		drawText(cells, w, h, labelX, labelY, e.Template.Name, e.Template.FgPalette[0], terminal.AttrDim)
 	}
 
-	title := " TOWER DEFENSE — ARCANE SENTINELS "
+	title := " EYE SANDBOX "
 	drawText(cells, w, h, max(0, (w-len(title))/2), 1, title, color.White, terminal.AttrBold)
 
 	sub := "Per-cell palette | Directional aura | Rotating borders"

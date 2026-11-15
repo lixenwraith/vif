@@ -782,14 +782,14 @@ func DrawString(buf *render.RenderBuffer, x, y int, s string, c color.RGB) {
 
 func MissileTypeName(t MissileType) string {
 	names := []string{
-		"KINETIC DART",
-		"HELIX PHASER",
-		"SEEKER SWARM",
-		"CLUSTER BOMB",
-		"LASER BEAM",
-		"WAVE RIDER",
-		"SPIRAL NOVA",
-		"BOUNCE BALL",
+		"KINETIC",
+		"HELIX",
+		"SEEKER",
+		"CLUSTER",
+		"LASER",
+		"WAVE",
+		"SPIRAL",
+		"BOUNCE",
 	}
 	if int(t) < len(names) {
 		return names[t]

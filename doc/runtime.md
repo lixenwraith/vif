@@ -744,7 +744,7 @@ Every relative clock (a timer slot, a carried age, a species countdown, a
 machine's elapsed time) advances in its owner's `Update`: step 6, or step 5 for the
 FSM's own. Nothing renders inside a tick, and every clock a tick starts, it starts
 in step 7, after every owner has run, so each first counts on the next tick and
-shows its whole span, whoever started it: a light simon's machine lights for 250 ms
+shows its whole span, whoever started it: a light recall's machine lights for 250 ms
 shows for 250 ms, as one an input lights between ticks does. The cost is that a
 system's `Update` first sees a crossing or an FSM action the tick after the one
 whose settle ran its handler.

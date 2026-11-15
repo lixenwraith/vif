@@ -34,7 +34,7 @@ var (
 // reads on every console palette
 var EyeTypeVisuals = [parameter.EyeTypeCount]LookArt{
 
-	// 0: Void Eye — 5×3, 5 frames
+	// 0: Void — 5×3, 5 frames
 	// Deep ocean, slow blink cycle (O→o→=→O→shut)
 	{
 		Fg: []color.RGB{
@@ -80,7 +80,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]LookArt{
 		},
 	},
 
-	// 1: Flame Eye — 5×3, 4 frames
+	// 1: Flame — 5×3, 4 frames
 	// Aggressive flicker (<@>→{*}→<o>→<O>)
 	{
 		Fg: []color.RGB{
@@ -120,7 +120,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]LookArt{
 		},
 	},
 
-	// 2: Frost Eye — 5×3, 4 frames
+	// 2: Frost — 5×3, 4 frames
 	// Crystalline pulse (<O>→(O)→{=}→(O))
 	{
 		Fg: []color.RGB{
@@ -160,7 +160,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]LookArt{
 		},
 	},
 
-	// 3: Storm Eye — 5×3, 3 frames
+	// 3: Storm — 5×3, 3 frames
 	// Electric, rotating highlight
 	{
 		Fg: []color.RGB{
@@ -194,7 +194,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]LookArt{
 		},
 	},
 
-	// 4: Blood Eye — 5×3, 4 frames
+	// 4: Blood — 5×3, 4 frames
 	// Veined pulse (X pupil, dilate cycle)
 	{
 		Fg: []color.RGB{
@@ -234,7 +234,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]LookArt{
 		},
 	},
 
-	// 5: Golden Eye — 5×3, 4 frames
+	// 5: Golden — 5×3, 4 frames
 	// Regal shimmer, warm amber
 	{
 		Fg: []color.RGB{
@@ -274,7 +274,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]LookArt{
 		},
 	},
 
-	// 6: Abyss Eye — 5×3, 4 frames
+	// 6: Abyss — 5×3, 4 frames
 	// Transparent corners (bg skip), dimensional rift
 	{
 		Fg: []color.RGB{

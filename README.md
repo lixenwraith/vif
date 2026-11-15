@@ -11,9 +11,9 @@
 
 # vif
 
-vif is a real-time roguelike typing shooter played with Vim motions, solo or with
-others over the network: in a terminal, a desktop window, on Android or in the
-browser.
+vif is a real-time roguelike typing shooter played with vi-style motions, solo or
+with others over the network: in a terminal, a desktop window, on Android or in
+the browser.
 
 It is pure Go with cgo off and few dependencies. The terminal, TOML, color and
 logging primitives are modules of their own ([terminal](https://github.com/lixenwraith/terminal),
@@ -24,8 +24,8 @@ scenarios, renderers and simulation libraries.
 
 ## Highlights
 
-- Vim's Normal, Insert, Visual, Search and Command modes as the controls: counts,
-  motions, operators, search repeat, undo and recorded macros.
+- vi-style Normal, Insert, Visual, Search and Command modes as the controls:
+  counts, motions, operators, search repeat, undo and recorded macros.
 - A typed sparse-set ECS on a fixed-step scheduler with bounded event settling,
   driven by TOML-authored hierarchical state machines for encounters and bots.
 - A layered terminal-cell compositor: truecolor, a 256-color tier settled on a
@@ -101,7 +101,7 @@ change when the run read none of yours); the rest last the run.
 `vif -h` prints every flag, to stdout; `man vif` is the same list after an
 install. The ones most runs want:
 
-- `-s <name|path>` picks a scenario (`td`, `simon`, `blank`, `vanguard`, `armada`, `dummy`), and `-d` plays
+- `-s <name|path>` picks a scenario (`td`, `recall`, `blank`, `cave`, `armada`, `dummy`), and `-d` plays
   the embedded one.
 - `-bot [N[:graph]]` seats bots beside you; `-watch` lets one play in your place
   ([Bots](doc/bots.md)).

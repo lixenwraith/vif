@@ -3,9 +3,9 @@
      is the target's, and @LABEL@, @TARGET@ and @PLATFORM@ are filled in. -->
 # vif @LABEL@ for @PLATFORM@
 
-vif is a real-time roguelike typing shooter played with Vim motions, solo or with
-other players over the network. Its page is https://lixen.com/vif/, and its source
-and documentation are at https://github.com/lixenwraith/vif.
+vif is a real-time roguelike typing shooter played with vi-style motions, solo or
+with other players over the network. Its page is https://lixen.com/vif/, and its
+source and documentation are at https://github.com/lixenwraith/vif.
 
 <!-- if nightly -->
 This is a nightly build: a development build of one commit, replaced every night,
@@ -18,6 +18,7 @@ whose flags, files and formats may change without notice.
 - `vif`: the game, in a terminal or, with `-g`, in a desktop window
 - `LICENSE`: vif's licence, BSD-3-Clause
 - `LICENSE.purego`: the licence of purego, which the desktop window links
+- `LICENSE.font`: the licence of the font the desktop window draws its cells in
 
 <!-- end -->
 <!-- if headless -->
@@ -35,6 +36,7 @@ whose flags, files and formats may change without notice.
 - `index.html`, with its scripts and stylesheet: the page that runs the game
 - `vif.wasm`: the game, which the page runs in a Worker through `wasm_exec.js`
 - `LICENSE`: vif's licence, BSD-3-Clause
+- `LICENSE.font`: the licence of the font `vif.wasm` draws its cells in
 
 <!-- end -->
 <!-- if client windows web -->
@@ -150,14 +152,14 @@ Nightly builds of this binary are also the container image
 <!-- end -->
 <!-- if client windows -->
 The binary carries the main scenario and a tutorial typing corpus. The `td`,
-`simon`, `blank`, `vanguard` and `armada` scenarios, the full corpus, wall images
+`recall`, `blank`, `cave` and `armada` scenarios, the full corpus, wall images
 and editable copies of the keymap, bot graphs and `vif.toml` are the wad,
 `vif-@LABEL@-wad.tar.gz` in the same release. It unpacks as the `vif/`
 configuration directory:
 
 <!-- end -->
 <!-- if headless -->
-The binary carries the main scenario. The `td`, `simon`, `blank`, `vanguard` and
+The binary carries the main scenario. The `td`, `recall`, `blank`, `cave` and
 `armada` scenarios and their wall images are in the wad,
 `vif-@LABEL@-wad.tar.gz` in the same release, which unpacks as the `vif/`
 configuration directory:

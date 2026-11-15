@@ -3,7 +3,7 @@ min_players = 1
 max_players = 16
 macro_files = ["macros.toml"]
 
-# A side-scroller after Vanguard (1981): the cursor is a ship and the cave scrolls
+# A side-scroller: the cursor is a ship and the cave scrolls
 # left past it. Rock pushes the cursor a column back and toward the channel; rock
 # pressing it against the left edge crushes it and the game starts over. Glyphs drift
 # left behind the rock at three depths as scenery no key types, raiders of the cave's

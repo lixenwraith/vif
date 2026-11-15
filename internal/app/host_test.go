@@ -2964,11 +2964,11 @@ func TestADialWhileItsHostLeavesIsRefusedAsTheSessionEnding(t *testing.T) {
 	}
 }
 
-// An abandoned relayed join leaves by a departure crossing that applies a lead
-// later, so its identity is free only then: a dial assigned it in between, as a
-// person joining right after a dropped probe of the relay's address was, is the
-// participant the crossing removes.
-func TestAnAbandonedRelayedIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.T) {
+// An abandoned relayed join gives its identity back once no crossing names it. One
+// whose arrival crossed leaves by a departure a lead later, which would remove a dial
+// assigned the identity in between; one never crossed in crosses nothing and leaves at
+// once, so the dial given its identity keeps it past the lead.
+func TestAnAbandonedRelayedIdentityIsFreeOnceNoCrossingNamesIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHosting(t, Membership{})
 	stop := tickInBackground(host)
@@ -2977,22 +2977,50 @@ func TestAnAbandonedRelayedIdentityIsFreeOnlyOnceItsDepartureApplies(t *testing.
 	relay := takePlace(t, pending, offered, network.JoinerReport{Width: 120, Height: 40})
 	stop() // the host takes its ticks as this test gives them from here
 
-	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayNonce, Nonce: 1})
-	challenge := relayAnswer(t, relay, 1).Challenge
-	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayAssign, Nonce: 2,
-		Keys: []network.Proof{network.NewKey().Prove(challenge, nil)}, Challenge: challenge})
-	leaf := relayAnswer(t, relay, 2).Offer.Assigned
-	relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayAbandon, Leaf: leaf})
+	var nonce uint32
+	ask := func(req network.RelayJoin) network.RelayAdmit {
+		nonce++
+		req.Nonce = nonce
+		relayStep(host, offered.Assigned, req)
+		return relayAnswer(t, relay, nonce)
+	}
+	assign := func() link.PeerID {
+		challenge := ask(network.RelayJoin{Step: network.RelayNonce}).Challenge
+		return ask(network.RelayJoin{Step: network.RelayAssign,
+			Keys: []network.Proof{network.NewKey().Prove(challenge, nil)}, Challenge: challenge}).Offer.Assigned
+	}
+	abandon := func(leaf link.PeerID) {
+		relayStep(host, offered.Assigned, network.RelayJoin{Step: network.RelayAbandon, Leaf: leaf})
+	}
+
+	leaf := assign()
+	ask(network.RelayJoin{Step: network.RelayReady, Leaf: leaf, Report: network.JoinerReport{Holder: offered.Assigned}})
+	abandon(leaf)
 	next, between := dialSession(t, host.HostAddr())
 	defer next.Close()
 	if between.Assigned == leaf {
-		t.Fatalf("identity %d was reassigned while its departure was still to apply", leaf)
+		t.Fatalf("identity %d, whose arrival crossed, was reassigned while its departure was still to apply", leaf)
 	}
 	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
 	again, after := dialSession(t, host.HostAddr())
 	defer again.Close()
 	if after.Assigned != leaf {
 		t.Fatalf("after the departure applied, assigned %d; want %d back", after.Assigned, leaf)
+	}
+
+	leaf = assign()
+	abandon(leaf)
+	last, atOnce := dialSession(t, host.HostAddr())
+	defer last.Close()
+	if atOnce.Assigned != leaf {
+		t.Fatalf("a relayed join abandoned before its arrival crossed left %d to the next dial; want %d back at once",
+			atOnce.Assigned, leaf)
+	}
+	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
+	beyond, later := dialSession(t, host.HostAddr())
+	defer beyond.Close()
+	if later.Assigned == leaf {
+		t.Fatalf("identity %d, given back at once, was taken from the dial it went to a lead later", leaf)
 	}
 }
 

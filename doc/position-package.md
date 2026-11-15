@@ -128,7 +128,7 @@ Each names the choice taken and what the other would have cost.
   species move and break; the planes are derived, never captured.
 - Cells, sixteen bytes with the crowds apart: a cell holds its occupant inline
   while it holds one, as 94 to 99.8% of the occupied cells of main, td and
-  vanguard do in play, and a cell of two or more keeps them in a 256-byte crowd
+  `cave` do in play, and a cell of two or more keeps them in a 256-byte crowd
   from a slab that reuses its places, a few hundred at most in those games. The
   map ceiling costs 2 MB of cells where it cost 32, and a move reads a cell and a
   presence word where it read a 256-byte cell and the occupied list. Each cell's
@@ -340,7 +340,7 @@ main it landed on:
 - The call sites and the binding, and the volume: parity, the compiler inlining
   the promoted calls as it inlined the forwarders, and a flat query's body and a
   cell's index unchanged at one layer.
-- The direct path from the header, 16 headless vanguard games on main and on the
+- The direct path from the header, 16 headless `cave` games on main and on the
   branch: the direct ticks whose body was blocked 1.6% and 1.2% to 0.3% and 0.1%
   at 120×40 and 200×60, the rest the body's motion within the tick after
   navigation decided; the direct share 71% to 73% and 78% to 79%.
@@ -359,7 +359,7 @@ main it landed on:
   layer's shift 33 and 48%, a wall's move 26 and 31%; the directional scan 46 and
   52%; an install 77 and 70%; the gauges 1.6 and 301 µs to 20 ns. In the game:
   td's tick with sixteen cursors 0.129 to 0.108 ms; headless ticks 9% under on
-  main, 11% on td and 20% on vanguard; the maze spawn 9 to 13% under; the glyph
+  main, 11% on td and 20% on `cave`; the maze spawn 9 to 13% under; the glyph
   renderer 12 and 9% under at 120×40 and 200×60 and at parity at 400×120, the 8%
   the surfaces cost it taken back; the cave, navigation and route benches inside
   the band or under; the world copy 3 to 5% under. A td world's grid holds 2.1

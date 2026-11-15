@@ -58,19 +58,19 @@ func main() {
 
 	// Create 3 distinct entities demonstrating different blend modes
 	entities := []*Entity{
-		// 1. "The Sun" - Additive blending, hot core
+		// Type 0: additive blending, hot core
 		{
 			X: 20, Y: 10, DX: 0.8, DY: 0.4, Radius: 14,
 			Color:      color.RGB{R: 255, G: 160, B: 60}, // Orange
 			RenderType: 0,
 		},
-		// 2. "The Bubble" - SoftLight/Overlay, distinct rim
+		// Type 1: SoftLight/Overlay, distinct rim
 		{
 			X: 60, Y: 20, DX: -0.6, DY: 0.7, Radius: 18,
 			Color:      color.RGB{R: 60, G: 220, B: 255}, // Cyan
 			RenderType: 1,
 		},
-		// 3. "The Pulse" - Screen blending, interference pattern
+		// Type 2: screen blending, interference pattern
 		{
 			X: 40, Y: 30, DX: 0.4, DY: -0.5, Radius: 22,
 			Color:      color.RGB{R: 200, G: 60, B: 255}, // Purple
@@ -216,7 +216,7 @@ func main() {
 					var finalColor color.RGB
 
 					switch e.RenderType {
-					case 0: // "The Sun" - Additive Core + Corona
+					case 0: // Additive core and corona
 						// Core: Hot white center
 						core := math.Max(0, 1.0-normDist*2.0) // Sharp falloff
 						// Corona: Soft glow
@@ -234,7 +234,7 @@ func main() {
 						// Explicit alpha 1.0
 						finalColor = color.Add(bg, val, 1.0)
 
-					case 1: // "The Bubble" - Overlay Body + SoftLight Rim
+					case 1: // Overlay body and SoftLight rim
 						// Rim lighting (strong at edges)
 						rim := math.Pow(normDist, 3.0)
 						// Internal volume
@@ -253,7 +253,7 @@ func main() {
 							finalColor = color.Add(finalColor, color.Scale(color.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)
 						}
 
-					case 2: // "The Pulse" - Screen Interference
+					case 2: // Screen interference
 						// Ripples
 						ripple := math.Sin(normDist*30.0 - currTime*8.0)
 						alpha := (1.0 - normDist) * (0.5 + 0.5*ripple)

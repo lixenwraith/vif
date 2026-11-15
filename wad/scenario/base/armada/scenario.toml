@@ -2,7 +2,7 @@ description = "Hold the line under an armada: its ranks hang overhead and its sh
 min_players = 1
 max_players = 16
 
-# A fixed shooter in the line of Galaxian and Galaga: the cursor is a ship firing
+# A fixed shooter of diving formations: the cursor is a ship firing
 # up alone, under an armada standing in ranks. A ship breaks rank, dives at where
 # the cursor stood and flies back to its slot; the top rank's wardens fire aimed
 # bullets too. A wave shot down brings on the next: darts, then lancers over them,

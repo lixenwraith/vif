@@ -88,6 +88,10 @@ jobs:
           for target in linux-amd64 linux-arm64 freebsd-amd64; do
             cp deploy/package/LICENSE.purego "stage/$p-$target/"
           done
+          # They and vif.wasm embed the font atlas the cells are drawn with.
+          for target in linux-amd64 linux-arm64 freebsd-amd64 web; do
+            cp internal/asset/font/LICENSE "stage/$p-$target/LICENSE.font"
+          done
           cp -R web/. "stage/$p-web/"
           # The loader of the Go that built vif.wasm above, not the committed copy.
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "stage/$p-web/"

@@ -1,13 +1,13 @@
-# Vim tutorial scenario
+# Tutor scenario
 
 A working doc: what the tutorial is, what its foundation already holds, what is
 still to lay, and the decisions it waits on. The todo item points here.
 
 ## 1. What it is
 
-A scenario, `wad/scenario/base/vimtutor`, that teaches vim's motions the way `:Tutor`
-does: one lesson at a time on a responsive map, combat off. Each lesson is laid
-out the same way, top to bottom:
+A scenario, `wad/scenario/base/tutor`, that teaches vif's vi-style motions the way
+Vim's `:Tutor` does: one lesson at a time on a responsive map, combat off. Each
+lesson is laid out the same way, top to bottom:
 
 - a heading in the small splash face (`EventSplashTextRequest`, `font = "small"`):
   the key or keys to press, as `press w`;
@@ -28,8 +28,8 @@ re-laid when the state is entered again.
 
 ## 2. The first round
 
-`wad/scenario/base/vimtutor` runs eleven lessons and a free practice; `vif -s vimtutor`
-plays it, `vif -s vimtutor -check` validates it with its corpus. What it stands on:
+`wad/scenario/base/tutor` runs eleven lessons and a free practice; `vif -s tutor`
+plays it, `vif -s tutor -check` validates it with its corpus. What it stands on:
 
 - Two splash faces (`asset.SplashFaces`): the large one as before, and a small one
   six by twelve pixels, drawn two pixel rows a cell with half blocks and a cell a
@@ -78,7 +78,7 @@ have somewhere to go.
   would spare the scenario its arithmetic.
 - **The magnifier**: a cursor resting on a glyph shows it large some way off, which
   a lesson could do without; the splash system has no switch for it yet.
-- **Sound**: a chime on a lesson cleared and a buzz on a taken key, as simon cues.
+- **Sound**: a chime on a lesson cleared and a buzz on a taken key, as recall cues.
 
 ## 4. Decisions taken
 

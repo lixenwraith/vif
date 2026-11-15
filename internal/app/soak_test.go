@@ -321,7 +321,7 @@ func TestTowerVictoryDropsAGunThatAddsALane(t *testing.T) {
 func forEachShippedScenario(t *testing.T, test func(t *testing.T, a *App)) {
 	t.Helper()
 	event.EnsureRegistry()
-	for _, name := range []string{"main", "blank", "td", "simon", "vanguard", "armada", "dummy", ""} {
+	for _, name := range []string{"main", "blank", "td", "recall", "cave", "armada", "dummy", ""} {
 		label := name
 		if label == "" {
 			label = resource.EmbeddedLabel
@@ -407,14 +407,14 @@ func TestEveryShippedScenarioResetsOnAnyCursorDefeat(t *testing.T) {
 	})
 }
 
-// TestALightShowsForItsWholeSpan: a note simon's machine lights in a tick stays lit
-// its whole span of ticks, as one lit between ticks does: the clock it arms first
-// counts on the tick after the one that armed it.
+// TestALightShowsForItsWholeSpan: a note recall's machine lights in a tick stays
+// lit its whole span of ticks, as one lit between ticks does: the clock it arms
+// first counts on the tick after the one that armed it.
 func TestALightShowsForItsWholeSpan(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "simon"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "recall"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("simon scenario not present")
+		t.Skip("recall scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24, Resources: opts})
 	if err != nil {
@@ -423,7 +423,7 @@ func TestALightShowsForItsWholeSpan(t *testing.T) {
 	defer a.Close()
 
 	w := a.World()
-	state := func() string { return w.Resources.Status.Strings.Get("fsm.simon.state").Load() }
+	state := func() string { return w.Resources.Status.Strings.Get("fsm.recall.state").Load() }
 	for range 400 {
 		if state() == "Ready" {
 			break
@@ -445,7 +445,7 @@ func TestALightShowsForItsWholeSpan(t *testing.T) {
 		}
 	}
 	if lit == nil {
-		t.Fatal("simon lit no button after the press")
+		t.Fatal("recall lit no button after the press")
 	}
 	var button core.Entity
 	w.Components.Button.Each(func(e core.Entity, b *component.ButtonComponent) bool {
@@ -467,15 +467,15 @@ func TestALightShowsForItsWholeSpan(t *testing.T) {
 	}
 }
 
-// TestSimonTakesBackWhatItShowed plays the shipped simon scenario through each way a
-// press arrives: a typed key, a click on the button, and a bot's press. Each level
-// shows one more note, a press sounds once on the pressing instance, a key the game
-// is not taking crosses nothing, and a wrong note starts a new game.
-func TestSimonTakesBackWhatItShowed(t *testing.T) {
+// TestEveryWayAPressArrivesAnswersTheSequence plays recall through each way a press
+// arrives: a typed key, a click on the button, and a bot's press. Each level shows
+// one more note, a press sounds once on the pressing instance, a key the game is
+// not taking crosses nothing, and a wrong note starts a new game.
+func TestEveryWayAPressArrivesAnswersTheSequence(t *testing.T) {
 	t.Parallel()
-	opts := resource.Options{Dir: soakRoot, Scenario: "simon"}
+	opts := resource.Options{Dir: soakRoot, Scenario: "recall"}
 	if _, err := resource.ScenarioPath(opts); err != nil {
-		t.Skip("simon scenario not present")
+		t.Skip("recall scenario not present")
 	}
 	a, err := NewHeadless(Config{Mode: ModeHeadless, Seed: fixtureSeed, Width: 80, Height: 24, Resources: opts})
 	if err != nil {
@@ -484,7 +484,7 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 	defer a.Close()
 
 	w := a.World()
-	state := func() string { return w.Resources.Status.Strings.Get("fsm.simon.state").Load() }
+	state := func() string { return w.Resources.Status.Strings.Get("fsm.recall.state").Load() }
 	var shown []int
 	var tones, presses int
 	a.SetDispatchTap(func(ev event.GameEvent) {
@@ -511,7 +511,7 @@ func TestSimonTakesBackWhatItShowed(t *testing.T) {
 			}
 			a.Tick(1)
 		}
-		t.Fatalf("simon stayed in %s, never reached %s", state(), want)
+		t.Fatalf("recall stayed in %s, never reached %s", state(), want)
 	}
 	press := func(intent *input.Intent, want int) {
 		t.Helper()

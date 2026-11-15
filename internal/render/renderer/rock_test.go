@@ -257,10 +257,10 @@ func TestARockCellsFaceIsItsNearestOpening(t *testing.T) {
 	}
 }
 
-// BenchmarkRockRender draws vanguard's cave scrolling a column a frame across a wide
-// terminal, a large one and the largest map, in a flat visual and in stone; "redraw"
-// changes the stone's seed every frame, so every column draws again, as on a cave's
-// first frame
+// BenchmarkRockRender draws the cave scenario's rock scrolling a column a frame
+// across a wide terminal, a large one and the largest map, in a flat visual and in
+// stone; "redraw" changes the stone's seed every frame, so every column draws
+// again, as on a cave's first frame
 func BenchmarkRockRender(b *testing.B) {
 	for _, size := range []struct{ w, h int }{{200, 60}, {400, 120}, {500, 254}} {
 		for _, c := range []struct {

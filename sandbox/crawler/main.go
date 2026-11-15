@@ -92,12 +92,12 @@ func paletteIdx(b byte) int {
 
 var bestiary = []EnemyTemplate{
 	// ================================================================
-	// INFERNAL — 6x3, 5 frames, fast flicker
+	// crawler 1 — 6x3, 5 frames, fast flicker
 	// Fg: 0=LemonYellow 1=FlameOrange 2=BrightRed 3=White 4=Amber 5=DarkCrimson 6=Vermilion
 	// Bg: 0=DarkAmber 1=BlackRed 2=Red
 	// ================================================================
 	{
-		Name: "INFERNAL", Width: 6, Height: 3,
+		Name: "crawler 1", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
 			color.LemonYellow, color.FlameOrange, color.BrightRed,
 			color.White, color.Amber, color.DarkCrimson, color.Vermilion,
@@ -142,12 +142,12 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// WRAITH — 5x3, 4 frames, slow phase-shift
+	// crawler 2 — 5x3, 4 frames, slow phase-shift
 	// Fg: 0=PaleLavender 1=ElectricViolet 2=DarkViolet 3=SoftLavender 4=DeepPurple
 	// Bg: 0=Obsidian 1=DeepPurple
 	// ================================================================
 	{
-		Name: "WRAITH", Width: 5, Height: 3,
+		Name: "crawler 2", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
 			color.PaleLavender, color.ElectricViolet, color.DarkViolet,
 			color.SoftLavender, color.DeepPurple,
@@ -186,13 +186,13 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// ARCANE EYE — 5x3, 5 frames, deliberate blink cycle
+	// crawler 3 — 5x3, 5 frames, deliberate blink cycle
 	// Fg: 0=CeruleanBlue 1=SteelBlue 2=White 3=BrightCyan 4=LightSkyBlue
 	//     5=CobaltBlue 6=DodgerBlue 7=SkyTeal
 	// Bg: 0=DeepNavy 1=CobaltBlue 2=DodgerBlue
 	// ================================================================
 	{
-		Name: "ARCANE EYE", Width: 5, Height: 3,
+		Name: "crawler 3", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
 			color.CeruleanBlue, color.SteelBlue, color.White,
 			color.BrightCyan, color.LightSkyBlue, color.CobaltBlue,
@@ -243,12 +243,12 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// VENOM QUEEN — 6x3, 4 frames, toxic drip
+	// crawler 4 — 6x3, 4 frames, toxic drip
 	// Fg: 0=NeonGreen 1=YellowGreen 2=BrightGreen 3=White 4=DarkGreen 5=Lime
 	// Bg: 0=BlackGreen 1=DarkGreen
 	// ================================================================
 	{
-		Name: "VENOM QUEEN", Width: 6, Height: 3,
+		Name: "crawler 4", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
 			color.NeonGreen, color.YellowGreen, color.BrightGreen,
 			color.White, color.DarkGreen, color.Lime,
@@ -287,12 +287,12 @@ var bestiary = []EnemyTemplate{
 	},
 
 	// ================================================================
-	// IRON REAVER — 6x3, 4 frames, mechanical chop
+	// crawler 5 — 6x3, 4 frames, mechanical chop
 	// Fg: 0=Silver 1=CoolSilver 2=IronGray 3=BrightRed 4=White 5=DarkGray
 	// Bg: 0=DarkSlate 1=BlackRed 2=Gunmetal
 	// ================================================================
 	{
-		Name: "IRON REAVER", Width: 6, Height: 3,
+		Name: "crawler 5", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
 			color.Silver, color.CoolSilver, color.IronGray,
 			color.BrightRed, color.White, color.DarkGray,
@@ -449,7 +449,7 @@ func renderFrame(term terminal.Terminal, tick int) {
 	}
 
 	// Title
-	title := " TOWER DEFENSE BESTIARY "
+	title := " CRAWLER SANDBOX "
 	titleX := (w - len(title)) / 2
 	drawText(cells, w, h, max(0, titleX), 1, title, color.White, terminal.AttrBold)
 
