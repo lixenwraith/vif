@@ -482,10 +482,12 @@ A mid-run join is admitted to transport before its capture is read, so
 traffic produced during transfer is buffered rather than lost. The join waits for
 a capture far enough past admission to include pre-admission epochs and refuses a
 catch-up gap past `NetworkJoinCatchUpTicks`, or one still wider than
-`NetworkJoinLagTicks` (the default lead) once it has caught up; a bot seat retries
-either, since a fresh attempt brings a fresher world. A joiner drives no cursor until
-its own exists: the arrival binds it, or a correction that already holds the arrival,
-whose fence drops the crossing, binds it by identity (`RebindCursorRoster`).
+`NetworkJoinLagTicks` (the default lead) once it has caught up. A gate with no world
+to send by `NetworkJoinReadyTimeout`, as a relay's is while its proof has not come,
+refuses its joiner the same way (`joinBehind`); a bot seat retries each, since a
+fresh attempt brings a fresher world. A joiner drives no cursor until its own
+exists: the arrival binds it, or a correction that already holds the arrival, whose
+fence drops the crossing, binds it by identity (`RebindCursorRoster`).
 
 A gate's lead counts the ticks of the game its offer names. A new game that starts
 under it ends the wait (`KeyframeAt`, `ProvedWorld`), and the host refuses the

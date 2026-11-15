@@ -1350,8 +1350,9 @@ sent bodies alone, deltas. A keyframe the relay takes for its own lagging bot
 (`serveOne`, `takeKeyframe`) moves their baseline past the one the person holds and
 keeps the scheduled keyframe from coming due, so each is refused until the limit's
 jitter lets a manifest through. A bot the person adds meanwhile waits in its relayed
-start gate (`Corrections.ProvedWorld`), which drops it past `NetworkJoinReadyTimeout`,
-and its seat does not retry that. Probed runs of
+start gate (`Corrections.ProvedWorld`) until a proof comes or, past
+`NetworkJoinReadyTimeout`, the gate refuses it as behind and its seat dials again.
+Probed runs of
 `TestAPinnedForkTakesThePeopleItRelayedAlong` stalled 2 to 3.4 s in 3 of 5. What
 would close it: manifests sent before a link's participant installed its gate world
 count toward no silence, and a peer fed deltas alone is owed the keyframe a fallback

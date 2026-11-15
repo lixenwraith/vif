@@ -2952,9 +2952,8 @@ func TestADialWhileItsHostLeavesIsRefusedAsTheSessionEnding(t *testing.T) {
 
 // An abandoned relayed join gives its identity back once no crossing names it. One
 // whose arrival crossed leaves by a departure a lead later, which would remove a dial
-// assigned the identity in between, as a person joining right after a dropped probe of
-// the relay's address was; one never crossed in leaves at once, since a new game drops
-// a departure with no cursor to remove, which would keep its place taken for good.
+// assigned the identity in between; one never crossed in crosses nothing and leaves at
+// once, so the dial given its identity keeps it past the lead.
 func TestAnAbandonedRelayedIdentityIsFreeOnceNoCrossingNamesIt(t *testing.T) {
 	// Not parallel: real sockets against wall-clock deadlines.
 	host := mustHosting(t, Membership{})
@@ -3002,6 +3001,12 @@ func TestAnAbandonedRelayedIdentityIsFreeOnceNoCrossingNamesIt(t *testing.T) {
 	if atOnce.Assigned != leaf {
 		t.Fatalf("a relayed join abandoned before its arrival crossed left %d to the next dial; want %d back at once",
 			atOnce.Assigned, leaf)
+	}
+	host.Tick(parameter.NetworkBarrierDelayTicks + 1)
+	beyond, later := dialSession(t, host.HostAddr())
+	defer beyond.Close()
+	if later.Assigned == leaf {
+		t.Fatalf("identity %d, given back at once, was taken from the dial it went to a lead later", leaf)
 	}
 }
 
