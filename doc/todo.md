@@ -1336,6 +1336,27 @@ fall between that and a host that only slows:
   longer than the link-dead time is not counted, or the share has to hold over two
   windows.
 
+### Correct a guest that joined while its link read as silent
+
+- Priority: P2
+- Affected files: `internal/converge/selective.go` (`publishManifest`, `silenceLimit`,
+  `serveOne`), `internal/converge/correction.go` (`publishRound`, `takeKeyframe`)
+- Guide: [Netcode design §2](netcode-design.md#2-the-correction-pipeline)
+
+A person that rejoins at its pinned fork's `-relay` door can go seconds with no
+authoritative world. Its link is in the relay's publication set while its run still
+joins, so the manifests sent meanwhile go unanswered, and past `silenceLimit` it is
+sent bodies alone, deltas. A keyframe the relay takes for its own lagging bot
+(`serveOne`, `takeKeyframe`) moves their baseline past the one the person holds and
+keeps the scheduled keyframe from coming due, so each is refused until the limit's
+jitter lets a manifest through. A bot the person adds meanwhile waits in its relayed
+start gate (`Corrections.ProvedWorld`), which drops it past `NetworkJoinReadyTimeout`,
+and its seat does not retry that. Probed runs of
+`TestAPinnedForkTakesThePeopleItRelayedAlong` stalled 2 to 3.4 s in 3 of 5. What
+would close it: manifests sent before a link's participant installed its gate world
+count toward no silence, and a peer fed deltas alone is owed the keyframe a fallback
+took.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under

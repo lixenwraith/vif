@@ -642,13 +642,22 @@ func (m *Membership) admitRelayedLocked(relay, leaf link.PeerID, report network.
 	return nil
 }
 
-// abandonRelayedLocked retires a relayed join that failed. Whether its arrival
-// crossed is the holder's guess, so it is dismissed as any participant can be: a
-// departure for a cursor never made removes nothing. A place taken back whose
-// arrival has not crossed goes back to its Wraith. Caller MUST hold updateMutex.
+// abandonRelayedLocked retires a failed relayed join as the barrier holds it, not as
+// the holder guessed: a place taken back and not yet crossed in goes back to its
+// Wraith, an identity never crossed in to the pool at once, as a direct joiner's does,
+// since a new game drops a dismissal with no cursor to remove and the place would
+// stay taken, and one that crossed in is dismissed. Caller MUST hold updateMutex.
 func (m *Membership) abandonRelayedLocked(relay, leaf link.PeerID) {
-	if slot, ok := m.relayedSlot(relay, leaf); ok && !m.giveBack(leaf) {
-		m.pushDepartureLocked(event.ParticipantDepartedPayload{Participant: uint32(leaf), Slot: slot, Dismissed: true},
-			core.DomainPlayer)
+	slot, ok := m.relayedSlot(relay, leaf)
+	if !ok || m.giveBack(leaf) {
+		return
 	}
+	for _, sys := range m.world.Systems() {
+		if s, ok := sys.(interface{ CrossedIn(uint32) bool }); ok && !s.CrossedIn(uint32(leaf)) {
+			m.leaveRoster(leaf, true)
+			return
+		}
+	}
+	m.pushDepartureLocked(event.ParticipantDepartedPayload{Participant: uint32(leaf), Slot: slot, Dismissed: true},
+		core.DomainPlayer)
 }

@@ -395,6 +395,12 @@ Libraries · Branches.
   nothing of why: put `fmt.Fprintf(os.Stderr, ...)` probes in a `git worktree`
   copy, build its race binary there and run it under the same load, keeping the
   branch clean.
+- A socket test's dump whose status reads "" where the test set one saw a new game
+  come in between: `MetaSystem.handleGameReset` is the only clear, and `Run` counts
+  the resets since the run began. Which of two runs applies a new game first races
+  their tickers; a test puts the guest first by sleeping once in a ticker of its own
+  on the authority, after the tick that crosses the reset and before the one that
+  applies it.
 - A closed listener's port is no refusing address: under `go test ./...` another
   package's listener can be given it and answer. Dial the near end of a held
   connection instead, which stays bound with nothing listening (vif-router's
