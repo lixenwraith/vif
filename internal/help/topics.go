@@ -189,6 +189,7 @@ var topics = []topicDef{
 			{Keys: ":mouse enable|disable|free", Desc: "Pointer master switch"},
 			{Keys: ":host <doors>", Desc: "Open this running game to participants at one or more doors, e.g. :host :7777 or :host :7777,wss://:7778; they join at the current tick"},
 			{Keys: ":join <target>", Desc: "Leave this solo game for the session at target, in any form -join takes, which seats you at your press; a failed join plays on solo"},
+			{Keys: ":spectate <target> [slot]", Desc: "Leave this game to watch the session at target, in any form -join takes, looking from the player on slot: you hold no place in it, play nothing and are not named to its players; a failed dial plays on. While spectating, :spectate <slot>, the left and right keys or a press on a player follow another, and :leave starts a local game"},
 			{Keys: ":leave", Desc: "Leave the session and play on in one of your own from where it stands; your bots come along, and :host or :join opens or finds another"},
 			{Keys: ":relay [on|off]", Desc: "Carry the game for players who reach this run and not their host, as after a host loss; off by default, and one that joined through this run is carried either way"},
 			{Keys: ":takeover [on|off]", Desc: "Let a session whose host chose migrate move to this run when that host leaves; off by default. On, this run listens on a port in each session it joins from then, and the session shares its address with the other players; off, it also passes its turn in the session it is in"},

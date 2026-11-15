@@ -716,9 +716,10 @@ type TicketGate struct {
 }
 
 // Admit is the door's answer to a ticket a dial carried (Coordinator.Ticket): good
-// under one of the router's keys, this session's, admitting a player, over a key the
-// dial proved and unspent; or the refusal, which says no more than the dial showed.
-func (g *TicketGate) Admit(shown *Signed, keys []string) (*TicketBody, error) {
+// under one of the router's keys, this session's, admitting what the door is for,
+// over a key the dial proved and unspent; or the refusal, which says no more than
+// the dial showed.
+func (g *TicketGate) Admit(shown *Signed, keys []string, kind AdmissionKind) (*TicketBody, error) {
 	now := time.Now() // [wall] the ticket's window
 	var body TicketBody
 	err := errors.New("the door holds no key to check it against")
@@ -732,8 +733,8 @@ func (g *TicketGate) Admit(shown *Signed, keys []string) (*TicketBody, error) {
 		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket was refused: " + err.Error()}
 	case body.Session != g.Session:
 		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket is another session's"}
-	case body.Kind != AdmitPlay:
-		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket admits no player"}
+	case body.Kind != kind:
+		return nil, &Refusal{Code: RefusalCredential, Reason: fmt.Sprintf("the ticket is to %s, and this door is to %s", body.Kind, kind)}
 	case body.Key == nil || !slices.Contains(keys, EncodeKey(body.Key)):
 		return nil, &Refusal{Code: RefusalCredential, Reason: "the ticket names a key the dial did not prove"}
 	case !g.spent.Spend(body, now):

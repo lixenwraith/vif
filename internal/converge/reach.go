@@ -248,7 +248,8 @@ func (r *Reach) cutOff() bool {
 	}
 	u := r.authority
 	u.mu.Lock()
-	in := u.term > 0 && !u.fork && u.local != u.holder && u.contested == 0
+	// A viewer holds no place to be carried to: a feed it lost is its run's to dial again
+	in := u.term > 0 && !u.fork && u.local != 0 && u.local != u.holder && u.contested == 0
 	u.mu.Unlock()
 	return in && !r.inst.Reaches()
 }

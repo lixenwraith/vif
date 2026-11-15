@@ -180,8 +180,9 @@ func (m *Membership) returnAcceptor(name string) func(net.Conn) (link.PeerID, er
 }
 
 // errNotReturning turns away a dial whose key holds no place in the session a pinned
-// fork goes on in for the players its run relayed: at its -relay door, or through one
-// of theirs (relaySeatingLocked). It takes them back, and nobody new.
+// fork goes on in for the players its run relayed, or that only watches it: at its
+// -relay door, or through one of theirs (relaySeatingLocked). It takes them back,
+// and nobody new.
 var errNotReturning = &network.Refusal{Code: network.RefusalUnknown,
 	Reason: "this session takes back only the players its host relayed before its own host left"}
 

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vif/internal/asset"
+	"github.com/lixenwraith/vif/internal/network"
+	"github.com/lixenwraith/vif/internal/probe"
 )
 
 type fakeKube struct {
@@ -361,6 +363,34 @@ func TestReadyAddressesStayScopedToTheirService(t *testing.T) {
 	}
 	if !addresses["vif-session-two"]["10.42.0.21"] || addresses["vif-session-two"]["10.42.0.20"] {
 		t.Fatalf("unexpected second Service addresses: %v", addresses["vif-session-two"])
+	}
+}
+
+// TestADialThatOnlyWatchesReachesAGameNotASeat: a full session refuses a join
+// before its pod is dialled and is still a spectator's to reach, who takes no seat;
+// one in its lobby is a join's alone, and refuses a spectator the same way.
+func TestADialThatOnlyWatchesReachesAGameNotASeat(t *testing.T) {
+	controller := newAllocator(&fakeKube{}, fakeHealth{state: sessionHealth{Live: true, Ready: true, Capacity: 4}},
+		testAllocatorConfig(t))
+	created, err := controller.createSession(context.Background(), sessionRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		state       sessionHealth
+		play, watch network.RefusalCode // zero where the dial reaches the pod
+	}{
+		{sessionHealth{Live: true, Phase: "occupied", Clock: probe.ClockRunning, Tick: 90}, network.RefusalFull, 0},
+		{sessionHealth{Live: true, Ready: true, Phase: "waiting", Clock: probe.ClockStopped}, 0, network.RefusalUnstarted},
+	} {
+		controller.health = fakeHealth{state: tc.state}
+		for kind, refused := range map[network.AdmissionKind]network.RefusalCode{network.AdmitPlay: tc.play, network.AdmitWatch: tc.watch} {
+			ip, err := controller.routeSession(context.Background(), created.ID, kind)
+			if routed := err == nil && ip == "10.42.0.20"; refused == 0 && !routed ||
+				refused != 0 && !errors.Is(err, &network.Refusal{Code: refused}) {
+				t.Errorf("a dial to %s a %s session reached %q, %v; want refusal %d", kind, tc.state.Phase, ip, err, refused)
+			}
+		}
 	}
 }
 

@@ -97,13 +97,7 @@ func (s *apiServer) handleSessionSocket(w http.ResponseWriter, r *http.Request) 
 		s.log.Warn("session socket upgrade failed", "session", id, "error", err)
 		return
 	}
-	from := s.clientAddr(r)
-	upstream, release, at := s.ws.route.place(client, from)
-	if upstream == nil {
-		return
-	}
-	defer release()
 	// The page's sign-in rides the upgrade as the cookie the identity service set on
 	// this origin, which the Origin check above made the page's own.
-	s.ws.route.carry(client, upstream, at, from, signInOf(r))
+	s.ws.route.route(client, s.clientAddr(r), signInOf(r))
 }

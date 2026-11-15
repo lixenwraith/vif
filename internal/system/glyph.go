@@ -176,8 +176,9 @@ func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventGlyphLineRequest:
-		// A scenario's line stands whether or not the system lays lines of its own
-		if payload, ok := ev.Payload.(*event.GlyphLinePayload); ok {
+		// A scenario's line stands whether or not the system lays lines of its own,
+		// but for a player: a viewer's world has none
+		if payload, ok := ev.Payload.(*event.GlyphLinePayload); ok && !s.world.Watches() {
 			s.placeLineAt(payload)
 		}
 
@@ -208,7 +209,8 @@ func (s *GlyphSystem) clear(p *event.GlyphClearPayload) {
 
 // Update runs the spawn system logic
 func (s *GlyphSystem) Update() {
-	if !s.enabled {
+	// A viewer's screen is its session's Shared world alone: it lays no field
+	if !s.enabled || s.world.Watches() {
 		return
 	}
 	s.feedEntering()
