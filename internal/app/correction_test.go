@@ -127,17 +127,18 @@ func TestGuestConvergesOnEveryCorrection(t *testing.T) {
 	advance := func() { host.Tick(1); guest.Tick(1) }
 	drifted := false
 	for round := range 6 {
-		// Each participant drives its own cursor, and the host takes a placement the
-		// guest never derives — a stamped shared one, as a wall push-out is.
+		// Each participant drives its own cursor, and the host then takes a placement
+		// the guest never derives — a stamped shared one, as a wall push-out is —
+		// once its own move has applied and cannot write over it.
 		inject(t, host, intentMotion(input.MotionRight, 1))
 		inject(t, guest, intentMotion(input.MotionLeft, 1))
+		for range 3 {
+			advance()
+		}
 		from := cursorPosition(host, localA)
 		host.Context().PushEventOrigin(event.EventCursorMoveRequest,
 			&event.CursorMoveRequestPayload{Entity: localA, X: from.X, Y: from.Y + 1}, event.OriginDebug)
 		host.Settle()
-		for range 3 {
-			advance()
-		}
 		if !sharedStatesAgree(host, guest) {
 			drifted = true
 		}
@@ -436,7 +437,7 @@ func TestCrossingApplyTimes(t *testing.T) {
 		&event.CursorMoveRequestPayload{Entity: target, X: want.X, Y: want.Y})
 	a.Settle()
 
-	for range parameter.NetworkBarrierDelayTicks {
+	for range statOf(a, "network.barrier_delay_ticks") + 1 {
 		if got := cursorPosition(a, target); got != start {
 			t.Fatalf("the producer applied its own crossing at %#v inside the lead", got)
 		}
@@ -446,8 +447,6 @@ func TestCrossingApplyTimes(t *testing.T) {
 		a.Tick(1)
 		b.Tick(1)
 	}
-	a.Tick(1)
-	b.Tick(1)
 	for _, x := range []*App{a, b} {
 		if got := cursorPosition(x, target); got != want {
 			t.Fatalf("the crossing applied as %#v at the agreed tick, want %#v", got, want)
@@ -1417,8 +1416,9 @@ func towerFight(t *testing.T, cfg Config, shape link.LinkShape) (host, guest *Ap
 func TestAGuestFollowsTheAuthoritysTransitions(t *testing.T) {
 	apps := meshSessionOf(t, towerScenario(t, 0x70E4), 2, [][2]int{{1, 2}})
 	host, guest := apps[0], apps[1]
+	const latency = 3
 	for _, a := range apps {
-		transportOf(t, a).SetShape(link.LinkShape{LatencyTicks: 3})
+		transportOf(t, a).SetShape(link.LinkShape{LatencyTicks: latency})
 		injectExCommand(t, a, "god")
 	}
 	type move struct {
@@ -1442,6 +1442,12 @@ func TestAGuestFollowsTheAuthoritysTransitions(t *testing.T) {
 				core.DomainShared)
 		})
 		a.Settle()
+	}
+	// The guest stands the link's latency behind its host, as a joiner lands, so
+	// what the authority stamps a tick ahead reaches it before that tick.
+	for range latency {
+		host.Tick(1)
+		observe(host)
 	}
 	for range 300 {
 		tickAll(apps)
