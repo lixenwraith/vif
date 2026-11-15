@@ -336,6 +336,7 @@ install:
 	put 0755 $(BIN_DIR)/$(BINARY) "$$dest/bin/$(BINARY)"; \
 	put 0644 LICENSE "$$dest/share/licenses/vif/LICENSE"; \
 	put 0644 $(PKG_DIR)/LICENSE.purego "$$dest/share/licenses/vif/LICENSE.purego"; \
+	put 0644 internal/asset/font/LICENSE "$$dest/share/licenses/vif/LICENSE.font"; \
 	put 0644 doc/vif.6 "$$dest/share/man/man6/vif.6"; \
 	put 0644 $(PKG_DIR)/vif.desktop "$$dest/share/applications/vif.desktop"; \
 	put 0644 $(PKG_DIR)/vif.svg "$$dest/share/icons/hicolor/scalable/apps/vif.svg"; \
