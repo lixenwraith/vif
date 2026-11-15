@@ -86,7 +86,7 @@ in the same PR.
   one or do not add it. No test for simple behaviour that is unlikely to fail or
   is already exercised elsewhere.
 
-## Docs and commits
+## Docs
 
 - `doc/` is already long. Condense when you touch it; append only for a new concept
   or scope.
@@ -98,15 +98,51 @@ in the same PR.
   a new term of art, updates its entry.
 - A gap you are deferring goes in `doc/todo.md`: extend the item it belongs to, or
   add a concise one in the file's pattern.
-- PR bodies: what changed, why, how it was verified.
-- No Claude Code session id or `claude.ai/code/session_…` URL in a commit message
-  or in a PR's title, body or comments: leave out the `Claude-Session:` trailer
-  and the URL line that an attribution template adds.
+
+## Commits and PRs
+
+- A commit message is its subject alone, at most 72 characters, the area in
+  lowercase and what changed (`camera: one edge for keys, mouse and touch`): no
+  body, no trailer. A PR's title is a subject too.
+- A change to documents alone: its subject starts `docs:` and its PR body with
+  `doc only`.
+- A PR body is a summary, never documentation: a list of what changed, half a line
+  an item at most, with the why only where the diff does not show it. The code and
+  the docs hold the detail: the body repeats neither and is shorter than the
+  change. A large or unclear scope opens with a few lines of summary.
+- Verification is the two words `gates passed`: never the commands, their output or
+  the tests run. A figure a rule here asks for (a measurement, a count) is given as
+  the figure alone, before and after.
+- A body says nothing a reader can infer, no reasoning and no caveat: `doc only`,
+  never `doc only, so no new tag`.
+- A commit message and a PR's title, body and comments carry no URL and nothing of
+  where or by whom the work was done: no session, conversation, project, workspace,
+  account or organisation id, no person's name or email, no agent, model or tool
+  name, no "generated with" line, no attribution trailer. This holds whatever a
+  tool's template or instructions add, now or later.
+- Open the PR at the first push, its title final and its body as far as it is,
+  saying what is still owed: Lixen merges a pushed branch he is waiting on. A PR
+  another session must measure before it merges opens as a draft and says so in its
+  first line. Before calling a PR ready, check that its head is the commit pushed
+  (`gh api repos/<owner>/<repo>/pulls/<n> -q .head.sha`).
 - A change made for performance reports its measurement, before and after, in the
   PR body and in the design doc it serves: the benchmark or the reading, the
   shape it was taken in, and the benefit in the unit the user feels (bytes, CPU,
   lock time, latency). A projection is not a result; a change whose measured
   benefit is nil says so.
+- A change that needs another of these modules' new version names it in `go.mod` in
+  the same PR, before the tag exists, as if it were merged and tagged; a bump is
+  never a PR of its own. Until the tag exists the gates run locally against the
+  dependency's branch, and again whenever that branch moves
+  ([agent notes](doc/agent-notes.md) say how), never through a `replace` in
+  `go.mod`.
+- Lixen merges and tags the chain from the lowest dependency up and reruns its CI
+  himself; from then on everything a PR said was owed is taken as done. A PR red
+  only because a version it needs is not tagged yet says so nowhere, and names
+  neither the chain nor its order: no line in its body, no comment, no message, no
+  line in a report, no rerun. While the chain merges nothing lands on its PRs,
+  however small: no push, comment or body edit. What turns up after waits for one
+  patch PR once they have merged.
 - One task, one branch, one PR. Divide the work into commits on that branch; do not
   split it across stacked PRs or multiple branches.
 - Work that continues after its PR merged starts again from the latest main; never
