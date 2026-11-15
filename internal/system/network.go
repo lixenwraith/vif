@@ -2960,10 +2960,11 @@ func paceDecision(latest, earliest int64) (trimPermille int32, stepTicks int64) 
 // driveOwnLead re-derives the lead this instance stamps its crossings with and
 // pushes a change as a journaled local event, so a reproduction switches on the
 // same tick. The lead is the worst reading of the window: raising is immediate,
-// lowering waits until every higher reading has aged out.
+// lowering waits until every higher reading has aged out. A guest with no peer
+// has no path to read; the authority's reading needs none.
 func (s *NetworkSystem) driveOwnLead(p engine.NetworkPort) {
 	r := s.world.Resources.Network
-	if r == nil || p == nil || !p.IsRunning() || p.PeerCount() == 0 || s.world.Watches() {
+	if r == nil || p == nil || !p.IsRunning() || s.world.Watches() || p.PeerCount() == 0 && !s.isCoordinator() {
 		return
 	}
 	target := s.ownLead()

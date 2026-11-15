@@ -329,9 +329,10 @@ reading, the newest epoch's standing in between, since a spike on a stream holds
 a burst that returns in one tick and the newest alone would hide it, plus
 `NetworkRelaySlackTicks` for the authority to relay it, held between
 `NetworkBarrierMinDelayTicks` and `NetworkBarrierMaxDelayTicks`; the authority's
-own is the minimum, one tick, and a guest no copy has reached uses the default
-`NetworkBarrierDelayTicks`. A participant behind a relay reads the same copy, which
-reaches it down its path, so no link has to measure a trip for it. The lead in
+own is the minimum, one tick, read with a peer or alone, and a guest no copy has
+reached uses the default `NetworkBarrierDelayTicks`. A participant behind a relay
+reads the same copy, which reaches it down its path, so no link has to measure a
+trip for it. The lead in
 force is the worst reading of the last `NetworkBarrierRenegotiateTicks` (`leadOf`):
 it rises at once and falls only as the higher readings age out of the window, to
 the highest still in it, so a momentary trough is not climbed back a tick at a time

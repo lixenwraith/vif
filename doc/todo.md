@@ -1358,18 +1358,6 @@ mode multiplies the actions. Compare the two clients' `network.sent_epoch_bytes`
 decide whether a drag's intermediate cells are a move each or one move to the cell
 the tick ends on.
 
-### Give a lone host the authority's one-tick lead
-
-- Priority: P3
-- Affected files: `internal/system/network.go`
-
-`driveOwnLead` returns while `PeerCount()` is 0, so a host with no guests keeps the
-3-tick default (`NetworkBarrierDelayTicks`) where `ownLead` gives an authority 1,
-and a guest's arrival lowers it only after the 300-tick renegotiation window. Each
-crossing a host playing alone makes lands two ticks later than it needs to. Push
-the authority's lead when hosting starts, or let `driveOwnLead` run for an
-authority with no peers.
-
 ### Hold a guest its correction carries past the hold
 
 - Priority: P2
