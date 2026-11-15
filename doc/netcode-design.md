@@ -635,6 +635,28 @@ on links of 150 to 300 bytes a tick, 460 ticks each, the link read as the limit 
 over the last 230 ticks, by rate, averaged 2.76, 1.54, 0.31 and 0.34 s before and
 2.24, 1.05, 0.24 and 0.29 s after. The four shapes' late counts hold.
 
+**The authority's lead from its first tick.** The authority stamped the default
+three ticks for its first `NetworkBarrierRenegotiateTicks`, the window's seed, and
+one after. It now holds no window ([Multi-player §3.5](multi-player.md#35-command-frames-the-commit-and-pacing)),
+so a host's crossings land two ticks sooner over its first five seconds: with
+hosting opened at tick 62 the lead read 1 at tick 362 before and 63 after. The
+harness starts its host and guest together, so every fight holds those 300
+ticks: late commits and late copies after the storm, and their sums with the
+fight's inputs drawn from eight seeds in a scratch build:
+
+```
+shape      before        after         eight seeds before   after
+fieldlike  lc 1  lcp 0   lc 1  lcp 1   lc 8   lcp 0         lc 8   lcp 8
+rare       lc 1  lcp 5   lc 1  lcp 8   lc 12  lcp 63        lc 14  lcp 87
+sparse     lc 4  lcp 4   lc 3  lcp 5   lc 26  lcp 91        lc 25  lcp 105
+heavy      lc 1  lcp 1   lc 1  lcp 3   lc 8   lcp 10        lc 8   lcp 20
+```
+
+The late commits hold. The late copies rise by one to three a fight: the spikes
+of the first 300 ticks, which the default covered and a guest now pays as it
+pays every later one. A guest that joins a host five seconds old met one tick
+already.
+
 **A relayed topology.** `TestARelayedTopologyConvergesUnderShape` runs always: a
 host, a relay and a person behind it over the default shape, 300 ticks, the storm,
 600 more, asserting that both guests answer most of their manifests hash-only, that
