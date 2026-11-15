@@ -1,4 +1,4 @@
-// Command raider shows vanguard's raider types as its scenario declares them: a
+// Command raider shows the cave scenario's raider types as it declares them: a
 // band for each stone art, its types weakest rank first between a ceiling and a
 // floor of that art's rock, in the colours their programs give them or one hue a
 // slider picks, on the game's truecolor tier or its console tier as a VGA or
@@ -47,7 +47,7 @@ func rgb(r, g, b uint8) color.RGB { return color.RGB{R: r, G: g, B: b} }
 
 // The slider's first stop is each program's own palette; the rest colour every
 // raider in one hue, its eyes the palest and its limbs the darkest
-const ownStop = "Vanguard"
+const ownStop = "Cave"
 
 var hues = []hue{
 	{"Purple", [parts]color.RGB{rgb(170, 90, 230), rgb(232, 205, 255), rgb(115, 60, 165), rgb(205, 145, 255)}, visual.ConBrightMagenta},
@@ -129,7 +129,7 @@ type app struct {
 }
 
 func main() {
-	dir := flag.String("s", "wad/scenario/base/vanguard", "the scenario directory whose raiders to show")
+	dir := flag.String("s", "wad/scenario/base/cave", "the scenario directory whose raiders to show")
 	flag.Parse()
 	caves, err := load(*dir)
 	if err != nil {
@@ -494,8 +494,7 @@ func (a *app) drawHeader() {
 	a.buf.SetWriteMask(visual.MaskUI)
 	a.clearRow(0)
 	a.clearRow(1)
-	a.text(1, 0, "VANGUARD RAIDERS", rgb(255, 255, 255), terminal.AttrBold)
-	a.text(19, 0, "each cave's types by tier, T1 the weakest", rgb(150, 150, 165), terminal.AttrNone)
+	a.text(1, 0, "each cave's types by rank, R1 the weakest", rgb(150, 150, 165), terminal.AttrNone)
 	help := "←/→ colour  c tier  b backdrop  s state  ↑/↓ scroll  q quit"
 	if a.native {
 		help = "←/→ colour  b backdrop  s state  ↑/↓ scroll  q quit"

@@ -616,7 +616,7 @@ player's keymap, after the player's: an installed keymap is a full copy of the
 defaults, which would otherwise undo it (`input.ScenarioKeyTable`,
 `resource.Scenario.Keys`). It binds no system action and no other section, so the
 special keys, which quit, leave a mode and open the menu and help, stay the
-player's; a scenario breaking either rule fails to load. The vim tutor binds `a` to
+player's; a scenario breaking either rule fails to load. The tutor binds `a` to
 `mode_append` and `p` to `"none"`, having no gun to cycle and no clock to stop.
 
 ## 11. Change checklist

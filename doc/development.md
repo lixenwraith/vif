@@ -549,7 +549,7 @@ the other `tool/*` commands have no focused test file. Programs under `sandbox/`
 are experiments, not tests.
 
 `BenchmarkHeadlessTicks` in `internal/app` ticks a driven App on the embedded
-scenario, on `td` and on `vanguard`; run it with `-benchtime=1500x -benchmem` so
+scenario, on `td` and on `cave`; run it with `-benchtime=1500x -benchmem` so
 every run simulates the same ticks of one seed and the allocation counts compare
 exactly, and compare `SnapshotSimulation` before and after a change that must not
 move the simulation. `BenchmarkKrakenRegion` beside it measures the Kraken in the

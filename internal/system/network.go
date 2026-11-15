@@ -2080,13 +2080,21 @@ func (s *NetworkSystem) dismissalScheduled() bool {
 // to the pool when that crossing applies, or here for a participant never crossed
 // in. dismissed is a seat this run dropped, which leaves for good.
 func (s *NetworkSystem) noticeDeparture(peerID uint32, dismissed bool) {
-	_, in := s.participantSlot(peerID)
-	if _, arriving := s.arrivalScheduled(peerID); !in && !arriving && !s.rebuilds(peerID) {
+	if !s.CrossedIn(peerID) {
 		if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
 			r.OnDeparture(peerID, true)
 		}
 	}
 	s.announceDeparture(peerID, 0, dismissed)
+}
+
+// CrossedIn reports a participant whose arrival this instance has applied, still
+// holds to apply, or is bringing into a new game: a departure of it has a cursor to
+// remove. Caller MUST hold updateMutex.
+func (s *NetworkSystem) CrossedIn(participant uint32) bool {
+	_, in := s.participantSlot(participant)
+	_, arriving := s.arrivalScheduled(participant)
+	return in || arriving || s.rebuilds(participant)
 }
 
 // rebuilds reports a participant a reset is bringing into its new game with no

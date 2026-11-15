@@ -15,9 +15,8 @@ const (
 // A Frame is a 2x4 grid of runes
 type Frame [Height][Width]rune
 
-// Animation holds the sequence of frames and a name
+// Animation holds the sequence of frames; its id is its place in the catalogue, from 1
 type Animation struct {
-	Name   string
 	Frames []Frame
 }
 
@@ -38,7 +37,7 @@ func main() {
 		// Move cursor to top-left
 		fmt.Print("\033[H")
 
-		fmt.Println("VIF SWARM VISUAL CONCEPTS (4x2)")
+		fmt.Println("SWARM SANDBOX (4x2)")
 		fmt.Println("--------------------------------------")
 		fmt.Println("Press Ctrl+C to exit")
 		fmt.Println("")
@@ -46,9 +45,9 @@ func main() {
 		// Render animations in a grid (3 columns)
 		cols := 3
 		for i := 0; i < len(animations); i += cols {
-			// Print Names
+			// Print ids
 			for j := 0; j < cols && i+j < len(animations); j++ {
-				fmt.Printf("ID %2d: %-20s  ", i+j+1, animations[i+j].Name)
+				fmt.Printf("%-29s", fmt.Sprintf("swarm %d", i+j+1))
 			}
 			fmt.Println()
 
@@ -86,28 +85,24 @@ func rowToString(row [Width]rune) string {
 func getAnimations() []Animation {
 	return []Animation{
 		{
-			Name: "The Interceptor",
 			Frames: []Frame{
 				{{'/', '-', '-', '\\'}, {'\\', '_', '_', '/'}}, // Wings Open
 				{{'|', '-', '-', '|'}, {'\\', '-', '-', '/'}},  // Wings Folded
 			},
 		},
 		{
-			Name: "The Scarab",
 			Frames: []Frame{
 				{{'┌', 'o', 'o', '┐'}, {'└', '─', '─', '┘'}}, // Eyes Open
 				{{'┌', '-', '-', '┐'}, {'└', '~', '~', '┘'}}, // Blink/Chirp
 			},
 		},
 		{
-			Name: "The Pulse Box",
 			Frames: []Frame{
 				{{'╔', '═', '═', '╗'}, {'╚', '═', '═', '╝'}}, // Bold
 				{{'┌', '─', '─', '┐'}, {'└', '─', '─', '┘'}}, // Thin
 			},
 		},
 		{
-			Name: "The Rotor",
 			Frames: []Frame{
 				{{' ', '/', '\\', ' '}, {' ', '\\', '/', ' '}}, // X shape
 				{{' ', '|', '|', ' '}, {' ', '|', '|', ' '}},   // Vertical
@@ -116,28 +111,24 @@ func getAnimations() []Animation {
 			},
 		},
 		{
-			Name: "The Data Eater",
 			Frames: []Frame{
 				{{'[', ' ', ' ', ']'}, {'[', ' ', ' ', ']'}}, // Open
 				{{'[', '▓', '▓', ']'}, {'[', '▓', '▓', ']'}}, // Full
 			},
 		},
 		{
-			Name: "The Clamp",
 			Frames: []Frame{
 				{{' ', ' ', ' ', ' '}, {'<', '=', '=', '>'}},   // Flat
 				{{'/', ' ', ' ', '\\'}, {'\\', ' ', ' ', '/'}}, // Open Jaw
 			},
 		},
 		{
-			Name: "The Hover-Tank",
 			Frames: []Frame{
 				{{'▄', '▀', '▀', '▄'}, {'▀', '▄', '▄', '▀'}}, // State A
 				{{'▀', '▄', '▄', '▀'}, {'▄', '▀', '▀', '▄'}}, // State B (Treads moving)
 			},
 		},
 		{
-			Name: "The Glitch",
 			Frames: []Frame{
 				{{'#', '%', '&', '@'}, {'@', '&', '%', '#'}},
 				{{'1', '0', '1', '1'}, {'0', '1', '0', '0'}},
@@ -145,7 +136,6 @@ func getAnimations() []Animation {
 			},
 		},
 		{
-			Name: "The Seeker Eye",
 			Frames: []Frame{
 				{{' ', '(', 'O', ')'}, {' ', '\\', '_', '/'}}, // Center
 				{{'(', 'O', ')', ' '}, {'\\', '_', '/', ' '}}, // Left
@@ -154,28 +144,24 @@ func getAnimations() []Animation {
 			},
 		},
 		{
-			Name: "The Construct",
 			Frames: []Frame{
 				{{'╓', '─', '─', '╖'}, {'╙', '─', '─', '╜'}},
 				{{'╒', '═', '═', '╕'}, {'╘', '═', '═', '╛'}},
 			},
 		},
 		{
-			Name: "The Engine",
 			Frames: []Frame{
 				{{'|', '>', '<', '|'}, {'|', '>', '<', '|'}}, // Intake
 				{{'|', '}', '{', '|'}, {'|', '}', '{', '|'}}, // Combustion
 			},
 		},
 		{
-			Name: "The Bat-Wing",
 			Frames: []Frame{
 				{{'/', '^', '^', '\\'}, {' ', 'v', 'v', ' '}}, // Down
 				{{'~', '^', '^', '~'}, {' ', ' ', ' ', ' '}},  // Up
 			},
 		},
 		{
-			Name: "The Phase Shift",
 			Frames: []Frame{
 				{{'░', '░', '░', '░'}, {'▓', '▓', '▓', '▓'}},
 				{{'▒', '▒', '▒', '▒'}, {'▒', '▒', '▒', '▒'}},
@@ -183,7 +169,6 @@ func getAnimations() []Animation {
 			},
 		},
 		{
-			Name: "The Coil",
 			Frames: []Frame{
 				{{'(', '/', '/', ')'}, {'(', '/', '/', ')'}},
 				{{'(', '-', '-', ')'}, {'(', '-', '-', ')'}},
@@ -191,42 +176,36 @@ func getAnimations() []Animation {
 			},
 		},
 		{
-			Name: "The Invader",
 			Frames: []Frame{
 				{{' ', 'o', 'o', ' '}, {'/', '"', '"', '\\'}},
 				{{'\\', 'o', 'o', '/'}, {' ', '"', '"', ' '}},
 			},
 		},
 		{
-			Name: "The Magnet",
 			Frames: []Frame{
 				{{'⊂', '⊃', '⊂', '⊃'}, {'⊂', '⊃', '⊂', '⊃'}},
 				{{'⊃', '⊂', '⊃', '⊂'}, {'⊃', '⊂', '⊃', '⊂'}},
 			},
 		},
 		{
-			Name: "The Shielded Core",
 			Frames: []Frame{
 				{{'[', '•', '•', ']'}, {'[', '•', '•', ']'}},
 				{{'[', ' ', ' ', ']'}, {'[', ' ', ' ', ']'}},
 			},
 		},
 		{
-			Name: "The Chevron",
 			Frames: []Frame{
 				{{'>', '>', '>', '>'}, {' ', ' ', ' ', ' '}},
 				{{' ', ' ', ' ', ' '}, {'>', '>', '>', '>'}},
 			},
 		},
 		{
-			Name: "The Waveform",
 			Frames: []Frame{
 				{{'▄', ' ', ' ', '▄'}, {' ', '▀', '▀', ' '}},
 				{{' ', '▄', '▄', ' '}, {'▀', ' ', ' ', '▀'}},
 			},
 		},
 		{
-			Name: "The Jaws",
 			Frames: []Frame{
 				{{'V', 'V', 'V', 'V'}, {'^', '^', '^', '^'}}, // Closed
 				{{'V', ' ', ' ', 'V'}, {'^', ' ', ' ', '^'}}, // Open

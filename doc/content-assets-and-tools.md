@@ -257,8 +257,9 @@ The `.aimg` anchor offset is available in `PatternResult` as authored image
 metadata, but `WallSystem` does not consume it. A file that fails to open or decode
 is reported on the status line and spawns nothing.
 
-The extensions are `.aimg` and `.aimgz`, and the shipped sample is
-`wad/image/test.aimg`. `WallPatternSpawnRequest.path` is a
+The extensions are `.aimg` and `.aimgz`, and the shipped sample,
+`wad/image/test.aimg`, is an original night landscape (a full moon over hills, a
+lake and pines) in 140 by 39 quadrant cells. `WallPatternSpawnRequest.path` is a
 logical name below `image/`, resolved through `-config-dir`, the user
 configuration root, the checkout's `wad/` and the system roots in that order, and
 only a regular file there opens: never a host path, absolute or relative to the

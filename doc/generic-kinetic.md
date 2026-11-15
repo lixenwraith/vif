@@ -349,8 +349,8 @@ A hybrid where the owner sends absolute cells while every peer independently
 integrates external forces is not viable: correction would alternate between two
 authorities. The owner-authored model is the lower-risk first step. It should keep
 the text cursor's discrete target separate from physical displacement so a gust
-does not silently reinterpret Vim motions. A likely shape is a desired cell plus a
-kinetic offset/velocity that settles back under an explicit controller.
+does not silently reinterpret vi-style motions. A likely shape is a desired cell
+plus a kinetic offset/velocity that settles back under an explicit controller.
 
 Required cursor work includes:
 

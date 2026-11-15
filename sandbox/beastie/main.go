@@ -22,12 +22,12 @@ type Enemy struct {
 	AnimOffset int // Offsets animation so they don't all tick perfectly in sync
 }
 
-// 25 Unique Styles (Sizes: 2x2, 3x2, 4x2, 5x3, 6x3)
+// 48 styles from 2x2 to 10x5, numbered from 1 in order; each tier's heading gives its range
 // Note: Backslashes (\) are escaped as \\ in Go strings.
 var bestiary = []EnemyTemplate{
 
 	// ========================================================================
-	// SWARM — 2x2, fast cheap fodder
+	// SWARM 1-7 — 2x2, fast cheap fodder
 	// ========================================================================
 	{2, 2, color.Red, color.BlackRed, [][]string{
 		{`/\`, `\/`},
@@ -50,13 +50,13 @@ var bestiary = []EnemyTemplate{
 		{`00`, `/\`},
 		{`00`, `\/`},
 	}},
-	// Firefly — blinks
+	// 6 — blinks
 	{2, 2, color.LemonYellow, color.Black, [][]string{
 		{`**`, `  `},
 		{`  `, `**`},
 		{`**`, `**`},
 	}},
-	// Mite — twitchy
+	// 7 — twitchy
 	{2, 2, color.Rust, color.Black, [][]string{
 		{`..`, `vv`},
 		{`::`, `^^`},
@@ -64,7 +64,7 @@ var bestiary = []EnemyTemplate{
 	}},
 
 	// ========================================================================
-	// SCOUTS — 3x2, fast flankers
+	// SCOUTS 8-14 — 3x2, fast flankers
 	// ========================================================================
 	{3, 2, color.FlameOrange, color.Black, [][]string{
 		{`<0>`, `/ \`},
@@ -86,13 +86,13 @@ var bestiary = []EnemyTemplate{
 		{`>-<`, `/ \`},
 		{`>-<`, `- -`},
 	}},
-	// Bat — flapping
+	// 13 — flapping
 	{3, 2, color.DarkViolet, color.Black, [][]string{
 		{`\./`, ` v `},
 		{`/.\`, ` ^ `},
 		{`-.-`, ` | `},
 	}},
-	// Spark — electric jitter
+	// 14 — electric jitter
 	{3, 2, color.BrightCyan, color.DeepNavy, [][]string{
 		{`~*~`, ` | `},
 		{`*~*`, ` | `},
@@ -100,7 +100,7 @@ var bestiary = []EnemyTemplate{
 	}},
 
 	// ========================================================================
-	// SOLDIERS — 4x2, standard creeps
+	// SOLDIERS 15-22 — 4x2, standard creeps
 	// ========================================================================
 	{4, 2, color.NeonGreen, color.Black, [][]string{
 		{`OOOO`, `/\/\`},
@@ -122,18 +122,18 @@ var bestiary = []EnemyTemplate{
 		{`{oo}`, `/\/\`},
 		{`[oo]`, `\/\/`},
 	}},
-	// Crab — side-scuttle
+	// 20 — side-scuttle
 	{4, 2, color.Terracotta, color.Black, [][]string{
 		{`>oo<`, `/  \`},
 		{`>oo<`, `\  /`},
 		{` oo `, `>  <`},
 	}},
-	// Shield Bearer — heavy step
+	// 21 — heavy step
 	{4, 2, color.SteelBlue, color.BlueCharcoal, [][]string{
 		{`[==]`, `|/\|`},
 		{`[==]`, `|\\/`},
 	}},
-	// Toxic — pulsing poison
+	// 22 — pulsing poison
 	{4, 2, color.YellowGreen, color.BlackGreen, [][]string{
 		{`{~~}`, ` :: `},
 		{`(~~)`, ` ;; `},
@@ -142,7 +142,7 @@ var bestiary = []EnemyTemplate{
 	}},
 
 	// ========================================================================
-	// ELITES — 5x3, dangerous mid-tier
+	// ELITES 23-31 — 5x3, dangerous mid-tier
 	// ========================================================================
 	{5, 3, color.Orchid, color.DarkPlum, [][]string{
 		{`/\_/\`, `[( )]`, ` / \ `},
@@ -164,32 +164,32 @@ var bestiary = []EnemyTemplate{
 		{` /-\ `, ` ||| `, ` >-< `},
 		{` \-/ `, ` ||| `, ` <-> `},
 	}},
-	// Wraith — phasing flicker
+	// 28 — phasing flicker
 	{5, 3, color.MutedPurple, color.Obsidian, [][]string{
 		{` .M. `, `(   )`, ` |~| `},
 		{` :M: `, `{   }`, ` |~| `},
 		{` 'M' `, `[   ]`, ` |_| `},
 	}},
-	// Scorpion — tail strike
+	// 29 — tail strike
 	{5, 3, color.WarmOrange, color.Black, [][]string{
 		{`  /| `, `(oo) `, `/||\\`},
 		{` /|  `, ` (oo)`, `/||\\`},
 		{`/|   `, `(oo) `, `/||\\`},
 	}},
-	// Djinn — swirling
+	// 30 — swirling
 	{5, 3, color.SoftLavender, color.DeepPurple, [][]string{
 		{` ~~~ `, `( @ )`, ` ))) `},
 		{` ~~~ `, `( @ )`, `((( `},
 		{` ~~~ `, `( @ )`, ` ||| `},
 	}},
-	// Beetle — armored march
+	// 31 — armored march
 	{5, 3, color.Bronze, color.DarkAmber, [][]string{
 		{`/===\`, `|ooo|`, `\/ \/`},
 		{`/===\`, `|ooo|`, `/\ /\`},
 	}},
 
 	// ========================================================================
-	// HEAVIES — 6x3, tanky
+	// HEAVIES 32-39 — 6x3, tanky
 	// ========================================================================
 	{6, 3, color.Magenta, color.DarkPlum, [][]string{
 		{`\ // /`, `[####]`, `/ \\ \`},
@@ -211,19 +211,19 @@ var bestiary = []EnemyTemplate{
 		{`_/__\_`, `\/  \/`, ` /  \ `},
 		{`_\__/_`, `/\  /\`, ` \  / `},
 	}},
-	// Golem — lumbering stone
+	// 37 — lumbering stone
 	{6, 3, color.Taupe, color.DarkSlate, [][]string{
 		{`[####]`, `|<  >|`, ` |  | `},
 		{`[####]`, `|>  <|`, ` /  \ `},
 		{`[####]`, `|<  >|`, ` \  / `},
 	}},
-	// Hive Carrier — spawns swarm
+	// 38 — spawns swarm
 	{6, 3, color.OliveYellow, color.DarkAmber, [][]string{
 		{`/~~~~\`, `|*||*|`, `\____/`},
 		{`/~~~~\`, `|+||+|`, `\____/`},
 		{`/~~~~\`, `|*||*|`, `\_/\_/`},
 	}},
-	// Reaver — blade arms
+	// 39 — blade arms
 	{6, 3, color.Vermilion, color.BlackRed, [][]string{
 		{`\    /`, `-[XX]-`, `/    \`},
 		{` \  / `, `-[XX]-`, ` /  \ `},
@@ -231,31 +231,31 @@ var bestiary = []EnemyTemplate{
 	}},
 
 	// ========================================================================
-	// CHAMPIONS — 8x4, mini-boss creeps
+	// CHAMPIONS 40-44 — 8x4, mini-boss creeps
 	// ========================================================================
 	{8, 4, color.BrightRed, color.Obsidian, [][]string{
 		{` /\  /\ `, `( @  @ )`, ` \<XX>/ `, `  /  \  `},
 		{` /\  /\ `, `( @  @ )`, ` /<XX>\ `, `  \  /  `},
 		{` /\  /\ `, `( @  @ )`, ` |<XX>| `, `  |  |  `},
 	}},
-	// War Machine — treaded
+	// 41 — treaded
 	{8, 4, color.IronGray, color.DarkSlate, [][]string{
 		{` [====] `, ` |<HH>| `, `=|    |=`, `{OOOOOO}`},
 		{` [====] `, ` |<HH>| `, `=|    |=`, `{OOOOOO}`},
 	}},
-	// Hydra — writhing heads
+	// 42 — writhing heads
 	{8, 4, color.SeaGreen, color.BlackGreen, [][]string{
 		{`  /  \  `, ` /    \ `, `< @  @ >`, ` \\||// `},
 		{` /    \ `, `/      \`, `< @  @ >`, `  \\//  `},
 		{`  /  \  `, ` / \/ \ `, `< @  @ >`, ` //||\\ `},
 	}},
-	// Floating Eye — pulsing iris
+	// 43 — pulsing iris
 	{8, 4, color.DodgerBlue, color.DeepNavy, [][]string{
 		{` /----\ `, `| (00) |`, `| \--/ |`, ` \----/ `},
 		{` /----\ `, `|  (0) |`, `|  --  |`, ` \----/ `},
 		{` /----\ `, `| (00) |`, `| /--\ |`, ` \----/ `},
 	}},
-	// Inferno Elemental — flame dance
+	// 44 — flame dance
 	{8, 4, color.FlameOrange, color.DarkRust, [][]string{
 		{` ,  /\  `, `/ \/ /\ `, `\ /\/ /\`, ` \/  \/ `},
 		{`  /\  , `, `/\ \/ / `, `/\/ /\ \`, ` \/  \/ `},
@@ -264,26 +264,26 @@ var bestiary = []EnemyTemplate{
 	}},
 
 	// ========================================================================
-	// BOSSES — 10x5, wave-ending threats
+	// BOSSES 45-48 — 10x5, wave-ending threats
 	// ========================================================================
-	// Demon Lord
+	// 45
 	{10, 5, color.Vermilion, color.BlackRed, [][]string{
 		{` /\\    /\\ `, ` \  \\//  / `, `  | >..< |  `, `  | \\// |  `, `  /||  ||\\ `},
 		{` /\\    /\\ `, ` \\  \\/  / `, `  | >..< |  `, `  | //\\ |  `, `  \\||  ||/ `},
 	}},
-	// Siege Titan
+	// 46
 	{10, 5, color.CoolSilver, color.DarkSlate, [][]string{
 		{`  [======]  `, `  |<IIII>|  `, ` /|      |\\ `, `/ |  {}  | \\`, `{OO}    {OO}`},
 		{`  [======]  `, `  |<IIII>|  `, ` /|      |\\ `, `\\ |  {}  | /`, `{OO}    {OO}`},
 		{`  [======]  `, `  |>IIII<|  `, `  |      |  `, `  | ={} = |  `, `{OO}    {OO}`},
 	}},
-	// Lich — necromantic pulse
+	// 47 — necromantic pulse
 	{10, 5, color.PaleLavender, color.Obsidian, [][]string{
 		{`   /==\\   `, `  / oo \\  `, `  | -- |   `, ` /|    |\\  `, `~ \\~~~~/ ~ `},
 		{`   /==\\   `, `  / ** \\  `, `  | -- |   `, ` ~|    |~  `, `  \\~~~~/ ~ `},
 		{`   /==\\   `, `  / oo \\  `, `  | ~~ |   `, ` /|    |\\  `, `~ /~~~~\\ ~ `},
 	}},
-	// Kraken — tentacle thrash
+	// 48 — tentacle thrash
 	{10, 5, color.Teal, color.DeepNavy, [][]string{
 		{`   /__\\   `, `  / @@ \\  `, ` /|    |\\  `, `/ \\~~~~/ \\`, `~  ~~~~  ~ `},
 		{`   /--\\   `, `  / @@ \\  `, `  |    |   `, ` \\/ ~~ \\/  `, `~~ ~~~~  ~~`},
@@ -388,7 +388,7 @@ func render(term terminal.Terminal, tick int) {
 	}
 
 	// Draw Title
-	title := " TERMINAL BESTIARY: TEXT-BASED HORRORS "
+	title := " BEASTIE SANDBOX "
 	titleX := (w - len(title)) / 2
 	if titleX < 0 {
 		titleX = 0

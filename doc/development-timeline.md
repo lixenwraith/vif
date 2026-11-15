@@ -8,10 +8,10 @@ until its rename to vif in September 2026.
 ## 2025-04 to 2025-11 — Prototype and core game
 
 - Repository opened in April; the prototype from November 16
-- Vim motions, counts, operators, find/till and `%`
+- vi-style motions, counts, operators, find/till and `%`
 - Normal, Insert, Search and Command modes
 - Ping grid, coordinate highlighting, heat and score
-- Decay, then a Matrix-style falling decay
+- Decay, then a decay of falling characters
 - Code blocks from files as the text to type
 - Gold, cleaners, nuggets with the `Tab` jump, drains
 - Sound effects, then an audio engine with `Ctrl-S` mute
@@ -173,7 +173,7 @@ until its rename to vif in September 2026.
 - Bot fitness and threat evasion; genetic archive dedup
 - Snapshot row reuse, owed busy links, bot relays
 - Timer slots, tick-closing settle, dust into particles
-- Parallax glyph drift; the input hook and simon
+- Parallax glyph drift; the input hook and recall
 - Component logic moved into its systems
 - Docs swept against the code; a term index
 - Netplay stalls, lead and repairs; the session as a tree
@@ -202,7 +202,7 @@ until its rename to vif in September 2026.
 - Soundlab editors, mixer and keyboard
 - `vif.toml` written back with its comments kept
 - Behavior machines: `pkg/machine`, data species
-- Vanguard: a cave side-scroller with raiders
+- The cave scenario: a side-scroller with raiders
 - Payload enums by name in scenarios
 - Load shedding; the host sets the session's rate
 - One pulse system for every pulse
@@ -225,7 +225,7 @@ until its rename to vif in September 2026.
 - `internal/app` split: corrector, config, membership
 - Fusion of drains and composites into any species
 - Dead code swept; cursor syncs bounded
-- The vim tutor: eleven lessons
+- The tutor: eleven lessons
 - Participant keys, session passes, keep-out list
 - Passphrase doors over Argon2-SCRAM
 - Router tickets, a TLS front door, accounts

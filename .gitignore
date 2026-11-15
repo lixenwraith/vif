@@ -13,6 +13,7 @@ web/*.wasm
 cmd/vif/vif
 /vif
 /vif-headless
+/vif-router
 tmp/
 log/**/*.jsonl
 tmp/**/*.jsonl

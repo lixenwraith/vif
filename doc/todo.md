@@ -8,7 +8,7 @@ code-originated item names its source here.
 Priorities: P0 blocks a release or leads the feature development push, P1 is
 wanted next, P2 is convenient follow-up, and P3 is an idea.
 
-## Vanguard
+## Cave
 
 The side-scroller's refinements after its first play test (2026-10-27) lead, grouped
 by area so an agent can take a group. The faster scroll, the jagged cave, the stone
@@ -20,7 +20,7 @@ follow-ups. A cave's shape stays in `pkg/cave` and its scenario, the rock behind
 
 ### Machine follow-ups
 
-What vanguard met in the machine and is still open, its certain faults having
+What `cave` met in the machine and is still open, its certain faults having
 landed.
 
 #### Give a program's entrance an entering state
@@ -152,7 +152,7 @@ What the slowest hundredth of the storm's ticks holds, each measured there:
 - Fields, 43%: three fifths point fields, the private fields of the cursors the
   snake heads lock and the drops follow, recomputed at the cooldown as each
   cursor walks; two fifths the eyes' composite fields. Settling a field only out
-  to its farthest reader reopens a decision taken on vanguard's numbers
+  to its farthest reader reopens a decision taken on the `cave` scenario's numbers
   (Navigation §12).
 - The eyes' own update, 24%, and the reaches, 21%.
 - A storm circle's X and Y checks each ask for the walls they meet, so a wall in
@@ -242,7 +242,7 @@ session hold `:pause` starts when the holder is its session's host, which alread
 stops its seats at one tick, and its spectators' runs on the same one
 ([Multiplayer §5.8](multi-player.md#58-watching-a-session)).
 
-### Train a network bot live in vanguard
+### Train a network bot live in `cave`
 
 - Priority: P2
 - Affected files: `internal/bot`, `cmd/vif`, `internal/paths`
@@ -254,7 +254,7 @@ A solo watched or headless bot whose policy is a small network and whose genes a
 its weights. One candidate plays a round, a game from its start to its defeat, and
 the population learns as rounds end. Decided:
 
-- **The game is vanguard as shipped, raiders on.** Its ramp, boss and faster caves
+- **The game is `cave` as shipped, raiders on.** Its ramp, boss and faster caves
   are the curriculum, a ship that kills nothing starves at tick 2002, so hiding
   cannot win, and a defeat already resets the game, which ends the round.
 - **The genome is a network's weights**, not a graph's constants: a graph asks only
@@ -267,7 +267,7 @@ What was measured, at 120x40 headless and flat out, where a 60 s round takes 0.1
 are over eight:
 
 ```
-vanguard          fitness  defeats  round, ticks
+cave              fitness  defeats  round, ticks
 still               -1052       64           137
 flee within 6        -958
 flee within 12       -620
@@ -282,7 +282,7 @@ still, median ticks to a crush      never    1064     489     288
 random mover                          715     424     293     202
 ```
 
-- One number already separates graphs in vanguard against a seed spread of 150 to
+- One number already separates graphs in `cave` against a seed spread of 150 to
   200, but the table flatters it: a crush crosses `EventCursorCrushed`, which no
   row weighs, so rounds lengthen 1.6 times where fitness improves 4.5 times.
 - The cave alone teaches nothing: the rock's push steers a still cursor into the
@@ -317,9 +317,9 @@ What remains:
   climb and the offline trainer fills the file.
 - **Sessions** wait: any participant's defeat resets every round, and a session
   refuses a speed change.
-- **After vanguard**: armada, with a round timer raising `EventGameResetRequest`
+- **After `cave`**: armada, with a round timer raising `EventGameResetRequest`
   and its band for the ship; main last, where `default` already scores about 900
-  a minute. Simon is memory with no number to tune, and td's rounds run minutes
+  a minute. Recall is memory with no number to tune, and td's rounds run minutes
   against an eye population that is itself evolving.
 
 ### Give `genetic` what a live network learner needs
@@ -355,7 +355,7 @@ lacks:
 - Priority: P3
 - Affected files: `internal/bot`, `lixenwraith/genetic`,
   `internal/system/nugget.go`
-- Prerequisite: [Train a network bot live in vanguard](#train-a-network-bot-live-in-vanguard)
+- Prerequisite: [Train a network bot live in `cave`](#train-a-network-bot-live-in-cave)
 - Guide: [Bots](bots.md#fitness-and-comparing-graphs)
 
 The genome is the live learner's network, and the result its population file.
@@ -380,6 +380,20 @@ for the session and dropped at its end, and a bandit over trained genomes. Decid
 what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
+
+### Hold armada and the tutor to the shared-region rule
+
+- Priority: P2
+- Affected files: `internal/app/domain_test.go` (`scenarioTrees`),
+  `wad/scenario/base/tutor/scenario.toml`
+
+`TestFSMTriggersAreReplicated` reads the scenarios `scenarioTrees` lists, which
+leaves out `armada` and `tutor`. Listed, armada passes and the tutor fails: its
+lessons step on `EventDeleteRequest` and count `EventEnergyGlyphConsumed`, both
+local events, so in a session of its up to 16 players only the authority's
+player's keys would move them (D-20). What closes it: the tutor's lessons
+advance on what every instance sees, or the tutor seats one player, and both
+scenarios listed.
 
 ### Build the map and scenario editor
 
@@ -430,9 +444,9 @@ map layer and point markers; root `[[expand]]` blocks and library copies.
 - Priority: P3
 - Affected files: `internal/input/machine.go`, `actionnames.go`, `keyconfig.go`,
   `internal/mode/router.go`, `internal/system/typing.go`,
-  `internal/asset/input/keymap.toml`, `wad/scenario/base/vimtutor/scenario.toml`
+  `internal/asset/input/keymap.toml`, `wad/scenario/base/tutor/scenario.toml`
 - Guide: [Input and modes §3](input-and-modes.md#3-normal-mode-grammar),
-  [§10](input-and-modes.md#10-keymap-override-files), [Vim tutorial](vim-tutorial.md)
+  [§10](input-and-modes.md#10-keymap-override-files), [Tutor](tutor.md)
 
 The cheap keys are in: `c cc C`, `A I`, `r`, `* #` and `.`, with vim's `a` as
 `mode_append`, which no default key binds, and a scenario `[keymap]` through which
@@ -489,11 +503,11 @@ carry; the keymap won for `a` and `p`, whose meanings an action names. Rewriting
 intents in the router for one scenario stays out: a second mechanism beside the key
 table and the capture.
 
-### Grow the vim tutor
+### Grow the tutor
 
 - Priority: P3
-- Affected files: `wad/scenario/base/vimtutor/`
-- Guide: [Vim tutorial §3](vim-tutorial.md#3-the-next-round)
+- Affected files: `wad/scenario/base/tutor/`
+- Guide: [Tutor §3](tutor.md#3-the-next-round)
 
 The first round teaches `h j k l`, `w b e`, `0 ^ $`, `f t ; ,`, counts, `x` then
 `dd`, `i` and typing, `%`, `/ n`, `gg G`, then the taken keys and free practice;
@@ -516,7 +530,7 @@ The page plays the embedded `main` alone: a guest is served its coordinator's
 scenario and a native player unpacks the wad, but nothing reaches a client with no
 config root and no peer, so `wad/scenario/` is out of the site's solo Play. The
 corpus needs no route, being player domain. A URL cannot carry one: the launcher
-takes 1,024 characters an argument, `vanguard` deflates to about 13 KB, and a query
+takes 1,024 characters an argument, `cave` deflates to about 13 KB, and a query
 is logged and kept in history
 ([Multi-platform §6](multi-platform.md#6-browser-launch-arguments)).
 
@@ -544,7 +558,7 @@ how the site's edge caches and precompresses it (the site's `doc/nginx.md`); eve
 `wad/scenario/` or only those a scenario marks for publishing; where the site
 offers them (a picker by the lobby's Play solo, links per scenario); a visitor's
 own scenario, picked or dropped on the start screen or carried in a link's
-fragment, which no server sees (about 17 KB for `vanguard`), and whether one from
+fragment, which no server sees (about 17 KB for `cave`), and whether one from
 a stranger may run; a native `-s https://…`, which needs an index at a fixed path,
 and from another origin a publisher's signature; any cache by digest beyond
 HTTP's own, which a native run has in its downloads.
@@ -619,6 +633,57 @@ Distribution-specific detail lives in [Packaging](packaging.md).
 Tag the selected commit `v0.1.0` and publish the draft release the tag creates,
 which already carries the source archive and its checksum; then drop the "no final
 release" lines in `README.md` and [Packaging](packaging.md) §2.
+
+### Rewrite the history without the third-party names and files
+
+- Priority: P1
+- Affected files: every commit
+- Prerequisite: the names PR merged and no other PR open
+
+The names audit (2026-11-14) took third-party game, brand and song names out of
+the tree, replaced a downloaded picture (`wad/image/test.aimg`) and deleted a
+stray 13.5 MB binary (`vif-router`). Older trees, commit messages and squash
+titles still carry them. One `git filter-repo` pass takes them out of every
+branch and tag:
+`--strip-blobs-with-ids` with the binary's blob
+`d6c2405eab3fc7ddc344b63a0513af09ebf1703d` and the old picture's
+`dfede4b85aa34b34e968bba8b73180e11876cfed`, `--invert-paths` for the deleted
+plan doc, `--path-rename` for each renamed scenario, test and doc, since a text
+replacement renames no path, and `--replace-text` with `--replace-message`, from
+the list of names and paths kept in the project's files, outside the repository,
+since it spells them. What it costs, and what it does not reach:
+
+- Every hash changes: each clone and fork re-clones, open branches are rebased
+  by hand, signed commits lose their signatures, and each release tag is set
+  again on its rewritten commit; release assets already uploaded keep the old
+  files.
+- vif has no version tags, only `nightly`, so no published version's checksum
+  is at stake, but proxy.golang.org keeps any pseudo-version someone fetched as
+  it was, the binary and the names with it.
+- GitHub keeps every PR's `refs/pull/<n>/head`, which no push deletes, so the
+  old commits stay reachable there and by hash in cached views. GitHub Support
+  removes only sensitive data that rotating a credential cannot make safe, so it
+  will not purge them. PR titles and bodies are edited on GitHub by hand.
+
+### Ship the third-party notices with every binary
+
+- Priority: P1
+- Affected files: `Makefile`, `.github/workflows/release.yml`,
+  `android/app/build.gradle.kts`, `internal/system/meta.go`
+
+A binary carries the licences of what it links, and they ask that their notices
+travel with every binary copy: Go's standard library, `golang.org/x/sys`,
+`x/term`, `x/crypto` and, on Android, `x/mobile` (BSD-3-Clause),
+`golang-jwt/jwt/v5` (MIT), `ebitengine/purego` (Apache-2.0) and the lixenwraith
+modules (BSD-3-Clause). The archives and `make install` carry vif's `LICENSE`,
+purego's (`LICENSE.purego`, with the desktop window) and the glyph atlas's font's
+(`LICENSE.font`), and the browser bundle its page fonts' (`web/fonts/LICENSE`),
+but none carries the Go modules' notices; the APK carries no licence at all,
+vif's own included, and the Play build must before it lists. One notices file
+made from `go.sum`'s modules (each module's licence from the module cache, by a
+make target, so a dependency added later comes with its own) goes into the
+archives beside the binary and into the APK's assets with the licence files,
+and the About overlay points to it or lists the names.
 
 ### Sign the Android build with a release key
 
@@ -1411,6 +1476,28 @@ fall between that and a host that only slows:
   longer than the link-dead time is not counted, or the share has to hold over two
   windows.
 
+### Correct a guest that joined while its link read as silent
+
+- Priority: P2
+- Affected files: `internal/converge/selective.go` (`publishManifest`, `silenceLimit`,
+  `serveOne`), `internal/converge/correction.go` (`publishRound`, `takeKeyframe`)
+- Guide: [Netcode design §2](netcode-design.md#2-the-correction-pipeline)
+
+A person that rejoins at its pinned fork's `-relay` door can go seconds with no
+authoritative world. Its link is in the relay's publication set while its run still
+joins, so the manifests sent meanwhile go unanswered, and past `silenceLimit` it is
+sent bodies alone, deltas. A keyframe the relay takes for its own lagging bot
+(`serveOne`, `takeKeyframe`) moves their baseline past the one the person holds and
+keeps the scheduled keyframe from coming due, so each is refused until the limit's
+jitter lets a manifest through. A bot the person adds meanwhile waits in its relayed
+start gate (`Corrections.ProvedWorld`) until a proof comes or, past
+`NetworkJoinReadyTimeout`, the gate refuses it as behind and its seat dials again.
+Probed runs of
+`TestAPinnedForkTakesThePeopleItRelayedAlong` stalled 2 to 3.4 s in 3 of 5. What
+would close it: manifests sent before a link's participant installed its gate world
+count toward no silence, and a peer fed deltas alone is owed the keyframe a fallback
+took.
+
 ## Session membership
 
 A suggestion for the words, not a decision: a *session* is one world timeline under
@@ -1731,7 +1818,7 @@ the joiner's report, and drop the record from the keeper and the report.
 
 A participant's cursor lands on the map centre whatever the scenario's boot request
 asked: `addParticipant` and a joiner's roster both push `Center: true` with the
-template's heat and energy, so a simon guest starts at the centre and not below the
+template's heat and energy, so a recall guest starts at the centre and not below the
 buttons where the boot cursor stands. Anything hostile a scenario puts at the centre
 strikes each arrival on its first ticks. Keep the boot request's placement beside
 the heat and energy template (`PlayerResource.SetInitialResources`) and spawn
@@ -2343,7 +2430,7 @@ of each. Measured through the trained models on twelve recordings (stapes'
 audit of 9 November): the stream finds 95 in a hundred of the offline rip's
 notes, but reads its bar grid on three recordings only, since tempo, meter and
 phase hold from the first six bars (five read at another tempo, a rubato piano
-take keeps 5 to 38 in a hundred of the offline downbeats, Billie Jean's intro
+take keeps 5 to 38 in a hundred of the offline downbeats, the pop song's intro
 sits half a bar off); it costs three times the offline rip, each model run
 three times over where its half-second steps overlap, and its worst block took
 a second of CPU, so it runs off the audio thread.
@@ -2428,7 +2515,7 @@ Where the beat is made, each a choice with what it costs:
    player and voice, and the beat is an ear offset of a constant `Δ` Hz on a
    tonal voice (the pad), so every partial pair beats at `Δ` inside the music.
    Most musical, and it brings panning per track with it, which the engine lacks
-   ([Can it run Doom](can-it-run-doom.md) notes `PlayBuffer` has no pan); but it
+   (`AudioEngine.PlayBuffer` takes no pan); but it
    touches the whole pipeline, doubles the voices' render cost, the offline
    renders (`RenderMusic`, `RenderTimeline`) and stapes' with it, and the beat
    sounds only while the pad plays.

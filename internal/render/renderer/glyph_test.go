@@ -153,8 +153,8 @@ func TestAnEnteringLineIsDrawnAStepPastWhereTheSpawnerLeftIt(t *testing.T) {
 }
 
 // BenchmarkGlyphRender draws a frame half a tick past its tick, of scenery drifting at
-// vanguard's three layer speeds over vanguard's cave, on three terminals, each with
-// as many glyphs as vanguard keeps there, placed at random, in the rock too
+// the cave scenario's three layer speeds over its cave, on three terminals, each
+// with as many glyphs as it keeps there, placed at random, in the rock too
 func BenchmarkGlyphRender(b *testing.B) {
 	for _, size := range []struct{ w, h, glyphs int }{{120, 40, 870}, {200, 60, 1460}, {400, 120, 2560}} {
 		b.Run(fmt.Sprintf("%dx%d", size.w, size.h), func(b *testing.B) {

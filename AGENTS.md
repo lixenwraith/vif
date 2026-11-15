@@ -99,6 +99,9 @@ in the same PR.
 - A gap you are deferring goes in `doc/todo.md`: extend the item it belongs to, or
   add a concise one in the file's pattern.
 - PR bodies: what changed, why, how it was verified.
+- No Claude Code session id or `claude.ai/code/session_…` URL in a commit message
+  or in a PR's title, body or comments: leave out the `Claude-Session:` trailer
+  and the URL line that an attribution template adds.
 - A change made for performance reports its measurement, before and after, in the
   PR body and in the design doc it serves: the benchmark or the reading, the
   shape it was taken in, and the benefit in the unit the user feels (bytes, CPU,

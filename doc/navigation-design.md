@@ -73,7 +73,7 @@ fits, its cells placed by the header's offset from their top-left, so a path ove
 it guarantees footprint clearance. Each footprint navigation steers by is a tier
 with its own passability and `SearchGrid`: the point tier; the eye's 5×3, which
 every body it holds around the same header rides, the quasar, the snake head, the
-4×2 swarm and vanguard's raiders among them; and one for each other footprint a
+4×2 swarm and `cave`'s raiders among them; and one for each other footprint a
 navigator declares (`NavigationComponent` carries the header's offset) or a route
 graph is requested for, derived whole as it is first needed and dropped once
 nothing needs it (`syncTiers`). Riding the eye's tier keeps one composite tier's
@@ -287,8 +287,8 @@ reach measuring every cursor settled about 30,000 cells where its choice needed
 CPU to 7% over 6,000 ticks, and leaves the slowest hundredth of its ticks to
 fields, 43% of them, the eyes, 24%, and the reaches, 21%.
 
-Vanguard's jagged cave steps a column every tick, and more in a later cave. At
-500×254 a step turns about 350 cells and the wall upkeep is 71 µs
+The `cave` scenario's jagged cave steps a column every tick, and more in a later
+cave. At 500×254 a step turns about 350 cells and the wall upkeep is 71 µs
 (`BenchmarkCaveStepNavigation`); a tick with eight composites, most of them out of
 sight of the cursor, costs 180 µs, and 103 µs with them near it
 (`BenchmarkCaveNavigation`). In play a step turns more than a fiftieth of a small
@@ -301,9 +301,9 @@ fiftieth derived whole, two thirds of it those derivations, and takes 27–43 µ
 What is left is the fields. A cell closes every tick, so a raider out of sight
 computes its group's composite field on every tick it reads one, a fifth of the
 ticks at 120×40 and a seventh at 200×60, and a drop out of sight its owner's point
-field. Vanguard reads them every fourth tick (`field_refresh_ticks`, §4), which
-computes a quarter of them. Medians of nine games of 6,000 ticks played as above,
-navigation and the whole tick, in µs:
+field. The `cave` scenario reads them every fourth tick (`field_refresh_ticks`, §4),
+which computes a quarter of them. Medians of nine games of 6,000 ticks played as
+above, navigation and the whole tick, in µs:
 
 ```
          main         unset        refresh 4
@@ -369,8 +369,9 @@ steers alike by a field a few ticks old.
   deferring one, which changes what a reader steers by, would bound nothing that
   stalls, and a 2×2 field changes the answer for a cost the shared grid already
   took.
-- Vanguard reads every fourth tick, not less often: past four, navigation's cost is
-  the wall upkeep and sight, and a longer hold saves under 10 µs a tick.
+- The `cave` scenario reads every fourth tick, not less often: past four,
+  navigation's cost is the wall upkeep and sight, and a longer hold saves under
+  10 µs a tick.
 
 ## 13. Extension guidance and source map
 

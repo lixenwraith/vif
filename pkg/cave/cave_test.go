@@ -9,8 +9,8 @@ import (
 
 // shapes are the configurations the property tests sweep: a terminal's cave, a
 // short and rough one, a long gentle one and a tight one at its limits, then jagged
-// ones: vanguard's on a terminal, on its smallest map and on a phone held upright,
-// a tall rough one whose band snakes, and a tight one at its limits
+// ones: the cave scenario's on a terminal, on its smallest map and on a phone held
+// upright, a tall rough one whose band snakes, and a tight one at its limits
 var shapes = []Config{
 	{Height: 40, MinGap: 8, MaxGap: 22, MinWall: 2, Wavelength: 48, Detail: 1, Ramp: 80},
 	{Height: 24, MinGap: 6, MaxGap: 12, MinWall: 1, Wavelength: 16, Detail: 2, Ramp: 10},
@@ -171,9 +171,9 @@ func TestAJaggedCaveSpansItsGapRange(t *testing.T) {
 	}
 }
 
-// A jagged wall reaches at most Reach rows into its band: vanguard's walls keep at
-// most 29 rows on a map of any height, so a taller map opens every row it adds,
-// and over a long run each wall reaches that deep
+// A jagged wall reaches at most Reach rows into its band: the cave scenario's walls
+// keep at most 29 rows on a map of any height, so a taller map opens every row it
+// adds, and over a long run each wall reaches that deep
 func TestAJaggedWallReachesAtMostItsReach(t *testing.T) {
 	for _, height := range []int{41, 50, 60, 90, 250} {
 		c := Config{Height: height, MinGap: 9, MaxGap: 2000, MinWall: 2, Wavelength: 64, Ramp: 96, Octaves: 4, Reach: 27}
@@ -196,7 +196,7 @@ func TestAJaggedWallReachesAtMostItsReach(t *testing.T) {
 }
 
 // A reach of all the room the min gap leaves, or more, lays the cave it laid with
-// none: vanguard's reach leaves its caves up to 40 rows as they were
+// none: the cave scenario's reach leaves its caves up to 40 rows as they were
 func TestAReachPastItsRoomChangesNoColumn(t *testing.T) {
 	for _, height := range []int{18, 30, 40} {
 		uncapped := Config{Seed: 11, Height: height, MinGap: 9, MaxGap: 2000, MinWall: 2, Wavelength: 64, Ramp: 96, Octaves: 4}
