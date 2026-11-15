@@ -640,22 +640,27 @@ release" lines in `README.md` and [Packaging](packaging.md) §2.
 The names audit (2026-11-14) took third-party game, brand and song names out of
 the tree, replaced a downloaded picture (`wad/image/test.aimg`) and deleted a
 stray 13.5 MB binary (`vif-router`). Older trees, commit messages and squash
-titles still carry them. One `git filter-repo` pass closes it:
+titles still carry them. One `git filter-repo` pass takes them out of every
+branch and tag:
 `--strip-blobs-with-ids` with the binary's blob
 `d6c2405eab3fc7ddc344b63a0513af09ebf1703d` and the old picture's
 `dfede4b85aa34b34e968bba8b73180e11876cfed`, `--invert-paths` for the deleted
 plan doc, `--path-rename` for each renamed scenario, test and doc, since a text
 replacement renames no path, and `--replace-text` with `--replace-message`, from
 the list of names and paths kept in the project's files, outside the repository,
-since it spells them. What it costs:
+since it spells them. What it costs, and what it does not reach:
 
 - Every hash changes: each clone and fork re-clones, open branches are rebased
   by hand, signed commits lose their signatures, and each release tag is set
   again on its rewritten commit; release assets already uploaded keep the old
   files.
+- vif has no version tags, only `nightly`, so no published version's checksum
+  is at stake, but proxy.golang.org keeps any pseudo-version someone fetched as
+  it was, the binary and the names with it.
 - GitHub keeps every PR's `refs/pull/<n>/head`, which no push deletes, so the
-  old commits stay reachable there and in cached views until GitHub Support
-  purges them. PR titles and bodies are edited on GitHub by hand.
+  old commits stay reachable there and by hash in cached views. GitHub Support
+  removes only sensitive data that rotating a credential cannot make safe, so it
+  will not purge them. PR titles and bodies are edited on GitHub by hand.
 
 ### Ship the third-party notices with every binary
 
