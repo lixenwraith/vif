@@ -37,9 +37,10 @@ func TestTypingActsOnTheDrawnGlyph(t *testing.T) {
 	}
 }
 
-// TestAReplaceRetypesWhatADeleteReachesAndScoresNothing: r retypes the drawn glyph of
-// each cell in its span that a delete would take, the player's and unprotected, and
-// it is an edit, as a delete is: no reward, heat or error follows it.
+// TestAReplaceRetypesWhatADeleteReachesAndScoresNothing: a replace retypes the drawn
+// glyph of each cell its text names that a delete would take, the player's and
+// unprotected, a space leaving its cell, and it is an edit, as a delete is: no
+// reward, heat or error follows it.
 func TestAReplaceRetypesWhatADeleteReachesAndScoresNothing(t *testing.T) {
 	w := engine.NewWorld()
 	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
@@ -51,20 +52,63 @@ func TestAReplaceRetypesWhatADeleteReachesAndScoresNothing(t *testing.T) {
 		return e
 	}
 	cells := []core.Entity{glyph(5, core.DomainPlayer, 'a'), glyph(6, core.DomainPlayer, 'b'),
-		glyph(7, core.DomainShared, 'c'), glyph(9, core.DomainPlayer, 'd')}
+		glyph(7, core.DomainShared, 'c'), glyph(8, core.DomainPlayer, 'd'), glyph(9, core.DomainPlayer, 'e')}
 	w.Components.Protection.SetComponent(cells[1], component.ProtectionComponent{Mask: component.ProtectFromDelete})
 
 	typing.HandleEvent(event.GameEvent{Type: event.EventGlyphReplaceRequest,
-		Payload: &event.GlyphReplaceRequestPayload{StartX: 5, EndX: 8, Y: 5, Char: 'z'}})
+		Payload: &event.GlyphReplaceRequestPayload{X: 5, Y: 5, Text: "zzz y"}})
 	var got []rune
 	for _, e := range cells {
 		g, _ := w.Components.Glyph.GetComponent(e)
 		got = append(got, g.Rune)
 	}
-	if string(got) != "zbcd" {
-		t.Fatalf("glyphs read %q after the replace, want %q", string(got), "zbcd")
+	if string(got) != "zbcdy" {
+		t.Fatalf("glyphs read %q after the replace, want %q", string(got), "zbcdy")
 	}
 	if sent := w.Resources.Event.Queue.Consume(); len(sent) != 0 {
 		t.Fatalf("a replace sent %d events, want none", len(sent))
+	}
+}
+
+// TestADeleteTakesItsRangeByKind: over three rows of five glyphs, a char range takes
+// from its start to its end as text runs, a line range its rows whole, and a block
+// the columns between its ends on every row, whichever end comes first.
+func TestADeleteTakesItsRangeByKind(t *testing.T) {
+	for _, c := range []struct {
+		p    event.DeleteRequestPayload
+		want string
+	}{
+		{event.DeleteRequestPayload{RangeType: event.DeleteRangeChar, StartX: 3, StartY: 0, EndX: 1, EndY: 2}, "abc.. ..... ..mno"},
+		{event.DeleteRequestPayload{RangeType: event.DeleteRangeChar, StartX: 1, StartY: 2, EndX: 3, EndY: 0}, "abc.. ..... ..mno"},
+		{event.DeleteRequestPayload{RangeType: event.DeleteRangeLine, StartX: 3, StartY: 1, EndX: 1, EndY: 2}, "abcde ..... ....."},
+		{event.DeleteRequestPayload{RangeType: event.DeleteRangeBlock, StartX: 3, StartY: 0, EndX: 1, EndY: 1}, "a...e f...j klmno"},
+	} {
+		w := engine.NewWorld()
+		engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+		typing := ready(NewTypingSystem(w)).(*TypingSystem)
+		for i, ch := range "abcdefghijklmno" {
+			e := w.CreateEntity(core.DomainPlayer)
+			w.Positions.SetPosition(e, component.PositionComponent{X: i % 5, Y: i / 5})
+			w.Components.Glyph.SetComponent(e, component.GlyphComponent{Rune: ch})
+		}
+		typing.HandleEvent(event.GameEvent{Type: event.EventDeleteRequest, Payload: &c.p})
+		dying := map[core.Entity]bool{}
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
+				for _, e := range p.Entities {
+					dying[e] = true
+				}
+			}
+		}
+		got := []rune("..... ..... .....")
+		w.Components.Glyph.Each(func(e core.Entity, g *component.GlyphComponent) bool {
+			if pos, _ := w.Positions.GetPosition(e); !dying[e] {
+				got[pos.Y*6+pos.X] = g.Rune
+			}
+			return true
+		})
+		if string(got) != c.want {
+			t.Errorf("%+v left %q, want %q", c.p, string(got), c.want)
+		}
 	}
 }

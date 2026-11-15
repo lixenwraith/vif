@@ -397,6 +397,28 @@ type GlyphClearPayload struct {
 	Height int `toml:"height"`
 }
 
+// GlyphCell is one glyph as a yank reads it and a put lays it: its cell, rune,
+// colour and level
+type GlyphCell struct {
+	X     int                  `toml:"x"`
+	Y     int                  `toml:"y"`
+	Rune  rune                 `toml:"rune"`
+	Type  component.GlyphType  `toml:"type"`
+	Level component.GlyphLevel `toml:"level"`
+}
+
+// Drawable reports a cell whose rune, colour and level a glyph can hold
+func (c *GlyphCell) Drawable() bool {
+	return component.GlyphRune(c.Rune) && c.Type >= 0 && int(c.Type) < len(component.GlyphTypeNames) &&
+		c.Level >= 0 && int(c.Level) < len(component.GlyphLevelNames)
+}
+
+// GlyphPutPayload lays glyphs cell by cell, each as it was yanked or deleted; a cell
+// off the map, or one a wall, rock or a glyph holds, is passed over
+type GlyphPutPayload struct {
+	Cells []GlyphCell `toml:"cells"`
+}
+
 // --- Energy ---
 
 // EnergyAddPayload contains energy delta
@@ -663,9 +685,10 @@ type DeleteRangeType int
 const (
 	DeleteRangeChar DeleteRangeType = iota
 	DeleteRangeLine
+	DeleteRangeBlock // the columns between its ends on every row, as Visual's bounds
 )
 
-var deleteRangeNames = [...]string{DeleteRangeChar: "char", DeleteRangeLine: "line"}
+var deleteRangeNames = [...]string{DeleteRangeChar: "char", DeleteRangeLine: "line", DeleteRangeBlock: "block"}
 
 // DeleteRequestPayload contains coordinates for deletion
 type DeleteRequestPayload struct {
@@ -676,13 +699,31 @@ type DeleteRequestPayload struct {
 	EndY      int             `toml:"end_y"`
 }
 
-// GlyphReplaceRequestPayload names the cells of row Y from StartX to EndX whose
-// glyphs r retypes as Char, the cells a delete of that span would reach
+// Covers reports whether the range takes cell (x, y), its ends in either order: a
+// line range every cell of its rows, a block the columns between its ends on each,
+// a char range those on its first and last rows alone
+func (p *DeleteRequestPayload) Covers(x, y int) bool {
+	sx, sy, ex, ey := p.StartX, p.StartY, p.EndX, p.EndY
+	if sy > ey || sy == ey && sx > ex {
+		sx, sy, ex, ey = ex, ey, sx, sy
+	}
+	switch {
+	case y < sy || y > ey:
+		return false
+	case p.RangeType == DeleteRangeLine:
+		return true
+	case p.RangeType == DeleteRangeBlock:
+		return x >= min(sx, ex) && x <= max(sx, ex)
+	}
+	return (y != sy || x >= sx) && (y != ey || x <= ex)
+}
+
+// GlyphReplaceRequestPayload retypes the glyphs of row Y from X on as Text's runes, a
+// cell each, a space leaving its cell as it is: the glyphs a delete would reach
 type GlyphReplaceRequestPayload struct {
-	StartX int  `toml:"start_x"`
-	EndX   int  `toml:"end_x"`
-	Y      int  `toml:"y"`
-	Char   rune `toml:"char"`
+	X    int    `toml:"x"`
+	Y    int    `toml:"y"`
+	Text string `toml:"text"`
 }
 
 // --- Materialize ---

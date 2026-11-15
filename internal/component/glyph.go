@@ -7,6 +7,10 @@ type GlyphComponent struct {
 	Level GlyphLevel
 }
 
+// GlyphRune reports a rune a glyph can hold: printable ASCII past the space, which
+// the corpus admits and the font draws
+func GlyphRune(r rune) bool { return r > ' ' && r <= '~' }
+
 // GlyphType represents the semantic type affecting game mechanics
 type GlyphType int
 

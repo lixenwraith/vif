@@ -60,6 +60,7 @@ var payloadNew = [EventTypeCount]func() any{
 	EventSplashTextRequest:               func() any { return new(SplashTextPayload) },
 	EventGlyphLineRequest:                func() any { return new(GlyphLinePayload) },
 	EventGlyphClearRequest:               func() any { return new(GlyphClearPayload) },
+	EventGlyphPutRequest:                 func() any { return new(GlyphPutPayload) },
 	EventEnergyAddRequest:                func() any { return new(EnergyAddPayload) },
 	EventEnergySetRequest:                func() any { return new(EnergySetPayload) },
 	EventEnergyCrossedZero:               func() any { return new(EnergyCrossedZeroPayload) },
@@ -233,6 +234,7 @@ var payloadCodecs = [EventTypeCount]*structCodec{
 	EventSplashTextRequest:               &codecSplashTextPayload,
 	EventGlyphLineRequest:                &codecGlyphLinePayload,
 	EventGlyphClearRequest:               &codecGlyphClearPayload,
+	EventGlyphPutRequest:                 &codecGlyphPutPayload,
 	EventEnergyAddRequest:                &codecEnergyAddPayload,
 	EventEnergySetRequest:                &codecEnergySetPayload,
 	EventEnergyCrossedZero:               &codecEnergyCrossedZeroPayload,
@@ -790,6 +792,22 @@ var codecGlyphClearPayload = structCodec{size: unsafe.Sizeof(GlyphClearPayload{}
 	{off: unsafe.Offsetof(GlyphClearPayload{}.Height), kind: kindInt, size: unsafe.Sizeof(int(0))},
 }}
 
+var codecGlyphCell = structCodec{size: unsafe.Sizeof(GlyphCell{}), fields: []field{
+	{off: unsafe.Offsetof(GlyphCell{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphCell{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphCell{}.Rune), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(GlyphCell{}.Type), kind: kindInt, size: unsafe.Sizeof(component.GlyphType(0))},
+	{off: unsafe.Offsetof(GlyphCell{}.Level), kind: kindInt, size: unsafe.Sizeof(component.GlyphLevel(0))},
+}}
+
+func (p *GlyphPutPayload) codec() (*structCodec, unsafe.Pointer) {
+	return &codecGlyphPutPayload, unsafe.Pointer(p)
+}
+
+var codecGlyphPutPayload = structCodec{size: unsafe.Sizeof(GlyphPutPayload{}), fields: []field{
+	{off: unsafe.Offsetof(GlyphPutPayload{}.Cells), kind: kindSlice, elem: &field{kind: kindStruct, sub: &codecGlyphCell}, stride: unsafe.Sizeof(GlyphCell{}), make: func(p unsafe.Pointer, n int) { *(*[]GlyphCell)(p) = make([]GlyphCell, n) }},
+}}
+
 func (p *EnergyAddPayload) codec() (*structCodec, unsafe.Pointer) {
 	return &codecEnergyAddPayload, unsafe.Pointer(p)
 }
@@ -1060,10 +1078,9 @@ func (p *GlyphReplaceRequestPayload) codec() (*structCodec, unsafe.Pointer) {
 }
 
 var codecGlyphReplaceRequestPayload = structCodec{size: unsafe.Sizeof(GlyphReplaceRequestPayload{}), fields: []field{
-	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.StartX), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.EndX), kind: kindInt, size: unsafe.Sizeof(int(0))},
+	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.X), kind: kindInt, size: unsafe.Sizeof(int(0))},
 	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.Y), kind: kindInt, size: unsafe.Sizeof(int(0))},
-	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.Char), kind: kindInt, size: unsafe.Sizeof(rune(0))},
+	{off: unsafe.Offsetof(GlyphReplaceRequestPayload{}.Text), kind: kindString},
 }}
 
 func (p *KeyCapturePayload) codec() (*structCodec, unsafe.Pointer) {

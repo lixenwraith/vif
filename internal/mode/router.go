@@ -2,6 +2,7 @@ package mode
 
 import (
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/terminal/tui"
@@ -637,7 +638,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 			// A glyph's char is printable ASCII and never blank: the font draws it
 			if intent.Char > ' ' && input.Capturable(intent.Char) {
 				r.ctx.PushLocal(event.EventGlyphReplaceRequest, &event.GlyphReplaceRequestPayload{
-					StartX: span.StartX, EndX: span.EndX, Y: pos.Y, Char: intent.Char,
+					X: span.StartX, Y: pos.Y, Text: strings.Repeat(string(intent.Char), span.EndX-span.StartX+1),
 				})
 			}
 
