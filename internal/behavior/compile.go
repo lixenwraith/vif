@@ -167,18 +167,22 @@ func (c *compiler[C]) fail(where string, err error) {
 func (c *compiler[C]) fittings(raw map[string]any) (map[string]any, func(C)) {
 	proto, _ := raw["prototype"].(map[string]any)
 	var fs []func(C)
+	cloned := false
 	for _, key := range slices.Sorted(maps.Keys(c.v.fittings)) {
 		table, ok := proto[key]
 		if !ok {
 			continue
 		}
-		f, err := c.v.fittings[key](c.payloads, table)
-		if err != nil {
-			c.fail("prototype: "+key, err)
+		// An empty table fits nothing, which is how a macro's default leaves a body bare
+		if t, isTable := table.(map[string]any); !isTable || len(t) > 0 {
+			f, err := c.v.fittings[key](c.payloads, table)
+			if err != nil {
+				c.fail("prototype: "+key, err)
+			}
+			fs = append(fs, f)
 		}
-		fs = append(fs, f)
-		if len(fs) == 1 { // the document is its caller's, so a copy loses the key
-			raw, proto = maps.Clone(raw), maps.Clone(proto)
+		if !cloned { // the document is its caller's, so a copy loses the key
+			raw, proto, cloned = maps.Clone(raw), maps.Clone(proto), true
 			raw["prototype"] = proto
 		}
 		delete(proto, key)

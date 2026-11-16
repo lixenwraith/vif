@@ -19,23 +19,20 @@ min_height = 22
 initial = "Muster"
 disabled_systems = ["nugget", "gold", "drain", "fuse", "glyph"]
 
-[regions.arms]
-initial = "ArmsWatch"
-background = true
-
 [regions.player]
 initial = "PlayerBoot"
 background = true
 
 # --- Ships ---
 
-# A ship holds its slot until its roll sends it down. It marks the cell its target
-# stands on for aim_ms, dives there over dive_ms and flies back over return_ms to
-# the cell it spawned on, so a slot shot empty stays empty. A stun sends a ship that
-# broke rank home.
+# A ship holds its slot until its roll sends it down, hold_ms on at the mean. It
+# marks the cell its target stands on for aim_ms, dives there over dive_ms and flies
+# back over return_ms to its post, the cell it spawned on, so a slot shot empty
+# stays empty. A stun sends a ship that broke rank back.
 [macros.Ship]
-doc = "An armada ship: its slot, its roll to dive, the dive and the flight home."
-params = { width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", fg = "array", fg256 = "int", hp = "int", mass = "float", contact = "table", percent = "int", aim_ms = "int", dive_ms = "int", return_ms = "int" }
+doc = "An armada ship: its slot, its roll to dive, the dive and the flight back, and the mount it carries, if any."
+params = { width = "int", height = "int", header = "table", pattern_ms = "int", frames = "array", fg = "array", fg256 = "int", hp = "int", mass = "float", contact = "table", hold_ms = "int", aim_ms = "int", dive_ms = "int", return_ms = "int", mount = "table" }
+defaults = { mount = {} }
 
 [macros.Ship.body]
 initial = "Hold"
@@ -59,15 +56,13 @@ frames = "${frames}"
 fg = "${fg}"
 fg256 = "${fg256}"
 bg256 = 0
+mount = "${mount}"
 
-# Two rolls a tick, 1% and percent%, so ships break rank one at a time: percent in
-# a hundred seconds of holding at the default tick. With no target it holds.
+# A roll a tick at a rate of one in hold_ms, so ships break rank one at a time
+# whatever the tick. With no target it holds.
 [macros.Ship.body.states.Hold]
 on_update = [{ action = "Freeze" }]
-transitions = [{ trigger = "Tick", target = "Aim", fallback = "hold", guard = "And", guard_args = { guards = [
-    { name = "Chance", args = { percent = 1 } },
-    { name = "Chance", args = { percent = "${percent}" } },
-] } }]
+transitions = [{ trigger = "Tick", target = "Aim", fallback = "hold", guard = "Chance", guard_args = { mean_ms = "${hold_ms}" } }]
 
 # The charge line and the landing marker show where the dive goes before it leaves
 [macros.Ship.body.states.Aim]
@@ -110,7 +105,7 @@ header = { x = 1, y = 0 }
 hp = 4
 mass = 2.0
 contact = { energy = 600, heat = 6 }
-percent = 10
+hold_ms = 50000
 aim_ms = 600
 dive_ms = 900
 return_ms = 1200
@@ -131,7 +126,7 @@ header = { x = 1, y = 0 }
 hp = 10
 mass = 2.4
 contact = { energy = 900, heat = 9 }
-percent = 8
+hold_ms = 62500
 aim_ms = 800
 dive_ms = 1100
 return_ms = 1400
@@ -143,7 +138,9 @@ frames = [
     { glyphs = ["{oo}", " \\/ "], fg = ["2112", " 00 "], attr = [" BB ", "    "] },
 ]
 
-# The warden: the top rank's gunship, which the arms region mounts a turret on
+# The warden: the top rank's gunship. Its turret fires a bullet aimed at the
+# nearest cursor from anywhere on the map, every three seconds or so, each warden
+# on an interval of its own so their volleys drift apart.
 [behaviors.warden]
 macro = "Ship"
 width = 5
@@ -152,7 +149,8 @@ header = { x = 2, y = 1 }
 hp = 24
 mass = 3.0
 contact = { energy = 1200, heat = 12 }
-percent = 5
+mount = { weapon = "turret", interval_ms = 3200, spread_ms = 600, range = 1000, muzzle = 2.0, energy = 300, heat = 3 }
+hold_ms = 100000
 aim_ms = 1000
 dive_ms = 1300
 return_ms = 1600
@@ -187,14 +185,24 @@ tiers = [
 
 # --- Waves ---
 
+# Each rank is a map: eight columns six cells apart, the wardens one to every two,
+# a character where a ship's header stands
+[maps.darts]
+legend = { d = { program = "dart" } }
+rows = [" d     d     d     d     d     d     d     d"]
+
+[maps.lancers]
+legend = { l = { program = "lancer" } }
+rows = [" l     l     l     l     l     l     l     l"]
+
+[maps.wardens]
+legend = { w = { program = "warden" } }
+rows = ["    w           w           w           w"]
+
 [macros.Rank]
-doc = "From wave `from`, a rank of `program` on row `y`: a ship at each column `dx` right of the leftmost."
-params = { program = "string", from = "int", y = "int", dx = "int" }
-body = [
-    { action = "CopyVar", payload = { name = "slot_x", source_var = "rank_left" } },
-    { action = "IncrementVar", payload = { name = "slot_x", delta = "${dx}" } },
-    { action = "EmitEvent", event = "EventBehaviorSpawnRequest", payload = { program = "${program}", y = "${y}" }, payload_vars = { x = "slot_x" }, guard = "VarCompare", guard_args = { var = "wave", op = "gte", value = "${from}" } },
-]
+doc = "From wave `from`, lay the rank `map` on row `y`, about the map's middle column."
+params = { map = "string", from = "int", y = "int" }
+body = { action = "EmitEvent", event = "EventMapLayRequest", origin = "top", payload = { map = "${map}", x = -22, y = "${y}" }, guard = "VarCompare", guard_args = { var = "wave", op = "gte", value = "${from}" } }
 
 # Boot: settled before the clock starts, drawn behind the start prompt; the first
 # wave comes in at the first Tick, after the press
@@ -204,21 +212,16 @@ transitions = [
     { trigger = "Tick", target = "Wave" },
 ]
 
-# Eight columns six cells apart about the map's middle column, each offset from a
-# cell left of the first, since an increment of 0 adds 1. The first wave is the two
-# ranks of darts, the second adds the lancers over them and every wave from the
-# third the wardens over those, one to every two columns.
+# The first wave is the two ranks of darts, the second adds the lancers over them
+# and every wave from the third the wardens over those.
 [states.Wave]
 parent = "Root"
 on_enter = [
     { action = "IncrementVar", payload = { name = "wave" } },
-    { action = "ConfigToVar", payload = { field = "map_width", name = "rank_left" } },
-    { action = "DivideVar", payload = { name = "rank_left", delta = 2 } },
-    { action = "DecrementVar", payload = { name = "rank_left", delta = 22 } },
-    { macro = "Rank", program = "warden", from = 3, y = 2, each = { dx = [4, 16, 28, 40] } },
-    { macro = "Rank", program = "lancer", from = 2, y = 5, each = { dx = [1, 7, 13, 19, 25, 31, 37, 43] } },
-    { macro = "Rank", program = "dart", from = 1, y = 8, each = { dx = [1, 7, 13, 19, 25, 31, 37, 43] } },
-    { macro = "Rank", program = "dart", from = 1, y = 11, each = { dx = [1, 7, 13, 19, 25, 31, 37, 43] } },
+    { macro = "Rank", map = "wardens", from = 3, y = 2 },
+    { macro = "Rank", map = "lancers", from = 2, y = 5 },
+    { macro = "Rank", map = "darts", from = 1, y = 8 },
+    { macro = "Rank", map = "darts", from = 1, y = 11 },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Wave {}" }, payload_vars = { message = "wave" } },
 ]
 transitions = [
@@ -239,31 +242,14 @@ transitions = [
     { trigger = "Tick", target = "Wave", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
 ]
 
-# --- Arms ---
-
-# Each warden takes a turret as it lands: a bullet aimed at the nearest cursor from
-# anywhere on the map, every three seconds or so, each warden on its own interval
-# so their volleys drift apart
-[states.ArmsWatch]
-parent = "Root"
-transitions = [
-    { trigger = "EventSpeciesCreated", internal = true, guard = "PayloadSpeciesIn", guard_args = { field = "species", names = ["warden"] }, capture_vars = { entity = "warden_entity" }, actions = [
-        { action = "IncrementVar", payload = { name = "warden_index" } },
-        { action = "EmitEvent", event = "EventMountRequest", payload = { weapon = "turret", range = 1000, muzzle = 2.0, energy = 300, heat = 3 }, payload_vars = { host = "warden_entity" }, pick = { field = "interval_ms", var = "warden_index", from = [2600, 3000, 3400, 3800] } },
-    ] },
-]
-
 # --- Player ---
 
-# The ship starts on the map's middle column, a row above its last
+# The ship starts on the map's middle column, a row above its last, and so does
+# every ship that joins
 [states.PlayerBoot]
 parent = "Root"
 on_enter = [
-    { action = "ConfigToVar", payload = { field = "map_width", name = "ship_x" } },
-    { action = "DivideVar", payload = { name = "ship_x", delta = 2 } },
-    { action = "ConfigToVar", payload = { field = "map_height", name = "ship_y" } },
-    { action = "DecrementVar", payload = { name = "ship_y", delta = 2 } },
-    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { heat = 10, energy = 100 }, payload_vars = { x = "ship_x", y = "ship_y" } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", origin = "bottom", payload = { y = -1, heat = 10, energy = 100 } },
 ]
 transitions = [
     { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
