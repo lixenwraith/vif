@@ -47,7 +47,7 @@ coordinator's, sent under the same bounds, held in memory and saved in its
 │       │   ├── scenario.toml
 │       │   ├── td_macros.toml # macro library
 │       │   └── td_*.toml      # region files
-│       └── tutor/
+│       └── tutorial/
 │           ├── scenario.toml
 │           └── lessons.toml   # the corpus the scenario carries
 └── input/
@@ -730,7 +730,7 @@ releases too, and `EventInputReport { slot, releases }` says which a slot does
 while keys are captured. `modes` names the play modes the capture holds in, every
 one when unset, and `idle = true` leaves a key to a count, operator or prefix
 already pending, so `fs` and `qs` still take an `s` the scenario captures; the
-tutor's lessons do both, for the `s` and `S` that skip one and go back.
+tutorial's lessons do both, for the `s` and `S` that skip one and go back.
 
 A button lights and sounds on every press of its key by itself, held lit until the
 release, so a machine judges a press and never plays its tone.
@@ -767,7 +767,7 @@ lesson leaves no dust behind: dust-all turns text into dust that orbits the curs
 and hides what is laid next. The glyph system lays and clears whether or not it is
 enabled, so a scenario that wants no corpus text disables the system and lays its
 own. All three are player-domain presentation each instance makes for itself, as a
-status message is. `wad/scenario/base/tutor` is the worked example.
+status message is. `wad/scenario/base/tutorial` is the worked example.
 
 A player's edits are requests a state can wait on, each made on the pressing
 instance alone: `EventDeleteRequest { range_type, start_x, start_y, end_x, end_y }`,
@@ -779,7 +779,7 @@ a delete undone, each cell an `x`, `y`, `rune`, `type` and `level`;
 and `EventModeChanged { mode }`, 0 Normal, 1 Visual, 2 Insert, 3 Search. A state
 that moves on one runs its entry before the system that handles the request, so
 what that system then pushes, as typing's step right, lands after the entry's own
-events: the tutor's `Stand` is delayed a tick for it.
+events: the tutorial's `Stand` is delayed a tick for it.
 
 ### PayloadSpeciesIn
 

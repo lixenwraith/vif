@@ -303,7 +303,7 @@ Libraries · Branches.
 - `.` owes the text Insert typed after its change through `Machine.Next`, which
   types nothing until the router has entered Insert: whatever routes `Process`'s
   intent drains `Next` after it, settling each, as `App.takeEventWith` and the
-  test helpers `press` and `tutorKeys` do.
+  test helpers `press` and `tutorialKeys` do.
 
 ## Session tests
 
@@ -882,8 +882,8 @@ Libraries · Branches.
   a guard on `dd` compares `range_type` and `start_y`; `x` fills every field, and
   a range's start is its first cell whichever way the motion went.
 - A transition on a request runs its entry before the system that handles the
-  request, so what that system pushes lands after the entry's events: typing's
-  step right overtook the next lesson's cursor placement until the tutor's `Stand`
+  request, so what that system pushes lands after the entry's events: typing's step
+  right overtook the next lesson's cursor placement until the tutorial's `Stand`
   took `delay_ms = 1`. A mode is the router's alone, so a lesson entered from
   Insert stays in Insert.
 - The router's change history ends at a glyph clear (`glyph.cleared`) and a new
@@ -924,7 +924,7 @@ Libraries · Branches.
   expands them itself, so the older build is refused at the door instead.
 - A system the manifest drops leaves every `only_systems` that names it, which
   `-check` and `internal/resource`'s systems test refuse as unknown: search
-  `wad/scenario/` for its name (`tutor` lists its systems one by one).
+  `wad/scenario/` for its name (`tutorial` lists its systems one by one).
 
 ## Corpus
 

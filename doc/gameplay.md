@@ -598,14 +598,14 @@ start ([FSM §5](fsm-and-configuration.md#5-tick-processing)).
    roster is rearmed. Every shipped scenario uses this defeat rule; tower defense
    also retains its objective-failure and victory conditions.
 
-`wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an authoring
-scaffold, `recall` is a memory game, `dummy` is a weapon range, `tutor` teaches
-the motions a lesson at a time, `cave` is a side-scroller whose raiders are
-species its own behavior programs define, and `armada` is a fixed shooter whose
-ranks are three more. Each entry has a short `description` for
-scenario listings.
+`wad/scenario/base/td` is a standalone 500-by-250 tower defense, `blank` is an
+authoring scaffold, `recall` is a memory game, `dummy` is a weapon range,
+`tutorial` teaches the game's vi-style typing and editing a lesson at a time,
+`cave` is a side-scroller whose raiders are species its own behavior programs
+define, and `armada` is a fixed shooter whose ranks are three more. Each entry has
+a short `description` for scenario listings.
 
-`tutor` runs with combat off: the cursor has no gun, so Enter, Space and
+`tutorial` runs with combat off: the cursor has no gun, so Enter, Space and
 auto-fire do nothing, and the glyph spawner is off until the last lesson. Each
 lesson lays its heading in the small splash face, three or four lines that explain
 and a practice line or block, stands the cursor on it, prompts on the status bar
@@ -617,7 +617,7 @@ raises the shield, and end on what a game makes of the keys its `[keymap]` gave
 back to vi: `a`, `p`, `P`, `o`, `O`, `u`, Ctrl-R and `m`
 ([Input §10](input-and-modes.md#10-keymap-override-files)). `s` then opens free
 practice on the scenario's own corpus: code laid in blocks, so `%` finds a
-bracket's pair across rows ([Tutor](tutor.md)).
+bracket's pair across rows ([Tutorial](tutorial.md)).
 
 `recall` lays four buttons across the map on keys 1-4, each with its note, rising
 in pitch from 1 to 4, and each key drawn large in black that turns white as its

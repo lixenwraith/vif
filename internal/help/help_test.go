@@ -38,7 +38,7 @@ func TestBindingsDocumented(t *testing.T) {
 // unboundByDefault lists documented actions no default key takes, since the game's
 // own action has it; a keymap or a scenario binds them, and their entry shows then
 var unboundByDefault = map[string]string{
-	"mode_append":     "a cycles auto fire; the tutor binds append",
+	"mode_append":     "a cycles auto fire; the tutorial binds append",
 	"mode_open_below": "o finds in a column",
 	"mode_open_above": "O finds in a column",
 	"put_after":       "p pauses",

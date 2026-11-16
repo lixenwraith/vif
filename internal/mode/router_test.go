@@ -383,7 +383,7 @@ func lineWorld(t *testing.T, text string, x int) (*engine.GameContext, func(keys
 	}
 }
 
-// vimKeys binds the vim actions no default key has to vim's own keys, as the tutor
+// vimKeys binds the vim actions no default key has to vim's own keys, as the tutorial
 // does, a, p, P, o, O, u, Ctrl-R and m, and the backtick to mark_jump, as a keymap may
 func vimKeys(t *testing.T) *input.KeyTable {
 	t.Helper()

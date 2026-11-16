@@ -511,7 +511,7 @@ func TestAnEntryKeyNothingReadsIsRefused(t *testing.T) {
 // place of the roots', and travel in the canonical form; a name the scenario has no
 // file for fails the load
 func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
-	dir := writeScenario(t, filepath.Join(t.TempDir(), "scenario", "tutor"), scenarioRegion)
+	dir := writeScenario(t, filepath.Join(t.TempDir(), "scenario", "tutorial"), scenarioRegion)
 	write := func(name, body string) {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
@@ -524,7 +524,7 @@ func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
 	if sc.Files() != 3 || !sc.ContentBlocks {
 		t.Fatalf("scenario holds %d files, blocks %v; want the entry, the region and the corpus, laid in blocks", sc.Files(), sc.ContentBlocks)
 	}
-	copied, err := UnmarshalScenario("tutor", sc.Marshal())
+	copied, err := UnmarshalScenario("tutorial", sc.Marshal())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +539,7 @@ func TestContentFilesAreScenarioFilesAndItsCorpus(t *testing.T) {
 		}
 	}
 	src, err := Corpus(Options{Scenario: dir, Content: dir}, sc)
-	if err != nil || src.FS == nil || !src.Explicit || src.Label != "scenario tutor" {
+	if err != nil || src.FS == nil || !src.Explicit || src.Label != "scenario tutorial" {
 		t.Fatalf("the run's corpus = %+v, %v; want the scenario's own over the -f root", src, err)
 	}
 

@@ -381,19 +381,19 @@ what is modelled and whether players see it; nothing is persisted.
 
 ## Authoring
 
-### Hold armada and the tutor to the shared-region rule
+### Hold armada and the tutorial to the shared-region rule
 
 - Priority: P2
 - Affected files: `internal/app/domain_test.go` (`scenarioTrees`),
-  `wad/scenario/base/tutor/scenario.toml`
+  `wad/scenario/base/tutorial/scenario.toml`
 
 `TestFSMTriggersAreReplicated` reads the scenarios `scenarioTrees` lists, which
-leaves out `armada` and `tutor`. Listed, armada passes and the tutor fails: its
-lessons step on a player's edit requests, typed glyphs and mode changes and count
-`EventEnergyGlyphConsumed`, all local events, so in a session of its up to 16
+leaves out `armada` and `tutorial`. Listed, armada passes and the tutorial fails:
+its lessons step on a player's edit requests, typed glyphs and mode changes and
+count `EventEnergyGlyphConsumed`, all local events, so in a session of its up to 16
 players only the authority's player's keys would move them (D-20). What closes it:
-the tutor's lessons advance on what every instance sees, or the tutor seats one
-player, and both scenarios listed.
+the tutorial's lessons advance on what every instance sees, or the tutorial seats
+one player, and both scenarios listed.
 
 ### Build the map and scenario editor
 
@@ -469,24 +469,24 @@ left:
 
 - Priority: P3
 - Affected files: `internal/mode/router.go`, `internal/system/meta.go`,
-  `wad/scenario/base/tutor/scenario.toml`
-- Guide: [Tutor §3](tutor.md#3-the-next-round)
+  `wad/scenario/base/tutorial/scenario.toml`
+- Guide: [Tutorial §3](tutorial.md#3-the-next-round)
 
-A tutor lesson that ends on a typed glyph leaves the next one in Insert, where its
-first key types, and the lesson can only say so on the status bar. A live run's
+A tutorial lesson that ends on a typed glyph leaves the next one in Insert, where
+its first key types, and the lesson can only say so on the status bar. A live run's
 mode changes through the router alone, which keeps the input machine in step, so a
 request from the FSM needs the router to take it, and the journal and a session to
-carry it. The same request would let a capture answer a key with a mode change,
-for a key that does what no action does. Rewriting intents in the router for one
+carry it. The same request would let a capture answer a key with a mode change, for
+a key that does what no action does. Rewriting intents in the router for one
 scenario stays out: a second mechanism beside the key table and the capture.
 
-### Grow the tutor
+### Grow the tutorial
 
 - Priority: P3
-- Affected files: `wad/scenario/base/tutor/`
-- Guide: [Tutor §3](tutor.md#3-the-next-round)
+- Affected files: `wad/scenario/base/tutorial/`
+- Guide: [Tutorial §3](tutorial.md#3-the-next-round)
 
-The tutor runs twenty-two lessons: the motions, counts, `x dd`, `d` with a
+The tutorial runs twenty-two lessons: the motions, counts, `x dd`, `d` with a
 motion, `i` and typing, `A I a`, `o O`, `c cc`, `r ~`, `.`, `y p P`, `u` and
 Ctrl-R, `%`, `/ n`, `* #`, `m '`, `gg G M`, `v`, then what a game makes of the
 keys it gave back to vi, and free practice; `s` skips and `S` goes back. The next

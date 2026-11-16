@@ -666,7 +666,7 @@ full copy of the defaults, which would otherwise undo it
 (`input.ScenarioKeyTable`, `resource.Scenario.Keys`). It binds no system action,
 no special key the default keymap gives one and no other section, so the keys
 that quit, leave a mode and open the menu and help stay the player's; a scenario
-breaking a rule fails to load. The tutor, with no gun to cycle, no clock to stop
+breaking a rule fails to load. The tutorial, with no gun to cycle, no clock to stop
 and no fight to find a column in, binds the keys of §4's last item to vim's
 actions, but for the backtick.
 
