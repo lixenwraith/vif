@@ -248,11 +248,10 @@ These patterns account for most keys. The [key notes](#key-notes) cover individu
 | `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker. The authority requires none |
 | `network.barrier_peer_lag_ticks`, `network.barrier_peer_artifacts`, `network.barrier_peer_applied` | Closed-epoch lag beyond this instance's lead (zero on the authority), and the peer artifacts admitted at the latest boundary |
 | `network.artifacts_refused` (int) | Peer artifacts refused: an arrival or departure from a participant that is not the coordinator, a crossing or cursor sync acting as another participant's cursor, or a raw epoch under an identity whose link it did not arrive on |
-| `network.artifacts_refused_tick` (int) | Peer artifacts naming an apply tick more than `NetworkApplyWindowTicks` ahead, or a run this instance is not in: a reset's last epochs, sent a round trip before it applied |
+| `network.artifacts_refused_tick` (int) | Peer artifacts naming an apply tick more than `NetworkApplyWindowTicks` ahead, or a run that is neither this instance's nor its next: a reset's last epochs, sent a round trip before it applied |
 | `network.artifacts_schedule_full` (int) | Peer artifacts turned away because their source held its `NetworkScheduledPerSource` share, the schedule held `NetworkScheduledMax` entries, or the artifact would take it past `NetworkScheduledBytes` |
 | `network.artifacts_pre_install` (int) | Scheduled or arriving artifacts the installed world already contains: a barrier-bound one due at or before the capture's tick (D-22), any other at or below its source's fence. Non-zero on a joiner is the ordering working |
 | `network.artifacts_authority_superseded` (int) | The part of `artifacts_pre_install` that a source fence, rather than the capture's tick, proved contained |
-| `network.artifacts_restored` (int) | Applied barrier-bound artifacts the installed capture did not contain, returned to the schedule to apply again |
 | `network.commit_late`, `network.commit_void` (int) | On the authority: guest crossings committed at its next tick because they arrived after their own, and the subset too late to apply, which only closed their source's fence |
 | `network.commit_refused_raw` (int) | On a guest: another participant's raw epochs, passed toward the authority and not applied |
 | `network.join_lag_ticks` (int) | Ticks this participant still stood behind after its join caught up, reported by `Membership.finishCatchUp`. Above `NetworkJoinLagTicks`, the join is refused |

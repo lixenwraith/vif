@@ -193,6 +193,17 @@ Libraries · Branches.
   clock's (`TimeControl`) and a reset ends the run its captures are read in, is no
   part of a world installed at or past its tick: it joins `snapshotContainsLocked`'s
   first cases, or a guest a correction carries to that tick loses it for good.
+- The barrier judges an install by the tick its capture was read at
+  (`AdoptSnapshot`'s `captured`), which `WriteStagedLocked` keeps apart from the tick
+  it writes the world at. Handed the projected tick, it prunes a late artifact as
+  held by a world that never had it, and forgets a retained one the next older
+  capture needs. The staging world's barrier outlives an install: one that put its
+  own retained artifacts back on its schedule doubled them at every projection.
+- Only the authority ends a run, and its epochs name the run it is in: a guest
+  follows that (`leaveRun`), since what ends a run on it, a crossed reset or a
+  transition whose entry emits one, can be lost, refused or left behind a hold. Two
+  resets settled in one tick advance the run twice, so the tick that leaves a run
+  applies nothing else, and a new path to a reset is checked against that.
 - A new bus crossing whose payload names its producer's cursor or slot adds a row to
   `crossingActors` (`internal/system/network.go`); without one, a misbound or
   modified participant can act as another's cursor through it.
@@ -443,10 +454,9 @@ Libraries · Branches.
   copy, build its race binary there and run it under the same load, keeping the
   branch clean. Probe after the wait has run out: a dump ahead of the racing step
   moves it, and hid a failure seen one run in ten.
-- A guest left in the run before its host's, its link up and the floor's alert its
-  status, lost the reset's crossing, the one thing that moves a run: print what the
-  barrier does with the reset's epoch (`scheduleCrossings`, `dispatch`,
-  `AdoptSnapshot`).
+- A mesh link loses exactly the frames that arrive while its `LossEvery` is 1
+  (`MeshPort.SetShape`): a test loses one epoch by setting it round the host tick
+  that flushes it (`TestAGuestFollowsItsHostIntoTheNextGame`).
 - A socket test's dump whose status reads "" where the test set one saw a new game
   come in between: `MetaSystem.handleGameReset` is the only clear, and `Run` counts
   the resets since the run began. Which of two runs applies a new game first races

@@ -207,13 +207,30 @@ An install classifies queued and later-arriving frames as follows:
 The sequence rule is the whole rule for ordinary frames — the tick never decides
 one — and the tick rule is the rule for barrier-bound ones: they apply at one
 agreed tick on every instance including their producer, so the tick is exact for
-them. An install's tick is the receiver's own once its capture is projected (§3.3),
-so a frame that reached a guest past its apply tick can stand at or under that tick
-in no world. The next correction brings its effect, except for what no capture
-holds: the hold and the rate, which are the clock's (§3.6), and the reset, which
-ends the run every capture of it was read in. Each of the three therefore still
-applies (`NetworkSystem.snapshotContainsLocked`): a reset dropped there would leave
-its guest in a run its host has left, refusing all that follows.
+them. `Header.Tick` is the tick the capture was read at, which the barrier judges
+by even once a projection has written that capture's world at the receiver's own
+tick (§3.3; `NetworkSystem.AdoptSnapshot`, `capturedBy`): a frame that reached a
+guest past its apply tick, with the capture read before it, stays on the barrier
+and applies at the guest's next tick, and what the guest applied after the
+capture's tick stays retained for every older capture still to come. What no
+capture holds is never judged held (`snapshotContainsLocked`): the hold and the
+rate, which are the clock's (§3.6), and the reset, which ends the run every capture
+of it was read in.
+
+A batch names its run and one naming another is refused, so a run has to end on
+every instance. The reset applies at one agreed tick, and a guest it reaches late
+is still in the old run as its host's first epochs of the next arrive: they and
+their syncs are kept for the guest's own reset and taken as it lands (`otherRun`,
+`takeAhead`), as the host keeps those of a guest that ran a tick ahead. Only the
+authority ends a run, by its reset or a transition its machine took into one, and
+all it sent of a run precedes its first epoch of the next. A guest still in the old
+run a tick after that epoch, its clock past the authority's last epoch of it, has
+lost what would have ended it (a refused epoch, a relay that left, a transition its
+own machine refused), which nothing sends again: it ends the run itself
+(`leaveRun`), applying nothing more of it, and the new game's first correction
+brings what its roster missed. A held guest takes that epoch as its resume: a new
+game its host starts from a hold sends a guest standing a tick past that hold no
+later epoch of the old one.
 
 This closes the guest-action pattern — a correction undoes the player's own
 keystroke, and the next one puts it back a cadence later — because a frame the
@@ -260,9 +277,12 @@ The projection is fed what the capture does not contain and this instance applie
 after it: its own ordinary crossings past the capture's fence for its source, the
 other participants' ordinary crossings past theirs, and the barrier-bound artifacts
 due after the capture's tick, each at its own apply tick. Fences, not ticks, choose
-membership; production ticks only bound retention age. A crossing still pending on
-the live barrier is not fed — the barrier applies it at its tick, and an install
-leaves the barrier and the D-18 queue alone. Retention is bounded by ticks, records
+membership; production ticks only bound retention age. The live barrier is the one
+source: it retains each artifact until a capture read at or past it is installed,
+and the staging world's barrier, which outlives an install, schedules nothing of
+its own, so each projection applies an artifact once. A crossing still pending on
+the live barrier is not fed — the barrier applies it at its tick, or its next once
+that has passed, and an install leaves the barrier and the D-18 queue alone. Retention is bounded by ticks, records
 and bytes; if the local suffix has a hole, none of this instance's own crossings
 are fed and the replay is reported skipped, rather than guessing at a partial
 history; the others' and the barrier-bound ones still are.
@@ -417,7 +437,7 @@ links and answers the link probe off the tick, so a hold times nobody out, and t
 host sends the held tick's round once, whatever its schedule said
 (`Corrections.publishRound`), so every link proves the held world. That round
 carries no clock, so an install leaves a hold or a rate scheduled at or before its
-tick to apply (`NetworkSystem.snapshotContainsLocked`). A hold whose tick a guest
+tick to apply (§3.2). A hold whose tick a guest
 has reached lands between two ticks, settled at once (`landLateHold`): one whose
 crossing came late where it found the guest, one the held round carried the guest
 to at the held tick, each before that round's proof is kept. A guest that ran
